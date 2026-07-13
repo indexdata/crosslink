@@ -1016,6 +1016,186 @@ func (a *PatronRequestApiHandler) PutPatronRequestsIdNotificationsNotificationId
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (a *PatronRequestApiHandler) GetTemplates(w http.ResponseWriter, r *http.Request, params proapi.GetTemplatesParams) {
+	logParams := map[string]string{"method": "GetTemplates"}
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+	limit := a.limitDefault
+	if params.Limit != nil {
+		limit = *params.Limit
+	}
+	var offset int32 = 0
+	if params.Offset != nil {
+		offset = *params.Offset
+	}
+	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	templates, count, err := a.prRepo.GetTemplatesByOwner(ctx, pr_db.GetTemplatesByOwnerParams{
+		Owner:  symbol,
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+
+	responseItems := make([]proapi.Template, 0, len(templates))
+	for _, t := range templates {
+		responseItems = append(responseItems, toApiTemplate(t))
+	}
+
+	resp := proapi.Templates{Items: responseItems}
+	resp.About = proapi.About(api.CollectAboutData(count, offset, limit, r))
+	api.WriteJsonResponse(w, resp)
+}
+
+func (a *PatronRequestApiHandler) PostTemplates(w http.ResponseWriter, r *http.Request, params proapi.PostTemplatesParams) {
+	logParams := map[string]string{"method": "PostTemplates"}
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	var template proapi.CreateTemplate
+	err = decodeRequiredBody(r, &template)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	tem, err := a.prRepo.SaveTemplate(ctx, pr_db.SaveTemplateParams{
+		ID:          uuid.NewString(),
+		Owner:       symbol,
+		Title:       template.Title,
+		Purpose:     string(template.Purpose),
+		Body:        template.Body,
+		ContentType: string(template.ContentType),
+		Labels:      template.Labels,
+		Subject:     getDbText(template.Subject),
+		Audience:    getDbText((*string)(template.Audience)),
+		CreatedAt:   pgtype.Timestamp{Time: time.Now(), Valid: true},
+	})
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(toApiTemplate(tem))
+}
+
+func (a *PatronRequestApiHandler) DeleteTemplatesId(w http.ResponseWriter, r *http.Request, id string, params proapi.DeleteTemplatesIdParams) {
+	ctx, tem := a.getTemplateById(w, r, id, params.Symbol, "DeleteTemplatesId")
+	if tem == nil {
+		return
+	}
+	err := a.prRepo.DeleteTemplateByIdAndOwner(ctx, tem.ID, tem.Owner)
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *PatronRequestApiHandler) GetTemplatesId(w http.ResponseWriter, r *http.Request, id string, params proapi.GetTemplatesIdParams) {
+	_, tem := a.getTemplateById(w, r, id, params.Symbol, "GetTemplatesId")
+	if tem == nil {
+		return
+	}
+	api.WriteJsonResponse(w, toApiTemplate(*tem))
+}
+
+func (a *PatronRequestApiHandler) PutTemplatesId(w http.ResponseWriter, r *http.Request, id string, params proapi.PutTemplatesIdParams) {
+	ctx, tem := a.getTemplateById(w, r, id, params.Symbol, "PutTemplatesId")
+	if tem == nil {
+		return
+	}
+	var updated proapi.UpdateTemplate
+	err := decodeRequiredBody(r, &updated)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	tem.Body = updated.Body
+	tem.ContentType = string(updated.ContentType)
+	tem.Labels = updated.Labels
+	tem.Title = updated.Title
+	if updated.Audience != nil {
+		tem.Audience = getDbText((*string)(updated.Audience))
+	}
+	if updated.Subject != nil {
+		tem.Subject = getDbText(updated.Subject)
+	}
+	template, err := a.prRepo.SaveTemplate(ctx, pr_db.SaveTemplateParams(*tem))
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	api.WriteJsonResponse(w, toApiTemplate(template))
+}
+
+func (a *PatronRequestApiHandler) getTemplateById(w http.ResponseWriter, r *http.Request, id string, symbolString *string, methodName string) (common.ExtendedContext, *pr_db.Template) {
+	logParams := map[string]string{"method": methodName, "id": id}
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+	tenant, err := a.tenantResolver.Resolve(ctx, r, symbolString)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return ctx, nil
+	}
+	symbol, err := tenant.GetRequestSymbol()
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return ctx, nil
+	}
+	tem, err := a.prRepo.GetTemplateByIdAndOwner(ctx, id, symbol)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			api.AddNotFoundError(w)
+			return ctx, nil
+		}
+		api.AddInternalError(ctx, w, err)
+		return ctx, nil
+	}
+	return ctx, &tem
+}
+
+func toApiTemplate(template pr_db.Template) proapi.Template {
+	t := proapi.Template{
+		Id:          template.ID,
+		Title:       template.Title,
+		Purpose:     proapi.TemplatePurpose(template.Purpose),
+		Body:        template.Body,
+		ContentType: proapi.TemplateContentType(template.ContentType),
+		Labels:      template.Labels,
+		CreatedAt:   template.CreatedAt.Time,
+	}
+	if template.Subject.Valid {
+		t.Subject = &template.Subject.String
+	}
+	if template.Audience.Valid {
+		audience := proapi.TemplateAudience(template.Audience.String)
+		t.Audience = &audience
+	}
+	if template.UpdatedAt.Valid {
+		t.UpdatedAt = &template.UpdatedAt.Time
+	}
+	return t
+}
+
 func toApiPatronRequest(r *http.Request, request pr_db.PatronRequestSearchView) proapi.PatronRequest {
 	items := []proapi.PrItem{}
 	for _, item := range request.Items {
@@ -1067,6 +1247,8 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequestSearchView) 
 		EventsLink:               eventsLink,
 		TerminalState:            request.TerminalState,
 		InternalNote:             toString(request.InternalNote),
+		RequesterName:            toString(request.RequesterName),
+		SupplierName:             toString(request.SupplierName),
 		NextReqId:                toString(request.NextReqID),
 		PrevReqId:                toString(request.PrevReqID),
 		RetryBibInfo:             request.RetryBibInfo,

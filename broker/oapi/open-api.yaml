@@ -97,8 +97,8 @@ components:
       name: facets
       in: query
       description: Comma separated list of facet names to include in the response.
-        Supported values are "requester_symbol" and "supplier_symbol";
-        unsupported facet names result in a 400 response.
+        Supported values are "requester_name", "requester_symbol", "supplier_name",
+        "supplier_symbol"; unsupported facet names result in a 400 response.
         For example "requester_symbol,supplier_symbol"
       style: form
       explode: false
@@ -109,6 +109,8 @@ components:
           enum:
             - requester_symbol
             - supplier_symbol
+            - requester_name
+            - supplier_name
   schemas:
     Index:
       type: object
@@ -582,6 +584,12 @@ components:
         internalNote:
           type: string
           description: Staff-only internal note, local to this request and never shared with peers
+        requesterName:
+          type: string
+          description: Name of the requester peer
+        supplierName:
+          type: string
+          description: Name of the supplier peer
         nextReqId:
           type: string
           description: ID of the next patron request in the sequence
@@ -1250,6 +1258,147 @@ components:
       type: object
       description: Bibliographic information for an ILL request item, as defined in ISO18626
 
+    TemplatePurpose:
+      type: string
+      description: Purpose of the template
+      enum:
+        - email
+        - pullslip
+
+    TemplateContentType:
+      type: string
+      description: Output content type for the template body
+      enum:
+        - text
+        - html
+
+    TemplateAudience:
+      type: string
+      description: Intended audience for the template. Omit to apply to both patron and staff.
+      enum:
+        - patron
+        - staff
+
+    Template:
+      type: object
+      title: Template
+      description: An email or pull slip template with optional placeholder support
+      properties:
+        id:
+          type: string
+          description: Unique identifier of the template
+        title:
+          type: string
+          description: Human-readable title for the template
+        purpose:
+          $ref: '#/components/schemas/TemplatePurpose'
+        subject:
+          type: string
+          description: Subject line template, supports {{x}} placeholders. Not used for pullslip templates.
+        body:
+          type: string
+          description: Body of the email or pull slip template. Supports {{x}} placeholders.
+        contentType:
+          $ref: '#/components/schemas/TemplateContentType'
+        labels:
+          type: array
+          description: Predefined labels identifying the template's usage context. Values correspond to templateLabel parameters used in state model send-email actions.
+          items:
+            type: string
+        audience:
+          $ref: '#/components/schemas/TemplateAudience'
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when the template was created
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the template was last updated
+      required:
+        - id
+        - title
+        - purpose
+        - body
+        - contentType
+        - labels
+        - createdAt
+
+    Templates:
+      type: object
+      required:
+        - items
+        - about
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          description: List of templates
+          items:
+            $ref: '#/components/schemas/Template'
+
+    CreateTemplate:
+      type: object
+      title: Create Template
+      description: Request body for creating a template
+      properties:
+        title:
+          type: string
+          description: Human-readable title for the template
+        purpose:
+          $ref: '#/components/schemas/TemplatePurpose'
+        subject:
+          type: string
+          description: Subject line template, supports {{x}} placeholders. Not used for pullslip templates.
+        body:
+          type: string
+          description: Body of the email or pull slip template. Supports {{x}} placeholders.
+        contentType:
+          $ref: '#/components/schemas/TemplateContentType'
+        labels:
+          type: array
+          description: Labels identifying the template's usage context
+          items:
+            type: string
+        audience:
+          $ref: '#/components/schemas/TemplateAudience'
+      required:
+        - title
+        - purpose
+        - body
+        - contentType
+        - labels
+
+    UpdateTemplate:
+      type: object
+      title: Update Template
+      description: Request body for updating a template
+      properties:
+        title:
+          type: string
+          description: Human-readable title for the template
+        subject:
+          type: string
+          description: Subject line template, supports {{x}} placeholders. Not used for pullslip templates.
+        body:
+          type: string
+          description: Body of the email or pull slip template. Supports {{x}} placeholders.
+        contentType:
+          $ref: '#/components/schemas/TemplateContentType'
+        labels:
+          type: array
+          description: Labels identifying the template's usage context
+          items:
+            type: string
+        audience:
+          $ref: '#/components/schemas/TemplateAudience'
+      required:
+        - title
+        - body
+        - contentType
+        - labels
+
 paths:
   /:
     get:
@@ -1582,10 +1731,11 @@ paths:
       description: |
         Use this endpoint to retrieve patron requests.
         Query parameter cql can be used to filter the results.
-        With cql you can use these fields id, state, side, requester_symbol, supplier_symbol, needs_attention,
-        has_notification, has_cost, has_unread_notification, service_type, service_level, created_at, needed_at,
-        requester_req_id, title, author, patron, terminal_state, updated_at, isbn, issn, given_name, surname,
-        has_internal_note, cql.serverChoice.
+        With cql you can use these fields id, state, side, requester_name, requester_symbol,
+        supplier_name, supplier_symbol, needs_attention, has_notification, has_cost,
+        has_unread_notification, service_type, service_level, created_at, needed_at, requester_req_id,
+        title, author, patron, terminal_state, updated_at, isbn, issn, given_name, surname, has_internal_note,
+        cql.serverChoice.
       tags:
         - patron-requests-api
       parameters:
@@ -2620,3 +2770,177 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  /templates:
+    get:
+      summary: List all templates
+      tags:
+        - templates-api
+        - patron-requests-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Successful retrieval of templates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Templates'
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Create a new template
+      tags:
+        - templates-api
+        - patron-requests-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTemplate'
+      responses:
+        '201':
+          description: Template created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '400':
+          description: Bad Request. Invalid input.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /templates/{id}:
+    get:
+      summary: Get a template by ID
+      tags:
+        - templates-api
+        - patron-requests-api
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the template to retrieve
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+      responses:
+        '200':
+          description: Template retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '404':
+          description: Template not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      summary: Update a template by ID
+      tags:
+        - templates-api
+        - patron-requests-api
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the template to update
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTemplate'
+      responses:
+        '200':
+          description: Template updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '400':
+          description: Bad Request. Invalid input.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Template not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Delete a template by ID
+      tags:
+        - templates-api
+        - patron-requests-api
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the template to delete
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+      responses:
+        '204':
+          description: Template deleted successfully (No Content)
+        '404':
+          description: Template not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+

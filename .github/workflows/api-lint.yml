@@ -49,7 +49,7 @@ jobs:
         run: |
           git clone https://github.com/folio-org/folio-tools
           cd folio-tools/api-lint \
-            && yarn install \
+            && yarn install --ignore-scripts --frozen-lockfile \
             && pip3 install -r requirements.txt
       - name: Configure default options
         run: |

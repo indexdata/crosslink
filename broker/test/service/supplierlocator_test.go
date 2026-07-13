@@ -686,7 +686,7 @@ func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
 func TestLocalSupplyToAlmaPeer(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqSymbol := "ISIL:REQ" + uuid.NewString()
-	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, reqSymbol, adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.Alma, directory.Entry{})
+	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, reqSymbol, adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.Alma, directory.Entry{}, reqSymbol)
 	data := ill_db.IllTransactionData{
 		BibliographicInfo: iso18626.BibliographicInfo{
 			SupplierUniqueRecordId: "return-" + reqSymbol,
@@ -907,7 +907,7 @@ func TestCheckAvailability_Z3950AdapterSkipped(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	// Create a peer with Holdings config in CustomData
 	customData := directory.Entry{HoldingsConfig: &directory.HoldingsConfig{}}
-	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData)
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData, "ISIL:Z3950-SUP")
 
 	// Create an ILL transaction and a located supplier for it
 	illTrId := apptest.GetIllTransId(t, illRepo)
@@ -957,7 +957,7 @@ func TestCheckAvailability_Z3950AdapterNotSkipped(t *testing.T) {
 			},
 		},
 	}}
-	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData)
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData, "ISIL:Z3950-SUP")
 
 	// Create an ILL transaction and a located supplier for it
 	illTrId := apptest.GetIllTransId(t, illRepo)
@@ -1011,7 +1011,7 @@ func TestCheckAvailability_Z3950AdapterError(t *testing.T) {
 			},
 		},
 	}
-	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData)
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData, "ISIL:Z3950-SUP")
 
 	// Create an ILL transaction and a located supplier for it
 	illTrId := apptest.GetIllTransId(t, illRepo)
@@ -1060,7 +1060,7 @@ func TestCheckAvailability_Z3950LookupError(t *testing.T) {
 			},
 		},
 	}
-	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData)
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData, "ISIL:Z3950-SUP")
 
 	// Create an ILL transaction and a located supplier for it
 	illTrId := apptest.GetIllTransId(t, illRepo)

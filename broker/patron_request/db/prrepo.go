@@ -37,6 +37,12 @@ type PrRepo interface {
 	MarkConditionNotificationsReceipt(ctx common.ExtendedContext, params MarkConditionNotificationsReceiptParams) error
 	DeleteNotificationById(ctx common.ExtendedContext, id string) error
 	DeleteItemById(ctx common.ExtendedContext, id string) error
+
+	SaveTemplate(ctx common.ExtendedContext, params SaveTemplateParams) (Template, error)
+	GetTemplateByIdAndOwner(ctx common.ExtendedContext, id string, owner string) (Template, error)
+	GetTemplatesByOwner(ctx common.ExtendedContext, params GetTemplatesByOwnerParams) ([]Template, int64, error)
+	GetTemplateByPurposeAudienceLabelAndOwner(ctx common.ExtendedContext, params GetTemplateByPurposeAudienceLabelAndOwnerParams) (Template, error)
+	DeleteTemplateByIdAndOwner(ctx common.ExtendedContext, id string, owner string) error
 }
 
 var ErrUnsupportedFacet = errors.New("unsupported facet field")
@@ -122,7 +128,7 @@ func (r *PgPrRepo) GetPatronRequestsFacets(ctx common.ExtendedContext, facetFiel
 	var facets []Facet
 	for _, field := range facetFields {
 		switch field {
-		case "requester_symbol", "supplier_symbol":
+		case "requester_symbol", "supplier_symbol", "requester_name", "supplier_name":
 			rows, err := r.queries.GetPatronRequestsFacetsCql(ctx, r.GetConnOrTx(), field, pgcql)
 			if err != nil {
 				return nil, err
@@ -160,7 +166,8 @@ func (r *PgPrRepo) ListPatronRequestsSearchView(ctx common.ExtendedContext, para
 }
 
 func (r *PgPrRepo) listPatronRequestRows(ctx common.ExtendedContext, params ListPatronRequestsParams, pgcql pgcql.Query) ([]ListPatronRequestsRow, int64, error) {
-	rows, explainResult, err := r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, pgcql, r.explainAnalyze)
+	db := r.GetConnOrTx()
+	rows, explainResult, err := r.queries.ListPatronRequestsCql(ctx, db, params, pgcql, r.explainAnalyze)
 	var fullCount int64
 	if err == nil {
 		for _, line := range explainResult {
@@ -171,7 +178,7 @@ func (r *PgPrRepo) listPatronRequestRows(ctx common.ExtendedContext, params List
 		} else {
 			params.Limit = 1
 			params.Offset = 0
-			countRows, _, countErr := r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, pgcql, false)
+			countRows, _, countErr := r.queries.ListPatronRequestsCql(ctx, db, params, pgcql, false)
 			err = countErr
 			if err == nil && len(countRows) > 0 {
 				fullCount = countRows[0].FullCount
@@ -305,4 +312,40 @@ func (r *PgPrRepo) DeleteNotificationById(ctx common.ExtendedContext, id string)
 
 func (r *PgPrRepo) DeleteItemById(ctx common.ExtendedContext, id string) error {
 	return r.queries.DeleteItemById(ctx, r.GetConnOrTx(), id)
+}
+
+func (r *PgPrRepo) SaveTemplate(ctx common.ExtendedContext, params SaveTemplateParams) (Template, error) {
+	row, err := r.queries.SaveTemplate(ctx, r.GetConnOrTx(), params)
+	return row.Template, err
+}
+
+func (r *PgPrRepo) GetTemplateByIdAndOwner(ctx common.ExtendedContext, id string, owner string) (Template, error) {
+	row, err := r.queries.GetTemplateByIdAndOwner(ctx, r.GetConnOrTx(), GetTemplateByIdAndOwnerParams{
+		ID:    id,
+		Owner: owner,
+	})
+	return row.Template, err
+}
+
+func (r *PgPrRepo) GetTemplatesByOwner(ctx common.ExtendedContext, params GetTemplatesByOwnerParams) ([]Template, int64, error) {
+	rows, err := r.queries.GetTemplatesByOwner(ctx, r.GetConnOrTx(), params)
+	var list []Template
+	var fullCount int64
+	for _, row := range rows {
+		fullCount = row.FullCount
+		list = append(list, row.Template)
+	}
+	return list, fullCount, err
+}
+
+func (r *PgPrRepo) GetTemplateByPurposeAudienceLabelAndOwner(ctx common.ExtendedContext, params GetTemplateByPurposeAudienceLabelAndOwnerParams) (Template, error) {
+	row, err := r.queries.GetTemplateByPurposeAudienceLabelAndOwner(ctx, r.GetConnOrTx(), params)
+	return row.Template, err
+}
+
+func (r *PgPrRepo) DeleteTemplateByIdAndOwner(ctx common.ExtendedContext, id string, owner string) error {
+	return r.queries.DeleteTemplateByIdAndOwner(ctx, r.GetConnOrTx(), DeleteTemplateByIdAndOwnerParams{
+		ID:    id,
+		Owner: owner,
+	})
 }

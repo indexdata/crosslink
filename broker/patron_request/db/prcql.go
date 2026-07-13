@@ -167,6 +167,12 @@ func ParsePatronRequestsCql(cqlString string) (pgcql.Query, error) {
 	ftv := pgcql.NewFieldTsVector().WithLanguage(LANGUAGE).WithServerChoiceRel(cql.ALL).WithColumn("search")
 	def.AddField("cql.serverChoice", ftv)
 
+	f = pgcql.NewFieldString().WithLikeOps().WithPrefixMatchOnly().WithLower()
+	def.AddField("requester_name", f)
+
+	f = pgcql.NewFieldString().WithLikeOps().WithPrefixMatchOnly().WithLower()
+	def.AddField("supplier_name", f)
+
 	var parser cql.Parser
 	query, err := parser.Parse(cqlString)
 	if err != nil {
@@ -304,6 +310,8 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 			&i.PatronRequestSearchView.ServiceLevel,
 			&i.PatronRequestSearchView.NeededAt,
 			&i.PatronRequestSearchView.UnreadNotificationsCount,
+			&i.PatronRequestSearchView.RequesterName,
+			&i.PatronRequestSearchView.SupplierName,
 			&i.FullCount,
 		); err != nil {
 			return nil, nil, err

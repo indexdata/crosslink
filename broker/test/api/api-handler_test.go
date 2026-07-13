@@ -79,7 +79,7 @@ func TestMain(m *testing.M) {
 	defer cancel()
 	code := m.Run()
 
-	test.Expect(pgContainer.Terminate(ctx), "failed to stop db container")
+	test.Expect(test.TerminatePGContainer(ctx, pgContainer), "failed to stop db container")
 	os.Exit(code)
 }
 
@@ -267,7 +267,7 @@ func TestGetIllTransactionsOkapiIncludesBranchSymbols(t *testing.T) {
 	tenantName := "BIBBRANCH" + strings.ToUpper(uuid.NewString())
 	mainSymbol := "ISIL:DK-" + tenantName
 	branchSymbol := "ISIL:DK-BRANCH" + strings.ToUpper(uuid.NewString())
-	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, mainSymbol, "http://example.invalid", app.BROKER_MODE, directory.CrossLink, directory.Entry{})
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, mainSymbol, "http://example.invalid", app.BROKER_MODE, directory.CrossLink, directory.Entry{}, mainSymbol)
 	_, err := illRepo.SaveBranchSymbol(ctx, ill_db.SaveBranchSymbolParams{
 		PeerID:      peer.ID,
 		SymbolValue: branchSymbol,
