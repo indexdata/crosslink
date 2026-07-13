@@ -42,6 +42,7 @@ const (
 	BorrowerStateRetryAccepted    pr_db.PatronRequestState = "RETRY_ACCEPTED"
 	BorrowerStateRetryRejected    pr_db.PatronRequestState = "RETRY_REJECTED"
 	BorrowerStateManuallyClosed   pr_db.PatronRequestState = "MANUALLY_CLOSED"
+	BorrowerStateClosedDuplicate  pr_db.PatronRequestState = "CLOSED_DUPLICATE"
 	LenderStateNew                pr_db.PatronRequestState = "NEW"
 	LenderStateValidated          pr_db.PatronRequestState = "VALIDATED"
 	LenderStateWillSupply         pr_db.PatronRequestState = "WILL_SUPPLY"
@@ -124,6 +125,7 @@ func requesterBuiltInStates() []string {
 		string(BorrowerStateRetryRejected),
 		string(BorrowerStateRetryPending),
 		string(BorrowerStateManuallyClosed),
+		string(BorrowerStateClosedDuplicate),
 	})
 }
 

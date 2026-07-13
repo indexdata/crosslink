@@ -30,6 +30,7 @@ stateModels:
             desc: Send ISO18626 request to the supplier or broker
             transitions:
               success: SENT
+              failure: CLOSED_DUPLICATE
             trigger: auto
 
       - name: NEEDS_REVIEW
@@ -44,6 +45,7 @@ stateModels:
             desc: Send ISO18626 request to the supplier or broker
             transitions:
               success: SENT
+              failure: CLOSED_DUPLICATE
 
       - name: SENT
         display: Sent
@@ -272,6 +274,12 @@ stateModels:
         side: REQUESTER
         terminal: true
         manualClose: true
+
+      - name: CLOSED_DUPLICATE
+        display: Closed Duplicate
+        desc: Closed due to duplicate request
+        side: REQUESTER
+        terminal: true
 
       # ── SUPPLIER states ──────────────────────────────────────────────────────
       - name: NEW
