@@ -286,7 +286,9 @@ func nextScheduleTimeAt(schedule string, now time.Time) (pgtype.Timestamptz, err
 	if err != nil {
 		return pgtype.Timestamptz{}, fmt.Errorf("invalid rrule string %q: %w", schedule, err)
 	}
-	options.Dtstart = now
+	// Anchor at today's UTC midnight so omitted time components inherit zero and
+	// interval rules have a deterministic daily phase.
+	options.Dtstart = now.Truncate(24 * time.Hour)
 
 	rule, err := rrule.NewRRule(*options)
 	if err != nil {

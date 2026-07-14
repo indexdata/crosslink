@@ -117,7 +117,7 @@ func TestNextScheduleTime_SpecificSchedule(t *testing.T) {
 	assert.True(t, ts.Time.After(time.Now()))
 }
 
-func TestNextScheduleTime_UsesDynamicDTStartDefaults(t *testing.T) {
+func TestNextScheduleTime_MidnightAnchoredDefaults(t *testing.T) {
 	tests := []struct {
 		name     string
 		schedule string
@@ -125,22 +125,47 @@ func TestNextScheduleTime_UsesDynamicDTStartDefaults(t *testing.T) {
 		expected time.Time
 	}{
 		{
-			name:     "daily defaults to current time of day",
+			name:     "daily defaults to midnight",
 			schedule: "FREQ=DAILY",
 			now:      time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
-			expected: time.Date(2026, 1, 3, 3, 4, 5, 0, time.UTC),
+			expected: time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC),
 		},
 		{
-			name:     "weekly defaults to current weekday and time",
+			name:     "weekly defaults to anchor weekday at midnight",
 			schedule: "FREQ=WEEKLY",
 			now:      time.Date(2026, 1, 7, 10, 11, 12, 0, time.UTC),
-			expected: time.Date(2026, 1, 14, 10, 11, 12, 0, time.UTC),
+			expected: time.Date(2026, 1, 14, 0, 0, 0, 0, time.UTC),
 		},
 		{
-			name:     "monthly defaults to current day of month and time",
+			name:     "monthly defaults to anchor day at midnight",
 			schedule: "FREQ=MONTHLY",
 			now:      time.Date(2026, 1, 15, 8, 30, 0, 0, time.UTC),
-			expected: time.Date(2026, 2, 15, 8, 30, 0, 0, time.UTC),
+			expected: time.Date(2026, 2, 15, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:     "minutely interval has a midnight-aligned phase",
+			schedule: "FREQ=MINUTELY;INTERVAL=15",
+			now:      time.Date(2026, 1, 2, 10, 7, 44, 0, time.UTC),
+			expected: time.Date(2026, 1, 2, 10, 15, 0, 0, time.UTC),
+		},
+		{
+			name:     "hourly defaults minute and second to zero",
+			schedule: "FREQ=HOURLY",
+			now:      time.Date(2026, 1, 2, 10, 7, 44, 0, time.UTC),
+			expected: time.Date(2026, 1, 2, 11, 0, 0, 0, time.UTC),
+		},
+		{
+			name:     "explicit minute overrides the anchor default",
+			schedule: "FREQ=HOURLY;BYMINUTE=30",
+			now:      time.Date(2026, 1, 2, 10, 7, 44, 0, time.UTC),
+			expected: time.Date(2026, 1, 2, 10, 30, 0, 0, time.UTC),
+		},
+		{
+			name:     "calendar rule inherits a zero second",
+			schedule: "FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0",
+			// Monday 08:59:45 — next run is 09:00:00 sharp, not 09:00:45.
+			now:      time.Date(2026, 1, 12, 8, 59, 45, 0, time.UTC),
+			expected: time.Date(2026, 1, 12, 9, 0, 0, 0, time.UTC),
 		},
 	}
 
