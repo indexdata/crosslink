@@ -1188,13 +1188,13 @@ func (m *MockActionTaskProcessorExclusiveError) ProcessInvokeActionTask(ctx comm
 
 // --- metadataUpdate tests ---
 
-// mockAvailabilityCreator controls what GetAdapter returns when no globalLookupAdapter is pre-set.
-type mockAvailabilityCreator struct {
+// mockLookupCreator controls what GetAdapter returns when no globalLookupAdapter is pre-set.
+type mockLookupCreator struct {
 	adapter catalog.LookupAdapter
 	err     error
 }
 
-func (m *mockAvailabilityCreator) GetAdapter(peer ill_db.Peer) (catalog.LookupAdapter, error) {
+func (m *mockLookupCreator) GetAdapter(peer ill_db.Peer) (catalog.LookupAdapter, error) {
 	return m.adapter, m.err
 }
 
@@ -1223,7 +1223,7 @@ func TestMetadataUpdateNoFactory(t *testing.T) {
 }
 
 func TestMetadataUpdateAdapterInitError(t *testing.T) {
-	creator := &mockAvailabilityCreator{err: errors.New("adapter init failed")}
+	creator := &mockLookupCreator{err: errors.New("adapter init failed")}
 	factory := service.NewLookupAdapterFactory(nil, nil, "", nil, creator)
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
@@ -1233,7 +1233,7 @@ func TestMetadataUpdateAdapterInitError(t *testing.T) {
 }
 
 func TestMetadataUpdateNilLookupAdapter(t *testing.T) {
-	creator := &mockAvailabilityCreator{} // returns nil adapter, nil error
+	creator := &mockLookupCreator{} // returns nil adapter, nil error
 	factory := service.NewLookupAdapterFactory(nil, nil, "", nil, creator)
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
