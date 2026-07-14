@@ -72,10 +72,10 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 
 	lookupAdapter, configPeer, err := s.lookupAdapterFactory.GetAdapterRequester(ctx, requester)
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "failed to get holdings adapter for locating suppliers", err)
+		return events.LogErrorAndReturnResult(ctx, "failed to get lookup adapter for locating suppliers", err)
 	}
 	if lookupAdapter == nil {
-		return events.LogErrorAndReturnResult(ctx, "no holdings adapter available for locating suppliers", fmt.Errorf("no adapter found"))
+		return events.LogErrorAndReturnResult(ctx, "no lookup adapter available for locating suppliers", fmt.Errorf("no adapter found"))
 	}
 
 	metadataUpdateMode := directory.None
