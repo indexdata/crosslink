@@ -58,7 +58,7 @@ func (c *LookupAdapterCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, 
 	entry := peer.CustomData
 	config := entry.CatalogConfig
 	if config == nil {
-		return nil, nil // No holdings adapter for this peer
+		return nil, nil // No lookup adapter for this peer
 	}
 	if c.mode == LookupAdapterMock {
 		return NewMockLookupAdapter(*config)
