@@ -1,4 +1,4 @@
-package holdings
+package catalog
 
 import (
 	"testing"
@@ -9,7 +9,7 @@ import (
 )
 
 func TestGetAdapterEmpty(t *testing.T) {
-	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
+	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
 	peer := ill_db.Peer{}
 	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
@@ -17,7 +17,7 @@ func TestGetAdapterEmpty(t *testing.T) {
 }
 
 func TestGetAdapterOtherNoConfig(t *testing.T) {
-	creator := NewAvailabilityCreator("other", "")
+	creator := NewLookupAdapterCreator("other", "")
 	peer := ill_db.Peer{}
 	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
@@ -31,15 +31,15 @@ func TestParserNil(t *testing.T) {
 }
 
 func TestParserMissing(t *testing.T) {
-	parserConfig := &directory.ParserConfig{}
+	parserConfig := &directory.HoldingsParserConfig{}
 	_, err := getHoldingsParser(parserConfig)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "must set marc")
 }
 
 func TestParserMarc(t *testing.T) {
-	parserConfig := &directory.ParserConfig{
-		Marc: &directory.MarcParserConfig{},
+	parserConfig := &directory.HoldingsParserConfig{
+		Marc: &directory.MarcHoldingsParserConfig{},
 	}
 	parser, err := getHoldingsParser(parserConfig)
 	assert.NoError(t, err)
@@ -47,8 +47,8 @@ func TestParserMarc(t *testing.T) {
 }
 
 func TestParserOpac(t *testing.T) {
-	parserConfig := &directory.ParserConfig{
-		Opac: &directory.OpacParserConfig{},
+	parserConfig := &directory.HoldingsParserConfig{
+		Opac: &directory.OpacHoldingsParserConfig{},
 	}
 	parser, err := getHoldingsParser(parserConfig)
 	assert.NoError(t, err)
@@ -56,14 +56,14 @@ func TestParserOpac(t *testing.T) {
 }
 
 func TestGetAdapterBadParser(t *testing.T) {
-	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
+	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			HoldingsConfig: &directory.HoldingsConfig{
+			CatalogConfig: &directory.CatalogConfig{
 				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
-				ParserConfig: &directory.ParserConfig{},
+				HoldingsFormat: &directory.HoldingsParserConfig{},
 			},
 		},
 	}
@@ -73,10 +73,10 @@ func TestGetAdapterBadParser(t *testing.T) {
 }
 
 func TestGetAdapterOtherWithConfig(t *testing.T) {
-	creator := NewAvailabilityCreator("other", "")
+	creator := NewLookupAdapterCreator("other", "")
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			HoldingsConfig: &directory.HoldingsConfig{
+			CatalogConfig: &directory.CatalogConfig{
 				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
@@ -85,14 +85,14 @@ func TestGetAdapterOtherWithConfig(t *testing.T) {
 	}
 	_, err := creator.GetAdapter(peer)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported holdings adapter type: other")
+	assert.Contains(t, err.Error(), "unsupported lookup adapter type: other")
 }
 
 func TestGetAdapterMissingProperties(t *testing.T) {
-	creator := NewAvailabilityCreator("zoom", "")
+	creator := NewLookupAdapterCreator("zoom", "")
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			HoldingsConfig: &directory.HoldingsConfig{},
+			CatalogConfig: &directory.CatalogConfig{},
 		},
 	}
 	_, err := creator.GetAdapter(peer)
@@ -103,30 +103,30 @@ func TestGetAdapterMissingProperties(t *testing.T) {
 func TestGetAdapterMock(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			HoldingsConfig: &directory.HoldingsConfig{
+			CatalogConfig: &directory.CatalogConfig{
 				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
 			},
 		},
 	}
-	creator := NewAvailabilityCreator(AvailabilityAdapterMock, "")
+	creator := NewLookupAdapterCreator(LookupAdapterMock, "")
 	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
-	assert.IsType(t, &MockAvailabilityAdapter{}, aa)
+	assert.IsType(t, &MockLookupAdapter{}, aa)
 }
 
 func TestGetAdapterZoom(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			HoldingsConfig: &directory.HoldingsConfig{
+			CatalogConfig: &directory.CatalogConfig{
 				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
 			},
 		},
 	}
-	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
+	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
 	aa, err := creator.GetAdapter(peer)
 	if !cgoEnabled() {
 		assert.Error(t, err)
@@ -134,37 +134,37 @@ func TestGetAdapterZoom(t *testing.T) {
 		assert.Nil(t, aa)
 	} else {
 		assert.NoError(t, err)
-		assert.IsType(t, &ZoomAvailabilityAdapter{}, aa)
+		assert.IsType(t, &ZoomLookupAdapter{}, aa)
 	}
 }
 
 func TestGetAdapterMetaproxy(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			HoldingsConfig: &directory.HoldingsConfig{
+			CatalogConfig: &directory.CatalogConfig{
 				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
 			},
 		},
 	}
-	creator := NewAvailabilityCreator(AvailabilityAdapterMetaproxy, "http://metaproxy.indexdata.com")
+	creator := NewLookupAdapterCreator(LookupAdapterMetaproxy, "http://metaproxy.indexdata.com")
 	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
-	assert.IsType(t, &MetaproxyAvailabilityAdapter{}, aa)
+	assert.IsType(t, &MetaproxyLookupAdapter{}, aa)
 }
 
 func TestGetAdapterMetaproxyMissingProxy(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			HoldingsConfig: &directory.HoldingsConfig{
+			CatalogConfig: &directory.CatalogConfig{
 				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
 			},
 		},
 	}
-	creator := NewAvailabilityCreator(AvailabilityAdapterMetaproxy, "")
+	creator := NewLookupAdapterCreator(LookupAdapterMetaproxy, "")
 	_, err := creator.GetAdapter(peer)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "METAPROXY_URL")
@@ -173,15 +173,15 @@ func TestGetAdapterMetaproxyMissingProxy(t *testing.T) {
 func TestGetAdapterSRU(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			HoldingsConfig: &directory.HoldingsConfig{
+			CatalogConfig: &directory.CatalogConfig{
 				Sru: &directory.SruConfig{
 					Address: "a",
 				},
 			},
 		},
 	}
-	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
+	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
 	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
-	assert.IsType(t, &SruHoldingsLookupAdapter{}, aa)
+	assert.IsType(t, &SruLookupAdapter{}, aa)
 }

@@ -11,7 +11,7 @@
         "authority": "ISIL"
       }
     ],
-    "holdingsConfig": {
+    "catalogConfig": {
       "zoom": {
         "address": "https://sru.kobv.de/holdingsgvi",
         "options": {
@@ -26,7 +26,7 @@
         "isbn": "",
         "issn": ""
       },
-      "parserConfig": {
+      "holdingsFormat": {
         "marc21plus1": {}
       }
     },

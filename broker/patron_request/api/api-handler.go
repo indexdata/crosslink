@@ -15,10 +15,10 @@ import (
 	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/api"
+	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
-	"github.com/indexdata/crosslink/broker/holdings"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/oapi"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
@@ -296,13 +296,13 @@ func (a *PatronRequestApiHandler) metadataUpdate(ctx common.ExtendedContext, ill
 	}
 
 	mode := directory.None
-	if configPeer.HoldingsConfig != nil && configPeer.HoldingsConfig.MetadataUpdateMode != nil {
-		mode = *configPeer.HoldingsConfig.MetadataUpdateMode
+	if configPeer.CatalogConfig != nil && configPeer.CatalogConfig.MetadataUpdateMode != nil {
+		mode = *configPeer.CatalogConfig.MetadataUpdateMode
 	}
 	if mode == directory.None {
 		return nil
 	}
-	lookupParams := holdings.LookupParamsFromBibliographicInfo(illRequest.BibliographicInfo, illRequest.ServiceInfo)
+	lookupParams := catalog.LookupParamsFromBibliographicInfo(illRequest.BibliographicInfo, illRequest.ServiceInfo)
 
 	lookupResult, err := lookupAdapter.Lookup(lookupParams)
 	if err != nil {
@@ -312,7 +312,7 @@ func (a *PatronRequestApiHandler) metadataUpdate(ctx common.ExtendedContext, ill
 	if err != nil {
 		return fmt.Errorf("failed to get metadata for patron request: %w", err)
 	}
-	return holdings.MetadataRequestUpdate(&illRequest.BibliographicInfo, metadata, lookupParams, mode)
+	return catalog.MetadataRequestUpdate(&illRequest.BibliographicInfo, metadata, lookupParams, mode)
 }
 
 func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *http.Request, params proapi.PostPatronRequestsParams) {

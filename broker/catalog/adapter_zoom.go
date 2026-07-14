@@ -1,6 +1,6 @@
 //go:build cgo
 
-package holdings
+package catalog
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 
 func cgoEnabled() bool { return true }
 
-type ZoomAvailabilityAdapter struct {
+type ZoomLookupAdapter struct {
 	zurl           string
 	options        zoom.Options
 	holdingsParser HoldingsParser
@@ -25,8 +25,8 @@ type ZoomLookupResult struct {
 	metadata *Metadata
 }
 
-func NewZoomAvailabilityAdapter(config directory.ZoomConfig, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser, metadataParser MetadataParser) (LookupAdapter, error) {
-	a := &ZoomAvailabilityAdapter{
+func NewZoomLookupAdapter(config directory.ZoomConfig, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser, metadataParser MetadataParser) (LookupAdapter, error) {
+	a := &ZoomLookupAdapter{
 		// default options, can be overridden by config.Options
 		options: zoom.Options{
 			"count":                 "10",
@@ -46,7 +46,7 @@ func NewZoomAvailabilityAdapter(config directory.ZoomConfig, queryBuilder Lookup
 	return a, nil
 }
 
-func (a *ZoomAvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query *zoom.Query, processRecord func([]byte) (bool, error)) (bool, error) {
+func (a *ZoomLookupAdapter) searchRetrieve(conn *zoom.Connection, query *zoom.Query, processRecord func([]byte) (bool, error)) (bool, error) {
 	set, err := conn.Search(query)
 	if err != nil {
 		return false, err
@@ -78,7 +78,7 @@ func (a *ZoomAvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query *z
 	return found, nil
 }
 
-func (a *ZoomAvailabilityAdapter) iterateQueries(
+func (a *ZoomLookupAdapter) iterateQueries(
 	params LookupParams,
 	processRecord func([]byte) (bool, error),
 ) (string, error) {
@@ -131,7 +131,7 @@ func (a *ZoomAvailabilityAdapter) iterateQueries(
 	return cqlList[0], nil
 }
 
-func (a *ZoomAvailabilityAdapter) Lookup(params LookupParams) (LookupResult, error) {
+func (a *ZoomLookupAdapter) Lookup(params LookupParams) (LookupResult, error) {
 	var result ZoomLookupResult
 	var err error
 	result.query, err = a.iterateQueries(params, func(xmlBuffer []byte) (bool, error) {

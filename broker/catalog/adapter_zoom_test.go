@@ -1,6 +1,6 @@
 //go:build cgo
 
-package holdings
+package catalog
 
 import (
 	"context"
@@ -35,7 +35,7 @@ func TestMain(m *testing.M) {
 
 func TestLookupFoundMarc(t *testing.T) {
 	// target does not return holdings, we just use 010$a as fake location to verify that the record was parsed correctly
-	config := directory.MarcParserConfig{
+	config := directory.MarcHoldingsParserConfig{
 		MainField:        NewString("010"),
 		LocationSubField: NewString("a"),
 	}
@@ -47,7 +47,7 @@ func TestLookupFoundMarc(t *testing.T) {
 	assert.NoError(t, err)
 	holdingsParser := NewMarcHoldingsParser(config)
 	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
-	aa, err := NewZoomAvailabilityAdapter(
+	aa, err := NewZoomLookupAdapter(
 		directory.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
 			Options: &map[string]string{
@@ -60,8 +60,8 @@ func TestLookupFoundMarc(t *testing.T) {
 		metadataParser,
 	)
 	assert.NoError(t, err)
-	assert.Equal(t, containerHost+":"+mappedPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
-	assert.Equal(t, "20", aa.(*ZoomAvailabilityAdapter).options["count"])
+	assert.Equal(t, containerHost+":"+mappedPort+"/marc", aa.(*ZoomLookupAdapter).zurl)
+	assert.Equal(t, "20", aa.(*ZoomLookupAdapter).options["count"])
 
 	params := LookupParams{
 		Title: "Computer",
@@ -90,9 +90,9 @@ func TestLookupFoundOpac(t *testing.T) {
 		Type: &cqlType,
 	})
 	assert.NoError(t, err)
-	holdingsParser := NewOpacHoldingsParser(directory.OpacParserConfig{})
+	holdingsParser := NewOpacHoldingsParser(directory.OpacHoldingsParserConfig{})
 	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
-	aa, err := NewZoomAvailabilityAdapter(
+	aa, err := NewZoomLookupAdapter(
 		directory.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
 			Options: &map[string]string{
@@ -104,8 +104,8 @@ func TestLookupFoundOpac(t *testing.T) {
 		metadataParser,
 	)
 	assert.NoError(t, err)
-	assert.Equal(t, containerHost+":"+mappedPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
-	assert.Equal(t, "10", aa.(*ZoomAvailabilityAdapter).options["count"])
+	assert.Equal(t, containerHost+":"+mappedPort+"/marc", aa.(*ZoomLookupAdapter).zurl)
+	assert.Equal(t, "10", aa.(*ZoomLookupAdapter).options["count"])
 
 	params := LookupParams{
 		Title: "Computer",
@@ -129,9 +129,9 @@ func TestLookupFoundOpac(t *testing.T) {
 func TestLookupDiagnosticPQF(t *testing.T) {
 	queryBuilder, err := NewQueryBuilderGen(nil)
 	assert.NoError(t, err)
-	holdingsParser := NewMarcHoldingsParser(directory.MarcParserConfig{})
+	holdingsParser := NewMarcHoldingsParser(directory.MarcHoldingsParserConfig{})
 	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
-	aa, err := NewZoomAvailabilityAdapter(
+	aa, err := NewZoomLookupAdapter(
 		directory.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
 			Options: &map[string]string{
@@ -143,8 +143,8 @@ func TestLookupDiagnosticPQF(t *testing.T) {
 		metadataParser,
 	)
 	assert.NoError(t, err)
-	assert.Equal(t, "localhost:"+mappedPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
-	assert.Equal(t, "danmarc", aa.(*ZoomAvailabilityAdapter).options["preferredRecordSyntax"])
+	assert.Equal(t, "localhost:"+mappedPort+"/marc", aa.(*ZoomLookupAdapter).zurl)
+	assert.Equal(t, "danmarc", aa.(*ZoomLookupAdapter).options["preferredRecordSyntax"])
 
 	params := LookupParams{Identifier: "1234"}
 	result, err := aa.Lookup(params)
@@ -160,9 +160,9 @@ func TestLookupDiagnosticCql(t *testing.T) {
 		Type: &cqlType,
 	})
 	assert.NoError(t, err)
-	holdingsParser := NewMarcHoldingsParser(directory.MarcParserConfig{})
+	holdingsParser := NewMarcHoldingsParser(directory.MarcHoldingsParserConfig{})
 	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
-	aa, err := NewZoomAvailabilityAdapter(
+	aa, err := NewZoomLookupAdapter(
 		directory.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
 			Options: &map[string]string{
@@ -174,8 +174,8 @@ func TestLookupDiagnosticCql(t *testing.T) {
 		metadataParser,
 	)
 	assert.NoError(t, err)
-	assert.Equal(t, "localhost:"+mappedPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
-	assert.Equal(t, "danmarc", aa.(*ZoomAvailabilityAdapter).options["preferredRecordSyntax"])
+	assert.Equal(t, "localhost:"+mappedPort+"/marc", aa.(*ZoomLookupAdapter).zurl)
+	assert.Equal(t, "danmarc", aa.(*ZoomLookupAdapter).options["preferredRecordSyntax"])
 
 	params := LookupParams{Identifier: "1234"}
 	result, err := aa.Lookup(params)
@@ -188,9 +188,9 @@ func TestLookupDiagnosticCql(t *testing.T) {
 func TestConnectFailure(t *testing.T) {
 	queryBuilder, err := NewQueryBuilderGen(nil)
 	assert.NoError(t, err)
-	holdingsParser := NewMarcHoldingsParser(directory.MarcParserConfig{})
+	holdingsParser := NewMarcHoldingsParser(directory.MarcHoldingsParserConfig{})
 	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
-	aa, err := NewZoomAvailabilityAdapter(
+	aa, err := NewZoomLookupAdapter(
 		directory.ZoomConfig{
 			Address: "",
 		},
