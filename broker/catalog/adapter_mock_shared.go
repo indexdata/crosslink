@@ -1,4 +1,4 @@
-package holdings
+package catalog
 
 import (
 	"errors"
@@ -7,18 +7,18 @@ import (
 	"strings"
 )
 
-type MockHoldingsLookupAdapter struct {
+type MockLookupShared struct {
 }
 
-type MockHoldingsLookupResult struct {
+type MockLookupSharedResult struct {
 	holdings    []Holding
 	holdingsErr error
 	query       string
 }
 
 // the original mock holdings adapter that we used for shared index testing
-func (m *MockHoldingsLookupAdapter) Lookup(params LookupParams) (LookupResult, error) {
-	var result MockHoldingsLookupResult
+func (m *MockLookupShared) Lookup(params LookupParams) (LookupResult, error) {
+	var result MockLookupSharedResult
 	result.holdings = []Holding{}
 	result.query = params.Identifier
 	ids := strings.Split(params.Identifier, ";")
@@ -67,19 +67,19 @@ func (m *MockHoldingsLookupAdapter) Lookup(params LookupParams) (LookupResult, e
 	return &result, nil
 }
 
-func (m *MockHoldingsLookupResult) GetMetadata() (Metadata, error) {
+func (m *MockLookupSharedResult) GetMetadata() (Metadata, error) {
 	var metadata Metadata
 	metadata.Identifier = m.query
 	return metadata, nil
 }
 
-func (m *MockHoldingsLookupResult) GetHoldings() ([]Holding, error) {
+func (m *MockLookupSharedResult) GetHoldings() ([]Holding, error) {
 	if m.holdingsErr != nil {
 		return nil, m.holdingsErr
 	}
 	return m.holdings, nil
 }
 
-func (m *MockHoldingsLookupResult) GetQuery() string {
+func (m *MockLookupSharedResult) GetQuery() string {
 	return m.query
 }

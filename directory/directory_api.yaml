@@ -254,9 +254,9 @@ components:
         lmsConfig:
           description: Configuration for LMS (Library Management System) integration via NCIP protocol
           $ref: '#/components/schemas/LmsConfig'
-        holdingsConfig:
-          description: Configuration for holdings lookup (institutional or consortial).
-          $ref: '#/components/schemas/HoldingsConfig'
+        catalogConfig:
+          description: Configuration for catalog lookup (institutional or consortial).
+          $ref: '#/components/schemas/CatalogConfig'
         vendor:
           type: string
           description: ISO18626 vendor type
@@ -267,7 +267,7 @@ components:
             - ILLiad
             - Unknown
 
-    HoldingsConfig:
+    CatalogConfig:
       type: object
       properties:
         sru:
@@ -276,8 +276,8 @@ components:
           $ref: '#/components/schemas/ZoomConfig'
         queryConfig:
           $ref: '#/components/schemas/QueryConfig'
-        parserConfig:
-          $ref: '#/components/schemas/ParserConfig'
+        holdingsFormat:
+          $ref: '#/components/schemas/HoldingsParserConfig'
         metadataUpdateMode:
           $ref: '#/components/schemas/MetadataUpdateMode'
         metadataFormat:
@@ -379,13 +379,13 @@ components:
           description: Subfield code to use for edition (for example, "250$a")
       additionalProperties: false
 
-    ParserConfig:
+    HoldingsParserConfig:
       type: object
       properties:
         marc:
-          $ref: '#/components/schemas/MarcParserConfig'
+          $ref: '#/components/schemas/MarcHoldingsParserConfig'
         opac:
-          $ref: '#/components/schemas/OpacParserConfig'
+          $ref: '#/components/schemas/OpacHoldingsParserConfig'
         reservoir:
           type: object
           description: Configuration for Reservoir parser. Currently must be empty; no properties allowed.
@@ -398,7 +398,7 @@ components:
           additionalProperties: false
       additionalProperties: false
 
-    MarcParserConfig:
+    MarcHoldingsParserConfig:
       type: object
       properties:
         mainField:
@@ -421,7 +421,7 @@ components:
           description: Subfield code to use for call number (for example, "h")
       additionalProperties: false
 
-    OpacParserConfig:
+    OpacHoldingsParserConfig:
       type: object
       description: |
         Configuration for OPAC parser. Currently must be empty; no properties allowed.

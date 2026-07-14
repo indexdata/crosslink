@@ -1,4 +1,4 @@
-package holdings
+package catalog
 
 import (
 	"encoding/xml"
@@ -14,7 +14,7 @@ import (
 	"github.com/indexdata/crosslink/sru/diag"
 )
 
-type SruHoldingsLookupAdapter struct {
+type SruLookupAdapter struct {
 	sruUrl         []string
 	client         *http.Client
 	holdingsParser HoldingsParser
@@ -30,11 +30,11 @@ type SruLookupResult struct {
 	metadata *Metadata
 }
 
-func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string, xTarget string, queryBuilder LookupQueryBuilder, parser HoldingsParser, metadataParser MetadataParser, recordSchema string) LookupAdapter {
-	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl, queryBuilder: queryBuilder, holdingsParser: parser, metadataParser: metadataParser, xTarget: xTarget, recordSchema: recordSchema}
+func CreateSruLookupAdapter(client *http.Client, sruUrl []string, xTarget string, queryBuilder LookupQueryBuilder, parser HoldingsParser, metadataParser MetadataParser, recordSchema string) LookupAdapter {
+	return &SruLookupAdapter{client: client, sruUrl: sruUrl, queryBuilder: queryBuilder, holdingsParser: parser, metadataParser: metadataParser, xTarget: xTarget, recordSchema: recordSchema}
 }
 
-func NewSruAvailabilityAdapter(config directory.SruConfig, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser, metadataParser MetadataParser) (LookupAdapter, error) {
+func NewSruLookupAdapter(config directory.SruConfig, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser, metadataParser MetadataParser) (LookupAdapter, error) {
 	var recordSchema string
 	if config.RecordSchema != nil {
 		recordSchema = *config.RecordSchema
@@ -42,10 +42,10 @@ func NewSruAvailabilityAdapter(config directory.SruConfig, queryBuilder LookupQu
 	if recordSchema == "" {
 		recordSchema = "marcxml" // default to marcxml if not specified
 	}
-	return CreateSruHoldingsLookupAdapter(http.DefaultClient, []string{config.Address}, "", queryBuilder, holdingsParser, metadataParser, recordSchema), nil
+	return CreateSruLookupAdapter(http.DefaultClient, []string{config.Address}, "", queryBuilder, holdingsParser, metadataParser, recordSchema), nil
 }
 
-func (s *SruHoldingsLookupAdapter) parseRecord(record *sru.RecordDefinition, processRecord func([]byte) (bool, error)) (bool, error) {
+func (s *SruLookupAdapter) parseRecord(record *sru.RecordDefinition, processRecord func([]byte) (bool, error)) (bool, error) {
 	if record.RecordXMLEscaping != nil && *record.RecordXMLEscaping != sru.RecordXMLEscapingDefinitionXml {
 		return false, fmt.Errorf("unsupported RecordXMLEscaping: %s", *record.RecordXMLEscaping)
 	}
@@ -75,7 +75,7 @@ func encodeCqlSearchClause(field string, value string) (string, error) {
 	return cqlQuery.String(), nil
 }
 
-func (s *SruHoldingsLookupAdapter) search(sruUrl string, params LookupParams, query string, processRecord func([]byte) (bool, error)) (bool, error) {
+func (s *SruLookupAdapter) search(sruUrl string, params LookupParams, query string, processRecord func([]byte) (bool, error)) (bool, error) {
 	var sruResponse sru.SearchRetrieveResponse
 	query = "?maximumRecords=1000&recordSchema=" + url.QueryEscape(s.recordSchema) + "&" + query
 	if s.xTarget != "" {
@@ -108,7 +108,7 @@ func (s *SruHoldingsLookupAdapter) search(sruUrl string, params LookupParams, qu
 	return found, nil
 }
 
-func (s *SruHoldingsLookupAdapter) lookupServer(sruUrl string, params LookupParams, processRecord func([]byte) (bool, error)) (bool, string, error) {
+func (s *SruLookupAdapter) lookupServer(sruUrl string, params LookupParams, processRecord func([]byte) (bool, error)) (bool, string, error) {
 	cqlList, pqfList, err := s.queryBuilder.Build(params)
 	if err != nil {
 		return false, "", err
@@ -134,7 +134,7 @@ func (s *SruHoldingsLookupAdapter) lookupServer(sruUrl string, params LookupPara
 	return false, query, nil
 }
 
-func (s *SruHoldingsLookupAdapter) Lookup(params LookupParams) (LookupResult, error) {
+func (s *SruLookupAdapter) Lookup(params LookupParams) (LookupResult, error) {
 	var result SruLookupResult
 
 	for _, sruUrl := range s.sruUrl {

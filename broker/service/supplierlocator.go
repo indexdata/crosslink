@@ -10,9 +10,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
+	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
-	"github.com/indexdata/crosslink/broker/holdings"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/directory"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -59,7 +59,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
 	}
-	lookupParams := holdings.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo)
+	lookupParams := catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo)
 
 	requester, err := s.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
 	if err != nil {
@@ -72,15 +72,15 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 
 	lookupAdapter, configPeer, err := s.lookupAdapterFactory.GetAdapterRequester(ctx, requester)
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "failed to get holdings adapter for locating suppliers", err)
+		return events.LogErrorAndReturnResult(ctx, "failed to get lookup adapter for locating suppliers", err)
 	}
 	if lookupAdapter == nil {
-		return events.LogErrorAndReturnResult(ctx, "no holdings adapter available for locating suppliers", fmt.Errorf("no adapter found"))
+		return events.LogErrorAndReturnResult(ctx, "no lookup adapter available for locating suppliers", fmt.Errorf("no adapter found"))
 	}
 
 	metadataUpdateMode := directory.None
-	if configPeer.HoldingsConfig != nil && configPeer.HoldingsConfig.MetadataUpdateMode != nil {
-		metadataUpdateMode = *configPeer.HoldingsConfig.MetadataUpdateMode
+	if configPeer.CatalogConfig != nil && configPeer.CatalogConfig.MetadataUpdateMode != nil {
+		metadataUpdateMode = *configPeer.CatalogConfig.MetadataUpdateMode
 	}
 
 	var query string
@@ -108,7 +108,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		if err != nil {
 			return events.LogErrorAndReturnResult(ctx, "failed to get metadata for locating suppliers", err)
 		}
-		err = holdings.MetadataRequestUpdate(&illTrans.IllTransactionData.BibliographicInfo, metadata, lookupParams, metadataUpdateMode)
+		err = catalog.MetadataRequestUpdate(&illTrans.IllTransactionData.BibliographicInfo, metadata, lookupParams, metadataUpdateMode)
 		if err != nil {
 			return events.LogErrorAndReturnResult(ctx, "failed to update metadata for locating suppliers", err)
 		}
@@ -116,7 +116,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		if err != nil {
 			return events.LogErrorAndReturnResult(ctx, "failed to save updated ILL transaction metadata", err)
 		}
-		lookupParams = holdings.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo,
+		lookupParams = catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo,
 			illTrans.IllTransactionData.ServiceInfo)
 	}
 	var holdingsLog = map[string]any{}
@@ -147,7 +147,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 			} else {
 				fullSymbol = "ISIL:" + sym.Symbol
 			}
-			holdingsResult = append(holdingsResult, holdings.Holding{
+			holdingsResult = append(holdingsResult, catalog.Holding{
 				Symbol:          fullSymbol,
 				LocalIdentifier: lookupParams.Identifier,
 			})
@@ -347,7 +347,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
 	}
-	lookupParams := holdings.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo)
+	lookupParams := catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo)
 	lookupParams.Identifier = sup.LocalID.String
 	lookupResult, err := aa.Lookup(lookupParams)
 	if err != nil {

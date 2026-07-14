@@ -905,8 +905,8 @@ func getSupplierId(i int, result map[string]interface{}) string {
 
 func TestCheckAvailability_Z3950AdapterSkipped(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	// Create a peer with Holdings config in CustomData
-	customData := directory.Entry{HoldingsConfig: &directory.HoldingsConfig{}}
+	// Create a peer with Catalog config in CustomData
+	customData := directory.Entry{CatalogConfig: &directory.CatalogConfig{}}
 	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData, "ISIL:Z3950-SUP")
 
 	// Create an ILL transaction and a located supplier for it
@@ -949,7 +949,7 @@ func TestCheckAvailability_Z3950AdapterSkipped(t *testing.T) {
 
 func TestCheckAvailability_Z3950AdapterNotSkipped(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	customData := directory.Entry{HoldingsConfig: &directory.HoldingsConfig{
+	customData := directory.Entry{CatalogConfig: &directory.CatalogConfig{
 		Zoom: &directory.ZoomConfig{
 			Address: "a",
 			Options: &map[string]string{
@@ -1002,7 +1002,7 @@ func TestCheckAvailability_Z3950AdapterNotSkipped(t *testing.T) {
 func TestCheckAvailability_Z3950AdapterError(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	customData := directory.Entry{
-		HoldingsConfig: &directory.HoldingsConfig{
+		CatalogConfig: &directory.CatalogConfig{
 			Zoom: &directory.ZoomConfig{
 				Address: "a",
 				Options: &map[string]string{
@@ -1051,7 +1051,7 @@ func TestCheckAvailability_Z3950AdapterError(t *testing.T) {
 func TestCheckAvailability_Z3950LookupError(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	customData := directory.Entry{
-		HoldingsConfig: &directory.HoldingsConfig{
+		CatalogConfig: &directory.CatalogConfig{
 			Zoom: &directory.ZoomConfig{
 				Address: "a",
 				Options: &map[string]string{
