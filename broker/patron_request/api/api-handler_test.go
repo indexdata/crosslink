@@ -1355,3 +1355,199 @@ func TestMetadataUpdateAutoModeWithoutIdentifierMerges(t *testing.T) {
 	assert.Equal(t, "4321-4321", req.BibliographicInfo.BibliographicItemId[1].BibliographicItemIdentifier)     // added (not present)
 	assert.Equal(t, "ISSN", req.BibliographicInfo.BibliographicItemId[1].BibliographicItemIdentifierCode.Text) // added (not present)
 }
+
+// --- PutPatronRequestsId tests ---
+
+// illRepoNoTx returns pgx.ErrNoRows for GetIllTransactionByRequesterRequestId,
+// meaning no ILL transaction has been sent for the given patron request yet.
+type illRepoNoTx struct {
+	mocks.MockIllRepositorySuccess
+}
+
+func (r *illRepoNoTx) GetIllTransactionByRequesterRequestId(ctx common.ExtendedContext, requesterRequestID pgtype.Text) (ill_db.IllTransaction, error) {
+	return ill_db.IllTransaction{}, pgx.ErrNoRows
+}
+
+// illRepoReqIdError returns a generic error for GetIllTransactionByRequesterRequestId.
+type illRepoReqIdError struct {
+	mocks.MockIllRepositorySuccess
+}
+
+func (r *illRepoReqIdError) GetIllTransactionByRequesterRequestId(ctx common.ExtendedContext, requesterRequestID pgtype.Text) (ill_db.IllTransaction, error) {
+	return ill_db.IllTransaction{}, errors.New("DB error")
+}
+
+// PrRepoUpdateCapture captures the params passed to UpdatePatronRequest and returns success.
+type PrRepoUpdateCapture struct {
+	PrRepoError
+	lastUpdateParams *pr_db.UpdatePatronRequestParams
+}
+
+func (r *PrRepoUpdateCapture) UpdatePatronRequest(ctx common.ExtendedContext, params pr_db.UpdatePatronRequestParams) (pr_db.PatronRequest, error) {
+	paramsCopy := params
+	r.lastUpdateParams = &paramsCopy
+	return pr_db.PatronRequest(paramsCopy), nil
+}
+
+// PrRepoWrongOwner returns a PR whose RequesterSymbol does not match the requesting symbol.
+type PrRepoWrongOwner struct {
+	PrRepoError
+}
+
+func (r *PrRepoWrongOwner) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
+	if id == "3" {
+		return pr_db.PatronRequest{
+			ID:              id,
+			State:           prservice.BorrowerStateNew,
+			Side:            prservice.SideBorrowing,
+			RequesterSymbol: pgtype.Text{String: "ISIL:OTHER", Valid: true},
+		}, nil
+	}
+	return r.PrRepoError.GetPatronRequestById(ctx, id)
+}
+
+func putBody(t *testing.T, id string, illReq iso18626.Request) *bytes.Buffer {
+	t.Helper()
+	toUpdate := proapi.CreatePatronRequest{
+		Id:              &id,
+		RequesterSymbol: &symbol,
+		IllRequest:      illReq,
+	}
+	jsonBytes, err := json.Marshal(toUpdate)
+	assert.NoError(t, err)
+	return bytes.NewBuffer(jsonBytes)
+}
+
+func TestPutPatronRequestsIdMissingBody(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("PUT", "/", nil)
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "body is required")
+}
+
+func TestPutPatronRequestsIdInvalidJson(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBufferString("{bad json"))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestPutPatronRequestsIdMissingId(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	handler.SetIllRepo(new(illRepoNoTx))
+	body := proapi.CreatePatronRequest{RequesterSymbol: &symbol, IllRequest: validIllRequest()}
+	jsonBytes, _ := json.Marshal(body)
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBuffer(jsonBytes))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "patron request id does not match")
+}
+
+func TestPutPatronRequestsIdIdMismatch(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	handler.SetIllRepo(new(illRepoNoTx))
+	otherId := "other-id"
+	body := proapi.CreatePatronRequest{Id: &otherId, RequesterSymbol: &symbol, IllRequest: validIllRequest()}
+	jsonBytes, _ := json.Marshal(body)
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBuffer(jsonBytes))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "patron request id does not match")
+}
+
+func TestPutPatronRequestsIdRequestAlreadySent(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	handler.SetIllRepo(new(mocks.MockIllRepositorySuccess))
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "request already sent")
+}
+
+func TestPutPatronRequestsIdIllRepoError(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	handler.SetIllRepo(new(illRepoReqIdError))
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+}
+
+func TestPutPatronRequestsIdNotFound(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	handler.SetIllRepo(new(illRepoNoTx))
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "2", validIllRequest()))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "2", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+func TestPutPatronRequestsIdPrRepoError(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	handler.SetIllRepo(new(illRepoNoTx))
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "1", validIllRequest()))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "1", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DB error")
+}
+
+func TestPutPatronRequestsIdWrongOwner(t *testing.T) {
+	// WithIllRepo on the resolver is required so that IsOwnerOf can look up branch symbols
+	// without erroring; the mock returns no branch symbols for "ISIL:OTHER", producing 404.
+	tenantResolver := tenant.NewResolver().WithIllRepo(new(mocks.MockIllRepositorySuccess))
+	handler := NewPrApiHandler(new(PrRepoWrongOwner), mockEventBus, mockEventRepo, tenantResolver, nil, 10)
+	handler.SetIllRepo(new(illRepoNoTx))
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+func TestPutPatronRequestsIdUpdateError(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	handler.SetIllRepo(new(illRepoNoTx))
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DB error")
+}
+
+func TestPutPatronRequestsIdOK(t *testing.T) {
+	repo := new(PrRepoUpdateCapture)
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	handler.SetIllRepo(new(illRepoNoTx))
+	id := "3"
+	patron := "user-1"
+	note := "staff note"
+	toUpdate := proapi.CreatePatronRequest{
+		Id:              &id,
+		RequesterSymbol: &symbol,
+		IllRequest:      validIllRequest(),
+		Patron:          &patron,
+		InternalNote:    &note,
+	}
+	jsonBytes, _ := json.Marshal(toUpdate)
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBuffer(jsonBytes))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusOK, rr.Code)
+	if assert.NotNil(t, repo.lastUpdateParams) {
+		assert.Equal(t, validIllRequest().BibliographicInfo.Title, repo.lastUpdateParams.IllRequest.BibliographicInfo.Title)
+		assert.True(t, repo.lastUpdateParams.Patron.Valid)
+		assert.Equal(t, patron, repo.lastUpdateParams.Patron.String)
+		assert.True(t, repo.lastUpdateParams.InternalNote.Valid)
+		assert.Equal(t, note, repo.lastUpdateParams.InternalNote.String)
+	}
+	var response proapi.PatronRequest
+	err := json.Unmarshal(rr.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, id, response.Id)
+}
