@@ -10,6 +10,15 @@ SELECT e.* FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = @aut
 -- name: EntryBySymbol :one
 SELECT e.* FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = @authority AND s.symbol = @symbol LIMIT 1;
 
+-- name: GetConsortialEntry :one
+SELECT * FROM entries WHERE type = 'Consortium' LIMIT 1;
+
+-- name: EntriesByParent :many
+SELECT * FROM entries WHERE parent = @parent;
+
+-- name: LockConsortiumEntryChanges :exec
+SELECT pg_advisory_xact_lock(hashtextextended('directoryish:consortium-entry', 0));
+
 -- name: CreateEntry :one
 INSERT INTO entries (
   name, description, contact_name, email, phone_number, time_zone, organization_id, type, parent, lms_location_code, lender_of_last_resort

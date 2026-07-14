@@ -98,4 +98,78 @@ func TestConcurrency(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("ConcurrentConsortiumPosts", func(t *testing.T) {
+		resetDb()
+		_, err := dbpool.Exec(context.Background(), "UPDATE entries SET parent = NULL, type = 'Institution'")
+		if err != nil {
+			t.Fatalf("failed to prepare entries: %v", err)
+		}
+
+		var wg sync.WaitGroup
+		statuses := make(chan int, 2)
+		for _, name := range []string{"Consortium One", "Consortium Two"} {
+			name := name
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				res, _ := jsonReq(t, http.MethodPost, "/entries", `{"name":"`+name+`","type":"Consortium"}`, consortiumPermissionHeaders)
+				statuses <- res.StatusCode
+			}()
+		}
+		wg.Wait()
+		close(statuses)
+
+		assertOneConsortiumWrite(t, statuses, http.StatusCreated)
+	})
+
+	t.Run("ConcurrentConsortiumPromotions", func(t *testing.T) {
+		resetDb()
+		_, err := dbpool.Exec(context.Background(), "UPDATE entries SET parent = NULL, type = 'Institution'")
+		if err != nil {
+			t.Fatalf("failed to prepare entries: %v", err)
+		}
+
+		var wg sync.WaitGroup
+		statuses := make(chan int, 2)
+		for _, id := range []string{"00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002"} {
+			id := id
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				res, _ := jsonReq(t, http.MethodPatch, "/entries/by-id/"+id, `{"type":"Consortium"}`, consortiumPermissionHeaders)
+				statuses <- res.StatusCode
+			}()
+		}
+		wg.Wait()
+		close(statuses)
+
+		assertOneConsortiumWrite(t, statuses, http.StatusNoContent)
+	})
+}
+
+func assertOneConsortiumWrite(t *testing.T, statuses <-chan int, successStatus int) {
+	t.Helper()
+	successes, rejections := 0, 0
+	for status := range statuses {
+		switch status {
+		case successStatus:
+			successes++
+		case http.StatusBadRequest:
+			rejections++
+		default:
+			t.Errorf("unexpected response status: %d", status)
+		}
+	}
+	if successes != 1 || rejections != 1 {
+		t.Errorf("expected one success and one rejection, got %d successes and %d rejections", successes, rejections)
+	}
+
+	var count int
+	if err := dbpool.QueryRow(context.Background(), "SELECT COUNT(*) FROM entries WHERE type = 'Consortium'").Scan(&count); err != nil {
+		t.Fatalf("failed to count consortium entries: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("expected exactly one consortium entry, got %d", count)
+	}
 }

@@ -1435,6 +1435,7 @@ components:
           enum:
           - Institution
           - Consortium
+          - Branch
         parent:
           type: string
           format: uuid
@@ -1496,6 +1497,7 @@ components:
           enum:
             - Institution
             - Consortium
+            - Branch
           nullable: true
         parent:
           type: string

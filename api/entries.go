@@ -29,6 +29,23 @@ func getSymbolAuthority() string {
 	return symbolAuthority
 }
 
+func isValidParentForType(entryType EntryType, parentEntry *db.Entry) (bool, string) {
+
+	if entryType == "Institution" {
+		if parentEntry.Type == "Consortium" {
+			return true, ""
+		}
+		return false, "Institution parent must be of type Consortium"
+	} else if entryType == "Branch" {
+		if parentEntry.Type == "Institution" {
+			return true, ""
+		}
+		return false, "Branch parent must be of type Institution"
+	} else {
+		return false, "Invalid type to have parent"
+	}
+}
+
 func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 	var (
 		id                 uuid.UUID
@@ -482,6 +499,35 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := a.queries.WithTx(tx)
+	entryType := derefOrDefault(request.Body.Type, EntryType("Institution"))
+
+	if entryType == "Consortium" {
+		if err := qtx.LockConsortiumEntryChanges(ctx); err != nil {
+			slog.ErrorContext(ctx, "failed to lock consortium entry changes", "error", err)
+			return AddEntry500TextResponse("Internal server error"), nil
+		}
+		_, err := qtx.GetConsortialEntry(ctx)
+		if err == nil {
+			return AddEntry400TextResponse("An entry of type Consortium already exists"), nil
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			slog.ErrorContext(ctx, "failed to check for consortium entry", "error", err)
+			return AddEntry500TextResponse("Internal server error"), nil
+		}
+	}
+
+	if request.Body.Parent != nil {
+		parentEntry, err := qtx.EntryByIdForUpdate(ctx, *request.Body.Parent)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return AddEntry400TextResponse("Value for Parent is not a valid Entry"), nil
+		} else if err != nil {
+			slog.ErrorContext(ctx, "failed to fetch parent entry", "error", err)
+			return AddEntry500TextResponse("Internal server error"), nil
+		}
+		validParent, reason := isValidParentForType(entryType, &parentEntry)
+		if !validParent {
+			return AddEntry400TextResponse("Invalid entry for parent: " + reason), nil
+		}
+	}
 
 	toInsert := db.CreateEntryParams{
 		Name:               request.Body.Name,
@@ -490,7 +536,7 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		PhoneNumber:        request.Body.PhoneNumber,
 		TimeZone:           request.Body.TimeZone,
 		OrganizationID:     request.Body.OrganizationId,
-		Type:               string(derefOrDefault(request.Body.Type, "Institution")),
+		Type:               string(entryType),
 		Parent:             request.Body.Parent,
 		LmsLocationCode:    request.Body.LmsLocationCode,
 		LenderOfLastResort: request.Body.LenderOfLastResort,
@@ -656,8 +702,61 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		slog.ErrorContext(ctx, "type cannot be null")
 		return UpdateEntry400TextResponse("'type' cannot be set to null"), nil
 	}
-
 	origTypeEntryPatch := EntryPatchType(orig.Type)
+	resultingType := string(*maybeUpdateCol(&origTypeEntryPatch, request.Body.Type))
+	var parentEntry db.Entry
+	parent := maybeUpdateCol(orig.Parent, request.Body.Parent)
+	if parent != nil {
+		if *parent == orig.ID {
+			return UpdateEntry400TextResponse("An entry cannot be its own parent"), nil
+		}
+		parentEntry, err = qtx.EntryByIdForUpdate(ctx, *parent)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return UpdateEntry400TextResponse("Value for Parent is not a valid Entry"), nil
+		} else if err != nil {
+			slog.ErrorContext(ctx, "failed to fetch parent entry", "error", err)
+			return UpdateEntry500TextResponse("Internal server error"), nil
+		}
+	}
+
+	if parent != nil {
+		validParent, reason := isValidParentForType(EntryType(resultingType), &parentEntry)
+		if !validParent {
+			return UpdateEntry400TextResponse("Invalid entry for parent: " + reason), nil
+		}
+	}
+
+	if resultingType != orig.Type {
+		children, err := qtx.EntriesByParent(ctx, &orig.ID)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to fetch child entries", "error", err)
+			return UpdateEntry500TextResponse("Internal server error"), nil
+		}
+		resultingParent := orig
+		resultingParent.Type = resultingType
+		for _, child := range children {
+			valid, reason := isValidParentForType(EntryType(child.Type), &resultingParent)
+			if !valid {
+				return UpdateEntry400TextResponse("Entry type is invalid for existing child: " + reason), nil
+			}
+		}
+	}
+
+	if resultingType == "Consortium" || orig.Type == "Consortium" {
+		if err := qtx.LockConsortiumEntryChanges(ctx); err != nil {
+			slog.ErrorContext(ctx, "failed to lock consortium entry changes", "error", err)
+			return UpdateEntry500TextResponse("Internal server error"), nil
+		}
+	}
+	if resultingType == "Consortium" && resultingType != orig.Type {
+		consortialEntry, err := qtx.GetConsortialEntry(ctx)
+		if err == nil && consortialEntry.ID != orig.ID {
+			return UpdateEntry400TextResponse("An entry of type Consortium already exists"), nil
+		} else if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			slog.ErrorContext(ctx, "failed to check for consortium entry", "error", err)
+			return UpdateEntry500TextResponse("Internal server error"), nil
+		}
+	}
 
 	err = qtx.UpdateEntry(ctx, db.UpdateEntryParams{
 		Name:               derefOrDefault(request.Body.Name, orig.Name),
@@ -669,7 +768,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		LmsLocationCode:    maybeUpdateCol(orig.LmsLocationCode, request.Body.LmsLocationCode),
 		LenderOfLastResort: maybeUpdateCol(orig.LenderOfLastResort, request.Body.LenderOfLastResort),
 		Hrid:               maybeUpdateCol(orig.Hrid, request.Body.Hrid),
-		Type:               string(*maybeUpdateCol(&origTypeEntryPatch, request.Body.Type)),
+		Type:               resultingType,
 		TimeZone:           maybeUpdateCol(orig.TimeZone, request.Body.TimeZone),
 		OrganizationID:     maybeUpdateCol(orig.OrganizationID, request.Body.OrganizationId),
 		ID:                 orig.ID,

@@ -399,6 +399,44 @@ func (q *Queries) DeleteTierById(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const entriesByParent = `-- name: EntriesByParent :many
+SELECT id, parent, name, type, description, organization_id, contact_name, email, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone FROM entries WHERE parent = $1
+`
+
+func (q *Queries) EntriesByParent(ctx context.Context, parent *uuid.UUID) ([]Entry, error) {
+	rows, err := q.db.Query(ctx, entriesByParent, parent)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Entry
+	for rows.Next() {
+		var i Entry
+		if err := rows.Scan(
+			&i.ID,
+			&i.Parent,
+			&i.Name,
+			&i.Type,
+			&i.Description,
+			&i.OrganizationID,
+			&i.ContactName,
+			&i.Email,
+			&i.PhoneNumber,
+			&i.LmsLocationCode,
+			&i.LenderOfLastResort,
+			&i.Hrid,
+			&i.TimeZone,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const entryById = `-- name: EntryById :one
 SELECT id, parent, name, type, description, organization_id, contact_name, email, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone FROM entries WHERE id = $1 LIMIT 1
 `
@@ -539,6 +577,31 @@ func (q *Queries) GetClosureByIdForUpdate(ctx context.Context, id uuid.UUID) (Cl
 		&i.StartDate,
 		&i.EndDate,
 		&i.Reason,
+	)
+	return i, err
+}
+
+const getConsortialEntry = `-- name: GetConsortialEntry :one
+SELECT id, parent, name, type, description, organization_id, contact_name, email, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone FROM entries WHERE type = 'Consortium' LIMIT 1
+`
+
+func (q *Queries) GetConsortialEntry(ctx context.Context) (Entry, error) {
+	row := q.db.QueryRow(ctx, getConsortialEntry)
+	var i Entry
+	err := row.Scan(
+		&i.ID,
+		&i.Parent,
+		&i.Name,
+		&i.Type,
+		&i.Description,
+		&i.OrganizationID,
+		&i.ContactName,
+		&i.Email,
+		&i.PhoneNumber,
+		&i.LmsLocationCode,
+		&i.LenderOfLastResort,
+		&i.Hrid,
+		&i.TimeZone,
 	)
 	return i, err
 }
@@ -1019,6 +1082,15 @@ func (q *Queries) ListTiersForEntry(ctx context.Context, entry uuid.UUID) ([]Lis
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockConsortiumEntryChanges = `-- name: LockConsortiumEntryChanges :exec
+SELECT pg_advisory_xact_lock(hashtextextended('directoryish:consortium-entry', 0))
+`
+
+func (q *Queries) LockConsortiumEntryChanges(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockConsortiumEntryChanges)
+	return err
 }
 
 const updateClosure = `-- name: UpdateClosure :exec
