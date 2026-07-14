@@ -1247,7 +1247,7 @@ func TestMetadataUpdateNoCatalogConfig(t *testing.T) {
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
-	peer := peerWithMetadataMode(nil) // HoldingsConfig absent → mode stays None
+	peer := peerWithMetadataMode(nil) // CatalogConfig absent → mode stays None
 	err := h.metadataUpdate(ctx, &iso18626.Request{}, peer)
 	assert.NoError(t, err)
 }
