@@ -233,15 +233,17 @@ func TestPostBatchActions_OK(t *testing.T) {
 	repo.AssertExpectations(t)
 }
 
-func TestPostBatchActions_ValidDailySchedule_ComputesDynamicRunAt(t *testing.T) {
+func TestPostBatchActions_ValidDailySchedule_ComputesMidnightRunAt(t *testing.T) {
 	repo := new(MockSchedRepo)
 	before := time.Now().UTC()
 
 	repo.On("SaveScheduledTask", mock.MatchedBy(func(p sched_db.SaveScheduledTaskParams) bool {
+		runAt := p.RunAt.Time
 		return p.Schedule == "FREQ=DAILY" &&
 			p.RunAt.Valid &&
-			p.RunAt.Time.After(before.Add(23*time.Hour)) &&
-			p.RunAt.Time.Before(before.Add(25*time.Hour))
+			runAt.After(before) &&
+			!runAt.After(before.Add(24*time.Hour+time.Second)) &&
+			runAt.Equal(runAt.UTC().Truncate(24*time.Hour))
 	})).Return(saveScheduledTaskReturn, nil)
 
 	h := newHandler(repo)
