@@ -1829,6 +1829,49 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+    put:
+      summary: Update a patron request
+      tags:
+        - patron-requests-api
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the patron request to update
+        - $ref: '#/components/parameters/Tenant'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatronRequest'
+      responses:
+        '200':
+          description: Patron request updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatronRequest'
+        '400':
+          description: Bad Request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Patron request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     delete:
       summary: Delete a patron request
       tags:

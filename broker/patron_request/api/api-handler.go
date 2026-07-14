@@ -505,6 +505,68 @@ func isSideParamValid(side *string) bool {
 	return side != nil && (*side == string(prservice.SideBorrowing) || *side == string(prservice.SideLending))
 }
 
+func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.PutPatronRequestsIdParams) {
+	logParams := map[string]string{"method": "PutPatronRequestsId", "id": id}
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+
+	var newPr proapi.CreatePatronRequest
+	err := decodeRequiredBody(r, &newPr)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	tenant, err := a.tenantResolver.Resolve(ctx, r, newPr.RequesterSymbol)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	logParams["symbol"] = symbol
+	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+
+	if newPr.Id == nil || *newPr.Id != id {
+		api.AddBadRequestError(ctx, w, fmt.Errorf("patron request id does not match"))
+		return
+	}
+	_, err = a.illRepo.GetIllTransactionByRequesterRequestId(ctx, pgtype.Text{String: id, Valid: true})
+	if err == nil {
+		// request already sent
+		api.AddBadRequestError(ctx, w, fmt.Errorf("request already sent"))
+		return
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	existingPr, err := a.prRepo.GetPatronRequestById(ctx, id)
+	if err != nil {
+		handleDbError(w, ctx, err)
+		return
+	}
+	if !a.checkOwnership(w, ctx, existingPr.Side, existingPr.RequesterSymbol, existingPr.SupplierSymbol, nil, tenant) {
+		return
+	}
+	existingPr.IllRequest = newPr.IllRequest
+	existingPr.Patron = getDbText(newPr.Patron)
+	existingPr.InternalNote = getDbText(newPr.InternalNote)
+	updatedPr, err := a.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(existingPr))
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	prView, err := a.prRepo.GetPatronRequestSearchView(ctx, updatedPr.ID)
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(toApiPatronRequest(r, prView))
+}
+
 func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdParams) {
 	logParams := map[string]string{"method": "GetPatronRequestsId", "id": id}
 	if params.Side != nil {
