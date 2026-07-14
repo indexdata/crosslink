@@ -700,7 +700,7 @@
       "actionName": "email-pullslips",
       "title": "Email pull slips ready to ship",
       "batchQuery": "side = lending and state = WILL_SUPPLY",
-      "schedule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=6;BYMINUTE=0;BYSECOND=0",
+      "schedule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=6;BYMINUTE=0",
       "actionParams": {
         "to": [
           "staff@example.com"
@@ -724,7 +724,7 @@
       "actionName": "request-aging",
       "title": "Request aging of rush requests",
       "batchQuery": "(state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = NEEDS_REVIEW) and service_level = Rush",
-      "schedule": "FREQ=HOURLY;BYMINUTE=0;BYSECOND=0",
+      "schedule": "FREQ=HOURLY;BYMINUTE=0",
       "actionParams": {
         "interval": "24h"
       }
@@ -733,7 +733,7 @@
       "actionName": "request-aging",
       "title": "Request aging of all requests",
       "batchQuery": "state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = NEEDS_REVIEW",
-      "schedule": "FREQ=DAILY;BYHOUR=5;BYMINUTE=0;BYSECOND=0",
+      "schedule": "FREQ=DAILY;BYHOUR=5;BYMINUTE=0",
       "actionParams": {
         "interval": "72h"
       }
