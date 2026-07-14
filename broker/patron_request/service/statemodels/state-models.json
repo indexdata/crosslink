@@ -49,6 +49,7 @@
           "side": "REQUESTER",
           "primaryAction": "send-request",
           "needsAttention": true,
+          "editable": true,
           "actions": [
             {
               "name": "send-request",

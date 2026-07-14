@@ -38,6 +38,7 @@ stateModels:
         side: REQUESTER
         primaryAction: send-request
         needsAttention: true
+        editable: true
         actions:
           - name: send-request
             desc: Send ISO18626 request to the supplier or broker
