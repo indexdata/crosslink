@@ -1,4 +1,4 @@
-package holdings
+package catalog
 
 import (
 	"encoding/xml"
@@ -10,7 +10,7 @@ import (
 
 type OpacHoldingsParser struct{}
 
-func NewOpacHoldingsParser(config directory.OpacParserConfig) HoldingsParser {
+func NewOpacHoldingsParser(config directory.OpacHoldingsParserConfig) HoldingsParser {
 	return &OpacHoldingsParser{}
 }
 

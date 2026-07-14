@@ -1,4 +1,4 @@
-package holdings
+package catalog
 
 type LookupAdapter interface {
 	Lookup(params LookupParams) (LookupResult, error)

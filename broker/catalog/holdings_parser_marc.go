@@ -1,4 +1,4 @@
-package holdings
+package catalog
 
 import (
 	"encoding/xml"
@@ -10,10 +10,10 @@ import (
 )
 
 type MarcHoldingsParser struct {
-	config directory.MarcParserConfig
+	config directory.MarcHoldingsParserConfig
 }
 
-func NewMarcHoldingsParser(config directory.MarcParserConfig) HoldingsParser {
+func NewMarcHoldingsParser(config directory.MarcHoldingsParserConfig) HoldingsParser {
 	if config.MainField == nil && config.LocationSubField == nil && config.ShelvingLocationSubField == nil && config.CallNumberSubField == nil && config.ItemIdSubField == nil && config.RestrictedSubField == nil {
 		config.MainField = NewString("852")
 		config.LocationSubField = NewString("b")
