@@ -11,9 +11,10 @@ import (
 type MessageEvent string
 
 const (
-	ActionOutcomeSuccess = "success"
-	ActionOutcomeFailure = "failure"
-	ActionOutcomeReview  = "review"
+	ActionOutcomeSuccess   = "success"
+	ActionOutcomeFailure   = "failure"
+	ActionOutcomeReview    = "review"
+	ActionOutcomeDuplicate = "duplicate"
 )
 
 const (

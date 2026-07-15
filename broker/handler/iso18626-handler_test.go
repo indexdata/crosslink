@@ -280,7 +280,7 @@ func TestCheckDuplicateRequest(t *testing.T) {
 			wantSvcType:    "Loan",
 		},
 		{
-			name: "nil PatronInfo - uses empty patron ID in query",
+			name: "nil PatronInfo - skips duplicate check (can't verify same patron)",
 			request: &iso18626.Request{
 				BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "rec-1"},
 				ServiceInfo:       &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
@@ -288,11 +288,7 @@ func TestCheckDuplicateRequest(t *testing.T) {
 			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
 			repoErr:        pgx.ErrNoRows,
 			wantErr:        nil,
-			wantRepoCalled: true,
-			wantPatronId:   "",
-			wantWindowHrs:  1,
-			wantIdentifier: "rec-1",
-			wantSvcType:    "Loan",
+			wantRepoCalled: false,
 		},
 		{
 			name:           "isbn passed as parameter to DB query",

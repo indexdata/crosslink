@@ -37,7 +37,7 @@
               "desc": "Send ISO18626 request to the supplier or broker",
               "transitions": {
                 "success": "SENT",
-                "failure": "CLOSED_DUPLICATE"
+                "duplicate": "CLOSED_DUPLICATE"
               },
               "trigger": "auto"
             }
@@ -57,7 +57,7 @@
               "desc": "Send ISO18626 request to the supplier or broker",
               "transitions": {
                 "success": "SENT",
-                "failure": "CLOSED_DUPLICATE"
+                "duplicate": "CLOSED_DUPLICATE"
               }
             }
           ]

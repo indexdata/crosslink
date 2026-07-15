@@ -333,9 +333,10 @@ func TestValidateStateModelInvalidActionSuccessTransitionTarget(t *testing.T) {
 					{
 						Name: string(BorrowerActionValidate),
 						Transitions: &struct {
-							Failure *string `json:"failure,omitempty"`
-							Review  *string `json:"review,omitempty"`
-							Success *string `json:"success,omitempty"`
+							Duplicate *string `json:"duplicate,omitempty"`
+							Failure   *string `json:"failure,omitempty"`
+							Review    *string `json:"review,omitempty"`
+							Success   *string `json:"success,omitempty"`
 						}{
 							Success: &invalidTarget,
 						},
@@ -366,9 +367,10 @@ func TestValidateStateModelInvalidActionFailureTransitionTarget(t *testing.T) {
 					{
 						Name: string(BorrowerActionSendRequest),
 						Transitions: &struct {
-							Failure *string `json:"failure,omitempty"`
-							Review  *string `json:"review,omitempty"`
-							Success *string `json:"success,omitempty"`
+							Duplicate *string `json:"duplicate,omitempty"`
+							Failure   *string `json:"failure,omitempty"`
+							Review    *string `json:"review,omitempty"`
+							Success   *string `json:"success,omitempty"`
 						}{
 							Failure: &invalidTarget,
 						},
@@ -426,9 +428,10 @@ func TestValidateStateModelActionTransitionTargetMustExistInModelForSameSide(t *
 					{
 						Name: string(BorrowerActionValidate),
 						Transitions: &struct {
-							Failure *string `json:"failure,omitempty"`
-							Review  *string `json:"review,omitempty"`
-							Success *string `json:"success,omitempty"`
+							Duplicate *string `json:"duplicate,omitempty"`
+							Failure   *string `json:"failure,omitempty"`
+							Review    *string `json:"review,omitempty"`
+							Success   *string `json:"success,omitempty"`
 						}{
 							Success: &transition,
 						},
@@ -459,9 +462,10 @@ func TestValidateStateModelActionTransitionCannotCrossSides(t *testing.T) {
 					{
 						Name: string(BorrowerActionValidate),
 						Transitions: &struct {
-							Failure *string `json:"failure,omitempty"`
-							Review  *string `json:"review,omitempty"`
-							Success *string `json:"success,omitempty"`
+							Duplicate *string `json:"duplicate,omitempty"`
+							Failure   *string `json:"failure,omitempty"`
+							Review    *string `json:"review,omitempty"`
+							Success   *string `json:"success,omitempty"`
 						}{
 							Success: &transition,
 						},

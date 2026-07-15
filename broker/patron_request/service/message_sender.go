@@ -161,6 +161,11 @@ func (ms *PatronRequestMessageSender) sendBorrowingRequest(ctx common.ExtendedCo
 	result.IncomingMessage = w.IllMessage
 	if w.StatusCode != http.StatusOK || w.IllMessage == nil || w.IllMessage.RequestConfirmation == nil ||
 		w.IllMessage.RequestConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
+		if w.IllMessage.RequestConfirmation.ErrorData != nil &&
+			w.IllMessage.RequestConfirmation.ErrorData.ErrorValue == string(handler.ReqIsDuplicate) {
+			result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeDuplicate}
+			return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
+		}
 		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 		return actionExecutionResult{status: events.EventStatusProblem, result: &result, pr: pr}
 	}

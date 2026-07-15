@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_ill_transaction_requester_timestamp;

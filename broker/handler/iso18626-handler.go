@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/indexdata/crosslink/broker/catalog"
+	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/shim"
 
 	"github.com/indexdata/crosslink/broker/adapter"
@@ -190,10 +191,15 @@ func checkDuplicateRequest(ctx common.ExtendedContext, request *iso18626.Request
 		patronId = request.PatronInfo.PatronId
 	}
 
-	lookupParams := service.CreateHoldingsParams(ill_db.IllTransactionData{
-		BibliographicInfo: request.BibliographicInfo,
-		ServiceInfo:       request.ServiceInfo,
-	})
+	if patronId == "" {
+		return nil
+	}
+
+	lookupParams := catalog.LookupParamsFromBibliographicInfo(request.BibliographicInfo, request.ServiceInfo)
+
+	if lookupParams.ServiceType == "" {
+		return nil
+	}
 
 	_, err := repo.FindDuplicateIllTransaction(ctx, ill_db.FindDuplicateIllTransactionParams{
 		RequesterSymbol: createPgText(requesterSymbol),
