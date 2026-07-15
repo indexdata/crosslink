@@ -849,7 +849,7 @@ components:
             Must be one of the actions defined in the actions array and is only meaningful when actions is present.
         editable:
           type: boolean
-          description: Indicates that patron request can be updated in this state
+          description: Indicates that a patron request can be updated in this state
         actions:
           type: array
           description: List of all actions that may be performed on the request when in this state
