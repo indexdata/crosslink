@@ -1389,8 +1389,27 @@ func (r *PrRepoUpdateCapture) UpdatePatronRequest(ctx common.ExtendedContext, pa
 	return pr_db.PatronRequest(paramsCopy), nil
 }
 
+// PrRepoUpdateCapturePreset embeds PrRepoUpdateCapture but returns a PR with a preset CreatedAt for id "3".
+type PrRepoUpdateCapturePreset struct {
+	PrRepoUpdateCapture
+	presetCreatedAt pgtype.Timestamp
+}
+
+func (r *PrRepoUpdateCapturePreset) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
+	pr, err := r.PrRepoError.GetPatronRequestById(ctx, id)
+	if err == nil {
+		pr.CreatedAt = r.presetCreatedAt
+	}
+	return pr, err
+}
+
 // PrRepoWrongOwner returns a PR whose RequesterSymbol does not match the requesting symbol.
 type PrRepoWrongOwner struct {
+	PrRepoError
+}
+
+// PrRepoLendingSide returns a lending-side PR for id "3".
+type PrRepoLendingSide struct {
 	PrRepoError
 }
 
@@ -1401,6 +1420,18 @@ func (r *PrRepoWrongOwner) GetPatronRequestById(ctx common.ExtendedContext, id s
 			State:           prservice.BorrowerStateNew,
 			Side:            prservice.SideBorrowing,
 			RequesterSymbol: pgtype.Text{String: "ISIL:OTHER", Valid: true},
+		}, nil
+	}
+	return r.PrRepoError.GetPatronRequestById(ctx, id)
+}
+
+func (r *PrRepoLendingSide) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
+	if id == "3" {
+		return pr_db.PatronRequest{
+			ID:             id,
+			State:          prservice.BorrowerStateNew,
+			Side:           prservice.SideLending,
+			SupplierSymbol: pgtype.Text{String: symbol, Valid: true},
 		}, nil
 	}
 	return r.PrRepoError.GetPatronRequestById(ctx, id)
@@ -1436,15 +1467,18 @@ func TestPutPatronRequestsIdInvalidJson(t *testing.T) {
 }
 
 func TestPutPatronRequestsIdMissingId(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	repo := new(PrRepoUpdateCapture)
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
 	handler.SetIllRepo(new(illRepoNoTx))
 	body := proapi.CreatePatronRequest{RequesterSymbol: &symbol, IllRequest: validIllRequest()}
 	jsonBytes, _ := json.Marshal(body)
 	req, _ := http.NewRequest("PUT", "/", bytes.NewBuffer(jsonBytes))
 	rr := httptest.NewRecorder()
 	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
-	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Contains(t, rr.Body.String(), "patron request id does not match")
+	assert.Equal(t, http.StatusOK, rr.Code)
+	if assert.NotNil(t, repo.lastUpdateParams) {
+		assert.Equal(t, "3", repo.lastUpdateParams.ID)
+	}
 }
 
 func TestPutPatronRequestsIdIdMismatch(t *testing.T) {
@@ -1518,6 +1552,32 @@ func TestPutPatronRequestsIdUpdateError(t *testing.T) {
 	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Contains(t, rr.Body.String(), "DB error")
+}
+
+func TestPutPatronRequestsIdNotBorrowingSide(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoLendingSide), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	handler.SetIllRepo(new(illRepoNoTx))
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "only borrower-side patron requests can be updated")
+}
+
+func TestPutPatronRequestsIdPreservesCreatedAt(t *testing.T) {
+	originalCreatedAt := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+	repo := &PrRepoUpdateCapturePreset{
+		presetCreatedAt: pgtype.Timestamp{Valid: true, Time: originalCreatedAt},
+	}
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	handler.SetIllRepo(new(illRepoNoTx))
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusOK, rr.Code)
+	if assert.NotNil(t, repo.lastUpdateParams) {
+		assert.Equal(t, originalCreatedAt, repo.lastUpdateParams.IllRequest.Header.Timestamp.Time)
+	}
 }
 
 func TestPutPatronRequestsIdOK(t *testing.T) {
