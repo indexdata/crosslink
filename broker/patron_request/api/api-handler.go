@@ -560,6 +560,15 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 		api.AddInternalError(ctx, w, err)
 		return
 	}
+	if !existingPr.RequesterSymbol.Valid || strings.TrimSpace(existingPr.RequesterSymbol.String) == "" {
+		api.AddInternalError(ctx, w, fmt.Errorf("existing patron request missing requesterSymbol"))
+		return
+	}
+	if newPr.RequesterSymbol != nil && strings.TrimSpace(*newPr.RequesterSymbol) != "" && strings.TrimSpace(*newPr.RequesterSymbol) != existingPr.RequesterSymbol.String {
+		api.AddBadRequestError(ctx, w, fmt.Errorf("requesterSymbol does not match existing patron request"))
+		return
+	}
+	symbol = existingPr.RequesterSymbol.String
 	newPr.RequesterSymbol = &symbol
 	creationTime := time.Now()
 	if existingPr.CreatedAt.Valid {
