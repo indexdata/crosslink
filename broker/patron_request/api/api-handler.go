@@ -584,6 +584,8 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 		return
 	}
 	symbol = existingPr.RequesterSymbol.String
+	logParams["symbol"] = symbol
+	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 	newPr.RequesterSymbol = &symbol
 	creationTime := time.Now()
 	if existingPr.CreatedAt.Valid {
