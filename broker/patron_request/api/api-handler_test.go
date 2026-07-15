@@ -1413,6 +1413,25 @@ type PrRepoLendingSide struct {
 	PrRepoError
 }
 
+// PrRepoBranchOwner returns a borrowing-side PR for id "3" whose RequesterSymbol
+// is "ISIL:S1" — the branch symbol that MockIllRepositorySuccess returns for any
+// peer, allowing a test to reach the requesterSymbol mismatch check.
+type PrRepoBranchOwner struct {
+	PrRepoError
+}
+
+func (r *PrRepoBranchOwner) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
+	if id == "3" {
+		return pr_db.PatronRequest{
+			ID:              id,
+			State:           prservice.BorrowerStateNew,
+			Side:            prservice.SideBorrowing,
+			RequesterSymbol: pgtype.Text{String: "ISIL:S1", Valid: true},
+		}, nil
+	}
+	return r.PrRepoError.GetPatronRequestById(ctx, id)
+}
+
 func (r *PrRepoWrongOwner) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
 	if id == "3" {
 		return pr_db.PatronRequest{
@@ -1464,6 +1483,17 @@ func TestPutPatronRequestsIdInvalidJson(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestPutPatronRequestsIdEmptySymbol(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	body := proapi.CreatePatronRequest{IllRequest: validIllRequest()}
+	jsonBytes, _ := json.Marshal(body)
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBuffer(jsonBytes))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "symbol must be specified")
 }
 
 func TestPutPatronRequestsIdMissingId(t *testing.T) {
@@ -1566,6 +1596,23 @@ func TestPutPatronRequestsIdNotBorrowingSide(t *testing.T) {
 	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	assert.Contains(t, rr.Body.String(), "only borrower-side patron requests can be updated")
+}
+
+func TestPutPatronRequestsIdRequesterSymbolMismatch(t *testing.T) {
+	// "ISIL:DIFFERENT" is the body/request symbol; MockIllRepositorySuccess returns
+	// "ISIL:S1" as a branch of that symbol, so ownership passes. The existing PR
+	// stores "ISIL:S1" directly, which differs from the body symbol → mismatch error.
+	tenantResolver := tenant.NewResolver().WithIllRepo(new(mocks.MockIllRepositorySuccess))
+	handler := NewPrApiHandler(new(PrRepoBranchOwner), mockEventBus, mockEventRepo, tenantResolver, nil, 10)
+	differentSymbol := "ISIL:DIFFERENT"
+	id := "3"
+	body := proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &differentSymbol, IllRequest: validIllRequest()}
+	jsonBytes, _ := json.Marshal(body)
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBuffer(jsonBytes))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "requesterSymbol does not match existing patron request")
 }
 
 func TestPutPatronRequestsIdPreservesCreatedAt(t *testing.T) {

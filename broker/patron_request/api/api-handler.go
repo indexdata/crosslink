@@ -550,6 +550,14 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 		api.AddBadRequestError(ctx, w, fmt.Errorf("only borrower-side patron requests can be updated"))
 		return
 	}
+	if !existingPr.RequesterSymbol.Valid || existingPr.RequesterSymbol.String == "" {
+		api.AddInternalError(ctx, w, fmt.Errorf("existing patron request missing requesterSymbol"))
+		return
+	}
+	if newPr.RequesterSymbol != nil && *newPr.RequesterSymbol != "" && *newPr.RequesterSymbol != existingPr.RequesterSymbol.String {
+		api.AddBadRequestError(ctx, w, fmt.Errorf("requesterSymbol does not match existing patron request"))
+		return
+	}
 	if a.illRepo == nil {
 		api.AddInternalError(ctx, w, errors.New("illRepo is not configured"))
 		return
@@ -562,14 +570,6 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		api.AddInternalError(ctx, w, err)
-		return
-	}
-	if !existingPr.RequesterSymbol.Valid || existingPr.RequesterSymbol.String == "" {
-		api.AddInternalError(ctx, w, fmt.Errorf("existing patron request missing requesterSymbol"))
-		return
-	}
-	if newPr.RequesterSymbol != nil && *newPr.RequesterSymbol != "" && *newPr.RequesterSymbol != existingPr.RequesterSymbol.String {
-		api.AddBadRequestError(ctx, w, fmt.Errorf("requesterSymbol does not match existing patron request"))
 		return
 	}
 	symbol = existingPr.RequesterSymbol.String
