@@ -1551,3 +1551,32 @@ func TestPutPatronRequestsIdOK(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, id, response.Id)
 }
+
+func TestPutPatronRequestsIdEmptyIllRequest(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	handler.SetIllRepo(new(illRepoNoTx))
+	id := "3"
+	body := proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol}
+	// IllRequest is zero-valued, which parseAndValidateIllRequest rejects as errInvalidPatronRequest
+	jsonBytes, _ := json.Marshal(body)
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBuffer(jsonBytes))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "illRequest must not be empty")
+}
+
+func TestPutPatronRequestsIdInvalidBrokerSymbol(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	handler.SetIllRepo(new(illRepoNoTx))
+	previousBrokerSymbol := brokerSymbol
+	brokerSymbol = "BROKER"
+	defer func() {
+		brokerSymbol = previousBrokerSymbol
+	}()
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "invalid BROKER_SYMBOL")
+}

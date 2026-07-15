@@ -550,7 +550,20 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 	if !a.checkOwnership(w, ctx, existingPr.Side, existingPr.RequesterSymbol, existingPr.SupplierSymbol, nil, tenant) {
 		return
 	}
-	existingPr.IllRequest = newPr.IllRequest
+	newPr.RequesterSymbol = &symbol
+	creationTime := pgtype.Timestamp{Valid: true, Time: time.Now()}
+	illRequest, requesterReqId, err := a.parseAndValidateIllRequest(ctx, &newPr, creationTime.Time)
+	if err != nil {
+		if errors.Is(err, errInvalidPatronRequest) {
+			api.AddBadRequestError(ctx, w, err)
+			return
+		}
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+
+	existingPr.RequesterReqID = getDbText(&requesterReqId)
+	existingPr.IllRequest = illRequest
 	existingPr.Patron = getDbText(newPr.Patron)
 	existingPr.InternalNote = getDbText(newPr.InternalNote)
 	updatedPr, err := a.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(existingPr))
