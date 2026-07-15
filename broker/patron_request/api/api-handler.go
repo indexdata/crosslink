@@ -560,14 +560,7 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 		api.AddInternalError(ctx, w, err)
 		return
 	}
-	prSymbol := strings.TrimSpace(existingPr.RequesterSymbol.String)
-	if !existingPr.RequesterSymbol.Valid || prSymbol == "" {
-		api.AddInternalError(ctx, w, fmt.Errorf("existing patron request is missing requesterSymbol"))
-		return
-	}
-	logParams["symbol"] = prSymbol
-	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	newPr.RequesterSymbol = &prSymbol
+	newPr.RequesterSymbol = &symbol
 	creationTime := time.Now()
 	if existingPr.CreatedAt.Valid {
 		creationTime = existingPr.CreatedAt.Time
