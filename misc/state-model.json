@@ -74,7 +74,7 @@
                 },
                 "editable": {
                     "type": "boolean",
-                    "description": "Indicates that patron request can be updated"
+                    "description": "Indicates that a patron request can be updated"
                 },
                 "actions": {
                     "type": "array",
