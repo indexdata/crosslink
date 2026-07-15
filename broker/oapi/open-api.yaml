@@ -1838,6 +1838,7 @@ paths:
         Updates are only permitted while the request is still editable per the state model (and before it has been sent).
       tags:
         - patron-requests-api
+      parameters:
         - in: path
           name: id
           schema:
