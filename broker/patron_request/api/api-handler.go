@@ -550,6 +550,10 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 	if !a.checkOwnership(w, ctx, existingPr.Side, existingPr.RequesterSymbol, existingPr.SupplierSymbol, nil, tenant) {
 		return
 	}
+	if existingPr.Side != prservice.SideBorrowing {
+		api.AddBadRequestError(ctx, w, fmt.Errorf("only borrower-side patron requests can be updated"))
+		return
+	}
 	newPr.RequesterSymbol = &symbol
 	creationTime := pgtype.Timestamp{Valid: true, Time: time.Now()}
 	illRequest, requesterReqId, err := a.parseAndValidateIllRequest(ctx, &newPr, creationTime.Time)
