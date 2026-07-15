@@ -525,6 +525,10 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 		api.AddBadRequestError(ctx, w, err)
 		return
 	}
+	if symbol == "" {
+		api.AddBadRequestError(ctx, w, errors.New("symbol must be specified"))
+		return
+	}
 	logParams["symbol"] = symbol
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
