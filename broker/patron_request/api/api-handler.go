@@ -547,7 +547,7 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 		return
 	}
 	if a.illRepo == nil {
-		api.AddBadRequestError(ctx, w, errors.New("illRepo is not configured"))
+		api.AddInternalError(ctx, w, errors.New("illRepo is not configured"))
 		return
 	}
 	_, err = a.illRepo.GetIllTransactionByRequesterRequestId(ctx, pgtype.Text{String: id, Valid: true})
