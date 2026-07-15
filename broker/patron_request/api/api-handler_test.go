@@ -1052,6 +1052,8 @@ func (r *PrRepoError) GetPatronRequestById(ctx common.ExtendedContext, id string
 		return pr_db.PatronRequest{}, pgx.ErrNoRows
 	case "3", "4":
 		return pr_db.PatronRequest{ID: id, State: prservice.BorrowerStateNew, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}}, nil
+	case "5":
+		return pr_db.PatronRequest{ID: id, State: prservice.BorrowerStateNeedsReview, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}}, nil
 	default:
 		return pr_db.PatronRequest{}, errors.New("DB error")
 	}
@@ -1360,27 +1362,17 @@ func TestMetadataUpdateAutoModeWithoutIdentifierMerges(t *testing.T) {
 
 // illRepoNoTx returns pgx.ErrNoRows for GetIllTransactionByRequesterRequestId,
 // meaning no ILL transaction has been sent for the given patron request yet.
-type illRepoNoTx struct {
-	mocks.MockIllRepositorySuccess
-}
-
-func (r *illRepoNoTx) GetIllTransactionByRequesterRequestId(ctx common.ExtendedContext, requesterRequestID pgtype.Text) (ill_db.IllTransaction, error) {
-	return ill_db.IllTransaction{}, pgx.ErrNoRows
-}
-
-// illRepoReqIdError returns a generic error for GetIllTransactionByRequesterRequestId.
-type illRepoReqIdError struct {
-	mocks.MockIllRepositorySuccess
-}
-
-func (r *illRepoReqIdError) GetIllTransactionByRequesterRequestId(ctx common.ExtendedContext, requesterRequestID pgtype.Text) (ill_db.IllTransaction, error) {
-	return ill_db.IllTransaction{}, errors.New("DB error")
-}
-
 // PrRepoUpdateCapture captures the params passed to UpdatePatronRequest and returns success.
 type PrRepoUpdateCapture struct {
 	PrRepoError
 	lastUpdateParams *pr_db.UpdatePatronRequestParams
+}
+
+func (r *PrRepoUpdateCapture) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
+	if id == "3" {
+		return pr_db.PatronRequest{ID: id, State: prservice.BorrowerStateNeedsReview, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}}, nil
+	}
+	return r.PrRepoError.GetPatronRequestById(ctx, id)
 }
 
 func (r *PrRepoUpdateCapture) UpdatePatronRequest(ctx common.ExtendedContext, params pr_db.UpdatePatronRequestParams) (pr_db.PatronRequest, error) {
@@ -1396,7 +1388,7 @@ type PrRepoUpdateCapturePreset struct {
 }
 
 func (r *PrRepoUpdateCapturePreset) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
-	pr, err := r.PrRepoError.GetPatronRequestById(ctx, id)
+	pr, err := r.PrRepoUpdateCapture.GetPatronRequestById(ctx, id)
 	if err == nil {
 		pr.CreatedAt = r.presetCreatedAt
 	}
@@ -1499,7 +1491,6 @@ func TestPutPatronRequestsIdEmptySymbol(t *testing.T) {
 func TestPutPatronRequestsIdMissingId(t *testing.T) {
 	repo := new(PrRepoUpdateCapture)
 	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
-	handler.SetIllRepo(new(illRepoNoTx))
 	body := proapi.CreatePatronRequest{RequesterSymbol: &symbol, IllRequest: validIllRequest()}
 	jsonBytes, _ := json.Marshal(body)
 	req, _ := http.NewRequest("PUT", "/", bytes.NewBuffer(jsonBytes))
@@ -1523,32 +1514,14 @@ func TestPutPatronRequestsIdIdMismatch(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "patron request id does not match")
 }
 
-func TestPutPatronRequestsIdIllRepoNotConfigured(t *testing.T) {
+func TestPutPatronRequestsIdNotEditable(t *testing.T) {
+	// id "3" returns a NEW state PR, which is not editable.
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
-	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
-	rr := httptest.NewRecorder()
-	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
-	assert.Equal(t, http.StatusInternalServerError, rr.Code)
-	assert.Contains(t, rr.Body.String(), "illRepo is not configured")
-}
-
-func TestPutPatronRequestsIdRequestAlreadySent(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
-	handler.SetIllRepo(new(mocks.MockIllRepositorySuccess))
 	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
 	rr := httptest.NewRecorder()
 	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Contains(t, rr.Body.String(), "request already sent")
-}
-
-func TestPutPatronRequestsIdIllRepoError(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
-	handler.SetIllRepo(new(illRepoReqIdError))
-	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
-	rr := httptest.NewRecorder()
-	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
-	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "patron request is not editable in state")
 }
 
 func TestPutPatronRequestsIdNotFound(t *testing.T) {
@@ -1581,10 +1554,9 @@ func TestPutPatronRequestsIdWrongOwner(t *testing.T) {
 
 func TestPutPatronRequestsIdUpdateError(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
-	handler.SetIllRepo(new(illRepoNoTx))
-	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "5", validIllRequest()))
 	rr := httptest.NewRecorder()
-	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	handler.PutPatronRequestsId(rr, req, "5", proapi.PutPatronRequestsIdParams{})
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Contains(t, rr.Body.String(), "DB error")
 }
@@ -1621,7 +1593,6 @@ func TestPutPatronRequestsIdPreservesCreatedAt(t *testing.T) {
 		presetCreatedAt: pgtype.Timestamp{Valid: true, Time: originalCreatedAt},
 	}
 	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
-	handler.SetIllRepo(new(illRepoNoTx))
 	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
 	rr := httptest.NewRecorder()
 	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
@@ -1634,7 +1605,6 @@ func TestPutPatronRequestsIdPreservesCreatedAt(t *testing.T) {
 func TestPutPatronRequestsIdOK(t *testing.T) {
 	repo := new(PrRepoUpdateCapture)
 	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
-	handler.SetIllRepo(new(illRepoNoTx))
 	id := "3"
 	patron := "user-1"
 	note := "staff note"
@@ -1665,29 +1635,27 @@ func TestPutPatronRequestsIdOK(t *testing.T) {
 
 func TestPutPatronRequestsIdEmptyIllRequest(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
-	handler.SetIllRepo(new(illRepoNoTx))
-	id := "3"
+	id := "5"
 	body := proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol}
 	// IllRequest is zero-valued, which parseAndValidateIllRequest rejects as errInvalidPatronRequest
 	jsonBytes, _ := json.Marshal(body)
 	req, _ := http.NewRequest("PUT", "/", bytes.NewBuffer(jsonBytes))
 	rr := httptest.NewRecorder()
-	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	handler.PutPatronRequestsId(rr, req, "5", proapi.PutPatronRequestsIdParams{})
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	assert.Contains(t, rr.Body.String(), "illRequest must not be empty")
 }
 
 func TestPutPatronRequestsIdInvalidBrokerSymbol(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
-	handler.SetIllRepo(new(illRepoNoTx))
 	previousBrokerSymbol := brokerSymbol
 	brokerSymbol = "BROKER"
 	defer func() {
 		brokerSymbol = previousBrokerSymbol
 	}()
-	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "5", validIllRequest()))
 	rr := httptest.NewRecorder()
-	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	handler.PutPatronRequestsId(rr, req, "5", proapi.PutPatronRequestsIdParams{})
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Contains(t, rr.Body.String(), "invalid BROKER_SYMBOL")
 }

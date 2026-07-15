@@ -505,6 +505,28 @@ func isSideParamValid(side *string) bool {
 	return side != nil && (*side == string(prservice.SideBorrowing) || *side == string(prservice.SideLending))
 }
 
+func (a *PatronRequestApiHandler) checkEditable(w http.ResponseWriter, ctx common.ExtendedContext, pr pr_db.PatronRequest) bool {
+	stateModel, err := a.actionMappingService.GetStateModelForRequest(pr.IllRequest)
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return true
+	}
+	editable := false
+	if stateModel != nil && stateModel.States != nil {
+		for _, st := range stateModel.States {
+			if st.Side == proapi.REQUESTER && st.Name == string(pr.State) {
+				editable = st.Editable != nil && *st.Editable
+				break
+			}
+		}
+	}
+	if !editable {
+		api.AddBadRequestError(ctx, w, fmt.Errorf("patron request is not editable in state %q", pr.State))
+		return true
+	}
+	return false
+}
+
 func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.PutPatronRequestsIdParams) {
 	logParams := map[string]string{"method": "PutPatronRequestsId", "id": id}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
@@ -558,18 +580,7 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 		api.AddBadRequestError(ctx, w, fmt.Errorf("requesterSymbol does not match existing patron request"))
 		return
 	}
-	if a.illRepo == nil {
-		api.AddInternalError(ctx, w, errors.New("illRepo is not configured"))
-		return
-	}
-	_, err = a.illRepo.GetIllTransactionByRequesterRequestId(ctx, pgtype.Text{String: id, Valid: true})
-	if err == nil {
-		// request already sent
-		api.AddBadRequestError(ctx, w, fmt.Errorf("request already sent"))
-		return
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		api.AddInternalError(ctx, w, err)
+	if a.checkEditable(w, ctx, existingPr) {
 		return
 	}
 	symbol = existingPr.RequesterSymbol.String
