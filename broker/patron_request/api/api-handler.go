@@ -528,7 +528,9 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 	logParams["symbol"] = symbol
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
-	if newPr.Id == nil || *newPr.Id != id {
+	if newPr.Id == nil {
+		newPr.Id = &id
+	} else if *newPr.Id != id {
 		api.AddBadRequestError(ctx, w, fmt.Errorf("patron request id does not match"))
 		return
 	}
