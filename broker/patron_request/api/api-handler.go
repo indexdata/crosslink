@@ -546,6 +546,10 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 		api.AddBadRequestError(ctx, w, fmt.Errorf("only borrower-side patron requests can be updated"))
 		return
 	}
+	if a.illRepo == nil {
+		api.AddBadRequestError(ctx, w, errors.New("illRepo is not configured"))
+		return
+	}
 	_, err = a.illRepo.GetIllTransactionByRequesterRequestId(ctx, pgtype.Text{String: id, Valid: true})
 	if err == nil {
 		// request already sent

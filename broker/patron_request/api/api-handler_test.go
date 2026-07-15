@@ -1493,6 +1493,15 @@ func TestPutPatronRequestsIdIdMismatch(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "patron request id does not match")
 }
 
+func TestPutPatronRequestsIdIllRepoNotConfigured(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "illRepo is not configured")
+}
+
 func TestPutPatronRequestsIdRequestAlreadySent(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
 	handler.SetIllRepo(new(mocks.MockIllRepositorySuccess))
