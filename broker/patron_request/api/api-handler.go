@@ -555,8 +555,11 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 		return
 	}
 	newPr.RequesterSymbol = &symbol
-	creationTime := pgtype.Timestamp{Valid: true, Time: time.Now()}
-	illRequest, requesterReqId, err := a.parseAndValidateIllRequest(ctx, &newPr, creationTime.Time)
+	creationTime := time.Now()
+	if existingPr.CreatedAt.Valid {
+		creationTime = existingPr.CreatedAt.Time
+	}
+	illRequest, requesterReqId, err := a.parseAndValidateIllRequest(ctx, &newPr, creationTime)
 	if err != nil {
 		if errors.Is(err, errInvalidPatronRequest) {
 			api.AddBadRequestError(ctx, w, err)
