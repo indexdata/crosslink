@@ -534,16 +534,6 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 		api.AddBadRequestError(ctx, w, fmt.Errorf("patron request id does not match"))
 		return
 	}
-	_, err = a.illRepo.GetIllTransactionByRequesterRequestId(ctx, pgtype.Text{String: id, Valid: true})
-	if err == nil {
-		// request already sent
-		api.AddBadRequestError(ctx, w, fmt.Errorf("request already sent"))
-		return
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		api.AddInternalError(ctx, w, err)
-		return
-	}
 	existingPr, err := a.prRepo.GetPatronRequestById(ctx, id)
 	if err != nil {
 		handleDbError(w, ctx, err)
@@ -554,6 +544,16 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 	}
 	if existingPr.Side != prservice.SideBorrowing {
 		api.AddBadRequestError(ctx, w, fmt.Errorf("only borrower-side patron requests can be updated"))
+		return
+	}
+	_, err = a.illRepo.GetIllTransactionByRequesterRequestId(ctx, pgtype.Text{String: id, Valid: true})
+	if err == nil {
+		// request already sent
+		api.AddBadRequestError(ctx, w, fmt.Errorf("request already sent"))
+		return
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		api.AddInternalError(ctx, w, err)
 		return
 	}
 	newPr.RequesterSymbol = &symbol

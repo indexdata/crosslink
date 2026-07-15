@@ -1483,7 +1483,6 @@ func TestPutPatronRequestsIdMissingId(t *testing.T) {
 
 func TestPutPatronRequestsIdIdMismatch(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
-	handler.SetIllRepo(new(illRepoNoTx))
 	otherId := "other-id"
 	body := proapi.CreatePatronRequest{Id: &otherId, RequesterSymbol: &symbol, IllRequest: validIllRequest()}
 	jsonBytes, _ := json.Marshal(body)
@@ -1515,7 +1514,6 @@ func TestPutPatronRequestsIdIllRepoError(t *testing.T) {
 
 func TestPutPatronRequestsIdNotFound(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
-	handler.SetIllRepo(new(illRepoNoTx))
 	req, _ := http.NewRequest("PUT", "/", putBody(t, "2", validIllRequest()))
 	rr := httptest.NewRecorder()
 	handler.PutPatronRequestsId(rr, req, "2", proapi.PutPatronRequestsIdParams{})
@@ -1524,7 +1522,6 @@ func TestPutPatronRequestsIdNotFound(t *testing.T) {
 
 func TestPutPatronRequestsIdPrRepoError(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
-	handler.SetIllRepo(new(illRepoNoTx))
 	req, _ := http.NewRequest("PUT", "/", putBody(t, "1", validIllRequest()))
 	rr := httptest.NewRecorder()
 	handler.PutPatronRequestsId(rr, req, "1", proapi.PutPatronRequestsIdParams{})
@@ -1537,7 +1534,6 @@ func TestPutPatronRequestsIdWrongOwner(t *testing.T) {
 	// without erroring; the mock returns no branch symbols for "ISIL:OTHER", producing 404.
 	tenantResolver := tenant.NewResolver().WithIllRepo(new(mocks.MockIllRepositorySuccess))
 	handler := NewPrApiHandler(new(PrRepoWrongOwner), mockEventBus, mockEventRepo, tenantResolver, nil, 10)
-	handler.SetIllRepo(new(illRepoNoTx))
 	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
 	rr := httptest.NewRecorder()
 	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
@@ -1556,7 +1552,6 @@ func TestPutPatronRequestsIdUpdateError(t *testing.T) {
 
 func TestPutPatronRequestsIdNotBorrowingSide(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoLendingSide), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
-	handler.SetIllRepo(new(illRepoNoTx))
 	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
 	rr := httptest.NewRecorder()
 	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
