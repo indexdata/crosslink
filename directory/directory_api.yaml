@@ -269,7 +269,6 @@ components:
         duplicateCheckWindowHours:
           type: integer
           description: The number of hours to check for duplicate requests. If a request is submitted within this window, it will be considered a duplicate.
-          default: 2
           minimum: 0
 
     CatalogConfig:
