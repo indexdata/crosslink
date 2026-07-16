@@ -608,13 +608,13 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 	existingPr.RequesterReqID = getDbText(&requesterReqId)
 	existingPr.IllRequest = illRequest
 	existingPr.Patron = getDbText(newPr.Patron)
-	var note pgtype.Text
 	if newPr.InternalNote != nil {
+		var note pgtype.Text
 		if trimmed := strings.TrimSpace(*newPr.InternalNote); trimmed != "" {
 			note = pgtype.Text{Valid: true, String: trimmed}
 		}
+		existingPr.InternalNote = note
 	}
-	existingPr.InternalNote = note
 	updatedPr, err := a.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(existingPr))
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
