@@ -1370,7 +1370,7 @@ type PrRepoUpdateCapture struct {
 
 func (r *PrRepoUpdateCapture) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
 	if id == "3" {
-		return pr_db.PatronRequest{ID: id, State: prservice.BorrowerStateNeedsReview, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, InternalNote: pgtype.Text{String: "original note", Valid: true}}, nil
+		return pr_db.PatronRequest{ID: id, State: prservice.BorrowerStateNeedsReview, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, InternalNote: pgtype.Text{String: "original note", Valid: true}, Patron: pgtype.Text{String: "original patron", Valid: true}}, nil
 	}
 	return r.PrRepoError.GetPatronRequestById(ctx, id)
 }
@@ -1633,16 +1633,14 @@ func TestPutPatronRequestsIdOK(t *testing.T) {
 	assert.Equal(t, id, response.Id)
 }
 
-func TestPutPatronRequestsIdNoInternalNote(t *testing.T) {
+func TestPutPatronRequestsIdNotePatronAbsent(t *testing.T) {
 	repo := new(PrRepoUpdateCapture)
 	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
 	id := "3"
-	patron := "user-1"
 	toUpdate := proapi.CreatePatronRequest{
 		Id:              &id,
 		RequesterSymbol: &symbol,
 		IllRequest:      validIllRequest(),
-		Patron:          &patron,
 	}
 	jsonBytes, _ := json.Marshal(toUpdate)
 	req, _ := http.NewRequest("PUT", "/", bytes.NewBuffer(jsonBytes))
@@ -1652,7 +1650,7 @@ func TestPutPatronRequestsIdNoInternalNote(t *testing.T) {
 	if assert.NotNil(t, repo.lastUpdateParams) {
 		assert.Equal(t, validIllRequest().BibliographicInfo.Title, repo.lastUpdateParams.IllRequest.BibliographicInfo.Title)
 		assert.True(t, repo.lastUpdateParams.Patron.Valid)
-		assert.Equal(t, patron, repo.lastUpdateParams.Patron.String)
+		assert.Equal(t, "original patron", repo.lastUpdateParams.Patron.String)
 		assert.Equal(t, "original note", repo.lastUpdateParams.InternalNote.String)
 	}
 	var response proapi.PatronRequest
