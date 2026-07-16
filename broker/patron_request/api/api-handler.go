@@ -591,6 +591,10 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 	if existingPr.CreatedAt.Valid {
 		creationTime = existingPr.CreatedAt.Time
 	}
+	if newPr.Patron == nil && existingPr.Patron.Valid {
+		patron := existingPr.Patron.String
+		newPr.Patron = &patron
+	}
 	illRequest, requesterReqId, err := a.parseAndValidateIllRequest(ctx, &newPr, creationTime)
 	if err != nil {
 		if errors.Is(err, errInvalidPatronRequest) {
@@ -604,7 +608,6 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 	existingPr.RequesterReqID = getDbText(&requesterReqId)
 	existingPr.IllRequest = illRequest
 	existingPr.Patron = getDbText(newPr.Patron)
-
 	var note pgtype.Text
 	if newPr.InternalNote != nil {
 		if trimmed := strings.TrimSpace(*newPr.InternalNote); trimmed != "" {
