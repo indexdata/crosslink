@@ -3,7 +3,7 @@ module github.com/indexdata/crosslink/illmock
 go 1.26.0
 
 require (
-	github.com/indexdata/crosslink/directory v0.0.0
+	github.com/indexdata/crosslink/directory-mock v0.0.0
 	github.com/indexdata/crosslink/httpclient v0.0.0
 	github.com/indexdata/crosslink/iso18626 v0.0.0
 	github.com/indexdata/crosslink/marcxml v0.0.0
@@ -13,7 +13,7 @@ require (
 )
 
 replace (
-	github.com/indexdata/crosslink/directory => ../directory
+	github.com/indexdata/crosslink/directory-mock => ../directory-mock
 	github.com/indexdata/crosslink/httpclient => ../httpclient
 	github.com/indexdata/crosslink/iso18626 => ../iso18626
 	github.com/indexdata/crosslink/marcxml => ../marcxml

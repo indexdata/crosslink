@@ -8,7 +8,7 @@ COPY go.work go.work.sum ./
 COPY broker/go.mod ./broker/go.mod
 
 # copy common sources
-COPY directory/ directory
+COPY directory-mock/ directory-mock
 COPY httpclient/ ./httpclient
 COPY iso18626/ ./iso18626
 COPY ncip/ ./ncip

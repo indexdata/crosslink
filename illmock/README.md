@@ -169,7 +169,7 @@ The directory service is accessible from the `/directory/entries` endpoint. For 
 
     curl http://localhost:8081/directory/entries
 
-See [the OpenAPI spec](directory/directory_api.yaml) . The `cql` query parameter is a CQL string.
+See [the OpenAPI spec](../directory-mock/directory_api.yaml) . The `cql` query parameter is a CQL string.
 This supports index `symbol` with supported relations `any`, `all`, `=` for matching against
 directory entry `symbols`. It also supports index `tenant` with supported relation `=` which matches
 against directory entry `tenant`.

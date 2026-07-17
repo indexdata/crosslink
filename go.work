@@ -2,7 +2,7 @@ go 1.26.0
 
 use (
 	./broker
-	./directory
+	./directory-mock
 	./httpclient
 	./illmock
 	./iso18626

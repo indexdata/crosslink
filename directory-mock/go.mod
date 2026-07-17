@@ -1,4 +1,4 @@
-module github.com/indexdata/crosslink/directory
+module github.com/indexdata/crosslink/directory-mock
 
 go 1.26.0
 

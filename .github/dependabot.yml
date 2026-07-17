@@ -4,7 +4,7 @@ updates:
   - package-ecosystem: gomod
     directories:
       - "/broker"
-      - "/directory"
+      - "/directory-mock"
       - "/httpclient"
       - "/illmock"
       - "/iso18626"
