@@ -3,19 +3,9 @@ FROM golang:1.26 AS build
 # Builds from the workspace root dir
 WORKDIR /app
 
-# copy workspace and module manifests before sources to leverage Docker cache
-COPY go.work go.work.sum ./
+# Copy only the Directory module manifests before sources to leverage Docker cache.
+# Build with GOWORK=off so the root workspace does not require unrelated modules.
 COPY directory/go.mod directory/go.sum ./directory/
-COPY directory-mock/go.mod directory-mock/go.sum ./directory-mock/
-COPY broker/go.mod broker/go.sum ./broker/
-COPY httpclient/go.mod httpclient/go.sum ./httpclient/
-COPY illmock/go.mod illmock/go.sum ./illmock/
-COPY iso18626/go.mod iso18626/go.sum ./iso18626/
-COPY marcxml/go.mod marcxml/go.sum ./marcxml/
-COPY ncip/go.mod ncip/go.sum ./ncip/
-COPY sru/go.mod sru/go.sum ./sru/
-COPY testutil/go.mod testutil/go.sum ./testutil/
-COPY zoom/go.mod zoom/go.sum ./zoom/
 
 # Set destination for COPY
 WORKDIR /app/directory
@@ -28,11 +18,12 @@ COPY directory/ ./
 
 # download go deps, caches GOMODPATH
 RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
-  go mod download
+  GOWORK=off go mod download
 
 # Build, caches GOCACHE
 RUN --mount=type=cache,sharing=shared,target=/root/.cache/go-build \
   CGO_ENABLED=0 \
+  GOWORK=off \
   GOOS=linux \
   go build -o /directory ./cmd/directory
 

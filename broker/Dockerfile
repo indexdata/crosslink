@@ -8,6 +8,7 @@ COPY go.work go.work.sum ./
 
 # copy only go.mods so Go doesn't complain on missing workspace modules
 COPY illmock/go.mod ./illmock/go.mod
+COPY directory-mock/go.mod ./directory-mock/go.mod
 
 
 # Copy dependent modules' sources (these change seldom)

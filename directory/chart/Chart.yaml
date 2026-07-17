@@ -1,5 +1,5 @@
 apiVersion: v2
-name: crosslink-directory
+name: directory
 description: CrossLink Directory
 type: application
 

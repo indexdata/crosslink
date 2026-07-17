@@ -47,7 +47,7 @@ jobs:
             runner: ubuntu-24.04-arm
           - module: directory
             dockerfile: ./directory/Dockerfile
-            image: ghcr.io/${{ github.repository }}-directory
+            image: ghcr.io/${{ github.repository_owner }}/directory
             title: CrossLink Directory
             description: Directory service for CrossLink
             licenses: AGPL-3.0-only
@@ -56,7 +56,7 @@ jobs:
             runner: ubuntu-24.04
           - module: directory
             dockerfile: ./directory/Dockerfile
-            image: ghcr.io/${{ github.repository }}-directory
+            image: ghcr.io/${{ github.repository_owner }}/directory
             title: CrossLink Directory
             description: Directory service for CrossLink
             licenses: AGPL-3.0-only
@@ -190,7 +190,7 @@ jobs:
             description: ISO18626 transaction broker for CrossLink
             licenses: AGPL-3.0-only
           - module: directory
-            image: ghcr.io/${{ github.repository }}-directory
+            image: ghcr.io/${{ github.repository_owner }}/directory
             description: Directory service for CrossLink
             licenses: AGPL-3.0-only
           - module: illmock

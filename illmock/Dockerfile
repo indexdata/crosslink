@@ -6,6 +6,7 @@ COPY go.work go.work.sum ./
 
 # copy only go.mods so Go doesn't complain on missing workspace modules
 COPY broker/go.mod ./broker/go.mod
+COPY directory/go.mod ./directory/go.mod
 
 # copy common sources
 COPY directory-mock/ directory-mock
