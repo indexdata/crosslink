@@ -234,30 +234,3 @@ SELECT archive_ill_transaction_by_date_and_status($1, $2);
 SELECT sqlc.embed(branch_symbol)
 FROM branch_symbol b
 WHERE b.peer_id = $1 AND b.symbol_value not in (SELECT s.symbol_value FROM symbol s);
-
--- name: FindDuplicateIllTransaction :one
-SELECT ill_transaction.id
-FROM ill_transaction
-WHERE requester_symbol = $1
-  AND timestamp > NOW() - make_interval(hours => sqlc.arg(hours)::int4)
-  AND COALESCE(ill_transaction_data->'patronInfo'->>'patronId', '')                    = sqlc.arg(patron_id)::text
-  AND COALESCE(ill_transaction_data->'bibliographicInfo'->>'supplierUniqueRecordId', '') = sqlc.arg(identifier)::text
-  AND COALESCE(ill_transaction_data->'bibliographicInfo'->>'title', '')                = sqlc.arg(title)::text
-  AND COALESCE(ill_transaction_data->'serviceInfo'->>'serviceType', '')                = sqlc.arg(service_type)::text
-  AND COALESCE((
-    SELECT elem->>'bibliographicItemIdentifier'
-    FROM jsonb_array_elements(
-      COALESCE(ill_transaction_data->'bibliographicInfo'->'bibliographicItemId', '[]'::jsonb)
-    ) AS elem
-    WHERE elem->'bibliographicItemIdentifierCode'->>'#text' = 'ISBN'
-    LIMIT 1
-  ), '') = sqlc.arg(isbn)::text
-  AND COALESCE((
-    SELECT elem->>'bibliographicItemIdentifier'
-    FROM jsonb_array_elements(
-      COALESCE(ill_transaction_data->'bibliographicInfo'->'bibliographicItemId', '[]'::jsonb)
-    ) AS elem
-    WHERE elem->'bibliographicItemIdentifierCode'->>'#text' = 'ISSN'
-    LIMIT 1
-  ), '') = sqlc.arg(issn)::text
-LIMIT 1;

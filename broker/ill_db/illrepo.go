@@ -50,7 +50,6 @@ type IllRepo interface {
 	GetExclusiveBranchSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]BranchSymbol, error)
 	DeleteBranchSymbolByPeerId(ctx common.ExtendedContext, peerId string) error
 	CallArchiveIllTransactionByDateAndStatus(ctx common.ExtendedContext, toDate time.Time, statuses []string) error
-	FindDuplicateIllTransaction(ctx common.ExtendedContext, params FindDuplicateIllTransactionParams) (string, error)
 }
 
 type PgIllRepo struct {
@@ -476,10 +475,6 @@ func (r *PgIllRepo) mapSymbolsAndFilterStale(ctx common.ExtendedContext, symbols
 func (r *PgIllRepo) CallArchiveIllTransactionByDateAndStatus(ctx common.ExtendedContext, toDate time.Time, statuses []string) error {
 	_, err := r.queries.CallArchiveIllTransactionByDateAndStatus(ctx, r.GetConnOrTx(), CallArchiveIllTransactionByDateAndStatusParams{toDate, statuses})
 	return err
-}
-
-func (r *PgIllRepo) FindDuplicateIllTransaction(ctx common.ExtendedContext, params FindDuplicateIllTransactionParams) (string, error) {
-	return r.queries.FindDuplicateIllTransaction(ctx, r.GetConnOrTx(), params)
 }
 
 func (r *PgIllRepo) GetExclusiveBranchSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]BranchSymbol, error) {

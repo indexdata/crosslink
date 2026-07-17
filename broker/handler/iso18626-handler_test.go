@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/common"
@@ -160,16 +161,21 @@ func (r *MockIllRepositoryNoSelectedSupplier) GetSelectedSupplierForIllTransacti
 // configurable results for duplicate-check testing.
 type mockDuplicateCheckRepo struct {
 	mocks.MockIllRepositorySuccess
-	duplicateId string
-	err         error
-	called      bool
-	params      ill_db.FindDuplicateIllTransactionParams
+	duplicate bool
+	err       error
+	called    bool
+	cql       string
 }
 
-func (r *mockDuplicateCheckRepo) FindDuplicateIllTransaction(ctx common.ExtendedContext, params ill_db.FindDuplicateIllTransactionParams) (string, error) {
+func (r *mockDuplicateCheckRepo) ListIllTransactions(ctx common.ExtendedContext, params ill_db.ListIllTransactionsParams, cql *string, symbols []string) ([]ill_db.IllTransaction, int64, error) {
+	if cql != nil {
+		r.cql = *cql
+	}
 	r.called = true
-	r.params = params
-	return r.duplicateId, r.err
+	if r.duplicate {
+		return []ill_db.IllTransaction{{ID: "duplicate-id"}}, 1, nil
+	}
+	return []ill_db.IllTransaction{}, 0, r.err
 }
 
 func TestCheckDuplicateRequest(t *testing.T) {
@@ -207,12 +213,11 @@ func TestCheckDuplicateRequest(t *testing.T) {
 		name           string
 		request        *iso18626.Request
 		peer           ill_db.Peer
-		duplicateId    string
+		duplicate      bool
 		repoErr        error
 		wantErr        error
 		wantRepoCalled bool
 		wantPatronId   string
-		wantWindowHrs  int32
 		wantIdentifier string
 		wantIsbn       string
 		wantIssn       string
@@ -248,7 +253,6 @@ func TestCheckDuplicateRequest(t *testing.T) {
 			wantErr:        nil,
 			wantRepoCalled: true,
 			wantPatronId:   "patron-1",
-			wantWindowHrs:  1,
 			wantIdentifier: "rec-1",
 			wantTitle:      "Test Title",
 			wantSvcType:    "Loan",
@@ -261,7 +265,6 @@ func TestCheckDuplicateRequest(t *testing.T) {
 			wantErr:        nil,
 			wantRepoCalled: true,
 			wantPatronId:   "patron-1",
-			wantWindowHrs:  1,
 			wantIdentifier: "rec-1",
 			wantTitle:      "Test Title",
 			wantSvcType:    "Loan",
@@ -270,11 +273,10 @@ func TestCheckDuplicateRequest(t *testing.T) {
 			name:           "duplicate found - returns ErrDuplicateRequest",
 			request:        baseRequest,
 			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
-			duplicateId:    "existing-tx-id",
+			duplicate:      true,
 			wantErr:        ErrDuplicateRequest,
 			wantRepoCalled: true,
 			wantPatronId:   "patron-1",
-			wantWindowHrs:  1,
 			wantIdentifier: "rec-1",
 			wantTitle:      "Test Title",
 			wantSvcType:    "Loan",
@@ -291,6 +293,22 @@ func TestCheckDuplicateRequest(t *testing.T) {
 			wantRepoCalled: false,
 		},
 		{
+			name: "no service level - skips duplicate check (can't verify same patron)",
+			request: &iso18626.Request{
+				BibliographicInfo: iso18626.BibliographicInfo{
+					SupplierUniqueRecordId: "rec-1",
+					Title:                  "Test Title",
+				},
+				PatronInfo: &iso18626.PatronInfo{
+					PatronId: "patron-1",
+				},
+			},
+			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
+			repoErr:        pgx.ErrNoRows,
+			wantErr:        nil,
+			wantRepoCalled: false,
+		},
+		{
 			name:           "isbn passed as parameter to DB query",
 			request:        isbnRequest,
 			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
@@ -298,7 +316,6 @@ func TestCheckDuplicateRequest(t *testing.T) {
 			wantErr:        nil,
 			wantRepoCalled: true,
 			wantPatronId:   "patron-2",
-			wantWindowHrs:  1,
 			wantIsbn:       "978-1234",
 			wantSvcType:    "Copy",
 		},
@@ -306,11 +323,21 @@ func TestCheckDuplicateRequest(t *testing.T) {
 			name:           "duplicate found via isbn - returns ErrDuplicateRequest",
 			request:        isbnRequest,
 			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
-			duplicateId:    "existing-tx-isbn",
+			duplicate:      true,
 			wantErr:        ErrDuplicateRequest,
 			wantRepoCalled: true,
 			wantPatronId:   "patron-2",
-			wantWindowHrs:  1,
+			wantIsbn:       "978-1234",
+			wantSvcType:    "Copy",
+		},
+		{
+			name:           "no duplicate - returns nil",
+			request:        isbnRequest,
+			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
+			duplicate:      false,
+			wantErr:        nil,
+			wantRepoCalled: true,
+			wantPatronId:   "patron-2",
 			wantIsbn:       "978-1234",
 			wantSvcType:    "Copy",
 		},
@@ -320,21 +347,19 @@ func TestCheckDuplicateRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 			mockRepo := &mockDuplicateCheckRepo{
-				duplicateId: tt.duplicateId,
-				err:         tt.repoErr,
+				duplicate: tt.duplicate,
+				err:       tt.repoErr,
 			}
 			err := checkDuplicateRequest(appCtx, tt.request, mockRepo, "ISIL:REQ1", tt.peer)
 			assert.Equal(t, tt.wantErr, err)
 			assert.Equal(t, tt.wantRepoCalled, mockRepo.called)
 			if tt.wantRepoCalled {
-				assert.Equal(t, "ISIL:REQ1", mockRepo.params.RequesterSymbol.String)
-				assert.Equal(t, tt.wantPatronId, mockRepo.params.PatronID)
-				assert.Equal(t, tt.wantWindowHrs, mockRepo.params.Hours)
-				assert.Equal(t, tt.wantIdentifier, mockRepo.params.Identifier)
-				assert.Equal(t, tt.wantIsbn, mockRepo.params.Isbn)
-				assert.Equal(t, tt.wantIssn, mockRepo.params.Issn)
-				assert.Equal(t, tt.wantTitle, mockRepo.params.Title)
-				assert.Equal(t, tt.wantSvcType, mockRepo.params.ServiceType)
+				assert.True(t, tt.wantPatronId == "" || strings.Contains(mockRepo.cql, tt.wantPatronId))
+				assert.True(t, tt.wantIdentifier == "" || strings.Contains(mockRepo.cql, tt.wantIdentifier))
+				assert.True(t, tt.wantIsbn == "" || strings.Contains(mockRepo.cql, tt.wantIsbn))
+				assert.True(t, tt.wantIssn == "" || strings.Contains(mockRepo.cql, tt.wantIssn))
+				assert.True(t, tt.wantTitle == "" || strings.Contains(mockRepo.cql, tt.wantTitle))
+				assert.True(t, tt.wantSvcType == "" || strings.Contains(mockRepo.cql, tt.wantSvcType))
 			}
 		})
 	}

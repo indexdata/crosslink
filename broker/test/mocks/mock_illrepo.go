@@ -9,7 +9,6 @@ import (
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/mock"
 )
@@ -198,10 +197,6 @@ func (r *MockIllRepositorySuccess) GetLocatedSupplierByIdForUpdate(ctx common.Ex
 	return ill_db.LocatedSupplier{ID: id}, nil
 }
 
-func (r *MockIllRepositorySuccess) FindDuplicateIllTransaction(ctx common.ExtendedContext, params ill_db.FindDuplicateIllTransactionParams) (string, error) {
-	return "", pgx.ErrNoRows
-}
-
 type MockIllRepositoryError struct {
 	mock.Mock
 }
@@ -342,8 +337,4 @@ func (r *MockIllRepositoryError) GetExclusiveBranchSymbolsByPeerId(ctx common.Ex
 
 func (r *MockIllRepositoryError) GetLocatedSupplierByIdForUpdate(ctx common.ExtendedContext, id string) (ill_db.LocatedSupplier, error) {
 	return ill_db.LocatedSupplier{}, errors.New("DB error")
-}
-
-func (r *MockIllRepositoryError) FindDuplicateIllTransaction(ctx common.ExtendedContext, params ill_db.FindDuplicateIllTransactionParams) (string, error) {
-	return "", errors.New("DB error")
 }

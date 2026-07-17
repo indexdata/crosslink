@@ -11,9 +11,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/broker/catalog"
-	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/shim"
+	"github.com/indexdata/crosslink/directory"
 
 	"github.com/indexdata/crosslink/broker/adapter"
 
@@ -33,6 +34,13 @@ var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 
 const HANDLER_COMP = "iso18626_handler"
 const ORIGINAL_INCOMING_MESSAGE = "originalIncomingMessage"
+
+var lookupQueryBuilder = utils.Must(catalog.NewQueryBuilderGen(&directory.QueryConfig{
+	Identifier: new("supplier_unique_record_id = {term}"),
+	Type:       new(directory.Cql),
+}))
+
+var queryTimeFormat = "2006-01-02 15:04:05"
 
 type ErrorValue string
 
@@ -201,22 +209,36 @@ func checkDuplicateRequest(ctx common.ExtendedContext, request *iso18626.Request
 		return nil
 	}
 
-	_, err := repo.FindDuplicateIllTransaction(ctx, ill_db.FindDuplicateIllTransactionParams{
-		RequesterSymbol: createPgText(requesterSymbol),
-		Hours:           service.ToInt32(*windowHours),
-		PatronID:        patronId,
-		Identifier:      lookupParams.Identifier,
-		Title:           lookupParams.Title,
-		ServiceType:     lookupParams.ServiceType,
-		Isbn:            lookupParams.Isbn,
-		Issn:            lookupParams.Issn,
-	})
+	cqlList, _, err := lookupQueryBuilder.Build(lookupParams)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil // no duplicate found
-		}
+		ctx.Logger().Warn("failed build lookup query", "error", err)
+		return nil
+	}
+
+	lookupCql := strings.Join(cqlList, " or ")
+	qb, err := cqlbuilder.NewQueryFromString("(" + lookupCql + ")")
+	if err != nil {
+		ctx.Logger().Warn("failed to build duplicate check query", "error", err)
+		return nil
+	}
+	formattedTime := time.Now().Add(-time.Duration(*windowHours) * time.Hour).Format(queryTimeFormat)
+	query, err := qb.And().Search("requester_symbol").Term(requesterSymbol).
+		And().Search("patron_id").Term(patronId).
+		And().Search("timestamp").Rel(">=").Term(formattedTime).
+		And().Search("service_type").Term(lookupParams.ServiceType).
+		Build()
+	if err != nil {
+		ctx.Logger().Warn("failed to build duplicate check query", "error", err)
+		return nil
+	}
+	cql := query.String()
+	trans, _, err := repo.ListIllTransactions(ctx, ill_db.ListIllTransactionsParams{Limit: 1, Offset: 0}, &cql, []string{requesterSymbol})
+	if err != nil {
 		ctx.Logger().Warn("failed to check for duplicate requests, proceeding", "error", err)
 		return nil // fail open
+	}
+	if len(trans) == 0 {
+		return nil
 	}
 	return ErrDuplicateRequest
 }
