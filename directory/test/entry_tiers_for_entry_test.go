@@ -131,5 +131,5 @@ func assertJSONFixture(t *testing.T, ja *jsonassert.Asserter, method string, end
 	if err != nil {
 		t.Fatalf("Error loading expected fixture %s: %v", fixture, err)
 	}
-	ja.Assertf(data, expected)
+	ja.Assertf(data, "%s", expected)
 }

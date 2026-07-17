@@ -108,7 +108,7 @@ Configuration is provided via environment variables:
 | `CONSORTIUM_SYMBOL`        | Designates peer for which configuration is used for consortium. At this time, it is     | (empty value)                             |
 |                            | used when `HOLDINGS_ADAPTER` = `consortium`.                                            |                                           |
 | `DIRECTORY_ADAPTER`        | Directory lookup method: `mock` or `api`                                                | `mock`                                    |
-| `DIRECTORY_API_URL`        | Comma separated list of URLs when `DIRECTORY_ADAPTER` is `api`                          | `http://localhost:8081/directory/entries` |
+| `DIRECTORY_API_URL`        | Comma separated list of URLs when `DIRECTORY_ADAPTER` is `api`                          | `http://localhost:8086/rsdir/entries` |
 | `AVAILABILITY_ADAPTER`     | Availability adapter: `mock` , `zoom`, `metaproxy`.                                     | `zoom`                                    |
 |                            | see [Building with native extensions (CGO)](#building-with-native-extensions-cgo)       |                                           |
 | `METAPROXY_URL`            | Metaproxy URL when `AVAILABILITY_ADAPTER` = `metaproxy`                                 | (empty value)                             |

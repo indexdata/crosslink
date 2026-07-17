@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/marcxml"
 	"github.com/indexdata/crosslink/sru"
 	"github.com/indexdata/crosslink/sru/diag"
@@ -16,7 +16,7 @@ import (
 func createSruAdapter(t *testing.T, isxn bool, url ...string) LookupAdapter {
 	parser := &ReservoirHoldingsParser{}
 	queryBuilder := NewQueryBuilderIsxn(isxn)
-	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
+	metadataParser := NewMetadataParserMarc(dirapi.MarcMetadataParserConfig{})
 	ad := CreateSruLookupAdapter(http.DefaultClient, url, "", queryBuilder, parser, metadataParser, "marcxml")
 	assert.NotNil(t, ad)
 	return ad

@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/indexdata/crosslink/broker/ncipclient"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/ncip"
 )
 
@@ -30,10 +30,10 @@ const (
 
 type LmsAdapterNcip struct {
 	ncipClient ncipclient.NcipClient
-	config     directory.LmsConfig
+	config     dirapi.LmsConfig
 }
 
-func CreateLmsAdapterNcip(lmsConfig directory.LmsConfig) (LmsAdapter, error) {
+func CreateLmsAdapterNcip(lmsConfig dirapi.LmsConfig) (LmsAdapter, error) {
 	l := &LmsAdapterNcip{config: lmsConfig}
 	toAgency := "default-to-agency"
 	if l.config.ToAgency != nil {

@@ -3,8 +3,8 @@ package api
 import (
 	"context"
 	"errors"
-	"indexdata/directory/auth"
-	"indexdata/directory/db"
+	"github.com/indexdata/crosslink/directory/auth"
+	"github.com/indexdata/crosslink/directory/db"
 	"log/slog"
 
 	"github.com/google/uuid"

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 )
 
 type MockLookupAdapter struct {
@@ -17,7 +17,7 @@ type MockLookupResult struct {
 	parent *MockLookupAdapter
 }
 
-func NewMockLookupAdapter(config directory.CatalogConfig) (LookupAdapter, error) {
+func NewMockLookupAdapter(config dirapi.CatalogConfig) (LookupAdapter, error) {
 	if config.Zoom != nil && config.Zoom.Options != nil {
 		options := *config.Zoom.Options
 		// For testing purposes, we can use the presence of "adapter-error" in options to trigger an error response

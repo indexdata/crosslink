@@ -8,7 +8,7 @@ replicaCount: 1
 # Always: always pull the latest version of the image from the container registry.
 # Never: there will be no attempts to pull the image.
 image:
-  repository: ghcr.io/indexdata/directory
+  repository: ghcr.io/indexdata/crosslink-directory
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""

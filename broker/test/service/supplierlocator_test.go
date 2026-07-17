@@ -16,7 +16,7 @@ import (
 	"github.com/indexdata/crosslink/broker/service"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	test "github.com/indexdata/crosslink/broker/test/utils"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
@@ -686,7 +686,7 @@ func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
 func TestLocalSupplyToAlmaPeer(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqSymbol := "ISIL:REQ" + uuid.NewString()
-	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, reqSymbol, adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.Alma, directory.Entry{}, reqSymbol)
+	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, reqSymbol, adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), dirapi.Alma, dirapi.Entry{}, reqSymbol)
 	data := ill_db.IllTransactionData{
 		BibliographicInfo: iso18626.BibliographicInfo{
 			SupplierUniqueRecordId: "return-" + reqSymbol,
@@ -906,8 +906,8 @@ func getSupplierId(i int, result map[string]interface{}) string {
 func TestCheckAvailability_Z3950AdapterSkipped(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	// Create a peer with Catalog config in CustomData
-	customData := directory.Entry{CatalogConfig: &directory.CatalogConfig{}}
-	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData, "ISIL:Z3950-SUP")
+	customData := dirapi.Entry{CatalogConfig: &dirapi.CatalogConfig{}}
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), dirapi.CrossLink, customData, "ISIL:Z3950-SUP")
 
 	// Create an ILL transaction and a located supplier for it
 	illTrId := apptest.GetIllTransId(t, illRepo)
@@ -949,15 +949,15 @@ func TestCheckAvailability_Z3950AdapterSkipped(t *testing.T) {
 
 func TestCheckAvailability_Z3950AdapterNotSkipped(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	customData := directory.Entry{CatalogConfig: &directory.CatalogConfig{
-		Zoom: &directory.ZoomConfig{
+	customData := dirapi.Entry{CatalogConfig: &dirapi.CatalogConfig{
+		Zoom: &dirapi.ZoomConfig{
 			Address: "a",
 			Options: &map[string]string{
 				"location": "1234", // ensures that holdings lookup returns a result and supplier is not skipped
 			},
 		},
 	}}
-	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData, "ISIL:Z3950-SUP")
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), dirapi.CrossLink, customData, "ISIL:Z3950-SUP")
 
 	// Create an ILL transaction and a located supplier for it
 	illTrId := apptest.GetIllTransId(t, illRepo)
@@ -1001,9 +1001,9 @@ func TestCheckAvailability_Z3950AdapterNotSkipped(t *testing.T) {
 
 func TestCheckAvailability_Z3950AdapterError(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	customData := directory.Entry{
-		CatalogConfig: &directory.CatalogConfig{
-			Zoom: &directory.ZoomConfig{
+	customData := dirapi.Entry{
+		CatalogConfig: &dirapi.CatalogConfig{
+			Zoom: &dirapi.ZoomConfig{
 				Address: "a",
 				Options: &map[string]string{
 					"adapter-error": "true",
@@ -1011,7 +1011,7 @@ func TestCheckAvailability_Z3950AdapterError(t *testing.T) {
 			},
 		},
 	}
-	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData, "ISIL:Z3950-SUP")
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), dirapi.CrossLink, customData, "ISIL:Z3950-SUP")
 
 	// Create an ILL transaction and a located supplier for it
 	illTrId := apptest.GetIllTransId(t, illRepo)
@@ -1050,9 +1050,9 @@ func TestCheckAvailability_Z3950AdapterError(t *testing.T) {
 
 func TestCheckAvailability_Z3950LookupError(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	customData := directory.Entry{
-		CatalogConfig: &directory.CatalogConfig{
-			Zoom: &directory.ZoomConfig{
+	customData := dirapi.Entry{
+		CatalogConfig: &dirapi.CatalogConfig{
+			Zoom: &dirapi.ZoomConfig{
 				Address: "a",
 				Options: &map[string]string{
 					"lookup-error": "true",
@@ -1060,7 +1060,7 @@ func TestCheckAvailability_Z3950LookupError(t *testing.T) {
 			},
 		},
 	}
-	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData, "ISIL:Z3950-SUP")
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), dirapi.CrossLink, customData, "ISIL:Z3950-SUP")
 
 	// Create an ILL transaction and a located supplier for it
 	illTrId := apptest.GetIllTransId(t, illRepo)

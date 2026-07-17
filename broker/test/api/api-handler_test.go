@@ -33,7 +33,7 @@ import (
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	mocks "github.com/indexdata/crosslink/broker/test/mocks"
 	test "github.com/indexdata/crosslink/broker/test/utils"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -267,7 +267,7 @@ func TestGetIllTransactionsOkapiIncludesBranchSymbols(t *testing.T) {
 	tenantName := "BIBBRANCH" + strings.ToUpper(uuid.NewString())
 	mainSymbol := "ISIL:DK-" + tenantName
 	branchSymbol := "ISIL:DK-BRANCH" + strings.ToUpper(uuid.NewString())
-	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, mainSymbol, "http://example.invalid", app.BROKER_MODE, directory.CrossLink, directory.Entry{}, mainSymbol)
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, mainSymbol, "http://example.invalid", app.BROKER_MODE, dirapi.CrossLink, dirapi.Entry{}, mainSymbol)
 	_, err := illRepo.SaveBranchSymbol(ctx, ill_db.SaveBranchSymbolParams{
 		PeerID:      peer.ID,
 		SymbolValue: branchSymbol,
@@ -537,7 +537,7 @@ func TestPeersCRUD(t *testing.T) {
 		"X-Okapi-Url":    "http://localhost:1234",
 	}
 	email := "v2"
-	custom := directory.Entry{
+	custom := dirapi.Entry{
 		Name:  "v1",
 		Email: &email,
 	}

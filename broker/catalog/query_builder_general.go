@@ -6,11 +6,11 @@ import (
 	"strings"
 
 	"github.com/indexdata/cql-go/cqlbuilder"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 )
 
 type QueryBuilderGen struct {
-	config directory.QueryConfig
+	config dirapi.QueryConfig
 }
 
 func NewString(s string) *string {
@@ -20,12 +20,12 @@ func NewString(s string) *string {
 	return nil
 }
 
-func NewQueryBuilderGen(queryConfig *directory.QueryConfig) (LookupQueryBuilder, error) {
-	var config directory.QueryConfig
+func NewQueryBuilderGen(queryConfig *dirapi.QueryConfig) (LookupQueryBuilder, error) {
+	var config dirapi.QueryConfig
 	if queryConfig != nil {
 		config = *queryConfig
 	}
-	if config.Type == nil || *config.Type == directory.Pqf {
+	if config.Type == nil || *config.Type == dirapi.Pqf {
 		if config.Identifier == nil {
 			config.Identifier = NewString("@attr 1=12 {term}")
 		}
@@ -40,7 +40,7 @@ func NewQueryBuilderGen(queryConfig *directory.QueryConfig) (LookupQueryBuilder,
 		}
 		return &QueryBuilderGen{config: config}, nil
 	}
-	if *config.Type == directory.Cql {
+	if *config.Type == dirapi.Cql {
 		if config.Identifier == nil {
 			config.Identifier = NewString("rec.id = {term}")
 		}
@@ -92,7 +92,7 @@ func (s *QueryBuilderGen) Build(params LookupParams) (cql []string, pqf []string
 	var cqlList []string
 	for _, pm := range paramMappings {
 		if pm.value != "" && pm.mapping != nil && *pm.mapping != "" {
-			if s.config.Type != nil && *s.config.Type == directory.Cql {
+			if s.config.Type != nil && *s.config.Type == dirapi.Cql {
 				cql := strings.ReplaceAll(*pm.mapping, "{term}", cqlEncode(pm.value))
 				cqlList = append(cqlList, cql)
 			} else {

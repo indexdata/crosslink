@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 )
 
 const (
@@ -25,9 +25,9 @@ func NewLookupAdapterCreator(mode string, metaproxyUrl string) LookupAdapterCrea
 	}
 }
 
-func getMetadataParser(config *directory.MetadataParserConfig) (MetadataParser, error) {
+func getMetadataParser(config *dirapi.MetadataParserConfig) (MetadataParser, error) {
 	if config == nil {
-		return NewMetadataParserMarc(directory.MarcMetadataParserConfig{}), nil
+		return NewMetadataParserMarc(dirapi.MarcMetadataParserConfig{}), nil
 	}
 	if config.Marc21 != nil {
 		return NewMetadataParserMarc(*config.Marc21), nil
@@ -35,9 +35,9 @@ func getMetadataParser(config *directory.MetadataParserConfig) (MetadataParser, 
 	return nil, fmt.Errorf("catalogConfig.metadataFormat must set marc21 (only marc21 is supported for now)")
 }
 
-func getHoldingsParser(config *directory.HoldingsParserConfig) (HoldingsParser, error) {
+func getHoldingsParser(config *dirapi.HoldingsParserConfig) (HoldingsParser, error) {
 	if config == nil {
-		return NewMarcHoldingsParser(directory.MarcHoldingsParserConfig{}), nil // default to marc parser
+		return NewMarcHoldingsParser(dirapi.MarcHoldingsParserConfig{}), nil // default to marc parser
 	}
 	if config.Marc != nil {
 		return NewMarcHoldingsParser(*config.Marc), nil

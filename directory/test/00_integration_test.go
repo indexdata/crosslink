@@ -21,7 +21,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"indexdata/directory/app"
+	"github.com/indexdata/crosslink/directory/app"
 )
 
 var dbpool *pgxpool.Pool
@@ -177,7 +177,7 @@ func testCase(t *testing.T, c httpTestCase) {
 		if err != nil {
 			t.Errorf(pre+"expected error to be nil got %v", err)
 		}
-		ja.Assertf(data, expectedResponse)
+		ja.Assertf(data, "%s", expectedResponse)
 
 	} else if c.res != "" {
 		if data != c.res {
@@ -237,7 +237,7 @@ func testCase(t *testing.T, c httpTestCase) {
 				}
 
 			}
-			ja.Assertf(redata, expectedRefetchResponse)
+			ja.Assertf(redata, "%s", expectedRefetchResponse)
 		}
 	}
 }

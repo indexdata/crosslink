@@ -26,7 +26,7 @@ import (
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/tenant"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgerrcode"
@@ -295,11 +295,11 @@ func (a *PatronRequestApiHandler) metadataUpdate(ctx common.ExtendedContext, ill
 		return nil
 	}
 
-	mode := directory.None
+	mode := dirapi.None
 	if configPeer.CatalogConfig != nil && configPeer.CatalogConfig.MetadataUpdateMode != nil {
 		mode = *configPeer.CatalogConfig.MetadataUpdateMode
 	}
-	if mode == directory.None {
+	if mode == dirapi.None {
 		return nil
 	}
 	lookupParams := catalog.LookupParamsFromBibliographicInfo(illRequest.BibliographicInfo, illRequest.ServiceInfo)
@@ -376,7 +376,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 			ctx.Logger().Warn("multiple peers found for requester symbol, using first peer", "symbol", symbol, "peerCount", len(peers))
 		}
 		requesterPeer := peers[0]
-		if requesterPeer.Vendor == string(directory.CrossLink) {
+		if requesterPeer.Vendor == string(dirapi.CrossLink) {
 			err := a.metadataUpdate(ctx, &illRequest, requesterPeer)
 			if err != nil {
 				api.AddInternalError(ctx, w, err)

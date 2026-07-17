@@ -7,13 +7,13 @@ import (
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/ncipclient"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/ncip"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCreateLmsAdapterNcip(t *testing.T) {
-	config := directory.LmsConfig{
+	config := dirapi.LmsConfig{
 		Address:    "http://ncip.example.com",
 		FromAgency: "MyAgency",
 	}
@@ -21,14 +21,14 @@ func TestCreateLmsAdapterNcip(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, ad)
 
-	config = directory.LmsConfig{
+	config = dirapi.LmsConfig{
 		FromAgency: "MyAgency",
 	}
 	_, err = CreateLmsAdapterNcip(config)
 	assert.Error(t, err)
 	assert.Equal(t, "missing NCIP address in LMS configuration", err.Error())
 
-	config = directory.LmsConfig{
+	config = dirapi.LmsConfig{
 		Address: "http://ncip.example.com",
 	}
 	_, err = CreateLmsAdapterNcip(config)
@@ -39,7 +39,7 @@ func TestCreateLmsAdapterNcip(t *testing.T) {
 func TestLookupUser(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	b := true
-	config := directory.LmsConfig{
+	config := dirapi.LmsConfig{
 		LookupUserEnabled: &b,
 	}
 	ad := &LmsAdapterNcip{
@@ -90,7 +90,7 @@ func TestAcceptItem(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	b := true
 	ad := &LmsAdapterNcip{
-		config:     directory.LmsConfig{AcceptItemEnabled: &b},
+		config:     dirapi.LmsConfig{AcceptItemEnabled: &b},
 		ncipClient: mock,
 	}
 	err := ad.AcceptItem("item1", "req1", "testuser", "author", "title", "isbn", "callnum", "loc", "action")
@@ -150,7 +150,7 @@ func TestRequestItem(t *testing.T) {
 	sysnumber := "NUMBER"
 	itemLocation := "itemloc"
 	ad := &LmsAdapterNcip{
-		config: directory.LmsConfig{
+		config: dirapi.LmsConfig{
 			ItemLocation:                     &itemLocation,
 			RequestItemPickupLocationEnabled: &b,
 			RequestItemRequestType:           &loan,
@@ -175,7 +175,7 @@ func TestRequestItem(t *testing.T) {
 	assert.Equal(t, itemLocation, req.ItemOptionalFields.Location[0].LocationName.LocationNameInstance[0].LocationNameValue)
 
 	ad = &LmsAdapterNcip{
-		config:     directory.LmsConfig{},
+		config:     dirapi.LmsConfig{},
 		ncipClient: mock,
 	}
 	mock.(*ncipClientMock).honorTitle = true
@@ -219,7 +219,7 @@ func TestRequestItem(t *testing.T) {
 
 	b = false
 	ad = &LmsAdapterNcip{
-		config: directory.LmsConfig{
+		config: dirapi.LmsConfig{
 			RequestItemPickupLocationEnabled: &b,
 		},
 		ncipClient: mock,
@@ -257,7 +257,7 @@ func TestCheckInItem(t *testing.T) {
 	b := true
 	ad := &LmsAdapterNcip{
 		ncipClient: mock,
-		config: directory.LmsConfig{
+		config: dirapi.LmsConfig{
 			CheckInItemEnabled: &b,
 		},
 	}
@@ -280,7 +280,7 @@ func TestCheckOutItem(t *testing.T) {
 	b := true
 	ad := &LmsAdapterNcip{
 		ncipClient: mock,
-		config: directory.LmsConfig{
+		config: dirapi.LmsConfig{
 			CheckOutItemEnabled: &b,
 		},
 	}
@@ -335,7 +335,7 @@ func TestCreateUserFiscalTransaction(t *testing.T) {
 
 func TestInstitutionalPatron(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
-	config := directory.LmsConfig{}
+	config := dirapi.LmsConfig{}
 	ad := &LmsAdapterNcip{
 		ncipClient: mock,
 		config:     config,
@@ -344,7 +344,7 @@ func TestInstitutionalPatron(t *testing.T) {
 	assert.Equal(t, "INST-123456", institutionalPatron)
 
 	p := "USER-{requesterSymbol}-XYZ"
-	config = directory.LmsConfig{RequesterPatronPattern: &p}
+	config = dirapi.LmsConfig{RequesterPatronPattern: &p}
 	ad = &LmsAdapterNcip{
 		ncipClient: mock,
 		config:     config,
@@ -355,7 +355,7 @@ func TestInstitutionalPatron(t *testing.T) {
 
 func TestSupplierPickupLocation(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
-	config := directory.LmsConfig{}
+	config := dirapi.LmsConfig{}
 	ad := &LmsAdapterNcip{
 		ncipClient: mock,
 		config:     config,
@@ -364,7 +364,7 @@ func TestSupplierPickupLocation(t *testing.T) {
 	assert.Equal(t, "ILL Office", pickupLocation)
 
 	p := "Office2"
-	config = directory.LmsConfig{SupplierPickupLocation: &p}
+	config = dirapi.LmsConfig{SupplierPickupLocation: &p}
 	ad = &LmsAdapterNcip{
 		ncipClient: mock,
 		config:     config,
@@ -375,7 +375,7 @@ func TestSupplierPickupLocation(t *testing.T) {
 
 func TestRequesterPickupLocation(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
-	config := directory.LmsConfig{}
+	config := dirapi.LmsConfig{}
 	ad := &LmsAdapterNcip{
 		ncipClient: mock,
 		config:     config,
@@ -384,7 +384,7 @@ func TestRequesterPickupLocation(t *testing.T) {
 	assert.Equal(t, "Main Library", pickupLocation)
 
 	p := "3rd Floor Desk"
-	config = directory.LmsConfig{RequesterPickupLocation: &p}
+	config = dirapi.LmsConfig{RequesterPickupLocation: &p}
 	ad = &LmsAdapterNcip{
 		ncipClient: mock,
 		config:     config,
@@ -395,7 +395,7 @@ func TestRequesterPickupLocation(t *testing.T) {
 
 func TestItemLocation(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
-	config := directory.LmsConfig{}
+	config := dirapi.LmsConfig{}
 	ad := &LmsAdapterNcip{
 		ncipClient: mock,
 		config:     config,
@@ -404,7 +404,7 @@ func TestItemLocation(t *testing.T) {
 	assert.Equal(t, "", itemLocation)
 
 	p := "4"
-	config = directory.LmsConfig{ItemLocation: &p}
+	config = dirapi.LmsConfig{ItemLocation: &p}
 	ad = &LmsAdapterNcip{
 		ncipClient: mock,
 		config:     config,

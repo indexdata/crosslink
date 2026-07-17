@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -13,9 +14,10 @@ import (
 	"github.com/indexdata/cql-go/pgcql"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/oapi-codegen/nullable"
 
-	"indexdata/directory/auth"
-	"indexdata/directory/db"
+	"github.com/indexdata/crosslink/directory/auth"
+	"github.com/indexdata/crosslink/directory/db"
 )
 
 const defaultSymbolAuthority string = "TEST"
@@ -27,6 +29,48 @@ func getSymbolAuthority() string {
 		return defaultSymbolAuthority
 	}
 	return symbolAuthority
+}
+
+func parseLenderOfLastResort(raw *string) (*[]Symbol, error) {
+	if raw == nil || *raw == "" {
+		return nil, nil
+	}
+	var symbols []Symbol
+	if err := json.Unmarshal([]byte(*raw), &symbols); err == nil {
+		if len(symbols) == 0 {
+			return nil, nil
+		}
+		return &symbols, nil
+	}
+	authority, symbol, err := resolveCombinedSymbol(*raw)
+	if err != nil {
+		return nil, err
+	}
+	symbols = []Symbol{{Authority: authority, Symbol: symbol}}
+	return &symbols, nil
+}
+
+func encodeLenderOfLastResort(symbols *[]Symbol) (*string, error) {
+	if symbols == nil {
+		return nil, nil
+	}
+	encoded, err := json.Marshal(symbols)
+	if err != nil {
+		return nil, err
+	}
+	value := string(encoded)
+	return &value, nil
+}
+
+func maybeUpdateLenderOfLastResort(cur *string, patch nullable.Nullable[[]Symbol]) (*string, error) {
+	if !patch.IsSpecified() {
+		return cur, nil
+	}
+	if patch.IsNull() {
+		return nil, nil
+	}
+	patchVal := patch.MustGet()
+	return encodeLenderOfLastResort(&patchVal)
 }
 
 func isValidParentForType(entryType EntryType, parentEntry *db.Entry) (bool, string) {
@@ -112,6 +156,11 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 		return Entry{}, 0, fmt.Errorf("unmarshalling networks config: %w", err)
 	}
 
+	lenderSymbols, err := parseLenderOfLastResort(lenderOfLastResort)
+	if err != nil {
+		return Entry{}, 0, fmt.Errorf("unmarshalling lender of last resort: %w", err)
+	}
+
 	// Use nil for empty arrays so they're omitted in JSON (omitempty)
 	var symbolsPtr *[]Symbol
 	if len(symbols) > 0 {
@@ -157,7 +206,7 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 		Email:              email,
 		Hrid:               hrid,
 		LmsLocationCode:    lmsLocationCode,
-		LenderOfLastResort: lenderOfLastResort,
+		LenderOfLastResort: lenderSymbols,
 		PhoneNumber:        phoneNumber,
 		Parent:             parent,
 		Symbols:            symbolsPtr,
@@ -529,6 +578,12 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		}
 	}
 
+	lenderOfLastResort, err := encodeLenderOfLastResort(request.Body.LenderOfLastResort)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to encode lenderOfLastResort", "error", err)
+		return AddEntry400TextResponse("Invalid lenderOfLastResort"), nil
+	}
+
 	toInsert := db.CreateEntryParams{
 		Name:               request.Body.Name,
 		ContactName:        request.Body.ContactName,
@@ -539,7 +594,7 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		Type:               string(entryType),
 		Parent:             request.Body.Parent,
 		LmsLocationCode:    request.Body.LmsLocationCode,
-		LenderOfLastResort: request.Body.LenderOfLastResort,
+		LenderOfLastResort: lenderOfLastResort,
 	}
 	insertedEntry, err := qtx.CreateEntry(ctx, toInsert)
 	if err != nil {
@@ -758,6 +813,12 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		}
 	}
 
+	lenderOfLastResort, err := maybeUpdateLenderOfLastResort(orig.LenderOfLastResort, request.Body.LenderOfLastResort)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to encode lenderOfLastResort", "error", err)
+		return UpdateEntry400TextResponse("Invalid lenderOfLastResort"), nil
+	}
+
 	err = qtx.UpdateEntry(ctx, db.UpdateEntryParams{
 		Name:               derefOrDefault(request.Body.Name, orig.Name),
 		Description:        maybeUpdateCol(orig.Description, request.Body.Description),
@@ -766,7 +827,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		PhoneNumber:        maybeUpdateCol(orig.PhoneNumber, request.Body.PhoneNumber),
 		Parent:             maybeUpdateCol(orig.Parent, request.Body.Parent),
 		LmsLocationCode:    maybeUpdateCol(orig.LmsLocationCode, request.Body.LmsLocationCode),
-		LenderOfLastResort: maybeUpdateCol(orig.LenderOfLastResort, request.Body.LenderOfLastResort),
+		LenderOfLastResort: lenderOfLastResort,
 		Hrid:               maybeUpdateCol(orig.Hrid, request.Body.Hrid),
 		Type:               resultingType,
 		TimeZone:           maybeUpdateCol(orig.TimeZone, request.Body.TimeZone),

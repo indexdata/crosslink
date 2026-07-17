@@ -2,7 +2,7 @@
   "id": "{{.id}}",
   "name":"New Institution",
   "type":"Institution",
-  "lenderOfLastResort":"NEW-LOR",
+  "lenderOfLastResort":[{"authority":"ISIL","symbol":"NEW-LOR"}],
   "symbols": [
     "<<UNORDERED>>",
     {"id": "<<PRESENCE>>", "authority":"TEST", "symbol":"NWINST"},

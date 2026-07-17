@@ -131,5 +131,5 @@ func assertNetworkJSONFixture(t *testing.T, ja *jsonassert.Asserter, method stri
 	if err != nil {
 		t.Fatalf("Error loading expected fixture %s: %v", fixture, err)
 	}
-	ja.Assertf(data, expected)
+	ja.Assertf(data, "%s", expected)
 }

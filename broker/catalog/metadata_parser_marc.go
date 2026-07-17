@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/marcxml"
 )
 
 type MetadataParserMarc struct {
-	config directory.MarcMetadataParserConfig
+	config dirapi.MarcMetadataParserConfig
 }
 
-func NewMetadataParserMarc(config directory.MarcMetadataParserConfig) MetadataParser {
+func NewMetadataParserMarc(config dirapi.MarcMetadataParserConfig) MetadataParser {
 	if config.Identifier == nil {
 		config.Identifier = NewString("001")
 	}

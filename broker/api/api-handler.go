@@ -12,7 +12,7 @@ import (
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/tenant"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 
 	"github.com/google/uuid"
 	icql "github.com/indexdata/cql-go/cql"
@@ -478,7 +478,7 @@ func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id strin
 			return
 		}
 	} else {
-		peer.CustomData = directory.Entry{}
+		peer.CustomData = dirapi.Entry{}
 	}
 	if update.BrokerMode != "" {
 		peer.BrokerMode = string(update.BrokerMode)
@@ -727,7 +727,7 @@ func toApiBrokerMode(brokerMode string) oapi.PeerBrokerMode {
 }
 
 func toDbPeer(peer oapi.Peer) ill_db.Peer {
-	var entry directory.Entry
+	var entry dirapi.Entry
 	if peer.CustomData != nil {
 		entry = *peer.CustomData
 	}

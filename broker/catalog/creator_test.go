@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -31,15 +31,15 @@ func TestParserNil(t *testing.T) {
 }
 
 func TestParserMissing(t *testing.T) {
-	parserConfig := &directory.HoldingsParserConfig{}
+	parserConfig := &dirapi.HoldingsParserConfig{}
 	_, err := getHoldingsParser(parserConfig)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "must set marc")
 }
 
 func TestParserMarc(t *testing.T) {
-	parserConfig := &directory.HoldingsParserConfig{
-		Marc: &directory.MarcHoldingsParserConfig{},
+	parserConfig := &dirapi.HoldingsParserConfig{
+		Marc: &dirapi.MarcHoldingsParserConfig{},
 	}
 	parser, err := getHoldingsParser(parserConfig)
 	assert.NoError(t, err)
@@ -47,8 +47,8 @@ func TestParserMarc(t *testing.T) {
 }
 
 func TestParserOpac(t *testing.T) {
-	parserConfig := &directory.HoldingsParserConfig{
-		Opac: &directory.OpacHoldingsParserConfig{},
+	parserConfig := &dirapi.HoldingsParserConfig{
+		Opac: &dirapi.OpacHoldingsParserConfig{},
 	}
 	parser, err := getHoldingsParser(parserConfig)
 	assert.NoError(t, err)
@@ -58,12 +58,12 @@ func TestParserOpac(t *testing.T) {
 func TestGetAdapterBadParser(t *testing.T) {
 	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
 	peer := ill_db.Peer{
-		CustomData: directory.Entry{
-			CatalogConfig: &directory.CatalogConfig{
-				Zoom: &directory.ZoomConfig{
+		CustomData: dirapi.Entry{
+			CatalogConfig: &dirapi.CatalogConfig{
+				Zoom: &dirapi.ZoomConfig{
 					Address: "a",
 				},
-				HoldingsFormat: &directory.HoldingsParserConfig{},
+				HoldingsFormat: &dirapi.HoldingsParserConfig{},
 			},
 		},
 	}
@@ -75,9 +75,9 @@ func TestGetAdapterBadParser(t *testing.T) {
 func TestGetAdapterOtherWithConfig(t *testing.T) {
 	creator := NewLookupAdapterCreator("other", "")
 	peer := ill_db.Peer{
-		CustomData: directory.Entry{
-			CatalogConfig: &directory.CatalogConfig{
-				Zoom: &directory.ZoomConfig{
+		CustomData: dirapi.Entry{
+			CatalogConfig: &dirapi.CatalogConfig{
+				Zoom: &dirapi.ZoomConfig{
 					Address: "a",
 				},
 			},
@@ -91,8 +91,8 @@ func TestGetAdapterOtherWithConfig(t *testing.T) {
 func TestGetAdapterMissingProperties(t *testing.T) {
 	creator := NewLookupAdapterCreator("zoom", "")
 	peer := ill_db.Peer{
-		CustomData: directory.Entry{
-			CatalogConfig: &directory.CatalogConfig{},
+		CustomData: dirapi.Entry{
+			CatalogConfig: &dirapi.CatalogConfig{},
 		},
 	}
 	_, err := creator.GetAdapter(peer)
@@ -102,9 +102,9 @@ func TestGetAdapterMissingProperties(t *testing.T) {
 
 func TestGetAdapterMock(t *testing.T) {
 	peer := ill_db.Peer{
-		CustomData: directory.Entry{
-			CatalogConfig: &directory.CatalogConfig{
-				Zoom: &directory.ZoomConfig{
+		CustomData: dirapi.Entry{
+			CatalogConfig: &dirapi.CatalogConfig{
+				Zoom: &dirapi.ZoomConfig{
 					Address: "a",
 				},
 			},
@@ -118,9 +118,9 @@ func TestGetAdapterMock(t *testing.T) {
 
 func TestGetAdapterZoom(t *testing.T) {
 	peer := ill_db.Peer{
-		CustomData: directory.Entry{
-			CatalogConfig: &directory.CatalogConfig{
-				Zoom: &directory.ZoomConfig{
+		CustomData: dirapi.Entry{
+			CatalogConfig: &dirapi.CatalogConfig{
+				Zoom: &dirapi.ZoomConfig{
 					Address: "a",
 				},
 			},
@@ -140,9 +140,9 @@ func TestGetAdapterZoom(t *testing.T) {
 
 func TestGetAdapterMetaproxy(t *testing.T) {
 	peer := ill_db.Peer{
-		CustomData: directory.Entry{
-			CatalogConfig: &directory.CatalogConfig{
-				Zoom: &directory.ZoomConfig{
+		CustomData: dirapi.Entry{
+			CatalogConfig: &dirapi.CatalogConfig{
+				Zoom: &dirapi.ZoomConfig{
 					Address: "a",
 				},
 			},
@@ -156,9 +156,9 @@ func TestGetAdapterMetaproxy(t *testing.T) {
 
 func TestGetAdapterMetaproxyMissingProxy(t *testing.T) {
 	peer := ill_db.Peer{
-		CustomData: directory.Entry{
-			CatalogConfig: &directory.CatalogConfig{
-				Zoom: &directory.ZoomConfig{
+		CustomData: dirapi.Entry{
+			CatalogConfig: &dirapi.CatalogConfig{
+				Zoom: &dirapi.ZoomConfig{
 					Address: "a",
 				},
 			},
@@ -172,9 +172,9 @@ func TestGetAdapterMetaproxyMissingProxy(t *testing.T) {
 
 func TestGetAdapterSRU(t *testing.T) {
 	peer := ill_db.Peer{
-		CustomData: directory.Entry{
-			CatalogConfig: &directory.CatalogConfig{
-				Sru: &directory.SruConfig{
+		CustomData: dirapi.Entry{
+			CatalogConfig: &dirapi.CatalogConfig{
+				Sru: &dirapi.SruConfig{
 					Address: "a",
 				},
 			},

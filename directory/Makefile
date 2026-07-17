@@ -1,30 +1,29 @@
 GO ?= go
-GIT ?= git
 GOFMT ?= gofmt "-s"
-OS ?= $(shell uname)
 DOCKER ?= docker
 GOFILES := $(shell find . -name "*.go")
-GOTOOLS=tools.go
 BINARY=directory
 MAIN_PACKAGE=cmd/directory
 COVERAGE=coverage.out
+SQLC ?= $(GO) tool sqlc
+OAPI_CODEGEN ?= $(GO) tool oapi-codegen
 
-all: $(BINARY)
+.PHONY: all docker generate generate-sqlc generate-api check checkinclgen run fmt fmt-check lint vulncheck clean deps-update tools-update
+
+all: generate $(BINARY)
 
 docker:
-	cd .. && $(DOCKER) build -f ./$(MODULE)/Dockerfile .
+	cd .. && $(DOCKER) build -f ./directory/Dockerfile .
 
-generate:
-	$(GO) generate
+generate: generate-sqlc generate-api
 
-verify-gen:
-	$(GO) generate
-	$(GIT) diff --exit-code --quiet -- ':/*.gen.go' 'db/' || (echo "Error: Generated code is out of date. Run 'make generate' and commit the changes." && exit 1)
+generate-sqlc:
+	$(SQLC) generate
 
-$(COMMIT_ID):
-	$(GIT) rev-parse --short HEAD | tr -d '\n' > $(COMMIT_ID)
+generate-api:
+	$(OAPI_CODEGEN) --config=oapi-codegen.yaml api.yaml
 
-$(BINARY):  $(COMMIT_ID) $(GEN_SCHEMA_OUT) $(SQL_GEN_OUT) $(GOFILES)
+$(BINARY): $(GOFILES)
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
 
 checkinclgen:
@@ -44,10 +43,20 @@ fmt:
 fmt-check:
 	$(GOFMT) -d $(GOFILES)
 
-lint:
+lint: generate
 	$(GO) run github.com/golangci/golangci-lint/cmd/golangci-lint@latest run
 
+vulncheck: generate
+	$(GO) run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+deps-update:
+	$(GO) get -u ./...
+	$(GO) mod tidy
+
+tools-update:
+	$(GO) get -tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
+	$(GO) get -tool github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+	$(GO) mod tidy
+
 clean:
-	rm -f $(BINARY)
-	rm -f $(COVERAGE)
-	rm -f $(COMMIT_ID)
+	rm -f $(BINARY) $(COVERAGE) $(COVERAGE).tmp

@@ -5,7 +5,7 @@ package catalog
 import (
 	"fmt"
 
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/zoom"
 )
 
@@ -25,7 +25,7 @@ type ZoomLookupResult struct {
 	metadata *Metadata
 }
 
-func NewZoomLookupAdapter(config directory.ZoomConfig, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser, metadataParser MetadataParser) (LookupAdapter, error) {
+func NewZoomLookupAdapter(config dirapi.ZoomConfig, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser, metadataParser MetadataParser) (LookupAdapter, error) {
 	a := &ZoomLookupAdapter{
 		// default options, can be overridden by config.Options
 		options: zoom.Options{

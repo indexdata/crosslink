@@ -9,7 +9,7 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test/mocks"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5"
@@ -144,7 +144,7 @@ type MockIllRepositorySuccessAlma struct {
 func (r *MockIllRepositorySuccessAlma) GetPeerById(ctx common.ExtendedContext, id string) (ill_db.Peer, error) {
 	return ill_db.Peer{
 		ID:     id,
-		Vendor: string(directory.Alma),
+		Vendor: string(dirapi.Alma),
 	}, nil
 }
 

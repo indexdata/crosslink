@@ -19,10 +19,10 @@ import (
 	sloghttp "github.com/veqryn/slog-context/http"
 	pgxUUID "github.com/vgarvardt/pgx-google-uuid/v5"
 
-	"indexdata/directory/api"
-	"indexdata/directory/auth"
-	"indexdata/directory/db"
-	"indexdata/directory/enhancedcontext"
+	"github.com/indexdata/crosslink/directory/api"
+	"github.com/indexdata/crosslink/directory/auth"
+	"github.com/indexdata/crosslink/directory/db"
+	"github.com/indexdata/crosslink/directory/enhancedcontext"
 )
 
 var Host = cmp.Or(os.Getenv("HOST"), "localhost")

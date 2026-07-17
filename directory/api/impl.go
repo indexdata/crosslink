@@ -3,7 +3,7 @@ package api
 import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"indexdata/directory/db"
+	"github.com/indexdata/crosslink/directory/db"
 )
 
 type ApiImpl struct {

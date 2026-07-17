@@ -1,10 +1,21 @@
-FROM golang:1.23.4 AS build
+FROM golang:1.26 AS build
 
 # Builds from the workspace root dir
 WORKDIR /app
 
-# copy only go.mods so Go doesn't complain on missing workspace modules
-COPY ./go.mod ./go.mod
+# copy workspace and module manifests before sources to leverage Docker cache
+COPY go.work go.work.sum ./
+COPY directory/go.mod directory/go.sum ./directory/
+COPY directory-mock/go.mod directory-mock/go.sum ./directory-mock/
+COPY broker/go.mod broker/go.sum ./broker/
+COPY httpclient/go.mod httpclient/go.sum ./httpclient/
+COPY illmock/go.mod illmock/go.sum ./illmock/
+COPY iso18626/go.mod iso18626/go.sum ./iso18626/
+COPY marcxml/go.mod marcxml/go.sum ./marcxml/
+COPY ncip/go.mod ncip/go.sum ./ncip/
+COPY sru/go.mod sru/go.sum ./sru/
+COPY testutil/go.mod testutil/go.sum ./testutil/
+COPY zoom/go.mod zoom/go.sum ./zoom/
 
 # Set destination for COPY
 WORKDIR /app/directory
@@ -13,7 +24,7 @@ WORKDIR /app/directory
 # make sure make generate is run
 
 # see .dockerignore for what is getting copied
-COPY . ./
+COPY directory/ ./
 
 # download go deps, caches GOMODPATH
 RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \

@@ -2,7 +2,7 @@
   "id":"00000000-0000-0000-0000-000000000002",
   "name":"Institution",
   "email":"what@ever.tk",
-  "lenderOfLastResort":"PATCHED-LOR",
+  "lenderOfLastResort":[{"authority":"ISIL","symbol":"PATCHED-LOR"}],
   "type":"Institution",
   "parent":"00000000-0000-0000-0000-000000000004",
   "symbols": [

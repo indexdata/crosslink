@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"indexdata/directory/app"
+	"github.com/indexdata/crosslink/directory/app"
 	"log/slog"
 	"os"
 	"strings"

@@ -1,6 +1,6 @@
 apiVersion: v2
-name: directory
-description: Directory
+name: crosslink-directory
+description: CrossLink Directory
 type: application
 
 # Use semver, note that this is replaced by the publish action
