@@ -1,0 +1,26 @@
+{
+  "id":"00000000-0000-0000-0000-000000000002",
+  "name":"Institution",
+  "email":"what@ever.tk",
+  "lenderOfLastResort":"PATCHED-LOR",
+  "type":"Institution",
+  "parent":"00000000-0000-0000-0000-000000000004",
+  "symbols": [
+    {"authority":"TEST","id":"60000000-0000-0000-0000-000000000001","symbol":"INST"}
+  ],
+  "lmsConfig": {
+    "address":"https://also.not.real",
+    "fromAgency":"rivendell",
+    "fromAgencyAuthentication":"",
+    "acceptItemEnabled": true
+  },
+  "closures": [
+    {
+      "entry":"00000000-0000-0000-0000-000000000002",
+      "id":"70000000-0000-0000-0000-000000000001",
+      "reason":"Winter break",
+      "startDate":"2024-01-01",
+      "endDate":"2024-01-15"
+    }
+  ]
+}

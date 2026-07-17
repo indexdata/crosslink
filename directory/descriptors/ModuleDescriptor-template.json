@@ -1,0 +1,484 @@
+{
+  "id": "directory-@version@",
+  "name": "Directory",
+  "provides": [
+    {
+      "id": "entries",
+      "version": "1.0",
+      "handlers": [
+        {
+          "methods": ["GET"],
+          "pathPattern": "/rsdir/entries",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["POST"],
+          "pathPattern": "/rsdir/entries",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["GET"],
+          "pathPattern": "/rsdir/entries/{key}/{value}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods" : ["GET"],
+          "pathPattern": "/rsdir/entries/{key}/{value}/tiers",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods" : ["POST"],
+          "pathPattern": "/rsdir/entries/{key}/{value}/tiers",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods" : ["DELETE"],
+          "pathPattern": "/rsdir/entries/{key}/{value}/tiers/{id}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods" : ["GET"],
+          "pathPattern": "/rsdir/entries/{key}/{value}/networks",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods" : ["POST"],
+          "pathPattern": "/rsdir/entries/{key}/{value}/networks",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods" : ["DELETE"],
+          "pathPattern": "/rsdir/entries/{key}/{value}/networks/{id}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["PATCH"],
+          "pathPattern": "/rsdir/entries/{key}/{value}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["DELETE"],
+          "pathPattern": "/rsdir/entries/{key}/{value}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        }
+      ]
+    },
+    {
+      "id" : "tiers",
+      "version" : "1.0",
+      "handlers" : [
+        {
+          "methods": ["GET"],
+          "pathPattern": "/rsdir/tiers",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["POST"],
+          "pathPattern": "/rsdir/tiers",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["GET"],
+          "pathPattern": "/rsdir/tiers/{id}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["DELETE"],
+          "pathPattern": "/rsdir/tiers/{id}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        }
+      ]
+    },
+    {
+      "id" : "networks",
+      "version" : "1.0",
+      "handlers" : [
+         {
+          "methods": ["GET"],
+          "pathPattern": "/rsdir/networks",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["POST"],
+          "pathPattern": "/rsdir/networks",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["GET"],
+          "pathPattern": "/rsdir/networks/{id}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["DELETE"],
+          "pathPattern": "/rsdir/networks/{id}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        }
+      ]
+    },
+    {
+      "id" : "memberships",
+      "version" : "1.0",
+      "handlers" : [
+         {
+          "methods": ["GET"],
+          "pathPattern": "/rsdir/memberships",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["POST"],
+          "pathPattern": "/rsdir/memberships",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["GET"],
+          "pathPattern": "/rsdir/memberships/{id}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["DELETE"],
+          "pathPattern": "/rsdir/memberships/{id}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        }
+       ]
+    },
+    {
+      "id" : "network-memberships",
+      "version" : "1.0",
+      "handlers" : [
+         {
+          "methods": ["GET"],
+          "pathPattern": "/rsdir/network-memberships",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["POST"],
+          "pathPattern": "/rsdir/network-memberships",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["GET"],
+          "pathPattern": "/rsdir/network-memberships/{id}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["DELETE"],
+          "pathPattern": "/rsdir/network-memberships/{id}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        }
+      ]
+    },
+    {
+      "id" : "tier-memberships",
+      "version" : "1.0",
+      "handlers" : [
+         {
+          "methods": ["GET"],
+          "pathPattern": "/rsdir/tier-memberships",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["POST"],
+          "pathPattern": "/rsdir/tier-memberships",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["GET"],
+          "pathPattern": "/rsdir/tier-memberships/{id}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["DELETE"],
+          "pathPattern": "/rsdir/tier-memberships/{id}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        }
+      ]
+    },
+    {
+      "id" : "closures",
+      "version" : "1.0",
+      "handlers" : [
+         {
+          "methods": ["GET"],
+          "pathPattern": "/rsdir/closures",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["POST"],
+          "pathPattern": "/rsdir/closures",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["GET"],
+          "pathPattern": "/rsdir/closures/{id}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["PATCH"],
+          "pathPattern": "/rsdir/closures/{id}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["DELETE"],
+          "pathPattern": "/rsdir/closures/{id}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        }
+      ]
+    }
+
+  ],
+  "requires": [],
+  "permissionSets": [
+    {
+      "description": "Consortial admin permissions",
+      "displayName": "Directory - all consortia permissions",
+      "permissionName": "directory.consortium.all",
+      "visible": true
+    },
+    {
+      "description": "Institution admin permissions",
+      "displayName": "Directory - all entry permissions",
+      "permissionName": "directory.institution.all",
+      "visible": true
+    },
+    {
+      "description": "System user permissions",
+      "displayName": "Directory - all entry permissions",
+      "permissionName": "directory.system.all",
+      "visible": true
+    },
+    {
+      "description": "Public user permissions",
+      "displayName": "Directory - all entry permissions",
+      "permissionName": "directory.public.all",
+      "visible": true
+    },
+    {
+      "description": "All directory module permissions",
+      "displayName": "Directory - all permissions",
+      "permissionName": "directory.all",
+      "subPermissions": [
+        "directory.consortium.all",
+        "directory.institution.all",
+        "directory.system.all",
+        "directory.public.all"
+      ],
+      "visible": true
+    }
+  ]
+}

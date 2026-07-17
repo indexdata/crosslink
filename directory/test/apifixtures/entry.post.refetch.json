@@ -1,0 +1,19 @@
+{
+  "id": "{{.id}}",
+  "name":"New Institution",
+  "type":"Institution",
+  "lenderOfLastResort":"NEW-LOR",
+  "symbols": [
+    "<<UNORDERED>>",
+    {"id": "<<PRESENCE>>", "authority":"TEST", "symbol":"NWINST"},
+    {"id": "<<PRESENCE>>", "authority":"TEST", "symbol":"NWINSTTOO"}
+  ],
+  "endpoints": [
+    {
+      "id": "<<PRESENCE>>",
+      "name": "Primary",
+      "type": "ISO18626",
+      "address": "https://some.host.tld/path"
+    }
+  ]
+}

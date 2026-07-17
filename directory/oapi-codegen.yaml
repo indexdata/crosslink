@@ -1,0 +1,9 @@
+package: api
+generate:
+  std-http-server: true
+  strict-server: true
+  models: true
+  embedded-spec: true
+output: api/directory.gen.go
+output-options:
+  nullable-type: true
