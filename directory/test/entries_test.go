@@ -2,7 +2,10 @@ package test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -575,5 +578,186 @@ func TestPatchEntryLenderOfLastResortToNull(t *testing.T) {
 	}
 	if lenderOfLastResort != nil {
 		t.Fatalf("expected lender_of_last_resort to be null, got %q", lenderOfLastResort)
+	}
+}
+
+func TestEntryDirectoryContractFieldsAndHoldingsConfig(t *testing.T) {
+	resetDb()
+
+	headers := map[string]string{
+		"X-Okapi-Tenant":      "ANINST",
+		"X-Okapi-Permissions": `["directory.consortium.all"]`,
+	}
+
+	body := `{
+		"name":"Contract Test Entry",
+		"type":"Institution",
+		"parent":"00000000-0000-0000-0000-000000000004",
+		"fromEmail":"from@example.org",
+		"tenant":"contract-tenant",
+		"vendor":"CrossLink",
+		"lenderOfLastResort":[{"authority":"ISIL","symbol":"CONTRACT-LOR"}],
+		"symbols":[{"authority":"ISIL","symbol":"CONTRACT"}],
+		"holdingsConfig":{
+			"metadataUpdateMode":"merge",
+			"zoom":{
+				"address":"z3950.example.org:210/catalog",
+				"options":{
+					"preferredRecordSyntax":"usmarc",
+					"count":"20",
+					"location":"STACKS"
+				}
+			},
+			"queryConfig":{
+				"type":"cql",
+				"identifier":"rec.id = {term}",
+				"isbn":"isbn = {term}",
+				"issn":"issn = {term}",
+				"title":"title = {term}"
+			},
+			"holdingsFormat":{
+				"marc":{
+					"mainField":"999",
+					"itemIdSubField":"i",
+					"locationSubField":"l",
+					"callNumberSubField":"c",
+					"restrictedSubField":"r",
+					"shelvingLocationSubField":"s"
+				},
+				"opac":{}
+			},
+			"metadataFormat":{
+				"marc21":{
+					"title":"245$a",
+					"author":"100$a",
+					"identifier":"001",
+					"isbn":"020$a",
+					"issn":"022$a",
+					"edition":"250$a",
+					"subtitle":"245$b"
+				}
+			}
+		}
+	}`
+
+	res, data := jsonReq(t, http.MethodPost, "/entries", body, headers)
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("expected POST status %d, got %d and body %s", http.StatusCreated, res.StatusCode, data)
+	}
+
+	var created struct {
+		Id string `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(data), &created); err != nil {
+		t.Fatalf("failed to parse create response: %v", err)
+	}
+
+	res, data = jsonReq(t, http.MethodGet, "/entries/by-id/"+created.Id, "", headers)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected GET status %d, got %d and body %s", http.StatusOK, res.StatusCode, data)
+	}
+	if strings.Contains(data, `"email"`) {
+		t.Fatalf("entry response must not contain removed email field: %s", data)
+	}
+
+	var entry map[string]any
+	if err := json.Unmarshal([]byte(data), &entry); err != nil {
+		t.Fatalf("failed to parse entry response: %v", err)
+	}
+	if entry["fromEmail"] != "from@example.org" || entry["tenant"] != "contract-tenant" || entry["vendor"] != "CrossLink" {
+		t.Fatalf("new entry fields not preserved: %#v", entry)
+	}
+	lender := entry["lenderOfLastResort"].([]any)[0].(map[string]any)
+	if lender["authority"] != "ISIL" || lender["symbol"] != "CONTRACT-LOR" {
+		t.Fatalf("lenderOfLastResort did not round-trip as Symbol array: %#v", lender)
+	}
+	holdings := entry["holdingsConfig"].(map[string]any)
+	zoom := holdings["zoom"].(map[string]any)
+	options := zoom["options"].(map[string]any)
+	if holdings["metadataUpdateMode"] != "merge" ||
+		zoom["address"] != "z3950.example.org:210/catalog" ||
+		options["preferredRecordSyntax"] != "usmarc" ||
+		options["count"] != "20" ||
+		options["location"] != "STACKS" {
+		t.Fatalf("holdingsConfig zoom fields did not round-trip: %#v", holdings)
+	}
+	queryConfig := holdings["queryConfig"].(map[string]any)
+	if queryConfig["type"] != "cql" || queryConfig["identifier"] != "rec.id = {term}" {
+		t.Fatalf("holdingsConfig queryConfig did not round-trip: %#v", queryConfig)
+	}
+	metadataMarc := holdings["metadataFormat"].(map[string]any)["marc21"].(map[string]any)
+	if metadataMarc["title"] != "245$a" || metadataMarc["author"] != "100$a" {
+		t.Fatalf("holdingsConfig metadataFormat did not round-trip: %#v", metadataMarc)
+	}
+
+	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+created.Id, `{"holdingsConfig":null}`, headers)
+	if res.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected holdingsConfig null PATCH status %d, got %d and body %s", http.StatusNoContent, res.StatusCode, data)
+	}
+	res, data = jsonReq(t, http.MethodGet, "/entries/by-id/"+created.Id, "", headers)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected GET after holdingsConfig clear status %d, got %d and body %s", http.StatusOK, res.StatusCode, data)
+	}
+	if strings.Contains(data, `"holdingsConfig"`) {
+		t.Fatalf("holdingsConfig should be omitted after nullable PATCH clear: %s", data)
+	}
+}
+
+func TestEntrySystemReadAndSymbolTenantCQL(t *testing.T) {
+	resetDb()
+
+	_, err := dbpool.Exec(
+		context.Background(),
+		"UPDATE entries SET tenant = $1 WHERE id = $2",
+		"tenant-a",
+		"00000000-0000-0000-0000-000000000002",
+	)
+	if err != nil {
+		t.Fatalf("failed to seed tenant: %v", err)
+	}
+
+	headers := map[string]string{
+		"X-Okapi-Permissions": `["directory.system.all"]`,
+	}
+	query := url.QueryEscape(`symbol any "TEST:ANINST" and tenant="tenant-a"`)
+	res, data := jsonReq(t, http.MethodGet, "/entries?q="+query+"&limit=1", "", headers)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected system CQL read status %d, got %d and body %s", http.StatusOK, res.StatusCode, data)
+	}
+
+	var response map[string]any
+	if err := json.Unmarshal([]byte(data), &response); err != nil {
+		t.Fatalf("failed to parse entries response: %v", err)
+	}
+	about := response["about"].(map[string]any)
+	items := response["items"].([]any)
+	if about["count"] != float64(1) || len(items) != 1 {
+		t.Fatalf("expected one CQL match with pagination count, got about=%#v items=%#v", about, items)
+	}
+	item := items[0].(map[string]any)
+	if item["id"] != "00000000-0000-0000-0000-000000000002" || item["tenant"] != "tenant-a" {
+		t.Fatalf("unexpected system CQL entry: %#v", item)
+	}
+}
+
+func TestPublicReadSanitizesProtectedLMSValues(t *testing.T) {
+	resetDb()
+
+	headers := map[string]string{
+		"X-Okapi-Tenant":      "PUBLIC",
+		"X-Okapi-Permissions": `["directory.public.all"]`,
+	}
+	res, data := jsonReq(t, http.MethodGet, "/entries/by-id/00000000-0000-0000-0000-000000000002", "", headers)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected public GET status %d, got %d and body %s", http.StatusOK, res.StatusCode, data)
+	}
+
+	var entry map[string]any
+	if err := json.Unmarshal([]byte(data), &entry); err != nil {
+		t.Fatalf("failed to parse public entry response: %v", err)
+	}
+	lmsConfig := entry["lmsConfig"].(map[string]any)
+	if lmsConfig["fromAgencyAuthentication"] != "" {
+		t.Fatalf("protected lmsConfig.fromAgencyAuthentication should be sanitized, got %#v", lmsConfig["fromAgencyAuthentication"])
 	}
 }

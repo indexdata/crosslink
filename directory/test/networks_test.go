@@ -1,6 +1,7 @@
 package test
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 )
@@ -69,4 +70,42 @@ func TestNetworkCases(t *testing.T) {
 		},
 	}
 	testCases(t, cases)
+}
+
+func TestNetworkReciprocalCreateAndRead(t *testing.T) {
+	resetDb()
+
+	headers := map[string]string{
+		"X-Okapi-Tenant":      "ANINST",
+		"X-Okapi-Permissions": `["directory.consortium.all"]`,
+	}
+	body := `{
+		"name":"Reciprocal Test Network",
+		"consortium":"00000000-0000-0000-0000-000000000004",
+		"priority":7,
+		"reciprocal":true
+	}`
+
+	res, data := jsonReq(t, http.MethodPost, "/networks", body, headers)
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("expected POST status %d, got %d and body %s", http.StatusCreated, res.StatusCode, data)
+	}
+	var created struct {
+		Id string `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(data), &created); err != nil {
+		t.Fatalf("failed to parse create response: %v", err)
+	}
+
+	res, data = jsonReq(t, http.MethodGet, "/networks/"+created.Id, "", headers)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected GET status %d, got %d and body %s", http.StatusOK, res.StatusCode, data)
+	}
+	var network map[string]any
+	if err := json.Unmarshal([]byte(data), &network); err != nil {
+		t.Fatalf("failed to parse network response: %v", err)
+	}
+	if network["reciprocal"] != true {
+		t.Fatalf("network reciprocal did not round-trip as true: %#v", network)
+	}
 }

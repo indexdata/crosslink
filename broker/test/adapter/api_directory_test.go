@@ -233,6 +233,131 @@ func TestLookupMissingSymbols(t *testing.T) {
 	assert.Equal(t, "?limit=1000&q=symbol+any+%22ISIL%3APEER%22+and+tenant%3D%22tenant1%22", cql)
 }
 
+func TestLookupSendsSystemAndTenantHeaders(t *testing.T) {
+	var permissionsHeader string
+	var tenantHeader string
+	var rawQuery string
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		permissionsHeader = r.Header.Get("X-Okapi-Permissions")
+		tenantHeader = r.Header.Get("X-Okapi-Tenant")
+		rawQuery = r.URL.RawQuery
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"about":{"count":0},"items":[]}`))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createDirectoryAdapter(server.URL)
+	p := adapter.DirectoryLookupParams{
+		Symbols: []string{"ISIL:PEER"},
+		Tenant:  "tenant1",
+	}
+	_, cql, err := ad.Lookup(createLookupCtx(), p)
+
+	assert.NoError(t, err)
+	assert.Equal(t, `["directory.system.all"]`, permissionsHeader)
+	assert.Equal(t, "tenant1", tenantHeader)
+	assert.Equal(t, "limit=1000&q=symbol+any+%22ISIL%3APEER%22+and+tenant%3D%22tenant1%22", rawQuery)
+	assert.Equal(t, "?"+rawQuery, cql)
+}
+
+func TestLookupDeserializesDirectoryConfigurationFields(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		respBody := `{
+			"about":{"count":1},
+			"items":[{
+				"id":"00000000-0000-0000-0000-000000000001",
+				"name":"Configured Peer",
+				"type":"Institution",
+				"fromEmail":"from@example.org",
+				"tenant":"tenant1",
+				"vendor":"CrossLink",
+				"symbols":[{"authority":"ISIL","symbol":"PEER"}],
+				"lenderOfLastResort":[{"authority":"ISIL","symbol":"LOR"}],
+				"lmsConfig":{
+					"address":"https://lms.example.org",
+					"fromAgency":"FROM",
+					"fromAgencyAuthentication":"secret",
+					"toAgency":"TO"
+				},
+				"holdingsConfig":{
+					"metadataUpdateMode":"merge",
+					"zoom":{
+						"address":"z3950.example.org:210/catalog",
+						"options":{
+							"preferredRecordSyntax":"usmarc",
+							"count":"20",
+							"location":"STACKS"
+						}
+					},
+					"queryConfig":{
+						"type":"cql",
+						"identifier":"rec.id = {term}",
+						"isbn":"isbn = {term}",
+						"issn":"issn = {term}",
+						"title":"title = {term}"
+					},
+					"holdingsFormat":{
+						"marc":{
+							"mainField":"999",
+							"itemIdSubField":"i",
+							"locationSubField":"l",
+							"callNumberSubField":"c",
+							"restrictedSubField":"r",
+							"shelvingLocationSubField":"s"
+						},
+						"opac":{}
+					},
+					"metadataFormat":{
+						"marc21":{
+							"title":"245$a",
+							"author":"100$a",
+							"identifier":"001",
+							"isbn":"020$a",
+							"issn":"022$a",
+							"edition":"250$a",
+							"subtitle":"245$b"
+						}
+					}
+				}
+			}]
+		}`
+		w.Write([]byte(respBody))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createDirectoryAdapter(server.URL)
+	entries, _, err := ad.Lookup(createLookupCtx(), adapter.DirectoryLookupParams{Symbols: []string{"ISIL:PEER"}})
+
+	assert.NoError(t, err)
+	if assert.Len(t, entries, 1) {
+		customData := entries[0].CustomData
+		assert.Equal(t, "from@example.org", *customData.FromEmail)
+		assert.Equal(t, "tenant1", *customData.Tenant)
+		assert.Equal(t, dirapi.CrossLink, *customData.Vendor)
+		assert.Equal(t, "LOR", (*customData.LenderOfLastResort)[0].Symbol)
+		assert.Equal(t, "https://lms.example.org", customData.LmsConfig.Address)
+		assert.Equal(t, "secret", *customData.LmsConfig.FromAgencyAuthentication)
+
+		holdingsConfig := customData.HoldingsConfig
+		if assert.NotNil(t, holdingsConfig) {
+			assert.Equal(t, dirapi.Merge, *holdingsConfig.MetadataUpdateMode)
+			assert.Equal(t, "z3950.example.org:210/catalog", holdingsConfig.Zoom.Address)
+			assert.Equal(t, "usmarc", (*holdingsConfig.Zoom.Options)["preferredRecordSyntax"])
+			assert.Equal(t, "20", (*holdingsConfig.Zoom.Options)["count"])
+			assert.Equal(t, "STACKS", (*holdingsConfig.Zoom.Options)["location"])
+			assert.Equal(t, dirapi.Cql, *holdingsConfig.QueryConfig.Type)
+			assert.Equal(t, "rec.id = {term}", *holdingsConfig.QueryConfig.Identifier)
+			assert.Equal(t, "999", *holdingsConfig.HoldingsFormat.Marc.MainField)
+			assert.NotNil(t, holdingsConfig.HoldingsFormat.Opac)
+			assert.Equal(t, "245$a", *holdingsConfig.MetadataFormat.Marc21.Title)
+			assert.Equal(t, "100$a", *holdingsConfig.MetadataFormat.Marc21.Author)
+		}
+	}
+}
+
 func TestLookupDefaultsEmptyAuthorityToISIL(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
