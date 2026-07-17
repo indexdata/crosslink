@@ -974,10 +974,17 @@ func TestGetStateModelBatchActions(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.GetStateModelBatchActions(rr, req, proapi.GetStateModelBatchActionsParams{})
 	assert.Equal(t, http.StatusOK, rr.Code)
-	var actions []proapi.CreateBatchAction
+	var actions []proapi.BatchActionDefault
 	err := json.Unmarshal(rr.Body.Bytes(), &actions)
 	assert.NoError(t, err)
 	assert.Len(t, actions, 4)
+	// Clients key translated titles off titleKey, so each default needs a distinct one.
+	seen := map[string]bool{}
+	for _, action := range actions {
+		assert.NotEmpty(t, action.TitleKey)
+		assert.False(t, seen[action.TitleKey], "duplicate titleKey %s", action.TitleKey)
+		seen[action.TitleKey] = true
+	}
 }
 
 type PrRepoError struct {

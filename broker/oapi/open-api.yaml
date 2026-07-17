@@ -1218,6 +1218,19 @@ components:
         - actionName
         - batchQuery
 
+    BatchActionDefault:
+      title: Batch Action Default
+      description: A built-in batch action that clients can offer as a starting point
+      allOf:
+        - $ref: '#/components/schemas/CreateBatchAction'
+        - type: object
+          properties:
+            titleKey:
+              type: string
+              description: Stable identifier for this default, for clients to look up a localized title
+          required:
+            - titleKey
+
     UpdateBatchAction:
       type: object
       title: Update Batch Action
@@ -2340,7 +2353,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/CreateBatchAction'
+                  $ref: '#/components/schemas/BatchActionDefault'
         '500':
           description: Internal Server Error
           content:
