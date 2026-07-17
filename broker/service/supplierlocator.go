@@ -79,8 +79,8 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	}
 
 	metadataUpdateMode := dirapi.None
-	if configPeer.CatalogConfig != nil && configPeer.CatalogConfig.MetadataUpdateMode != nil {
-		metadataUpdateMode = *configPeer.CatalogConfig.MetadataUpdateMode
+	if configPeer.HoldingsConfig != nil && configPeer.HoldingsConfig.MetadataUpdateMode != nil {
+		metadataUpdateMode = *configPeer.HoldingsConfig.MetadataUpdateMode
 	}
 
 	var query string

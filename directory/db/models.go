@@ -39,10 +39,12 @@ type Entry struct {
 	Description        *string
 	OrganizationID     *string
 	ContactName        *string
-	Email              *string
+	FromEmail          *string
+	Tenant             *string
+	Vendor             *string
 	PhoneNumber        *string
 	LmsLocationCode    *string
-	LenderOfLastResort *string
+	LenderOfLastResort []string
 	Hrid               *string
 	TimeZone           *string
 }
@@ -57,6 +59,47 @@ type EntryTier struct {
 	ID    uuid.UUID
 	Entry uuid.UUID
 	Tier  uuid.UUID
+}
+
+type HoldingsConfig struct {
+	ID                                   uuid.UUID
+	Entry                                uuid.UUID
+	MetadataUpdateMode                   *string
+	SruAddress                           *string
+	SruRecordSchema                      *string
+	ZoomAddress                          *string
+	ZoomOptionMockRecords                *string
+	ZoomOptionPreferredRecordSyntax      *string
+	ZoomOptionCount                      *string
+	ZoomOptionElementSetName             *string
+	ZoomOptionSchema                     *string
+	ZoomOptionAuthentication             *string
+	ZoomOptionUser                       *string
+	ZoomOptionPassword                   *string
+	ZoomOptionAdapterError               *string
+	ZoomOptionLookupError                *string
+	ZoomOptionLocation                   *string
+	QueryType                            *string
+	QueryIdentifier                      *string
+	QueryIsbn                            *string
+	QueryIssn                            *string
+	QueryTitle                           *string
+	HoldingsMarcCallNumberSubfield       *string
+	HoldingsMarcItemIDSubfield           *string
+	HoldingsMarcLocationSubfield         *string
+	HoldingsMarcMainField                *string
+	HoldingsMarcRestrictedSubfield       *string
+	HoldingsMarcShelvingLocationSubfield *string
+	HoldingsMarc21plus1Enabled           *bool
+	HoldingsOpacEnabled                  *bool
+	HoldingsReservoirEnabled             *bool
+	MetadataMarc21Author                 *string
+	MetadataMarc21Edition                *string
+	MetadataMarc21Identifier             *string
+	MetadataMarc21Isbn                   *string
+	MetadataMarc21Issn                   *string
+	MetadataMarc21Subtitle               *string
+	MetadataMarc21Title                  *string
 }
 
 type LmsConfig struct {
@@ -85,6 +128,7 @@ type Network struct {
 	Consortium uuid.UUID
 	Name       *string
 	Priority   float64
+	Reciprocal *bool
 }
 
 type ServiceEndpoint struct {

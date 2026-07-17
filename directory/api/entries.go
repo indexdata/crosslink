@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -31,46 +30,26 @@ func getSymbolAuthority() string {
 	return symbolAuthority
 }
 
-func parseLenderOfLastResort(raw *string) (*[]Symbol, error) {
-	if raw == nil || *raw == "" {
-		return nil, nil
-	}
-	var symbols []Symbol
-	if err := json.Unmarshal([]byte(*raw), &symbols); err == nil {
-		if len(symbols) == 0 {
-			return nil, nil
-		}
-		return &symbols, nil
-	}
-	authority, symbol, err := resolveCombinedSymbol(*raw)
-	if err != nil {
-		return nil, err
-	}
-	symbols = []Symbol{{Authority: authority, Symbol: symbol}}
-	return &symbols, nil
-}
-
-func encodeLenderOfLastResort(symbols *[]Symbol) (*string, error) {
-	if symbols == nil {
-		return nil, nil
-	}
-	encoded, err := json.Marshal(symbols)
-	if err != nil {
-		return nil, err
-	}
-	value := string(encoded)
-	return &value, nil
-}
-
-func maybeUpdateLenderOfLastResort(cur *string, patch nullable.Nullable[[]Symbol]) (*string, error) {
+func maybeUpdateLenderOfLastResort(cur []string, patch nullable.Nullable[[]Symbol]) []string {
 	if !patch.IsSpecified() {
-		return cur, nil
+		return cur
 	}
 	if patch.IsNull() {
-		return nil, nil
+		return nil
 	}
 	patchVal := patch.MustGet()
-	return encodeLenderOfLastResort(&patchVal)
+	return symbolsToFullSymbols(&patchVal)
+}
+
+func maybeUpdateEntryVendor(cur *string, patch nullable.Nullable[EntryVendor]) *string {
+	if !patch.IsSpecified() {
+		return cur
+	}
+	if patch.IsNull() {
+		return nil
+	}
+	value := string(patch.MustGet())
+	return &value
 }
 
 func isValidParentForType(entryType EntryType, parentEntry *db.Entry) (bool, string) {
@@ -97,11 +76,14 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 		description        *string
 		contactName        *string
 		organizationId     *string
-		email              *string
+		fromEmail          *string
+		tenant             *string
+		vendor             *string
 		phoneNumber        *string
 		lmsLocationCode    *string
-		lenderOfLastResort *string
+		lenderOfLastResort []string
 		lmsConfigJSON      []byte
+		holdingsConfigJSON []byte
 		hrid               *string
 		timeZone           *string
 		entryType          *string
@@ -115,8 +97,8 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 		totalCount         int
 	)
 
-	if err := rows.Scan(&id, &name, &description, &organizationId, &contactName, &email, &phoneNumber,
-		&lmsLocationCode, &lenderOfLastResort, &lmsConfigJSON, &hrid, &timeZone, &entryType, &parent, &symbolsJSON, &endpointsJSON,
+	if err := rows.Scan(&id, &name, &description, &organizationId, &contactName, &fromEmail, &tenant, &vendor, &phoneNumber,
+		&lmsLocationCode, &lenderOfLastResort, &lmsConfigJSON, &holdingsConfigJSON, &hrid, &timeZone, &entryType, &parent, &symbolsJSON, &endpointsJSON,
 		&addressesJSON, &tiersJSON, &networksJSON, &closuresJSON, &totalCount); err != nil {
 		return Entry{}, 0, err
 	}
@@ -146,6 +128,11 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 		return Entry{}, 0, fmt.Errorf("unmarshalling lms config: %w", err)
 	}
 
+	holdingsConfig, err := unmarshalJSONObject[HoldingsConfig](holdingsConfigJSON)
+	if err != nil {
+		return Entry{}, 0, fmt.Errorf("unmarshalling holdings config: %w", err)
+	}
+
 	tiers, err := unmarshalJSONArray[Tier](tiersJSON)
 	if err != nil {
 		return Entry{}, 0, fmt.Errorf("unmarshalling tiers: %w", err)
@@ -156,7 +143,7 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 		return Entry{}, 0, fmt.Errorf("unmarshalling networks config: %w", err)
 	}
 
-	lenderSymbols, err := parseLenderOfLastResort(lenderOfLastResort)
+	lenderSymbols, err := fullSymbolsToSymbols(lenderOfLastResort)
 	if err != nil {
 		return Entry{}, 0, fmt.Errorf("unmarshalling lender of last resort: %w", err)
 	}
@@ -203,7 +190,8 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 		OrganizationId:     organizationId,
 		Description:        description,
 		ContactName:        contactName,
-		Email:              email,
+		FromEmail:          fromEmail,
+		Tenant:             tenant,
 		Hrid:               hrid,
 		LmsLocationCode:    lmsLocationCode,
 		LenderOfLastResort: lenderSymbols,
@@ -214,9 +202,11 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 		Addresses:          addressesPtr,
 		Closures:           closuresPtr,
 		LmsConfig:          lmsConfigPtr,
+		HoldingsConfig:     holdingsConfig,
 		Tiers:              tiersPtr,
 		Networks:           networksPtr,
 		TimeZone:           timeZone,
+		Vendor:             (*EntryVendor)(vendor),
 	}, totalCount, nil
 }
 
@@ -243,12 +233,43 @@ func handleEntryCQL(cqlString string, noBaseArgs int) (pgcql.Query, error) {
 	f.SetColumn("e.parent")
 	def.AddField("parent", f)
 
+	f = pgcql.NewFieldString().WithExact()
+	f.SetColumn("e.tenant")
+	def.AddField("tenant", f)
+
+	def.AddField("symbol", &fieldEntrySymbol{})
+
 	var parser cql.Parser
 	query, err := parser.Parse(cqlString)
 	if err != nil {
 		return nil, err
 	}
 	return def.Parse(query, noBaseArgs+1)
+}
+
+type fieldEntrySymbol struct{}
+
+func (f *fieldEntrySymbol) GetColumn() string  { return "" }
+func (f *fieldEntrySymbol) SetColumn(_ string) {}
+func (f *fieldEntrySymbol) Sort() string       { return "" }
+func (f *fieldEntrySymbol) Generate(sc cql.SearchClause, queryArgumentIndex int) (string, []any, error) {
+	switch sc.Relation {
+	case cql.EQ, cql.EXACT, "==":
+		return fmt.Sprintf(`EXISTS (
+			SELECT 1 FROM symbols entry_symbol
+			WHERE entry_symbol.owner = e.id
+				AND (entry_symbol.authority || ':' || entry_symbol.symbol = $%d OR entry_symbol.symbol = $%d)
+		)`, queryArgumentIndex, queryArgumentIndex), []any{strings.ToUpper(sc.Term)}, nil
+	case cql.ANY:
+		terms := strings.Fields(strings.ToUpper(sc.Term))
+		return fmt.Sprintf(`EXISTS (
+			SELECT 1 FROM symbols entry_symbol
+			WHERE entry_symbol.owner = e.id
+				AND (entry_symbol.authority || ':' || entry_symbol.symbol = ANY($%d::text[]) OR entry_symbol.symbol = ANY($%d::text[]))
+		)`, queryArgumentIndex, queryArgumentIndex), []any{terms}, nil
+	default:
+		return "", nil, fmt.Errorf("unsupported relation %s for symbol", sc.Relation)
+	}
 }
 
 // buildEntrySQL builds the base SQL query for entries with nested subresources
@@ -261,7 +282,9 @@ func buildEntrySQL(whereClause string) string {
 		e.description,
 		e.organization_id,
 		e.contact_name,
-		e.email,
+		e.from_email,
+		e.tenant,
+		e.vendor,
 		e.phone_number,
 		e.lms_location_code,
 		e.lender_of_last_resort,
@@ -286,6 +309,75 @@ func buildEntrySQL(whereClause string) string {
 				'toAgency', l.to_agency
 			) 
 		from lms_configs l WHERE l.entry = e.id) as lms_config,
+		(
+		SELECT
+			json_strip_nulls(json_build_object(
+				'metadataUpdateMode', h.metadata_update_mode,
+				'sru', CASE WHEN h.sru_address IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
+					'address', h.sru_address,
+					'recordSchema', h.sru_record_schema
+				)) END,
+				'zoom', CASE WHEN h.zoom_address IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
+					'address', h.zoom_address,
+					'options', json_strip_nulls(json_build_object(
+						'mockRecords', h.zoom_option_mock_records,
+						'preferredRecordSyntax', h.zoom_option_preferred_record_syntax,
+						'count', h.zoom_option_count,
+						'elementSetName', h.zoom_option_element_set_name,
+						'schema', h.zoom_option_schema,
+						'authentication', h.zoom_option_authentication,
+						'user', h.zoom_option_user,
+						'password', h.zoom_option_password,
+						'adapter-error', h.zoom_option_adapter_error,
+						'lookup-error', h.zoom_option_lookup_error,
+						'location', h.zoom_option_location
+					))
+				)) END,
+				'queryConfig', CASE WHEN h.query_type IS NULL AND h.query_identifier IS NULL AND h.query_isbn IS NULL AND h.query_issn IS NULL AND h.query_title IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
+					'type', h.query_type,
+					'identifier', h.query_identifier,
+					'isbn', h.query_isbn,
+					'issn', h.query_issn,
+					'title', h.query_title
+				)) END,
+				'holdingsFormat', json_strip_nulls(json_build_object(
+					'marc', CASE WHEN h.holdings_marc_call_number_subfield IS NULL
+						AND h.holdings_marc_item_id_subfield IS NULL
+						AND h.holdings_marc_location_subfield IS NULL
+						AND h.holdings_marc_main_field IS NULL
+						AND h.holdings_marc_restricted_subfield IS NULL
+						AND h.holdings_marc_shelving_location_subfield IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
+							'callNumberSubField', h.holdings_marc_call_number_subfield,
+							'itemIdSubField', h.holdings_marc_item_id_subfield,
+							'locationSubField', h.holdings_marc_location_subfield,
+							'mainField', h.holdings_marc_main_field,
+							'restrictedSubField', h.holdings_marc_restricted_subfield,
+							'shelvingLocationSubField', h.holdings_marc_shelving_location_subfield
+						)) END,
+					'marc21plus1', CASE WHEN h.holdings_marc21plus1_enabled THEN json_build_object() ELSE NULL END,
+					'opac', CASE WHEN h.holdings_opac_enabled THEN json_build_object() ELSE NULL END,
+					'reservoir', CASE WHEN h.holdings_reservoir_enabled THEN json_build_object() ELSE NULL END
+				)),
+				'metadataFormat', CASE WHEN h.metadata_marc21_author IS NULL
+					AND h.metadata_marc21_edition IS NULL
+					AND h.metadata_marc21_identifier IS NULL
+					AND h.metadata_marc21_isbn IS NULL
+					AND h.metadata_marc21_issn IS NULL
+					AND h.metadata_marc21_subtitle IS NULL
+					AND h.metadata_marc21_title IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
+						'marc21', json_strip_nulls(json_build_object(
+							'author', h.metadata_marc21_author,
+							'edition', h.metadata_marc21_edition,
+							'identifier', h.metadata_marc21_identifier,
+							'isbn', h.metadata_marc21_isbn,
+							'issn', h.metadata_marc21_issn,
+							'subtitle', h.metadata_marc21_subtitle,
+							'title', h.metadata_marc21_title
+						))
+					)) END
+				)
+			)
+		from holdings_configs h WHERE h.entry = e.id) as holdings_config,
 		e.hrid,
 		e.time_zone,
 		e.type,
@@ -326,7 +418,8 @@ func buildEntrySQL(whereClause string) string {
 				'id', networks.id,
 				'consortium', networks.consortium,
 				'name', networks.name,
-				'priority', networks.priority
+				'priority', networks.priority,
+				'reciprocal', networks.reciprocal
 			) from entry_networks INNER JOIN networks ON networks.id = entry_networks.network
 			WHERE entry_networks.entry = e.id
 			ORDER BY networks.id
@@ -357,7 +450,7 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 	var args []interface{}
 
 	authData := auth.GetAuthData(ctx)
-	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.PublicUserRole}
+	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole, auth.PublicUserRole}
 	seeSensitiveRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.SystemUserRole}
 	if !authData.HasRoleFromList(validRoles) {
 		slog.ErrorContext(ctx, "permission denied")
@@ -578,23 +671,22 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		}
 	}
 
-	lenderOfLastResort, err := encodeLenderOfLastResort(request.Body.LenderOfLastResort)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to encode lenderOfLastResort", "error", err)
-		return AddEntry400TextResponse("Invalid lenderOfLastResort"), nil
-	}
-
 	toInsert := db.CreateEntryParams{
 		Name:               request.Body.Name,
 		ContactName:        request.Body.ContactName,
-		Email:              request.Body.Email,
+		FromEmail:          request.Body.FromEmail,
+		Tenant:             request.Body.Tenant,
 		PhoneNumber:        request.Body.PhoneNumber,
 		TimeZone:           request.Body.TimeZone,
 		OrganizationID:     request.Body.OrganizationId,
 		Type:               string(entryType),
 		Parent:             request.Body.Parent,
 		LmsLocationCode:    request.Body.LmsLocationCode,
-		LenderOfLastResort: lenderOfLastResort,
+		LenderOfLastResort: symbolsToFullSymbols(request.Body.LenderOfLastResort),
+	}
+	if request.Body.Vendor != nil {
+		vendor := string(*request.Body.Vendor)
+		toInsert.Vendor = &vendor
 	}
 	insertedEntry, err := qtx.CreateEntry(ctx, toInsert)
 	if err != nil {
@@ -689,6 +781,14 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		})
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to create lmsConfig component", "error", err, "to_agency", lmsConfig.ToAgency)
+			return AddEntry500TextResponse("Internal server error"), nil
+		}
+	}
+
+	if request.Body.HoldingsConfig != nil {
+		_, err := qtx.UpsertHoldingsConfig(ctx, holdingsConfigToDBParams(insertedEntry.ID, *request.Body.HoldingsConfig))
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to create holdingsConfig component", "error", err)
 			return AddEntry500TextResponse("Internal server error"), nil
 		}
 	}
@@ -813,17 +913,15 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		}
 	}
 
-	lenderOfLastResort, err := maybeUpdateLenderOfLastResort(orig.LenderOfLastResort, request.Body.LenderOfLastResort)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to encode lenderOfLastResort", "error", err)
-		return UpdateEntry400TextResponse("Invalid lenderOfLastResort"), nil
-	}
+	lenderOfLastResort := maybeUpdateLenderOfLastResort(orig.LenderOfLastResort, request.Body.LenderOfLastResort)
 
 	err = qtx.UpdateEntry(ctx, db.UpdateEntryParams{
 		Name:               derefOrDefault(request.Body.Name, orig.Name),
 		Description:        maybeUpdateCol(orig.Description, request.Body.Description),
 		ContactName:        maybeUpdateCol(orig.ContactName, request.Body.ContactName),
-		Email:              maybeUpdateCol(orig.Email, request.Body.Email),
+		FromEmail:          maybeUpdateCol(orig.FromEmail, request.Body.FromEmail),
+		Tenant:             maybeUpdateCol(orig.Tenant, request.Body.Tenant),
+		Vendor:             maybeUpdateEntryVendor(orig.Vendor, request.Body.Vendor),
 		PhoneNumber:        maybeUpdateCol(orig.PhoneNumber, request.Body.PhoneNumber),
 		Parent:             maybeUpdateCol(orig.Parent, request.Body.Parent),
 		LmsLocationCode:    maybeUpdateCol(orig.LmsLocationCode, request.Body.LmsLocationCode),
@@ -1034,6 +1132,23 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		if err != nil {
 			slog.ErrorContext(ctx, "unexpected database error during lmsConfig upsert", "error", err)
 			return UpdateEntry500TextResponse(err.Error()), nil
+		}
+	}
+
+	if request.Body.HoldingsConfig.IsSpecified() {
+		if request.Body.HoldingsConfig.IsNull() {
+			err = qtx.DeleteHoldingsConfigByEntry(ctx, orig.ID)
+			if err != nil {
+				slog.ErrorContext(ctx, "unexpected database error during holdingsConfig delete", "error", err)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		} else {
+			holdingsConfig := request.Body.HoldingsConfig.MustGet()
+			_, err = qtx.UpsertHoldingsConfig(ctx, holdingsConfigToDBParams(orig.ID, holdingsConfig))
+			if err != nil {
+				slog.ErrorContext(ctx, "unexpected database error during holdingsConfig upsert", "error", err)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
 		}
 	}
 

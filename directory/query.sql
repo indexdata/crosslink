@@ -21,9 +21,9 @@ SELECT pg_advisory_xact_lock(hashtextextended('directoryish:consortium-entry', 0
 
 -- name: CreateEntry :one
 INSERT INTO entries (
-  name, description, contact_name, email, phone_number, time_zone, organization_id, type, parent, lms_location_code, lender_of_last_resort
+  name, description, contact_name, from_email, tenant, vendor, phone_number, time_zone, organization_id, type, parent, lms_location_code, lender_of_last_resort
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
 )
 RETURNING *;
 
@@ -33,7 +33,9 @@ SET
   name = @name,
   description = @description,
   contact_name = @contact_name,
-  email = @email,
+  from_email = @from_email,
+  tenant = @tenant,
+  vendor = @vendor,
   phone_number = @phone_number,
   time_zone = @time_zone,
   organization_id = @organization_id,
@@ -147,9 +149,9 @@ RETURNING *;
 
 -- name: CreateNetwork :one
 INSERT INTO networks (
-  name, consortium, priority
+  name, consortium, priority, reciprocal
 ) VALUES (
-  @name, @consortium, @priority
+  @name, @consortium, @priority, @reciprocal
 )
 RETURNING *;
 
@@ -161,6 +163,99 @@ INSERT INTO entry_networks (
   @entry,
   @network
 )
+RETURNING *;
+
+-- name: UpsertHoldingsConfig :one
+INSERT INTO holdings_configs (
+  id, entry, metadata_update_mode,
+  sru_address, sru_record_schema,
+  zoom_address, zoom_option_mock_records, zoom_option_preferred_record_syntax, zoom_option_count,
+  zoom_option_element_set_name, zoom_option_schema, zoom_option_authentication, zoom_option_user, zoom_option_password,
+  zoom_option_adapter_error, zoom_option_lookup_error, zoom_option_location,
+  query_type, query_identifier, query_isbn, query_issn, query_title,
+  holdings_marc_call_number_subfield, holdings_marc_item_id_subfield, holdings_marc_location_subfield,
+  holdings_marc_main_field, holdings_marc_restricted_subfield, holdings_marc_shelving_location_subfield,
+  holdings_marc21plus1_enabled, holdings_opac_enabled, holdings_reservoir_enabled,
+  metadata_marc21_author, metadata_marc21_edition, metadata_marc21_identifier, metadata_marc21_isbn,
+  metadata_marc21_issn, metadata_marc21_subtitle, metadata_marc21_title
+) VALUES (
+  coalesce(sqlc.narg('id'), gen_random_uuid()),
+  @entry,
+  @metadata_update_mode,
+  @sru_address,
+  @sru_record_schema,
+  @zoom_address,
+  @zoom_option_mock_records,
+  @zoom_option_preferred_record_syntax,
+  @zoom_option_count,
+  @zoom_option_element_set_name,
+  @zoom_option_schema,
+  @zoom_option_authentication,
+  @zoom_option_user,
+  @zoom_option_password,
+  @zoom_option_adapter_error,
+  @zoom_option_lookup_error,
+  @zoom_option_location,
+  @query_type,
+  @query_identifier,
+  @query_isbn,
+  @query_issn,
+  @query_title,
+  @holdings_marc_call_number_subfield,
+  @holdings_marc_item_id_subfield,
+  @holdings_marc_location_subfield,
+  @holdings_marc_main_field,
+  @holdings_marc_restricted_subfield,
+  @holdings_marc_shelving_location_subfield,
+  @holdings_marc21plus1_enabled,
+  @holdings_opac_enabled,
+  @holdings_reservoir_enabled,
+  @metadata_marc21_author,
+  @metadata_marc21_edition,
+  @metadata_marc21_identifier,
+  @metadata_marc21_isbn,
+  @metadata_marc21_issn,
+  @metadata_marc21_subtitle,
+  @metadata_marc21_title
+)
+ON CONFLICT (entry) DO UPDATE SET
+  metadata_update_mode = @metadata_update_mode,
+  sru_address = @sru_address,
+  sru_record_schema = @sru_record_schema,
+  zoom_address = @zoom_address,
+  zoom_option_mock_records = @zoom_option_mock_records,
+  zoom_option_preferred_record_syntax = @zoom_option_preferred_record_syntax,
+  zoom_option_count = @zoom_option_count,
+  zoom_option_element_set_name = @zoom_option_element_set_name,
+  zoom_option_schema = @zoom_option_schema,
+  zoom_option_authentication = @zoom_option_authentication,
+  zoom_option_user = @zoom_option_user,
+  zoom_option_password = @zoom_option_password,
+  zoom_option_adapter_error = @zoom_option_adapter_error,
+  zoom_option_lookup_error = @zoom_option_lookup_error,
+  zoom_option_location = @zoom_option_location,
+  query_type = @query_type,
+  query_identifier = @query_identifier,
+  query_isbn = @query_isbn,
+  query_issn = @query_issn,
+  query_title = @query_title,
+  holdings_marc_call_number_subfield = @holdings_marc_call_number_subfield,
+  holdings_marc_item_id_subfield = @holdings_marc_item_id_subfield,
+  holdings_marc_location_subfield = @holdings_marc_location_subfield,
+  holdings_marc_main_field = @holdings_marc_main_field,
+  holdings_marc_restricted_subfield = @holdings_marc_restricted_subfield,
+  holdings_marc_shelving_location_subfield = @holdings_marc_shelving_location_subfield,
+  holdings_marc21plus1_enabled = @holdings_marc21plus1_enabled,
+  holdings_opac_enabled = @holdings_opac_enabled,
+  holdings_reservoir_enabled = @holdings_reservoir_enabled,
+  metadata_marc21_author = @metadata_marc21_author,
+  metadata_marc21_edition = @metadata_marc21_edition,
+  metadata_marc21_identifier = @metadata_marc21_identifier,
+  metadata_marc21_isbn = @metadata_marc21_isbn,
+  metadata_marc21_issn = @metadata_marc21_issn,
+  metadata_marc21_subtitle = @metadata_marc21_subtitle,
+  metadata_marc21_title = @metadata_marc21_title
+WHERE holdings_configs.entry = sqlc.narg('entry')
 RETURNING *;
 
 -- name: CreateEntryTier :one
@@ -341,3 +436,10 @@ SELECT * FROM entry_tiers
 -- name: GetLMSConfigByEntry :one
 SELECT * FROM lms_configs 
   WHERE entry = @entry;
+
+-- name: GetHoldingsConfigByEntry :one
+SELECT * FROM holdings_configs
+  WHERE entry = @entry;
+
+-- name: DeleteHoldingsConfigByEntry :exec
+DELETE FROM holdings_configs WHERE entry = @entry;

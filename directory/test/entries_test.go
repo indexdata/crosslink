@@ -551,8 +551,8 @@ func TestPatchEntryLenderOfLastResortToNull(t *testing.T) {
 
 	_, err := dbpool.Exec(
 		context.Background(),
-		"UPDATE entries SET lender_of_last_resort = $1 WHERE id = $2",
-		"PATCHED-LOR",
+		"UPDATE entries SET lender_of_last_resort = ARRAY[$1]::text[] WHERE id = $2",
+		"TEST:PATCHED-LOR",
 		"00000000-0000-0000-0000-000000000002",
 	)
 	if err != nil {
@@ -564,7 +564,7 @@ func TestPatchEntryLenderOfLastResortToNull(t *testing.T) {
 		t.Fatalf("expected PATCH response status of %d, got %d and body of %s", http.StatusNoContent, res.StatusCode, data)
 	}
 
-	var lenderOfLastResort *string
+	var lenderOfLastResort []string
 	err = dbpool.QueryRow(
 		context.Background(),
 		"SELECT lender_of_last_resort FROM entries WHERE id = $1",
@@ -574,6 +574,6 @@ func TestPatchEntryLenderOfLastResortToNull(t *testing.T) {
 		t.Fatalf("failed to fetch lender_of_last_resort: %v", err)
 	}
 	if lenderOfLastResort != nil {
-		t.Fatalf("expected lender_of_last_resort to be null, got %q", *lenderOfLastResort)
+		t.Fatalf("expected lender_of_last_resort to be null, got %q", lenderOfLastResort)
 	}
 }

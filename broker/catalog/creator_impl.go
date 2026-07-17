@@ -32,7 +32,7 @@ func getMetadataParser(config *dirapi.MetadataParserConfig) (MetadataParser, err
 	if config.Marc21 != nil {
 		return NewMetadataParserMarc(*config.Marc21), nil
 	}
-	return nil, fmt.Errorf("catalogConfig.metadataFormat must set marc21 (only marc21 is supported for now)")
+	return nil, fmt.Errorf("holdingsConfig.metadataFormat must set marc21 (only marc21 is supported for now)")
 }
 
 func getHoldingsParser(config *dirapi.HoldingsParserConfig) (HoldingsParser, error) {
@@ -51,12 +51,12 @@ func getHoldingsParser(config *dirapi.HoldingsParserConfig) (HoldingsParser, err
 	if config.Marc21plus1 != nil {
 		return NewMarc21Plus1HoldingsParser(), nil
 	}
-	return nil, fmt.Errorf("catalogConfig.holdingsFormat must set marc, opac, reservoir, or marc21plus1 properties")
+	return nil, fmt.Errorf("holdingsConfig.holdingsFormat must set marc, opac, reservoir, or marc21plus1 properties")
 }
 
 func (c *LookupAdapterCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, error) {
 	entry := peer.CustomData
-	config := entry.CatalogConfig
+	config := entry.HoldingsConfig
 	if config == nil {
 		return nil, nil // No lookup adapter for this peer
 	}

@@ -17,7 +17,7 @@ type MockLookupResult struct {
 	parent *MockLookupAdapter
 }
 
-func NewMockLookupAdapter(config dirapi.CatalogConfig) (LookupAdapter, error) {
+func NewMockLookupAdapter(config dirapi.HoldingsConfig) (LookupAdapter, error) {
 	if config.Zoom != nil && config.Zoom.Options != nil {
 		options := *config.Zoom.Options
 		// For testing purposes, we can use the presence of "adapter-error" in options to trigger an error response

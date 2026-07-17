@@ -6,10 +6,12 @@ CREATE TABLE IF NOT EXISTS entries (
 	description varchar(255),
 	organization_id varchar(255),
 	contact_name varchar(255),
-	email varchar(255),
+	from_email varchar(255),
+	tenant varchar(255),
+	vendor varchar(64),
 	phone_number varchar(255),
 	lms_location_code varchar(255),
-	lender_of_last_resort varchar(255),
+	lender_of_last_resort text[],
 	hrid varchar(255) UNIQUE,
 	time_zone varchar(128)
 );
@@ -69,7 +71,8 @@ CREATE TABLE IF NOT EXISTS networks (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
 	consortium uuid NOT NULL REFERENCES entries (id) ON DELETE CASCADE,
 	name varchar(255),
-	priority double precision NOT NULL DEFAULT 0.0
+	priority double precision NOT NULL DEFAULT 0.0,
+	reciprocal boolean
 );
 
 CREATE INDEX networks_consortium_idx ON networks (consortium);
@@ -105,4 +108,45 @@ CREATE TABLE IF NOT EXISTS lms_configs (
 	requester_pickup_location varchar(128),
 	supplier_pickup_location varchar(128),
 	requester_patron_pattern varchar(255)
+);
+
+CREATE TABLE IF NOT EXISTS holdings_configs (
+	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+	entry uuid NOT NULL REFERENCES entries (id) ON DELETE CASCADE UNIQUE,
+	metadata_update_mode varchar(32),
+	sru_address text,
+	sru_record_schema varchar(255),
+	zoom_address text,
+	zoom_option_mock_records text,
+	zoom_option_preferred_record_syntax text,
+	zoom_option_count text,
+	zoom_option_element_set_name text,
+	zoom_option_schema text,
+	zoom_option_authentication text,
+	zoom_option_user text,
+	zoom_option_password text,
+	zoom_option_adapter_error text,
+	zoom_option_lookup_error text,
+	zoom_option_location text,
+	query_type varchar(16),
+	query_identifier text,
+	query_isbn text,
+	query_issn text,
+	query_title text,
+	holdings_marc_call_number_subfield varchar(32),
+	holdings_marc_item_id_subfield varchar(32),
+	holdings_marc_location_subfield varchar(32),
+	holdings_marc_main_field varchar(32),
+	holdings_marc_restricted_subfield varchar(32),
+	holdings_marc_shelving_location_subfield varchar(32),
+	holdings_marc21plus1_enabled boolean,
+	holdings_opac_enabled boolean,
+	holdings_reservoir_enabled boolean,
+	metadata_marc21_author varchar(32),
+	metadata_marc21_edition varchar(32),
+	metadata_marc21_identifier varchar(32),
+	metadata_marc21_isbn varchar(32),
+	metadata_marc21_issn varchar(32),
+	metadata_marc21_subtitle varchar(32),
+	metadata_marc21_title varchar(32)
 );

@@ -20,8 +20,8 @@ func (e EntryVendor) Valid() bool {
 	}
 }
 
-// CatalogConfig contains catalog lookup configuration used by broker.
-type CatalogConfig struct {
+// HoldingsConfig contains catalog lookup configuration used by broker.
+type HoldingsConfig struct {
 	HoldingsFormat     *HoldingsParserConfig `json:"holdingsFormat,omitempty"`
 	MetadataFormat     *MetadataParserConfig `json:"metadataFormat,omitempty"`
 	MetadataUpdateMode *MetadataUpdateMode   `json:"metadataUpdateMode,omitempty"`
@@ -29,6 +29,10 @@ type CatalogConfig struct {
 	Sru                *SruConfig            `json:"sru,omitempty"`
 	Zoom               *ZoomConfig           `json:"zoom,omitempty"`
 }
+
+// CatalogConfig is kept as a Go-only compatibility alias for broker code during the
+// migration. The public Directory contract uses holdingsConfig.
+type CatalogConfig = HoldingsConfig
 
 type HoldingsParserConfig struct {
 	Marc        *MarcHoldingsParserConfig `json:"marc,omitempty"`

@@ -1711,7 +1711,6 @@ func TestHandleInvokeLenderActionAcceptCancelMissingRequesterSymbol(t *testing.T
 
 func TestGetDirectoryEmailData(t *testing.T) {
 	fromEmail := "from@example.com"
-	toEmail := "to@example.com"
 	emptyStr := ""
 
 	tests := []struct {
@@ -1753,22 +1752,21 @@ func TestGetDirectoryEmailData(t *testing.T) {
 			wantErrMessage: "from email is not configured",
 		},
 		{
-			name:           "toNeeded true but email nil",
-			symbol:         "ISIL:A",
-			toNeeded:       true,
-			peer:           ill_db.Peer{CustomData: dirapi.Entry{FromEmail: &fromEmail}},
-			wantFrom:       "",
-			wantTo:         &emptyStr,
-			wantErrMessage: "email is not configured",
+			name:     "toNeeded true uses fromEmail as recipient",
+			symbol:   "ISIL:A",
+			toNeeded: true,
+			peer:     ill_db.Peer{CustomData: dirapi.Entry{FromEmail: &fromEmail}},
+			wantFrom: fromEmail,
+			wantTo:   &fromEmail,
 		},
 		{
-			name:           "toNeeded true but email empty",
+			name:           "toNeeded true but fromEmail empty",
 			symbol:         "ISIL:A",
 			toNeeded:       true,
-			peer:           ill_db.Peer{CustomData: dirapi.Entry{FromEmail: &fromEmail, Email: &emptyStr}},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{FromEmail: &emptyStr}},
 			wantFrom:       "",
 			wantTo:         &emptyStr,
-			wantErrMessage: "email is not configured",
+			wantErrMessage: "from email is not configured",
 		},
 		{
 			name:     "toNeeded false with no email configured",
@@ -1782,17 +1780,17 @@ func TestGetDirectoryEmailData(t *testing.T) {
 			name:     "toNeeded true with both emails configured",
 			symbol:   "ISIL:A",
 			toNeeded: true,
-			peer:     ill_db.Peer{CustomData: dirapi.Entry{FromEmail: &fromEmail, Email: &toEmail}},
+			peer:     ill_db.Peer{CustomData: dirapi.Entry{FromEmail: &fromEmail}},
 			wantFrom: fromEmail,
-			wantTo:   &toEmail,
+			wantTo:   &fromEmail,
 		},
 		{
 			name:     "toNeeded false with both emails configured",
 			symbol:   "ISIL:A",
 			toNeeded: false,
-			peer:     ill_db.Peer{CustomData: dirapi.Entry{FromEmail: &fromEmail, Email: &toEmail}},
+			peer:     ill_db.Peer{CustomData: dirapi.Entry{FromEmail: &fromEmail}},
 			wantFrom: fromEmail,
-			wantTo:   &toEmail,
+			wantTo:   nil,
 		},
 	}
 
@@ -2053,7 +2051,6 @@ func ptr[T any](v T) *T { return &v }
 func peerWithEmail(fromEmail, toEmail string) ill_db.Peer {
 	return ill_db.Peer{CustomData: dirapi.Entry{
 		FromEmail: ptr(fromEmail),
-		Email:     ptr(toEmail),
 	}}
 }
 
@@ -2234,15 +2231,17 @@ func TestSendEmailNotification(t *testing.T) {
 			wantNote:   "staff email sent successfully",
 		},
 		{
-			name:   "SendTo staff – whitespace-only address yields no recipients",
+			name:   "SendTo staff – fromEmail is used as staff recipient",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
 			params: autoParams(testTemplate, proapi.ModelActionParamsSendToStaff),
-			setupMocks: func(_ *MockPrRepo, illRepo *IllRepoMock, _ *EmailSenderMock) {
-				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithEmail(testFrom, "  ; ; "), nil)
+			setupMocks: func(prRepo *MockPrRepo, illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
+				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithFromEmailOnly(testFrom), nil)
+				prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
+				emailSvc.On("SendEmail", testFrom).Return(nil)
 			},
 			wantStatus: events.EventStatusSuccess,
-			wantNote:   "no recipients found for staff",
+			wantNote:   "staff email sent successfully",
 		},
 		{
 			name:   "SendTo staff – SendEmail fails – error result",
@@ -2317,7 +2316,6 @@ func TestHandleInvokeActionBorrowerActionSendNotification(t *testing.T) {
 	illMock := new(IllRepoMock)
 	illMock.On("GetPeerBySymbol", "ISIL:REC1").Return(ill_db.Peer{
 		CustomData: dirapi.Entry{
-			Email:     ptr("staff@mail.com"),
 			FromEmail: ptr("from@mail.com"),
 		},
 	}, nil)
@@ -2374,7 +2372,6 @@ func TestHandleInvokeActionLenderActionSendNotification(t *testing.T) {
 	illMock := new(IllRepoMock)
 	illMock.On("GetPeerBySymbol", "ISIL:SUP1").Return(ill_db.Peer{
 		CustomData: dirapi.Entry{
-			Email:     ptr("staff@mail.com"),
 			FromEmail: ptr("from@mail.com"),
 		},
 	}, nil)
@@ -2405,7 +2402,6 @@ func TestHandleInvokeActionLenderActionSendNotification_emailServiceNotReady(t *
 	illMock := new(IllRepoMock)
 	illMock.On("GetPeerBySymbol", "ISIL:SUP1").Return(ill_db.Peer{
 		CustomData: dirapi.Entry{
-			Email:     ptr("staff@mail.com"),
 			FromEmail: ptr("from@mail.com"),
 		},
 	}, nil)

@@ -1445,9 +1445,9 @@ components:
           type: string
         contactName:
           type: string
-        email:
-          type: string
         fromEmail:
+          type: string
+        tenant:
           type: string
         vendor:
           x-go-type: EntryVendor
@@ -1492,8 +1492,8 @@ components:
         lmsConfig:
           description: Configuration for LMS (Library Management System) integration via NCIP protocol
           $ref: '#/components/schemas/LmsConfig'
-        catalogConfig:
-          x-go-type: CatalogConfig
+        holdingsConfig:
+          x-go-type: HoldingsConfig
     EntryPatch:
       type: object
       properties:
@@ -1520,11 +1520,14 @@ components:
         contactName:
           type: string
           nullable: true
-        email:
-          type: string
-          nullable: true
         fromEmail:
           type: string
+          nullable: true
+        tenant:
+          type: string
+          nullable: true
+        vendor:
+          x-go-type: EntryVendor
           nullable: true
         phoneNumber:
           type: string
@@ -1546,6 +1549,9 @@ components:
         lmsConfig:
           allOf:
             - $ref: '#/components/schemas/LmsConfigPatch'
+          nullable: true
+        holdingsConfig:
+          x-go-type: HoldingsConfig
           nullable: true
         symbols:
           type: array

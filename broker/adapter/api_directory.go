@@ -50,7 +50,15 @@ func (a *ApiDirectory) getDirectory(ctx common.ExtendedContext, symbols []string
 	var dirEntries []DirectoryEntry
 	query := "?limit=1000&q=" + url.QueryEscape(cql)
 	fullUrl := durl + query
-	response, err := a.client.Get(fullUrl)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullUrl, nil)
+	if err != nil {
+		return []DirectoryEntry{}, query, err
+	}
+	req.Header.Set("X-Okapi-Permissions", `["directory.system.all"]`)
+	if tenant != "" {
+		req.Header.Set("X-Okapi-Tenant", tenant)
+	}
+	response, err := a.client.Do(req)
 	if err != nil {
 		return []DirectoryEntry{}, query, err
 	}

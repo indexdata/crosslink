@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS holdings_configs;
 DROP TABLE IF EXISTS lms_configs;
 DROP TABLE IF EXISTS entry_networks;
 DROP TABLE IF EXISTS entry_tiers;
@@ -9,4 +10,3 @@ DROP TABLE IF EXISTS addresses;
 DROP TABLE IF EXISTS service_endpoints;
 DROP TABLE IF EXISTS symbols;
 DROP TABLE IF EXISTS entries;
-

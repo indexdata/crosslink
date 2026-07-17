@@ -538,8 +538,8 @@ func TestPeersCRUD(t *testing.T) {
 	}
 	email := "v2"
 	custom := dirapi.Entry{
-		Name:  "v1",
-		Email: &email,
+		Name:      "v1",
+		FromEmail: &email,
 	}
 	// Create peer
 	loanCount := int32(5)
@@ -579,8 +579,8 @@ func TestPeersCRUD(t *testing.T) {
 	assert.Equal(t, "Unknown", respPeers.Items[0].Vendor)
 	assert.NotNil(t, respPeers.Items[0].CustomData)
 	assert.Equal(t, "v1", respPeers.Items[0].CustomData.Name)
-	if assert.NotNil(t, respPeers.Items[0].CustomData.Email) {
-		assert.Equal(t, "v2", *respPeers.Items[0].CustomData.Email)
+	if assert.NotNil(t, respPeers.Items[0].CustomData.FromEmail) {
+		assert.Equal(t, "v2", *respPeers.Items[0].CustomData.FromEmail)
 	}
 	assert.Equal(t, "http://localhost:1234", (*respPeers.Items[0].HttpHeaders)["X-Okapi-Url"])
 	assert.Equal(t, int32(5), *respPeers.Items[0].LoansCount)
@@ -653,8 +653,8 @@ func TestPeersCRUD(t *testing.T) {
 	assert.Equal(t, toCreate.Id, respPeers.Items[0].Id)
 	assert.NotNil(t, respPeers.Items[0].CustomData)
 	assert.Equal(t, "v1", respPeers.Items[0].CustomData.Name)
-	if assert.NotNil(t, respPeers.Items[0].CustomData.Email) {
-		assert.Equal(t, "v2", *respPeers.Items[0].CustomData.Email)
+	if assert.NotNil(t, respPeers.Items[0].CustomData.FromEmail) {
+		assert.Equal(t, "v2", *respPeers.Items[0].CustomData.FromEmail)
 	}
 	assert.Equal(t, "http://localhost:1234", (*respPeers.Items[0].HttpHeaders)["X-Okapi-Url"])
 

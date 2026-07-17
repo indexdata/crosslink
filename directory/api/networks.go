@@ -51,6 +51,7 @@ func (a ApiImpl) AddNetwork(ctx context.Context, request AddNetworkRequestObject
 		Name:       request.Body.Name,
 		Consortium: request.Body.Consortium,
 		Priority:   request.Body.Priority,
+		Reciprocal: request.Body.Reciprocal,
 	})
 
 	if err != nil {
@@ -97,6 +98,7 @@ func (a ApiImpl) GetNetwork(ctx context.Context, request GetNetworkRequestObject
 		Consortium: network.Consortium,
 		Name:       network.Name,
 		Priority:   network.Priority,
+		Reciprocal: network.Reciprocal,
 	}
 
 	return GetNetwork200JSONResponse(networkResponse), nil
@@ -130,6 +132,7 @@ func (a ApiImpl) GetNetworks(ctx context.Context, request GetNetworksRequestObje
 			Consortium: row.Consortium,
 			Name:       row.Name,
 			Priority:   row.Priority,
+			Reciprocal: row.Reciprocal,
 		}
 		networkList = append(networkList, network)
 	}

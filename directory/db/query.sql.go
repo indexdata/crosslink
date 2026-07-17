@@ -88,25 +88,27 @@ func (q *Queries) CreateClosure(ctx context.Context, arg CreateClosureParams) (C
 
 const createEntry = `-- name: CreateEntry :one
 INSERT INTO entries (
-  name, description, contact_name, email, phone_number, time_zone, organization_id, type, parent, lms_location_code, lender_of_last_resort
+  name, description, contact_name, from_email, tenant, vendor, phone_number, time_zone, organization_id, type, parent, lms_location_code, lender_of_last_resort
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
 )
-RETURNING id, parent, name, type, description, organization_id, contact_name, email, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone
+RETURNING id, parent, name, type, description, organization_id, contact_name, from_email, tenant, vendor, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone
 `
 
 type CreateEntryParams struct {
 	Name               string
 	Description        *string
 	ContactName        *string
-	Email              *string
+	FromEmail          *string
+	Tenant             *string
+	Vendor             *string
 	PhoneNumber        *string
 	TimeZone           *string
 	OrganizationID     *string
 	Type               string
 	Parent             *uuid.UUID
 	LmsLocationCode    *string
-	LenderOfLastResort *string
+	LenderOfLastResort []string
 }
 
 func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry, error) {
@@ -114,7 +116,9 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry
 		arg.Name,
 		arg.Description,
 		arg.ContactName,
-		arg.Email,
+		arg.FromEmail,
+		arg.Tenant,
+		arg.Vendor,
 		arg.PhoneNumber,
 		arg.TimeZone,
 		arg.OrganizationID,
@@ -132,7 +136,9 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry
 		&i.Description,
 		&i.OrganizationID,
 		&i.ContactName,
-		&i.Email,
+		&i.FromEmail,
+		&i.Tenant,
+		&i.Vendor,
 		&i.PhoneNumber,
 		&i.LmsLocationCode,
 		&i.LenderOfLastResort,
@@ -188,27 +194,34 @@ func (q *Queries) CreateEntryTier(ctx context.Context, arg CreateEntryTierParams
 
 const createNetwork = `-- name: CreateNetwork :one
 INSERT INTO networks (
-  name, consortium, priority
+  name, consortium, priority, reciprocal
 ) VALUES (
-  $1, $2, $3
+  $1, $2, $3, $4
 )
-RETURNING id, consortium, name, priority
+RETURNING id, consortium, name, priority, reciprocal
 `
 
 type CreateNetworkParams struct {
 	Name       *string
 	Consortium uuid.UUID
 	Priority   float64
+	Reciprocal *bool
 }
 
 func (q *Queries) CreateNetwork(ctx context.Context, arg CreateNetworkParams) (Network, error) {
-	row := q.db.QueryRow(ctx, createNetwork, arg.Name, arg.Consortium, arg.Priority)
+	row := q.db.QueryRow(ctx, createNetwork,
+		arg.Name,
+		arg.Consortium,
+		arg.Priority,
+		arg.Reciprocal,
+	)
 	var i Network
 	err := row.Scan(
 		&i.ID,
 		&i.Consortium,
 		&i.Name,
 		&i.Priority,
+		&i.Reciprocal,
 	)
 	return i, err
 }
@@ -339,6 +352,15 @@ func (q *Queries) DeleteEntryTierById(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const deleteHoldingsConfigByEntry = `-- name: DeleteHoldingsConfigByEntry :exec
+DELETE FROM holdings_configs WHERE entry = $1
+`
+
+func (q *Queries) DeleteHoldingsConfigByEntry(ctx context.Context, entry uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteHoldingsConfigByEntry, entry)
+	return err
+}
+
 const deleteNetworkById = `-- name: DeleteNetworkById :exec
 DELETE from networks where id = $1
 `
@@ -400,7 +422,7 @@ func (q *Queries) DeleteTierById(ctx context.Context, id uuid.UUID) error {
 }
 
 const entriesByParent = `-- name: EntriesByParent :many
-SELECT id, parent, name, type, description, organization_id, contact_name, email, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone FROM entries WHERE parent = $1
+SELECT id, parent, name, type, description, organization_id, contact_name, from_email, tenant, vendor, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone FROM entries WHERE parent = $1
 `
 
 func (q *Queries) EntriesByParent(ctx context.Context, parent *uuid.UUID) ([]Entry, error) {
@@ -420,7 +442,9 @@ func (q *Queries) EntriesByParent(ctx context.Context, parent *uuid.UUID) ([]Ent
 			&i.Description,
 			&i.OrganizationID,
 			&i.ContactName,
-			&i.Email,
+			&i.FromEmail,
+			&i.Tenant,
+			&i.Vendor,
 			&i.PhoneNumber,
 			&i.LmsLocationCode,
 			&i.LenderOfLastResort,
@@ -438,7 +462,7 @@ func (q *Queries) EntriesByParent(ctx context.Context, parent *uuid.UUID) ([]Ent
 }
 
 const entryById = `-- name: EntryById :one
-SELECT id, parent, name, type, description, organization_id, contact_name, email, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone FROM entries WHERE id = $1 LIMIT 1
+SELECT id, parent, name, type, description, organization_id, contact_name, from_email, tenant, vendor, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone FROM entries WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) EntryById(ctx context.Context, id uuid.UUID) (Entry, error) {
@@ -452,7 +476,9 @@ func (q *Queries) EntryById(ctx context.Context, id uuid.UUID) (Entry, error) {
 		&i.Description,
 		&i.OrganizationID,
 		&i.ContactName,
-		&i.Email,
+		&i.FromEmail,
+		&i.Tenant,
+		&i.Vendor,
 		&i.PhoneNumber,
 		&i.LmsLocationCode,
 		&i.LenderOfLastResort,
@@ -463,7 +489,7 @@ func (q *Queries) EntryById(ctx context.Context, id uuid.UUID) (Entry, error) {
 }
 
 const entryByIdForUpdate = `-- name: EntryByIdForUpdate :one
-SELECT id, parent, name, type, description, organization_id, contact_name, email, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone FROM entries WHERE id = $1 LIMIT 1 FOR UPDATE
+SELECT id, parent, name, type, description, organization_id, contact_name, from_email, tenant, vendor, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone FROM entries WHERE id = $1 LIMIT 1 FOR UPDATE
 `
 
 func (q *Queries) EntryByIdForUpdate(ctx context.Context, id uuid.UUID) (Entry, error) {
@@ -477,7 +503,9 @@ func (q *Queries) EntryByIdForUpdate(ctx context.Context, id uuid.UUID) (Entry, 
 		&i.Description,
 		&i.OrganizationID,
 		&i.ContactName,
-		&i.Email,
+		&i.FromEmail,
+		&i.Tenant,
+		&i.Vendor,
 		&i.PhoneNumber,
 		&i.LmsLocationCode,
 		&i.LenderOfLastResort,
@@ -488,7 +516,7 @@ func (q *Queries) EntryByIdForUpdate(ctx context.Context, id uuid.UUID) (Entry, 
 }
 
 const entryBySymbol = `-- name: EntryBySymbol :one
-SELECT e.id, e.parent, e.name, e.type, e.description, e.organization_id, e.contact_name, e.email, e.phone_number, e.lms_location_code, e.lender_of_last_resort, e.hrid, e.time_zone FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = $1 AND s.symbol = $2 LIMIT 1
+SELECT e.id, e.parent, e.name, e.type, e.description, e.organization_id, e.contact_name, e.from_email, e.tenant, e.vendor, e.phone_number, e.lms_location_code, e.lender_of_last_resort, e.hrid, e.time_zone FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = $1 AND s.symbol = $2 LIMIT 1
 `
 
 type EntryBySymbolParams struct {
@@ -507,7 +535,9 @@ func (q *Queries) EntryBySymbol(ctx context.Context, arg EntryBySymbolParams) (E
 		&i.Description,
 		&i.OrganizationID,
 		&i.ContactName,
-		&i.Email,
+		&i.FromEmail,
+		&i.Tenant,
+		&i.Vendor,
 		&i.PhoneNumber,
 		&i.LmsLocationCode,
 		&i.LenderOfLastResort,
@@ -518,7 +548,7 @@ func (q *Queries) EntryBySymbol(ctx context.Context, arg EntryBySymbolParams) (E
 }
 
 const entryBySymbolForUpdate = `-- name: EntryBySymbolForUpdate :one
-SELECT e.id, e.parent, e.name, e.type, e.description, e.organization_id, e.contact_name, e.email, e.phone_number, e.lms_location_code, e.lender_of_last_resort, e.hrid, e.time_zone FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = $1 AND s.symbol = $2 LIMIT 1 FOR UPDATE OF e
+SELECT e.id, e.parent, e.name, e.type, e.description, e.organization_id, e.contact_name, e.from_email, e.tenant, e.vendor, e.phone_number, e.lms_location_code, e.lender_of_last_resort, e.hrid, e.time_zone FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = $1 AND s.symbol = $2 LIMIT 1 FOR UPDATE OF e
 `
 
 type EntryBySymbolForUpdateParams struct {
@@ -537,7 +567,9 @@ func (q *Queries) EntryBySymbolForUpdate(ctx context.Context, arg EntryBySymbolF
 		&i.Description,
 		&i.OrganizationID,
 		&i.ContactName,
-		&i.Email,
+		&i.FromEmail,
+		&i.Tenant,
+		&i.Vendor,
 		&i.PhoneNumber,
 		&i.LmsLocationCode,
 		&i.LenderOfLastResort,
@@ -582,7 +614,7 @@ func (q *Queries) GetClosureByIdForUpdate(ctx context.Context, id uuid.UUID) (Cl
 }
 
 const getConsortialEntry = `-- name: GetConsortialEntry :one
-SELECT id, parent, name, type, description, organization_id, contact_name, email, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone FROM entries WHERE type = 'Consortium' LIMIT 1
+SELECT id, parent, name, type, description, organization_id, contact_name, from_email, tenant, vendor, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone FROM entries WHERE type = 'Consortium' LIMIT 1
 `
 
 func (q *Queries) GetConsortialEntry(ctx context.Context) (Entry, error) {
@@ -596,7 +628,9 @@ func (q *Queries) GetConsortialEntry(ctx context.Context) (Entry, error) {
 		&i.Description,
 		&i.OrganizationID,
 		&i.ContactName,
-		&i.Email,
+		&i.FromEmail,
+		&i.Tenant,
+		&i.Vendor,
 		&i.PhoneNumber,
 		&i.LmsLocationCode,
 		&i.LenderOfLastResort,
@@ -660,6 +694,57 @@ func (q *Queries) GetEntryTierByTierAndEntry(ctx context.Context, arg GetEntryTi
 	return i, err
 }
 
+const getHoldingsConfigByEntry = `-- name: GetHoldingsConfigByEntry :one
+SELECT id, entry, metadata_update_mode, sru_address, sru_record_schema, zoom_address, zoom_option_mock_records, zoom_option_preferred_record_syntax, zoom_option_count, zoom_option_element_set_name, zoom_option_schema, zoom_option_authentication, zoom_option_user, zoom_option_password, zoom_option_adapter_error, zoom_option_lookup_error, zoom_option_location, query_type, query_identifier, query_isbn, query_issn, query_title, holdings_marc_call_number_subfield, holdings_marc_item_id_subfield, holdings_marc_location_subfield, holdings_marc_main_field, holdings_marc_restricted_subfield, holdings_marc_shelving_location_subfield, holdings_marc21plus1_enabled, holdings_opac_enabled, holdings_reservoir_enabled, metadata_marc21_author, metadata_marc21_edition, metadata_marc21_identifier, metadata_marc21_isbn, metadata_marc21_issn, metadata_marc21_subtitle, metadata_marc21_title FROM holdings_configs
+  WHERE entry = $1
+`
+
+func (q *Queries) GetHoldingsConfigByEntry(ctx context.Context, entry uuid.UUID) (HoldingsConfig, error) {
+	row := q.db.QueryRow(ctx, getHoldingsConfigByEntry, entry)
+	var i HoldingsConfig
+	err := row.Scan(
+		&i.ID,
+		&i.Entry,
+		&i.MetadataUpdateMode,
+		&i.SruAddress,
+		&i.SruRecordSchema,
+		&i.ZoomAddress,
+		&i.ZoomOptionMockRecords,
+		&i.ZoomOptionPreferredRecordSyntax,
+		&i.ZoomOptionCount,
+		&i.ZoomOptionElementSetName,
+		&i.ZoomOptionSchema,
+		&i.ZoomOptionAuthentication,
+		&i.ZoomOptionUser,
+		&i.ZoomOptionPassword,
+		&i.ZoomOptionAdapterError,
+		&i.ZoomOptionLookupError,
+		&i.ZoomOptionLocation,
+		&i.QueryType,
+		&i.QueryIdentifier,
+		&i.QueryIsbn,
+		&i.QueryIssn,
+		&i.QueryTitle,
+		&i.HoldingsMarcCallNumberSubfield,
+		&i.HoldingsMarcItemIDSubfield,
+		&i.HoldingsMarcLocationSubfield,
+		&i.HoldingsMarcMainField,
+		&i.HoldingsMarcRestrictedSubfield,
+		&i.HoldingsMarcShelvingLocationSubfield,
+		&i.HoldingsMarc21plus1Enabled,
+		&i.HoldingsOpacEnabled,
+		&i.HoldingsReservoirEnabled,
+		&i.MetadataMarc21Author,
+		&i.MetadataMarc21Edition,
+		&i.MetadataMarc21Identifier,
+		&i.MetadataMarc21Isbn,
+		&i.MetadataMarc21Issn,
+		&i.MetadataMarc21Subtitle,
+		&i.MetadataMarc21Title,
+	)
+	return i, err
+}
+
 const getLMSConfigByEntry = `-- name: GetLMSConfigByEntry :one
 SELECT id, entry, address, from_agency, from_agency_authentication, to_agency, lookup_user_enabled, accept_item_enabled, checkin_item_enabled, checkout_item_enabled, item_location, request_item_request_type, request_item_scope_type, request_item_bib_code, request_item_pickup_location_enabled, requester_pickup_location, supplier_pickup_location, requester_patron_pattern FROM lms_configs 
   WHERE entry = $1
@@ -692,7 +777,7 @@ func (q *Queries) GetLMSConfigByEntry(ctx context.Context, entry uuid.UUID) (Lms
 }
 
 const getNetworkById = `-- name: GetNetworkById :one
-SELECT id, consortium, name, priority FROM networks WHERE id = $1 LIMIT 1
+SELECT id, consortium, name, priority, reciprocal FROM networks WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) GetNetworkById(ctx context.Context, id uuid.UUID) (Network, error) {
@@ -703,6 +788,7 @@ func (q *Queries) GetNetworkById(ctx context.Context, id uuid.UUID) (Network, er
 		&i.Consortium,
 		&i.Name,
 		&i.Priority,
+		&i.Reciprocal,
 	)
 	return i, err
 }
@@ -857,7 +943,7 @@ func (q *Queries) ListEntryTiers(ctx context.Context, arg ListEntryTiersParams) 
 }
 
 const listNetworks = `-- name: ListNetworks :many
-SELECT id, consortium, name, priority FROM networks
+SELECT id, consortium, name, priority, reciprocal FROM networks
   LIMIT $2
   OFFSET $1
 `
@@ -881,6 +967,7 @@ func (q *Queries) ListNetworks(ctx context.Context, arg ListNetworksParams) ([]N
 			&i.Consortium,
 			&i.Name,
 			&i.Priority,
+			&i.Reciprocal,
 		); err != nil {
 			return nil, err
 		}
@@ -893,7 +980,7 @@ func (q *Queries) ListNetworks(ctx context.Context, arg ListNetworksParams) ([]N
 }
 
 const listNetworksForConsortium = `-- name: ListNetworksForConsortium :many
-SELECT id, consortium, name, priority FROM networks
+SELECT id, consortium, name, priority, reciprocal FROM networks
 WHERE consortium = $1
 `
 
@@ -911,6 +998,7 @@ func (q *Queries) ListNetworksForConsortium(ctx context.Context, consortium uuid
 			&i.Consortium,
 			&i.Name,
 			&i.Priority,
+			&i.Reciprocal,
 		); err != nil {
 			return nil, err
 		}
@@ -923,7 +1011,7 @@ func (q *Queries) ListNetworksForConsortium(ctx context.Context, consortium uuid
 }
 
 const listNetworksForEntry = `-- name: ListNetworksForEntry :many
-SELECT n.id, consortium, name, priority, en.id, entry, network FROM networks n
+SELECT n.id, consortium, name, priority, reciprocal, en.id, entry, network FROM networks n
 JOIN entry_networks en ON n.id = en.network
 WHERE en.entry = $1
 `
@@ -933,6 +1021,7 @@ type ListNetworksForEntryRow struct {
 	Consortium uuid.UUID
 	Name       *string
 	Priority   float64
+	Reciprocal *bool
 	ID_2       uuid.UUID
 	Entry      uuid.UUID
 	Network    uuid.UUID
@@ -952,6 +1041,7 @@ func (q *Queries) ListNetworksForEntry(ctx context.Context, entry uuid.UUID) ([]
 			&i.Consortium,
 			&i.Name,
 			&i.Priority,
+			&i.Reciprocal,
 			&i.ID_2,
 			&i.Entry,
 			&i.Network,
@@ -1125,31 +1215,35 @@ SET
   name = $1,
   description = $2,
   contact_name = $3,
-  email = $4,
-  phone_number = $5,
-  time_zone = $6,
-  organization_id = $7,
-  type = $8,
-  parent = $9,
-  lms_location_code = $10,
-  lender_of_last_resort = $11,
-  hrid = $12
+  from_email = $4,
+  tenant = $5,
+  vendor = $6,
+  phone_number = $7,
+  time_zone = $8,
+  organization_id = $9,
+  type = $10,
+  parent = $11,
+  lms_location_code = $12,
+  lender_of_last_resort = $13,
+  hrid = $14
 
-WHERE id = $13
+WHERE id = $15
 `
 
 type UpdateEntryParams struct {
 	Name               string
 	Description        *string
 	ContactName        *string
-	Email              *string
+	FromEmail          *string
+	Tenant             *string
+	Vendor             *string
 	PhoneNumber        *string
 	TimeZone           *string
 	OrganizationID     *string
 	Type               string
 	Parent             *uuid.UUID
 	LmsLocationCode    *string
-	LenderOfLastResort *string
+	LenderOfLastResort []string
 	Hrid               *string
 	ID                 uuid.UUID
 }
@@ -1159,7 +1253,9 @@ func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) error 
 		arg.Name,
 		arg.Description,
 		arg.ContactName,
-		arg.Email,
+		arg.FromEmail,
+		arg.Tenant,
+		arg.Vendor,
 		arg.PhoneNumber,
 		arg.TimeZone,
 		arg.OrganizationID,
@@ -1198,6 +1294,226 @@ func (q *Queries) UpsertAddress(ctx context.Context, arg UpsertAddressParams) (A
 	row := q.db.QueryRow(ctx, upsertAddress, arg.ID, arg.Entry, arg.Type)
 	var i Address
 	err := row.Scan(&i.ID, &i.Entry, &i.Type)
+	return i, err
+}
+
+const upsertHoldingsConfig = `-- name: UpsertHoldingsConfig :one
+INSERT INTO holdings_configs (
+  id, entry, metadata_update_mode,
+  sru_address, sru_record_schema,
+  zoom_address, zoom_option_mock_records, zoom_option_preferred_record_syntax, zoom_option_count,
+  zoom_option_element_set_name, zoom_option_schema, zoom_option_authentication, zoom_option_user, zoom_option_password,
+  zoom_option_adapter_error, zoom_option_lookup_error, zoom_option_location,
+  query_type, query_identifier, query_isbn, query_issn, query_title,
+  holdings_marc_call_number_subfield, holdings_marc_item_id_subfield, holdings_marc_location_subfield,
+  holdings_marc_main_field, holdings_marc_restricted_subfield, holdings_marc_shelving_location_subfield,
+  holdings_marc21plus1_enabled, holdings_opac_enabled, holdings_reservoir_enabled,
+  metadata_marc21_author, metadata_marc21_edition, metadata_marc21_identifier, metadata_marc21_isbn,
+  metadata_marc21_issn, metadata_marc21_subtitle, metadata_marc21_title
+) VALUES (
+  coalesce($1, gen_random_uuid()),
+  $2,
+  $3,
+  $4,
+  $5,
+  $6,
+  $7,
+  $8,
+  $9,
+  $10,
+  $11,
+  $12,
+  $13,
+  $14,
+  $15,
+  $16,
+  $17,
+  $18,
+  $19,
+  $20,
+  $21,
+  $22,
+  $23,
+  $24,
+  $25,
+  $26,
+  $27,
+  $28,
+  $29,
+  $30,
+  $31,
+  $32,
+  $33,
+  $34,
+  $35,
+  $36,
+  $37,
+  $38
+)
+ON CONFLICT (entry) DO UPDATE SET
+  metadata_update_mode = $3,
+  sru_address = $4,
+  sru_record_schema = $5,
+  zoom_address = $6,
+  zoom_option_mock_records = $7,
+  zoom_option_preferred_record_syntax = $8,
+  zoom_option_count = $9,
+  zoom_option_element_set_name = $10,
+  zoom_option_schema = $11,
+  zoom_option_authentication = $12,
+  zoom_option_user = $13,
+  zoom_option_password = $14,
+  zoom_option_adapter_error = $15,
+  zoom_option_lookup_error = $16,
+  zoom_option_location = $17,
+  query_type = $18,
+  query_identifier = $19,
+  query_isbn = $20,
+  query_issn = $21,
+  query_title = $22,
+  holdings_marc_call_number_subfield = $23,
+  holdings_marc_item_id_subfield = $24,
+  holdings_marc_location_subfield = $25,
+  holdings_marc_main_field = $26,
+  holdings_marc_restricted_subfield = $27,
+  holdings_marc_shelving_location_subfield = $28,
+  holdings_marc21plus1_enabled = $29,
+  holdings_opac_enabled = $30,
+  holdings_reservoir_enabled = $31,
+  metadata_marc21_author = $32,
+  metadata_marc21_edition = $33,
+  metadata_marc21_identifier = $34,
+  metadata_marc21_isbn = $35,
+  metadata_marc21_issn = $36,
+  metadata_marc21_subtitle = $37,
+  metadata_marc21_title = $38
+WHERE holdings_configs.entry = $2
+RETURNING id, entry, metadata_update_mode, sru_address, sru_record_schema, zoom_address, zoom_option_mock_records, zoom_option_preferred_record_syntax, zoom_option_count, zoom_option_element_set_name, zoom_option_schema, zoom_option_authentication, zoom_option_user, zoom_option_password, zoom_option_adapter_error, zoom_option_lookup_error, zoom_option_location, query_type, query_identifier, query_isbn, query_issn, query_title, holdings_marc_call_number_subfield, holdings_marc_item_id_subfield, holdings_marc_location_subfield, holdings_marc_main_field, holdings_marc_restricted_subfield, holdings_marc_shelving_location_subfield, holdings_marc21plus1_enabled, holdings_opac_enabled, holdings_reservoir_enabled, metadata_marc21_author, metadata_marc21_edition, metadata_marc21_identifier, metadata_marc21_isbn, metadata_marc21_issn, metadata_marc21_subtitle, metadata_marc21_title
+`
+
+type UpsertHoldingsConfigParams struct {
+	ID                                   interface{}
+	Entry                                *uuid.UUID
+	MetadataUpdateMode                   *string
+	SruAddress                           *string
+	SruRecordSchema                      *string
+	ZoomAddress                          *string
+	ZoomOptionMockRecords                *string
+	ZoomOptionPreferredRecordSyntax      *string
+	ZoomOptionCount                      *string
+	ZoomOptionElementSetName             *string
+	ZoomOptionSchema                     *string
+	ZoomOptionAuthentication             *string
+	ZoomOptionUser                       *string
+	ZoomOptionPassword                   *string
+	ZoomOptionAdapterError               *string
+	ZoomOptionLookupError                *string
+	ZoomOptionLocation                   *string
+	QueryType                            *string
+	QueryIdentifier                      *string
+	QueryIsbn                            *string
+	QueryIssn                            *string
+	QueryTitle                           *string
+	HoldingsMarcCallNumberSubfield       *string
+	HoldingsMarcItemIDSubfield           *string
+	HoldingsMarcLocationSubfield         *string
+	HoldingsMarcMainField                *string
+	HoldingsMarcRestrictedSubfield       *string
+	HoldingsMarcShelvingLocationSubfield *string
+	HoldingsMarc21plus1Enabled           *bool
+	HoldingsOpacEnabled                  *bool
+	HoldingsReservoirEnabled             *bool
+	MetadataMarc21Author                 *string
+	MetadataMarc21Edition                *string
+	MetadataMarc21Identifier             *string
+	MetadataMarc21Isbn                   *string
+	MetadataMarc21Issn                   *string
+	MetadataMarc21Subtitle               *string
+	MetadataMarc21Title                  *string
+}
+
+func (q *Queries) UpsertHoldingsConfig(ctx context.Context, arg UpsertHoldingsConfigParams) (HoldingsConfig, error) {
+	row := q.db.QueryRow(ctx, upsertHoldingsConfig,
+		arg.ID,
+		arg.Entry,
+		arg.MetadataUpdateMode,
+		arg.SruAddress,
+		arg.SruRecordSchema,
+		arg.ZoomAddress,
+		arg.ZoomOptionMockRecords,
+		arg.ZoomOptionPreferredRecordSyntax,
+		arg.ZoomOptionCount,
+		arg.ZoomOptionElementSetName,
+		arg.ZoomOptionSchema,
+		arg.ZoomOptionAuthentication,
+		arg.ZoomOptionUser,
+		arg.ZoomOptionPassword,
+		arg.ZoomOptionAdapterError,
+		arg.ZoomOptionLookupError,
+		arg.ZoomOptionLocation,
+		arg.QueryType,
+		arg.QueryIdentifier,
+		arg.QueryIsbn,
+		arg.QueryIssn,
+		arg.QueryTitle,
+		arg.HoldingsMarcCallNumberSubfield,
+		arg.HoldingsMarcItemIDSubfield,
+		arg.HoldingsMarcLocationSubfield,
+		arg.HoldingsMarcMainField,
+		arg.HoldingsMarcRestrictedSubfield,
+		arg.HoldingsMarcShelvingLocationSubfield,
+		arg.HoldingsMarc21plus1Enabled,
+		arg.HoldingsOpacEnabled,
+		arg.HoldingsReservoirEnabled,
+		arg.MetadataMarc21Author,
+		arg.MetadataMarc21Edition,
+		arg.MetadataMarc21Identifier,
+		arg.MetadataMarc21Isbn,
+		arg.MetadataMarc21Issn,
+		arg.MetadataMarc21Subtitle,
+		arg.MetadataMarc21Title,
+	)
+	var i HoldingsConfig
+	err := row.Scan(
+		&i.ID,
+		&i.Entry,
+		&i.MetadataUpdateMode,
+		&i.SruAddress,
+		&i.SruRecordSchema,
+		&i.ZoomAddress,
+		&i.ZoomOptionMockRecords,
+		&i.ZoomOptionPreferredRecordSyntax,
+		&i.ZoomOptionCount,
+		&i.ZoomOptionElementSetName,
+		&i.ZoomOptionSchema,
+		&i.ZoomOptionAuthentication,
+		&i.ZoomOptionUser,
+		&i.ZoomOptionPassword,
+		&i.ZoomOptionAdapterError,
+		&i.ZoomOptionLookupError,
+		&i.ZoomOptionLocation,
+		&i.QueryType,
+		&i.QueryIdentifier,
+		&i.QueryIsbn,
+		&i.QueryIssn,
+		&i.QueryTitle,
+		&i.HoldingsMarcCallNumberSubfield,
+		&i.HoldingsMarcItemIDSubfield,
+		&i.HoldingsMarcLocationSubfield,
+		&i.HoldingsMarcMainField,
+		&i.HoldingsMarcRestrictedSubfield,
+		&i.HoldingsMarcShelvingLocationSubfield,
+		&i.HoldingsMarc21plus1Enabled,
+		&i.HoldingsOpacEnabled,
+		&i.HoldingsReservoirEnabled,
+		&i.MetadataMarc21Author,
+		&i.MetadataMarc21Edition,
+		&i.MetadataMarc21Identifier,
+		&i.MetadataMarc21Isbn,
+		&i.MetadataMarc21Issn,
+		&i.MetadataMarc21Subtitle,
+		&i.MetadataMarc21Title,
+	)
 	return i, err
 }
 
