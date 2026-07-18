@@ -55,7 +55,7 @@ func StartApp(ctx context.Context, dbpool *pgxpool.Pool) {
 }
 
 func InitHandler(ctx context.Context, dbpool *pgxpool.Pool) http.Handler {
-	swagger, err := api.GetSwagger()
+	swagger, err := api.GetSpec()
 	if err != nil {
 		slog.ErrorContext(ctx, "Error loading API spec", "error", err)
 		os.Exit(1)

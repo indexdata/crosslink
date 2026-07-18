@@ -8,11 +8,11 @@ import (
 
 func TestEnhancedContext(t *testing.T) {
 	dummyHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		originalRequestPtr := GetRequest(r.Context())
+			originalRequestPtr := GetRequest(r.Context())
 
-		if originalRequestPtr == nil {
-			t.Error("Tried to retrieve stored request, but got nil")
-		}
+			if originalRequestPtr == nil {
+				t.Fatal("Tried to retrieve stored request, but got nil")
+			}
 
 		if originalRequestPtr.URL != r.URL {
 			t.Errorf("Expected URL %s, but got %s", r.URL, originalRequestPtr.URL)
