@@ -21,12 +21,16 @@ func (r *ActionMappingService) NewActionMappingService() *ActionMappingService {
 }
 
 func (r *ActionMappingService) GetActionMapping(request iso18626.Request) (*ActionMapping, error) {
-	//TODO: check the ISO18626Request to decide what kind of state model/mapping to return
-	stateModel, err := r.getStateModelService().GetStateModel("returnables")
+	stateModel, err := r.GetStateModelForRequest(request)
 	if err != nil {
 		return nil, err
 	}
 	return NewActionMapping(stateModel), nil
+}
+
+func (r *ActionMappingService) GetStateModelForRequest(request iso18626.Request) (*proapi.StateModel, error) {
+	//TODO: check the ISO18626Request to decide what kind of state model/mapping to return
+	return r.GetStateModel("returnables")
 }
 
 func (r *ActionMappingService) GetStateModel(modelName string) (*proapi.StateModel, error) {
