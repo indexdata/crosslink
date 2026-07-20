@@ -72,6 +72,7 @@ func TestHandleMessageRequestCreatesTaskForCreatedPatronRequest(t *testing.T) {
 
 	var message = iso18626.NewISO18626Message()
 	message.Request = &iso18626.Request{
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
 		Header: iso18626.Header{
 			RequestingAgencyId: iso18626.TypeAgencyId{
 				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
@@ -109,6 +110,7 @@ func TestHandleMessageRequestCreatesTaskBeforeAutoActions(t *testing.T) {
 
 	var message = iso18626.NewISO18626Message()
 	message.Request = &iso18626.Request{
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
 		Header: iso18626.Header{
 			RequestingAgencyId: iso18626.TypeAgencyId{
 				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
@@ -296,6 +298,7 @@ func TestHandleMessageDuplicateRequestCreatesTaskOnExistingPatronRequest(t *test
 
 	var message = iso18626.NewISO18626Message()
 	message.Request = &iso18626.Request{
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
 		Header: iso18626.Header{
 			RequestingAgencyId: iso18626.TypeAgencyId{
 				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
@@ -340,6 +343,7 @@ func TestHandleMessageRequestTaskStatusUsesHandlerStatusWhenAutoActionFails(t *t
 
 	var message = iso18626.NewISO18626Message()
 	message.Request = &iso18626.Request{
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
 		Header: iso18626.Header{
 			RequestingAgencyId:        iso18626.TypeAgencyId{AgencyIdType: iso18626.TypeSchemeValuePair{Text: "ISIL"}, AgencyIdValue: "REQ1"},
 			SupplyingAgencyId:         iso18626.TypeAgencyId{AgencyIdType: iso18626.TypeSchemeValuePair{Text: "ISIL"}, AgencyIdValue: "SUP1"},
@@ -1100,6 +1104,7 @@ func TestHandleRequestMessage(t *testing.T) {
 	handler.SetAutoActionRunner(mockAutoActionRunner)
 
 	status, resp, _, err := handler.handleRequestMessage(appCtx, iso18626.Request{
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
 		Header: iso18626.Header{
 			RequestingAgencyId: iso18626.TypeAgencyId{
 				AgencyIdType: iso18626.TypeSchemeValuePair{
@@ -1134,6 +1139,7 @@ func TestHandleRequestMessageAutoActionError(t *testing.T) {
 	handler.SetAutoActionRunner(mockAutoActionRunner)
 
 	status, resp, _, err := handler.handleRequestMessage(appCtx, iso18626.Request{
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
 		Header: iso18626.Header{
 			RequestingAgencyId: iso18626.TypeAgencyId{
 				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
@@ -1159,6 +1165,7 @@ func TestHandleRequestMessageMissingRequestId(t *testing.T) {
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
 
 	status, resp, _, err := handler.handleRequestMessage(appCtx, iso18626.Request{
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
 		Header: iso18626.Header{
 			RequestingAgencyId: iso18626.TypeAgencyId{
 				AgencyIdType: iso18626.TypeSchemeValuePair{
@@ -1189,6 +1196,7 @@ func TestHandleRequestMessageExistingRequest(t *testing.T) {
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
 
 	status, resp, pr, err := handler.handleRequestMessage(appCtx, iso18626.Request{
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
 		Header: iso18626.Header{
 			RequestingAgencyId: iso18626.TypeAgencyId{
 				AgencyIdType: iso18626.TypeSchemeValuePair{
@@ -1219,6 +1227,7 @@ func TestHandleRequestMessageSearchDbError(t *testing.T) {
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
 
 	status, resp, _, err := handler.handleRequestMessage(appCtx, iso18626.Request{
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
 		Header: iso18626.Header{
 			RequestingAgencyId: iso18626.TypeAgencyId{
 				AgencyIdType: iso18626.TypeSchemeValuePair{
@@ -1248,6 +1257,7 @@ func TestHandleRequestMessageSaveError(t *testing.T) {
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
 
 	status, resp, _, err := handler.handleRequestMessage(appCtx, iso18626.Request{
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
 		Header: iso18626.Header{
 			RequestingAgencyId: iso18626.TypeAgencyId{
 				AgencyIdType: iso18626.TypeSchemeValuePair{

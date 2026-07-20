@@ -4,6 +4,8 @@ stateModels:
     name: CrossLink Returnables State Model
     desc: "Requester/Supplier workflow per ISO18626, including NCIP integration and ISO status events."
     version: 1.0.0
+    selector:
+      serviceType: [Copy, Loan, CopyOrLoan]
     states:
       # ── REQUESTER states ──────────────────────────────────────────────────────
       - name: NEW
@@ -518,4 +520,3 @@ batchActionDefaults:
     schedule: "FREQ=DAILY;BYHOUR=5;BYMINUTE=0"
     actionParams:
       interval: 72h
-

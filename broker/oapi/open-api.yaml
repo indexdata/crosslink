@@ -750,6 +750,8 @@ components:
         version:
           type: string
           description: Version of the state model in SemVer
+        selector:
+          $ref: '#/components/schemas/StateModelSelector'
         states:
           type: array
           description: A list of all allowed states
@@ -760,6 +762,26 @@ components:
         - states
         - type
         - version
+
+    StateModelSelector:
+      title: StateModelSelector
+      type: object
+      description: Criteria used to select this state model for an ISO 18626 request
+      additionalProperties: false
+      properties:
+        serviceType:
+          type: array
+          description: ISO 18626 service types handled by this state model
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - Copy
+              - Loan
+              - CopyOrLoan
+      required:
+        - serviceType
 
     StateModelCapabilities:
       title: StateModelCapabilities
@@ -3007,4 +3029,3 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-
