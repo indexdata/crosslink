@@ -519,6 +519,9 @@ func TestActionsToCompleteState(t *testing.T) {
 		BibliographicInfo: iso18626.BibliographicInfo{
 			SupplierUniqueRecordId: "return-" + supplierSymbol + "::WILLSUPPLY_LOANED",
 		},
+		ServiceInfo: &iso18626.ServiceInfo{
+			ServiceType: iso18626.TypeServiceTypeLoan,
+		},
 	}
 	newPr := proapi.CreatePatronRequest{
 		RequesterSymbol: &requesterSymbol,
