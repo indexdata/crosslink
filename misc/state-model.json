@@ -168,6 +168,10 @@
                         "review": {
                             "type": "string",
                             "description": "Target state when the action requires review."
+                        },
+                        "duplicate": {
+                            "type": "string",
+                            "description": "Target state when the action is a duplicate."
                         }
                     }
                 },

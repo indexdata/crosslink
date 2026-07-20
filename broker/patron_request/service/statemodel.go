@@ -221,6 +221,12 @@ func validateActionTransitions(action proapi.ModelAction, stateName string, allo
 			return fmt.Errorf("action %s in state %s has invalid review transition target %s", action.Name, stateName, target)
 		}
 	}
+	if action.Transitions.Duplicate != nil && *action.Transitions.Duplicate != "" {
+		target := *action.Transitions.Duplicate
+		if !hasTransitionTarget(allowedTransitionTargets, target) {
+			return fmt.Errorf("action %s in state %s has invalid duplicate transition target %s", action.Name, stateName, target)
+		}
+	}
 	return nil
 }
 
