@@ -210,6 +210,7 @@ func patronRequestFromSearchView(v PatronRequestSearchView) PatronRequest {
 		UpdatedAt:         v.UpdatedAt,
 		IllResponse:       v.IllResponse,
 		InternalNote:      v.InternalNote,
+		StateModel:        v.StateModel,
 	}
 }
 

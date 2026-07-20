@@ -24,6 +24,9 @@
                     "type": "string",
                     "description": "Version of the state model in SemVer"
                 },
+                "selector": {
+                    "$ref": "#/definitions/StateModelSelector"
+                },
                 "states": {
                     "type": "array",
                     "description": "A list of all allowed states",
@@ -37,6 +40,30 @@
                 "states",
                 "type",
                 "version"
+            ]
+        },
+        "StateModelSelector": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Criteria used to select this state model for an ISO 18626 request.",
+            "properties": {
+                "serviceType": {
+                    "type": "array",
+                    "description": "ISO 18626 service types handled by this state model.",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "Copy",
+                            "Loan",
+                            "CopyOrLoan"
+                        ]
+                    }
+                }
+            },
+            "required": [
+                "serviceType"
             ]
         },
         "State": {

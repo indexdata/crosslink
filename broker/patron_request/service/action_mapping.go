@@ -1,7 +1,9 @@
 package prservice
 
 import (
+	"fmt"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/indexdata/crosslink/broker/events"
@@ -29,8 +31,45 @@ func (r *ActionMappingService) GetActionMapping(request iso18626.Request) (*Acti
 }
 
 func (r *ActionMappingService) GetStateModelForRequest(request iso18626.Request) (*proapi.StateModel, error) {
-	//TODO: check the ISO18626Request to decide what kind of state model/mapping to return
-	return r.GetStateModel("returnables")
+	modelName, err := r.GetStateModelNameForRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetStateModel(modelName)
+}
+
+func (r *ActionMappingService) GetStateModelNameForRequest(request iso18626.Request) (string, error) {
+	if request.ServiceInfo == nil {
+		var selectableModels []string
+		for name, stateModel := range stateModelsConfig.StateModels {
+			if stateModel.Selector != nil {
+				selectableModels = append(selectableModels, name)
+			}
+		}
+		sort.Strings(selectableModels)
+		if len(selectableModels) == 1 {
+			return selectableModels[0], nil
+		}
+		return "", fmt.Errorf("cannot select state model without service info: found %d selectable models", len(selectableModels))
+	}
+
+	serviceType := proapi.StateModelSelectorServiceType(request.ServiceInfo.ServiceType)
+	var matches []string
+	for name, stateModel := range stateModelsConfig.StateModels {
+		if stateModel.Selector != nil && slices.Contains(stateModel.Selector.ServiceType, serviceType) {
+			matches = append(matches, name)
+		}
+	}
+	sort.Strings(matches)
+
+	switch len(matches) {
+	case 0:
+		return "", fmt.Errorf("no state model matches service type %q", serviceType)
+	case 1:
+		return matches[0], nil
+	default:
+		return "", fmt.Errorf("multiple state models match service type %q: %s", serviceType, strings.Join(matches, ", "))
+	}
 }
 
 func (r *ActionMappingService) GetStateModel(modelName string) (*proapi.StateModel, error) {

@@ -351,11 +351,17 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		api.AddInternalError(ctx, w, err)
 		return
 	}
-	actionMapping, err := a.actionMappingService.GetActionMapping(illRequest)
+	stateModelName, err := a.actionMappingService.GetStateModelNameForRequest(illRequest)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return
 	}
+	stateModel, err := a.actionMappingService.GetStateModel(stateModelName)
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	actionMapping := prservice.NewActionMapping(stateModel)
 	borrowerInitialState, ok := actionMapping.GetInitialState(prservice.SideBorrowing)
 	if !ok {
 		api.AddInternalError(ctx, w, fmt.Errorf("no initial state defined for borrower side"))
@@ -385,7 +391,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		}
 	}
 
-	dbreq := buildDbPatronRequest(&newPr, params.XOkapiTenant, creationTime, requesterReqId, illRequest, borrowerInitialState)
+	dbreq := buildDbPatronRequest(&newPr, params.XOkapiTenant, creationTime, requesterReqId, illRequest, borrowerInitialState, stateModelName)
 	pr, err := a.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(dbreq))
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -604,9 +610,15 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 		api.AddInternalError(ctx, w, err)
 		return
 	}
+	stateModelName, err := a.actionMappingService.GetStateModelNameForRequest(illRequest)
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
 
 	existingPr.RequesterReqID = getDbText(&requesterReqId)
 	existingPr.IllRequest = illRequest
+	existingPr.StateModel = stateModelName
 	existingPr.Patron = getDbText(newPr.Patron)
 	if newPr.InternalNote != nil {
 		var note pgtype.Text
@@ -1351,6 +1363,7 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequestSearchView) 
 		Id:                       request.ID,
 		CreatedAt:                request.CreatedAt.Time,
 		State:                    string(request.State),
+		StateModel:               request.StateModel,
 		Side:                     string(request.Side),
 		Patron:                   toString(request.Patron),
 		RequesterSymbol:          toString(request.RequesterSymbol),
@@ -1501,6 +1514,7 @@ func buildDbPatronRequest(
 	requesterReqId string,
 	illRequest iso18626.Request,
 	initialState pr_db.PatronRequestState,
+	stateModel string,
 ) pr_db.PatronRequest {
 	return pr_db.PatronRequest{
 		ID:              requesterReqId,
@@ -1518,6 +1532,7 @@ func buildDbPatronRequest(
 		Items:           []pr_db.PrItem{},
 		TerminalState:   false,
 		NeedsAttention:  true,
+		StateModel:      stateModel,
 		// LastAction, LastActionOutcome and LastActionResult are not set on creation
 		// they will be updated when the first action is executed.
 	}

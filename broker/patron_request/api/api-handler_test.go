@@ -128,8 +128,10 @@ func TestToApiPatronRequestSurfacesInternalNote(t *testing.T) {
 	pr := pr_db.PatronRequest{
 		ID:           "pr-1",
 		InternalNote: pgtype.Text{String: "staff note", Valid: true},
+		StateModel:   "returnables",
 	}
 	apiPr := toApiPatronRequest(req, patronRequestSearchViewFromPatronRequest(pr, false))
+	assert.Equal(t, "returnables", apiPr.StateModel)
 	if assert.NotNil(t, apiPr.InternalNote) {
 		assert.Equal(t, "staff note", *apiPr.InternalNote)
 	}
@@ -157,6 +159,7 @@ func patronRequestSearchViewFromPatronRequest(pr pr_db.PatronRequest, hasCost bo
 		UpdatedAt:         pr.UpdatedAt,
 		IllResponse:       pr.IllResponse,
 		InternalNote:      pr.InternalNote,
+		StateModel:        pr.StateModel,
 		HasCost:           hasCost,
 	}
 }
@@ -760,7 +763,7 @@ func TestParseAndValidateIllRequestAndBuildDbPatronRequest(t *testing.T) {
 	illRequest, requesterReqID, err := handler.parseAndValidateIllRequest(ctx, reqWithID, creationTime)
 	assert.NoError(t, err)
 	assert.Equal(t, id, requesterReqID)
-	pr := buildDbPatronRequest(reqWithID, nil, pgtype.Timestamp{Valid: true, Time: creationTime}, requesterReqID, illRequest, prservice.BorrowerStateNew)
+	pr := buildDbPatronRequest(reqWithID, nil, pgtype.Timestamp{Valid: true, Time: creationTime}, requesterReqID, illRequest, prservice.BorrowerStateNew, "returnables")
 	assert.Equal(t, id, pr.ID)
 	assert.True(t, pr.CreatedAt.Valid)
 	assert.True(t, pr.RequesterReqID.Valid)
@@ -768,6 +771,7 @@ func TestParseAndValidateIllRequestAndBuildDbPatronRequest(t *testing.T) {
 	assert.False(t, pr.SupplierSymbol.Valid)
 	assert.Equal(t, patron, pr.Patron.String)
 	assert.Equal(t, patron, pr.IllRequest.PatronInfo.PatronId)
+	assert.Equal(t, "returnables", pr.StateModel)
 
 	reqWithoutID := &proapi.CreatePatronRequest{RequesterSymbol: &symbol}
 	_, _, err = handler.parseAndValidateIllRequest(ctx, reqWithoutID, creationTime)
@@ -1633,6 +1637,7 @@ func TestPutPatronRequestsIdOK(t *testing.T) {
 		assert.Equal(t, patron, repo.lastUpdateParams.Patron.String)
 		assert.True(t, repo.lastUpdateParams.InternalNote.Valid)
 		assert.Equal(t, note, repo.lastUpdateParams.InternalNote.String)
+		assert.Equal(t, "returnables", repo.lastUpdateParams.StateModel)
 	}
 	var response proapi.PatronRequest
 	err := json.Unmarshal(rr.Body.Bytes(), &response)
