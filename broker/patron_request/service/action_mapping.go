@@ -21,12 +21,16 @@ func (r *ActionMappingService) NewActionMappingService() *ActionMappingService {
 }
 
 func (r *ActionMappingService) GetActionMapping(request iso18626.Request) (*ActionMapping, error) {
-	//TODO: check the ISO18626Request to decide what kind of state model/mapping to return
-	stateModel, err := r.getStateModelService().GetStateModel("returnables")
+	stateModel, err := r.GetStateModelForRequest(request)
 	if err != nil {
 		return nil, err
 	}
 	return NewActionMapping(stateModel), nil
+}
+
+func (r *ActionMappingService) GetStateModelForRequest(request iso18626.Request) (*proapi.StateModel, error) {
+	//TODO: check the ISO18626Request to decide what kind of state model/mapping to return
+	return r.GetStateModel("returnables")
 }
 
 func (r *ActionMappingService) GetStateModel(modelName string) (*proapi.StateModel, error) {
@@ -238,6 +242,10 @@ func (r *ActionMapping) GetActionTransition(pr pr_db.PatronRequest, action pr_db
 	case ActionOutcomeReview:
 		if actionConfig.Transitions.Review != nil && *actionConfig.Transitions.Review != "" {
 			return pr_db.PatronRequestState(*actionConfig.Transitions.Review), true
+		}
+	case ActionOutcomeDuplicate:
+		if actionConfig.Transitions.Duplicate != nil && *actionConfig.Transitions.Duplicate != "" {
+			return pr_db.PatronRequestState(*actionConfig.Transitions.Duplicate), true
 		}
 	}
 	return "", false

@@ -371,6 +371,130 @@ func assertPatronRequestIllRequest(t *testing.T, payload iso18626.Request, asser
 	assertFn(payload)
 }
 
+func TestNeedsReviewAndUpdate(t *testing.T) {
+	requesterSymbol := "ISIL:REQ" + uuid.NewString()
+	supplierSymbol := "ISIL:SUP" + uuid.NewString()
+
+	lmsConfig := &directory.LmsConfig{
+		FromAgency: "from-agency",
+		Address:    ncipMockUrl,
+	}
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
+		directory.Entry{LmsConfig: lmsConfig}, requesterSymbol)
+	assert.NotNil(t, reqPeer)
+	supPeer := apptest.CreatePeer(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL)
+	assert.NotNil(t, supPeer)
+
+	// POST without SupplierUniqueRecordId: validate returns 'review' outcome → NEEDS_REVIEW
+	patron := "p1"
+	request := iso18626.Request{
+		BibliographicInfo: iso18626.BibliographicInfo{
+			Title: "Needs review title",
+		},
+		ServiceInfo: &iso18626.ServiceInfo{
+			ServiceType: iso18626.TypeServiceTypeCopy,
+		},
+	}
+	newPr := proapi.CreatePatronRequest{
+		RequesterSymbol: &requesterSymbol,
+		Patron:          &patron,
+		IllRequest:      request,
+	}
+	newPrBytes, err := json.Marshal(newPr)
+	assert.NoError(t, err)
+
+	respBytes := httpRequest(t, "POST", basePath, newPrBytes, 201)
+	var foundPr proapi.PatronRequest
+	err = json.Unmarshal(respBytes, &foundPr)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, foundPr.Id)
+
+	prPath := basePath + "/" + foundPr.Id
+	queryParams := "?side=borrowing&symbol=" + requesterSymbol
+
+	// Validate auto-action runs synchronously; state should already be NEEDS_REVIEW.
+	assert.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", prPath+queryParams, []byte{}, 200)
+		err = json.Unmarshal(respBytes, &foundPr)
+		return err == nil && foundPr.State == string(prservice.BorrowerStateNeedsReview)
+	}), "timed out waiting for NEEDS_REVIEW state")
+	assert.Equal(t, string(prservice.BorrowerStateNeedsReview), foundPr.State)
+	if assert.NotNil(t, foundPr.LastAction) {
+		assert.Equal(t, string(prservice.BorrowerActionValidate), *foundPr.LastAction)
+	}
+	if assert.NotNil(t, foundPr.LastActionOutcome) {
+		assert.Equal(t, prservice.ActionOutcomeReview, *foundPr.LastActionOutcome)
+	}
+	assert.True(t, foundPr.NeedsAttention)
+
+	// PUT without SupplierUniqueRecordId: state must remain NEEDS_REVIEW
+	prId := foundPr.Id
+	updateNoId := proapi.CreatePatronRequest{
+		Id:              &prId,
+		RequesterSymbol: &requesterSymbol,
+		IllRequest: iso18626.Request{
+			BibliographicInfo: iso18626.BibliographicInfo{
+				Title: "Updated title, still no item ID",
+			},
+			ServiceInfo: &iso18626.ServiceInfo{
+				ServiceType: iso18626.TypeServiceTypeCopy,
+			},
+		},
+	}
+	updateNoIdBytes, err := json.Marshal(updateNoId)
+	assert.NoError(t, err)
+	respBytes = httpRequest(t, "PUT", prPath, updateNoIdBytes, 200)
+	err = json.Unmarshal(respBytes, &foundPr)
+	assert.NoError(t, err)
+	assert.Equal(t, string(prservice.BorrowerStateNeedsReview), foundPr.State)
+	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
+		assert.Equal(t, "Updated title, still no item ID", r.BibliographicInfo.Title)
+		assert.Empty(t, r.BibliographicInfo.SupplierUniqueRecordId)
+	})
+
+	// PUT with SupplierUniqueRecordId: PUT only persists data, state stays NEEDS_REVIEW
+	updateWithId := proapi.CreatePatronRequest{
+		Id:              &prId,
+		RequesterSymbol: &requesterSymbol,
+		IllRequest: iso18626.Request{
+			BibliographicInfo: iso18626.BibliographicInfo{
+				Title:                  "Updated title with item ID",
+				SupplierUniqueRecordId: "WILLSUPPLY_LOANED",
+			},
+			ServiceInfo: &iso18626.ServiceInfo{
+				ServiceType: iso18626.TypeServiceTypeCopy,
+			},
+		},
+	}
+	updateWithIdBytes, err := json.Marshal(updateWithId)
+	assert.NoError(t, err)
+	respBytes = httpRequest(t, "PUT", prPath, updateWithIdBytes, 200)
+	err = json.Unmarshal(respBytes, &foundPr)
+	assert.NoError(t, err)
+	assert.Equal(t, string(prservice.BorrowerStateNeedsReview), foundPr.State)
+	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
+		assert.Equal(t, "WILLSUPPLY_LOANED", r.BibliographicInfo.SupplierUniqueRecordId)
+	})
+
+	// Manually invoke send-request: transitions out of NEEDS_REVIEW
+	sendAction := proapi.ExecuteAction{Action: string(prservice.BorrowerActionSendRequest)}
+	sendActionBytes, err := json.Marshal(sendAction)
+	assert.NoError(t, err)
+	respBytes = httpRequest(t, "POST", prPath+"/action"+queryParams, sendActionBytes, 200)
+	var pResult proapi.ActionResult
+	err = json.Unmarshal(respBytes, &pResult)
+	assert.NoError(t, err)
+	assert.Equal(t, "SUCCESS", pResult.Result)
+
+	// Wait for state to advance beyond NEEDS_REVIEW (mock responds asynchronously)
+	assert.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", prPath+queryParams, []byte{}, 200)
+		err = json.Unmarshal(respBytes, &foundPr)
+		return err == nil && foundPr.State != string(prservice.BorrowerStateNeedsReview)
+	}), "timed out waiting for state to advance past NEEDS_REVIEW after send-request")
+	assert.NotEqual(t, string(prservice.BorrowerStateNeedsReview), foundPr.State)
+}
+
 func TestActionsToCompleteState(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	requesterSymbol := "ISIL:REQ" + uuid.NewString()

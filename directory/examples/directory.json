@@ -126,7 +126,8 @@
           "reason": "Renovation"
         }
       ],
-      "timeZone": "Australia/ACT"
+      "timeZone": "Australia/ACT",
+      "duplicateCheckWindowHours": 2
     },
     {
       "id": "69794360-8304-5d8b-9f00-525ab77fc4c0",
