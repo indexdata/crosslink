@@ -143,6 +143,7 @@ func TestCrud(t *testing.T) {
 
 	assert.Equal(t, *newPr.Id, foundPr.Id)
 	assert.True(t, foundPr.State != "")
+	assert.Equal(t, "returnables", foundPr.StateModel)
 	assert.Equal(t, string(prservice.SideBorrowing), foundPr.Side)
 	if !assert.NotNil(t, foundPr.RequesterSymbol) {
 		t.FailNow()
@@ -447,6 +448,7 @@ func TestNeedsReviewAndUpdate(t *testing.T) {
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err)
 	assert.Equal(t, string(prservice.BorrowerStateNeedsReview), foundPr.State)
+	assert.Equal(t, "returnables", foundPr.StateModel)
 	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
 		assert.Equal(t, "Updated title, still no item ID", r.BibliographicInfo.Title)
 		assert.Empty(t, r.BibliographicInfo.SupplierUniqueRecordId)
@@ -472,6 +474,7 @@ func TestNeedsReviewAndUpdate(t *testing.T) {
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err)
 	assert.Equal(t, string(prservice.BorrowerStateNeedsReview), foundPr.State)
+	assert.Equal(t, "returnables", foundPr.StateModel)
 	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
 		assert.Equal(t, "WILLSUPPLY_LOANED", r.BibliographicInfo.SupplierUniqueRecordId)
 	})
@@ -538,6 +541,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	assert.NoError(t, err, "failed to unmarshal patron request")
 
 	assert.Equal(t, strings.ToUpper(strings.Split(requesterSymbol, ":")[1]+"-1"), foundPr.Id)
+	assert.Equal(t, "returnables", foundPr.StateModel)
 	requesterPrPath := basePath + "/" + foundPr.Id
 	queryParams := "?side=borrowing&symbol=" + *foundPr.RequesterSymbol
 

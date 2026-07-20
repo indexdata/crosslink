@@ -671,6 +671,7 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 	retryPr.Language = pr.Language
 	retryPr.Items = []pr_db.PrItem{}
 	retryPr.RetryBibInfo = nil
+	retryPr.StateModel = pr.StateModel
 	if pr.RetryBibInfo != nil {
 		// only take selected fields from retry bib info to allow for corrections without affecting other fields
 		if pr.RetryBibInfo.SupplierUniqueRecordId != "" {

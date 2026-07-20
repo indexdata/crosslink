@@ -81,6 +81,15 @@ func TestGetStateModelForRequestUsesSelector(t *testing.T) {
 	}
 }
 
+func TestGetStateModelNameForRequestUsesSelector(t *testing.T) {
+	name, err := (&ActionMappingService{}).GetStateModelNameForRequest(iso18626.Request{
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, "returnables", name)
+}
+
 func TestGetStateModelForRequestWithoutServiceInfoUsesOnlyConfiguredModel(t *testing.T) {
 	model, err := (&ActionMappingService{}).GetStateModelForRequest(iso18626.Request{})
 

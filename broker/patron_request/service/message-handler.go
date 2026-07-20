@@ -397,7 +397,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 			})
 		return status, response, existingPr, handleErr
 	}
-	actionMapping, err := m.actionMappingService.GetActionMapping(request)
+	stateModelName, err := m.actionMappingService.GetStateModelNameForRequest(request)
 	if err != nil {
 		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
@@ -405,6 +405,15 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 		}, err)
 		return status, response, pr_db.PatronRequest{}, handleErr
 	}
+	stateModel, err := m.actionMappingService.GetStateModel(stateModelName)
+	if err != nil {
+		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+			ErrorValue: err.Error(),
+		}, err)
+		return status, response, pr_db.PatronRequest{}, handleErr
+	}
+	actionMapping := NewActionMapping(stateModel)
 	lenderInitialState, ok := actionMapping.GetInitialState(SideLending)
 	if !ok {
 		internalErr := fmt.Errorf("no initial state defined for lender side")
@@ -428,6 +437,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 		Items:           []pr_db.PrItem{},
 		TerminalState:   false,
 		NeedsAttention:  true,
+		StateModel:      stateModelName,
 	})
 	if err != nil {
 		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{

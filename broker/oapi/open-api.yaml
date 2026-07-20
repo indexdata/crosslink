@@ -521,6 +521,9 @@ components:
         state:
           type: string
           description: Patron request state
+        stateModel:
+          type: string
+          description: State model configuration key governing this request
         side:
           type: string
           description: Patron request side - borrowing or lending
@@ -602,6 +605,7 @@ components:
         - id
         - createdAt
         - state
+        - stateModel
         - side
         - illRequest
         - needsAttention
