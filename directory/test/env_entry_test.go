@@ -2,7 +2,6 @@ package test
 
 import (
 	"net/http"
-	"os"
 	"testing"
 )
 
@@ -20,7 +19,7 @@ func TestEntryEnvironment(t *testing.T) {
 		"X-Okapi-Permissions": `["directory.institution.all"]`,
 	}
 
-	os.Setenv(symbolAuthorityEnv, "GRONK")
+	t.Setenv(symbolAuthorityEnv, "GRONK")
 	t.Run("CreateAndRetrieveEntry", func(t *testing.T) {
 		resetDb()
 		postRes, postData := jsonReq(t, http.MethodPost, "/entries",

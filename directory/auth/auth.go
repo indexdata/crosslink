@@ -84,9 +84,9 @@ func FolioTokenAwareMiddleware(handler http.Handler) http.Handler {
 		ctx := request.Context()
 		//parse token out of request here, populate DirectoryContext
 		folioTenant := request.Header.Get(FolioTenantHeader)
-			if err := json.Unmarshal([]byte(request.Header.Get(FolioPermissionsHeader)), &folioPermissions); err != nil {
-				folioPermissions = []string{}
-			}
+		if err := json.Unmarshal([]byte(request.Header.Get(FolioPermissionsHeader)), &folioPermissions); err != nil {
+			folioPermissions = []string{}
+		}
 
 		authData.institution = folioTenant
 		authData.roleMap = map[DirectoryRole]bool{}
