@@ -444,17 +444,17 @@ func (s *SupplierLocator) getNextSupplier(ctx common.ExtendedContext, suppliers 
 				currentTime := time.Now().In(timezoneLoc)
 				skipSup := false
 				for _, closure := range *peer.CustomData.Closures {
-					if closure.StartDate.Time.IsZero() || closure.EndDate.Time.IsZero() {
+					if closure.StartDate.IsZero() || closure.EndDate.IsZero() {
 						continue
 					}
 					{
-						startDate, err := getDateWithTimezone(closure.StartDate.Time.Format(time.DateOnly), timezoneLoc, false)
+						startDate, err := getDateWithTimezone(closure.StartDate.Format(time.DateOnly), timezoneLoc, false)
 						if err != nil {
 							ctx.Logger().Error("failed to parse closure start date", "error", err)
 							skipSup = true
 							continue
 						}
-						endDate, err := getDateWithTimezone(closure.EndDate.Time.Format(time.DateOnly), timezoneLoc, true)
+						endDate, err := getDateWithTimezone(closure.EndDate.Format(time.DateOnly), timezoneLoc, true)
 						if err != nil {
 							ctx.Logger().Error("failed to parse closure end date", "error", err)
 							skipSup = true

@@ -240,8 +240,6 @@ func TestGetNextSupplierBothInFuture(t *testing.T) {
 }
 
 func TestGetNextSupplierCannotParseDate(t *testing.T) {
-	peerId := "p1"
-	mockIllRepo := new(MockIllRepoRequester)
 	end := time.Now().Add(72 * time.Hour).Format(DATE_LAYOUT)
 	jsonData := "{\"closures\": " +
 		"[{\"id\": \"00251ffa-d517-5e1a-9a9a-a98033dda361\"," +
@@ -255,20 +253,9 @@ func TestGetNextSupplierCannotParseDate(t *testing.T) {
 	var data dirapi.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.Error(t, err)
-	return
-	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
-	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
-	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
-
-	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
-	assert.NoError(t, err)
-	assert.Len(t, skipped, 1)
-	assert.Equal(t, "", locSup.ID)
 }
 
 func TestGetNextSupplierCannotParseEndDate(t *testing.T) {
-	peerId := "p1"
-	mockIllRepo := new(MockIllRepoRequester)
 	start := time.Now().Add(-48 * time.Hour).Format(DATE_LAYOUT)
 	jsonData := "{\"closures\": " +
 		"[{\"id\": \"00251ffa-d517-5e1a-9a9a-a98033dda361\"," +
@@ -282,15 +269,6 @@ func TestGetNextSupplierCannotParseEndDate(t *testing.T) {
 	var data dirapi.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.Error(t, err)
-	return
-	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
-	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
-	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
-
-	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
-	assert.NoError(t, err)
-	assert.Len(t, skipped, 1)
-	assert.Equal(t, "", locSup.ID)
 }
 
 func TestGetNextSupplierBetweenHolidays(t *testing.T) {
