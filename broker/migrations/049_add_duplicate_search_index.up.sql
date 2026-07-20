@@ -11,7 +11,7 @@ CREATE INDEX IF NOT EXISTS idx_ill_transaction_issn
     USING gin (bibliographic_item_identifiers(ill_transaction_data, 'ISSN'));
 
 CREATE INDEX idx_ill_transaction_title_tsv
-    ON ill_transaction USING GIN (to_tsvector('simple', ill_transaction_data->'bibliographicInfo'->>'title'));
+    ON ill_transaction ((ill_transaction_data->'bibliographicInfo'->>'title'));
 
 CREATE INDEX IF NOT EXISTS idx_ill_transaction_supplier_unique_record_id
     ON ill_transaction ((ill_transaction_data->'bibliographicInfo'->>'supplierUniqueRecordId'));
