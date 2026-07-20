@@ -209,6 +209,36 @@ func TestHandleInvokeActionValidateSendRequest(t *testing.T) {
 	assert.Equal(t, ActionOutcomeSuccess, resultData.ActionResult.Outcome)
 }
 
+func TestHandleInvokeActionValidateSendRequestDuplicate(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	mockEventBus := new(MockEventBus)
+	mockIso18626Handler := new(MockIso18626Handler)
+	patronRequestId := "duplicate"
+
+	lmsCreator.On("GetAdapter", "ISIL:x").Return(createLmsAdapterMockLog(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, new(EmailSenderMock))
+	illRequest := iso18626.Request{BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "12312"}}
+	fakeEventID := "1234"
+	initialPR := pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}}
+	validatedPR := initialPR
+	validatedPR.State = BorrowerStateValidated
+	sentPR := initialPR
+	sentPR.State = BorrowerStateSent
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(initialPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(sentPR, nil).Once()
+	mockEventBus.On("CreateNoticeWithParent", fakeEventID).Return("", nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{ID: fakeEventID, PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}}})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.NotNil(t, resultData)
+	assert.Equal(t, BorrowerStateClosedDuplicate, mockPrRepo.savedPr.State)
+	assert.Equal(t, string(BorrowerActionSendRequest), mockPrRepo.savedPr.LastAction.String)
+	assert.Equal(t, ActionOutcomeDuplicate, mockPrRepo.savedPr.LastActionOutcome.String)
+}
+
 func TestHandleInvokeActionValidateGetAdapterFailed(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
@@ -2684,6 +2714,13 @@ func (h *MockIso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessa
 		ConfirmationHeader: iso18626.ConfirmationHeader{
 			MessageStatus: status,
 		},
+	}
+	if illMessage.Request.Header.RequestingAgencyRequestId == "duplicate" {
+		resmsg.RequestConfirmation.ConfirmationHeader.MessageStatus = iso18626.TypeMessageStatusERROR
+		resmsg.RequestConfirmation.ErrorData = &iso18626.ErrorData{
+			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+			ErrorValue: string(handler.ReqIsDuplicate),
+		}
 	}
 	output, err := xml.MarshalIndent(resmsg, "  ", "  ")
 	if err != nil {

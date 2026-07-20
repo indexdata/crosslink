@@ -505,6 +505,130 @@ func isSideParamValid(side *string) bool {
 	return side != nil && (*side == string(prservice.SideBorrowing) || *side == string(prservice.SideLending))
 }
 
+func (a *PatronRequestApiHandler) checkEditable(w http.ResponseWriter, ctx common.ExtendedContext, pr pr_db.PatronRequest) bool {
+	stateModel, err := a.actionMappingService.GetStateModelForRequest(pr.IllRequest)
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return true
+	}
+	editable := false
+	if stateModel != nil && stateModel.States != nil {
+		for _, st := range stateModel.States {
+			if st.Side == proapi.REQUESTER && st.Name == string(pr.State) {
+				editable = st.Editable != nil && *st.Editable
+				break
+			}
+		}
+	}
+	if !editable {
+		api.AddBadRequestError(ctx, w, fmt.Errorf("patron request is not editable in state %q", pr.State))
+		return true
+	}
+	return false
+}
+
+func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.PutPatronRequestsIdParams) {
+	logParams := map[string]string{"method": "PutPatronRequestsId", "id": id}
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+
+	var newPr proapi.CreatePatronRequest
+	err := decodeRequiredBody(r, &newPr)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	tenant, err := a.tenantResolver.Resolve(ctx, r, newPr.RequesterSymbol)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	if symbol == "" {
+		api.AddBadRequestError(ctx, w, errors.New("symbol must be specified"))
+		return
+	}
+	logParams["symbol"] = symbol
+	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+
+	if newPr.Id == nil {
+		newPr.Id = &id
+	} else if *newPr.Id != id {
+		api.AddBadRequestError(ctx, w, fmt.Errorf("patron request id does not match"))
+		return
+	}
+	existingPr, err := a.prRepo.GetPatronRequestById(ctx, id)
+	if err != nil {
+		handleDbError(w, ctx, err)
+		return
+	}
+	if !a.checkOwnership(w, ctx, existingPr.Side, existingPr.RequesterSymbol, existingPr.SupplierSymbol, nil, tenant) {
+		return
+	}
+	if existingPr.Side != prservice.SideBorrowing {
+		api.AddBadRequestError(ctx, w, fmt.Errorf("only borrower-side patron requests can be updated"))
+		return
+	}
+	if !existingPr.RequesterSymbol.Valid || existingPr.RequesterSymbol.String == "" {
+		api.AddInternalError(ctx, w, fmt.Errorf("existing patron request missing requesterSymbol"))
+		return
+	}
+	if newPr.RequesterSymbol != nil && *newPr.RequesterSymbol != "" && *newPr.RequesterSymbol != existingPr.RequesterSymbol.String {
+		api.AddBadRequestError(ctx, w, fmt.Errorf("requesterSymbol does not match existing patron request"))
+		return
+	}
+	if a.checkEditable(w, ctx, existingPr) {
+		return
+	}
+	symbol = existingPr.RequesterSymbol.String
+	logParams["symbol"] = symbol
+	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+	newPr.RequesterSymbol = &symbol
+	creationTime := time.Now()
+	if existingPr.CreatedAt.Valid {
+		creationTime = existingPr.CreatedAt.Time
+	}
+	if newPr.Patron == nil && existingPr.Patron.Valid {
+		patron := existingPr.Patron.String
+		newPr.Patron = &patron
+	}
+	illRequest, requesterReqId, err := a.parseAndValidateIllRequest(ctx, &newPr, creationTime)
+	if err != nil {
+		if errors.Is(err, errInvalidPatronRequest) {
+			api.AddBadRequestError(ctx, w, err)
+			return
+		}
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+
+	existingPr.RequesterReqID = getDbText(&requesterReqId)
+	existingPr.IllRequest = illRequest
+	existingPr.Patron = getDbText(newPr.Patron)
+	if newPr.InternalNote != nil {
+		var note pgtype.Text
+		if trimmed := strings.TrimSpace(*newPr.InternalNote); trimmed != "" {
+			note = pgtype.Text{Valid: true, String: trimmed}
+		}
+		existingPr.InternalNote = note
+	}
+	updatedPr, err := a.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(existingPr))
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	prView, err := a.prRepo.GetPatronRequestSearchView(ctx, updatedPr.ID)
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(toApiPatronRequest(r, prView))
+}
+
 func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdParams) {
 	logParams := map[string]string{"method": "GetPatronRequestsId", "id": id}
 	if params.Side != nil {

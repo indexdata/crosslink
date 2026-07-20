@@ -36,7 +36,8 @@
               "name": "send-request",
               "desc": "Send ISO18626 request to the supplier or broker",
               "transitions": {
-                "success": "SENT"
+                "success": "SENT",
+                "duplicate": "CLOSED_DUPLICATE"
               },
               "trigger": "auto"
             }
@@ -49,12 +50,14 @@
           "side": "REQUESTER",
           "primaryAction": "send-request",
           "needsAttention": true,
+          "editable": true,
           "actions": [
             {
               "name": "send-request",
               "desc": "Send ISO18626 request to the supplier or broker",
               "transitions": {
-                "success": "SENT"
+                "success": "SENT",
+                "duplicate": "CLOSED_DUPLICATE"
               }
             }
           ]
@@ -394,6 +397,13 @@
           "side": "REQUESTER",
           "terminal": true,
           "manualClose": true
+        },
+        {
+          "name": "CLOSED_DUPLICATE",
+          "display": "Closed Duplicate",
+          "desc": "Closed due to duplicate request",
+          "side": "REQUESTER",
+          "terminal": true
         },
         {
           "name": "NEW",

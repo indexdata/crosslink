@@ -72,6 +72,10 @@
                     "type": "string",
                     "description": "Indicates the primary action for the state, i.e., the most common or recommended action to be performed when in the state. The value must match the name of one of the actions defined for the state."
                 },
+                "editable": {
+                    "type": "boolean",
+                    "description": "Indicates that a patron request can be updated"
+                },
                 "actions": {
                     "type": "array",
                     "description": "List of all actions that may be performed on the request when in this state",
@@ -164,6 +168,10 @@
                         "review": {
                             "type": "string",
                             "description": "Target state when the action requires review."
+                        },
+                        "duplicate": {
+                            "type": "string",
+                            "description": "Target state when the action is a duplicate."
                         }
                     }
                 },
