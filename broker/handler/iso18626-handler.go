@@ -288,7 +288,9 @@ func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, r
 			// RetryPossible terminates the previous supplier request. When the
 			// lookup is unchanged, the same selected supplier is reused for a new
 			// request, so clear the fields that belong to the completed attempt.
+			selSup.PrevStatus = pgtype.Text{}
 			selSup.LastStatus = pgtype.Text{}
+			selSup.PrevReason = pgtype.Text{}
 			selSup.LastReason = pgtype.Text{}
 			selSup.SupplierRequestID = pgtype.Text{}
 			if _, err = repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(selSup)); err != nil {

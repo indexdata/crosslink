@@ -70,6 +70,7 @@ func TestIsTransitionValid(t *testing.T) {
 		{TypeStatusRecalled, TypeStatusCompletedWithoutReturn, true},
 		{TypeStatusRecalled, TypeStatusCopyCompleted, true},
 		{TypeStatusRetryPossible, TypeStatusRequestReceived, false},
+		{TypeStatusRetryPossible, TypeStatusRetryPossible, false},
 		{TypeStatusRetryPossible, TypeStatusExpectToSupply, false},
 		{TypeStatusRetryPossible, TypeStatusWillSupply, false},
 		{TypeStatusRetryPossible, TypeStatusLoaned, false},

@@ -84,8 +84,8 @@ func TestHandleRetryRequestResetsReusedSelectedSupplierAttempt(t *testing.T) {
 		assert.False(t, repo.savedSupplier.LastStatus.Valid)
 		assert.False(t, repo.savedSupplier.LastReason.Valid)
 		assert.False(t, repo.savedSupplier.SupplierRequestID.Valid)
-		assert.Equal(t, string(iso18626.TypeStatusWillSupply), repo.savedSupplier.PrevStatus.String)
-		assert.Equal(t, string(iso18626.TypeReasonForMessageRequestResponse), repo.savedSupplier.PrevReason.String)
+		assert.False(t, repo.savedSupplier.PrevStatus.Valid)
+		assert.False(t, repo.savedSupplier.PrevReason.Valid)
 	}
 }
 
