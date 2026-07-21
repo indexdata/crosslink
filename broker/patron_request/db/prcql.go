@@ -206,8 +206,8 @@ func (q *Queries) GetPatronRequestsFacetsCql(ctx context.Context, db DBTX, facet
 	}
 	// facetField is validated against an allowlist by the caller (GetPatronRequestsFacets)
 	// and the map lookup above, so both columns are safe to substitute directly.
-	sql := strings.Replace(getPatronRequestsFacets, facetValuePlaceholder, facetField, 1)
-	sql = strings.Replace(sql, facetLabelPlaceholder, labelField, 1)
+	sql := strings.ReplaceAll(getPatronRequestsFacets, facetValuePlaceholder, facetField)
+	sql = strings.ReplaceAll(sql, facetLabelPlaceholder, labelField)
 
 	idx := strings.Index(sql, "GROUP BY")
 	if idx == -1 {
