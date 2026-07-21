@@ -95,10 +95,9 @@ func (a *ApiHandler) Get(w http.ResponseWriter, r *http.Request) {
 	index.Revision = vcs.GetCommit()
 	index.Signature = vcs.GetSignature()
 	index.Links.IllTransactionsLink = Link(r, Path(ILL_TRANSACTIONS_PATH), nil)
-	index.Links.EventsLink = Link(r, Path(EVENTS_PATH), nil)
-	index.Links.LocatedSuppliersLink = Link(r, Path(LOCATED_SUPPLIERS_PATH), nil)
 	index.Links.PeersLink = Link(r, Path(PEERS_PATH), nil)
-	index.Links.PatronRequestsLink = Link(r, Path(PATRON_REQUESTS_PATH), nil)
+	index.Links.BorrowingRequestsLink = Link(r, Path(PATRON_REQUESTS_PATH), Query("side", "borrowing"))
+	index.Links.LendingRequestsLink = Link(r, Path(PATRON_REQUESTS_PATH), Query("side", "lending"))
 	WriteJsonResponse(w, index)
 }
 

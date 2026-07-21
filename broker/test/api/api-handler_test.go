@@ -92,9 +92,9 @@ func TestGetIndex(t *testing.T) {
 	assert.Equal(t, vcs.GetCommit(), resp.Revision)
 	assert.Equal(t, vcs.GetSignature(), resp.Signature)
 	assert.Equal(t, getLocalhostWithPort()+api.ILL_TRANSACTIONS_PATH, resp.Links.IllTransactionsLink)
-	assert.Equal(t, getLocalhostWithPort()+api.EVENTS_PATH, resp.Links.EventsLink)
 	assert.Equal(t, getLocalhostWithPort()+api.PEERS_PATH, resp.Links.PeersLink)
-	assert.Equal(t, getLocalhostWithPort()+api.LOCATED_SUPPLIERS_PATH, resp.Links.LocatedSuppliersLink)
+	assert.Equal(t, getLocalhostWithPort()+api.PATRON_REQUESTS_PATH+"?side=borrowing", resp.Links.BorrowingRequestsLink)
+	assert.Equal(t, getLocalhostWithPort()+api.PATRON_REQUESTS_PATH+"?side=lending", resp.Links.LendingRequestsLink)
 }
 
 func TestGetEvents(t *testing.T) {
