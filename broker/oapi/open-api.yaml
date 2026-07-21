@@ -521,6 +521,9 @@ components:
         state:
           type: string
           description: Patron request state
+        stateModel:
+          type: string
+          description: State model configuration key governing this request
         side:
           type: string
           description: Patron request side - borrowing or lending
@@ -602,6 +605,7 @@ components:
         - id
         - createdAt
         - state
+        - stateModel
         - side
         - illRequest
         - needsAttention
@@ -705,7 +709,7 @@ components:
           description: Action message
         outcome:
           type: string
-          description: Action outcome ("success", "failure", "review")
+          description: Action outcome ("success", "failure", "review", "duplicate")
         fromState:
           type: string
           description: State before action execution
@@ -750,6 +754,8 @@ components:
         version:
           type: string
           description: Version of the state model in SemVer
+        selector:
+          $ref: '#/components/schemas/StateModelSelector'
         states:
           type: array
           description: A list of all allowed states
@@ -760,6 +766,26 @@ components:
         - states
         - type
         - version
+
+    StateModelSelector:
+      title: StateModelSelector
+      type: object
+      description: Criteria used to select this state model for an ISO 18626 request
+      additionalProperties: false
+      properties:
+        serviceType:
+          type: array
+          description: ISO 18626 service types handled by this state model
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - Copy
+              - Loan
+              - CopyOrLoan
+      required:
+        - serviceType
 
     StateModelCapabilities:
       title: StateModelCapabilities
@@ -847,6 +873,9 @@ components:
           type: string
           description: Name of the primary action for this state.
             Must be one of the actions defined in the actions array and is only meaningful when actions is present.
+        editable:
+          type: boolean
+          description: Indicates that a patron request can be updated in this state
         actions:
           type: array
           description: List of all actions that may be performed on the request when in this state
@@ -911,6 +940,9 @@ components:
             review:
               type: string
               description: Target state when the action requires review.
+            duplicate:
+              type: string
+              description: Target state when the action is a duplicate.
         params:
           type: object
           description: Parameters for the action. The presence of parameters indicates that the action requires additional input to be executed.
@@ -1217,6 +1249,19 @@ components:
         - schedule
         - actionName
         - batchQuery
+
+    BatchActionDefault:
+      title: Batch Action Default
+      description: A built-in batch action that clients can offer as a starting point
+      allOf:
+        - $ref: '#/components/schemas/CreateBatchAction'
+        - type: object
+          properties:
+            titleKey:
+              type: string
+              description: Stable identifier for this default, for clients to look up a localized title
+          required:
+            - titleKey
 
     UpdateBatchAction:
       type: object
@@ -1829,6 +1874,51 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+    put:
+      summary: Update a borrower-side patron request
+      description: >
+        Updates are only permitted while the request is still editable per the state model (and before it has been sent).
+      tags:
+        - patron-requests-api
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the patron request to update
+        - $ref: '#/components/parameters/Tenant'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePatronRequest'
+      responses:
+        '200':
+          description: Patron request updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatronRequest'
+        '400':
+          description: Bad Request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Patron request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     delete:
       summary: Delete a patron request
       tags:
@@ -2340,7 +2430,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/CreateBatchAction'
+                  $ref: '#/components/schemas/BatchActionDefault'
         '500':
           description: Internal Server Error
           content:
@@ -2943,4 +3033,3 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-

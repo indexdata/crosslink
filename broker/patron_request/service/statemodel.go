@@ -21,7 +21,7 @@ type StateModelService struct {
 
 type StateModelsConfig struct {
 	StateModels         map[string]proapi.StateModel `json:"stateModels"`
-	BatchActionDefaults []proapi.CreateBatchAction   `json:"batchActionDefaults"`
+	BatchActionDefaults []proapi.BatchActionDefault  `json:"batchActionDefaults"`
 }
 
 func (s *StateModelService) GetStateModel(modelName string) (*proapi.StateModel, error) {
@@ -221,6 +221,12 @@ func validateActionTransitions(action proapi.ModelAction, stateName string, allo
 			return fmt.Errorf("action %s in state %s has invalid review transition target %s", action.Name, stateName, target)
 		}
 	}
+	if action.Transitions.Duplicate != nil && *action.Transitions.Duplicate != "" {
+		target := *action.Transitions.Duplicate
+		if !hasTransitionTarget(allowedTransitionTargets, target) {
+			return fmt.Errorf("action %s in state %s has invalid duplicate transition target %s", action.Name, stateName, target)
+		}
+	}
 	return nil
 }
 
@@ -240,13 +246,13 @@ func hasTransitionTarget(allowedTransitionTargets map[string]struct{}, name stri
 	return ok
 }
 
-func GetStateModelBatchActionDefaults() []proapi.CreateBatchAction {
+func GetStateModelBatchActionDefaults() []proapi.BatchActionDefault {
 	// Return a defensive deep copy so callers can't mutate embedded defaults.
 	data, err := json.Marshal(stateModelsConfig.BatchActionDefaults)
 	if err != nil {
 		return slices.Clone(stateModelsConfig.BatchActionDefaults)
 	}
-	var out []proapi.CreateBatchAction
+	var out []proapi.BatchActionDefault
 	if err := json.Unmarshal(data, &out); err != nil {
 		return slices.Clone(stateModelsConfig.BatchActionDefaults)
 	}

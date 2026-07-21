@@ -73,6 +73,7 @@ func TestMultipleEventHandlers(t *testing.T) {
 	noPools := 3
 	noEvents := 2
 	receivedAr := make([][]events.Event, noPools)
+	var receivedMu sync.Mutex
 	var normalCreated atomic.Int32
 	ctx, cancel := context.WithCancel(context.Background())
 	for i := 0; i < noPools; i++ {
@@ -84,6 +85,8 @@ func TestMultipleEventHandlers(t *testing.T) {
 		eventBus := app.CreateEventBus(eventRepo)
 
 		eventBus.HandleEventCreated(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
+			receivedMu.Lock()
+			defer receivedMu.Unlock()
 			receivedAr[i] = append(receivedAr[i], event)
 		})
 		eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
@@ -98,6 +101,8 @@ func TestMultipleEventHandlers(t *testing.T) {
 
 	var requestReceived1 []events.Event
 	eventBus.HandleEventCreated(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
+		receivedMu.Lock()
+		defer receivedMu.Unlock()
 		requestReceived1 = append(requestReceived1, event)
 	})
 
@@ -108,6 +113,8 @@ func TestMultipleEventHandlers(t *testing.T) {
 	}
 
 	if !test.WaitForPredicateToBeTrue(func() bool {
+		receivedMu.Lock()
+		defer receivedMu.Unlock()
 		total := len(requestReceived1)
 		for i := 0; i < noPools; i++ {
 			total += len(receivedAr[i])
@@ -116,12 +123,16 @@ func TestMultipleEventHandlers(t *testing.T) {
 	}) {
 		t.Error("Expected to have some events")
 	}
+	receivedMu.Lock()
 	total := len(requestReceived1)
 	for i := 0; i < noPools; i++ {
 		total += len(receivedAr[i])
 	}
+	receivedMu.Unlock()
 	assert.Equal(t, noEvents, total, "Total number of events should match the number of created tasks")
 	if total != noEvents {
+		receivedMu.Lock()
+		defer receivedMu.Unlock()
 		for e := range requestReceived1 {
 			t.Logf("Request event %d: %s", e, requestReceived1[e].ID)
 		}
@@ -137,6 +148,7 @@ func TestBroadcastEventHandlers(t *testing.T) {
 	noPools := 3
 	noEvents := 2
 	receivedAr := make([][]events.Event, noPools)
+	var receivedMu sync.Mutex
 	var normalCreated atomic.Int32
 	ctx, cancel := context.WithCancel(context.Background())
 	for i := 0; i < noPools; i++ {
@@ -148,6 +160,8 @@ func TestBroadcastEventHandlers(t *testing.T) {
 		eventBus := app.CreateEventBus(eventRepo)
 
 		eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, events.HandlerRoleObserver, func(ctx common.ExtendedContext, event events.Event) {
+			receivedMu.Lock()
+			defer receivedMu.Unlock()
 			receivedAr[i] = append(receivedAr[i], event)
 		})
 		eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
@@ -162,6 +176,8 @@ func TestBroadcastEventHandlers(t *testing.T) {
 
 	var requestReceived1 []events.Event
 	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, events.HandlerRoleObserver, func(ctx common.ExtendedContext, event events.Event) {
+		receivedMu.Lock()
+		defer receivedMu.Unlock()
 		requestReceived1 = append(requestReceived1, event)
 	})
 	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
@@ -175,6 +191,8 @@ func TestBroadcastEventHandlers(t *testing.T) {
 	}
 
 	if !test.WaitForPredicateToBeTrue(func() bool {
+		receivedMu.Lock()
+		defer receivedMu.Unlock()
 		total := len(requestReceived1)
 		for i := 0; i < noPools; i++ {
 			total += len(receivedAr[i])
@@ -183,13 +201,17 @@ func TestBroadcastEventHandlers(t *testing.T) {
 	}) {
 		t.Error("Expected to have some events")
 	}
+	receivedMu.Lock()
 	total := len(requestReceived1)
 	for i := 0; i < noPools; i++ {
 		total += len(receivedAr[i])
 	}
+	receivedMu.Unlock()
 	assert.Equal(t, noEvents*(noPools+1), total, "Total number of events should match the number of created tasks")
 	assert.Equal(t, int32(0), normalCreated.Load(), "broadcast-created signals should not invoke normal created handlers")
-	if total != noEvents {
+	if total != noEvents*(noPools+1) {
+		receivedMu.Lock()
+		defer receivedMu.Unlock()
 		for e := range requestReceived1 {
 			t.Logf("Request event %d: %s", e, requestReceived1[e].ID)
 		}

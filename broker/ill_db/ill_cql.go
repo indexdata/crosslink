@@ -8,6 +8,7 @@ import (
 	"github.com/indexdata/cql-go/cql"
 	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/cql-go/pgcql"
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 )
 
 func handleIllTransactionsQuery(cqlString string, noBaseArgs int) (pgcql.Query, error) {
@@ -27,6 +28,24 @@ func handleIllTransactionsQuery(cqlString string, noBaseArgs int) (pgcql.Query, 
 
 	f = pgcql.NewFieldString().WithExact()
 	def.AddField("last_requester_action", f)
+
+	def.AddField("isbn", pr_db.NewFieldTextArrayContains("bibliographic_item_identifiers(ill_transaction_data, 'ISBN')").WithFunction("norm_isxn"))
+	def.AddField("issn", pr_db.NewFieldTextArrayContains("bibliographic_item_identifiers(ill_transaction_data, 'ISSN')").WithFunction("norm_isxn"))
+
+	f = pgcql.NewFieldString().WithExact().WithLower().WithColumn("ill_transaction_data->'bibliographicInfo'->>'title'")
+	def.AddField("title", f)
+
+	nf := pgcql.NewFieldDate()
+	def.AddField("timestamp", nf)
+
+	f = pgcql.NewFieldString().WithExact().WithColumn("ill_transaction_data->'patronInfo'->>'patronId'")
+	def.AddField("patron_id", f)
+
+	f = pgcql.NewFieldString().WithExact().WithColumn("ill_transaction_data->'bibliographicInfo'->>'supplierUniqueRecordId'")
+	def.AddField("supplier_unique_record_id", f)
+
+	f = pgcql.NewFieldString().WithExact().WithColumn("ill_transaction_data->'serviceInfo'->>'serviceType'")
+	def.AddField("service_type", f)
 
 	var parser cql.Parser
 	query, err := parser.Parse(cqlString)

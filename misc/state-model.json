@@ -24,6 +24,9 @@
                     "type": "string",
                     "description": "Version of the state model in SemVer"
                 },
+                "selector": {
+                    "$ref": "#/definitions/StateModelSelector"
+                },
                 "states": {
                     "type": "array",
                     "description": "A list of all allowed states",
@@ -37,6 +40,30 @@
                 "states",
                 "type",
                 "version"
+            ]
+        },
+        "StateModelSelector": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Criteria used to select this state model for an ISO 18626 request.",
+            "properties": {
+                "serviceType": {
+                    "type": "array",
+                    "description": "ISO 18626 service types handled by this state model.",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "Copy",
+                            "Loan",
+                            "CopyOrLoan"
+                        ]
+                    }
+                }
+            },
+            "required": [
+                "serviceType"
             ]
         },
         "State": {
@@ -71,6 +98,10 @@
                 "primaryAction": {
                     "type": "string",
                     "description": "Indicates the primary action for the state, i.e., the most common or recommended action to be performed when in the state. The value must match the name of one of the actions defined for the state."
+                },
+                "editable": {
+                    "type": "boolean",
+                    "description": "Indicates that a patron request can be updated"
                 },
                 "actions": {
                     "type": "array",
@@ -164,6 +195,10 @@
                         "review": {
                             "type": "string",
                             "description": "Target state when the action requires review."
+                        },
+                        "duplicate": {
+                            "type": "string",
+                            "description": "Target state when the action is a duplicate."
                         }
                     }
                 },

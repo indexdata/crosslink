@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/common"
@@ -154,4 +155,212 @@ type MockIllRepositoryNoSelectedSupplier struct {
 
 func (r *MockIllRepositoryNoSelectedSupplier) GetSelectedSupplierForIllTransaction(ctx common.ExtendedContext, illTransId string) (ill_db.LocatedSupplier, error) {
 	return ill_db.LocatedSupplier{}, pgx.ErrNoRows
+}
+
+// mockDuplicateCheckRepo overrides FindDuplicateIllTransaction to return
+// configurable results for duplicate-check testing.
+type mockDuplicateCheckRepo struct {
+	mocks.MockIllRepositorySuccess
+	duplicate bool
+	err       error
+	called    bool
+	cql       string
+}
+
+func (r *mockDuplicateCheckRepo) ListIllTransactions(ctx common.ExtendedContext, params ill_db.ListIllTransactionsParams, cql *string, symbols []string) ([]ill_db.IllTransaction, int64, error) {
+	if cql != nil {
+		r.cql = *cql
+	}
+	r.called = true
+	if r.duplicate {
+		return []ill_db.IllTransaction{{ID: "duplicate-id"}}, 1, nil
+	}
+	return []ill_db.IllTransaction{}, 0, r.err
+}
+
+func TestCheckDuplicateRequest(t *testing.T) {
+	window1 := 1
+	window0 := 0
+	windowNeg := -1
+
+	baseRequest := &iso18626.Request{
+		BibliographicInfo: iso18626.BibliographicInfo{
+			SupplierUniqueRecordId: "rec-1",
+			Title:                  "Test Title",
+		},
+		ServiceInfo: &iso18626.ServiceInfo{
+			ServiceType: iso18626.TypeServiceTypeLoan,
+		},
+		PatronInfo: &iso18626.PatronInfo{
+			PatronId: "patron-1",
+		},
+	}
+
+	isbnRequest := &iso18626.Request{
+		BibliographicInfo: iso18626.BibliographicInfo{
+			BibliographicItemId: []iso18626.BibliographicItemId{
+				{
+					BibliographicItemIdentifier:     "978-1234",
+					BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{Text: "ISBN"},
+				},
+			},
+		},
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopy},
+		PatronInfo:  &iso18626.PatronInfo{PatronId: "patron-2"},
+	}
+
+	tests := []struct {
+		name           string
+		request        *iso18626.Request
+		peer           ill_db.Peer
+		duplicate      bool
+		repoErr        error
+		wantErr        error
+		wantRepoCalled bool
+		wantPatronId   string
+		wantIdentifier string
+		wantIsbn       string
+		wantIssn       string
+		wantTitle      string
+		wantSvcType    string
+	}{
+		{
+			name:           "no DuplicateCheckWindowHours configured - skips check",
+			request:        baseRequest,
+			peer:           ill_db.Peer{},
+			wantErr:        nil,
+			wantRepoCalled: false,
+		},
+		{
+			name:           "window is zero - skips check",
+			request:        baseRequest,
+			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window0}},
+			wantErr:        nil,
+			wantRepoCalled: false,
+		},
+		{
+			name:           "window is negative - skips check",
+			request:        baseRequest,
+			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &windowNeg}},
+			wantErr:        nil,
+			wantRepoCalled: false,
+		},
+		{
+			name:           "db error - fails open, allows request through",
+			request:        baseRequest,
+			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
+			repoErr:        errors.New("db connection error"),
+			wantErr:        nil,
+			wantRepoCalled: true,
+			wantPatronId:   "patron-1",
+			wantIdentifier: "rec-1",
+			wantTitle:      "Test Title",
+			wantSvcType:    "Loan",
+		},
+		{
+			name:           "no duplicate found (ErrNoRows) - not a duplicate",
+			request:        baseRequest,
+			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
+			repoErr:        pgx.ErrNoRows,
+			wantErr:        nil,
+			wantRepoCalled: true,
+			wantPatronId:   "patron-1",
+			wantIdentifier: "rec-1",
+			wantTitle:      "Test Title",
+			wantSvcType:    "Loan",
+		},
+		{
+			name:           "duplicate found - returns ErrDuplicateRequest",
+			request:        baseRequest,
+			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
+			duplicate:      true,
+			wantErr:        ErrDuplicateRequest,
+			wantRepoCalled: true,
+			wantPatronId:   "patron-1",
+			wantIdentifier: "rec-1",
+			wantTitle:      "Test Title",
+			wantSvcType:    "Loan",
+		},
+		{
+			name: "nil PatronInfo - skips duplicate check (can't verify same patron)",
+			request: &iso18626.Request{
+				BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "rec-1"},
+				ServiceInfo:       &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
+			},
+			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
+			repoErr:        pgx.ErrNoRows,
+			wantErr:        nil,
+			wantRepoCalled: false,
+		},
+		{
+			name: "no service level - skips duplicate check (can't verify same patron)",
+			request: &iso18626.Request{
+				BibliographicInfo: iso18626.BibliographicInfo{
+					SupplierUniqueRecordId: "rec-1",
+					Title:                  "Test Title",
+				},
+				PatronInfo: &iso18626.PatronInfo{
+					PatronId: "patron-1",
+				},
+			},
+			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
+			repoErr:        pgx.ErrNoRows,
+			wantErr:        nil,
+			wantRepoCalled: false,
+		},
+		{
+			name:           "isbn passed as parameter to DB query",
+			request:        isbnRequest,
+			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
+			repoErr:        pgx.ErrNoRows,
+			wantErr:        nil,
+			wantRepoCalled: true,
+			wantPatronId:   "patron-2",
+			wantIsbn:       "978-1234",
+			wantSvcType:    "Copy",
+		},
+		{
+			name:           "duplicate found via isbn - returns ErrDuplicateRequest",
+			request:        isbnRequest,
+			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
+			duplicate:      true,
+			wantErr:        ErrDuplicateRequest,
+			wantRepoCalled: true,
+			wantPatronId:   "patron-2",
+			wantIsbn:       "978-1234",
+			wantSvcType:    "Copy",
+		},
+		{
+			name:           "no duplicate - returns nil",
+			request:        isbnRequest,
+			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
+			duplicate:      false,
+			wantErr:        nil,
+			wantRepoCalled: true,
+			wantPatronId:   "patron-2",
+			wantIsbn:       "978-1234",
+			wantSvcType:    "Copy",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+			mockRepo := &mockDuplicateCheckRepo{
+				duplicate: tt.duplicate,
+				err:       tt.repoErr,
+			}
+			err := checkDuplicateRequest(appCtx, tt.request, mockRepo, "ISIL:REQ1", tt.peer)
+			assert.Equal(t, tt.wantErr, err)
+			assert.Equal(t, tt.wantRepoCalled, mockRepo.called)
+			if tt.wantRepoCalled {
+				assert.True(t, tt.wantPatronId == "" || strings.Contains(mockRepo.cql, tt.wantPatronId))
+				assert.True(t, tt.wantIdentifier == "" || strings.Contains(mockRepo.cql, tt.wantIdentifier))
+				assert.True(t, tt.wantIsbn == "" || strings.Contains(mockRepo.cql, tt.wantIsbn))
+				assert.True(t, tt.wantIssn == "" || strings.Contains(mockRepo.cql, tt.wantIssn))
+				assert.True(t, tt.wantTitle == "" || strings.Contains(mockRepo.cql, tt.wantTitle))
+				assert.True(t, tt.wantSvcType == "" || strings.Contains(mockRepo.cql, tt.wantSvcType))
+			}
+		})
+	}
 }

@@ -53,10 +53,59 @@ var actionMappingService = ActionMappingService{}
 
 func mustActionMapping(t *testing.T) *ActionMapping {
 	t.Helper()
-	mapping, err := actionMappingService.GetActionMapping(iso18626.Request{})
+	mapping, err := actionMappingService.GetActionMapping(iso18626.Request{
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
+	})
 	assert.NoError(t, err)
 	assert.NotNil(t, mapping)
 	return mapping
+}
+
+func TestGetStateModelForRequestUsesSelector(t *testing.T) {
+	service := ActionMappingService{}
+
+	for _, serviceType := range []iso18626.TypeServiceType{
+		iso18626.TypeServiceTypeCopy,
+		iso18626.TypeServiceTypeLoan,
+		iso18626.TypeServiceTypeCopyOrLoan,
+	} {
+		t.Run(string(serviceType), func(t *testing.T) {
+			model, err := service.GetStateModelForRequest(iso18626.Request{
+				ServiceInfo: &iso18626.ServiceInfo{ServiceType: serviceType},
+			})
+			assert.NoError(t, err)
+			if assert.NotNil(t, model) {
+				assert.Equal(t, "CrossLink Returnables State Model", model.Name)
+			}
+		})
+	}
+}
+
+func TestGetStateModelNameForRequestUsesSelector(t *testing.T) {
+	name, err := (&ActionMappingService{}).GetStateModelNameForRequest(iso18626.Request{
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, "returnables", name)
+}
+
+func TestGetStateModelForRequestWithoutServiceInfoUsesOnlyConfiguredModel(t *testing.T) {
+	model, err := (&ActionMappingService{}).GetStateModelForRequest(iso18626.Request{})
+
+	assert.NoError(t, err)
+	if assert.NotNil(t, model) {
+		assert.Equal(t, "CrossLink Returnables State Model", model.Name)
+	}
+}
+
+func TestGetStateModelForRequestWithoutMatch(t *testing.T) {
+	model, err := (&ActionMappingService{}).GetStateModelForRequest(iso18626.Request{
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceType("Unsupported")},
+	})
+
+	assert.Nil(t, model)
+	assert.EqualError(t, err, `no state model matches service type "Unsupported"`)
 }
 
 func TestIsActionAvailable(t *testing.T) {

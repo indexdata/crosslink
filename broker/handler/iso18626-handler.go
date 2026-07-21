@@ -11,8 +11,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/shim"
+	"github.com/indexdata/crosslink/directory"
 
 	"github.com/indexdata/crosslink/broker/adapter"
 
@@ -33,6 +35,13 @@ var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 const HANDLER_COMP = "iso18626_handler"
 const ORIGINAL_INCOMING_MESSAGE = "originalIncomingMessage"
 
+var lookupQueryBuilder = utils.Must(catalog.NewQueryBuilderGen(&directory.QueryConfig{
+	Identifier: new("supplier_unique_record_id = {term}"),
+	Type:       new(directory.Cql),
+}))
+
+var queryTimeFormat = "2006-01-02 15:04:05"
+
 type ErrorValue string
 
 const (
@@ -47,6 +56,7 @@ const (
 	InvalidAction             ErrorValue = "invalid action"
 	InvalidStatus             ErrorValue = "invalid status"
 	InvalidReason             ErrorValue = "invalid reason"
+	ReqIsDuplicate            ErrorValue = "duplicate request: an ILL request with the same patron, item, and service type was already submitted within the configured time window"
 )
 
 const PublicFailedToProcessReqMsg = "failed to process request"
@@ -64,6 +74,7 @@ var ErrReqAgencyNotFound = errors.New(string(ReqAgencyNotFound))
 var ErrInvalidAction = errors.New(string(InvalidAction))
 var ErrInvalidStatus = errors.New(string(InvalidStatus))
 var ErrInvalidReason = errors.New(string(InvalidReason))
+var ErrDuplicateRequest = errors.New(string(ReqIsDuplicate))
 
 var waitingReqs = map[string]RequestWait{}
 
@@ -139,6 +150,10 @@ func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapt
 }
 
 func handleNewRequest(ctx common.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo, requesterSymbol pgtype.Text, peers []ill_db.Peer) (string, error) {
+	if err := checkDuplicateRequest(ctx, request, repo, requesterSymbol.String, peers[0]); err != nil {
+		return "", err
+	}
+
 	supplierSymbol := createPgText(request.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + request.Header.SupplyingAgencyId.AgencyIdValue)
 	requesterRequestId := createPgText(request.Header.RequestingAgencyRequestId)
 	supplierRequestId := createPgText(request.Header.SupplyingAgencyRequestId)
@@ -171,6 +186,61 @@ func handleNewRequest(ctx common.ExtendedContext, request *iso18626.Request, rep
 		IllTransactionData:  illTransactionData,
 	})
 	return id, err
+}
+
+func checkDuplicateRequest(ctx common.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo, requesterSymbol string, peer ill_db.Peer) error {
+	windowHours := peer.CustomData.DuplicateCheckWindowHours
+	if windowHours == nil || *windowHours <= 0 {
+		return nil
+	}
+
+	patronId := ""
+	if request.PatronInfo != nil {
+		patronId = request.PatronInfo.PatronId
+	}
+
+	if patronId == "" {
+		return nil
+	}
+
+	lookupParams := catalog.LookupParamsFromBibliographicInfo(request.BibliographicInfo, request.ServiceInfo)
+
+	if lookupParams.ServiceType == "" {
+		return nil
+	}
+
+	cqlList, _, err := lookupQueryBuilder.Build(lookupParams)
+	if err != nil {
+		ctx.Logger().Warn("failed build lookup query", "error", err)
+		return nil
+	}
+
+	lookupCql := strings.Join(cqlList, " or ")
+	qb, err := cqlbuilder.NewQueryFromString("(" + lookupCql + ")")
+	if err != nil {
+		ctx.Logger().Warn("failed to build duplicate check query", "error", err)
+		return nil
+	}
+	formattedTime := time.Now().Add(-time.Duration(*windowHours) * time.Hour).Format(queryTimeFormat)
+	query, err := qb.And().Search("requester_symbol").Term(requesterSymbol).
+		And().Search("patron_id").Term(patronId).
+		And().Search("timestamp").Rel(">=").Term(formattedTime).
+		And().Search("service_type").Term(lookupParams.ServiceType).
+		Build()
+	if err != nil {
+		ctx.Logger().Warn("failed to build duplicate check query", "error", err)
+		return nil
+	}
+	cql := query.String()
+	trans, _, err := repo.ListIllTransactions(ctx, ill_db.ListIllTransactionsParams{Limit: 1, Offset: 0}, &cql, []string{requesterSymbol})
+	if err != nil {
+		ctx.Logger().Warn("failed to check for duplicate requests, proceeding", "error", err)
+		return nil // fail open
+	}
+	if len(trans) == 0 {
+		return nil
+	}
+	return ErrDuplicateRequest
 }
 
 func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo) (string, bool, error) {
@@ -268,6 +338,8 @@ func handleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Mess
 			handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdAlreadyExists)
 		} else if errors.Is(err, ErrRetryNotPossible) {
 			handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, RetryNotPossible)
+		} else if errors.Is(err, ErrDuplicateRequest) {
+			handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIsDuplicate)
 		} else {
 			ctx.Logger().Error(InternalFailedToSaveTx, "error", err)
 			http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
