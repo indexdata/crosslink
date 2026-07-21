@@ -153,6 +153,9 @@ stateModels:
           - name: will-supply-conditional
             desc: "Supplier adds conditions after initial WillSupply (ISO18626 WillSupply with conditions)"
             transition: CONDITION_PENDING
+          - name: retry-conditional
+            desc: Received retry from supplier
+            transition: RETRY_PENDING
           - name: loaned
             desc: "Supplier shipped the item (ISO18626 Loaned)"
             transition: SHIPPED
