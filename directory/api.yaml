@@ -1463,6 +1463,11 @@ components:
           type: string
         timeZone:
           type: string
+        duplicateCheckWindowHours:
+          type: integer
+          format: int32
+          description: The number of hours to check for duplicate requests. If a request is submitted within this window, it will be considered a duplicate.
+          minimum: 0
         symbols:
           type: array
           items:
@@ -1545,6 +1550,12 @@ components:
           nullable: true
         timeZone:
           type: string
+          nullable: true
+        duplicateCheckWindowHours:
+          type: integer
+          format: int32
+          description: The number of hours to check for duplicate requests. If a request is submitted within this window, it will be considered a duplicate.
+          minimum: 0
           nullable: true
         lmsConfig:
           allOf:

@@ -71,34 +71,35 @@ func isValidParentForType(entryType EntryType, parentEntry *db.Entry) (bool, str
 
 func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 	var (
-		id                 uuid.UUID
-		name               string
-		description        *string
-		contactName        *string
-		organizationId     *string
-		fromEmail          *string
-		tenant             *string
-		vendor             *string
-		phoneNumber        *string
-		lmsLocationCode    *string
-		lenderOfLastResort []string
-		lmsConfigJSON      []byte
-		holdingsConfigJSON []byte
-		hrid               *string
-		timeZone           *string
-		entryType          *string
-		parent             *uuid.UUID
-		symbolsJSON        [][]byte
-		endpointsJSON      [][]byte
-		addressesJSON      [][]byte
-		tiersJSON          [][]byte
-		networksJSON       [][]byte
-		closuresJSON       [][]byte
-		totalCount         int
+		id                        uuid.UUID
+		name                      string
+		description               *string
+		contactName               *string
+		organizationId            *string
+		fromEmail                 *string
+		tenant                    *string
+		vendor                    *string
+		phoneNumber               *string
+		lmsLocationCode           *string
+		lenderOfLastResort        []string
+		duplicateCheckWindowHours *int32
+		lmsConfigJSON             []byte
+		holdingsConfigJSON        []byte
+		hrid                      *string
+		timeZone                  *string
+		entryType                 *string
+		parent                    *uuid.UUID
+		symbolsJSON               [][]byte
+		endpointsJSON             [][]byte
+		addressesJSON             [][]byte
+		tiersJSON                 [][]byte
+		networksJSON              [][]byte
+		closuresJSON              [][]byte
+		totalCount                int
 	)
 
 	if err := rows.Scan(&id, &name, &description, &organizationId, &contactName, &fromEmail, &tenant, &vendor, &phoneNumber,
-		&lmsLocationCode, &lenderOfLastResort, &lmsConfigJSON, &holdingsConfigJSON, &hrid, &timeZone, &entryType, &parent, &symbolsJSON, &endpointsJSON,
+		&lmsLocationCode, &lenderOfLastResort, &duplicateCheckWindowHours, &lmsConfigJSON, &holdingsConfigJSON, &hrid, &timeZone, &entryType, &parent, &symbolsJSON, &endpointsJSON,
 		&addressesJSON, &tiersJSON, &networksJSON, &closuresJSON, &totalCount); err != nil {
 		return Entry{}, 0, err
 	}
@@ -184,29 +185,30 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 	typeValue := EntryType(*entryType)
 
 	return Entry{
-		Id:                 &id,
-		Name:               name,
-		Type:               &typeValue,
-		OrganizationId:     organizationId,
-		Description:        description,
-		ContactName:        contactName,
-		FromEmail:          fromEmail,
-		Tenant:             tenant,
-		Hrid:               hrid,
-		LmsLocationCode:    lmsLocationCode,
-		LenderOfLastResort: lenderSymbols,
-		PhoneNumber:        phoneNumber,
-		Parent:             parent,
-		Symbols:            symbolsPtr,
-		Endpoints:          endpointsPtr,
-		Addresses:          addressesPtr,
-		Closures:           closuresPtr,
-		LmsConfig:          lmsConfigPtr,
-		HoldingsConfig:     holdingsConfig,
-		Tiers:              tiersPtr,
-		Networks:           networksPtr,
-		TimeZone:           timeZone,
-		Vendor:             (*EntryVendor)(vendor),
+		Id:                        &id,
+		Name:                      name,
+		Type:                      &typeValue,
+		OrganizationId:            organizationId,
+		Description:               description,
+		ContactName:               contactName,
+		FromEmail:                 fromEmail,
+		Tenant:                    tenant,
+		Hrid:                      hrid,
+		LmsLocationCode:           lmsLocationCode,
+		LenderOfLastResort:        lenderSymbols,
+		DuplicateCheckWindowHours: duplicateCheckWindowHours,
+		PhoneNumber:               phoneNumber,
+		Parent:                    parent,
+		Symbols:                   symbolsPtr,
+		Endpoints:                 endpointsPtr,
+		Addresses:                 addressesPtr,
+		Closures:                  closuresPtr,
+		LmsConfig:                 lmsConfigPtr,
+		HoldingsConfig:            holdingsConfig,
+		Tiers:                     tiersPtr,
+		Networks:                  networksPtr,
+		TimeZone:                  timeZone,
+		Vendor:                    (*EntryVendor)(vendor),
 	}, totalCount, nil
 }
 
@@ -288,6 +290,7 @@ func buildEntrySQL(whereClause string) string {
 		e.phone_number,
 		e.lms_location_code,
 		e.lender_of_last_resort,
+		e.duplicate_check_window_hours,
 		(
 		SELECT 
 			json_build_object(
@@ -672,17 +675,18 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 	}
 
 	toInsert := db.CreateEntryParams{
-		Name:               request.Body.Name,
-		ContactName:        request.Body.ContactName,
-		FromEmail:          request.Body.FromEmail,
-		Tenant:             request.Body.Tenant,
-		PhoneNumber:        request.Body.PhoneNumber,
-		TimeZone:           request.Body.TimeZone,
-		OrganizationID:     request.Body.OrganizationId,
-		Type:               string(entryType),
-		Parent:             request.Body.Parent,
-		LmsLocationCode:    request.Body.LmsLocationCode,
-		LenderOfLastResort: symbolsToFullSymbols(request.Body.LenderOfLastResort),
+		Name:                      request.Body.Name,
+		ContactName:               request.Body.ContactName,
+		FromEmail:                 request.Body.FromEmail,
+		Tenant:                    request.Body.Tenant,
+		PhoneNumber:               request.Body.PhoneNumber,
+		TimeZone:                  request.Body.TimeZone,
+		OrganizationID:            request.Body.OrganizationId,
+		Type:                      string(entryType),
+		Parent:                    request.Body.Parent,
+		LmsLocationCode:           request.Body.LmsLocationCode,
+		LenderOfLastResort:        symbolsToFullSymbols(request.Body.LenderOfLastResort),
+		DuplicateCheckWindowHours: request.Body.DuplicateCheckWindowHours,
 	}
 	if request.Body.Vendor != nil {
 		vendor := string(*request.Body.Vendor)
@@ -916,21 +920,22 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 	lenderOfLastResort := maybeUpdateLenderOfLastResort(orig.LenderOfLastResort, request.Body.LenderOfLastResort)
 
 	err = qtx.UpdateEntry(ctx, db.UpdateEntryParams{
-		Name:               derefOrDefault(request.Body.Name, orig.Name),
-		Description:        maybeUpdateCol(orig.Description, request.Body.Description),
-		ContactName:        maybeUpdateCol(orig.ContactName, request.Body.ContactName),
-		FromEmail:          maybeUpdateCol(orig.FromEmail, request.Body.FromEmail),
-		Tenant:             maybeUpdateCol(orig.Tenant, request.Body.Tenant),
-		Vendor:             maybeUpdateEntryVendor(orig.Vendor, request.Body.Vendor),
-		PhoneNumber:        maybeUpdateCol(orig.PhoneNumber, request.Body.PhoneNumber),
-		Parent:             maybeUpdateCol(orig.Parent, request.Body.Parent),
-		LmsLocationCode:    maybeUpdateCol(orig.LmsLocationCode, request.Body.LmsLocationCode),
-		LenderOfLastResort: lenderOfLastResort,
-		Hrid:               maybeUpdateCol(orig.Hrid, request.Body.Hrid),
-		Type:               resultingType,
-		TimeZone:           maybeUpdateCol(orig.TimeZone, request.Body.TimeZone),
-		OrganizationID:     maybeUpdateCol(orig.OrganizationID, request.Body.OrganizationId),
-		ID:                 orig.ID,
+		Name:                      derefOrDefault(request.Body.Name, orig.Name),
+		Description:               maybeUpdateCol(orig.Description, request.Body.Description),
+		ContactName:               maybeUpdateCol(orig.ContactName, request.Body.ContactName),
+		FromEmail:                 maybeUpdateCol(orig.FromEmail, request.Body.FromEmail),
+		Tenant:                    maybeUpdateCol(orig.Tenant, request.Body.Tenant),
+		Vendor:                    maybeUpdateEntryVendor(orig.Vendor, request.Body.Vendor),
+		PhoneNumber:               maybeUpdateCol(orig.PhoneNumber, request.Body.PhoneNumber),
+		Parent:                    maybeUpdateCol(orig.Parent, request.Body.Parent),
+		LmsLocationCode:           maybeUpdateCol(orig.LmsLocationCode, request.Body.LmsLocationCode),
+		LenderOfLastResort:        lenderOfLastResort,
+		DuplicateCheckWindowHours: maybeUpdateCol(orig.DuplicateCheckWindowHours, request.Body.DuplicateCheckWindowHours),
+		Hrid:                      maybeUpdateCol(orig.Hrid, request.Body.Hrid),
+		Type:                      resultingType,
+		TimeZone:                  maybeUpdateCol(orig.TimeZone, request.Body.TimeZone),
+		OrganizationID:            maybeUpdateCol(orig.OrganizationID, request.Body.OrganizationId),
+		ID:                        orig.ID,
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to update entry", "error", err, "id", orig.ID)

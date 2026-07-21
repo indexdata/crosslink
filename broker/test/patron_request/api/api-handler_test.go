@@ -376,12 +376,12 @@ func TestNeedsReviewAndUpdate(t *testing.T) {
 	requesterSymbol := "ISIL:REQ" + uuid.NewString()
 	supplierSymbol := "ISIL:SUP" + uuid.NewString()
 
-	lmsConfig := &directory.LmsConfig{
+	lmsConfig := &dirapi.LmsConfig{
 		FromAgency: "from-agency",
 		Address:    ncipMockUrl,
 	}
-	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
-		directory.Entry{LmsConfig: lmsConfig}, requesterSymbol)
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink,
+		dirapi.Entry{LmsConfig: lmsConfig}, requesterSymbol)
 	assert.NotNil(t, reqPeer)
 	supPeer := apptest.CreatePeer(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL)
 	assert.NotNil(t, supPeer)

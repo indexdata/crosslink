@@ -21,9 +21,9 @@ SELECT pg_advisory_xact_lock(hashtextextended('directoryish:consortium-entry', 0
 
 -- name: CreateEntry :one
 INSERT INTO entries (
-  name, description, contact_name, from_email, tenant, vendor, phone_number, time_zone, organization_id, type, parent, lms_location_code, lender_of_last_resort
+  name, description, contact_name, from_email, tenant, vendor, phone_number, time_zone, organization_id, type, parent, lms_location_code, lender_of_last_resort, duplicate_check_window_hours
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 )
 RETURNING *;
 
@@ -43,6 +43,7 @@ SET
   parent = @parent,
   lms_location_code = @lms_location_code,
   lender_of_last_resort = @lender_of_last_resort,
+  duplicate_check_window_hours = @duplicate_check_window_hours,
   hrid = @hrid
 
 WHERE id = @id;

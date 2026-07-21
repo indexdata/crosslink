@@ -32,21 +32,22 @@ type Closure struct {
 }
 
 type Entry struct {
-	ID                 uuid.UUID
-	Parent             *uuid.UUID
-	Name               string
-	Type               string
-	Description        *string
-	OrganizationID     *string
-	ContactName        *string
-	FromEmail          *string
-	Tenant             *string
-	Vendor             *string
-	PhoneNumber        *string
-	LmsLocationCode    *string
-	LenderOfLastResort []string
-	Hrid               *string
-	TimeZone           *string
+	ID                        uuid.UUID
+	Parent                    *uuid.UUID
+	Name                      string
+	Type                      string
+	Description               *string
+	OrganizationID            *string
+	ContactName               *string
+	FromEmail                 *string
+	Tenant                    *string
+	Vendor                    *string
+	PhoneNumber               *string
+	LmsLocationCode           *string
+	LenderOfLastResort        []string
+	Hrid                      *string
+	TimeZone                  *string
+	DuplicateCheckWindowHours *int32
 }
 
 type EntryNetwork struct {

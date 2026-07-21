@@ -88,27 +88,28 @@ func (q *Queries) CreateClosure(ctx context.Context, arg CreateClosureParams) (C
 
 const createEntry = `-- name: CreateEntry :one
 INSERT INTO entries (
-  name, description, contact_name, from_email, tenant, vendor, phone_number, time_zone, organization_id, type, parent, lms_location_code, lender_of_last_resort
+  name, description, contact_name, from_email, tenant, vendor, phone_number, time_zone, organization_id, type, parent, lms_location_code, lender_of_last_resort, duplicate_check_window_hours
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 )
-RETURNING id, parent, name, type, description, organization_id, contact_name, from_email, tenant, vendor, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone
+RETURNING id, parent, name, type, description, organization_id, contact_name, from_email, tenant, vendor, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone, duplicate_check_window_hours
 `
 
 type CreateEntryParams struct {
-	Name               string
-	Description        *string
-	ContactName        *string
-	FromEmail          *string
-	Tenant             *string
-	Vendor             *string
-	PhoneNumber        *string
-	TimeZone           *string
-	OrganizationID     *string
-	Type               string
-	Parent             *uuid.UUID
-	LmsLocationCode    *string
-	LenderOfLastResort []string
+	Name                      string
+	Description               *string
+	ContactName               *string
+	FromEmail                 *string
+	Tenant                    *string
+	Vendor                    *string
+	PhoneNumber               *string
+	TimeZone                  *string
+	OrganizationID            *string
+	Type                      string
+	Parent                    *uuid.UUID
+	LmsLocationCode           *string
+	LenderOfLastResort        []string
+	DuplicateCheckWindowHours *int32
 }
 
 func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry, error) {
@@ -126,6 +127,7 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry
 		arg.Parent,
 		arg.LmsLocationCode,
 		arg.LenderOfLastResort,
+		arg.DuplicateCheckWindowHours,
 	)
 	var i Entry
 	err := row.Scan(
@@ -144,6 +146,7 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry
 		&i.LenderOfLastResort,
 		&i.Hrid,
 		&i.TimeZone,
+		&i.DuplicateCheckWindowHours,
 	)
 	return i, err
 }
@@ -422,7 +425,7 @@ func (q *Queries) DeleteTierById(ctx context.Context, id uuid.UUID) error {
 }
 
 const entriesByParent = `-- name: EntriesByParent :many
-SELECT id, parent, name, type, description, organization_id, contact_name, from_email, tenant, vendor, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone FROM entries WHERE parent = $1
+SELECT id, parent, name, type, description, organization_id, contact_name, from_email, tenant, vendor, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone, duplicate_check_window_hours FROM entries WHERE parent = $1
 `
 
 func (q *Queries) EntriesByParent(ctx context.Context, parent *uuid.UUID) ([]Entry, error) {
@@ -450,6 +453,7 @@ func (q *Queries) EntriesByParent(ctx context.Context, parent *uuid.UUID) ([]Ent
 			&i.LenderOfLastResort,
 			&i.Hrid,
 			&i.TimeZone,
+			&i.DuplicateCheckWindowHours,
 		); err != nil {
 			return nil, err
 		}
@@ -462,7 +466,7 @@ func (q *Queries) EntriesByParent(ctx context.Context, parent *uuid.UUID) ([]Ent
 }
 
 const entryById = `-- name: EntryById :one
-SELECT id, parent, name, type, description, organization_id, contact_name, from_email, tenant, vendor, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone FROM entries WHERE id = $1 LIMIT 1
+SELECT id, parent, name, type, description, organization_id, contact_name, from_email, tenant, vendor, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone, duplicate_check_window_hours FROM entries WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) EntryById(ctx context.Context, id uuid.UUID) (Entry, error) {
@@ -484,12 +488,13 @@ func (q *Queries) EntryById(ctx context.Context, id uuid.UUID) (Entry, error) {
 		&i.LenderOfLastResort,
 		&i.Hrid,
 		&i.TimeZone,
+		&i.DuplicateCheckWindowHours,
 	)
 	return i, err
 }
 
 const entryByIdForUpdate = `-- name: EntryByIdForUpdate :one
-SELECT id, parent, name, type, description, organization_id, contact_name, from_email, tenant, vendor, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone FROM entries WHERE id = $1 LIMIT 1 FOR UPDATE
+SELECT id, parent, name, type, description, organization_id, contact_name, from_email, tenant, vendor, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone, duplicate_check_window_hours FROM entries WHERE id = $1 LIMIT 1 FOR UPDATE
 `
 
 func (q *Queries) EntryByIdForUpdate(ctx context.Context, id uuid.UUID) (Entry, error) {
@@ -511,12 +516,13 @@ func (q *Queries) EntryByIdForUpdate(ctx context.Context, id uuid.UUID) (Entry, 
 		&i.LenderOfLastResort,
 		&i.Hrid,
 		&i.TimeZone,
+		&i.DuplicateCheckWindowHours,
 	)
 	return i, err
 }
 
 const entryBySymbol = `-- name: EntryBySymbol :one
-SELECT e.id, e.parent, e.name, e.type, e.description, e.organization_id, e.contact_name, e.from_email, e.tenant, e.vendor, e.phone_number, e.lms_location_code, e.lender_of_last_resort, e.hrid, e.time_zone FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = $1 AND s.symbol = $2 LIMIT 1
+SELECT e.id, e.parent, e.name, e.type, e.description, e.organization_id, e.contact_name, e.from_email, e.tenant, e.vendor, e.phone_number, e.lms_location_code, e.lender_of_last_resort, e.hrid, e.time_zone, e.duplicate_check_window_hours FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = $1 AND s.symbol = $2 LIMIT 1
 `
 
 type EntryBySymbolParams struct {
@@ -543,12 +549,13 @@ func (q *Queries) EntryBySymbol(ctx context.Context, arg EntryBySymbolParams) (E
 		&i.LenderOfLastResort,
 		&i.Hrid,
 		&i.TimeZone,
+		&i.DuplicateCheckWindowHours,
 	)
 	return i, err
 }
 
 const entryBySymbolForUpdate = `-- name: EntryBySymbolForUpdate :one
-SELECT e.id, e.parent, e.name, e.type, e.description, e.organization_id, e.contact_name, e.from_email, e.tenant, e.vendor, e.phone_number, e.lms_location_code, e.lender_of_last_resort, e.hrid, e.time_zone FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = $1 AND s.symbol = $2 LIMIT 1 FOR UPDATE OF e
+SELECT e.id, e.parent, e.name, e.type, e.description, e.organization_id, e.contact_name, e.from_email, e.tenant, e.vendor, e.phone_number, e.lms_location_code, e.lender_of_last_resort, e.hrid, e.time_zone, e.duplicate_check_window_hours FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = $1 AND s.symbol = $2 LIMIT 1 FOR UPDATE OF e
 `
 
 type EntryBySymbolForUpdateParams struct {
@@ -575,6 +582,7 @@ func (q *Queries) EntryBySymbolForUpdate(ctx context.Context, arg EntryBySymbolF
 		&i.LenderOfLastResort,
 		&i.Hrid,
 		&i.TimeZone,
+		&i.DuplicateCheckWindowHours,
 	)
 	return i, err
 }
@@ -614,7 +622,7 @@ func (q *Queries) GetClosureByIdForUpdate(ctx context.Context, id uuid.UUID) (Cl
 }
 
 const getConsortialEntry = `-- name: GetConsortialEntry :one
-SELECT id, parent, name, type, description, organization_id, contact_name, from_email, tenant, vendor, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone FROM entries WHERE type = 'Consortium' LIMIT 1
+SELECT id, parent, name, type, description, organization_id, contact_name, from_email, tenant, vendor, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone, duplicate_check_window_hours FROM entries WHERE type = 'Consortium' LIMIT 1
 `
 
 func (q *Queries) GetConsortialEntry(ctx context.Context) (Entry, error) {
@@ -636,6 +644,7 @@ func (q *Queries) GetConsortialEntry(ctx context.Context) (Entry, error) {
 		&i.LenderOfLastResort,
 		&i.Hrid,
 		&i.TimeZone,
+		&i.DuplicateCheckWindowHours,
 	)
 	return i, err
 }
@@ -1225,27 +1234,29 @@ SET
   parent = $11,
   lms_location_code = $12,
   lender_of_last_resort = $13,
-  hrid = $14
+  duplicate_check_window_hours = $14,
+  hrid = $15
 
-WHERE id = $15
+WHERE id = $16
 `
 
 type UpdateEntryParams struct {
-	Name               string
-	Description        *string
-	ContactName        *string
-	FromEmail          *string
-	Tenant             *string
-	Vendor             *string
-	PhoneNumber        *string
-	TimeZone           *string
-	OrganizationID     *string
-	Type               string
-	Parent             *uuid.UUID
-	LmsLocationCode    *string
-	LenderOfLastResort []string
-	Hrid               *string
-	ID                 uuid.UUID
+	Name                      string
+	Description               *string
+	ContactName               *string
+	FromEmail                 *string
+	Tenant                    *string
+	Vendor                    *string
+	PhoneNumber               *string
+	TimeZone                  *string
+	OrganizationID            *string
+	Type                      string
+	Parent                    *uuid.UUID
+	LmsLocationCode           *string
+	LenderOfLastResort        []string
+	DuplicateCheckWindowHours *int32
+	Hrid                      *string
+	ID                        uuid.UUID
 }
 
 func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) error {
@@ -1263,6 +1274,7 @@ func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) error 
 		arg.Parent,
 		arg.LmsLocationCode,
 		arg.LenderOfLastResort,
+		arg.DuplicateCheckWindowHours,
 		arg.Hrid,
 		arg.ID,
 	)
