@@ -242,6 +242,18 @@ func TestGetActionTransitionConditionPendingSelfTransition(t *testing.T) {
 	assert.Equal(t, LenderStateConditionPending, transition)
 }
 
+func TestGetEventTransitionRetryConditionalFromBorrowerWillSupply(t *testing.T) {
+	mapping := mustActionMapping(t)
+
+	transition, stateChanged, eventDefined := mapping.GetEventTransition(
+		pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateWillSupply},
+		string(SupplierRetryConditional),
+	)
+	assert.True(t, eventDefined)
+	assert.True(t, stateChanged)
+	assert.Equal(t, BorrowerStateRetryPending, transition)
+}
+
 func listCompare(t *testing.T, list1 []pr_db.PatronRequestAction, list2 []pr_db.PatronRequestAction) {
 	assert.Equal(t, len(list1), len(list2), "list1=%v, list2=%v", list1, list2)
 	for i := range list1 {
