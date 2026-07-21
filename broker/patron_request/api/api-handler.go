@@ -236,6 +236,7 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 			for j, value := range field.Values {
 				facetResults[i].Values[j] = proapi.FacetResultValue{
 					Value: value.Value,
+					Label: value.Label,
 					Count: value.Count,
 				}
 			}

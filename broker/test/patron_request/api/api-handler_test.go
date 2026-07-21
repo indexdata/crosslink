@@ -31,6 +31,7 @@ import (
 	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -1250,23 +1251,28 @@ func TestRequesterSupplierNameCQL(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, int64(0), foundPrs.About.Count)
 
-	// get requester_name and supplier_name facets → 1 result, 2 facets
+	// get requester_symbol and supplier_symbol facets → 1 result, 2 facets;
+	// each value carries the symbol as Value and the peer name as Label.
 	respBytes = httpRequest(t, "GET", basePath+"?cql=requester_name%3D"+url.QueryEscape(reqName)+
-		"&facets=requester_name,supplier_name", []byte{}, 200)
+		"&facets=requester_symbol,supplier_symbol", []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(1), foundPrs.About.Count)
 	assert.Equal(t, prId, foundPrs.Items[0].Id)
 
-	assert.NotNil(t, foundPrs.About.Facets)
-	assert.Len(t, *foundPrs.About.Facets, 2)
-	assert.Equal(t, "requester_name", (*foundPrs.About.Facets)[0].Name)
-	assert.Len(t, (*foundPrs.About.Facets)[0].Values, 1)
-	assert.Equal(t, reqName, (*foundPrs.About.Facets)[0].Values[0].Value)
+	require.NotNil(t, foundPrs.About.Facets)
+	require.Len(t, *foundPrs.About.Facets, 2)
+	assert.Equal(t, "requester_symbol", (*foundPrs.About.Facets)[0].Name)
+	require.Len(t, (*foundPrs.About.Facets)[0].Values, 1)
+	assert.Equal(t, reqSymbol, (*foundPrs.About.Facets)[0].Values[0].Value)
+	require.NotNil(t, (*foundPrs.About.Facets)[0].Values[0].Label)
+	assert.Equal(t, reqName, *(*foundPrs.About.Facets)[0].Values[0].Label)
 	assert.Equal(t, int64(1), (*foundPrs.About.Facets)[0].Values[0].Count)
-	assert.Equal(t, "supplier_name", (*foundPrs.About.Facets)[1].Name)
-	assert.Len(t, (*foundPrs.About.Facets)[1].Values, 1)
-	assert.Equal(t, supName, (*foundPrs.About.Facets)[1].Values[0].Value)
+	assert.Equal(t, "supplier_symbol", (*foundPrs.About.Facets)[1].Name)
+	require.Len(t, (*foundPrs.About.Facets)[1].Values, 1)
+	assert.Equal(t, supSymbol, (*foundPrs.About.Facets)[1].Values[0].Value)
+	require.NotNil(t, (*foundPrs.About.Facets)[1].Values[0].Label)
+	assert.Equal(t, supName, *(*foundPrs.About.Facets)[1].Values[0].Label)
 	assert.Equal(t, int64(1), (*foundPrs.About.Facets)[1].Values[0].Count)
 }
 
@@ -1361,13 +1367,17 @@ func TestFacetsOK(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, int64(5), foundPrs.About.Count)
 	assert.Len(t, foundPrs.Items, 0)
-	assert.NotNil(t, foundPrs.About.Facets)
-	assert.Len(t, *foundPrs.About.Facets, 1)
+	require.NotNil(t, foundPrs.About.Facets)
+	require.Len(t, *foundPrs.About.Facets, 1)
 	assert.Equal(t, "requester_symbol", (*foundPrs.About.Facets)[0].Name)
-	assert.Len(t, (*foundPrs.About.Facets)[0].Values, 2)
+	require.Len(t, (*foundPrs.About.Facets)[0].Values, 2)
 	assert.Equal(t, requesterSymbols[0], (*foundPrs.About.Facets)[0].Values[0].Value)
+	require.NotNil(t, (*foundPrs.About.Facets)[0].Values[0].Label)
+	assert.Equal(t, requesterSymbols[0], *(*foundPrs.About.Facets)[0].Values[0].Label)
 	assert.Equal(t, int64(3), (*foundPrs.About.Facets)[0].Values[0].Count)
 	assert.Equal(t, requesterSymbols[1], (*foundPrs.About.Facets)[0].Values[1].Value)
+	require.NotNil(t, (*foundPrs.About.Facets)[0].Values[1].Label)
+	assert.Equal(t, requesterSymbols[1], *(*foundPrs.About.Facets)[0].Values[1].Label)
 	assert.Equal(t, int64(2), (*foundPrs.About.Facets)[0].Values[1].Count)
 
 	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol&cql=title%3Dfacets%20title&offset=0&limit=0", []byte{}, 200)
@@ -1375,13 +1385,17 @@ func TestFacetsOK(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, int64(10), foundPrs.About.Count)
 	assert.Len(t, foundPrs.Items, 0)
-	assert.NotNil(t, foundPrs.About.Facets)
-	assert.Len(t, *foundPrs.About.Facets, 1)
+	require.NotNil(t, foundPrs.About.Facets)
+	require.Len(t, *foundPrs.About.Facets, 1)
 	assert.Equal(t, "requester_symbol", (*foundPrs.About.Facets)[0].Name)
-	assert.Len(t, (*foundPrs.About.Facets)[0].Values, 2)
+	require.Len(t, (*foundPrs.About.Facets)[0].Values, 2)
 	assert.Equal(t, requesterSymbols[0], (*foundPrs.About.Facets)[0].Values[0].Value)
+	require.NotNil(t, (*foundPrs.About.Facets)[0].Values[0].Label)
+	assert.Equal(t, requesterSymbols[0], *(*foundPrs.About.Facets)[0].Values[0].Label)
 	assert.Equal(t, int64(7), (*foundPrs.About.Facets)[0].Values[0].Count)
 	assert.Equal(t, requesterSymbols[1], (*foundPrs.About.Facets)[0].Values[1].Value)
+	require.NotNil(t, (*foundPrs.About.Facets)[0].Values[1].Label)
+	assert.Equal(t, requesterSymbols[1], *(*foundPrs.About.Facets)[0].Values[1].Label)
 	assert.Equal(t, int64(3), (*foundPrs.About.Facets)[0].Values[1].Count)
 
 	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol%2Csupplier_symbol&cql=title%3Dfacets%20title&offset=0&limit=0", []byte{}, 200)
@@ -1389,13 +1403,17 @@ func TestFacetsOK(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, int64(10), foundPrs.About.Count)
 	assert.Len(t, foundPrs.Items, 0)
-	assert.NotNil(t, foundPrs.About.Facets)
-	assert.Len(t, *foundPrs.About.Facets, 2)
+	require.NotNil(t, foundPrs.About.Facets)
+	require.Len(t, *foundPrs.About.Facets, 2)
 	assert.Equal(t, "requester_symbol", (*foundPrs.About.Facets)[0].Name)
-	assert.Len(t, (*foundPrs.About.Facets)[0].Values, 2)
+	require.Len(t, (*foundPrs.About.Facets)[0].Values, 2)
 	assert.Equal(t, requesterSymbols[0], (*foundPrs.About.Facets)[0].Values[0].Value)
+	require.NotNil(t, (*foundPrs.About.Facets)[0].Values[0].Label)
+	assert.Equal(t, requesterSymbols[0], *(*foundPrs.About.Facets)[0].Values[0].Label)
 	assert.Equal(t, int64(7), (*foundPrs.About.Facets)[0].Values[0].Count)
 	assert.Equal(t, requesterSymbols[1], (*foundPrs.About.Facets)[0].Values[1].Value)
+	require.NotNil(t, (*foundPrs.About.Facets)[0].Values[1].Label)
+	assert.Equal(t, requesterSymbols[1], *(*foundPrs.About.Facets)[0].Values[1].Label)
 	assert.Equal(t, int64(3), (*foundPrs.About.Facets)[0].Values[1].Count)
 	assert.Equal(t, "supplier_symbol", (*foundPrs.About.Facets)[1].Name)
 	if len((*foundPrs.About.Facets)[1].Values) == 1 {
@@ -1412,7 +1430,7 @@ func TestFacetsOK(t *testing.T) {
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, foundPrs.About.Count, int64(10))
 	assert.Len(t, foundPrs.Items, 0)
-	assert.NotNil(t, foundPrs.About.Facets)
+	require.NotNil(t, foundPrs.About.Facets)
 	assert.GreaterOrEqual(t, len(*foundPrs.About.Facets), 2)
 }
 
