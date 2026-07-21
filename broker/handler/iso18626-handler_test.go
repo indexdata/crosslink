@@ -14,8 +14,112 @@ import (
 
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 )
+
+type retryRequestRepo struct {
+	mocks.MockIllRepositorySuccess
+	transaction          ill_db.IllTransaction
+	selectedSupplier     ill_db.LocatedSupplier
+	savedSupplier        ill_db.LocatedSupplier
+	savedSupplierPresent bool
+}
+
+func (r *retryRequestRepo) WithTxFunc(ctx common.ExtendedContext, fn func(ill_db.IllRepo) error) error {
+	return fn(r)
+}
+
+func (r *retryRequestRepo) GetIllTransactionByRequesterRequestIdForUpdate(ctx common.ExtendedContext, requesterRequestID pgtype.Text) (ill_db.IllTransaction, error) {
+	return r.transaction, nil
+}
+
+func (r *retryRequestRepo) GetSelectedSupplierForIllTransaction(ctx common.ExtendedContext, illTransID string) (ill_db.LocatedSupplier, error) {
+	return r.selectedSupplier, nil
+}
+
+func (r *retryRequestRepo) SaveLocatedSupplier(ctx common.ExtendedContext, params ill_db.SaveLocatedSupplierParams) (ill_db.LocatedSupplier, error) {
+	r.savedSupplier = ill_db.LocatedSupplier(params)
+	r.savedSupplierPresent = true
+	return r.savedSupplier, nil
+}
+
+func TestHandleRetryRequestResetsReusedSelectedSupplierAttempt(t *testing.T) {
+	oldInfo := iso18626.BibliographicInfo{SupplierUniqueRecordId: "same-item", Title: "Same title"}
+	repo := &retryRequestRepo{
+		transaction: ill_db.IllTransaction{
+			ID: "transaction-id",
+			IllTransactionData: ill_db.IllTransactionData{
+				BibliographicInfo: oldInfo,
+			},
+		},
+		selectedSupplier: ill_db.LocatedSupplier{
+			ID:                "supplier-id",
+			SupplierStatus:    ill_db.SupplierStateSelectedPg,
+			LastStatus:        pgtype.Text{String: string(iso18626.TypeStatusRetryPossible), Valid: true},
+			PrevStatus:        pgtype.Text{String: string(iso18626.TypeStatusWillSupply), Valid: true},
+			LastReason:        pgtype.Text{String: string(iso18626.TypeReasonForMessageStatusChange), Valid: true},
+			PrevReason:        pgtype.Text{String: string(iso18626.TypeReasonForMessageRequestResponse), Valid: true},
+			SupplierRequestID: pgtype.Text{String: "old-supplier-request-id", Valid: true},
+		},
+	}
+	requestType := iso18626.TypeRequestTypeRetry
+	request := &iso18626.Request{
+		Header:            iso18626.Header{RequestingAgencyRequestId: "retry-request-id"},
+		BibliographicInfo: oldInfo,
+		ServiceInfo: &iso18626.ServiceInfo{
+			RequestType:                       &requestType,
+			RequestingAgencyPreviousRequestId: "previous-request-id",
+		},
+	}
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	id, lookupChanged, err := handleRetryRequest(ctx, request, repo)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "transaction-id", id)
+	assert.False(t, lookupChanged)
+	if assert.True(t, repo.savedSupplierPresent) {
+		assert.Equal(t, ill_db.SupplierStateSelectedPg, repo.savedSupplier.SupplierStatus)
+		assert.False(t, repo.savedSupplier.LastStatus.Valid)
+		assert.False(t, repo.savedSupplier.LastReason.Valid)
+		assert.False(t, repo.savedSupplier.SupplierRequestID.Valid)
+		assert.Equal(t, string(iso18626.TypeStatusWillSupply), repo.savedSupplier.PrevStatus.String)
+		assert.Equal(t, string(iso18626.TypeReasonForMessageRequestResponse), repo.savedSupplier.PrevReason.String)
+	}
+}
+
+func TestHandleRetryRequestLeavesOldSupplierForChangedLookup(t *testing.T) {
+	repo := &retryRequestRepo{
+		transaction: ill_db.IllTransaction{
+			ID: "transaction-id",
+			IllTransactionData: ill_db.IllTransactionData{
+				BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "old-item"},
+			},
+		},
+		selectedSupplier: ill_db.LocatedSupplier{
+			ID:         "supplier-id",
+			LastStatus: pgtype.Text{String: string(iso18626.TypeStatusRetryPossible), Valid: true},
+		},
+	}
+	requestType := iso18626.TypeRequestTypeRetry
+	request := &iso18626.Request{
+		Header:            iso18626.Header{RequestingAgencyRequestId: "retry-request-id"},
+		BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "new-item"},
+		ServiceInfo: &iso18626.ServiceInfo{
+			RequestType:                       &requestType,
+			RequestingAgencyPreviousRequestId: "previous-request-id",
+		},
+	}
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	id, lookupChanged, err := handleRetryRequest(ctx, request, repo)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "transaction-id", id)
+	assert.True(t, lookupChanged)
+	assert.False(t, repo.savedSupplierPresent)
+}
 
 func TestGetSupplierSymbol(t *testing.T) {
 	header := &iso18626.Header{

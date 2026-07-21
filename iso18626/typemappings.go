@@ -23,9 +23,9 @@ const TypeStatusEmpty = TypeStatus("")
 var _StatusOrder = []TypeStatus{
 	TypeStatusEmpty,
 	TypeStatusRequestReceived,
-	TypeStatusRetryPossible,
 	TypeStatusExpectToSupply,
 	TypeStatusWillSupply,
+	TypeStatusRetryPossible,
 	TypeStatusUnfilled,
 	TypeStatusLoaned,
 	TypeStatusOverdue,
@@ -38,6 +38,7 @@ var _StatusOrder = []TypeStatus{
 }
 
 var _Terminals = []TypeStatus{
+	TypeStatusRetryPossible,
 	TypeStatusUnfilled,
 	TypeStatusCancelled,
 	TypeStatusCompletedWithoutReturn,

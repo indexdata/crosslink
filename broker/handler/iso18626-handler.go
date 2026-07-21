@@ -284,6 +284,17 @@ func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, r
 
 		newParams := catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo)
 		retryLookupChanged = oldParams != newParams
+		if !retryLookupChanged {
+			// RetryPossible terminates the previous supplier request. When the
+			// lookup is unchanged, the same selected supplier is reused for a new
+			// request, so clear the fields that belong to the completed attempt.
+			selSup.LastStatus = pgtype.Text{}
+			selSup.LastReason = pgtype.Text{}
+			selSup.SupplierRequestID = pgtype.Text{}
+			if _, err = repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(selSup)); err != nil {
+				return err
+			}
+		}
 
 		timestamp := pgtype.Timestamp{
 			Time:  request.Header.Timestamp.Time,
