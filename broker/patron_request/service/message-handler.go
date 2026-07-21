@@ -233,6 +233,9 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	switch sam.StatusInfo.Status {
 	case iso18626.TypeStatusExpectToSupply:
 		eventName = SupplierExpectToSupply
+		if pr.RequesterSymbol.String == supSymbol {
+			eventName = SupplierExpectToSupplyLocal
+		}
 	case iso18626.TypeStatusWillSupply:
 		if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse {
 			if sam.MessageInfo.AnswerYesNo != nil && *sam.MessageInfo.AnswerYesNo == iso18626.TypeYesNoY {

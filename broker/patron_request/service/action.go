@@ -369,6 +369,12 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		return a.acceptRetryBorrowingRequest(ctx, pr)
 	case BorrowerActionSendNotification:
 		return a.sendNotificationBorrowingRequest(ctx, pr, params)
+	case BorrowerActionCancel:
+		return a.cancelLocalBorrowingRequest(pr)
+	case BorrowerActionCannotSupplyLocally:
+		return a.cannotSupplyLocallyBorrowingRequest(ctx, pr, params)
+	case BorrowerActionFillLocally:
+		return a.fillLocallyBorrowingRequest(ctx, pr, params)
 	default:
 		status, result := logActionErrorAndReturnResult(ctx, "borrower action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -698,6 +704,23 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 }
 
 func (a *PatronRequestActionService) sendNotificationBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
+	if !a.emailService.IsReadyToSend() {
+		return actionExecutionResult{status: events.EventStatusSuccess, result: &events.EventResult{CommonEventData: events.CommonEventData{Note: "email service is not ready to send"}}, pr: pr}
+	}
+	return a.sendEmailNotification(ctx, pr, params, pr.RequesterSymbol.String)
+}
+
+func (a *PatronRequestActionService) cancelLocalBorrowingRequest(pr pr_db.PatronRequest) actionExecutionResult {
+	result := events.EventResult{}
+	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
+}
+
+func (a *PatronRequestActionService) cannotSupplyLocallyBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
+	// Should do the same as when supplier sends cannot supply
+	return a.cannotSupplyLenderRequest(ctx, pr, params)
+}
+
+func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
 	if !a.emailService.IsReadyToSend() {
 		return actionExecutionResult{status: events.EventStatusSuccess, result: &events.EventResult{CommonEventData: events.CommonEventData{Note: "email service is not ready to send"}}, pr: pr}
 	}

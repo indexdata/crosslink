@@ -26,6 +26,7 @@ func TestNewReturnableActionMapping(t *testing.T) {
 		BorrowerStateCheckedIn:        {{actionName: BorrowerActionShipReturn}},
 		BorrowerStateRetryPending:     {{actionName: BorrowerActionAcceptRetry}, {actionName: BorrowerActionRejectRetry}},
 		BorrowerStateUnfilled:         {{actionName: BorrowerActionSendNotification, auto: true}},
+		BorrowerStateLocalSupply:      {{actionName: BorrowerActionFillLocally}, {actionName: BorrowerActionCancel}, {actionName: BorrowerActionCannotSupplyLocally}},
 	}
 
 	lenderStateActionMapping := map[pr_db.PatronRequestState][]PatronRequestAction{

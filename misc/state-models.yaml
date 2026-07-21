@@ -49,6 +49,27 @@ stateModels:
               success: SENT
               duplicate: CLOSED_DUPLICATE
 
+      - name: LOCAL_SUPPLY
+        display: Local Supply
+        desc: The requested item is available locally
+        side: REQUESTER
+        primaryAction: fill-locally
+        needsAttention: true
+        editable: true
+        actions:
+          - name: fill-locally
+            desc: Fill the request locally
+            transitions:
+              success: COMPLETED
+          - name: cancel
+            desc: Cancel the local supply
+            transitions:
+              success: CANCELLED
+          - name: cannot-supply-locally
+            desc: Cannot supply locally
+            transitions:
+              success: SENT
+
       - name: SENT
         display: Sent
         desc: Request is sent
@@ -56,6 +77,9 @@ stateModels:
         events:
           - name: expect-to-supply
             desc: "Supplier indicates an intention to supply (ISO18626 ExpectToSupply)"
+            transition: SUPPLIER_LOCATED
+          - name: expect-to-supply-local
+            desc: "Local supplier indicates an intention to supply (ISO18626 ExpectToSupply)"
             transition: SUPPLIER_LOCATED
           - name: will-supply
             desc: "Supplier will supply without conditions (ISO18626 WillSupply)"
