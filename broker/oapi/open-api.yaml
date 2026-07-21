@@ -130,21 +130,17 @@ components:
             peersLink:
               type: string
               description: Link to peers
-            eventsLink:
+            borrowingRequestsLink:
               type: string
-              description: Link to events
-            locatedSuppliersLink:
+              description: Link to borrowing requests
+            lendingRequestsLink:
               type: string
-              description: Link to located suppliers
-            patronRequestsLink:
-              type: string
-              description: Link to patron request
+              description: Link to lending requests
           required:
-            - eventsLink
+            - borrowingRequestsLink
             - illTransactionsLink
+            - lendingRequestsLink
             - peersLink
-            - locatedSuppliersLink
-            - patronRequestsLink
       required:
         - revision
         - signature
