@@ -257,6 +257,9 @@ components:
         catalogConfig:
           description: Configuration for catalog lookup (institutional or consortial).
           $ref: '#/components/schemas/CatalogConfig'
+        holdingsPolicy:
+          description: Policy that determines whether and in which order holdings may supply an item.
+          $ref: '#/components/schemas/HoldingsPolicy'
         vendor:
           type: string
           description: ISO18626 vendor type
@@ -287,6 +290,106 @@ components:
         metadataFormat:
           $ref: '#/components/schemas/MetadataParserConfig'
       additionalProperties: false
+
+    HoldingsPolicy:
+      type: object
+      required:
+        - locations
+        - shelvingLocations
+        - locationPolicies
+        - itemLoanPolicies
+      properties:
+        locations:
+          type: array
+          items:
+            $ref: '#/components/schemas/HoldingsLocation'
+        shelvingLocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/HoldingsShelvingLocation'
+        locationPolicies:
+          type: array
+          items:
+            $ref: '#/components/schemas/HoldingsLocationPolicy'
+        itemLoanPolicies:
+          type: array
+          items:
+            $ref: '#/components/schemas/HoldingsItemLoanPolicy'
+      additionalProperties: false
+
+    HoldingsLocation:
+      type: object
+      required:
+        - code
+        - name
+        - supplyPreference
+      properties:
+        code:
+          type: string
+          description: Location code (for example, "MAIN").
+        name:
+          type: string
+          description: Human-readable location name (for example, "Main Library").
+        supplyPreference:
+          $ref: '#/components/schemas/HoldingsSupplyPreference'
+      additionalProperties: false
+
+    HoldingsShelvingLocation:
+      type: object
+      required:
+        - code
+        - name
+        - supplyPreference
+      properties:
+        code:
+          type: string
+          description: Shelving location code (for example, "STACKS").
+        name:
+          type: string
+          description: Human-readable shelving location name (for example, "Stacks").
+        supplyPreference:
+          $ref: '#/components/schemas/HoldingsSupplyPreference'
+      additionalProperties: false
+
+    HoldingsLocationPolicy:
+      type: object
+      required:
+        - shelvingLocationCode
+        - supplyPreference
+      properties:
+        locationCode:
+          type: string
+          description: Location code. When omitted, the override applies across all locations.
+        shelvingLocationCode:
+          type: string
+          description: Shelving location code to which the override applies.
+        supplyPreference:
+          $ref: '#/components/schemas/HoldingsSupplyPreference'
+      additionalProperties: false
+
+    HoldingsItemLoanPolicy:
+      type: object
+      required:
+        - code
+        - name
+        - lendable
+      properties:
+        code:
+          type: string
+          description: Item loan policy code (for example, "NORMAL").
+        name:
+          type: string
+          description: Human-readable item loan policy name (for example, "Normal loan").
+        lendable:
+          type: boolean
+          description: Whether items governed by this loan policy may be supplied.
+      additionalProperties: false
+
+    HoldingsSupplyPreference:
+      type: integer
+      minimum: -1
+      maximum: 10000
+      description: Supply preference where -1 disables supply, 0 means no preference, and 10000 is the highest preference.
 
     MetadataUpdateMode:
       type: string
