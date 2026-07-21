@@ -152,7 +152,7 @@ func Sanitize[T any](target *T) error {
 	}
 
 	v := reflect.ValueOf(target)
-	if v.Kind() != reflect.Ptr || v.IsNil() {
+	if v.Kind() != reflect.Pointer || v.IsNil() {
 		return errors.New("target must be a non-nil pointer to a struct")
 	}
 
@@ -189,7 +189,7 @@ func clearProtectedStruct(v reflect.Value) error {
 			if err := clearProtectedStruct(fieldValue); err != nil {
 				return err
 			}
-		case reflect.Ptr:
+		case reflect.Pointer:
 			if !fieldValue.IsNil() && fieldValue.Elem().Kind() == reflect.Struct {
 				if err := clearProtectedStruct(fieldValue.Elem()); err != nil {
 					return err
@@ -225,7 +225,7 @@ func clearProtectedValue(v reflect.Value) error {
 		v.Set(reflect.Zero(v.Type()))
 		return nil
 
-	case reflect.Ptr:
+	case reflect.Pointer:
 		elemType := v.Type().Elem()
 
 		switch elemType.Kind() {
@@ -267,7 +267,7 @@ func SplitQuery(queryString *string) (field *string, value *string, err error) {
 	}
 	parts := strings.SplitN(*queryString, "=", 2)
 	if len(parts) != 2 {
-		return nil, nil, errors.New("Malformed query string")
+		return nil, nil, errors.New("malformed query string")
 	}
 	return &parts[0], &parts[1], nil
 }

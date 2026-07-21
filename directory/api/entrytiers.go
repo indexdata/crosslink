@@ -38,13 +38,14 @@ func (a ApiImpl) AddTierForEntry(ctx context.Context, request AddTierForEntryReq
 
 	var orig db.Entry
 
-	if request.Key == AddTierForEntryParamsKeyById {
+	switch request.Key {
+	case AddTierForEntryParamsKeyById:
 		parsedId, perr := uuid.Parse(request.Value)
 		if perr != nil {
 			return AddTierForEntry400TextResponse("Error parsing id"), nil
 		}
 		orig, err = qtx.EntryByIdForUpdate(ctx, parsedId)
-	} else if request.Key == AddTierForEntryParamsKeyBySymbol {
+	case AddTierForEntryParamsKeyBySymbol:
 		authority, symbol, perr := resolveCombinedSymbol(request.Value)
 		if perr != nil {
 			return AddTierForEntry400TextResponse("Unable to parse symbol"), nil

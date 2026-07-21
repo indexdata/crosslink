@@ -53,18 +53,18 @@ func maybeUpdateEntryVendor(cur *string, patch nullable.Nullable[EntryVendor]) *
 }
 
 func isValidParentForType(entryType EntryType, parentEntry *db.Entry) (bool, string) {
-
-	if entryType == "Institution" {
+	switch entryType {
+	case "Institution":
 		if parentEntry.Type == "Consortium" {
 			return true, ""
 		}
 		return false, "Institution parent must be of type Consortium"
-	} else if entryType == "Branch" {
+	case "Branch":
 		if parentEntry.Type == "Institution" {
 			return true, ""
 		}
 		return false, "Branch parent must be of type Institution"
-	} else {
+	default:
 		return false, "Invalid type to have parent"
 	}
 }
@@ -571,14 +571,15 @@ func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (G
 		slog.ErrorContext(ctx, "Unable to get entry by symbol", "authority", ownSymbolAuthority, "institution", ownSymbolInstitution, "error", err)
 	}
 
-	if request.Key == GetEntryParamsKeyById {
+	switch request.Key {
+	case GetEntryParamsKeyById:
 		parsedId, perr := uuid.Parse(request.Value)
 		if perr != nil {
 			return GetEntry400TextResponse("Error parsing id"), nil
 		}
 		query = buildEntrySQL("WHERE e.id = $1")
 		args = []interface{}{parsedId}
-	} else if request.Key == GetEntryParamsKeyBySymbol {
+	case GetEntryParamsKeyBySymbol:
 		authority, symbol, perr := resolveCombinedSymbol(request.Value)
 		if perr != nil {
 			return GetEntry400TextResponse("No delimiter found or other issue parsing symbol"), nil
@@ -832,13 +833,14 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 	qtx := a.queries.WithTx(tx)
 
 	var orig db.Entry
-	if request.Key == UpdateEntryParamsKeyById {
+	switch request.Key {
+	case UpdateEntryParamsKeyById:
 		parsedId, perr := uuid.Parse(request.Value)
 		if perr != nil {
 			return UpdateEntry400TextResponse("Error parsing id"), nil
 		}
 		orig, err = qtx.EntryByIdForUpdate(ctx, parsedId)
-	} else if request.Key == UpdateEntryParamsKeyBySymbol {
+	case UpdateEntryParamsKeyBySymbol:
 		authority, symbol, perr := resolveCombinedSymbol(request.Value)
 		if perr != nil {
 			return UpdateEntry400TextResponse("No delimiter found or other issue parsing symbol"), nil
@@ -1175,13 +1177,14 @@ func (a ApiImpl) DeleteEntry(ctx context.Context, request DeleteEntryRequestObje
 	}
 
 	var err error
-	if request.Key == DeleteEntryParamsKeyById {
+	switch request.Key {
+	case DeleteEntryParamsKeyById:
 		parsedId, perr := uuid.Parse(request.Value)
 		if perr != nil {
 			return DeleteEntry400TextResponse("Error parsing id"), nil
 		}
 		err = a.queries.DeleteEntryById(ctx, parsedId)
-	} else if request.Key == DeleteEntryParamsKeyBySymbol {
+	case DeleteEntryParamsKeyBySymbol:
 		authority, symbol, perr := resolveCombinedSymbol(request.Value)
 		if perr != nil {
 			return DeleteEntry400TextResponse("No delimiter found or other issue parsing symbol"), nil

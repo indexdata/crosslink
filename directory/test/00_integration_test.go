@@ -45,10 +45,12 @@ func jsonReq(t *testing.T, method string, endpoint string, bodyStr string, addlH
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 	res := w.Result()
-	defer res.Body.Close()
 	data, err := io.ReadAll(res.Body)
 	if err != nil {
 		t.Errorf("Unexpected error reading response body %v", err)
+	}
+	if err := res.Body.Close(); err != nil {
+		t.Errorf("Unexpected error closing response body %v", err)
 	}
 	return res, string(data)
 }
@@ -80,7 +82,6 @@ func TestMain(m *testing.M) {
 
 	app.RunMigrateScripts()
 	dbpool = app.InitDbPool()
-	defer dbpool.Close()
 
 	// Set up fixtures so we can initialise the db with some test data
 	// These aren't aware of pgx so we need another connection to the db
@@ -90,8 +91,6 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
 		os.Exit(1)
 	}
-	defer stdDb.Close()
-
 	fixtures, err = testfixtures.New(
 		testfixtures.Database(stdDb),
 		testfixtures.Dialect("postgres"),
@@ -105,6 +104,11 @@ func TestMain(m *testing.M) {
 	handler = app.InitHandler(ctx, dbpool)
 
 	code := m.Run()
+	if err := stdDb.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "Unable to close fixture database connection: %v\n", err)
+		code = 1
+	}
+	dbpool.Close()
 
 	if err := pgContainer.Terminate(ctx); err != nil {
 		panic(fmt.Sprintf("failed to stop db container: %s", err))

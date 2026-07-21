@@ -83,13 +83,14 @@ func (a ApiImpl) AddNetworkForEntry(ctx context.Context, request AddNetworkForEn
 
 	var orig db.Entry
 
-	if request.Key == AddNetworkForEntryParamsKeyById {
+	switch request.Key {
+	case AddNetworkForEntryParamsKeyById:
 		parsedId, perr := uuid.Parse(request.Value)
 		if perr != nil {
 			return AddNetworkForEntry400TextResponse("Error parsing id"), nil
 		}
 		orig, err = qtx.EntryByIdForUpdate(ctx, parsedId)
-	} else if request.Key == AddNetworkForEntryParamsKeyBySymbol {
+	case AddNetworkForEntryParamsKeyBySymbol:
 		authority, symbol, perr := resolveCombinedSymbol(request.Value)
 		if perr != nil {
 			return AddNetworkForEntry400TextResponse("Unable to parse symbol"), nil
