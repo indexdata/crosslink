@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS entries (
 	phone_number varchar(255),
 	lms_location_code varchar(255),
 	lender_of_last_resort text[],
+	duplicate_check_window_hours integer CHECK (duplicate_check_window_hours >= 0),
 	hrid varchar(255) UNIQUE,
 	time_zone varchar(128)
 );
