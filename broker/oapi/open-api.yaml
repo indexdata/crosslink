@@ -97,8 +97,9 @@ components:
       name: facets
       in: query
       description: Comma separated list of facet names to include in the response.
-        Supported values are "requester_name", "requester_symbol", "supplier_name",
-        "supplier_symbol"; unsupported facet names result in a 400 response.
+        Supported values are "requester_symbol" and "supplier_symbol"; each facet
+        value carries the symbol as "value" and, when available, the peer name as
+        "label". Unsupported facet names result in a 400 response.
         For example "requester_symbol,supplier_symbol"
       style: form
       explode: false
@@ -109,8 +110,6 @@ components:
           enum:
             - requester_symbol
             - supplier_symbol
-            - requester_name
-            - supplier_name
   schemas:
     Index:
       type: object
@@ -241,6 +240,10 @@ components:
         value:
           type: string
           description: Facet value
+        label:
+          type: string
+          description: Human-readable name for the facet value, when one is
+            available. Omitted when the value has no associated name.
         count:
           type: integer
           format: int64
