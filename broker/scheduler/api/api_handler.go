@@ -22,14 +22,16 @@ import (
 type SchedulerApiHandler struct {
 	limitDefault   int32
 	schedRepo      sched_db.SchedRepo
+	eventRepo      events.EventRepo
 	tenantResolver *tenant.TenantResolver
 }
 
 // NewSchedulerApiHandler creates a SchedulerApiHandler.
-func NewSchedulerApiHandler(limitDefault int32, schedRepo sched_db.SchedRepo, tenantResolver *tenant.TenantResolver) SchedulerApiHandler {
+func NewSchedulerApiHandler(limitDefault int32, schedRepo sched_db.SchedRepo, eventRepo events.EventRepo, tenantResolver *tenant.TenantResolver) SchedulerApiHandler {
 	return SchedulerApiHandler{
 		limitDefault:   limitDefault,
 		schedRepo:      schedRepo,
+		eventRepo:      eventRepo,
 		tenantResolver: tenantResolver,
 	}
 }
@@ -39,7 +41,7 @@ func (h SchedulerApiHandler) GetBatchActions(w http.ResponseWriter, r *http.Requ
 	logParams := map[string]string{"method": "GetBatchActions"}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
-	owner, ok := h.resolveOwner(ctx, w, r, params.Symbol)
+	owners, ok := h.resolveOwnerScope(ctx, w, r, params.Symbol)
 	if !ok {
 		return
 	}
@@ -54,7 +56,7 @@ func (h SchedulerApiHandler) GetBatchActions(w http.ResponseWriter, r *http.Requ
 	}
 
 	items, count, err := h.schedRepo.GetScheduledTasks(ctx, sched_db.GetScheduledTasksParams{
-		Owner:  owner,
+		Owners: owners,
 		Limit:  limit,
 		Offset: offset,
 	})
@@ -65,9 +67,29 @@ func (h SchedulerApiHandler) GetBatchActions(w http.ResponseWriter, r *http.Requ
 
 	resp := schedoapi.BatchActions{
 		About: schedoapi.About(brokerapi.CollectAboutData(count, offset, limit, r)),
-		Items: toBatchActionList(items),
+		Items: toBatchActionList(r, items),
 	}
 	brokerapi.WriteJsonResponse(w, resp)
+}
+
+func (h SchedulerApiHandler) GetBatchActionsIdEvents(w http.ResponseWriter, r *http.Request, id string, params schedoapi.GetBatchActionsIdEventsParams) {
+	_, ctx, done := h.getScheduledTask(w, r, "GetBatchActionsIdEvents", id, params.Symbol)
+	if done {
+		return
+	}
+
+	eventList, err := h.eventRepo.GetBatchActionEvents(ctx, id)
+	if err != nil {
+		brokerapi.AddInternalError(ctx, w, err)
+		return
+	}
+	items := make([]schedoapi.Event, 0, len(eventList))
+	for _, event := range eventList {
+		items = append(items, schedoapi.Event(brokerapi.ToApiEvent(event, event.IllTransactionID, nil)))
+	}
+	brokerapi.WriteJsonResponse(w, schedoapi.Events{
+		About: schedoapi.About{Count: int64(len(items))}, Items: items,
+	})
 }
 
 // PostBatchActions creates a new batch action.
@@ -97,7 +119,7 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	owner, ok := h.resolveOwner(ctx, w, r, params.Symbol)
+	owner, ok := h.resolveConcreteOwner(ctx, w, r, params.Symbol)
 	if !ok {
 		return
 	}
@@ -142,7 +164,7 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 	w.Header().Set("Location", brokerapi.Link(r, brokerapi.Path("batch_actions", task.ID), nil))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(toBatchAction(task))
+	_ = json.NewEncoder(w).Encode(toBatchAction(r, task))
 }
 
 // GetBatchActionsId returns a single batch action by ID.
@@ -151,19 +173,19 @@ func (h SchedulerApiHandler) GetBatchActionsId(w http.ResponseWriter, r *http.Re
 	if done {
 		return
 	}
-	brokerapi.WriteJsonResponse(w, toBatchAction(task))
+	brokerapi.WriteJsonResponse(w, toBatchAction(r, task))
 }
 
 func (h SchedulerApiHandler) getScheduledTask(w http.ResponseWriter, r *http.Request, methodName string, id string, symbol *schedoapi.Symbol) (sched_db.ScheduledTask, common.ExtendedContext, bool) {
 	logParams := map[string]string{"method": methodName, "id": id}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
-	owner, ok := h.resolveOwner(ctx, w, r, symbol)
+	owners, ok := h.resolveOwnerScope(ctx, w, r, symbol)
 	if !ok {
 		return sched_db.ScheduledTask{}, ctx, true
 	}
 
-	task, err := h.schedRepo.GetScheduledTaskByIdAndOwner(ctx, id, owner)
+	task, err := h.schedRepo.GetScheduledTaskById(ctx, id, owners)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			brokerapi.AddNotFoundError(w)
@@ -184,17 +206,17 @@ func (h SchedulerApiHandler) DeleteBatchActionsId(w http.ResponseWriter, r *http
 	logParams := map[string]string{"method": "DeleteBatchActionsId", "id": id}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
-	owner, ok := h.resolveOwner(ctx, w, r, params.Symbol)
+	owners, ok := h.resolveOwnerScope(ctx, w, r, params.Symbol)
 	if !ok {
 		return
 	}
 
 	err := h.schedRepo.WithTxFunc(ctx, func(schedRepo sched_db.SchedRepo) error {
-		task, inErr := schedRepo.GetScheduledTaskByIdAndOwner(ctx, id, owner)
+		task, inErr := schedRepo.GetScheduledTaskById(ctx, id, owners)
 		if inErr != nil {
 			return inErr
 		}
-		return schedRepo.DeleteScheduledTask(ctx, task.ID, owner)
+		return schedRepo.DeleteScheduledTask(ctx, task.ID, owners)
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -252,7 +274,7 @@ func (h SchedulerApiHandler) PutBatchActionsId(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	brokerapi.WriteJsonResponse(w, toBatchAction(task))
+	brokerapi.WriteJsonResponse(w, toBatchAction(r, task))
 }
 
 func (h SchedulerApiHandler) PostBatchActionsIdDisable(w http.ResponseWriter, r *http.Request, id string, params schedoapi.PostBatchActionsIdDisableParams) {
@@ -283,9 +305,24 @@ func (h SchedulerApiHandler) PostBatchActionsIdEnable(w http.ResponseWriter, r *
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// resolveOwner resolves the tenant and returns the owner symbol.
-// Writes an error response and returns false on failure.
-func (h SchedulerApiHandler) resolveOwner(ctx common.ExtendedContext, w http.ResponseWriter, r *http.Request, symbol *string) (string, bool) {
+// resolveOwnerScope returns the owners the request may access. A nil scope
+// means unrestricted master access.
+func (h SchedulerApiHandler) resolveOwnerScope(ctx common.ExtendedContext, w http.ResponseWriter, r *http.Request, symbol *string) ([]string, bool) {
+	t, err := h.tenantResolver.Resolve(ctx, r, symbol)
+	if err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return nil, false
+	}
+	owners, err := t.GetOwnedSymbols()
+	if err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return nil, false
+	}
+	return owners, true
+}
+
+// resolveConcreteOwner resolves the single owner required when creating a task.
+func (h SchedulerApiHandler) resolveConcreteOwner(ctx common.ExtendedContext, w http.ResponseWriter, r *http.Request, symbol *string) (string, bool) {
 	t, err := h.tenantResolver.Resolve(ctx, r, symbol)
 	if err != nil {
 		brokerapi.AddBadRequestError(ctx, w, err)
@@ -296,10 +333,14 @@ func (h SchedulerApiHandler) resolveOwner(ctx common.ExtendedContext, w http.Res
 		brokerapi.AddBadRequestError(ctx, w, err)
 		return "", false
 	}
+	if owner == "" {
+		brokerapi.AddBadRequestError(ctx, w, errors.New("symbol must be specified when creating a batch action with master access"))
+		return "", false
+	}
 	return owner, true
 }
 
-func toBatchAction(task sched_db.ScheduledTask) schedoapi.BatchAction {
+func toBatchAction(r *http.Request, task sched_db.ScheduledTask) schedoapi.BatchAction {
 	actionData := task.ActionData.BatchActionData
 	if actionData == nil { // Prevent panic for nil, should never happen
 		actionData = &events.BatchActionData{}
@@ -312,6 +353,7 @@ func toBatchAction(task sched_db.ScheduledTask) schedoapi.BatchAction {
 		CreatedAt:  task.CreatedAt.Time,
 		BatchQuery: actionData.Selector,
 		Active:     active,
+		EventsLink: brokerapi.Link(r, brokerapi.Path("batch_actions", task.ID, "events"), nil),
 	}
 	if len(task.ActionData.CustomData) > 0 {
 		resp.ActionParams = &task.ActionData.CustomData
@@ -328,11 +370,11 @@ func toBatchAction(task sched_db.ScheduledTask) schedoapi.BatchAction {
 	return resp
 }
 
-func toBatchActionList(items []sched_db.ScheduledTask) []schedoapi.BatchAction {
+func toBatchActionList(r *http.Request, items []sched_db.ScheduledTask) []schedoapi.BatchAction {
 	result := make([]schedoapi.BatchAction, 0, len(items))
 	for _, task := range items {
 		if task.ActionData.BatchActionData != nil {
-			result = append(result, toBatchAction(task))
+			result = append(result, toBatchAction(r, task))
 		}
 	}
 	return result

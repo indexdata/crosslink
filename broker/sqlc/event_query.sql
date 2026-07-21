@@ -70,6 +70,13 @@ FROM event
 WHERE patron_request_id = $1
 ORDER BY timestamp;
 
+-- name: GetBatchActionEvents :many
+SELECT sqlc.embed(event)
+FROM event
+WHERE event_name = 'invoke-batch-action'
+  AND event_data -> 'batchActionData' ->> 'taskId' = sqlc.arg(task_id)::text
+ORDER BY timestamp DESC;
+
 -- name: SaveEvent :one
 INSERT INTO event (
     id, timestamp, ill_transaction_id, parent_id, event_type, event_name, event_status, event_data, result_data, last_signal, patron_request_id

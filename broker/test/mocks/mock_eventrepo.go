@@ -82,6 +82,10 @@ func (r *MockEventRepositorySuccess) GetIllTransactionEvents(ctx common.Extended
 	}}, 0, nil
 }
 
+func (r *MockEventRepositorySuccess) GetBatchActionEvents(ctx common.ExtendedContext, taskID string) ([]events.Event, error) {
+	return nil, nil
+}
+
 func (r *MockEventRepositorySuccess) DeleteEventsByIllTransaction(ctx common.ExtendedContext, illTransId string) error {
 	return nil
 }
@@ -138,6 +142,10 @@ func (r *MockEventRepositoryError) Notify(ctx common.ExtendedContext, eventId st
 
 func (r *MockEventRepositoryError) GetIllTransactionEvents(ctx common.ExtendedContext, id string) ([]events.Event, int64, error) {
 	return []events.Event{}, 0, errors.New("DB error")
+}
+
+func (r *MockEventRepositoryError) GetBatchActionEvents(ctx common.ExtendedContext, taskID string) ([]events.Event, error) {
+	return nil, errors.New("event repo error")
 }
 
 func (r *MockEventRepositoryError) DeleteEventsByIllTransaction(ctx common.ExtendedContext, illTransId string) error {

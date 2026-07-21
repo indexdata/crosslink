@@ -19,6 +19,15 @@
           "methods": [
             "GET"
           ],
+          "pathPattern": "/broker/ill_transactions/{id}/events",
+          "permissionsRequired": [
+            "broker.ill_transactions.item.events.get"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
           "pathPattern": "/broker/ill_transactions",
           "permissionsRequired": [
             "broker.ill_transactions.get"
@@ -269,6 +278,15 @@
         },
         {
           "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/batch_actions/{id}/events",
+          "permissionsRequired": [
+            "broker.batch_actions.item.events.get"
+          ]
+        },
+        {
+          "methods": [
             "PUT"
           ],
           "pathPattern": "/broker/batch_actions/{id}",
@@ -360,6 +378,7 @@
       "visible": true,
       "subPermissions": [
         "broker.ill_transactions.item.get",
+        "broker.ill_transactions.item.events.get",
         "broker.ill_transactions.get",
         "broker.located_suppliers.get",
         "broker.events.get",
@@ -381,6 +400,11 @@
       "description": "Read ILL transactions",
       "displayName": "Broker - read ILL transactions",
       "permissionName": "broker.ill_transactions.get"
+    },
+    {
+      "description": "Read events for an ILL transaction",
+      "displayName": "Broker - read ILL transaction events",
+      "permissionName": "broker.ill_transactions.item.events.get"
     },
     {
       "description": "Read located suppliers",
@@ -498,6 +522,11 @@
       "permissionName": "broker.batch_actions.item.get"
     },
     {
+      "description": "Read events for a batch action",
+      "displayName": "Broker - read batch action events",
+      "permissionName": "broker.batch_actions.item.events.get"
+    },
+    {
       "description": "Update a batch action",
       "displayName": "Broker - update batch action",
       "permissionName": "broker.batch_actions.item.put"
@@ -580,7 +609,8 @@
       "visible": true,
       "subPermissions": [
         "broker.batch_actions.get",
-        "broker.batch_actions.item.get"
+        "broker.batch_actions.item.get",
+        "broker.batch_actions.item.events.get"
       ]
     },
     {
@@ -673,6 +703,7 @@
       "visible": true,
       "subPermissions": [
         "broker.ill_transactions.item.get",
+        "broker.ill_transactions.item.events.get",
         "broker.ill_transactions.get",
         "broker.located_suppliers.get",
         "broker.events.get",
@@ -701,6 +732,7 @@
         "broker.batch_actions.get",
         "broker.batch_actions.post",
         "broker.batch_actions.item.get",
+        "broker.batch_actions.item.events.get",
         "broker.batch_actions.item.put",
         "broker.batch_actions.item.delete",
         "broker.batch_actions.item.enable.post",

@@ -41,22 +41,21 @@ UPDATE SKIP LOCKED
     )
     RETURNING sqlc.embed(scheduled_task);
 
--- name: GetScheduledTaskByIdAndOwner :one
+-- name: GetScheduledTaskById :one
 SELECT sqlc.embed(scheduled_task)
 FROM scheduled_task
-WHERE id = $1
-  AND owner = $2;
+WHERE id = sqlc.arg(id)
+  AND (sqlc.arg(owners)::text[] IS NULL OR owner = ANY(sqlc.arg(owners)::text[]));
 
 -- name: GetScheduledTasks :many
 SELECT sqlc.embed(scheduled_task), COUNT(*) OVER () as full_count
 FROM scheduled_task
-WHERE owner = $3
+WHERE sqlc.arg(owners)::text[] IS NULL OR owner = ANY(sqlc.arg(owners)::text[])
 ORDER BY created_at LIMIT $1
 OFFSET $2;
 
 -- name: DeleteScheduledTask :exec
 DELETE
 FROM scheduled_task
-WHERE id = $1
-  AND owner = $2;
-
+WHERE id = sqlc.arg(id)
+  AND (sqlc.arg(owners)::text[] IS NULL OR owner = ANY(sqlc.arg(owners)::text[]));
