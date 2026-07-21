@@ -1340,6 +1340,9 @@ func TestHandleInvokeBorrowerActionAcceptRetryAutoActionCreateTaskError(t *testi
 	assert.Equal(t, string(BorrowerActionValidate), mockPrRepo.savedPr.LastAction.String)
 	assert.Equal(t, ActionOutcomeFailure, mockPrRepo.savedPr.LastActionOutcome.String)
 	assert.Equal(t, string(events.EventStatusError), mockPrRepo.savedPr.LastActionResult.String)
+	assert.Equal(t, "REQ1-2", mockPrRepo.createdPr.ID)
+	assert.Equal(t, "REQ1-2", mockPrRepo.createdPr.RequesterReqID.String)
+	assert.Equal(t, "REQ1-2", mockPrRepo.createdPr.IllRequest.Header.RequestingAgencyRequestId)
 }
 
 func TestHandleInvokeLenderActionAddConditionMissingConditionAndCost(t *testing.T) {
@@ -2563,6 +2566,7 @@ type MockPrRepo struct {
 	mock.Mock
 	pr_db.PgPrRepo
 	savedPr                              pr_db.PatronRequest
+	createdPr                            pr_db.PatronRequest
 	savedItems                           []pr_db.Item
 	savedNotifications                   []pr_db.Notification
 	markedConditionNotificationsReceipts []pr_db.MarkConditionNotificationsReceiptParams
@@ -2609,7 +2613,12 @@ func (r *MockPrRepo) CreatePatronRequest(ctx common.ExtendedContext, params pr_d
 		return pr_db.PatronRequest{}, errors.New("db error")
 	}
 	r.savedPr = pr_db.PatronRequest(params)
+	r.createdPr = r.savedPr
 	return r.savedPr, nil
+}
+
+func (r *MockPrRepo) GetNextHrid(ctx common.ExtendedContext, prefix string) (string, error) {
+	return strings.ToUpper(prefix) + "-2", nil
 }
 
 func (r *MockPrRepo) GetLendingRequestBySupplierSymbolAndRequesterReqId(ctx common.ExtendedContext, symbol string, requesterReqId string) (pr_db.PatronRequest, error) {
