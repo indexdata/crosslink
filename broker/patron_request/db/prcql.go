@@ -181,17 +181,33 @@ func ParsePatronRequestsCql(cqlString string) (pgcql.Query, error) {
 	return def.Parse(query, NumberBaseArgs+1)
 }
 
-// facetFieldPlaceholder is the column name used in the getPatronRequestsFacets SQL template.
-// GetPatronRequestsFacetsCql substitutes it with the validated facet field at runtime.
-const facetFieldPlaceholder = "requester_symbol"
+// facetValuePlaceholder and facetLabelPlaceholder are the placeholder column names
+// in the getPatronRequestsFacets SQL template. GetPatronRequestsFacetsCql substitutes
+// them with the requested facet's symbol (value) and peer-name (label) columns.
+const (
+	facetValuePlaceholder = "requester_symbol"
+	facetLabelPlaceholder = "requester_name"
+)
+
+// facetLabelColumns maps each supported facet field (a symbol column) to the
+// peer-name column used as its display label.
+var facetLabelColumns = map[string]string{
+	"requester_symbol": "requester_name",
+	"supplier_symbol":  "supplier_name",
+}
 
 func (q *Queries) GetPatronRequestsFacetsCql(ctx context.Context, db DBTX, facetField string, pgcql pgcql.Query) ([]GetPatronRequestsFacetsRow, error) {
 	if pgcql == nil {
 		return nil, fmt.Errorf("pgcql.Query must not be nil; use cql.allRecords=1 for no filter")
 	}
-	// facetField is validated against an allowlist by the caller (GetPatronRequestsFacets),
-	// so it is safe to substitute directly as a column name.
-	sql := strings.Replace(getPatronRequestsFacets, facetFieldPlaceholder, facetField, 1)
+	labelField, ok := facetLabelColumns[facetField]
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrUnsupportedFacet, facetField)
+	}
+	// facetField is validated against an allowlist by the caller (GetPatronRequestsFacets)
+	// and the map lookup above, so both columns are safe to substitute directly.
+	sql := strings.Replace(getPatronRequestsFacets, facetValuePlaceholder, facetField, 1)
+	sql = strings.Replace(sql, facetLabelPlaceholder, labelField, 1)
 
 	idx := strings.Index(sql, "GROUP BY")
 	if idx == -1 {
@@ -211,7 +227,7 @@ func (q *Queries) GetPatronRequestsFacetsCql(ctx context.Context, db DBTX, facet
 	var items []GetPatronRequestsFacetsRow
 	for rows.Next() {
 		var i GetPatronRequestsFacetsRow
-		if err := rows.Scan(&i.Value, &i.Count); err != nil {
+		if err := rows.Scan(&i.Value, &i.Label, &i.Count); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
