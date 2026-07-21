@@ -7,22 +7,24 @@ PGPASSWORD=<somepass> psql -p 54322 -U postgres -h <local host/ip> -c 'create da
 PGPASSWORD=<somepass> psql -p 54322 -U postgres -h <local host/ip> -d directory -a -f schema.sql
 ```
 
-Installing sqlc and oapi-codegen (probably good to contrive a way to add these as deps although the [tools.go](https://www.jvt.me/posts/2024/09/30/go-tools-module/) approach is a bit unwieldy it does seem like they have a proposal open with the core team to smooth this out a bit): 
+The SQLC and OpenAPI generator versions are pinned as Go tools in `go.mod`.
+Generate the database and API sources with:
+
 ```
-go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
-go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
+make generate
 ```
 
-Generating structs/interfaces for db and api:
+Generated Go sources are build artifacts and are not stored in the repository.
+The standard build, test, lint, and run targets generate them automatically:
+
 ```
-sqlc generate
-oapi-codegen --config=oapi-codegen.yaml api.yaml
+make all
+make check
+make lint
+make run
 ```
 
-Compiling:
-```
-go build
-```
+Run `make generate` before invoking `go build` or `go test` directly.
 
 # Some examples of repos using sqlc / some sort of api gen
 

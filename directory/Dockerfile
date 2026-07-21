@@ -10,15 +10,16 @@ COPY directory/go.mod directory/go.sum ./directory/
 # Set destination for COPY
 WORKDIR /app/directory
 
-# sources are generated before docker build
-# make sure make generate is run
-
 # see .dockerignore for what is getting copied
 COPY directory/ ./
 
 # download go deps, caches GOMODPATH
 RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
   GOWORK=off go mod download
+
+# Generate API and database code from the tracked specifications.
+RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
+  GOWORK=off go generate .
 
 # Build, caches GOCACHE
 RUN --mount=type=cache,sharing=shared,target=/root/.cache/go-build \

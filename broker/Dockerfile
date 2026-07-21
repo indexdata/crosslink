@@ -21,6 +21,12 @@ COPY ncip/ ./ncip
 COPY zoom/ ./zoom
 COPY testutil/ ./testutil
 
+# Directory generated sources are not stored in the repository.
+RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
+    cd /app/directory && \
+    GOWORK=off go mod download && \
+    GOWORK=off go generate .
+
 # copy broker manifests before sources to leverage docker cache for mod downloads
 COPY broker/go.mod broker/go.sum ./broker/
 
@@ -30,9 +36,6 @@ WORKDIR /app/broker
 # download broker module dependencies, use cached GOMODPATH for local builds
 RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
   go mod download
-
-# sources are generated before docker build
-# make sure make generate is run
 
 # copy broker sources (changes here won't invalidate deps cache)
 # see .dockerignore for what is getting copied

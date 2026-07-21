@@ -10,7 +10,7 @@ OAPI_CODEGEN ?= $(GO) tool oapi-codegen
 
 .PHONY: all docker generate generate-sqlc generate-api check checkinclgen run fmt fmt-check lint vulncheck clean deps-update tools-update
 
-all: generate $(BINARY)
+all: $(BINARY)
 
 docker:
 	cd .. && $(DOCKER) build -f ./directory/Dockerfile .
@@ -23,18 +23,18 @@ generate-sqlc:
 generate-api:
 	$(OAPI_CODEGEN) --config=oapi-codegen.yaml api.yaml
 
-$(BINARY): $(GOFILES)
+$(BINARY): generate $(GOFILES)
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
 
-checkinclgen:
+checkinclgen: generate
 	$(GO) test -v -cover -coverpkg=./... -coverprofile=$(COVERAGE) ./...
 
-check:
+check: generate
 	$(GO) test -v -coverpkg=./... -coverprofile=$(COVERAGE).tmp ./...
 	grep -v "\.gen\.go" $(COVERAGE).tmp | grep -v "/db/" | grep -v "/test/" > $(COVERAGE)
 	$(GO) tool cover -func $(COVERAGE)
 
-run: $(BINARY)
+run: generate
 	$(GO) run -buildvcs=true ./$(MAIN_PACKAGE)
 
 fmt:
@@ -59,4 +59,6 @@ tools-update:
 	$(GO) mod tidy
 
 clean:
-	rm -f $(BINARY) $(COVERAGE) $(COVERAGE).tmp
+	rm -f $(BINARY) $(COVERAGE) $(COVERAGE).tmp \
+		api/directory.gen.go \
+		db/db.go db/models.go db/query.sql.go

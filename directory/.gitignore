@@ -1,3 +1,7 @@
 directory
 coverage.out
 .vscode
+/api/directory.gen.go
+/db/db.go
+/db/models.go
+/db/query.sql.go
