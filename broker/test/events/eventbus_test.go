@@ -373,16 +373,32 @@ func TestGetBatchActionEvents(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	taskID := uuid.NewString()
 	otherTaskID := uuid.NewString()
+	patronRequestID := uuid.NewString()
+	otherPatronRequestID := uuid.NewString()
+	createPatronRequestForEventTest(t, patronRequestID)
+	createPatronRequestForEventTest(t, otherPatronRequestID)
 	now := time.Now()
-	for i, id := range []string{taskID, otherTaskID, taskID} {
+	type eventFixture struct {
+		taskID          string
+		eventName       events.EventName
+		patronRequestID string
+	}
+	fixtures := []eventFixture{
+		{taskID, events.EventNameInvokeBatchAction, events.DEFAULT_PATRON_REQUEST_ID},
+		{otherTaskID, events.EventNameInvokeBatchAction, events.DEFAULT_PATRON_REQUEST_ID},
+		{taskID, events.EventNameInvokeBatchAction, events.DEFAULT_PATRON_REQUEST_ID},
+		{taskID, events.EventNameInvokeBackgroundAction, patronRequestID},
+		{taskID, events.EventNameInvokeAction, otherPatronRequestID},
+	}
+	for i, fixture := range fixtures {
 		_, err := eventRepo.SaveEvent(ctx, events.SaveEventParams{
 			ID: uuid.NewString(), IllTransactionID: events.DEFAULT_ILL_TRANSACTION_ID,
-			PatronRequestID: events.DEFAULT_PATRON_REQUEST_ID,
+			PatronRequestID: fixture.patronRequestID,
 			Timestamp:       pgtype.Timestamp{Time: now.Add(time.Duration(i) * time.Second), Valid: true},
-			EventType:       events.EventTypeTask, EventName: events.EventNameInvokeBatchAction,
+			EventType:       events.EventTypeTask, EventName: fixture.eventName,
 			EventStatus: events.EventStatusSuccess,
 			EventData: events.EventData{CommonEventData: events.CommonEventData{
-				BatchActionData: &events.BatchActionData{TaskId: id},
+				BatchActionData: &events.BatchActionData{TaskId: fixture.taskID},
 			}},
 		})
 		assert.NoError(t, err)
@@ -390,11 +406,13 @@ func TestGetBatchActionEvents(t *testing.T) {
 
 	eventList, err := eventRepo.GetBatchActionEvents(ctx, taskID)
 	assert.NoError(t, err)
-	if assert.Len(t, eventList, 2) {
+	if assert.Len(t, eventList, 3) {
 		assert.True(t, eventList[0].Timestamp.Time.After(eventList[1].Timestamp.Time))
 		for _, event := range eventList {
 			assert.Equal(t, taskID, event.EventData.BatchActionData.TaskId)
 		}
+		assert.Equal(t, events.EventNameInvokeBackgroundAction, eventList[0].EventName)
+		assert.Equal(t, patronRequestID, eventList[0].PatronRequestID)
 	}
 }
 
