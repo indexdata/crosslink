@@ -219,7 +219,7 @@ func Init(ctx context.Context) (Context, error) {
 	}
 
 	schedRepoRepo := sched_db.CreateSchedRepo(pool)
-	schedApiHandler := schedapi.NewSchedulerApiHandler(API_PAGE_SIZE, schedRepoRepo, tenantResolver)
+	schedApiHandler := schedapi.NewSchedulerApiHandler(API_PAGE_SIZE, schedRepoRepo, eventRepo, tenantResolver)
 	if err = StartScheduler(ctx, schedRepoRepo, eventBus); err != nil {
 		return Context{}, err
 	}

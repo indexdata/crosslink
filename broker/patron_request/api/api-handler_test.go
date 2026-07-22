@@ -621,6 +621,19 @@ func TestGetPatronRequestsIdEventsNoSymbol(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 }
 
+func TestGetPatronRequestsIdEventsRejectsSyntheticIDs(t *testing.T) {
+	handler := NewPrApiHandler(nil, nil, nil, nil, nil, 10)
+	for _, id := range []string{events.DEFAULT_ILL_TRANSACTION_ID, events.DEFAULT_PATRON_REQUEST_ID} {
+		t.Run(id, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/patron_requests/"+id+"/events", nil)
+			rr := httptest.NewRecorder()
+			handler.GetPatronRequestsIdEvents(rr, req, id, proapi.GetPatronRequestsIdEventsParams{})
+			assert.Equal(t, http.StatusBadRequest, rr.Code)
+			assert.Contains(t, rr.Body.String(), "synthetic IDs are not allowed")
+		})
+	}
+}
+
 func TestGetPatronRequestsIdEventsDbError(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
