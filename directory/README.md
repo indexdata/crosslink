@@ -1,4 +1,4 @@
-# Directoryish tinkering
+# Directory tinkering
 
 Setting up a temporary db (just using public schema for now):
 ```

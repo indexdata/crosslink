@@ -121,7 +121,7 @@ func TestEntryCases(t *testing.T) {
 		{
 			name:        "GET entries with CQL query by name",
 			method:      http.MethodGet,
-			endpoint:    "/entries?q=name%3DAn%20Institution",
+			endpoint:    "/entries?cql=name%3DAn%20Institution",
 			status:      http.StatusOK,
 			resFile:     "entries-cql-name.get.res.json",
 			addlHeaders: institutionPermissionHeaders,
@@ -129,7 +129,7 @@ func TestEntryCases(t *testing.T) {
 		{
 			name:        "GET entries with CQL query by parent",
 			method:      http.MethodGet,
-			endpoint:    "/entries?q=parent%3D00000000-0000-0000-0000-000000000004",
+			endpoint:    "/entries?cql=parent%3D00000000-0000-0000-0000-000000000004",
 			status:      http.StatusOK,
 			resFile:     "entries-cql-parent.get.res.json",
 			addlHeaders: institutionPermissionHeaders,
@@ -137,7 +137,7 @@ func TestEntryCases(t *testing.T) {
 		{
 			name:        "GET entries with CQL wildcard query by description",
 			method:      http.MethodGet,
-			endpoint:    "/entries?q=description%3D%2Aparticular%2A",
+			endpoint:    "/entries?cql=description%3D%2Aparticular%2A",
 			status:      http.StatusOK,
 			resFile:     "entries-cql-desc.get.res.json",
 			addlHeaders: institutionPermissionHeaders,
@@ -145,14 +145,14 @@ func TestEntryCases(t *testing.T) {
 		{
 			name:        "GET entries with invalid CQL query",
 			method:      http.MethodGet,
-			endpoint:    "/entries?q=invalid%28%28%28",
+			endpoint:    "/entries?cql=invalid%28%28%28",
 			status:      http.StatusBadRequest,
 			addlHeaders: institutionPermissionHeaders,
 		},
 		{
 			name:        "GET entries with CQL query by type",
 			method:      http.MethodGet,
-			endpoint:    "/entries?q=type%3DConsortium",
+			endpoint:    "/entries?cql=type%3DConsortium",
 			status:      http.StatusOK,
 			resFile:     "entries-cql-type.get.res.json",
 			addlHeaders: institutionPermissionHeaders,
@@ -720,7 +720,7 @@ func TestEntrySystemReadAndSymbolTenantCQL(t *testing.T) {
 		"X-Okapi-Permissions": `["directory.system.all"]`,
 	}
 	query := url.QueryEscape(`symbol any "TEST:ANINST" and tenant="tenant-a"`)
-	res, data := jsonReq(t, http.MethodGet, "/entries?q="+query+"&limit=1", "", headers)
+	res, data := jsonReq(t, http.MethodGet, "/entries?cql="+query+"&limit=1", "", headers)
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("expected system CQL read status %d, got %d and body %s", http.StatusOK, res.StatusCode, data)
 	}

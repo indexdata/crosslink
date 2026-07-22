@@ -66,7 +66,6 @@ require (
 	github.com/cubicdaiya/gonp v1.0.4 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/distribution/reference v0.6.0 // indirect
-	github.com/docker/docker v28.5.2+incompatible // indirect
 	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dprotaso/go-yit v0.0.0-20250512143907-c109d19d21e6 // indirect
@@ -102,7 +101,6 @@ require (
 	github.com/moby/sys/user v0.4.0 // indirect
 	github.com/moby/sys/userns v0.1.0 // indirect
 	github.com/moby/term v0.5.2 // indirect
-	github.com/morikuni/aec v1.1.0 // indirect
 	github.com/ncruces/go-sqlite3 v0.32.0 // indirect
 	github.com/ncruces/julianday v1.0.0 // indirect
 	github.com/oapi-codegen/nullable v1.1.0 // indirect

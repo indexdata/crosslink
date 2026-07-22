@@ -463,10 +463,10 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 	ourEntry, _ := a.queries.EntryBySymbol(ctx,
 		db.EntryBySymbolParams{Authority: getSymbolAuthority(), Symbol: authData.GetInstitution()})
 
-	if request.Params.Q != nil && *request.Params.Q != "" {
+	if request.Params.Cql != nil && *request.Params.Cql != "" {
 		// Use CQL query
 		noBaseArgs := 0
-		res, err := handleEntryCQL(*request.Params.Q, noBaseArgs)
+		res, err := handleEntryCQL(*request.Params.Cql, noBaseArgs)
 		if err != nil {
 			return GetEntries400TextResponse(fmt.Sprintf("CQL parse error: %v", err)), nil
 		}

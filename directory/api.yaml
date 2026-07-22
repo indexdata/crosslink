@@ -1,7 +1,7 @@
 openapi: "3.0.0"
 info:
   version: 1.0.0
-  title: Directoryish API
+  title: Directory API
 servers:
   - url: /rsdir
 paths:
@@ -11,9 +11,9 @@ paths:
       description: Returns all entries from the system that the user has access to.
       operationId: getEntries
       parameters:
-        - name: q
+        - name: cql
           in: query
-          description: keywords to filter by
+          description: CQL query filter
           required: false
           style: form
           schema:

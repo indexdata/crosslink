@@ -230,7 +230,7 @@ func TestLookupMissingSymbols(t *testing.T) {
 	entries, cql, err := ad.Lookup(createLookupCtx(), p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 0)
-	assert.Equal(t, "?limit=1000&q=symbol+any+%22ISIL%3APEER%22+and+tenant%3D%22tenant1%22", cql)
+	assert.Equal(t, "?limit=1000&cql=symbol+any+%22ISIL%3APEER%22+and+tenant%3D%22tenant1%22", cql)
 }
 
 func TestLookupSendsSystemAndTenantHeaders(t *testing.T) {
@@ -257,7 +257,7 @@ func TestLookupSendsSystemAndTenantHeaders(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, `["directory.system.all"]`, permissionsHeader)
 	assert.Equal(t, "tenant1", tenantHeader)
-	assert.Equal(t, "limit=1000&q=symbol+any+%22ISIL%3APEER%22+and+tenant%3D%22tenant1%22", rawQuery)
+	assert.Equal(t, "limit=1000&cql=symbol+any+%22ISIL%3APEER%22+and+tenant%3D%22tenant1%22", rawQuery)
 	assert.Equal(t, "?"+rawQuery, cql)
 }
 

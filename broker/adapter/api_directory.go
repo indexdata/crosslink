@@ -48,7 +48,7 @@ func (a *ApiDirectory) getDirectory(ctx common.ExtendedContext, symbols []string
 		return []DirectoryEntry{}, "", fmt.Errorf("no symbols or tenant provided for directory lookup")
 	}
 	var dirEntries []DirectoryEntry
-	query := "?limit=1000&q=" + url.QueryEscape(cql)
+	query := "?limit=1000&cql=" + url.QueryEscape(cql)
 	fullUrl := durl + query
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullUrl, nil)
 	if err != nil {
