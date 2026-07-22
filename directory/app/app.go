@@ -106,14 +106,14 @@ func RunMigrateScripts() {
 	}
 	m, err := migrate.New(MigrationsFolder, migrationConnectionString)
 	if err != nil {
-		fmt.Println(err)
+		slog.Error("failed to initialize migrations", "error", err)
 		return
 	}
 
 	// Migrate up
 	err = m.Up()
 	if err != nil && err != migrate.ErrNoChange {
-		fmt.Println(err)
+		slog.Error("database migration failed", "error", err)
 		return
 	}
 }
