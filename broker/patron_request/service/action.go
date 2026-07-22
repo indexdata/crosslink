@@ -374,7 +374,7 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 	case BorrowerActionCannotSupplyLocally:
 		return a.cannotSupplyLocallyBorrowingRequest(ctx, pr, params)
 	case BorrowerActionFillLocally:
-		return a.fillLocallyBorrowingRequest(ctx, pr, params)
+		return a.fillLocallyBorrowingRequest(ctx, pr, lmsAdapter, illRequest, params)
 	default:
 		status, result := logActionErrorAndReturnResult(ctx, "borrower action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -720,11 +720,35 @@ func (a *PatronRequestActionService) cannotSupplyLocallyBorrowingRequest(ctx com
 	return a.cannotSupplyLenderRequest(ctx, pr, params)
 }
 
-func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
-	if !a.emailService.IsReadyToSend() {
-		return actionExecutionResult{status: events.EventStatusSuccess, result: &events.EventResult{CommonEventData: events.CommonEventData{Note: "email service is not ready to send"}}, pr: pr}
+func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
+	_, _, _, err := lmsAdapter.RequestItem(
+		pr.ID,
+		illRequest.BibliographicInfo.SupplierUniqueRecordId,
+		pr.Patron.String,
+		lmsAdapter.RequesterPickupLocation(),
+		lmsAdapter.ItemLocation(),
+	)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "LMS RequestItem failed", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	return a.sendEmailNotification(ctx, pr, params, pr.RequesterSymbol.String)
+
+	completedStatus := iso18626.TypeStatusLoanCompleted
+	if illRequest.ServiceInfo != nil && illRequest.ServiceInfo.ServiceType == iso18626.TypeServiceTypeCopy {
+		completedStatus = iso18626.TypeStatusCopyCompleted
+	}
+	result := events.EventResult{}
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
+		iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+			Note:             params.Note,
+		},
+		iso18626.StatusInfo{Status: completedStatus},
+		nil)
+	if result.OutgoingMessage.SupplyingAgencyMessage != nil {
+		setSupplierMessage(*result.OutgoingMessage.SupplyingAgencyMessage, &pr)
+	}
+	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
 func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) actionExecutionResult {
