@@ -1,4 +1,4 @@
-DROP INDEX idx_event_batch_action_task_timestamp;
+DROP INDEX IF EXISTS idx_event_batch_action_task_timestamp;
 
 CREATE INDEX idx_event_batch_action_task_timestamp
     ON event ((event_data -> 'batchActionData' ->> 'taskId'), timestamp DESC)
