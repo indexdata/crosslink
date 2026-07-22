@@ -23,6 +23,7 @@ type Holding struct {
 	LocalIdentifier  string
 	Location         string
 	ShelvingLocation string
+	ItemLoanPolicy   string
 	CallNumber       string
 	ItemId           string
 }

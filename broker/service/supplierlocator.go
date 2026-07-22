@@ -160,24 +160,12 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	holdingsLog["entries"] = holdingsResult
 
 	holdingsSymbols := make([]string, 0, len(holdingsResult))
-	symbolToLocalId := make(map[string]string, len(holdingsResult))
-	holdingSymbolCounts := make(map[string]int, len(holdingsResult))
+	holdingsBySymbol := make(map[string][]catalog.Holding, len(holdingsResult))
 	for _, holding := range holdingsResult {
-		holdingSymbolCounts[holding.Symbol]++
-		if holdingSymbolCounts[holding.Symbol] > 1 {
-			if holdingSymbolCounts[holding.Symbol] == 2 {
-				ctx.Logger().Warn("Multiple holdings for supplier, only first holding will be used",
-					"symbol", holding.Symbol,
-					"localIdentifier", holding.LocalIdentifier,
-					"supplierUniqueRecordId", lookupParams.Identifier,
-					"isbn", lookupParams.Isbn,
-					"issn", lookupParams.Issn,
-				)
-			}
-			continue
+		if len(holdingsBySymbol[holding.Symbol]) == 0 {
+			holdingsSymbols = append(holdingsSymbols, holding.Symbol)
 		}
-		holdingsSymbols = append(holdingsSymbols, holding.Symbol)
-		symbolToLocalId[holding.Symbol] = holding.LocalIdentifier
+		holdingsBySymbol[holding.Symbol] = append(holdingsBySymbol[holding.Symbol], holding)
 	}
 	peers, query, err := s.illRepo.GetCachedPeersBySymbols(ctx, holdingsSymbols, s.dirAdapter)
 	var directoryLog = map[string]any{}
@@ -216,7 +204,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 			}
 			dirEntriesLog = append(dirEntriesLog, map[string]any{"id": peer.ID, "name": peer.Name, "symbols": symbolsLog, "branchSymbols": branchSymbolsLog})
 			for _, sym := range symbols {
-				if localId, ok := symbolToLocalId[sym]; ok {
+				if holdings, ok := holdingsBySymbol[sym]; ok {
 					local := false
 					supplierStatus := ill_db.SupplierStateNewPg
 					if illTrans.RequesterSymbol.Valid && sym == illTrans.RequesterSymbol.String {
@@ -226,15 +214,22 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 							local = true
 						}
 					}
-					potentialSuppliers = append(potentialSuppliers, adapter.Supplier{
-						PeerId:          peer.ID,
-						CustomData:      peer.CustomData,
-						LocalIdentifier: localId,
-						Ratio:           getPeerRatio(peer),
-						Symbol:          sym,
-						Local:           local,
-						SupplierStatus:  supplierStatus,
-					})
+					for _, holding := range holdings {
+						supplier := adapter.Supplier{
+							PeerId:           peer.ID,
+							CustomData:       peer.CustomData,
+							LocalIdentifier:  holding.LocalIdentifier,
+							Ratio:            getPeerRatio(peer),
+							Symbol:           sym,
+							Local:            local,
+							SupplierStatus:   supplierStatus,
+							Location:         holding.Location,
+							ShelvingLocation: holding.ShelvingLocation,
+							ItemLoanPolicy:   holding.ItemLoanPolicy,
+						}
+						applyHoldingsPolicy(&supplier)
+						potentialSuppliers = append(potentialSuppliers, supplier)
+					}
 				}
 			}
 		}
@@ -247,6 +242,8 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	var rotaInfo adapter.RotaInfo
 	potentialSuppliers, rotaInfo = s.dirAdapter.FilterAndSort(ctx, potentialSuppliers, requester.CustomData,
 		illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.BillingInfo)
+	// A located supplier is symbol-level, so keep the best eligible holding for each symbol after sorting.
+	potentialSuppliers = firstSupplierPerSymbol(potentialSuppliers)
 	if len(potentialSuppliers) == 0 {
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no located suppliers match",
 			map[string]any{"holdings": holdingsLog, "directory": directoryLog, ROTA_INFO_KEY: rotaInfo})
@@ -293,6 +290,57 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	return events.EventStatusSuccess, &events.EventResult{
 		CustomData: map[string]any{"suppliers": locatedSuppliers, "holdings": holdingsLog, "directory": directoryLog, ROTA_INFO_KEY: rotaInfo},
 	}
+}
+
+func applyHoldingsPolicy(supplier *adapter.Supplier) {
+	policy := supplier.CustomData.HoldingsPolicy
+	if policy == nil {
+		return
+	}
+	for _, location := range policy.Locations {
+		if location.Code == supplier.Location {
+			supplier.LocationPreference = location.SupplyPreference
+			break
+		}
+	}
+	for _, shelvingLocation := range policy.ShelvingLocations {
+		if shelvingLocation.Code == supplier.ShelvingLocation {
+			supplier.ShelvingPreference = shelvingLocation.SupplyPreference
+			break
+		}
+	}
+	var generalOverride *int
+	var exactOverride *int
+	for i := range policy.LocationPolicies {
+		locationPolicy := &policy.LocationPolicies[i]
+		if locationPolicy.ShelvingLocationCode != supplier.ShelvingLocation {
+			continue
+		}
+		if locationPolicy.LocationCode == nil {
+			generalOverride = &locationPolicy.SupplyPreference
+		} else if *locationPolicy.LocationCode == supplier.Location {
+			exactOverride = &locationPolicy.SupplyPreference
+		}
+	}
+	if exactOverride != nil {
+		// A location/shelving pair is more specific than an all-locations shelving override.
+		supplier.ShelvingPreference = *exactOverride
+	} else if generalOverride != nil {
+		supplier.ShelvingPreference = *generalOverride
+	}
+}
+
+func firstSupplierPerSymbol(suppliers []adapter.Supplier) []adapter.Supplier {
+	result := make([]adapter.Supplier, 0, len(suppliers))
+	seen := make(map[string]struct{}, len(suppliers))
+	for _, supplier := range suppliers {
+		if _, ok := seen[supplier.Symbol]; ok {
+			continue
+		}
+		seen[supplier.Symbol] = struct{}{}
+		result = append(result, supplier)
+	}
+	return result
 }
 
 func (s *SupplierLocator) addLocatedSupplier(ctx common.ExtendedContext, transId string, ordinal int32, supplier *adapter.Supplier) (*ill_db.LocatedSupplier, error) {

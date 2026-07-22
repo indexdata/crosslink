@@ -36,27 +36,36 @@ type SupplierOrdering interface {
 	GetSymbol() string
 	GetPriority() int
 	GetCost() float64
+	GetLocationPreference() int
+	GetShelvingPreference() int
 	GetRatio() float32
 	IsLocal() bool
 }
 
 type Supplier struct {
-	LocalIdentifier string
-	PeerId          string
-	CustomData      directory.Entry
-	Symbol          string
-	Priority        int
-	Cost            float64
-	Local           bool
-	Ratio           float32
-	SupplierStatus  pgtype.Text
+	LocalIdentifier    string
+	PeerId             string
+	CustomData         directory.Entry
+	Symbol             string
+	Priority           int
+	Cost               float64
+	Local              bool
+	Ratio              float32
+	SupplierStatus     pgtype.Text
+	Location           string
+	ShelvingLocation   string
+	ItemLoanPolicy     string
+	LocationPreference int
+	ShelvingPreference int
 }
 
-func (s Supplier) GetSymbol() string { return s.Symbol }
-func (s Supplier) GetPriority() int  { return s.Priority }
-func (s Supplier) GetCost() float64  { return s.Cost }
-func (s Supplier) IsLocal() bool     { return s.Local }
-func (s Supplier) GetRatio() float32 { return s.Ratio }
+func (s Supplier) GetSymbol() string          { return s.Symbol }
+func (s Supplier) GetPriority() int           { return s.Priority }
+func (s Supplier) GetCost() float64           { return s.Cost }
+func (s Supplier) GetLocationPreference() int { return s.LocationPreference }
+func (s Supplier) GetShelvingPreference() int { return s.ShelvingPreference }
+func (s Supplier) IsLocal() bool              { return s.Local }
+func (s Supplier) GetRatio() float32          { return s.Ratio }
 
 type Network struct {
 	Name       string `json:"name"`
@@ -96,14 +105,19 @@ type TierMatch struct {
 }
 
 type SupplierMatch struct {
-	Match    bool           `json:"match"`
-	Networks []NetworkMatch `json:"networks"`
-	Tiers    []TierMatch    `json:"tiers"`
-	Symbol   string         `json:"symbol"`
-	Priority int            `json:"priority"`
-	Cost     string         `json:"cost"`
-	Local    bool           `json:"local"`
-	Ratio    float32        `json:"ratio"`
+	Match              bool           `json:"match"`
+	Networks           []NetworkMatch `json:"networks"`
+	Tiers              []TierMatch    `json:"tiers"`
+	Symbol             string         `json:"symbol"`
+	Priority           int            `json:"priority"`
+	Cost               string         `json:"cost"`
+	Local              bool           `json:"local"`
+	Ratio              float32        `json:"ratio"`
+	Location           string         `json:"location,omitempty"`
+	ShelvingLocation   string         `json:"shelvingLocation,omitempty"`
+	ItemLoanPolicy     string         `json:"itemLoanPolicy,omitempty"`
+	LocationPreference int            `json:"locationPreference"`
+	ShelvingPreference int            `json:"shelvingPreference"`
 }
 
 func (s SupplierMatch) GetSymbol() string { return s.Symbol }
@@ -112,8 +126,10 @@ func (s SupplierMatch) GetCost() float64 {
 	f, _ := strconv.ParseFloat(s.Cost, 64)
 	return f
 }
-func (s SupplierMatch) IsLocal() bool     { return s.Local }
-func (s SupplierMatch) GetRatio() float32 { return s.Ratio }
+func (s SupplierMatch) IsLocal() bool              { return s.Local }
+func (s SupplierMatch) GetRatio() float32          { return s.Ratio }
+func (s SupplierMatch) GetLocationPreference() int { return s.LocationPreference }
+func (s SupplierMatch) GetShelvingPreference() int { return s.ShelvingPreference }
 
 type RotaInfo struct {
 	Request   Request         `json:"request"`
