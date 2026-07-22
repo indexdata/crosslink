@@ -317,7 +317,7 @@ func applyHoldingsPolicy(supplier *adapter.Supplier) {
 	var exactOverride *int
 	if policy.LocationPolicies != nil {
 		for i := range *policy.LocationPolicies {
-			locationPolicy := (*policy.LocationPolicies)[i]
+			locationPolicy := &(*policy.LocationPolicies)[i]
 			if locationPolicy.ShelvingLocationCode != supplier.ShelvingLocation {
 				continue
 			}
