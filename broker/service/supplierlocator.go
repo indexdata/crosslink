@@ -297,29 +297,35 @@ func applyHoldingsPolicy(supplier *adapter.Supplier) {
 	if policy == nil {
 		return
 	}
-	for _, location := range policy.Locations {
-		if location.Code == supplier.Location {
-			supplier.LocationPreference = location.SupplyPreference
-			break
+	if policy.Locations != nil {
+		for _, location := range *policy.Locations {
+			if location.Code == supplier.Location {
+				supplier.LocationPreference = location.SupplyPreference
+				break
+			}
 		}
 	}
-	for _, shelvingLocation := range policy.ShelvingLocations {
-		if shelvingLocation.Code == supplier.ShelvingLocation {
-			supplier.ShelvingPreference = shelvingLocation.SupplyPreference
-			break
+	if policy.ShelvingLocations != nil {
+		for _, shelvingLocation := range *policy.ShelvingLocations {
+			if shelvingLocation.Code == supplier.ShelvingLocation {
+				supplier.ShelvingPreference = shelvingLocation.SupplyPreference
+				break
+			}
 		}
 	}
 	var generalOverride *int
 	var exactOverride *int
-	for i := range policy.LocationPolicies {
-		locationPolicy := &policy.LocationPolicies[i]
-		if locationPolicy.ShelvingLocationCode != supplier.ShelvingLocation {
-			continue
-		}
-		if locationPolicy.LocationCode == nil {
-			generalOverride = &locationPolicy.SupplyPreference
-		} else if *locationPolicy.LocationCode == supplier.Location {
-			exactOverride = &locationPolicy.SupplyPreference
+	if policy.LocationPolicies != nil {
+		for i := range *policy.LocationPolicies {
+			locationPolicy := (*policy.LocationPolicies)[i]
+			if locationPolicy.ShelvingLocationCode != supplier.ShelvingLocation {
+				continue
+			}
+			if locationPolicy.LocationCode == nil {
+				generalOverride = &locationPolicy.SupplyPreference
+			} else if *locationPolicy.LocationCode == supplier.Location {
+				exactOverride = &locationPolicy.SupplyPreference
+			}
 		}
 	}
 	if exactOverride != nil {

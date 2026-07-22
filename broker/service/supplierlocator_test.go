@@ -68,13 +68,13 @@ func TestApplyHoldingsPolicy(t *testing.T) {
 		Location:         "MAIN",
 		ShelvingLocation: "STACKS",
 		CustomData: directory.Entry{HoldingsPolicy: &directory.HoldingsPolicy{
-			Locations: []directory.HoldingsLocation{
+			Locations: &[]directory.HoldingsLocation{
 				{Code: "MAIN", SupplyPreference: 4},
 			},
-			ShelvingLocations: []directory.HoldingsShelvingLocation{
+			ShelvingLocations: &[]directory.HoldingsShelvingLocation{
 				{Code: "STACKS", SupplyPreference: 3},
 			},
-			LocationPolicies: []directory.HoldingsLocationPolicy{
+			LocationPolicies: &[]directory.HoldingsLocationPolicy{
 				{ShelvingLocationCode: "STACKS", SupplyPreference: 5},
 				{LocationCode: &other, ShelvingLocationCode: "STACKS", SupplyPreference: 6},
 				{LocationCode: &main, ShelvingLocationCode: "STACKS", SupplyPreference: 7},
@@ -88,16 +88,29 @@ func TestApplyHoldingsPolicy(t *testing.T) {
 	assert.Equal(t, 7, supplier.ShelvingPreference, "exact override should beat the all-locations override")
 }
 
-func TestApplyHoldingsPolicyUnknownValuesAreNeutral(t *testing.T) {
+func TestApplyHoldingsPolicyEmptyCollectionsAreNeutral(t *testing.T) {
 	supplier := adapter.Supplier{
 		Location:         "UNKNOWN",
 		ShelvingLocation: "UNKNOWN",
 		CustomData: directory.Entry{HoldingsPolicy: &directory.HoldingsPolicy{
-			Locations:         []directory.HoldingsLocation{},
-			ShelvingLocations: []directory.HoldingsShelvingLocation{},
-			LocationPolicies:  []directory.HoldingsLocationPolicy{},
-			ItemLoanPolicies:  []directory.HoldingsItemLoanPolicy{},
+			Locations:         &[]directory.HoldingsLocation{},
+			ShelvingLocations: &[]directory.HoldingsShelvingLocation{},
+			LocationPolicies:  &[]directory.HoldingsLocationPolicy{},
+			ItemLoanPolicies:  &[]directory.HoldingsItemLoanPolicy{},
 		}},
+	}
+
+	applyHoldingsPolicy(&supplier)
+
+	assert.Zero(t, supplier.LocationPreference)
+	assert.Zero(t, supplier.ShelvingPreference)
+}
+
+func TestApplyHoldingsPolicyOmittedCollectionsAreNeutral(t *testing.T) {
+	supplier := adapter.Supplier{
+		Location:         "UNKNOWN",
+		ShelvingLocation: "UNKNOWN",
+		CustomData:       directory.Entry{HoldingsPolicy: &directory.HoldingsPolicy{}},
 	}
 
 	applyHoldingsPolicy(&supplier)

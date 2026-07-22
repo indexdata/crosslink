@@ -363,7 +363,10 @@ func holdingMatchesPolicy(sup Supplier) bool {
 	if policy == nil {
 		return true
 	}
-	for _, itemPolicy := range policy.ItemLoanPolicies {
+	if policy.ItemLoanPolicies == nil {
+		return true
+	}
+	for _, itemPolicy := range *policy.ItemLoanPolicies {
 		if itemPolicy.Code == sup.ItemLoanPolicy && !itemPolicy.Lendable {
 			return false
 		}

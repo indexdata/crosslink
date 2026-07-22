@@ -293,11 +293,6 @@ components:
 
     HoldingsPolicy:
       type: object
-      required:
-        - locations
-        - shelvingLocations
-        - locationPolicies
-        - itemLoanPolicies
       properties:
         locations:
           type: array

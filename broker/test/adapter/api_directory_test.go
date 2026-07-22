@@ -751,7 +751,7 @@ func TestFilterAndSortAppliesHoldingsPolicy(t *testing.T) {
 		Name:     "Supplier",
 		Networks: &networks,
 		Tiers:    &tiers,
-		HoldingsPolicy: &directory.HoldingsPolicy{ItemLoanPolicies: []directory.HoldingsItemLoanPolicy{
+		HoldingsPolicy: &directory.HoldingsPolicy{ItemLoanPolicies: &[]directory.HoldingsItemLoanPolicy{
 			{Code: "NONCIRC", Name: "Non-circulating", Lendable: false},
 			{Code: "NORMAL", Name: "Normal", Lendable: true},
 		}},
