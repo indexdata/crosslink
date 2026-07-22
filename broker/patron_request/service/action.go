@@ -662,7 +662,16 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 	}
 	retryPr.State = borrowerInitialState
 	retryPr.TerminalState = actionMapping.IsTerminalState(retryPr)
-	retryPr.ID = uuid.NewString()
+	_, requesterSymbol, err := common.SplitSymbol(pr.RequesterSymbol.String)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "invalid requester symbol for retry", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	retryPr.ID, err = a.prRepo.GetNextHrid(ctx, requesterSymbol)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to generate requester HRID for retry", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
 	retryPr.RequesterReqID = getDbTextPtr(&retryPr.ID)
 	retryPr.CreatedAt = pgtype.Timestamp{Valid: true, Time: time.Now()}
 	retryPr.IllRequest.Header.RequestingAgencyRequestId = retryPr.ID

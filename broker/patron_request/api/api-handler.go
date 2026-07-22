@@ -236,6 +236,7 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 			for j, value := range field.Values {
 				facetResults[i].Values[j] = proapi.FacetResultValue{
 					Value: value.Value,
+					Label: value.Label,
 					Count: value.Count,
 				}
 			}
@@ -903,6 +904,10 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdEvents(w http.ResponseWrite
 		logParams["side"] = *params.Side
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+	if events.IsSyntheticID(id) {
+		api.AddBadRequestError(ctx, w, errors.New("synthetic IDs are not allowed for event lookup"))
+		return
+	}
 
 	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
 	if err != nil {

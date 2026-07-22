@@ -92,9 +92,10 @@ func TestGetIndex(t *testing.T) {
 	assert.Equal(t, vcs.GetCommit(), resp.Revision)
 	assert.Equal(t, vcs.GetSignature(), resp.Signature)
 	assert.Equal(t, getLocalhostWithPort()+api.ILL_TRANSACTIONS_PATH, resp.Links.IllTransactionsLink)
-	assert.Equal(t, getLocalhostWithPort()+api.EVENTS_PATH, resp.Links.EventsLink)
 	assert.Equal(t, getLocalhostWithPort()+api.PEERS_PATH, resp.Links.PeersLink)
-	assert.Equal(t, getLocalhostWithPort()+api.LOCATED_SUPPLIERS_PATH, resp.Links.LocatedSuppliersLink)
+	assert.Equal(t, getLocalhostWithPort()+"/batch_actions", resp.Links.BatchActionsLink)
+	assert.Equal(t, getLocalhostWithPort()+api.PATRON_REQUESTS_PATH+"?side=borrowing", resp.Links.BorrowingRequestsLink)
+	assert.Equal(t, getLocalhostWithPort()+api.PATRON_REQUESTS_PATH+"?side=lending", resp.Links.LendingRequestsLink)
 }
 
 func TestGetEvents(t *testing.T) {
@@ -311,7 +312,7 @@ func TestGetIllTransactionsId(t *testing.T) {
 	err := json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.Equal(t, illId, resp.Id)
-	assert.Equal(t, getLocalhostWithPort()+"/events?ill_transaction_id="+url.PathEscape(illId), resp.EventsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/ill_transactions/"+url.PathEscape(illId)+"/events", resp.EventsLink)
 	assert.Equal(t, getLocalhostWithPort()+"/located_suppliers?ill_transaction_id="+url.PathEscape(illId), resp.LocatedSuppliersLink)
 
 	// Delete peer
@@ -362,7 +363,7 @@ func TestBrokerCRUD(t *testing.T) {
 	err = json.Unmarshal(body, &tran)
 	assert.NoError(t, err)
 	assert.Equal(t, illId, tran.Id)
-	assert.Equal(t, getLocalhostWithPort()+"/broker/events?ill_transaction_id="+url.PathEscape(illId), tran.EventsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/broker/ill_transactions/"+url.PathEscape(illId)+"/events", tran.EventsLink)
 	assert.Equal(t, getLocalhostWithPort()+"/broker/located_suppliers?ill_transaction_id="+url.PathEscape(illId), tran.LocatedSuppliersLink)
 
 	httpGet(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "diku", http.StatusOK)
@@ -443,6 +444,15 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, events.Items, 1)
 	assert.Equal(t, eventId, events.Items[0].Id)
+
+	body = httpGet(t, "/broker/ill_transactions/"+url.PathEscape(illId)+"/events", "diku", http.StatusOK)
+	err = json.Unmarshal(body, &events)
+	assert.NoError(t, err)
+	assert.Len(t, events.Items, 1)
+	assert.Equal(t, eventId, events.Items[0].Id)
+
+	httpGet(t, "/broker/ill_transactions/"+url.PathEscape(uuid.NewString())+"/events", "diku", http.StatusNotFound)
+	httpGet(t, "/broker/ill_transactions/00000000-0000-0000-0000-000000000001/events", "diku", http.StatusBadRequest)
 
 	body = httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusOK)
 	err = json.Unmarshal(body, &events)

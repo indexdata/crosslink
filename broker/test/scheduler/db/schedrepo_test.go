@@ -132,6 +132,61 @@ func TestSaveScheduledTask_WithPayload(t *testing.T) {
 	stopTask(t, saved)
 }
 
+func TestScheduledTaskOwnerScopes(t *testing.T) {
+	ownerA := "ISIL:SCOPE-A-" + uuid.NewString()
+	ownerB := "ISIL:SCOPE-B-" + uuid.NewString()
+	taskAParams := newTask("", tstz(time.Now().Add(time.Hour)))
+	taskAParams.Owner = ownerA
+	taskBParams := newTask("", tstz(time.Now().Add(time.Hour)))
+	taskBParams.Owner = ownerB
+	taskA, err := schedRepo.SaveScheduledTask(appCtx, taskAParams)
+	assert.NoError(t, err)
+	taskB, err := schedRepo.SaveScheduledTask(appCtx, taskBParams)
+	assert.NoError(t, err)
+	t.Cleanup(func() {
+		assert.NoError(t, schedRepo.DeleteScheduledTask(appCtx, taskA.ID, nil))
+		assert.NoError(t, schedRepo.DeleteScheduledTask(appCtx, taskB.ID, nil))
+	})
+
+	allTasks, _, err := schedRepo.GetScheduledTasks(appCtx, sched_db.GetScheduledTasksParams{Limit: 1000})
+	assert.NoError(t, err)
+	allIDs := make([]string, 0, len(allTasks))
+	for _, task := range allTasks {
+		allIDs = append(allIDs, task.ID)
+	}
+	assert.Contains(t, allIDs, taskA.ID)
+	assert.Contains(t, allIDs, taskB.ID)
+
+	ownerATasks, count, err := schedRepo.GetScheduledTasks(appCtx, sched_db.GetScheduledTasksParams{
+		Owners: []string{ownerA}, Limit: 100,
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), count)
+	if assert.Len(t, ownerATasks, 1) {
+		assert.Equal(t, taskA.ID, ownerATasks[0].ID)
+	}
+
+	found, err := schedRepo.GetScheduledTaskById(appCtx, taskB.ID, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, taskB.ID, found.ID)
+	_, err = schedRepo.GetScheduledTaskById(appCtx, taskB.ID, []string{ownerA})
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+
+	emptyScope := []string{}
+	emptyTasks, count, err := schedRepo.GetScheduledTasks(appCtx, sched_db.GetScheduledTasksParams{
+		Owners: emptyScope, Limit: 100,
+	})
+	assert.NoError(t, err)
+	assert.Zero(t, count)
+	assert.Empty(t, emptyTasks)
+	_, err = schedRepo.GetScheduledTaskById(appCtx, taskB.ID, emptyScope)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+	assert.NoError(t, schedRepo.DeleteScheduledTask(appCtx, taskB.ID, emptyScope))
+	found, err = schedRepo.GetScheduledTaskById(appCtx, taskB.ID, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, taskB.ID, found.ID)
+}
+
 // ---------------------------------------------------------------------------
 // GetNextRunAt
 // ---------------------------------------------------------------------------

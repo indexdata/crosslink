@@ -95,10 +95,10 @@ func (a *ApiHandler) Get(w http.ResponseWriter, r *http.Request) {
 	index.Revision = vcs.GetCommit()
 	index.Signature = vcs.GetSignature()
 	index.Links.IllTransactionsLink = Link(r, Path(ILL_TRANSACTIONS_PATH), nil)
-	index.Links.EventsLink = Link(r, Path(EVENTS_PATH), nil)
-	index.Links.LocatedSuppliersLink = Link(r, Path(LOCATED_SUPPLIERS_PATH), nil)
 	index.Links.PeersLink = Link(r, Path(PEERS_PATH), nil)
-	index.Links.PatronRequestsLink = Link(r, Path(PATRON_REQUESTS_PATH), nil)
+	index.Links.BorrowingRequestsLink = Link(r, Path(PATRON_REQUESTS_PATH), Query("side", "borrowing"))
+	index.Links.LendingRequestsLink = Link(r, Path(PATRON_REQUESTS_PATH), Query("side", "lending"))
+	index.Links.BatchActionsLink = Link(r, Path("batch_actions"), nil)
 	WriteJsonResponse(w, index)
 }
 
@@ -110,29 +110,63 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: logParams,
 	})
+	if params.IllTransactionId != nil && events.IsSyntheticID(*params.IllTransactionId) {
+		AddBadRequestError(ctx, w, errors.New("synthetic IDs are not allowed for event lookup"))
+		return
+	}
 	tran, err := a.getIllTranFromParams(ctx, w, r, params.RequesterSymbol,
 		params.RequesterReqId, params.IllTransactionId)
 	if err != nil {
 		return
 	}
-	var resp oapi.Events
-	resp.Items = make([]oapi.Event, 0)
 	if tran == nil {
-		WriteJsonResponse(w, resp)
+		WriteJsonResponse(w, oapi.Events{Items: make([]oapi.Event, 0)})
 		return
 	}
-	var fullCount int64
-	var eventList []events.Event
-	eventList, fullCount, err = a.eventRepo.GetIllTransactionEvents(ctx, tran.ID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	resp, err := a.illTransactionEventsResponse(ctx, tran.ID)
+	if err != nil {
 		AddInternalError(ctx, w, err)
 		return
+	}
+	WriteJsonResponse(w, resp)
+}
+
+func (a *ApiHandler) GetIllTransactionsIdEvents(w http.ResponseWriter, r *http.Request, id string, params oapi.GetIllTransactionsIdEventsParams) {
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
+		Other: map[string]string{"method": "GetIllTransactionsIdEvents", "id": id},
+	})
+	if events.IsSyntheticID(id) {
+		AddBadRequestError(ctx, w, errors.New("synthetic IDs are not allowed for event lookup"))
+		return
+	}
+
+	tran, err := a.getIllTranFromParams(ctx, w, r, params.RequesterSymbol, nil, &id)
+	if err != nil {
+		return
+	}
+	if tran == nil {
+		AddNotFoundError(w)
+		return
+	}
+	resp, err := a.illTransactionEventsResponse(ctx, tran.ID)
+	if err != nil {
+		AddInternalError(ctx, w, err)
+		return
+	}
+	WriteJsonResponse(w, resp)
+}
+
+func (a *ApiHandler) illTransactionEventsResponse(ctx common.ExtendedContext, id string) (oapi.Events, error) {
+	resp := oapi.Events{Items: make([]oapi.Event, 0)}
+	eventList, fullCount, err := a.eventRepo.GetIllTransactionEvents(ctx, id)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return resp, err
 	}
 	resp.About.Count = fullCount
 	for _, event := range eventList {
 		resp.Items = append(resp.Items, ToApiEvent(event, event.IllTransactionID, nil))
 	}
-	WriteJsonResponse(w, resp)
+	return resp, nil
 }
 
 func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, params oapi.GetIllTransactionsParams) {
@@ -653,7 +687,7 @@ func toApiIllTransaction(r *http.Request, trans ill_db.IllTransaction) oapi.IllT
 	api.SupplierRequestID = getString(trans.SupplierRequestID)
 	api.LastSupplierStatus = getString(trans.LastSupplierStatus)
 	api.PrevSupplierStatus = getString(trans.PrevSupplierStatus)
-	api.EventsLink = Link(r, Path(EVENTS_PATH), Query("ill_transaction_id", trans.ID))
+	api.EventsLink = Link(r, Path("ill_transactions", trans.ID, "events"), nil)
 	api.LocatedSuppliersLink = Link(r, Path(LOCATED_SUPPLIERS_PATH), Query("ill_transaction_id", trans.ID))
 	if trans.RequesterID.Valid {
 		api.RequesterPeerLink = Link(r, Path(PEERS_PATH, trans.RequesterID.String), nil)

@@ -100,10 +100,12 @@ func (s *BatchActionService) RequestAging(ctx common.ExtendedContext, event even
 			if pr.Side == prservice.SideLending {
 				action = prservice.LenderActionCannotSupply
 			}
+			childBatchActionData := *batchActionData
 			data := events.EventData{CommonEventData: events.CommonEventData{
-				Action: &action,
+				Action:          &action,
+				BatchActionData: &childBatchActionData,
 			}, CustomData: backgroundActionParams(event.EventData.CustomData)}
-			_, eventErr := s.eventBus.CreateTask(pr.ID, events.EventNameInvokeBackgroundAction, data, events.EventDomainPatronRequest, nil, events.SignalConsumers)
+			_, eventErr := s.eventBus.CreateTask(pr.ID, events.EventNameInvokeBackgroundAction, data, events.EventDomainPatronRequest, &event.ID, events.SignalConsumers)
 			if eventErr != nil {
 				result.CustomData[pr.ID] = "error creating close action: " + eventErr.Error()
 			}

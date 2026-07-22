@@ -18,6 +18,7 @@ type EventRepo interface {
 	ClaimEventForSignal(ctx common.ExtendedContext, id string, signal Signal) (Event, error)
 	Notify(ctx common.ExtendedContext, eventId string, signal Signal, target SignalTarget) error
 	GetIllTransactionEvents(ctx common.ExtendedContext, id string) ([]Event, int64, error)
+	GetBatchActionEvents(ctx common.ExtendedContext, taskID string) ([]Event, error)
 	DeleteEventsByIllTransaction(ctx common.ExtendedContext, illTransId string) error
 	GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (Event, error)
 	GetPatronRequestEvents(ctx common.ExtendedContext, id string) ([]Event, error)
@@ -115,6 +116,17 @@ func (r *PgEventRepo) GetPatronRequestEvents(ctx common.ExtendedContext, id stri
 		}
 	}
 	return events, err
+}
+
+func (r *PgEventRepo) GetBatchActionEvents(ctx common.ExtendedContext, taskID string) ([]Event, error) {
+	rows, err := r.queries.GetBatchActionEvents(ctx, r.GetConnOrTx(), taskID)
+	var eventList []Event
+	if err == nil {
+		for _, row := range rows {
+			eventList = append(eventList, row.Event)
+		}
+	}
+	return eventList, err
 }
 
 func (r *PgEventRepo) DeleteEventsByIllTransaction(ctx common.ExtendedContext, illTransId string) error {

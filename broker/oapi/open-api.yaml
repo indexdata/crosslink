@@ -97,8 +97,9 @@ components:
       name: facets
       in: query
       description: Comma separated list of facet names to include in the response.
-        Supported values are "requester_name", "requester_symbol", "supplier_name",
-        "supplier_symbol"; unsupported facet names result in a 400 response.
+        Supported values are "requester_symbol" and "supplier_symbol"; each facet
+        value carries the symbol as "value" and, when available, the peer name as
+        "label". Unsupported facet names result in a 400 response.
         For example "requester_symbol,supplier_symbol"
       style: form
       explode: false
@@ -109,8 +110,6 @@ components:
           enum:
             - requester_symbol
             - supplier_symbol
-            - requester_name
-            - supplier_name
   schemas:
     Index:
       type: object
@@ -130,21 +129,21 @@ components:
             peersLink:
               type: string
               description: Link to peers
-            eventsLink:
+            borrowingRequestsLink:
               type: string
-              description: Link to events
-            locatedSuppliersLink:
+              description: Link to borrowing requests
+            lendingRequestsLink:
               type: string
-              description: Link to located suppliers
-            patronRequestsLink:
+              description: Link to lending requests
+            batchActionsLink:
               type: string
-              description: Link to patron request
+              description: Link to batch actions
           required:
-            - eventsLink
+            - batchActionsLink
+            - borrowingRequestsLink
             - illTransactionsLink
+            - lendingRequestsLink
             - peersLink
-            - locatedSuppliersLink
-            - patronRequestsLink
       required:
         - revision
         - signature
@@ -241,6 +240,10 @@ components:
         value:
           type: string
           description: Facet value
+        label:
+          type: string
+          description: Human-readable name for the facet value, when one is
+            available. Omitted when the value has no associated name.
         count:
           type: integer
           format: int64
@@ -1203,6 +1206,9 @@ components:
         active:
           type: boolean
           description: Indicates if the batch action is active
+        eventsLink:
+          type: string
+          description: Link to execution events for this batch action
       required:
         - id
         - schedule
@@ -1210,6 +1216,7 @@ components:
         - createdAt
         - batchQuery
         - active
+        - eventsLink
 
     BatchActions:
       type: object
@@ -1464,6 +1471,7 @@ paths:
   /events:
     get:
       summary: Retrieve events
+      description: Retrieve events by requester request ID or ILL transaction ID. When the internal ILL transaction ID is known, prefer `/ill_transactions/{id}/events`.
       parameters:
         - $ref: '#/components/parameters/Tenant'
         - $ref: '#/components/parameters/RequesterRequestId'
@@ -1478,6 +1486,44 @@ paths:
                 $ref: '#/components/schemas/Events'
         '400':
           description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ill_transactions/{id}/events:
+    get:
+      summary: Retrieve events for an ILL transaction
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/RequesterSymbol'
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the ILL transaction
+      responses:
+        '200':
+          description: Successful retrieval of ILL transaction events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Events'
+        '400':
+          description: Bad Request. Synthetic transaction IDs are not accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: ILL transaction not found
           content:
             application/json:
               schema:
@@ -2441,6 +2487,7 @@ paths:
   /batch_actions:
     get:
       summary: List all batch actions
+      description: Lists batch actions for all owners accessible to the caller. Without `symbol`, master access is unrestricted and Okapi access includes all symbols owned by the tenant. When `symbol` is provided, access includes that symbol and its branches.
       tags:
         - scheduler-api
       parameters:
@@ -2469,6 +2516,7 @@ paths:
                 $ref: '#/components/schemas/Error'
     post:
       summary: Create a new batch action
+      description: Creates a batch action for one owner. Master access must provide `symbol`; Okapi access defaults to the tenant's primary symbol when omitted.
       tags:
         - scheduler-api
       parameters:
@@ -2503,6 +2551,7 @@ paths:
   /batch_actions/{id}:
     get:
       summary: Get a batch action by ID
+      description: Retrieves the batch action when its owner is accessible to the caller. Without `symbol`, master access is unrestricted and Okapi access includes all tenant-owned symbols. When `symbol` is provided, access includes that symbol and its branches.
       tags:
         - scheduler-api
       parameters:
@@ -2539,6 +2588,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
     put:
       summary: Update a batch action by ID
       tags:
@@ -2599,6 +2649,46 @@ paths:
       responses:
         '204':
           description: Batch action deleted successfully (No Content)
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Batch action not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /batch_actions/{id}/events:
+    get:
+      summary: Retrieve execution events for a batch action
+      tags:
+        - scheduler-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the batch action
+      responses:
+        '200':
+          description: Successful retrieval of batch-action execution events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Events'
         '400':
           description: Bad Request. Invalid query parameters.
           content:

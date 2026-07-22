@@ -17,8 +17,8 @@ type SchedRepo interface {
 	ClaimNextScheduledTask(ctx common.ExtendedContext) (ScheduledTask, error)
 	GetNextRunAt(ctx common.ExtendedContext) (pgtype.Timestamptz, error)
 	GetStuckRunningTasks(ctx common.ExtendedContext, stuckAfter time.Duration) ([]ScheduledTask, error)
-	GetScheduledTaskByIdAndOwner(ctx common.ExtendedContext, id, owner string) (ScheduledTask, error)
-	DeleteScheduledTask(ctx common.ExtendedContext, id, owner string) error
+	GetScheduledTaskById(ctx common.ExtendedContext, id string, owners []string) (ScheduledTask, error)
+	DeleteScheduledTask(ctx common.ExtendedContext, id string, owners []string) error
 	GetScheduledTasks(ctx common.ExtendedContext, params GetScheduledTasksParams) ([]ScheduledTask, int64, error)
 }
 
@@ -88,18 +88,18 @@ func (r *PgSchedRepo) notify(ctx common.ExtendedContext) {
 	}
 }
 
-func (r *PgSchedRepo) GetScheduledTaskByIdAndOwner(ctx common.ExtendedContext, id, owner string) (ScheduledTask, error) {
-	row, err := r.queries.GetScheduledTaskByIdAndOwner(ctx, r.GetConnOrTx(), GetScheduledTaskByIdAndOwnerParams{
-		ID:    id,
-		Owner: owner,
+func (r *PgSchedRepo) GetScheduledTaskById(ctx common.ExtendedContext, id string, owners []string) (ScheduledTask, error) {
+	row, err := r.queries.GetScheduledTaskById(ctx, r.GetConnOrTx(), GetScheduledTaskByIdParams{
+		ID:     id,
+		Owners: owners,
 	})
 	return row.ScheduledTask, err
 }
 
-func (r *PgSchedRepo) DeleteScheduledTask(ctx common.ExtendedContext, id, owner string) error {
+func (r *PgSchedRepo) DeleteScheduledTask(ctx common.ExtendedContext, id string, owners []string) error {
 	return r.queries.DeleteScheduledTask(ctx, r.GetConnOrTx(), DeleteScheduledTaskParams{
-		ID:    id,
-		Owner: owner,
+		ID:     id,
+		Owners: owners,
 	})
 }
 

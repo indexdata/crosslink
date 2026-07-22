@@ -54,6 +54,7 @@ type Facet struct {
 
 type FacetValue struct {
 	Value string
+	Label *string
 	Count int64
 }
 
@@ -128,7 +129,7 @@ func (r *PgPrRepo) GetPatronRequestsFacets(ctx common.ExtendedContext, facetFiel
 	var facets []Facet
 	for _, field := range facetFields {
 		switch field {
-		case "requester_symbol", "supplier_symbol", "requester_name", "supplier_name":
+		case "requester_symbol", "supplier_symbol":
 			rows, err := r.queries.GetPatronRequestsFacetsCql(ctx, r.GetConnOrTx(), field, pgcql)
 			if err != nil {
 				return nil, err
@@ -136,10 +137,15 @@ func (r *PgPrRepo) GetPatronRequestsFacets(ctx common.ExtendedContext, facetFiel
 			var values []FacetValue
 			for _, row := range rows {
 				if row.Value.Valid {
-					values = append(values, FacetValue{
+					value := FacetValue{
 						Value: row.Value.String,
 						Count: row.Count,
-					})
+					}
+					if row.Label.Valid {
+						label := row.Label.String
+						value.Label = &label
+					}
+					values = append(values, value)
 				}
 			}
 			facets = append(facets, Facet{
