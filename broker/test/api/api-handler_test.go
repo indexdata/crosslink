@@ -307,6 +307,9 @@ func TestGetIllTransactionsOkapiIncludesBranchSymbols(t *testing.T) {
 
 func TestGetIllTransactionsId(t *testing.T) {
 	illId := apptest.GetIllTransId(t, illRepo)
+	eventID := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusSuccess, events.EventNameSelectSupplier)
+	peer := apptest.CreatePeer(t, illRepo, "ISIL:CASCADE-"+uuid.NewString(), "")
+	apptest.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "ISIL:CASCADE", string(iso18626.TypeStatusLoaned))
 	body := getResponseBody(t, "/ill_transactions/"+illId)
 	var resp oapi.IllTransaction
 	err := json.Unmarshal(body, &resp)
@@ -315,9 +318,22 @@ func TestGetIllTransactionsId(t *testing.T) {
 	assert.Equal(t, getLocalhostWithPort()+"/ill_transactions/"+url.PathEscape(illId)+"/events", resp.EventsLink)
 	assert.Equal(t, getLocalhostWithPort()+"/located_suppliers?ill_transaction_id="+url.PathEscape(illId), resp.LocatedSuppliersLink)
 
-	// Delete peer
+	// Delete transaction and verify owned rows cascade.
 	httpRequest(t, "DELETE", "/ill_transactions/"+illId, nil, "", http.StatusNoContent)
+	_, err = eventRepo.GetEvent(common.CreateExtCtxWithArgs(context.Background(), nil), eventID)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+	suppliers, _, err := illRepo.GetLocatedSuppliersByIllTransaction(common.CreateExtCtxWithArgs(context.Background(), nil), illId)
+	assert.NoError(t, err)
+	assert.Empty(t, suppliers)
 	httpRequest(t, "DELETE", "/ill_transactions/"+illId, nil, "", http.StatusNotFound)
+}
+
+func TestSyntheticIllTransactionCannotBeDeleted(t *testing.T) {
+	err := illRepo.DeleteIllTransaction(
+		common.CreateExtCtxWithArgs(context.Background(), nil),
+		events.DEFAULT_ILL_TRANSACTION_ID,
+	)
+	assert.Error(t, err)
 }
 
 func TestGetLocatedSuppliers(t *testing.T) {
@@ -515,6 +531,33 @@ func TestPeersNoHeaders(t *testing.T) {
 	// Delete peer
 	httpRequest(t, "DELETE", "/peers/"+respPeer.Id, nil, "", http.StatusNoContent)
 	httpRequest(t, "DELETE", "/peers/"+respPeer.Id, nil, "", http.StatusNotFound)
+}
+
+func TestDeletePeerWithTransactionAsRequesterAndSupplier(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	peer := apptest.CreatePeer(t, illRepo, "ISIL:DELETE-PEER-"+uuid.NewString(), "")
+	illID := uuid.NewString()
+	_, err := illRepo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams{
+		ID:          illID,
+		Timestamp:   test.GetNow(),
+		RequesterID: pgtype.Text{String: peer.ID, Valid: true},
+	})
+	assert.NoError(t, err)
+	apptest.CreateLocatedSupplier(
+		t,
+		illRepo,
+		illID,
+		peer.ID,
+		"ISIL:DELETE-PEER",
+		string(iso18626.TypeStatusLoaned),
+	)
+
+	httpRequest(t, "DELETE", "/peers/"+peer.ID, nil, "", http.StatusNoContent)
+
+	_, err = illRepo.GetIllTransactionById(ctx, illID)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+	_, err = illRepo.GetPeerById(ctx, peer.ID)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestPeersBadRequestJson(t *testing.T) {

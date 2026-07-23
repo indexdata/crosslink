@@ -38,7 +38,6 @@ type IllRepo interface {
 	GetLocatedSupplierByIllTransactionAndSymbol(ctx common.ExtendedContext, id, symbol string) (LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndSymbolForUpdate(ctx common.ExtendedContext, id, symbol string) (LocatedSupplier, error)
 	GetSelectedSupplierForIllTransaction(ctx common.ExtendedContext, illTransId string) (LocatedSupplier, error)
-	DeleteLocatedSupplierByIllTransaction(ctx common.ExtendedContext, illTransId string) error
 	GetLocatedSupplierByPeerId(ctx common.ExtendedContext, peerId string) ([]LocatedSupplier, error)
 	GetIllTransactionByRequesterId(ctx common.ExtendedContext, peerId pgtype.Text) ([]IllTransaction, error)
 	GetCachedPeersBySymbols(ctx common.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]Peer, string, error)
@@ -228,10 +227,6 @@ func (r *PgIllRepo) GetSelectedSupplierForIllTransaction(ctx common.ExtendedCont
 		return LocatedSupplier{}, err
 	}
 	return getSelectedSupplierForIllTransactionForCommon(selSup, illTransId)
-}
-
-func (r *PgIllRepo) DeleteLocatedSupplierByIllTransaction(ctx common.ExtendedContext, illTransId string) error {
-	return r.queries.DeleteLocatedSuppliersByIllTransaction(ctx, r.GetConnOrTx(), illTransId)
 }
 
 func (r *PgIllRepo) SaveSymbol(ctx common.ExtendedContext, params SaveSymbolParams) (Symbol, error) {

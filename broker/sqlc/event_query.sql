@@ -100,10 +100,6 @@ RETURNING sqlc.embed(event);
 DELETE FROM event
 WHERE id = $1;
 
--- name: DeleteEventsByIllTransaction :exec
-DELETE FROM event
-WHERE ill_transaction_id = $1;
-
 -- name: UpdateEventLifecycle :one
 UPDATE event SET last_signal = $3, event_status = $2
 WHERE id = $1

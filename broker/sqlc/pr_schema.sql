@@ -37,7 +37,7 @@ $$ LANGUAGE plpgsql;
 CREATE TABLE item
 (
     id          VARCHAR PRIMARY KEY,
-    pr_id       VARCHAR   NOT NULL REFERENCES patron_request (id),
+    pr_id       VARCHAR   NOT NULL REFERENCES patron_request (id) ON DELETE CASCADE,
     barcode     VARCHAR   NOT NULL,
     call_number VARCHAR,
     title       VARCHAR,
@@ -48,7 +48,7 @@ CREATE TABLE item
 CREATE TABLE notification
 (
     id              VARCHAR PRIMARY KEY,
-    pr_id           VARCHAR   NOT NULL REFERENCES patron_request (id),
+    pr_id           VARCHAR   NOT NULL REFERENCES patron_request (id) ON DELETE CASCADE,
     from_symbol     VARCHAR   NOT NULL,
     to_symbol       VARCHAR   NOT NULL,
     direction       VARCHAR   NOT NULL DEFAULT 'sent',

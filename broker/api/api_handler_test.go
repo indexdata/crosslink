@@ -33,3 +33,14 @@ func TestGetIllTransactionsIdEventsRejectsSyntheticIDs(t *testing.T) {
 		})
 	}
 }
+
+func TestDeleteIllTransactionsIdRejectsSyntheticID(t *testing.T) {
+	h := ApiHandler{}
+	req := httptest.NewRequest(http.MethodDelete, "/ill_transactions/"+events.DEFAULT_ILL_TRANSACTION_ID, nil)
+	rr := httptest.NewRecorder()
+
+	h.DeleteIllTransactionsId(rr, req, events.DEFAULT_ILL_TRANSACTION_ID)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "synthetic IDs cannot be deleted")
+}

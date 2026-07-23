@@ -17,7 +17,8 @@ CREATE TABLE event
     event_data         jsonb,
     result_data        jsonb,
     last_signal        VARCHAR   NOT NULL,
-    patron_request_id  VARCHAR   NOT NULL,
-    FOREIGN KEY (ill_transaction_id) REFERENCES ill_transaction (id),
+    patron_request_id  VARCHAR   NOT NULL DEFAULT '00000000-0000-0000-0000-000000000002',
+    FOREIGN KEY (ill_transaction_id) REFERENCES ill_transaction (id) ON DELETE CASCADE,
+    FOREIGN KEY (patron_request_id) REFERENCES patron_request (id) ON DELETE CASCADE,
     FOREIGN KEY (event_name) REFERENCES event_config (event_name)
 );
