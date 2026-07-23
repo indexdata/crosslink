@@ -191,6 +191,37 @@ func TestBatchAction_RequestAgingDispatches(t *testing.T) {
 	assert.True(t, repo.listCalled)
 }
 
+func TestBatchAction_AddsOwnerRestrictionBeforeDispatch(t *testing.T) {
+	repo := &mockEmailPrRepo{}
+	svc := NewBatchActionService(&mockBatchActionEventBus{}, repo, nil)
+	event := requestAgingEvent("state = REQ", map[string]any{"interval": "24h"})
+
+	status, _ := svc.batchAction(testCtx, event)
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t,
+		"(state = $3 AND ((side = $4 AND supplier_symbol = $5) OR (side = $6 AND requester_symbol = $7))) AND updated_at <= $8",
+		repo.gotQuery.GetWhereClause(),
+	)
+	// The restriction is added to the dispatched copy, not persisted into the
+	// scheduled event payload where repeated runs could accumulate predicates.
+	assert.Equal(t, "state = REQ", event.EventData.BatchActionData.Selector)
+}
+
+func TestBatchAction_MissingOwnerDispatchesWithoutRestriction(t *testing.T) {
+	repo := &mockEmailPrRepo{}
+	svc := NewBatchActionService(&mockBatchActionEventBus{}, repo, nil)
+	event := requestAgingEvent("state = REQ", map[string]any{"interval": "24h"})
+	event.EventData.BatchActionData.Owner = ""
+
+	status, result := svc.batchAction(testCtx, event)
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Nil(t, result.EventError)
+	assert.True(t, repo.listCalled)
+	assert.Equal(t, "state = $3 AND updated_at <= $4", repo.gotQuery.GetWhereClause())
+}
+
 func TestRequestAging_ValidationErrors(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -210,16 +241,6 @@ func TestRequestAging_ValidationErrors(t *testing.T) {
 			event:     requestAgingEvent("", map[string]any{"interval": "24h"}),
 			wantMsg:   "cannot process event",
 			wantCause: "selector is empty",
-		},
-		{
-			name: "empty owner",
-			event: func() events.Event {
-				event := requestAgingEvent("cql.allRecords=1", map[string]any{"interval": "24h"})
-				event.EventData.BatchActionData.Owner = ""
-				return event
-			}(),
-			wantMsg:   "cannot process event",
-			wantCause: "owner is empty",
 		},
 		{
 			name:      "missing custom data",

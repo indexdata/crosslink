@@ -409,17 +409,48 @@ func TestPostBatchActions_ActionParamsPersisted(t *testing.T) {
 	repo.AssertExpectations(t)
 }
 
-func TestPostBatchActions_MasterWithoutSymbolReturnsBadRequest(t *testing.T) {
+func TestPostBatchActions_MasterWithoutSymbolCreatesUnrestrictedAction(t *testing.T) {
 	repo := new(MockSchedRepo)
+	repo.On("SaveScheduledTask", mock.MatchedBy(func(p sched_db.SaveScheduledTaskParams) bool {
+		return p.Owner == "" &&
+			p.ActionData.BatchActionData != nil &&
+			p.ActionData.BatchActionData.Owner == ""
+	})).Return(saveScheduledTaskReturn, nil)
+
 	h := newHandler(repo)
-	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"`+validRrule+`"}`)
+	req := newReq(http.MethodPost, `{"actionName":"request-aging","batchQuery":"title=test","schedule":"`+validRrule+`","actionParams":{"interval":"24h"}}`)
 	rr := httptest.NewRecorder()
 
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{})
 
-	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Contains(t, rr.Body.String(), "symbol must be specified")
-	repo.AssertNotCalled(t, "SaveScheduledTask", mock.Anything)
+	assert.Equal(t, http.StatusCreated, rr.Code)
+	var resp schedoapi.BatchAction
+	assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	assert.Equal(t, schedoapi.RequestAging, resp.ActionName)
+	repo.AssertExpectations(t)
+}
+
+func TestPostBatchActions_OkapiWithoutSymbolUsesPrimaryMappedOwner(t *testing.T) {
+	const mappedOwner = "ISIL:DK-DIKU"
+	repo := new(MockSchedRepo)
+	repo.On("SaveScheduledTask", mock.MatchedBy(func(p sched_db.SaveScheduledTaskParams) bool {
+		return p.Owner == mappedOwner &&
+			p.ActionData.BatchActionData != nil &&
+			p.ActionData.BatchActionData.Owner == mappedOwner
+	})).Return(saveScheduledTaskReturn, nil)
+	resolver := tenant.NewResolver().
+		WithTenantToSymbol("ISIL:DK-{tenant}").
+		WithIllRepo(new(testmocks.MockIllRepositorySuccess))
+	h := NewSchedulerApiHandler(10, repo, nil, resolver)
+	req := httptest.NewRequest(http.MethodPost, "/broker/batch_actions",
+		strings.NewReader(`{"actionName":"request-aging","batchQuery":"title=test","schedule":"`+validRrule+`","actionParams":{"interval":"24h"}}`))
+	req.Header.Set(tenant.OkapiTenantHeader, "diku")
+	rr := httptest.NewRecorder()
+
+	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{})
+
+	assert.Equal(t, http.StatusCreated, rr.Code)
+	repo.AssertExpectations(t)
 }
 
 func TestPostBatchActions_MissingBody(t *testing.T) {

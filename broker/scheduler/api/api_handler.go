@@ -123,7 +123,7 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	owner, ok := h.resolveConcreteOwner(ctx, w, r, params.Symbol)
+	owner, ok := h.resolveBatchActionOwner(ctx, w, r, params.Symbol)
 	if !ok {
 		return
 	}
@@ -325,8 +325,9 @@ func (h SchedulerApiHandler) resolveOwnerScope(ctx common.ExtendedContext, w htt
 	return owners, true
 }
 
-// resolveConcreteOwner resolves the single owner required when creating a task.
-func (h SchedulerApiHandler) resolveConcreteOwner(ctx common.ExtendedContext, w http.ResponseWriter, r *http.Request, symbol *string) (string, bool) {
+// resolveBatchActionOwner resolves the owner for a new batch action. An empty
+// owner represents unrestricted master access.
+func (h SchedulerApiHandler) resolveBatchActionOwner(ctx common.ExtendedContext, w http.ResponseWriter, r *http.Request, symbol *string) (string, bool) {
 	t, err := h.tenantResolver.Resolve(ctx, r, symbol)
 	if err != nil {
 		brokerapi.AddBadRequestError(ctx, w, err)
@@ -335,10 +336,6 @@ func (h SchedulerApiHandler) resolveConcreteOwner(ctx common.ExtendedContext, w 
 	owner, err := t.GetRequestSymbol()
 	if err != nil {
 		brokerapi.AddBadRequestError(ctx, w, err)
-		return "", false
-	}
-	if owner == "" {
-		brokerapi.AddBadRequestError(ctx, w, errors.New("symbol must be specified when creating a batch action with master access"))
 		return "", false
 	}
 	return owner, true

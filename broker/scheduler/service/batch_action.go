@@ -1,6 +1,7 @@
 package sched_service
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
@@ -34,19 +35,67 @@ func (s *BatchActionService) BatchAction(ctx common.ExtendedContext, event event
 }
 func (s *BatchActionService) batchAction(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(BATCH_COMP))
-	if event.EventData.BatchActionData != nil {
-		switch event.EventData.BatchActionData.ActionName {
-		case string(schedoapi.EmailPullslips):
-			return s.emailSenderService.EmailPullslip(ctx, event)
-		case string(schedoapi.RequestAging):
-			return s.RequestAging(ctx, event)
-		default:
-			ctx.Logger().Error("unknown batch action", "actionName", event.EventData.BatchActionData.ActionName, "event", event)
-			return events.NewErrorResult("cannot process event", "unknown batch action")
-		}
+	if event.EventData.BatchActionData == nil {
+		ctx.Logger().Error("batch action data is empty", "eventId", event.ID)
+		return events.NewErrorResult("cannot process event", "batch action data is empty")
 	}
-	ctx.Logger().Error("batch action data is empty", "event", event.ID)
-	return events.NewErrorResult("cannot process event", "batch action data is empty")
+
+	var action func(common.ExtendedContext, events.Event) (events.EventStatus, *events.EventResult)
+	switch event.EventData.BatchActionData.ActionName {
+	case string(schedoapi.EmailPullslips):
+		action = s.emailSenderService.EmailPullslip
+	case string(schedoapi.RequestAging):
+		action = s.RequestAging
+	default:
+		ctx.Logger().Error("unknown batch action",
+			"actionName", event.EventData.BatchActionData.ActionName,
+			"eventId", event.ID,
+			"taskId", event.EventData.BatchActionData.TaskId)
+		return events.NewErrorResult("cannot process event", "unknown batch action")
+	}
+
+	restrictedSelector, err := addBatchActionOwnerRestriction(
+		event.EventData.BatchActionData.Selector,
+		event.EventData.BatchActionData.Owner,
+	)
+	if err != nil {
+		return events.NewErrorResult("invalid batch action data", err.Error())
+	}
+
+	// Keep the event stored by the event bus unchanged while ensuring every
+	// action handler receives the owner-restricted selector.
+	batchActionData := *event.EventData.BatchActionData
+	batchActionData.Selector = restrictedSelector
+	event.EventData.BatchActionData = &batchActionData
+	return action(ctx, event)
+}
+
+func addBatchActionOwnerRestriction(selector string, owner string) (string, error) {
+	if selector == "" {
+		return "", fmt.Errorf("selector is empty")
+	}
+	if owner == "" {
+		return selector, nil
+	}
+
+	qb, err := cqlbuilder.NewQueryFromString(selector)
+	if err != nil {
+		return "", err
+	}
+	restrictedSelector, err := qb.And().
+		BeginClause().
+		Search("side").Term(string(prservice.SideLending)).
+		And().Search("supplier_symbol_exact").Term(owner).
+		Or().
+		BeginClause().Search("side").Term(string(prservice.SideBorrowing)).
+		And().Search("requester_symbol_exact").Term(owner).
+		EndClause().
+		EndClause().
+		Build()
+	if err != nil {
+		return "", err
+	}
+	return restrictedSelector.String(), nil
 }
 
 func (s *BatchActionService) RequestAging(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
@@ -58,10 +107,6 @@ func (s *BatchActionService) RequestAging(ctx common.ExtendedContext, event even
 	if batchActionData.Selector == "" {
 		return events.NewErrorResult("cannot process event", "selector is empty")
 	}
-	if batchActionData.Owner == "" {
-		return events.NewErrorResult("cannot process event", "owner is empty")
-	}
-
 	intervalString, ok := event.EventData.CustomData["interval"].(string)
 	if !ok || intervalString == "" {
 		return events.NewErrorResult("cannot process event", "interval is missing or not a string")
