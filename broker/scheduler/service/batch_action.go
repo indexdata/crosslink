@@ -36,7 +36,7 @@ func (s *BatchActionService) BatchAction(ctx common.ExtendedContext, event event
 func (s *BatchActionService) batchAction(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(BATCH_COMP))
 	if event.EventData.BatchActionData == nil {
-		ctx.Logger().Error("batch action data is empty", "event", event.ID)
+		ctx.Logger().Error("batch action data is empty", "eventId", event.ID)
 		return events.NewErrorResult("cannot process event", "batch action data is empty")
 	}
 
@@ -47,7 +47,10 @@ func (s *BatchActionService) batchAction(ctx common.ExtendedContext, event event
 	case string(schedoapi.RequestAging):
 		action = s.RequestAging
 	default:
-		ctx.Logger().Error("unknown batch action", "actionName", event.EventData.BatchActionData.ActionName, "event", event)
+		ctx.Logger().Error("unknown batch action",
+			"actionName", event.EventData.BatchActionData.ActionName,
+			"eventId", event.ID,
+			"taskId", event.EventData.BatchActionData.TaskId)
 		return events.NewErrorResult("cannot process event", "unknown batch action")
 	}
 
