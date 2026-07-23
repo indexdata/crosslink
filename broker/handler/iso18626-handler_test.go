@@ -10,7 +10,7 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test/mocks"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5"
@@ -249,7 +249,7 @@ type MockIllRepositorySuccessAlma struct {
 func (r *MockIllRepositorySuccessAlma) GetPeerById(ctx common.ExtendedContext, id string) (ill_db.Peer, error) {
 	return ill_db.Peer{
 		ID:     id,
-		Vendor: string(directory.Alma),
+		Vendor: string(dirapi.Alma),
 	}, nil
 }
 
@@ -283,9 +283,9 @@ func (r *mockDuplicateCheckRepo) ListIllTransactions(ctx common.ExtendedContext,
 }
 
 func TestCheckDuplicateRequest(t *testing.T) {
-	window1 := 1
-	window0 := 0
-	windowNeg := -1
+	window1 := int32(1)
+	window0 := int32(0)
+	windowNeg := int32(-1)
 
 	baseRequest := &iso18626.Request{
 		BibliographicInfo: iso18626.BibliographicInfo{
@@ -338,21 +338,21 @@ func TestCheckDuplicateRequest(t *testing.T) {
 		{
 			name:           "window is zero - skips check",
 			request:        baseRequest,
-			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window0}},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{DuplicateCheckWindowHours: &window0}},
 			wantErr:        nil,
 			wantRepoCalled: false,
 		},
 		{
 			name:           "window is negative - skips check",
 			request:        baseRequest,
-			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &windowNeg}},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{DuplicateCheckWindowHours: &windowNeg}},
 			wantErr:        nil,
 			wantRepoCalled: false,
 		},
 		{
 			name:           "db error - fails open, allows request through",
 			request:        baseRequest,
-			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{DuplicateCheckWindowHours: &window1}},
 			repoErr:        errors.New("db connection error"),
 			wantErr:        nil,
 			wantRepoCalled: true,
@@ -364,7 +364,7 @@ func TestCheckDuplicateRequest(t *testing.T) {
 		{
 			name:           "no duplicate found (ErrNoRows) - not a duplicate",
 			request:        baseRequest,
-			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{DuplicateCheckWindowHours: &window1}},
 			repoErr:        pgx.ErrNoRows,
 			wantErr:        nil,
 			wantRepoCalled: true,
@@ -376,7 +376,7 @@ func TestCheckDuplicateRequest(t *testing.T) {
 		{
 			name:           "duplicate found - returns ErrDuplicateRequest",
 			request:        baseRequest,
-			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{DuplicateCheckWindowHours: &window1}},
 			duplicate:      true,
 			wantErr:        ErrDuplicateRequest,
 			wantRepoCalled: true,
@@ -391,7 +391,7 @@ func TestCheckDuplicateRequest(t *testing.T) {
 				BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "rec-1"},
 				ServiceInfo:       &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
 			},
-			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{DuplicateCheckWindowHours: &window1}},
 			repoErr:        pgx.ErrNoRows,
 			wantErr:        nil,
 			wantRepoCalled: false,
@@ -407,7 +407,7 @@ func TestCheckDuplicateRequest(t *testing.T) {
 					PatronId: "patron-1",
 				},
 			},
-			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{DuplicateCheckWindowHours: &window1}},
 			repoErr:        pgx.ErrNoRows,
 			wantErr:        nil,
 			wantRepoCalled: false,
@@ -415,7 +415,7 @@ func TestCheckDuplicateRequest(t *testing.T) {
 		{
 			name:           "isbn passed as parameter to DB query",
 			request:        isbnRequest,
-			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{DuplicateCheckWindowHours: &window1}},
 			repoErr:        pgx.ErrNoRows,
 			wantErr:        nil,
 			wantRepoCalled: true,
@@ -426,7 +426,7 @@ func TestCheckDuplicateRequest(t *testing.T) {
 		{
 			name:           "duplicate found via isbn - returns ErrDuplicateRequest",
 			request:        isbnRequest,
-			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{DuplicateCheckWindowHours: &window1}},
 			duplicate:      true,
 			wantErr:        ErrDuplicateRequest,
 			wantRepoCalled: true,
@@ -437,7 +437,7 @@ func TestCheckDuplicateRequest(t *testing.T) {
 		{
 			name:           "no duplicate - returns nil",
 			request:        isbnRequest,
-			peer:           ill_db.Peer{CustomData: directory.Entry{DuplicateCheckWindowHours: &window1}},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{DuplicateCheckWindowHours: &window1}},
 			duplicate:      false,
 			wantErr:        nil,
 			wantRepoCalled: true,

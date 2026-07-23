@@ -18,7 +18,7 @@ import (
 	"github.com/indexdata/crosslink/broker/oapi"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -88,12 +88,12 @@ func TestCrud(t *testing.T) {
 	requesterSymbol := "localISIL:REQ" + uuid.NewString()
 	supplierSymbol := "ISIL:SUP" + uuid.NewString()
 
-	lmsConfig := &directory.LmsConfig{
+	lmsConfig := &dirapi.LmsConfig{
 		FromAgency: "from-agency",
 		Address:    ncipMockUrl,
 	}
-	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
-		directory.Entry{
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink,
+		dirapi.Entry{
 			LmsConfig: lmsConfig,
 		}, requesterSymbol)
 	assert.NotNil(t, reqPeer)
@@ -377,12 +377,12 @@ func TestNeedsReviewAndUpdate(t *testing.T) {
 	requesterSymbol := "ISIL:REQ" + uuid.NewString()
 	supplierSymbol := "ISIL:SUP" + uuid.NewString()
 
-	lmsConfig := &directory.LmsConfig{
+	lmsConfig := &dirapi.LmsConfig{
 		FromAgency: "from-agency",
 		Address:    ncipMockUrl,
 	}
-	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
-		directory.Entry{LmsConfig: lmsConfig}, requesterSymbol)
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink,
+		dirapi.Entry{LmsConfig: lmsConfig}, requesterSymbol)
 	assert.NotNil(t, reqPeer)
 	supPeer := apptest.CreatePeer(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL)
 	assert.NotNil(t, supPeer)
@@ -504,15 +504,15 @@ func TestActionsToCompleteState(t *testing.T) {
 	requesterSymbol := "ISIL:REQ" + uuid.NewString()
 	supplierSymbol := "ISIL:SUP" + uuid.NewString()
 
-	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink, directory.Entry{}, requesterSymbol)
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink, dirapi.Entry{}, requesterSymbol)
 	assert.NotNil(t, reqPeer)
 
-	lmsConfig := &directory.LmsConfig{
+	lmsConfig := &dirapi.LmsConfig{
 		FromAgency: "from-agency",
 		Address:    ncipMockUrl,
 	}
-	supPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
-		directory.Entry{
+	supPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink,
+		dirapi.Entry{
 			LmsConfig: lmsConfig,
 		}, supplierSymbol)
 	assert.NotNil(t, supPeer)
@@ -788,12 +788,12 @@ func TestRejectRetry(t *testing.T) {
 	requesterSymbol := "localISIL:REQ" + uuid.NewString()
 	supplierSymbol := "ISIL:SUP" + uuid.NewString()
 
-	lmsConfig := &directory.LmsConfig{
+	lmsConfig := &dirapi.LmsConfig{
 		FromAgency: "from-agency",
 		Address:    ncipMockUrl,
 	}
-	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
-		directory.Entry{
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink,
+		dirapi.Entry{
 			LmsConfig: lmsConfig,
 		}, requesterSymbol)
 	assert.NotNil(t, reqPeer)
@@ -904,12 +904,12 @@ func TestAcceptRetry(t *testing.T) {
 	requesterSymbol := "localISIL:REQ" + uuid.NewString()
 	supplierSymbol := "ISIL:SUP" + uuid.NewString()
 
-	lmsConfig := &directory.LmsConfig{
+	lmsConfig := &dirapi.LmsConfig{
 		FromAgency: "from-agency",
 		Address:    ncipMockUrl,
 	}
-	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
-		directory.Entry{
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink,
+		dirapi.Entry{
 			LmsConfig: lmsConfig,
 		}, requesterSymbol)
 	assert.NotNil(t, reqPeer)
@@ -1053,9 +1053,9 @@ func TestAcceptRetry(t *testing.T) {
 func TestPostPatronRequestRejectsInvalidIllRequest(t *testing.T) {
 	requesterSymbol := "localISIL:REQ" + uuid.NewString()
 
-	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
-		directory.Entry{
-			LmsConfig: &directory.LmsConfig{
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink,
+		dirapi.Entry{
+			LmsConfig: &dirapi.LmsConfig{
 				FromAgency: "from-agency",
 				Address:    ncipMockUrl,
 			},
@@ -1185,8 +1185,8 @@ func TestRequesterSupplierNameCQL(t *testing.T) {
 
 	// CreatePeerWithModeAndVendor registers the symbol record (reqSymbol/supSymbol) and sets
 	// peer.Name to the provided name, so requester_name / supplier_name resolve via the view JOIN.
-	apptest.CreatePeerWithModeAndVendor(t, illRepo, reqSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.ReShare, directory.Entry{}, reqName)
-	apptest.CreatePeerWithModeAndVendor(t, illRepo, supSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.ReShare, directory.Entry{}, supName)
+	apptest.CreatePeerWithModeAndVendor(t, illRepo, reqSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.ReShare, dirapi.Entry{}, reqName)
+	apptest.CreatePeerWithModeAndVendor(t, illRepo, supSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.ReShare, dirapi.Entry{}, supName)
 
 	prId := uuid.NewString()
 	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
@@ -1307,9 +1307,9 @@ func TestFacetsOK(t *testing.T) {
 	requesterSymbols := []string{"ISIL:REQ" + uuid.NewString(), "ISIL:REQ" + uuid.NewString()}
 
 	for _, requesterSymbol := range requesterSymbols {
-		reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
-			directory.Entry{
-				LmsConfig: &directory.LmsConfig{
+		reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink,
+			dirapi.Entry{
+				LmsConfig: &dirapi.LmsConfig{
 					FromAgency: "from-agency",
 					Address:    ncipMockUrl,
 				},
@@ -1446,7 +1446,7 @@ func TestFacetsEmptyField(t *testing.T) {
 
 func TestCRUDTemplate(t *testing.T) {
 	symbol := "ISIL:TMPL" + uuid.NewString()
-	apptest.CreatePeerWithModeAndVendor(t, illRepo, symbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink, directory.Entry{}, symbol)
+	apptest.CreatePeerWithModeAndVendor(t, illRepo, symbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink, dirapi.Entry{}, symbol)
 
 	templatePath := "/templates"
 	queryParams := "?symbol=" + url.QueryEscape(symbol)
@@ -1495,7 +1495,7 @@ func TestCRUDTemplate(t *testing.T) {
 
 	// GET list – template is NOT visible for a different symbol
 	otherSymbol := "ISIL:OTHER" + uuid.NewString()
-	apptest.CreatePeerWithModeAndVendor(t, illRepo, otherSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink, directory.Entry{}, otherSymbol)
+	apptest.CreatePeerWithModeAndVendor(t, illRepo, otherSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink, dirapi.Entry{}, otherSymbol)
 	respBytes = httpRequest(t, "GET", templatePath+"?symbol="+url.QueryEscape(otherSymbol), []byte{}, 200)
 	var otherTemplates proapi.Templates
 	err = json.Unmarshal(respBytes, &otherTemplates)

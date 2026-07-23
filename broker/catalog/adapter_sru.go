@@ -8,7 +8,7 @@ import (
 	"net/url"
 
 	"github.com/indexdata/cql-go/cqlbuilder"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/sru"
 	"github.com/indexdata/crosslink/sru/diag"
@@ -34,7 +34,7 @@ func CreateSruLookupAdapter(client *http.Client, sruUrl []string, xTarget string
 	return &SruLookupAdapter{client: client, sruUrl: sruUrl, queryBuilder: queryBuilder, holdingsParser: parser, metadataParser: metadataParser, xTarget: xTarget, recordSchema: recordSchema}
 }
 
-func NewSruLookupAdapter(config directory.SruConfig, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser, metadataParser MetadataParser) (LookupAdapter, error) {
+func NewSruLookupAdapter(config dirapi.SruConfig, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser, metadataParser MetadataParser) (LookupAdapter, error) {
 	var recordSchema string
 	if config.RecordSchema != nil {
 		recordSchema = *config.RecordSchema

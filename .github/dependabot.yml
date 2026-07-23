@@ -5,6 +5,7 @@ updates:
     directories:
       - "/broker"
       - "/directory"
+      - "/directory-mock"
       - "/httpclient"
       - "/illmock"
       - "/iso18626"
@@ -47,6 +48,18 @@ updates:
   # Docker broker
   - package-ecosystem: docker
     directory: "/broker"
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "deps"
+
+  # Docker directory
+  - package-ecosystem: docker
+    directory: "/directory"
     schedule:
       interval: weekly
       day: monday

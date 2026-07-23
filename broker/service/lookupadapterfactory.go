@@ -7,7 +7,7 @@ import (
 	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 )
 
 type LookupAdapterFactory struct {
@@ -50,20 +50,20 @@ func (s *LookupAdapterFactory) resolveConfigPeer(ctx common.ExtendedContext, req
 	return consortiumPeers[0], nil
 }
 
-func (s *LookupAdapterFactory) GetAdapterRequester(ctx common.ExtendedContext, requester ill_db.Peer) (catalog.LookupAdapter, directory.Entry, error) {
+func (s *LookupAdapterFactory) GetAdapterRequester(ctx common.ExtendedContext, requester ill_db.Peer) (catalog.LookupAdapter, dirapi.Entry, error) {
 	peer, err := s.resolveConfigPeer(ctx, requester)
 	if err != nil {
-		return nil, directory.Entry{}, err
+		return nil, dirapi.Entry{}, err
 	}
 	if s.globalLookupAdapter != nil {
 		return s.globalLookupAdapter, peer.CustomData, nil
 	}
 	if s.lookupAdapterCreator == nil {
-		return nil, directory.Entry{}, fmt.Errorf("lookup adapter factory misconfigured: lookupAdapterCreator is nil")
+		return nil, dirapi.Entry{}, fmt.Errorf("lookup adapter factory misconfigured: lookupAdapterCreator is nil")
 	}
 	lookupAdapter, err := s.lookupAdapterCreator.GetAdapter(peer)
 	if err != nil {
-		return nil, directory.Entry{}, fmt.Errorf("failed to get adapter for peer: %w", err)
+		return nil, dirapi.Entry{}, fmt.Errorf("failed to get adapter for peer: %w", err)
 	}
 	return lookupAdapter, peer.CustomData, nil
 }

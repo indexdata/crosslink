@@ -1,0 +1,1989 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Directory API
+servers:
+  - url: /rsdir
+paths:
+  /entries:
+    get:
+      summary: Returns all entries
+      description: Returns all entries from the system that the user has access to.
+      operationId: getEntries
+      parameters:
+        - name: cql
+          in: query
+          description: CQL query filter
+          required: false
+          style: form
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Entry list response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntriesResponse'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    post:
+      summary: Creates a new entry
+      description: Creates a new entry
+      operationId: addEntry
+      requestBody:
+        description: Entry to add
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Entry'
+      responses:
+        '201':
+          description: Entry response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Id'
+          links:
+            GetEntryByID:
+              operationId: getEntry
+              parameters:
+                key: 'id'
+                value: '$response.body#/id'
+            UpdateEntry:
+              operationId: updateEntry
+              parameters:
+                key: 'id'
+                value: '$response.body#/id'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entries/{key}/{value}:
+    get:
+      summary: Returns a directory entry by ID or symbol
+      operationId: getEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+      responses:
+        '200':
+          description: Entry response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entry'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    patch:
+      summary: Update an entry
+      description: Update an entry
+      operationId: updateEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+      requestBody:
+        description: Updated fields
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntryPatch'
+      responses:
+        '204':
+          description: entry updated
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    delete:
+      summary: Delete directory entry by ID
+      operationId: deleteEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+      responses:
+        '204':
+          description: entry deleted
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entries/{key}/{value}/tiers:
+    get:
+      summary: Get all Tiers for a given Entry
+      operationId: getTiersForEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+      responses:
+        '200':
+          description: Tier list response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TiersResponse'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    post: 
+      summary: Add an Entry Tier to a given Entry
+      operationId: addTierForEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+      requestBody:
+        description: Entry Tier to add
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddEntryTier'
+      responses:
+        '201':
+          description: Entry Tier response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Id'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entries/{key}/{value}/tiers/{id}:
+    delete:
+      summary: Delete an Entry Tier from a given Entry
+      operationId: deleteTierForEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+        - name: id
+          in: path
+          description: ID of Tier to delete from entry
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Tier deleted from Entry
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal sever error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entries/{key}/{value}/networks:
+    get:
+      summary: Get all Networks for a given Entry
+      operationId: getNetworksForEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+      responses:
+        '200':
+          description: Network list response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworksResponse'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    post:
+      summary: Add an Entry Network to a given Entry
+      operationId: addNetworkForEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+      requestBody:
+        description: Entry Network to add
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddEntryNetwork'
+      responses:
+        '201':
+          description: Entry Network response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Id'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entries/{key}/{value}/networks/{id}:
+    delete:
+      summary: Delete an Entry Network from a given Entry
+      operationId: deleteNetworkForEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+        - name: id
+          in: path
+          description: ID of Network to delete from entry
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Network deleted from Entry
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /tiers:
+    get:
+      summary: Get all tiers
+      description: Return all tiers that the user has access to
+      operationId: getTiers
+      parameters:
+        - name: q
+          in: query
+          description: keywords to filter by
+          required: false
+          style: form
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Tiers list response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TiersResponse'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    post:
+      summary: Create a new Tier
+      description: Create a new Tier
+      operationId: addTier
+      requestBody:
+        description: Tier to add
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Tier'
+      responses:
+        '201':
+          description: Tier response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Id'
+          links:
+            GetTierById:
+              operationId: getTier
+              parameters:
+                id: '$response.body#/id'
+            UpdateTier:
+              operationId: updateTier
+              parameters:
+                id: '$response.body#/id'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /tiers/{id}:
+    get:
+      summary: Returns a Tier by ID
+      operationId: getTier
+      parameters:
+        - name: id
+          in: path
+          description: ID of tier to fetch
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Tier response
+          content: 
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tier'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    delete:
+      summary: Delete Tier by ID
+      operationId: deleteTier
+      parameters:
+        - name: id
+          in: path
+          description: ID of Tier to update
+          required: true
+          schema: 
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Tier deleted
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /networks:
+    get:
+      summary: Get all networks
+      description: Return all networks that the user has access to
+      operationId: getNetworks
+      parameters:
+        - name: q
+          in: query
+          description: keywords to filter by
+          required: false
+          style: form
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Network list response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworksResponse'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    post:
+      summary: Create a new network
+      description: Create a new network
+      operationId: addNetwork
+      requestBody:
+        description: Network to add
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Network'
+      responses:
+        '201':
+          description: Network response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Id'
+          links:
+            GetNetworkById:
+              operationId: GetNetworkById
+              parameters:
+                id: '$response.body#/id'
+            UpdateNetwork:
+              operationId: updateNetwork
+              parameters:
+                id: '$response.body#/id'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /networks/{id}:
+    get:
+      summary: Returns a Network by ID
+      operationId: getNetwork
+      parameters:
+        - name: id
+          in: path
+          description: ID of network to fetch
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Network response
+          content: 
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Network'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    delete:
+      summary: Delete Network by ID
+      operationId: deleteNetwork
+      parameters:
+        - name: id
+          in: path
+          description: ID of Network to update
+          required: true
+          schema: 
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Network deleted
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entry-tiers:
+    get:
+      summary: Returns all Entry Tier Mappings
+      description: Returns all Entry Tier mappings from the system that the user has access to
+      operationId: getEntryTiers
+      parameters:
+        - name: q
+          in: query
+          description: keywords to filter by
+          required: false
+          style: form
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Entry Tiers list response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryTiersResponse'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    post:
+      summary: Creates a new Entry Tier
+      description: Creates a new Entry Tier Relationship
+      operationId: addEntryTier
+      requestBody:
+        description: Entry Tier to add
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntryTier'
+      responses:
+        '201':
+          description: Entry Tier response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Id'
+          links:
+            GetEntryByID:
+              operationId: getEntryTierByID
+              parameters:
+                id: '$response.body#/id'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entry-tiers/{id}:
+    get:
+      summary: Returns an Entry Tier by ID
+      operationId: getEntryTierByID
+      parameters:
+        - name: id
+          in: path
+          description: ID of Entry Tier
+          required: true
+          schema: 
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Entry Tier response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryTier'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    delete:
+      summary: Delete Entry Tier by ID
+      operationId: deleteEntryTier
+      parameters:
+      - name: id
+        in: path
+        description: ID of Entry Tier
+        required: true
+        schema: 
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: Entry Tier deleted
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entry-networks:
+    get:
+      summary: Returns all Entry Network Mappings
+      description: Returns all Entry Network mappings from the system that the user has access to
+      operationId: getEntryNetworks
+      parameters:
+        - name: q
+          in: query
+          description: keywords to filter by
+          required: false
+          style: form
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Entry Networks list response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryNetworksResponse'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    post:
+      summary: Creates a new Entry Network
+      description: Creates a new Entry Network Relationship
+      operationId: addEntryNetwork
+      requestBody:
+        description: Entry Network to add
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntryNetwork'
+      responses:
+        '201':
+          description: Entry Network response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Id'
+          links:
+            GetEntryNetworkByID:
+              operationId: getEntryNetworkByID
+              parameters:
+                id: '$response.body#/id'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entry-networks/{id}:
+    get:
+      summary: Returns an Entry Network by ID
+      operationId: getEntryNetworkByID
+      parameters:
+        - name: id
+          in: path
+          description: ID of Entry Network
+          required: true
+          schema: 
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Entry Network response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryNetwork'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  
+    delete:
+      summary: Delete Entry Network by ID
+      operationId: deleteEntryNetwork
+      parameters:
+      - name: id
+        in: path
+        description: ID of Entry Network
+        required: true
+        schema: 
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: Entry Network deleted
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /closures:
+    get:
+      summary: Get all Closures
+      description: Return all Closures that the user has access to
+      operationId: getClosures
+      parameters:
+        - name: q
+          in: query
+          description: keywords to filter by
+          required: false
+          style: form
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Closures list response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClosuresResponse'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    post:
+      summary: Create a new Closure
+      description: Create a new Closure
+      operationId: addClosure
+      requestBody:
+        description: Closure to add
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Closure'
+      responses:
+        '201':
+          description: Closure response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Id'
+          links:
+            GetClosureById:
+              operationId: GetClosureById
+              parameters:
+                id: '$response.body#/id'
+            UpdateClosure:
+              operationId: updateClosure
+              parameters:
+                id: '$response.body#/id'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /closures/{id}:
+    get:
+      summary: Returns a Closure by ID
+      operationId: getClosure
+      parameters:
+        - name: id
+          in: path
+          description: ID of Closure to fetch
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Closure response
+          content: 
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Closure'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    patch:
+      summary: Update a Closure
+      description: Update a Closure
+      operationId: updateClosure
+      parameters:
+        - name: id
+          in: path
+          description: ID of Closure to update
+          required: true
+          schema: 
+            type: string
+            format: uuid
+      requestBody:
+        description: Updated fields
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClosurePatch'
+      responses:
+        '204':
+          description: Closure updated
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    delete:
+      summary: Delete Closure by ID
+      operationId: deleteClosure
+      parameters:
+        - name: id
+          in: path
+          description: ID of Closure to delete
+          required: true
+          schema: 
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Closure deleted
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+components:
+  parameters:
+    Offset:
+      name: offset
+      in: query
+      description: Offset for pagination (first item is 0)
+      schema:
+        type: integer
+        format: int32
+        minimum: 0
+    Limit:
+      name: limit
+      in: query
+      description: Limit for pagination
+      schema:
+        type: integer
+        format: int32
+        minimum: 0
+        maximum: 1000
+        default: 10
+    entryLookupKey:
+      name: key
+      in: path
+      description: Key to look up entry, either 'id' or 'symbol'
+      required: true
+      schema:
+        type: string
+        enum: [by-id, by-symbol]
+    entryLookupValue:
+      name: value
+      in: path
+      description: Value of id or symbol to access entry by
+      required: true
+      schema:
+        type: string
+
+  schemas:
+    NetworksResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Network'
+    TiersResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tier'
+    EntriesResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Entry'
+    ClosuresResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Closure'
+    EntryNetworksResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntryNetwork'
+    EntryTiersResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntryTier'
+    About:
+      type: object
+      required:
+        - count
+      properties:
+        count:
+          type: integer
+          format: int64
+          description: Total number of items in the result
+        nextLink:
+          type: string
+          description: Link to the next page of results
+        prevLink:
+          type: string
+          description: Link to the previous page of results
+    Id:
+      required:
+        - id
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique id
+    Entry:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique id
+        name:
+          type: string
+          minLength: 1
+        type:
+          type: string
+          enum:
+          - Institution
+          - Consortium
+          - Branch
+        parent:
+          type: string
+          format: uuid
+        description:
+          type: string
+        organizationId:
+          type: string
+        contactName:
+          type: string
+        fromEmail:
+          type: string
+        tenant:
+          type: string
+        vendor:
+          x-go-type: EntryVendor
+        phoneNumber:
+          type: string
+        lmsLocationCode:
+          type: string
+        lenderOfLastResort:
+          type: array
+          items:
+            $ref: '#/components/schemas/Symbol'
+        hrid:
+          type: string
+        timeZone:
+          type: string
+        duplicateCheckWindowHours:
+          type: integer
+          format: int32
+          description: The number of hours to check for duplicate requests. If a request is submitted within this window, it will be considered a duplicate.
+          minimum: 0
+        symbols:
+          type: array
+          items:
+            $ref: '#/components/schemas/Symbol'
+        addresses:
+          type: array
+          items:
+            $ref: '#/components/schemas/Address'
+        closures:
+          type: array
+          items:
+            $ref: '#/components/schemas/Closure'
+        endpoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceEndpoint'
+        networks:
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/Network'
+        tiers:
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/Tier'
+        lmsConfig:
+          description: Configuration for LMS (Library Management System) integration via NCIP protocol
+          $ref: '#/components/schemas/LmsConfig'
+        holdingsConfig:
+          x-go-type: HoldingsConfig
+    EntryPatch:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        type:
+          type: string
+          enum:
+            - Institution
+            - Consortium
+            - Branch
+          nullable: true
+        parent:
+          type: string
+          format: uuid
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        organizationId:
+          type: string
+          nullable: true
+        contactName:
+          type: string
+          nullable: true
+        fromEmail:
+          type: string
+          nullable: true
+        tenant:
+          type: string
+          nullable: true
+        vendor:
+          x-go-type: EntryVendor
+          nullable: true
+        phoneNumber:
+          type: string
+          nullable: true
+        lmsLocationCode:
+          type: string
+          nullable: true
+        lenderOfLastResort:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/Symbol'
+        hrid:
+          type: string
+          nullable: true
+        timeZone:
+          type: string
+          nullable: true
+        duplicateCheckWindowHours:
+          type: integer
+          format: int32
+          description: The number of hours to check for duplicate requests. If a request is submitted within this window, it will be considered a duplicate.
+          minimum: 0
+          nullable: true
+        lmsConfig:
+          allOf:
+            - $ref: '#/components/schemas/LmsConfigPatch'
+          nullable: true
+        holdingsConfig:
+          x-go-type: HoldingsConfig
+          nullable: true
+        symbols:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/SymbolPatch'
+        endpoints:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/ServiceEndpointPatch'
+        addresses:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/AddressPatch'
+        closures:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/ClosurePatch'
+
+    LmsConfig:
+      type: object
+      required:
+        - address
+        - fromAgency
+      properties:
+        address:
+          type: string
+          description: Base URL of the LMS API
+        fromAgency:
+          type: string
+          description: Agency code used when the entry is acting as the supplying agency
+        fromAgencyAuthentication:
+          type: string
+          x-oapi-codegen-extra-tags:
+            protected: "true"
+          description: Authentication token or credentials for the fromAgency
+        toAgency:
+          type: string
+          description: Agency code used when the entry is acting as the requesting agency
+        lookupUserEnabled:
+          type: boolean
+          description: Whether user lookup is enabled
+          default: true
+        acceptItemEnabled:
+          type: boolean
+          description: Whether item acceptance is enabled
+          default: true
+        checkInItemEnabled:
+          type: boolean
+          description: Whether item check-in is enabled
+          default: true
+        checkOutItemEnabled:
+          type: boolean
+          description: Whether item check-out is enabled
+          default: true
+        itemLocation:
+          type: string
+          description: Location code to include in NCIP RequestItem messages
+          default: ""
+        requestItemRequestType:
+          type: string
+          description: For Request Item requests, the type of request to create
+          default: Page
+        requestItemRequestScopeType:
+          type: string
+          description: For Request Item requests, the scope type of request to create
+          default: Item
+        requestItemBibIdCode:
+          type: string
+          description: For Request Item requests, the code indicating how to interpret the bib id
+          default: SYSNUMBER
+        requestItemPickupLocationEnabled:
+          type: boolean
+          description: Whether to include a pickup location when making Request Item requests
+          default: true
+        requesterPickupLocation:
+          type: string
+          description: Pickup location code used when acting as requesting agency
+          default: Main Library
+        supplierPickupLocation:
+          type: string
+          description: Pickup location code used when acting as supplying agency
+          default: ILL Office
+        requesterPatronPattern:
+          type: string
+          description: "'{requesterSymbol}' occurrences are replaced with requesting agency ISIL"
+          default: "INST-{requesterSymbol}"
+    LmsConfigPatch:
+      type: object
+      properties:
+        address:
+          type: string
+        fromAgency:
+          type: string
+        fromAgencyAuthentication:
+          type: string
+        toAgency:
+          type: string
+        lookupUserEnabled:
+          type: boolean
+        acceptItemEnabled:
+          type: boolean
+        checkInItemEnabled:
+          type: boolean
+        checkOutItemEnabled:
+          type: boolean
+        itemLocation:
+          type: string
+        requestItemRequestType:
+          type: string
+        requestItemRequestScopeType:
+          type: string
+        requestItemBibIdCode:
+          type: string
+        requestItemPickupLocationEnabled:
+          type: boolean
+        requesterPickupLocation:
+          type: string
+        supplierPickupLocation:
+          type: string
+        requesterPatronPattern:
+          type: string
+
+    SymbolProperties:
+      required:
+        - symbol
+        - authority
+      properties:
+        symbol:
+          type: string
+          description: Uppercase string
+        authority:
+          type: string
+          description: Uppercase string
+    Symbol:
+      allOf:
+        - required:
+          - id
+          properties:
+            id:
+              readOnly: true
+              type: string
+              format: uuid
+              description: Unique id
+        - $ref: '#/components/schemas/SymbolProperties'
+    SymbolPatch:
+      allOf:
+        - properties:
+            id:
+              type: string
+              format: uuid
+              description: Unique id
+        - $ref: '#/components/schemas/SymbolProperties'
+
+    ServiceEndpointProperties:
+      type: object
+      required:
+        - name
+        - type
+        - address
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        address:
+          type: string
+    ServiceEndpoint:
+      allOf:
+        - required:
+          - id
+          properties:
+            id:
+              readOnly: true
+              type: string
+              format: uuid
+              description: Unique id
+        - $ref: '#/components/schemas/ServiceEndpointProperties'
+    ServiceEndpointPatch:
+      allOf:
+        - properties:
+            id:
+              type: string
+              format: uuid
+              description: Unique id
+        - $ref: '#/components/schemas/ServiceEndpointProperties'
+
+    AddressComponent:
+      type: object
+      required:
+        - seq
+        - type
+        - value
+      properties:
+        seq:
+          type: integer
+          format: int32
+          description: Sequence number for ordering components
+        type:
+          type: string
+          enum:
+            - Thoroughfare
+            - Locality
+            - AdministrativeArea
+            - PostalCode
+            - CountryCode
+            - Other
+        value:
+          type: string
+
+    AddressProperties:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum:
+            - Default
+            - Shipping
+            - Billing
+            - Other
+        addressComponents:
+          type: array
+          items:
+            $ref: '#/components/schemas/AddressComponent'
+    Address:
+      allOf:
+        - required:
+          - id
+          - entry
+          properties:
+            id:
+              readOnly: true
+              type: string
+              format: uuid
+              description: Unique id
+            entry:
+              readOnly: true
+              type: string
+              format: uuid
+        - $ref: '#/components/schemas/AddressProperties'
+    AddressPatch:
+      allOf:
+        - properties:
+            id:
+              type: string
+              format: uuid
+              description: Unique id
+        - $ref: '#/components/schemas/AddressProperties'
+
+    Closure:
+      type: object
+      required:
+        - id
+        - entry
+        - startDate
+        - endDate
+        - reason
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique identifier
+        entry:
+          type: string
+          format: uuid
+        startDate:
+          type: string
+          format: date
+          description: ISO8601 date
+        endDate:
+          type: string
+          format: date
+          description: ISO8601 date
+        reason:
+          type: string
+    ClosurePatch:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier
+        startDate:
+          type: string
+          format: date
+          description: ISO8601 date
+        endDate:
+          type: string
+          format: date
+          description: ISO8601 date
+        reason:
+          type: string
+
+    Network:
+      type: object
+      required:
+        - id
+        - consortium
+        - priority
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique identifier
+        consortium:
+          type: string
+          format: uuid
+        name:
+          type: string
+        priority:
+          type: number
+          format: double
+          default: 0.0
+        reciprocal:
+          type: boolean
+
+    Tier:
+      type: object
+      required:
+        - id
+        - consortium
+        - level
+        - type
+        - cost
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique identifier
+        consortium:
+          type: string
+          format: uuid
+        name:
+          type: string
+        level:
+          type: string
+          enum:
+            - express
+            - normal
+            - rush
+            - secondarymail
+            - standard
+            - urgent
+          default: standard
+        type:
+          type: string
+          enum:
+            - loan
+            - copy
+          default: loan
+        cost:
+          type: number
+          format: double
+          default: 0.0
+    
+    EntryNetwork:
+      type: object
+      required:
+        - id
+        - entry
+        - network
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique identifier
+        entry:
+          type: string
+          format: uuid
+          description: ID of entry
+        network:
+          type: string
+          format: uuid
+          description: ID of network
+
+    EntryTier:
+      type: object
+      required:
+        - id
+        - entry
+        - tier
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique identifier
+        entry:
+          type: string
+          format: uuid
+          description: ID of entry
+        tier:
+          type: string
+          format: uuid
+          description: ID of tier
+    
+    AddEntryTier:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier
+
+    AddEntryNetwork:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier

@@ -2,15 +2,43 @@ FROM golang:1.26 AS build
 
 RUN apt-get update && apt-get install -y libyaz-dev pkg-config
 
-# Builds from the workspace root dir
 WORKDIR /app
-COPY go.work go.work.sum ./
 
-# copy only go.mods so Go doesn't complain on missing workspace modules
-COPY illmock/go.mod ./illmock/go.mod
+# Copy manifests first so source changes do not invalidate dependency caches.
+COPY broker/go.mod broker/go.sum ./broker/
+COPY directory/go.mod directory/go.sum ./directory/
+COPY illmock/go.mod illmock/go.sum ./illmock/
+COPY directory-mock/go.mod directory-mock/go.sum ./directory-mock/
+COPY httpclient/go.mod httpclient/go.sum ./httpclient/
+COPY iso18626/go.mod iso18626/go.sum ./iso18626/
+COPY marcxml/go.mod marcxml/go.sum ./marcxml/
+COPY ncip/go.mod ncip/go.sum ./ncip/
+COPY sru/go.mod sru/go.sum ./sru/
+COPY testutil/go.mod testutil/go.sum ./testutil/
+COPY zoom/go.mod zoom/go.sum ./zoom/
 
+RUN go work init \
+    ./broker \
+    ./directory \
+    ./illmock \
+    ./directory-mock \
+    ./httpclient \
+    ./iso18626 \
+    ./marcxml \
+    ./ncip \
+    ./sru \
+    ./testutil \
+    ./zoom
 
-# Copy dependent modules' sources (these change seldom)
+RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
+    cd /app/directory && \
+    GOWORK=off go mod download
+
+RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
+    cd /app/broker && \
+    go mod download
+
+# Copy dependent module sources after dependencies have been downloaded.
 COPY directory/ ./directory
 COPY httpclient/ ./httpclient
 COPY marcxml/ ./marcxml
@@ -20,21 +48,14 @@ COPY ncip/ ./ncip
 COPY zoom/ ./zoom
 COPY testutil/ ./testutil
 
-# copy broker manifests before sources to leverage docker cache for mod downloads
-COPY broker/go.mod broker/go.sum ./broker/
+# Directory generated sources are not stored in the repository.
+RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
+    cd /app/directory && \
+    GOWORK=off go generate .
 
-# Set workdir for go commands
 WORKDIR /app/broker
 
-# download broker module dependencies, use cached GOMODPATH for local builds
-RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
-  go mod download
-
-# sources are generated before docker build
-# make sure make generate is run
-
-# copy broker sources (changes here won't invalidate deps cache)
-# see .dockerignore for what is getting copied
+# Copy Broker sources after dependencies have been downloaded.
 COPY broker/ ./
 
 # Build, reuse both module and build caches

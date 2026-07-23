@@ -1,0 +1,16 @@
+{
+  "name":"New Institution",
+  "type":"Institution",
+  "lenderOfLastResort":[{"authority":"ISIL","symbol":"NEW-LOR"}],
+  "symbols": [
+    {"authority":"TEST", "symbol":"NWINST"},
+    {"authority":"TEST", "symbol":"NWINSTTOO"}
+  ],
+  "endpoints": [
+    {
+      "name": "Primary",
+      "type": "ISO18626",
+      "address": "https://some.host.tld/path"
+    }
+  ]
+}

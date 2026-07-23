@@ -8,7 +8,7 @@ import (
 	"time"
 
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 
 	"github.com/indexdata/crosslink/broker/shim"
 	"github.com/indexdata/crosslink/broker/vcs"
@@ -458,7 +458,7 @@ func (c *Iso18626Client) HandleIllMessage(ctx common.ExtendedContext, peer *ill_
 	if peer == nil {
 		return nil, fmt.Errorf("peer is nil")
 	}
-	if strings.EqualFold(peer.Vendor, string(directory.CrossLink)) {
+	if strings.EqualFold(peer.Vendor, string(dirapi.CrossLink)) {
 		return c.prMessageHandler.HandleMessage(ctx, msg)
 	}
 	return c.SendHttpPost(peer, msg)
@@ -530,8 +530,8 @@ func getPeerInfo(peer *ill_db.Peer, symbol string) (string, iso18626.TypeAgencyI
 		}
 	}
 	email := iso18626.ElectronicAddress{}
-	if peer.CustomData.Email != nil {
-		email.ElectronicAddressData = *peer.CustomData.Email
+	if peer.CustomData.FromEmail != nil {
+		email.ElectronicAddressData = *peer.CustomData.FromEmail
 		email.ElectronicAddressType = iso18626.TypeSchemeValuePair{
 			Text: string(iso18626.ElectronicAddressTypeEmail),
 		}
@@ -687,7 +687,7 @@ func isInternalCrossLinkMessage(trCtx transactionContext, target *messageTarget)
 }
 
 func isCrossLinkVendor(peer *ill_db.Peer) bool {
-	return peer != nil && strings.EqualFold(peer.Vendor, string(directory.CrossLink))
+	return peer != nil && strings.EqualFold(peer.Vendor, string(dirapi.CrossLink))
 }
 
 func prependSupplierSymbolNote(trCtx transactionContext, target *messageTarget, sam *iso18626.SupplyingAgencyMessage) {

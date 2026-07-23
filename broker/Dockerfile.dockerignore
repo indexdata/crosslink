@@ -26,3 +26,9 @@ broker/**/*_test.go
 
 # Include pull slip templates
 !broker/pullslip/service/pull_slip_template.html
+
+# Directory sources are generated inside the build.
+directory/api/directory.gen.go
+directory/db/db.go
+directory/db/models.go
+directory/db/query.sql.go

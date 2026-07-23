@@ -254,9 +254,9 @@ components:
         lmsConfig:
           description: Configuration for LMS (Library Management System) integration via NCIP protocol
           $ref: '#/components/schemas/LmsConfig'
-        catalogConfig:
+        holdingsConfig:
           description: Configuration for catalog lookup (institutional or consortial).
-          $ref: '#/components/schemas/CatalogConfig'
+          $ref: '#/components/schemas/HoldingsConfig'
         vendor:
           type: string
           description: ISO18626 vendor type
@@ -271,7 +271,7 @@ components:
           description: The number of hours to check for duplicate requests. If a request is submitted within this window, it will be considered a duplicate.
           minimum: 0
 
-    CatalogConfig:
+    HoldingsConfig:
       type: object
       properties:
         sru:

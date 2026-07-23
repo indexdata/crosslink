@@ -14,7 +14,7 @@ import (
 
 	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/broker/common"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 )
@@ -48,9 +48,17 @@ func (a *ApiDirectory) getDirectory(ctx common.ExtendedContext, symbols []string
 		return []DirectoryEntry{}, "", fmt.Errorf("no symbols or tenant provided for directory lookup")
 	}
 	var dirEntries []DirectoryEntry
-	query := "?maximumRecords=1000&cql=" + url.QueryEscape(cql)
+	query := "?limit=1000&cql=" + url.QueryEscape(cql)
 	fullUrl := durl + query
-	response, err := a.client.Get(fullUrl)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullUrl, nil)
+	if err != nil {
+		return []DirectoryEntry{}, query, err
+	}
+	req.Header.Set("X-Okapi-Permissions", `["directory.system.all"]`)
+	if tenant != "" {
+		req.Header.Set("X-Okapi-Tenant", tenant)
+	}
+	response, err := a.client.Do(req)
 	if err != nil {
 		return []DirectoryEntry{}, query, err
 	}
@@ -61,7 +69,7 @@ func (a *ApiDirectory) getDirectory(ctx common.ExtendedContext, symbols []string
 		return []DirectoryEntry{}, query, fmt.Errorf("API returned non-OK status: %d, body: %s", response.StatusCode, body)
 	}
 
-	var responseList directory.EntriesResponse
+	var responseList dirapi.EntriesResponse
 	err = json.Unmarshal(body, &responseList)
 	if err != nil {
 		return []DirectoryEntry{}, query, err
@@ -78,7 +86,8 @@ func (a *ApiDirectory) getDirectory(ctx common.ExtendedContext, symbols []string
 				symbols = append(symbols, authority+":"+s.Symbol)
 			}
 			if d.Parent != nil {
-				childSymbolsById[*d.Parent] = append(childSymbolsById[*d.Parent], symbols...)
+				parentID := d.Parent.String()
+				childSymbolsById[parentID] = append(childSymbolsById[parentID], symbols...)
 			}
 		}
 		if len(symbols) == 0 {
@@ -93,7 +102,7 @@ func (a *ApiDirectory) getDirectory(ctx common.ExtendedContext, symbols []string
 				}
 			}
 		}
-		vendor := directory.Unknown
+		vendor := dirapi.Unknown
 		if d.Vendor != nil {
 			vendor = *d.Vendor
 		} else if apiUrl != "" {
@@ -135,7 +144,7 @@ func (a *ApiDirectory) Lookup(ctx common.ExtendedContext, params DirectoryLookup
 	return directoryList, query, nil
 }
 
-func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData directory.Entry, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo) {
+func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData dirapi.Entry, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo) {
 	var rotaInfo RotaInfo
 
 	filtered := []Supplier{}
@@ -342,15 +351,15 @@ func CompareSuppliers(a, b SupplierOrdering) int {
 	return cmp.Compare(a.GetSymbol(), b.GetSymbol())
 }
 
-func getPeerNetworks(peerData directory.Entry) map[string]Network {
+func getPeerNetworks(peerData dirapi.Entry) map[string]Network {
 	networks := map[string]Network{}
 	if peerData.Networks != nil {
 		for _, n := range *peerData.Networks {
-			if n.Priority != nil {
-				networks[n.Name] = Network{
-					Name:       n.Name,
-					Priority:   int(*n.Priority),
-					Reciprocal: n.Reciprocal,
+			if n.Name != nil {
+				networks[*n.Name] = Network{
+					Name:       *n.Name,
+					Priority:   int(n.Priority),
+					Reciprocal: nil,
 				}
 			}
 		}
@@ -358,14 +367,18 @@ func getPeerNetworks(peerData directory.Entry) map[string]Network {
 	return networks
 }
 
-func getPeerTiers(peerData directory.Entry) []Tier {
+func getPeerTiers(peerData dirapi.Entry) []Tier {
 	tiers := []Tier{}
 	if peerData.Tiers != nil {
 		for _, t := range *peerData.Tiers {
+			name := ""
+			if t.Name != nil {
+				name = *t.Name
+			}
 			tiers = append(tiers, Tier{
-				Name:  t.Name,
-				Level: t.Level,
-				Type:  t.Type,
+				Name:  name,
+				Level: string(t.Level),
+				Type:  string(t.Type),
 				Cost:  t.Cost,
 			})
 		}
@@ -373,28 +386,28 @@ func getPeerTiers(peerData directory.Entry) []Tier {
 	return tiers
 }
 
-func GetVendorFromUrl(url string) directory.EntryVendor {
+func GetVendorFromUrl(url string) dirapi.EntryVendor {
 	url = strings.ToLower(url)
 	if strings.Contains(url, "alma.exlibrisgroup.com") || strings.Contains(url, "rapido.exlibrisgroup.com") {
-		return directory.Alma
+		return dirapi.Alma
 	} else if strings.Contains(url, "/rs/externalapi/iso18626") {
-		return directory.ReShare
+		return dirapi.ReShare
 	} else if strings.Contains(url, "atlas-sys.com") || strings.Contains(url, "illiad") {
-		return directory.ILLiad
+		return dirapi.ILLiad
 	} else {
-		return directory.Unknown
+		return dirapi.Unknown
 	}
 }
 
-func GetBrokerMode(vendor directory.EntryVendor) common.BrokerMode {
+func GetBrokerMode(vendor dirapi.EntryVendor) common.BrokerMode {
 	switch vendor {
-	case directory.Alma:
+	case dirapi.Alma:
 		return common.BrokerModeOpaque
-	case directory.ILLiad:
+	case dirapi.ILLiad:
 		return common.BrokerModeOpaque
-	case directory.ReShare:
+	case dirapi.ReShare:
 		return common.BrokerModeTransparent
-	case directory.CrossLink:
+	case dirapi.CrossLink:
 		return common.BrokerModeTransparent
 	default:
 		return DEFAULT_BROKER_MODE

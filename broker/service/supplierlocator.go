@@ -14,7 +14,7 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -78,9 +78,9 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		return events.LogErrorAndReturnResult(ctx, "no lookup adapter available for locating suppliers", fmt.Errorf("no adapter found"))
 	}
 
-	metadataUpdateMode := directory.None
-	if configPeer.CatalogConfig != nil && configPeer.CatalogConfig.MetadataUpdateMode != nil {
-		metadataUpdateMode = *configPeer.CatalogConfig.MetadataUpdateMode
+	metadataUpdateMode := dirapi.None
+	if configPeer.HoldingsConfig != nil && configPeer.HoldingsConfig.MetadataUpdateMode != nil {
+		metadataUpdateMode = *configPeer.HoldingsConfig.MetadataUpdateMode
 	}
 
 	var query string
@@ -103,7 +103,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	}
 
 	// only want metadata lookup for non-Crosslink vendors, because Crosslink is dealt with in post of patron requests.
-	if metadataUpdateMode != directory.None && requester.Vendor != string(directory.CrossLink) {
+	if metadataUpdateMode != dirapi.None && requester.Vendor != string(dirapi.CrossLink) {
 		metadata, err := lookupResult.GetMetadata()
 		if err != nil {
 			return events.LogErrorAndReturnResult(ctx, "failed to get metadata for locating suppliers", err)
@@ -133,7 +133,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 
 	// deal with last resort symbols configured for requester or consortium (if any) - these are added as holdings results to
 	// be processed like normal holdings, but just use bibliographicInfo.SupplierUniqueRecordId for localIdentifier
-	var lenderLastResort []directory.Symbol
+	var lenderLastResort []dirapi.Symbol
 	if requester.CustomData.LenderOfLastResort != nil {
 		lenderLastResort = *requester.CustomData.LenderOfLastResort
 	} else if configPeer.LenderOfLastResort != nil {
@@ -444,14 +444,17 @@ func (s *SupplierLocator) getNextSupplier(ctx common.ExtendedContext, suppliers 
 				currentTime := time.Now().In(timezoneLoc)
 				skipSup := false
 				for _, closure := range *peer.CustomData.Closures {
-					if closure.StartDate != nil && closure.EndDate != nil {
-						startDate, err := getDateWithTimezone(*closure.StartDate, timezoneLoc, false)
+					if closure.StartDate.IsZero() || closure.EndDate.IsZero() {
+						continue
+					}
+					{
+						startDate, err := getDateWithTimezone(closure.StartDate.Format(time.DateOnly), timezoneLoc, false)
 						if err != nil {
 							ctx.Logger().Error("failed to parse closure start date", "error", err)
 							skipSup = true
 							continue
 						}
-						endDate, err := getDateWithTimezone(*closure.EndDate, timezoneLoc, true)
+						endDate, err := getDateWithTimezone(closure.EndDate.Format(time.DateOnly), timezoneLoc, true)
 						if err != nil {
 							ctx.Logger().Error("failed to parse closure end date", "error", err)
 							skipSup = true

@@ -1101,10 +1101,10 @@ func (a *PatronRequestActionService) getDirectoryEmailData(ctx common.ExtendedCo
 	if dir.CustomData.FromEmail == nil || *dir.CustomData.FromEmail == "" {
 		return "", &toEmail, errors.New("from email is not configured")
 	}
-	if toNeeded && (dir.CustomData.Email == nil || *dir.CustomData.Email == "") {
-		return "", &toEmail, errors.New("email is not configured")
+	if !toNeeded {
+		return *dir.CustomData.FromEmail, nil, nil
 	}
-	return *dir.CustomData.FromEmail, dir.CustomData.Email, nil
+	return *dir.CustomData.FromEmail, dir.CustomData.FromEmail, nil
 }
 
 func (a *PatronRequestActionService) checkSupplyingResponse(status events.EventStatus, eventResult *events.EventResult, result *events.EventResult, httpStatus *int, pr pr_db.PatronRequest) actionExecutionResult {

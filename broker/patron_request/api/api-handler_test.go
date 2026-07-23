@@ -26,7 +26,7 @@ import (
 	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/tenant"
 	"github.com/indexdata/crosslink/broker/test/mocks"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -1225,14 +1225,14 @@ func (m *mockLookupCreator) GetAdapter(peer ill_db.Peer) (catalog.LookupAdapter,
 }
 
 // peerWithMetadataMode builds a Peer whose CustomData carries the given MetadataUpdateMode.
-// Pass nil to leave CatalogConfig absent entirely.
-func peerWithMetadataMode(mode *directory.MetadataUpdateMode) ill_db.Peer {
-	var cc *directory.CatalogConfig
+// Pass nil to leave HoldingsConfig absent entirely.
+func peerWithMetadataMode(mode *dirapi.MetadataUpdateMode) ill_db.Peer {
+	var cc *dirapi.HoldingsConfig
 	if mode != nil {
-		cc = &directory.CatalogConfig{MetadataUpdateMode: mode}
+		cc = &dirapi.HoldingsConfig{MetadataUpdateMode: mode}
 	}
 	return ill_db.Peer{
-		CustomData: directory.Entry{Name: "test-peer", CatalogConfig: cc},
+		CustomData: dirapi.Entry{Name: "test-peer", HoldingsConfig: cc},
 	}
 }
 
@@ -1268,18 +1268,18 @@ func TestMetadataUpdateNilLookupAdapter(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestMetadataUpdateNoCatalogConfig(t *testing.T) {
+func TestMetadataUpdateNoHoldingsConfig(t *testing.T) {
 	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{})
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
-	peer := peerWithMetadataMode(nil) // CatalogConfig absent → mode stays None
+	peer := peerWithMetadataMode(nil) // HoldingsConfig absent → mode stays None
 	err := h.metadataUpdate(ctx, &iso18626.Request{}, peer)
 	assert.NoError(t, err)
 }
 
 func TestMetadataUpdateModeNone(t *testing.T) {
-	mode := directory.None
+	mode := dirapi.None
 	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{})
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
@@ -1289,7 +1289,7 @@ func TestMetadataUpdateModeNone(t *testing.T) {
 }
 
 func TestMetadataUpdateMetadataLookupError(t *testing.T) {
-	mode := directory.Merge
+	mode := dirapi.Merge
 	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{Err: errors.New("lookup failed")})
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
@@ -1299,7 +1299,7 @@ func TestMetadataUpdateMetadataLookupError(t *testing.T) {
 }
 
 func TestMetadataUpdateMergePopulatesEmptyFields(t *testing.T) {
-	mode := directory.Merge
+	mode := dirapi.Merge
 	meta := catalog.Metadata{Title: "Catalog Title", Author: "Jane Doe"}
 	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{Metadata: meta})
 	h := PatronRequestApiHandler{}
@@ -1313,7 +1313,7 @@ func TestMetadataUpdateMergePopulatesEmptyFields(t *testing.T) {
 }
 
 func TestMetadataUpdateMergePreservesExistingFields(t *testing.T) {
-	mode := directory.Merge
+	mode := dirapi.Merge
 	meta := catalog.Metadata{Title: "Catalog Title"}
 	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{Metadata: meta})
 	h := PatronRequestApiHandler{}
@@ -1328,7 +1328,7 @@ func TestMetadataUpdateMergePreservesExistingFields(t *testing.T) {
 }
 
 func TestMetadataUpdateAutoModeWithIdentifierReplaces(t *testing.T) {
-	mode := directory.Auto
+	mode := dirapi.Auto
 	meta := catalog.Metadata{Title: "Catalog Title", Author: "Catalog Author", Isbn: "1234567890"}
 	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{Metadata: meta})
 	h := PatronRequestApiHandler{}
@@ -1355,7 +1355,7 @@ func TestMetadataUpdateAutoModeWithIdentifierReplaces(t *testing.T) {
 }
 
 func TestMetadataUpdateAutoModeWithoutIdentifierMerges(t *testing.T) {
-	mode := directory.Auto
+	mode := dirapi.Auto
 	meta := catalog.Metadata{Title: "Catalog Title", Author: "Catalog Author", Isbn: "1234567890", Issn: "4321-4321"}
 	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{Metadata: meta})
 	h := PatronRequestApiHandler{}

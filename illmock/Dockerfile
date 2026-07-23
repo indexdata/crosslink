@@ -1,35 +1,40 @@
 FROM golang:1.26 AS build
 
-# Builds from the workspace root dir
 WORKDIR /app
-COPY go.work go.work.sum ./
 
-# copy only go.mods so Go doesn't complain on missing workspace modules
-COPY broker/go.mod ./broker/go.mod
-
-# copy common sources
-COPY directory/ directory
-COPY httpclient/ ./httpclient
-COPY iso18626/ ./iso18626
-COPY ncip/ ./ncip
-COPY marcxml/ ./marcxml
-COPY sru/ ./sru
-COPY zoom/ ./zoom
-COPY testutil/ ./testutil
-
-# copy illmock manifests before sources to leverage docker cache for mod downloads
+# Copy manifests first so source changes do not invalidate the dependency cache.
+COPY directory-mock/go.mod directory-mock/go.sum ./directory-mock/
+COPY httpclient/go.mod httpclient/go.sum ./httpclient/
+COPY iso18626/go.mod iso18626/go.sum ./iso18626/
+COPY marcxml/go.mod marcxml/go.sum ./marcxml/
+COPY ncip/go.mod ncip/go.sum ./ncip/
+COPY sru/go.mod sru/go.sum ./sru/
+COPY testutil/go.mod testutil/go.sum ./testutil/
 COPY illmock/go.mod illmock/go.sum ./illmock/
 
-# Set destination for COPY
+RUN go work init \
+    ./illmock \
+    ./directory-mock \
+    ./httpclient \
+    ./iso18626 \
+    ./marcxml \
+    ./ncip \
+    ./sru \
+    ./testutil
+
 WORKDIR /app/illmock
 
-# download go deps
 RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
-go mod download
-# see .dockerignore for what is getting copied
+    go mod download
 
-# sources are generated before docker build
-# make sure make generate is run
+# Copy sources after dependencies have been downloaded.
+COPY directory-mock/ /app/directory-mock/
+COPY httpclient/ /app/httpclient/
+COPY iso18626/ /app/iso18626/
+COPY marcxml/ /app/marcxml/
+COPY ncip/ /app/ncip/
+COPY sru/ /app/sru/
+COPY testutil/ /app/testutil/
 COPY illmock/ ./
 
 # Build

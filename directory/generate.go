@@ -1,4 +1,4 @@
-// Package directory contains generated Directory API models.
-//
-//go:generate make generate
-package directory
+package main
+
+//go:generate go tool sqlc generate
+//go:generate go tool oapi-codegen --config=oapi-codegen.yaml api.yaml

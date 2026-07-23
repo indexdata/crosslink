@@ -1,0 +1,11 @@
+- id: 10000000-0000-0000-0000-000000000001
+  entry: 00000000-0000-0000-0000-000000000001
+  address: 'https://not.really.real'
+  from_agency: diku
+  from_agency_authentication: the_beaver_flies_at_twilight
+- id: 10000000-0000-0000-0000-000000000002
+  entry: 00000000-0000-0000-0000-000000000002
+  address: 'https://also.not.real'
+  from_agency: rivendell
+  from_agency_authentication: pack_extra_lembas
+  accept_item_enabled: true

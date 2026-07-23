@@ -19,7 +19,7 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	test "github.com/indexdata/crosslink/broker/test/utils"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
@@ -89,13 +89,13 @@ func TestMain(m *testing.M) {
 	mockPeerUrl = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
 	brokerUrl := "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
 
-	var directoryEntries []directory.Entry
+	var directoryEntries []dirapi.Entry
 	err = json.Unmarshal(directoryBytes, &directoryEntries)
 	test.Expect(err, "failed to unmarshal directories")
 
 	// patch consortium peer with SRU server URL for zoom
 	entry := &directoryEntries[0]
-	entry.CatalogConfig.Zoom.Address = sruServer.URL
+	entry.HoldingsConfig.Zoom.Address = sruServer.URL
 
 	// MOCK_PEER_URL is only for DIRECTORY_ADAPTER=mock, so we have to patch all peers here
 	for _, entry := range directoryEntries {

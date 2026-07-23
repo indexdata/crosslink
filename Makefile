@@ -1,6 +1,6 @@
 GO ?= go
-SUBDIRS := testutil iso18626 ncip directory sru marcxml httpclient zoom illmock broker
-TOOL_SUBDIRS := iso18626 ncip directory sru marcxml broker
+SUBDIRS := testutil iso18626 ncip directory directory-mock sru marcxml httpclient zoom illmock broker
+TOOL_SUBDIRS := iso18626 ncip directory directory-mock sru marcxml broker
 TOOL_SUBDIR_TARGETS := $(TOOL_SUBDIRS:%=%-tools-update)
 GOALS := $(or $(MAKECMDGOALS),all)
 SUBDIR_GOALS := $(filter-out tools-update,$(GOALS))

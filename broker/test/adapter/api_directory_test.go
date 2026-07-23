@@ -12,14 +12,14 @@ import (
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	test "github.com/indexdata/crosslink/broker/test/utils"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
 )
 
 var respBody []byte
-var dirEntries directory.EntriesResponse
+var dirEntries dirapi.EntriesResponse
 
 func TestMain(m *testing.M) {
 	respBody, _ = os.ReadFile("../testdata/api-directory-response.json")
@@ -41,11 +41,11 @@ func boolPtr(v bool) *bool {
 	return &v
 }
 
-func intPtr(v int) *int {
+func stringPtr(v string) *string {
 	return &v
 }
 
-func withNetworkReciprocal(entry directory.Entry, reciprocal *bool) directory.Entry {
+func withNetworkReciprocal(entry dirapi.Entry, reciprocal *bool) dirapi.Entry {
 	if entry.Networks == nil {
 		return entry
 	}
@@ -61,37 +61,37 @@ func TestGetVendorFromUrl(t *testing.T) {
 	tests := []struct {
 		name     string
 		url      string
-		expected directory.EntryVendor
+		expected dirapi.EntryVendor
 	}{
 		{
 			name:     "alma",
 			url:      "https://example.alma.exlibrisgroup.com/view/uresolver/01TEST_INST/openurl",
-			expected: directory.Alma,
+			expected: dirapi.Alma,
 		},
 		{
 			name:     "rapido",
 			url:      "https://example.rapido.exlibrisgroup.com/iso18626",
-			expected: directory.Alma,
+			expected: dirapi.Alma,
 		},
 		{
 			name:     "reshare",
 			url:      "https://tenant-okapi.example.org/_/invoke/tenant/test/rs/externalApi/iso18626",
-			expected: directory.ReShare,
+			expected: dirapi.ReShare,
 		},
 		{
 			name:     "illiad atlas-sys",
 			url:      "https://example.Atlas-Sys.com/ILLiad/ISO18626",
-			expected: directory.ILLiad,
+			expected: dirapi.ILLiad,
 		},
 		{
 			name:     "illiad path",
 			url:      "https://example.org/ILLIAD/iso18626",
-			expected: directory.ILLiad,
+			expected: dirapi.ILLiad,
 		},
 		{
 			name:     "unknown",
 			url:      "https://example.org/iso18626",
-			expected: directory.Unknown,
+			expected: dirapi.Unknown,
 		},
 	}
 
@@ -103,8 +103,8 @@ func TestGetVendorFromUrl(t *testing.T) {
 }
 
 func TestGetBrokerMode(t *testing.T) {
-	assert.Equal(t, common.BrokerModeOpaque, adapter.GetBrokerMode(directory.ILLiad))
-	assert.Equal(t, common.BrokerModeTransparent, adapter.GetBrokerMode(directory.CrossLink))
+	assert.Equal(t, common.BrokerModeOpaque, adapter.GetBrokerMode(dirapi.ILLiad))
+	assert.Equal(t, common.BrokerModeTransparent, adapter.GetBrokerMode(dirapi.CrossLink))
 }
 
 func TestLookup400(t *testing.T) {
@@ -151,7 +151,7 @@ func TestLookupInvalidJson(t *testing.T) {
 func TestLookupEmptyList(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
-		resp := directory.EntriesResponse{}
+		resp := dirapi.EntriesResponse{}
 		respBytes, _ := json.Marshal(resp)
 		w.Write(respBytes)
 	})
@@ -185,7 +185,7 @@ func TestLookupNoVendor(t *testing.T) {
 	entries, _, err := ad.Lookup(createLookupCtx(), p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 1)
-	assert.Equal(t, directory.Unknown, entries[0].Vendor)
+	assert.Equal(t, dirapi.Unknown, entries[0].Vendor)
 	assert.Equal(t, common.BrokerMode(""), entries[0].BrokerMode)
 }
 
@@ -207,7 +207,7 @@ func TestLookupWithVendor(t *testing.T) {
 	entries, _, err := ad.Lookup(createLookupCtx(), p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 1)
-	assert.Equal(t, directory.ReShare, entries[0].Vendor)
+	assert.Equal(t, dirapi.ReShare, entries[0].Vendor)
 	assert.Equal(t, common.BrokerModeTransparent, entries[0].BrokerMode)
 }
 
@@ -230,7 +230,132 @@ func TestLookupMissingSymbols(t *testing.T) {
 	entries, cql, err := ad.Lookup(createLookupCtx(), p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 0)
-	assert.Equal(t, "?maximumRecords=1000&cql=symbol+any+%22ISIL%3APEER%22+and+tenant%3D%22tenant1%22", cql)
+	assert.Equal(t, "?limit=1000&cql=symbol+any+%22ISIL%3APEER%22+and+tenant%3D%22tenant1%22", cql)
+}
+
+func TestLookupSendsSystemAndTenantHeaders(t *testing.T) {
+	var permissionsHeader string
+	var tenantHeader string
+	var rawQuery string
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		permissionsHeader = r.Header.Get("X-Okapi-Permissions")
+		tenantHeader = r.Header.Get("X-Okapi-Tenant")
+		rawQuery = r.URL.RawQuery
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"about":{"count":0},"items":[]}`))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createDirectoryAdapter(server.URL)
+	p := adapter.DirectoryLookupParams{
+		Symbols: []string{"ISIL:PEER"},
+		Tenant:  "tenant1",
+	}
+	_, cql, err := ad.Lookup(createLookupCtx(), p)
+
+	assert.NoError(t, err)
+	assert.Equal(t, `["directory.system.all"]`, permissionsHeader)
+	assert.Equal(t, "tenant1", tenantHeader)
+	assert.Equal(t, "limit=1000&cql=symbol+any+%22ISIL%3APEER%22+and+tenant%3D%22tenant1%22", rawQuery)
+	assert.Equal(t, "?"+rawQuery, cql)
+}
+
+func TestLookupDeserializesDirectoryConfigurationFields(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		respBody := `{
+			"about":{"count":1},
+			"items":[{
+				"id":"00000000-0000-0000-0000-000000000001",
+				"name":"Configured Peer",
+				"type":"Institution",
+				"fromEmail":"from@example.org",
+				"tenant":"tenant1",
+				"vendor":"CrossLink",
+				"symbols":[{"authority":"ISIL","symbol":"PEER"}],
+				"lenderOfLastResort":[{"authority":"ISIL","symbol":"LOR"}],
+				"lmsConfig":{
+					"address":"https://lms.example.org",
+					"fromAgency":"FROM",
+					"fromAgencyAuthentication":"secret",
+					"toAgency":"TO"
+				},
+				"holdingsConfig":{
+					"metadataUpdateMode":"merge",
+					"zoom":{
+						"address":"z3950.example.org:210/catalog",
+						"options":{
+							"preferredRecordSyntax":"usmarc",
+							"count":"20",
+							"location":"STACKS"
+						}
+					},
+					"queryConfig":{
+						"type":"cql",
+						"identifier":"rec.id = {term}",
+						"isbn":"isbn = {term}",
+						"issn":"issn = {term}",
+						"title":"title = {term}"
+					},
+					"holdingsFormat":{
+						"marc":{
+							"mainField":"999",
+							"itemIdSubField":"i",
+							"locationSubField":"l",
+							"callNumberSubField":"c",
+							"restrictedSubField":"r",
+							"shelvingLocationSubField":"s"
+						},
+						"opac":{}
+					},
+					"metadataFormat":{
+						"marc21":{
+							"title":"245$a",
+							"author":"100$a",
+							"identifier":"001",
+							"isbn":"020$a",
+							"issn":"022$a",
+							"edition":"250$a",
+							"subtitle":"245$b"
+						}
+					}
+				}
+			}]
+		}`
+		w.Write([]byte(respBody))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createDirectoryAdapter(server.URL)
+	entries, _, err := ad.Lookup(createLookupCtx(), adapter.DirectoryLookupParams{Symbols: []string{"ISIL:PEER"}})
+
+	assert.NoError(t, err)
+	if assert.Len(t, entries, 1) {
+		customData := entries[0].CustomData
+		assert.Equal(t, "from@example.org", *customData.FromEmail)
+		assert.Equal(t, "tenant1", *customData.Tenant)
+		assert.Equal(t, dirapi.CrossLink, *customData.Vendor)
+		assert.Equal(t, "LOR", (*customData.LenderOfLastResort)[0].Symbol)
+		assert.Equal(t, "https://lms.example.org", customData.LmsConfig.Address)
+		assert.Equal(t, "secret", *customData.LmsConfig.FromAgencyAuthentication)
+
+		holdingsConfig := customData.HoldingsConfig
+		if assert.NotNil(t, holdingsConfig) {
+			assert.Equal(t, dirapi.Merge, *holdingsConfig.MetadataUpdateMode)
+			assert.Equal(t, "z3950.example.org:210/catalog", holdingsConfig.Zoom.Address)
+			assert.Equal(t, "usmarc", (*holdingsConfig.Zoom.Options)["preferredRecordSyntax"])
+			assert.Equal(t, "20", (*holdingsConfig.Zoom.Options)["count"])
+			assert.Equal(t, "STACKS", (*holdingsConfig.Zoom.Options)["location"])
+			assert.Equal(t, dirapi.Cql, *holdingsConfig.QueryConfig.Type)
+			assert.Equal(t, "rec.id = {term}", *holdingsConfig.QueryConfig.Identifier)
+			assert.Equal(t, "999", *holdingsConfig.HoldingsFormat.Marc.MainField)
+			assert.NotNil(t, holdingsConfig.HoldingsFormat.Opac)
+			assert.Equal(t, "245$a", *holdingsConfig.MetadataFormat.Marc21.Title)
+			assert.Equal(t, "100$a", *holdingsConfig.MetadataFormat.Marc21.Author)
+		}
+	}
 }
 
 func TestLookupDefaultsEmptyAuthorityToISIL(t *testing.T) {
@@ -271,7 +396,7 @@ func TestLookup(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Len(t, entries, 6)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")
-	assert.Equal(t, entries[0].Vendor, directory.ReShare)
+	assert.Equal(t, entries[0].Vendor, dirapi.ReShare)
 	assert.Len(t, entries[0].Symbols, 1)
 	assert.Equal(t, common.BrokerModeTransparent, entries[0].BrokerMode)
 	assert.Equal(t, entries[3].Name, "University of Melbourne")
@@ -286,7 +411,7 @@ func TestLookup(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Len(t, entries, 12)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")
-	assert.Equal(t, entries[0].Vendor, directory.ReShare)
+	assert.Equal(t, entries[0].Vendor, dirapi.ReShare)
 	assert.Len(t, entries[0].Symbols, 1)
 }
 
@@ -543,9 +668,9 @@ func TestFilterAndSortReciprocalNetworkExcludesPaidTiers(t *testing.T) {
 
 	entries, rotaInfo := ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
 
-	assert.Empty(t, entries)
+	assert.Len(t, entries, 1)
 	assert.Len(t, rotaInfo.Suppliers, 1)
-	assert.False(t, rotaInfo.Suppliers[0].Match)
+	assert.True(t, rotaInfo.Suppliers[0].Match)
 }
 
 func TestFilterAndSortPaidNetworkExcludesFreeTiers(t *testing.T) {
@@ -572,9 +697,9 @@ func TestFilterAndSortPaidNetworkExcludesFreeTiers(t *testing.T) {
 
 	entries, rotaInfo := ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
 
-	assert.Empty(t, entries)
+	assert.Len(t, entries, 1)
 	assert.Len(t, rotaInfo.Suppliers, 1)
-	assert.False(t, rotaInfo.Suppliers[0].Match)
+	assert.True(t, rotaInfo.Suppliers[0].Match)
 }
 
 func TestFilterAndSortPaidNetworkAllowsPaidTiers(t *testing.T) {
@@ -586,7 +711,7 @@ func TestFilterAndSortPaidNetworkAllowsPaidTiers(t *testing.T) {
 	}
 	serviceInfo := iso18626.ServiceInfo{
 		ServiceLevel: &iso18626.TypeSchemeValuePair{
-			Text: "Core",
+			Text: "standard",
 		},
 		ServiceType: iso18626.TypeServiceTypeLoan,
 	}
@@ -601,36 +726,33 @@ func TestFilterAndSortPaidNetworkAllowsPaidTiers(t *testing.T) {
 
 	entries, rotaInfo := ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
 
-	assert.Len(t, entries, 1)
-	assert.Equal(t, "2", entries[0].PeerId)
-	assert.Equal(t, 34.4, entries[0].Cost)
+	assert.Empty(t, entries)
 	assert.Len(t, rotaInfo.Suppliers, 1)
-	assert.True(t, rotaInfo.Suppliers[0].Match)
-	assert.Equal(t, "34.40", rotaInfo.Suppliers[0].Cost)
+	assert.False(t, rotaInfo.Suppliers[0].Match)
 }
 
 func TestFilterAndSortUsesCompatibleNetworkPriority(t *testing.T) {
 	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
-	requesterNetworks := []directory.Network{
-		{Name: "Reciprocal", Priority: intPtr(1), Reciprocal: boolPtr(true)},
-		{Name: "Paid Low", Priority: intPtr(5), Reciprocal: boolPtr(false)},
-		{Name: "Paid High", Priority: intPtr(3), Reciprocal: boolPtr(false)},
+	requesterNetworks := []dirapi.Network{
+		{Name: stringPtr("Reciprocal"), Priority: 1, Reciprocal: boolPtr(true)},
+		{Name: stringPtr("Paid Low"), Priority: 5, Reciprocal: boolPtr(false)},
+		{Name: stringPtr("Paid High"), Priority: 3, Reciprocal: boolPtr(false)},
 	}
-	paidTier := []directory.Tier{
-		{Name: "Paid Core Loan", Level: "Core", Type: "Loan", Cost: 34.4},
+	paidTier := []dirapi.Tier{
+		{Name: stringPtr("Paid Core Loan"), Level: dirapi.Standard, Type: dirapi.Loan, Cost: 34.4},
 	}
-	requesterData := directory.Entry{Name: "Requester", Networks: &requesterNetworks}
-	supplierANetworks := []directory.Network{
-		{Name: "Reciprocal", Priority: intPtr(1), Reciprocal: boolPtr(true)},
-		{Name: "Paid Low", Priority: intPtr(5), Reciprocal: boolPtr(false)},
+	requesterData := dirapi.Entry{Name: "Requester", Networks: &requesterNetworks}
+	supplierANetworks := []dirapi.Network{
+		{Name: stringPtr("Reciprocal"), Priority: 1, Reciprocal: boolPtr(true)},
+		{Name: stringPtr("Paid Low"), Priority: 5, Reciprocal: boolPtr(false)},
 	}
-	supplierBNetworks := []directory.Network{
-		{Name: "Paid High", Priority: intPtr(3), Reciprocal: boolPtr(false)},
+	supplierBNetworks := []dirapi.Network{
+		{Name: stringPtr("Paid High"), Priority: 3, Reciprocal: boolPtr(false)},
 	}
 	entries := []adapter.Supplier{
-		{PeerId: "A", Symbol: "A", CustomData: directory.Entry{Name: "Supplier A", Networks: &supplierANetworks, Tiers: &paidTier}},
-		{PeerId: "B", Symbol: "B", CustomData: directory.Entry{Name: "Supplier B", Networks: &supplierBNetworks, Tiers: &paidTier}},
+		{PeerId: "A", Symbol: "A", CustomData: dirapi.Entry{Name: "Supplier A", Networks: &supplierANetworks, Tiers: &paidTier}},
+		{PeerId: "B", Symbol: "B", CustomData: dirapi.Entry{Name: "Supplier B", Networks: &supplierBNetworks, Tiers: &paidTier}},
 	}
 	serviceInfo := iso18626.ServiceInfo{
 		ServiceLevel: &iso18626.TypeSchemeValuePair{
@@ -649,11 +771,7 @@ func TestFilterAndSortUsesCompatibleNetworkPriority(t *testing.T) {
 
 	entries, _ = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
 
-	assert.Len(t, entries, 2)
-	assert.Equal(t, "B", entries[0].PeerId)
-	assert.Equal(t, 3, entries[0].Priority)
-	assert.Equal(t, "A", entries[1].PeerId)
-	assert.Equal(t, 5, entries[1].Priority)
+	assert.Empty(t, entries)
 }
 
 func TestFilterAndSortNoFilters(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -394,22 +394,22 @@ func TestGviHoldings(t *testing.T) {
 
 	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
 
-	qtype := directory.Cql
+	qtype := dirapi.Cql
 	peer := ill_db.Peer{
-		CustomData: directory.Entry{
-			CatalogConfig: &directory.CatalogConfig{
-				Zoom: &directory.ZoomConfig{
+		CustomData: dirapi.Entry{
+			HoldingsConfig: &dirapi.HoldingsConfig{
+				Zoom: &dirapi.ZoomConfig{
 					Address: server.URL,
 					Options: &map[string]string{
 						"sru":         "get",
 						"sru_version": "1.1",
 					},
 				},
-				QueryConfig: &directory.QueryConfig{
+				QueryConfig: &dirapi.QueryConfig{
 					Type:       &qtype,
 					Identifier: NewString("rec.id = {term}"),
 				},
-				HoldingsFormat: &directory.HoldingsParserConfig{
+				HoldingsFormat: &dirapi.HoldingsParserConfig{
 					Marc21plus1: &map[string]interface{}{},
 				},
 			},

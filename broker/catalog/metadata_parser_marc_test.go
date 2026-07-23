@@ -3,12 +3,12 @@ package catalog
 import (
 	"testing"
 
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestMetadataParserMarcDefault(t *testing.T) {
-	parser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
+	parser := NewMetadataParserMarc(dirapi.MarcMetadataParserConfig{})
 
 	marcXML := []byte(`
 	<record xmlns="http://www.loc.gov/MARC21/slim">
@@ -48,7 +48,7 @@ func TestMetadataParserMarcDefault(t *testing.T) {
 
 func TestMetadataParserMarcOverride(t *testing.T) {
 	empty := ""
-	parser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{
+	parser := NewMetadataParserMarc(dirapi.MarcMetadataParserConfig{
 		Identifier: NewString("002"),
 		Title:      NewString("245$a$n$p"),
 		Isbn:       NewString("020$a"),
@@ -95,7 +95,7 @@ func TestMetadataParserMarcOverride(t *testing.T) {
 }
 
 func TestMetadataParserMarcNoNamespace(t *testing.T) {
-	parser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
+	parser := NewMetadataParserMarc(dirapi.MarcMetadataParserConfig{})
 
 	marcXML := []byte(`
 	<record>
@@ -119,7 +119,7 @@ func TestMetadataParserMarcNoNamespace(t *testing.T) {
 }
 
 func TestMetadataParserBadXml(t *testing.T) {
-	parser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
+	parser := NewMetadataParserMarc(dirapi.MarcMetadataParserConfig{})
 	marcXML := []byte(`<xrecord`)
 	_, err := parser.Parse(marcXML)
 	assert.ErrorContains(t, err, "failed to unmarshal MARC XML")

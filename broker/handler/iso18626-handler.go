@@ -14,7 +14,7 @@ import (
 	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/shim"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 
 	"github.com/indexdata/crosslink/broker/adapter"
 
@@ -35,9 +35,9 @@ var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 const HANDLER_COMP = "iso18626_handler"
 const ORIGINAL_INCOMING_MESSAGE = "originalIncomingMessage"
 
-var lookupQueryBuilder = utils.Must(catalog.NewQueryBuilderGen(&directory.QueryConfig{
+var lookupQueryBuilder = utils.Must(catalog.NewQueryBuilderGen(&dirapi.QueryConfig{
 	Identifier: new("supplier_unique_record_id = {term}"),
-	Type:       new(directory.Cql),
+	Type:       new(dirapi.Cql),
 }))
 
 var queryTimeFormat = "2006-01-02 15:04:05"
