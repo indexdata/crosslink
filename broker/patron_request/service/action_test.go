@@ -1110,6 +1110,69 @@ func TestHandleInvokeLenderActionWillSupplySaveItemFailed(t *testing.T) {
 	lmsAdapter.AssertExpectations(t)
 }
 
+func TestCancelLenderRequestItemNoSavedItem(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, nil)
+	prAction := &PatronRequestActionService{prRepo: mockPrRepo}
+	lmsAdapter := new(mockLmsAdapter)
+
+	err := prAction.cancelLenderRequestItem(
+		appCtx,
+		pr_db.PatronRequest{ID: patronRequestId},
+		lmsAdapter,
+		iso18626.Request{},
+	)
+
+	assert.NoError(t, err)
+	lmsAdapter.AssertNotCalled(t, "CancelRequestItem", mock.Anything, mock.Anything)
+}
+
+func TestCancelLenderRequestItemMissingRequestID(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "item-1"}}, nil)
+	prAction := &PatronRequestActionService{prRepo: mockPrRepo}
+	lmsAdapter := new(mockLmsAdapter)
+
+	err := prAction.cancelLenderRequestItem(
+		appCtx,
+		pr_db.PatronRequest{ID: patronRequestId, RequesterSymbol: getDbText("ISIL:REQ1")},
+		lmsAdapter,
+		iso18626.Request{},
+	)
+
+	assert.EqualError(t, err, "missing RequestingAgencyRequestId for LMS CancelRequestItem")
+	lmsAdapter.AssertNotCalled(t, "CancelRequestItem", mock.Anything, mock.Anything)
+}
+
+func TestCancelLenderRequestItemInvalidRequesterSymbol(t *testing.T) {
+	tests := []struct {
+		name   string
+		symbol pgtype.Text
+	}{
+		{name: "not valid"},
+		{name: "empty", symbol: getDbText("")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockPrRepo := new(MockPrRepo)
+			mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "item-1"}}, nil)
+			prAction := &PatronRequestActionService{prRepo: mockPrRepo}
+			lmsAdapter := new(mockLmsAdapter)
+
+			err := prAction.cancelLenderRequestItem(
+				appCtx,
+				pr_db.PatronRequest{ID: patronRequestId, RequesterSymbol: tt.symbol},
+				lmsAdapter,
+				iso18626.Request{Header: iso18626.Header{RequestingAgencyRequestId: "req-1"}},
+			)
+
+			assert.EqualError(t, err, "invalid requester symbol")
+			lmsAdapter.AssertNotCalled(t, "CancelRequestItem", mock.Anything, mock.Anything)
+		})
+	}
+}
+
 func TestHandleInvokeLenderActionCannotSupply(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)

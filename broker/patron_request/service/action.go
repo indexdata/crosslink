@@ -767,6 +767,12 @@ func (a *PatronRequestActionService) cancelLenderRequestItem(ctx common.Extended
 		return nil
 	}
 	requestId := illRequest.Header.RequestingAgencyRequestId
+	if requestId == "" {
+		return errors.New("missing RequestingAgencyRequestId for LMS CancelRequestItem")
+	}
+	if !pr.RequesterSymbol.Valid || pr.RequesterSymbol.String == "" {
+		return errors.New("invalid requester symbol")
+	}
 	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
 	return lmsAdapter.CancelRequestItem(requestId, userId)
 }
