@@ -61,6 +61,79 @@ func TestGetDateWithTimezone(t *testing.T) {
 	assert.Equal(t, "Local", date.Location().String())
 }
 
+func TestApplyHoldingsPolicy(t *testing.T) {
+	main := "MAIN"
+	other := "OTHER"
+	supplier := adapter.Supplier{
+		Location:         "MAIN",
+		ShelvingLocation: "STACKS",
+		CustomData: directory.Entry{HoldingsPolicy: &directory.HoldingsPolicy{
+			Locations: &[]directory.HoldingsLocation{
+				{Code: "MAIN", SupplyPreference: 4},
+			},
+			ShelvingLocations: &[]directory.HoldingsShelvingLocation{
+				{Code: "STACKS", SupplyPreference: 3},
+			},
+			LocationPolicies: &[]directory.HoldingsLocationPolicy{
+				{ShelvingLocationCode: "STACKS", SupplyPreference: 5},
+				{LocationCode: &other, ShelvingLocationCode: "STACKS", SupplyPreference: 6},
+				{LocationCode: &main, ShelvingLocationCode: "STACKS", SupplyPreference: 7},
+			},
+		}},
+	}
+
+	applyHoldingsPolicy(&supplier)
+
+	assert.Equal(t, 4, supplier.LocationPreference)
+	assert.Equal(t, 7, supplier.ShelvingPreference, "exact override should beat the all-locations override")
+}
+
+func TestApplyHoldingsPolicyEmptyCollectionsAreNeutral(t *testing.T) {
+	supplier := adapter.Supplier{
+		Location:         "UNKNOWN",
+		ShelvingLocation: "UNKNOWN",
+		CustomData: directory.Entry{HoldingsPolicy: &directory.HoldingsPolicy{
+			Locations:         &[]directory.HoldingsLocation{},
+			ShelvingLocations: &[]directory.HoldingsShelvingLocation{},
+			LocationPolicies:  &[]directory.HoldingsLocationPolicy{},
+			ItemLoanPolicies:  &[]directory.HoldingsItemLoanPolicy{},
+		}},
+	}
+
+	applyHoldingsPolicy(&supplier)
+
+	assert.Zero(t, supplier.LocationPreference)
+	assert.Zero(t, supplier.ShelvingPreference)
+}
+
+func TestApplyHoldingsPolicyOmittedCollectionsAreNeutral(t *testing.T) {
+	supplier := adapter.Supplier{
+		Location:         "UNKNOWN",
+		ShelvingLocation: "UNKNOWN",
+		CustomData:       directory.Entry{HoldingsPolicy: &directory.HoldingsPolicy{}},
+	}
+
+	applyHoldingsPolicy(&supplier)
+
+	assert.Zero(t, supplier.LocationPreference)
+	assert.Zero(t, supplier.ShelvingPreference)
+}
+
+func TestFirstSupplierPerSymbolKeepsBestSortedHolding(t *testing.T) {
+	suppliers := []adapter.Supplier{
+		{Symbol: "ISIL:A", LocalIdentifier: "best"},
+		{Symbol: "ISIL:A", LocalIdentifier: "other"},
+		{Symbol: "ISIL:B", LocalIdentifier: "only"},
+	}
+
+	result := firstSupplierPerSymbol(suppliers)
+
+	if assert.Len(t, result, 2) {
+		assert.Equal(t, "best", result[0].LocalIdentifier)
+		assert.Equal(t, "only", result[1].LocalIdentifier)
+	}
+}
+
 func TestGetNextSupplierEmptyMap(t *testing.T) {
 	peerId := "p1"
 	mockIllRepo := new(MockIllRepoRequester)

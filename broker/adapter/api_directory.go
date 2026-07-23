@@ -168,6 +168,11 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 	for _, sup := range entries {
 		var supMatch SupplierMatch
 		supMatch.Symbol = sup.Symbol
+		supMatch.Location = sup.Location
+		supMatch.ShelvingLocation = sup.ShelvingLocation
+		supMatch.ItemLoanPolicy = sup.ItemLoanPolicy
+		supMatch.LocationPreference = sup.LocationPreference
+		supMatch.ShelvingPreference = sup.ShelvingPreference
 		supNetworks := getPeerNetworks(sup.CustomData)
 		supMatch.Networks = make([]NetworkMatch, 0, len(supNetworks))
 		for name := range supNetworks {
@@ -258,7 +263,7 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 				}
 				return cmp.Compare(a.Name, b.Name)
 			})
-			if cost < math.MaxFloat64 {
+			if cost < math.MaxFloat64 && holdingMatchesPolicy(sup) {
 				supMatch.Match = true
 				supMatch.Cost = fmt.Sprintf("%.2f", cost)
 				sup.Cost = cost
@@ -279,7 +284,7 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 		}
 		return CompareSuppliers(a, b)
 	})
-	slices.SortFunc(filtered, func(a, b Supplier) int {
+	slices.SortStableFunc(filtered, func(a, b Supplier) int {
 		return CompareSuppliers(a, b)
 	})
 	return filtered, rotaInfo
@@ -335,11 +340,38 @@ func CompareSuppliers(a, b SupplierOrdering) int {
 	if sort != 0 {
 		return sort
 	}
+	sort = cmp.Compare(b.GetLocationPreference(), a.GetLocationPreference())
+	if sort != 0 {
+		return sort
+	}
+	sort = cmp.Compare(b.GetShelvingPreference(), a.GetShelvingPreference())
+	if sort != 0 {
+		return sort
+	}
 	sort = cmp.Compare(a.GetRatio(), b.GetRatio())
 	if sort != 0 {
 		return sort
 	}
 	return cmp.Compare(a.GetSymbol(), b.GetSymbol())
+}
+
+func holdingMatchesPolicy(sup Supplier) bool {
+	if sup.LocationPreference < 0 || sup.ShelvingPreference < 0 {
+		return false
+	}
+	policy := sup.CustomData.HoldingsPolicy
+	if policy == nil {
+		return true
+	}
+	if policy.ItemLoanPolicies == nil {
+		return true
+	}
+	for _, itemPolicy := range *policy.ItemLoanPolicies {
+		if itemPolicy.Code == sup.ItemLoanPolicy && !itemPolicy.Lendable {
+			return false
+		}
+	}
+	return true
 }
 
 func getPeerNetworks(peerData directory.Entry) map[string]Network {
