@@ -414,7 +414,7 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 	case LenderActionRejectCancel:
 		return a.rejectCancelLenderRequest(ctx, pr)
 	case LenderActionCannotSupply:
-		return a.cannotSupplyLenderRequest(ctx, pr, params)
+		return a.cannotSupplyLenderRequest(ctx, pr, lms, illRequest, params)
 	case LenderActionAddCondition:
 		return a.addConditionsLenderRequest(ctx, pr, params)
 	case LenderActionShip:
@@ -422,9 +422,9 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 	case LenderActionMarkReceived:
 		return a.markReceivedLenderRequest(ctx, pr, lms)
 	case LenderActionAcceptCancel:
-		return a.acceptCancelLenderRequest(ctx, pr)
+		return a.acceptCancelLenderRequest(ctx, pr, lms, illRequest)
 	case LenderActionAskRetry:
-		return a.askRetryLenderRequest(ctx, pr, params)
+		return a.askRetryLenderRequest(ctx, pr, lms, illRequest, params)
 	case LenderActionSendNotification:
 		return a.sendNotificationLenderRequest(ctx, pr, params)
 	default:
@@ -738,6 +738,9 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 		Barcode:    itemBarcode,
 	})
 	if err != nil {
+		if cancelErr := lmsAdapter.CancelRequestItem(requestId, userId); cancelErr != nil {
+			err = errors.Join(err, fmt.Errorf("LMS CancelRequestItem compensation failed: %w", cancelErr))
+		}
 		status, result := logActionErrorAndReturnResult(ctx, "failed to save item", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
@@ -755,7 +758,24 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
-func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
+func (a *PatronRequestActionService) cancelLenderRequestItem(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) error {
+	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get items: %w", err)
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	requestId := illRequest.Header.RequestingAgencyRequestId
+	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
+	return lmsAdapter.CancelRequestItem(requestId, userId)
+}
+
+func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
+	if err := a.cancelLenderRequestItem(ctx, pr, lmsAdapter, illRequest); err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "LMS CancelRequestItem failed", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
 	result := events.EventResult{}
 	var reasonUnfilled *iso18626.TypeSchemeValuePair
 	if params.ReasonUnfilled != "" {
@@ -935,7 +955,11 @@ func (a *PatronRequestActionService) rejectCancelLenderRequest(ctx common.Extend
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
-func (a *PatronRequestActionService) acceptCancelLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
+func (a *PatronRequestActionService) acceptCancelLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
+	if err := a.cancelLenderRequestItem(ctx, pr, lmsAdapter, illRequest); err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "LMS CancelRequestItem failed", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
 	yes := iso18626.TypeYesNoY
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
@@ -948,7 +972,7 @@ func (a *PatronRequestActionService) acceptCancelLenderRequest(ctx common.Extend
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
-func (a *PatronRequestActionService) askRetryLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
+func (a *PatronRequestActionService) askRetryLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
 	var deliveryInfo *iso18626.DeliveryInfo
 	switch params.ReasonRetry {
 	case "":
@@ -964,6 +988,10 @@ func (a *PatronRequestActionService) askRetryLenderRequest(ctx common.ExtendedCo
 		}
 	default:
 		status, result := logActionErrorAndReturnResult(ctx, fmt.Sprintf("unsupported reasonRetry %q for ask-retry action (supported: %q)", params.ReasonRetry, iso18626.ReasonRetryNotFoundAsCited), nil)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	if err := a.cancelLenderRequestItem(ctx, pr, lmsAdapter, illRequest); err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "LMS CancelRequestItem failed", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	reasonRetry := iso18626.TypeSchemeValuePair{Text: params.ReasonRetry}
