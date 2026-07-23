@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,6 +19,9 @@ type SchedRepo interface {
 	GetNextRunAt(ctx common.ExtendedContext) (pgtype.Timestamptz, error)
 	GetStuckRunningTasks(ctx common.ExtendedContext, stuckAfter time.Duration) ([]ScheduledTask, error)
 	GetScheduledTaskById(ctx common.ExtendedContext, id string, owners []string) (ScheduledTask, error)
+	GetScheduledTaskByIdForUpdate(ctx common.ExtendedContext, id string, owners []string) (ScheduledTask, error)
+	HasActiveBatchActionEvents(ctx common.ExtendedContext, taskID string) (bool, error)
+	DeleteBatchActionEvents(ctx common.ExtendedContext, taskID string) error
 	DeleteScheduledTask(ctx common.ExtendedContext, id string, owners []string) error
 	GetScheduledTasks(ctx common.ExtendedContext, params GetScheduledTasksParams) ([]ScheduledTask, int64, error)
 }
@@ -96,11 +100,27 @@ func (r *PgSchedRepo) GetScheduledTaskById(ctx common.ExtendedContext, id string
 	return row.ScheduledTask, err
 }
 
+func (r *PgSchedRepo) GetScheduledTaskByIdForUpdate(ctx common.ExtendedContext, id string, owners []string) (ScheduledTask, error) {
+	row, err := r.queries.GetScheduledTaskByIdForUpdate(ctx, r.GetConnOrTx(), GetScheduledTaskByIdForUpdateParams{
+		ID:     id,
+		Owners: owners,
+	})
+	return row.ScheduledTask, err
+}
+
 func (r *PgSchedRepo) DeleteScheduledTask(ctx common.ExtendedContext, id string, owners []string) error {
 	return r.queries.DeleteScheduledTask(ctx, r.GetConnOrTx(), DeleteScheduledTaskParams{
 		ID:     id,
 		Owners: owners,
 	})
+}
+
+func (r *PgSchedRepo) HasActiveBatchActionEvents(ctx common.ExtendedContext, taskID string) (bool, error) {
+	return events.New().HasActiveBatchActionEvents(ctx, r.GetConnOrTx(), taskID)
+}
+
+func (r *PgSchedRepo) DeleteBatchActionEvents(ctx common.ExtendedContext, taskID string) error {
+	return events.New().DeleteBatchActionEvents(ctx, r.GetConnOrTx(), taskID)
 }
 
 func (r *PgSchedRepo) GetScheduledTasks(ctx common.ExtendedContext, params GetScheduledTasksParams) ([]ScheduledTask, int64, error) {

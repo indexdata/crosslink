@@ -2,6 +2,7 @@ package sched_db
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -22,6 +23,7 @@ import (
 )
 
 var schedRepo sched_db.SchedRepo
+var eventRepo events.EventRepo
 var appCtx = common.CreateExtCtxWithArgs(context.Background(), nil)
 
 func TestMain(m *testing.M) {
@@ -51,11 +53,101 @@ func TestMain(m *testing.M) {
 	test.Expect(err, "failed to init db pool")
 
 	schedRepo = sched_db.CreateSchedRepo(pool)
+	eventRepo = app.CreateEventRepo(pool)
 
 	code := m.Run()
 	pool.Close()
 	test.Expect(test.TerminatePGContainer(ctx, pgContainer), "failed to stop db container")
 	os.Exit(code)
+}
+
+func saveBatchEvent(t *testing.T, taskID string, name events.EventName, status events.EventStatus) {
+	t.Helper()
+	_, err := eventRepo.SaveEvent(appCtx, events.SaveEventParams{
+		ID:               uuid.NewString(),
+		Timestamp:        pgtype.Timestamp{Time: time.Now(), Valid: true},
+		IllTransactionID: events.DEFAULT_ILL_TRANSACTION_ID,
+		EventType:        events.EventTypeTask,
+		EventName:        name,
+		EventStatus:      status,
+		EventData: events.EventData{CommonEventData: events.CommonEventData{
+			BatchActionData: &events.BatchActionData{TaskId: taskID},
+		}},
+		LastSignal:      string(events.SignalTaskCreated),
+		PatronRequestID: events.DEFAULT_PATRON_REQUEST_ID,
+	})
+	assert.NoError(t, err)
+}
+
+func TestBatchActionEventCleanup(t *testing.T) {
+	taskID := uuid.NewString()
+	otherTaskID := uuid.NewString()
+	t.Cleanup(func() {
+		assert.NoError(t, schedRepo.DeleteBatchActionEvents(appCtx, taskID))
+		assert.NoError(t, schedRepo.DeleteBatchActionEvents(appCtx, otherTaskID))
+	})
+
+	saveBatchEvent(t, taskID, events.EventNameInvokeBatchAction, events.EventStatusSuccess)
+	saveBatchEvent(t, taskID, events.EventNameInvokeBackgroundAction, events.EventStatusError)
+	saveBatchEvent(t, otherTaskID, events.EventNameInvokeBatchAction, events.EventStatusSuccess)
+
+	active, err := schedRepo.HasActiveBatchActionEvents(appCtx, taskID)
+	assert.NoError(t, err)
+	assert.False(t, active)
+
+	saveBatchEvent(t, taskID, events.EventNameInvokeBackgroundAction, events.EventStatusNew)
+	active, err = schedRepo.HasActiveBatchActionEvents(appCtx, taskID)
+	assert.NoError(t, err)
+	assert.True(t, active)
+
+	assert.NoError(t, schedRepo.DeleteBatchActionEvents(appCtx, taskID))
+	taskEvents, err := eventRepo.GetBatchActionEvents(appCtx, taskID)
+	assert.NoError(t, err)
+	assert.Empty(t, taskEvents)
+	otherEvents, err := eventRepo.GetBatchActionEvents(appCtx, otherTaskID)
+	assert.NoError(t, err)
+	assert.Len(t, otherEvents, 1)
+}
+
+func TestDeleteBatchActionEventsRollsBack(t *testing.T) {
+	taskID := uuid.NewString()
+	t.Cleanup(func() {
+		assert.NoError(t, schedRepo.DeleteBatchActionEvents(appCtx, taskID))
+	})
+	saveBatchEvent(t, taskID, events.EventNameInvokeBatchAction, events.EventStatusSuccess)
+
+	expected := errors.New("force rollback")
+	err := schedRepo.WithTxFunc(appCtx, func(txRepo sched_db.SchedRepo) error {
+		assert.NoError(t, txRepo.DeleteBatchActionEvents(appCtx, taskID))
+		return expected
+	})
+	assert.ErrorIs(t, err, expected)
+
+	taskEvents, err := eventRepo.GetBatchActionEvents(appCtx, taskID)
+	assert.NoError(t, err)
+	assert.Len(t, taskEvents, 1)
+}
+
+func TestGetScheduledTaskByIdForUpdatePreventsClaim(t *testing.T) {
+	params := newTask("", tstz(time.Now().Add(-time.Minute)))
+	task, err := schedRepo.SaveScheduledTask(appCtx, params)
+	assert.NoError(t, err)
+	t.Cleanup(func() {
+		assert.NoError(t, schedRepo.DeleteScheduledTask(appCtx, task.ID, nil))
+	})
+
+	err = schedRepo.WithTxFunc(appCtx, func(txRepo sched_db.SchedRepo) error {
+		locked, lockErr := txRepo.GetScheduledTaskByIdForUpdate(appCtx, task.ID, nil)
+		if lockErr != nil {
+			return lockErr
+		}
+		assert.Equal(t, task.ID, locked.ID)
+
+		_, claimErr := schedRepo.ClaimNextScheduledTask(appCtx)
+		assert.ErrorIs(t, claimErr, pgx.ErrNoRows)
+		return nil
+	})
+	assert.NoError(t, err)
 }
 
 // ---------------------------------------------------------------------------

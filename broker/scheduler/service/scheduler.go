@@ -204,23 +204,6 @@ func (s *SchedulerService) runDueTasks(ctx common.ExtendedContext) bool {
 	}
 }
 
-func (s *SchedulerService) disableTask(ctx common.ExtendedContext, task sched_db.ScheduledTask) {
-	task.Status = sched_db.ScheduledTaskStatusStopped
-	task.RunAt = pgtype.Timestamptz{Valid: false}
-	_, err := s.schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
-	if err != nil {
-		ctx.Logger().Error("failed to update scheduled task", "error", err, "taskId", task.ID)
-	}
-}
-
-func (s *SchedulerService) unlockAndReschedule(ctx common.ExtendedContext, task sched_db.ScheduledTask) {
-	task.Status = sched_db.ScheduledTaskStatusPending
-	_, err := s.schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
-	if err != nil {
-		ctx.Logger().Error("failed to reschedule scheduled task", "error", err, "taskId", task.ID)
-	}
-}
-
 // getNextRunAt returns the run_at timestamp of the earliest pending scheduled
 // task, or a zero Timestamptz if no pending tasks exist.
 func (s *SchedulerService) getNextRunAt(ctx common.ExtendedContext) pgtype.Timestamptz {
@@ -310,26 +293,51 @@ func nextScheduleTimeAt(schedule string, now time.Time) (pgtype.Timestamptz, err
 // longer than an hour (indicating a crashed or lost worker) and
 // resets them to 'pending' so they are picked up again on the next loop tick.
 func (s *SchedulerService) rescheduleLongRunningTasks(ctx common.ExtendedContext) {
-	tasks, err := s.schedRepo.GetStuckRunningTasks(ctx, time.Hour)
+	const stuckAfter = time.Hour
+	tasks, err := s.schedRepo.GetStuckRunningTasks(ctx, stuckAfter)
 	if err != nil {
 		ctx.Logger().Error("failed to query stuck running tasks", "error", err)
 		return
 	}
-	for _, task := range tasks {
-		ctx.Logger().Info("rescheduling stuck task", "taskId", task.ID, "eventName", task.EventName)
-		var nextRunAt time.Time
-		if task.Schedule != "" {
-			next, err := NextScheduleTime(task.Schedule)
-			if err != nil {
-				ctx.Logger().Error("invalid rrule string, disabling task", "error", err, "taskId", task.ID)
-				s.disableTask(ctx, task)
-				continue
+	stuckBefore := time.Now().Add(-stuckAfter)
+	for _, candidate := range tasks {
+		err = s.schedRepo.WithTxFunc(ctx, func(repo sched_db.SchedRepo) error {
+			task, inErr := repo.GetScheduledTaskByIdForUpdate(ctx, candidate.ID, nil)
+			if errors.Is(inErr, pgx.ErrNoRows) {
+				return nil
 			}
-			nextRunAt = next.Time
-		} else {
-			nextRunAt = time.Now().Add(SCHEDULER_RETRY_DELAY)
+			if inErr != nil {
+				return inErr
+			}
+			if task.Status != sched_db.ScheduledTaskStatusRunning ||
+				!task.UpdatedAt.Valid ||
+				task.UpdatedAt.Time.After(stuckBefore) {
+				return nil
+			}
+
+			ctx.Logger().Info("rescheduling stuck task", "taskId", task.ID, "eventName", task.EventName)
+			if task.Schedule != "" {
+				next, nextErr := NextScheduleTime(task.Schedule)
+				if nextErr != nil {
+					ctx.Logger().Error("invalid rrule string, disabling task", "error", nextErr, "taskId", task.ID)
+					task.Status = sched_db.ScheduledTaskStatusStopped
+					task.RunAt = pgtype.Timestamptz{Valid: false}
+				} else {
+					task.Status = sched_db.ScheduledTaskStatusPending
+					task.RunAt = next
+				}
+			} else {
+				task.Status = sched_db.ScheduledTaskStatusPending
+				task.RunAt = pgtype.Timestamptz{
+					Time:  time.Now().Add(SCHEDULER_RETRY_DELAY),
+					Valid: true,
+				}
+			}
+			_, inErr = repo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
+			return inErr
+		})
+		if err != nil {
+			ctx.Logger().Error("failed to recover stuck running task", "error", err, "taskId", candidate.ID)
 		}
-		task.RunAt = pgtype.Timestamptz{Time: nextRunAt, Valid: true}
-		s.unlockAndReschedule(ctx, task)
 	}
 }

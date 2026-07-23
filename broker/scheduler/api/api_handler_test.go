@@ -57,8 +57,23 @@ func (m *MockSchedRepo) GetScheduledTaskById(_ common.ExtendedContext, id string
 	return args.Get(0).(sched_db.ScheduledTask), args.Error(1)
 }
 
+func (m *MockSchedRepo) GetScheduledTaskByIdForUpdate(_ common.ExtendedContext, id string, owners []string) (sched_db.ScheduledTask, error) {
+	args := m.Called(id, owners)
+	return args.Get(0).(sched_db.ScheduledTask), args.Error(1)
+}
+
 func (m *MockSchedRepo) DeleteScheduledTask(_ common.ExtendedContext, id string, owners []string) error {
 	args := m.Called(id, owners)
+	return args.Error(0)
+}
+
+func (m *MockSchedRepo) HasActiveBatchActionEvents(_ common.ExtendedContext, taskID string) (bool, error) {
+	args := m.Called(taskID)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockSchedRepo) DeleteBatchActionEvents(_ common.ExtendedContext, taskID string) error {
+	args := m.Called(taskID)
 	return args.Error(0)
 }
 
@@ -600,7 +615,7 @@ func TestPutBatchActionsId_OK_RecomputesRunAtAndPersistsActionData(t *testing.T)
 	task := scheduledTaskFixture("task-1")
 	oldRunAt := task.RunAt.Time
 	newSchedule := "FREQ=DAILY"
-	repo.On("GetScheduledTaskById", "task-1", testOwnerScope).Return(task, nil)
+	repo.On("GetScheduledTaskByIdForUpdate", "task-1", testOwnerScope).Return(task, nil)
 	repo.On("SaveScheduledTask", mock.MatchedBy(func(p sched_db.SaveScheduledTaskParams) bool {
 		return p.ID == "task-1" &&
 			p.Schedule == newSchedule &&
@@ -627,7 +642,6 @@ func TestPutBatchActionsId_OK_RecomputesRunAtAndPersistsActionData(t *testing.T)
 
 func TestPutBatchActionsId_InvalidSchedule(t *testing.T) {
 	repo := new(MockSchedRepo)
-	repo.On("GetScheduledTaskById", "task-1", testOwnerScope).Return(scheduledTaskFixture("task-1"), nil)
 
 	h := newHandler(repo)
 	req := newReq(http.MethodPut, `{"batchQuery":"title=test","schedule":"not-a-rrule"}`)
@@ -641,7 +655,6 @@ func TestPutBatchActionsId_InvalidSchedule(t *testing.T) {
 
 func TestPutBatchActionsId_MissingBody(t *testing.T) {
 	repo := new(MockSchedRepo)
-	repo.On("GetScheduledTaskById", "task-1", testOwnerScope).Return(scheduledTaskFixture("task-1"), nil)
 
 	h := newHandler(repo)
 	req := newReq(http.MethodPut, "")
@@ -656,7 +669,7 @@ func TestPutBatchActionsId_MissingBody(t *testing.T) {
 
 func TestPutBatchActionsId_SaveError(t *testing.T) {
 	repo := new(MockSchedRepo)
-	repo.On("GetScheduledTaskById", "task-1", testOwnerScope).Return(scheduledTaskFixture("task-1"), nil)
+	repo.On("GetScheduledTaskByIdForUpdate", "task-1", testOwnerScope).Return(scheduledTaskFixture("task-1"), nil)
 	repo.On("SaveScheduledTask", mock.Anything).Return(sched_db.ScheduledTask{}, errors.New("db error"))
 
 	h := newHandler(repo)
@@ -673,7 +686,9 @@ func TestPutBatchActionsId_SaveError(t *testing.T) {
 func TestDeleteBatchActionsId_OK(t *testing.T) {
 	repo := new(MockSchedRepo)
 	task := scheduledTaskFixture("task-1")
-	repo.On("GetScheduledTaskById", "task-1", testOwnerScope).Return(task, nil)
+	repo.On("GetScheduledTaskByIdForUpdate", "task-1", testOwnerScope).Return(task, nil)
+	repo.On("HasActiveBatchActionEvents", "task-1").Return(false, nil)
+	repo.On("DeleteBatchActionEvents", "task-1").Return(nil)
 	repo.On("DeleteScheduledTask", "task-1", testOwnerScope).Return(nil)
 
 	h := newHandler(repo)
@@ -687,7 +702,7 @@ func TestDeleteBatchActionsId_OK(t *testing.T) {
 
 func TestDeleteBatchActionsId_NotFound(t *testing.T) {
 	repo := new(MockSchedRepo)
-	repo.On("GetScheduledTaskById", "missing", testOwnerScope).Return(sched_db.ScheduledTask{}, pgx.ErrNoRows)
+	repo.On("GetScheduledTaskByIdForUpdate", "missing", testOwnerScope).Return(sched_db.ScheduledTask{}, pgx.ErrNoRows)
 
 	h := newHandler(repo)
 	req := newReq(http.MethodDelete, "")
@@ -700,7 +715,7 @@ func TestDeleteBatchActionsId_NotFound(t *testing.T) {
 
 func TestDeleteBatchActionsId_GetScheduledTaskError(t *testing.T) {
 	repo := new(MockSchedRepo)
-	repo.On("GetScheduledTaskById", "task-err", testOwnerScope).Return(sched_db.ScheduledTask{}, errors.New("db error"))
+	repo.On("GetScheduledTaskByIdForUpdate", "task-err", testOwnerScope).Return(sched_db.ScheduledTask{}, errors.New("db error"))
 
 	h := newHandler(repo)
 	req := newReq(http.MethodDelete, "")
@@ -714,7 +729,9 @@ func TestDeleteBatchActionsId_GetScheduledTaskError(t *testing.T) {
 func TestDeleteBatchActionsId_DeleteError(t *testing.T) {
 	repo := new(MockSchedRepo)
 	task := scheduledTaskFixture("task-1")
-	repo.On("GetScheduledTaskById", "task-1", testOwnerScope).Return(task, nil)
+	repo.On("GetScheduledTaskByIdForUpdate", "task-1", testOwnerScope).Return(task, nil)
+	repo.On("HasActiveBatchActionEvents", "task-1").Return(false, nil)
+	repo.On("DeleteBatchActionEvents", "task-1").Return(nil)
 	repo.On("DeleteScheduledTask", "task-1", testOwnerScope).Return(errors.New("db error"))
 
 	h := newHandler(repo)
@@ -726,12 +743,62 @@ func TestDeleteBatchActionsId_DeleteError(t *testing.T) {
 	repo.AssertExpectations(t)
 }
 
+func TestDeleteBatchActionsId_ActiveEvent(t *testing.T) {
+	repo := new(MockSchedRepo)
+	task := scheduledTaskFixture("task-1")
+	repo.On("GetScheduledTaskByIdForUpdate", "task-1", testOwnerScope).Return(task, nil)
+	repo.On("HasActiveBatchActionEvents", "task-1").Return(true, nil)
+
+	h := newHandler(repo)
+	req := newReq(http.MethodDelete, "")
+	rr := httptest.NewRecorder()
+	h.DeleteBatchActionsId(rr, req, "task-1", schedoapi.DeleteBatchActionsIdParams{Symbol: symPtr(testSymbol)})
+
+	assertErrorStatus(t, rr, http.StatusConflict)
+	repo.AssertNotCalled(t, "DeleteBatchActionEvents", mock.Anything)
+	repo.AssertNotCalled(t, "DeleteScheduledTask", mock.Anything, mock.Anything)
+	repo.AssertExpectations(t)
+}
+
+func TestDeleteBatchActionsId_ActiveEventCheckError(t *testing.T) {
+	repo := new(MockSchedRepo)
+	task := scheduledTaskFixture("task-1")
+	repo.On("GetScheduledTaskByIdForUpdate", "task-1", testOwnerScope).Return(task, nil)
+	repo.On("HasActiveBatchActionEvents", "task-1").Return(false, errors.New("db error"))
+
+	h := newHandler(repo)
+	req := newReq(http.MethodDelete, "")
+	rr := httptest.NewRecorder()
+	h.DeleteBatchActionsId(rr, req, "task-1", schedoapi.DeleteBatchActionsIdParams{Symbol: symPtr(testSymbol)})
+
+	assertErrorStatus(t, rr, http.StatusInternalServerError)
+	repo.AssertNotCalled(t, "DeleteBatchActionEvents", mock.Anything)
+	repo.AssertExpectations(t)
+}
+
+func TestDeleteBatchActionsId_DeleteEventsError(t *testing.T) {
+	repo := new(MockSchedRepo)
+	task := scheduledTaskFixture("task-1")
+	repo.On("GetScheduledTaskByIdForUpdate", "task-1", testOwnerScope).Return(task, nil)
+	repo.On("HasActiveBatchActionEvents", "task-1").Return(false, nil)
+	repo.On("DeleteBatchActionEvents", "task-1").Return(errors.New("db error"))
+
+	h := newHandler(repo)
+	req := newReq(http.MethodDelete, "")
+	rr := httptest.NewRecorder()
+	h.DeleteBatchActionsId(rr, req, "task-1", schedoapi.DeleteBatchActionsIdParams{Symbol: symPtr(testSymbol)})
+
+	assertErrorStatus(t, rr, http.StatusInternalServerError)
+	repo.AssertNotCalled(t, "DeleteScheduledTask", mock.Anything, mock.Anything)
+	repo.AssertExpectations(t)
+}
+
 // ── Enable / Disable ─────────────────────────────────────────────────────────
 
 func TestPostBatchActionsIdDisable_OK(t *testing.T) {
 	repo := new(MockSchedRepo)
 	task := scheduledTaskFixture("task-1")
-	repo.On("GetScheduledTaskById", "task-1", testOwnerScope).Return(task, nil)
+	repo.On("GetScheduledTaskByIdForUpdate", "task-1", testOwnerScope).Return(task, nil)
 	repo.On("SaveScheduledTask", mock.MatchedBy(func(p sched_db.SaveScheduledTaskParams) bool {
 		return p.ID == "task-1" && p.Status == sched_db.ScheduledTaskStatusStopped
 	})).Return(saveScheduledTaskReturn, nil)
@@ -749,7 +816,7 @@ func TestPostBatchActionsIdEnable_OK(t *testing.T) {
 	repo := new(MockSchedRepo)
 	task := scheduledTaskFixture("task-1")
 	task.Status = sched_db.ScheduledTaskStatusStopped
-	repo.On("GetScheduledTaskById", "task-1", testOwnerScope).Return(task, nil)
+	repo.On("GetScheduledTaskByIdForUpdate", "task-1", testOwnerScope).Return(task, nil)
 	repo.On("SaveScheduledTask", mock.MatchedBy(func(p sched_db.SaveScheduledTaskParams) bool {
 		return p.ID == "task-1" && p.Status == sched_db.ScheduledTaskStatusPending
 	})).Return(saveScheduledTaskReturn, nil)
@@ -765,7 +832,7 @@ func TestPostBatchActionsIdEnable_OK(t *testing.T) {
 
 func TestPostBatchActionsIdDisable_SaveError(t *testing.T) {
 	repo := new(MockSchedRepo)
-	repo.On("GetScheduledTaskById", "task-1", testOwnerScope).Return(scheduledTaskFixture("task-1"), nil)
+	repo.On("GetScheduledTaskByIdForUpdate", "task-1", testOwnerScope).Return(scheduledTaskFixture("task-1"), nil)
 	repo.On("SaveScheduledTask", mock.Anything).Return(sched_db.ScheduledTask{}, errors.New("db error"))
 
 	h := newHandler(repo)
