@@ -100,6 +100,20 @@ RETURNING sqlc.embed(event);
 DELETE FROM event
 WHERE id = $1;
 
+-- name: HasActiveBatchActionEvents :one
+SELECT EXISTS (
+    SELECT 1
+    FROM event
+    WHERE event_name IN ('invoke-batch-action', 'invoke-background-action')
+      AND event_data -> 'batchActionData' ->> 'taskId' = sqlc.arg(task_id)::text
+      AND event_status IN ('NEW', 'PROCESSING')
+);
+
+-- name: DeleteBatchActionEvents :exec
+DELETE FROM event
+WHERE event_name IN ('invoke-batch-action', 'invoke-background-action')
+  AND event_data -> 'batchActionData' ->> 'taskId' = sqlc.arg(task_id)::text;
+
 -- name: UpdateEventLifecycle :one
 UPDATE event SET last_signal = $3, event_status = $2
 WHERE id = $1

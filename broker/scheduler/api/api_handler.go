@@ -198,8 +198,8 @@ func (h SchedulerApiHandler) getScheduledTask(w http.ResponseWriter, r *http.Req
 		brokerapi.AddInternalError(ctx, w, err)
 		return sched_db.ScheduledTask{}, ctx, true
 	}
-	if task.ActionData.BatchActionData == nil {
-		brokerapi.AddInternalError(ctx, w, errors.New("missing batchActionData"))
+	if err := validateBatchActionTask(task); err != nil {
+		brokerapi.AddInternalError(ctx, w, err)
 		return sched_db.ScheduledTask{}, ctx, true
 	}
 	return task, ctx, false
@@ -216,8 +216,21 @@ func (h SchedulerApiHandler) DeleteBatchActionsId(w http.ResponseWriter, r *http
 	}
 
 	err := h.schedRepo.WithTxFunc(ctx, func(schedRepo sched_db.SchedRepo) error {
-		task, inErr := schedRepo.GetScheduledTaskById(ctx, id, owners)
+		task, inErr := schedRepo.GetScheduledTaskByIdForUpdate(ctx, id, owners)
 		if inErr != nil {
+			return inErr
+		}
+		if inErr = validateBatchActionTask(task); inErr != nil {
+			return inErr
+		}
+		active, inErr := schedRepo.HasActiveBatchActionEvents(ctx, task.ID)
+		if inErr != nil {
+			return inErr
+		}
+		if active {
+			return errBatchActionInProgress
+		}
+		if inErr = schedRepo.DeleteBatchActionEvents(ctx, task.ID); inErr != nil {
 			return inErr
 		}
 		return schedRepo.DeleteScheduledTask(ctx, task.ID, owners)
@@ -227,15 +240,24 @@ func (h SchedulerApiHandler) DeleteBatchActionsId(w http.ResponseWriter, r *http
 			brokerapi.AddNotFoundError(w)
 			return
 		}
+		if errors.Is(err, errBatchActionInProgress) {
+			brokerapi.WriteJsonErrorResponse(w, err, http.StatusConflict)
+			return
+		}
 		brokerapi.AddInternalError(ctx, w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
+var errBatchActionInProgress = errors.New("batch action is currently queued or being processed")
+
 func (h SchedulerApiHandler) PutBatchActionsId(w http.ResponseWriter, r *http.Request, id string, params schedoapi.PutBatchActionsIdParams) {
-	task, ctx, done := h.getScheduledTask(w, r, "PutBatchActionsId", id, params.Symbol)
-	if done {
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
+		Other: map[string]string{"method": "PutBatchActionsId", "id": id},
+	})
+	owners, ok := h.resolveOwnerScope(ctx, w, r, params.Symbol)
+	if !ok {
 		return
 	}
 	if r.Body == nil || r.Body == http.NoBody {
@@ -260,21 +282,17 @@ func (h SchedulerApiHandler) PutBatchActionsId(w http.ResponseWriter, r *http.Re
 		brokerapi.AddBadRequestError(ctx, w, err)
 		return
 	}
-	task.Schedule = update.Schedule
-	task.RunAt = next
-	if task.ActionData.BatchActionData == nil {
-		task.ActionData.BatchActionData = &events.BatchActionData{}
-	}
-	task.ActionData.BatchActionData.Selector = update.BatchQuery
-	task.Title = toPgText(update.Title)
-
-	if update.ActionParams != nil {
-		task.ActionData.CustomData = *update.ActionParams
-	}
-
-	task, err = h.schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
+	task, err := h.mutateScheduledTask(ctx, id, owners, func(task *sched_db.ScheduledTask) {
+		task.Schedule = update.Schedule
+		task.RunAt = next
+		task.ActionData.BatchActionData.Selector = update.BatchQuery
+		task.Title = toPgText(update.Title)
+		if update.ActionParams != nil {
+			task.ActionData.CustomData = *update.ActionParams
+		}
+	})
 	if err != nil {
-		brokerapi.AddInternalError(ctx, w, err)
+		h.writeScheduledTaskMutationError(ctx, w, err)
 		return
 	}
 
@@ -282,31 +300,77 @@ func (h SchedulerApiHandler) PutBatchActionsId(w http.ResponseWriter, r *http.Re
 }
 
 func (h SchedulerApiHandler) PostBatchActionsIdDisable(w http.ResponseWriter, r *http.Request, id string, params schedoapi.PostBatchActionsIdDisableParams) {
-	task, ctx, done := h.getScheduledTask(w, r, "PostBatchActionsIdDisable", id, params.Symbol)
-	if done {
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
+		Other: map[string]string{"method": "PostBatchActionsIdDisable", "id": id},
+	})
+	owners, ok := h.resolveOwnerScope(ctx, w, r, params.Symbol)
+	if !ok {
 		return
 	}
-	task.Status = sched_db.ScheduledTaskStatusStopped
-	_, err := h.schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
+	_, err := h.mutateScheduledTask(ctx, id, owners, func(task *sched_db.ScheduledTask) {
+		task.Status = sched_db.ScheduledTaskStatusStopped
+	})
 	if err != nil {
-		brokerapi.AddInternalError(ctx, w, err)
+		h.writeScheduledTaskMutationError(ctx, w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h SchedulerApiHandler) PostBatchActionsIdEnable(w http.ResponseWriter, r *http.Request, id string, params schedoapi.PostBatchActionsIdEnableParams) {
-	task, ctx, done := h.getScheduledTask(w, r, "PostBatchActionsIdEnable", id, params.Symbol)
-	if done {
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
+		Other: map[string]string{"method": "PostBatchActionsIdEnable", "id": id},
+	})
+	owners, ok := h.resolveOwnerScope(ctx, w, r, params.Symbol)
+	if !ok {
 		return
 	}
-	task.Status = sched_db.ScheduledTaskStatusPending
-	_, err := h.schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
+	_, err := h.mutateScheduledTask(ctx, id, owners, func(task *sched_db.ScheduledTask) {
+		task.Status = sched_db.ScheduledTaskStatusPending
+	})
 	if err != nil {
-		brokerapi.AddInternalError(ctx, w, err)
+		h.writeScheduledTaskMutationError(ctx, w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h SchedulerApiHandler) mutateScheduledTask(
+	ctx common.ExtendedContext,
+	id string,
+	owners []string,
+	mutate func(*sched_db.ScheduledTask),
+) (sched_db.ScheduledTask, error) {
+	var task sched_db.ScheduledTask
+	err := h.schedRepo.WithTxFunc(ctx, func(repo sched_db.SchedRepo) error {
+		var inErr error
+		task, inErr = repo.GetScheduledTaskByIdForUpdate(ctx, id, owners)
+		if inErr != nil {
+			return inErr
+		}
+		if inErr = validateBatchActionTask(task); inErr != nil {
+			return inErr
+		}
+		mutate(&task)
+		task, inErr = repo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
+		return inErr
+	})
+	return task, err
+}
+
+func validateBatchActionTask(task sched_db.ScheduledTask) error {
+	if task.ActionData.BatchActionData == nil {
+		return errors.New("missing batchActionData")
+	}
+	return nil
+}
+
+func (h SchedulerApiHandler) writeScheduledTaskMutationError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
+	if errors.Is(err, pgx.ErrNoRows) {
+		brokerapi.AddNotFoundError(w)
+		return
+	}
+	brokerapi.AddInternalError(ctx, w, err)
 }
 
 // resolveOwnerScope returns the owners the request may access. A nil scope
