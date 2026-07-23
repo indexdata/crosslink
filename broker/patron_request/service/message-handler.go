@@ -308,6 +308,15 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	if !eventDefined {
 		return statusChangeNotAllowed()
 	}
+	if stateChanged &&
+		(eventName == SupplierCompletedLocal ||
+			eventName == SupplierCancelledLocal ||
+			eventName == SupplierUnfilledLocal) {
+		ctx.Logger().Warn("ignoring transition configured for local audit event",
+			"event", eventName, "state", pr.State)
+		updatedPr = pr
+		stateChanged = false
+	}
 	if retryBibInfo != nil {
 		updatedPr.RetryBibInfo = retryBibInfo
 	}

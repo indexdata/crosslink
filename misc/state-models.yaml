@@ -56,8 +56,8 @@ stateModels:
         primaryAction: fill-locally
         needsAttention: true
         editable: true
-        # Audit-only events emitted by local-supply actions. These must not define
-        # transitions; the corresponding actions own the state transitions.
+        # Audit-only events emitted by local-supply actions. Do not configure
+        # transitions as they are ignored, use action transitions instead.
         events:
           - name: completed-local
             desc: Local-supply completion recorded for audit
