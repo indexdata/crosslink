@@ -8,6 +8,7 @@ import (
 	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
+	prapi "github.com/indexdata/crosslink/broker/patron_request/api"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	schedoapi "github.com/indexdata/crosslink/broker/scheduler/oapi"
@@ -58,9 +59,6 @@ func (s *BatchActionService) RequestAging(ctx common.ExtendedContext, event even
 	if batchActionData.Selector == "" {
 		return events.NewErrorResult("cannot process event", "selector is empty")
 	}
-	if batchActionData.Owner == "" {
-		return events.NewErrorResult("cannot process event", "owner is empty")
-	}
 
 	intervalString, ok := event.EventData.CustomData["interval"].(string)
 	if !ok || intervalString == "" {
@@ -78,6 +76,14 @@ func (s *BatchActionService) RequestAging(ctx common.ExtendedContext, event even
 
 	fromTime := time.Now().UTC().Add(-interval).Format(TIME_FORMAT)
 	qb.And().Search("updated_at").Rel(cql.LE).Term(fromTime)
+	if batchActionData.Owner != "" {
+		qb, err = prapi.AddOwnerRestriction(qb, batchActionData.Owner, prservice.SideLending)
+		if err != nil {
+			return events.NewErrorResult("failed to add owner restriction", err.Error())
+		}
+	} else {
+		qb.And().Search("side").Term(string(prservice.SideLending))
+	}
 	builtCQL, err := qb.Build()
 	if err != nil {
 		return events.NewErrorResult("invalid cql selector", err.Error())
@@ -96,10 +102,7 @@ func (s *BatchActionService) RequestAging(ctx common.ExtendedContext, event even
 	var processedCount = 0
 	if len(prs) > 0 {
 		for _, pr := range prs {
-			var action = prservice.BorrowerActionCancelRequest
-			if pr.Side == prservice.SideLending {
-				action = prservice.LenderActionCannotSupply
-			}
+			var action = prservice.LenderActionCannotSupply
 			childBatchActionData := *batchActionData
 			data := events.EventData{CommonEventData: events.CommonEventData{
 				Action:          &action,

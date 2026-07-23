@@ -317,6 +317,7 @@ func TestGenerateAndEmailPullslip_Success(t *testing.T) {
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Nil(t, result)
 	assert.True(t, mailer.called)
+	assert.Equal(t, "TRUE AND ((side = $3 AND supplier_symbol = $4) OR (side = $5 AND requester_symbol = $6))", prRepo.gotQuery.GetWhereClause())
 
 	assert.True(t, strings.Contains(string(mailer.data), "user@example.com"))
 }

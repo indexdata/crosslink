@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/email"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	prapi "github.com/indexdata/crosslink/broker/patron_request/api"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	psservice "github.com/indexdata/crosslink/broker/pullslip/service"
 	"github.com/indexdata/go-utils/utils"
@@ -64,7 +66,23 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 		event.EventData.BatchActionData.Owner == "" {
 		return events.NewErrorResult("invalid email event data", "batch action data is empty")
 	}
-	pgcql, err := pr_db.ParsePatronRequestsCql(event.EventData.BatchActionData.Selector)
+
+	qb, err := cqlbuilder.NewQueryFromString(event.EventData.BatchActionData.Selector)
+	if err != nil {
+		return events.NewErrorResult("invalid cql selector", err.Error())
+	}
+
+	var side pr_db.PatronRequestSide
+	qb, err = prapi.AddOwnerRestriction(qb, event.EventData.BatchActionData.Owner, side)
+	if err != nil {
+		return events.NewErrorResult("failed to add owner restriction", err.Error())
+	}
+	builtCQL, err := qb.Build()
+	if err != nil {
+		return events.NewErrorResult("invalid cql selector", err.Error())
+	}
+
+	pgcql, err := pr_db.ParsePatronRequestsCql(builtCQL.String())
 	if err != nil {
 		return events.NewErrorResult("invalid cql selector", err.Error())
 	}
