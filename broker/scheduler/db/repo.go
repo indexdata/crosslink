@@ -47,6 +47,9 @@ func CreateSchedRepo(dbPool *pgxpool.Pool) SchedRepo {
 }
 
 func (r *PgSchedRepo) SaveScheduledTask(ctx common.ExtendedContext, params SaveScheduledTaskParams) (ScheduledTask, error) {
+	if !params.UpdatedAt.Valid {
+		params.UpdatedAt = params.CreatedAt
+	}
 	row, err := r.queries.SaveScheduledTask(ctx, r.GetConnOrTx(), params)
 	if err == nil {
 		r.notify(ctx)

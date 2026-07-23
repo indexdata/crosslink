@@ -71,7 +71,7 @@ func TestMain(m *testing.M) {
 
 func TestItem(t *testing.T) {
 	prId := uuid.NewString()
-	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+	pr, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
 		ID: prId,
 		CreatedAt: pgtype.Timestamp{
 			Time:  time.Now(),
@@ -82,6 +82,8 @@ func TestItem(t *testing.T) {
 		TerminalState: false,
 	})
 	assert.NoError(t, err)
+	assert.True(t, pr.UpdatedAt.Valid)
+	assert.Equal(t, pr.CreatedAt.Time, pr.UpdatedAt.Time)
 
 	// Save works
 	itemId := uuid.NewString()
@@ -164,6 +166,24 @@ func TestItem(t *testing.T) {
 
 	err = prRepo.DeletePatronRequest(appCtx, prId)
 	assert.NoError(t, err)
+}
+
+func TestTemplateUpdatedAtInitializedFromCreatedAt(t *testing.T) {
+	createdAt := pgtype.Timestamp{Time: time.Now(), Valid: true}
+	template, err := prRepo.SaveTemplate(appCtx, pr_db.SaveTemplateParams{
+		ID:          uuid.NewString(),
+		Owner:       "ISIL:TEST",
+		Title:       "Test template",
+		Purpose:     "general",
+		Body:        "Body",
+		ContentType: "text/plain",
+		Labels:      []string{},
+		CreatedAt:   createdAt,
+	})
+
+	assert.NoError(t, err)
+	assert.True(t, template.UpdatedAt.Valid)
+	assert.Equal(t, template.CreatedAt.Time, template.UpdatedAt.Time)
 }
 
 func TestNotification(t *testing.T) {

@@ -97,6 +97,8 @@ func TestSaveScheduledTask_Insert(t *testing.T) {
 	assert.Equal(t, params.Schedule, saved.Schedule)
 	assert.Equal(t, sched_db.ScheduledTaskStatusPending, saved.Status)
 	assert.True(t, saved.CreatedAt.Valid)
+	assert.True(t, saved.UpdatedAt.Valid)
+	assert.Equal(t, saved.CreatedAt.Time, saved.UpdatedAt.Time)
 
 	stopTask(t, saved)
 }
