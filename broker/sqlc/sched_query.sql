@@ -47,6 +47,13 @@ FROM scheduled_task
 WHERE id = sqlc.arg(id)
   AND (sqlc.arg(owners)::text[] IS NULL OR owner = ANY(sqlc.arg(owners)::text[]));
 
+-- name: GetScheduledTaskByIdForUpdate :one
+SELECT sqlc.embed(scheduled_task)
+FROM scheduled_task
+WHERE id = sqlc.arg(id)
+  AND (sqlc.arg(owners)::text[] IS NULL OR owner = ANY(sqlc.arg(owners)::text[]))
+FOR UPDATE;
+
 -- name: GetScheduledTasks :many
 SELECT sqlc.embed(scheduled_task), COUNT(*) OVER () as full_count
 FROM scheduled_task
