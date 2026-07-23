@@ -232,6 +232,9 @@ func (r *PgPrRepo) UpdatePatronRequestInternalNote(ctx common.ExtendedContext, i
 	})
 }
 func (r *PgPrRepo) CreatePatronRequest(ctx common.ExtendedContext, params CreatePatronRequestParams) (PatronRequest, error) {
+	if !params.UpdatedAt.Valid {
+		params.UpdatedAt = params.CreatedAt
+	}
 	row, err := r.queries.CreatePatronRequest(ctx, r.GetConnOrTx(), params)
 	return row.PatronRequest, err
 }
@@ -322,6 +325,9 @@ func (r *PgPrRepo) DeleteItemById(ctx common.ExtendedContext, id string) error {
 }
 
 func (r *PgPrRepo) SaveTemplate(ctx common.ExtendedContext, params SaveTemplateParams) (Template, error) {
+	if !params.UpdatedAt.Valid {
+		params.UpdatedAt = params.CreatedAt
+	}
 	row, err := r.queries.SaveTemplate(ctx, r.GetConnOrTx(), params)
 	return row.Template, err
 }
