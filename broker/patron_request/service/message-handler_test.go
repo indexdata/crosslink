@@ -13,6 +13,7 @@ import (
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -446,6 +447,29 @@ func TestHandleSupplyingAgencyMessageExpectToSupply(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, BorrowerStateSupplierLocated, mockPrRepo.savedPr.State)
+}
+
+func TestHandleSupplyingAgencyMessageExpectToSupplyLocally(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+
+	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+				AgencyIdValue: "REQ",
+			},
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
+		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusExpectToSupply},
+	}, pr_db.PatronRequest{RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REQ"}, State: BorrowerStateSent, Side: SideBorrowing})
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.NoError(t, err)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, BorrowerStateLocalSupply, mockPrRepo.savedPr.State)
 }
 
 func TestHandleSupplyingAgencyMessageWillSupply(t *testing.T) {

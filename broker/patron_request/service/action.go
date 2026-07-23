@@ -369,8 +369,8 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		return a.acceptRetryBorrowingRequest(ctx, pr)
 	case BorrowerActionSendNotification:
 		return a.sendNotificationBorrowingRequest(ctx, pr, params)
-	case BorrowerActionCancel:
-		return a.cancelLocalBorrowingRequest(pr)
+	case BorrowerActionCancelLocalSupply:
+		return a.cancelLocalBorrowingRequest(ctx, pr)
 	case BorrowerActionCannotSupplyLocally:
 		return a.cannotSupplyLocallyBorrowingRequest(ctx, pr, params)
 	case BorrowerActionFillLocally:
@@ -710,9 +710,9 @@ func (a *PatronRequestActionService) sendNotificationBorrowingRequest(ctx common
 	return a.sendEmailNotification(ctx, pr, params, pr.RequesterSymbol.String)
 }
 
-func (a *PatronRequestActionService) cancelLocalBorrowingRequest(pr pr_db.PatronRequest) actionExecutionResult {
-	result := events.EventResult{}
-	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
+func (a *PatronRequestActionService) cancelLocalBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
+	// Should do the same as when supplier sends cancel
+	return a.rejectCancelLenderRequest(ctx, pr)
 }
 
 func (a *PatronRequestActionService) cannotSupplyLocallyBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {

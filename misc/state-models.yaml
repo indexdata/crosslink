@@ -61,7 +61,7 @@ stateModels:
             desc: Fill the request locally
             transitions:
               success: COMPLETED
-          - name: cancel
+          - name: cancel-local-supply
             desc: Cancel the local supply
             transitions:
               success: CANCELLED
@@ -80,7 +80,7 @@ stateModels:
             transition: SUPPLIER_LOCATED
           - name: expect-to-supply-local
             desc: "Local supplier indicates an intention to supply (ISO18626 ExpectToSupply)"
-            transition: SUPPLIER_LOCATED
+            transition: LOCAL_SUPPLY
           - name: will-supply
             desc: "Supplier will supply without conditions (ISO18626 WillSupply)"
             transition: WILL_SUPPLY
