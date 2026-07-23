@@ -152,6 +152,7 @@ func TestGetBatchActions_OK(t *testing.T) {
 	assert.Equal(t, int64(2), resp.About.Count)
 	assert.Len(t, resp.Items, 2)
 	assert.Equal(t, "task-1", resp.Items[0].Id)
+	assert.Equal(t, testSymbol, resp.Items[0].Owner)
 	assert.Equal(t, "https://example.com/batch_actions/task-1/events", resp.Items[0].EventsLink)
 	assert.Equal(t, schedoapi.EmailPullslips, resp.Items[0].ActionName)
 	assert.Equal(t, "title=test", resp.Items[0].BatchQuery)
@@ -360,6 +361,7 @@ func TestPostBatchActions_OK(t *testing.T) {
 	var resp schedoapi.BatchAction
 	assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
 	assert.NotEmpty(t, resp.Id)
+	assert.Equal(t, testSymbol, resp.Owner)
 	assert.Equal(t, validRrule, resp.Schedule)
 	assert.Equal(t, "title=test", resp.BatchQuery)
 	assert.True(t, resp.Active)
@@ -427,6 +429,7 @@ func TestPostBatchActions_MasterWithoutSymbolCreatesUnrestrictedAction(t *testin
 	var resp schedoapi.BatchAction
 	assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
 	assert.Equal(t, schedoapi.RequestAging, resp.ActionName)
+	assert.Empty(t, resp.Owner)
 	repo.AssertExpectations(t)
 }
 
@@ -555,6 +558,7 @@ func TestGetBatchActionsId_OK(t *testing.T) {
 	var resp schedoapi.BatchAction
 	assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
 	assert.Equal(t, "task-1", resp.Id)
+	assert.Equal(t, testSymbol, resp.Owner)
 	assert.Equal(t, "title=test", resp.BatchQuery)
 	assert.True(t, resp.Active)
 	assert.NotNil(t, resp.UpdatedAt)
@@ -614,6 +618,7 @@ func TestPutBatchActionsId_OK_RecomputesRunAtAndPersistsActionData(t *testing.T)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	var resp schedoapi.BatchAction
 	assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	assert.Equal(t, testSymbol, resp.Owner)
 	assert.Equal(t, newSchedule, resp.Schedule)
 	assert.Equal(t, "author=doe", resp.BatchQuery)
 	assert.NotNil(t, resp.NextRun)

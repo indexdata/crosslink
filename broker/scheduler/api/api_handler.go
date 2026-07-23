@@ -349,6 +349,7 @@ func toBatchAction(r *http.Request, task sched_db.ScheduledTask) schedoapi.Batch
 	active := task.Status != sched_db.ScheduledTaskStatusStopped
 	resp := schedoapi.BatchAction{
 		Id:         task.ID,
+		Owner:      task.Owner,
 		Schedule:   task.Schedule,
 		ActionName: schedoapi.BatchActionName(actionData.ActionName),
 		CreatedAt:  task.CreatedAt.Time,
