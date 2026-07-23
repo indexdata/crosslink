@@ -77,12 +77,11 @@ func (s *BatchActionService) RequestAging(ctx common.ExtendedContext, event even
 	fromTime := time.Now().UTC().Add(-interval).Format(TIME_FORMAT)
 	qb.And().Search("updated_at").Rel(cql.LE).Term(fromTime)
 	if batchActionData.Owner != "" {
-		qb, err = prapi.AddOwnerRestriction(qb, batchActionData.Owner, prservice.SideLending)
+		var side pr_db.PatronRequestSide
+		qb, err = prapi.AddOwnerRestriction(qb, batchActionData.Owner, side)
 		if err != nil {
 			return events.NewErrorResult("failed to add owner restriction", err.Error())
 		}
-	} else {
-		qb.And().Search("side").Term(string(prservice.SideLending))
 	}
 	builtCQL, err := qb.Build()
 	if err != nil {

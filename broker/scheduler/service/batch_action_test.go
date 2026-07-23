@@ -305,7 +305,7 @@ func TestRequestAging_CreatesBackgroundTasksForLending(t *testing.T) {
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.NotNil(t, result)
 	assert.Equal(t, "processed patron request count: 2", result.Note)
-	assert.Equal(t, "((TRUE AND updated_at <= $3) AND side = $4) AND supplier_symbol = $5", repo.gotQuery.GetWhereClause())
+	assert.Equal(t, "(TRUE AND updated_at <= $3) AND ((side = $4 AND supplier_symbol = $5) OR (side = $6 AND requester_symbol = $7))", repo.gotQuery.GetWhereClause())
 	if assert.Len(t, eventBus.createTaskCalls, 2) {
 		assertRequestAgingCreateTask(t, eventBus.createTaskCalls[0], "lending-1", prservice.LenderActionCannotSupply)
 		assertRequestAgingCreateTask(t, eventBus.createTaskCalls[1], "lending-2", prservice.LenderActionCannotSupply)
@@ -333,7 +333,7 @@ func TestRequestAging_CreateTaskErrorRecordsCustomDataAndContinues(t *testing.T)
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.NotNil(t, result)
 	assert.Equal(t, "processed patron request count: 2", result.Note)
-	assert.Equal(t, "(TRUE AND updated_at <= $3) AND side = $4", repo.gotQuery.GetWhereClause())
+	assert.Equal(t, "TRUE AND updated_at <= $3", repo.gotQuery.GetWhereClause())
 	assert.Equal(t, "error creating close action: create failed", result.CustomData["failed-1"])
 	_, ok := result.CustomData["ok-1"]
 	assert.False(t, ok)
