@@ -12,6 +12,7 @@ import (
 func TestBuiltInStateModelCapabilities(t *testing.T) {
 	c := BuiltInStateModelCapabilities()
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateValidated)))
+	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateLocalSupply)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateValidated)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateReceived)))
 
@@ -30,9 +31,24 @@ func TestBuiltInStateModelCapabilities(t *testing.T) {
 	}))
 
 	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierWillSupply)))
+	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierCancelledLocal)))
+	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierCompletedLocal)))
+	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierUnfilledLocal)))
 	assert.True(t, slices.Contains(c.RequesterMessageEvents, string(RequesterCancelRequest)))
 	assert.True(t, slices.Contains(c.RequesterMessageEvents, string(RequesterReceived)))
 	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierCancelRejected)))
+}
+
+func TestReturnablesIncludesLocalSupplyRequesterState(t *testing.T) {
+	model, err := LoadStateModelByName("returnables")
+	if !assert.NoError(t, err) || !assert.NotNil(t, model) {
+		return
+	}
+
+	stateIndex := slices.IndexFunc(model.States, func(state proapi.ModelState) bool {
+		return state.Name == string(BorrowerStateLocalSupply) && state.Side == proapi.REQUESTER
+	})
+	assert.NotEqual(t, -1, stateIndex)
 }
 
 func TestValidateStateModelMissingInitial(t *testing.T) {

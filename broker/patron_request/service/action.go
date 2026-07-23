@@ -369,6 +369,12 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		return a.acceptRetryBorrowingRequest(ctx, pr)
 	case BorrowerActionSendNotification:
 		return a.sendNotificationBorrowingRequest(ctx, pr, params)
+	case BorrowerActionCancelLocalSupply:
+		return a.cancelLocalBorrowingRequest(ctx, pr)
+	case BorrowerActionCannotSupplyLocally:
+		return a.cannotSupplyLocallyBorrowingRequest(ctx, pr, params)
+	case BorrowerActionFillLocally:
+		return a.fillLocallyBorrowingRequest(ctx, pr, lmsAdapter, illRequest, params)
 	default:
 		status, result := logActionErrorAndReturnResult(ctx, "borrower action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -702,6 +708,65 @@ func (a *PatronRequestActionService) sendNotificationBorrowingRequest(ctx common
 		return actionExecutionResult{status: events.EventStatusSuccess, result: &events.EventResult{CommonEventData: events.CommonEventData{Note: "email service is not ready to send"}}, pr: pr}
 	}
 	return a.sendEmailNotification(ctx, pr, params, pr.RequesterSymbol.String)
+}
+
+func (a *PatronRequestActionService) cancelLocalBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
+	result := events.EventResult{}
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
+		iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled},
+		nil)
+	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
+}
+
+func (a *PatronRequestActionService) cannotSupplyLocallyBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
+	result := events.EventResult{}
+	var reasonUnfilled *iso18626.TypeSchemeValuePair
+	if params.ReasonUnfilled != "" {
+		reasonUnfilled = &iso18626.TypeSchemeValuePair{Text: params.ReasonUnfilled}
+	}
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
+		iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+			Note:             params.Note,
+			ReasonUnfilled:   reasonUnfilled,
+		},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusUnfilled},
+		nil)
+	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
+}
+
+func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
+	_, _, _, err := lmsAdapter.RequestItem(
+		pr.ID,
+		illRequest.BibliographicInfo.SupplierUniqueRecordId,
+		pr.Patron.String,
+		lmsAdapter.RequesterPickupLocation(),
+		lmsAdapter.ItemLocation(),
+	)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "LMS RequestItem failed", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+
+	completedStatus := iso18626.TypeStatusLoanCompleted
+	if illRequest.ServiceInfo != nil && illRequest.ServiceInfo.ServiceType == iso18626.TypeServiceTypeCopy {
+		completedStatus = iso18626.TypeStatusCopyCompleted
+	}
+	result := events.EventResult{}
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
+		iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+			Note:             params.Note,
+		},
+		iso18626.StatusInfo{Status: completedStatus},
+		nil)
+	if result.OutgoingMessage.SupplyingAgencyMessage != nil {
+		setSupplierMessage(*result.OutgoingMessage.SupplyingAgencyMessage, &pr)
+	}
+	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
 func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) actionExecutionResult {
