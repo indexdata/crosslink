@@ -18,7 +18,7 @@ CREATE TABLE patron_request
     items               JSONB NOT NULL DEFAULT '[]'::jsonb,
     language            regconfig NOT NULL DEFAULT 'english',
     terminal_state      BOOLEAN NOT NULL DEFAULT false,
-    updated_at          TIMESTAMP,
+    updated_at          TIMESTAMP NOT NULL DEFAULT now(),
     ill_response        jsonb NOT NULL DEFAULT '{}'::jsonb,
     internal_note       TEXT,
     next_req_id         VARCHAR,
@@ -74,7 +74,7 @@ CREATE TABLE template
     labels       TEXT[]    NOT NULL DEFAULT '{}',
     audience     VARCHAR,
     created_at   TIMESTAMP NOT NULL DEFAULT now(),
-    updated_at   TIMESTAMP
+    updated_at   TIMESTAMP NOT NULL DEFAULT now()
 );
 
 CREATE OR REPLACE FUNCTION immutable_to_timestamp(text)

@@ -1479,7 +1479,9 @@ func TestCRUDTemplate(t *testing.T) {
 	assert.Equal(t, newTemplate.Labels, createdTemplate.Labels)
 	assert.Equal(t, newTemplate.Body, createdTemplate.Body)
 	assert.False(t, createdTemplate.CreatedAt.IsZero())
-	assert.Nil(t, createdTemplate.UpdatedAt)
+	if assert.NotNil(t, createdTemplate.UpdatedAt) {
+		assert.Equal(t, createdTemplate.CreatedAt, *createdTemplate.UpdatedAt)
+	}
 
 	templateId := createdTemplate.Id
 	thisTemplatePath := templatePath + "/" + templateId
