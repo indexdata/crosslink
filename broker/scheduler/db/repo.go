@@ -28,7 +28,8 @@ type SchedRepo interface {
 
 type PgSchedRepo struct {
 	repo.PgBaseRepo[SchedRepo]
-	queries Queries
+	queries      Queries
+	eventQueries events.Queries
 }
 
 // WithTxFunc delegates transaction handling to PgBaseRepo.
@@ -116,11 +117,11 @@ func (r *PgSchedRepo) DeleteScheduledTask(ctx common.ExtendedContext, id string,
 }
 
 func (r *PgSchedRepo) HasActiveBatchActionEvents(ctx common.ExtendedContext, taskID string) (bool, error) {
-	return events.New().HasActiveBatchActionEvents(ctx, r.GetConnOrTx(), taskID)
+	return r.eventQueries.HasActiveBatchActionEvents(ctx, r.GetConnOrTx(), taskID)
 }
 
 func (r *PgSchedRepo) DeleteBatchActionEvents(ctx common.ExtendedContext, taskID string) error {
-	return events.New().DeleteBatchActionEvents(ctx, r.GetConnOrTx(), taskID)
+	return r.eventQueries.DeleteBatchActionEvents(ctx, r.GetConnOrTx(), taskID)
 }
 
 func (r *PgSchedRepo) GetScheduledTasks(ctx common.ExtendedContext, params GetScheduledTasksParams) ([]ScheduledTask, int64, error) {

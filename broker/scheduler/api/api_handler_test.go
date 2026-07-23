@@ -726,6 +726,24 @@ func TestDeleteBatchActionsId_GetScheduledTaskError(t *testing.T) {
 	repo.AssertExpectations(t)
 }
 
+func TestDeleteBatchActionsId_NotBatchAction(t *testing.T) {
+	repo := new(MockSchedRepo)
+	task := scheduledTaskFixture("task-1")
+	task.ActionData.BatchActionData = nil
+	repo.On("GetScheduledTaskByIdForUpdate", "task-1", testOwnerScope).Return(task, nil)
+
+	h := newHandler(repo)
+	req := newReq(http.MethodDelete, "")
+	rr := httptest.NewRecorder()
+	h.DeleteBatchActionsId(rr, req, "task-1", schedoapi.DeleteBatchActionsIdParams{Symbol: symPtr(testSymbol)})
+
+	assertErrorStatus(t, rr, http.StatusInternalServerError)
+	repo.AssertNotCalled(t, "HasActiveBatchActionEvents", mock.Anything)
+	repo.AssertNotCalled(t, "DeleteBatchActionEvents", mock.Anything)
+	repo.AssertNotCalled(t, "DeleteScheduledTask", mock.Anything, mock.Anything)
+	repo.AssertExpectations(t)
+}
+
 func TestDeleteBatchActionsId_DeleteError(t *testing.T) {
 	repo := new(MockSchedRepo)
 	task := scheduledTaskFixture("task-1")

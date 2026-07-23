@@ -198,8 +198,8 @@ func (h SchedulerApiHandler) getScheduledTask(w http.ResponseWriter, r *http.Req
 		brokerapi.AddInternalError(ctx, w, err)
 		return sched_db.ScheduledTask{}, ctx, true
 	}
-	if task.ActionData.BatchActionData == nil {
-		brokerapi.AddInternalError(ctx, w, errors.New("missing batchActionData"))
+	if err := validateBatchActionTask(task); err != nil {
+		brokerapi.AddInternalError(ctx, w, err)
 		return sched_db.ScheduledTask{}, ctx, true
 	}
 	return task, ctx, false
@@ -218,6 +218,9 @@ func (h SchedulerApiHandler) DeleteBatchActionsId(w http.ResponseWriter, r *http
 	err := h.schedRepo.WithTxFunc(ctx, func(schedRepo sched_db.SchedRepo) error {
 		task, inErr := schedRepo.GetScheduledTaskByIdForUpdate(ctx, id, owners)
 		if inErr != nil {
+			return inErr
+		}
+		if inErr = validateBatchActionTask(task); inErr != nil {
 			return inErr
 		}
 		active, inErr := schedRepo.HasActiveBatchActionEvents(ctx, task.ID)
@@ -345,14 +348,21 @@ func (h SchedulerApiHandler) mutateScheduledTask(
 		if inErr != nil {
 			return inErr
 		}
-		if task.ActionData.BatchActionData == nil {
-			return errors.New("missing batchActionData")
+		if inErr = validateBatchActionTask(task); inErr != nil {
+			return inErr
 		}
 		mutate(&task)
 		task, inErr = repo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
 		return inErr
 	})
 	return task, err
+}
+
+func validateBatchActionTask(task sched_db.ScheduledTask) error {
+	if task.ActionData.BatchActionData == nil {
+		return errors.New("missing batchActionData")
+	}
+	return nil
 }
 
 func (h SchedulerApiHandler) writeScheduledTaskMutationError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
