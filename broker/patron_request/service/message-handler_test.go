@@ -736,22 +736,125 @@ func TestHandleSupplyingAgencyMessageCancelled(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestHandleSupplyingAgencyMessageCancelledStatusChangeRejected(t *testing.T) {
-	handler := CreatePatronRequestMessageHandler(new(MockPrRepo), *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+func TestHandleSupplyingAgencyMessageCancelledStatusChangeAcceptedWithoutTransition(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
 
 	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
 		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+				AgencyIdValue: "REQ",
+			},
 			RequestingAgencyRequestId: patronRequestId,
 		},
 		MessageInfo: iso18626.MessageInfo{
 			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
 		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled},
-	}, pr_db.PatronRequest{})
+	}, pr_db.PatronRequest{
+		ID:              patronRequestId,
+		RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REQ"},
+		State:           BorrowerStateLocalSupply,
+		Side:            SideBorrowing,
+	})
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.NoError(t, err)
+	assert.Equal(t, patronRequestId, mockPrRepo.savedPr.ID)
+	assert.Equal(t, BorrowerStateLocalSupply, mockPrRepo.savedPr.State)
+}
+
+func TestHandleSupplyingAgencyMessageCancelledStatusChangeRejectedWhenNotLocalSupply(t *testing.T) {
+	handler := CreatePatronRequestMessageHandler(new(MockPrRepo), *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+
+	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+				AgencyIdValue: "REQ",
+			},
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
+		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled},
+	}, pr_db.PatronRequest{
+		RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REQ"},
+		State:           BorrowerStateSent,
+		Side:            SideBorrowing,
+	})
 	assert.Equal(t, events.EventStatusProblem, status)
 	assert.Equal(t, iso18626.TypeMessageStatusERROR, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
-	assert.Contains(t, resp.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue, "status change not allowed:")
-	assert.Contains(t, err.Error(), "status change not allowed:")
+	if assert.Error(t, err) {
+		assert.Contains(t, err.Error(), "status change not allowed:")
+	}
+}
+
+func TestHandleSupplyingAgencyMessageLocalSupplyCompletedAcceptedWithoutTransition(t *testing.T) {
+	for _, completedStatus := range []iso18626.TypeStatus{
+		iso18626.TypeStatusLoanCompleted,
+		iso18626.TypeStatusCopyCompleted,
+	} {
+		t.Run(string(completedStatus), func(t *testing.T) {
+			mockPrRepo := new(MockPrRepo)
+			handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+
+			status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+				Header: iso18626.Header{
+					SupplyingAgencyId: iso18626.TypeAgencyId{
+						AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+						AgencyIdValue: "REQ",
+					},
+					RequestingAgencyRequestId: patronRequestId,
+				},
+				MessageInfo: iso18626.MessageInfo{
+					ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+				},
+				StatusInfo: iso18626.StatusInfo{Status: completedStatus},
+			}, pr_db.PatronRequest{
+				ID:              patronRequestId,
+				RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REQ"},
+				State:           BorrowerStateLocalSupply,
+				Side:            SideBorrowing,
+			})
+			assert.Equal(t, events.EventStatusSuccess, status)
+			assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+			assert.NoError(t, err)
+			assert.Equal(t, patronRequestId, mockPrRepo.savedPr.ID)
+			assert.Equal(t, BorrowerStateLocalSupply, mockPrRepo.savedPr.State)
+		})
+	}
+}
+
+func TestHandleSupplyingAgencyMessageLocalSupplyUnfilledAcceptedWithoutTransition(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+
+	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+				AgencyIdValue: "REQ",
+			},
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
+		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusUnfilled},
+	}, pr_db.PatronRequest{
+		ID:              patronRequestId,
+		RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REQ"},
+		State:           BorrowerStateLocalSupply,
+		Side:            SideBorrowing,
+	})
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.NoError(t, err)
+	assert.Equal(t, patronRequestId, mockPrRepo.savedPr.ID)
+	assert.Equal(t, BorrowerStateLocalSupply, mockPrRepo.savedPr.State)
 }
 
 func TestHandleSupplyingAgencyMessageCancelResponseCancelled(t *testing.T) {

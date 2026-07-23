@@ -714,9 +714,9 @@ func (a *PatronRequestActionService) cancelLocalBorrowingRequest(ctx common.Exte
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
 		iso18626.MessageInfo{
-			ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
 		},
-		iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled},
 		nil)
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }

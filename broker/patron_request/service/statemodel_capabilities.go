@@ -98,7 +98,10 @@ const (
 	SupplierWillSupplyCond      MessageEvent = "will-supply-conditional"
 	SupplierLoaned              MessageEvent = "loaned"
 	SupplierCompleted           MessageEvent = "completed"
+	SupplierCompletedLocal      MessageEvent = "completed-local"
 	SupplierUnfilled            MessageEvent = "unfilled"
+	SupplierUnfilledLocal       MessageEvent = "unfilled-local"
+	SupplierCancelledLocal      MessageEvent = "cancelled-local"
 	SupplierCancelAccepted      MessageEvent = "cancel-accepted"
 	SupplierCancelRejected      MessageEvent = "cancel-rejected"
 	SupplierRetryConditional    MessageEvent = "retry-conditional"
@@ -299,7 +302,10 @@ func supplierBuiltInMessageEvents() []string {
 		string(SupplierWillSupplyCond),
 		string(SupplierLoaned),
 		string(SupplierCompleted),
+		string(SupplierCompletedLocal),
 		string(SupplierUnfilled),
+		string(SupplierUnfilledLocal),
+		string(SupplierCancelledLocal),
 		string(SupplierCancelAccepted),
 		string(SupplierCancelRejected),
 		string(SupplierRetryConditional),
