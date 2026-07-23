@@ -190,6 +190,37 @@ func TestBatchAction_RequestAgingDispatches(t *testing.T) {
 	assert.True(t, repo.listCalled)
 }
 
+func TestBatchAction_AddsOwnerRestrictionBeforeDispatch(t *testing.T) {
+	repo := &mockEmailPrRepo{}
+	svc := NewBatchActionService(&mockBatchActionEventBus{}, repo, nil)
+	event := requestAgingEvent("state = REQ", map[string]any{"interval": "24h"})
+
+	status, _ := svc.batchAction(testCtx, event)
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t,
+		"(state = $3 AND ((side = $4 AND supplier_symbol = $5) OR (side = $6 AND requester_symbol = $7))) AND updated_at <= $8",
+		repo.gotQuery.GetWhereClause(),
+	)
+	// The restriction is added to the dispatched copy, not persisted into the
+	// scheduled event payload where repeated runs could accumulate predicates.
+	assert.Equal(t, "state = REQ", event.EventData.BatchActionData.Selector)
+}
+
+func TestBatchAction_RejectsMissingOwnerBeforeDispatch(t *testing.T) {
+	repo := &mockEmailPrRepo{}
+	svc := NewBatchActionService(&mockBatchActionEventBus{}, repo, nil)
+	event := requestAgingEvent("cql.allRecords=1", map[string]any{"interval": "24h"})
+	event.EventData.BatchActionData.Owner = ""
+
+	status, result := svc.batchAction(testCtx, event)
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "invalid batch action data", result.EventError.Message)
+	assert.Equal(t, "owner is empty", result.EventError.Cause)
+	assert.False(t, repo.listCalled)
+}
+
 func TestRequestAging_ValidationErrors(t *testing.T) {
 	tests := []struct {
 		name              string
