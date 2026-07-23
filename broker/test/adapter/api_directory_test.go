@@ -711,6 +711,22 @@ func TestCompareSuppliers(t *testing.T) {
 		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1}) > 0)
 
 	assert.True(t, adapter.CompareSuppliers(
+		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 2, Ratio: 2},
+		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 1, Ratio: 1}) < 0)
+
+	assert.True(t, adapter.CompareSuppliers(
+		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 1, ShelvingPreference: 2, Ratio: 2},
+		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 1, ShelvingPreference: 1, Ratio: 1}) < 0)
+
+	assert.True(t, adapter.CompareSuppliers(
+		adapter.Supplier{Cost: 2, Priority: 1, LocationPreference: 100},
+		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 0}) > 0)
+
+	assert.True(t, adapter.CompareSuppliers(
+		adapter.Supplier{Cost: 1, Priority: 2, LocationPreference: 100},
+		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 0}) > 0)
+
+	assert.True(t, adapter.CompareSuppliers(
 		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1, Local: true},
 		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1, Local: false}) < 0)
 
@@ -724,4 +740,37 @@ func TestCompareSuppliers(t *testing.T) {
 	})
 	assert.True(t, suppliers[0].Local) // Local sorted as first
 	assert.False(t, suppliers[1].Local)
+}
+
+func TestFilterAndSortAppliesHoldingsPolicy(t *testing.T) {
+	appCtx := createLookupCtx()
+	ad := createDirectoryAdapter("")
+	networks := []directory.Network{{Name: "Reciprocal", Priority: intPtr(1)}}
+	tiers := []directory.Tier{{Name: "Core Loan", Level: "Core", Type: "Loan", Cost: 0}}
+	customData := directory.Entry{
+		Name:     "Supplier",
+		Networks: &networks,
+		Tiers:    &tiers,
+		HoldingsPolicy: &directory.HoldingsPolicy{ItemLoanPolicies: &[]directory.HoldingsItemLoanPolicy{
+			{Code: "NONCIRC", Name: "Non-circulating", Lendable: false},
+			{Code: "NORMAL", Name: "Normal", Lendable: true},
+		}},
+	}
+	entries := []adapter.Supplier{
+		{PeerId: "disabled-item", Symbol: "A", ItemLoanPolicy: "NONCIRC", CustomData: customData},
+		{PeerId: "disabled-location", Symbol: "B", LocationPreference: -1, CustomData: customData},
+		{PeerId: "preferred", Symbol: "C", LocationPreference: 2, ShelvingPreference: 1, ItemLoanPolicy: "NORMAL", CustomData: customData},
+		{PeerId: "unknown-policy", Symbol: "D", LocationPreference: 1, ShelvingPreference: 10, ItemLoanPolicy: "UNKNOWN", CustomData: customData},
+	}
+	serviceInfo := iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}
+
+	entries, rotaInfo := ad.FilterAndSort(appCtx, entries, customData, &serviceInfo, nil)
+
+	if assert.Len(t, entries, 2) {
+		assert.Equal(t, "preferred", entries[0].PeerId)
+		assert.Equal(t, "unknown-policy", entries[1].PeerId)
+	}
+	assert.Len(t, rotaInfo.Suppliers, 4)
+	assert.False(t, rotaInfo.Suppliers[2].Match)
+	assert.False(t, rotaInfo.Suppliers[3].Match)
 }

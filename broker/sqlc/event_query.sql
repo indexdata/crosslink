@@ -73,7 +73,7 @@ ORDER BY timestamp;
 -- name: GetBatchActionEvents :many
 SELECT sqlc.embed(event)
 FROM event
-WHERE event_name = 'invoke-batch-action'
+WHERE event_name IN ('invoke-batch-action', 'invoke-background-action')
   AND event_data -> 'batchActionData' ->> 'taskId' = sqlc.arg(task_id)::text
 ORDER BY timestamp DESC;
 

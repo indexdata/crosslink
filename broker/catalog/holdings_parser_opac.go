@@ -3,6 +3,7 @@ package catalog
 import (
 	"encoding/xml"
 	"fmt"
+	"strings"
 
 	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/marcxml"
@@ -24,10 +25,12 @@ func (p *OpacHoldingsParser) Parse(record []byte, params LookupParams) ([]Holdin
 	for _, holding := range opacRecord.Holdings.Holding {
 		availableNow := false
 		itemId := ""
+		itemLoanPolicy := ""
 		for _, circ := range holding.Circulations.Circulation {
 			// regrettably, YAZ uses 0 or 1 to indicate availability, instead of a boolean value
 			if circ.AvailableNow.Value == "1" {
 				itemId = circ.ItemId
+				itemLoanPolicy = strings.TrimSpace(circ.AvailableThru)
 				availableNow = true
 				break
 			}
@@ -38,6 +41,7 @@ func (p *OpacHoldingsParser) Parse(record []byte, params LookupParams) ([]Holdin
 				ShelvingLocation: holding.ShelvingLocation,
 				CallNumber:       holding.CallNumber,
 				ItemId:           itemId,
+				ItemLoanPolicy:   itemLoanPolicy,
 			})
 		}
 	}

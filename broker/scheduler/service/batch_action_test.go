@@ -74,6 +74,7 @@ func (m *mockBatchActionEventBus) CreateTask(id string, eventName events.EventNa
 
 func batchActionEvent(actionName string) events.Event {
 	return events.Event{
+		ID: "batch-event-1",
 		EventData: events.EventData{
 			CommonEventData: events.CommonEventData{
 				BatchActionData: &events.BatchActionData{
@@ -371,9 +372,19 @@ func assertRequestAgingCreateTask(t *testing.T, got createTaskCall, wantID strin
 	assert.Equal(t, wantID, got.id)
 	assert.Equal(t, events.EventNameInvokeBackgroundAction, got.eventName)
 	assert.Equal(t, events.EventDomainPatronRequest, got.eventDomain)
-	assert.Nil(t, got.parentID)
+	if assert.NotNil(t, got.parentID) {
+		assert.Equal(t, "batch-event-1", *got.parentID)
+	}
 	assert.Equal(t, events.SignalConsumers, got.target)
 	if assert.NotNil(t, got.data.Action) {
 		assert.Equal(t, wantAction, *got.data.Action)
+	}
+	if assert.NotNil(t, got.data.BatchActionData) {
+		assert.Equal(t, events.BatchActionData{
+			ActionName: string(schedoapi.RequestAging),
+			Selector:   "cql.allRecords=1",
+			TaskId:     "task-1",
+			Owner:      testBatchActionOwner,
+		}, *got.data.BatchActionData)
 	}
 }

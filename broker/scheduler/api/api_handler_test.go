@@ -255,12 +255,28 @@ func TestGetBatchActionsIdEvents_OK(t *testing.T) {
 	repo := new(MockSchedRepo)
 	eventRepo := new(MockEventRepo)
 	repo.On("GetScheduledTaskById", "task-1", testOwnerScope).Return(scheduledTaskFixture("task-1"), nil)
-	eventRepo.On("GetBatchActionEvents", "task-1").Return([]events.Event{{
-		ID: "event-1", EventName: events.EventNameInvokeBatchAction,
-		EventType: events.EventTypeTask, EventStatus: events.EventStatusError,
-		IllTransactionID: events.DEFAULT_ILL_TRANSACTION_ID,
-		Timestamp:        pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
-	}}, nil)
+	eventRepo.On("GetBatchActionEvents", "task-1").Return([]events.Event{
+		{
+			ID: "event-1", EventName: events.EventNameInvokeBatchAction,
+			EventType: events.EventTypeTask, EventStatus: events.EventStatusError,
+			IllTransactionID: events.DEFAULT_ILL_TRANSACTION_ID,
+			PatronRequestID:  events.DEFAULT_PATRON_REQUEST_ID,
+			Timestamp:        pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
+		},
+		{
+			ID: "event-2", EventName: events.EventNameInvokeBackgroundAction,
+			EventType: events.EventTypeTask, EventStatus: events.EventStatusSuccess,
+			IllTransactionID: events.DEFAULT_ILL_TRANSACTION_ID,
+			PatronRequestID:  "pr-1",
+			Timestamp:        pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
+		},
+		{
+			ID: "event-3", EventName: events.EventNameInvokeBackgroundAction,
+			EventType: events.EventTypeTask, EventStatus: events.EventStatusSuccess,
+			IllTransactionID: events.DEFAULT_ILL_TRANSACTION_ID,
+			Timestamp:        pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
+		},
+	}, nil)
 
 	h := newHandlerWithEvents(repo, eventRepo)
 	req := newReq(http.MethodGet, "")
@@ -272,9 +288,12 @@ func TestGetBatchActionsIdEvents_OK(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	var resp schedoapi.Events
 	assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
-	assert.Equal(t, int64(1), resp.About.Count)
-	assert.Len(t, resp.Items, 1)
+	assert.Equal(t, int64(3), resp.About.Count)
+	assert.Len(t, resp.Items, 3)
 	assert.Equal(t, "event-1", resp.Items[0].Id)
+	assert.Nil(t, resp.Items[0].PatronRequestID)
+	assert.Equal(t, "pr-1", *resp.Items[1].PatronRequestID)
+	assert.Nil(t, resp.Items[2].PatronRequestID)
 	repo.AssertExpectations(t)
 	eventRepo.AssertExpectations(t)
 }

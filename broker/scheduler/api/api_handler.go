@@ -85,7 +85,11 @@ func (h SchedulerApiHandler) GetBatchActionsIdEvents(w http.ResponseWriter, r *h
 	}
 	items := make([]schedoapi.Event, 0, len(eventList))
 	for _, event := range eventList {
-		items = append(items, schedoapi.Event(brokerapi.ToApiEvent(event, event.IllTransactionID, nil)))
+		var patronRequestID *string
+		if event.PatronRequestID != "" && !events.IsSyntheticID(event.PatronRequestID) {
+			patronRequestID = &event.PatronRequestID
+		}
+		items = append(items, schedoapi.Event(brokerapi.ToApiEvent(event, event.IllTransactionID, patronRequestID)))
 	}
 	brokerapi.WriteJsonResponse(w, schedoapi.Events{
 		About: schedoapi.About{Count: int64(len(items))}, Items: items,
