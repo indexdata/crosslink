@@ -1403,6 +1403,36 @@ func TestHandleInvokeLenderActionAskRetryFull(t *testing.T) {
 	}
 }
 
+func TestHandleInvokeLenderActionAskRetryCancelRequestItemFailed(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsAdapter := new(mockLmsAdapter)
+	lmsAdapter.On("CancelRequestItem", "req-1", "").Return(errors.New("cancel failed"))
+	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lmsAdapter, nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock))
+	illRequest := iso18626.Request{Header: iso18626.Header{RequestingAgencyRequestId: "req-1"}}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "item-1"}}, nil)
+	action := LenderActionAskRetry
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{
+		CommonEventData: events.CommonEventData{Action: &action},
+		CustomData: map[string]any{
+			"itemId":      "0201896834",
+			"reasonRetry": string(iso18626.ReasonRetryNotFoundAsCited),
+		},
+	}})
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "LMS CancelRequestItem failed", resultData.EventError.Message)
+	assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
+	assert.Equal(t, LenderStateValidated, mockPrRepo.savedPr.State)
+	assert.False(t, mockPrRepo.savedPr.TerminalState)
+	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
+	lmsAdapter.AssertExpectations(t)
+}
+
 func TestHandleInvokeBorrowerActionAcceptRetryAutoActionCreateTaskError(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockEventBus := new(MockEventBus)
@@ -1828,6 +1858,30 @@ func TestHandleInvokeLenderActionAcceptCancel(t *testing.T) {
 	if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.AnswerYesNo) {
 		assert.Equal(t, iso18626.TypeYesNoY, *mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.AnswerYesNo)
 	}
+}
+
+func TestHandleInvokeLenderActionAcceptCancelCancelRequestItemFailed(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsAdapter := new(mockLmsAdapter)
+	lmsAdapter.On("CancelRequestItem", "req-1", "").Return(errors.New("cancel failed"))
+	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lmsAdapter, nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock))
+	illRequest := iso18626.Request{Header: iso18626.Header{RequestingAgencyRequestId: "req-1"}}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateCancelRequested, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1"), RequesterReqID: getDbText("req-1")}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "item-1"}}, nil)
+	action := LenderActionAcceptCancel
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "LMS CancelRequestItem failed", resultData.EventError.Message)
+	assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
+	assert.Equal(t, LenderStateCancelRequested, mockPrRepo.savedPr.State)
+	assert.False(t, mockPrRepo.savedPr.TerminalState)
+	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
+	lmsAdapter.AssertExpectations(t)
 }
 
 func TestHandleInvokeLenderActionAcceptCancelMissingRequesterSymbol(t *testing.T) {
