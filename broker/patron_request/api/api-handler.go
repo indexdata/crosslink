@@ -427,6 +427,10 @@ func (a *PatronRequestApiHandler) DeletePatronRequestsId(w http.ResponseWriter, 
 		logParams["side"] = *params.Side
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+	if id == events.DEFAULT_PATRON_REQUEST_ID {
+		api.AddBadRequestError(ctx, w, errors.New("synthetic IDs cannot be deleted"))
+		return
+	}
 	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
 	if err != nil {
 		api.AddBadRequestError(ctx, w, err)
@@ -443,9 +447,7 @@ func (a *PatronRequestApiHandler) DeletePatronRequestsId(w http.ResponseWriter, 
 	if pr == nil {
 		return
 	}
-	err = a.prRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
-		return repo.DeletePatronRequest(ctx, pr.ID)
-	})
+	err = a.prRepo.DeletePatronRequest(ctx, pr.ID)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return

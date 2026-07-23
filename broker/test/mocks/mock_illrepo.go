@@ -145,10 +145,6 @@ func (r *MockIllRepositorySuccess) GetSymbolsByPeerId(ctx common.ExtendedContext
 	}}, nil
 }
 
-func (r *MockIllRepositorySuccess) DeleteLocatedSupplierByIllTransaction(ctx common.ExtendedContext, illTransId string) error {
-	return nil
-}
-
 func (r *MockIllRepositorySuccess) DeleteIllTransaction(ctx common.ExtendedContext, id string) error {
 	return nil
 }
@@ -291,10 +287,6 @@ func (r *MockIllRepositoryError) DeleteSymbolByPeerId(ctx common.ExtendedContext
 
 func (r *MockIllRepositoryError) GetSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]ill_db.Symbol, error) {
 	return []ill_db.Symbol{}, errors.New("DB error")
-}
-
-func (r *MockIllRepositoryError) DeleteLocatedSupplierByIllTransaction(ctx common.ExtendedContext, illTransId string) error {
-	return errors.New("DB error")
 }
 
 func (r *MockIllRepositoryError) DeleteIllTransaction(ctx common.ExtendedContext, id string) error {

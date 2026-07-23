@@ -345,6 +345,17 @@ func TestDeletePatronRequestsIdNotFound(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
 
+func TestDeletePatronRequestsIdRejectsSyntheticID(t *testing.T) {
+	handler := NewPrApiHandler(nil, nil, nil, nil, nil, 10)
+	req := httptest.NewRequest(http.MethodDelete, "/patron_requests/"+events.DEFAULT_PATRON_REQUEST_ID, nil)
+	rr := httptest.NewRecorder()
+
+	handler.DeletePatronRequestsId(rr, req, events.DEFAULT_PATRON_REQUEST_ID, proapi.DeletePatronRequestsIdParams{})
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "synthetic IDs cannot be deleted")
+}
+
 func internalNoteBody(t *testing.T, note *string) *bytes.Buffer {
 	jsonBytes, err := json.Marshal(proapi.UpdateInternalNote{InternalNote: note})
 	assert.NoError(t, err)

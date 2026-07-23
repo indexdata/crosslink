@@ -246,6 +246,10 @@ func (a *ApiHandler) DeleteIllTransactionsId(w http.ResponseWriter, r *http.Requ
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "DeleteIllTransactionsId", "id": id},
 	})
+	if id == events.DEFAULT_ILL_TRANSACTION_ID {
+		AddBadRequestError(ctx, w, errors.New("synthetic IDs cannot be deleted"))
+		return
+	}
 	trans, err := a.illRepo.GetIllTransactionById(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -256,9 +260,7 @@ func (a *ApiHandler) DeleteIllTransactionsId(w http.ResponseWriter, r *http.Requ
 			return
 		}
 	}
-	err = a.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
-		return deleteIllTransaction(ctx, repo, a.eventRepo, trans.ID)
-	})
+	err = a.illRepo.DeleteIllTransaction(ctx, trans.ID)
 	if err != nil {
 		AddInternalError(ctx, w, err)
 		return
@@ -404,17 +406,17 @@ func (a *ApiHandler) DeletePeersId(w http.ResponseWriter, r *http.Request, id st
 			return err
 		}
 		for _, t := range trans {
-			err = deleteIllTransaction(ctx, repo, a.eventRepo, t.ID)
+			err = repo.DeleteIllTransaction(ctx, t.ID)
 			if err != nil {
 				return err
 			}
 		}
-		suppliers, err := a.illRepo.GetLocatedSupplierByPeerId(ctx, peer.ID)
+		suppliers, err := repo.GetLocatedSupplierByPeerId(ctx, peer.ID)
 		if err != nil {
 			return err
 		}
 		for _, s := range suppliers {
-			err = deleteIllTransaction(ctx, repo, a.eventRepo, s.IllTransactionID)
+			err = repo.DeleteIllTransaction(ctx, s.IllTransactionID)
 			if err != nil {
 				return err
 			}
@@ -622,18 +624,6 @@ func (a *ApiHandler) PostArchiveIllTransactions(w http.ResponseWriter, r *http.R
 	WriteJsonResponse(w, oapi.StatusMessage{
 		Status: ARCHIVE_PROCESS_STARTED,
 	})
-}
-
-func deleteIllTransaction(ctx common.ExtendedContext, illRepo ill_db.IllRepo, eventRepo events.EventRepo, transId string) error {
-	inErr := eventRepo.DeleteEventsByIllTransaction(ctx, transId)
-	if inErr != nil {
-		return inErr
-	}
-	inErr = illRepo.DeleteLocatedSupplierByIllTransaction(ctx, transId)
-	if inErr != nil {
-		return inErr
-	}
-	return illRepo.DeleteIllTransaction(ctx, transId)
 }
 
 func ToApiEvent(event events.Event, illId string, prId *string) oapi.Event {

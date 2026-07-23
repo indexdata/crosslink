@@ -100,10 +100,6 @@ RETURNING sqlc.embed(event);
 DELETE FROM event
 WHERE id = $1;
 
--- name: DeleteEventsByIllTransaction :exec
-DELETE FROM event
-WHERE ill_transaction_id = $1;
-
 -- name: HasActiveBatchActionEvents :one
 SELECT EXISTS (
     SELECT 1
