@@ -1176,6 +1176,9 @@ components:
         id:
           type: string
           description: Unique identifier of the batch action
+        owner:
+          type: string
+          description: Symbol of the institution that owns the batch action. Empty for unrestricted actions created with master access.
         schedule:
           type: string
           description: RRULE schedule expression, e.g. "FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0" (every Monday at 06:00)
@@ -1211,6 +1214,7 @@ components:
           description: Link to execution events for this batch action
       required:
         - id
+        - owner
         - schedule
         - actionName
         - createdAt
