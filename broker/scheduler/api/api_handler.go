@@ -123,9 +123,16 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	owner, ok := h.resolveConcreteOwner(ctx, w, r, params.Symbol)
+	owners, ok := h.resolveOwnerScope(ctx, w, r, params.Symbol)
 	if !ok {
 		return
+	}
+	owner := ""
+	if owners != nil {
+		owner, ok = h.resolveConcreteOwner(ctx, w, r, params.Symbol)
+		if !ok {
+			return
+		}
 	}
 
 	next, err := sched_service.NextScheduleTime(create.Schedule)

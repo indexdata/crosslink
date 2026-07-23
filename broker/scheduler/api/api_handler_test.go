@@ -367,6 +367,45 @@ func TestPostBatchActions_OK(t *testing.T) {
 	repo.AssertExpectations(t)
 }
 
+func TestPostBatchActions_MasterWithoutSymbol(t *testing.T) {
+	repo := new(MockSchedRepo)
+	before := time.Now().UTC()
+
+	repo.On("SaveScheduledTask", mock.MatchedBy(func(p sched_db.SaveScheduledTaskParams) bool {
+		return p.ID != "" &&
+			p.EventName == events.EventNameInvokeBatchAction &&
+			p.Schedule == validRrule &&
+			p.Status == sched_db.ScheduledTaskStatusPending &&
+			p.Owner == "" &&
+			p.RunAt.Valid && p.RunAt.Time.After(before) &&
+			p.CreatedAt.Valid &&
+			p.ActionData.BatchActionData != nil &&
+			p.ActionData.BatchActionData.ActionName == string(schedoapi.EmailPullslips) &&
+			p.ActionData.BatchActionData.Selector == "title=test" &&
+			p.ActionData.BatchActionData.TaskId == p.ID &&
+			p.ActionData.BatchActionData.Owner == "" &&
+			len(p.ActionData.CustomData) == 0
+	})).Return(saveScheduledTaskReturn, nil)
+
+	h := newHandler(repo)
+	body := `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"` + validRrule + `"}`
+	req := newReq(http.MethodPost, body)
+	rr := httptest.NewRecorder()
+	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{})
+
+	assert.Equal(t, http.StatusCreated, rr.Code)
+	assert.NotEmpty(t, rr.Header().Get("Location"))
+	assert.Contains(t, rr.Header().Get("Content-Type"), "application/json")
+	var resp schedoapi.BatchAction
+	assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	assert.NotEmpty(t, resp.Id)
+	assert.Equal(t, validRrule, resp.Schedule)
+	assert.Equal(t, "title=test", resp.BatchQuery)
+	assert.True(t, resp.Active)
+	assert.NotNil(t, resp.NextRun)
+	repo.AssertExpectations(t)
+}
+
 func TestPostBatchActions_ValidDailySchedule_ComputesMidnightRunAt(t *testing.T) {
 	repo := new(MockSchedRepo)
 	before := time.Now().UTC()
