@@ -77,6 +77,7 @@ generate-sqlc: $(SQL_GEN_OUT)
 generate-api: $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN)
 
 $(STATE_MODELS_JSON): $(STATE_MODELS_YAML)
+	mkdir -p $(@D)
 	$(GO) run github.com/mikefarah/yq/v4@v4.52.5 eval -o=json $< > $@.tmp
 	mv -f $@.tmp $@
 
