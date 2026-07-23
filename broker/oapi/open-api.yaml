@@ -2516,7 +2516,7 @@ paths:
                 $ref: '#/components/schemas/Error'
     post:
       summary: Create a new batch action
-      description: Creates a batch action for one owner. Master access must provide `symbol`; Okapi access defaults to the tenant's primary symbol when omitted.
+      description: Creates a batch action. Master access without `symbol` creates an unrestricted action; Okapi access without `symbol` defaults to the tenant's primary symbol.
       tags:
         - scheduler-api
       parameters:

@@ -536,7 +536,7 @@ batchActionDefaults:
   - actionName: request-aging
     titleKey: request-aging-express
     title: Request aging of express requests
-    batchQuery: "(state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = NEEDS_REVIEW) and service_level = Express"
+    batchQuery: "side = lending and (state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = CONDITION_ACCEPTED) and service_level = Express"
     schedule: "FREQ=MINUTELY;INTERVAL=15"
     actionParams:
       interval: 2h
@@ -544,7 +544,7 @@ batchActionDefaults:
   - actionName: request-aging
     titleKey: request-aging-rush
     title: Request aging of rush requests
-    batchQuery: "(state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = NEEDS_REVIEW) and service_level = Rush"
+    batchQuery: "side = lending and (state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = CONDITION_ACCEPTED) and service_level = Rush"
     schedule: "FREQ=HOURLY;BYMINUTE=0"
     actionParams:
       interval: 24h
@@ -552,7 +552,7 @@ batchActionDefaults:
   - actionName: request-aging
     titleKey: request-aging-all
     title: Request aging of all requests
-    batchQuery: state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = NEEDS_REVIEW
+    batchQuery: "side = lending and (state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = CONDITION_ACCEPTED)"
     schedule: "FREQ=DAILY;BYHOUR=5;BYMINUTE=0"
     actionParams:
       interval: 72h
