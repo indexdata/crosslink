@@ -207,18 +207,18 @@ func TestBatchAction_AddsOwnerRestrictionBeforeDispatch(t *testing.T) {
 	assert.Equal(t, "state = REQ", event.EventData.BatchActionData.Selector)
 }
 
-func TestBatchAction_RejectsMissingOwnerBeforeDispatch(t *testing.T) {
+func TestBatchAction_MissingOwnerDispatchesWithoutRestriction(t *testing.T) {
 	repo := &mockEmailPrRepo{}
 	svc := NewBatchActionService(&mockBatchActionEventBus{}, repo, nil)
-	event := requestAgingEvent("cql.allRecords=1", map[string]any{"interval": "24h"})
+	event := requestAgingEvent("state = REQ", map[string]any{"interval": "24h"})
 	event.EventData.BatchActionData.Owner = ""
 
 	status, result := svc.batchAction(testCtx, event)
 
-	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "invalid batch action data", result.EventError.Message)
-	assert.Equal(t, "owner is empty", result.EventError.Cause)
-	assert.False(t, repo.listCalled)
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Nil(t, result.EventError)
+	assert.True(t, repo.listCalled)
+	assert.Equal(t, "state = $3 AND updated_at <= $4", repo.gotQuery.GetWhereClause())
 }
 
 func TestRequestAging_ValidationErrors(t *testing.T) {
@@ -240,16 +240,6 @@ func TestRequestAging_ValidationErrors(t *testing.T) {
 			event:     requestAgingEvent("", map[string]any{"interval": "24h"}),
 			wantMsg:   "cannot process event",
 			wantCause: "selector is empty",
-		},
-		{
-			name: "empty owner",
-			event: func() events.Event {
-				event := requestAgingEvent("cql.allRecords=1", map[string]any{"interval": "24h"})
-				event.EventData.BatchActionData.Owner = ""
-				return event
-			}(),
-			wantMsg:   "cannot process event",
-			wantCause: "owner is empty",
 		},
 		{
 			name:      "missing custom data",

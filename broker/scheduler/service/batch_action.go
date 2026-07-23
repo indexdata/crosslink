@@ -72,7 +72,7 @@ func addBatchActionOwnerRestriction(selector string, owner string) (string, erro
 		return "", fmt.Errorf("selector is empty")
 	}
 	if owner == "" {
-		return "", fmt.Errorf("owner is empty")
+		return selector, nil
 	}
 
 	qb, err := cqlbuilder.NewQueryFromString(selector)
@@ -108,10 +108,6 @@ func (s *BatchActionService) RequestAging(ctx common.ExtendedContext, event even
 	if batchActionData.Selector == "" {
 		return events.NewErrorResult("cannot process event", "selector is empty")
 	}
-	if batchActionData.Owner == "" {
-		return events.NewErrorResult("cannot process event", "owner is empty")
-	}
-
 	intervalString, ok := event.EventData.CustomData["interval"].(string)
 	if !ok || intervalString == "" {
 		return events.NewErrorResult("cannot process event", "interval is missing or not a string")
