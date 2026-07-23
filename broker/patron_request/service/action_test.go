@@ -2650,9 +2650,7 @@ func TestHandleInvokeBorrowerActionCancelLocalSupply(t *testing.T) {
 	assert.Equal(t, iso18626.TypeReasonForMessageCancelResponse, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.ReasonForMessage)
 	assert.Equal(t, iso18626.TypeStatusWillSupply, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.Status)
 	assert.False(t, mockIso18626Handler.lastSupplyingAgencyMessage.Header.Timestamp.IsZero())
-	if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.AnswerYesNo) {
-		assert.Equal(t, iso18626.TypeYesNoN, *mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.AnswerYesNo)
-	}
+	assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.AnswerYesNo)
 }
 
 func TestHandleInvokeBorrowerActionCannotSupplyLocally(t *testing.T) {

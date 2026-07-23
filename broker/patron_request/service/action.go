@@ -711,13 +711,31 @@ func (a *PatronRequestActionService) sendNotificationBorrowingRequest(ctx common
 }
 
 func (a *PatronRequestActionService) cancelLocalBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
-	// Should do the same as when supplier sends cancel
-	return a.rejectCancelLenderRequest(ctx, pr)
+	result := events.EventResult{}
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
+		iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
+		},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
+		nil)
+	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
 func (a *PatronRequestActionService) cannotSupplyLocallyBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
-	// Should do the same as when supplier sends cannot supply
-	return a.cannotSupplyLenderRequest(ctx, pr, params)
+	result := events.EventResult{}
+	var reasonUnfilled *iso18626.TypeSchemeValuePair
+	if params.ReasonUnfilled != "" {
+		reasonUnfilled = &iso18626.TypeSchemeValuePair{Text: params.ReasonUnfilled}
+	}
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
+		iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+			Note:             params.Note,
+			ReasonUnfilled:   reasonUnfilled,
+		},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusUnfilled},
+		nil)
+	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
 func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
