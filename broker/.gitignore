@@ -2,3 +2,4 @@
 /broker
 /data
 /pg_data
+/patron_request/service/statemodels/state-models.json

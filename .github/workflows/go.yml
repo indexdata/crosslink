@@ -12,7 +12,7 @@ on:
       - '**.xsd'
       - '**.html'
       - '**.sql'
-      - '**/sqlc.yaml'
+      - '**.yaml'
       - '**/Makefile'
       - '**/Dockerfile' #run this workflow first to ensure tests are passing
       - '**/chart/**' #trigger also when chart templates chnage to force republish
@@ -26,7 +26,7 @@ on:
       - '**.xsd'
       - '**.html'
       - '**.sql'
-      - '**/sqlc.yaml'
+      - '**.yaml'
       - '**/Makefile'
       - '**/Dockerfile' #run this workflow first to ensure tests are passing
       - '**/chart/**' #trigger also when chart templates change to force republish
