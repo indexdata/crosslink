@@ -79,7 +79,7 @@ func addBatchActionOwnerRestriction(selector string, owner string) (string, erro
 	if err != nil {
 		return "", err
 	}
-	_, err = qb.And().
+	restrictedSelector, err := qb.And().
 		BeginClause().
 		Search("side").Term(string(prservice.SideLending)).
 		And().Search("supplier_symbol_exact").Term(owner).
@@ -89,10 +89,6 @@ func addBatchActionOwnerRestriction(selector string, owner string) (string, erro
 		EndClause().
 		EndClause().
 		Build()
-	if err != nil {
-		return "", err
-	}
-	restrictedSelector, err := qb.Build()
 	if err != nil {
 		return "", err
 	}
