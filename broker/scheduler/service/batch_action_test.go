@@ -323,10 +323,10 @@ func TestRequestAging_NoPatronRequestsReturnsSuccess(t *testing.T) {
 	assert.Empty(t, eventBus.createTaskCalls)
 }
 
-func TestRequestAging_CreatesBackgroundTasksForBorrowingAndLending(t *testing.T) {
+func TestRequestAging_CreatesBackgroundTasksForLending(t *testing.T) {
 	repo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{
-		{ID: "borrowing-1", Side: prservice.SideBorrowing},
-		{ID: "lending-1", Side: prservice.SideLending},
+		{ID: "lending-1", Side: prservice.SideLending, State: prservice.LenderStateValidated},
+		{ID: "lending-2", Side: prservice.SideLending, State: prservice.LenderStateWillSupply},
 	}}
 	eventBus := &mockBatchActionEventBus{}
 	svc := NewBatchActionService(eventBus, repo, nil)
@@ -337,8 +337,8 @@ func TestRequestAging_CreatesBackgroundTasksForBorrowingAndLending(t *testing.T)
 	assert.NotNil(t, result)
 	assert.Equal(t, "processed patron request count: 2", result.Note)
 	if assert.Len(t, eventBus.createTaskCalls, 2) {
-		assertRequestAgingCreateTask(t, eventBus.createTaskCalls[0], "borrowing-1", prservice.BorrowerActionCancelRequest)
-		assertRequestAgingCreateTask(t, eventBus.createTaskCalls[1], "lending-1", prservice.LenderActionCannotSupply)
+		assertRequestAgingCreateTask(t, eventBus.createTaskCalls[0], "lending-1", prservice.LenderActionCannotSupply)
+		assertRequestAgingCreateTask(t, eventBus.createTaskCalls[1], "lending-2", prservice.LenderActionCannotSupply)
 		for _, call := range eventBus.createTaskCalls {
 			assert.Equal(t, "Closing stale request", call.data.CustomData["note"])
 			assert.Equal(t, "Expired", call.data.CustomData["reasonUnfilled"])
@@ -348,19 +348,36 @@ func TestRequestAging_CreatesBackgroundTasksForBorrowingAndLending(t *testing.T)
 	}
 }
 
+func TestRequestAging_FailsIfNoClosingActionForState(t *testing.T) {
+	repo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{
+		{ID: "lending-1", Side: prservice.SideLending, State: prservice.LenderStateShipped},
+		{ID: "lending-2", Side: prservice.SideLending, State: prservice.LenderStateWillSupply},
+	}}
+	eventBus := &mockBatchActionEventBus{}
+	svc := NewBatchActionService(eventBus, repo, nil)
+
+	status, result := svc.RequestAging(testCtx, requestAgingEvent("cql.allRecords=1", map[string]any{"interval": "24h", "note": "Closing stale request", "reasonUnfilled": "Expired"}))
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.NotNil(t, result)
+	assert.Equal(t, "processed patron request count: 2, failed: 1 with ids and errors in custom data", result.Note)
+	assert.Equal(t, "could not find closing action for patron request state: SHIPPED within state model: CrossLink Returnables State Model", result.CustomData["lending-1"])
+	assert.Len(t, eventBus.createTaskCalls, 1)
+}
+
 func TestRequestAging_CreateTaskErrorRecordsCustomDataAndContinues(t *testing.T) {
 	repo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{
-		{ID: "failed-1", Side: prservice.SideBorrowing},
-		{ID: "ok-1", Side: prservice.SideBorrowing},
+		{ID: "failed-1", Side: prservice.SideLending, State: prservice.LenderStateValidated},
+		{ID: "ok-1", Side: prservice.SideLending, State: prservice.LenderStateWillSupply},
 	}}
 	eventBus := &mockBatchActionEventBus{createTaskErrByID: map[string]error{"failed-1": errors.New("create failed")}}
 	svc := NewBatchActionService(eventBus, repo, nil)
 
 	status, result := svc.RequestAging(testCtx, requestAgingEvent("cql.allRecords=1", map[string]any{"interval": "24h"}))
 
-	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, events.EventStatusError, status)
 	assert.NotNil(t, result)
-	assert.Equal(t, "processed patron request count: 2", result.Note)
+	assert.Equal(t, "processed patron request count: 2, failed: 1 with ids and errors in custom data", result.Note)
 	assert.Equal(t, "error creating close action: create failed", result.CustomData["failed-1"])
 	_, ok := result.CustomData["ok-1"]
 	assert.False(t, ok)

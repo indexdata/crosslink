@@ -255,6 +255,32 @@ func TestGetEventTransitionRetryConditionalFromBorrowerWillSupply(t *testing.T) 
 	assert.Equal(t, BorrowerStateRetryPending, transition)
 }
 
+func TestGetClosingAction(t *testing.T) {
+	mapping := mustActionMapping(t)
+
+	action := mapping.GetClosingAction(pr_db.PatronRequest{Side: SideLending, State: LenderStateValidated})
+	assert.NotNil(t, action)
+	assert.Equal(t, LenderActionCannotSupply, *action)
+
+	action = mapping.GetClosingAction(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply})
+	assert.NotNil(t, action)
+	assert.Equal(t, LenderActionCannotSupply, *action)
+
+	action = mapping.GetClosingAction(pr_db.PatronRequest{Side: SideLending, State: LenderStateConditionPending})
+	assert.NotNil(t, action)
+	assert.Equal(t, LenderActionCannotSupply, *action)
+
+	action = mapping.GetClosingAction(pr_db.PatronRequest{Side: SideLending, State: LenderStateConditionAccepted})
+	assert.NotNil(t, action)
+	assert.Equal(t, LenderActionCannotSupply, *action)
+
+	action = mapping.GetClosingAction(pr_db.PatronRequest{Side: SideLending, State: LenderStateShipped})
+	assert.Nil(t, action)
+
+	action = mapping.GetClosingAction(pr_db.PatronRequest{State: LenderStateWillSupply})
+	assert.Nil(t, action)
+}
+
 func listCompare(t *testing.T, list1 []pr_db.PatronRequestAction, list2 []pr_db.PatronRequestAction) {
 	assert.Equal(t, len(list1), len(list2), "list1=%v, list2=%v", list1, list2)
 	for i := range list1 {
