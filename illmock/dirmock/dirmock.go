@@ -9,13 +9,23 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/indexdata/cql-go/cql"
-	directory "github.com/indexdata/crosslink/directory-mock"
+	apiValidator "github.com/oapi-codegen/nethttp-middleware"
+
+	directory "github.com/indexdata/crosslink/illmock/dirmock/api"
 )
 
 var _ directory.StrictServerInterface = (*DirectoryMock)(nil)
+
+const (
+	directoryBasePath = "/rsdir"
+	defaultEntryLimit = 10
+	maxEntryLimit     = 1000
+)
 
 type DirectoryMock struct {
 	entries []directory.Entry
@@ -84,10 +94,24 @@ func matchClause(clause *cql.Clause, entry directory.Entry) (bool, error) {
 	if clause.SearchClause != nil {
 		sc := clause.SearchClause
 		switch sc.Index {
+		case "name":
+			return matchString(sc, entry.Name, true)
+		case "description":
+			return matchOptionalString(sc, entry.Description, true)
+		case "type":
+			if entry.Type == nil {
+				return false, nil
+			}
+			return matchString(sc, string(*entry.Type), true)
+		case "parent":
+			if entry.Parent == nil {
+				return false, nil
+			}
+			return matchString(sc, entry.Parent.String(), false)
 		case "symbol":
 			return matchSymbol(sc, entry.Symbols)
 		case "tenant":
-			return matchTenant(sc, entry.Tenant)
+			return matchOptionalString(sc, entry.Tenant, false)
 		default:
 			return false, fmt.Errorf("unsupported index %s", sc.Index)
 		}
@@ -116,59 +140,131 @@ func matchClause(clause *cql.Clause, entry directory.Entry) (bool, error) {
 	return false, nil
 }
 
-func matchTenant(sc *cql.SearchClause, tenant *string) (bool, error) {
+func matchOptionalString(sc *cql.SearchClause, value *string, allowMasking bool) (bool, error) {
+	if value == nil {
+		return false, nil
+	}
+	return matchString(sc, *value, allowMasking)
+}
+
+func matchString(sc *cql.SearchClause, value string, allowMasking bool) (bool, error) {
+	term, pattern, err := parseCQLTerm(sc.Term, allowMasking)
+	if err != nil {
+		return false, err
+	}
+	if pattern != nil &&
+		sc.Relation != cql.EQ &&
+		sc.Relation != cql.EXACT &&
+		sc.Relation != cql.NE {
+		return false, fmt.Errorf("masking is not supported with relation %s", sc.Relation)
+	}
+
 	switch sc.Relation {
-	case "=":
-		if tenant == nil {
-			return false, nil
+	case cql.EQ, cql.EXACT:
+		if pattern != nil {
+			return pattern.MatchString(value), nil
 		}
-		return sc.Term == *tenant, nil
+		return value == term, nil
+	case cql.NE:
+		if pattern != nil {
+			return !pattern.MatchString(value), nil
+		}
+		return value != term, nil
+	case cql.LT:
+		return value < term, nil
+	case cql.LE:
+		return value <= term, nil
+	case cql.GT:
+		return value > term, nil
+	case cql.GE:
+		return value >= term, nil
 	default:
 		return false, fmt.Errorf("unsupported relation %s", sc.Relation)
 	}
+}
+
+func parseCQLTerm(term string, allowMasking bool) (string, *regexp.Regexp, error) {
+	var exact strings.Builder
+	var pattern strings.Builder
+	pattern.WriteString("^")
+	masked := false
+	escaped := false
+
+	for _, char := range term {
+		if escaped {
+			switch char {
+			case '*', '?', '^', '"', '\\':
+				exact.WriteRune(char)
+				pattern.WriteString(regexp.QuoteMeta(string(char)))
+			default:
+				return "", nil, fmt.Errorf("a masking backslash in a CQL string must be followed by *, ?, ^, \" or \\")
+			}
+			escaped = false
+			continue
+		}
+
+		switch char {
+		case '\\':
+			escaped = true
+		case '^':
+			return "", nil, fmt.Errorf("anchor op ^ unsupported")
+		case '*':
+			if !allowMasking {
+				return "", nil, fmt.Errorf("masking op * unsupported")
+			}
+			masked = true
+			pattern.WriteString(".*")
+		case '?':
+			if !allowMasking {
+				return "", nil, fmt.Errorf("masking op ? unsupported")
+			}
+			masked = true
+			pattern.WriteString(".")
+		default:
+			exact.WriteRune(char)
+			pattern.WriteString(regexp.QuoteMeta(string(char)))
+		}
+	}
+	if escaped {
+		return "", nil, fmt.Errorf("a CQL string must not end with a masking backslash")
+	}
+	if !masked {
+		return exact.String(), nil, nil
+	}
+	pattern.WriteString("$")
+	compiled, err := regexp.Compile(pattern.String())
+	if err != nil {
+		return "", nil, err
+	}
+	return exact.String(), compiled, nil
 }
 
 func matchSymbol(sc *cql.SearchClause, symbols *[]directory.Symbol) (bool, error) {
 	if symbols == nil {
 		return false, nil
 	}
-	tSymbols := strings.Split(sc.Term, " ")
+	matches := func(term string) bool {
+		term = strings.ToUpper(term)
+		for _, symbol := range *symbols {
+			if fullSymbol(symbol) == term || strings.ToUpper(symbol.Symbol) == term {
+				return true
+			}
+		}
+		return false
+	}
+
 	switch sc.Relation {
 	case cql.ANY:
-		for _, t := range tSymbols {
-			for _, s := range *symbols {
-				if fullSymbol(s) == t {
-					return true, nil
-				}
+		for _, term := range strings.Fields(sc.Term) {
+			if matches(term) {
+				return true, nil
 			}
 		}
 		return false, nil
-	case cql.ALL:
-		for _, t := range tSymbols {
-			found := false
-			for _, s := range *symbols {
-				if fullSymbol(s) == t {
-					found = true
-				}
-			}
-			if !found {
-				return false, nil
-			}
-		}
-		return true, nil
-	case "=":
-		// all match match in order
-		if len(tSymbols) != len(*symbols) {
-			return false, nil
-		}
-		for i, t := range tSymbols {
-			if t != fullSymbol((*symbols)[i]) {
-				return false, nil
-			}
-		}
-		return true, nil
+	case cql.EQ, cql.EXACT, cql.Relation("=="):
+		return matches(sc.Term), nil
 	default:
-		return false, fmt.Errorf("unsupported relation %s", sc.Relation)
+		return false, fmt.Errorf("unsupported relation %s for symbol", sc.Relation)
 	}
 }
 
@@ -180,16 +276,7 @@ func matchQuery(query *cql.Query, entry directory.Entry) (bool, error) {
 }
 
 func fullSymbol(symbol directory.Symbol) string {
-	return symbol.Authority + ":" + symbol.Symbol
-}
-
-func fixUpPeerUrl(entry *directory.Entry, peerUrl *string) {
-	if entry.Endpoints == nil || peerUrl == nil {
-		return
-	}
-	for i := range *entry.Endpoints {
-		(*entry.Endpoints)[i].Address = *peerUrl
-	}
+	return strings.ToUpper(symbol.Authority + ":" + symbol.Symbol)
 }
 
 func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEntriesRequestObject) (directory.GetEntriesResponseObject, error) {
@@ -202,22 +289,20 @@ func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEnt
 		}
 		query = &tmp
 	}
-	peerUrl := request.Params.PeerUrl
-	if peerUrl != nil {
-		if !strings.HasPrefix(*peerUrl, "http://") && !strings.HasPrefix(*peerUrl, "https://") {
-			return directory.GetEntries400TextResponse("peerUrl must start with http:// or https://"), nil
-		}
+
+	limit := int32(defaultEntryLimit)
+	if request.Params.Limit != nil {
+		limit = *request.Params.Limit
 	}
-	var filtered []directory.Entry
-	parentmap := make(map[string][]directory.Entry)
-	for _, entry := range d.entries {
-		if entry.Parent == nil {
-			continue
-		}
-		id := *entry.Parent
-		fixUpPeerUrl(&entry, peerUrl)
-		parentmap[id] = append(parentmap[id], entry)
+	offset := int32(0)
+	if request.Params.Offset != nil {
+		offset = *request.Params.Offset
 	}
+	if limit < 0 || limit > maxEntryLimit || offset < 0 {
+		return directory.GetEntries400TextResponse("invalid pagination parameters"), nil
+	}
+
+	filtered := make([]directory.Entry, 0)
 	for _, entry := range d.entries {
 		match, err := matchQuery(query, entry)
 		if err != nil {
@@ -226,24 +311,48 @@ func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEnt
 		if !match {
 			continue
 		}
-		fixUpPeerUrl(&entry, peerUrl)
 		filtered = append(filtered, entry)
-		if entry.Id == nil {
-			continue
+	}
+
+	sort.SliceStable(filtered, func(i, j int) bool {
+		if filtered[i].Name != filtered[j].Name {
+			return filtered[i].Name < filtered[j].Name
 		}
-		id := entry.Id.String()
-		filtered = append(filtered, parentmap[id]...)
+		var left, right string
+		if filtered[i].Id != nil {
+			left = filtered[i].Id.String()
+		}
+		if filtered[j].Id != nil {
+			right = filtered[j].Id.String()
+		}
+		return left < right
+	})
+
+	total := int64(len(filtered))
+	start := min(int(offset), len(filtered))
+	end := min(start+int(limit), len(filtered))
+	items := append([]directory.Entry(nil), filtered[start:end]...)
+	if items == nil {
+		items = make([]directory.Entry, 0)
 	}
-	var response directory.GetEntries200JSONResponse
-	response.Items = filtered
-	total := len(filtered)
-	response.ResultInfo = &directory.ResultInfo{
-		TotalRecords: &total,
-	}
-	return response, nil
+
+	return directory.GetEntries200JSONResponse{
+		Items: items,
+		About: directory.About{Count: total},
+	}, nil
 }
 
-func (d *DirectoryMock) HandlerFromMux(mux *http.ServeMux) {
+func (d *DirectoryMock) HandlerFromMux(mux *http.ServeMux) error {
+	swagger, err := directory.GetSpec()
+	if err != nil {
+		return err
+	}
 	sint := directory.NewStrictHandler(d, nil)
-	directory.HandlerFromMux(sint, mux)
+	directoryMux := http.NewServeMux()
+	handler := directory.HandlerWithOptions(sint, directory.StdHTTPServerOptions{
+		BaseURL:    directoryBasePath,
+		BaseRouter: directoryMux,
+	})
+	mux.Handle(directoryBasePath+"/", apiValidator.OapiRequestValidator(swagger)(handler))
+	return nil
 }

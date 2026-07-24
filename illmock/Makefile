@@ -8,6 +8,10 @@ GOFILES := $(shell find . -name "*.go")
 MODULE=illmock
 COVERAGE=coverage.out
 PROGRAMS := $(shell cd cmd; ls)
+OAPI_CFG=dirmock/api/oapi-codegen.yaml
+OAPI_SPEC=../directory/api.yaml
+OAPI_GEN=dirmock/api/directory.gen.go
+OAPI_CODEGEN ?= $(GO) tool oapi-codegen
 
 .PHONY: all check clean coverage docker fmt fmt-check generate run doc view-coverage deps-update lint vulncheck
 
@@ -16,7 +20,10 @@ all: $(PROGRAMS)
 docker: generate
 	cd .. && $(DOCKER) build -t indexdata/$(MODULE):latest -f ./$(MODULE)/Dockerfile .
 
-generate:
+generate: $(OAPI_GEN)
+
+$(OAPI_GEN): $(OAPI_CFG) $(OAPI_SPEC)
+	$(OAPI_CODEGEN) --config=$(OAPI_CFG) $(OAPI_SPEC)
 
 $(PROGRAMS): $(GOFILES) $(COMMIT_ID) $(OAPI_GEN)
 	$(GO) build -v -o $@ ./cmd/$@
@@ -58,3 +65,4 @@ clean:
 	rm -f $(COVERAGE)
 	rm -f $(COMMIT_ID)
 	rm -f README.html
+	rm -f $(OAPI_GEN)

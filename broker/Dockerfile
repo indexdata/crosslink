@@ -8,7 +8,6 @@ WORKDIR /app
 COPY broker/go.mod broker/go.sum ./broker/
 COPY directory/go.mod directory/go.sum ./directory/
 COPY illmock/go.mod illmock/go.sum ./illmock/
-COPY directory-mock/go.mod directory-mock/go.sum ./directory-mock/
 COPY httpclient/go.mod httpclient/go.sum ./httpclient/
 COPY iso18626/go.mod iso18626/go.sum ./iso18626/
 COPY marcxml/go.mod marcxml/go.sum ./marcxml/
@@ -21,7 +20,6 @@ RUN go work init \
     ./broker \
     ./directory \
     ./illmock \
-    ./directory-mock \
     ./httpclient \
     ./iso18626 \
     ./marcxml \

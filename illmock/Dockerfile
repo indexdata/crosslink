@@ -3,7 +3,7 @@ FROM golang:1.26 AS build
 WORKDIR /app
 
 # Copy manifests first so source changes do not invalidate the dependency cache.
-COPY directory-mock/go.mod directory-mock/go.sum ./directory-mock/
+COPY directory/go.mod directory/go.sum ./directory/
 COPY httpclient/go.mod httpclient/go.sum ./httpclient/
 COPY iso18626/go.mod iso18626/go.sum ./iso18626/
 COPY marcxml/go.mod marcxml/go.sum ./marcxml/
@@ -11,10 +11,11 @@ COPY ncip/go.mod ncip/go.sum ./ncip/
 COPY sru/go.mod sru/go.sum ./sru/
 COPY testutil/go.mod testutil/go.sum ./testutil/
 COPY illmock/go.mod illmock/go.sum ./illmock/
+COPY illmock/dirmock/api/oapi-codegen.yaml ./illmock/dirmock/api/oapi-codegen.yaml
 
 RUN go work init \
     ./illmock \
-    ./directory-mock \
+    ./directory \
     ./httpclient \
     ./iso18626 \
     ./marcxml \
@@ -28,7 +29,8 @@ RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
     go mod download
 
 # Copy sources after dependencies have been downloaded.
-COPY directory-mock/ /app/directory-mock/
+COPY directory/api.yaml /app/directory/api.yaml
+COPY directory/apimodels/ /app/directory/apimodels/
 COPY httpclient/ /app/httpclient/
 COPY iso18626/ /app/iso18626/
 COPY marcxml/ /app/marcxml/
@@ -36,6 +38,11 @@ COPY ncip/ /app/ncip/
 COPY sru/ /app/sru/
 COPY testutil/ /app/testutil/
 COPY illmock/ ./
+
+# Generate the filtered Directory binding from the shared API contract.
+RUN go tool oapi-codegen \
+    --config=dirmock/api/oapi-codegen.yaml \
+    /app/directory/api.yaml
 
 # Build
 RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \

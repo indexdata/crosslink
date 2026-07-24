@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	directory "github.com/indexdata/crosslink/directory-mock"
 	"github.com/indexdata/crosslink/httpclient"
+	directory "github.com/indexdata/crosslink/illmock/dirmock/api"
 	"github.com/indexdata/crosslink/illmock/flows"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/crosslink/testutil"
@@ -323,7 +323,7 @@ func TestService(t *testing.T) {
 	app.peerUrl = url + "/iso18626"
 	isoUrl := app.peerUrl
 	apiUrl := url + "/api/flows"
-	directoryUrl := url + "/directory/entries"
+	directoryUrl := url + "/rsdir/entries"
 	healthUrl := url + "/healthz"
 	sruUrl := url + "/sru"
 	app.agencyType = "ABC"
@@ -1407,9 +1407,27 @@ func TestService(t *testing.T) {
 		var response directory.EntriesResponse
 		err = json.Unmarshal(buf, &response)
 		assert.NoError(t, err)
-		assert.Len(t, response.Items, 63)
-		assert.Equal(t, 63, *response.ResultInfo.TotalRecords)
+		assert.Len(t, response.Items, 10)
+		assert.Equal(t, int64(42), response.About.Count)
 		assert.Equal(t, "Albury City Libraries", response.Items[0].Name)
+	})
+
+	t.Run("directory entries pagination", func(t *testing.T) {
+		resp, err := http.Get(directoryUrl + "?limit=2&offset=1")
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		buf, err := io.ReadAll(resp.Body)
+		assert.NoError(t, err)
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
+		var response directory.EntriesResponse
+		err = json.Unmarshal(buf, &response)
+		assert.NoError(t, err)
+		assert.Len(t, response.Items, 2)
+		assert.Equal(t, int64(42), response.About.Count)
+		assert.Equal(t, "Albury City Libraries / Albury City Libraries", response.Items[0].Name)
 	})
 
 	t.Run("directory entries cql=ISIL:AU-NWOOL", func(t *testing.T) {
@@ -1426,46 +1444,9 @@ func TestService(t *testing.T) {
 		var response directory.EntriesResponse
 		err = json.Unmarshal(buf, &response)
 		assert.NoError(t, err)
-		assert.Len(t, response.Items, 2)
-		assert.Equal(t, 2, *response.ResultInfo.TotalRecords)
+		assert.Len(t, response.Items, 1)
+		assert.Equal(t, int64(1), response.About.Count)
 		assert.Equal(t, "Woollahra Library and Information Service", response.Items[0].Name)
-		assert.Equal(t, "Woollahra Library and Information Service / Double Bay Central Library", response.Items[1].Name)
-	})
-
-	t.Run("directory entries cql=ISIL:AU-NWOOL ok peerUrl", func(t *testing.T) {
-		resp, err := http.Get(directoryUrl + "?cql=symbol%3DISIL%3AAU-NWOOL&peer_url=http%3A%2F%2Flocalhost%3A1234")
-		assert.NoError(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
-		buf, err := io.ReadAll(resp.Body)
-		assert.NoError(t, err)
-		defer func() {
-			dErr := resp.Body.Close()
-			assert.NoError(t, dErr)
-		}()
-		var response directory.EntriesResponse
-		err = json.Unmarshal(buf, &response)
-		assert.NoError(t, err)
-		assert.Len(t, response.Items, 2)
-		assert.Equal(t, 2, *response.ResultInfo.TotalRecords)
-		assert.Equal(t, "Woollahra Library and Information Service", response.Items[0].Name)
-		assert.Equal(t, "http://localhost:1234", (*response.Items[0].Endpoints)[0].Address)
-		assert.Equal(t, "Woollahra Library and Information Service / Double Bay Central Library", response.Items[1].Name)
-	})
-
-	t.Run("directory entries cql=ISIL:AU-NWOOL bad peerUrl", func(t *testing.T) {
-		resp, err := http.Get(directoryUrl + "?cql=symbol%3DISIL%3AAU-NWOOL&peer_url=foo")
-		assert.NoError(t, err)
-
-		assert.Equal(t, 400, resp.StatusCode)
-		assert.Equal(t, "text/plain", resp.Header.Get("Content-Type"))
-		buf, err := io.ReadAll(resp.Body)
-		assert.NoError(t, err)
-		defer func() {
-			dErr := resp.Body.Close()
-			assert.NoError(t, dErr)
-		}()
-		assert.Contains(t, string(buf), "peerUrl must start with http:// or https://")
 	})
 
 	t.Run("directory entries cql any sym3", func(t *testing.T) {
@@ -1483,7 +1464,7 @@ func TestService(t *testing.T) {
 		err = json.Unmarshal(buf, &response)
 		assert.NoError(t, err)
 		assert.Len(t, response.Items, 0)
-		assert.Equal(t, 0, *response.ResultInfo.TotalRecords)
+		assert.Equal(t, int64(0), response.About.Count)
 	})
 
 	t.Run("directory entries cql serverChoice sym2 sym3", func(t *testing.T) {

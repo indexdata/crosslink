@@ -5,7 +5,6 @@ updates:
     directories:
       - "/broker"
       - "/directory"
-      - "/directory-mock"
       - "/httpclient"
       - "/illmock"
       - "/iso18626"

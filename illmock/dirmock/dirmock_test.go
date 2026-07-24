@@ -2,14 +2,58 @@ package dirmock
 
 import (
 	"compress/gzip"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
-	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/indexdata/cql-go/cql"
-	directory "github.com/indexdata/crosslink/directory-mock"
+	directory "github.com/indexdata/crosslink/illmock/dirmock/api"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestGetEntriesContract(t *testing.T) {
+	mock, err := NewJson(`[
+		{"id":"00000000-0000-0000-0000-000000000001","name":"Alpha","type":"Institution"},
+		{"id":"00000000-0000-0000-0000-000000000002","name":"Beta","type":"Institution"},
+		{"id":"00000000-0000-0000-0000-000000000003","name":"Gamma","type":"Institution"}
+	]`)
+	assert.NoError(t, err)
+
+	mux := http.NewServeMux()
+	assert.NoError(t, mock.HandlerFromMux(mux))
+
+	for _, testcase := range []struct {
+		name       string
+		path       string
+		status     int
+		itemCount  int
+		totalCount int64
+	}{
+		{"zero limit", "/rsdir/entries?limit=0", http.StatusOK, 0, 3},
+		{"offset beyond results", "/rsdir/entries?offset=99", http.StatusOK, 0, 3},
+		{"negative limit", "/rsdir/entries?limit=-1", http.StatusBadRequest, 0, 0},
+		{"limit above maximum", "/rsdir/entries?limit=1001", http.StatusBadRequest, 0, 0},
+		{"negative offset", "/rsdir/entries?offset=-1", http.StatusBadRequest, 0, 0},
+	} {
+		t.Run(testcase.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, testcase.path, nil)
+			recorder := httptest.NewRecorder()
+			mux.ServeHTTP(recorder, request)
+			assert.Equal(t, testcase.status, recorder.Code)
+			if testcase.status != http.StatusOK {
+				return
+			}
+
+			var response directory.EntriesResponse
+			assert.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+			assert.Len(t, response.Items, testcase.itemCount)
+			assert.Equal(t, testcase.totalCount, response.About.Count)
+		})
+	}
+}
 
 func TestMatchQueries(t *testing.T) {
 	match, err := matchQuery(nil, directory.Entry{})
@@ -20,72 +64,54 @@ func TestMatchQueries(t *testing.T) {
 	assert.Nil(t, err)
 	assert.False(t, match)
 
-	for _, testcase := range []struct {
-		query   string
-		symbols string
-		tenant  string
-		match   bool
-		error   string
-	}{
-		{"a:a", "a:a a:b a:c", "", false, "cql.serverChoice"},
-		{"symbol > a:a", "a:a a:b a:c", "", false, "unsupported relation >"},
-		{"foo = a:a", "a:a a:b a:c", "", false, "unsupported index foo"},
-		{"symbol = a:a", "", "", false, ""},
-		{"symbol = a:a", "a:b", "", false, ""},
-		{"symbol = a:a", "a:a a:b", "", false, ""},
-		{"symbol = a:a a:b", "a:a a:b", "", true, ""},
-		{"symbol = a:b a:a", "a:a a:b", "", false, ""},
-		{"symbol = a:b a:a", "a:a a:b a:c", "", false, ""},
-		{"symbol any a:a", "a:a", "", true, ""},
-		{"symbol any a:a", "a:b", "", false, ""},
-		{"symbol any a:a", "a:a a:b", "", true, ""},
-		{"symbol any a:a a:b", "a:a a:b", "", true, ""},
-		{"symbol any a:b a:a", "a:a a:b", "", true, ""},
-		{"symbol any a:b a:a", "a:a a:b a:c", "", true, ""},
-		{"symbol all a:a", "a:a", "", true, ""},
-		{"symbol all a:a", "a:b", "", false, ""},
-		{"symbol all a:a", "a:a a:b", "", true, ""},
-		{"symbol all a:a a:b", "a:a a:b", "", true, ""},
-		{"symbol all a:b a:a", "a:a a:b", "", true, ""},
-		{"symbol all a:b a:a", "a:a a:b a:c", "", true, ""},
-		{"symbol all a:b or symbol all d", "a:a a:b a:c", "", true, ""},
-		{"symbol all e or symbol all d", "a:a a:b a:c", "", false, ""},
-		{"symbol all e or d", "a:a a:b a:c", "", false, "cql.serverChoice"},
-		{"e or symbol all d", "a:a a:b a:c", "", false, "cql.serverChoice"},
-		{"symbol all a:b and symbol all d", "a:a a:b a:c", "", false, ""},
-		{"symbol all e and symbol all d", "a:a a:b a:c", "", false, ""},
-		{"symbol all a:a and symbol all a:c", "a:a a:b a:c", "", true, ""},
+	description := "A useful description"
+	tenant := "tenant-a"
+	entryType := directory.EntryTypeInstitution
+	parent := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	symbols := []directory.Symbol{
+		{Authority: "AUTH", Symbol: "ONE"},
+		{Authority: "AUTH", Symbol: "TWO"},
+	}
+	entry := directory.Entry{
+		Name:        "Alpha Institution",
+		Description: &description,
+		Tenant:      &tenant,
+		Type:        &entryType,
+		Parent:      &parent,
+		Symbols:     &symbols,
+	}
 
-		{"symbol all a:b not symbol all d", "a:a a:b a:c", "", true, ""},
-		{"symbol all e not symbol all d", "a:a a:b a:c", "", false, ""},
-		{"symbol all a:a not symbol all a:c", "a:a a:b a:c", "", false, ""},
-		{"symbol all a:a not symbol all a:c", "a:a a:b a:c", "", false, ""},
-		{"symbol all a:a prox symbol all a:c", "a:a a:b a:c", "", false, "unsupported operator"},
-		{"tenant = \"\"", "a:a", "", false, ""},
-		{"tenant = t1", "a:a", "t0", false, ""},
-		{"tenant = t1", "a:a", "t1", true, ""},
-		{"tenant > t1", "a:a", "t1", true, "unsupported relation >"},
-		{"tenant = t1 and symbol = a:a", "a:a", "t1", true, ""},
-		{"tenant = t1 and symbol = a:a", "a:a", "t0", false, ""},
-		{"tenant = t1 or symbol = a:a", "a:a", "t0", true, ""},
+	for _, testcase := range []struct {
+		query string
+		match bool
+		error string
+	}{
+		{`name = "Alpha Institution"`, true, ""},
+		{`name = "Alpha*"`, true, ""},
+		{`name = "Beta*"`, false, ""},
+		{`description = "*useful*"`, true, ""},
+		{`type = Institution`, true, ""},
+		{`parent = "00000000-0000-0000-0000-000000000001"`, true, ""},
+		{`tenant = tenant-a`, true, ""},
+		{`tenant > tenant-a`, false, ""},
+		{`symbol = AUTH:ONE`, true, ""},
+		{`symbol = one`, true, ""},
+		{`symbol any "AUTH:THREE AUTH:TWO"`, true, ""},
+		{`symbol = AUTH:THREE`, false, ""},
+		{`symbol all "AUTH:ONE AUTH:TWO"`, false, "unsupported relation all for symbol"},
+		{`symbol > AUTH:ONE`, false, "unsupported relation > for symbol"},
+		{`foo = value`, false, "unsupported index foo"},
+		{`name = "Alpha*" and tenant = tenant-a`, true, ""},
+		{`name = "Beta*" or symbol = AUTH:TWO`, true, ""},
+		{`symbol = AUTH:ONE not tenant = other`, true, ""},
+		{`symbol = AUTH:ONE prox tenant = tenant-a`, false, "unsupported operator prox"},
+		{`name = "Alpha^"`, false, "anchor op ^ unsupported"},
 	} {
 		t.Run(testcase.query, func(t *testing.T) {
 			var p cql.Parser
 			query, err := p.Parse(testcase.query)
 			if err != nil {
 				t.Fatalf("failed to parse query: %v", err)
-			}
-			var entry directory.Entry
-			if testcase.symbols != "" {
-				var symbols []directory.Symbol
-				for _, symbol := range strings.Split(testcase.symbols, " ") {
-					split := strings.Split(symbol, ":")
-					symbols = append(symbols, directory.Symbol{Authority: split[0], Symbol: split[1]})
-				}
-				entry.Symbols = &symbols
-			}
-			if testcase.tenant != "" {
-				entry.Tenant = &testcase.tenant
 			}
 			match, err := matchQuery(&query, entry)
 			if err != nil {

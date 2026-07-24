@@ -1450,7 +1450,10 @@ components:
         tenant:
           type: string
         vendor:
-          x-go-type: EntryVendor
+          x-go-type: apimodels.EntryVendor
+          x-go-type-import:
+            path: github.com/indexdata/crosslink/directory/apimodels
+            name: apimodels
         phoneNumber:
           type: string
         lmsLocationCode:
@@ -1498,7 +1501,10 @@ components:
           description: Configuration for LMS (Library Management System) integration via NCIP protocol
           $ref: '#/components/schemas/LmsConfig'
         holdingsConfig:
-          x-go-type: HoldingsConfig
+          x-go-type: apimodels.HoldingsConfig
+          x-go-type-import:
+            path: github.com/indexdata/crosslink/directory/apimodels
+            name: apimodels
     EntryPatch:
       type: object
       properties:
@@ -1532,7 +1538,10 @@ components:
           type: string
           nullable: true
         vendor:
-          x-go-type: EntryVendor
+          x-go-type: apimodels.EntryVendor
+          x-go-type-import:
+            path: github.com/indexdata/crosslink/directory/apimodels
+            name: apimodels
           nullable: true
         phoneNumber:
           type: string
@@ -1562,7 +1571,10 @@ components:
             - $ref: '#/components/schemas/LmsConfigPatch'
           nullable: true
         holdingsConfig:
-          x-go-type: HoldingsConfig
+          x-go-type: apimodels.HoldingsConfig
+          x-go-type-import:
+            path: github.com/indexdata/crosslink/directory/apimodels
+            name: apimodels
           nullable: true
         symbols:
           type: array

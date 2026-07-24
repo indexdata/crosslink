@@ -16,7 +16,6 @@ require (
 
 replace (
 	github.com/indexdata/crosslink/directory => ../directory
-	github.com/indexdata/crosslink/directory-mock => ../directory-mock
 	github.com/indexdata/crosslink/httpclient => ../httpclient
 	github.com/indexdata/crosslink/illmock => ../illmock
 	github.com/indexdata/crosslink/iso18626 => ../iso18626
@@ -84,7 +83,6 @@ require (
 	github.com/google/cel-go v0.28.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/indexdata/crosslink/directory-mock v0.0.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect

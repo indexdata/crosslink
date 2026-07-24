@@ -34,7 +34,7 @@ services:
       DB_PROVISION: "true"
       DB_MIGRATE: "true"
       DIRECTORY_ADAPTER: api
-      DIRECTORY_API_URL: http://illmock:8081/directory/entries
+      DIRECTORY_API_URL: http://illmock:8081/rsdir/entries
       TENANT_TO_SYMBOL: "ISIL:US-{tenant}"
     ports:
       - "8080:8080"

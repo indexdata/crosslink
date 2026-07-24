@@ -1,119 +1,40 @@
 package api
 
-// EntryVendor identifies the ILL platform inferred for an entry.
-type EntryVendor string
+import "github.com/indexdata/crosslink/directory/apimodels"
+
+type EntryVendor = apimodels.EntryVendor
 
 const (
-	Alma      EntryVendor = "Alma"
-	CrossLink EntryVendor = "CrossLink"
-	ILLiad    EntryVendor = "ILLiad"
-	ReShare   EntryVendor = "ReShare"
-	Unknown   EntryVendor = "Unknown"
+	Alma      = apimodels.Alma
+	CrossLink = apimodels.CrossLink
+	ILLiad    = apimodels.ILLiad
+	ReShare   = apimodels.ReShare
+	Unknown   = apimodels.Unknown
 )
 
-func (e EntryVendor) Valid() bool {
-	switch e {
-	case Alma, CrossLink, ILLiad, ReShare, Unknown:
-		return true
-	default:
-		return false
-	}
-}
-
-// HoldingsConfig contains catalog lookup configuration used by broker.
-type HoldingsConfig struct {
-	HoldingsFormat     *HoldingsParserConfig `json:"holdingsFormat,omitempty"`
-	MetadataFormat     *MetadataParserConfig `json:"metadataFormat,omitempty"`
-	MetadataUpdateMode *MetadataUpdateMode   `json:"metadataUpdateMode,omitempty"`
-	QueryConfig        *QueryConfig          `json:"queryConfig,omitempty"`
-	Sru                *SruConfig            `json:"sru,omitempty"`
-	Zoom               *ZoomConfig           `json:"zoom,omitempty"`
-}
-
-// CatalogConfig is kept as a Go-only compatibility alias for broker code during the
-// migration. The public Directory contract uses holdingsConfig.
-type CatalogConfig = HoldingsConfig
-
-type HoldingsParserConfig struct {
-	Marc        *MarcHoldingsParserConfig `json:"marc,omitempty"`
-	Marc21plus1 *map[string]interface{}   `json:"marc21plus1,omitempty"`
-	Opac        *OpacHoldingsParserConfig `json:"opac,omitempty"`
-	Reservoir   *map[string]interface{}   `json:"reservoir,omitempty"`
-}
-
-type MarcHoldingsParserConfig struct {
-	CallNumberSubField       *string `json:"callNumberSubField,omitempty"`
-	ItemIdSubField           *string `json:"itemIdSubField,omitempty"`
-	LocationSubField         *string `json:"locationSubField,omitempty"`
-	MainField                *string `json:"mainField,omitempty"`
-	RestrictedSubField       *string `json:"restrictedSubField,omitempty"`
-	ShelvingLocationSubField *string `json:"shelvingLocationSubField,omitempty"`
-}
-
-type MarcMetadataParserConfig struct {
-	Author     *string `json:"author,omitempty"`
-	Edition    *string `json:"edition,omitempty"`
-	Identifier *string `json:"identifier,omitempty"`
-	Isbn       *string `json:"isbn,omitempty"`
-	Issn       *string `json:"issn,omitempty"`
-	Subtitle   *string `json:"subtitle,omitempty"`
-	Title      *string `json:"title,omitempty"`
-}
-
-type MetadataParserConfig struct {
-	Marc21 *MarcMetadataParserConfig `json:"marc21,omitempty"`
-}
-
-type MetadataUpdateMode string
+type HoldingsConfig = apimodels.HoldingsConfig
+type CatalogConfig = apimodels.CatalogConfig
+type HoldingsParserConfig = apimodels.HoldingsParserConfig
+type MarcHoldingsParserConfig = apimodels.MarcHoldingsParserConfig
+type MarcMetadataParserConfig = apimodels.MarcMetadataParserConfig
+type MetadataParserConfig = apimodels.MetadataParserConfig
+type MetadataUpdateMode = apimodels.MetadataUpdateMode
 
 const (
-	Auto    MetadataUpdateMode = "auto"
-	Merge   MetadataUpdateMode = "merge"
-	None    MetadataUpdateMode = "none"
-	Replace MetadataUpdateMode = "replace"
+	Auto    = apimodels.Auto
+	Merge   = apimodels.Merge
+	None    = apimodels.None
+	Replace = apimodels.Replace
 )
 
-func (e MetadataUpdateMode) Valid() bool {
-	switch e {
-	case Auto, Merge, None, Replace:
-		return true
-	default:
-		return false
-	}
-}
-
-type OpacHoldingsParserConfig = map[string]interface{}
-
-type QueryConfig struct {
-	Identifier *string          `json:"identifier,omitempty"`
-	Isbn       *string          `json:"isbn,omitempty"`
-	Issn       *string          `json:"issn,omitempty"`
-	Title      *string          `json:"title,omitempty"`
-	Type       *QueryConfigType `json:"type,omitempty"`
-}
-
-type QueryConfigType string
+type OpacHoldingsParserConfig = apimodels.OpacHoldingsParserConfig
+type QueryConfig = apimodels.QueryConfig
+type QueryConfigType = apimodels.QueryConfigType
 
 const (
-	Cql QueryConfigType = "cql"
-	Pqf QueryConfigType = "pqf"
+	Cql = apimodels.Cql
+	Pqf = apimodels.Pqf
 )
 
-func (e QueryConfigType) Valid() bool {
-	switch e {
-	case Cql, Pqf:
-		return true
-	default:
-		return false
-	}
-}
-
-type SruConfig struct {
-	Address      string  `json:"address"`
-	RecordSchema *string `json:"recordSchema,omitempty"`
-}
-
-type ZoomConfig struct {
-	Address string             `json:"address"`
-	Options *map[string]string `json:"options,omitempty"`
-}
+type SruConfig = apimodels.SruConfig
+type ZoomConfig = apimodels.ZoomConfig

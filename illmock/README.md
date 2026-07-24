@@ -165,11 +165,11 @@ With zoomsh:
 
 # Directory service
 
-The directory service is accessible from the `/directory/entries` endpoint. For example:
+The directory service is accessible from the `/rsdir/entries` endpoint. For example:
 
-    curl http://localhost:8081/directory/entries
+    curl http://localhost:8081/rsdir/entries
 
-See [the OpenAPI spec](../directory-mock/directory_api.yaml) . The `cql` query parameter is a CQL string.
+See [the shared Directory OpenAPI spec](../directory/api.yaml). The endpoint accepts the same `cql`, `limit`, and `offset` query parameters as Directory and returns `items` with `about.count`.
 This supports index `symbol` with supported relations `any`, `all`, `=` for matching against
 directory entry `symbols`. It also supports index `tenant` with supported relation `=` which matches
 against directory entry `tenant`.

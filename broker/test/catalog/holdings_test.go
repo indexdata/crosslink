@@ -110,7 +110,7 @@ func TestMain(m *testing.M) {
 	test.Expect(os.Setenv("PEER_URL", brokerUrl), "failed to set peer URL")
 	app.AVAILABILITY_ADAPTER = catalog.LookupAdapterZoom
 	app.DIRECTORY_ADAPTER = "api"
-	app.DIRECTORY_API_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/directory/entries"
+	app.DIRECTORY_API_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/rsdir/entries"
 	app.HOLDINGS_ADAPTER = "consortium"
 	app.CONSORTIUM_SYMBOL = "ISIL:GVIC"
 
