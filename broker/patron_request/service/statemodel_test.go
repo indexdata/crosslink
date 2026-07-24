@@ -200,6 +200,55 @@ func TestValidateStateModelPrimaryActionNoActionsDefined(t *testing.T) {
 	assert.Equal(t, "primary action other undefined in state NEW side REQUESTER", err.Error())
 }
 
+func TestValidateStateModelClosingActionUndefined(t *testing.T) {
+	s := "ship"
+	valid := "will-supply"
+	tt := true
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name:    "VALIDATED",
+				Side:    proapi.SUPPLIER,
+				Initial: &tt,
+				Actions: &[]proapi.ModelAction{
+					{Name: valid},
+				},
+				PrimaryAction: &valid,
+				ClosingAction: &s,
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.Error(t, err)
+	assert.Equal(t, "closing action ship undefined in state VALIDATED side SUPPLIER", err.Error())
+}
+
+func TestValidateStateModelClosingActionNoActionsDefined(t *testing.T) {
+	s := "ship"
+	tt := true
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name:          "VALIDATED",
+				Side:          proapi.SUPPLIER,
+				Initial:       &tt,
+				ClosingAction: &s,
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.Error(t, err)
+	assert.Equal(t, "closing action ship undefined in state VALIDATED side SUPPLIER", err.Error())
+}
+
 func TestValidateStateModelManualCloseTerminal(t *testing.T) {
 	tt := true
 	model := &proapi.StateModel{
