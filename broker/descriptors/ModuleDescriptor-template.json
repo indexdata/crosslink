@@ -107,6 +107,15 @@
         },
         {
           "methods": [
+            "PUT"
+          ],
+          "pathPattern": "/broker/patron_requests/{id}",
+          "permissionsRequired": [
+            "broker.patron_requests.item.put"
+          ]
+        },
+        {
+          "methods": [
             "DELETE"
           ],
           "pathPattern": "/broker/patron_requests/{id}",
@@ -442,6 +451,11 @@
       "permissionName": "broker.patron_requests.item.get"
     },
     {
+      "description": "Update a patron request",
+      "displayName": "Broker - update patron request (item)",
+      "permissionName": "broker.patron_requests.item.put"
+    },
+    {
       "description": "Delete a patron request",
       "displayName": "Broker - delete patron request (item)",
       "permissionName": "broker.patron_requests.item.delete"
@@ -659,6 +673,7 @@
       "visible": true,
       "subPermissions": [
         "broker.patron_requests.post",
+        "broker.patron_requests.item.put",
         "broker.patron_requests.item.delete",
         "broker.patron_requests.item.action.post",
         "broker.patron_requests.item.terminate.post",
@@ -713,6 +728,7 @@
         "broker.patron_requests.get",
         "broker.patron_requests.post",
         "broker.patron_requests.item.get",
+        "broker.patron_requests.item.put",
         "broker.patron_requests.item.delete",
         "broker.patron_requests.item.actions.get",
         "broker.patron_requests.item.events.get",
