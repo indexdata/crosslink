@@ -144,13 +144,17 @@ func (s *BatchActionService) RequestAging(ctx common.ExtendedContext, event even
 	var processedCount = 0
 	if len(prs) > 0 {
 		for _, pr := range prs {
+			processedCount++
+			var action *pr_db.PatronRequestAction
 			actionMapping, mappingErr := s.actionMappingService.GetActionMapping(pr.IllRequest)
 			if mappingErr != nil {
-				return events.NewErrorResult("could not find action mapping for patron request: "+pr.ID, mappingErr.Error())
+				result.CustomData[pr.ID] = "could not find action mapping for patron request: " + pr.ID + ", error: " + mappingErr.Error()
+				continue
 			}
-			action := actionMapping.GetClosingAction(pr)
+			action = actionMapping.GetClosingAction(pr)
 			if action == nil {
-				return events.NewErrorResult("could not find closing action for patron request state: "+string(pr.State)+" within state model: "+actionMapping.StateModelName, "closing action not found")
+				result.CustomData[pr.ID] = "could not find closing action for patron request state: " + string(pr.State) + " within state model: " + actionMapping.StateModelName
+				continue
 			}
 			childBatchActionData := *batchActionData
 			data := events.EventData{CommonEventData: events.CommonEventData{
@@ -161,12 +165,15 @@ func (s *BatchActionService) RequestAging(ctx common.ExtendedContext, event even
 			if eventErr != nil {
 				result.CustomData[pr.ID] = "error creating close action: " + eventErr.Error()
 			}
-			processedCount++
 		}
 	}
 	result.Note = "processed patron request count: " + strconv.Itoa(processedCount)
-
-	return events.EventStatusSuccess, result
+	status := events.EventStatusSuccess
+	if len(result.CustomData) > 0 {
+		status = events.EventStatusError
+		result.Note += ", failed: " + strconv.Itoa(len(result.CustomData)) + " with ids and errors in custom data"
+	}
+	return status, result
 }
 
 func backgroundActionParams(customData map[string]any) map[string]any {

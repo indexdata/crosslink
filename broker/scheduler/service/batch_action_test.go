@@ -360,9 +360,9 @@ func TestRequestAging_FailsIfNoClosingActionForState(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.NotNil(t, result)
-	assert.Equal(t, "could not find closing action for patron request state: SHIPPED within state model: CrossLink Returnables State Model", result.EventError.Message)
-	assert.Equal(t, "closing action not found", result.EventError.Cause)
-	assert.Len(t, eventBus.createTaskCalls, 0)
+	assert.Equal(t, "processed patron request count: 2, failed: 1 with ids and errors in custom data", result.Note)
+	assert.Equal(t, "could not find closing action for patron request state: SHIPPED within state model: CrossLink Returnables State Model", result.CustomData["lending-1"])
+	assert.Len(t, eventBus.createTaskCalls, 1)
 }
 
 func TestRequestAging_CreateTaskErrorRecordsCustomDataAndContinues(t *testing.T) {
@@ -375,9 +375,9 @@ func TestRequestAging_CreateTaskErrorRecordsCustomDataAndContinues(t *testing.T)
 
 	status, result := svc.RequestAging(testCtx, requestAgingEvent("cql.allRecords=1", map[string]any{"interval": "24h"}))
 
-	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, events.EventStatusError, status)
 	assert.NotNil(t, result)
-	assert.Equal(t, "processed patron request count: 2", result.Note)
+	assert.Equal(t, "processed patron request count: 2, failed: 1 with ids and errors in custom data", result.Note)
 	assert.Equal(t, "error creating close action: create failed", result.CustomData["failed-1"])
 	_, ok := result.CustomData["ok-1"]
 	assert.False(t, ok)
