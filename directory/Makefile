@@ -7,6 +7,10 @@ MAIN_PACKAGE=cmd/directory
 COVERAGE=coverage.out
 SQLC ?= $(GO) tool sqlc
 OAPI_CODEGEN ?= $(GO) tool oapi-codegen
+SQL_GEN_IN := sqlc.yaml query.sql $(wildcard migrations/*.sql) go.mod go.sum
+SQL_GEN_OUT := db/db.go db/models.go db/query.sql.go
+OAPI_GEN_IN := api.yaml oapi-codegen.yaml go.mod go.sum
+OAPI_GEN_OUT := api/directory.gen.go
 
 .PHONY: all docker generate generate-sqlc generate-api check checkinclgen run fmt fmt-check lint vulncheck clean deps-update tools-update
 
@@ -15,15 +19,19 @@ all: $(BINARY)
 docker:
 	cd .. && $(DOCKER) build -f ./directory/Dockerfile .
 
-generate: generate-sqlc generate-api
+generate: $(SQL_GEN_OUT) $(OAPI_GEN_OUT)
 
-generate-sqlc:
+generate-sqlc: $(SQL_GEN_OUT)
+
+$(SQL_GEN_OUT) &: $(SQL_GEN_IN)
 	$(SQLC) generate
 
-generate-api:
+generate-api: $(OAPI_GEN_OUT)
+
+$(OAPI_GEN_OUT): $(OAPI_GEN_IN)
 	$(OAPI_CODEGEN) --config=oapi-codegen.yaml api.yaml
 
-$(BINARY): generate $(GOFILES)
+$(BINARY): $(SQL_GEN_OUT) $(OAPI_GEN_OUT) $(GOFILES)
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
 
 checkinclgen: generate
@@ -60,5 +68,5 @@ tools-update:
 
 clean:
 	rm -f $(BINARY) $(COVERAGE) $(COVERAGE).tmp \
-		api/directory.gen.go \
-		db/db.go db/models.go db/query.sql.go
+		$(OAPI_GEN_OUT) \
+		$(SQL_GEN_OUT)
