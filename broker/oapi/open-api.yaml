@@ -876,6 +876,10 @@ components:
           type: string
           description: Name of the primary action for this state.
             Must be one of the actions defined in the actions array and is only meaningful when actions is present.
+        closingAction:
+          type: string
+          description: Name of the closing action for this state.
+            Must be one of the actions defined in the actions array.
         editable:
           type: boolean
           description: Indicates that a patron request can be updated in this state

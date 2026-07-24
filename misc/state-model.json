@@ -99,6 +99,10 @@
                     "type": "string",
                     "description": "Indicates the primary action for the state, i.e., the most common or recommended action to be performed when in the state. The value must match the name of one of the actions defined for the state."
                 },
+                "closingAction": {
+                    "type": "string",
+                    "description": "Indicates the closing action for the state, i.e., the action to be performed when closing the state. The value must match the name of one of the actions defined for the state."
+                },
                 "editable": {
                     "type": "boolean",
                     "description": "Indicates that a patron request can be updated"

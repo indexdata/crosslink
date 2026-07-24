@@ -338,6 +338,7 @@ stateModels:
         desc: Request is valid
         side: SUPPLIER
         primaryAction: will-supply
+        closingAction: cannot-supply
         actions:
           - name: will-supply
             desc: Indicate supplier will supply and send ISO18626 WillSupply
@@ -373,6 +374,7 @@ stateModels:
         desc: After manual will-supply or successful auto-responder
         side: SUPPLIER
         primaryAction: ship
+        closingAction: cannot-supply
         actions:
           - name: add-condition
             desc: Add conditions and notify requester
@@ -400,6 +402,7 @@ stateModels:
         desc: Conditions are sent with a special ISO WillSupply
         side: SUPPLIER
         primaryAction: cannot-supply
+        closingAction: cannot-supply
         actions:
           - name: add-condition
             desc: Add additional conditions and notify requester
@@ -425,6 +428,7 @@ stateModels:
         desc: After receiving conditions accepted notification
         side: SUPPLIER
         primaryAction: ship
+        closingAction: cannot-supply
         actions:
           - name: add-condition
             desc: Add additional conditions and notify requester

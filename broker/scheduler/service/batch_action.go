@@ -18,18 +18,21 @@ const BATCH_COMP = "batch_action"
 const TIME_FORMAT = "2006-01-02 15:04:05"
 
 type BatchActionService struct {
-	eventBus           events.EventBus
-	prRepo             pr_db.PrRepo
-	emailSenderService *EmailSenderService
+	eventBus             events.EventBus
+	prRepo               pr_db.PrRepo
+	emailSenderService   *EmailSenderService
+	actionMappingService prservice.ActionMappingService
 }
 
 func NewBatchActionService(eventBus events.EventBus, prRepo pr_db.PrRepo, emailSenderService *EmailSenderService) *BatchActionService {
 	return &BatchActionService{
-		eventBus:           eventBus,
-		prRepo:             prRepo,
-		emailSenderService: emailSenderService,
+		eventBus:             eventBus,
+		prRepo:               prRepo,
+		emailSenderService:   emailSenderService,
+		actionMappingService: prservice.ActionMappingService{SMService: &prservice.StateModelService{}},
 	}
 }
+
 func (s *BatchActionService) BatchAction(ctx common.ExtendedContext, event events.Event) {
 	_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.batchAction)
 }
@@ -141,13 +144,17 @@ func (s *BatchActionService) RequestAging(ctx common.ExtendedContext, event even
 	var processedCount = 0
 	if len(prs) > 0 {
 		for _, pr := range prs {
-			var action = prservice.BorrowerActionCancelRequest
-			if pr.Side == prservice.SideLending {
-				action = prservice.LenderActionCannotSupply
+			actionMapping, mappingErr := s.actionMappingService.GetActionMapping(pr.IllRequest)
+			if mappingErr != nil {
+				return events.NewErrorResult("could not find action mapping for patron request: "+pr.ID, mappingErr.Error())
+			}
+			action := actionMapping.GetClosingAction(pr)
+			if action == nil {
+				return events.NewErrorResult("could not find closing action for patron request state: "+string(pr.State)+" within state model: "+actionMapping.StateModelName, "closing action not found")
 			}
 			childBatchActionData := *batchActionData
 			data := events.EventData{CommonEventData: events.CommonEventData{
-				Action:          &action,
+				Action:          action,
 				BatchActionData: &childBatchActionData,
 			}, CustomData: backgroundActionParams(event.EventData.CustomData)}
 			_, eventErr := s.eventBus.CreateTask(pr.ID, events.EventNameInvokeBackgroundAction, data, events.EventDomainPatronRequest, &event.ID, events.SignalConsumers)
