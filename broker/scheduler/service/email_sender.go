@@ -10,6 +10,7 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	psservice "github.com/indexdata/crosslink/broker/pullslip/service"
 	"github.com/indexdata/go-utils/utils"
 )
@@ -19,6 +20,12 @@ const COMP = "email_sender"
 var (
 	MAX_RECORDS_PER_EMAIL = int32(utils.Must(utils.GetEnvInt("BATCH_PULLSLIP_MAX_COUNT", 100)))
 )
+
+type pullslipEmailData struct {
+	To            []string `json:"to"`
+	TemplateLabel string   `json:"templateLabel"`
+	IncludePdf    bool     `json:"includePdf"`
+}
 
 type EmailSenderService struct {
 	prRepo       pr_db.PrRepo
@@ -85,11 +92,24 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 	if len(emailData.To) == 0 {
 		return events.NewErrorResult("invalid email event data", "to field is required")
 	}
-	if emailData.Subject == "" {
-		return events.NewErrorResult("invalid email event data", "subject field is required")
+	if emailData.TemplateLabel == "" {
+		return events.NewErrorResult("invalid email event data", "templateLabel field is required")
 	}
-	if emailData.Body == "" {
-		return events.NewErrorResult("invalid email event data", "body field is required")
+
+	template, err := s.prRepo.GetTemplateByPurposeAudienceLabelAndOwner(ctx, pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams{
+		Owner:    event.EventData.BatchActionData.Owner,
+		Purpose:  string(proapi.Email),
+		Label:    emailData.TemplateLabel,
+		Audience: string(proapi.ModelActionParamsSendToStaff),
+	})
+	if err != nil {
+		return events.NewErrorResult("failed to load email template", err.Error())
+	}
+	if !template.Subject.Valid || template.Subject.String == "" {
+		return events.NewErrorResult("invalid email template", "subject field is required")
+	}
+	if template.Body == "" {
+		return events.NewErrorResult("invalid email template", "body field is required")
 	}
 
 	prs, fullCount, err := s.prRepo.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: MAX_RECORDS_PER_EMAIL, Offset: 0}, pgcql)
@@ -114,31 +134,47 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 		pdfAttachment = &email.PdfAttach{Filename: "pull-slips.pdf", Data: pdfBytes}
 	}
 
-	emailData.Body = strings.ReplaceAll(emailData.Body, "{{fullCount}}", fmt.Sprintf("%d", fullCount))
-	emailData.Body = strings.ReplaceAll(emailData.Body, "{{actualCount}}", fmt.Sprintf("%d", len(prs)))
-	emailData.Body = strings.ReplaceAll(emailData.Body, "{{batchQuery}}", event.EventData.BatchActionData.Selector)
+	placeholders := map[string]string{
+		"fullCount":   fmt.Sprintf("%d", fullCount),
+		"actualCount": fmt.Sprintf("%d", len(prs)),
+		"batchQuery":  event.EventData.BatchActionData.Selector,
+	}
+	messageData := email.EmailData{
+		To:         emailData.To,
+		Subject:    renderEmailTemplate(template.Subject.String, placeholders),
+		Body:       renderEmailTemplate(template.Body, placeholders),
+		IsHTML:     template.ContentType == string(proapi.Html),
+		IncludePdf: emailData.IncludePdf,
+	}
 
-	raw, err := email.BuildRawMessage(*owner.CustomData.FromEmail, emailData, pdfAttachment)
+	raw, err := email.BuildRawMessage(*owner.CustomData.FromEmail, messageData, pdfAttachment)
 	if err != nil {
 		return events.NewErrorResult("failed to build email message", err.Error())
 	}
 
-	err = s.emailService.SendEmail(*owner.CustomData.FromEmail, emailData.To, raw)
+	err = s.emailService.SendEmail(*owner.CustomData.FromEmail, messageData.To, raw)
 	if err != nil {
 		return events.NewErrorResult("failed to send email via SMTP", err.Error())
 	}
 	return events.EventStatusSuccess, nil
 }
 
-// extractEmailData retrieves EmailData from the event's CustomData map.
-func extractEmailData(eventData events.EventData) (email.EmailData, error) {
+func renderEmailTemplate(value string, placeholders map[string]string) string {
+	for key, replacement := range placeholders {
+		value = strings.ReplaceAll(value, "{{"+key+"}}", replacement)
+	}
+	return value
+}
+
+// extractEmailData retrieves email pullslip parameters from the event's CustomData map.
+func extractEmailData(eventData events.EventData) (pullslipEmailData, error) {
 	if eventData.CustomData == nil {
-		return email.EmailData{}, fmt.Errorf("customData is nil")
+		return pullslipEmailData{}, fmt.Errorf("customData is nil")
 	}
 
 	toRaw, ok := eventData.CustomData["to"]
 	if !ok {
-		return email.EmailData{}, fmt.Errorf("missing 'to' field in customData")
+		return pullslipEmailData{}, fmt.Errorf("missing 'to' field in customData")
 	}
 	var toAddrs []string
 	switch v := toRaw.(type) {
@@ -148,24 +184,20 @@ func extractEmailData(eventData events.EventData) (email.EmailData, error) {
 		for _, item := range v {
 			s, ok := item.(string)
 			if !ok {
-				return email.EmailData{}, fmt.Errorf("'to' field contains non-string value")
+				return pullslipEmailData{}, fmt.Errorf("'to' field contains non-string value")
 			}
 			toAddrs = append(toAddrs, s)
 		}
 	default:
-		return email.EmailData{}, fmt.Errorf("'to' field has unexpected type %T", toRaw)
+		return pullslipEmailData{}, fmt.Errorf("'to' field has unexpected type %T", toRaw)
 	}
 
-	subject, _ := eventData.CustomData["subject"].(string)
-	body, _ := eventData.CustomData["body"].(string)
-	isHTML, _ := eventData.CustomData["isHtml"].(bool)
+	templateLabel, _ := eventData.CustomData["templateLabel"].(string)
 	includePdf, _ := eventData.CustomData["includePdf"].(bool)
 
-	return email.EmailData{
-		To:         toAddrs,
-		Subject:    subject,
-		Body:       body,
-		IsHTML:     isHTML,
-		IncludePdf: includePdf,
+	return pullslipEmailData{
+		To:            toAddrs,
+		TemplateLabel: templateLabel,
+		IncludePdf:    includePdf,
 	}, nil
 }

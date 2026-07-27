@@ -532,10 +532,8 @@ batchActionDefaults:
     actionParams:
       to:
         - staff@example.com
-      subject: Scheduled pullslips
-      body: "<p>This is an automated pull slip summary.</p><p><strong>Query:</strong> {{batchQuery}}<br><strong>Matching requests:</strong> {{actualCount}} (of {{fullCount}} total)</p><p>Please process the attached pull slips at your earliest convenience.</p>"
+      templateLabel: pullslip-email
       includePdf: true
-      isHtml: true
 
   - actionName: request-aging
     titleKey: request-aging-express
