@@ -70,6 +70,13 @@ FROM event
 WHERE patron_request_id = $1
 ORDER BY timestamp;
 
+-- name: GetBatchActionEvents :many
+SELECT sqlc.embed(event)
+FROM event
+WHERE event_name IN ('invoke-batch-action', 'invoke-background-action')
+  AND event_data -> 'batchActionData' ->> 'taskId' = sqlc.arg(task_id)::text
+ORDER BY timestamp DESC;
+
 -- name: SaveEvent :one
 INSERT INTO event (
     id, timestamp, ill_transaction_id, parent_id, event_type, event_name, event_status, event_data, result_data, last_signal, patron_request_id
@@ -93,9 +100,19 @@ RETURNING sqlc.embed(event);
 DELETE FROM event
 WHERE id = $1;
 
--- name: DeleteEventsByIllTransaction :exec
+-- name: HasActiveBatchActionEvents :one
+SELECT EXISTS (
+    SELECT 1
+    FROM event
+    WHERE event_name IN ('invoke-batch-action', 'invoke-background-action')
+      AND event_data -> 'batchActionData' ->> 'taskId' = sqlc.arg(task_id)::text
+      AND event_status IN ('NEW', 'PROCESSING')
+);
+
+-- name: DeleteBatchActionEvents :exec
 DELETE FROM event
-WHERE ill_transaction_id = $1;
+WHERE event_name IN ('invoke-batch-action', 'invoke-background-action')
+  AND event_data -> 'batchActionData' ->> 'taskId' = sqlc.arg(task_id)::text;
 
 -- name: UpdateEventLifecycle :one
 UPDATE event SET last_signal = $3, event_status = $2

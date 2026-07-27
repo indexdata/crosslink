@@ -26,6 +26,7 @@ func TestNewReturnableActionMapping(t *testing.T) {
 		BorrowerStateCheckedIn:        {{actionName: BorrowerActionShipReturn}},
 		BorrowerStateRetryPending:     {{actionName: BorrowerActionAcceptRetry}, {actionName: BorrowerActionRejectRetry}},
 		BorrowerStateUnfilled:         {{actionName: BorrowerActionSendNotification, auto: true}},
+		BorrowerStateLocalSupply:      {{actionName: BorrowerActionFillLocally}, {actionName: BorrowerActionCancelLocalSupply}, {actionName: BorrowerActionCannotSupplyLocally}},
 	}
 
 	lenderStateActionMapping := map[pr_db.PatronRequestState][]PatronRequestAction{
@@ -240,6 +241,44 @@ func TestGetActionTransitionConditionPendingSelfTransition(t *testing.T) {
 	)
 	assert.True(t, ok)
 	assert.Equal(t, LenderStateConditionPending, transition)
+}
+
+func TestGetEventTransitionRetryConditionalFromBorrowerWillSupply(t *testing.T) {
+	mapping := mustActionMapping(t)
+
+	transition, stateChanged, eventDefined := mapping.GetEventTransition(
+		pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateWillSupply},
+		string(SupplierRetryConditional),
+	)
+	assert.True(t, eventDefined)
+	assert.True(t, stateChanged)
+	assert.Equal(t, BorrowerStateRetryPending, transition)
+}
+
+func TestGetClosingAction(t *testing.T) {
+	mapping := mustActionMapping(t)
+
+	action := mapping.GetClosingAction(pr_db.PatronRequest{Side: SideLending, State: LenderStateValidated})
+	assert.NotNil(t, action)
+	assert.Equal(t, LenderActionCannotSupply, *action)
+
+	action = mapping.GetClosingAction(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply})
+	assert.NotNil(t, action)
+	assert.Equal(t, LenderActionCannotSupply, *action)
+
+	action = mapping.GetClosingAction(pr_db.PatronRequest{Side: SideLending, State: LenderStateConditionPending})
+	assert.NotNil(t, action)
+	assert.Equal(t, LenderActionCannotSupply, *action)
+
+	action = mapping.GetClosingAction(pr_db.PatronRequest{Side: SideLending, State: LenderStateConditionAccepted})
+	assert.NotNil(t, action)
+	assert.Equal(t, LenderActionCannotSupply, *action)
+
+	action = mapping.GetClosingAction(pr_db.PatronRequest{Side: SideLending, State: LenderStateShipped})
+	assert.Nil(t, action)
+
+	action = mapping.GetClosingAction(pr_db.PatronRequest{State: LenderStateWillSupply})
+	assert.Nil(t, action)
 }
 
 func listCompare(t *testing.T, list1 []pr_db.PatronRequestAction, list2 []pr_db.PatronRequestAction) {

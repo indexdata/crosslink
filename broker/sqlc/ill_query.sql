@@ -203,11 +203,6 @@ DELETE
 FROM located_supplier
 WHERE id = $1;
 
--- name: DeleteLocatedSuppliersByIllTransaction :exec
-DELETE
-FROM located_supplier
-WHERE ill_transaction_id = $1;
-
 
 -- name: SaveBranchSymbol :one
 INSERT INTO branch_symbol (symbol_value, peer_id)

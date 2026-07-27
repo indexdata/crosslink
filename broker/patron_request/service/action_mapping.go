@@ -90,6 +90,7 @@ type PatronRequestAction struct {
 }
 
 type ActionMapping struct {
+	StateModelName             string
 	borrowerStateActionMapping map[pr_db.PatronRequestState][]PatronRequestAction
 	lenderStateActionMapping   map[pr_db.PatronRequestState][]PatronRequestAction
 	borrowerStateConfig        map[pr_db.PatronRequestState]stateConfig
@@ -106,6 +107,7 @@ type stateConfig struct {
 	autoActions    []proapi.ModelAction
 	terminal       bool
 	needsAttention bool
+	closingAction  *pr_db.PatronRequestAction
 }
 
 // Constructor function to initialize the mappings for given StateModel
@@ -114,6 +116,7 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 	if stateModel == nil || stateModel.States == nil {
 		return r
 	}
+	r.StateModelName = stateModel.Name
 
 	borrowerMap := make(map[pr_db.PatronRequestState][]PatronRequestAction)
 	lenderMap := make(map[pr_db.PatronRequestState][]PatronRequestAction)
@@ -133,6 +136,10 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 		}
 		if state.NeedsAttention != nil && *state.NeedsAttention {
 			currentStateConfig.needsAttention = true
+		}
+		if state.ClosingAction != nil && *state.ClosingAction != "" {
+			closingAction := pr_db.PatronRequestAction(*state.ClosingAction)
+			currentStateConfig.closingAction = &closingAction
 		}
 		actionEntries := make([]PatronRequestAction, 0)
 		if state.Actions != nil {
@@ -349,6 +356,14 @@ func (r *ActionMapping) GetManualCloseState(pr pr_db.PatronRequest) (pr_db.Patro
 func (r *ActionMapping) IsTerminalState(pr pr_db.PatronRequest) bool {
 	stateConfig, ok := r.getStateConfig(pr)
 	return ok && stateConfig.terminal
+}
+
+func (r *ActionMapping) GetClosingAction(pr pr_db.PatronRequest) *pr_db.PatronRequestAction {
+	config, ok := r.getStateConfig(pr)
+	if !ok {
+		return nil
+	}
+	return config.closingAction
 }
 
 func (r *ActionMapping) getStateConfig(pr pr_db.PatronRequest) (stateConfig, bool) {

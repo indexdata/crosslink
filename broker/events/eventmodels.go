@@ -31,6 +31,10 @@ const (
 	EventDomainScheduler      EventDomain = "SCHEDULER"
 )
 
+func IsSyntheticID(id string) bool {
+	return id == DEFAULT_ILL_TRANSACTION_ID || id == DEFAULT_PATRON_REQUEST_ID
+}
+
 type EventName string
 
 const (

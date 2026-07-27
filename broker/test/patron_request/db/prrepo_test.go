@@ -12,12 +12,14 @@ import (
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go"
@@ -26,6 +28,7 @@ import (
 )
 
 var prRepo pr_db.PrRepo
+var eventRepo events.EventRepo
 var appCtx = common.CreateExtCtxWithArgs(context.Background(), nil)
 
 func TestMain(m *testing.M) {
@@ -59,7 +62,7 @@ func TestMain(m *testing.M) {
 	apptest.StartMockApp(mockPort)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	_, _, _, prRepo = apptest.StartApp(ctx)
+	_, _, eventRepo, prRepo = apptest.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	defer cancel()
@@ -69,9 +72,97 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func TestDeletePatronRequestCascadesOwnedRows(t *testing.T) {
+	prID := uuid.NewString()
+	itemID := uuid.NewString()
+	notificationID := uuid.NewString()
+	eventID := uuid.NewString()
+	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID: prID, CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Language: "english", Items: []pr_db.PrItem{},
+	})
+	assert.NoError(t, err)
+	_, err = prRepo.SaveItem(appCtx, pr_db.SaveItemParams{
+		ID: itemID, PrID: prID, Barcode: "cascade",
+		CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+	})
+	assert.NoError(t, err)
+	_, err = prRepo.SaveNotification(appCtx, pr_db.SaveNotificationParams{
+		ID: notificationID, PrID: prID, FromSymbol: "from", ToSymbol: "to",
+		Direction: pr_db.NotificationDirectionSent, Kind: pr_db.NotificationKindNote,
+		CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+	})
+	assert.NoError(t, err)
+	_, err = eventRepo.SaveEvent(appCtx, events.SaveEventParams{
+		ID: eventID, Timestamp: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		IllTransactionID: events.DEFAULT_ILL_TRANSACTION_ID, PatronRequestID: prID,
+		EventType: events.EventTypeTask, EventName: events.EventNameInvokeAction,
+		EventStatus: events.EventStatusSuccess, LastSignal: string(events.SignalTaskComplete),
+	})
+	assert.NoError(t, err)
+
+	assert.NoError(t, prRepo.DeletePatronRequest(appCtx, prID))
+	_, err = prRepo.GetItemById(appCtx, itemID)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+	_, err = prRepo.GetNotificationById(appCtx, notificationID)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+	_, err = eventRepo.GetEvent(appCtx, eventID)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestSyntheticPatronRequestCannotBeDeleted(t *testing.T) {
+	err := prRepo.DeletePatronRequest(appCtx, events.DEFAULT_PATRON_REQUEST_ID)
+	assert.Error(t, err)
+}
+
+func TestDeleteItemById(t *testing.T) {
+	prID := uuid.NewString()
+	itemID := uuid.NewString()
+	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID: prID, CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Language: "english", Items: []pr_db.PrItem{},
+	})
+	assert.NoError(t, err)
+	_, err = prRepo.SaveItem(appCtx, pr_db.SaveItemParams{
+		ID: itemID, PrID: prID, Barcode: "delete-item",
+		CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+	})
+	assert.NoError(t, err)
+	t.Cleanup(func() {
+		assert.NoError(t, prRepo.DeletePatronRequest(appCtx, prID))
+	})
+
+	assert.NoError(t, prRepo.DeleteItemById(appCtx, itemID))
+	_, err = prRepo.GetItemById(appCtx, itemID)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestDeleteNotificationById(t *testing.T) {
+	prID := uuid.NewString()
+	notificationID := uuid.NewString()
+	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID: prID, CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Language: "english", Items: []pr_db.PrItem{},
+	})
+	assert.NoError(t, err)
+	_, err = prRepo.SaveNotification(appCtx, pr_db.SaveNotificationParams{
+		ID: notificationID, PrID: prID, FromSymbol: "from", ToSymbol: "to",
+		Direction: pr_db.NotificationDirectionSent, Kind: pr_db.NotificationKindNote,
+		CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+	})
+	assert.NoError(t, err)
+	t.Cleanup(func() {
+		assert.NoError(t, prRepo.DeletePatronRequest(appCtx, prID))
+	})
+
+	assert.NoError(t, prRepo.DeleteNotificationById(appCtx, notificationID))
+	_, err = prRepo.GetNotificationById(appCtx, notificationID)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
 func TestItem(t *testing.T) {
 	prId := uuid.NewString()
-	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+	pr, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
 		ID: prId,
 		CreatedAt: pgtype.Timestamp{
 			Time:  time.Now(),
@@ -82,6 +173,8 @@ func TestItem(t *testing.T) {
 		TerminalState: false,
 	})
 	assert.NoError(t, err)
+	assert.True(t, pr.UpdatedAt.Valid)
+	assert.Equal(t, pr.CreatedAt.Time, pr.UpdatedAt.Time)
 
 	// Save works
 	itemId := uuid.NewString()
@@ -159,11 +252,28 @@ func TestItem(t *testing.T) {
 	assert.Len(t, items, 1)
 	assert.Equal(t, itemId, items[0].ID)
 
-	err = prRepo.DeleteItemById(appCtx, itemId)
-	assert.NoError(t, err)
-
 	err = prRepo.DeletePatronRequest(appCtx, prId)
 	assert.NoError(t, err)
+	_, err = prRepo.GetItemById(appCtx, itemId)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestTemplateUpdatedAtInitializedFromCreatedAt(t *testing.T) {
+	createdAt := pgtype.Timestamp{Time: time.Now(), Valid: true}
+	template, err := prRepo.SaveTemplate(appCtx, pr_db.SaveTemplateParams{
+		ID:          uuid.NewString(),
+		Owner:       "ISIL:TEST",
+		Title:       "Test template",
+		Purpose:     "general",
+		Body:        "Body",
+		ContentType: "text/plain",
+		Labels:      []string{},
+		CreatedAt:   createdAt,
+	})
+
+	assert.NoError(t, err)
+	assert.True(t, template.UpdatedAt.Valid)
+	assert.Equal(t, template.CreatedAt.Time, template.UpdatedAt.Time)
 }
 
 func TestNotification(t *testing.T) {
@@ -298,11 +408,10 @@ func TestNotification(t *testing.T) {
 	assert.Equal(t, notificaitonId, notifications[0].ID)
 	assert.Equal(t, int64(1), fullCount)
 
-	err = prRepo.DeleteNotificationById(appCtx, notificaitonId)
-	assert.NoError(t, err)
-
 	err = prRepo.DeletePatronRequest(appCtx, prId)
 	assert.NoError(t, err)
+	_, err = prRepo.GetNotificationById(appCtx, notificaitonId)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestMarkConditionNotificationsReceipt(t *testing.T) {

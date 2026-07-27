@@ -345,6 +345,17 @@ func TestDeletePatronRequestsIdNotFound(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
 
+func TestDeletePatronRequestsIdRejectsSyntheticID(t *testing.T) {
+	handler := NewPrApiHandler(nil, nil, nil, nil, nil, 10)
+	req := httptest.NewRequest(http.MethodDelete, "/patron_requests/"+events.DEFAULT_PATRON_REQUEST_ID, nil)
+	rr := httptest.NewRecorder()
+
+	handler.DeletePatronRequestsId(rr, req, events.DEFAULT_PATRON_REQUEST_ID, proapi.DeletePatronRequestsIdParams{})
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "synthetic IDs cannot be deleted")
+}
+
 func internalNoteBody(t *testing.T, note *string) *bytes.Buffer {
 	jsonBytes, err := json.Marshal(proapi.UpdateInternalNote{InternalNote: note})
 	assert.NoError(t, err)
@@ -619,6 +630,19 @@ func TestGetPatronRequestsIdEventsNoSymbol(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsIdEvents(rr, req, "3", proapi.GetPatronRequestsIdEventsParams{Side: &proapiBorrowingSide})
 	assert.Equal(t, http.StatusOK, rr.Code)
+}
+
+func TestGetPatronRequestsIdEventsRejectsSyntheticIDs(t *testing.T) {
+	handler := NewPrApiHandler(nil, nil, nil, nil, nil, 10)
+	for _, id := range []string{events.DEFAULT_ILL_TRANSACTION_ID, events.DEFAULT_PATRON_REQUEST_ID} {
+		t.Run(id, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/patron_requests/"+id+"/events", nil)
+			rr := httptest.NewRecorder()
+			handler.GetPatronRequestsIdEvents(rr, req, id, proapi.GetPatronRequestsIdEventsParams{})
+			assert.Equal(t, http.StatusBadRequest, rr.Code)
+			assert.Contains(t, rr.Body.String(), "synthetic IDs are not allowed")
+		})
+	}
 }
 
 func TestGetPatronRequestsIdEventsDbError(t *testing.T) {

@@ -86,8 +86,8 @@ func (r *exclusiveCheckErrorRepo) GetIllTransactionEvents(ctx common.ExtendedCon
 	return nil, 0, nil
 }
 
-func (r *exclusiveCheckErrorRepo) DeleteEventsByIllTransaction(ctx common.ExtendedContext, illTransId string) error {
-	return nil
+func (r *exclusiveCheckErrorRepo) GetBatchActionEvents(ctx common.ExtendedContext, taskID string) ([]Event, error) {
+	return nil, nil
 }
 
 func (r *exclusiveCheckErrorRepo) GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (Event, error) {

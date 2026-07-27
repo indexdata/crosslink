@@ -12,6 +12,7 @@ import (
 func TestBuiltInStateModelCapabilities(t *testing.T) {
 	c := BuiltInStateModelCapabilities()
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateValidated)))
+	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateLocalSupply)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateValidated)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateReceived)))
 
@@ -30,9 +31,24 @@ func TestBuiltInStateModelCapabilities(t *testing.T) {
 	}))
 
 	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierWillSupply)))
+	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierCancelledLocal)))
+	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierCompletedLocal)))
+	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierUnfilledLocal)))
 	assert.True(t, slices.Contains(c.RequesterMessageEvents, string(RequesterCancelRequest)))
 	assert.True(t, slices.Contains(c.RequesterMessageEvents, string(RequesterReceived)))
 	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierCancelRejected)))
+}
+
+func TestReturnablesIncludesLocalSupplyRequesterState(t *testing.T) {
+	model, err := LoadStateModelByName("returnables")
+	if !assert.NoError(t, err) || !assert.NotNil(t, model) {
+		return
+	}
+
+	stateIndex := slices.IndexFunc(model.States, func(state proapi.ModelState) bool {
+		return state.Name == string(BorrowerStateLocalSupply) && state.Side == proapi.REQUESTER
+	})
+	assert.NotEqual(t, -1, stateIndex)
 }
 
 func TestValidateStateModelMissingInitial(t *testing.T) {
@@ -182,6 +198,55 @@ func TestValidateStateModelPrimaryActionNoActionsDefined(t *testing.T) {
 	err := ValidateStateModel(model)
 	assert.Error(t, err)
 	assert.Equal(t, "primary action other undefined in state NEW side REQUESTER", err.Error())
+}
+
+func TestValidateStateModelClosingActionUndefined(t *testing.T) {
+	s := "ship"
+	valid := "will-supply"
+	tt := true
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name:    "VALIDATED",
+				Side:    proapi.SUPPLIER,
+				Initial: &tt,
+				Actions: &[]proapi.ModelAction{
+					{Name: valid},
+				},
+				PrimaryAction: &valid,
+				ClosingAction: &s,
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.Error(t, err)
+	assert.Equal(t, "closing action ship undefined in state VALIDATED side SUPPLIER", err.Error())
+}
+
+func TestValidateStateModelClosingActionNoActionsDefined(t *testing.T) {
+	s := "ship"
+	tt := true
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name:          "VALIDATED",
+				Side:          proapi.SUPPLIER,
+				Initial:       &tt,
+				ClosingAction: &s,
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.Error(t, err)
+	assert.Equal(t, "closing action ship undefined in state VALIDATED side SUPPLIER", err.Error())
 }
 
 func TestValidateStateModelManualCloseTerminal(t *testing.T) {

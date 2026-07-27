@@ -26,6 +26,7 @@ const (
 	BorrowerStateNew              pr_db.PatronRequestState = "NEW"
 	BorrowerStateValidated        pr_db.PatronRequestState = "VALIDATED"
 	BorrowerStateNeedsReview      pr_db.PatronRequestState = "NEEDS_REVIEW"
+	BorrowerStateLocalSupply      pr_db.PatronRequestState = "LOCAL_SUPPLY"
 	BorrowerStateSent             pr_db.PatronRequestState = "SENT"
 	BorrowerStateSupplierLocated  pr_db.PatronRequestState = "SUPPLIER_LOCATED"
 	BorrowerStateConditionPending pr_db.PatronRequestState = "CONDITION_PENDING"
@@ -61,47 +62,54 @@ const (
 )
 
 const (
-	BorrowerActionValidate         pr_db.PatronRequestAction = "validate"
-	BorrowerActionSendRequest      pr_db.PatronRequestAction = "send-request"
-	BorrowerActionCancelRequest    pr_db.PatronRequestAction = "cancel-request"
-	BorrowerActionAcceptCondition  pr_db.PatronRequestAction = "accept-condition"
-	BorrowerActionRejectCondition  pr_db.PatronRequestAction = "reject-condition"
-	BorrowerActionReceive          pr_db.PatronRequestAction = "receive"
-	BorrowerActionCheckOut         pr_db.PatronRequestAction = "check-out"
-	BorrowerActionCheckIn          pr_db.PatronRequestAction = "check-in"
-	BorrowerActionShipReturn       pr_db.PatronRequestAction = "ship-return"
-	BorrowerActionAcceptRetry      pr_db.PatronRequestAction = "accept-retry"
-	BorrowerActionRejectRetry      pr_db.PatronRequestAction = "reject-retry"
-	BorrowerActionSendNotification pr_db.PatronRequestAction = "send-notification"
-	LenderActionValidate           pr_db.PatronRequestAction = "validate"
-	LenderActionWillSupply         pr_db.PatronRequestAction = "will-supply"
-	LenderActionRejectCancel       pr_db.PatronRequestAction = "reject-cancel"
-	LenderActionCannotSupply       pr_db.PatronRequestAction = "cannot-supply"
-	LenderActionAddCondition       pr_db.PatronRequestAction = "add-condition"
-	LenderActionShip               pr_db.PatronRequestAction = "ship"
-	LenderActionMarkReceived       pr_db.PatronRequestAction = "mark-received"
-	LenderActionAcceptCancel       pr_db.PatronRequestAction = "accept-cancel"
-	LenderActionAskRetry           pr_db.PatronRequestAction = "ask-retry"
-	LenderActionSendNotification   pr_db.PatronRequestAction = "send-notification"
+	BorrowerActionValidate            pr_db.PatronRequestAction = "validate"
+	BorrowerActionSendRequest         pr_db.PatronRequestAction = "send-request"
+	BorrowerActionCancelRequest       pr_db.PatronRequestAction = "cancel-request"
+	BorrowerActionAcceptCondition     pr_db.PatronRequestAction = "accept-condition"
+	BorrowerActionRejectCondition     pr_db.PatronRequestAction = "reject-condition"
+	BorrowerActionReceive             pr_db.PatronRequestAction = "receive"
+	BorrowerActionCheckOut            pr_db.PatronRequestAction = "check-out"
+	BorrowerActionCheckIn             pr_db.PatronRequestAction = "check-in"
+	BorrowerActionShipReturn          pr_db.PatronRequestAction = "ship-return"
+	BorrowerActionAcceptRetry         pr_db.PatronRequestAction = "accept-retry"
+	BorrowerActionRejectRetry         pr_db.PatronRequestAction = "reject-retry"
+	BorrowerActionSendNotification    pr_db.PatronRequestAction = "send-notification"
+	BorrowerActionFillLocally         pr_db.PatronRequestAction = "fill-locally"
+	BorrowerActionCancelLocalSupply   pr_db.PatronRequestAction = "cancel-local-supply"
+	BorrowerActionCannotSupplyLocally pr_db.PatronRequestAction = "cannot-supply-locally"
+	LenderActionValidate              pr_db.PatronRequestAction = "validate"
+	LenderActionWillSupply            pr_db.PatronRequestAction = "will-supply"
+	LenderActionRejectCancel          pr_db.PatronRequestAction = "reject-cancel"
+	LenderActionCannotSupply          pr_db.PatronRequestAction = "cannot-supply"
+	LenderActionAddCondition          pr_db.PatronRequestAction = "add-condition"
+	LenderActionShip                  pr_db.PatronRequestAction = "ship"
+	LenderActionMarkReceived          pr_db.PatronRequestAction = "mark-received"
+	LenderActionAcceptCancel          pr_db.PatronRequestAction = "accept-cancel"
+	LenderActionAskRetry              pr_db.PatronRequestAction = "ask-retry"
+	LenderActionSendNotification      pr_db.PatronRequestAction = "send-notification"
 
 	TerminateAction pr_db.PatronRequestAction = "terminate"
 )
 
 const (
-	SupplierExpectToSupply   MessageEvent = "expect-to-supply"
-	SupplierWillSupply       MessageEvent = "will-supply"
-	SupplierWillSupplyCond   MessageEvent = "will-supply-conditional"
-	SupplierLoaned           MessageEvent = "loaned"
-	SupplierCompleted        MessageEvent = "completed"
-	SupplierUnfilled         MessageEvent = "unfilled"
-	SupplierCancelAccepted   MessageEvent = "cancel-accepted"
-	SupplierCancelRejected   MessageEvent = "cancel-rejected"
-	SupplierRetryConditional MessageEvent = "retry-conditional"
-	RequesterCancelRequest   MessageEvent = "cancel-request"
-	RequesterReceived        MessageEvent = "received"
-	RequesterShippedReturn   MessageEvent = "shipped-return"
-	RequesterCondAccepted    MessageEvent = "conditions-accepted"
-	RequesterCondRejected    MessageEvent = "condition-rejected"
+	SupplierExpectToSupply      MessageEvent = "expect-to-supply"
+	SupplierExpectToSupplyLocal MessageEvent = "expect-to-supply-local"
+	SupplierWillSupply          MessageEvent = "will-supply"
+	SupplierWillSupplyCond      MessageEvent = "will-supply-conditional"
+	SupplierLoaned              MessageEvent = "loaned"
+	SupplierCompleted           MessageEvent = "completed"
+	SupplierCompletedLocal      MessageEvent = "completed-local"
+	SupplierUnfilled            MessageEvent = "unfilled"
+	SupplierUnfilledLocal       MessageEvent = "unfilled-local"
+	SupplierCancelledLocal      MessageEvent = "cancelled-local"
+	SupplierCancelAccepted      MessageEvent = "cancel-accepted"
+	SupplierCancelRejected      MessageEvent = "cancel-rejected"
+	SupplierRetryConditional    MessageEvent = "retry-conditional"
+	RequesterCancelRequest      MessageEvent = "cancel-request"
+	RequesterReceived           MessageEvent = "received"
+	RequesterShippedReturn      MessageEvent = "shipped-return"
+	RequesterCondAccepted       MessageEvent = "conditions-accepted"
+	RequesterCondRejected       MessageEvent = "condition-rejected"
 )
 
 func requesterBuiltInStates() []string {
@@ -109,6 +117,7 @@ func requesterBuiltInStates() []string {
 		string(BorrowerStateNew),
 		string(BorrowerStateValidated),
 		string(BorrowerStateNeedsReview),
+		string(BorrowerStateLocalSupply),
 		string(BorrowerStateSent),
 		string(BorrowerStateSupplierLocated),
 		string(BorrowerStateConditionPending),
@@ -199,6 +208,18 @@ func requesterBuiltInActions() []proapi.ActionCapability {
 			Name:       string(BorrowerActionSendNotification),
 			Parameters: []string{},
 		},
+		{
+			Name:       string(BorrowerActionFillLocally),
+			Parameters: []string{},
+		},
+		{
+			Name:       string(BorrowerActionCancelLocalSupply),
+			Parameters: []string{},
+		},
+		{
+			Name:       string(BorrowerActionCannotSupplyLocally),
+			Parameters: []string{},
+		},
 	}
 }
 
@@ -276,11 +297,15 @@ func requesterBuiltInMessageEvents() []string {
 func supplierBuiltInMessageEvents() []string {
 	return uniqueSorted([]string{
 		string(SupplierExpectToSupply),
+		string(SupplierExpectToSupplyLocal),
 		string(SupplierWillSupply),
 		string(SupplierWillSupplyCond),
 		string(SupplierLoaned),
 		string(SupplierCompleted),
+		string(SupplierCompletedLocal),
 		string(SupplierUnfilled),
+		string(SupplierUnfilledLocal),
+		string(SupplierCancelledLocal),
 		string(SupplierCancelAccepted),
 		string(SupplierCancelRejected),
 		string(SupplierRetryConditional),

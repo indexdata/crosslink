@@ -1,6 +1,7 @@
 package sched_service
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
@@ -17,36 +18,87 @@ const BATCH_COMP = "batch_action"
 const TIME_FORMAT = "2006-01-02 15:04:05"
 
 type BatchActionService struct {
-	eventBus           events.EventBus
-	prRepo             pr_db.PrRepo
-	emailSenderService *EmailSenderService
+	eventBus             events.EventBus
+	prRepo               pr_db.PrRepo
+	emailSenderService   *EmailSenderService
+	actionMappingService prservice.ActionMappingService
 }
 
 func NewBatchActionService(eventBus events.EventBus, prRepo pr_db.PrRepo, emailSenderService *EmailSenderService) *BatchActionService {
 	return &BatchActionService{
-		eventBus:           eventBus,
-		prRepo:             prRepo,
-		emailSenderService: emailSenderService,
+		eventBus:             eventBus,
+		prRepo:               prRepo,
+		emailSenderService:   emailSenderService,
+		actionMappingService: prservice.ActionMappingService{SMService: &prservice.StateModelService{}},
 	}
 }
+
 func (s *BatchActionService) BatchAction(ctx common.ExtendedContext, event events.Event) {
 	_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.batchAction)
 }
 func (s *BatchActionService) batchAction(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(BATCH_COMP))
-	if event.EventData.BatchActionData != nil {
-		switch event.EventData.BatchActionData.ActionName {
-		case string(schedoapi.EmailPullslips):
-			return s.emailSenderService.EmailPullslip(ctx, event)
-		case string(schedoapi.RequestAging):
-			return s.RequestAging(ctx, event)
-		default:
-			ctx.Logger().Error("unknown batch action", "actionName", event.EventData.BatchActionData.ActionName, "event", event)
-			return events.NewErrorResult("cannot process event", "unknown batch action")
-		}
+	if event.EventData.BatchActionData == nil {
+		ctx.Logger().Error("batch action data is empty", "eventId", event.ID)
+		return events.NewErrorResult("cannot process event", "batch action data is empty")
 	}
-	ctx.Logger().Error("batch action data is empty", "event", event.ID)
-	return events.NewErrorResult("cannot process event", "batch action data is empty")
+
+	var action func(common.ExtendedContext, events.Event) (events.EventStatus, *events.EventResult)
+	switch event.EventData.BatchActionData.ActionName {
+	case string(schedoapi.EmailPullslips):
+		action = s.emailSenderService.EmailPullslip
+	case string(schedoapi.RequestAging):
+		action = s.RequestAging
+	default:
+		ctx.Logger().Error("unknown batch action",
+			"actionName", event.EventData.BatchActionData.ActionName,
+			"eventId", event.ID,
+			"taskId", event.EventData.BatchActionData.TaskId)
+		return events.NewErrorResult("cannot process event", "unknown batch action")
+	}
+
+	restrictedSelector, err := addBatchActionOwnerRestriction(
+		event.EventData.BatchActionData.Selector,
+		event.EventData.BatchActionData.Owner,
+	)
+	if err != nil {
+		return events.NewErrorResult("invalid batch action data", err.Error())
+	}
+
+	// Keep the event stored by the event bus unchanged while ensuring every
+	// action handler receives the owner-restricted selector.
+	batchActionData := *event.EventData.BatchActionData
+	batchActionData.Selector = restrictedSelector
+	event.EventData.BatchActionData = &batchActionData
+	return action(ctx, event)
+}
+
+func addBatchActionOwnerRestriction(selector string, owner string) (string, error) {
+	if selector == "" {
+		return "", fmt.Errorf("selector is empty")
+	}
+	if owner == "" {
+		return selector, nil
+	}
+
+	qb, err := cqlbuilder.NewQueryFromString(selector)
+	if err != nil {
+		return "", err
+	}
+	restrictedSelector, err := qb.And().
+		BeginClause().
+		Search("side").Term(string(prservice.SideLending)).
+		And().Search("supplier_symbol_exact").Term(owner).
+		Or().
+		BeginClause().Search("side").Term(string(prservice.SideBorrowing)).
+		And().Search("requester_symbol_exact").Term(owner).
+		EndClause().
+		EndClause().
+		Build()
+	if err != nil {
+		return "", err
+	}
+	return restrictedSelector.String(), nil
 }
 
 func (s *BatchActionService) RequestAging(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
@@ -58,10 +110,6 @@ func (s *BatchActionService) RequestAging(ctx common.ExtendedContext, event even
 	if batchActionData.Selector == "" {
 		return events.NewErrorResult("cannot process event", "selector is empty")
 	}
-	if batchActionData.Owner == "" {
-		return events.NewErrorResult("cannot process event", "owner is empty")
-	}
-
 	intervalString, ok := event.EventData.CustomData["interval"].(string)
 	if !ok || intervalString == "" {
 		return events.NewErrorResult("cannot process event", "interval is missing or not a string")
@@ -96,23 +144,36 @@ func (s *BatchActionService) RequestAging(ctx common.ExtendedContext, event even
 	var processedCount = 0
 	if len(prs) > 0 {
 		for _, pr := range prs {
-			var action = prservice.BorrowerActionCancelRequest
-			if pr.Side == prservice.SideLending {
-				action = prservice.LenderActionCannotSupply
+			processedCount++
+			var action *pr_db.PatronRequestAction
+			actionMapping, mappingErr := s.actionMappingService.GetActionMapping(pr.IllRequest)
+			if mappingErr != nil {
+				result.CustomData[pr.ID] = "could not find action mapping for patron request: " + pr.ID + ", error: " + mappingErr.Error()
+				continue
 			}
+			action = actionMapping.GetClosingAction(pr)
+			if action == nil {
+				result.CustomData[pr.ID] = "could not find closing action for patron request state: " + string(pr.State) + " within state model: " + actionMapping.StateModelName
+				continue
+			}
+			childBatchActionData := *batchActionData
 			data := events.EventData{CommonEventData: events.CommonEventData{
-				Action: &action,
+				Action:          action,
+				BatchActionData: &childBatchActionData,
 			}, CustomData: backgroundActionParams(event.EventData.CustomData)}
-			_, eventErr := s.eventBus.CreateTask(pr.ID, events.EventNameInvokeBackgroundAction, data, events.EventDomainPatronRequest, nil, events.SignalConsumers)
+			_, eventErr := s.eventBus.CreateTask(pr.ID, events.EventNameInvokeBackgroundAction, data, events.EventDomainPatronRequest, &event.ID, events.SignalConsumers)
 			if eventErr != nil {
 				result.CustomData[pr.ID] = "error creating close action: " + eventErr.Error()
 			}
-			processedCount++
 		}
 	}
 	result.Note = "processed patron request count: " + strconv.Itoa(processedCount)
-
-	return events.EventStatusSuccess, result
+	status := events.EventStatusSuccess
+	if len(result.CustomData) > 0 {
+		status = events.EventStatusError
+		result.Note += ", failed: " + strconv.Itoa(len(result.CustomData)) + " with ids and errors in custom data"
+	}
+	return status, result
 }
 
 func backgroundActionParams(customData map[string]any) map[string]any {

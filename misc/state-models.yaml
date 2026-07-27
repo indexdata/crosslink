@@ -49,6 +49,36 @@ stateModels:
               success: SENT
               duplicate: CLOSED_DUPLICATE
 
+      - name: LOCAL_SUPPLY
+        display: Local Supply
+        desc: The requested item is available locally
+        side: REQUESTER
+        primaryAction: fill-locally
+        needsAttention: true
+        editable: true
+        # Audit-only events emitted by local-supply actions. Do not configure
+        # transitions as they are ignored, use action transitions instead.
+        events:
+          - name: completed-local
+            desc: Local-supply completion recorded for audit
+          - name: cancelled-local
+            desc: Local-supply cancellation recorded for audit
+          - name: unfilled-local
+            desc: Local-supply failure recorded for audit
+        actions:
+          - name: fill-locally
+            desc: Fill the request locally
+            transitions:
+              success: COMPLETED
+          - name: cancel-local-supply
+            desc: Cancel the local supply
+            transitions:
+              success: CANCELLED
+          - name: cannot-supply-locally
+            desc: Cannot supply locally
+            transitions:
+              success: SENT
+
       - name: SENT
         display: Sent
         desc: Request is sent
@@ -57,6 +87,9 @@ stateModels:
           - name: expect-to-supply
             desc: "Supplier indicates an intention to supply (ISO18626 ExpectToSupply)"
             transition: SUPPLIER_LOCATED
+          - name: expect-to-supply-local
+            desc: "Local supplier indicates an intention to supply (ISO18626 ExpectToSupply)"
+            transition: LOCAL_SUPPLY
           - name: will-supply
             desc: "Supplier will supply without conditions (ISO18626 WillSupply)"
             transition: WILL_SUPPLY
@@ -153,6 +186,9 @@ stateModels:
           - name: will-supply-conditional
             desc: "Supplier adds conditions after initial WillSupply (ISO18626 WillSupply with conditions)"
             transition: CONDITION_PENDING
+          - name: retry-conditional
+            desc: Received retry from supplier
+            transition: RETRY_PENDING
           - name: loaned
             desc: "Supplier shipped the item (ISO18626 Loaned)"
             transition: SHIPPED
@@ -302,6 +338,7 @@ stateModels:
         desc: Request is valid
         side: SUPPLIER
         primaryAction: will-supply
+        closingAction: cannot-supply
         actions:
           - name: will-supply
             desc: Indicate supplier will supply and send ISO18626 WillSupply
@@ -337,6 +374,7 @@ stateModels:
         desc: After manual will-supply or successful auto-responder
         side: SUPPLIER
         primaryAction: ship
+        closingAction: cannot-supply
         actions:
           - name: add-condition
             desc: Add conditions and notify requester
@@ -364,6 +402,7 @@ stateModels:
         desc: Conditions are sent with a special ISO WillSupply
         side: SUPPLIER
         primaryAction: cannot-supply
+        closingAction: cannot-supply
         actions:
           - name: add-condition
             desc: Add additional conditions and notify requester
@@ -389,6 +428,7 @@ stateModels:
         desc: After receiving conditions accepted notification
         side: SUPPLIER
         primaryAction: ship
+        closingAction: cannot-supply
         actions:
           - name: add-condition
             desc: Add additional conditions and notify requester
@@ -500,7 +540,7 @@ batchActionDefaults:
   - actionName: request-aging
     titleKey: request-aging-express
     title: Request aging of express requests
-    batchQuery: "(state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = NEEDS_REVIEW) and service_level = Express"
+    batchQuery: "side = lending and (state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = CONDITION_ACCEPTED) and service_level = Express"
     schedule: "FREQ=MINUTELY;INTERVAL=15"
     actionParams:
       interval: 2h
@@ -508,7 +548,7 @@ batchActionDefaults:
   - actionName: request-aging
     titleKey: request-aging-rush
     title: Request aging of rush requests
-    batchQuery: "(state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = NEEDS_REVIEW) and service_level = Rush"
+    batchQuery: "side = lending and (state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = CONDITION_ACCEPTED) and service_level = Rush"
     schedule: "FREQ=HOURLY;BYMINUTE=0"
     actionParams:
       interval: 24h
@@ -516,7 +556,7 @@ batchActionDefaults:
   - actionName: request-aging
     titleKey: request-aging-all
     title: Request aging of all requests
-    batchQuery: state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = NEEDS_REVIEW
+    batchQuery: "side = lending and (state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = CONDITION_ACCEPTED)"
     schedule: "FREQ=DAILY;BYHOUR=5;BYMINUTE=0"
     actionParams:
       interval: 72h

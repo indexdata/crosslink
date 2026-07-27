@@ -74,6 +74,7 @@ func (m *mockBatchActionEventBus) CreateTask(id string, eventName events.EventNa
 
 func batchActionEvent(actionName string) events.Event {
 	return events.Event{
+		ID: "batch-event-1",
 		EventData: events.EventData{
 			CommonEventData: events.CommonEventData{
 				BatchActionData: &events.BatchActionData{
@@ -190,6 +191,37 @@ func TestBatchAction_RequestAgingDispatches(t *testing.T) {
 	assert.True(t, repo.listCalled)
 }
 
+func TestBatchAction_AddsOwnerRestrictionBeforeDispatch(t *testing.T) {
+	repo := &mockEmailPrRepo{}
+	svc := NewBatchActionService(&mockBatchActionEventBus{}, repo, nil)
+	event := requestAgingEvent("state = REQ", map[string]any{"interval": "24h"})
+
+	status, _ := svc.batchAction(testCtx, event)
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t,
+		"(state = $3 AND ((side = $4 AND supplier_symbol = $5) OR (side = $6 AND requester_symbol = $7))) AND updated_at <= $8",
+		repo.gotQuery.GetWhereClause(),
+	)
+	// The restriction is added to the dispatched copy, not persisted into the
+	// scheduled event payload where repeated runs could accumulate predicates.
+	assert.Equal(t, "state = REQ", event.EventData.BatchActionData.Selector)
+}
+
+func TestBatchAction_MissingOwnerDispatchesWithoutRestriction(t *testing.T) {
+	repo := &mockEmailPrRepo{}
+	svc := NewBatchActionService(&mockBatchActionEventBus{}, repo, nil)
+	event := requestAgingEvent("state = REQ", map[string]any{"interval": "24h"})
+	event.EventData.BatchActionData.Owner = ""
+
+	status, result := svc.batchAction(testCtx, event)
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Nil(t, result.EventError)
+	assert.True(t, repo.listCalled)
+	assert.Equal(t, "state = $3 AND updated_at <= $4", repo.gotQuery.GetWhereClause())
+}
+
 func TestRequestAging_ValidationErrors(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -209,16 +241,6 @@ func TestRequestAging_ValidationErrors(t *testing.T) {
 			event:     requestAgingEvent("", map[string]any{"interval": "24h"}),
 			wantMsg:   "cannot process event",
 			wantCause: "selector is empty",
-		},
-		{
-			name: "empty owner",
-			event: func() events.Event {
-				event := requestAgingEvent("cql.allRecords=1", map[string]any{"interval": "24h"})
-				event.EventData.BatchActionData.Owner = ""
-				return event
-			}(),
-			wantMsg:   "cannot process event",
-			wantCause: "owner is empty",
 		},
 		{
 			name:      "missing custom data",
@@ -301,10 +323,10 @@ func TestRequestAging_NoPatronRequestsReturnsSuccess(t *testing.T) {
 	assert.Empty(t, eventBus.createTaskCalls)
 }
 
-func TestRequestAging_CreatesBackgroundTasksForBorrowingAndLending(t *testing.T) {
+func TestRequestAging_CreatesBackgroundTasksForLending(t *testing.T) {
 	repo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{
-		{ID: "borrowing-1", Side: prservice.SideBorrowing},
-		{ID: "lending-1", Side: prservice.SideLending},
+		{ID: "lending-1", Side: prservice.SideLending, State: prservice.LenderStateValidated},
+		{ID: "lending-2", Side: prservice.SideLending, State: prservice.LenderStateWillSupply},
 	}}
 	eventBus := &mockBatchActionEventBus{}
 	svc := NewBatchActionService(eventBus, repo, nil)
@@ -315,8 +337,8 @@ func TestRequestAging_CreatesBackgroundTasksForBorrowingAndLending(t *testing.T)
 	assert.NotNil(t, result)
 	assert.Equal(t, "processed patron request count: 2", result.Note)
 	if assert.Len(t, eventBus.createTaskCalls, 2) {
-		assertRequestAgingCreateTask(t, eventBus.createTaskCalls[0], "borrowing-1", prservice.BorrowerActionCancelRequest)
-		assertRequestAgingCreateTask(t, eventBus.createTaskCalls[1], "lending-1", prservice.LenderActionCannotSupply)
+		assertRequestAgingCreateTask(t, eventBus.createTaskCalls[0], "lending-1", prservice.LenderActionCannotSupply)
+		assertRequestAgingCreateTask(t, eventBus.createTaskCalls[1], "lending-2", prservice.LenderActionCannotSupply)
 		for _, call := range eventBus.createTaskCalls {
 			assert.Equal(t, "Closing stale request", call.data.CustomData["note"])
 			assert.Equal(t, "Expired", call.data.CustomData["reasonUnfilled"])
@@ -326,19 +348,36 @@ func TestRequestAging_CreatesBackgroundTasksForBorrowingAndLending(t *testing.T)
 	}
 }
 
+func TestRequestAging_FailsIfNoClosingActionForState(t *testing.T) {
+	repo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{
+		{ID: "lending-1", Side: prservice.SideLending, State: prservice.LenderStateShipped},
+		{ID: "lending-2", Side: prservice.SideLending, State: prservice.LenderStateWillSupply},
+	}}
+	eventBus := &mockBatchActionEventBus{}
+	svc := NewBatchActionService(eventBus, repo, nil)
+
+	status, result := svc.RequestAging(testCtx, requestAgingEvent("cql.allRecords=1", map[string]any{"interval": "24h", "note": "Closing stale request", "reasonUnfilled": "Expired"}))
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.NotNil(t, result)
+	assert.Equal(t, "processed patron request count: 2, failed: 1 with ids and errors in custom data", result.Note)
+	assert.Equal(t, "could not find closing action for patron request state: SHIPPED within state model: CrossLink Returnables State Model", result.CustomData["lending-1"])
+	assert.Len(t, eventBus.createTaskCalls, 1)
+}
+
 func TestRequestAging_CreateTaskErrorRecordsCustomDataAndContinues(t *testing.T) {
 	repo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{
-		{ID: "failed-1", Side: prservice.SideBorrowing},
-		{ID: "ok-1", Side: prservice.SideBorrowing},
+		{ID: "failed-1", Side: prservice.SideLending, State: prservice.LenderStateValidated},
+		{ID: "ok-1", Side: prservice.SideLending, State: prservice.LenderStateWillSupply},
 	}}
 	eventBus := &mockBatchActionEventBus{createTaskErrByID: map[string]error{"failed-1": errors.New("create failed")}}
 	svc := NewBatchActionService(eventBus, repo, nil)
 
 	status, result := svc.RequestAging(testCtx, requestAgingEvent("cql.allRecords=1", map[string]any{"interval": "24h"}))
 
-	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, events.EventStatusError, status)
 	assert.NotNil(t, result)
-	assert.Equal(t, "processed patron request count: 2", result.Note)
+	assert.Equal(t, "processed patron request count: 2, failed: 1 with ids and errors in custom data", result.Note)
 	assert.Equal(t, "error creating close action: create failed", result.CustomData["failed-1"])
 	_, ok := result.CustomData["ok-1"]
 	assert.False(t, ok)
@@ -350,9 +389,19 @@ func assertRequestAgingCreateTask(t *testing.T, got createTaskCall, wantID strin
 	assert.Equal(t, wantID, got.id)
 	assert.Equal(t, events.EventNameInvokeBackgroundAction, got.eventName)
 	assert.Equal(t, events.EventDomainPatronRequest, got.eventDomain)
-	assert.Nil(t, got.parentID)
+	if assert.NotNil(t, got.parentID) {
+		assert.Equal(t, "batch-event-1", *got.parentID)
+	}
 	assert.Equal(t, events.SignalConsumers, got.target)
 	if assert.NotNil(t, got.data.Action) {
 		assert.Equal(t, wantAction, *got.data.Action)
+	}
+	if assert.NotNil(t, got.data.BatchActionData) {
+		assert.Equal(t, events.BatchActionData{
+			ActionName: string(schedoapi.RequestAging),
+			Selector:   "cql.allRecords=1",
+			TaskId:     "task-1",
+			Owner:      testBatchActionOwner,
+		}, *got.data.BatchActionData)
 	}
 }

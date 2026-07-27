@@ -25,13 +25,14 @@ ORDER BY created_at
 LIMIT $1 OFFSET $2;
 
 -- name: GetPatronRequestsFacets :many
--- TEMPLATE: 'requester_symbol' is a placeholder column name. This query is not
--- meant to be called directly; use GetPatronRequestsFacetsCql in prcql.go, which
--- substitutes the column with the validated facet field at runtime.
-SELECT requester_symbol AS value, COUNT(*) AS count
+-- TEMPLATE: 'requester_symbol' (value) and 'requester_name' (label) are placeholder
+-- column names. This query is not meant to be called directly; use
+-- GetPatronRequestsFacetsCql in prcql.go, which substitutes both columns with the
+-- validated facet field's symbol/name columns at runtime.
+SELECT requester_symbol AS value, requester_name AS label, COUNT(*) AS count
 FROM patron_request_search_view
 WHERE ill_request IS NOT NULL
-GROUP BY 1
+GROUP BY 1, 2
 ORDER BY count DESC, value ASC
 LIMIT $1 OFFSET $2;
 

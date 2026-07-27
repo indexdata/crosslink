@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -17,14 +18,18 @@ type SchedRepo interface {
 	ClaimNextScheduledTask(ctx common.ExtendedContext) (ScheduledTask, error)
 	GetNextRunAt(ctx common.ExtendedContext) (pgtype.Timestamptz, error)
 	GetStuckRunningTasks(ctx common.ExtendedContext, stuckAfter time.Duration) ([]ScheduledTask, error)
-	GetScheduledTaskByIdAndOwner(ctx common.ExtendedContext, id, owner string) (ScheduledTask, error)
-	DeleteScheduledTask(ctx common.ExtendedContext, id, owner string) error
+	GetScheduledTaskById(ctx common.ExtendedContext, id string, owners []string) (ScheduledTask, error)
+	GetScheduledTaskByIdForUpdate(ctx common.ExtendedContext, id string, owners []string) (ScheduledTask, error)
+	HasActiveBatchActionEvents(ctx common.ExtendedContext, taskID string) (bool, error)
+	DeleteBatchActionEvents(ctx common.ExtendedContext, taskID string) error
+	DeleteScheduledTask(ctx common.ExtendedContext, id string, owners []string) error
 	GetScheduledTasks(ctx common.ExtendedContext, params GetScheduledTasksParams) ([]ScheduledTask, int64, error)
 }
 
 type PgSchedRepo struct {
 	repo.PgBaseRepo[SchedRepo]
-	queries Queries
+	queries      Queries
+	eventQueries events.Queries
 }
 
 // WithTxFunc delegates transaction handling to PgBaseRepo.
@@ -47,6 +52,9 @@ func CreateSchedRepo(dbPool *pgxpool.Pool) SchedRepo {
 }
 
 func (r *PgSchedRepo) SaveScheduledTask(ctx common.ExtendedContext, params SaveScheduledTaskParams) (ScheduledTask, error) {
+	if !params.UpdatedAt.Valid {
+		params.UpdatedAt = params.CreatedAt
+	}
 	row, err := r.queries.SaveScheduledTask(ctx, r.GetConnOrTx(), params)
 	if err == nil {
 		r.notify(ctx)
@@ -88,19 +96,35 @@ func (r *PgSchedRepo) notify(ctx common.ExtendedContext) {
 	}
 }
 
-func (r *PgSchedRepo) GetScheduledTaskByIdAndOwner(ctx common.ExtendedContext, id, owner string) (ScheduledTask, error) {
-	row, err := r.queries.GetScheduledTaskByIdAndOwner(ctx, r.GetConnOrTx(), GetScheduledTaskByIdAndOwnerParams{
-		ID:    id,
-		Owner: owner,
+func (r *PgSchedRepo) GetScheduledTaskById(ctx common.ExtendedContext, id string, owners []string) (ScheduledTask, error) {
+	row, err := r.queries.GetScheduledTaskById(ctx, r.GetConnOrTx(), GetScheduledTaskByIdParams{
+		ID:     id,
+		Owners: owners,
 	})
 	return row.ScheduledTask, err
 }
 
-func (r *PgSchedRepo) DeleteScheduledTask(ctx common.ExtendedContext, id, owner string) error {
-	return r.queries.DeleteScheduledTask(ctx, r.GetConnOrTx(), DeleteScheduledTaskParams{
-		ID:    id,
-		Owner: owner,
+func (r *PgSchedRepo) GetScheduledTaskByIdForUpdate(ctx common.ExtendedContext, id string, owners []string) (ScheduledTask, error) {
+	row, err := r.queries.GetScheduledTaskByIdForUpdate(ctx, r.GetConnOrTx(), GetScheduledTaskByIdForUpdateParams{
+		ID:     id,
+		Owners: owners,
 	})
+	return row.ScheduledTask, err
+}
+
+func (r *PgSchedRepo) DeleteScheduledTask(ctx common.ExtendedContext, id string, owners []string) error {
+	return r.queries.DeleteScheduledTask(ctx, r.GetConnOrTx(), DeleteScheduledTaskParams{
+		ID:     id,
+		Owners: owners,
+	})
+}
+
+func (r *PgSchedRepo) HasActiveBatchActionEvents(ctx common.ExtendedContext, taskID string) (bool, error) {
+	return r.eventQueries.HasActiveBatchActionEvents(ctx, r.GetConnOrTx(), taskID)
+}
+
+func (r *PgSchedRepo) DeleteBatchActionEvents(ctx common.ExtendedContext, taskID string) error {
+	return r.eventQueries.DeleteBatchActionEvents(ctx, r.GetConnOrTx(), taskID)
 }
 
 func (r *PgSchedRepo) GetScheduledTasks(ctx common.ExtendedContext, params GetScheduledTasksParams) ([]ScheduledTask, int64, error) {

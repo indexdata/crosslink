@@ -95,10 +95,10 @@ func (a *ApiHandler) Get(w http.ResponseWriter, r *http.Request) {
 	index.Revision = vcs.GetCommit()
 	index.Signature = vcs.GetSignature()
 	index.Links.IllTransactionsLink = Link(r, Path(ILL_TRANSACTIONS_PATH), nil)
-	index.Links.EventsLink = Link(r, Path(EVENTS_PATH), nil)
-	index.Links.LocatedSuppliersLink = Link(r, Path(LOCATED_SUPPLIERS_PATH), nil)
 	index.Links.PeersLink = Link(r, Path(PEERS_PATH), nil)
-	index.Links.PatronRequestsLink = Link(r, Path(PATRON_REQUESTS_PATH), nil)
+	index.Links.BorrowingRequestsLink = Link(r, Path(PATRON_REQUESTS_PATH), Query("side", "borrowing"))
+	index.Links.LendingRequestsLink = Link(r, Path(PATRON_REQUESTS_PATH), Query("side", "lending"))
+	index.Links.BatchActionsLink = Link(r, Path("batch_actions"), nil)
 	WriteJsonResponse(w, index)
 }
 
@@ -110,29 +110,63 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: logParams,
 	})
+	if params.IllTransactionId != nil && events.IsSyntheticID(*params.IllTransactionId) {
+		AddBadRequestError(ctx, w, errors.New("synthetic IDs are not allowed for event lookup"))
+		return
+	}
 	tran, err := a.getIllTranFromParams(ctx, w, r, params.RequesterSymbol,
 		params.RequesterReqId, params.IllTransactionId)
 	if err != nil {
 		return
 	}
-	var resp oapi.Events
-	resp.Items = make([]oapi.Event, 0)
 	if tran == nil {
-		WriteJsonResponse(w, resp)
+		WriteJsonResponse(w, oapi.Events{Items: make([]oapi.Event, 0)})
 		return
 	}
-	var fullCount int64
-	var eventList []events.Event
-	eventList, fullCount, err = a.eventRepo.GetIllTransactionEvents(ctx, tran.ID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	resp, err := a.illTransactionEventsResponse(ctx, tran.ID)
+	if err != nil {
 		AddInternalError(ctx, w, err)
 		return
+	}
+	WriteJsonResponse(w, resp)
+}
+
+func (a *ApiHandler) GetIllTransactionsIdEvents(w http.ResponseWriter, r *http.Request, id string, params oapi.GetIllTransactionsIdEventsParams) {
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
+		Other: map[string]string{"method": "GetIllTransactionsIdEvents", "id": id},
+	})
+	if events.IsSyntheticID(id) {
+		AddBadRequestError(ctx, w, errors.New("synthetic IDs are not allowed for event lookup"))
+		return
+	}
+
+	tran, err := a.getIllTranFromParams(ctx, w, r, params.RequesterSymbol, nil, &id)
+	if err != nil {
+		return
+	}
+	if tran == nil {
+		AddNotFoundError(w)
+		return
+	}
+	resp, err := a.illTransactionEventsResponse(ctx, tran.ID)
+	if err != nil {
+		AddInternalError(ctx, w, err)
+		return
+	}
+	WriteJsonResponse(w, resp)
+}
+
+func (a *ApiHandler) illTransactionEventsResponse(ctx common.ExtendedContext, id string) (oapi.Events, error) {
+	resp := oapi.Events{Items: make([]oapi.Event, 0)}
+	eventList, fullCount, err := a.eventRepo.GetIllTransactionEvents(ctx, id)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return resp, err
 	}
 	resp.About.Count = fullCount
 	for _, event := range eventList {
 		resp.Items = append(resp.Items, ToApiEvent(event, event.IllTransactionID, nil))
 	}
-	WriteJsonResponse(w, resp)
+	return resp, nil
 }
 
 func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, params oapi.GetIllTransactionsParams) {
@@ -212,6 +246,10 @@ func (a *ApiHandler) DeleteIllTransactionsId(w http.ResponseWriter, r *http.Requ
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "DeleteIllTransactionsId", "id": id},
 	})
+	if id == events.DEFAULT_ILL_TRANSACTION_ID {
+		AddBadRequestError(ctx, w, errors.New("synthetic IDs cannot be deleted"))
+		return
+	}
 	trans, err := a.illRepo.GetIllTransactionById(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -222,9 +260,7 @@ func (a *ApiHandler) DeleteIllTransactionsId(w http.ResponseWriter, r *http.Requ
 			return
 		}
 	}
-	err = a.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
-		return deleteIllTransaction(ctx, repo, a.eventRepo, trans.ID)
-	})
+	err = a.illRepo.DeleteIllTransaction(ctx, trans.ID)
 	if err != nil {
 		AddInternalError(ctx, w, err)
 		return
@@ -370,17 +406,17 @@ func (a *ApiHandler) DeletePeersId(w http.ResponseWriter, r *http.Request, id st
 			return err
 		}
 		for _, t := range trans {
-			err = deleteIllTransaction(ctx, repo, a.eventRepo, t.ID)
+			err = repo.DeleteIllTransaction(ctx, t.ID)
 			if err != nil {
 				return err
 			}
 		}
-		suppliers, err := a.illRepo.GetLocatedSupplierByPeerId(ctx, peer.ID)
+		suppliers, err := repo.GetLocatedSupplierByPeerId(ctx, peer.ID)
 		if err != nil {
 			return err
 		}
 		for _, s := range suppliers {
-			err = deleteIllTransaction(ctx, repo, a.eventRepo, s.IllTransactionID)
+			err = repo.DeleteIllTransaction(ctx, s.IllTransactionID)
 			if err != nil {
 				return err
 			}
@@ -590,18 +626,6 @@ func (a *ApiHandler) PostArchiveIllTransactions(w http.ResponseWriter, r *http.R
 	})
 }
 
-func deleteIllTransaction(ctx common.ExtendedContext, illRepo ill_db.IllRepo, eventRepo events.EventRepo, transId string) error {
-	inErr := eventRepo.DeleteEventsByIllTransaction(ctx, transId)
-	if inErr != nil {
-		return inErr
-	}
-	inErr = illRepo.DeleteLocatedSupplierByIllTransaction(ctx, transId)
-	if inErr != nil {
-		return inErr
-	}
-	return illRepo.DeleteIllTransaction(ctx, transId)
-}
-
 func ToApiEvent(event events.Event, illId string, prId *string) oapi.Event {
 	api := oapi.Event{
 		Id:               event.ID,
@@ -653,7 +677,7 @@ func toApiIllTransaction(r *http.Request, trans ill_db.IllTransaction) oapi.IllT
 	api.SupplierRequestID = getString(trans.SupplierRequestID)
 	api.LastSupplierStatus = getString(trans.LastSupplierStatus)
 	api.PrevSupplierStatus = getString(trans.PrevSupplierStatus)
-	api.EventsLink = Link(r, Path(EVENTS_PATH), Query("ill_transaction_id", trans.ID))
+	api.EventsLink = Link(r, Path("ill_transactions", trans.ID, "events"), nil)
 	api.LocatedSuppliersLink = Link(r, Path(LOCATED_SUPPLIERS_PATH), Query("ill_transaction_id", trans.ID))
 	if trans.RequesterID.Valid {
 		api.RequesterPeerLink = Link(r, Path(PEERS_PATH, trans.RequesterID.String), nil)

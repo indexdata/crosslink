@@ -341,16 +341,18 @@ func guessReason(reason iso18626.TypeReasonForMessage, requesterAction string, p
 	}
 	var expectedReason iso18626.TypeReasonForMessage
 	switch requesterAction {
+	case string(ill_db.RequestAction):
+		if prevStatus == "" || prevStatus == string(iso18626.TypeStatusRetryPossible) {
+			expectedReason = iso18626.TypeReasonForMessageRequestResponse
+		} else {
+			expectedReason = iso18626.TypeReasonForMessageStatusChange
+		}
 	case string(iso18626.TypeActionStatusRequest):
 		expectedReason = iso18626.TypeReasonForMessageStatusRequestResponse
 	case string(iso18626.TypeActionRenew):
 		expectedReason = iso18626.TypeReasonForMessageRenewResponse
-	default: //for everything else we guess we check if there is a previous status
-		if len(prevStatus) > 0 {
-			expectedReason = iso18626.TypeReasonForMessageStatusChange
-		} else {
-			expectedReason = iso18626.TypeReasonForMessageRequestResponse
-		}
+	default:
+		expectedReason = iso18626.TypeReasonForMessageStatusChange
 	}
 	return expectedReason
 }

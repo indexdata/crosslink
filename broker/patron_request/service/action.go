@@ -369,6 +369,12 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		return a.acceptRetryBorrowingRequest(ctx, pr)
 	case BorrowerActionSendNotification:
 		return a.sendNotificationBorrowingRequest(ctx, pr, params)
+	case BorrowerActionCancelLocalSupply:
+		return a.cancelLocalBorrowingRequest(ctx, pr)
+	case BorrowerActionCannotSupplyLocally:
+		return a.cannotSupplyLocallyBorrowingRequest(ctx, pr, params)
+	case BorrowerActionFillLocally:
+		return a.fillLocallyBorrowingRequest(ctx, pr, lmsAdapter, illRequest, params)
 	default:
 		status, result := logActionErrorAndReturnResult(ctx, "borrower action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -414,7 +420,7 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 	case LenderActionRejectCancel:
 		return a.rejectCancelLenderRequest(ctx, pr)
 	case LenderActionCannotSupply:
-		return a.cannotSupplyLenderRequest(ctx, pr, params)
+		return a.cannotSupplyLenderRequest(ctx, pr, lms, illRequest, params)
 	case LenderActionAddCondition:
 		return a.addConditionsLenderRequest(ctx, pr, params)
 	case LenderActionShip:
@@ -422,9 +428,9 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 	case LenderActionMarkReceived:
 		return a.markReceivedLenderRequest(ctx, pr, lms)
 	case LenderActionAcceptCancel:
-		return a.acceptCancelLenderRequest(ctx, pr)
+		return a.acceptCancelLenderRequest(ctx, pr, lms, illRequest)
 	case LenderActionAskRetry:
-		return a.askRetryLenderRequest(ctx, pr, params)
+		return a.askRetryLenderRequest(ctx, pr, lms, illRequest, params)
 	case LenderActionSendNotification:
 		return a.sendNotificationLenderRequest(ctx, pr, params)
 	default:
@@ -662,7 +668,16 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 	}
 	retryPr.State = borrowerInitialState
 	retryPr.TerminalState = actionMapping.IsTerminalState(retryPr)
-	retryPr.ID = uuid.NewString()
+	_, requesterSymbol, err := common.SplitSymbol(pr.RequesterSymbol.String)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "invalid requester symbol for retry", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	retryPr.ID, err = a.prRepo.GetNextHrid(ctx, requesterSymbol)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to generate requester HRID for retry", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
 	retryPr.RequesterReqID = getDbTextPtr(&retryPr.ID)
 	retryPr.CreatedAt = pgtype.Timestamp{Valid: true, Time: time.Now()}
 	retryPr.IllRequest.Header.RequestingAgencyRequestId = retryPr.ID
@@ -693,6 +708,65 @@ func (a *PatronRequestActionService) sendNotificationBorrowingRequest(ctx common
 		return actionExecutionResult{status: events.EventStatusSuccess, result: &events.EventResult{CommonEventData: events.CommonEventData{Note: "email service is not ready to send"}}, pr: pr}
 	}
 	return a.sendEmailNotification(ctx, pr, params, pr.RequesterSymbol.String)
+}
+
+func (a *PatronRequestActionService) cancelLocalBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
+	result := events.EventResult{}
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
+		iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled},
+		nil)
+	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
+}
+
+func (a *PatronRequestActionService) cannotSupplyLocallyBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
+	result := events.EventResult{}
+	var reasonUnfilled *iso18626.TypeSchemeValuePair
+	if params.ReasonUnfilled != "" {
+		reasonUnfilled = &iso18626.TypeSchemeValuePair{Text: params.ReasonUnfilled}
+	}
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
+		iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+			Note:             params.Note,
+			ReasonUnfilled:   reasonUnfilled,
+		},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusUnfilled},
+		nil)
+	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
+}
+
+func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
+	_, _, _, err := lmsAdapter.RequestItem(
+		pr.ID,
+		illRequest.BibliographicInfo.SupplierUniqueRecordId,
+		pr.Patron.String,
+		lmsAdapter.RequesterPickupLocation(),
+		lmsAdapter.ItemLocation(),
+	)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "LMS RequestItem failed", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+
+	completedStatus := iso18626.TypeStatusLoanCompleted
+	if illRequest.ServiceInfo != nil && illRequest.ServiceInfo.ServiceType == iso18626.TypeServiceTypeCopy {
+		completedStatus = iso18626.TypeStatusCopyCompleted
+	}
+	result := events.EventResult{}
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
+		iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+			Note:             params.Note,
+		},
+		iso18626.StatusInfo{Status: completedStatus},
+		nil)
+	if result.OutgoingMessage.SupplyingAgencyMessage != nil {
+		setSupplierMessage(*result.OutgoingMessage.SupplyingAgencyMessage, &pr)
+	}
+	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
 func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) actionExecutionResult {
@@ -729,6 +803,9 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 		Barcode:    itemBarcode,
 	})
 	if err != nil {
+		if cancelErr := lmsAdapter.CancelRequestItem(requestId, userId); cancelErr != nil {
+			err = errors.Join(err, fmt.Errorf("LMS CancelRequestItem compensation failed: %w", cancelErr))
+		}
 		status, result := logActionErrorAndReturnResult(ctx, "failed to save item", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
@@ -746,7 +823,30 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
-func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
+func (a *PatronRequestActionService) cancelLenderRequestItem(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) error {
+	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get items: %w", err)
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	requestId := illRequest.Header.RequestingAgencyRequestId
+	if requestId == "" {
+		return errors.New("missing RequestingAgencyRequestId for LMS CancelRequestItem")
+	}
+	if !pr.RequesterSymbol.Valid || pr.RequesterSymbol.String == "" {
+		return errors.New("invalid requester symbol")
+	}
+	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
+	return lmsAdapter.CancelRequestItem(requestId, userId)
+}
+
+func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
+	if err := a.cancelLenderRequestItem(ctx, pr, lmsAdapter, illRequest); err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "LMS CancelRequestItem failed", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
 	result := events.EventResult{}
 	var reasonUnfilled *iso18626.TypeSchemeValuePair
 	if params.ReasonUnfilled != "" {
@@ -926,7 +1026,11 @@ func (a *PatronRequestActionService) rejectCancelLenderRequest(ctx common.Extend
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
-func (a *PatronRequestActionService) acceptCancelLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
+func (a *PatronRequestActionService) acceptCancelLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
+	if err := a.cancelLenderRequestItem(ctx, pr, lmsAdapter, illRequest); err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "LMS CancelRequestItem failed", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
 	yes := iso18626.TypeYesNoY
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
@@ -939,7 +1043,7 @@ func (a *PatronRequestActionService) acceptCancelLenderRequest(ctx common.Extend
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
-func (a *PatronRequestActionService) askRetryLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
+func (a *PatronRequestActionService) askRetryLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
 	var deliveryInfo *iso18626.DeliveryInfo
 	switch params.ReasonRetry {
 	case "":
@@ -955,6 +1059,10 @@ func (a *PatronRequestActionService) askRetryLenderRequest(ctx common.ExtendedCo
 		}
 	default:
 		status, result := logActionErrorAndReturnResult(ctx, fmt.Sprintf("unsupported reasonRetry %q for ask-retry action (supported: %q)", params.ReasonRetry, iso18626.ReasonRetryNotFoundAsCited), nil)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	if err := a.cancelLenderRequestItem(ctx, pr, lmsAdapter, illRequest); err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "LMS CancelRequestItem failed", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	reasonRetry := iso18626.TypeSchemeValuePair{Text: params.ReasonRetry}

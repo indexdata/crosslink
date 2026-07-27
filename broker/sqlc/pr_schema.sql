@@ -18,7 +18,7 @@ CREATE TABLE patron_request
     items               JSONB NOT NULL DEFAULT '[]'::jsonb,
     language            regconfig NOT NULL DEFAULT 'english',
     terminal_state      BOOLEAN NOT NULL DEFAULT false,
-    updated_at          TIMESTAMP,
+    updated_at          TIMESTAMP NOT NULL DEFAULT now(),
     ill_response        jsonb NOT NULL DEFAULT '{}'::jsonb,
     internal_note       TEXT,
     next_req_id         VARCHAR,
@@ -37,7 +37,7 @@ $$ LANGUAGE plpgsql;
 CREATE TABLE item
 (
     id          VARCHAR PRIMARY KEY,
-    pr_id       VARCHAR   NOT NULL REFERENCES patron_request (id),
+    pr_id       VARCHAR   NOT NULL REFERENCES patron_request (id) ON DELETE CASCADE,
     barcode     VARCHAR   NOT NULL,
     call_number VARCHAR,
     title       VARCHAR,
@@ -48,7 +48,7 @@ CREATE TABLE item
 CREATE TABLE notification
 (
     id              VARCHAR PRIMARY KEY,
-    pr_id           VARCHAR   NOT NULL REFERENCES patron_request (id),
+    pr_id           VARCHAR   NOT NULL REFERENCES patron_request (id) ON DELETE CASCADE,
     from_symbol     VARCHAR   NOT NULL,
     to_symbol       VARCHAR   NOT NULL,
     direction       VARCHAR   NOT NULL DEFAULT 'sent',
@@ -74,7 +74,7 @@ CREATE TABLE template
     labels       TEXT[]    NOT NULL DEFAULT '{}',
     audience     VARCHAR,
     created_at   TIMESTAMP NOT NULL DEFAULT now(),
-    updated_at   TIMESTAMP
+    updated_at   TIMESTAMP NOT NULL DEFAULT now()
 );
 
 CREATE OR REPLACE FUNCTION immutable_to_timestamp(text)

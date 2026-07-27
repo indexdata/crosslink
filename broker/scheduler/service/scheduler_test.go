@@ -28,6 +28,10 @@ func invalidTstz() pgtype.Timestamptz {
 	return pgtype.Timestamptz{Valid: false}
 }
 
+func stuckUpdatedAt() pgtype.Timestamptz {
+	return tstz(time.Now().Add(-2 * time.Hour))
+}
+
 // ---------------------------------------------------------------------------
 // Mock SchedRepo
 // ---------------------------------------------------------------------------
@@ -44,6 +48,8 @@ type mockSchedRepo struct {
 	stuckTasks    []sched_db.ScheduledTask
 	stuckTasksErr error
 	stuckAfter    time.Duration
+	lockedTasks   map[string]sched_db.ScheduledTask
+	lockErrors    map[string]error
 }
 
 func (m *mockSchedRepo) WithTxFunc(ctx common.ExtendedContext, fn func(sched_db.SchedRepo) error) error {
@@ -75,6 +81,21 @@ func (m *mockSchedRepo) GetNextRunAt(_ common.ExtendedContext) (pgtype.Timestamp
 func (m *mockSchedRepo) GetStuckRunningTasks(_ common.ExtendedContext, stuckAfter time.Duration) ([]sched_db.ScheduledTask, error) {
 	m.stuckAfter = stuckAfter
 	return m.stuckTasks, m.stuckTasksErr
+}
+
+func (m *mockSchedRepo) GetScheduledTaskByIdForUpdate(_ common.ExtendedContext, id string, _ []string) (sched_db.ScheduledTask, error) {
+	if err := m.lockErrors[id]; err != nil {
+		return sched_db.ScheduledTask{}, err
+	}
+	if task, ok := m.lockedTasks[id]; ok {
+		return task, nil
+	}
+	for _, task := range m.stuckTasks {
+		if task.ID == id {
+			return task, nil
+		}
+	}
+	return sched_db.ScheduledTask{}, pgx.ErrNoRows
 }
 
 // ---------------------------------------------------------------------------
@@ -426,6 +447,7 @@ func TestRescheduleLongRunning_OneShot_ReschedulesWithRetryDelay(t *testing.T) {
 		EventName: "one-shot",
 		Schedule:  "",
 		Status:    sched_db.ScheduledTaskStatusRunning,
+		UpdatedAt: stuckUpdatedAt(),
 	}
 	repo := &mockSchedRepo{stuckTasks: []sched_db.ScheduledTask{stuck}}
 	svc := &SchedulerService{schedRepo: repo, eventBus: &mockEventBus{}}
@@ -442,9 +464,9 @@ func TestRescheduleLongRunning_OneShot_ReschedulesWithRetryDelay(t *testing.T) {
 	assert.True(t, saved.RunAt.Time.After(after)) // run_at is in the future
 }
 
-// TestRescheduleLongRunning_ProcessesRepoReturnedTaskRegardlessOfUpdatedAt
-// verifies that GetStuckRunningTasks is the sole age filter for stuck tasks.
-func TestRescheduleLongRunning_ProcessesRepoReturnedTaskRegardlessOfUpdatedAt(t *testing.T) {
+// TestRescheduleLongRunning_SkipsRecentlyUpdatedCandidate verifies that a
+// candidate is revalidated after its row lock is acquired.
+func TestRescheduleLongRunning_SkipsRecentlyUpdatedCandidate(t *testing.T) {
 	stuck := sched_db.ScheduledTask{
 		ID:        "stuck-recent",
 		EventName: "one-shot",
@@ -458,9 +480,39 @@ func TestRescheduleLongRunning_ProcessesRepoReturnedTaskRegardlessOfUpdatedAt(t 
 	svc.rescheduleLongRunningTasks(testCtx)
 
 	assert.Equal(t, time.Hour, repo.stuckAfter)
-	assert.Len(t, repo.savedTasks, 1)
-	assert.Equal(t, sched_db.ScheduledTaskStatusPending, repo.savedTasks[0].Status)
-	assert.True(t, repo.savedTasks[0].RunAt.Valid)
+	assert.Empty(t, repo.savedTasks)
+}
+
+func TestRescheduleLongRunning_SkipsDeletedCandidate(t *testing.T) {
+	candidate := sched_db.ScheduledTask{
+		ID: "deleted", Status: sched_db.ScheduledTaskStatusRunning, UpdatedAt: stuckUpdatedAt(),
+	}
+	repo := &mockSchedRepo{
+		stuckTasks: []sched_db.ScheduledTask{candidate},
+		lockErrors: map[string]error{candidate.ID: pgx.ErrNoRows},
+	}
+	svc := &SchedulerService{schedRepo: repo, eventBus: &mockEventBus{}}
+
+	svc.rescheduleLongRunningTasks(testCtx)
+
+	assert.Empty(t, repo.savedTasks)
+}
+
+func TestRescheduleLongRunning_SkipsCandidateNoLongerRunning(t *testing.T) {
+	candidate := sched_db.ScheduledTask{
+		ID: "changed", Status: sched_db.ScheduledTaskStatusRunning, UpdatedAt: stuckUpdatedAt(),
+	}
+	current := candidate
+	current.Status = sched_db.ScheduledTaskStatusStopped
+	repo := &mockSchedRepo{
+		stuckTasks:  []sched_db.ScheduledTask{candidate},
+		lockedTasks: map[string]sched_db.ScheduledTask{candidate.ID: current},
+	}
+	svc := &SchedulerService{schedRepo: repo, eventBus: &mockEventBus{}}
+
+	svc.rescheduleLongRunningTasks(testCtx)
+
+	assert.Empty(t, repo.savedTasks)
 }
 
 // TestRescheduleLongRunning_Recurring_ReschedulesWithNextScheduleTime verifies that
@@ -471,6 +523,7 @@ func TestRescheduleLongRunning_Recurring_ReschedulesWithNextScheduleTime(t *test
 		EventName: "rrule-ev",
 		Schedule:  "FREQ=MINUTELY", // every minute
 		Status:    sched_db.ScheduledTaskStatusRunning,
+		UpdatedAt: stuckUpdatedAt(),
 	}
 	repo := &mockSchedRepo{stuckTasks: []sched_db.ScheduledTask{stuck}}
 	svc := &SchedulerService{schedRepo: repo, eventBus: &mockEventBus{}}
@@ -492,6 +545,7 @@ func TestRescheduleLongRunning_InvalidRrule_DisablesTask(t *testing.T) {
 		EventName: "bad-rrule",
 		Schedule:  "not-a-rrule",
 		Status:    sched_db.ScheduledTaskStatusRunning,
+		UpdatedAt: stuckUpdatedAt(),
 	}
 	repo := &mockSchedRepo{stuckTasks: []sched_db.ScheduledTask{stuck}}
 	svc := &SchedulerService{schedRepo: repo, eventBus: &mockEventBus{}}
@@ -508,8 +562,8 @@ func TestRescheduleLongRunning_InvalidRrule_DisablesTask(t *testing.T) {
 // stuck tasks in the result set are processed.
 func TestRescheduleLongRunning_MultipleStuck_AllRescheduled(t *testing.T) {
 	stuckTasks := []sched_db.ScheduledTask{
-		{ID: "s1", EventName: "ev-a", Schedule: "", Status: sched_db.ScheduledTaskStatusRunning},
-		{ID: "s2", EventName: "ev-b", Schedule: "FREQ=MINUTELY", Status: sched_db.ScheduledTaskStatusRunning},
+		{ID: "s1", EventName: "ev-a", Schedule: "", Status: sched_db.ScheduledTaskStatusRunning, UpdatedAt: stuckUpdatedAt()},
+		{ID: "s2", EventName: "ev-b", Schedule: "FREQ=MINUTELY", Status: sched_db.ScheduledTaskStatusRunning, UpdatedAt: stuckUpdatedAt()},
 	}
 	repo := &mockSchedRepo{stuckTasks: stuckTasks}
 	svc := &SchedulerService{schedRepo: repo, eventBus: &mockEventBus{}}

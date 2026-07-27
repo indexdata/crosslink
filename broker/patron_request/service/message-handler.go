@@ -181,6 +181,10 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.Ex
 	return m.handleSupplyingAgencyMessageWithParent(ctx, sam, pr, nil)
 }
 
+func isLocalSupply(pr pr_db.PatronRequest, supplierSymbol string) bool {
+	return pr.RequesterSymbol.Valid && pr.RequesterSymbol.String == supplierSymbol
+}
+
 func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx common.ExtendedContext, sam iso18626.SupplyingAgencyMessage, pr pr_db.PatronRequest, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	unsupportedReason := func() (events.EventStatus, *iso18626.ISO18626Message, error) {
 		err := fmt.Errorf("unsupported reason for message: %s", sam.MessageInfo.ReasonForMessage)
@@ -227,12 +231,14 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 			Valid:  true,
 		}
 	}
-
 	eventName := MessageEvent("")
 	var retryBibInfo *iso18626.BibliographicInfo
 	switch sam.StatusInfo.Status {
 	case iso18626.TypeStatusExpectToSupply:
 		eventName = SupplierExpectToSupply
+		if isLocalSupply(pr, supSymbol) {
+			eventName = SupplierExpectToSupplyLocal
+		}
 	case iso18626.TypeStatusWillSupply:
 		if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse {
 			if sam.MessageInfo.AnswerYesNo != nil && *sam.MessageInfo.AnswerYesNo == iso18626.TypeYesNoY {
@@ -258,15 +264,23 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 		eventName = SupplierLoaned
 	case iso18626.TypeStatusLoanCompleted, iso18626.TypeStatusCopyCompleted:
 		eventName = SupplierCompleted
+		if isLocalSupply(pr, supSymbol) {
+			eventName = SupplierCompletedLocal
+		}
 	case iso18626.TypeStatusUnfilled:
 		eventName = SupplierUnfilled
+		if isLocalSupply(pr, supSymbol) {
+			eventName = SupplierUnfilledLocal
+		}
 	case iso18626.TypeStatusCancelled:
-		// Cancellation transition is accepted only for cancel-response messages.
 		if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse {
 			if sam.MessageInfo.AnswerYesNo != nil && *sam.MessageInfo.AnswerYesNo == iso18626.TypeYesNoN {
 				return contradictoryCancelResponse()
 			}
 			eventName = SupplierCancelAccepted
+		} else if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageStatusChange &&
+			isLocalSupply(pr, supSymbol) {
+			eventName = SupplierCancelledLocal
 		}
 	case iso18626.TypeStatusRetryPossible:
 		eventName = SupplierRetryConditional
@@ -293,6 +307,15 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	}
 	if !eventDefined {
 		return statusChangeNotAllowed()
+	}
+	if stateChanged &&
+		(eventName == SupplierCompletedLocal ||
+			eventName == SupplierCancelledLocal ||
+			eventName == SupplierUnfilledLocal) {
+		ctx.Logger().Warn("ignoring transition configured for local audit event",
+			"event", eventName, "state", pr.State)
+		updatedPr = pr
+		stateChanged = false
 	}
 	if retryBibInfo != nil {
 		updatedPr.RetryBibInfo = retryBibInfo
