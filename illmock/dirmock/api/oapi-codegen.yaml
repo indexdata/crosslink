@@ -1,0 +1,12 @@
+package: directoryapi
+generate:
+  std-http-server: true
+  strict-server: true
+  models: true
+  embedded-spec: true
+output: dirmock/api/directory.gen.go
+output-options:
+  nullable-type: true
+  skip-prune: true
+  include-operation-ids:
+    - getEntries
