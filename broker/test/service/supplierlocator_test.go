@@ -863,8 +863,8 @@ func getOrCreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, loans 
 				Valid: true,
 			},
 			Url:          adapter.MOCK_PEER_URL,
-			LoansCount:   service.ToInt32(loans),
-			BorrowsCount: service.ToInt32(borrows),
+			LoansCount:   common.ToInt32(loans),
+			BorrowsCount: common.ToInt32(borrows),
 		})
 		if err != nil {
 			t.Errorf("Failed to save peer: %s", err)
@@ -879,8 +879,8 @@ func getOrCreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, loans 
 		}
 		return peer
 	} else {
-		peer.LoansCount = service.ToInt32(loans)
-		peer.BorrowsCount = service.ToInt32(borrows)
+		peer.LoansCount = common.ToInt32(loans)
+		peer.BorrowsCount = common.ToInt32(borrows)
 		peer, err := illRepo.SavePeer(ctx, ill_db.SavePeerParams(peer))
 		if err != nil {
 			t.Errorf("Failed to update peer: %s", err)

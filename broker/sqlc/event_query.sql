@@ -114,6 +114,25 @@ DELETE FROM event
 WHERE event_name IN ('invoke-batch-action', 'invoke-background-action')
   AND event_data -> 'batchActionData' ->> 'taskId' = sqlc.arg(task_id)::text;
 
+-- name: DeleteOldBatchActionRunEvents :exec
+WITH retained_runs AS (
+    SELECT id
+    FROM event
+    WHERE event_name = 'invoke-batch-action'
+      AND event_data -> 'batchActionData' ->> 'taskId' = sqlc.arg(task_id)::text
+    ORDER BY timestamp DESC, id DESC
+    LIMIT sqlc.arg(retention)::int
+),
+old_runs AS (
+    SELECT id
+    FROM event
+    WHERE event_name = 'invoke-batch-action'
+      AND event_data -> 'batchActionData' ->> 'taskId' = sqlc.arg(task_id)::text
+      AND id NOT IN (SELECT id FROM retained_runs)
+)
+DELETE FROM event
+WHERE id IN (SELECT id FROM old_runs);
+
 -- name: UpdateEventLifecycle :one
 UPDATE event SET last_signal = $3, event_status = $2
 WHERE id = $1
