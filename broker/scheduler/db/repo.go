@@ -130,9 +130,10 @@ func (r *PgSchedRepo) DeleteBatchActionEvents(ctx common.ExtendedContext, taskID
 
 func (r *PgSchedRepo) DeleteOldBatchActionRunEvents(ctx common.ExtendedContext, currentEventId string, taskID string, retention int32) error {
 	return r.eventQueries.DeleteOldBatchActionRunEvents(ctx, r.GetConnOrTx(), events.DeleteOldBatchActionRunEventsParams{
-		CurrentEventID: currentEventId,
-		TaskID:         taskID,
-		Retention:      retention,
+		CurrentEventID:  currentEventId,
+		TaskID:          taskID,
+		Retention:       retention,
+		PatronRequestID: events.DEFAULT_PATRON_REQUEST_ID,
 	})
 }
 

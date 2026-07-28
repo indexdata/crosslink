@@ -135,8 +135,8 @@ WHERE event_name IN ('invoke-batch-action', 'invoke-background-action')
           AND id NOT IN (SELECT id FROM retained_runs)
     )
     DELETE FROM event
-    WHERE id IN (SELECT id FROM old_runs) OR
-          parent_id IN (SELECT id FROM old_runs);
+    WHERE patron_request_id = sqlc.arg(patron_request_id)::text AND (id IN (SELECT id FROM old_runs) OR
+          parent_id IN (SELECT id FROM old_runs));
 
 -- name: UpdateEventLifecycle :one
 UPDATE event SET last_signal = $3, event_status = $2
