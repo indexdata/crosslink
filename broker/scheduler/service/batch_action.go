@@ -88,7 +88,7 @@ func (s *BatchActionService) cleanupOldRuns(ctx common.ExtendedContext, event ev
 	if taskID == "" {
 		return
 	}
-	if err := s.schedRepo.DeleteOldBatchActionRunEvents(ctx, taskID, BATCH_ACTION_RUN_RETENTION); err != nil {
+	if err := s.schedRepo.DeleteOldBatchActionRunEvents(ctx, event.ID, taskID, BATCH_ACTION_RUN_RETENTION); err != nil {
 		ctx.Logger().Error("failed to cleanup old batch action runs", "taskId", taskID, "retention", BATCH_ACTION_RUN_RETENTION, "error", err)
 	}
 }

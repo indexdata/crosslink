@@ -22,7 +22,7 @@ type SchedRepo interface {
 	GetScheduledTaskByIdForUpdate(ctx common.ExtendedContext, id string, owners []string) (ScheduledTask, error)
 	HasActiveBatchActionEvents(ctx common.ExtendedContext, taskID string) (bool, error)
 	DeleteBatchActionEvents(ctx common.ExtendedContext, taskID string) error
-	DeleteOldBatchActionRunEvents(ctx common.ExtendedContext, taskID string, retention int32) error
+	DeleteOldBatchActionRunEvents(ctx common.ExtendedContext, currentEventId string, taskID string, retention int32) error
 	DeleteScheduledTask(ctx common.ExtendedContext, id string, owners []string) error
 	GetScheduledTasks(ctx common.ExtendedContext, params GetScheduledTasksParams) ([]ScheduledTask, int64, error)
 }
@@ -128,10 +128,11 @@ func (r *PgSchedRepo) DeleteBatchActionEvents(ctx common.ExtendedContext, taskID
 	return r.eventQueries.DeleteBatchActionEvents(ctx, r.GetConnOrTx(), taskID)
 }
 
-func (r *PgSchedRepo) DeleteOldBatchActionRunEvents(ctx common.ExtendedContext, taskID string, retention int32) error {
+func (r *PgSchedRepo) DeleteOldBatchActionRunEvents(ctx common.ExtendedContext, currentEventId string, taskID string, retention int32) error {
 	return r.eventQueries.DeleteOldBatchActionRunEvents(ctx, r.GetConnOrTx(), events.DeleteOldBatchActionRunEventsParams{
-		TaskID:    taskID,
-		Retention: retention,
+		CurrentEventID: currentEventId,
+		TaskID:         taskID,
+		Retention:      retention,
 	})
 }
 

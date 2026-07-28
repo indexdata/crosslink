@@ -42,14 +42,16 @@ type mockBatchActionEventBus struct {
 
 type mockBatchActionCleanupRepo struct {
 	sched_db.PgSchedRepo
-	called       bool
-	gotTaskID    string
-	gotRetention int32
-	err          error
+	called            bool
+	gotCurrentEventId string
+	gotTaskID         string
+	gotRetention      int32
+	err               error
 }
 
-func (m *mockBatchActionCleanupRepo) DeleteOldBatchActionRunEvents(_ common.ExtendedContext, taskID string, retention int32) error {
+func (m *mockBatchActionCleanupRepo) DeleteOldBatchActionRunEvents(_ common.ExtendedContext, currentEventId string, taskID string, retention int32) error {
 	m.called = true
+	m.gotCurrentEventId = currentEventId
 	m.gotTaskID = taskID
 	m.gotRetention = retention
 	return m.err
@@ -165,6 +167,7 @@ func TestBatchAction_CleansOldRunsBeforeDispatch(t *testing.T) {
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.NotNil(t, result)
 	assert.True(t, cleanupRepo.called)
+	assert.Equal(t, "batch-event-1", cleanupRepo.gotCurrentEventId)
 	assert.Equal(t, "task-1", cleanupRepo.gotTaskID)
 	assert.Equal(t, int32(5), cleanupRepo.gotRetention)
 	assert.True(t, repo.listCalled)
@@ -175,6 +178,7 @@ func TestBatchAction_CleansOldRunsBeforeDispatch_WhenRetentionIsZero(t *testing.
 	eventBus := &mockBatchActionEventBus{}
 	cleanupRepo := &mockBatchActionCleanupRepo{}
 	svc := NewBatchActionService(eventBus, repo, cleanupRepo, nil)
+	prevValue := BATCH_ACTION_RUN_RETENTION
 	BATCH_ACTION_RUN_RETENTION = 0
 
 	status, result := svc.batchAction(testCtx, requestAgingEvent("cql.allRecords=1", map[string]any{"interval": "24h"}))
@@ -183,7 +187,7 @@ func TestBatchAction_CleansOldRunsBeforeDispatch_WhenRetentionIsZero(t *testing.
 	assert.NotNil(t, result)
 	assert.False(t, cleanupRepo.called)
 	assert.True(t, repo.listCalled)
-	BATCH_ACTION_RUN_RETENTION = 5
+	BATCH_ACTION_RUN_RETENTION = prevValue
 }
 
 func TestBatchAction_CleanupErrorDoesNotBlockDispatch(t *testing.T) {
