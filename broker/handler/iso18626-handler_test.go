@@ -454,7 +454,8 @@ func TestCheckDuplicateRequest(t *testing.T) {
 				duplicate: tt.duplicate,
 				err:       tt.repoErr,
 			}
-			err := checkDuplicateRequest(appCtx, tt.request, mockRepo, "ISIL:REQ1", tt.peer)
+			result, err := checkDuplicateRequest(appCtx, tt.request, mockRepo, "ISIL:REQ1", tt.peer)
+			assert.Equal(t, 1, len(result))
 			assert.Equal(t, tt.wantErr, err)
 			assert.Equal(t, tt.wantRepoCalled, mockRepo.called)
 			if tt.wantRepoCalled {
@@ -464,6 +465,19 @@ func TestCheckDuplicateRequest(t *testing.T) {
 				assert.True(t, tt.wantIssn == "" || strings.Contains(mockRepo.cql, tt.wantIssn))
 				assert.True(t, tt.wantTitle == "" || strings.Contains(mockRepo.cql, tt.wantTitle))
 				assert.True(t, tt.wantSvcType == "" || strings.Contains(mockRepo.cql, tt.wantSvcType))
+			}
+			if tt.duplicate {
+				dupCheck, ok := result[duplicateCheckKey].(*events.DuplicateCheck)
+				assert.True(t, ok)
+				assert.True(t, dupCheck.Enabled)
+				assert.Equal(t, tt.wantIdentifier, dupCheck.LookupParams.Identifier)
+				assert.Equal(t, tt.wantIsbn, dupCheck.LookupParams.Isbn)
+				assert.Equal(t, tt.wantIssn, dupCheck.LookupParams.Issn)
+				assert.Equal(t, tt.wantTitle, dupCheck.LookupParams.Title)
+				assert.Equal(t, tt.wantSvcType, dupCheck.LookupParams.ServiceType)
+				assert.Equal(t, window1, *dupCheck.WindowHours)
+				assert.NotNil(t, dupCheck.CutoffTime)
+				assert.Equal(t, "duplicate-id", *dupCheck.MatchedTransactionId)
 			}
 		})
 	}

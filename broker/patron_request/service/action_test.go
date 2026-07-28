@@ -3011,7 +3011,7 @@ type MockIso18626Handler struct {
 	lastSupplyingAgencyMessage  *iso18626.SupplyingAgencyMessage
 }
 
-func (h *MockIso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
+func (h *MockIso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) map[string]any {
 	status := iso18626.TypeMessageStatusOK
 	if illMessage.Request.Header.RequestingAgencyRequestId == "error" {
 		status = iso18626.TypeMessageStatusERROR
@@ -3032,11 +3032,12 @@ func (h *MockIso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessa
 	output, err := xml.MarshalIndent(resmsg, "  ", "  ")
 	if err != nil {
 		ctx.Logger().Error("failed to produce response", "error", err, "body", string(output))
-		return
+		return nil
 	}
 	w.Header().Set("Content-Type", "application/xml")
 	w.WriteHeader(http.StatusOK)
 	w.Write(output)
+	return nil
 }
 
 func (h *MockIso18626Handler) HandleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
