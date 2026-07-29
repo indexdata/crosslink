@@ -13,6 +13,7 @@ import (
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	psservice "github.com/indexdata/crosslink/broker/pullslip/service"
 	"github.com/indexdata/crosslink/directory"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -24,18 +25,38 @@ import (
 // Only ListPatronRequests is overridden; all other methods panic via the nil embed.
 type mockEmailPrRepo struct {
 	pr_db.PrRepo
-	listResult []pr_db.PatronRequest
-	listErr    error
-	listCalled bool
-	gotParams  pr_db.ListPatronRequestsParams
-	gotQuery   pgcql.Query
+	listResult     []pr_db.PatronRequest
+	fullCount      int64
+	listErr        error
+	listCalled     bool
+	gotParams      pr_db.ListPatronRequestsParams
+	gotQuery       pgcql.Query
+	template       pr_db.Template
+	templateErr    error
+	templateCalled bool
+	gotTemplate    pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams
 }
 
 func (m *mockEmailPrRepo) ListPatronRequests(_ common.ExtendedContext, params pr_db.ListPatronRequestsParams, query pgcql.Query) ([]pr_db.PatronRequest, int64, error) {
 	m.listCalled = true
 	m.gotParams = params
 	m.gotQuery = query
+	if m.fullCount != 0 {
+		return m.listResult, m.fullCount, m.listErr
+	}
 	return m.listResult, int64(len(m.listResult)), m.listErr
+}
+
+func (m *mockEmailPrRepo) GetTemplateByPurposeAudienceLabelAndOwner(_ common.ExtendedContext, params pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams) (pr_db.Template, error) {
+	m.templateCalled = true
+	m.gotTemplate = params
+	if m.templateErr != nil {
+		return pr_db.Template{}, m.templateErr
+	}
+	if m.template.ID != "" {
+		return m.template, nil
+	}
+	return validEmailTemplate(), nil
 }
 
 // mockEmailIllRepo implements the owner lookup needed to resolve the sender address.
@@ -86,9 +107,19 @@ func (m *mockPdfGen) GeneratePdfPullSlipForPrs(_ common.ExtendedContext, _ []pr_
 
 func validEmailCustomData() map[string]any {
 	return map[string]any{
-		"to":      []string{"user@example.com"},
-		"subject": "Test Subject",
-		"body":    "Test body text",
+		"to":            []string{"user@example.com"},
+		"templateLabel": "pullslips",
+	}
+}
+
+func validEmailTemplate() pr_db.Template {
+	return pr_db.Template{
+		ID:          "template-id",
+		Owner:       "ISIL:OWNER",
+		Purpose:     "email",
+		Subject:     pgtype.Text{String: "Test Subject", Valid: true},
+		Body:        "Test body text",
+		ContentType: "text",
 	}
 }
 
@@ -123,7 +154,7 @@ func TestExtractEmailData_NilCustomData(t *testing.T) {
 
 func TestExtractEmailData_MissingTo(t *testing.T) {
 	_, err := extractEmailData(events.EventData{
-		CustomData: map[string]any{"subject": "s", "body": "b"},
+		CustomData: map[string]any{"templateLabel": "pullslips"},
 	})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "missing")
@@ -132,23 +163,20 @@ func TestExtractEmailData_MissingTo(t *testing.T) {
 func TestExtractEmailData_ToAsStringSlice(t *testing.T) {
 	ed, err := extractEmailData(events.EventData{
 		CustomData: map[string]any{
-			"to":      []string{"a@b.com", "c@d.com"},
-			"subject": "Subject",
-			"body":    "Body",
+			"to":            []string{"a@b.com", "c@d.com"},
+			"templateLabel": "pullslips",
 		},
 	})
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"a@b.com", "c@d.com"}, ed.To)
-	assert.Equal(t, "Subject", ed.Subject)
-	assert.Equal(t, "Body", ed.Body)
+	assert.Equal(t, "pullslips", ed.TemplateLabel)
 }
 
 func TestExtractEmailData_ToAsInterfaceSlice(t *testing.T) {
 	ed, err := extractEmailData(events.EventData{
 		CustomData: map[string]any{
-			"to":      []interface{}{"x@y.com"},
-			"subject": "Sub",
-			"body":    "Bdy",
+			"to":            []interface{}{"x@y.com"},
+			"templateLabel": "pullslips",
 		},
 	})
 	assert.NoError(t, err)
@@ -178,15 +206,13 @@ func TestExtractEmailData_ToUnexpectedType(t *testing.T) {
 func TestExtractEmailData_AllOptionalFields(t *testing.T) {
 	ed, err := extractEmailData(events.EventData{
 		CustomData: map[string]any{
-			"to":         []string{"a@b.com"},
-			"subject":    "Sub",
-			"body":       "Bdy",
-			"isHtml":     true,
-			"includePdf": true,
+			"to":            []string{"a@b.com"},
+			"templateLabel": "pullslips",
+			"includePdf":    true,
 		},
 	})
 	assert.NoError(t, err)
-	assert.True(t, ed.IsHTML)
+	assert.Equal(t, "pullslips", ed.TemplateLabel)
 	assert.True(t, ed.IncludePdf)
 }
 
@@ -250,7 +276,7 @@ func TestGenerateAndEmailPullslip_EmptyTo(t *testing.T) {
 				BatchActionData: &events.BatchActionData{Selector: "cql.allRecords=1", Owner: "ISIL:OWNER"},
 			},
 			CustomData: map[string]any{
-				"to": []string{}, "subject": "Sub", "body": "Body",
+				"to": []string{}, "templateLabel": "pullslips",
 			},
 		},
 	}
@@ -259,7 +285,7 @@ func TestGenerateAndEmailPullslip_EmptyTo(t *testing.T) {
 	assert.NotNil(t, result)
 }
 
-func TestGenerateAndEmailPullslip_EmptySubject(t *testing.T) {
+func TestGenerateAndEmailPullslip_MissingTemplateLabel(t *testing.T) {
 	svc := newEmailSvc(&mockEmailPrRepo{}, &mockEmailService{}, nil)
 	event := events.Event{
 		EventData: events.EventData{
@@ -267,7 +293,7 @@ func TestGenerateAndEmailPullslip_EmptySubject(t *testing.T) {
 				BatchActionData: &events.BatchActionData{Selector: "cql.allRecords=1", Owner: "ISIL:OWNER"},
 			},
 			CustomData: map[string]any{
-				"to": []string{"a@b.com"}, "subject": "", "body": "Body",
+				"to": []string{"a@b.com"},
 			},
 		},
 	}
@@ -275,20 +301,39 @@ func TestGenerateAndEmailPullslip_EmptySubject(t *testing.T) {
 	assert.Equal(t, events.EventStatusError, status)
 }
 
-func TestGenerateAndEmailPullslip_EmptyBody(t *testing.T) {
-	svc := newEmailSvc(&mockEmailPrRepo{}, &mockEmailService{}, nil)
-	event := events.Event{
-		EventData: events.EventData{
-			CommonEventData: events.CommonEventData{
-				BatchActionData: &events.BatchActionData{Selector: "cql.allRecords=1", Owner: "ISIL:OWNER"},
-			},
-			CustomData: map[string]any{
-				"to": []string{"a@b.com"}, "subject": "Sub", "body": "",
-			},
-		},
-	}
-	status, _ := svc.generateAndEmailPullslip(testCtx, event)
+func TestGenerateAndEmailPullslip_TemplateLookupError(t *testing.T) {
+	prRepo := &mockEmailPrRepo{templateErr: errors.New("template not found")}
+	svc := newEmailSvc(prRepo, &mockEmailService{}, nil)
+	status, result := svc.generateAndEmailPullslip(testCtx, validEmailEvent())
 	assert.Equal(t, events.EventStatusError, status)
+	assert.NotNil(t, result)
+	assert.True(t, prRepo.templateCalled)
+}
+
+func TestGenerateAndEmailPullslip_TemplateEmptySubject(t *testing.T) {
+	prRepo := &mockEmailPrRepo{template: pr_db.Template{
+		ID:          "template-id",
+		Subject:     pgtype.Text{},
+		Body:        "Body",
+		ContentType: "text",
+	}}
+	svc := newEmailSvc(prRepo, &mockEmailService{}, nil)
+	status, result := svc.generateAndEmailPullslip(testCtx, validEmailEvent())
+	assert.Equal(t, events.EventStatusError, status)
+	assert.NotNil(t, result)
+}
+
+func TestGenerateAndEmailPullslip_TemplateEmptyBody(t *testing.T) {
+	prRepo := &mockEmailPrRepo{template: pr_db.Template{
+		ID:          "template-id",
+		Subject:     pgtype.Text{String: "Subject", Valid: true},
+		Body:        "",
+		ContentType: "text",
+	}}
+	svc := newEmailSvc(prRepo, &mockEmailService{}, nil)
+	status, result := svc.generateAndEmailPullslip(testCtx, validEmailEvent())
+	assert.Equal(t, events.EventStatusError, status)
+	assert.NotNil(t, result)
 }
 
 func TestGenerateAndEmailPullslip_ListPatronRequestsError(t *testing.T) {
@@ -319,6 +364,52 @@ func TestGenerateAndEmailPullslip_Success(t *testing.T) {
 	assert.True(t, mailer.called)
 
 	assert.True(t, strings.Contains(string(mailer.data), "user@example.com"))
+	assert.Equal(t, pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams{
+		Owner:    "ISIL:OWNER",
+		Purpose:  "email",
+		Label:    "pullslips",
+		Audience: "staff",
+	}, prRepo.gotTemplate)
+}
+
+func TestGenerateAndEmailPullslip_PerformsPlaceholderSubstitution(t *testing.T) {
+	prRepo := &mockEmailPrRepo{
+		listResult: []pr_db.PatronRequest{{ID: "pr-1"}, {ID: "pr-2"}},
+		fullCount:  5,
+		template: pr_db.Template{
+			ID:          "template-id",
+			Subject:     pgtype.Text{String: "Selected {{fullCount}}", Valid: true},
+			Body:        "Attached {{actualCount}} of {{fullCount}} from {{batchQuery}}",
+			ContentType: "text",
+		},
+	}
+	mailer := &mockEmailService{}
+	svc := newEmailSvc(prRepo, mailer, nil)
+
+	status, result := svc.generateAndEmailPullslip(testCtx, validEmailEvent())
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Nil(t, result)
+	message := string(mailer.data)
+	assert.Contains(t, message, "Selected 5")
+	assert.Contains(t, message, "Attached 2 of 5 from cql.allRecords=3D1")
+}
+
+func TestGenerateAndEmailPullslip_HtmlTemplate(t *testing.T) {
+	prRepo := &mockEmailPrRepo{template: pr_db.Template{
+		ID:          "template-id",
+		Subject:     pgtype.Text{String: "Subject", Valid: true},
+		Body:        "<p>Body</p>",
+		ContentType: "html",
+	}}
+	mailer := &mockEmailService{}
+	svc := newEmailSvc(prRepo, mailer, nil)
+
+	status, result := svc.generateAndEmailPullslip(testCtx, validEmailEvent())
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Nil(t, result)
+	assert.Contains(t, string(mailer.data), "Content-Type: text/html")
 }
 
 func TestGenerateAndEmailPullslip_WithPDF_Success(t *testing.T) {
