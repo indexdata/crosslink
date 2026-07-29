@@ -40,7 +40,8 @@ var lookupQueryBuilder = utils.Must(catalog.NewQueryBuilderGen(&directory.QueryC
 	Type:       new(directory.Cql),
 }))
 
-var queryTimeFormat = "2006-01-02 15:04:05"
+const queryTimeFormat = "2006-01-02 15:04:05"
+const duplicateCheckKey = "duplicateCheck"
 
 type ErrorValue string
 
@@ -79,7 +80,7 @@ var ErrDuplicateRequest = errors.New(string(ReqIsDuplicate))
 var waitingReqs = map[string]RequestWait{}
 
 type Iso18626HandlerInterface interface {
-	HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter)
+	HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) map[string]any
 	HandleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter)
 	HandleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter)
 }
@@ -149,9 +150,10 @@ func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapt
 	}
 }
 
-func handleNewRequest(ctx common.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo, requesterSymbol pgtype.Text, peers []ill_db.Peer) (string, error) {
-	if err := checkDuplicateRequest(ctx, request, repo, requesterSymbol.String, peers[0]); err != nil {
-		return "", err
+func handleNewRequest(ctx common.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo, requesterSymbol pgtype.Text, peers []ill_db.Peer) (string, map[string]any, error) {
+	resultMap, err := checkDuplicateRequest(ctx, request, repo, requesterSymbol.String, peers[0])
+	if err != nil {
+		return "", resultMap, err
 	}
 
 	supplierSymbol := createPgText(request.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + request.Header.SupplyingAgencyId.AgencyIdValue)
@@ -174,7 +176,7 @@ func handleNewRequest(ctx common.ExtendedContext, request *iso18626.Request, rep
 		Time:  request.Header.Timestamp.Time,
 		Valid: true,
 	}
-	_, err := repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams{
+	_, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams{
 		ID:                  id,
 		Timestamp:           timestamp,
 		RequesterSymbol:     requesterSymbol,
@@ -185,14 +187,20 @@ func handleNewRequest(ctx common.ExtendedContext, request *iso18626.Request, rep
 		SupplierRequestID:   supplierRequestId,
 		IllTransactionData:  illTransactionData,
 	})
-	return id, err
+	return id, resultMap, err
 }
 
-func checkDuplicateRequest(ctx common.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo, requesterSymbol string, peer ill_db.Peer) error {
+func checkDuplicateRequest(ctx common.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo, requesterSymbol string, peer ill_db.Peer) (map[string]any, error) {
+	resultMap := map[string]any{}
+	duplicateCheck := events.DuplicateCheck{}
+	resultMap[duplicateCheckKey] = &duplicateCheck
 	windowHours := peer.CustomData.DuplicateCheckWindowHours
+	duplicateCheck.WindowHours = windowHours
 	if windowHours == nil || *windowHours <= 0 {
-		return nil
+		duplicateCheck.Enabled = false
+		return resultMap, nil
 	}
+	duplicateCheck.Enabled = true
 
 	patronId := ""
 	if request.PatronInfo != nil {
@@ -200,28 +208,29 @@ func checkDuplicateRequest(ctx common.ExtendedContext, request *iso18626.Request
 	}
 
 	if patronId == "" {
-		return nil
+		return resultMap, nil
 	}
 
 	lookupParams := catalog.LookupParamsFromBibliographicInfo(request.BibliographicInfo, request.ServiceInfo)
-
+	duplicateCheck.LookupParams = &lookupParams
 	if lookupParams.ServiceType == "" {
-		return nil
+		return resultMap, nil
 	}
 
 	cqlList, _, err := lookupQueryBuilder.Build(lookupParams)
 	if err != nil {
 		ctx.Logger().Warn("failed build lookup query", "error", err)
-		return nil
+		return resultMap, nil
 	}
 
 	lookupCql := strings.Join(cqlList, " or ")
 	qb, err := cqlbuilder.NewQueryFromString("(" + lookupCql + ")")
 	if err != nil {
 		ctx.Logger().Warn("failed to build duplicate check query", "error", err)
-		return nil
+		return resultMap, err
 	}
 	formattedTime := time.Now().Add(-time.Duration(*windowHours) * time.Hour).Format(queryTimeFormat)
+	duplicateCheck.CutoffTime = &formattedTime
 	query, err := qb.And().Search("requester_symbol").Term(requesterSymbol).
 		And().Search("patron_id").Term(patronId).
 		And().Search("timestamp").Rel(">=").Term(formattedTime).
@@ -229,18 +238,20 @@ func checkDuplicateRequest(ctx common.ExtendedContext, request *iso18626.Request
 		Build()
 	if err != nil {
 		ctx.Logger().Warn("failed to build duplicate check query", "error", err)
-		return nil
+		return resultMap, err
 	}
 	cql := query.String()
 	trans, _, err := repo.ListIllTransactions(ctx, ill_db.ListIllTransactionsParams{Limit: 1, Offset: 0}, &cql, []string{requesterSymbol})
 	if err != nil {
 		ctx.Logger().Warn("failed to check for duplicate requests, proceeding", "error", err)
-		return nil // fail open
+		return resultMap, nil // fail open
 	}
 	if len(trans) == 0 {
-		return nil
+		return resultMap, nil
 	}
-	return ErrDuplicateRequest
+	duplicateCheck.Duplicate = true
+	duplicateCheck.MatchedTransactionId = &trans[0].ID
+	return resultMap, ErrDuplicateRequest
 }
 
 func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo) (string, bool, error) {
@@ -310,22 +321,23 @@ func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, r
 	return id, retryLookupChanged, err
 }
 
-func (h *Iso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
-	handleRequest(ctx, illMessage, w, h.illRepo, h.eventBus, h.dirAdapter)
+func (h *Iso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) map[string]any {
+	return handleRequest(ctx, illMessage, w, h.illRepo, h.eventBus, h.dirAdapter)
 }
 
-func handleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter) {
+func handleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter) map[string]any {
 	request := illMessage.Request
+	resultMap := map[string]any{}
 	if request.Header.RequestingAgencyRequestId == "" {
 		handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdIsEmpty)
-		return
+		return resultMap
 	}
 
 	requesterSymbol := createPgText(request.Header.RequestingAgencyId.AgencyIdType.Text + ":" + request.Header.RequestingAgencyId.AgencyIdValue)
 	peers, _, _ := repo.GetCachedPeersBySymbols(ctx, []string{requesterSymbol.String}, dirAdapter)
 	if len(peers) != 1 {
 		handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqAgencyNotFound)
-		return
+		return resultMap
 	}
 
 	var err error
@@ -340,10 +352,10 @@ func handleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Mess
 	case iso18626.TypeRequestTypeRetry:
 		id, mustLocate, err = handleRetryRequest(ctx, request, repo)
 	case iso18626.TypeRequestTypeNew:
-		id, err = handleNewRequest(ctx, request, repo, requesterSymbol, peers)
+		id, resultMap, err = handleNewRequest(ctx, request, repo, requesterSymbol, peers)
 	default:
 		handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, UnsupportedRequestType)
-		return
+		return resultMap
 	}
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -357,7 +369,7 @@ func handleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Mess
 			ctx.Logger().Error(InternalFailedToSaveTx, "error", err)
 			http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		}
-		return
+		return resultMap
 	}
 	afterShim := shim.GetShim(peers[0].Vendor).ApplyToIncomingRequest(illMessage, &peers[0], nil)
 	var resmsg = createRequestResponse(request, iso18626.TypeMessageStatusOK, nil, "")
@@ -374,9 +386,10 @@ func handleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Mess
 	event := events.EventNameRequestReceived
 	if _, err = createNotice(ctx, eventBus, id, event, eventData, events.EventStatusSuccess); err != nil {
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
-		return
+		return resultMap
 	}
 	writeResponse(ctx, resmsg, w)
+	return resultMap
 }
 
 func writeResponse(ctx common.ExtendedContext, resmsg *iso18626.ISO18626Message, w http.ResponseWriter) {
