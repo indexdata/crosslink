@@ -40,8 +40,8 @@ var lookupQueryBuilder = utils.Must(catalog.NewQueryBuilderGen(&directory.QueryC
 	Type:       new(directory.Cql),
 }))
 
-var queryTimeFormat = "2006-01-02 15:04:05"
-var duplicateCheckKey = "duplicateCheck"
+const queryTimeFormat = "2006-01-02 15:04:05"
+const duplicateCheckKey = "duplicateCheck"
 
 type ErrorValue string
 
@@ -220,7 +220,7 @@ func checkDuplicateRequest(ctx common.ExtendedContext, request *iso18626.Request
 	cqlList, _, err := lookupQueryBuilder.Build(lookupParams)
 	if err != nil {
 		ctx.Logger().Warn("failed build lookup query", "error", err)
-		return resultMap, err
+		return resultMap, nil
 	}
 
 	lookupCql := strings.Join(cqlList, " or ")

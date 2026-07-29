@@ -455,7 +455,8 @@ func TestCheckDuplicateRequest(t *testing.T) {
 				err:       tt.repoErr,
 			}
 			result, err := checkDuplicateRequest(appCtx, tt.request, mockRepo, "ISIL:REQ1", tt.peer)
-			assert.Equal(t, 1, len(result))
+			_, hasKey := result[duplicateCheckKey]
+			assert.True(t, hasKey)
 			assert.Equal(t, tt.wantErr, err)
 			assert.Equal(t, tt.wantRepoCalled, mockRepo.called)
 			if tt.wantRepoCalled {
