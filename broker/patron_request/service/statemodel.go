@@ -266,7 +266,7 @@ func GetStateModelBatchActionDefaults() []proapi.BatchActionDefault {
 }
 
 func GetStateModelTemplateDefaults() []proapi.CreateTemplate {
-	// Return a defensive deep copy so callers can't mutate embedded defaults.
+	// Return a deep copy so callers can't mutate embedded defaults.
 	data, err := json.Marshal(stateModelsConfig.TemplateDefaults)
 	if err != nil {
 		return slices.Clone(stateModelsConfig.TemplateDefaults)
