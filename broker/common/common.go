@@ -3,6 +3,7 @@ package common
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"reflect"
 	"strings"
 )
@@ -132,4 +133,14 @@ func SplitAgencySymbol(symbol string) (string, string) {
 		return "", symbol
 	}
 	return symbolParts[0], symbolParts[1]
+}
+
+func ToInt32(i int) int32 {
+	if i > math.MaxInt32 {
+		return math.MaxInt32
+	} else if i < math.MinInt32 {
+		return math.MinInt32
+	} else {
+		return int32(i)
+	}
 }

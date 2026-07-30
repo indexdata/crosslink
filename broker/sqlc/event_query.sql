@@ -114,6 +114,39 @@ DELETE FROM event
 WHERE event_name IN ('invoke-batch-action', 'invoke-background-action')
   AND event_data -> 'batchActionData' ->> 'taskId' = sqlc.arg(task_id)::text;
 
+-- name: DeleteOldBatchActionRunEvents :exec
+    WITH retained_runs AS (
+        SELECT id
+        FROM event
+        WHERE event_name = 'invoke-batch-action'
+          AND event_status IN ('SUCCESS', 'ERROR', 'PROBLEM')
+          AND id <> sqlc.arg(current_event_id)::text
+          AND event_data -> 'batchActionData' ->> 'taskId' = sqlc.arg(task_id)::text
+        ORDER BY timestamp DESC, id DESC
+        LIMIT sqlc.arg(retention)::int
+    ),
+    old_runs AS (
+        SELECT id
+        FROM event
+        WHERE event_name = 'invoke-batch-action'
+          AND event_status IN ('SUCCESS', 'ERROR', 'PROBLEM')
+          AND id <> sqlc.arg(current_event_id)::text
+          AND event_data -> 'batchActionData' ->> 'taskId' = sqlc.arg(task_id)::text
+          AND id NOT IN (SELECT id FROM retained_runs)
+    ),
+    cleared_parent_refs AS (
+        UPDATE event
+        SET parent_id = NULL
+        WHERE parent_id IN (SELECT id FROM event
+            WHERE patron_request_id = sqlc.arg(patron_request_id)::text AND
+                (id IN (SELECT id FROM old_runs) OR
+            parent_id IN (SELECT id FROM old_runs)))
+    )
+    DELETE FROM event
+    WHERE patron_request_id = sqlc.arg(patron_request_id)::text AND
+        (id IN (SELECT id FROM old_runs) OR
+          parent_id IN (SELECT id FROM old_runs));
+
 -- name: UpdateEventLifecycle :one
 UPDATE event SET last_signal = $3, event_status = $2
 WHERE id = $1

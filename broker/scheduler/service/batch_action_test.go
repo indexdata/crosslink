@@ -8,6 +8,7 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
+	sched_db "github.com/indexdata/crosslink/broker/scheduler/db"
 	schedoapi "github.com/indexdata/crosslink/broker/scheduler/oapi"
 	"github.com/stretchr/testify/assert"
 )
@@ -37,6 +38,23 @@ type mockBatchActionEventBus struct {
 	createTaskCalls   []createTaskCall
 	createTaskErr     error
 	createTaskErrByID map[string]error
+}
+
+type mockBatchActionCleanupRepo struct {
+	sched_db.PgSchedRepo
+	called            bool
+	gotCurrentEventId string
+	gotTaskID         string
+	gotRetention      int32
+	err               error
+}
+
+func (m *mockBatchActionCleanupRepo) DeleteOldBatchActionRunEvents(_ common.ExtendedContext, currentEventId string, taskID string, retention int32) error {
+	m.called = true
+	m.gotCurrentEventId = currentEventId
+	m.gotTaskID = taskID
+	m.gotRetention = retention
+	return m.err
 }
 
 func (m *mockBatchActionEventBus) ProcessTask(
@@ -99,7 +117,7 @@ func TestNewBatchActionService_WiresDependencies(t *testing.T) {
 	eventBus := &mockBatchActionEventBus{}
 	emailSender := EmailSenderServiceWithClient(nil, nil, nil, nil)
 
-	svc := NewBatchActionService(eventBus, &mockEmailPrRepo{}, emailSender)
+	svc := NewBatchActionService(eventBus, &mockEmailPrRepo{}, &mockBatchActionCleanupRepo{}, emailSender)
 
 	assert.NotNil(t, svc)
 	assert.Same(t, eventBus, svc.eventBus)
@@ -109,7 +127,7 @@ func TestNewBatchActionService_WiresDependencies(t *testing.T) {
 func TestBatchAction_CallsProcessTaskWithSignalConsumers(t *testing.T) {
 	eventBus := &mockBatchActionEventBus{}
 	emailSender := EmailSenderServiceWithClient(nil, nil, nil, nil)
-	svc := NewBatchActionService(eventBus, &mockEmailPrRepo{}, emailSender)
+	svc := NewBatchActionService(eventBus, &mockEmailPrRepo{}, &mockBatchActionCleanupRepo{}, emailSender)
 
 	event := events.Event{}
 
@@ -129,7 +147,7 @@ func TestBatchAction_ProcessTaskErrorIgnored(t *testing.T) {
 		processErr: errors.New("event bus unavailable"),
 	}
 	emailSender := EmailSenderServiceWithClient(nil, nil, nil, nil)
-	svc := NewBatchActionService(eventBus, &mockEmailPrRepo{}, emailSender)
+	svc := NewBatchActionService(eventBus, &mockEmailPrRepo{}, &mockBatchActionCleanupRepo{}, emailSender)
 
 	assert.NotPanics(t, func() {
 		svc.BatchAction(testCtx, events.Event{})
@@ -138,8 +156,56 @@ func TestBatchAction_ProcessTaskErrorIgnored(t *testing.T) {
 	assert.True(t, eventBus.processCalled)
 }
 
+func TestBatchAction_CleansOldRunsBeforeDispatch(t *testing.T) {
+	repo := &mockEmailPrRepo{}
+	eventBus := &mockBatchActionEventBus{}
+	cleanupRepo := &mockBatchActionCleanupRepo{}
+	svc := NewBatchActionService(eventBus, repo, cleanupRepo, nil)
+
+	status, result := svc.batchAction(testCtx, requestAgingEvent("cql.allRecords=1", map[string]any{"interval": "24h"}))
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.NotNil(t, result)
+	assert.True(t, cleanupRepo.called)
+	assert.Equal(t, "batch-event-1", cleanupRepo.gotCurrentEventId)
+	assert.Equal(t, "task-1", cleanupRepo.gotTaskID)
+	assert.Equal(t, int32(5), cleanupRepo.gotRetention)
+	assert.True(t, repo.listCalled)
+}
+
+func TestBatchAction_CleansOldRunsBeforeDispatch_WhenRetentionIsZero(t *testing.T) {
+	repo := &mockEmailPrRepo{}
+	eventBus := &mockBatchActionEventBus{}
+	cleanupRepo := &mockBatchActionCleanupRepo{}
+	svc := NewBatchActionService(eventBus, repo, cleanupRepo, nil)
+	prevValue := BATCH_ACTION_RUN_RETENTION
+	BATCH_ACTION_RUN_RETENTION = 0
+
+	status, result := svc.batchAction(testCtx, requestAgingEvent("cql.allRecords=1", map[string]any{"interval": "24h"}))
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.NotNil(t, result)
+	assert.False(t, cleanupRepo.called)
+	assert.True(t, repo.listCalled)
+	BATCH_ACTION_RUN_RETENTION = prevValue
+}
+
+func TestBatchAction_CleanupErrorDoesNotBlockDispatch(t *testing.T) {
+	repo := &mockEmailPrRepo{}
+	eventBus := &mockBatchActionEventBus{}
+	cleanupRepo := &mockBatchActionCleanupRepo{err: errors.New("delete failed")}
+	svc := NewBatchActionService(eventBus, repo, cleanupRepo, nil)
+
+	status, result := svc.batchAction(testCtx, requestAgingEvent("cql.allRecords=1", map[string]any{"interval": "24h"}))
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.NotNil(t, result)
+	assert.True(t, cleanupRepo.called)
+	assert.True(t, repo.listCalled)
+}
+
 func TestBatchAction_NilBatchActionDataReturnsError(t *testing.T) {
-	svc := NewBatchActionService(nil, &mockEmailPrRepo{}, nil)
+	svc := NewBatchActionService(nil, &mockEmailPrRepo{}, &mockBatchActionCleanupRepo{}, nil)
 
 	status, result := svc.batchAction(testCtx, events.Event{})
 
@@ -151,7 +217,7 @@ func TestBatchAction_NilBatchActionDataReturnsError(t *testing.T) {
 }
 
 func TestBatchAction_UnknownActionReturnsError(t *testing.T) {
-	svc := NewBatchActionService(nil, &mockEmailPrRepo{}, nil)
+	svc := NewBatchActionService(nil, &mockEmailPrRepo{}, &mockBatchActionCleanupRepo{}, nil)
 
 	event := batchActionEvent("unknown-action")
 
@@ -166,7 +232,7 @@ func TestBatchAction_UnknownActionReturnsError(t *testing.T) {
 
 func TestBatchAction_EmailPullslipsDispatchesToEmailSender(t *testing.T) {
 	emailSender := EmailSenderServiceWithClient(nil, nil, &mockEmailService{ready: false}, nil)
-	svc := NewBatchActionService(nil, &mockEmailPrRepo{}, emailSender)
+	svc := NewBatchActionService(nil, &mockEmailPrRepo{}, &mockBatchActionCleanupRepo{}, emailSender)
 
 	event := batchActionEvent(string(schedoapi.EmailPullslips))
 
@@ -181,7 +247,7 @@ func TestBatchAction_EmailPullslipsDispatchesToEmailSender(t *testing.T) {
 
 func TestBatchAction_RequestAgingDispatches(t *testing.T) {
 	repo := &mockEmailPrRepo{}
-	svc := NewBatchActionService(&mockBatchActionEventBus{}, repo, nil)
+	svc := NewBatchActionService(&mockBatchActionEventBus{}, repo, &mockBatchActionCleanupRepo{}, nil)
 
 	status, result := svc.batchAction(testCtx, requestAgingEvent("cql.allRecords=1", map[string]any{"interval": "24h"}))
 
@@ -193,7 +259,7 @@ func TestBatchAction_RequestAgingDispatches(t *testing.T) {
 
 func TestBatchAction_AddsOwnerRestrictionBeforeDispatch(t *testing.T) {
 	repo := &mockEmailPrRepo{}
-	svc := NewBatchActionService(&mockBatchActionEventBus{}, repo, nil)
+	svc := NewBatchActionService(&mockBatchActionEventBus{}, repo, &mockBatchActionCleanupRepo{}, nil)
 	event := requestAgingEvent("state = REQ", map[string]any{"interval": "24h"})
 
 	status, _ := svc.batchAction(testCtx, event)
@@ -210,7 +276,7 @@ func TestBatchAction_AddsOwnerRestrictionBeforeDispatch(t *testing.T) {
 
 func TestBatchAction_MissingOwnerDispatchesWithoutRestriction(t *testing.T) {
 	repo := &mockEmailPrRepo{}
-	svc := NewBatchActionService(&mockBatchActionEventBus{}, repo, nil)
+	svc := NewBatchActionService(&mockBatchActionEventBus{}, repo, &mockBatchActionCleanupRepo{}, nil)
 	event := requestAgingEvent("state = REQ", map[string]any{"interval": "24h"})
 	event.EventData.BatchActionData.Owner = ""
 
@@ -290,7 +356,7 @@ func TestRequestAging_ValidationErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &mockEmailPrRepo{}
 			eventBus := &mockBatchActionEventBus{}
-			svc := NewBatchActionService(eventBus, repo, nil)
+			svc := NewBatchActionService(eventBus, repo, &mockBatchActionCleanupRepo{}, nil)
 
 			status, result := svc.RequestAging(testCtx, tt.event)
 
@@ -312,7 +378,7 @@ func TestRequestAging_ValidationErrors(t *testing.T) {
 func TestRequestAging_NoPatronRequestsReturnsSuccess(t *testing.T) {
 	repo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
 	eventBus := &mockBatchActionEventBus{}
-	svc := NewBatchActionService(eventBus, repo, nil)
+	svc := NewBatchActionService(eventBus, repo, &mockBatchActionCleanupRepo{}, nil)
 
 	status, result := svc.RequestAging(testCtx, requestAgingEvent("cql.allRecords=1", map[string]any{"interval": "24h"}))
 
@@ -329,7 +395,7 @@ func TestRequestAging_CreatesBackgroundTasksForLending(t *testing.T) {
 		{ID: "lending-2", Side: prservice.SideLending, State: prservice.LenderStateWillSupply},
 	}}
 	eventBus := &mockBatchActionEventBus{}
-	svc := NewBatchActionService(eventBus, repo, nil)
+	svc := NewBatchActionService(eventBus, repo, &mockBatchActionCleanupRepo{}, nil)
 
 	status, result := svc.RequestAging(testCtx, requestAgingEvent("cql.allRecords=1", map[string]any{"interval": "24h", "note": "Closing stale request", "reasonUnfilled": "Expired"}))
 
@@ -354,7 +420,7 @@ func TestRequestAging_FailsIfNoClosingActionForState(t *testing.T) {
 		{ID: "lending-2", Side: prservice.SideLending, State: prservice.LenderStateWillSupply},
 	}}
 	eventBus := &mockBatchActionEventBus{}
-	svc := NewBatchActionService(eventBus, repo, nil)
+	svc := NewBatchActionService(eventBus, repo, &mockBatchActionCleanupRepo{}, nil)
 
 	status, result := svc.RequestAging(testCtx, requestAgingEvent("cql.allRecords=1", map[string]any{"interval": "24h", "note": "Closing stale request", "reasonUnfilled": "Expired"}))
 
@@ -371,7 +437,7 @@ func TestRequestAging_CreateTaskErrorRecordsCustomDataAndContinues(t *testing.T)
 		{ID: "ok-1", Side: prservice.SideLending, State: prservice.LenderStateWillSupply},
 	}}
 	eventBus := &mockBatchActionEventBus{createTaskErrByID: map[string]error{"failed-1": errors.New("create failed")}}
-	svc := NewBatchActionService(eventBus, repo, nil)
+	svc := NewBatchActionService(eventBus, repo, &mockBatchActionCleanupRepo{}, nil)
 
 	status, result := svc.RequestAging(testCtx, requestAgingEvent("cql.allRecords=1", map[string]any{"interval": "24h"}))
 
