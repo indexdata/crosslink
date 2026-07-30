@@ -136,6 +136,10 @@ func (a *PatronRequestApiHandler) GetStateModelBatchActions(w http.ResponseWrite
 	api.WriteJsonResponse(w, prservice.GetStateModelBatchActionDefaults())
 }
 
+func (a *PatronRequestApiHandler) GetStateModelTemplates(w http.ResponseWriter, r *http.Request, params proapi.GetStateModelTemplatesParams) {
+	api.WriteJsonResponse(w, prservice.GetStateModelTemplateDefaults())
+}
+
 func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *http.Request, params proapi.GetPatronRequestsParams) {
 	logParams := map[string]string{"method": "GetPatronRequests"}
 	if params.Side != nil {
