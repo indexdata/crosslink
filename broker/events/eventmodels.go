@@ -165,7 +165,7 @@ const MUST_LOCATE = "mustLocate"
 type DuplicateCheck struct {
 	Enabled              bool                  `json:"enabled"`
 	LookupParams         *catalog.LookupParams `json:"lookupParams"`
-	WindowHours          *int                  `json:"windowHours"`
+	WindowHours          *int32                `json:"windowHours"`
 	CutoffTime           *string               `json:"cutoffTime"`
 	Duplicate            bool                  `json:"duplicate"`
 	MatchedTransactionId *string               `json:"matchedTransactionId"`
