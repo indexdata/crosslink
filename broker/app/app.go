@@ -181,6 +181,7 @@ func Init(ctx context.Context) (Context, error) {
 	illRepo := ill_db.CreateIllRepo(pool)
 	prRepo := pr_db.CreatePrRepo(pool, DB_EXPLAIN_ANALYZE)
 	psRepo := ps_db.CreatePsRepo(pool)
+	schedRepo := sched_db.CreateSchedRepo(pool)
 
 	var emailSenderService *sched_service.EmailSenderService
 	emailSenderService, err = sched_service.NewEmailSenderService(prRepo, illRepo)
@@ -206,7 +207,7 @@ func Init(ctx context.Context) (Context, error) {
 	sseBroker := api.NewSseBroker(appCtx, tenantResolver)
 	psApiHandler := psapi.NewPsApiHandler(psRepo, prRepo, tenantResolver)
 
-	batchActionService := sched_service.NewBatchActionService(eventBus, prRepo, emailSenderService)
+	batchActionService := sched_service.NewBatchActionService(eventBus, prRepo, schedRepo, emailSenderService)
 
 	if err != nil {
 		appCtx.Logger().Warn("email service not available, email sending events will fail", "error", err)
@@ -218,9 +219,8 @@ func Init(ctx context.Context) (Context, error) {
 		return Context{}, err
 	}
 
-	schedRepoRepo := sched_db.CreateSchedRepo(pool)
-	schedApiHandler := schedapi.NewSchedulerApiHandler(API_PAGE_SIZE, schedRepoRepo, eventRepo, tenantResolver)
-	if err = StartScheduler(ctx, schedRepoRepo, eventBus); err != nil {
+	schedApiHandler := schedapi.NewSchedulerApiHandler(API_PAGE_SIZE, schedRepo, eventRepo, tenantResolver)
+	if err = StartScheduler(ctx, schedRepo, eventBus); err != nil {
 		return Context{}, err
 	}
 

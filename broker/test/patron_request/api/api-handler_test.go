@@ -261,17 +261,11 @@ func TestCrud(t *testing.T) {
 	// GET by id with symbol and side
 	thisPrPath := basePath + "/" + *newPr.Id
 
-	assert.True(t, test.WaitForPredicateToBeTrue(func() bool {
-		respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
-		err = json.Unmarshal(respBytes, &foundPr)
-		if err != nil {
-			return true
-		}
-		return foundPr.LastAction != nil && *foundPr.LastAction == "send-notification"
-	}), "timed out waiting for patron request to reach send-notification action")
+	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	if assert.NotNil(t, foundPr.LastAction) {
-		assert.Equal(t, "send-notification", *foundPr.LastAction)
+		assert.Equal(t, "send-request", *foundPr.LastAction)
 	}
 	assert.Equal(t, *newPr.Id, foundPr.Id)
 	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {

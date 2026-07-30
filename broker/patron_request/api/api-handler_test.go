@@ -1015,6 +1015,31 @@ func TestGetStateModelBatchActions(t *testing.T) {
 	}
 }
 
+func TestGetStateModelTemplates(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	handler.GetStateModelTemplates(rr, req, proapi.GetStateModelTemplatesParams{})
+	assert.Equal(t, http.StatusOK, rr.Code)
+	var templates []proapi.CreateTemplate
+	err := json.Unmarshal(rr.Body.Bytes(), &templates)
+	assert.NoError(t, err)
+	assert.Len(t, templates, 5)
+	labels := make([]string, 0, len(templates))
+	for _, template := range templates {
+		assert.NotEmpty(t, template.Title)
+		assert.NotEmpty(t, template.Labels)
+		labels = append(labels, template.Labels...)
+	}
+	assert.ElementsMatch(t, []string{
+		"received-notification",
+		"unfilled-notification",
+		"cancelled-notification",
+		"new-supply-request-notification",
+		"pullslip-email",
+	}, labels)
+}
+
 type PrRepoError struct {
 	mock.Mock
 	pr_db.PgPrRepo

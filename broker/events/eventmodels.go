@@ -1,6 +1,7 @@
 package events
 
 import (
+	"github.com/indexdata/crosslink/broker/catalog"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/iso18626"
@@ -160,3 +161,12 @@ func NewProblemResult(kind string, details string) (EventStatus, *EventResult) {
 }
 
 const MUST_LOCATE = "mustLocate"
+
+type DuplicateCheck struct {
+	Enabled              bool                  `json:"enabled"`
+	LookupParams         *catalog.LookupParams `json:"lookupParams"`
+	WindowHours          *int                  `json:"windowHours"`
+	CutoffTime           *string               `json:"cutoffTime"`
+	Duplicate            bool                  `json:"duplicate"`
+	MatchedTransactionId *string               `json:"matchedTransactionId"`
+}

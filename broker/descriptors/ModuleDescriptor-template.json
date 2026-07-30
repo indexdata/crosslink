@@ -187,6 +187,15 @@
           ]
         },
         {
+          "methods" : [
+            "GET"
+          ],
+          "pathPattern": "/broker/state_model/templates",
+          "permissionsRequired" : [
+            "broker.state_model.templates.get"
+          ]
+        },
+        {
           "methods": [
             "GET"
           ],
@@ -712,6 +721,12 @@
       "visible": true
     },
     {
+      "description": "Read state model template defaults",
+      "displayName": "Broker - state model template defaults: read",
+      "permissionName": "broker.state_model.templates.get",
+      "visible": true
+    },
+    {
       "description": "All broker permissions (read and write)",
       "displayName": "Broker - all permissions",
       "permissionName": "broker.all",
@@ -737,6 +752,7 @@
         "broker.state_model.item.get",
         "broker.state_model.capabilities.get",
         "broker.state_model.batch_actions.get",
+        "broker.state_model.templates.get",
         "broker.patron_requests.item.items.get",
         "broker.patron_requests.item.notifications.get",
         "broker.patron_requests.item.notifications.post",

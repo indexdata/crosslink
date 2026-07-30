@@ -156,7 +156,13 @@ func (ms *PatronRequestMessageSender) sendBorrowingRequest(ctx common.ExtendedCo
 	var illMessage = iso18626.NewISO18626Message()
 	illMessage.Request = &illRequest
 	w := NewResponseCaptureWriter()
-	ms.iso18626Handler.HandleRequest(ctx, illMessage, w)
+	resultMap := ms.iso18626Handler.HandleRequest(ctx, illMessage, w)
+	if len(resultMap) > 0 {
+		result.CustomData = make(map[string]any, len(resultMap))
+		for key, value := range resultMap {
+			result.CustomData[key] = value
+		}
+	}
 	result.OutgoingMessage = illMessage
 	result.IncomingMessage = w.IllMessage
 	if w.StatusCode != http.StatusOK || w.IllMessage == nil || w.IllMessage.RequestConfirmation == nil ||

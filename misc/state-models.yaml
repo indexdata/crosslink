@@ -206,13 +206,6 @@ stateModels:
             desc: "Receive and accept item in local ILS (via NCIP AcceptItem if enabled); send ISO18626 Received"
             transitions:
               success: RECEIVED
-          - name: send-notification
-            desc: Send email notification when item is shipped
-            trigger: auto
-            params:
-              sendTo:
-                - patron
-              templateLabel: shipped-notification
 
       - name: RECEIVED
         display: Received
@@ -224,6 +217,13 @@ stateModels:
             desc: Check out item to patron (NCIP CheckOutItem)
             transitions:
               success: CHECKED_OUT
+          - name: send-notification
+            desc: Send email notification when the item is received
+            trigger: auto
+            params:
+              sendTo:
+                - patron
+              templateLabel: received-notification
 
       - name: CHECKED_OUT
         display: Checked Out
@@ -279,6 +279,14 @@ stateModels:
         desc: Cancel response is received
         side: REQUESTER
         terminal: true
+        actions:
+          - name: send-notification
+            desc: Send email notification when the request is cancelled
+            trigger: auto
+            params:
+              sendTo:
+                - patron
+              templateLabel: cancelled-notification
 
       - name: UNFILLED
         display: Unfilled
@@ -327,6 +335,13 @@ stateModels:
         initial: true
         primaryAction: validate
         actions:
+          - name: send-notification
+            desc: Send staff email notification when a new supply request is received
+            trigger: auto
+            params:
+              sendTo:
+                - staff
+              templateLabel: new-supply-request-notification
           - name: validate
             desc: "Validate the request, e.g institutional patron via NCIP LookupUser, if enabled"
             transitions:
@@ -357,13 +372,6 @@ stateModels:
             desc: Ask requester to retry with new ISO18626 metadata
             transitions:
               success: COMPLETED_WITH_RETRY
-          - name: send-notification
-            desc: Send email notification when item is validated
-            trigger: auto
-            params:
-              sendTo:
-                - patron
-              templateLabel: validated-notification
         events:
           - name: cancel-request
             desc: Requester sent ISO18626 Cancel
@@ -532,10 +540,8 @@ batchActionDefaults:
     actionParams:
       to:
         - staff@example.com
-      subject: Scheduled pullslips
-      body: "<p>This is an automated pull slip summary.</p><p><strong>Query:</strong> {{batchQuery}}<br><strong>Matching requests:</strong> {{actualCount}} (of {{fullCount}} total)</p><p>Please process the attached pull slips at your earliest convenience.</p>"
+      templateLabel: pullslip-email
       includePdf: true
-      isHtml: true
 
   - actionName: request-aging
     titleKey: request-aging-express
@@ -560,3 +566,59 @@ batchActionDefaults:
     schedule: "FREQ=DAILY;BYHOUR=5;BYMINUTE=0"
     actionParams:
       interval: 72h
+
+templateDefaults:
+  - title: Received item notification
+    labels:
+      - received-notification
+    subject: "Your requested item is ready"
+    contentType: text
+    audience: patron
+    purpose: email
+    body: |
+      Your requested item has been received and is ready for the next step.
+
+  - title: Unfilled request notification
+    labels:
+      - unfilled-notification
+    subject: "Your request could not be filled"
+    contentType: text
+    audience: patron
+    purpose: email
+    body: |
+      We were unable to fill your request.
+
+  - title: Cancelled request notification
+    labels:
+      - cancelled-notification
+    subject: "Your request has been cancelled"
+    contentType: text
+    audience: patron
+    purpose: email
+    body: |
+      Your request has been cancelled.
+
+  - title: New supply request notification
+    labels:
+      - new-supply-request-notification
+    subject: "New supply request received"
+    contentType: text
+    audience: staff
+    purpose: email
+    body: |
+      A new supply request has been received and is ready for processing.
+
+  - title: Scheduled pullslips email template
+    labels:
+      - pullslip-email
+    subject: "Scheduled pullslips"
+    contentType: html
+    audience: staff
+    purpose: email
+    body: |
+      <p>This is an automated pull slip summary.</p>
+      <p>
+        <strong>Query:</strong> {{batchQuery}}<br>
+        <strong>Matching requests:</strong> {{actualCount}} (of {{fullCount}} total)
+      </p>
+      <p>Please process the attached pull slips at your earliest convenience.</p>

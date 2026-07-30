@@ -277,7 +277,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 			if pass != matchPass {
 				continue
 			}
-			added, loopErr := s.addLocatedSupplier(ctx, illTrans.ID, ToInt32(i), &sup)
+			added, loopErr := s.addLocatedSupplier(ctx, illTrans.ID, common.ToInt32(i), &sup)
 			i++
 			if loopErr == nil {
 				locatedSuppliers = append(locatedSuppliers, added)
@@ -562,16 +562,6 @@ func getPeerRatio(peer ill_db.Peer) float32 {
 		return float32(peer.LoansCount) / float32(peer.BorrowsCount)
 	} else {
 		return math.MaxFloat32
-	}
-}
-
-func ToInt32(i int) int32 {
-	if i > math.MaxInt32 {
-		return math.MaxInt32
-	} else if i < math.MinInt32 {
-		return math.MinInt32
-	} else {
-		return int32(i)
 	}
 }
 

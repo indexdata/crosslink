@@ -11,23 +11,29 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
+	sched_db "github.com/indexdata/crosslink/broker/scheduler/db"
 	schedoapi "github.com/indexdata/crosslink/broker/scheduler/oapi"
+	"github.com/indexdata/go-utils/utils"
 )
 
 const BATCH_COMP = "batch_action"
 const TIME_FORMAT = "2006-01-02 15:04:05"
 
+var BATCH_ACTION_RUN_RETENTION = common.ToInt32(utils.Must(utils.GetEnvInt("BATCH_ACTION_RUN_RETENTION", 5)))
+
 type BatchActionService struct {
 	eventBus             events.EventBus
 	prRepo               pr_db.PrRepo
+	schedRepo            sched_db.SchedRepo
 	emailSenderService   *EmailSenderService
 	actionMappingService prservice.ActionMappingService
 }
 
-func NewBatchActionService(eventBus events.EventBus, prRepo pr_db.PrRepo, emailSenderService *EmailSenderService) *BatchActionService {
+func NewBatchActionService(eventBus events.EventBus, prRepo pr_db.PrRepo, schedRepo sched_db.SchedRepo, emailSenderService *EmailSenderService) *BatchActionService {
 	return &BatchActionService{
 		eventBus:             eventBus,
 		prRepo:               prRepo,
+		schedRepo:            schedRepo,
 		emailSenderService:   emailSenderService,
 		actionMappingService: prservice.ActionMappingService{SMService: &prservice.StateModelService{}},
 	}
@@ -70,7 +76,21 @@ func (s *BatchActionService) batchAction(ctx common.ExtendedContext, event event
 	batchActionData := *event.EventData.BatchActionData
 	batchActionData.Selector = restrictedSelector
 	event.EventData.BatchActionData = &batchActionData
+	s.cleanupOldRuns(ctx, event)
 	return action(ctx, event)
+}
+
+func (s *BatchActionService) cleanupOldRuns(ctx common.ExtendedContext, event events.Event) {
+	if BATCH_ACTION_RUN_RETENTION <= 0 {
+		return
+	}
+	taskID := event.EventData.BatchActionData.TaskId
+	if taskID == "" {
+		return
+	}
+	if err := s.schedRepo.DeleteOldBatchActionRunEvents(ctx, event.ID, taskID, BATCH_ACTION_RUN_RETENTION); err != nil {
+		ctx.Logger().Error("failed to cleanup old batch action runs", "taskId", taskID, "retention", BATCH_ACTION_RUN_RETENTION, "error", err)
+	}
 }
 
 func addBatchActionOwnerRestriction(selector string, owner string) (string, error) {
