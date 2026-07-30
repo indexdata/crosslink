@@ -133,9 +133,18 @@ WHERE event_name IN ('invoke-batch-action', 'invoke-background-action')
           AND id <> sqlc.arg(current_event_id)::text
           AND event_data -> 'batchActionData' ->> 'taskId' = sqlc.arg(task_id)::text
           AND id NOT IN (SELECT id FROM retained_runs)
+    ),
+    cleared_parent_refs AS (
+        UPDATE event
+        SET parent_id = NULL
+        WHERE parent_id IN (SELECT id FROM event
+            WHERE patron_request_id = sqlc.arg(patron_request_id)::text AND
+                (id IN (SELECT id FROM old_runs) OR
+            parent_id IN (SELECT id FROM old_runs)))
     )
     DELETE FROM event
-    WHERE patron_request_id = sqlc.arg(patron_request_id)::text AND (id IN (SELECT id FROM old_runs) OR
+    WHERE patron_request_id = sqlc.arg(patron_request_id)::text AND
+        (id IN (SELECT id FROM old_runs) OR
           parent_id IN (SELECT id FROM old_runs));
 
 -- name: UpdateEventLifecycle :one
