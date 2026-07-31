@@ -32,6 +32,12 @@ import (
 
 var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 
+func getPeerShim(peer ill_db.Peer) shim.Iso18626Shim {
+	noteFieldSeparator := common.IllConfigString(peer.CustomData, shim.NOTE_FIELD_SEP, func(c directory.IllConfig) *string { return c.NoteFieldSeparator })
+	useOfferedCosts := common.IllConfigBool(peer.CustomData, shim.OFFERED_COSTS, func(c directory.IllConfig) *bool { return c.UseOfferedCosts })
+	return shim.GetShimWithConfig(peer.Vendor, noteFieldSeparator, useOfferedCosts)
+}
+
 const HANDLER_COMP = "iso18626_handler"
 const ORIGINAL_INCOMING_MESSAGE = "originalIncomingMessage"
 
@@ -374,7 +380,7 @@ func handleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Mess
 		}
 		return resultMap
 	}
-	afterShim := shim.GetShim(peers[0].Vendor).ApplyToIncomingRequest(illMessage, &peers[0], nil)
+	afterShim := getPeerShim(peers[0]).ApplyToIncomingRequest(illMessage, &peers[0], nil)
 	var resmsg = createRequestResponse(request, iso18626.TypeMessageStatusOK, nil, "")
 	eventData := events.EventData{
 		CommonEventData: events.CommonEventData{
@@ -585,7 +591,7 @@ func applyRequesterShim(ctx common.ExtendedContext, repo ill_db.IllRepo, reqId s
 	if err != nil {
 		return err
 	}
-	afterShim := shim.GetShim(requester.Vendor).ApplyToIncomingRequest(illMessage, &requester, supplier)
+	afterShim := getPeerShim(requester).ApplyToIncomingRequest(illMessage, &requester, supplier)
 	eventData.IncomingMessage = afterShim
 	eventData.CustomData = map[string]any{
 		ORIGINAL_INCOMING_MESSAGE: illMessage,
@@ -734,7 +740,7 @@ func handleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso186
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
-	afterShim := shim.GetShim(supplierPeer.Vendor).ApplyToIncomingRequest(illMessage, &requester, &supplier)
+	afterShim := getPeerShim(supplierPeer).ApplyToIncomingRequest(illMessage, &requester, &supplier)
 	var resmsg = createSupplyingAgencyResponse(afterShim, iso18626.TypeMessageStatusOK, nil, "")
 	eventData := events.EventData{
 		CommonEventData: events.CommonEventData{

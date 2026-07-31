@@ -93,11 +93,17 @@ Configuration is provided via environment variables:
 | `BROKER_MODE`                | Default broker mode if not configured for a peer: `opaque` or `transparent`             | `opaque`                                  |
 | `BROKER_SYMBOL`              | Symbol for the broker when in the `opaque` mode                                         | `ISIL:BROKER`                             |
 | `REQ_AGENCY_INFO`            | Should `request/requestingAgencyInfo` be populated from Directory                       | `true`                                    |
+|                              | Deprecated: use requester `illConfig.includeRequestingAgencyInfo`.                      |                                           |
 | `SUPPLIER_INFO`              | Should `request/supplierInfo` be populated from Directory                               | `true`                                    |
+|                              | Deprecated: use supplier `illConfig.includeSupplierInfo`.                               |                                           |
 | `RETURN_INFO`                | Should `returnInfo` be populated from Directory for supplier `Loaned` message           | `true`                                    |
+|                              | Deprecated: use supplier `illConfig.includeReturnInfo`.                                 |                                           |
 | `VENDOR_NOTE`                | Should `note` field be prepended with `Vendor: {vendor}` text                           | `true`                                    |
+|                              | Deprecated: use requester `illConfig.includeVendorNote`.                                |                                           |
 | `OFFERED_COSTS`              | Should `deliveryCosts` be transferred to `offeredCosts` for ReShare vendor requesters   | `false`                                   |
+|                              | Deprecated: use requester `illConfig.useOfferedCosts`.                                  |                                           |
 | `NOTE_FIELD_SEP`             | Separator for fields (e.g. Vendor) prepended to the note                                | `, `                                      |
+|                              | Deprecated: use recipient `illConfig.noteFieldSeparator`.                               |                                           |
 | `CLIENT_DELAY`               | Delay duration for outgoing ISO18626 messages                                           | `0ms`                                     |
 | `SHUTDOWN_DELAY`             | Delay duration for graceful shutdown (in-flight connections)                            | `15s`                                     |
 | `MAX_MESSAGE_SIZE`           | Max accepted ISO18626 message size                                                      | `100KB`                                   |
@@ -119,6 +125,7 @@ Configuration is provided via environment variables:
 |                              | the `{tenant}` token is replaced by the `X-Okapi-Tenant` header value.                  |                                           |
 |                              | If pattern is exactly `directory` the symbol will be obtained by directory lookup.      |                                           |
 | `SUPPLIER_PATRON_PATTERN`    | Pattern used to create patron ID when receiving Request on supplier side                | `%v_user`                                 |
+|                              | Deprecated: use supplier `illConfig.supplierPatronPattern`.                             |                                           |
 | `LANGUAGE`                   | Language parameter used for ts_vector search in DB                                      | `english`                                 |
 | `SCHEDULER_RETRY_DELAY`      | Delay for rescheduling failed scheduled tasks and fallback poll interval in `waitUntil` | `5m`                                      |
 | `SMTP_HOST`                  | SMTP server host for sending emails, if not configured all email tasks will fail        | (empty value)                             |

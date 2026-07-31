@@ -277,6 +277,27 @@ components:
           description: Suppliers appended to the end of the rota when no regular supplier can fill the request.
           items:
             $ref: '#/components/schemas/Symbol'
+        includeRequestingAgencyInfo:
+          type: boolean
+          description: Whether outgoing requests include requestingAgencyInfo populated from the requester directory entry.
+        includeSupplierInfo:
+          type: boolean
+          description: Whether outgoing requests include supplierInfo populated from the supplier directory entry.
+        includeReturnInfo:
+          type: boolean
+          description: Whether Loaned messages include returnInfo populated from the supplier directory entry.
+        includeVendorNote:
+          type: boolean
+          description: Whether broker-generated supplying-agency messages include the supplier vendor in the note.
+        useOfferedCosts:
+          type: boolean
+          description: Whether deliveryCosts are transferred to offeredCosts for messages sent to this requester.
+        noteFieldSeparator:
+          type: string
+          description: Separator used between fields added to notes in messages sent to this entry.
+        supplierPatronPattern:
+          type: string
+          description: Format pattern used to create a patron ID for requests received by this supplier.
         duplicateCheckWindowHours:
           type: integer
           description: The number of hours to check for duplicate requests. If a request is submitted within this window, it will be considered a duplicate.
