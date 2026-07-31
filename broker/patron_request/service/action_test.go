@@ -2986,7 +2986,7 @@ func TestUpdateMetadataBorrowingRequestAddsDecisionDetails(t *testing.T) {
 		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
 	}
 
-	res := svc.updateMetadataBorrowingRequest(appCtx, pr, nil, illRequest)
+	res := svc.updateMetadataBorrowingRequest(appCtx, pr, illRequest)
 
 	assert.Equal(t, events.EventStatusSuccess, res.status)
 	if assert.NotNil(t, res.result) {
@@ -3078,7 +3078,7 @@ func TestUpdateMetadataBorrowingRequestNegativeCases(t *testing.T) {
 			illRepo := new(IllRepoMock)
 			svc := tt.setup(illRepo)
 
-			res := svc.updateMetadataBorrowingRequest(appCtx, pr, nil, iso18626.Request{})
+			res := svc.updateMetadataBorrowingRequest(appCtx, pr, iso18626.Request{})
 
 			assert.Equal(t, events.EventStatusError, res.status)
 			assert.Equal(t, pr, res.pr)

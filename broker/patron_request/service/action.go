@@ -379,7 +379,7 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 	case BorrowerActionValidate:
 		return a.validateBorrowingRequest(ctx, pr, lmsAdapter, illRequest)
 	case BorrowerActionUpdateMetadata:
-		return a.updateMetadataBorrowingRequest(ctx, pr, lmsAdapter, illRequest)
+		return a.updateMetadataBorrowingRequest(ctx, pr, illRequest)
 	case BorrowerActionSendRequest:
 		return a.sendBorrowingRequest(ctx, pr, illRequest)
 	case BorrowerActionReceive:
@@ -489,7 +489,7 @@ func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.Extende
 	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
 }
 
-func (a *PatronRequestActionService) updateMetadataBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
+func (a *PatronRequestActionService) updateMetadataBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, illRequest iso18626.Request) actionExecutionResult {
 	peers, _, peerErr := a.illRepo.GetCachedPeersBySymbols(ctx, []string{pr.RequesterSymbol.String}, a.directoryLookupAdapter)
 	if peerErr != nil {
 		status, result := logActionErrorAndReturnResult(ctx, "failed to get requester peer", peerErr)
@@ -514,6 +514,8 @@ func (a *PatronRequestActionService) updateMetadataBorrowingRequest(ctx common.E
 			decisionDetails = append(decisionDetails, *detail)
 		}
 	}
+
+	pr.IllRequest = illRequest
 
 	res := actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
 	if len(decisionDetails) > 0 || illRequest.BibliographicInfo.SupplierUniqueRecordId == "" {
