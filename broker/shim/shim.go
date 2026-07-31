@@ -8,7 +8,7 @@ import (
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 )
@@ -50,11 +50,11 @@ type Iso18626Shim interface {
 func GetShim(vendor string) Iso18626Shim {
 	var shim Iso18626Shim
 	switch vendor {
-	case string(directory.Alma):
+	case string(dirapi.Alma):
 		shim = new(Iso18626AlmaShim)
-	case string(directory.ILLiad):
+	case string(dirapi.ILLiad):
 		shim = new(Iso18626ILLiadShim)
-	case string(directory.ReShare):
+	case string(dirapi.ReShare):
 		shim = new(Iso18626ReShareShim)
 	default:
 		shim = new(Iso18626DefaultShim)

@@ -3,7 +3,7 @@ package catalog
 import (
 	"testing"
 
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -20,7 +20,7 @@ func TestNewQueryBuilderGen(t *testing.T) {
 	assert.Equal(t, "@attr 1=4 {term}", *gg.config.Title)
 
 	// Test with empty config (should use default PQF mappings)
-	qb, err = NewQueryBuilderGen(&directory.QueryConfig{})
+	qb, err = NewQueryBuilderGen(&dirapi.QueryConfig{})
 	assert.NoError(t, err)
 	assert.NotNil(t, qb)
 	gg = (qb).(*QueryBuilderGen)
@@ -30,8 +30,8 @@ func TestNewQueryBuilderGen(t *testing.T) {
 	assert.Equal(t, "@attr 1=4 {term}", *gg.config.Title)
 
 	// Test with CQL type and no mappings (should use default CQL mappings)
-	cqlType := directory.Cql
-	qb, err = NewQueryBuilderGen(&directory.QueryConfig{Type: &cqlType})
+	cqlType := dirapi.Cql
+	qb, err = NewQueryBuilderGen(&dirapi.QueryConfig{Type: &cqlType})
 	assert.NoError(t, err)
 	assert.NotNil(t, qb)
 	gg = (qb).(*QueryBuilderGen)
@@ -47,7 +47,7 @@ func TestNewQueryBuilderGen(t *testing.T) {
 
 	empty := ""
 	// Test with CQL type and one mapping
-	qb, err = NewQueryBuilderGen(&directory.QueryConfig{
+	qb, err = NewQueryBuilderGen(&dirapi.QueryConfig{
 		Type:       &cqlType,
 		Identifier: NewString("id == {term}"),
 		Title:      &empty,
@@ -69,8 +69,8 @@ func TestNewQueryBuilderGen(t *testing.T) {
 	assert.ErrorContains(t, err, "missing lookup parameters. Provide at least one of: identifier, isbn, issn")
 
 	// Test with unsupported type
-	unsupportedType := directory.QueryConfigType("unsupported")
-	qb, err = NewQueryBuilderGen(&directory.QueryConfig{Type: &unsupportedType})
+	unsupportedType := dirapi.QueryConfigType("unsupported")
+	qb, err = NewQueryBuilderGen(&dirapi.QueryConfig{Type: &unsupportedType})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported query builder type")
 	assert.Nil(t, qb)

@@ -1,0 +1,21 @@
+{
+  "id": "{{.id}}",
+  "name":"Institution with LmsConfig",
+  "type":"Institution",
+  "lmsConfig" : {
+    "address" : "https://do.not.taunt.happy.fun.ball",
+    "fromAgency" : "happyfunballdotcom",
+    "acceptItemEnabled":true,
+    "checkInItemEnabled":true,
+    "checkOutItemEnabled":true,
+    "itemLocation":"",
+    "lookupUserEnabled":true,
+    "requestItemBibIdCode":"SYSNUMBER",
+    "requestItemPickupLocationEnabled":true,
+    "requestItemRequestScopeType":"Item",
+    "requestItemRequestType":"Page",
+    "requesterPatronPattern":"INST-{requesterSymbol}",
+    "requesterPickupLocation":"Main Library",
+    "supplierPickupLocation":"ILL Office"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name":"Institution with Address",
+  "type":"Institution",
+  "addresses": [
+    {
+      "type": "Default",
+      "addressComponents": [
+        {"seq": 0, "type": "Thoroughfare", "value": "123 Main Street"},
+        {"seq": 1, "type": "Locality", "value": "Springfield"},
+        {"seq": 2, "type": "AdministrativeArea", "value": "IL"},
+        {"seq": 3, "type": "PostalCode", "value": "62701"},
+        {"seq": 4, "type": "CountryCode", "value": "US"}
+      ]
+    },
+    {
+      "type": "Shipping",
+      "addressComponents": [
+        {"seq": 0, "type": "Thoroughfare", "value": "456 Oak Avenue"},
+        {"seq": 1, "type": "Locality", "value": "Chicago"},
+        {"seq": 2, "type": "AdministrativeArea", "value": "IL"},
+        {"seq": 3, "type": "PostalCode", "value": "60601"},
+        {"seq": 4, "type": "CountryCode", "value": "US"}
+      ]
+    }
+  ]
+}

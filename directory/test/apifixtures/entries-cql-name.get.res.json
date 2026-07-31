@@ -1,0 +1,50 @@
+{
+  "items": [
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "An Institution",
+      "type": "Institution",
+      "contactName":"Bob",
+      "parent":"00000000-0000-0000-0000-000000000004",
+      "symbols": [
+        "<<UNORDERED>>",
+        {
+          "authority": "TEST",
+          "id": "60000000-0000-0000-0000-000000000001",
+          "symbol": "ANINST"
+        },
+        {
+          "authority": "TEST",
+          "id": "60000000-0000-0000-0000-000000000002",
+          "symbol": "ANINSTTOO"
+        }
+      ],
+      "endpoints": [
+        {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "name": "Primary",
+          "type": "ISO18626",
+          "address": "https://whatever.host.tld/path"
+        }
+      ],
+      "lmsConfig": {
+        "address":"https://also.not.real",
+        "fromAgency":"rivendell",
+        "fromAgencyAuthentication":"pack_extra_lembas",
+        "acceptItemEnabled": true
+      },
+      "closures": [
+        {
+          "entry":"00000000-0000-0000-0000-000000000002",
+          "id":"70000000-0000-0000-0000-000000000001",
+          "reason":"Winter break",
+          "startDate":"2024-01-01",
+          "endDate":"2024-01-15"
+        }
+      ]
+    }
+  ],
+  "about": {
+    "count": 1
+  }
+}

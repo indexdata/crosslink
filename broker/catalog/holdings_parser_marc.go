@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/marcxml"
 )
 
 type MarcHoldingsParser struct {
-	config directory.MarcHoldingsParserConfig
+	config dirapi.MarcHoldingsParserConfig
 }
 
-func NewMarcHoldingsParser(config directory.MarcHoldingsParserConfig) HoldingsParser {
+func NewMarcHoldingsParser(config dirapi.MarcHoldingsParserConfig) HoldingsParser {
 	if config.MainField == nil && config.LocationSubField == nil && config.ShelvingLocationSubField == nil && config.CallNumberSubField == nil && config.ItemIdSubField == nil && config.RestrictedSubField == nil {
 		config.MainField = NewString("852")
 		config.LocationSubField = NewString("b")

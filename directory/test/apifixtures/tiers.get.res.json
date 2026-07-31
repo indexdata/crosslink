@@ -1,0 +1,10 @@
+{
+  "items": [
+    "<<UNORDERED>>",
+    {"id":"30000000-0000-0000-0000-000000000001","consortium":"00000000-0000-0000-0000-000000000004","name":"Top Tier","level":"standard","type":"loan","cost":0.0},
+    {"id":"30000000-0000-0000-0000-000000000002","consortium":"00000000-0000-0000-0000-000000000004","name":"Middle Tier","level":"standard","type":"loan","cost":0.0}
+  ],
+  "about": {
+    "count": 2
+  }
+}

@@ -6,3 +6,5 @@ commit.txt
 coverage.out
 *_gen.go
 /.idea
+go.work
+go.work.sum

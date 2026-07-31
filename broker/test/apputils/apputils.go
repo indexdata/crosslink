@@ -10,7 +10,7 @@ import (
 	"time"
 
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/app"
@@ -96,10 +96,10 @@ func CreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string)
 }
 
 func CreatePeerWithMode(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string, brokerMode string) ill_db.Peer {
-	return CreatePeerWithModeAndVendor(t, illRepo, symbol, url, brokerMode, directory.ReShare, directory.Entry{}, symbol)
+	return CreatePeerWithModeAndVendor(t, illRepo, symbol, url, brokerMode, dirapi.ReShare, dirapi.Entry{}, symbol)
 }
 
-func CreatePeerWithModeAndVendor(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string, brokerMode string, vendor directory.EntryVendor, customData directory.Entry, name string) ill_db.Peer {
+func CreatePeerWithModeAndVendor(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string, brokerMode string, vendor dirapi.EntryVendor, customData dirapi.Entry, name string) ill_db.Peer {
 	peer, err := illRepo.SavePeer(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SavePeerParams{
 		ID:            uuid.New().String(),
 		Name:          name,

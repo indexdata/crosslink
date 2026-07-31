@@ -5,6 +5,7 @@ CrossLink project provides software services for the implementation of Inter-Lib
 See individual components docs for details:
 
 * [broker](broker/README.md): ISO18626 transaction broker
+* [directory](directory/README.md): CrossLink directory service
 * [illmock](illmock/README.md): ISO18626 and SRU mocking service
 
 # Project goals and architecture

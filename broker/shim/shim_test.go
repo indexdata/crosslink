@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 
 	"github.com/indexdata/go-utils/utils"
 
@@ -39,7 +39,7 @@ func TestIso18626AlmaShimLoanCompleted(t *testing.T) {
 			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
 		},
 	})
-	shim := GetShim(string(directory.Alma))
+	shim := GetShim(string(dirapi.Alma))
 	bytes, err := shim.ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err, "failed to apply outgoing")
 	var resmsg iso18626.ISO18626Message
@@ -65,7 +65,7 @@ func TestIso18626AlmaShimCopyCompleted(t *testing.T) {
 			ItemId: "http://example.com/item/12345678",
 		},
 	})
-	shim := GetShim(string(directory.Alma))
+	shim := GetShim(string(dirapi.Alma))
 	bytes, err := shim.ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err, "failed to apply outgoing")
 	var resmsg iso18626.ISO18626Message
@@ -100,7 +100,7 @@ func TestIso18626AlmaShimCopyCompletedEmail(t *testing.T) {
 			},
 		},
 	})
-	shim := GetShim(string(directory.Alma))
+	shim := GetShim(string(dirapi.Alma))
 	bytes, err := shim.ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err, "failed to apply outgoing")
 	var resmsg iso18626.ISO18626Message
@@ -141,7 +141,7 @@ func TestIso18626AlmaShimLoanLoaned(t *testing.T) {
 			},
 		},
 	})
-	shim := GetShim(string(directory.Alma))
+	shim := GetShim(string(dirapi.Alma))
 	bytes, err := shim.ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err, "failed to apply outgoing")
 	var resmsg iso18626.ISO18626Message
@@ -196,7 +196,7 @@ func TestIso18626AlmaShimIncoming(t *testing.T) {
 	assert.Nil(t, msg.SupplyingAgencyMessage.MessageInfo.OfferedCosts, "OfferedCosts should be nil")
 
 	var resmsg iso18626.ISO18626Message
-	shim := GetShim(string(directory.Alma))
+	shim := GetShim(string(dirapi.Alma))
 	err = shim.ApplyToIncomingResponse(bytes, &resmsg)
 	if err != nil {
 		t.Errorf("failed to apply incoming")
@@ -219,7 +219,7 @@ func TestIso18626AlmaShimWillSupply(t *testing.T) {
 			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
 		},
 	})
-	shim := GetShim(string(directory.Alma))
+	shim := GetShim(string(dirapi.Alma))
 	bytes, err := shim.ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err, "failed to apply outgoing")
 	var resmsg iso18626.ISO18626Message
@@ -296,7 +296,7 @@ func TestIso18626AlmaShimExpectToSupply(t *testing.T) {
 			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
 		},
 	})
-	shim := GetShim(string(directory.Alma))
+	shim := GetShim(string(dirapi.Alma))
 	bytes, err := shim.ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err, "failed to apply outgoing")
 	var resmsg iso18626.ISO18626Message
@@ -315,7 +315,7 @@ func TestIso18626AlmaShimNotificationRequestReceived(t *testing.T) {
 			ReasonForMessage: iso18626.TypeReasonForMessageNotification,
 		},
 	})
-	shim := GetShim(string(directory.Alma))
+	shim := GetShim(string(dirapi.Alma))
 	bytes, err := shim.ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err, "failed to apply outgoing")
 	var resmsg iso18626.ISO18626Message
@@ -390,7 +390,7 @@ func TestIso18626ILLiadShimRequest(t *testing.T) {
 		},
 	)
 
-	msgBytes, err := GetShim(string(directory.ILLiad)).ApplyToOutgoingRequest(msg)
+	msgBytes, err := GetShim(string(dirapi.ILLiad)).ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err)
 
 	var resmsg iso18626.ISO18626Message
@@ -419,7 +419,7 @@ func TestIso18626ILLiadShimSupplyingAgencyMessage(t *testing.T) {
 		},
 	})
 
-	msgBytes, err := GetShim(string(directory.ILLiad)).ApplyToOutgoingRequest(msg)
+	msgBytes, err := GetShim(string(dirapi.ILLiad)).ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err)
 
 	var resmsg iso18626.ISO18626Message
@@ -438,7 +438,7 @@ func TestSetItemIdFromItemsNoteILLiad(t *testing.T) {
 		},
 	})
 
-	msgBytes, err := GetShim(string(directory.ILLiad)).ApplyToOutgoingRequest(msg)
+	msgBytes, err := GetShim(string(dirapi.ILLiad)).ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err)
 
 	var resmsg iso18626.ISO18626Message
@@ -455,7 +455,7 @@ func TestIso18626ILLiadShimRequestingAgencyMessage(t *testing.T) {
 		Note:   "#seq:2#" + RESHARE_LOAN_CONDITION_AGREE + "Accept",
 	})
 
-	msgBytes, err := GetShim(string(directory.ILLiad)).ApplyToOutgoingRequest(msg)
+	msgBytes, err := GetShim(string(dirapi.ILLiad)).ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err)
 
 	var resmsg iso18626.ISO18626Message
@@ -479,7 +479,7 @@ func TestIso18626ILLiadShimIncomingRequestingMessageLoanConditionReject(t *testi
 		Note:   "--ReJeCT;",
 	})
 
-	resmsg := GetShim(string(directory.ILLiad)).ApplyToIncomingRequest(msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
+	resmsg := GetShim(string(dirapi.ILLiad)).ApplyToIncomingRequest(msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
 
 	assert.Equal(t, RESHARE_LOAN_CONDITION_REJECT+"--ReJeCT;", resmsg.RequestingAgencyMessage.Note)
 	assert.Equal(t, iso18626.TypeActionCancel, resmsg.RequestingAgencyMessage.Action)
@@ -499,7 +499,7 @@ func TestIso18626ILLiadShimIncomingSupplyingAgencyMessageUnifiesItem(t *testing.
 		},
 	})
 
-	resmsg := GetShim(string(directory.ILLiad)).ApplyToIncomingRequest(msg, nil, nil)
+	resmsg := GetShim(string(dirapi.ILLiad)).ApplyToIncomingRequest(msg, nil, nil)
 
 	assert.Equal(t, "1|23\\,1|24\\", resmsg.SupplyingAgencyMessage.DeliveryInfo.ItemId)
 	assert.Equal(t, "send multiple items\n"+
@@ -588,7 +588,7 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 		BibliographicRecordIdentifier: "val",
 	}
 	msg.Request.BibliographicInfo.BibliographicRecordId = append(msg.Request.BibliographicInfo.BibliographicRecordId, lccn, badRecId)
-	shim := GetShim(string(directory.Alma))
+	shim := GetShim(string(dirapi.Alma))
 	bytes, err := shim.ApplyToOutgoingRequest(msg)
 	if err != nil {
 		t.Errorf("failed to apply outgoing")
@@ -622,7 +622,7 @@ func TestIso18626AlmaShimStripReqSeqMsg(t *testing.T) {
 		Action: iso18626.TypeActionNotification,
 		Note:   "#seq:2#original note",
 	})
-	msgBytes, err := GetShim(string(directory.Alma)).ApplyToOutgoingRequest(msg)
+	msgBytes, err := GetShim(string(dirapi.Alma)).ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err)
 
 	var resmsg iso18626.ISO18626Message
@@ -637,7 +637,7 @@ func TestIso18626AlmaShimHumanizeReShareRequesterNote(t *testing.T) {
 		Action: iso18626.TypeActionNotification,
 		Note:   RESHARE_LOAN_CONDITION_AGREE + "Accept",
 	})
-	msgBytes, err := GetShim(string(directory.Alma)).ApplyToOutgoingRequest(msg)
+	msgBytes, err := GetShim(string(dirapi.Alma)).ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err)
 
 	var resmsg iso18626.ISO18626Message
@@ -654,7 +654,7 @@ func TestIso18626AlmaShimSupplyingMessageLoanConditions(t *testing.T) {
 		},
 	})
 
-	msgBytes, err := GetShim(string(directory.Alma)).ApplyToOutgoingRequest(msg)
+	msgBytes, err := GetShim(string(dirapi.Alma)).ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err)
 	var resmsg iso18626.ISO18626Message
 	err = GetShim("default").ApplyToIncomingResponse(msgBytes, &resmsg)
@@ -675,7 +675,7 @@ func TestIso18626AlmaShimSupplyingMessageAddLoanCondition(t *testing.T) {
 		},
 	})
 
-	msgBytes, err := GetShim(string(directory.Alma)).ApplyToOutgoingRequest(msg)
+	msgBytes, err := GetShim(string(dirapi.Alma)).ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err)
 	var resmsg iso18626.ISO18626Message
 	err = GetShim("default").ApplyToIncomingResponse(msgBytes, &resmsg)
@@ -703,7 +703,7 @@ func TestIso18626AlmaShimSupplyingMessageAddLoanConditionWithNote(t *testing.T) 
 		},
 	})
 
-	msgBytes, err := GetShim(string(directory.Alma)).ApplyToOutgoingRequest(msg)
+	msgBytes, err := GetShim(string(dirapi.Alma)).ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err)
 	var resmsg iso18626.ISO18626Message
 	err = GetShim("default").ApplyToIncomingResponse(msgBytes, &resmsg)
@@ -721,7 +721,7 @@ func TestIso18626AlmaShimSupplyingMessageLoanConditionsAssumedAgreed(t *testing.
 		},
 	})
 
-	msgBytes, err := GetShim(string(directory.Alma)).ApplyToOutgoingRequest(msg)
+	msgBytes, err := GetShim(string(dirapi.Alma)).ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err)
 	var resmsg iso18626.ISO18626Message
 	err = GetShim("default").ApplyToIncomingResponse(msgBytes, &resmsg)
@@ -743,13 +743,13 @@ func TestIso18626AlmaShimRequestingMessageLoanConditionAccept(t *testing.T) {
 		Action: iso18626.TypeActionNotification,
 		Note:   "`Accept`",
 	})
-	resmsg := GetShim(string(directory.Alma)).ApplyToIncomingRequest(msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
+	resmsg := GetShim(string(dirapi.Alma)).ApplyToIncomingRequest(msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
 
 	assert.Equal(t, RESHARE_LOAN_CONDITION_AGREE+"`Accept`", resmsg.RequestingAgencyMessage.Note)
 	assert.Equal(t, "BROKER", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 
 	msg.RequestingAgencyMessage.Note = "I will accept"
-	resmsg = GetShim(string(directory.Alma)).ApplyToIncomingRequest(msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
+	resmsg = GetShim(string(dirapi.Alma)).ApplyToIncomingRequest(msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
 
 	assert.Equal(t, "I will accept", resmsg.RequestingAgencyMessage.Note)
 	assert.Equal(t, "BROKER", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
@@ -768,7 +768,7 @@ func TestIso18626AlmaShimRequestingMessageLoanConditionReject(t *testing.T) {
 		Action: iso18626.TypeActionNotification,
 		Note:   "--ReJeCT;",
 	})
-	resmsg := GetShim(string(directory.Alma)).ApplyToIncomingRequest(msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
+	resmsg := GetShim(string(dirapi.Alma)).ApplyToIncomingRequest(msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
 
 	assert.Equal(t, RESHARE_LOAN_CONDITION_REJECT+"--ReJeCT;", resmsg.RequestingAgencyMessage.Note)
 	assert.Equal(t, iso18626.TypeActionCancel, resmsg.RequestingAgencyMessage.Action)
@@ -791,7 +791,7 @@ func TestIso18626AlmaShimRequestingMessageLoanConditionRejectWithSymbolWithoutAu
 		Action: iso18626.TypeActionNotification,
 		Note:   "reject",
 	})
-	resmsg := GetShim(string(directory.Alma)).ApplyToIncomingRequest(msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "AU-VBAY"})
+	resmsg := GetShim(string(dirapi.Alma)).ApplyToIncomingRequest(msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "AU-VBAY"})
 
 	assert.Equal(t, RESHARE_LOAN_CONDITION_REJECT+"reject", resmsg.RequestingAgencyMessage.Note)
 	assert.Equal(t, iso18626.TypeActionCancel, resmsg.RequestingAgencyMessage.Action)
@@ -812,7 +812,7 @@ func TestIso18626AlmaShimRequestingMessageLoanConditionRejectWithoutSupplierStay
 		Action: iso18626.TypeActionNotification,
 		Note:   "reject",
 	})
-	resmsg := GetShim(string(directory.Alma)).ApplyToIncomingRequest(msg, nil, nil)
+	resmsg := GetShim(string(dirapi.Alma)).ApplyToIncomingRequest(msg, nil, nil)
 
 	assert.Equal(t, RESHARE_LOAN_CONDITION_REJECT+"reject", resmsg.RequestingAgencyMessage.Note)
 	assert.Equal(t, iso18626.TypeActionNotification, resmsg.RequestingAgencyMessage.Action)
@@ -833,7 +833,7 @@ func TestIso18626AlmaShimRequestingMessageLoanConditionRejectWithEmptySupplierSt
 		Action: iso18626.TypeActionNotification,
 		Note:   "reject",
 	})
-	resmsg := GetShim(string(directory.Alma)).ApplyToIncomingRequest(msg, nil, &ill_db.LocatedSupplier{})
+	resmsg := GetShim(string(dirapi.Alma)).ApplyToIncomingRequest(msg, nil, &ill_db.LocatedSupplier{})
 
 	assert.Equal(t, RESHARE_LOAN_CONDITION_REJECT+"reject", resmsg.RequestingAgencyMessage.Note)
 	assert.Equal(t, iso18626.TypeActionNotification, resmsg.RequestingAgencyMessage.Action)
@@ -853,7 +853,7 @@ func TestIso18626AlmaShimRequestingMessageOriginalCancelKeepsSupplyingAgencyId(t
 		},
 		Action: iso18626.TypeActionCancel,
 	})
-	resmsg := GetShim(string(directory.Alma)).ApplyToIncomingRequest(msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
+	resmsg := GetShim(string(dirapi.Alma)).ApplyToIncomingRequest(msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
 
 	assert.Equal(t, iso18626.TypeActionCancel, resmsg.RequestingAgencyMessage.Action)
 	assert.Equal(t, "BROKER", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
@@ -892,7 +892,7 @@ func TestIso18626AReShareShimSupplyingOutgoing(t *testing.T) {
 	assert.Nil(t, msg.SupplyingAgencyMessage.MessageInfo.OfferedCosts, "OfferedCosts should be nil")
 	assert.Nil(t, msg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition, "LoanCondition should be nil")
 
-	shim := GetShim(string(directory.ReShare))
+	shim := GetShim(string(dirapi.ReShare))
 	bytes, err := shim.ApplyToOutgoingRequest(msg)
 	if err != nil {
 		t.Errorf("failed to apply outgoing")
@@ -937,7 +937,7 @@ func TestIso18626AReShareShimSupplyingOutgoingZeroCost(t *testing.T) {
 		},
 	})
 
-	shim := GetShim(string(directory.ReShare))
+	shim := GetShim(string(dirapi.ReShare))
 	bytes, err := shim.ApplyToOutgoingRequest(msg)
 	if err != nil {
 		t.Errorf("failed to apply outgoing")
@@ -1129,7 +1129,7 @@ func TestIso18626ReShareShimRequestingMessageSupplierCancelMarkedAsConditionReje
 		Action: iso18626.TypeActionCancel,
 	})
 
-	resmsg := GetShim(string(directory.ReShare)).ApplyToIncomingRequest(msg, nil, nil)
+	resmsg := GetShim(string(dirapi.ReShare)).ApplyToIncomingRequest(msg, nil, nil)
 
 	assert.Equal(t, iso18626.TypeActionCancel, resmsg.RequestingAgencyMessage.Action)
 	assert.Equal(t, RESHARE_LOAN_CONDITION_REJECT, resmsg.RequestingAgencyMessage.Note)
@@ -1147,7 +1147,7 @@ func TestIso18626ReShareShimRequestingMessageBrokerCancelNotMarkedAsConditionRej
 		Action: iso18626.TypeActionCancel,
 	})
 
-	resmsg := GetShim(string(directory.ReShare)).ApplyToIncomingRequest(msg, nil, nil)
+	resmsg := GetShim(string(dirapi.ReShare)).ApplyToIncomingRequest(msg, nil, nil)
 
 	assert.Equal(t, iso18626.TypeActionCancel, resmsg.RequestingAgencyMessage.Action)
 	assert.Empty(t, resmsg.RequestingAgencyMessage.Note)

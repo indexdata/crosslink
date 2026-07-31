@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        modules: [broker, illmock]
+        modules: [broker, directory, illmock]
     steps:
     - name: Checkout repository
       uses: actions/checkout@v7

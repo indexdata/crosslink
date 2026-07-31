@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/indexdata/crosslink/broker/common"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 )
 
@@ -28,19 +28,19 @@ func (m *MockDirectoryLookupAdapter) Lookup(ctx common.ExtendedContext, params D
 			return []DirectoryEntry{{
 				Symbols:    []string{"ISIL:D1", "ISIL:D2"},
 				URL:        MOCK_PEER_URL,
-				Vendor:     directory.Unknown,
+				Vendor:     dirapi.Unknown,
 				BrokerMode: DEFAULT_BROKER_MODE,
 			}, {
 				Symbols:    []string{"ISIL:D3", "ISIL:D4"},
 				URL:        MOCK_PEER_URL,
-				Vendor:     directory.Unknown,
+				Vendor:     dirapi.Unknown,
 				BrokerMode: DEFAULT_BROKER_MODE,
 			}}, "tenant lookup", nil
 		}
 		return []DirectoryEntry{{
 			Symbols:    []string{"ISIL:" + strings.ToUpper(params.Tenant)},
 			URL:        MOCK_PEER_URL,
-			Vendor:     directory.Unknown,
+			Vendor:     dirapi.Unknown,
 			BrokerMode: DEFAULT_BROKER_MODE,
 		}}, "tenant lookup", nil
 	}
@@ -57,7 +57,7 @@ func (m *MockDirectoryLookupAdapter) Lookup(ctx common.ExtendedContext, params D
 		return []DirectoryEntry{{
 			Symbols:    []string{"ISIL:NOCHANGE"},
 			URL:        MOCK_PEER_URL,
-			Vendor:     directory.Unknown,
+			Vendor:     dirapi.Unknown,
 			BrokerMode: DEFAULT_BROKER_MODE,
 		}}, strings.Join(params.Symbols, ","), nil
 	}
@@ -67,14 +67,14 @@ func (m *MockDirectoryLookupAdapter) Lookup(ctx common.ExtendedContext, params D
 		dirs = append(dirs, DirectoryEntry{
 			Symbols:    []string{value},
 			URL:        MOCK_PEER_URL,
-			Vendor:     directory.Unknown,
+			Vendor:     dirapi.Unknown,
 			BrokerMode: DEFAULT_BROKER_MODE,
 		})
 	}
 	return dirs, strings.Join(params.Symbols, ","), nil
 }
 
-func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData directory.Entry, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo) {
+func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData dirapi.Entry, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo) {
 	var rotaInfo RotaInfo
 	rotaInfo.Request.Type = "mock"
 	rotaInfo.Suppliers = make([]SupplierMatch, 0, len(entries))
