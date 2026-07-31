@@ -1,11 +1,25 @@
-# Directory tinkering
+# Directory service
 
-Setting up a temporary db (just using public schema for now):
+## Local database
+
+Start a temporary PostgreSQL server and create the Directory database:
+
 ```
-docker run -e POSTGRES_PASSWORD=<somepass> -p 54322:5432 -it --rm postgres
-PGPASSWORD=<somepass> psql -p 54322 -U postgres -h <local host/ip> -c 'create database directory;'
-PGPASSWORD=<somepass> psql -p 54322 -U postgres -h <local host/ip> -d directory -a -f schema.sql
+docker run --name crosslink-directory-postgres --rm -d \
+  -e POSTGRES_PASSWORD=directory -p 54322:5432 postgres
+until docker exec crosslink-directory-postgres pg_isready -U postgres; do sleep 1; done
+PGPASSWORD=directory psql -p 54322 -U postgres -h localhost \
+  -c 'create database directory;'
 ```
+
+Run the service with a matching connection string. Database migrations are
+applied automatically during startup:
+
+```
+DATABASE_URL=postgresql://postgres:directory@localhost:54322/directory make run
+```
+
+## Build and test
 
 The SQLC and OpenAPI generator versions are pinned as Go tools in `go.mod`.
 Generate the database and API sources with:
@@ -26,17 +40,25 @@ make run
 
 Run `make generate` before invoking `go build` or `go test` directly.
 
-# Some examples of repos using sqlc / some sort of api gen
+## Some examples of repositories using SQLC or API generation
 
-## Contrived
+### Contrived
 - https://github.com/SeaRoll/api-sqlc-goose/tree/main
 - https://github.com/danicc097/openapi-go-gin-postgres-sqlc
 - https://github.com/kwryoh/oapi-sample
 - https://github.com/aliml92/realworld-gin-sqlc/tree/master
 
-## Real
+### Real
 - https://github.com/leg100/otf
 - https://github.com/helpwave/services/tree/main/services/tasks-svc
 
-# Environment variables
-- SYMBOL_AUTHORITY: The authority that is paired with the incoming institution/tenant to form a full symbol
+## Environment variables
+
+| Name                      | Description                                                                    | Default value                                               |
+|---------------------------|--------------------------------------------------------------------------------|-------------------------------------------------------------|
+| `HOST`                    | Address on which the HTTP server listens                                       | `localhost`                                                 |
+| `HTTP_PORT`               | Port on which the HTTP server listens                                          | `8086`                                                      |
+| `DATABASE_URL`            | PostgreSQL connection string used by the service and database migrations       | `postgresql://postgres:directory@localhost:54322/directory` |
+| `TENANT_SYMBOL_AUTHORITY` | Authority paired with an incoming institution/tenant to form a complete symbol | `TEST`                                                      |
+| `LOG_LEVEL`               | Log level: `debug`, `info`, `warn`, or `error`                                 | `info`                                                      |
+| `LOG_FORMAT`              | Log output format; set to `json` for structured JSON logs                      | `text`                                                      |

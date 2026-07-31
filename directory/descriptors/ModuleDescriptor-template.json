@@ -230,12 +230,12 @@
       ]
     },
     {
-      "id" : "memberships",
+      "id" : "entry-networks",
       "version" : "1.0",
       "handlers" : [
          {
           "methods": ["GET"],
-          "pathPattern": "/rsdir/memberships",
+          "pathPattern": "/rsdir/entry-networks",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -246,7 +246,7 @@
         },
         {
           "methods": ["POST"],
-          "pathPattern": "/rsdir/memberships",
+          "pathPattern": "/rsdir/entry-networks",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -257,7 +257,7 @@
         },
         {
           "methods": ["GET"],
-          "pathPattern": "/rsdir/memberships/{id}",
+          "pathPattern": "/rsdir/entry-networks/{id}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -268,57 +268,7 @@
         },
         {
           "methods": ["DELETE"],
-          "pathPattern": "/rsdir/memberships/{id}",
-          "permissionsRequired" : [],
-          "permissionsDesired": [ 
-            "directory.consortium.all",
-            "directory.institution.all",
-            "directory.system.all",
-            "directory.public.all" 
-          ]
-        }
-       ]
-    },
-    {
-      "id" : "network-memberships",
-      "version" : "1.0",
-      "handlers" : [
-         {
-          "methods": ["GET"],
-          "pathPattern": "/rsdir/network-memberships",
-          "permissionsRequired" : [],
-          "permissionsDesired": [ 
-            "directory.consortium.all",
-            "directory.institution.all",
-            "directory.system.all",
-            "directory.public.all" 
-          ]
-        },
-        {
-          "methods": ["POST"],
-          "pathPattern": "/rsdir/network-memberships",
-          "permissionsRequired" : [],
-          "permissionsDesired": [ 
-            "directory.consortium.all",
-            "directory.institution.all",
-            "directory.system.all",
-            "directory.public.all" 
-          ]
-        },
-        {
-          "methods": ["GET"],
-          "pathPattern": "/rsdir/network-memberships/{id}",
-          "permissionsRequired" : [],
-          "permissionsDesired": [ 
-            "directory.consortium.all",
-            "directory.institution.all",
-            "directory.system.all",
-            "directory.public.all" 
-          ]
-        },
-        {
-          "methods": ["DELETE"],
-          "pathPattern": "/rsdir/network-memberships/{id}",
+          "pathPattern": "/rsdir/entry-networks/{id}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -330,12 +280,12 @@
       ]
     },
     {
-      "id" : "tier-memberships",
+      "id" : "entry-tiers",
       "version" : "1.0",
       "handlers" : [
          {
           "methods": ["GET"],
-          "pathPattern": "/rsdir/tier-memberships",
+          "pathPattern": "/rsdir/entry-tiers",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -346,7 +296,7 @@
         },
         {
           "methods": ["POST"],
-          "pathPattern": "/rsdir/tier-memberships",
+          "pathPattern": "/rsdir/entry-tiers",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -357,7 +307,7 @@
         },
         {
           "methods": ["GET"],
-          "pathPattern": "/rsdir/tier-memberships/{id}",
+          "pathPattern": "/rsdir/entry-tiers/{id}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -368,7 +318,7 @@
         },
         {
           "methods": ["DELETE"],
-          "pathPattern": "/rsdir/tier-memberships/{id}",
+          "pathPattern": "/rsdir/entry-tiers/{id}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",

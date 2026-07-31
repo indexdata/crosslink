@@ -4,7 +4,7 @@ CrossLink broker is a system to manage inter-library loans (ILL), specifically i
 
 * accepts and handles ILL requests from external requesters (e.g Alma or ReShare) via the ISO18626 protocol
 * locates suppliers and their holdings from a Union Catalog using the _Search/Retrieval via URL_ (SRU) protocol
-* resolves supplier information via the [Directory API](./../directory/directory_api.yaml)
+* resolves supplier information via the [Directory API](./../directory/api.yaml)
 * checks item availability using the Z3.50 or the SRU protocol
 * negotiates loans with external suppliers (e.g Alma or ReShare) via ISO18626
 * allows internal requesters and suppliers to manage ILL requests using a convenient JSON API
@@ -108,7 +108,7 @@ Configuration is provided via environment variables:
 | `CONSORTIUM_SYMBOL`          | Designates peer for which configuration is used for consortium. At this time, it is     | (empty value)                             |
 |                              | used when `HOLDINGS_ADAPTER` = `consortium`.                                            |                                           |
 | `DIRECTORY_ADAPTER`          | Directory lookup method: `mock` or `api`                                                | `mock`                                    |
-| `DIRECTORY_API_URL`          | Comma separated list of URLs when `DIRECTORY_ADAPTER` is `api`                          | `http://localhost:8081/directory/entries` |
+| `DIRECTORY_API_URL`          | Comma separated list of URLs when `DIRECTORY_ADAPTER` is `api`                          | `http://localhost:8086/rsdir/entries`     |
 | `AVAILABILITY_ADAPTER`       | Availability adapter: `mock` , `zoom`, `metaproxy`.                                     | `zoom`                                    |
 |                              | see [Building with native extensions (CGO)](#building-with-native-extensions-cgo)       |                                           |
 | `METAPROXY_URL`              | Metaproxy URL when `AVAILABILITY_ADAPTER` = `metaproxy`                                 | (empty value)                             |
