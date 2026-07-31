@@ -194,7 +194,10 @@ func checkDuplicateRequest(ctx common.ExtendedContext, request *iso18626.Request
 	resultMap := map[string]any{}
 	duplicateCheck := events.DuplicateCheck{}
 	resultMap[duplicateCheckKey] = &duplicateCheck
-	windowHours := peer.CustomData.DuplicateCheckWindowHours
+	var windowHours *int
+	if peer.CustomData.IllConfig != nil {
+		windowHours = peer.CustomData.IllConfig.DuplicateCheckWindowHours
+	}
 	duplicateCheck.WindowHours = windowHours
 	if windowHours == nil || *windowHours <= 0 {
 		duplicateCheck.Enabled = false

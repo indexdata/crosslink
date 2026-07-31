@@ -9,7 +9,11 @@
       "email": "test@example.com",
       "fromEmail": "from@example.com",
       "hrid": "TTTZ",
-      "vendor": "ReShare",
+      "illConfig": {
+        "iso18626Url": "https://tttz-okapi.au.reshare.indexdata.com/_/invoke/tenant/tttz/rs/externalApi/iso18626",
+        "iso18626Vendor": "ReShare",
+        "duplicateCheckWindowHours": 2
+      },
       "symbols": [
         {
           "id": "a804c1db-de17-5bbc-a165-8fd9cd4d8704",
@@ -126,8 +130,7 @@
           "reason": "Renovation"
         }
       ],
-      "timeZone": "Australia/ACT",
-      "duplicateCheckWindowHours": 2
+      "timeZone": "Australia/ACT"
     },
     {
       "id": "69794360-8304-5d8b-9f00-525ab77fc4c0",

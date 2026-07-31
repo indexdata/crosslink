@@ -193,7 +193,9 @@ func TestLookupWithVendor(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 		respBody := "{\"items\":[{" +
-			"\"name\":\"Peer\",\"vendor\":\"ReShare\",\"symbols\":[{\"authority\":\"ISIL\",\"symbol\":\"PEER\"}]}]," +
+			"\"name\":\"Peer\",\"vendor\":\"Alma\",\"illConfig\":{\"iso18626Url\":\"https://configured.example/iso18626\",\"iso18626Vendor\":\"ReShare\"}," +
+			"\"endpoints\":[{\"type\":\"ISO18626\",\"address\":\"https://legacy.example/iso18626\"}]," +
+			"\"symbols\":[{\"authority\":\"ISIL\",\"symbol\":\"PEER\"}]}]," +
 			"\"resultInfo\":{\"totalRecords\":1}}"
 		w.Write([]byte(respBody))
 	})
@@ -207,8 +209,55 @@ func TestLookupWithVendor(t *testing.T) {
 	entries, _, err := ad.Lookup(createLookupCtx(), p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 1)
+	assert.Equal(t, "https://configured.example/iso18626", entries[0].URL)
 	assert.Equal(t, directory.ReShare, entries[0].Vendor)
 	assert.Equal(t, common.BrokerModeTransparent, entries[0].BrokerMode)
+}
+
+func TestLookupWithLegacyVendor(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"items":[{"name":"Peer","vendor":"Alma","symbols":[{"authority":"ISIL","symbol":"PEER"}]}]}`))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	entries, _, err := createDirectoryAdapter(server.URL).Lookup(createLookupCtx(), adapter.DirectoryLookupParams{Symbols: []string{"ISIL:PEER"}})
+	assert.NoError(t, err)
+	if assert.Len(t, entries, 1) {
+		assert.Equal(t, directory.Alma, entries[0].Vendor)
+	}
+}
+
+func TestLookupIgnoresIllConfigVendorWithoutUrl(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"items":[{"name":"Peer","vendor":"Alma","illConfig":{"iso18626Vendor":"ReShare"},"endpoints":[{"type":"ISO18626","address":"https://legacy.example/iso18626"}],"symbols":[{"authority":"ISIL","symbol":"PEER"}]}]}`))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	entries, _, err := createDirectoryAdapter(server.URL).Lookup(createLookupCtx(), adapter.DirectoryLookupParams{Symbols: []string{"ISIL:PEER"}})
+	assert.NoError(t, err)
+	if assert.Len(t, entries, 1) {
+		assert.Equal(t, "https://legacy.example/iso18626", entries[0].URL)
+		assert.Equal(t, directory.Alma, entries[0].Vendor)
+	}
+}
+
+func TestLookupDoesNotMixLegacyVendorWithIllConfigUrl(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"items":[{"name":"Peer","vendor":"Alma","illConfig":{"iso18626Url":"https://example.test/rs/externalapi/iso18626"},"symbols":[{"authority":"ISIL","symbol":"PEER"}]}]}`))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	entries, _, err := createDirectoryAdapter(server.URL).Lookup(createLookupCtx(), adapter.DirectoryLookupParams{Symbols: []string{"ISIL:PEER"}})
+	assert.NoError(t, err)
+	if assert.Len(t, entries, 1) {
+		assert.Equal(t, directory.ReShare, entries[0].Vendor)
+	}
 }
 
 func TestLookupMissingSymbols(t *testing.T) {
@@ -272,6 +321,7 @@ func TestLookup(t *testing.T) {
 	assert.Len(t, entries, 6)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")
 	assert.Equal(t, entries[0].Vendor, directory.ReShare)
+	assert.Equal(t, "http://localhost:8083/iso18626", entries[0].URL)
 	assert.Len(t, entries[0].Symbols, 1)
 	assert.Equal(t, common.BrokerModeTransparent, entries[0].BrokerMode)
 	assert.Equal(t, entries[3].Name, "University of Melbourne")

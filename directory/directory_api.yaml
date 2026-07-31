@@ -222,10 +222,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Symbol'
-        lenderOfLastResort:
-          type: array
-          items:
-            $ref: '#/components/schemas/Symbol'
         tenant:
           description: The tenant this entry belongs to, if applicable.
           type: string
@@ -260,19 +256,41 @@ components:
         holdingsPolicy:
           description: Policy that determines whether and in which order holdings may supply an item.
           $ref: '#/components/schemas/HoldingsPolicy'
+        illConfig:
+          description: Configuration for interlibrary loan (ILL) behavior.
+          $ref: '#/components/schemas/IllConfig'
         vendor:
+          description: Library system vendor name
+          $ref: '#/components/schemas/EntryVendor'
+
+    IllConfig:
+      type: object
+      properties:
+        iso18626Url:
           type: string
-          description: ISO18626 vendor type
-          enum:
-            - Alma
-            - ReShare
-            - CrossLink
-            - ILLiad
-            - Unknown
+          description: URL of the ISO18626 service. When set, used instead of an ISO18626 service from endpoints.
+        iso18626Vendor:
+          description: ISO18626 service vendor. Used only when iso18626Url is non-empty.
+          $ref: '#/components/schemas/EntryVendor'
+        lendersOfLastResort:
+          type: array
+          description: Suppliers appended to the end of the rota when no regular supplier can fill the request.
+          items:
+            $ref: '#/components/schemas/Symbol'
         duplicateCheckWindowHours:
           type: integer
           description: The number of hours to check for duplicate requests. If a request is submitted within this window, it will be considered a duplicate.
           minimum: 0
+
+    EntryVendor:
+      type: string
+      description: ISO18626 vendor type
+      enum:
+        - Alma
+        - ReShare
+        - CrossLink
+        - ILLiad
+        - Unknown
 
     CatalogConfig:
       type: object
@@ -429,7 +447,7 @@ components:
       properties:
         type:
           type: string
-          enum: 
+          enum:
             - cql
             - pqf
           default: pqf
