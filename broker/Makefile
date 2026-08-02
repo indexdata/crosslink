@@ -144,6 +144,8 @@ clean:
 	rm -f $(BINARY) archive
 	rm -f $(COVERAGE)
 	rm -f $(COMMIT_ID)
+	rm -f $(STATE_MODELS_JSON) $(STATE_MODELS_JSON).tmp
+	rmdir $(dir $(STATE_MODELS_JSON)) 2>/dev/null || true
 	rm -f $(SQL_GEN_OUT)
 	rm -f $(OAPI_GEN)
 	rm -f $(PR_OAPI_GEN)
