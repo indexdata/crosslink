@@ -10,7 +10,7 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/shim"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5"
@@ -89,7 +89,7 @@ func TestHandleMessageRequestCreatesTaskForCreatedPatronRequest(t *testing.T) {
 		},
 	}
 	patronPattern := "local-%v"
-	recipientPeer := &ill_db.Peer{CustomData: directory.Entry{IllConfig: &directory.IllConfig{SupplierPatronPattern: &patronPattern}}}
+	recipientPeer := &ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{SupplierPatronPattern: &patronPattern}}}
 	resp, err := handler.HandleMessage(appCtx, message, recipientPeer)
 
 	assert.NoError(t, err)

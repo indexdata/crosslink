@@ -1,0 +1,5 @@
+# Generated sources are created inside the build.
+directory/api/directory.gen.go
+directory/db/db.go
+directory/db/models.go
+directory/db/query.sql.go

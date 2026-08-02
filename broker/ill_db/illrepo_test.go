@@ -14,13 +14,13 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/dbutil"
 	test "github.com/indexdata/crosslink/broker/test/utils"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 )
 
 var illRepo IllRepo
-var dirEntries directory.EntriesResponse
+var dirEntries dirapi.EntriesResponse
 var respBody []byte
 
 func createDirectoryAdapter(urls ...string) adapter.DirectoryLookupAdapter {

@@ -1,0 +1,14 @@
+{
+  "name":"New Consortium",
+  "type":"Consortium",
+  "symbols": [
+    {"authority":"TEST", "symbol":"NWCONS"}
+  ],
+  "endpoints": [
+    {
+      "name": "Primary",
+      "type": "ISO18626",
+      "address": "https://some.host.tld/path"
+    }
+  ]
+}

@@ -14,7 +14,7 @@ import (
 	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/shim"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 
 	"github.com/indexdata/crosslink/broker/adapter"
 
@@ -33,17 +33,17 @@ import (
 var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 
 func getPeerShim(peer ill_db.Peer) shim.Iso18626Shim {
-	noteFieldSeparator := common.IllConfigString(peer.CustomData, shim.NOTE_FIELD_SEP, func(c directory.IllConfig) *string { return c.NoteFieldSeparator })
-	useOfferedCosts := common.IllConfigBool(peer.CustomData, shim.OFFERED_COSTS, func(c directory.IllConfig) *bool { return c.UseOfferedCosts })
+	noteFieldSeparator := common.IllConfigString(peer.CustomData, shim.NOTE_FIELD_SEP, func(c dirapi.IllConfig) *string { return c.NoteFieldSeparator })
+	useOfferedCosts := common.IllConfigBool(peer.CustomData, shim.OFFERED_COSTS, func(c dirapi.IllConfig) *bool { return c.UseOfferedCosts })
 	return shim.GetShimWithConfig(peer.Vendor, noteFieldSeparator, useOfferedCosts)
 }
 
 const HANDLER_COMP = "iso18626_handler"
 const ORIGINAL_INCOMING_MESSAGE = "originalIncomingMessage"
 
-var lookupQueryBuilder = utils.Must(catalog.NewQueryBuilderGen(&directory.QueryConfig{
+var lookupQueryBuilder = utils.Must(catalog.NewQueryBuilderGen(&dirapi.QueryConfig{
 	Identifier: new("supplier_unique_record_id = {term}"),
-	Type:       new(directory.Cql),
+	Type:       new(dirapi.Cql),
 }))
 
 const queryTimeFormat = "2006-01-02 15:04:05"
@@ -200,10 +200,7 @@ func checkDuplicateRequest(ctx common.ExtendedContext, request *iso18626.Request
 	resultMap := map[string]any{}
 	duplicateCheck := events.DuplicateCheck{}
 	resultMap[duplicateCheckKey] = &duplicateCheck
-	var windowHours *int
-	if peer.CustomData.IllConfig != nil {
-		windowHours = peer.CustomData.IllConfig.DuplicateCheckWindowHours
-	}
+	windowHours := peer.CustomData.DuplicateCheckWindowHours
 	duplicateCheck.WindowHours = windowHours
 	if windowHours == nil || *windowHours <= 0 {
 		duplicateCheck.Enabled = false

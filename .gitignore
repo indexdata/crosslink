@@ -4,5 +4,8 @@
 */chart/*.tgz
 commit.txt
 coverage.out
+coverage.out.tmp
 *_gen.go
 /.idea
+go.work
+go.work.sum

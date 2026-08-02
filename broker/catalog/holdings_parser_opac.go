@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/marcxml"
 )
 
 type OpacHoldingsParser struct{}
 
-func NewOpacHoldingsParser(config directory.OpacHoldingsParserConfig) HoldingsParser {
+func NewOpacHoldingsParser(config dirapi.OpacHoldingsParserConfig) HoldingsParser {
 	return &OpacHoldingsParser{}
 }
 

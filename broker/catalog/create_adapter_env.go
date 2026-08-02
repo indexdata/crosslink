@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 )
 
 const (
@@ -26,9 +26,9 @@ func getParserFormat(format string) (HoldingsParser, error) {
 	case HoldingsFormatMarc21Plus1:
 		return NewMarc21Plus1HoldingsParser(), nil
 	case HoldingsFormatMarc:
-		return NewMarcHoldingsParser(directory.MarcHoldingsParserConfig{}), nil
+		return NewMarcHoldingsParser(dirapi.MarcHoldingsParserConfig{}), nil
 	case HoldingsFormatOpac:
-		return NewOpacHoldingsParser(directory.OpacHoldingsParserConfig{}), nil
+		return NewOpacHoldingsParser(dirapi.OpacHoldingsParserConfig{}), nil
 	default:
 		return nil, fmt.Errorf("bad value for %s: %s", HoldingsFormat, format)
 	}
@@ -66,7 +66,7 @@ func CreateLookupAdapterFromEnv(cfg map[string]any) (LookupAdapter, error) {
 		if err != nil {
 			return nil, err
 		}
-		metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
+		metadataParser := NewMetadataParserMarc(dirapi.MarcMetadataParserConfig{})
 		return CreateSruLookupAdapter(http.DefaultClient, strings.Split(sruURLVal, ","), "", &queryBuilder, parser, metadataParser, "marcxml"), nil
 	}
 	if holdingsAdapterVal == "mock" {

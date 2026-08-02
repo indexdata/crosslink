@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	zoomtestutil "github.com/indexdata/crosslink/testutil"
 	"github.com/stretchr/testify/assert"
 )
@@ -35,20 +35,20 @@ func TestMain(m *testing.M) {
 
 func TestLookupFoundMarc(t *testing.T) {
 	// target does not return holdings, we just use 010$a as fake location to verify that the record was parsed correctly
-	config := directory.MarcHoldingsParserConfig{
+	config := dirapi.MarcHoldingsParserConfig{
 		MainField:        NewString("010"),
 		LocationSubField: NewString("a"),
 	}
-	pqfType := directory.Pqf
-	queryBuilder, err := NewQueryBuilderGen(&directory.QueryConfig{
+	pqfType := dirapi.Pqf
+	queryBuilder, err := NewQueryBuilderGen(&dirapi.QueryConfig{
 		Title: NewString("@attr 1=1016 {term}"),
 		Type:  &pqfType,
 	})
 	assert.NoError(t, err)
 	holdingsParser := NewMarcHoldingsParser(config)
-	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
+	metadataParser := NewMetadataParserMarc(dirapi.MarcMetadataParserConfig{})
 	aa, err := NewZoomLookupAdapter(
-		directory.ZoomConfig{
+		dirapi.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
 			Options: &map[string]string{
 				"count":                 "20",
@@ -85,15 +85,15 @@ func TestLookupFoundMarc(t *testing.T) {
 }
 
 func TestLookupFoundOpac(t *testing.T) {
-	cqlType := directory.Cql
-	queryBuilder, err := NewQueryBuilderGen(&directory.QueryConfig{
+	cqlType := dirapi.Cql
+	queryBuilder, err := NewQueryBuilderGen(&dirapi.QueryConfig{
 		Type: &cqlType,
 	})
 	assert.NoError(t, err)
-	holdingsParser := NewOpacHoldingsParser(directory.OpacHoldingsParserConfig{})
-	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
+	holdingsParser := NewOpacHoldingsParser(dirapi.OpacHoldingsParserConfig{})
+	metadataParser := NewMetadataParserMarc(dirapi.MarcMetadataParserConfig{})
 	aa, err := NewZoomLookupAdapter(
-		directory.ZoomConfig{
+		dirapi.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
 			Options: &map[string]string{
 				"preferredRecordSyntax": "opac",
@@ -129,10 +129,10 @@ func TestLookupFoundOpac(t *testing.T) {
 func TestLookupDiagnosticPQF(t *testing.T) {
 	queryBuilder, err := NewQueryBuilderGen(nil)
 	assert.NoError(t, err)
-	holdingsParser := NewMarcHoldingsParser(directory.MarcHoldingsParserConfig{})
-	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
+	holdingsParser := NewMarcHoldingsParser(dirapi.MarcHoldingsParserConfig{})
+	metadataParser := NewMetadataParserMarc(dirapi.MarcMetadataParserConfig{})
 	aa, err := NewZoomLookupAdapter(
-		directory.ZoomConfig{
+		dirapi.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
 			Options: &map[string]string{
 				"preferredRecordSyntax": "danmarc",
@@ -155,15 +155,15 @@ func TestLookupDiagnosticPQF(t *testing.T) {
 }
 
 func TestLookupDiagnosticCql(t *testing.T) {
-	cqlType := directory.Cql
-	queryBuilder, err := NewQueryBuilderGen(&directory.QueryConfig{
+	cqlType := dirapi.Cql
+	queryBuilder, err := NewQueryBuilderGen(&dirapi.QueryConfig{
 		Type: &cqlType,
 	})
 	assert.NoError(t, err)
-	holdingsParser := NewMarcHoldingsParser(directory.MarcHoldingsParserConfig{})
-	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
+	holdingsParser := NewMarcHoldingsParser(dirapi.MarcHoldingsParserConfig{})
+	metadataParser := NewMetadataParserMarc(dirapi.MarcMetadataParserConfig{})
 	aa, err := NewZoomLookupAdapter(
-		directory.ZoomConfig{
+		dirapi.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
 			Options: &map[string]string{
 				"preferredRecordSyntax": "danmarc",
@@ -188,10 +188,10 @@ func TestLookupDiagnosticCql(t *testing.T) {
 func TestConnectFailure(t *testing.T) {
 	queryBuilder, err := NewQueryBuilderGen(nil)
 	assert.NoError(t, err)
-	holdingsParser := NewMarcHoldingsParser(directory.MarcHoldingsParserConfig{})
-	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
+	holdingsParser := NewMarcHoldingsParser(dirapi.MarcHoldingsParserConfig{})
+	metadataParser := NewMetadataParserMarc(dirapi.MarcMetadataParserConfig{})
 	aa, err := NewZoomLookupAdapter(
-		directory.ZoomConfig{
+		dirapi.ZoomConfig{
 			Address: "",
 		},
 		queryBuilder,

@@ -8,7 +8,7 @@ import (
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 )
@@ -55,11 +55,11 @@ func GetShimWithConfig(vendor string, noteFieldSeparator string, useOfferedCosts
 	base := Iso18626DefaultShim{NoteFieldSeparator: noteFieldSeparator, UseOfferedCosts: useOfferedCosts, configured: true}
 	var shim Iso18626Shim
 	switch vendor {
-	case string(directory.Alma):
+	case string(dirapi.Alma):
 		shim = &Iso18626AlmaShim{Iso18626DefaultShim: base}
-	case string(directory.ILLiad):
+	case string(dirapi.ILLiad):
 		shim = &Iso18626ILLiadShim{Iso18626DefaultShim: base}
-	case string(directory.ReShare):
+	case string(dirapi.ReShare):
 		shim = &Iso18626ReShareShim{Iso18626DefaultShim: base}
 	default:
 		shim = &base

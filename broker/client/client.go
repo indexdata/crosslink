@@ -8,7 +8,7 @@ import (
 	"time"
 
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 
 	"github.com/indexdata/crosslink/broker/shim"
 	"github.com/indexdata/crosslink/broker/vcs"
@@ -462,7 +462,7 @@ func (c *Iso18626Client) HandleIllMessage(ctx common.ExtendedContext, peer *ill_
 	if peer == nil {
 		return nil, fmt.Errorf("peer is nil")
 	}
-	if strings.EqualFold(peer.Vendor, string(directory.CrossLink)) {
+	if strings.EqualFold(peer.Vendor, string(dirapi.CrossLink)) {
 		return c.prMessageHandler.HandleMessage(ctx, msg, peer)
 	}
 	return c.SendHttpPost(peer, msg)
@@ -500,8 +500,8 @@ func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626M
 }
 
 func getPeerShim(peer *ill_db.Peer) shim.Iso18626Shim {
-	noteFieldSeparator := common.IllConfigString(peer.CustomData, shim.NOTE_FIELD_SEP, func(c directory.IllConfig) *string { return c.NoteFieldSeparator })
-	useOfferedCosts := common.IllConfigBool(peer.CustomData, shim.OFFERED_COSTS, func(c directory.IllConfig) *bool { return c.UseOfferedCosts })
+	noteFieldSeparator := common.IllConfigString(peer.CustomData, shim.NOTE_FIELD_SEP, func(c dirapi.IllConfig) *string { return c.NoteFieldSeparator })
+	useOfferedCosts := common.IllConfigBool(peer.CustomData, shim.OFFERED_COSTS, func(c dirapi.IllConfig) *bool { return c.UseOfferedCosts })
 	return shim.GetShimWithConfig(peer.Vendor, noteFieldSeparator, useOfferedCosts)
 }
 
@@ -540,8 +540,8 @@ func getPeerInfo(peer *ill_db.Peer, symbol string) (string, iso18626.TypeAgencyI
 		}
 	}
 	email := iso18626.ElectronicAddress{}
-	if peer.CustomData.Email != nil {
-		email.ElectronicAddressData = *peer.CustomData.Email
+	if peer.CustomData.FromEmail != nil {
+		email.ElectronicAddressData = *peer.CustomData.FromEmail
 		email.ElectronicAddressType = iso18626.TypeSchemeValuePair{
 			Text: string(iso18626.ElectronicAddressTypeEmail),
 		}
@@ -677,7 +677,7 @@ func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarge
 		sam.DeliveryInfo.DateSent = utils.XSDDateTime{Time: time.Now()}
 	}
 
-	includeReturnInfo := target.peer != nil && common.IllConfigBool(target.peer.CustomData, appendReturnInfo, func(c directory.IllConfig) *bool { return c.IncludeReturnInfo })
+	includeReturnInfo := target.peer != nil && common.IllConfigBool(target.peer.CustomData, appendReturnInfo, func(c dirapi.IllConfig) *bool { return c.IncludeReturnInfo })
 	if target.status == iso18626.TypeStatusLoaned && includeReturnInfo {
 		name, agencyId, address, _ := getPeerInfo(target.peer, target.supplier.SupplierSymbol)
 		populateReturnAddress(message, name, agencyId, address)
@@ -685,8 +685,8 @@ func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarge
 	if !isInternalCrossLinkMessage(trCtx, target) {
 		prependSupplierSymbolNote(trCtx, target, sam)
 	}
-	includeVendorNote := common.IllConfigBool(trCtx.requester.CustomData, vendorNote, func(c directory.IllConfig) *bool { return c.IncludeVendorNote })
-	noteFieldSeparator := common.IllConfigString(trCtx.requester.CustomData, shim.NOTE_FIELD_SEP, func(c directory.IllConfig) *string { return c.NoteFieldSeparator })
+	includeVendorNote := common.IllConfigBool(trCtx.requester.CustomData, vendorNote, func(c dirapi.IllConfig) *bool { return c.IncludeVendorNote })
+	noteFieldSeparator := common.IllConfigString(trCtx.requester.CustomData, shim.NOTE_FIELD_SEP, func(c dirapi.IllConfig) *string { return c.NoteFieldSeparator })
 	if includeVendorNote && target.brokerInfoMessage && target.peer != nil && target.peer.Vendor != trCtx.requester.Vendor {
 		prependVendorNoteWithSeparator(sam, target.peer.Vendor, noteFieldSeparator)
 	}
@@ -700,7 +700,7 @@ func isInternalCrossLinkMessage(trCtx transactionContext, target *messageTarget)
 }
 
 func isCrossLinkVendor(peer *ill_db.Peer) bool {
-	return peer != nil && strings.EqualFold(peer.Vendor, string(directory.CrossLink))
+	return peer != nil && strings.EqualFold(peer.Vendor, string(dirapi.CrossLink))
 }
 
 func prependSupplierSymbolNote(trCtx transactionContext, target *messageTarget, sam *iso18626.SupplyingAgencyMessage) {
@@ -708,7 +708,7 @@ func prependSupplierSymbolNote(trCtx transactionContext, target *messageTarget, 
 		target != nil && target.supplier != nil {
 		_, symbol := common.SplitAgencySymbol(target.supplier.SupplierSymbol)
 		if sam.MessageInfo.Note != "" {
-			sep := common.IllConfigString(trCtx.requester.CustomData, shim.NOTE_FIELD_SEP, func(c directory.IllConfig) *string { return c.NoteFieldSeparator })
+			sep := common.IllConfigString(trCtx.requester.CustomData, shim.NOTE_FIELD_SEP, func(c dirapi.IllConfig) *string { return c.NoteFieldSeparator })
 			if strings.HasPrefix(sam.MessageInfo.Note, "#") {
 				sep = ""
 			}
@@ -788,11 +788,11 @@ func createRequestMessage(trCtx transactionContext) (*iso18626.ISO18626Message, 
 	}
 	message.Request.BibliographicInfo.SupplierUniqueRecordId = trCtx.selectedSupplier.LocalID.String
 	requesterName, _, deliveryAddress, email := getPeerInfo(trCtx.requester, trCtx.transaction.RequesterSymbol.String)
-	if common.IllConfigBool(trCtx.requester.CustomData, appendRequestingAgencyInfo, func(c directory.IllConfig) *bool { return c.IncludeRequestingAgencyInfo }) {
+	if common.IllConfigBool(trCtx.requester.CustomData, appendRequestingAgencyInfo, func(c dirapi.IllConfig) *bool { return c.IncludeRequestingAgencyInfo }) {
 		populateRequesterInfo(message, requesterName, deliveryAddress, email)
 	}
 	populateDeliveryAddress(message, deliveryAddress, email)
-	if common.IllConfigBool(trCtx.selectedSupplierPeer.CustomData, appendSupplierInfo, func(c directory.IllConfig) *bool { return c.IncludeSupplierInfo }) {
+	if common.IllConfigBool(trCtx.selectedSupplierPeer.CustomData, appendSupplierInfo, func(c dirapi.IllConfig) *bool { return c.IncludeSupplierInfo }) {
 		supplierName, suppAgencyId, supplierAddress, _ := getPeerInfo(trCtx.selectedSupplierPeer, trCtx.selectedSupplier.SupplierSymbol)
 		populateSupplierInfo(message, supplierName, suppAgencyId, supplierAddress)
 	}

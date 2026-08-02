@@ -3,7 +3,7 @@ package catalog
 import (
 	"testing"
 
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,7 +35,7 @@ func TestOpacHoldingsParserReadsItemLoanPolicy(t *testing.T) {
     </holding>
   </holdings>
 </opacRecord>`)
-	parser := NewOpacHoldingsParser(directory.OpacHoldingsParserConfig{})
+	parser := NewOpacHoldingsParser(dirapi.OpacHoldingsParserConfig{})
 
 	holdings, err := parser.Parse(record, LookupParams{})
 

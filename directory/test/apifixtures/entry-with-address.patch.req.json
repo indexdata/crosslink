@@ -1,0 +1,23 @@
+{
+  "addresses": [
+    {
+      "id": "00000003-0000-0000-0000-000000000001",
+      "type": "Default",
+      "addressComponents": [
+        {"seq": 0, "type": "Thoroughfare", "value": "Unter den Linden 1"},
+        {"seq": 1, "type": "Locality", "value": "Berlin"},
+        {"seq": 2, "type": "PostalCode", "value": "10115"},
+        {"seq": 3, "type": "CountryCode", "value": "DE"}
+      ]
+    },
+    {
+      "type": "Shipping",
+      "addressComponents": [
+        {"seq": 0, "type": "Thoroughfare", "value": "Hauptstraße 42"},
+        {"seq": 1, "type": "Locality", "value": "Hamburg"},
+        {"seq": 2, "type": "PostalCode", "value": "20095"},
+        {"seq": 3, "type": "CountryCode", "value": "DE"}
+      ]
+    }
+  ]
+}

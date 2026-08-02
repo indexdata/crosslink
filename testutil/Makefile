@@ -23,3 +23,6 @@ vulncheck:
 deps-update:
 	$(GO) get -u ./...
 	$(GO) mod tidy
+
+clean:
+	rm -f $(COVERAGE)

@@ -15,7 +15,7 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/shim"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5"
@@ -457,7 +457,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessageWithPeer(ctx common.Ex
 	}
 	supplierPatronPattern := SUPPLIER_PATRON_PATTERN
 	if recipientPeer != nil {
-		supplierPatronPattern = common.IllConfigString(recipientPeer.CustomData, supplierPatronPattern, func(c directory.IllConfig) *string { return c.SupplierPatronPattern })
+		supplierPatronPattern = common.IllConfigString(recipientPeer.CustomData, supplierPatronPattern, func(c dirapi.IllConfig) *string { return c.SupplierPatronPattern })
 	}
 	pr, err := m.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams{
 		ID:              uuid.NewString(),

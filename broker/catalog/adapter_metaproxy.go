@@ -3,14 +3,14 @@ package catalog
 import (
 	"net/http"
 
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 )
 
 type MetaproxyLookupAdapter struct {
 	holdingsLookupAdapter LookupAdapter
 }
 
-func NewMetaproxyLookupAdapter(config directory.ZoomConfig, metaproxyUrl string, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser, metadataParser MetadataParser) (LookupAdapter, error) {
+func NewMetaproxyLookupAdapter(config dirapi.ZoomConfig, metaproxyUrl string, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser, metadataParser MetadataParser) (LookupAdapter, error) {
 	a := &MetaproxyLookupAdapter{
 		holdingsLookupAdapter: CreateSruLookupAdapter(http.DefaultClient, []string{metaproxyUrl}, config.Address, queryBuilder, holdingsParser, metadataParser, "marcxml"),
 	}

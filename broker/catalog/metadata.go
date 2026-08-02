@@ -3,7 +3,7 @@ package catalog
 import (
 	"strings"
 
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 )
 
@@ -34,18 +34,18 @@ func fixupString(src string, dst *string, replace bool) {
 	}
 }
 
-func MetadataRequestUpdate(illRequest *iso18626.BibliographicInfo, metadata Metadata, params LookupParams, mode directory.MetadataUpdateMode) error {
-	if mode == directory.None {
+func MetadataRequestUpdate(illRequest *iso18626.BibliographicInfo, metadata Metadata, params LookupParams, mode dirapi.MetadataUpdateMode) error {
+	if mode == dirapi.None {
 		return nil
 	}
-	if mode == directory.Auto {
+	if mode == dirapi.Auto {
 		if params.Identifier != "" {
-			mode = directory.Replace
+			mode = dirapi.Replace
 		} else {
-			mode = directory.Merge
+			mode = dirapi.Merge
 		}
 	}
-	replace := mode == directory.Replace
+	replace := mode == dirapi.Replace
 	fixupString(metadata.Title, &illRequest.Title, replace)
 	fixupString(metadata.Subtitle, &illRequest.Subtitle, replace)
 	fixupString(metadata.Author, &illRequest.Author, replace)

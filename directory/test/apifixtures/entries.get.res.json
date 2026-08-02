@@ -1,0 +1,120 @@
+{
+  "items": [
+    "<<UNORDERED>>",
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "An Institution",
+      "contactName":"Bob",
+      "type":"Institution",
+      "parent":"00000000-0000-0000-0000-000000000004",
+      "symbols": [
+        "<<UNORDERED>>",
+        {
+          "authority": "TEST",
+          "id": "60000000-0000-0000-0000-000000000001",
+          "symbol": "ANINST"
+        },
+        {
+          "authority": "TEST",
+          "id": "60000000-0000-0000-0000-000000000002",
+          "symbol": "ANINSTTOO"
+        }
+      ],
+      "endpoints": [
+        {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "name": "Primary",
+          "type": "ISO18626",
+          "address": "https://whatever.host.tld/path"
+        }
+      ],
+      "lmsConfig": {
+        "address":"https://also.not.real",
+        "fromAgency":"rivendell",
+        "fromAgencyAuthentication":"pack_extra_lembas",
+        "acceptItemEnabled": true
+      },
+      "closures": [
+        {
+          "entry":"00000000-0000-0000-0000-000000000002",
+          "id":"70000000-0000-0000-0000-000000000001",
+          "reason":"Winter break",
+          "startDate":"2024-01-01",
+          "endDate":"2024-01-15"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "Das Konsortium",
+      "type":"Consortium",
+      "symbols": [
+        {
+          "authority": "TEST",
+          "id": "60000000-0000-0000-0000-000000000003",
+          "symbol": "ANCONS"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "Eine Weitere Einrichtung",
+      "contactName": "Klaus",
+      "type":"Institution",
+      "parent":"00000000-0000-0000-0000-000000000004",
+      "addresses": [
+        "<<UNORDERED>>",
+        {
+          "id": "00000003-0000-0000-0000-000000000001",
+          "type": "Default",
+          "addressComponents": [
+            {"seq": 0, "type": "Thoroughfare", "value": "Unter den Linden 1"},
+            {"seq": 1, "type": "Locality", "value": "Berlin"},
+            {"seq": 2, "type": "PostalCode", "value": "10117"},
+            {"seq": 3, "type": "CountryCode", "value": "DE"}
+          ]
+        },
+        {
+          "id": "00000003-0000-0000-0000-000000000002",
+          "type": "Billing",
+          "addressComponents": [
+            {"seq": 0, "type": "Thoroughfare", "value": "Musterstraße 99"},
+            {"seq": 1, "type": "Locality", "value": "München"},
+            {"seq": 2, "type": "PostalCode", "value": "80331"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "No Symbol",
+      "description": "A very particular test entry",
+      "type":"Institution",
+      "parent":"00000000-0000-0000-0000-000000000004",
+      "networks": [
+        {
+          "id":"20000000-0000-0000-0000-000000000001","consortium":"00000000-0000-0000-0000-000000000004",
+          "name":"The Ultimate Network","priority":0.0
+        },
+        {
+          "id":"20000000-0000-0000-0000-000000000003","consortium":"00000000-0000-0000-0000-000000000004",
+          "name": "The Completely Normal Network","priority":0.0
+        }
+      ],
+      "tiers":[
+        {
+        "id":"30000000-0000-0000-0000-000000000001","consortium":"00000000-0000-0000-0000-000000000004",
+        "name":"Top Tier","level":"standard","type":"loan","cost":0.0
+        }
+      ],
+      "lmsConfig": {
+        "address":"https://not.really.real",
+        "fromAgency":"diku",
+        "fromAgencyAuthentication":"the_beaver_flies_at_twilight"
+      }
+    }
+  ],
+  "about": {
+    "count": 4
+  }
+}

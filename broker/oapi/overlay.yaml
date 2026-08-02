@@ -20,6 +20,7 @@ actions:
         path: github.com/indexdata/crosslink/broker/ill_db
   - target: $.components.schemas.Peer.properties.customData
     update:
-      x-go-type: directory.Entry
+      x-go-type: dirapi.Entry
       x-go-type-import:
-        path: github.com/indexdata/crosslink/directory
+        path: github.com/indexdata/crosslink/directory/api
+        name: dirapi

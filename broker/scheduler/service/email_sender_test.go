@@ -12,7 +12,7 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	psservice "github.com/indexdata/crosslink/broker/pullslip/service"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 )
@@ -70,7 +70,7 @@ func (m *mockEmailIllRepo) GetPeerBySymbol(_ common.ExtendedContext, _ string) (
 	if m.err != nil {
 		return ill_db.Peer{}, m.err
 	}
-	return ill_db.Peer{CustomData: directory.Entry{FromEmail: &m.fromEmail}}, nil
+	return ill_db.Peer{CustomData: dirapi.Entry{FromEmail: &m.fromEmail}}, nil
 }
 
 // mockEmailService records the raw message bytes passed to SendMail.

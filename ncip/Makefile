@@ -25,7 +25,7 @@ $(GEN_SCHEMA_OUT): $(GEN_SCHEMA_IN)
 	$(GO) fmt $@
 
 clean:
-	rm -f $(GEN_SCHEMA_OUT)
+	rm -f $(GEN_SCHEMA_OUT) $(COVERAGE)
 
 check: generate
 	$(GO) test -v -cover -coverpkg=./... -coverprofile=$(COVERAGE) ./...
