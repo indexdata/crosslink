@@ -705,7 +705,7 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 
 func (a *PatronRequestActionService) sendNotificationBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
 	if !a.emailService.IsReadyToSend() {
-		return actionExecutionResult{status: events.EventStatusSuccess, result: &events.EventResult{CommonEventData: events.CommonEventData{Note: "email service is not ready to send"}}, pr: pr}
+		return logNotificationErrorAndReturnSuccess(ctx, pr, "email service is not ready to send", nil)
 	}
 	return a.sendEmailNotification(ctx, pr, params, pr.RequesterSymbol.String)
 }
@@ -1083,25 +1083,29 @@ func (a *PatronRequestActionService) askRetryLenderRequest(ctx common.ExtendedCo
 
 func (a *PatronRequestActionService) sendNotificationLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
 	if !a.emailService.IsReadyToSend() {
-		return actionExecutionResult{status: events.EventStatusSuccess, result: &events.EventResult{CommonEventData: events.CommonEventData{Note: "email service is not ready to send"}}, pr: pr}
+		return logNotificationErrorAndReturnSuccess(ctx, pr, "email service is not ready to send", nil)
 	}
 	return a.sendEmailNotification(ctx, pr, params, pr.SupplierSymbol.String)
 }
 
-func logErrorAndReturnActionExecutionResult(ctx common.ExtendedContext, pr pr_db.PatronRequest, msg string, err error) actionExecutionResult {
-	status, result := logActionErrorAndReturnResult(ctx, msg, err)
-	return actionExecutionResult{status: status, result: result, pr: pr}
+func logNotificationErrorAndReturnSuccess(ctx common.ExtendedContext, pr pr_db.PatronRequest, msg string, err error) actionExecutionResult {
+	ctx.Logger().Error(msg, "error", err)
+	return actionExecutionResult{
+		status: events.EventStatusSuccess,
+		result: &events.EventResult{CommonEventData: events.CommonEventData{Note: msg}},
+		pr:     pr,
+	}
 }
 
 func (a *PatronRequestActionService) sendEmailNotification(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams, symbol string) actionExecutionResult {
 	result := events.EventResult{}
 	if params.AutoActionParams != nil && params.AutoActionParams.SendTo != nil && len(*params.AutoActionParams.SendTo) > 0 {
 		if params.AutoActionParams.TemplateLabel == nil {
-			return logErrorAndReturnActionExecutionResult(ctx, pr, "template label is not set", nil)
+			return logNotificationErrorAndReturnSuccess(ctx, pr, "template label is not set", nil)
 		}
 		from, to, err := a.getDirectoryEmailData(ctx, symbol, slices.Contains(*params.AutoActionParams.SendTo, proapi.ModelActionParamsSendToStaff))
 		if err != nil {
-			return logErrorAndReturnActionExecutionResult(ctx, pr, "error getting directory email data", err)
+			return logNotificationErrorAndReturnSuccess(ctx, pr, "error getting directory email data", err)
 		}
 		if slices.Contains(*params.AutoActionParams.SendTo, proapi.ModelActionParamsSendToPatron) {
 			recipients := patronEmail(pr)
@@ -1110,7 +1114,7 @@ func (a *PatronRequestActionService) sendEmailNotification(ctx common.ExtendedCo
 			} else {
 				sendErr := a.createAndSendEmail(ctx, symbol, from, recipients, *params.AutoActionParams.TemplateLabel, proapi.ModelActionParamsSendToPatron)
 				if sendErr != nil {
-					return logErrorAndReturnActionExecutionResult(ctx, pr, "error sending email to patron", sendErr)
+					return logNotificationErrorAndReturnSuccess(ctx, pr, "error sending email to patron", sendErr)
 				}
 				result.Note = "patron email sent successfully"
 			}
@@ -1130,7 +1134,7 @@ func (a *PatronRequestActionService) sendEmailNotification(ctx common.ExtendedCo
 			} else {
 				sendErr := a.createAndSendEmail(ctx, symbol, from, recipients, *params.AutoActionParams.TemplateLabel, proapi.ModelActionParamsSendToStaff)
 				if sendErr != nil {
-					return logErrorAndReturnActionExecutionResult(ctx, pr, "error sending email to staff", sendErr)
+					return logNotificationErrorAndReturnSuccess(ctx, pr, "error sending email to staff", sendErr)
 				}
 				result.Note = "staff email sent successfully"
 			}

@@ -2330,26 +2330,26 @@ func TestSendEmailNotification(t *testing.T) {
 			wantStatus: events.EventStatusSuccess,
 		},
 		{
-			name:   "nil TemplateLabel – error",
+			name:   "nil TemplateLabel – logged success",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
 			params: actionParams{AutoActionParams: &proapi.ModelAction_Params{
 				SendTo: sendToTargets(proapi.ModelActionParamsSendToPatron),
 			}},
 			setupMocks: func(_ *MockPrRepo, _ *IllRepoMock, _ *EmailSenderMock) {},
-			wantStatus: events.EventStatusError,
-			wantErr:    "template label is not set",
+			wantStatus: events.EventStatusSuccess,
+			wantNote:   "template label is not set",
 		},
 		{
-			name:   "GetPeerBySymbol error – error result",
+			name:   "GetPeerBySymbol error – logged success",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
 			params: autoParams(testTemplate, proapi.ModelActionParamsSendToPatron),
 			setupMocks: func(_ *MockPrRepo, illRepo *IllRepoMock, _ *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(ill_db.Peer{}, errors.New("db error"))
 			},
-			wantStatus: events.EventStatusError,
-			wantErr:    "error getting directory email data",
+			wantStatus: events.EventStatusSuccess,
+			wantNote:   "error getting directory email data",
 		},
 		{
 			name:   "SendTo patron – no patron email addresses – note set",
@@ -2376,7 +2376,7 @@ func TestSendEmailNotification(t *testing.T) {
 			wantNote:   "patron email sent successfully",
 		},
 		{
-			name:   "SendTo patron – SendEmail fails – error result",
+			name:   "SendTo patron – SendEmail fails – logged success",
 			pr:     prWithPatronEmail(testPatronTo),
 			symbol: testSymbol,
 			params: autoParams(testTemplate, proapi.ModelActionParamsSendToPatron),
@@ -2385,8 +2385,8 @@ func TestSendEmailNotification(t *testing.T) {
 				prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
 				emailSvc.On("SendEmail", testFrom).Return(errors.New("smtp error"))
 			},
-			wantStatus: events.EventStatusError,
-			wantErr:    "error sending email to patron",
+			wantStatus: events.EventStatusSuccess,
+			wantNote:   "error sending email to patron",
 		},
 		{
 			name:   "SendTo staff – email sent successfully",
@@ -2441,7 +2441,7 @@ func TestSendEmailNotification(t *testing.T) {
 			wantNote:   "staff email sent successfully",
 		},
 		{
-			name:   "SendTo staff – SendEmail fails – error result",
+			name:   "SendTo staff – SendEmail fails – logged success",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
 			params: autoParams(testTemplate, proapi.ModelActionParamsSendToStaff),
@@ -2450,8 +2450,8 @@ func TestSendEmailNotification(t *testing.T) {
 				prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
 				emailSvc.On("SendEmail", testFrom).Return(errors.New("smtp error"))
 			},
-			wantStatus: events.EventStatusError,
-			wantErr:    "error sending email to staff",
+			wantStatus: events.EventStatusSuccess,
+			wantNote:   "error sending email to staff",
 		},
 		{
 			name:   "SendTo patron and staff – both emails sent – staff note wins",
