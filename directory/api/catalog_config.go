@@ -9,20 +9,6 @@ import (
 	"github.com/indexdata/crosslink/directory/db"
 )
 
-const (
-	zoomOptionMockRecords           = "mockRecords"
-	zoomOptionPreferredRecordSyntax = "preferredRecordSyntax"
-	zoomOptionCount                 = "count"
-	zoomOptionElementSetName        = "elementSetName"
-	zoomOptionSchema                = "schema"
-	zoomOptionAuthentication        = "authentication"
-	zoomOptionUser                  = "user"
-	zoomOptionPassword              = "password"
-	zoomOptionAdapterError          = "adapter-error"
-	zoomOptionLookupError           = "lookup-error"
-	zoomOptionLocation              = "location"
-)
-
 func catalogConfigToDBParams(entryID uuid.UUID, cfg CatalogConfig) db.UpsertCatalogConfigParams {
 	params := db.UpsertCatalogConfigParams{
 		Entry: &entryID,
@@ -106,14 +92,6 @@ func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) db.UpsertIllConfigPar
 	return params
 }
 
-func stringMapValue(values map[string]string, key string) *string {
-	value, ok := values[key]
-	if !ok {
-		return nil
-	}
-	return &value
-}
-
 func boolPtr(value bool) *bool {
 	return &value
 }
@@ -127,19 +105,4 @@ func symbolsToFullSymbols(symbols *[]Symbol) []string {
 		values = append(values, strings.ToUpper(symbol.Authority)+":"+strings.ToUpper(symbol.Symbol))
 	}
 	return values
-}
-
-func fullSymbolsToSymbols(values []string) (*[]Symbol, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	symbols := make([]Symbol, 0, len(values))
-	for _, value := range values {
-		authority, symbol, err := resolveCombinedSymbol(value)
-		if err != nil {
-			return nil, err
-		}
-		symbols = append(symbols, Symbol{Authority: authority, Symbol: symbol})
-	}
-	return &symbols, nil
 }

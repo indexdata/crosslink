@@ -30,34 +30,6 @@ func getSymbolAuthority() string {
 	return symbolAuthority
 }
 
-func maybeUpdateLenderOfLastResort(cur []string, patch nullable.Nullable[IllConfig]) []string {
-	if !patch.IsSpecified() {
-		return cur
-	}
-	if patch.IsNull() {
-		return nil
-	}
-	patchVal := patch.MustGet().LendersOfLastResort
-	if patchVal == nil {
-		return cur
-	}
-	return symbolsToFullSymbols(patchVal)
-}
-
-func maybeUpdateDuplicateCheckWindowHours(cur *int32, patch nullable.Nullable[IllConfig]) *int32 {
-	if !patch.IsSpecified() {
-		return cur
-	}
-	if patch.IsNull() {
-		return nil
-	}
-	patchVal := patch.MustGet().DuplicateCheckWindowHours
-	if patchVal == nil {
-		return cur
-	}
-	return patchVal
-}
-
 func maybeUpdateEntryVendor(cur *string, patch nullable.Nullable[EntryVendor]) *string {
 	if !patch.IsSpecified() {
 		return cur
