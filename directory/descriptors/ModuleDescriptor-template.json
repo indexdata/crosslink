@@ -8,7 +8,7 @@
       "handlers": [
         {
           "methods": ["GET"],
-          "pathPattern": "/rsdir/entries",
+          "pathPattern": "/directory/entries",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -19,7 +19,7 @@
         },
         {
           "methods": ["POST"],
-          "pathPattern": "/rsdir/entries",
+          "pathPattern": "/directory/entries",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -30,7 +30,7 @@
         },
         {
           "methods": ["GET"],
-          "pathPattern": "/rsdir/entries/{key}/{value}",
+          "pathPattern": "/directory/entries/{key}/{value}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -41,7 +41,7 @@
         },
         {
           "methods" : ["GET"],
-          "pathPattern": "/rsdir/entries/{key}/{value}/tiers",
+          "pathPattern": "/directory/entries/{key}/{value}/tiers",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -52,7 +52,7 @@
         },
         {
           "methods" : ["POST"],
-          "pathPattern": "/rsdir/entries/{key}/{value}/tiers",
+          "pathPattern": "/directory/entries/{key}/{value}/tiers",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -63,7 +63,7 @@
         },
         {
           "methods" : ["DELETE"],
-          "pathPattern": "/rsdir/entries/{key}/{value}/tiers/{id}",
+          "pathPattern": "/directory/entries/{key}/{value}/tiers/{id}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -74,7 +74,7 @@
         },
         {
           "methods" : ["GET"],
-          "pathPattern": "/rsdir/entries/{key}/{value}/networks",
+          "pathPattern": "/directory/entries/{key}/{value}/networks",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -85,7 +85,7 @@
         },
         {
           "methods" : ["POST"],
-          "pathPattern": "/rsdir/entries/{key}/{value}/networks",
+          "pathPattern": "/directory/entries/{key}/{value}/networks",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -96,7 +96,7 @@
         },
         {
           "methods" : ["DELETE"],
-          "pathPattern": "/rsdir/entries/{key}/{value}/networks/{id}",
+          "pathPattern": "/directory/entries/{key}/{value}/networks/{id}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -107,7 +107,7 @@
         },
         {
           "methods": ["PATCH"],
-          "pathPattern": "/rsdir/entries/{key}/{value}",
+          "pathPattern": "/directory/entries/{key}/{value}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -118,7 +118,7 @@
         },
         {
           "methods": ["DELETE"],
-          "pathPattern": "/rsdir/entries/{key}/{value}",
+          "pathPattern": "/directory/entries/{key}/{value}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -135,7 +135,7 @@
       "handlers" : [
         {
           "methods": ["GET"],
-          "pathPattern": "/rsdir/tiers",
+          "pathPattern": "/directory/tiers",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -146,7 +146,7 @@
         },
         {
           "methods": ["POST"],
-          "pathPattern": "/rsdir/tiers",
+          "pathPattern": "/directory/tiers",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -157,7 +157,7 @@
         },
         {
           "methods": ["GET"],
-          "pathPattern": "/rsdir/tiers/{id}",
+          "pathPattern": "/directory/tiers/{id}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -168,7 +168,7 @@
         },
         {
           "methods": ["DELETE"],
-          "pathPattern": "/rsdir/tiers/{id}",
+          "pathPattern": "/directory/tiers/{id}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -185,7 +185,7 @@
       "handlers" : [
          {
           "methods": ["GET"],
-          "pathPattern": "/rsdir/networks",
+          "pathPattern": "/directory/networks",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -196,7 +196,7 @@
         },
         {
           "methods": ["POST"],
-          "pathPattern": "/rsdir/networks",
+          "pathPattern": "/directory/networks",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -207,7 +207,7 @@
         },
         {
           "methods": ["GET"],
-          "pathPattern": "/rsdir/networks/{id}",
+          "pathPattern": "/directory/networks/{id}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -218,7 +218,7 @@
         },
         {
           "methods": ["DELETE"],
-          "pathPattern": "/rsdir/networks/{id}",
+          "pathPattern": "/directory/networks/{id}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -235,7 +235,7 @@
       "handlers" : [
          {
           "methods": ["GET"],
-          "pathPattern": "/rsdir/entry-networks",
+          "pathPattern": "/directory/entry-networks",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -246,7 +246,7 @@
         },
         {
           "methods": ["POST"],
-          "pathPattern": "/rsdir/entry-networks",
+          "pathPattern": "/directory/entry-networks",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -257,7 +257,7 @@
         },
         {
           "methods": ["GET"],
-          "pathPattern": "/rsdir/entry-networks/{id}",
+          "pathPattern": "/directory/entry-networks/{id}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -268,7 +268,7 @@
         },
         {
           "methods": ["DELETE"],
-          "pathPattern": "/rsdir/entry-networks/{id}",
+          "pathPattern": "/directory/entry-networks/{id}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -285,7 +285,7 @@
       "handlers" : [
          {
           "methods": ["GET"],
-          "pathPattern": "/rsdir/entry-tiers",
+          "pathPattern": "/directory/entry-tiers",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -296,7 +296,7 @@
         },
         {
           "methods": ["POST"],
-          "pathPattern": "/rsdir/entry-tiers",
+          "pathPattern": "/directory/entry-tiers",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -307,7 +307,7 @@
         },
         {
           "methods": ["GET"],
-          "pathPattern": "/rsdir/entry-tiers/{id}",
+          "pathPattern": "/directory/entry-tiers/{id}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -318,7 +318,7 @@
         },
         {
           "methods": ["DELETE"],
-          "pathPattern": "/rsdir/entry-tiers/{id}",
+          "pathPattern": "/directory/entry-tiers/{id}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -335,7 +335,7 @@
       "handlers" : [
          {
           "methods": ["GET"],
-          "pathPattern": "/rsdir/closures",
+          "pathPattern": "/directory/closures",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -346,7 +346,7 @@
         },
         {
           "methods": ["POST"],
-          "pathPattern": "/rsdir/closures",
+          "pathPattern": "/directory/closures",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -357,7 +357,7 @@
         },
         {
           "methods": ["GET"],
-          "pathPattern": "/rsdir/closures/{id}",
+          "pathPattern": "/directory/closures/{id}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -368,7 +368,7 @@
         },
         {
           "methods": ["PATCH"],
-          "pathPattern": "/rsdir/closures/{id}",
+          "pathPattern": "/directory/closures/{id}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",
@@ -379,7 +379,7 @@
         },
         {
           "methods": ["DELETE"],
-          "pathPattern": "/rsdir/closures/{id}",
+          "pathPattern": "/directory/closures/{id}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
             "directory.consortium.all",

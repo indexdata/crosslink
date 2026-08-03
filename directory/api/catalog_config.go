@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/google/uuid"
@@ -8,22 +9,8 @@ import (
 	"github.com/indexdata/crosslink/directory/db"
 )
 
-const (
-	zoomOptionMockRecords           = "mockRecords"
-	zoomOptionPreferredRecordSyntax = "preferredRecordSyntax"
-	zoomOptionCount                 = "count"
-	zoomOptionElementSetName        = "elementSetName"
-	zoomOptionSchema                = "schema"
-	zoomOptionAuthentication        = "authentication"
-	zoomOptionUser                  = "user"
-	zoomOptionPassword              = "password"
-	zoomOptionAdapterError          = "adapter-error"
-	zoomOptionLookupError           = "lookup-error"
-	zoomOptionLocation              = "location"
-)
-
-func holdingsConfigToDBParams(entryID uuid.UUID, cfg HoldingsConfig) db.UpsertHoldingsConfigParams {
-	params := db.UpsertHoldingsConfigParams{
+func catalogConfigToDBParams(entryID uuid.UUID, cfg CatalogConfig) db.UpsertCatalogConfigParams {
+	params := db.UpsertCatalogConfigParams{
 		Entry: &entryID,
 	}
 
@@ -38,18 +25,7 @@ func holdingsConfigToDBParams(entryID uuid.UUID, cfg HoldingsConfig) db.UpsertHo
 	if cfg.Zoom != nil {
 		params.ZoomAddress = &cfg.Zoom.Address
 		if cfg.Zoom.Options != nil {
-			options := *cfg.Zoom.Options
-			params.ZoomOptionMockRecords = stringMapValue(options, zoomOptionMockRecords)
-			params.ZoomOptionPreferredRecordSyntax = stringMapValue(options, zoomOptionPreferredRecordSyntax)
-			params.ZoomOptionCount = stringMapValue(options, zoomOptionCount)
-			params.ZoomOptionElementSetName = stringMapValue(options, zoomOptionElementSetName)
-			params.ZoomOptionSchema = stringMapValue(options, zoomOptionSchema)
-			params.ZoomOptionAuthentication = stringMapValue(options, zoomOptionAuthentication)
-			params.ZoomOptionUser = stringMapValue(options, zoomOptionUser)
-			params.ZoomOptionPassword = stringMapValue(options, zoomOptionPassword)
-			params.ZoomOptionAdapterError = stringMapValue(options, zoomOptionAdapterError)
-			params.ZoomOptionLookupError = stringMapValue(options, zoomOptionLookupError)
-			params.ZoomOptionLocation = stringMapValue(options, zoomOptionLocation)
+			params.ZoomOptions, _ = json.Marshal(*cfg.Zoom.Options)
 		}
 	}
 	if cfg.QueryConfig != nil {
@@ -90,12 +66,30 @@ func holdingsConfigToDBParams(entryID uuid.UUID, cfg HoldingsConfig) db.UpsertHo
 	return params
 }
 
-func stringMapValue(values map[string]string, key string) *string {
-	value, ok := values[key]
-	if !ok {
-		return nil
+func holdingsPolicyJSON(policy HoldingsPolicy) []byte {
+	value, _ := json.Marshal(policy)
+	return value
+}
+
+func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) db.UpsertIllConfigParams {
+	params := db.UpsertIllConfigParams{
+		Entry:                       entryID,
+		Iso18626Url:                 cfg.Iso18626Url,
+		LendersOfLastResort:         symbolsToFullSymbols(cfg.LendersOfLastResort),
+		IncludeRequestingAgencyInfo: cfg.IncludeRequestingAgencyInfo,
+		IncludeSupplierInfo:         cfg.IncludeSupplierInfo,
+		IncludeReturnInfo:           cfg.IncludeReturnInfo,
+		IncludeVendorNote:           cfg.IncludeVendorNote,
+		UseOfferedCosts:             cfg.UseOfferedCosts,
+		NoteFieldSeparator:          cfg.NoteFieldSeparator,
+		SupplierPatronPattern:       cfg.SupplierPatronPattern,
+		DuplicateCheckWindowHours:   cfg.DuplicateCheckWindowHours,
 	}
-	return &value
+	if cfg.Iso18626Vendor != nil {
+		vendor := string(*cfg.Iso18626Vendor)
+		params.Iso18626Vendor = &vendor
+	}
+	return params
 }
 
 func boolPtr(value bool) *bool {
@@ -111,19 +105,4 @@ func symbolsToFullSymbols(symbols *[]Symbol) []string {
 		values = append(values, strings.ToUpper(symbol.Authority)+":"+strings.ToUpper(symbol.Symbol))
 	}
 	return values
-}
-
-func fullSymbolsToSymbols(values []string) (*[]Symbol, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	symbols := make([]Symbol, 0, len(values))
-	for _, value := range values {
-		authority, symbol, err := resolveCombinedSymbol(value)
-		if err != nil {
-			return nil, err
-		}
-		symbols = append(symbols, Symbol{Authority: authority, Symbol: symbol})
-	}
-	return &symbols, nil
 }

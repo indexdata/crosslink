@@ -32,11 +32,11 @@ func TestGetEntriesContract(t *testing.T) {
 		itemCount  int
 		totalCount int64
 	}{
-		{"zero limit", "/rsdir/entries?limit=0", http.StatusOK, 0, 3},
-		{"offset beyond results", "/rsdir/entries?offset=99", http.StatusOK, 0, 3},
-		{"negative limit", "/rsdir/entries?limit=-1", http.StatusBadRequest, 0, 0},
-		{"limit above maximum", "/rsdir/entries?limit=1001", http.StatusBadRequest, 0, 0},
-		{"negative offset", "/rsdir/entries?offset=-1", http.StatusBadRequest, 0, 0},
+		{"zero limit", "/directory/entries?limit=0", http.StatusOK, 0, 3},
+		{"offset beyond results", "/directory/entries?offset=99", http.StatusOK, 0, 3},
+		{"negative limit", "/directory/entries?limit=-1", http.StatusBadRequest, 0, 0},
+		{"limit above maximum", "/directory/entries?limit=1001", http.StatusBadRequest, 0, 0},
+		{"negative offset", "/directory/entries?offset=-1", http.StatusBadRequest, 0, 0},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, testcase.path, nil)
@@ -53,6 +53,56 @@ func TestGetEntriesContract(t *testing.T) {
 			assert.Equal(t, testcase.totalCount, response.About.Count)
 		})
 	}
+}
+
+func TestGetEntriesPeerURLCompatibility(t *testing.T) {
+	mock, err := NewJson(`[{"id":"00000000-0000-0000-0000-000000000001","name":"Alpha","endpoints":[{"name":"ISO","type":"ISO18626","address":"https://original.example/iso18626"}]}]`)
+	assert.NoError(t, err)
+
+	mux := http.NewServeMux()
+	assert.NoError(t, mock.HandlerFromMux(mux))
+
+	request := httptest.NewRequest(http.MethodGet, "/directory/entries?limit=1000&peer_url=http%3A%2F%2Flocalhost%3A1234%2Fiso18626", nil)
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, request)
+	assert.Equal(t, http.StatusOK, recorder.Code)
+
+	var response directory.EntriesResponse
+	assert.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	if assert.Len(t, response.Items, 1) && assert.NotNil(t, response.Items[0].Endpoints) {
+		assert.Equal(t, "http://localhost:1234/iso18626", (*response.Items[0].Endpoints)[0].Address)
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "/directory/entries?peer_url=not-a-url", nil)
+	recorder = httptest.NewRecorder()
+	mux.ServeHTTP(recorder, request)
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
+func TestGetEntriesIncludesChildrenOfMatchingParent(t *testing.T) {
+	mock, err := NewJson(`[
+		{"id":"00000000-0000-0000-0000-000000000001","name":"Parent","type":"Institution","symbols":[{"authority":"ISIL","symbol":"PARENT"}]},
+		{"id":"00000000-0000-0000-0000-000000000002","parent":"00000000-0000-0000-0000-000000000001","name":"Branch","type":"Branch","symbols":[{"authority":"ISIL","symbol":"BRANCH"}],"endpoints":[{"name":"ISO","type":"ISO18626","address":"https://original.example/iso18626"}]}
+	]`)
+	assert.NoError(t, err)
+
+	mux := http.NewServeMux()
+	assert.NoError(t, mock.HandlerFromMux(mux))
+	request := httptest.NewRequest(http.MethodGet, "/directory/entries?limit=1000&cql=symbol+any+%22ISIL%3APARENT%22&peer_url=https%3A%2F%2Foverride.example%2Fiso18626", nil)
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, request)
+	assert.Equal(t, http.StatusOK, recorder.Code)
+
+	var response directory.EntriesResponse
+	assert.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	if assert.Len(t, response.Items, 2) {
+		assert.Equal(t, "Branch", response.Items[0].Name)
+		assert.Equal(t, "Parent", response.Items[1].Name)
+		if assert.NotNil(t, response.Items[0].Endpoints) {
+			assert.Equal(t, "https://override.example/iso18626", (*response.Items[0].Endpoints)[0].Address)
+		}
+	}
+	assert.Equal(t, int64(2), response.About.Count)
 }
 
 func TestMatchQueries(t *testing.T) {

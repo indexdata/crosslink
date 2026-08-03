@@ -22,13 +22,40 @@ import (
 var _ directory.StrictServerInterface = (*DirectoryMock)(nil)
 
 const (
-	directoryBasePath = "/rsdir"
+	directoryBasePath = "/directory"
 	defaultEntryLimit = 10
 	maxEntryLimit     = 1000
 )
 
 type DirectoryMock struct {
 	entries []directory.Entry
+}
+
+type peerURLContextKey struct{}
+
+func peerURLCompatibilityMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query := r.URL.Query()
+		peerURL := query.Get("peer_url")
+		if peerURL != "" {
+			query.Del("peer_url")
+			r.URL.RawQuery = query.Encode()
+			r = r.WithContext(context.WithValue(r.Context(), peerURLContextKey{}, peerURL))
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func overridePeerURL(entry directory.Entry, peerURL string) directory.Entry {
+	if entry.Endpoints == nil || peerURL == "" {
+		return entry
+	}
+	endpoints := append([]directory.ServiceEndpoint(nil), (*entry.Endpoints)...)
+	for i := range endpoints {
+		endpoints[i].Address = peerURL
+	}
+	entry.Endpoints = &endpoints
+	return entry
 }
 
 //go:embed directories.json
@@ -280,6 +307,11 @@ func fullSymbol(symbol directory.Symbol) string {
 }
 
 func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEntriesRequestObject) (directory.GetEntriesResponseObject, error) {
+	peerURL, _ := ctx.Value(peerURLContextKey{}).(string)
+	if peerURL != "" && !strings.HasPrefix(peerURL, "http://") && !strings.HasPrefix(peerURL, "https://") {
+		return directory.GetEntries400TextResponse("peer_url must start with http:// or https://"), nil
+	}
+
 	var query *cql.Query
 	if request.Params.Cql != nil {
 		var p cql.Parser
@@ -303,6 +335,24 @@ func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEnt
 	}
 
 	filtered := make([]directory.Entry, 0)
+	includedIDs := make(map[string]struct{})
+	appendEntry := func(entry directory.Entry) {
+		if entry.Id != nil {
+			id := entry.Id.String()
+			if _, exists := includedIDs[id]; exists {
+				return
+			}
+			includedIDs[id] = struct{}{}
+		}
+		filtered = append(filtered, overridePeerURL(entry, peerURL))
+	}
+	childrenByParent := make(map[string][]directory.Entry)
+	for _, entry := range d.entries {
+		if entry.Parent != nil {
+			parentID := entry.Parent.String()
+			childrenByParent[parentID] = append(childrenByParent[parentID], entry)
+		}
+	}
 	for _, entry := range d.entries {
 		match, err := matchQuery(query, entry)
 		if err != nil {
@@ -311,7 +361,12 @@ func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEnt
 		if !match {
 			continue
 		}
-		filtered = append(filtered, entry)
+		appendEntry(entry)
+		if query != nil && entry.Id != nil {
+			for _, child := range childrenByParent[entry.Id.String()] {
+				appendEntry(child)
+			}
+		}
 	}
 
 	sort.SliceStable(filtered, func(i, j int) bool {
@@ -353,6 +408,6 @@ func (d *DirectoryMock) HandlerFromMux(mux *http.ServeMux) error {
 		BaseURL:    directoryBasePath,
 		BaseRouter: directoryMux,
 	})
-	mux.Handle(directoryBasePath+"/", apiValidator.OapiRequestValidator(swagger)(handler))
+	mux.Handle(directoryBasePath+"/", peerURLCompatibilityMiddleware(apiValidator.OapiRequestValidator(swagger)(handler)))
 	return nil
 }

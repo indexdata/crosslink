@@ -95,7 +95,10 @@ func (a *ApiDirectory) getDirectory(ctx common.ExtendedContext, symbols []string
 			continue
 		}
 		apiUrl := ""
-		if d.Endpoints != nil {
+		useIllConfig := d.IllConfig != nil && d.IllConfig.Iso18626Url != nil && *d.IllConfig.Iso18626Url != ""
+		if useIllConfig {
+			apiUrl = *d.IllConfig.Iso18626Url
+		} else if d.Endpoints != nil {
 			for _, s := range *d.Endpoints {
 				if s.Type == "ISO18626" && s.Address != "" {
 					apiUrl = s.Address
@@ -103,10 +106,18 @@ func (a *ApiDirectory) getDirectory(ctx common.ExtendedContext, symbols []string
 			}
 		}
 		vendor := dirapi.Unknown
-		if d.Vendor != nil {
-			vendor = *d.Vendor
-		} else if apiUrl != "" {
-			vendor = GetVendorFromUrl(apiUrl)
+		if useIllConfig {
+			if d.IllConfig.Iso18626Vendor != nil {
+				vendor = *d.IllConfig.Iso18626Vendor
+			} else {
+				vendor = GetVendorFromUrl(apiUrl)
+			}
+		} else {
+			if d.Vendor != nil {
+				vendor = *d.Vendor
+			} else if apiUrl != "" {
+				vendor = GetVendorFromUrl(apiUrl)
+			}
 		}
 		entry := DirectoryEntry{
 			Name:       d.Name,
@@ -391,7 +402,7 @@ func getPeerNetworks(peerData dirapi.Entry) map[string]Network {
 				networks[*n.Name] = Network{
 					Name:       *n.Name,
 					Priority:   int(n.Priority),
-					Reciprocal: nil,
+					Reciprocal: n.Reciprocal,
 				}
 			}
 		}

@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS entries (
 	description varchar(255),
 	organization_id varchar(255),
 	contact_name varchar(255),
+	email varchar(255),
 	from_email varchar(255),
 	tenant varchar(255),
 	vendor varchar(64),
@@ -72,7 +73,7 @@ CREATE TABLE IF NOT EXISTS networks (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
 	consortium uuid NOT NULL REFERENCES entries (id) ON DELETE CASCADE,
 	name varchar(255),
-	priority double precision NOT NULL DEFAULT 0.0,
+	priority integer NOT NULL DEFAULT 0,
 	reciprocal boolean
 );
 
@@ -111,7 +112,7 @@ CREATE TABLE IF NOT EXISTS lms_configs (
 	requester_patron_pattern varchar(255)
 );
 
-CREATE TABLE IF NOT EXISTS holdings_configs (
+CREATE TABLE IF NOT EXISTS catalog_configs (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
 	entry uuid NOT NULL REFERENCES entries (id) ON DELETE CASCADE UNIQUE,
 	metadata_update_mode varchar(32),

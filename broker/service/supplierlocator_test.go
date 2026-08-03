@@ -483,7 +483,7 @@ func TestLocateSuppliersLastResortRequester(t *testing.T) {
 				},
 			},
 		},
-		requester: ill_db.Peer{ID: "requester-1", CustomData: dirapi.Entry{LenderOfLastResort: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUP2"}, {Symbol: "SUP3"}}}},
+		requester: ill_db.Peer{ID: "requester-1", CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{LendersOfLastResort: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUP2"}, {Symbol: "SUP3"}}}}},
 		peers: []ill_db.Peer{
 			{ID: "peer-1", BorrowsCount: 1},
 			{ID: "peer-2", BorrowsCount: 1},
@@ -529,7 +529,7 @@ func TestLocateSuppliersLastResortLookupEmpty(t *testing.T) {
 				},
 			},
 		},
-		requester: ill_db.Peer{ID: "requester-1", CustomData: dirapi.Entry{LenderOfLastResort: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUP2"}, {Symbol: "SUP3"}}}},
+		requester: ill_db.Peer{ID: "requester-1", CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{LendersOfLastResort: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUP2"}, {Symbol: "SUP3"}}}}},
 		peers: []ill_db.Peer{
 			{ID: "peer-2", BorrowsCount: 1},
 			{ID: "peer-3", BorrowsCount: 1},
@@ -579,7 +579,7 @@ func TestLocateSuppliersLastResortConsortium(t *testing.T) {
 			"peer-2": {{SymbolValue: "ISIL:SUP2", PeerID: "peer-2"}},
 		},
 		consortiumPeers: []ill_db.Peer{
-			{ID: "consortium-peer-1", CustomData: dirapi.Entry{Symbols: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUPC"}}, LenderOfLastResort: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUP2"}}}},
+			{ID: "consortium-peer-1", CustomData: dirapi.Entry{Symbols: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUPC"}}, IllConfig: &dirapi.IllConfig{LendersOfLastResort: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUP2"}}}}},
 		},
 	}
 
@@ -702,16 +702,16 @@ func metadataTestRepo(illTrans ill_db.IllTransaction, requester ill_db.Peer) *Mo
 	}
 }
 
-// metadataTestRequester returns a peer carrying the given MetadataUpdateMode in its HoldingsConfig.
-// Pass nil to leave HoldingsConfig absent (mode defaults to None).
+// metadataTestRequester returns a peer carrying the given MetadataUpdateMode in its CatalogConfig.
+// Pass nil to leave CatalogConfig absent (mode defaults to None).
 func metadataTestRequester(mode *dirapi.MetadataUpdateMode) ill_db.Peer {
-	var cc *dirapi.HoldingsConfig
+	var cc *dirapi.CatalogConfig
 	if mode != nil {
-		cc = &dirapi.HoldingsConfig{MetadataUpdateMode: mode}
+		cc = &dirapi.CatalogConfig{MetadataUpdateMode: mode}
 	}
 	return ill_db.Peer{
 		ID:         "requester-1",
-		CustomData: dirapi.Entry{Name: "test-requester", HoldingsConfig: cc},
+		CustomData: dirapi.Entry{Name: "test-requester", CatalogConfig: cc},
 	}
 }
 
@@ -726,7 +726,7 @@ func TestLocateSuppliersMetadataModeNoneSkipsUpdate(t *testing.T) {
 			},
 		},
 	}
-	mockRepo := metadataTestRepo(illTrans, metadataTestRequester(nil)) // no HoldingsConfig → mode=None
+	mockRepo := metadataTestRepo(illTrans, metadataTestRequester(nil)) // no CatalogConfig → mode=None
 	holdingsAdapter := &catalog.MockLookupAdapter{
 		Holdings: []catalog.Holding{{Symbol: "ISIL:SUP1"}},
 	}

@@ -13,8 +13,8 @@ import (
 	"github.com/indexdata/go-utils/utils"
 )
 
-var NOTE_FIELD_SEP = utils.GetEnv("NOTE_FIELD_SEP", ", ")
-var OFFERED_COSTS, _ = utils.GetEnvBool("OFFERED_COSTS", false)
+var NOTE_FIELD_SEP = common.GetDeprecatedEnv("NOTE_FIELD_SEP", ", ", "use illConfig.noteFieldSeparator in the message recipient's directory entry instead")
+var OFFERED_COSTS, _ = common.GetDeprecatedEnvBool("OFFERED_COSTS", false, "use illConfig.useOfferedCosts in the requester directory entry instead")
 var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 
 const DELIVERY_ADDRESS_BEGIN = "#SHIP_TO#"
@@ -48,21 +48,43 @@ type Iso18626Shim interface {
 
 // factory method
 func GetShim(vendor string) Iso18626Shim {
+	return GetShimWithConfig(vendor, NOTE_FIELD_SEP, OFFERED_COSTS)
+}
+
+func GetShimWithConfig(vendor string, noteFieldSeparator string, useOfferedCosts bool) Iso18626Shim {
+	base := Iso18626DefaultShim{NoteFieldSeparator: noteFieldSeparator, UseOfferedCosts: useOfferedCosts, configured: true}
 	var shim Iso18626Shim
 	switch vendor {
 	case string(dirapi.Alma):
-		shim = new(Iso18626AlmaShim)
+		shim = &Iso18626AlmaShim{Iso18626DefaultShim: base}
 	case string(dirapi.ILLiad):
-		shim = new(Iso18626ILLiadShim)
+		shim = &Iso18626ILLiadShim{Iso18626DefaultShim: base}
 	case string(dirapi.ReShare):
-		shim = new(Iso18626ReShareShim)
+		shim = &Iso18626ReShareShim{Iso18626DefaultShim: base}
 	default:
-		shim = new(Iso18626DefaultShim)
+		shim = &base
 	}
 	return shim
 }
 
 type Iso18626DefaultShim struct {
+	NoteFieldSeparator string
+	UseOfferedCosts    bool
+	configured         bool
+}
+
+func (i *Iso18626DefaultShim) noteFieldSeparator() string {
+	if i.configured {
+		return i.NoteFieldSeparator
+	}
+	return NOTE_FIELD_SEP
+}
+
+func (i *Iso18626DefaultShim) useOfferedCosts() bool {
+	if i.configured {
+		return i.UseOfferedCosts
+	}
+	return OFFERED_COSTS
 }
 
 func (i *Iso18626DefaultShim) ApplyToOutgoingRequest(message *iso18626.ISO18626Message) ([]byte, error) {
@@ -253,11 +275,11 @@ func (i *Iso18626AlmaShim) prependLoanConditionOrCostToNote(suppMsg *iso18626.Su
 	origNote := suppMsg.MessageInfo.Note
 	if len(condition) > 0 && !strings.Contains(origNote, LOAN_CONDITION_PRE) {
 		prependNote = LOAN_CONDITION_PRE + condition
-		sep = NOTE_FIELD_SEP
+		sep = i.noteFieldSeparator()
 	}
 	if len(cost) > 0 && !strings.Contains(origNote, COST_CONDITION_PRE) {
 		prependNote = prependNote + sep + COST_CONDITION_PRE + cost
-		sep = NOTE_FIELD_SEP
+		sep = i.noteFieldSeparator()
 	}
 	suppMsg.MessageInfo.Note = prependNote
 	if len(origNote) > 0 {
@@ -271,10 +293,10 @@ func (i *Iso18626AlmaShim) appendUnfilledStatusAndReasonUnfilled(suppMsg *iso186
 		if suppMsg.MessageInfo.Note == "" {
 			suppMsg.MessageInfo.Note = "Status: Unfilled"
 		} else {
-			suppMsg.MessageInfo.Note += NOTE_FIELD_SEP + "Status: Unfilled"
+			suppMsg.MessageInfo.Note += i.noteFieldSeparator() + "Status: Unfilled"
 		}
 		if suppMsg.MessageInfo.ReasonUnfilled != nil {
-			suppMsg.MessageInfo.Note += NOTE_FIELD_SEP + "Reason: " + suppMsg.MessageInfo.ReasonUnfilled.Text
+			suppMsg.MessageInfo.Note += i.noteFieldSeparator() + "Reason: " + suppMsg.MessageInfo.ReasonUnfilled.Text
 		}
 	}
 }
@@ -333,7 +355,7 @@ func (i *Iso18626AlmaShim) prependURLToSuppMsgNote(suppMsg *iso18626.SupplyingAg
 		!strings.Contains(suppMsg.MessageInfo.Note, URL_PRE) {
 		url := suppMsg.DeliveryInfo.ItemId
 		if suppMsg.MessageInfo.Note != "" {
-			suppMsg.MessageInfo.Note = URL_PRE + url + NOTE_FIELD_SEP + suppMsg.MessageInfo.Note
+			suppMsg.MessageInfo.Note = URL_PRE + url + i.noteFieldSeparator() + suppMsg.MessageInfo.Note
 		} else {
 			suppMsg.MessageInfo.Note = URL_PRE + url
 		}
@@ -673,7 +695,7 @@ func (i *Iso18626ReShareShim) ApplyToOutgoingRequest(message *iso18626.ISO18626M
 }
 
 func (i *Iso18626ReShareShim) transferDeliveryCostsToOfferedCosts(suppMsg *iso18626.SupplyingAgencyMessage) {
-	if OFFERED_COSTS {
+	if i.useOfferedCosts() {
 		if suppMsg.DeliveryInfo == nil || suppMsg.DeliveryInfo.DeliveryCosts == nil {
 			return
 		}

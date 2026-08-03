@@ -79,8 +79,8 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	}
 
 	metadataUpdateMode := dirapi.None
-	if configPeer.HoldingsConfig != nil && configPeer.HoldingsConfig.MetadataUpdateMode != nil {
-		metadataUpdateMode = *configPeer.HoldingsConfig.MetadataUpdateMode
+	if configPeer.CatalogConfig != nil && configPeer.CatalogConfig.MetadataUpdateMode != nil {
+		metadataUpdateMode = *configPeer.CatalogConfig.MetadataUpdateMode
 	}
 
 	var query string
@@ -134,10 +134,10 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	// deal with last resort symbols configured for requester or consortium (if any) - these are added as holdings results to
 	// be processed like normal holdings, but just use bibliographicInfo.SupplierUniqueRecordId for localIdentifier
 	var lenderLastResort []dirapi.Symbol
-	if requester.CustomData.LenderOfLastResort != nil {
-		lenderLastResort = *requester.CustomData.LenderOfLastResort
-	} else if configPeer.LenderOfLastResort != nil {
-		lenderLastResort = *configPeer.LenderOfLastResort
+	if requester.CustomData.IllConfig != nil && requester.CustomData.IllConfig.LendersOfLastResort != nil {
+		lenderLastResort = *requester.CustomData.IllConfig.LendersOfLastResort
+	} else if configPeer.IllConfig != nil && configPeer.IllConfig.LendersOfLastResort != nil {
+		lenderLastResort = *configPeer.IllConfig.LendersOfLastResort
 	}
 	if lookupParams.Identifier != "" {
 		for _, sym := range lenderLastResort {

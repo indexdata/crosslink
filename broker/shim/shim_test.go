@@ -952,6 +952,44 @@ func TestIso18626AReShareShimSupplyingOutgoingZeroCost(t *testing.T) {
 	assert.Nil(t, resmsg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition, "LoanCondition should remain nil for zero delivery cost")
 }
 
+func TestReShareShimUsesConfiguredOfferedCosts(t *testing.T) {
+	newMessage := func() *iso18626.ISO18626Message {
+		return newSAM(&iso18626.SupplyingAgencyMessage{
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				DeliveryCosts: &iso18626.TypeCosts{
+					MonetaryValue: utils.XSDDecimal{Base: 10},
+				},
+			},
+		})
+	}
+
+	disabledMessage := newMessage()
+	_, err := GetShimWithConfig(string(dirapi.ReShare), ", ", false).ApplyToOutgoingRequest(disabledMessage)
+	assert.NoError(t, err)
+	assert.Nil(t, disabledMessage.SupplyingAgencyMessage.MessageInfo.OfferedCosts)
+
+	enabledMessage := newMessage()
+	_, err = GetShimWithConfig(string(dirapi.ReShare), ", ", true).ApplyToOutgoingRequest(enabledMessage)
+	assert.NoError(t, err)
+	assert.NotNil(t, enabledMessage.SupplyingAgencyMessage.MessageInfo.OfferedCosts)
+}
+
+func TestAlmaShimUsesConfiguredNoteFieldSeparator(t *testing.T) {
+	shim := GetShimWithConfig(string(dirapi.Alma), " | ", false).(*Iso18626AlmaShim)
+	sam := iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusUnfilled},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageNotification,
+			ReasonUnfilled:   &iso18626.TypeSchemeValuePair{Text: "Cannot find item"},
+			Note:             "Sorry",
+		},
+	}
+
+	shim.appendUnfilledStatusAndReasonUnfilled(&sam)
+
+	assert.Equal(t, "Sorry | Status: Unfilled | Reason: Cannot find item", sam.MessageInfo.Note)
+}
+
 func TestAppendUnfilledStatusAndReasonUnfilled(t *testing.T) {
 	shima := new(Iso18626AlmaShim)
 	sam := iso18626.SupplyingAgencyMessage{

@@ -30,7 +30,6 @@ RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
 
 # Copy sources after dependencies have been downloaded.
 COPY directory/api.yaml /app/directory/api.yaml
-COPY directory/apimodels/ /app/directory/apimodels/
 COPY httpclient/ /app/httpclient/
 COPY iso18626/ /app/iso18626/
 COPY marcxml/ /app/marcxml/

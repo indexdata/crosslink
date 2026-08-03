@@ -323,7 +323,7 @@ func TestService(t *testing.T) {
 	app.peerUrl = url + "/iso18626"
 	isoUrl := app.peerUrl
 	apiUrl := url + "/api/flows"
-	directoryUrl := url + "/rsdir/entries"
+	directoryUrl := url + "/directory/entries"
 	healthUrl := url + "/healthz"
 	sruUrl := url + "/sru"
 	app.agencyType = "ABC"
@@ -1444,9 +1444,10 @@ func TestService(t *testing.T) {
 		var response directory.EntriesResponse
 		err = json.Unmarshal(buf, &response)
 		assert.NoError(t, err)
-		assert.Len(t, response.Items, 1)
-		assert.Equal(t, int64(1), response.About.Count)
+		assert.Len(t, response.Items, 2)
+		assert.Equal(t, int64(2), response.About.Count)
 		assert.Equal(t, "Woollahra Library and Information Service", response.Items[0].Name)
+		assert.Equal(t, "Woollahra Library and Information Service / Double Bay Central Library", response.Items[1].Name)
 	})
 
 	t.Run("directory entries cql any sym3", func(t *testing.T) {

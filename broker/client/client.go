@@ -40,10 +40,10 @@ const KindConfirmationError = "confirmation-error"
 const BrokerInfoStatus = iso18626.TypeStatusExpectToSupply
 
 var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
-var appendSupplierInfo, _ = utils.GetEnvBool("SUPPLIER_INFO", true)
-var appendRequestingAgencyInfo, _ = utils.GetEnvBool("REQ_AGENCY_INFO", true)
-var appendReturnInfo, _ = utils.GetEnvBool("RETURN_INFO", true)
-var vendorNote, _ = utils.GetEnvBool("VENDOR_NOTE", true)
+var appendSupplierInfo, _ = common.GetDeprecatedEnvBool("SUPPLIER_INFO", true, "use illConfig.includeSupplierInfo in the supplier directory entry instead")
+var appendRequestingAgencyInfo, _ = common.GetDeprecatedEnvBool("REQ_AGENCY_INFO", true, "use illConfig.includeRequestingAgencyInfo in the requester directory entry instead")
+var appendReturnInfo, _ = common.GetDeprecatedEnvBool("RETURN_INFO", true, "use illConfig.includeReturnInfo in the supplier directory entry instead")
+var vendorNote, _ = common.GetDeprecatedEnvBool("VENDOR_NOTE", true, "use illConfig.includeVendorNote in the requester directory entry instead")
 
 type Iso18626Client struct {
 	eventBus         events.EventBus
@@ -143,8 +143,12 @@ func populateReturnAddress(message *iso18626.ISO18626Message, name string, agenc
 }
 
 func prependVendorNote(message *iso18626.SupplyingAgencyMessage, vendor string) {
+	prependVendorNoteWithSeparator(message, vendor, shim.NOTE_FIELD_SEP)
+}
+
+func prependVendorNoteWithSeparator(message *iso18626.SupplyingAgencyMessage, vendor string, noteFieldSeparator string) {
 	if message.MessageInfo.Note != "" {
-		sep := shim.NOTE_FIELD_SEP
+		sep := noteFieldSeparator
 		if strings.HasPrefix(message.MessageInfo.Note, "#") {
 			sep = ""
 		}
@@ -459,7 +463,7 @@ func (c *Iso18626Client) HandleIllMessage(ctx common.ExtendedContext, peer *ill_
 		return nil, fmt.Errorf("peer is nil")
 	}
 	if strings.EqualFold(peer.Vendor, string(dirapi.CrossLink)) {
-		return c.prMessageHandler.HandleMessage(ctx, msg)
+		return c.prMessageHandler.HandleMessage(ctx, msg, peer)
 	}
 	return c.SendHttpPost(peer, msg)
 }
@@ -472,7 +476,7 @@ func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626M
 		httpClient.WithHeaders(k, v)
 	}
 	time.Sleep(c.sendDelay)
-	iso18626Shim := shim.GetShim(peer.Vendor)
+	iso18626Shim := getPeerShim(peer)
 	var resmsg iso18626.ISO18626Message
 	err := httpClient.RequestResponse(c.client, http.MethodPost,
 		[]string{httpclient.ContentTypeApplicationXml, httpclient.ContentTypeTextXml},
@@ -493,6 +497,12 @@ func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626M
 		return nil, err
 	}
 	return &resmsg, nil
+}
+
+func getPeerShim(peer *ill_db.Peer) shim.Iso18626Shim {
+	noteFieldSeparator := common.IllConfigString(peer.CustomData, shim.NOTE_FIELD_SEP, func(c dirapi.IllConfig) *string { return c.NoteFieldSeparator })
+	useOfferedCosts := common.IllConfigBool(peer.CustomData, shim.OFFERED_COSTS, func(c dirapi.IllConfig) *bool { return c.UseOfferedCosts })
+	return shim.GetShimWithConfig(peer.Vendor, noteFieldSeparator, useOfferedCosts)
 }
 
 func getPeerInfo(peer *ill_db.Peer, symbol string) (string, iso18626.TypeAgencyId, iso18626.PhysicalAddress, iso18626.ElectronicAddress) {
@@ -530,8 +540,8 @@ func getPeerInfo(peer *ill_db.Peer, symbol string) (string, iso18626.TypeAgencyI
 		}
 	}
 	email := iso18626.ElectronicAddress{}
-	if peer.CustomData.FromEmail != nil {
-		email.ElectronicAddressData = *peer.CustomData.FromEmail
+	if peer.CustomData.Email != nil {
+		email.ElectronicAddressData = *peer.CustomData.Email
 		email.ElectronicAddressType = iso18626.TypeSchemeValuePair{
 			Text: string(iso18626.ElectronicAddressTypeEmail),
 		}
@@ -667,15 +677,18 @@ func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarge
 		sam.DeliveryInfo.DateSent = utils.XSDDateTime{Time: time.Now()}
 	}
 
-	if target.status == iso18626.TypeStatusLoaned && appendReturnInfo {
+	includeReturnInfo := target.peer != nil && common.IllConfigBool(target.peer.CustomData, appendReturnInfo, func(c dirapi.IllConfig) *bool { return c.IncludeReturnInfo })
+	if target.status == iso18626.TypeStatusLoaned && includeReturnInfo {
 		name, agencyId, address, _ := getPeerInfo(target.peer, target.supplier.SupplierSymbol)
 		populateReturnAddress(message, name, agencyId, address)
 	}
 	if !isInternalCrossLinkMessage(trCtx, target) {
 		prependSupplierSymbolNote(trCtx, target, sam)
 	}
-	if vendorNote && target.brokerInfoMessage && target.peer != nil && target.peer.Vendor != trCtx.requester.Vendor {
-		prependVendorNote(sam, target.peer.Vendor)
+	includeVendorNote := common.IllConfigBool(trCtx.requester.CustomData, vendorNote, func(c dirapi.IllConfig) *bool { return c.IncludeVendorNote })
+	noteFieldSeparator := common.IllConfigString(trCtx.requester.CustomData, shim.NOTE_FIELD_SEP, func(c dirapi.IllConfig) *string { return c.NoteFieldSeparator })
+	if includeVendorNote && target.brokerInfoMessage && target.peer != nil && target.peer.Vendor != trCtx.requester.Vendor {
+		prependVendorNoteWithSeparator(sam, target.peer.Vendor, noteFieldSeparator)
 	}
 	return message
 }
@@ -695,7 +708,7 @@ func prependSupplierSymbolNote(trCtx transactionContext, target *messageTarget, 
 		target != nil && target.supplier != nil {
 		_, symbol := common.SplitAgencySymbol(target.supplier.SupplierSymbol)
 		if sam.MessageInfo.Note != "" {
-			sep := shim.NOTE_FIELD_SEP
+			sep := common.IllConfigString(trCtx.requester.CustomData, shim.NOTE_FIELD_SEP, func(c dirapi.IllConfig) *string { return c.NoteFieldSeparator })
 			if strings.HasPrefix(sam.MessageInfo.Note, "#") {
 				sep = ""
 			}
@@ -775,11 +788,11 @@ func createRequestMessage(trCtx transactionContext) (*iso18626.ISO18626Message, 
 	}
 	message.Request.BibliographicInfo.SupplierUniqueRecordId = trCtx.selectedSupplier.LocalID.String
 	requesterName, _, deliveryAddress, email := getPeerInfo(trCtx.requester, trCtx.transaction.RequesterSymbol.String)
-	if appendRequestingAgencyInfo {
+	if common.IllConfigBool(trCtx.requester.CustomData, appendRequestingAgencyInfo, func(c dirapi.IllConfig) *bool { return c.IncludeRequestingAgencyInfo }) {
 		populateRequesterInfo(message, requesterName, deliveryAddress, email)
 	}
 	populateDeliveryAddress(message, deliveryAddress, email)
-	if appendSupplierInfo {
+	if common.IllConfigBool(trCtx.selectedSupplierPeer.CustomData, appendSupplierInfo, func(c dirapi.IllConfig) *bool { return c.IncludeSupplierInfo }) {
 		supplierName, suppAgencyId, supplierAddress, _ := getPeerInfo(trCtx.selectedSupplierPeer, trCtx.selectedSupplier.SupplierSymbol)
 		populateSupplierInfo(message, supplierName, suppAgencyId, supplierAddress)
 	}
