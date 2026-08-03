@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/google/uuid"
@@ -22,8 +23,8 @@ const (
 	zoomOptionLocation              = "location"
 )
 
-func holdingsConfigToDBParams(entryID uuid.UUID, cfg HoldingsConfig) db.UpsertHoldingsConfigParams {
-	params := db.UpsertHoldingsConfigParams{
+func catalogConfigToDBParams(entryID uuid.UUID, cfg CatalogConfig) db.UpsertCatalogConfigParams {
+	params := db.UpsertCatalogConfigParams{
 		Entry: &entryID,
 	}
 
@@ -38,18 +39,7 @@ func holdingsConfigToDBParams(entryID uuid.UUID, cfg HoldingsConfig) db.UpsertHo
 	if cfg.Zoom != nil {
 		params.ZoomAddress = &cfg.Zoom.Address
 		if cfg.Zoom.Options != nil {
-			options := *cfg.Zoom.Options
-			params.ZoomOptionMockRecords = stringMapValue(options, zoomOptionMockRecords)
-			params.ZoomOptionPreferredRecordSyntax = stringMapValue(options, zoomOptionPreferredRecordSyntax)
-			params.ZoomOptionCount = stringMapValue(options, zoomOptionCount)
-			params.ZoomOptionElementSetName = stringMapValue(options, zoomOptionElementSetName)
-			params.ZoomOptionSchema = stringMapValue(options, zoomOptionSchema)
-			params.ZoomOptionAuthentication = stringMapValue(options, zoomOptionAuthentication)
-			params.ZoomOptionUser = stringMapValue(options, zoomOptionUser)
-			params.ZoomOptionPassword = stringMapValue(options, zoomOptionPassword)
-			params.ZoomOptionAdapterError = stringMapValue(options, zoomOptionAdapterError)
-			params.ZoomOptionLookupError = stringMapValue(options, zoomOptionLookupError)
-			params.ZoomOptionLocation = stringMapValue(options, zoomOptionLocation)
+			params.ZoomOptions, _ = json.Marshal(*cfg.Zoom.Options)
 		}
 	}
 	if cfg.QueryConfig != nil {
@@ -87,6 +77,32 @@ func holdingsConfigToDBParams(entryID uuid.UUID, cfg HoldingsConfig) db.UpsertHo
 		params.MetadataMarc21Title = marc.Title
 	}
 
+	return params
+}
+
+func holdingsPolicyJSON(policy HoldingsPolicy) []byte {
+	value, _ := json.Marshal(policy)
+	return value
+}
+
+func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) db.UpsertIllConfigParams {
+	params := db.UpsertIllConfigParams{
+		Entry:                       entryID,
+		Iso18626Url:                 cfg.Iso18626Url,
+		LendersOfLastResort:         symbolsToFullSymbols(cfg.LendersOfLastResort),
+		IncludeRequestingAgencyInfo: cfg.IncludeRequestingAgencyInfo,
+		IncludeSupplierInfo:         cfg.IncludeSupplierInfo,
+		IncludeReturnInfo:           cfg.IncludeReturnInfo,
+		IncludeVendorNote:           cfg.IncludeVendorNote,
+		UseOfferedCosts:             cfg.UseOfferedCosts,
+		NoteFieldSeparator:          cfg.NoteFieldSeparator,
+		SupplierPatronPattern:       cfg.SupplierPatronPattern,
+		DuplicateCheckWindowHours:   cfg.DuplicateCheckWindowHours,
+	}
+	if cfg.Iso18626Vendor != nil {
+		vendor := string(*cfg.Iso18626Vendor)
+		params.Iso18626Vendor = &vendor
+	}
 	return params
 }
 

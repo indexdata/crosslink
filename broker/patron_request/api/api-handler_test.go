@@ -1261,14 +1261,14 @@ func (m *mockLookupCreator) GetAdapter(peer ill_db.Peer) (catalog.LookupAdapter,
 }
 
 // peerWithMetadataMode builds a Peer whose CustomData carries the given MetadataUpdateMode.
-// Pass nil to leave HoldingsConfig absent entirely.
+// Pass nil to leave CatalogConfig absent entirely.
 func peerWithMetadataMode(mode *dirapi.MetadataUpdateMode) ill_db.Peer {
-	var cc *dirapi.HoldingsConfig
+	var cc *dirapi.CatalogConfig
 	if mode != nil {
-		cc = &dirapi.HoldingsConfig{MetadataUpdateMode: mode}
+		cc = &dirapi.CatalogConfig{MetadataUpdateMode: mode}
 	}
 	return ill_db.Peer{
-		CustomData: dirapi.Entry{Name: "test-peer", HoldingsConfig: cc},
+		CustomData: dirapi.Entry{Name: "test-peer", CatalogConfig: cc},
 	}
 }
 
@@ -1304,12 +1304,12 @@ func TestMetadataUpdateNilLookupAdapter(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestMetadataUpdateNoHoldingsConfig(t *testing.T) {
+func TestMetadataUpdateNoCatalogConfig(t *testing.T) {
 	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{})
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
-	peer := peerWithMetadataMode(nil) // HoldingsConfig absent → mode stays None
+	peer := peerWithMetadataMode(nil) // CatalogConfig absent → mode stays None
 	err := h.metadataUpdate(ctx, &iso18626.Request{}, peer)
 	assert.NoError(t, err)
 }

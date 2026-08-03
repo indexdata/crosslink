@@ -554,7 +554,7 @@ func TestPatchEntryLenderOfLastResortToNull(t *testing.T) {
 
 	_, err := dbpool.Exec(
 		context.Background(),
-		"UPDATE entries SET lender_of_last_resort = ARRAY[$1]::text[] WHERE id = $2",
+		"INSERT INTO ill_configs (entry, lenders_of_last_resort) VALUES ($2, ARRAY[$1]::text[])",
 		"TEST:PATCHED-LOR",
 		"00000000-0000-0000-0000-000000000002",
 	)
@@ -562,26 +562,26 @@ func TestPatchEntryLenderOfLastResortToNull(t *testing.T) {
 		t.Fatalf("failed to seed lender_of_last_resort: %v", err)
 	}
 
-	res, data := jsonReq(t, http.MethodPatch, "/entries/by-id/00000000-0000-0000-0000-000000000002", `{"lenderOfLastResort":null}`, headers)
+	res, data := jsonReq(t, http.MethodPatch, "/entries/by-id/00000000-0000-0000-0000-000000000002", `{"illConfig":null}`, headers)
 	if res.StatusCode != http.StatusNoContent {
 		t.Fatalf("expected PATCH response status of %d, got %d and body of %s", http.StatusNoContent, res.StatusCode, data)
 	}
 
-	var lenderOfLastResort []string
+	var illConfigCount int
 	err = dbpool.QueryRow(
 		context.Background(),
-		"SELECT lender_of_last_resort FROM entries WHERE id = $1",
+		"SELECT count(*) FROM ill_configs WHERE entry = $1",
 		"00000000-0000-0000-0000-000000000002",
-	).Scan(&lenderOfLastResort)
+	).Scan(&illConfigCount)
 	if err != nil {
-		t.Fatalf("failed to fetch lender_of_last_resort: %v", err)
+		t.Fatalf("failed to fetch ill config count: %v", err)
 	}
-	if lenderOfLastResort != nil {
-		t.Fatalf("expected lender_of_last_resort to be null, got %q", lenderOfLastResort)
+	if illConfigCount != 0 {
+		t.Fatalf("expected illConfig row to be deleted, got count %d", illConfigCount)
 	}
 }
 
-func TestEntryDirectoryContractFieldsAndHoldingsConfig(t *testing.T) {
+func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 	resetDb()
 
 	headers := map[string]string{
@@ -593,19 +593,35 @@ func TestEntryDirectoryContractFieldsAndHoldingsConfig(t *testing.T) {
 		"name":"Contract Test Entry",
 		"type":"Institution",
 		"parent":"00000000-0000-0000-0000-000000000004",
+		"email":"contact@example.org",
 		"fromEmail":"from@example.org",
+		"description":"Contract description",
+		"hrid":"contract-hrid",
 		"tenant":"contract-tenant",
 		"vendor":"CrossLink",
-		"lenderOfLastResort":[{"authority":"ISIL","symbol":"CONTRACT-LOR"}],
+		"illConfig":{
+			"iso18626Url":"https://iso.example.org/iso18626",
+			"iso18626Vendor":"ReShare",
+			"lendersOfLastResort":[{"authority":"ISIL","symbol":"CONTRACT-LOR"}],
+			"includeRequestingAgencyInfo":true,
+			"includeSupplierInfo":false,
+			"includeReturnInfo":true,
+			"includeVendorNote":false,
+			"useOfferedCosts":true,
+			"noteFieldSeparator":" | ",
+			"supplierPatronPattern":"PATRON-{requesterSymbol}",
+			"duplicateCheckWindowHours":24
+		},
 		"symbols":[{"authority":"ISIL","symbol":"CONTRACT"}],
-		"holdingsConfig":{
+		"catalogConfig":{
 			"metadataUpdateMode":"merge",
 			"zoom":{
 				"address":"z3950.example.org:210/catalog",
 				"options":{
 					"preferredRecordSyntax":"usmarc",
 					"count":"20",
-					"location":"STACKS"
+					"location":"STACKS",
+					"customOption":"preserved"
 				}
 			},
 			"queryConfig":{
@@ -637,6 +653,12 @@ func TestEntryDirectoryContractFieldsAndHoldingsConfig(t *testing.T) {
 					"subtitle":"245$b"
 				}
 			}
+		},
+		"holdingsPolicy":{
+			"locations":[{"code":"MAIN","name":"Main Library","supplyPreference":100}],
+			"shelvingLocations":[{"code":"STACKS","name":"Stacks","supplyPreference":50}],
+			"locationPolicies":[{"locationCode":"MAIN","shelvingLocationCode":"RARE","supplyPreference":-1}],
+			"itemLoanPolicies":[{"code":"NORMAL","name":"Normal loan","lendable":true}]
 		}
 	}`
 
@@ -656,50 +678,105 @@ func TestEntryDirectoryContractFieldsAndHoldingsConfig(t *testing.T) {
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("expected GET status %d, got %d and body %s", http.StatusOK, res.StatusCode, data)
 	}
-	if strings.Contains(data, `"email"`) {
-		t.Fatalf("entry response must not contain removed email field: %s", data)
-	}
-
 	var entry map[string]any
+	entry = make(map[string]any)
 	if err := json.Unmarshal([]byte(data), &entry); err != nil {
 		t.Fatalf("failed to parse entry response: %v", err)
 	}
-	if entry["fromEmail"] != "from@example.org" || entry["tenant"] != "contract-tenant" || entry["vendor"] != "CrossLink" {
+	if entry["email"] != "contact@example.org" || entry["fromEmail"] != "from@example.org" || entry["tenant"] != "contract-tenant" || entry["vendor"] != "CrossLink" || entry["description"] != "Contract description" || entry["hrid"] != "contract-hrid" {
 		t.Fatalf("new entry fields not preserved: %#v", entry)
 	}
-	lender := entry["lenderOfLastResort"].([]any)[0].(map[string]any)
+	illConfig := entry["illConfig"].(map[string]any)
+	lender := illConfig["lendersOfLastResort"].([]any)[0].(map[string]any)
 	if lender["authority"] != "ISIL" || lender["symbol"] != "CONTRACT-LOR" {
-		t.Fatalf("lenderOfLastResort did not round-trip as Symbol array: %#v", lender)
+		t.Fatalf("illConfig.lendersOfLastResort did not round-trip as Symbol array: %#v", lender)
 	}
-	holdings := entry["holdingsConfig"].(map[string]any)
+	if illConfig["iso18626Url"] != "https://iso.example.org/iso18626" ||
+		illConfig["iso18626Vendor"] != "ReShare" ||
+		illConfig["includeRequestingAgencyInfo"] != true ||
+		illConfig["includeSupplierInfo"] != false ||
+		illConfig["includeReturnInfo"] != true ||
+		illConfig["includeVendorNote"] != false ||
+		illConfig["useOfferedCosts"] != true ||
+		illConfig["noteFieldSeparator"] != " | " ||
+		illConfig["supplierPatronPattern"] != "PATRON-{requesterSymbol}" ||
+		illConfig["duplicateCheckWindowHours"] != float64(24) {
+		t.Fatalf("illConfig fields did not round-trip: %#v", illConfig)
+	}
+
+	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+created.Id, `{"illConfig":{"noteFieldSeparator":" / ","useOfferedCosts":false}}`, headers)
+	if res.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected partial illConfig PATCH status %d, got %d and body %s", http.StatusNoContent, res.StatusCode, data)
+	}
+	res, data = jsonReq(t, http.MethodGet, "/entries/by-id/"+created.Id, "", headers)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected GET after illConfig PATCH status %d, got %d and body %s", http.StatusOK, res.StatusCode, data)
+	}
+	entry = make(map[string]any)
+	if err := json.Unmarshal([]byte(data), &entry); err != nil {
+		t.Fatalf("failed to parse entry after illConfig PATCH: %v", err)
+	}
+	illConfig = entry["illConfig"].(map[string]any)
+	if illConfig["noteFieldSeparator"] != " / " || illConfig["useOfferedCosts"] != false || illConfig["iso18626Url"] != "https://iso.example.org/iso18626" {
+		t.Fatalf("partial illConfig PATCH did not merge fields: %#v", illConfig)
+	}
+	holdings := entry["catalogConfig"].(map[string]any)
 	zoom := holdings["zoom"].(map[string]any)
 	options := zoom["options"].(map[string]any)
 	if holdings["metadataUpdateMode"] != "merge" ||
 		zoom["address"] != "z3950.example.org:210/catalog" ||
 		options["preferredRecordSyntax"] != "usmarc" ||
 		options["count"] != "20" ||
-		options["location"] != "STACKS" {
-		t.Fatalf("holdingsConfig zoom fields did not round-trip: %#v", holdings)
+		options["location"] != "STACKS" ||
+		options["customOption"] != "preserved" {
+		t.Fatalf("catalogConfig zoom fields did not round-trip: %#v", holdings)
+	}
+	policy := entry["holdingsPolicy"].(map[string]any)
+	locations := policy["locations"].([]any)
+	itemLoanPolicies := policy["itemLoanPolicies"].([]any)
+	if locations[0].(map[string]any)["code"] != "MAIN" || itemLoanPolicies[0].(map[string]any)["lendable"] != true {
+		t.Fatalf("holdingsPolicy did not round-trip: %#v", policy)
 	}
 	queryConfig := holdings["queryConfig"].(map[string]any)
 	if queryConfig["type"] != "cql" || queryConfig["identifier"] != "rec.id = {term}" {
-		t.Fatalf("holdingsConfig queryConfig did not round-trip: %#v", queryConfig)
+		t.Fatalf("catalogConfig queryConfig did not round-trip: %#v", queryConfig)
 	}
 	metadataMarc := holdings["metadataFormat"].(map[string]any)["marc21"].(map[string]any)
 	if metadataMarc["title"] != "245$a" || metadataMarc["author"] != "100$a" {
-		t.Fatalf("holdingsConfig metadataFormat did not round-trip: %#v", metadataMarc)
+		t.Fatalf("catalogConfig metadataFormat did not round-trip: %#v", metadataMarc)
 	}
 
-	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+created.Id, `{"holdingsConfig":null}`, headers)
+	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+created.Id, `{"holdingsPolicy":{"itemLoanPolicies":[{"code":"REFERENCE","name":"Reference only","lendable":false}]}}`, headers)
 	if res.StatusCode != http.StatusNoContent {
-		t.Fatalf("expected holdingsConfig null PATCH status %d, got %d and body %s", http.StatusNoContent, res.StatusCode, data)
+		t.Fatalf("expected holdingsPolicy PATCH status %d, got %d and body %s", http.StatusNoContent, res.StatusCode, data)
 	}
 	res, data = jsonReq(t, http.MethodGet, "/entries/by-id/"+created.Id, "", headers)
 	if res.StatusCode != http.StatusOK {
-		t.Fatalf("expected GET after holdingsConfig clear status %d, got %d and body %s", http.StatusOK, res.StatusCode, data)
+		t.Fatalf("expected GET after holdingsPolicy PATCH status %d, got %d and body %s", http.StatusOK, res.StatusCode, data)
 	}
-	if strings.Contains(data, `"holdingsConfig"`) {
-		t.Fatalf("holdingsConfig should be omitted after nullable PATCH clear: %s", data)
+	entry = make(map[string]any)
+	if err := json.Unmarshal([]byte(data), &entry); err != nil {
+		t.Fatalf("failed to parse entry after holdingsPolicy PATCH: %v", err)
+	}
+	policy = entry["holdingsPolicy"].(map[string]any)
+	itemLoanPolicies = policy["itemLoanPolicies"].([]any)
+	if itemLoanPolicies[0].(map[string]any)["code"] != "REFERENCE" || itemLoanPolicies[0].(map[string]any)["lendable"] != false {
+		t.Fatalf("holdingsPolicy PATCH did not persist replacement: %#v", policy)
+	}
+
+	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+created.Id, `{"catalogConfig":null,"holdingsPolicy":null}`, headers)
+	if res.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected catalogConfig null PATCH status %d, got %d and body %s", http.StatusNoContent, res.StatusCode, data)
+	}
+	res, data = jsonReq(t, http.MethodGet, "/entries/by-id/"+created.Id, "", headers)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected GET after catalogConfig clear status %d, got %d and body %s", http.StatusOK, res.StatusCode, data)
+	}
+	if strings.Contains(data, `"catalogConfig"`) {
+		t.Fatalf("catalogConfig should be omitted after nullable PATCH clear: %s", data)
+	}
+	if strings.Contains(data, `"holdingsPolicy"`) {
+		t.Fatalf("holdingsPolicy should be omitted after nullable PATCH clear: %s", data)
 	}
 }
 

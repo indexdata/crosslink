@@ -301,8 +301,8 @@ func (a *PatronRequestApiHandler) metadataUpdate(ctx common.ExtendedContext, ill
 	}
 
 	mode := dirapi.None
-	if configPeer.HoldingsConfig != nil && configPeer.HoldingsConfig.MetadataUpdateMode != nil {
-		mode = *configPeer.HoldingsConfig.MetadataUpdateMode
+	if configPeer.CatalogConfig != nil && configPeer.CatalogConfig.MetadataUpdateMode != nil {
+		mode = *configPeer.CatalogConfig.MetadataUpdateMode
 	}
 	if mode == dirapi.None {
 		return nil

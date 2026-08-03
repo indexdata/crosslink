@@ -540,8 +540,8 @@ func getPeerInfo(peer *ill_db.Peer, symbol string) (string, iso18626.TypeAgencyI
 		}
 	}
 	email := iso18626.ElectronicAddress{}
-	if peer.CustomData.FromEmail != nil {
-		email.ElectronicAddressData = *peer.CustomData.FromEmail
+	if peer.CustomData.Email != nil {
+		email.ElectronicAddressData = *peer.CustomData.Email
 		email.ElectronicAddressType = iso18626.TypeSchemeValuePair{
 			Text: string(iso18626.ElectronicAddressTypeEmail),
 		}

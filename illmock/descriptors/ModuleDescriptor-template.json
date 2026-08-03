@@ -10,7 +10,7 @@
           "methods": [
             "GET"
           ],
-          "pathPattern": "/rsdir/entries",
+          "pathPattern": "/directory/entries",
           "permissionsRequired": []
         }
       ]

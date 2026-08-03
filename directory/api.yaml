@@ -3,7 +3,7 @@ info:
   version: 1.0.0
   title: Directory API
 servers:
-  - url: /rsdir
+  - url: /directory
 paths:
   /entries:
     get:
@@ -1445,34 +1445,24 @@ components:
           type: string
         contactName:
           type: string
+        email:
+          type: string
         fromEmail:
           type: string
         tenant:
           type: string
         vendor:
-          x-go-type: apimodels.EntryVendor
-          x-go-type-import:
-            path: github.com/indexdata/crosslink/directory/apimodels
-            name: apimodels
+          $ref: '#/components/schemas/EntryVendor'
         phoneNumber:
           type: string
         lmsLocationCode:
           type: string
         illConfig:
           $ref: '#/components/schemas/IllConfig'
-        lenderOfLastResort:
-          type: array
-          items:
-            $ref: '#/components/schemas/Symbol'
         hrid:
           type: string
         timeZone:
           type: string
-        duplicateCheckWindowHours:
-          type: integer
-          format: int32
-          description: The number of hours to check for duplicate requests. If a request is submitted within this window, it will be considered a duplicate.
-          minimum: 0
         symbols:
           type: array
           items:
@@ -1502,17 +1492,25 @@ components:
         lmsConfig:
           description: Configuration for LMS (Library Management System) integration via NCIP protocol
           $ref: '#/components/schemas/LmsConfig'
-        holdingsConfig:
-          x-go-type: apimodels.HoldingsConfig
-          x-go-type-import:
-            path: github.com/indexdata/crosslink/directory/apimodels
-            name: apimodels
+        catalogConfig:
+          $ref: '#/components/schemas/CatalogConfig'
         holdingsPolicy:
           description: Policy that determines whether and in which order holdings may supply an item.
           $ref: '#/components/schemas/HoldingsPolicy'
     IllConfig:
       type: object
       properties:
+        iso18626Url:
+          type: string
+          description: URL of the ISO18626 service. When set, used instead of an ISO18626 service from endpoints.
+        iso18626Vendor:
+          description: ISO18626 service vendor. Used only when iso18626Url is non-empty.
+          $ref: '#/components/schemas/EntryVendor'
+        lendersOfLastResort:
+          type: array
+          description: Suppliers appended to the end of the rota when no regular supplier can fill the request.
+          items:
+            $ref: '#/components/schemas/Symbol'
         includeRequestingAgencyInfo:
           type: boolean
           description: Whether outgoing requests include requestingAgencyInfo populated from the requester directory entry.
@@ -1534,6 +1532,120 @@ components:
         supplierPatronPattern:
           type: string
           description: Format pattern used to create a patron ID for requests received by this supplier.
+        duplicateCheckWindowHours:
+          type: integer
+          format: int32
+          description: The number of hours to check for duplicate requests. If a request is submitted within this window, it will be considered a duplicate.
+          minimum: 0
+    EntryVendor:
+      type: string
+      description: ISO18626 vendor type
+      enum:
+        - Alma
+        - ReShare
+        - CrossLink
+        - ILLiad
+        - Unknown
+    CatalogConfig:
+      type: object
+      properties:
+        sru:
+          $ref: '#/components/schemas/SruConfig'
+        zoom:
+          $ref: '#/components/schemas/ZoomConfig'
+        queryConfig:
+          $ref: '#/components/schemas/QueryConfig'
+        holdingsFormat:
+          $ref: '#/components/schemas/HoldingsParserConfig'
+        metadataUpdateMode:
+          $ref: '#/components/schemas/MetadataUpdateMode'
+        metadataFormat:
+          $ref: '#/components/schemas/MetadataParserConfig'
+      additionalProperties: false
+    MetadataUpdateMode:
+      type: string
+      description: Determines how lookup metadata updates the outgoing ILL request metadata.
+      enum: [replace, merge, none, auto]
+    SruConfig:
+      type: object
+      required: [address]
+      properties:
+        address:
+          type: string
+        recordSchema:
+          type: string
+      additionalProperties: false
+    ZoomConfig:
+      type: object
+      required: [address]
+      properties:
+        address:
+          type: string
+        options:
+          type: object
+          additionalProperties:
+            type: string
+      additionalProperties: false
+    QueryConfig:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [cql, pqf]
+          default: pqf
+        title:
+          type: string
+        isbn:
+          type: string
+        issn:
+          type: string
+        identifier:
+          type: string
+      additionalProperties: false
+    MetadataParserConfig:
+      type: object
+      properties:
+        marc21:
+          $ref: '#/components/schemas/MarcMetadataParserConfig'
+      additionalProperties: false
+    MarcMetadataParserConfig:
+      type: object
+      properties:
+        identifier: { type: string }
+        isbn: { type: string }
+        issn: { type: string }
+        title: { type: string }
+        subtitle: { type: string }
+        author: { type: string }
+        edition: { type: string }
+      additionalProperties: false
+    HoldingsParserConfig:
+      type: object
+      properties:
+        marc:
+          $ref: '#/components/schemas/MarcHoldingsParserConfig'
+        opac:
+          $ref: '#/components/schemas/OpacHoldingsParserConfig'
+        reservoir:
+          type: object
+          additionalProperties: false
+        marc21plus1:
+          type: object
+          additionalProperties: false
+      additionalProperties: false
+    MarcHoldingsParserConfig:
+      type: object
+      properties:
+        mainField: { type: string }
+        locationSubField: { type: string }
+        shelvingLocationSubField: { type: string }
+        itemIdSubField: { type: string }
+        restrictedSubField: { type: string }
+        callNumberSubField: { type: string }
+      additionalProperties: false
+    OpacHoldingsParserConfig:
+      type: object
+      additionalProperties: false
     EntryPatch:
       type: object
       properties:
@@ -1560,6 +1672,9 @@ components:
         contactName:
           type: string
           nullable: true
+        email:
+          type: string
+          nullable: true
         fromEmail:
           type: string
           nullable: true
@@ -1567,10 +1682,8 @@ components:
           type: string
           nullable: true
         vendor:
-          x-go-type: apimodels.EntryVendor
-          x-go-type-import:
-            path: github.com/indexdata/crosslink/directory/apimodels
-            name: apimodels
+          allOf:
+            - $ref: '#/components/schemas/EntryVendor'
           nullable: true
         phoneNumber:
           type: string
@@ -1578,32 +1691,23 @@ components:
         lmsLocationCode:
           type: string
           nullable: true
-        lenderOfLastResort:
-          type: array
+        illConfig:
+          allOf:
+            - $ref: '#/components/schemas/IllConfig'
           nullable: true
-          items:
-            $ref: '#/components/schemas/Symbol'
         hrid:
           type: string
           nullable: true
         timeZone:
           type: string
           nullable: true
-        duplicateCheckWindowHours:
-          type: integer
-          format: int32
-          description: The number of hours to check for duplicate requests. If a request is submitted within this window, it will be considered a duplicate.
-          minimum: 0
-          nullable: true
         lmsConfig:
           allOf:
             - $ref: '#/components/schemas/LmsConfigPatch'
           nullable: true
-        holdingsConfig:
-          x-go-type: apimodels.HoldingsConfig
-          x-go-type-import:
-            path: github.com/indexdata/crosslink/directory/apimodels
-            name: apimodels
+        catalogConfig:
+          allOf:
+            - $ref: '#/components/schemas/CatalogConfig'
           nullable: true
         holdingsPolicy:
           allOf:
@@ -2020,9 +2124,9 @@ components:
         name:
           type: string
         priority:
-          type: number
-          format: double
-          default: 0.0
+          type: integer
+          format: int32
+          default: 0
         reciprocal:
           type: boolean
 

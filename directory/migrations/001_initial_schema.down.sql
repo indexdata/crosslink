@@ -1,4 +1,4 @@
-DROP TABLE IF EXISTS holdings_configs;
+DROP TABLE IF EXISTS catalog_configs;
 DROP TABLE IF EXISTS lms_configs;
 DROP TABLE IF EXISTS entry_networks;
 DROP TABLE IF EXISTS entry_tiers;
