@@ -15,7 +15,7 @@ image:
 
 okapi-hooks:
   enabled: true
-  moduleUrl: http://directory:80
+  moduleUrl: http://crosslink-directory:80
   moduleDescriptor: |
     @descriptor@
 
