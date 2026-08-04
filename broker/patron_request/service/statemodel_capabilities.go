@@ -25,6 +25,7 @@ const (
 const (
 	BorrowerStateNew              pr_db.PatronRequestState = "NEW"
 	BorrowerStateValidated        pr_db.PatronRequestState = "VALIDATED"
+	BorrowerStateMetadataUpdated  pr_db.PatronRequestState = "METADATA_UPDATED"
 	BorrowerStateNeedsReview      pr_db.PatronRequestState = "NEEDS_REVIEW"
 	BorrowerStateLocalSupply      pr_db.PatronRequestState = "LOCAL_SUPPLY"
 	BorrowerStateSent             pr_db.PatronRequestState = "SENT"
@@ -63,6 +64,7 @@ const (
 
 const (
 	BorrowerActionValidate            pr_db.PatronRequestAction = "validate"
+	BorrowerActionUpdateMetadata      pr_db.PatronRequestAction = "update-metadata"
 	BorrowerActionSendRequest         pr_db.PatronRequestAction = "send-request"
 	BorrowerActionCancelRequest       pr_db.PatronRequestAction = "cancel-request"
 	BorrowerActionAcceptCondition     pr_db.PatronRequestAction = "accept-condition"
@@ -116,6 +118,7 @@ func requesterBuiltInStates() []string {
 	return uniqueSorted([]string{
 		string(BorrowerStateNew),
 		string(BorrowerStateValidated),
+		string(BorrowerStateMetadataUpdated),
 		string(BorrowerStateNeedsReview),
 		string(BorrowerStateLocalSupply),
 		string(BorrowerStateSent),
@@ -162,6 +165,10 @@ func requesterBuiltInActions() []proapi.ActionCapability {
 	return []proapi.ActionCapability{
 		{
 			Name:       string(BorrowerActionValidate),
+			Parameters: []string{},
+		},
+		{
+			Name:       string(BorrowerActionUpdateMetadata),
 			Parameters: []string{},
 		},
 		{

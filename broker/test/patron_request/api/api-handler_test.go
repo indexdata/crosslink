@@ -416,7 +416,7 @@ func TestNeedsReviewAndUpdate(t *testing.T) {
 	}), "timed out waiting for NEEDS_REVIEW state")
 	assert.Equal(t, string(prservice.BorrowerStateNeedsReview), foundPr.State)
 	if assert.NotNil(t, foundPr.LastAction) {
-		assert.Equal(t, string(prservice.BorrowerActionValidate), *foundPr.LastAction)
+		assert.Equal(t, string(prservice.BorrowerActionUpdateMetadata), *foundPr.LastAction)
 	}
 	if assert.NotNil(t, foundPr.LastActionOutcome) {
 		assert.Equal(t, prservice.ActionOutcomeReview, *foundPr.LastActionOutcome)

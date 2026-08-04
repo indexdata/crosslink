@@ -19,12 +19,24 @@ stateModels:
             desc: "Validate the request (e.g. check patron via NCIP LookupUser, if enabled)"
             transitions:
               success: VALIDATED
-              review: NEEDS_REVIEW
             trigger: auto
 
       - name: VALIDATED
         display: Validated
         desc: Patron Request is valid
+        side: REQUESTER
+        primaryAction: update-metadata
+        actions:
+          - name: update-metadata
+            desc: Update the request metadata
+            transitions:
+              success: METADATA_UPDATED
+              review: NEEDS_REVIEW
+            trigger: auto
+
+      - name: METADATA_UPDATED
+        display: Metadata Updated
+        desc: Patron Request metadata has been updated
         side: REQUESTER
         primaryAction: send-request
         actions:
