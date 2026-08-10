@@ -1153,9 +1153,15 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		} else {
 			lmsConfig := request.Body.LmsConfig.MustGet()
 			originalLMSConfig, queryErr := qtx.GetLMSConfigByEntry(ctx, orig.ID)
-			if queryErr != nil && !errors.Is(queryErr, pgx.ErrNoRows) {
-				slog.ErrorContext(ctx, "unable to query original lmsConfig", "error", queryErr)
-				return UpdateEntry500TextResponse("Internal server error"), nil
+			if queryErr != nil {
+				if errors.Is(queryErr, pgx.ErrNoRows) {
+					if lmsConfig.Address == nil || lmsConfig.FromAgency == nil {
+						return UpdateEntry400TextResponse("lmsConfig.address and lmsConfig.fromAgency are required when creating lmsConfig"), nil
+					}
+				} else {
+					slog.ErrorContext(ctx, "unable to query original lmsConfig", "error", queryErr)
+					return UpdateEntry500TextResponse("Internal server error"), nil
+				}
 			}
 
 			_, err = qtx.UpsertLMSConfig(ctx, db.UpsertLMSConfigParams{
