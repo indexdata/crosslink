@@ -165,6 +165,10 @@ ON CONFLICT (entry) DO UPDATE SET
   duplicate_check_window_hours = COALESCE(@duplicate_check_window_hours, ill_configs.duplicate_check_window_hours)
 RETURNING *;
 
+-- name: GetIllConfigByEntry :one
+SELECT * FROM ill_configs
+WHERE entry = @entry;
+
 -- name: DeleteIllConfigByEntry :exec
 DELETE FROM ill_configs WHERE entry = @entry;
 
@@ -444,6 +448,9 @@ SELECT * FROM entry_tiers
 SELECT * FROM lms_configs 
   WHERE entry = @entry;
 
+-- name: DeleteLMSConfigByEntry :exec
+DELETE FROM lms_configs WHERE entry = @entry;
+
 -- name: GetCatalogConfigByEntry :one
 SELECT * FROM catalog_configs
   WHERE entry = @entry;
@@ -456,6 +463,10 @@ INSERT INTO holdings_policies (entry, policy)
 VALUES (@entry, @policy)
 ON CONFLICT (entry) DO UPDATE SET policy = @policy
 RETURNING *;
+
+-- name: GetHoldingsPolicyByEntry :one
+SELECT * FROM holdings_policies
+WHERE entry = @entry;
 
 -- name: DeleteHoldingsPolicyByEntry :exec
 DELETE FROM holdings_policies WHERE entry = @entry;

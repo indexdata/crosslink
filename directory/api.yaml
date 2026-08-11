@@ -1562,6 +1562,22 @@ components:
         metadataFormat:
           $ref: '#/components/schemas/MetadataParserConfig'
       additionalProperties: false
+    CatalogConfigPatch:
+      type: object
+      properties:
+        sru:
+          $ref: '#/components/schemas/SruConfigPatch'
+        zoom:
+          $ref: '#/components/schemas/ZoomConfigPatch'
+        queryConfig:
+          $ref: '#/components/schemas/QueryConfig'
+        holdingsFormat:
+          $ref: '#/components/schemas/HoldingsParserConfig'
+        metadataUpdateMode:
+          $ref: '#/components/schemas/MetadataUpdateMode'
+        metadataFormat:
+          $ref: '#/components/schemas/MetadataParserConfig'
+      additionalProperties: false
     MetadataUpdateMode:
       type: string
       description: Determines how lookup metadata updates the outgoing ILL request metadata.
@@ -1569,6 +1585,14 @@ components:
     SruConfig:
       type: object
       required: [address]
+      properties:
+        address:
+          type: string
+        recordSchema:
+          type: string
+      additionalProperties: false
+    SruConfigPatch:
+      type: object
       properties:
         address:
           type: string
@@ -1585,6 +1609,17 @@ components:
           type: object
           additionalProperties:
             type: string
+      additionalProperties: false
+    ZoomConfigPatch:
+      type: object
+      properties:
+        address:
+          type: string
+        options:
+          type: object
+          additionalProperties:
+            type: string
+            nullable: true
       additionalProperties: false
     QueryConfig:
       type: object
@@ -1707,7 +1742,7 @@ components:
           nullable: true
         catalogConfig:
           allOf:
-            - $ref: '#/components/schemas/CatalogConfig'
+            - $ref: '#/components/schemas/CatalogConfigPatch'
           nullable: true
         holdingsPolicy:
           allOf:
@@ -1906,32 +1941,46 @@ components:
           type: string
         fromAgencyAuthentication:
           type: string
+          nullable: true
         toAgency:
           type: string
+          nullable: true
         lookupUserEnabled:
           type: boolean
+          nullable: true
         acceptItemEnabled:
           type: boolean
+          nullable: true
         checkInItemEnabled:
           type: boolean
+          nullable: true
         checkOutItemEnabled:
           type: boolean
+          nullable: true
         itemLocation:
           type: string
+          nullable: true
         requestItemRequestType:
           type: string
+          nullable: true
         requestItemRequestScopeType:
           type: string
+          nullable: true
         requestItemBibIdCode:
           type: string
+          nullable: true
         requestItemPickupLocationEnabled:
           type: boolean
+          nullable: true
         requesterPickupLocation:
           type: string
+          nullable: true
         supplierPickupLocation:
           type: string
+          nullable: true
         requesterPatronPattern:
           type: string
+          nullable: true
 
     SymbolProperties:
       required:
