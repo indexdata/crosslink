@@ -450,7 +450,8 @@ func TestEntryCases(t *testing.T) {
 			method:      http.MethodPatch,
 			endpoint:    "/entries/by-id/00000000-0000-0000-0000-000000000003",
 			bodyFile:    "entry-new-lmsconfig-incomplete.patch.req.json",
-			status:      http.StatusBadRequest,
+			status:      http.StatusNoContent,
+			refetchFile: "entry-new-lmsconfig-incomplete.patch.refetch.json",
 			addlHeaders: consortiumPermissionHeaders,
 		},
 		{
