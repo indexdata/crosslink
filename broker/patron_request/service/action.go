@@ -54,6 +54,7 @@ type actionExecutionResult struct {
 type actionDecisionDetailMetadataUpdate struct {
 	Type          string                               `json:"type"`
 	Outcome       string                               `json:"outcome"`
+	Reason        string                               `json:"reason,omitempty"`
 	Mode          string                               `json:"mode"`
 	EffectiveMode string                               `json:"effectiveMode"`
 	LookupParams  catalog.LookupParams                 `json:"lookupParams"`
@@ -572,9 +573,21 @@ func (a *PatronRequestActionService) metadataUpdateWithDetails(ctx common.Extend
 		return nil, nil
 	}
 	lookupParams := catalog.LookupParamsFromBibliographicInfo(illRequest.BibliographicInfo, illRequest.ServiceInfo)
+	detail := &actionDecisionDetailMetadataUpdate{
+		Type:          "metadata-update",
+		Mode:          string(mode),
+		EffectiveMode: string(effectiveMetadataUpdateMode(mode, lookupParams)),
+		LookupParams:  lookupParams,
+		Source:        metadataUpdateSource(configPeer),
+	}
 
 	lookupResult, err := lookupAdapter.Lookup(lookupParams)
 	if err != nil {
+		if errors.Is(err, catalog.ErrMissingLookupParameters) {
+			detail.Outcome = "skipped"
+			detail.Reason = "missing-lookup-parameters"
+			return detail, nil
+		}
 		return nil, fmt.Errorf("failed to perform lookup for patron request: %w", err)
 	}
 	metadata, err := lookupResult.GetMetadata()
@@ -587,15 +600,9 @@ func (a *PatronRequestActionService) metadataUpdateWithDetails(ctx common.Extend
 		return nil, err
 	}
 	changes := metadataUpdateChanges(before, illRequest.BibliographicInfo)
-	return &actionDecisionDetailMetadataUpdate{
-		Type:          "metadata-update",
-		Outcome:       metadataUpdateOutcome(changes),
-		Mode:          string(mode),
-		EffectiveMode: string(effectiveMetadataUpdateMode(mode, lookupParams)),
-		LookupParams:  lookupParams,
-		Source:        metadataUpdateSource(configPeer),
-		Changes:       changes,
-	}, nil
+	detail.Outcome = metadataUpdateOutcome(changes)
+	detail.Changes = changes
+	return detail, nil
 }
 
 func cloneBibliographicInfo(info iso18626.BibliographicInfo) iso18626.BibliographicInfo {

@@ -67,6 +67,7 @@ func TestNewQueryBuilderGen(t *testing.T) {
 	// Test with missing lookup parameters
 	_, _, err = qb.Build(LookupParams{Title: "Test Title"})
 	assert.ErrorContains(t, err, "missing lookup parameters. Provide at least one of: identifier, isbn, issn")
+	assert.ErrorIs(t, err, ErrMissingLookupParameters)
 
 	// Test with unsupported type
 	unsupportedType := dirapi.QueryConfigType("unsupported")
