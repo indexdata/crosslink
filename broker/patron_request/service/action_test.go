@@ -191,6 +191,51 @@ func TestHandleInvokeActionUpdateMetadataNeedReview(t *testing.T) {
 	assert.Equal(t, string(BorrowerStateNeedsReview), *resultData.ActionResult.ToState)
 }
 
+func TestHandleInvokeActionUpdateMetadataMissingLookupParamsNeedsReview(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	mockEventBus := new(MockEventBus)
+	illRepo := new(IllRepoMock)
+	mode := dirapi.Merge
+
+	lmsCreator.On("GetAdapter", "ISIL:x").Return(createLmsAdapterMockLog(), nil)
+	illRepo.On("GetCachedPeersBySymbols", []string{"ISIL:x"}, mock.Anything).Return([]ill_db.Peer{
+		{
+			Vendor: string(dirapi.CrossLink),
+			CustomData: dirapi.Entry{
+				Name:          "RS1",
+				CatalogConfig: &dirapi.CatalogConfig{MetadataUpdateMode: &mode},
+			},
+		},
+	}, "", nil)
+	queryBuilder := catalog.NewQueryBuilderIsxn(false)
+	lookupAdapter := catalog.CreateSruLookupAdapter(http.DefaultClient, []string{"http://unused"}, "", queryBuilder, nil, nil, "marcxml")
+	lookupAdapterFactory := lookupFactoryWithAdapter(lookupAdapter)
+	prAction := CreatePatronRequestActionService(mockPrRepo, illRepo, mockEventBus, new(handler.Iso18626Handler), lmsCreator, new(EmailSenderMock), lookupAdapterFactory, nil)
+	illRequest := iso18626.Request{}
+	fakeEventID := "1234"
+	pr := pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateValidated, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil)
+	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(pr, nil)
+
+	action := BorrowerActionUpdateMetadata
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{ID: fakeEventID, PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, BorrowerStateNeedsReview, mockPrRepo.savedPr.State)
+	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
+	assert.Equal(t, ActionOutcomeReview, mockPrRepo.savedPr.LastActionOutcome.String)
+	if assert.NotNil(t, resultData.ActionResult) && assert.NotNil(t, resultData.ActionResult.ToState) {
+		assert.Equal(t, string(BorrowerStateNeedsReview), *resultData.ActionResult.ToState)
+	}
+	details, ok := resultData.CustomData["decisionDetails"].([]actionDecisionDetailMetadataUpdate)
+	if assert.True(t, ok) && assert.Len(t, details, 1) {
+		assert.Equal(t, "skipped", details[0].Outcome)
+		assert.Equal(t, "missing-lookup-parameters", details[0].Reason)
+		assert.Equal(t, dirapi.Merge, dirapi.MetadataUpdateMode(details[0].EffectiveMode))
+	}
+}
+
 func TestHandleInvokeActionValidateSendRequest(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
