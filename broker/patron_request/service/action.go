@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/broker/adapter"
+	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/email"
 	"github.com/indexdata/crosslink/broker/events"
@@ -19,7 +21,9 @@ import (
 	"github.com/indexdata/crosslink/broker/lms"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
+	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/shim"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -29,12 +33,14 @@ const COMP = "pr_action_service"
 
 type PatronRequestActionService struct {
 	PatronRequestMessageSender
-	prRepo               pr_db.PrRepo
-	illRepo              ill_db.IllRepo
-	eventBus             events.EventBus
-	lmsCreator           lms.LmsCreator
-	actionMappingService ActionMappingService
-	emailService         email.EmailService
+	prRepo                 pr_db.PrRepo
+	illRepo                ill_db.IllRepo
+	eventBus               events.EventBus
+	lmsCreator             lms.LmsCreator
+	actionMappingService   ActionMappingService
+	emailService           email.EmailService
+	directoryLookupAdapter adapter.DirectoryLookupAdapter
+	lookupAdapterFactory   *service.LookupAdapterFactory
 }
 
 type actionExecutionResult struct {
@@ -42,6 +48,27 @@ type actionExecutionResult struct {
 	result  *events.EventResult
 	pr      pr_db.PatronRequest
 	retryPr pr_db.PatronRequest
+}
+
+type actionDecisionDetailMetadataUpdate struct {
+	Type          string                               `json:"type"`
+	Outcome       string                               `json:"outcome"`
+	Mode          string                               `json:"mode"`
+	EffectiveMode string                               `json:"effectiveMode"`
+	LookupParams  catalog.LookupParams                 `json:"lookupParams"`
+	Source        actionDecisionDetailMetadataSource   `json:"source"`
+	Changes       []actionDecisionDetailMetadataChange `json:"changes"`
+}
+
+type actionDecisionDetailMetadataSource struct {
+	AdapterType         string `json:"adapterType"`
+	ConfigurationPeerID string `json:"configurationPeerId"`
+}
+
+type actionDecisionDetailMetadataChange struct {
+	Field         string `json:"field"`
+	PreviousValue string `json:"previousValue"`
+	NewValue      string `json:"newValue"`
 }
 
 type autoActionFailure struct {
@@ -64,7 +91,9 @@ type actionParams struct {
 	AutoActionParams *proapi.ModelAction_Params `json:"autoActionParams,omitempty"`
 }
 
-func CreatePatronRequestActionService(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator, emailService email.EmailService) *PatronRequestActionService {
+func CreatePatronRequestActionService(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, eventBus events.EventBus,
+	iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator, emailService email.EmailService,
+	lookupAdapterFactory *service.LookupAdapterFactory, directoryLookupAdapter adapter.DirectoryLookupAdapter) *PatronRequestActionService {
 	return &PatronRequestActionService{
 		PatronRequestMessageSender: PatronRequestMessageSender{iso18626Handler: iso18626Handler, logErrorAndReturnResult: logActionErrorAndReturnResult},
 		prRepo:                     prRepo,
@@ -73,6 +102,8 @@ func CreatePatronRequestActionService(prRepo pr_db.PrRepo, illRepo ill_db.IllRep
 		lmsCreator:                 lmsCreator,
 		actionMappingService:       ActionMappingService{SMService: &StateModelService{}},
 		emailService:               emailService,
+		lookupAdapterFactory:       lookupAdapterFactory,
+		directoryLookupAdapter:     directoryLookupAdapter,
 	}
 }
 
@@ -347,6 +378,8 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 	switch action {
 	case BorrowerActionValidate:
 		return a.validateBorrowingRequest(ctx, pr, lmsAdapter, illRequest)
+	case BorrowerActionUpdateMetadata:
+		return a.updateMetadataBorrowingRequest(ctx, pr, illRequest)
 	case BorrowerActionSendRequest:
 		return a.sendBorrowingRequest(ctx, pr, illRequest)
 	case BorrowerActionReceive:
@@ -453,12 +486,168 @@ func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.Extende
 	// perhaps it would be better to have both original and canonical id stored?
 	pr.Patron = pgtype.Text{String: userId, Valid: true}
 
+	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
+}
+
+func (a *PatronRequestActionService) updateMetadataBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, illRequest iso18626.Request) actionExecutionResult {
+	peers, _, peerErr := a.illRepo.GetCachedPeersBySymbols(ctx, []string{pr.RequesterSymbol.String}, a.directoryLookupAdapter)
+	if peerErr != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to get requester peer", peerErr)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	if len(peers) == 0 {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to get requester peer", fmt.Errorf("no peer found for requester symbol %q", pr.RequesterSymbol.String))
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	if len(peers) > 1 {
+		ctx.Logger().Warn("multiple peers found for requester symbol, using first peer", "symbol", pr.RequesterSymbol.String, "peerCount", len(peers))
+	}
+	requesterPeer := peers[0]
+	var decisionDetails []actionDecisionDetailMetadataUpdate
+	if requesterPeer.Vendor == string(dirapi.CrossLink) {
+		detail, err := a.metadataUpdateWithDetails(ctx, &illRequest, requesterPeer)
+		if err != nil {
+			status, result := logActionErrorAndReturnResult(ctx, "metadata update failed", err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		if detail != nil {
+			decisionDetails = append(decisionDetails, *detail)
+		}
+	}
+
+	pr.IllRequest = illRequest
+
 	res := actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
-	if illRequest.BibliographicInfo.SupplierUniqueRecordId == "" {
+	if len(decisionDetails) > 0 || illRequest.BibliographicInfo.SupplierUniqueRecordId == "" {
 		res.result = &events.EventResult{}
+		if len(decisionDetails) > 0 {
+			res.result.CustomData = map[string]any{"decisionDetails": decisionDetails}
+		}
+	}
+	if illRequest.BibliographicInfo.SupplierUniqueRecordId == "" {
 		res.result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeReview}
 	}
 	return res
+}
+
+func (a *PatronRequestActionService) metadataUpdate(ctx common.ExtendedContext, illRequest *iso18626.Request, requesterPeer ill_db.Peer) error {
+	_, err := a.metadataUpdateWithDetails(ctx, illRequest, requesterPeer)
+	return err
+}
+
+func (a *PatronRequestActionService) metadataUpdateWithDetails(ctx common.ExtendedContext, illRequest *iso18626.Request, requesterPeer ill_db.Peer) (*actionDecisionDetailMetadataUpdate, error) {
+	if a.lookupAdapterFactory == nil {
+		return nil, nil
+	}
+	lookupAdapter, configPeer, err := a.lookupAdapterFactory.GetAdapterRequester(ctx, requesterPeer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get lookup adapter: %w", err)
+	}
+	if lookupAdapter == nil {
+		return nil, nil
+	}
+
+	mode := dirapi.None
+	if configPeer.CatalogConfig != nil && configPeer.CatalogConfig.MetadataUpdateMode != nil {
+		mode = *configPeer.CatalogConfig.MetadataUpdateMode
+	}
+	if mode == dirapi.None {
+		return nil, nil
+	}
+	lookupParams := catalog.LookupParamsFromBibliographicInfo(illRequest.BibliographicInfo, illRequest.ServiceInfo)
+
+	lookupResult, err := lookupAdapter.Lookup(lookupParams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to perform lookup for patron request: %w", err)
+	}
+	metadata, err := lookupResult.GetMetadata()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get metadata for patron request: %w", err)
+	}
+	before := cloneBibliographicInfo(illRequest.BibliographicInfo)
+	err = catalog.MetadataRequestUpdate(&illRequest.BibliographicInfo, metadata, lookupParams, mode)
+	if err != nil {
+		return nil, err
+	}
+	changes := metadataUpdateChanges(before, illRequest.BibliographicInfo)
+	return &actionDecisionDetailMetadataUpdate{
+		Type:          "metadata-update",
+		Outcome:       metadataUpdateOutcome(changes),
+		Mode:          string(mode),
+		EffectiveMode: string(effectiveMetadataUpdateMode(mode, lookupParams)),
+		LookupParams:  lookupParams,
+		Source:        metadataUpdateSource(configPeer),
+		Changes:       changes,
+	}, nil
+}
+
+func cloneBibliographicInfo(info iso18626.BibliographicInfo) iso18626.BibliographicInfo {
+	info.BibliographicItemId = append([]iso18626.BibliographicItemId(nil), info.BibliographicItemId...)
+	return info
+}
+
+func effectiveMetadataUpdateMode(mode dirapi.MetadataUpdateMode, params catalog.LookupParams) dirapi.MetadataUpdateMode {
+	if mode != dirapi.Auto {
+		return mode
+	}
+	if params.Identifier != "" {
+		return dirapi.Replace
+	}
+	return dirapi.Merge
+}
+
+func metadataUpdateOutcome(changes []actionDecisionDetailMetadataChange) string {
+	if len(changes) == 0 {
+		return "unchanged"
+	}
+	return "updated"
+}
+
+func metadataUpdateSource(configPeer dirapi.Entry) actionDecisionDetailMetadataSource {
+	source := actionDecisionDetailMetadataSource{}
+	if configPeer.Id != nil {
+		source.ConfigurationPeerID = configPeer.Id.String()
+	}
+	if configPeer.CatalogConfig != nil {
+		switch {
+		case configPeer.CatalogConfig.Sru != nil:
+			source.AdapterType = "sru"
+		case configPeer.CatalogConfig.Zoom != nil:
+			source.AdapterType = "zoom"
+		}
+	}
+	return source
+}
+
+func metadataUpdateChanges(before iso18626.BibliographicInfo, after iso18626.BibliographicInfo) []actionDecisionDetailMetadataChange {
+	changes := make([]actionDecisionDetailMetadataChange, 0)
+	addMetadataStringChange := func(field string, previousValue string, newValue string) {
+		if previousValue == newValue {
+			return
+		}
+		changes = append(changes, actionDecisionDetailMetadataChange{
+			Field:         field,
+			PreviousValue: previousValue,
+			NewValue:      newValue,
+		})
+	}
+	addMetadataStringChange("title", before.Title, after.Title)
+	addMetadataStringChange("subtitle", before.Subtitle, after.Subtitle)
+	addMetadataStringChange("author", before.Author, after.Author)
+	addMetadataStringChange("supplierUniqueRecordId", before.SupplierUniqueRecordId, after.SupplierUniqueRecordId)
+	addMetadataStringChange("edition", before.Edition, after.Edition)
+	addMetadataStringChange("isbn", bibliographicItemValue(before.BibliographicItemId, "ISBN"), bibliographicItemValue(after.BibliographicItemId, "ISBN"))
+	addMetadataStringChange("issn", bibliographicItemValue(before.BibliographicItemId, "ISSN"), bibliographicItemValue(after.BibliographicItemId, "ISSN"))
+	return changes
+}
+
+func bibliographicItemValue(items []iso18626.BibliographicItemId, code string) string {
+	for _, id := range items {
+		if strings.TrimSpace(id.BibliographicItemIdentifierCode.Text) == code {
+			return id.BibliographicItemIdentifier
+		}
+	}
+	return ""
 }
 
 func deepCopyISO18626Request(request iso18626.Request) (iso18626.Request, error) {

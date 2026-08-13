@@ -15,7 +15,8 @@ import (
 func TestNewReturnableActionMapping(t *testing.T) {
 	borrowerStateActionMapping := map[pr_db.PatronRequestState][]PatronRequestAction{
 		BorrowerStateNew:              {{actionName: BorrowerActionValidate, auto: true}},
-		BorrowerStateValidated:        {{actionName: BorrowerActionSendRequest, auto: true}},
+		BorrowerStateValidated:        {{actionName: BorrowerActionUpdateMetadata, auto: true}},
+		BorrowerStateMetadataUpdated:  {{actionName: BorrowerActionSendRequest, auto: true}},
 		BorrowerStateNeedsReview:      {{actionName: BorrowerActionSendRequest}},
 		BorrowerStateSupplierLocated:  {{actionName: BorrowerActionCancelRequest}},
 		BorrowerStateConditionPending: {{actionName: BorrowerActionAcceptCondition}, {actionName: BorrowerActionRejectCondition}},

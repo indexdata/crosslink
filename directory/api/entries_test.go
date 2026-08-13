@@ -26,6 +26,18 @@ func TestBuildEntrySQL(t *testing.T) {
 	if !strings.Contains(sql, "ORDER BY e.name") {
 		t.Error("SQL should contain ORDER BY clause")
 	}
+
+	// CQL queries expand direct matches with their immediate children before
+	// the existing entry projection applies counting and pagination.
+	sql = buildEntryCQLSQL("e.name = $1")
+	if !strings.Contains(sql, "WITH matched_entries AS") ||
+		!strings.Contains(sql, "JOIN matched_entries parent ON child.parent = parent.id") ||
+		!strings.Contains(sql, "WHERE e.id IN (SELECT id FROM expanded_entries)") {
+		t.Errorf("CQL SQL should expand matching entries with their children: %s", sql)
+	}
+	if !strings.Contains(sql, "WHERE e.name = $1") {
+		t.Errorf("CQL SQL should retain the generated predicate: %s", sql)
+	}
 }
 
 func TestHandleEntryCQL(t *testing.T) {

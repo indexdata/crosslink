@@ -451,6 +451,23 @@ func buildEntrySQL(whereClause string) string {
 	return baseQuery
 }
 
+func buildEntryCQLSQL(whereClause string) string {
+	return fmt.Sprintf(`
+		WITH matched_entries AS (
+			SELECT e.id
+			FROM entries e
+			WHERE %s
+		),
+		expanded_entries AS (
+			SELECT id FROM matched_entries
+			UNION
+			SELECT child.id
+			FROM entries child
+			JOIN matched_entries parent ON child.parent = parent.id
+		)
+		%s`, whereClause, buildEntrySQL("WHERE e.id IN (SELECT id FROM expanded_entries)\n"+defaultEntryOrder))
+}
+
 func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject) (GetEntriesResponseObject, error) {
 	var query string
 	var args []interface{}
@@ -474,12 +491,11 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 			return GetEntries400TextResponse(fmt.Sprintf("CQL parse error: %v", err)), nil
 		}
 
-		whereClause := ""
 		if res.GetWhereClause() != "" {
-			whereClause = "WHERE " + res.GetWhereClause()
+			query = buildEntryCQLSQL(res.GetWhereClause())
+		} else {
+			query = buildEntrySQL(defaultEntryOrder)
 		}
-
-		query = buildEntrySQL(whereClause + "\n" + defaultEntryOrder)
 		args = res.GetQueryArguments()
 	} else {
 		query = buildEntrySQL(defaultEntryOrder)
@@ -1127,38 +1143,44 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		}
 	}
 
-	if request.Body.LmsConfig.IsSpecified() && !request.Body.LmsConfig.IsNull() {
-		lmsConfig := request.Body.LmsConfig.MustGet()
+	if request.Body.LmsConfig.IsSpecified() {
+		if request.Body.LmsConfig.IsNull() {
+			err = qtx.DeleteLMSConfigByEntry(ctx, orig.ID)
+			if err != nil {
+				slog.ErrorContext(ctx, "unexpected database error during lmsConfig delete", "error", err)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		} else {
+			lmsConfig := request.Body.LmsConfig.MustGet()
+			originalLMSConfig, queryErr := qtx.GetLMSConfigByEntry(ctx, orig.ID)
+			if queryErr != nil && !errors.Is(queryErr, pgx.ErrNoRows) {
+				slog.ErrorContext(ctx, "unable to query original lmsConfig", "error", queryErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
 
-		if err != nil {
-			slog.ErrorContext(ctx, "unable to query original LMS Config", "error", err)
-			return UpdateEntry500TextResponse("Internal server error"), nil
-		}
-
-		originalLMSConfig, _ := qtx.GetLMSConfigByEntry(ctx, orig.ID)
-
-		_, err = qtx.UpsertLMSConfig(ctx, db.UpsertLMSConfigParams{
-			Entry:                            &orig.ID,
-			Address:                          derefOrDefault(lmsConfig.Address, originalLMSConfig.Address),
-			FromAgency:                       derefOrDefault(lmsConfig.FromAgency, originalLMSConfig.FromAgency),
-			FromAgencyAuthentication:         derefOrDefaultPtr(lmsConfig.FromAgencyAuthentication, originalLMSConfig.FromAgencyAuthentication),
-			ToAgency:                         derefOrDefaultPtr(lmsConfig.ToAgency, originalLMSConfig.ToAgency),
-			LookupUserEnabled:                derefOrDefaultPtr(lmsConfig.LookupUserEnabled, originalLMSConfig.LookupUserEnabled),
-			AcceptItemEnabled:                derefOrDefaultPtr(lmsConfig.AcceptItemEnabled, originalLMSConfig.AcceptItemEnabled),
-			CheckinItemEnabled:               derefOrDefaultPtr(lmsConfig.CheckInItemEnabled, originalLMSConfig.CheckinItemEnabled),
-			CheckoutItemEnabled:              derefOrDefaultPtr(lmsConfig.CheckOutItemEnabled, originalLMSConfig.CheckoutItemEnabled),
-			ItemLocation:                     derefOrDefaultPtr(lmsConfig.ItemLocation, originalLMSConfig.ItemLocation),
-			RequestItemRequestType:           derefOrDefaultPtr(lmsConfig.RequestItemRequestType, originalLMSConfig.RequestItemRequestType),
-			RequestItemScopeType:             derefOrDefaultPtr(lmsConfig.RequestItemRequestScopeType, originalLMSConfig.RequestItemScopeType),
-			RequestItemBibCode:               derefOrDefaultPtr(lmsConfig.RequestItemBibIdCode, originalLMSConfig.RequestItemBibCode),
-			RequestItemPickupLocationEnabled: derefOrDefaultPtr(lmsConfig.RequestItemPickupLocationEnabled, originalLMSConfig.RequestItemPickupLocationEnabled),
-			RequesterPickupLocation:          derefOrDefaultPtr(lmsConfig.RequesterPickupLocation, originalLMSConfig.RequesterPickupLocation),
-			SupplierPickupLocation:           derefOrDefaultPtr(lmsConfig.SupplierPickupLocation, originalLMSConfig.SupplierPickupLocation),
-			RequesterPatronPattern:           derefOrDefaultPtr(lmsConfig.RequesterPatronPattern, originalLMSConfig.RequesterPatronPattern),
-		})
-		if err != nil {
-			slog.ErrorContext(ctx, "unexpected database error during lmsConfig upsert", "error", err)
-			return UpdateEntry500TextResponse(err.Error()), nil
+			_, err = qtx.UpsertLMSConfig(ctx, db.UpsertLMSConfigParams{
+				Entry:                            &orig.ID,
+				Address:                          derefOrDefault(lmsConfig.Address, originalLMSConfig.Address),
+				FromAgency:                       derefOrDefault(lmsConfig.FromAgency, originalLMSConfig.FromAgency),
+				FromAgencyAuthentication:         maybeUpdateCol(originalLMSConfig.FromAgencyAuthentication, lmsConfig.FromAgencyAuthentication),
+				ToAgency:                         maybeUpdateCol(originalLMSConfig.ToAgency, lmsConfig.ToAgency),
+				LookupUserEnabled:                maybeUpdateCol(originalLMSConfig.LookupUserEnabled, lmsConfig.LookupUserEnabled),
+				AcceptItemEnabled:                maybeUpdateCol(originalLMSConfig.AcceptItemEnabled, lmsConfig.AcceptItemEnabled),
+				CheckinItemEnabled:               maybeUpdateCol(originalLMSConfig.CheckinItemEnabled, lmsConfig.CheckInItemEnabled),
+				CheckoutItemEnabled:              maybeUpdateCol(originalLMSConfig.CheckoutItemEnabled, lmsConfig.CheckOutItemEnabled),
+				ItemLocation:                     maybeUpdateCol(originalLMSConfig.ItemLocation, lmsConfig.ItemLocation),
+				RequestItemRequestType:           maybeUpdateCol(originalLMSConfig.RequestItemRequestType, lmsConfig.RequestItemRequestType),
+				RequestItemScopeType:             maybeUpdateCol(originalLMSConfig.RequestItemScopeType, lmsConfig.RequestItemRequestScopeType),
+				RequestItemBibCode:               maybeUpdateCol(originalLMSConfig.RequestItemBibCode, lmsConfig.RequestItemBibIdCode),
+				RequestItemPickupLocationEnabled: maybeUpdateCol(originalLMSConfig.RequestItemPickupLocationEnabled, lmsConfig.RequestItemPickupLocationEnabled),
+				RequesterPickupLocation:          maybeUpdateCol(originalLMSConfig.RequesterPickupLocation, lmsConfig.RequesterPickupLocation),
+				SupplierPickupLocation:           maybeUpdateCol(originalLMSConfig.SupplierPickupLocation, lmsConfig.SupplierPickupLocation),
+				RequesterPatronPattern:           maybeUpdateCol(originalLMSConfig.RequesterPatronPattern, lmsConfig.RequesterPatronPattern),
+			})
+			if err != nil {
+				slog.ErrorContext(ctx, "unexpected database error during lmsConfig upsert", "error", err)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
 		}
 	}
 
@@ -1171,7 +1193,20 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 			}
 		} else {
 			catalogConfig := request.Body.CatalogConfig.MustGet()
-			_, err = qtx.UpsertCatalogConfig(ctx, catalogConfigToDBParams(orig.ID, catalogConfig))
+			originalCatalogConfig, queryErr := qtx.GetCatalogConfigByEntry(ctx, orig.ID)
+			if queryErr != nil && !errors.Is(queryErr, pgx.ErrNoRows) {
+				slog.ErrorContext(ctx, "unable to query original catalogConfig", "error", queryErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+			if validationErr := validateCatalogConfigPatch(catalogConfig, originalCatalogConfig); validationErr != nil {
+				return UpdateEntry400TextResponse(validationErr.Error()), nil
+			}
+			params, mergeErr := catalogConfigPatchToDBParams(orig.ID, catalogConfig, originalCatalogConfig)
+			if mergeErr != nil {
+				slog.ErrorContext(ctx, "unable to merge catalogConfig", "error", mergeErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+			_, err = qtx.UpsertCatalogConfig(ctx, params)
 			if err != nil {
 				slog.ErrorContext(ctx, "unexpected database error during catalogConfig upsert", "error", err)
 				return UpdateEntry500TextResponse("Internal server error"), nil
@@ -1188,7 +1223,12 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 			}
 		} else {
 			illConfig := request.Body.IllConfig.MustGet()
-			_, err = qtx.UpsertIllConfig(ctx, illConfigToDBParams(orig.ID, illConfig))
+			originalIllConfig, queryErr := qtx.GetIllConfigByEntry(ctx, orig.ID)
+			if queryErr != nil && !errors.Is(queryErr, pgx.ErrNoRows) {
+				slog.ErrorContext(ctx, "unable to query original illConfig", "error", queryErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+			_, err = qtx.UpsertIllConfig(ctx, illConfigPatchToDBParams(orig.ID, illConfig, originalIllConfig))
 			if err != nil {
 				slog.ErrorContext(ctx, "unexpected database error during illConfig upsert", "error", err)
 				return UpdateEntry500TextResponse("Internal server error"), nil
@@ -1204,7 +1244,17 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 				return UpdateEntry500TextResponse("Internal server error"), nil
 			}
 		} else {
-			policy := request.Body.HoldingsPolicy.MustGet()
+			policyPatch := request.Body.HoldingsPolicy.MustGet()
+			originalPolicy, queryErr := qtx.GetHoldingsPolicyByEntry(ctx, orig.ID)
+			if queryErr != nil && !errors.Is(queryErr, pgx.ErrNoRows) {
+				slog.ErrorContext(ctx, "unable to query original holdingsPolicy", "error", queryErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+			policy, mergeErr := mergeHoldingsPolicy(originalPolicy.Policy, policyPatch)
+			if mergeErr != nil {
+				slog.ErrorContext(ctx, "unable to merge holdingsPolicy", "error", mergeErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
 			_, err = qtx.UpsertHoldingsPolicy(ctx, db.UpsertHoldingsPolicyParams{
 				Entry:  orig.ID,
 				Policy: holdingsPolicyJSON(policy),
