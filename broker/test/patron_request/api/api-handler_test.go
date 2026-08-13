@@ -381,7 +381,7 @@ func TestNeedsReviewAndUpdate(t *testing.T) {
 	supPeer := apptest.CreatePeer(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL)
 	assert.NotNil(t, supPeer)
 
-	// POST without SupplierUniqueRecordId: validate returns 'review' outcome → NEEDS_REVIEW
+	// POST without SupplierUniqueRecordId: update-metadata returns 'review' outcome → NEEDS_REVIEW
 	patron := "p1"
 	request := iso18626.Request{
 		BibliographicInfo: iso18626.BibliographicInfo{

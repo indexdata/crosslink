@@ -13,10 +13,10 @@ stateModels:
         desc: Initial state after Patron Request is created (POST)
         side: REQUESTER
         initial: true
-        primaryAction: validate
+        primaryAction: validate-patron
         actions:
-          - name: validate
-            desc: "Validate the request (e.g. check patron via NCIP LookupUser, if enabled)"
+          - name: validate-patron
+            desc: "Validate the patron via NCIP LookupUser, if enabled"
             transitions:
               success: VALIDATED
               review: INVALID_PATRON
@@ -26,11 +26,11 @@ stateModels:
         display: Invalid Patron
         desc: Patron validation was rejected by the LMS
         side: REQUESTER
-        primaryAction: validate
+        primaryAction: validate-patron
         needsAttention: true
         editable: true
         actions:
-          - name: validate
+          - name: validate-patron
             desc: Revalidate the patron after correcting the request
             transitions:
               success: VALIDATED
@@ -360,7 +360,7 @@ stateModels:
         desc: Item is created on the supplier side for local fulfillment
         side: SUPPLIER
         initial: true
-        primaryAction: validate
+        primaryAction: validate-patron
         actions:
           - name: send-notification
             desc: Send staff email notification when a new supply request is received
@@ -369,8 +369,8 @@ stateModels:
               sendTo:
                 - staff
               templateLabel: new-supply-request-notification
-          - name: validate
-            desc: "Validate the request, e.g institutional patron via NCIP LookupUser, if enabled"
+          - name: validate-patron
+            desc: "Validate the institutional patron via NCIP LookupUser, if enabled"
             transitions:
               success: VALIDATED
             trigger: auto

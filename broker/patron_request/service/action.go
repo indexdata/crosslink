@@ -379,8 +379,8 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	switch action {
-	case BorrowerActionValidate:
-		return a.validateBorrowingRequest(ctx, pr, lmsAdapter, illRequest)
+	case BorrowerActionValidatePatron:
+		return a.validatePatronBorrowingRequest(ctx, pr, lmsAdapter, illRequest)
 	case BorrowerActionUpdateMetadata:
 		return a.updateMetadataBorrowingRequest(ctx, pr, illRequest)
 	case BorrowerActionSendRequest:
@@ -449,8 +449,8 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	switch action {
-	case LenderActionValidate:
-		return a.validateLenderRequest(ctx, pr, lms)
+	case LenderActionValidatePatron:
+		return a.validatePatronLenderRequest(ctx, pr, lms)
 	case LenderActionWillSupply:
 		return a.willSupplyLenderRequest(ctx, pr, lms, illRequest, params)
 	case LenderActionRejectCancel:
@@ -475,7 +475,7 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 	}
 }
 
-func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
+func (a *PatronRequestActionService) validatePatronBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
 	patron := ""
 	if pr.Patron.Valid {
 		patron = pr.Patron.String
@@ -975,7 +975,7 @@ func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.Exte
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
-func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) actionExecutionResult {
+func (a *PatronRequestActionService) validatePatronLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) actionExecutionResult {
 	institutionalPatron := lms.InstitutionalPatron(pr.RequesterSymbol.String)
 	_, err := lms.LookupUser(institutionalPatron)
 	if err != nil {
