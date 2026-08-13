@@ -138,6 +138,9 @@ The `rec` prefix refers to the
 
 The identifier value is split by semicolon and each substring generates a holdings record entry
 in the `999#11` field with subfield `$l` set to the local ID and subfield `$s` set to library ISIL.
+The MARCXML record also contains fixed mock bibliographic metadata: identifier `123456`, title
+`Title record from SRU mock`, subtitle `Subtitle from SRU mock`, author `Author from SRU mock`,
+edition `Mock edition`, ISBN `9781402894626`, and ISSN `20493630`.
 
 By default each substring is taken verbatim, except for some special cases:
 
