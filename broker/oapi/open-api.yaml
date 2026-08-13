@@ -1433,14 +1433,13 @@ components:
     UpdateTemplate:
       type: object
       title: Update Template
-      description: Request body for updating a template
       properties:
         title:
           type: string
           description: Human-readable title for the template
         subject:
           type: string
-          description: Subject line template, supports {{x}} placeholders. Not used for pullslip templates.
+          description: Subject line template, supports {{x}} placeholders. Not used for pullslip templates. Omit to clear.
         body:
           type: string
           description: Body of the email or pull slip template. Supports {{x}} placeholders.
