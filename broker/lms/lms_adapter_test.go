@@ -58,6 +58,12 @@ func TestLookupUser(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, "unknown user name", err.Error())
 
+	_, err = ad.LookupUser("problem user")
+	var ncipErr *ncipclient.NcipError
+	assert.ErrorAs(t, err, &ncipErr)
+	assert.Equal(t, string(ncip.UnknownUser), ncipErr.Problem.ProblemType.Text)
+	assert.Equal(t, "patron was not found", ncipErr.Problem.ProblemDetail)
+
 	userId, err = ad.LookupUser("pass")
 	assert.NoError(t, err)
 	assert.Equal(t, "pass", userId)
@@ -450,6 +456,15 @@ func (n *ncipClientMock) LookupUser(lookup ncip.LookupUser) (*ncip.LookupUserRes
 	}
 	if lookup.AuthenticationInput[0].AuthenticationInputData == "bad user" {
 		return nil, fmt.Errorf("unknown user name")
+	}
+	if lookup.AuthenticationInput[0].AuthenticationInputData == "problem user" {
+		return nil, &ncipclient.NcipError{
+			Message: "NCIP user lookup failed",
+			Problem: ncip.Problem{
+				ProblemType:   ncip.SchemeValuePair{Text: string(ncip.UnknownUser)},
+				ProblemDetail: "patron was not found",
+			},
+		}
 	}
 	if lookup.AuthenticationInput[0].AuthenticationInputData == "missing data" {
 		return &ncip.LookupUserResponse{}, nil

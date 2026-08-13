@@ -19,7 +19,22 @@ stateModels:
             desc: "Validate the request (e.g. check patron via NCIP LookupUser, if enabled)"
             transitions:
               success: VALIDATED
+              review: INVALID_PATRON
             trigger: auto
+
+      - name: INVALID_PATRON
+        display: Invalid Patron
+        desc: Patron validation was rejected by the LMS
+        side: REQUESTER
+        primaryAction: validate
+        needsAttention: true
+        editable: true
+        actions:
+          - name: validate
+            desc: Revalidate the patron after correcting the request
+            transitions:
+              success: VALIDATED
+              review: INVALID_PATRON
 
       - name: VALIDATED
         display: Validated

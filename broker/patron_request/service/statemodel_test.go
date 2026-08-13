@@ -12,6 +12,7 @@ import (
 func TestBuiltInStateModelCapabilities(t *testing.T) {
 	c := BuiltInStateModelCapabilities()
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateValidated)))
+	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateInvalidPatron)))
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateLocalSupply)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateValidated)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateReceived)))
@@ -49,6 +50,25 @@ func TestReturnablesIncludesLocalSupplyRequesterState(t *testing.T) {
 		return state.Name == string(BorrowerStateLocalSupply) && state.Side == proapi.REQUESTER
 	})
 	assert.NotEqual(t, -1, stateIndex)
+}
+
+func TestReturnablesInvalidPatronStateIsEditableAndNeedsAttention(t *testing.T) {
+	model, err := LoadStateModelByName("returnables")
+	if !assert.NoError(t, err) || !assert.NotNil(t, model) {
+		return
+	}
+
+	stateIndex := slices.IndexFunc(model.States, func(state proapi.ModelState) bool {
+		return state.Name == string(BorrowerStateInvalidPatron) && state.Side == proapi.REQUESTER
+	})
+	if !assert.NotEqual(t, -1, stateIndex) {
+		return
+	}
+	state := model.States[stateIndex]
+	assert.NotNil(t, state.Editable)
+	assert.True(t, *state.Editable)
+	assert.NotNil(t, state.NeedsAttention)
+	assert.True(t, *state.NeedsAttention)
 }
 
 func TestValidateStateModelMissingInitial(t *testing.T) {

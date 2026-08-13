@@ -24,6 +24,7 @@ const (
 
 const (
 	BorrowerStateNew              pr_db.PatronRequestState = "NEW"
+	BorrowerStateInvalidPatron    pr_db.PatronRequestState = "INVALID_PATRON"
 	BorrowerStateValidated        pr_db.PatronRequestState = "VALIDATED"
 	BorrowerStateMetadataUpdated  pr_db.PatronRequestState = "METADATA_UPDATED"
 	BorrowerStateNeedsReview      pr_db.PatronRequestState = "NEEDS_REVIEW"
@@ -117,6 +118,7 @@ const (
 func requesterBuiltInStates() []string {
 	return uniqueSorted([]string{
 		string(BorrowerStateNew),
+		string(BorrowerStateInvalidPatron),
 		string(BorrowerStateValidated),
 		string(BorrowerStateMetadataUpdated),
 		string(BorrowerStateNeedsReview),

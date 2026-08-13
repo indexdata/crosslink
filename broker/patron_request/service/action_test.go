@@ -25,6 +25,7 @@ import (
 	"github.com/indexdata/crosslink/broker/shim"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/indexdata/crosslink/ncip"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -436,6 +437,62 @@ func TestHandleInvokeActionValidateLookupFailed(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "LMS LookupUser failed", resultData.EventError.Message)
+	assert.Equal(t, BorrowerStateNew, mockPrRepo.savedPr.State)
+	assert.Equal(t, ActionOutcomeFailure, mockPrRepo.savedPr.LastActionOutcome.String)
+	assert.Equal(t, string(events.EventStatusError), mockPrRepo.savedPr.LastActionResult.String)
+}
+
+func TestHandleInvokeActionValidatePatronProblem(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(&MockLmsAdapterPatronProblem{}, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
+	illRequest := iso18626.Request{}
+	pr := pr_db.PatronRequest{
+		ID:              patronRequestId,
+		IllRequest:      illRequest,
+		RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"},
+		State:           BorrowerStateNew,
+		Side:            SideBorrowing,
+		Tenant:          pgtype.Text{Valid: true, String: "testlib"},
+	}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}}})
+
+	assert.Equal(t, events.EventStatusProblem, status)
+	assert.Equal(t, ActionOutcomeReview, resultData.ActionResult.Outcome)
+	assert.Equal(t, string(BorrowerStateInvalidPatron), *resultData.ActionResult.ToState)
+	assert.Equal(t, string(ncip.UnknownUser), resultData.Problem.Kind)
+	assert.Equal(t, "patron was not found", resultData.Problem.Details)
+	assert.Equal(t, BorrowerStateInvalidPatron, mockPrRepo.savedPr.State)
+	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
+	assert.Equal(t, ActionOutcomeReview, mockPrRepo.savedPr.LastActionOutcome.String)
+	assert.Equal(t, string(events.EventStatusProblem), mockPrRepo.savedPr.LastActionResult.String)
+}
+
+func TestHandleInvokeActionRepeatedPatronProblemKeepsNeedsAttention(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(&MockLmsAdapterPatronProblem{}, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
+	pr := pr_db.PatronRequest{
+		ID:              patronRequestId,
+		IllRequest:      iso18626.Request{},
+		RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"},
+		State:           BorrowerStateInvalidPatron,
+		Side:            SideBorrowing,
+		NeedsAttention:  true,
+	}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}}})
+
+	assert.Equal(t, events.EventStatusProblem, status)
+	assert.Equal(t, ActionOutcomeReview, resultData.ActionResult.Outcome)
+	assert.Nil(t, resultData.ActionResult.ToState)
+	assert.Equal(t, BorrowerStateInvalidPatron, mockPrRepo.savedPr.State)
+	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
 }
 
 func TestHandleInvokeActionSendRequest(t *testing.T) {
@@ -3482,6 +3539,20 @@ func (l *MockLmsAdapterLog) RequesterPickupLocation() string {
 }
 
 type MockLmsAdapterFail struct {
+}
+
+type MockLmsAdapterPatronProblem struct {
+	MockLmsAdapterFail
+}
+
+func (l *MockLmsAdapterPatronProblem) LookupUser(patron string) (string, error) {
+	return "", &ncipclient.NcipError{
+		Message: "NCIP user lookup failed",
+		Problem: ncip.Problem{
+			ProblemType:   ncip.SchemeValuePair{Text: string(ncip.UnknownUser)},
+			ProblemDetail: "patron was not found",
+		},
+	}
 }
 
 func (l *MockLmsAdapterFail) SetLogFunc(logFunc ncipclient.NcipLogFunc) {

@@ -19,6 +19,7 @@ import (
 	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/lms"
+	"github.com/indexdata/crosslink/broker/ncipclient"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	"github.com/indexdata/crosslink/broker/service"
@@ -217,17 +218,19 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 		updatedPr.NeedsAttention = true
 	}
 	stateChanged := false
-	if transitionState, ok := actionMapping.GetActionTransition(currentPr, action, outcome); ok && transitionState != updatedPr.State {
-		updatedPr.State = transitionState
+	if transitionState, ok := actionMapping.GetActionTransition(currentPr, action, outcome); ok {
+		if transitionState != updatedPr.State {
+			updatedPr.State = transitionState
+			toState := string(transitionState)
+			execResult.result.ActionResult.ToState = &toState
+			stateChanged = true
+		}
 		if config, configOk := actionMapping.getStateConfig(updatedPr); configOk {
 			if config.terminal {
 				updatedPr.TerminalState = true
 			}
 			updatedPr.NeedsAttention = config.needsAttention
 		}
-		toState := string(transitionState)
-		execResult.result.ActionResult.ToState = &toState
-		stateChanged = true
 	}
 
 	var retryPr pr_db.PatronRequest
@@ -479,6 +482,20 @@ func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.Extende
 	}
 	userId, err := lmsAdapter.LookupUser(patron)
 	if err != nil {
+		var ncipErr *ncipclient.NcipError
+		if errors.As(err, &ncipErr) {
+			problemType := ncipErr.Problem.ProblemType.Text
+			if problemType == "" {
+				problemType = "LMS LookupUser failed"
+			}
+			problemDetails := ncipErr.Problem.ProblemDetail
+			if problemDetails == "" {
+				problemDetails = ncipErr.Error()
+			}
+			status, result := events.LogProblemAndReturnResult(ctx, problemType, problemDetails, nil)
+			result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeReview}
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
 		status, result := logActionErrorAndReturnResult(ctx, "LMS LookupUser failed", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
