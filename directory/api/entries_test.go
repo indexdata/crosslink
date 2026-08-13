@@ -26,18 +26,6 @@ func TestBuildEntrySQL(t *testing.T) {
 	if !strings.Contains(sql, "ORDER BY e.name") {
 		t.Error("SQL should contain ORDER BY clause")
 	}
-
-	// CQL queries expand direct matches with their immediate children before
-	// the existing entry projection applies counting and pagination.
-	sql = buildEntryCQLSQL("e.name = $1")
-	if !strings.Contains(sql, "WITH matched_entries AS") ||
-		!strings.Contains(sql, "JOIN matched_entries parent ON child.parent = parent.id") ||
-		!strings.Contains(sql, "WHERE e.id IN (SELECT id FROM expanded_entries)") {
-		t.Errorf("CQL SQL should expand matching entries with their children: %s", sql)
-	}
-	if !strings.Contains(sql, "WHERE e.name = $1") {
-		t.Errorf("CQL SQL should retain the generated predicate: %s", sql)
-	}
 }
 
 func TestHandleEntryCQL(t *testing.T) {
@@ -86,6 +74,19 @@ func TestHandleEntryCQL(t *testing.T) {
 	args = res.GetQueryArguments()
 	if len(args) != 2 {
 		t.Errorf("Expected 2 arguments, got %d", len(args))
+	}
+
+	// Test parent symbol search
+	res, err = handleEntryCQL(`parentSymbol any "ISIL:PARENT PARENT2"`, 0)
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+	if !strings.Contains(res.GetWhereClause(), "entry_symbol.owner = e.parent") {
+		t.Errorf("Expected parentSymbol to match symbols owned by the parent: %s", res.GetWhereClause())
+	}
+	args = res.GetQueryArguments()
+	if len(args) != 1 {
+		t.Errorf("Expected 1 parentSymbol argument, got %d", len(args))
 	}
 
 	// Test invalid CQL

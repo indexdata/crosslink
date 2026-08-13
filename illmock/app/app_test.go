@@ -1430,8 +1430,8 @@ func TestService(t *testing.T) {
 		assert.Equal(t, "Albury City Libraries / Albury City Libraries", response.Items[0].Name)
 	})
 
-	t.Run("directory entries cql=ISIL:AU-NWOOL", func(t *testing.T) {
-		resp, err := http.Get(directoryUrl + "?cql=symbol%3DISIL%3AAU-NWOOL")
+	t.Run("directory entries cql institution and branches", func(t *testing.T) {
+		resp, err := http.Get(directoryUrl + "?cql=%28symbol%3DISIL%3AAU-NWOOL%20or%20parentSymbol%3DISIL%3AAU-NWOOL%29")
 		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))

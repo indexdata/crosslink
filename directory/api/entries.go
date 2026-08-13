@@ -234,7 +234,8 @@ func handleEntryCQL(cqlString string, noBaseArgs int) (pgcql.Query, error) {
 	f.SetColumn("e.tenant")
 	def.AddField("tenant", f)
 
-	def.AddField("symbol", &fieldEntrySymbol{})
+	def.AddField("symbol", &fieldEntrySymbol{index: "symbol", ownerColumn: "e.id"})
+	def.AddField("parentSymbol", &fieldEntrySymbol{index: "parentSymbol", ownerColumn: "e.parent"})
 
 	var parser cql.Parser
 	query, err := parser.Parse(cqlString)
@@ -244,7 +245,10 @@ func handleEntryCQL(cqlString string, noBaseArgs int) (pgcql.Query, error) {
 	return def.Parse(query, noBaseArgs+1)
 }
 
-type fieldEntrySymbol struct{}
+type fieldEntrySymbol struct {
+	index       string
+	ownerColumn string
+}
 
 func (f *fieldEntrySymbol) GetColumn() string  { return "" }
 func (f *fieldEntrySymbol) SetColumn(_ string) {}
@@ -254,18 +258,18 @@ func (f *fieldEntrySymbol) Generate(sc cql.SearchClause, queryArgumentIndex int)
 	case cql.EQ, cql.EXACT, "==":
 		return fmt.Sprintf(`EXISTS (
 			SELECT 1 FROM symbols entry_symbol
-			WHERE entry_symbol.owner = e.id
+			WHERE entry_symbol.owner = %s
 				AND (entry_symbol.authority || ':' || entry_symbol.symbol = $%d OR entry_symbol.symbol = $%d)
-		)`, queryArgumentIndex, queryArgumentIndex), []any{strings.ToUpper(sc.Term)}, nil
+		)`, f.ownerColumn, queryArgumentIndex, queryArgumentIndex), []any{strings.ToUpper(sc.Term)}, nil
 	case cql.ANY:
 		terms := strings.Fields(strings.ToUpper(sc.Term))
 		return fmt.Sprintf(`EXISTS (
 			SELECT 1 FROM symbols entry_symbol
-			WHERE entry_symbol.owner = e.id
+			WHERE entry_symbol.owner = %s
 				AND (entry_symbol.authority || ':' || entry_symbol.symbol = ANY($%d::text[]) OR entry_symbol.symbol = ANY($%d::text[]))
-		)`, queryArgumentIndex, queryArgumentIndex), []any{terms}, nil
+		)`, f.ownerColumn, queryArgumentIndex, queryArgumentIndex), []any{terms}, nil
 	default:
-		return "", nil, fmt.Errorf("unsupported relation %s for symbol", sc.Relation)
+		return "", nil, fmt.Errorf("unsupported relation %s for %s", sc.Relation, f.index)
 	}
 }
 
@@ -451,23 +455,6 @@ func buildEntrySQL(whereClause string) string {
 	return baseQuery
 }
 
-func buildEntryCQLSQL(whereClause string) string {
-	return fmt.Sprintf(`
-		WITH matched_entries AS (
-			SELECT e.id
-			FROM entries e
-			WHERE %s
-		),
-		expanded_entries AS (
-			SELECT id FROM matched_entries
-			UNION
-			SELECT child.id
-			FROM entries child
-			JOIN matched_entries parent ON child.parent = parent.id
-		)
-		%s`, whereClause, buildEntrySQL("WHERE e.id IN (SELECT id FROM expanded_entries)\n"+defaultEntryOrder))
-}
-
 func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject) (GetEntriesResponseObject, error) {
 	var query string
 	var args []interface{}
@@ -492,7 +479,7 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 		}
 
 		if res.GetWhereClause() != "" {
-			query = buildEntryCQLSQL(res.GetWhereClause())
+			query = buildEntrySQL("WHERE " + res.GetWhereClause() + "\n" + defaultEntryOrder)
 		} else {
 			query = buildEntrySQL(defaultEntryOrder)
 		}
