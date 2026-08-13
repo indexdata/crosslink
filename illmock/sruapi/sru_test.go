@@ -23,6 +23,36 @@ func TestGetSurrogateDiagnostic(t *testing.T) {
 	assert.Contains(t, string(record.RecordData.XMLContent), "<uri>info:srw/diagnostic/1/64</uri>")
 }
 
+func TestMockRecordIncludesBibliographicMetadata(t *testing.T) {
+	record, err := new(SruApi).getMarcXmlRecord("return-ISIL:US-RS3::whatever")
+	assert.NoError(t, err)
+	if !assert.NotNil(t, record) {
+		return
+	}
+
+	parserValues := map[string]string{}
+	for _, field := range record.Controlfield {
+		if field.Tag == "001" {
+			parserValues["001"] = string(field.Text)
+		}
+	}
+	for _, field := range record.Datafield {
+		for _, subfield := range field.Subfield {
+			parserValues[field.Tag+"$"+subfield.Code] = string(subfield.Text)
+		}
+	}
+
+	assert.Equal(t, "123456", parserValues["001"])
+	assert.Equal(t, "9781402894626", parserValues["020$a"])
+	assert.Equal(t, "20493630", parserValues["022$a"])
+	assert.Equal(t, "Title record from SRU mock", parserValues["245$a"])
+	assert.Equal(t, "Subtitle from SRU mock", parserValues["245$b"])
+	assert.Equal(t, "Author from SRU mock", parserValues["245$c"])
+	assert.Equal(t, "Mock edition", parserValues["250$a"])
+	assert.Equal(t, "whatever", parserValues["999$l"])
+	assert.Equal(t, "ISIL:US-RS3", parserValues["999$s"])
+}
+
 func getSr(t *testing.T, uri string) *sru.SearchRetrieveResponse {
 	resp, err := http.Get(uri)
 	assert.Nil(t, err)

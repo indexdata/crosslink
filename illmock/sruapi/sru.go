@@ -82,7 +82,16 @@ func (api *SruApi) getMarcXmlRecord(id string) (*marcxml.Record, error) {
 	record.Leader = &marcxml.LeaderFieldType{Text: "00000cam a2200000 a 4500"}
 	record.Controlfield = append(record.Controlfield, marcxml.ControlFieldType{Text: "123456", Id: "2", Tag: "001"})
 	record.Datafield = append(record.Datafield, marcxml.DataFieldType{Tag: "245", Ind1: "1", Ind2: "0",
-		Subfield: []marcxml.SubfieldatafieldType{{Code: "a", Text: "Title record from SRU mock"}}})
+		Subfield: []marcxml.SubfieldatafieldType{
+			{Code: "a", Text: "Title record from SRU mock"},
+			{Code: "b", Text: "Subtitle from SRU mock"},
+			{Code: "c", Text: "Author from SRU mock"},
+		}})
+	record.Datafield = append(record.Datafield,
+		marcxml.DataFieldType{Tag: "020", Subfield: []marcxml.SubfieldatafieldType{{Code: "a", Text: "9781402894626"}}},
+		marcxml.DataFieldType{Tag: "022", Subfield: []marcxml.SubfieldatafieldType{{Code: "a", Text: "20493630"}}},
+		marcxml.DataFieldType{Tag: "250", Subfield: []marcxml.SubfieldatafieldType{{Code: "a", Text: "Mock edition"}}},
+	)
 	localIds := strings.Split(id, ";")
 	i := 1
 	for _, localId := range localIds {
