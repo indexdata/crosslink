@@ -25,6 +25,7 @@ import (
 	"github.com/indexdata/crosslink/broker/shim"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/indexdata/crosslink/ncip"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -33,7 +34,7 @@ import (
 var appCtx = common.CreateExtCtxWithArgs(context.Background(), nil)
 var patronRequestId = "pr1"
 
-var actionValidate = BorrowerActionValidate
+var actionValidatePatron = BorrowerActionValidatePatron
 
 func TestInvokeAction(t *testing.T) {
 	mockEventBus := new(MockEventBus)
@@ -62,7 +63,7 @@ func TestHandleInvokeActionNoPR(t *testing.T) {
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(handler.Iso18626Handler), nil, new(EmailSenderMock), nil, nil)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{}, errors.New("not fund"))
 
-	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}}})
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidatePatron}}})
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "failed to read patron request", resultData.EventError.Message)
@@ -76,10 +77,10 @@ func TestHandleInvokeActionNoPRSide(t *testing.T) {
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateNew, Side: "helper", IllRequest: illRequest}, nil)
 
-	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}}})
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidatePatron}}})
 
 	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "state NEW does not support action validate", resultData.EventError.Message)
+	assert.Equal(t, "state NEW does not support action validate-patron", resultData.EventError.Message)
 }
 
 func TestHandleInvokeActionWhichIsNotAllowed(t *testing.T) {
@@ -87,10 +88,10 @@ func TestHandleInvokeActionWhichIsNotAllowed(t *testing.T) {
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(handler.Iso18626Handler), nil, new(EmailSenderMock), nil, nil)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateValidated, Side: SideBorrowing}, nil)
 
-	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}}})
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidatePatron}}})
 
 	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "state VALIDATED does not support action validate", resultData.EventError.Message)
+	assert.Equal(t, "state VALIDATED does not support action validate-patron", resultData.EventError.Message)
 }
 
 func TestHandleInvokeActionNoLms(t *testing.T) {
@@ -99,7 +100,7 @@ func TestHandleInvokeActionNoLms(t *testing.T) {
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}, IllRequest: illRequest}, nil)
 
-	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}}})
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidatePatron}}})
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "LMS creator not configured", resultData.EventError.Message)
@@ -156,7 +157,7 @@ func TestHandleBorrowingActionMissingRequesterSymbol(t *testing.T) {
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}, IllRequest: illRequest}, nil)
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}, IllRequest: illRequest}, nil)
 
-	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}}})
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidatePatron}}})
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "missing requester symbol", resultData.EventError.Message)
@@ -215,7 +216,7 @@ func TestHandleInvokeActionValidateSendRequest(t *testing.T) {
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(sentPR, nil)
 	mockEventBus.On("CreateNoticeWithParent", fakeEventID).Return("", nil)
 
-	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{ID: fakeEventID, PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}}})
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{ID: fakeEventID, PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidatePatron}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.NotNil(t, resultData)
@@ -249,7 +250,7 @@ func TestHandleInvokeActionValidateSendRequestDuplicate(t *testing.T) {
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(sentPR, nil)
 	mockEventBus.On("CreateNoticeWithParent", fakeEventID).Return("", nil)
 
-	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{ID: fakeEventID, PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}}})
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{ID: fakeEventID, PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidatePatron}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.NotNil(t, resultData)
@@ -416,7 +417,7 @@ func TestHandleInvokeActionValidateGetAdapterFailed(t *testing.T) {
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}, IllRequest: illRequest, NeedsAttention: true}, nil)
 
-	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}}})
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidatePatron}}})
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "failed to create LMS adapter", resultData.EventError.Message)
@@ -432,10 +433,66 @@ func TestHandleInvokeActionValidateLookupFailed(t *testing.T) {
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}}, nil)
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(pr_db.PatronRequest{RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}, IllRequest: illRequest}, nil)
 
-	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}}})
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidatePatron}}})
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "LMS LookupUser failed", resultData.EventError.Message)
+	assert.Equal(t, BorrowerStateNew, mockPrRepo.savedPr.State)
+	assert.Equal(t, ActionOutcomeFailure, mockPrRepo.savedPr.LastActionOutcome.String)
+	assert.Equal(t, string(events.EventStatusError), mockPrRepo.savedPr.LastActionResult.String)
+}
+
+func TestHandleInvokeActionValidatePatronProblem(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(&MockLmsAdapterPatronProblem{}, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
+	illRequest := iso18626.Request{}
+	pr := pr_db.PatronRequest{
+		ID:              patronRequestId,
+		IllRequest:      illRequest,
+		RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"},
+		State:           BorrowerStateNew,
+		Side:            SideBorrowing,
+		Tenant:          pgtype.Text{Valid: true, String: "testlib"},
+	}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidatePatron}}})
+
+	assert.Equal(t, events.EventStatusProblem, status)
+	assert.Equal(t, ActionOutcomeReview, resultData.ActionResult.Outcome)
+	assert.Equal(t, string(BorrowerStateInvalidPatron), *resultData.ActionResult.ToState)
+	assert.Equal(t, string(ncip.UnknownUser), resultData.Problem.Kind)
+	assert.Equal(t, "patron was not found", resultData.Problem.Details)
+	assert.Equal(t, BorrowerStateInvalidPatron, mockPrRepo.savedPr.State)
+	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
+	assert.Equal(t, ActionOutcomeReview, mockPrRepo.savedPr.LastActionOutcome.String)
+	assert.Equal(t, string(events.EventStatusProblem), mockPrRepo.savedPr.LastActionResult.String)
+}
+
+func TestHandleInvokeActionRepeatedPatronProblemKeepsNeedsAttention(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(&MockLmsAdapterPatronProblem{}, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
+	pr := pr_db.PatronRequest{
+		ID:              patronRequestId,
+		IllRequest:      iso18626.Request{},
+		RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"},
+		State:           BorrowerStateInvalidPatron,
+		Side:            SideBorrowing,
+		NeedsAttention:  true,
+	}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidatePatron}}})
+
+	assert.Equal(t, events.EventStatusProblem, status)
+	assert.Equal(t, ActionOutcomeReview, resultData.ActionResult.Outcome)
+	assert.Nil(t, resultData.ActionResult.ToState)
+	assert.Equal(t, BorrowerStateInvalidPatron, mockPrRepo.savedPr.State)
+	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
 }
 
 func TestHandleInvokeActionSendRequest(t *testing.T) {
@@ -991,7 +1048,7 @@ func TestHandleInvokeLenderActionNoSupplierSymbol(t *testing.T) {
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateNew, Side: SideLending}, nil)
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(pr_db.PatronRequest{RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}, IllRequest: illRequest}, nil)
 
-	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}}})
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidatePatron}}})
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "missing supplier symbol", resultData.EventError.Message)
@@ -1007,13 +1064,13 @@ func TestHandleInvokeLenderActionNoLms(t *testing.T) {
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateNew, Side: SideLending, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(pr_db.PatronRequest{RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}, IllRequest: illRequest}, nil)
 
-	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}}})
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidatePatron}}})
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "failed to create LMS adapter", resultData.EventError.Message)
 }
 
-func TestHandleInvokeLenderActionValidate(t *testing.T) {
+func TestHandleInvokeLenderActionValidatePatron(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockEventBus := new(MockEventBus)
 	mockEventBus.runTaskHandler = true
@@ -1044,7 +1101,7 @@ func TestHandleInvokeLenderActionValidate(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
 		ID:              "invoke-validate",
 		PatronRequestID: patronRequestId,
-		EventData:       events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate, User: "okapi-user-1"}},
+		EventData:       events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidatePatron, User: "okapi-user-1"}},
 	})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
@@ -1085,7 +1142,7 @@ func TestHandleInvokeLenderActionValidateAutoActionError(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
 		ID:              "invoke-validate",
 		PatronRequestID: patronRequestId,
-		EventData:       events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}},
+		EventData:       events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidatePatron}},
 	})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
@@ -1130,7 +1187,7 @@ func TestHandleInvokeLenderActionValidateAutoActionCreateTaskError(t *testing.T)
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
 		ID:              "invoke-validate",
 		PatronRequestID: patronRequestId,
-		EventData:       events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}},
+		EventData:       events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidatePatron}},
 	})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
@@ -1641,7 +1698,7 @@ func TestHandleInvokeBorrowerActionAcceptRetryAutoActionCreateTaskError(t *testi
 	// The original PR (not the retry PR) should be marked as a chain failure.
 	assert.Equal(t, patronRequestId, mockPrRepo.savedPr.ID)
 	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
-	assert.Equal(t, string(BorrowerActionValidate), mockPrRepo.savedPr.LastAction.String)
+	assert.Equal(t, string(BorrowerActionValidatePatron), mockPrRepo.savedPr.LastAction.String)
 	assert.Equal(t, ActionOutcomeFailure, mockPrRepo.savedPr.LastActionOutcome.String)
 	assert.Equal(t, string(events.EventStatusError), mockPrRepo.savedPr.LastActionResult.String)
 	assert.Equal(t, "REQ1-2", mockPrRepo.createdPr.ID)
@@ -3482,6 +3539,20 @@ func (l *MockLmsAdapterLog) RequesterPickupLocation() string {
 }
 
 type MockLmsAdapterFail struct {
+}
+
+type MockLmsAdapterPatronProblem struct {
+	MockLmsAdapterFail
+}
+
+func (l *MockLmsAdapterPatronProblem) LookupUser(patron string) (string, error) {
+	return "", &ncipclient.NcipError{
+		Message: "NCIP user lookup failed",
+		Problem: ncip.Problem{
+			ProblemType:   ncip.SchemeValuePair{Text: string(ncip.UnknownUser)},
+			ProblemDetail: "patron was not found",
+		},
+	}
 }
 
 func (l *MockLmsAdapterFail) SetLogFunc(logFunc ncipclient.NcipLogFunc) {

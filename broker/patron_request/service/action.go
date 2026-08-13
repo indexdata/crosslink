@@ -19,6 +19,7 @@ import (
 	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/lms"
+	"github.com/indexdata/crosslink/broker/ncipclient"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	"github.com/indexdata/crosslink/broker/service"
@@ -217,17 +218,19 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 		updatedPr.NeedsAttention = true
 	}
 	stateChanged := false
-	if transitionState, ok := actionMapping.GetActionTransition(currentPr, action, outcome); ok && transitionState != updatedPr.State {
-		updatedPr.State = transitionState
+	if transitionState, ok := actionMapping.GetActionTransition(currentPr, action, outcome); ok {
+		if transitionState != updatedPr.State {
+			updatedPr.State = transitionState
+			toState := string(transitionState)
+			execResult.result.ActionResult.ToState = &toState
+			stateChanged = true
+		}
 		if config, configOk := actionMapping.getStateConfig(updatedPr); configOk {
 			if config.terminal {
 				updatedPr.TerminalState = true
 			}
 			updatedPr.NeedsAttention = config.needsAttention
 		}
-		toState := string(transitionState)
-		execResult.result.ActionResult.ToState = &toState
-		stateChanged = true
 	}
 
 	var retryPr pr_db.PatronRequest
@@ -376,8 +379,8 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	switch action {
-	case BorrowerActionValidate:
-		return a.validateBorrowingRequest(ctx, pr, lmsAdapter, illRequest)
+	case BorrowerActionValidatePatron:
+		return a.validatePatronBorrowingRequest(ctx, pr, lmsAdapter, illRequest)
 	case BorrowerActionUpdateMetadata:
 		return a.updateMetadataBorrowingRequest(ctx, pr, illRequest)
 	case BorrowerActionSendRequest:
@@ -446,8 +449,8 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	switch action {
-	case LenderActionValidate:
-		return a.validateLenderRequest(ctx, pr, lms)
+	case LenderActionValidatePatron:
+		return a.validatePatronLenderRequest(ctx, pr, lms)
 	case LenderActionWillSupply:
 		return a.willSupplyLenderRequest(ctx, pr, lms, illRequest, params)
 	case LenderActionRejectCancel:
@@ -472,13 +475,27 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 	}
 }
 
-func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
+func (a *PatronRequestActionService) validatePatronBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
 	patron := ""
 	if pr.Patron.Valid {
 		patron = pr.Patron.String
 	}
 	userId, err := lmsAdapter.LookupUser(patron)
 	if err != nil {
+		var ncipErr *ncipclient.NcipError
+		if errors.As(err, &ncipErr) {
+			problemType := ncipErr.Problem.ProblemType.Text
+			if problemType == "" {
+				problemType = "LMS LookupUser failed"
+			}
+			problemDetails := ncipErr.Problem.ProblemDetail
+			if problemDetails == "" {
+				problemDetails = ncipErr.Error()
+			}
+			status, result := events.LogProblemAndReturnResult(ctx, problemType, problemDetails, nil)
+			result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeReview}
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
 		status, result := logActionErrorAndReturnResult(ctx, "LMS LookupUser failed", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
@@ -958,7 +975,7 @@ func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.Exte
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
-func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) actionExecutionResult {
+func (a *PatronRequestActionService) validatePatronLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) actionExecutionResult {
 	institutionalPatron := lms.InstitutionalPatron(pr.RequesterSymbol.String)
 	_, err := lms.LookupUser(institutionalPatron)
 	if err != nil {

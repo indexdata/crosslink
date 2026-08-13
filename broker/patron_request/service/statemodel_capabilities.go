@@ -24,6 +24,7 @@ const (
 
 const (
 	BorrowerStateNew              pr_db.PatronRequestState = "NEW"
+	BorrowerStateInvalidPatron    pr_db.PatronRequestState = "INVALID_PATRON"
 	BorrowerStateValidated        pr_db.PatronRequestState = "VALIDATED"
 	BorrowerStateMetadataUpdated  pr_db.PatronRequestState = "METADATA_UPDATED"
 	BorrowerStateNeedsReview      pr_db.PatronRequestState = "NEEDS_REVIEW"
@@ -63,7 +64,7 @@ const (
 )
 
 const (
-	BorrowerActionValidate            pr_db.PatronRequestAction = "validate"
+	BorrowerActionValidatePatron      pr_db.PatronRequestAction = "validate-patron"
 	BorrowerActionUpdateMetadata      pr_db.PatronRequestAction = "update-metadata"
 	BorrowerActionSendRequest         pr_db.PatronRequestAction = "send-request"
 	BorrowerActionCancelRequest       pr_db.PatronRequestAction = "cancel-request"
@@ -79,7 +80,7 @@ const (
 	BorrowerActionFillLocally         pr_db.PatronRequestAction = "fill-locally"
 	BorrowerActionCancelLocalSupply   pr_db.PatronRequestAction = "cancel-local-supply"
 	BorrowerActionCannotSupplyLocally pr_db.PatronRequestAction = "cannot-supply-locally"
-	LenderActionValidate              pr_db.PatronRequestAction = "validate"
+	LenderActionValidatePatron        pr_db.PatronRequestAction = "validate-patron"
 	LenderActionWillSupply            pr_db.PatronRequestAction = "will-supply"
 	LenderActionRejectCancel          pr_db.PatronRequestAction = "reject-cancel"
 	LenderActionCannotSupply          pr_db.PatronRequestAction = "cannot-supply"
@@ -117,6 +118,7 @@ const (
 func requesterBuiltInStates() []string {
 	return uniqueSorted([]string{
 		string(BorrowerStateNew),
+		string(BorrowerStateInvalidPatron),
 		string(BorrowerStateValidated),
 		string(BorrowerStateMetadataUpdated),
 		string(BorrowerStateNeedsReview),
@@ -164,7 +166,7 @@ func supplierBuiltInStates() []string {
 func requesterBuiltInActions() []proapi.ActionCapability {
 	return []proapi.ActionCapability{
 		{
-			Name:       string(BorrowerActionValidate),
+			Name:       string(BorrowerActionValidatePatron),
 			Parameters: []string{},
 		},
 		{
@@ -233,7 +235,7 @@ func requesterBuiltInActions() []proapi.ActionCapability {
 func supplierBuiltInActions() []proapi.ActionCapability {
 	return []proapi.ActionCapability{
 		{
-			Name:       string(LenderActionValidate),
+			Name:       string(LenderActionValidatePatron),
 			Parameters: []string{},
 		},
 		{

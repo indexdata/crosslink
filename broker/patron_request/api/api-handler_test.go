@@ -1461,14 +1461,16 @@ func TestPutPatronRequestsIdIdMismatch(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "patron request id does not match")
 }
 
-func TestPutPatronRequestsIdNotEditable(t *testing.T) {
-	// id "3" returns a NEW state PR, which is not editable.
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+func TestPutPatronRequestsIdNewStateIsEditable(t *testing.T) {
+	repo := new(PrRepoUpdateCapture)
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
 	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
 	rr := httptest.NewRecorder()
 	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
-	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Contains(t, rr.Body.String(), "patron request is not editable in state")
+	assert.Equal(t, http.StatusOK, rr.Code)
+	if assert.NotNil(t, repo.lastUpdateParams) {
+		assert.Equal(t, "3", repo.lastUpdateParams.ID)
+	}
 }
 
 func TestPutPatronRequestsIdNotFound(t *testing.T) {

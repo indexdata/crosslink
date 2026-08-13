@@ -12,12 +12,13 @@ import (
 func TestBuiltInStateModelCapabilities(t *testing.T) {
 	c := BuiltInStateModelCapabilities()
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateValidated)))
+	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateInvalidPatron)))
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateLocalSupply)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateValidated)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateReceived)))
 
 	assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
-		return a.Name == string(BorrowerActionValidate)
+		return a.Name == string(BorrowerActionValidatePatron)
 	}))
 	assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
 		return a.Name == string(BorrowerActionReceive)
@@ -51,8 +52,44 @@ func TestReturnablesIncludesLocalSupplyRequesterState(t *testing.T) {
 	assert.NotEqual(t, -1, stateIndex)
 }
 
+func TestReturnablesInvalidPatronStateIsEditableAndNeedsAttention(t *testing.T) {
+	model, err := LoadStateModelByName("returnables")
+	if !assert.NoError(t, err) || !assert.NotNil(t, model) {
+		return
+	}
+
+	stateIndex := slices.IndexFunc(model.States, func(state proapi.ModelState) bool {
+		return state.Name == string(BorrowerStateInvalidPatron) && state.Side == proapi.REQUESTER
+	})
+	if !assert.NotEqual(t, -1, stateIndex) {
+		return
+	}
+	state := model.States[stateIndex]
+	assert.NotNil(t, state.Editable)
+	assert.True(t, *state.Editable)
+	assert.NotNil(t, state.NeedsAttention)
+	assert.True(t, *state.NeedsAttention)
+}
+
+func TestReturnablesNewRequesterStateIsEditable(t *testing.T) {
+	model, err := LoadStateModelByName("returnables")
+	if !assert.NoError(t, err) || !assert.NotNil(t, model) {
+		return
+	}
+
+	stateIndex := slices.IndexFunc(model.States, func(state proapi.ModelState) bool {
+		return state.Name == string(BorrowerStateNew) && state.Side == proapi.REQUESTER
+	})
+	if !assert.NotEqual(t, -1, stateIndex) {
+		return
+	}
+	state := model.States[stateIndex]
+	assert.NotNil(t, state.Editable)
+	assert.True(t, *state.Editable)
+}
+
 func TestValidateStateModelMissingInitial(t *testing.T) {
-	s := "validate"
+	s := "validate-patron"
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
@@ -74,7 +111,7 @@ func TestValidateStateModelMissingInitial(t *testing.T) {
 }
 
 func TestValidateStateModelDoubleInitial(t *testing.T) {
-	s := "validate"
+	s := "validate-patron"
 	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
@@ -106,7 +143,7 @@ func TestValidateStateModelDoubleInitial(t *testing.T) {
 }
 
 func TestValidateStateModelWithPrimaryAction(t *testing.T) {
-	s := "validate"
+	s := "validate-patron"
 	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
@@ -130,7 +167,7 @@ func TestValidateStateModelWithPrimaryAction(t *testing.T) {
 }
 
 func TestValidateStateModelWithoutPrimaryAction(t *testing.T) {
-	s := "validate"
+	s := "validate-patron"
 	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
@@ -165,7 +202,7 @@ func TestValidateStateModelPrimaryActionUndefined(t *testing.T) {
 				Side:    proapi.REQUESTER,
 				Initial: &tt,
 				Actions: &[]proapi.ModelAction{
-					{Name: "validate"},
+					{Name: "validate-patron"},
 				},
 				PrimaryAction: &s,
 			},
@@ -396,7 +433,7 @@ func TestValidateStateModelInvalidActionSuccessTransitionTarget(t *testing.T) {
 				Initial: &tt,
 				Actions: &[]proapi.ModelAction{
 					{
-						Name: string(BorrowerActionValidate),
+						Name: string(BorrowerActionValidatePatron),
 						Transitions: &struct {
 							Duplicate *string `json:"duplicate,omitempty"`
 							Failure   *string `json:"failure,omitempty"`
@@ -491,7 +528,7 @@ func TestValidateStateModelActionTransitionTargetMustExistInModelForSameSide(t *
 				Initial: &tt,
 				Actions: &[]proapi.ModelAction{
 					{
-						Name: string(BorrowerActionValidate),
+						Name: string(BorrowerActionValidatePatron),
 						Transitions: &struct {
 							Duplicate *string `json:"duplicate,omitempty"`
 							Failure   *string `json:"failure,omitempty"`
@@ -525,7 +562,7 @@ func TestValidateStateModelActionTransitionCannotCrossSides(t *testing.T) {
 				Initial: &tt,
 				Actions: &[]proapi.ModelAction{
 					{
-						Name: string(BorrowerActionValidate),
+						Name: string(BorrowerActionValidatePatron),
 						Transitions: &struct {
 							Duplicate *string `json:"duplicate,omitempty"`
 							Failure   *string `json:"failure,omitempty"`
