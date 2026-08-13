@@ -13,6 +13,7 @@ stateModels:
         desc: Initial state after Patron Request is created (POST)
         side: REQUESTER
         initial: true
+        editable: true
         primaryAction: validate-patron
         actions:
           - name: validate-patron

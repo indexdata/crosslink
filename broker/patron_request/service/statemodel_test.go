@@ -71,6 +71,23 @@ func TestReturnablesInvalidPatronStateIsEditableAndNeedsAttention(t *testing.T) 
 	assert.True(t, *state.NeedsAttention)
 }
 
+func TestReturnablesNewRequesterStateIsEditable(t *testing.T) {
+	model, err := LoadStateModelByName("returnables")
+	if !assert.NoError(t, err) || !assert.NotNil(t, model) {
+		return
+	}
+
+	stateIndex := slices.IndexFunc(model.States, func(state proapi.ModelState) bool {
+		return state.Name == string(BorrowerStateNew) && state.Side == proapi.REQUESTER
+	})
+	if !assert.NotEqual(t, -1, stateIndex) {
+		return
+	}
+	state := model.States[stateIndex]
+	assert.NotNil(t, state.Editable)
+	assert.True(t, *state.Editable)
+}
+
 func TestValidateStateModelMissingInitial(t *testing.T) {
 	s := "validate-patron"
 	model := &proapi.StateModel{
