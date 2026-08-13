@@ -293,6 +293,67 @@ func TestPostPatronRequests(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "DB error")
 }
 
+type createdPatronRequestRepo struct {
+	PrRepoError
+	created pr_db.PatronRequest
+	view    pr_db.PatronRequestSearchView
+}
+
+func (r *createdPatronRequestRepo) CreatePatronRequest(ctx common.ExtendedContext, params pr_db.CreatePatronRequestParams) (pr_db.PatronRequest, error) {
+	return r.created, nil
+}
+
+func (r *createdPatronRequestRepo) GetPatronRequestSearchView(ctx common.ExtendedContext, id string) (pr_db.PatronRequestSearchView, error) {
+	return r.view, nil
+}
+
+type failingInitialAutoActionRunner struct{}
+
+func (failingInitialAutoActionRunner) RunAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest, parentEventID *string, user string) error {
+	return errors.New("auto-action failed")
+}
+
+func TestPostPatronRequestsReturnsCreatedWhenInitialAutoActionFails(t *testing.T) {
+	now := time.Now()
+	id := "pr-123"
+	repo := &createdPatronRequestRepo{
+		created: pr_db.PatronRequest{ID: id},
+		view: pr_db.PatronRequestSearchView{
+			ID:                id,
+			CreatedAt:         pgtype.Timestamp{Valid: true, Time: now},
+			State:             pr_db.PatronRequestState("VALIDATED"),
+			StateModel:        "default",
+			Side:              prservice.SideBorrowing,
+			IllRequest:        validIllRequest(),
+			NeedsAttention:    true,
+			LastAction:        pgtype.Text{String: "update-metadata", Valid: true},
+			LastActionOutcome: pgtype.Text{String: "failure", Valid: true},
+			LastActionResult:  pgtype.Text{String: "error", Valid: true},
+		},
+	}
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	handler.SetAutoActionRunner(failingInitialAutoActionRunner{})
+	body := proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol, IllRequest: validIllRequest()}
+	jsonBytes, err := json.Marshal(body)
+	assert.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/patron_requests", bytes.NewReader(jsonBytes))
+	rr := httptest.NewRecorder()
+	okapiTenant := proapi.Tenant("test-lib")
+
+	handler.PostPatronRequests(rr, req, proapi.PostPatronRequestsParams{XOkapiTenant: &okapiTenant})
+
+	assert.Equal(t, http.StatusCreated, rr.Code)
+	assert.Equal(t, "https://example.com/patron_requests/"+id, rr.Header().Get("Location"))
+	var response map[string]any
+	assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), &response))
+	assert.Equal(t, id, response["id"])
+	assert.Equal(t, "VALIDATED", response["state"])
+	assert.Equal(t, "update-metadata", response["lastAction"])
+	assert.Equal(t, "failure", response["lastActionOutcome"])
+	assert.Equal(t, "error", response["lastActionResult"])
+	assert.Equal(t, true, response["needsAttention"])
+}
+
 func TestPostPatronRequestsMissingSymbol(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
 	toCreate := proapi.PatronRequest{Id: "1"}

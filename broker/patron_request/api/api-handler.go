@@ -333,11 +333,9 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		return
 	}
 	if a.autoActionRunner != nil {
-		err = a.autoActionRunner.RunAutoActionsOnStateEntry(ctx, pr, nil, tenant.GetUser())
-		if err != nil {
-			api.AddInternalError(ctx, w, err)
-			return
-		}
+		// The patron request is already persisted, so return its current state
+		// even when an initial auto-action fails.
+		_ = a.autoActionRunner.RunAutoActionsOnStateEntry(ctx, pr, nil, tenant.GetUser())
 	}
 	prView, err := a.prRepo.GetPatronRequestSearchView(ctx, pr.ID)
 	if err != nil {
