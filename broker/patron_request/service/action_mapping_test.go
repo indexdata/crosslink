@@ -276,6 +276,18 @@ func TestGetActionTransitionConditionPendingSelfTransition(t *testing.T) {
 	assert.Equal(t, LenderStateConditionPending, transition)
 }
 
+func TestGetActionTransitionWillSupplyFailureSelfTransition(t *testing.T) {
+	mapping := mustActionMapping(t)
+
+	transition, ok := mapping.GetActionTransition(
+		pr_db.PatronRequest{Side: SideLending, State: LenderStateValidated},
+		LenderActionWillSupply,
+		ActionOutcomeFailure,
+	)
+	assert.True(t, ok)
+	assert.Equal(t, LenderStateValidated, transition)
+}
+
 func TestGetEventTransitionRetryConditionalFromBorrowerWillSupply(t *testing.T) {
 	mapping := mustActionMapping(t)
 
