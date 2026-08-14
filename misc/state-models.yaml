@@ -400,6 +400,7 @@ stateModels:
             desc: Indicate supplier will supply and send ISO18626 WillSupply
             transitions:
               success: WILL_SUPPLY
+              failure: VALIDATED
             trigger: auto
           - name: cannot-supply
             desc: Indicate cannot supply and send ISO18626 Unfilled

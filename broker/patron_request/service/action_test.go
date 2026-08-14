@@ -569,7 +569,9 @@ func TestHandleInvokeActionRepeatedPatronProblemKeepsNeedsAttention(t *testing.T
 
 	assert.Equal(t, events.EventStatusProblem, status)
 	assert.Equal(t, ActionOutcomeReview, resultData.ActionResult.Outcome)
-	assert.Nil(t, resultData.ActionResult.ToState)
+	if assert.NotNil(t, resultData.ActionResult.ToState) {
+		assert.Equal(t, string(BorrowerStateInvalidPatron), *resultData.ActionResult.ToState)
+	}
 	assert.Equal(t, BorrowerStateInvalidPatron, mockPrRepo.savedPr.State)
 	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
 }
@@ -1238,6 +1240,97 @@ func TestHandleInvokeLenderActionValidateAutoActionError(t *testing.T) {
 	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
 }
 
+func TestHandleInvokeLenderActionValidateHandlesWillSupplyFailureTransition(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	mockEventBus := new(MockEventBus)
+	mockEventBus.runTaskHandler = true
+	lmsCreator := new(MockLmsCreator)
+	lmsAdapter := &MockLmsAdapterLog{requestItemErr: errors.New("RequestItem failed")}
+	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lmsAdapter, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, new(MockIso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
+	illRequest := iso18626.Request{}
+
+	initialPR := pr_db.PatronRequest{
+		ID:              patronRequestId,
+		IllRequest:      illRequest,
+		State:           LenderStateNew,
+		Side:            SideLending,
+		SupplierSymbol:  getDbText("ISIL:SUP1"),
+		RequesterSymbol: getDbText("ISIL:REQ1"),
+	}
+	validatedPR := initialPR
+	validatedPR.State = LenderStateValidated
+
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(initialPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
+	mockEventBus.On("CreateNoticeWithParent", "invoke-validate").Return("", nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
+		ID:              "invoke-validate",
+		PatronRequestID: patronRequestId,
+		EventData:       events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidatePatron}},
+	})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	if assert.NotNil(t, resultData.ActionResult) {
+		assert.Nil(t, resultData.ActionResult.ChildActionError)
+	}
+	assert.Equal(t, LenderStateValidated, mockPrRepo.savedPr.State)
+	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
+	assert.Equal(t, string(LenderActionWillSupply), mockPrRepo.savedPr.LastAction.String)
+	assert.Equal(t, ActionOutcomeFailure, mockPrRepo.savedPr.LastActionOutcome.String)
+	assert.Equal(t, string(events.EventStatusError), mockPrRepo.savedPr.LastActionResult.String)
+}
+
+func TestRunAutoActionsHandlesPersistedFailureTransition(t *testing.T) {
+	mockEventBus := new(MockEventBus)
+	toState := string(LenderStateValidated)
+	mockEventBus.On("ProcessExclusiveTask", patronRequestId+"-task-1").Return(events.Event{
+		EventStatus: events.EventStatusError,
+		ResultData: events.EventResult{CommonEventData: events.CommonEventData{
+			ActionResult: &events.ActionResult{
+				Outcome: ActionOutcomeFailure,
+				ToState: &toState,
+			},
+		}},
+	}, nil)
+	prAction := CreatePatronRequestActionService(new(MockPrRepo), new(IllRepoMock), mockEventBus, new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
+
+	err := prAction.RunAutoActionsOnStateEntry(appCtx, pr_db.PatronRequest{
+		ID:    patronRequestId,
+		State: LenderStateValidated,
+		Side:  SideLending,
+		IllRequest: iso18626.Request{
+			ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
+		},
+	}, nil, "")
+
+	assert.NoError(t, err)
+}
+
+func TestRunAutoActionsPropagatesUnboundFailure(t *testing.T) {
+	mockEventBus := new(MockEventBus)
+	mockEventBus.On("ProcessExclusiveTask", patronRequestId+"-task-1").Return(events.Event{
+		EventStatus: events.EventStatusError,
+		ResultData: events.EventResult{CommonEventData: events.CommonEventData{
+			ActionResult: &events.ActionResult{Outcome: ActionOutcomeFailure},
+			EventError:   &events.EventError{Message: "action failed"},
+		}},
+	}, nil)
+	prAction := CreatePatronRequestActionService(new(MockPrRepo), new(IllRepoMock), mockEventBus, new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
+
+	err := prAction.RunAutoActionsOnStateEntry(appCtx, pr_db.PatronRequest{
+		ID:    patronRequestId,
+		State: BorrowerStateNew,
+		Side:  SideBorrowing,
+		IllRequest: iso18626.Request{
+			ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
+		},
+	}, nil, "")
+
+	assert.EqualError(t, err, "auto action validate-patron failed with status ERROR: action failed")
+}
+
 func TestHandleInvokeLenderActionValidateAutoActionCreateTaskError(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockEventBus := new(MockEventBus)
@@ -1396,6 +1489,11 @@ func TestHandleInvokeLenderActionWillSupplyNcipFailed(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "LMS RequestItem failed", resultData.EventError.Message)
+	if assert.NotNil(t, resultData.ActionResult) && assert.NotNil(t, resultData.ActionResult.ToState) {
+		assert.Equal(t, string(LenderStateValidated), *resultData.ActionResult.ToState)
+	}
+	assert.Equal(t, LenderStateValidated, mockPrRepo.savedPr.State)
+	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
 }
 
 func TestHandleInvokeLenderActionWillSupplySaveItemFailed(t *testing.T) {
@@ -3577,7 +3675,8 @@ func createLmsAdapterMockLog() lms.LmsAdapter {
 
 type MockLmsAdapterLog struct {
 	lms.LmsAdapter
-	logFunc ncipclient.NcipLogFunc
+	logFunc        ncipclient.NcipLogFunc
+	requestItemErr error
 }
 
 func (l *MockLmsAdapterLog) SetLogFunc(logFunc ncipclient.NcipLogFunc) {
@@ -3598,7 +3697,7 @@ func (l *MockLmsAdapterLog) RequestItem(
 	pickupLocation string,
 	itemLocation string,
 ) (string, string, string, error) {
-	return "", "", "", nil
+	return "", "", "", l.requestItemErr
 }
 
 func (l *MockLmsAdapterLog) InstitutionalPatron(requesterSymbol string) string {

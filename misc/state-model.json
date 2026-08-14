@@ -185,7 +185,7 @@
                 },
                 "transitions": {
                     "type": "object",
-                    "description": "Action outcome to state transition mapping. When no transition is defined, the action is considered to be non-state-changing.",
+                    "description": "Action outcome to state transition mapping. When no transition is defined, the action is considered to be non-state-changing. A failure transition handles a persisted failure within an automatic action chain; an unbound failure propagates to the parent.",
                     "additionalProperties": false,
                     "properties": {
                         "success": {
@@ -194,7 +194,7 @@
                         },
                         "failure": {
                             "type": "string",
-                            "description": "Target state when the action fails."
+                            "description": "Target state when the action fails. Once persisted, this transition prevents the failure from propagating through an automatic action chain."
                         },
                         "review": {
                             "type": "string",

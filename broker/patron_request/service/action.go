@@ -220,10 +220,10 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 	}
 	stateChanged := false
 	if transitionState, ok := actionMapping.GetActionTransition(currentPr, action, outcome); ok {
+		toState := string(transitionState)
+		execResult.result.ActionResult.ToState = &toState
 		if transitionState != updatedPr.State {
 			updatedPr.State = transitionState
-			toState := string(transitionState)
-			execResult.result.ActionResult.ToState = &toState
 			stateChanged = true
 		}
 		if config, configOk := actionMapping.getStateConfig(updatedPr); configOk {
@@ -232,6 +232,11 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 			}
 			updatedPr.NeedsAttention = config.needsAttention
 		}
+	}
+	// A failed action always requires attention, including when its configured
+	// failure transition targets the current state and reapplies its config.
+	if outcome == ActionOutcomeFailure {
+		updatedPr.NeedsAttention = true
 	}
 
 	var retryPr pr_db.PatronRequest
@@ -316,14 +321,22 @@ func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.Exten
 		if err != nil {
 			return &autoActionFailure{action: actionName, msg: err.Error()}
 		}
+		actionResult := completedEvent.ResultData.ActionResult
+		if actionResult != nil && actionResult.ChildActionError != nil {
+			return &autoActionFailure{action: actionName, msg: *actionResult.ChildActionError}
+		}
 		if completedEvent.EventStatus != events.EventStatusSuccess {
+			// A persisted failure transition means the state model has handled the
+			// outcome. Stop this auto-action chain without propagating the failure
+			// to its parent. ToState is also populated for self-transitions and is
+			// only returned after the patron request update succeeds.
+			if actionResult != nil && actionResult.Outcome == ActionOutcomeFailure && actionResult.ToState != nil {
+				return nil
+			}
 			return &autoActionFailure{
 				action: actionName,
 				msg:    fmt.Sprintf("auto action %s failed with status %s%s", actionName, completedEvent.EventStatus, autoActionErrorSuffix(completedEvent)),
 			}
-		}
-		if completedEvent.ResultData.ActionResult != nil && completedEvent.ResultData.ActionResult.ChildActionError != nil {
-			return &autoActionFailure{action: actionName, msg: *completedEvent.ResultData.ActionResult.ChildActionError}
 		}
 
 		updatedPr, err := a.prRepo.GetPatronRequestById(ctx, pr.ID)
