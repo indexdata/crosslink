@@ -45,6 +45,7 @@ const (
 	BorrowerStateRetryPending     pr_db.PatronRequestState = "RETRY_PENDING"
 	BorrowerStateRetryAccepted    pr_db.PatronRequestState = "RETRY_ACCEPTED"
 	BorrowerStateRetryRejected    pr_db.PatronRequestState = "RETRY_REJECTED"
+	BorrowerStateDuplicate        pr_db.PatronRequestState = "DUPLICATE"
 	BorrowerStateManuallyClosed   pr_db.PatronRequestState = "MANUALLY_CLOSED"
 	BorrowerStateClosedDuplicate  pr_db.PatronRequestState = "CLOSED_DUPLICATE"
 	LenderStateNew                pr_db.PatronRequestState = "NEW"
@@ -80,6 +81,7 @@ const (
 	BorrowerActionFillLocally         pr_db.PatronRequestAction = "fill-locally"
 	BorrowerActionCancelLocalSupply   pr_db.PatronRequestAction = "cancel-local-supply"
 	BorrowerActionCannotSupplyLocally pr_db.PatronRequestAction = "cannot-supply-locally"
+	BorrowerActionCloseDuplicate      pr_db.PatronRequestAction = "close-duplicate"
 	LenderActionValidatePatron        pr_db.PatronRequestAction = "validate-patron"
 	LenderActionWillSupply            pr_db.PatronRequestAction = "will-supply"
 	LenderActionRejectCancel          pr_db.PatronRequestAction = "reject-cancel"
@@ -139,6 +141,7 @@ func requesterBuiltInStates() []string {
 		string(BorrowerStateRetryAccepted),
 		string(BorrowerStateRetryRejected),
 		string(BorrowerStateRetryPending),
+		string(BorrowerStateDuplicate),
 		string(BorrowerStateManuallyClosed),
 		string(BorrowerStateClosedDuplicate),
 	})
@@ -227,6 +230,10 @@ func requesterBuiltInActions() []proapi.ActionCapability {
 		},
 		{
 			Name:       string(BorrowerActionCannotSupplyLocally),
+			Parameters: []string{},
+		},
+		{
+			Name:       string(BorrowerActionCloseDuplicate),
 			Parameters: []string{},
 		},
 	}
