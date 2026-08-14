@@ -299,9 +299,43 @@ func TestHandleInvokeActionValidateSendRequestDuplicate(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.NotNil(t, resultData)
-	assert.Equal(t, BorrowerStateClosedDuplicate, mockPrRepo.savedPr.State)
+	assert.Equal(t, BorrowerStateDuplicate, mockPrRepo.savedPr.State)
+	assert.False(t, mockPrRepo.savedPr.TerminalState)
+	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
 	assert.Equal(t, string(BorrowerActionSendRequest), mockPrRepo.savedPr.LastAction.String)
 	assert.Equal(t, ActionOutcomeDuplicate, mockPrRepo.savedPr.LastActionOutcome.String)
+}
+
+func TestHandleInvokeActionCloseDuplicate(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:x").Return(createLmsAdapterMockLog(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), new(MockEventBus), new(MockIso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
+	pr := pr_db.PatronRequest{
+		ID:              patronRequestId,
+		IllRequest:      iso18626.Request{},
+		RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"},
+		State:           BorrowerStateDuplicate,
+		Side:            SideBorrowing,
+	}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil)
+	action := BorrowerActionCloseDuplicate
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
+		PatronRequestID: patronRequestId,
+		EventData: events.EventData{CommonEventData: events.CommonEventData{
+			Action: &action,
+		}},
+	})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.NotNil(t, resultData)
+	assert.Equal(t, ActionOutcomeSuccess, resultData.ActionResult.Outcome)
+	assert.Equal(t, string(BorrowerStateClosedDuplicate), *resultData.ActionResult.ToState)
+	assert.Equal(t, BorrowerStateClosedDuplicate, mockPrRepo.savedPr.State)
+	assert.True(t, mockPrRepo.savedPr.TerminalState)
+	assert.False(t, mockPrRepo.savedPr.NeedsAttention)
+	assert.Equal(t, string(BorrowerActionCloseDuplicate), mockPrRepo.savedPr.LastAction.String)
 }
 
 func TestMetadataUpdateNoFactory(t *testing.T) {

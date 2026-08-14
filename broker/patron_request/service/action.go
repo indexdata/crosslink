@@ -412,6 +412,8 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		return a.cannotSupplyLocallyBorrowingRequest(ctx, pr, params)
 	case BorrowerActionFillLocally:
 		return a.fillLocallyBorrowingRequest(ctx, pr, lmsAdapter, illRequest, params)
+	case BorrowerActionCloseDuplicate:
+		return a.closeDuplicateBorrowingRequest(pr)
 	default:
 		status, result := logActionErrorAndReturnResult(ctx, "borrower action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -854,6 +856,10 @@ func (a *PatronRequestActionService) rejectConditionBorrowingRequest(ctx common.
 func (a *PatronRequestActionService) rejectRetryBorrowingRequest(pr pr_db.PatronRequest) actionExecutionResult {
 	result := events.EventResult{}
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
+}
+
+func (a *PatronRequestActionService) closeDuplicateBorrowingRequest(pr pr_db.PatronRequest) actionExecutionResult {
+	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
 }
 
 func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {

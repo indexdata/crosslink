@@ -1537,6 +1537,30 @@ func TestCRUDTemplate(t *testing.T) {
 	assert.Equal(t, updateTemplate.Body, updatedTemplate.Body)
 	assert.NotNil(t, updatedTemplate.UpdatedAt)
 
+	// PUT – omit optional fields to clear them
+	clearBytes, err := json.Marshal(proapi.UpdateTemplate{
+		Title:       updateTemplate.Title,
+		ContentType: updateTemplate.ContentType,
+		Labels:      updateTemplate.Labels,
+		Body:        updateTemplate.Body,
+	})
+	assert.NoError(t, err)
+	respBytes = httpRequest(t, "PUT", thisTemplatePath+queryParams, clearBytes, 200)
+	var clearedTemplate proapi.Template
+	err = json.Unmarshal(respBytes, &clearedTemplate)
+	assert.NoError(t, err)
+	assert.Nil(t, clearedTemplate.Audience)
+	assert.Nil(t, clearedTemplate.Subject)
+
+	// GET – cleared fields were persisted
+	respBytes = httpRequest(t, "GET", thisTemplatePath+queryParams, []byte{}, 200)
+	var reReadTemplate proapi.Template
+	err = json.Unmarshal(respBytes, &reReadTemplate)
+	assert.NoError(t, err)
+	assert.Nil(t, reReadTemplate.Audience)
+	assert.Nil(t, reReadTemplate.Subject)
+	assert.Equal(t, updateTemplate.Title, reReadTemplate.Title)
+
 	// PUT – 404 for wrong owner
 	httpRequest(t, "PUT", thisTemplatePath+"?symbol="+url.QueryEscape(otherSymbol), updateBytes, 404)
 

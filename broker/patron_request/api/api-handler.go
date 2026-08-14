@@ -1204,12 +1204,9 @@ func (a *PatronRequestApiHandler) PutTemplatesId(w http.ResponseWriter, r *http.
 	tem.ContentType = string(updated.ContentType)
 	tem.Labels = updated.Labels
 	tem.Title = updated.Title
-	if updated.Audience != nil {
-		tem.Audience = getDbText((*string)(updated.Audience))
-	}
-	if updated.Subject != nil {
-		tem.Subject = getDbText(updated.Subject)
-	}
+	// PUT replaces optional fields; omitted values are cleared.
+	tem.Audience = getDbText((*string)(updated.Audience))
+	tem.Subject = getDbText(updated.Subject)
 	template, err := a.prRepo.SaveTemplate(ctx, pr_db.SaveTemplateParams(*tem))
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
