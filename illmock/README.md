@@ -173,9 +173,10 @@ The directory service is accessible from the `/directory/entries` endpoint. For 
     curl http://localhost:8081/directory/entries
 
 See [the shared Directory OpenAPI spec](../directory/api.yaml). The endpoint accepts the same `cql`, `limit`, and `offset` query parameters as Directory and returns `items` with `about.count`.
-This supports index `symbol` with supported relations `any`, `all`, `=` for matching against
-directory entry `symbols`. It also supports index `tenant` with supported relation `=` which matches
-against directory entry `tenant`.
+This supports indexes `symbol` and `parentSymbol` with relations `any`, `=`, `==`, and `exact` for matching
+against an entry's symbols or its immediate parent's symbols. It also supports index `tenant` with
+supported relation `=` which matches against directory entry `tenant`. CQL results contain only
+entries that directly match the query; include `parentSymbol` explicitly when branches are needed.
 
 # NCIP server
 

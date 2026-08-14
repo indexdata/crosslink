@@ -156,8 +156,8 @@ func TestEntryCases(t *testing.T) {
 			method:      http.MethodGet,
 			endpoint:    "/entries?cql=type%3DConsortium",
 			status:      http.StatusOK,
-			resFile:     "entries.get.res.json",
-			addlHeaders: consortiumPermissionHeaders,
+			resFile:     "entries-cql-type.get.res.json",
+			addlHeaders: institutionPermissionHeaders,
 		},
 		{
 			name:            "POST entry",
@@ -1093,7 +1093,7 @@ func TestEntrySystemReadAndSymbolTenantCQL(t *testing.T) {
 	}
 }
 
-func TestEntryCQLIncludesChildrenOfMatches(t *testing.T) {
+func TestEntryCQLParentSymbol(t *testing.T) {
 	resetDb()
 
 	const parentID = "00000000-0000-0000-0000-000000000002"
@@ -1145,16 +1145,31 @@ func TestEntryCQLIncludesChildrenOfMatches(t *testing.T) {
 		return result
 	}
 
-	t.Run("children are counted sorted and paginated after expansion", func(t *testing.T) {
-		result := getEntries(t, `symbol any "TEST:ANINST" and tenant="tenant-a"`, 2, 0)
+	t.Run("symbol returns only the direct match", func(t *testing.T) {
+		result := getEntries(t, `symbol any "TEST:ANINST"`, 10, 0)
+		if result.About.Count != 1 || len(result.Items) != 1 || result.Items[0].Name != "An Institution" {
+			t.Fatalf("unexpected direct symbol result: %#v", result)
+		}
+	})
+
+	t.Run("parentSymbol returns children", func(t *testing.T) {
+		result := getEntries(t, `parentSymbol any "TEST:ANINST"`, 10, 0)
+		if result.About.Count != 2 || len(result.Items) != 2 ||
+			result.Items[0].Name != "A Branch" || result.Items[1].Name != "Z Branch" {
+			t.Fatalf("unexpected parentSymbol result: %#v", result)
+		}
+	})
+
+	t.Run("explicit parent and children are counted sorted and paginated", func(t *testing.T) {
+		result := getEntries(t, `symbol any "TEST:ANINST" or parentSymbol any "TEST:ANINST"`, 2, 0)
 		if result.About.Count != 3 || len(result.Items) != 2 ||
 			result.Items[0].Name != "A Branch" || result.Items[1].Name != "An Institution" {
-			t.Fatalf("unexpected first expanded page: %#v", result)
+			t.Fatalf("unexpected first explicit page: %#v", result)
 		}
 
-		result = getEntries(t, `symbol any "TEST:ANINST" and tenant="tenant-a"`, 2, 2)
+		result = getEntries(t, `symbol any "TEST:ANINST" or parentSymbol any "TEST:ANINST"`, 2, 2)
 		if result.About.Count != 3 || len(result.Items) != 1 || result.Items[0].Name != "Z Branch" {
-			t.Fatalf("unexpected second expanded page: %#v", result)
+			t.Fatalf("unexpected second explicit page: %#v", result)
 		}
 	})
 
@@ -1165,17 +1180,24 @@ func TestEntryCQLIncludesChildrenOfMatches(t *testing.T) {
 		}
 	})
 
-	t.Run("direct and inherited matches are deduplicated", func(t *testing.T) {
-		result := getEntries(t, `symbol any "TEST:ANINST TEST:BRANCH"`, 10, 0)
+	t.Run("overlapping direct and parent matches are deduplicated", func(t *testing.T) {
+		result := getEntries(t, `symbol any "TEST:ANINST TEST:BRANCH" or parentSymbol any "TEST:ANINST TEST:BRANCH"`, 10, 0)
 		if result.About.Count != 3 || len(result.Items) != 3 {
 			t.Fatalf("expected parent and two unique branches, got %#v", result)
 		}
 	})
 
-	t.Run("non-symbol CQL matches also include children", func(t *testing.T) {
+	t.Run("non-symbol CQL does not include children", func(t *testing.T) {
 		result := getEntries(t, `name="An Institution"`, 10, 0)
-		if result.About.Count != 3 || len(result.Items) != 3 {
-			t.Fatalf("expected name match and its branches, got %#v", result)
+		if result.About.Count != 1 || len(result.Items) != 1 || result.Items[0].Name != "An Institution" {
+			t.Fatalf("expected only the direct name match, got %#v", result)
+		}
+	})
+
+	t.Run("tenant CQL does not include children with another tenant", func(t *testing.T) {
+		result := getEntries(t, `tenant="tenant-a"`, 10, 0)
+		if result.About.Count != 1 || len(result.Items) != 1 || result.Items[0].Name != "An Institution" {
+			t.Fatalf("expected only the direct tenant match, got %#v", result)
 		}
 	})
 }

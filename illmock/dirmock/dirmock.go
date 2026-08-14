@@ -114,7 +114,7 @@ func NewJson(entries string) (*DirectoryMock, error) {
 	return mock, nil
 }
 
-func matchClause(clause *cql.Clause, entry directory.Entry) (bool, error) {
+func matchClause(clause *cql.Clause, entry directory.Entry, symbolsByEntryID map[string]*[]directory.Symbol) (bool, error) {
 	if clause == nil {
 		return false, nil
 	}
@@ -136,7 +136,12 @@ func matchClause(clause *cql.Clause, entry directory.Entry) (bool, error) {
 			}
 			return matchString(sc, entry.Parent.String(), false)
 		case "symbol":
-			return matchSymbol(sc, entry.Symbols)
+			return matchSymbol(sc, entry.Symbols, "symbol")
+		case "parentSymbol":
+			if entry.Parent == nil {
+				return false, nil
+			}
+			return matchSymbol(sc, symbolsByEntryID[entry.Parent.String()], "parentSymbol")
 		case "tenant":
 			return matchOptionalString(sc, entry.Tenant, false)
 		default:
@@ -145,11 +150,11 @@ func matchClause(clause *cql.Clause, entry directory.Entry) (bool, error) {
 	}
 	if clause.BoolClause != nil {
 		bc := clause.BoolClause
-		left, err := matchClause(&bc.Left, entry)
+		left, err := matchClause(&bc.Left, entry, symbolsByEntryID)
 		if err != nil {
 			return false, err
 		}
-		right, err := matchClause(&bc.Right, entry)
+		right, err := matchClause(&bc.Right, entry, symbolsByEntryID)
 		if err != nil {
 			return false, err
 		}
@@ -266,7 +271,7 @@ func parseCQLTerm(term string, allowMasking bool) (string, *regexp.Regexp, error
 	return exact.String(), compiled, nil
 }
 
-func matchSymbol(sc *cql.SearchClause, symbols *[]directory.Symbol) (bool, error) {
+func matchSymbol(sc *cql.SearchClause, symbols *[]directory.Symbol, index string) (bool, error) {
 	if symbols == nil {
 		return false, nil
 	}
@@ -291,15 +296,15 @@ func matchSymbol(sc *cql.SearchClause, symbols *[]directory.Symbol) (bool, error
 	case cql.EQ, cql.EXACT, cql.Relation("=="):
 		return matches(sc.Term), nil
 	default:
-		return false, fmt.Errorf("unsupported relation %s for symbol", sc.Relation)
+		return false, fmt.Errorf("unsupported relation %s for %s", sc.Relation, index)
 	}
 }
 
-func matchQuery(query *cql.Query, entry directory.Entry) (bool, error) {
+func matchQuery(query *cql.Query, entry directory.Entry, symbolsByEntryID map[string]*[]directory.Symbol) (bool, error) {
 	if query == nil {
 		return true, nil
 	}
-	return matchClause(&query.Clause, entry)
+	return matchClause(&query.Clause, entry, symbolsByEntryID)
 }
 
 func fullSymbol(symbol directory.Symbol) string {
@@ -335,38 +340,21 @@ func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEnt
 	}
 
 	filtered := make([]directory.Entry, 0)
-	includedIDs := make(map[string]struct{})
-	appendEntry := func(entry directory.Entry) {
+	symbolsByEntryID := make(map[string]*[]directory.Symbol)
+	for _, entry := range d.entries {
 		if entry.Id != nil {
-			id := entry.Id.String()
-			if _, exists := includedIDs[id]; exists {
-				return
-			}
-			includedIDs[id] = struct{}{}
-		}
-		filtered = append(filtered, overridePeerURL(entry, peerURL))
-	}
-	childrenByParent := make(map[string][]directory.Entry)
-	for _, entry := range d.entries {
-		if entry.Parent != nil {
-			parentID := entry.Parent.String()
-			childrenByParent[parentID] = append(childrenByParent[parentID], entry)
+			symbolsByEntryID[entry.Id.String()] = entry.Symbols
 		}
 	}
 	for _, entry := range d.entries {
-		match, err := matchQuery(query, entry)
+		match, err := matchQuery(query, entry, symbolsByEntryID)
 		if err != nil {
 			return directory.GetEntries400TextResponse(err.Error()), nil
 		}
 		if !match {
 			continue
 		}
-		appendEntry(entry)
-		if query != nil && entry.Id != nil {
-			for _, child := range childrenByParent[entry.Id.String()] {
-				appendEntry(child)
-			}
-		}
+		filtered = append(filtered, overridePeerURL(entry, peerURL))
 	}
 
 	sort.SliceStable(filtered, func(i, j int) bool {

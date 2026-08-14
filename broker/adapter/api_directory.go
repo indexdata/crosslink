@@ -36,7 +36,8 @@ func (a *ApiDirectory) getDirectory(ctx common.ExtendedContext, symbols []string
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(COMP))
 	var cql string
 	if len(symbols) > 0 {
-		cql = "symbol any \"" + cqlbuilder.EscapeMaskingChars(cqlbuilder.EscapeSpecialChars(strings.Join(symbols, " "))) + "\""
+		symbolTerm := cqlbuilder.EscapeMaskingChars(cqlbuilder.EscapeSpecialChars(strings.Join(symbols, " ")))
+		cql = "(symbol any \"" + symbolTerm + "\" or parentSymbol any \"" + symbolTerm + "\")"
 	}
 	if tenant != "" {
 		if cql != "" {
