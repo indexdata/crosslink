@@ -19,6 +19,7 @@ func TestNewReturnableActionMapping(t *testing.T) {
 		BorrowerStateValidated:        {{actionName: BorrowerActionUpdateMetadata, auto: true}},
 		BorrowerStateMetadataUpdated:  {{actionName: BorrowerActionSendRequest, auto: true}},
 		BorrowerStateNeedsReview:      {{actionName: BorrowerActionSendRequest}},
+		BorrowerStateDuplicate:        {{actionName: BorrowerActionCloseDuplicate}},
 		BorrowerStateSupplierLocated:  {{actionName: BorrowerActionCancelRequest}},
 		BorrowerStateConditionPending: {{actionName: BorrowerActionAcceptCondition}, {actionName: BorrowerActionRejectCondition}},
 		BorrowerStateWillSupply:       {{actionName: BorrowerActionCancelRequest}},
@@ -290,7 +291,11 @@ func TestGetEventTransitionRetryConditionalFromBorrowerWillSupply(t *testing.T) 
 func TestGetClosingAction(t *testing.T) {
 	mapping := mustActionMapping(t)
 
-	action := mapping.GetClosingAction(pr_db.PatronRequest{Side: SideLending, State: LenderStateValidated})
+	action := mapping.GetClosingAction(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateDuplicate})
+	assert.NotNil(t, action)
+	assert.Equal(t, BorrowerActionCloseDuplicate, *action)
+
+	action = mapping.GetClosingAction(pr_db.PatronRequest{Side: SideLending, State: LenderStateValidated})
 	assert.NotNil(t, action)
 	assert.Equal(t, LenderActionCannotSupply, *action)
 

@@ -14,6 +14,7 @@ func TestBuiltInStateModelCapabilities(t *testing.T) {
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateValidated)))
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateInvalidPatron)))
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateLocalSupply)))
+	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateDuplicate)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateValidated)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateReceived)))
 
@@ -22,6 +23,9 @@ func TestBuiltInStateModelCapabilities(t *testing.T) {
 	}))
 	assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
 		return a.Name == string(BorrowerActionReceive)
+	}))
+	assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
+		return a.Name == string(BorrowerActionCloseDuplicate)
 	}))
 
 	assert.True(t, slices.ContainsFunc(c.SupplierActions, func(a proapi.ActionCapability) bool {
@@ -86,6 +90,28 @@ func TestReturnablesNewRequesterStateIsEditable(t *testing.T) {
 	state := model.States[stateIndex]
 	assert.NotNil(t, state.Editable)
 	assert.True(t, *state.Editable)
+}
+
+func TestReturnablesDuplicateStateIsEditableAndNeedsAttention(t *testing.T) {
+	model, err := LoadStateModelByName("returnables")
+	if !assert.NoError(t, err) || !assert.NotNil(t, model) {
+		return
+	}
+
+	stateIndex := slices.IndexFunc(model.States, func(state proapi.ModelState) bool {
+		return state.Name == string(BorrowerStateDuplicate) && state.Side == proapi.REQUESTER
+	})
+	if !assert.NotEqual(t, -1, stateIndex) {
+		return
+	}
+	state := model.States[stateIndex]
+	assert.NotNil(t, state.Editable)
+	assert.True(t, *state.Editable)
+	assert.NotNil(t, state.NeedsAttention)
+	assert.True(t, *state.NeedsAttention)
+	assert.Nil(t, state.Terminal)
+	assert.NotNil(t, state.ClosingAction)
+	assert.Equal(t, string(BorrowerActionCloseDuplicate), *state.ClosingAction)
 }
 
 func TestValidateStateModelMissingInitial(t *testing.T) {

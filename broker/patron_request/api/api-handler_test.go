@@ -1313,11 +1313,16 @@ func (m *MockActionTaskProcessorExclusiveError) ProcessInvokeActionTask(ctx comm
 type PrRepoUpdateCapture struct {
 	PrRepoError
 	lastUpdateParams *pr_db.UpdatePatronRequestParams
+	state            pr_db.PatronRequestState
 }
 
 func (r *PrRepoUpdateCapture) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
 	if id == "3" {
-		return pr_db.PatronRequest{ID: id, State: prservice.BorrowerStateNeedsReview, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, InternalNote: pgtype.Text{String: "original note", Valid: true}, Patron: pgtype.Text{String: "original patron", Valid: true}}, nil
+		state := r.state
+		if state == "" {
+			state = prservice.BorrowerStateNeedsReview
+		}
+		return pr_db.PatronRequest{ID: id, State: state, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, InternalNote: pgtype.Text{String: "original note", Valid: true}, Patron: pgtype.Text{String: "original patron", Valid: true}}, nil
 	}
 	return r.PrRepoError.GetPatronRequestById(ctx, id)
 }
@@ -1470,6 +1475,18 @@ func TestPutPatronRequestsIdNewStateIsEditable(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	if assert.NotNil(t, repo.lastUpdateParams) {
 		assert.Equal(t, "3", repo.lastUpdateParams.ID)
+	}
+}
+
+func TestPutPatronRequestsIdDuplicateStateIsEditable(t *testing.T) {
+	repo := &PrRepoUpdateCapture{state: prservice.BorrowerStateDuplicate}
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusOK, rr.Code)
+	if assert.NotNil(t, repo.lastUpdateParams) {
+		assert.Equal(t, prservice.BorrowerStateDuplicate, repo.lastUpdateParams.State)
 	}
 }
 
