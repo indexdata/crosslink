@@ -79,7 +79,7 @@ func TestGetEntriesPeerURLCompatibility(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
 }
 
-func TestGetEntriesIncludesChildrenOfMatchingParent(t *testing.T) {
+func TestGetEntriesParentSymbol(t *testing.T) {
 	mock, err := NewJson(`[
 		{"id":"00000000-0000-0000-0000-000000000001","name":"Parent","type":"Institution","symbols":[{"authority":"ISIL","symbol":"PARENT"}]},
 		{"id":"00000000-0000-0000-0000-000000000002","parent":"00000000-0000-0000-0000-000000000001","name":"Branch","type":"Branch","symbols":[{"authority":"ISIL","symbol":"BRANCH"}],"endpoints":[{"name":"ISO","type":"ISO18626","address":"https://original.example/iso18626"}]}
@@ -88,12 +88,22 @@ func TestGetEntriesIncludesChildrenOfMatchingParent(t *testing.T) {
 
 	mux := http.NewServeMux()
 	assert.NoError(t, mock.HandlerFromMux(mux))
-	request := httptest.NewRequest(http.MethodGet, "/directory/entries?limit=1000&cql=symbol+any+%22ISIL%3APARENT%22&peer_url=https%3A%2F%2Foverride.example%2Fiso18626", nil)
+	request := httptest.NewRequest(http.MethodGet, "/directory/entries?limit=1000&cql=symbol+any+%22ISIL%3APARENT%22", nil)
 	recorder := httptest.NewRecorder()
 	mux.ServeHTTP(recorder, request)
 	assert.Equal(t, http.StatusOK, recorder.Code)
 
 	var response directory.EntriesResponse
+	assert.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	if assert.Len(t, response.Items, 1) {
+		assert.Equal(t, "Parent", response.Items[0].Name)
+	}
+	assert.Equal(t, int64(1), response.About.Count)
+
+	request = httptest.NewRequest(http.MethodGet, "/directory/entries?limit=1000&cql=%28symbol+any+%22ISIL%3APARENT%22+or+parentSymbol+any+%22ISIL%3APARENT%22%29&peer_url=https%3A%2F%2Foverride.example%2Fiso18626", nil)
+	recorder = httptest.NewRecorder()
+	mux.ServeHTTP(recorder, request)
+	assert.Equal(t, http.StatusOK, recorder.Code)
 	assert.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
 	if assert.Len(t, response.Items, 2) {
 		assert.Equal(t, "Branch", response.Items[0].Name)
@@ -106,11 +116,11 @@ func TestGetEntriesIncludesChildrenOfMatchingParent(t *testing.T) {
 }
 
 func TestMatchQueries(t *testing.T) {
-	match, err := matchQuery(nil, directory.Entry{})
+	match, err := matchQuery(nil, directory.Entry{}, nil)
 	assert.Nil(t, err)
 	assert.True(t, match)
 
-	match, err = matchClause(nil, directory.Entry{})
+	match, err = matchClause(nil, directory.Entry{}, nil)
 	assert.Nil(t, err)
 	assert.False(t, match)
 
@@ -122,6 +132,8 @@ func TestMatchQueries(t *testing.T) {
 		{Authority: "AUTH", Symbol: "ONE"},
 		{Authority: "AUTH", Symbol: "TWO"},
 	}
+	parentSymbols := []directory.Symbol{{Authority: "AUTH", Symbol: "PARENT"}}
+	symbolsByEntryID := map[string]*[]directory.Symbol{parent.String(): &parentSymbols}
 	entry := directory.Entry{
 		Name:        "Alpha Institution",
 		Description: &description,
@@ -148,6 +160,10 @@ func TestMatchQueries(t *testing.T) {
 		{`symbol = one`, true, ""},
 		{`symbol any "AUTH:THREE AUTH:TWO"`, true, ""},
 		{`symbol = AUTH:THREE`, false, ""},
+		{`parentSymbol = AUTH:PARENT`, true, ""},
+		{`parentSymbol any "AUTH:OTHER PARENT"`, true, ""},
+		{`parentSymbol = AUTH:OTHER`, false, ""},
+		{`parentSymbol > AUTH:PARENT`, false, "unsupported relation > for parentSymbol"},
 		{`symbol all "AUTH:ONE AUTH:TWO"`, false, "unsupported relation all for symbol"},
 		{`symbol > AUTH:ONE`, false, "unsupported relation > for symbol"},
 		{`foo = value`, false, "unsupported index foo"},
@@ -163,7 +179,7 @@ func TestMatchQueries(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to parse query: %v", err)
 			}
-			match, err := matchQuery(&query, entry)
+			match, err := matchQuery(&query, entry, symbolsByEntryID)
 			if err != nil {
 				if testcase.error == "" {
 					t.Fatalf("unexpected error: %v", err)

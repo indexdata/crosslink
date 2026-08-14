@@ -13,7 +13,7 @@ paths:
       parameters:
         - name: cql
           in: query
-          description: CQL query filter
+          description: CQL query filter. The parentSymbol index matches entries by their immediate parent's symbols.
           required: false
           style: form
           schema:
