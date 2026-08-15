@@ -1177,6 +1177,7 @@ func TestHandleInvokeLenderActionValidatePatron(t *testing.T) {
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(initialPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(willSupplyPR, nil).Once()
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, nil).Once()
 	mockEventBus.On("CreateNoticeWithParent", "invoke-validate").Return("", nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
@@ -1263,6 +1264,7 @@ func TestHandleInvokeLenderActionValidateHandlesWillSupplyFailureTransition(t *t
 
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(initialPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, nil).Once()
 	mockEventBus.On("CreateNoticeWithParent", "invoke-validate").Return("", nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
@@ -1385,7 +1387,8 @@ func TestHandleInvokeLenderActionWillSupplyUseIllTitleWhenRequestItemEmptyOK(t *
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{BibliographicInfo: iso18626.BibliographicInfo{Title: "title1"}}
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, nil).Once()
 	action := LenderActionWillSupply
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
@@ -1396,6 +1399,7 @@ func TestHandleInvokeLenderActionWillSupplyUseIllTitleWhenRequestItemEmptyOK(t *
 	assert.Equal(t, "1", mockPrRepo.savedItems[0].Barcode)
 	assert.Equal(t, "2", mockPrRepo.savedItems[0].CallNumber.String)
 	assert.Equal(t, "title1", mockPrRepo.savedItems[0].Title.String)
+	lmsAdapter.AssertNumberOfCalls(t, "RequestItem", 1)
 
 	if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage) {
 		assert.Equal(t, iso18626.TypeStatusWillSupply, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.Status)
@@ -1414,7 +1418,8 @@ func TestHandleInvokeLenderActionWillSupplyUseRequestItemTitleWhenAvailableOK(t 
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{BibliographicInfo: iso18626.BibliographicInfo{Title: "title1"}}
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, nil).Once()
 	action := LenderActionWillSupply
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{
 		CommonEventData: events.CommonEventData{Action: &action},
@@ -1430,6 +1435,7 @@ func TestHandleInvokeLenderActionWillSupplyUseRequestItemTitleWhenAvailableOK(t 
 	assert.Equal(t, "1", mockPrRepo.savedItems[0].Barcode)
 	assert.Equal(t, "2", mockPrRepo.savedItems[0].CallNumber.String)
 	assert.Equal(t, "title2", mockPrRepo.savedItems[0].Title.String)
+	lmsAdapter.AssertNumberOfCalls(t, "RequestItem", 1)
 
 	if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage) {
 		assert.Equal(t, iso18626.TypeStatusWillSupply, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.Status)
@@ -1437,6 +1443,76 @@ func TestHandleInvokeLenderActionWillSupplyUseRequestItemTitleWhenAvailableOK(t 
 		assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.OfferedCosts)
 		assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage.DeliveryInfo)
 	}
+}
+
+func TestHandleInvokeLenderActionWillSupplyResumesAfterSavedItem(t *testing.T) {
+	savedItems := []pr_db.Item{{PrID: patronRequestId, Barcode: "item-1"}}
+	mockPrRepo := &MockPrRepo{savedItems: savedItems}
+	lmsCreator := new(MockLmsCreator)
+	lmsAdapter := new(mockLmsAdapter)
+	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lmsAdapter, nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	illRequest := iso18626.Request{Header: iso18626.Header{RequestingAgencyRequestId: "req-1"}}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{
+		ID:              patronRequestId,
+		IllRequest:      illRequest,
+		State:           LenderStateValidated,
+		Side:            SideLending,
+		SupplierSymbol:  getDbText("ISIL:SUP1"),
+		RequesterSymbol: getDbText("ISIL:REQ1"),
+		NeedsAttention:  true,
+	}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return(savedItems, nil).Once()
+	action := LenderActionWillSupply
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
+		PatronRequestID: patronRequestId,
+		EventData:       events.EventData{CommonEventData: events.CommonEventData{Action: &action}},
+	})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.NotNil(t, resultData)
+	assert.Equal(t, LenderStateWillSupply, mockPrRepo.savedPr.State)
+	assert.False(t, mockPrRepo.savedPr.NeedsAttention)
+	assert.Len(t, mockPrRepo.savedItems, 1)
+	lmsAdapter.AssertNotCalled(t, "RequestItem", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage) {
+		assert.Equal(t, iso18626.TypeStatusWillSupply, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.Status)
+	}
+}
+
+func TestHandleInvokeLenderActionWillSupplyExistingItemLookupFailed(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsAdapter := new(mockLmsAdapter)
+	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lmsAdapter, nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	illRequest := iso18626.Request{}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{
+		ID:              patronRequestId,
+		IllRequest:      illRequest,
+		State:           LenderStateValidated,
+		Side:            SideLending,
+		SupplierSymbol:  getDbText("ISIL:SUP1"),
+		RequesterSymbol: getDbText("ISIL:REQ1"),
+	}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, assert.AnError)
+	action := LenderActionWillSupply
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
+		PatronRequestID: patronRequestId,
+		EventData:       events.EventData{CommonEventData: events.CommonEventData{Action: &action}},
+	})
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "failed to get existing items", resultData.EventError.Message)
+	assert.Equal(t, LenderStateValidated, mockPrRepo.savedPr.State)
+	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
+	lmsAdapter.AssertNotCalled(t, "RequestItem", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
+	mockPrRepo.AssertExpectations(t)
 }
 
 func TestHandleInvokeLenderActionRejectCancel(t *testing.T) {
@@ -1483,6 +1559,7 @@ func TestHandleInvokeLenderActionWillSupplyNcipFailed(t *testing.T) {
 
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, nil).Once()
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(pr_db.PatronRequest{RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}, IllRequest: illRequest}, nil)
 	action := LenderActionWillSupply
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
@@ -1507,6 +1584,7 @@ func TestHandleInvokeLenderActionWillSupplySaveItemFailed(t *testing.T) {
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{Header: iso18626.Header{RequestingAgencyRequestId: "req-1"}}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, nil).Once()
 	mockPrRepo.saveItemFail = true
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(pr_db.PatronRequest{RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}, IllRequest: illRequest}, nil)
 	action := LenderActionWillSupply

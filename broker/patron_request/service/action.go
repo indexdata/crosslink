@@ -1012,35 +1012,47 @@ func (a *PatronRequestActionService) validatePatronLenderRequest(ctx common.Exte
 }
 
 func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
-	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
-	requestId := illRequest.Header.RequestingAgencyRequestId
-	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
-	pickupLocation := lmsAdapter.SupplierPickupLocation()
-	itemLocation := lmsAdapter.ItemLocation()
-	itemBarcode, callNumber, title, err := lmsAdapter.RequestItem(requestId, itemId, userId, pickupLocation, itemLocation)
+	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
 	if err != nil {
-		status, result := logActionErrorAndReturnResult(ctx, "LMS RequestItem failed", err)
+		status, result := logActionErrorAndReturnResult(ctx, "failed to get existing items", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	if title == "" {
-		title = illRequest.BibliographicInfo.Title
-	}
-	_, err = a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
-		ID:         uuid.NewString(),
-		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
-		PrID:       pr.ID,
-		ItemID:     getDbText(itemId),
-		Title:      getDbTextPtr(&title),
-		CallNumber: getDbTextPtr(&callNumber),
-		Barcode:    itemBarcode,
-	})
-	if err != nil {
-		if cancelErr := lmsAdapter.CancelRequestItem(requestId, userId); cancelErr != nil {
-			err = errors.Join(err, fmt.Errorf("LMS CancelRequestItem compensation failed: %w", cancelErr))
+
+	// A saved item proves that RequestItem completed on an earlier attempt. Resume
+	// at the ISO message so a failed confirmation can be retried without creating
+	// a second LMS request.
+	if len(items) == 0 {
+		itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
+		requestId := illRequest.Header.RequestingAgencyRequestId
+		userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
+		pickupLocation := lmsAdapter.SupplierPickupLocation()
+		itemLocation := lmsAdapter.ItemLocation()
+		itemBarcode, callNumber, title, requestErr := lmsAdapter.RequestItem(requestId, itemId, userId, pickupLocation, itemLocation)
+		if requestErr != nil {
+			status, result := logActionErrorAndReturnResult(ctx, "LMS RequestItem failed", requestErr)
+			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
-		status, result := logActionErrorAndReturnResult(ctx, "failed to save item", err)
-		return actionExecutionResult{status: status, result: result, pr: pr}
+		if title == "" {
+			title = illRequest.BibliographicInfo.Title
+		}
+		_, saveErr := a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
+			ID:         uuid.NewString(),
+			CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
+			PrID:       pr.ID,
+			ItemID:     getDbText(itemId),
+			Title:      getDbTextPtr(&title),
+			CallNumber: getDbTextPtr(&callNumber),
+			Barcode:    itemBarcode,
+		})
+		if saveErr != nil {
+			if cancelErr := lmsAdapter.CancelRequestItem(requestId, userId); cancelErr != nil {
+				saveErr = errors.Join(saveErr, fmt.Errorf("LMS CancelRequestItem compensation failed: %w", cancelErr))
+			}
+			status, result := logActionErrorAndReturnResult(ctx, "failed to save item", saveErr)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
 	}
+
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
 		iso18626.MessageInfo{
