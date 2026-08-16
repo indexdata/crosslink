@@ -65,33 +65,35 @@ const (
 )
 
 const (
-	BorrowerActionValidatePatron      pr_db.PatronRequestAction = "validate-patron"
-	BorrowerActionUpdateMetadata      pr_db.PatronRequestAction = "update-metadata"
-	BorrowerActionSendRequest         pr_db.PatronRequestAction = "send-request"
-	BorrowerActionCancelRequest       pr_db.PatronRequestAction = "cancel-request"
-	BorrowerActionAcceptCondition     pr_db.PatronRequestAction = "accept-condition"
-	BorrowerActionRejectCondition     pr_db.PatronRequestAction = "reject-condition"
-	BorrowerActionReceive             pr_db.PatronRequestAction = "receive"
-	BorrowerActionCheckOut            pr_db.PatronRequestAction = "check-out"
-	BorrowerActionCheckIn             pr_db.PatronRequestAction = "check-in"
-	BorrowerActionShipReturn          pr_db.PatronRequestAction = "ship-return"
-	BorrowerActionAcceptRetry         pr_db.PatronRequestAction = "accept-retry"
-	BorrowerActionRejectRetry         pr_db.PatronRequestAction = "reject-retry"
-	BorrowerActionSendNotification    pr_db.PatronRequestAction = "send-notification"
-	BorrowerActionFillLocally         pr_db.PatronRequestAction = "fill-locally"
-	BorrowerActionCancelLocalSupply   pr_db.PatronRequestAction = "cancel-local-supply"
-	BorrowerActionCannotSupplyLocally pr_db.PatronRequestAction = "cannot-supply-locally"
-	BorrowerActionCloseDuplicate      pr_db.PatronRequestAction = "close-duplicate"
-	LenderActionValidatePatron        pr_db.PatronRequestAction = "validate-patron"
-	LenderActionWillSupply            pr_db.PatronRequestAction = "will-supply"
-	LenderActionRejectCancel          pr_db.PatronRequestAction = "reject-cancel"
-	LenderActionCannotSupply          pr_db.PatronRequestAction = "cannot-supply"
-	LenderActionAddCondition          pr_db.PatronRequestAction = "add-condition"
-	LenderActionShip                  pr_db.PatronRequestAction = "ship"
-	LenderActionMarkReceived          pr_db.PatronRequestAction = "mark-received"
-	LenderActionAcceptCancel          pr_db.PatronRequestAction = "accept-cancel"
-	LenderActionAskRetry              pr_db.PatronRequestAction = "ask-retry"
-	LenderActionSendNotification      pr_db.PatronRequestAction = "send-notification"
+	BorrowerActionValidatePatron       pr_db.PatronRequestAction = "validate-patron"
+	BorrowerActionUpdateMetadata       pr_db.PatronRequestAction = "update-metadata"
+	BorrowerActionSendRequest          pr_db.PatronRequestAction = "send-request"
+	BorrowerActionCancelRequest        pr_db.PatronRequestAction = "cancel-request"
+	BorrowerActionAcceptCondition      pr_db.PatronRequestAction = "accept-condition"
+	BorrowerActionRejectCondition      pr_db.PatronRequestAction = "reject-condition"
+	BorrowerActionReceive              pr_db.PatronRequestAction = "receive"
+	BorrowerActionCheckOut             pr_db.PatronRequestAction = "check-out"
+	BorrowerActionCheckIn              pr_db.PatronRequestAction = "check-in"
+	BorrowerActionShipReturn           pr_db.PatronRequestAction = "ship-return"
+	BorrowerActionAcceptRetry          pr_db.PatronRequestAction = "accept-retry"
+	BorrowerActionRejectRetry          pr_db.PatronRequestAction = "reject-retry"
+	BorrowerActionSendNotification     pr_db.PatronRequestAction = "send-notification"
+	BorrowerActionFillLocally          pr_db.PatronRequestAction = "fill-locally"
+	BorrowerActionCancelLocalSupply    pr_db.PatronRequestAction = "cancel-local-supply"
+	BorrowerActionCannotSupplyLocally  pr_db.PatronRequestAction = "cannot-supply-locally"
+	BorrowerActionSkipPatronValidation pr_db.PatronRequestAction = "skip-patron-validation"
+	BorrowerActionSkipMetadataUpdate   pr_db.PatronRequestAction = "skip-metadata-update"
+	BorrowerActionCloseRequest         pr_db.PatronRequestAction = "close-request"
+	LenderActionValidatePatron         pr_db.PatronRequestAction = "validate-patron"
+	LenderActionWillSupply             pr_db.PatronRequestAction = "will-supply"
+	LenderActionRejectCancel           pr_db.PatronRequestAction = "reject-cancel"
+	LenderActionCannotSupply           pr_db.PatronRequestAction = "cannot-supply"
+	LenderActionAddCondition           pr_db.PatronRequestAction = "add-condition"
+	LenderActionShip                   pr_db.PatronRequestAction = "ship"
+	LenderActionMarkReceived           pr_db.PatronRequestAction = "mark-received"
+	LenderActionAcceptCancel           pr_db.PatronRequestAction = "accept-cancel"
+	LenderActionAskRetry               pr_db.PatronRequestAction = "ask-retry"
+	LenderActionSendNotification       pr_db.PatronRequestAction = "send-notification"
 
 	TerminateAction pr_db.PatronRequestAction = "terminate"
 )
@@ -167,7 +169,7 @@ func supplierBuiltInStates() []string {
 }
 
 func requesterBuiltInActions() []proapi.ActionCapability {
-	return []proapi.ActionCapability{
+	actions := []proapi.ActionCapability{
 		{
 			Name:       string(BorrowerActionValidatePatron),
 			Parameters: []string{},
@@ -212,10 +214,7 @@ func requesterBuiltInActions() []proapi.ActionCapability {
 			Name:       string(BorrowerActionAcceptRetry),
 			Parameters: []string{},
 		},
-		{
-			Name:       string(BorrowerActionRejectRetry),
-			Parameters: []string{},
-		},
+		transitionActionCapability(BorrowerActionRejectRetry),
 		{
 			Name:       string(BorrowerActionSendNotification),
 			Parameters: []string{},
@@ -232,11 +231,41 @@ func requesterBuiltInActions() []proapi.ActionCapability {
 			Name:       string(BorrowerActionCannotSupplyLocally),
 			Parameters: []string{},
 		},
-		{
-			Name:       string(BorrowerActionCloseDuplicate),
-			Parameters: []string{},
-		},
+		transitionActionCapability(BorrowerActionSkipPatronValidation),
+		transitionActionCapability(BorrowerActionSkipMetadataUpdate),
+		transitionActionCapability(BorrowerActionCloseRequest),
 	}
+	return actions
+}
+
+func transitionActionCapability(name pr_db.PatronRequestAction) proapi.ActionCapability {
+	kind := proapi.Transition
+	return proapi.ActionCapability{
+		Name:       string(name),
+		Parameters: []string{},
+		Kind:       &kind,
+	}
+}
+
+func isTransitionCapability(capability proapi.ActionCapability) bool {
+	return capability.Kind != nil && *capability.Kind == proapi.Transition
+}
+
+func getActionCapability(side pr_db.PatronRequestSide, action pr_db.PatronRequestAction) (proapi.ActionCapability, bool) {
+	capabilities := BuiltInStateModelCapabilities()
+	actions := capabilities.SupplierActions
+	if side == SideBorrowing {
+		actions = capabilities.RequesterActions
+	} else if side != SideLending {
+		return proapi.ActionCapability{}, false
+	}
+	index := slices.IndexFunc(actions, func(capability proapi.ActionCapability) bool {
+		return capability.Name == string(action)
+	})
+	if index == -1 {
+		return proapi.ActionCapability{}, false
+	}
+	return actions[index], true
 }
 
 func supplierBuiltInActions() []proapi.ActionCapability {

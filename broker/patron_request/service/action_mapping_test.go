@@ -14,12 +14,12 @@ import (
 
 func TestNewReturnableActionMapping(t *testing.T) {
 	borrowerStateActionMapping := map[pr_db.PatronRequestState][]PatronRequestAction{
-		BorrowerStateNew:              {{actionName: BorrowerActionValidatePatron, auto: true}},
-		BorrowerStateInvalidPatron:    {{actionName: BorrowerActionValidatePatron}},
-		BorrowerStateValidated:        {{actionName: BorrowerActionUpdateMetadata, auto: true}},
-		BorrowerStateMetadataUpdated:  {{actionName: BorrowerActionSendRequest, auto: true}},
-		BorrowerStateNeedsReview:      {{actionName: BorrowerActionSendRequest}},
-		BorrowerStateDuplicate:        {{actionName: BorrowerActionCloseDuplicate}},
+		BorrowerStateNew:              {{actionName: BorrowerActionValidatePatron, auto: true}, {actionName: BorrowerActionSkipPatronValidation}, {actionName: BorrowerActionCloseRequest}},
+		BorrowerStateInvalidPatron:    {{actionName: BorrowerActionValidatePatron}, {actionName: BorrowerActionSkipPatronValidation}, {actionName: BorrowerActionCloseRequest}},
+		BorrowerStateValidated:        {{actionName: BorrowerActionUpdateMetadata, auto: true}, {actionName: BorrowerActionSkipMetadataUpdate}, {actionName: BorrowerActionCloseRequest}},
+		BorrowerStateMetadataUpdated:  {{actionName: BorrowerActionSendRequest, auto: true}, {actionName: BorrowerActionCloseRequest}},
+		BorrowerStateNeedsReview:      {{actionName: BorrowerActionSendRequest}, {actionName: BorrowerActionCloseRequest}},
+		BorrowerStateDuplicate:        {{actionName: BorrowerActionSendRequest}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateSupplierLocated:  {{actionName: BorrowerActionCancelRequest}},
 		BorrowerStateConditionPending: {{actionName: BorrowerActionAcceptCondition}, {actionName: BorrowerActionRejectCondition}},
 		BorrowerStateWillSupply:       {{actionName: BorrowerActionCancelRequest}},
@@ -117,6 +117,8 @@ func TestIsActionAvailable(t *testing.T) {
 	mapping := mustActionMapping(t)
 	// Borrower
 	assert.False(t, mapping.IsActionAvailable(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}, BorrowerActionValidatePatron))
+	assert.True(t, mapping.IsActionAvailable(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}, BorrowerActionSkipPatronValidation))
+	assert.True(t, mapping.IsActionAvailable(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}, BorrowerActionCloseRequest))
 	assert.False(t, mapping.IsActionAvailable(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}, BorrowerActionReceive))
 	assert.False(t, mapping.IsActionAvailable(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}, TerminateAction))
 
@@ -131,24 +133,26 @@ func TestIsActionAvailable(t *testing.T) {
 func TestGetActionsForPatronRequest(t *testing.T) {
 	mapping := mustActionMapping(t)
 	// Borrower
-	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}))
-	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionValidatePatron}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew,
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionSkipPatronValidation, BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}))
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionValidatePatron, BorrowerActionSkipPatronValidation, BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew,
 		LastAction:       pgtype.Text{String: string(BorrowerActionValidatePatron), Valid: true},
 		LastActionResult: pgtype.Text{String: string(events.EventStatusError), Valid: true},
 	}))
-	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionValidatePatron}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew,
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionValidatePatron, BorrowerActionSkipPatronValidation, BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew,
 		LastAction:       pgtype.Text{String: string(BorrowerActionValidatePatron), Valid: true},
 		LastActionResult: pgtype.Text{String: string(events.EventStatusProblem), Valid: true},
 	}))
-	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew,
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionSkipPatronValidation, BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew,
 		LastAction:       pgtype.Text{String: string(BorrowerActionValidatePatron), Valid: true},
 		LastActionResult: pgtype.Text{String: string(events.EventStatusSuccess), Valid: true},
 	}))
 	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateCompleted}))
 	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateCancelled}))
-	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionSendRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNeedsReview}))
-	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionValidatePatron}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateInvalidPatron}))
-	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}))
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionSendRequest, BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNeedsReview}))
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionSendRequest, BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateDuplicate}))
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionValidatePatron, BorrowerActionSkipPatronValidation, BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateInvalidPatron}))
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionSkipMetadataUpdate, BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}))
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateMetadataUpdated}))
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionCancelRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateSupplierLocated}))
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionAcceptCondition, BorrowerActionRejectCondition}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateConditionPending}))
 
@@ -192,12 +196,18 @@ func TestGetManualCloseStateMissing(t *testing.T) {
 
 func TestGetAllowedActionsForPatronRequest1(t *testing.T) {
 	mapping := mustActionMapping(t)
-	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{}}, mapping.GetAllowedActionsForPatronRequest(
+	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{
+		{Name: string(BorrowerActionSkipPatronValidation), Parameters: []string{}, Available: true},
+		{Name: string(BorrowerActionCloseRequest), Parameters: []string{}, Available: true},
+	}}, mapping.GetAllowedActionsForPatronRequest(
 		pr_db.PatronRequest{
 			Side: SideBorrowing, State: BorrowerStateNew}, true))
 
 	tt := true
-	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{}},
+	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{
+		{Name: string(BorrowerActionSkipMetadataUpdate), Parameters: []string{}, Available: false},
+		{Name: string(BorrowerActionCloseRequest), Parameters: []string{}, Available: false},
+	}},
 		mapping.GetAllowedActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}, false))
 
 	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{
@@ -206,6 +216,12 @@ func TestGetAllowedActionsForPatronRequest1(t *testing.T) {
 		{Name: string(LenderActionCannotSupply), Parameters: []string{"note", "reasonUnfilled"}, Available: true},
 		{Name: string(LenderActionAskRetry), Parameters: []string{"note", "reasonRetry", "itemId"}, Available: true},
 	}}, mapping.GetAllowedActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}, true))
+
+	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{
+		{Name: string(BorrowerActionValidatePatron), Parameters: []string{}, Primary: &tt, Available: true},
+		{Name: string(BorrowerActionSkipPatronValidation), Parameters: []string{}, Available: true},
+		{Name: string(BorrowerActionCloseRequest), Parameters: []string{}, Available: true},
+	}}, mapping.GetAllowedActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateInvalidPatron}, true))
 }
 
 func TestGetActionTransitionMissingCases(t *testing.T) {
@@ -264,6 +280,56 @@ func TestInvalidPatronValidateTransitions(t *testing.T) {
 	assert.Equal(t, BorrowerStateValidated, state)
 }
 
+func TestStateModelTransitionActions(t *testing.T) {
+	mapping := mustActionMapping(t)
+	pr := pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateInvalidPatron}
+
+	assert.True(t, mapping.IsTransitionAction(pr, BorrowerActionSkipPatronValidation))
+	state, ok := mapping.GetActionTransition(pr, BorrowerActionSkipPatronValidation, ActionOutcomeSuccess)
+	assert.True(t, ok)
+	assert.Equal(t, BorrowerStateValidated, state)
+
+	assert.True(t, mapping.IsTransitionAction(pr, BorrowerActionCloseRequest))
+	state, ok = mapping.GetActionTransition(pr, BorrowerActionCloseRequest, ActionOutcomeSuccess)
+	assert.True(t, ok)
+	assert.Equal(t, BorrowerStateManuallyClosed, state)
+
+	pr = pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}
+	assert.True(t, mapping.IsTransitionAction(pr, BorrowerActionSkipMetadataUpdate))
+	state, ok = mapping.GetActionTransition(pr, BorrowerActionSkipMetadataUpdate, ActionOutcomeSuccess)
+	assert.True(t, ok)
+	assert.Equal(t, BorrowerStateMetadataUpdated, state)
+
+	assert.True(t, mapping.IsTransitionAction(pr, BorrowerActionCloseRequest))
+	state, ok = mapping.GetActionTransition(pr, BorrowerActionCloseRequest, ActionOutcomeSuccess)
+	assert.True(t, ok)
+	assert.Equal(t, BorrowerStateManuallyClosed, state)
+
+	pr = pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateMetadataUpdated}
+	assert.True(t, mapping.IsTransitionAction(pr, BorrowerActionCloseRequest))
+	state, ok = mapping.GetActionTransition(pr, BorrowerActionCloseRequest, ActionOutcomeSuccess)
+	assert.True(t, ok)
+	assert.Equal(t, BorrowerStateManuallyClosed, state)
+
+	assert.True(t, mapping.IsTransitionAction(
+		pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateRetryPending},
+		BorrowerActionRejectRetry,
+	))
+	assert.True(t, mapping.IsTransitionAction(
+		pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateDuplicate},
+		BorrowerActionCloseRequest,
+	))
+
+	duplicatePr := pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateDuplicate}
+	assert.False(t, mapping.IsTransitionAction(duplicatePr, BorrowerActionSendRequest))
+	state, ok = mapping.GetActionTransition(duplicatePr, BorrowerActionSendRequest, ActionOutcomeSuccess)
+	assert.True(t, ok)
+	assert.Equal(t, BorrowerStateSent, state)
+	state, ok = mapping.GetActionTransition(duplicatePr, BorrowerActionSendRequest, ActionOutcomeDuplicate)
+	assert.True(t, ok)
+	assert.Equal(t, BorrowerStateDuplicate, state)
+}
+
 func TestGetActionTransitionConditionPendingSelfTransition(t *testing.T) {
 	mapping := mustActionMapping(t)
 
@@ -305,7 +371,23 @@ func TestGetClosingAction(t *testing.T) {
 
 	action := mapping.GetClosingAction(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateDuplicate})
 	assert.NotNil(t, action)
-	assert.Equal(t, BorrowerActionCloseDuplicate, *action)
+	assert.Equal(t, BorrowerActionCloseRequest, *action)
+
+	action = mapping.GetClosingAction(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew})
+	assert.NotNil(t, action)
+	assert.Equal(t, BorrowerActionCloseRequest, *action)
+
+	action = mapping.GetClosingAction(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated})
+	assert.NotNil(t, action)
+	assert.Equal(t, BorrowerActionCloseRequest, *action)
+
+	action = mapping.GetClosingAction(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateMetadataUpdated})
+	assert.NotNil(t, action)
+	assert.Equal(t, BorrowerActionCloseRequest, *action)
+
+	action = mapping.GetClosingAction(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNeedsReview})
+	assert.NotNil(t, action)
+	assert.Equal(t, BorrowerActionCloseRequest, *action)
 
 	action = mapping.GetClosingAction(pr_db.PatronRequest{Side: SideLending, State: LenderStateValidated})
 	assert.NotNil(t, action)

@@ -168,13 +168,13 @@ func ValidateStateModel(stateModel *proapi.StateModel) error {
 		}
 		if state.Actions != nil {
 			for _, action := range *state.Actions {
-				if !slices.ContainsFunc(allowedActions,
-					func(a proapi.ActionCapability) bool {
-						return a.Name == action.Name
-					}) {
+				capabilityIndex := slices.IndexFunc(allowedActions, func(a proapi.ActionCapability) bool {
+					return a.Name == action.Name
+				})
+				if capabilityIndex == -1 {
 					return fmt.Errorf("action %s in state %s is not a built-in %s action", action.Name, state.Name, strings.ToLower(string(state.Side)))
 				}
-				if err := validateActionTransitions(action, state.Name, allowedTransitionTargets); err != nil {
+				if err := validateActionTransitions(action, state.Name, allowedTransitionTargets, isTransitionCapability(allowedActions[capabilityIndex])); err != nil {
 					return err
 				}
 			}
@@ -205,7 +205,11 @@ func ValidateStateModel(stateModel *proapi.StateModel) error {
 	return nil
 }
 
-func validateActionTransitions(action proapi.ModelAction, stateName string, allowedTransitionTargets map[string]struct{}) error {
+func validateActionTransitions(action proapi.ModelAction, stateName string, allowedTransitionTargets map[string]struct{}, transitionAction bool) error {
+	if transitionAction &&
+		(action.Transitions == nil || action.Transitions.Success == nil || *action.Transitions.Success == "") {
+		return fmt.Errorf("transition action %s in state %s must define a success transition", action.Name, stateName)
+	}
 	if action.Transitions == nil {
 		return nil
 	}

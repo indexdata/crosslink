@@ -527,7 +527,7 @@ func TestGetPatronRequestsIdActions(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsIdActions(rr, req, "3", proapi.GetPatronRequestsIdActionsParams{Symbol: &symbol, Side: &proapiBorrowingSide})
 	assert.Equal(t, http.StatusOK, rr.Code)
-	assert.Equal(t, "{\"actions\":[]}\n", rr.Body.String())
+	assert.Equal(t, "{\"actions\":[{\"available\":true,\"name\":\"skip-patron-validation\",\"parameters\":[]},{\"available\":true,\"name\":\"close-request\",\"parameters\":[]}]}\n", rr.Body.String())
 }
 
 func TestGetPatronRequestsIdActionsNoSymbol(t *testing.T) {
@@ -536,7 +536,7 @@ func TestGetPatronRequestsIdActionsNoSymbol(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsIdActions(rr, req, "3", proapi.GetPatronRequestsIdActionsParams{Side: &proapiBorrowingSide})
 	assert.Equal(t, http.StatusOK, rr.Code)
-	assert.Equal(t, "{\"actions\":[]}\n", rr.Body.String())
+	assert.Equal(t, "{\"actions\":[{\"available\":true,\"name\":\"skip-patron-validation\",\"parameters\":[]},{\"available\":true,\"name\":\"close-request\",\"parameters\":[]}]}\n", rr.Body.String())
 }
 
 func TestGetPatronRequestsIdActionsDbError(t *testing.T) {
