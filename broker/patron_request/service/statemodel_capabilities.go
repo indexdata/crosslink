@@ -251,21 +251,26 @@ func isTransitionCapability(capability proapi.ActionCapability) bool {
 	return capability.Kind != nil && *capability.Kind == proapi.Transition
 }
 
+var actionCapabilitiesBySide = map[pr_db.PatronRequestSide]map[pr_db.PatronRequestAction]proapi.ActionCapability{
+	SideBorrowing: indexActionCapabilities(requesterBuiltInActions()),
+	SideLending:   indexActionCapabilities(supplierBuiltInActions()),
+}
+
+func indexActionCapabilities(capabilities []proapi.ActionCapability) map[pr_db.PatronRequestAction]proapi.ActionCapability {
+	indexed := make(map[pr_db.PatronRequestAction]proapi.ActionCapability, len(capabilities))
+	for _, capability := range capabilities {
+		indexed[pr_db.PatronRequestAction(capability.Name)] = capability
+	}
+	return indexed
+}
+
 func getActionCapability(side pr_db.PatronRequestSide, action pr_db.PatronRequestAction) (proapi.ActionCapability, bool) {
-	capabilities := BuiltInStateModelCapabilities()
-	actions := capabilities.SupplierActions
-	if side == SideBorrowing {
-		actions = capabilities.RequesterActions
-	} else if side != SideLending {
+	capabilities, ok := actionCapabilitiesBySide[side]
+	if !ok {
 		return proapi.ActionCapability{}, false
 	}
-	index := slices.IndexFunc(actions, func(capability proapi.ActionCapability) bool {
-		return capability.Name == string(action)
-	})
-	if index == -1 {
-		return proapi.ActionCapability{}, false
-	}
-	return actions[index], true
+	capability, ok := capabilities[action]
+	return capability, ok
 }
 
 func supplierBuiltInActions() []proapi.ActionCapability {
