@@ -3,7 +3,7 @@ stateModels:
     type: StateModel
     name: CrossLink Returnables State Model
     desc: "Requester/Supplier workflow per ISO18626, including NCIP integration and ISO status events."
-    version: 1.0.0
+    version: 2.0.0
     selector:
       serviceType: [Copy, Loan, CopyOrLoan]
     states:
@@ -15,6 +15,7 @@ stateModels:
         initial: true
         editable: true
         primaryAction: validate-patron
+        closingAction: close-request
         actions:
           - name: validate-patron
             desc: "Validate the patron via NCIP LookupUser, if enabled"
@@ -22,12 +23,21 @@ stateModels:
               success: VALIDATED
               review: INVALID_PATRON
             trigger: auto
+          - name: skip-patron-validation
+            desc: Continue without validating the patron
+            transitions:
+              success: VALIDATED
+          - name: close-request
+            desc: Close the request locally
+            transitions:
+              success: MANUALLY_CLOSED
 
       - name: INVALID_PATRON
         display: Invalid Patron
         desc: Patron validation was rejected by the LMS
         side: REQUESTER
         primaryAction: validate-patron
+        closingAction: close-request
         needsAttention: true
         editable: true
         actions:
@@ -36,12 +46,21 @@ stateModels:
             transitions:
               success: VALIDATED
               review: INVALID_PATRON
+          - name: skip-patron-validation
+            desc: Continue without validating the patron
+            transitions:
+              success: VALIDATED
+          - name: close-request
+            desc: Close the request locally
+            transitions:
+              success: MANUALLY_CLOSED
 
       - name: VALIDATED
-        display: Validated
-        desc: Patron Request is valid
+        display: Patron Validated
+        desc: Patron validation has completed or been skipped
         side: REQUESTER
         primaryAction: update-metadata
+        closingAction: close-request
         actions:
           - name: update-metadata
             desc: Update the request metadata
@@ -49,12 +68,21 @@ stateModels:
               success: METADATA_UPDATED
               review: NEEDS_REVIEW
             trigger: auto
+          - name: skip-metadata-update
+            desc: Continue without updating the request metadata
+            transitions:
+              success: METADATA_UPDATED
+          - name: close-request
+            desc: Close the request locally
+            transitions:
+              success: MANUALLY_CLOSED
 
       - name: METADATA_UPDATED
         display: Metadata Updated
-        desc: Patron Request metadata has been updated
+        desc: Request metadata update has completed or been skipped
         side: REQUESTER
         primaryAction: send-request
+        closingAction: close-request
         actions:
           - name: send-request
             desc: Send ISO18626 request to the supplier or broker
@@ -62,12 +90,17 @@ stateModels:
               success: SENT
               duplicate: DUPLICATE
             trigger: auto
+          - name: close-request
+            desc: Close the request locally
+            transitions:
+              success: MANUALLY_CLOSED
 
       - name: NEEDS_REVIEW
         display: Needs review
         desc: Request is valid but needs staff review before sending
         side: REQUESTER
         primaryAction: send-request
+        closingAction: close-request
         needsAttention: true
         editable: true
         actions:
@@ -76,16 +109,26 @@ stateModels:
             transitions:
               success: SENT
               duplicate: DUPLICATE
+          - name: close-request
+            desc: Close the request locally
+            transitions:
+              success: MANUALLY_CLOSED
 
       - name: DUPLICATE
         display: Duplicate
         desc: A duplicate request was reported by the supplier or broker
         side: REQUESTER
+        primaryAction: send-request
         needsAttention: true
         editable: true
-        closingAction: close-duplicate
+        closingAction: close-request
         actions:
-          - name: close-duplicate
+          - name: send-request
+            desc: Retry sending the request to the supplier or broker
+            transitions:
+              success: SENT
+              duplicate: DUPLICATE
+          - name: close-request
             desc: Close the duplicate request
             transitions:
               success: CLOSED_DUPLICATE

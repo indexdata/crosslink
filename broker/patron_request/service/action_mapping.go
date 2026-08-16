@@ -264,6 +264,14 @@ func (r *ActionMapping) IsActionSupported(pr pr_db.PatronRequest, action pr_db.P
 	return ok
 }
 
+func (r *ActionMapping) IsTransitionAction(pr pr_db.PatronRequest, action pr_db.PatronRequestAction) bool {
+	if !r.IsActionSupported(pr, action) {
+		return false
+	}
+	capability, ok := getActionCapability(pr.Side, action)
+	return ok && isTransitionCapability(capability)
+}
+
 func (r *ActionMapping) GetActionTransition(pr pr_db.PatronRequest, action pr_db.PatronRequestAction, outcome string) (pr_db.PatronRequestState, bool) {
 	stateConfig, ok := r.getStateConfig(pr)
 	if !ok {

@@ -306,11 +306,9 @@ func TestHandleInvokeActionValidateSendRequestDuplicate(t *testing.T) {
 	assert.Equal(t, ActionOutcomeDuplicate, mockPrRepo.savedPr.LastActionOutcome.String)
 }
 
-func TestHandleInvokeActionCloseDuplicate(t *testing.T) {
+func TestHandleInvokeActionCloseRequestFromDuplicate(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	lmsCreator := new(MockLmsCreator)
-	lmsCreator.On("GetAdapter", "ISIL:x").Return(createLmsAdapterMockLog(), nil)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), new(MockEventBus), new(MockIso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), new(MockEventBus), new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
 	pr := pr_db.PatronRequest{
 		ID:              patronRequestId,
 		IllRequest:      iso18626.Request{},
@@ -319,7 +317,7 @@ func TestHandleInvokeActionCloseDuplicate(t *testing.T) {
 		Side:            SideBorrowing,
 	}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil)
-	action := BorrowerActionCloseDuplicate
+	action := BorrowerActionCloseRequest
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
 		PatronRequestID: patronRequestId,
@@ -335,7 +333,168 @@ func TestHandleInvokeActionCloseDuplicate(t *testing.T) {
 	assert.Equal(t, BorrowerStateClosedDuplicate, mockPrRepo.savedPr.State)
 	assert.True(t, mockPrRepo.savedPr.TerminalState)
 	assert.False(t, mockPrRepo.savedPr.NeedsAttention)
-	assert.Equal(t, string(BorrowerActionCloseDuplicate), mockPrRepo.savedPr.LastAction.String)
+	assert.Equal(t, string(BorrowerActionCloseRequest), mockPrRepo.savedPr.LastAction.String)
+}
+
+func TestHandleInvokeActionTransitionActions(t *testing.T) {
+	tests := []struct {
+		name             string
+		initialState     pr_db.PatronRequestState
+		action           pr_db.PatronRequestAction
+		expectedState    pr_db.PatronRequestState
+		disableAutoState pr_db.PatronRequestState
+		terminal         bool
+	}{
+		{
+			name:             "skip patron validation from new",
+			initialState:     BorrowerStateNew,
+			action:           BorrowerActionSkipPatronValidation,
+			expectedState:    BorrowerStateValidated,
+			disableAutoState: BorrowerStateValidated,
+		},
+		{
+			name:          "close new request locally",
+			initialState:  BorrowerStateNew,
+			action:        BorrowerActionCloseRequest,
+			expectedState: BorrowerStateManuallyClosed,
+			terminal:      true,
+		},
+		{
+			name:             "skip patron validation",
+			initialState:     BorrowerStateInvalidPatron,
+			action:           BorrowerActionSkipPatronValidation,
+			expectedState:    BorrowerStateValidated,
+			disableAutoState: BorrowerStateValidated,
+		},
+		{
+			name:          "close request locally",
+			initialState:  BorrowerStateInvalidPatron,
+			action:        BorrowerActionCloseRequest,
+			expectedState: BorrowerStateManuallyClosed,
+			terminal:      true,
+		},
+		{
+			name:             "skip metadata update",
+			initialState:     BorrowerStateValidated,
+			action:           BorrowerActionSkipMetadataUpdate,
+			expectedState:    BorrowerStateMetadataUpdated,
+			disableAutoState: BorrowerStateMetadataUpdated,
+		},
+		{
+			name:          "close patron validated request locally",
+			initialState:  BorrowerStateValidated,
+			action:        BorrowerActionCloseRequest,
+			expectedState: BorrowerStateManuallyClosed,
+			terminal:      true,
+		},
+		{
+			name:          "close metadata updated request locally",
+			initialState:  BorrowerStateMetadataUpdated,
+			action:        BorrowerActionCloseRequest,
+			expectedState: BorrowerStateManuallyClosed,
+			terminal:      true,
+		},
+		{
+			name:          "close request needing review locally",
+			initialState:  BorrowerStateNeedsReview,
+			action:        BorrowerActionCloseRequest,
+			expectedState: BorrowerStateManuallyClosed,
+			terminal:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockPrRepo := new(MockPrRepo)
+			prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), new(MockEventBus), new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
+			stateModel, err := LoadStateModelByName("returnables")
+			assert.NoError(t, err)
+			for stateIndex := range stateModel.States {
+				state := &stateModel.States[stateIndex]
+				if state.Name != string(tt.disableAutoState) || state.Actions == nil {
+					continue
+				}
+				for actionIndex := range *state.Actions {
+					(*state.Actions)[actionIndex].Trigger = nil
+				}
+			}
+			prAction.actionMappingService.SMService = &StateModelService{stateMap: map[string]*proapi.StateModel{"returnables": stateModel}}
+			pr := pr_db.PatronRequest{
+				ID:             patronRequestId,
+				IllRequest:     iso18626.Request{},
+				State:          tt.initialState,
+				Side:           SideBorrowing,
+				NeedsAttention: true,
+			}
+			mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil)
+
+			status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
+				PatronRequestID: patronRequestId,
+				EventData: events.EventData{CommonEventData: events.CommonEventData{
+					Action: &tt.action,
+				}},
+			})
+
+			assert.Equal(t, events.EventStatusSuccess, status)
+			assert.NotNil(t, resultData)
+			assert.Equal(t, ActionOutcomeSuccess, resultData.ActionResult.Outcome)
+			assert.Equal(t, string(tt.expectedState), *resultData.ActionResult.ToState)
+			assert.Equal(t, tt.expectedState, mockPrRepo.savedPr.State)
+			assert.Equal(t, tt.terminal, mockPrRepo.savedPr.TerminalState)
+			assert.False(t, mockPrRepo.savedPr.NeedsAttention)
+			assert.Equal(t, string(tt.action), mockPrRepo.savedPr.LastAction.String)
+		})
+	}
+}
+
+func TestHandleInvokeActionSkipPatronValidationRunsConfiguredAutoActions(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	mockEventBus := new(MockEventBus)
+	mockIso18626Handler := new(MockIso18626Handler)
+
+	lmsCreator.On("GetAdapter", "ISIL:x").Return(createLmsAdapterMockLog(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	illRequest := iso18626.Request{BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "12312"}}
+	fakeEventID := "1234"
+	initialPR := pr_db.PatronRequest{
+		ID:              patronRequestId,
+		IllRequest:      illRequest,
+		RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"},
+		State:           BorrowerStateInvalidPatron,
+		Side:            SideBorrowing,
+		Tenant:          pgtype.Text{Valid: true, String: "testlib"},
+		NeedsAttention:  true,
+	}
+	validatedPR := initialPR
+	validatedPR.State = BorrowerStateValidated
+	validatedPR.NeedsAttention = false
+	metadataUpdatedPR := validatedPR
+	metadataUpdatedPR.State = BorrowerStateMetadataUpdated
+	sentPR := metadataUpdatedPR
+	sentPR.State = BorrowerStateSent
+	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(sentPR, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(initialPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(metadataUpdatedPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(sentPR, nil)
+	mockEventBus.On("CreateNoticeWithParent", fakeEventID).Return("", nil)
+	action := BorrowerActionSkipPatronValidation
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
+		ID:              fakeEventID,
+		PatronRequestID: patronRequestId,
+		EventData: events.EventData{CommonEventData: events.CommonEventData{
+			Action: &action,
+		}},
+	})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.NotNil(t, resultData)
+	assert.Equal(t, ActionOutcomeSuccess, resultData.ActionResult.Outcome)
+	assert.Equal(t, string(BorrowerStateValidated), *resultData.ActionResult.ToState)
+	assert.Equal(t, BorrowerStateSent, mockPrRepo.savedPr.State)
+	assert.Equal(t, string(BorrowerActionSendRequest), mockPrRepo.savedPr.LastAction.String)
 }
 
 func TestMetadataUpdateNoFactory(t *testing.T) {

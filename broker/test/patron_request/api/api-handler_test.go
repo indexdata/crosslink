@@ -1096,6 +1096,15 @@ func TestGetStateModelCapabilities(t *testing.T) {
 	assert.True(t, slices.Contains(capabilities.RequesterMessageEvents, string(prservice.RequesterCancelRequest)))
 	assert.True(t, slices.Contains(capabilities.RequesterMessageEvents, string(prservice.RequesterReceived)))
 	assert.True(t, slices.Contains(capabilities.SupplierMessageEvents, string(prservice.SupplierCancelRejected)))
+	skipPatronValidationIndex := slices.IndexFunc(capabilities.RequesterActions, func(action proapi.ActionCapability) bool {
+		return action.Name == string(prservice.BorrowerActionSkipPatronValidation)
+	})
+	if assert.NotEqual(t, -1, skipPatronValidationIndex, "skip-patron-validation capability not found") {
+		skipPatronValidation := capabilities.RequesterActions[skipPatronValidationIndex]
+		if assert.NotNil(t, skipPatronValidation.Kind) {
+			assert.Equal(t, proapi.Transition, *skipPatronValidation.Kind)
+		}
+	}
 }
 
 func TestServerChoice(t *testing.T) {

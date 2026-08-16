@@ -830,20 +830,24 @@ components:
     ActionCapability:
       title: ActionCapability
       type: object
-      description: Definition of an action and its parameters supported by the broker.
-        Action parameters are defined separately from actions because the same parameters
-        can be used for multiple actions, for example note parameter is supported for
-        multiple actions but is not required for all of them.
+      description: Definition of an action supported by the broker, including its execution kind and accepted parameters.
       additionalProperties: false
       properties:
         name:
           type: string
-          description: Name of the action parameter
+          description: Name of the action
         parameters:
           type: array
-          description: List of parameter names for this action parameter
+          description: List of parameter names for this action
           items:
             type: string
+        kind:
+          type: string
+          default: operation
+          description: How the action is executed. Operation actions invoke built-in domain logic; transition actions immediately succeed using the state model's configured success transition.
+          enum:
+            - operation
+            - transition
       required:
         - name
         - parameters

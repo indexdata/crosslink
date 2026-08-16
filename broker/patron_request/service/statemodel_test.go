@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	"github.com/stretchr/testify/assert"
 )
@@ -19,14 +20,21 @@ func TestBuiltInStateModelCapabilities(t *testing.T) {
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateReceived)))
 
 	assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
-		return a.Name == string(BorrowerActionValidatePatron)
+		return a.Name == string(BorrowerActionValidatePatron) && !isTransitionCapability(a)
 	}))
 	assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
 		return a.Name == string(BorrowerActionReceive)
 	}))
-	assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
-		return a.Name == string(BorrowerActionCloseDuplicate)
-	}))
+	for _, transitionAction := range []pr_db.PatronRequestAction{
+		BorrowerActionSkipPatronValidation,
+		BorrowerActionSkipMetadataUpdate,
+		BorrowerActionCloseRequest,
+		BorrowerActionRejectRetry,
+	} {
+		assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
+			return a.Name == string(transitionAction) && isTransitionCapability(a)
+		}))
+	}
 
 	assert.True(t, slices.ContainsFunc(c.SupplierActions, func(a proapi.ActionCapability) bool {
 		return a.Name == string(LenderActionWillSupply)
@@ -73,6 +81,14 @@ func TestReturnablesInvalidPatronStateIsEditableAndNeedsAttention(t *testing.T) 
 	assert.True(t, *state.Editable)
 	assert.NotNil(t, state.NeedsAttention)
 	assert.True(t, *state.NeedsAttention)
+	assert.NotNil(t, state.ClosingAction)
+	assert.Equal(t, string(BorrowerActionCloseRequest), *state.ClosingAction)
+	assert.True(t, slices.ContainsFunc(*state.Actions, func(action proapi.ModelAction) bool {
+		return action.Name == string(BorrowerActionSkipPatronValidation)
+	}))
+	assert.True(t, slices.ContainsFunc(*state.Actions, func(action proapi.ModelAction) bool {
+		return action.Name == string(BorrowerActionCloseRequest)
+	}))
 }
 
 func TestReturnablesNewRequesterStateIsEditable(t *testing.T) {
@@ -90,6 +106,14 @@ func TestReturnablesNewRequesterStateIsEditable(t *testing.T) {
 	state := model.States[stateIndex]
 	assert.NotNil(t, state.Editable)
 	assert.True(t, *state.Editable)
+	assert.NotNil(t, state.ClosingAction)
+	assert.Equal(t, string(BorrowerActionCloseRequest), *state.ClosingAction)
+	assert.True(t, slices.ContainsFunc(*state.Actions, func(action proapi.ModelAction) bool {
+		return action.Name == string(BorrowerActionSkipPatronValidation)
+	}))
+	assert.True(t, slices.ContainsFunc(*state.Actions, func(action proapi.ModelAction) bool {
+		return action.Name == string(BorrowerActionCloseRequest)
+	}))
 }
 
 func TestReturnablesDuplicateStateIsEditableAndNeedsAttention(t *testing.T) {
@@ -110,8 +134,13 @@ func TestReturnablesDuplicateStateIsEditableAndNeedsAttention(t *testing.T) {
 	assert.NotNil(t, state.NeedsAttention)
 	assert.True(t, *state.NeedsAttention)
 	assert.Nil(t, state.Terminal)
+	assert.NotNil(t, state.PrimaryAction)
+	assert.Equal(t, string(BorrowerActionSendRequest), *state.PrimaryAction)
 	assert.NotNil(t, state.ClosingAction)
-	assert.Equal(t, string(BorrowerActionCloseDuplicate), *state.ClosingAction)
+	assert.Equal(t, string(BorrowerActionCloseRequest), *state.ClosingAction)
+	assert.True(t, slices.ContainsFunc(*state.Actions, func(action proapi.ModelAction) bool {
+		return action.Name == string(BorrowerActionSendRequest)
+	}))
 }
 
 func TestValidateStateModelMissingInitial(t *testing.T) {
@@ -643,6 +672,29 @@ func TestValidateStateModelEventTransitionCannotCrossSides(t *testing.T) {
 	err := ValidateStateModel(model)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid transition target")
+}
+
+func TestValidateStateModelTransitionActionRequiresSuccessTransition(t *testing.T) {
+	model, err := LoadStateModelByName("returnables")
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	for stateIndex := range model.States {
+		state := &model.States[stateIndex]
+		if state.Name != string(BorrowerStateInvalidPatron) || state.Actions == nil {
+			continue
+		}
+		for actionIndex := range *state.Actions {
+			action := &(*state.Actions)[actionIndex]
+			if action.Name == string(BorrowerActionSkipPatronValidation) {
+				action.Transitions = nil
+			}
+		}
+	}
+
+	err = ValidateStateModel(model)
+	assert.EqualError(t, err, "transition action skip-patron-validation in state INVALID_PATRON must define a success transition")
 }
 
 func TestStateModelServiceConcurrentGetStateModel(t *testing.T) {
