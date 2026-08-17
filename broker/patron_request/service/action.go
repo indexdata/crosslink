@@ -179,20 +179,13 @@ func (a *PatronRequestActionService) handleTerminateAction(ctx common.ExtendedCo
 
 	var closingActionError *string
 	if closingAction := actionMapping.GetClosingAction(pr); closingAction != nil {
-		// If the configured closing action requires LMS integration and we don't have it,
-		// fall back directly to local close instead of logging an error.
-		if !actionMapping.IsTransitionAction(pr, *closingAction) && a.lmsCreator == nil {
-			message := fmt.Sprintf("closing action %s could not be executed: LMS creator not configured", *closingAction)
-			closingActionError = &message
-		} else {
-			status, result := a.executeAction(ctx, event, actionMapping, pr, *closingAction)
-			if status == events.EventStatusSuccess && result != nil && result.ActionResult != nil &&
-				result.ActionResult.Outcome == ActionOutcomeSuccess && result.ActionResult.ChildActionError == nil {
-				return status, result
-			}
-			message := closingActionFailureMessage(*closingAction, status, result)
-			closingActionError = &message
+		status, result := a.executeAction(ctx, event, actionMapping, pr, *closingAction)
+		if status == events.EventStatusSuccess && result != nil && result.ActionResult != nil &&
+			result.ActionResult.Outcome == ActionOutcomeSuccess && result.ActionResult.ChildActionError == nil {
+			return status, result
 		}
+		message := closingActionFailureMessage(*closingAction, status, result)
+		closingActionError = &message
 	}
 
 	return a.closeLocally(ctx, actionMapping, pr, closingActionError)

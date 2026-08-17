@@ -173,7 +173,7 @@ func TestHandleInvokeActionTerminateReportsUnavailableClosingActionOnFallback(t 
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, string(LenderStateManuallyClosed), *resultData.ActionResult.ToState)
 	if assert.NotNil(t, resultData.ActionResult.ChildActionError) {
-		assert.Equal(t, "closing action cannot-supply could not be executed: LMS creator not configured", *resultData.ActionResult.ChildActionError)
+		assert.Equal(t, "closing action cannot-supply failed with status ERROR and outcome failure: LMS creator not configured", *resultData.ActionResult.ChildActionError)
 	}
 }
 
