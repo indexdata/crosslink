@@ -177,17 +177,50 @@ func (a *PatronRequestActionService) handleTerminateAction(ctx common.ExtendedCo
 		return logActionErrorAndReturnResult(ctx, "patron request "+pr.ID+" is already terminal", errors.New("invalid action"))
 	}
 
+	var closingActionError *string
 	if closingAction := actionMapping.GetClosingAction(pr); closingAction != nil {
-		status, result := a.executeAction(ctx, event, actionMapping, pr, *closingAction)
-		if status == events.EventStatusSuccess && result != nil && result.ActionResult != nil && result.ActionResult.Outcome != ActionOutcomeFailure {
-			return status, result
+		// If the configured closing action requires LMS integration and we don't have it,
+		// fall back directly to local close instead of logging an error.
+		if !actionMapping.IsTransitionAction(pr, *closingAction) && a.lmsCreator == nil {
+			message := fmt.Sprintf("closing action %s could not be executed: LMS creator not configured", *closingAction)
+			closingActionError = &message
+		} else {
+			status, result := a.executeAction(ctx, event, actionMapping, pr, *closingAction)
+			if status == events.EventStatusSuccess && result != nil && result.ActionResult != nil &&
+				result.ActionResult.Outcome == ActionOutcomeSuccess && result.ActionResult.ChildActionError == nil {
+				return status, result
+			}
+			message := closingActionFailureMessage(*closingAction, status, result)
+			closingActionError = &message
 		}
 	}
 
-	return a.closeLocally(ctx, actionMapping, pr)
+	return a.closeLocally(ctx, actionMapping, pr, closingActionError)
 }
 
-func (a *PatronRequestActionService) closeLocally(ctx common.ExtendedContext, actionMapping *ActionMapping, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+func closingActionFailureMessage(action pr_db.PatronRequestAction, status events.EventStatus, result *events.EventResult) string {
+	message := fmt.Sprintf("closing action %s failed with status %s", action, status)
+	if result == nil {
+		return message
+	}
+	if result.ActionResult != nil {
+		if result.ActionResult.ChildActionError != nil {
+			return message + ": " + *result.ActionResult.ChildActionError
+		}
+		if result.ActionResult.Outcome != "" {
+			message += " and outcome " + result.ActionResult.Outcome
+		}
+	}
+	if result.EventError != nil && result.EventError.Message != "" {
+		return message + ": " + result.EventError.Message
+	}
+	if result.Problem != nil && result.Problem.Details != "" {
+		return message + ": " + result.Problem.Details
+	}
+	return message
+}
+
+func (a *PatronRequestActionService) closeLocally(ctx common.ExtendedContext, actionMapping *ActionMapping, pr pr_db.PatronRequest, closingActionError *string) (events.EventStatus, *events.EventResult) {
 	manualCloseState, ok := actionMapping.GetManualCloseState(pr)
 	if !ok {
 		return logActionErrorAndReturnResult(ctx, "state model does not define a manual close target for side "+string(pr.Side), errors.New("invalid state model"))
@@ -213,8 +246,9 @@ func (a *PatronRequestActionService) closeLocally(ctx common.ExtendedContext, ac
 	return events.EventStatusSuccess, &events.EventResult{
 		CommonEventData: events.CommonEventData{
 			ActionResult: &events.ActionResult{
-				Outcome: ActionOutcomeSuccess,
-				ToState: &toState,
+				Outcome:          ActionOutcomeSuccess,
+				ToState:          &toState,
+				ChildActionError: closingActionError,
 			},
 		},
 	}

@@ -151,7 +151,30 @@ func TestHandleInvokeActionTerminateFallsBackWhenClosingActionFails(t *testing.T
 	assert.Equal(t, LenderStateManuallyClosed, mockPrRepo.savedPr.State)
 	assert.True(t, mockPrRepo.savedPr.TerminalState)
 	assert.Equal(t, string(TerminateAction), mockPrRepo.savedPr.LastAction.String)
+	if assert.NotNil(t, resultData.ActionResult.ChildActionError) {
+		assert.Contains(t, *resultData.ActionResult.ChildActionError, "closing action cannot-supply failed")
+		assert.Contains(t, *resultData.ActionResult.ChildActionError, "failed to create LMS adapter")
+	}
 	lmsCreator.AssertExpectations(t)
+}
+
+func TestHandleInvokeActionTerminateReportsUnavailableClosingActionOnFallback(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(handler.Iso18626Handler), nil, new(EmailSenderMock), nil, nil)
+	action := TerminateAction
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{
+		ID:    patronRequestId,
+		State: LenderStateValidated,
+		Side:  SideLending,
+	}, nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, string(LenderStateManuallyClosed), *resultData.ActionResult.ToState)
+	if assert.NotNil(t, resultData.ActionResult.ChildActionError) {
+		assert.Equal(t, "closing action cannot-supply could not be executed: LMS creator not configured", *resultData.ActionResult.ChildActionError)
+	}
 }
 
 func TestHandleInvokeActionTerminateFallsBackWithoutClosingAction(t *testing.T) {
@@ -171,6 +194,7 @@ func TestHandleInvokeActionTerminateFallsBackWithoutClosingAction(t *testing.T) 
 	assert.Equal(t, BorrowerStateManuallyClosed, mockPrRepo.savedPr.State)
 	assert.True(t, mockPrRepo.savedPr.TerminalState)
 	assert.Equal(t, string(TerminateAction), mockPrRepo.savedPr.LastAction.String)
+	assert.Nil(t, resultData.ActionResult.ChildActionError)
 }
 
 func TestHandleInvokeActionTerminateRejectsTerminal(t *testing.T) {
