@@ -143,8 +143,12 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 		return logActionErrorAndReturnResult(ctx, "failed to load state model", err)
 	}
 	if action == TerminateAction {
-		return a.handleTerminateAction(ctx, actionMapping, pr, action)
+		return a.handleTerminateAction(ctx, event, actionMapping, pr)
 	}
+	return a.executeAction(ctx, event, actionMapping, pr, action)
+}
+
+func (a *PatronRequestActionService) executeAction(ctx common.ExtendedContext, event events.Event, actionMapping *ActionMapping, pr pr_db.PatronRequest, action pr_db.PatronRequestAction) (events.EventStatus, *events.EventResult) {
 	if !actionMapping.IsActionSupported(pr, action) {
 		return logActionErrorAndReturnResult(ctx, "state "+string(pr.State)+" does not support action "+string(action), errors.New("invalid action"))
 	}
@@ -168,10 +172,22 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 	}
 }
 
-func (a *PatronRequestActionService) handleTerminateAction(ctx common.ExtendedContext, actionMapping *ActionMapping, pr pr_db.PatronRequest, action pr_db.PatronRequestAction) (events.EventStatus, *events.EventResult) {
+func (a *PatronRequestActionService) handleTerminateAction(ctx common.ExtendedContext, event events.Event, actionMapping *ActionMapping, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
 	if actionMapping.IsTerminalState(pr) || pr.TerminalState {
 		return logActionErrorAndReturnResult(ctx, "patron request "+pr.ID+" is already terminal", errors.New("invalid action"))
 	}
+
+	if closingAction := actionMapping.GetClosingAction(pr); closingAction != nil {
+		status, result := a.executeAction(ctx, event, actionMapping, pr, *closingAction)
+		if status == events.EventStatusSuccess && result != nil && result.ActionResult != nil && result.ActionResult.Outcome != ActionOutcomeFailure {
+			return status, result
+		}
+	}
+
+	return a.closeLocally(ctx, actionMapping, pr)
+}
+
+func (a *PatronRequestActionService) closeLocally(ctx common.ExtendedContext, actionMapping *ActionMapping, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
 	manualCloseState, ok := actionMapping.GetManualCloseState(pr)
 	if !ok {
 		return logActionErrorAndReturnResult(ctx, "state model does not define a manual close target for side "+string(pr.Side), errors.New("invalid state model"))
@@ -180,7 +196,7 @@ func (a *PatronRequestActionService) handleTerminateAction(ctx common.ExtendedCo
 	updatedPr := pr
 	updatedPr.State = manualCloseState
 	updatedPr.TerminalState = true
-	updatedPr.LastAction = getDbText(string(action))
+	updatedPr.LastAction = getDbText(string(TerminateAction))
 	updatedPr.LastActionOutcome = getDbText(ActionOutcomeSuccess)
 	updatedPr.LastActionResult = getDbText(string(events.EventStatusSuccess))
 	updatedPr.NeedsAttention = false

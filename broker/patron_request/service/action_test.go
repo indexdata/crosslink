@@ -106,7 +106,7 @@ func TestHandleInvokeActionNoLms(t *testing.T) {
 	assert.Equal(t, "LMS creator not configured", resultData.EventError.Message)
 }
 
-func TestHandleInvokeActionTerminateOKNoLms(t *testing.T) {
+func TestHandleInvokeActionTerminateUsesClosingAction(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(handler.Iso18626Handler), nil, new(EmailSenderMock), nil, nil)
 	action := TerminateAction
@@ -126,9 +126,51 @@ func TestHandleInvokeActionTerminateOKNoLms(t *testing.T) {
 	assert.Equal(t, string(BorrowerStateManuallyClosed), *resultData.ActionResult.ToState)
 	assert.Equal(t, BorrowerStateManuallyClosed, mockPrRepo.savedPr.State)
 	assert.True(t, mockPrRepo.savedPr.TerminalState)
-	assert.Equal(t, string(TerminateAction), mockPrRepo.savedPr.LastAction.String)
+	assert.Equal(t, string(BorrowerActionCloseRequest), mockPrRepo.savedPr.LastAction.String)
 	assert.Equal(t, ActionOutcomeSuccess, mockPrRepo.savedPr.LastActionOutcome.String)
 	assert.Equal(t, string(events.EventStatusSuccess), mockPrRepo.savedPr.LastActionResult.String)
+}
+
+func TestHandleInvokeActionTerminateFallsBackWhenClosingActionFails(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lms.CreateLmsAdapterMockOK(), assert.AnError)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
+	action := TerminateAction
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{
+		ID:             patronRequestId,
+		State:          LenderStateValidated,
+		Side:           SideLending,
+		SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"},
+	}, nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, string(LenderStateManuallyClosed), *resultData.ActionResult.ToState)
+	assert.Equal(t, LenderStateManuallyClosed, mockPrRepo.savedPr.State)
+	assert.True(t, mockPrRepo.savedPr.TerminalState)
+	assert.Equal(t, string(TerminateAction), mockPrRepo.savedPr.LastAction.String)
+	lmsCreator.AssertExpectations(t)
+}
+
+func TestHandleInvokeActionTerminateFallsBackWithoutClosingAction(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(handler.Iso18626Handler), nil, new(EmailSenderMock), nil, nil)
+	action := TerminateAction
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{
+		ID:    patronRequestId,
+		State: BorrowerStateSupplierLocated,
+		Side:  SideBorrowing,
+	}, nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, string(BorrowerStateManuallyClosed), *resultData.ActionResult.ToState)
+	assert.Equal(t, BorrowerStateManuallyClosed, mockPrRepo.savedPr.State)
+	assert.True(t, mockPrRepo.savedPr.TerminalState)
+	assert.Equal(t, string(TerminateAction), mockPrRepo.savedPr.LastAction.String)
 }
 
 func TestHandleInvokeActionTerminateRejectsTerminal(t *testing.T) {
