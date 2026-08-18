@@ -341,6 +341,69 @@ func TestValidateStateModelClosingActionNoActionsDefined(t *testing.T) {
 	assert.Equal(t, "closing action ship undefined in state VALIDATED side SUPPLIER", err.Error())
 }
 
+func TestValidateStateModelClosingActionWithoutSuccessTransition(t *testing.T) {
+	closingAction := string(BorrowerActionValidatePatron)
+	tt := true
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name:          string(BorrowerStateNew),
+				Side:          proapi.REQUESTER,
+				Initial:       &tt,
+				ClosingAction: &closingAction,
+				Actions: &[]proapi.ModelAction{
+					{Name: closingAction},
+				},
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.EqualError(t, err, "closing action validate-patron in state NEW side REQUESTER must define a success transition")
+}
+
+func TestValidateStateModelClosingActionTransitionsToNonTerminalState(t *testing.T) {
+	closingAction := string(BorrowerActionCloseRequest)
+	target := string(BorrowerStateValidated)
+	tt := true
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name:          string(BorrowerStateNew),
+				Side:          proapi.REQUESTER,
+				Initial:       &tt,
+				ClosingAction: &closingAction,
+				Actions: &[]proapi.ModelAction{
+					{
+						Name: closingAction,
+						Transitions: &struct {
+							Duplicate *string `json:"duplicate,omitempty"`
+							Failure   *string `json:"failure,omitempty"`
+							Review    *string `json:"review,omitempty"`
+							Success   *string `json:"success,omitempty"`
+						}{
+							Success: &target,
+						},
+					},
+				},
+			},
+			{
+				Name: string(BorrowerStateValidated),
+				Side: proapi.REQUESTER,
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.EqualError(t, err, "closing action close-request in state NEW side REQUESTER has non-terminal success transition target VALIDATED")
+}
+
 func TestValidateStateModelManualCloseTerminal(t *testing.T) {
 	tt := true
 	model := &proapi.StateModel{

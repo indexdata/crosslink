@@ -103,6 +103,10 @@ func ValidateStateModel(stateModel *proapi.StateModel) error {
 		proapi.REQUESTER: {},
 		proapi.SUPPLIER:  {},
 	}
+	terminalStates := map[proapi.ModelStateSide]map[string]struct{}{
+		proapi.REQUESTER: {},
+		proapi.SUPPLIER:  {},
+	}
 	manualCloseStates := map[proapi.ModelStateSide]string{}
 	initialStates := map[proapi.ModelStateSide]string{}
 	// Pass 1: validate all states and collect the state set defined in this model.
@@ -131,6 +135,9 @@ func ValidateStateModel(stateModel *proapi.StateModel) error {
 			return fmt.Errorf("state %s is defined multiple times for side %s", state.Name, state.Side)
 		}
 		sideStates[state.Name] = struct{}{}
+		if state.Terminal != nil && *state.Terminal {
+			terminalStates[state.Side][state.Name] = struct{}{}
+		}
 		if state.ManualClose != nil && *state.ManualClose {
 			if state.Terminal == nil || !*state.Terminal {
 				return fmt.Errorf("manualClose state %s side %s must be terminal", state.Name, state.Side)
@@ -185,10 +192,24 @@ func ValidateStateModel(stateModel *proapi.StateModel) error {
 			return fmt.Errorf("primary action %s undefined in state %s side %s", *state.PrimaryAction, state.Name, state.Side)
 		}
 
-		if state.ClosingAction != nil && (state.Actions == nil || !slices.ContainsFunc(*state.Actions, func(a proapi.ModelAction) bool {
-			return a.Name == string(*state.ClosingAction)
-		})) {
-			return fmt.Errorf("closing action %s undefined in state %s side %s", *state.ClosingAction, state.Name, state.Side)
+		if state.ClosingAction != nil {
+			closingActionIndex := -1
+			if state.Actions != nil {
+				closingActionIndex = slices.IndexFunc(*state.Actions, func(a proapi.ModelAction) bool {
+					return a.Name == string(*state.ClosingAction)
+				})
+			}
+			if closingActionIndex == -1 {
+				return fmt.Errorf("closing action %s undefined in state %s side %s", *state.ClosingAction, state.Name, state.Side)
+			}
+			closingAction := (*state.Actions)[closingActionIndex]
+			if closingAction.Transitions == nil || closingAction.Transitions.Success == nil || *closingAction.Transitions.Success == "" {
+				return fmt.Errorf("closing action %s in state %s side %s must define a success transition", *state.ClosingAction, state.Name, state.Side)
+			}
+			target := *closingAction.Transitions.Success
+			if _, terminal := terminalStates[state.Side][target]; !terminal {
+				return fmt.Errorf("closing action %s in state %s side %s has non-terminal success transition target %s", *state.ClosingAction, state.Name, state.Side, target)
+			}
 		}
 		if state.Events != nil {
 			for _, event := range *state.Events {
