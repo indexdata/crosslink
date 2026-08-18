@@ -137,12 +137,19 @@ func TestHandleInvokeActionTerminateFallsBackWhenClosingActionFails(t *testing.T
 	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lms.CreateLmsAdapterMockOK(), assert.AnError)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
 	action := TerminateAction
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{
+	staleUpdatedAt := pgtype.Timestamp{Time: time.Now().Add(-time.Minute), Valid: true}
+	currentUpdatedAt := pgtype.Timestamp{Time: time.Now(), Valid: true}
+	pr := pr_db.PatronRequest{
 		ID:             patronRequestId,
 		State:          LenderStateValidated,
 		Side:           SideLending,
 		SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"},
-	}, nil)
+		UpdatedAt:      staleUpdatedAt,
+	}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil).Once()
+	refreshedPr := pr
+	refreshedPr.UpdatedAt = currentUpdatedAt
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(refreshedPr, nil).Once()
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
@@ -151,11 +158,31 @@ func TestHandleInvokeActionTerminateFallsBackWhenClosingActionFails(t *testing.T
 	assert.Equal(t, LenderStateManuallyClosed, mockPrRepo.savedPr.State)
 	assert.True(t, mockPrRepo.savedPr.TerminalState)
 	assert.Equal(t, string(TerminateAction), mockPrRepo.savedPr.LastAction.String)
+	assert.Equal(t, currentUpdatedAt, mockPrRepo.savedPr.UpdatedAt)
 	if assert.NotNil(t, resultData.ActionResult.ChildActionError) {
 		assert.Contains(t, *resultData.ActionResult.ChildActionError, "closing action cannot-supply failed")
 		assert.Contains(t, *resultData.ActionResult.ChildActionError, "failed to create LMS adapter")
 	}
 	lmsCreator.AssertExpectations(t)
+	mockPrRepo.AssertExpectations(t)
+}
+
+func TestHandleInvokeActionTerminateReportsReloadFailureBeforeFallback(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(handler.Iso18626Handler), nil, new(EmailSenderMock), nil, nil)
+	action := TerminateAction
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{
+		ID:    patronRequestId,
+		State: LenderStateValidated,
+		Side:  SideLending,
+	}, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{}, assert.AnError).Once()
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "failed to reload patron request before local close", resultData.EventError.Message)
+	mockPrRepo.AssertExpectations(t)
 }
 
 func TestHandleInvokeActionTerminateReportsUnavailableClosingActionOnFallback(t *testing.T) {

@@ -186,6 +186,11 @@ func (a *PatronRequestActionService) handleTerminateAction(ctx common.ExtendedCo
 		}
 		message := closingActionFailureMessage(*closingAction, status, result)
 		closingActionError = &message
+		refreshedPr, err := a.prRepo.GetPatronRequestById(ctx, pr.ID)
+		if err != nil {
+			return logActionErrorAndReturnResult(ctx, "failed to reload patron request before local close", err)
+		}
+		pr = refreshedPr
 	}
 
 	return a.closeLocally(ctx, actionMapping, pr, closingActionError)
