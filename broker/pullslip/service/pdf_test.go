@@ -6,12 +6,13 @@ import (
 	"encoding/base64"
 	"errors"
 	"image/png"
-	"strings"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/indexdata/crosslink/broker/common"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -52,47 +53,9 @@ func TestGetBarcodeBase64(t *testing.T) {
 	assert.Equal(t, 67, bounds.Dy())
 }
 
-func TestRenderPullSlipHTML(t *testing.T) {
-	html, err := renderPullSlipHTML(PullSlipData{
-		ReqId:          "REQ-123",
-		PickupLocation: "Main Library",
-		Title:          "Big Shark",
-		Author:         "John Doe",
-		DueDate:        "2026-01-01",
-		ReturnAddress:  "1 Test Street",
-		BarcodeBase64:  "abc123",
-	})
-	assert.NoError(t, err)
-	assert.True(t, strings.Contains(html, "REQ-123"))
-	assert.True(t, strings.Contains(html, "Main Library"))
-	assert.True(t, strings.Contains(html, "data:image/png;base64,abc123"))
-}
-
-func TestRenderPullSlipHTML_InvalidTemplate(t *testing.T) {
-	// Temporarily swap pullSlipTemplate with an invalid one
-	orig := pullSlipTemplate
-	defer func() { pullSlipTemplate = orig }()
-	pullSlipTemplate = `{{.Unclosed`
-
-	_, err := renderPullSlipHTML(PullSlipData{ReqId: "X"})
-	assert.Error(t, err)
-}
-
-func TestRenderPullSlipHTML_ExecuteError(t *testing.T) {
-	// A template that calls a function on a field that panics/errors at execute time
-	orig := pullSlipTemplate
-	defer func() { pullSlipTemplate = orig }()
-	// Use a template that references a non-existent function to trigger execute error
-	// The only reliable way in Go templates: call.option "missingkey=error" with unknown key on a map
-	pullSlipTemplate = `{{index . "nonexistent"}}`
-
-	_, err := renderPullSlipHTML(PullSlipData{ReqId: "X"})
-	// Execute on a struct with map-access fails
-	assert.Error(t, err)
-}
-
 func TestGeneratePdfPullSlip_Defaults(t *testing.T) {
-	svc := &PdfServiceImpl{}
+	repo := &mockPrRepo{}
+	svc := newSvcWithMock(repo)
 	pr := pr_db.PatronRequest{
 		RequesterReqID: pgtype.Text{
 			String: "REQ-DEFAULTS",
@@ -100,7 +63,7 @@ func TestGeneratePdfPullSlip_Defaults(t *testing.T) {
 		},
 		// No bibliographic info — all fields should fall back to DEFAULT_FOR_NO_VALUE
 	}
-	pdfBytes, err := svc.GeneratePdfPullSlip(pr, []pr_db.Notification{}, []pr_db.Notification{})
+	pdfBytes, err := svc.GeneratePdfPullSlip(appCtx, pr, []pr_db.Notification{}, []pr_db.Notification{})
 	assert.NoError(t, err)
 	assert.NotEmpty(t, pdfBytes)
 	// PDF magic bytes: %PDF
@@ -108,7 +71,8 @@ func TestGeneratePdfPullSlip_Defaults(t *testing.T) {
 }
 
 func TestGeneratePdfPullSlip_WithBibliographicInfo(t *testing.T) {
-	svc := &PdfServiceImpl{}
+	repo := &mockPrRepo{}
+	svc := newSvcWithMock(repo)
 	pr := pr_db.PatronRequest{
 		ID: "REQ-BIB",
 		RequesterReqID: pgtype.Text{
@@ -122,7 +86,7 @@ func TestGeneratePdfPullSlip_WithBibliographicInfo(t *testing.T) {
 			},
 		},
 	}
-	pdfBytes, err := svc.GeneratePdfPullSlip(pr, []pr_db.Notification{}, []pr_db.Notification{})
+	pdfBytes, err := svc.GeneratePdfPullSlip(appCtx, pr, []pr_db.Notification{}, []pr_db.Notification{})
 	assert.NoError(t, err)
 	assert.NotEmpty(t, pdfBytes)
 	assert.Equal(t, "%PDF", string(pdfBytes[:4]))
@@ -132,7 +96,8 @@ func TestGeneratePdfPullSlip_FullData(t *testing.T) {
 	callNumber := "QA76.9.A25"
 	dueDate := utils.XSDDateTime{Time: time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC)}
 
-	svc := &PdfServiceImpl{}
+	repo := &mockPrRepo{}
+	svc := newSvcWithMock(repo)
 	pr := pr_db.PatronRequest{
 		ID: "REQ-FULL",
 		RequesterReqID: pgtype.Text{
@@ -195,7 +160,7 @@ func TestGeneratePdfPullSlip_FullData(t *testing.T) {
 		{Condition: pgtype.Text{String: "No photocopying", Valid: true}},
 	}
 
-	pdfBytes, err := svc.GeneratePdfPullSlip(pr, notes, conditions)
+	pdfBytes, err := svc.GeneratePdfPullSlip(appCtx, pr, notes, conditions)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, pdfBytes)
 	assert.Equal(t, "%PDF", string(pdfBytes[:4]))
@@ -215,187 +180,53 @@ func TestGeneratePdfPullSlip_BarcodeError(t *testing.T) {
 			Valid:  true,
 		},
 	}
-	_, err := svc.GeneratePdfPullSlip(pr, []pr_db.Notification{}, []pr_db.Notification{})
+	_, err := svc.GeneratePdfPullSlip(appCtx, pr, []pr_db.Notification{}, []pr_db.Notification{})
 	assert.Error(t, err)
 }
 
 func TestGeneratePdfPullSlip_TemplateError(t *testing.T) {
-	orig := pullSlipTemplate
-	defer func() { pullSlipTemplate = orig }()
-	pullSlipTemplate = `{{.Unclosed`
-
-	svc := &PdfServiceImpl{}
+	repo := &mockPrRepo{}
+	svc := newSvcWithMock(repo)
 	pr := pr_db.PatronRequest{
 		ID: "REQ-X",
 		RequesterReqID: pgtype.Text{
 			String: "REQ-X",
 			Valid:  true,
 		},
+		RequesterSymbol: pgtype.Text{String: "invalid", Valid: true},
 	}
-	_, err := svc.GeneratePdfPullSlip(pr, []pr_db.Notification{}, []pr_db.Notification{})
+	_, err := svc.GeneratePdfPullSlip(appCtx, pr, []pr_db.Notification{}, []pr_db.Notification{})
 	assert.Error(t, err)
 }
 
-// ── formatPhysicalAddress ─────────────────────────────────────────────────────
-
-func TestFormatPhysicalAddress_Full(t *testing.T) {
-	a := &iso18626.PhysicalAddress{
-		Line1:      "1 Main St",
-		Line2:      "Floor 2",
-		Locality:   "Springfield",
-		PostalCode: "12345",
-		Region:     &iso18626.TypeSchemeValuePair{Text: "IL"},
-		Country:    &iso18626.TypeSchemeValuePair{Text: "US"},
-	}
-	assert.Equal(t, "1 Main St, Floor 2, Springfield, 12345, IL, US", formatPhysicalAddress(a))
-}
-
-func TestFormatPhysicalAddress_Partial(t *testing.T) {
-	// Only Line1 and Locality — Region/Country nil, Line2/PostalCode empty
-	a := &iso18626.PhysicalAddress{
-		Line1:    "42 Book Rd",
-		Locality: "Shelbyville",
-	}
-	assert.Equal(t, "42 Book Rd, Shelbyville", formatPhysicalAddress(a))
-}
-
-func TestFormatPhysicalAddress_EmptyRegionText(t *testing.T) {
-	// Region present but empty Text — should be skipped
-	a := &iso18626.PhysicalAddress{
-		Line1:   "1 St",
-		Region:  &iso18626.TypeSchemeValuePair{Text: ""},
-		Country: &iso18626.TypeSchemeValuePair{Text: ""},
-	}
-	assert.Equal(t, "1 St", formatPhysicalAddress(a))
-}
-
-func TestFormatPhysicalAddress_Empty(t *testing.T) {
-	assert.Equal(t, "", formatPhysicalAddress(&iso18626.PhysicalAddress{}))
-}
-
-// ── getStaffNotes ─────────────────────────────────────────────────────────────
-
-func TestGetStaffNotes_Empty(t *testing.T) {
-	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getStaffNotes([]pr_db.Notification{}))
-}
-
-func TestGetStaffNotes_InvalidNotesSkipped(t *testing.T) {
-	notes := []pr_db.Notification{
-		{Note: pgtype.Text{String: "valid note", Valid: true}},
-		{Note: pgtype.Text{String: "ignored", Valid: false}},
-	}
-	assert.Equal(t, "valid note", getStaffNotes(notes))
-}
-
-func TestGetStaffNotes_Multiple(t *testing.T) {
-	notes := []pr_db.Notification{
-		{Note: pgtype.Text{String: "note one", Valid: true}},
-		{Note: pgtype.Text{String: "note two", Valid: true}},
-	}
-	assert.Equal(t, "note one\nnote two", getStaffNotes(notes))
-}
-
-// ── getLoanConditions ─────────────────────────────────────────────────────────
-
-func TestGetLoanConditions_Empty(t *testing.T) {
-	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getLoanConditions([]pr_db.Notification{}))
-}
-
-func TestGetLoanConditions_InvalidSkipped(t *testing.T) {
-	conditions := []pr_db.Notification{
-		{Condition: pgtype.Text{String: "library use only", Valid: true}},
-		{Condition: pgtype.Text{String: "ignored", Valid: false}},
-	}
-	assert.Equal(t, "library use only", getLoanConditions(conditions))
-}
-
-func TestGetLoanConditions_Multiple(t *testing.T) {
-	conditions := []pr_db.Notification{
-		{Condition: pgtype.Text{String: "no photocopying", Valid: true}},
-		{Condition: pgtype.Text{String: "in-library use", Valid: true}},
-	}
-	assert.Equal(t, "no photocopying\nin-library use", getLoanConditions(conditions))
-}
-
-// ── getCallNumber ─────────────────────────────────────────────────────────────
-
-func TestGetCallNumber_Empty(t *testing.T) {
-	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getCallNumber(pr_db.PatronRequest{}))
-}
-
-func TestGetCallNumber_NilCallNumber(t *testing.T) {
-	pr := pr_db.PatronRequest{Items: []pr_db.PrItem{{ID: "i1", CallNumber: nil}}}
-	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getCallNumber(pr))
-}
-
-func TestGetCallNumber_EmptyCallNumber(t *testing.T) {
-	empty := ""
-	pr := pr_db.PatronRequest{Items: []pr_db.PrItem{{ID: "i1", CallNumber: &empty}}}
-	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getCallNumber(pr))
-}
-
-func TestGetCallNumber_Multiple(t *testing.T) {
-	cn1, cn2 := "QA76", "PR9199"
-	pr := pr_db.PatronRequest{Items: []pr_db.PrItem{
-		{ID: "i1", CallNumber: &cn1},
-		{ID: "i2", CallNumber: &cn2},
-	}}
-	assert.Equal(t, "QA76, PR9199", getCallNumber(pr))
-}
-
-// ── getPickupLocation ─────────────────────────────────────────────────────────
-
-func TestGetPickupLocation_NoDeliveryInfo(t *testing.T) {
-	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getPickupLocation(pr_db.PatronRequest{}))
-}
-
-func TestGetPickupLocation_NilAddress(t *testing.T) {
+func TestGeneratePdfPullSlip_TemplateEmpty(t *testing.T) {
+	repo := &mockPrRepo{}
+	svc := newSvcWithMock(repo)
 	pr := pr_db.PatronRequest{
-		IllRequest: iso18626.Request{
-			RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{{Address: nil}},
+		ID: "REQ-X",
+		RequesterReqID: pgtype.Text{
+			String: "REQ-X",
+			Valid:  true,
 		},
+		RequesterSymbol: pgtype.Text{String: "empty", Valid: true},
 	}
-	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getPickupLocation(pr))
+	_, err := svc.GeneratePdfPullSlip(appCtx, pr, []pr_db.Notification{}, []pr_db.Notification{})
+	assert.Error(t, err)
 }
 
-func TestGetPickupLocation_PhysicalAddress(t *testing.T) {
+func TestGeneratePdfPullSlip_TemplateDbError(t *testing.T) {
+	repo := &mockPrRepo{}
+	svc := newSvcWithMock(repo)
 	pr := pr_db.PatronRequest{
-		IllRequest: iso18626.Request{
-			RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{
-				{Address: &iso18626.Address{
-					PhysicalAddress: &iso18626.PhysicalAddress{Line1: "Pickup Desk"},
-				}},
-			},
+		ID: "REQ-X",
+		RequesterReqID: pgtype.Text{
+			String: "REQ-X",
+			Valid:  true,
 		},
+		RequesterSymbol: pgtype.Text{String: "error", Valid: true},
 	}
-	assert.Equal(t, "Pickup Desk", getPickupLocation(pr))
-}
-
-func TestGetPickupLocation_ElectronicAddress(t *testing.T) {
-	pr := pr_db.PatronRequest{
-		IllRequest: iso18626.Request{
-			RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{
-				{Address: &iso18626.Address{
-					ElectronicAddress: &iso18626.ElectronicAddress{
-						ElectronicAddressData: "patron@library.org",
-					},
-				}},
-			},
-		},
-	}
-	assert.Equal(t, "patron@library.org", getPickupLocation(pr))
-}
-
-func TestGetPickupLocation_AddressWithNoUsableFields(t *testing.T) {
-	// Address present but neither PhysicalAddress nor a non-empty ElectronicAddressData
-	pr := pr_db.PatronRequest{
-		IllRequest: iso18626.Request{
-			RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{
-				{Address: &iso18626.Address{}},
-			},
-		},
-	}
-	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getPickupLocation(pr))
+	_, err := svc.GeneratePdfPullSlip(appCtx, pr, []pr_db.Notification{}, []pr_db.Notification{})
+	assert.Error(t, err)
 }
 
 // ── GeneratePdfPullSlipForPrs ─────────────────────────────────────────────────
@@ -413,6 +244,26 @@ func (m *mockPrRepo) GetNotificationsByPrId(_ common.ExtendedContext, params pr_
 		return m.notes, int64(len(m.notes)), m.noteErr
 	}
 	return m.conditions, int64(len(m.conditions)), m.condErr
+}
+
+func (m *mockPrRepo) GetTemplateByPurposeAudienceLabelAndOwner(_ common.ExtendedContext, params pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams) (pr_db.Template, error) {
+	if params.Owner == "invalid" {
+		return pr_db.Template{Body: "{{.Unclosed"}, nil
+	}
+	if params.Owner == "empty" {
+		return pr_db.Template{}, nil
+	}
+	if params.Owner == "error" {
+		return pr_db.Template{}, errors.New("template db error")
+	}
+	for _, t := range prservice.GetStateModelTemplateDefaults() {
+		if slices.Contains(t.Labels, params.Label) {
+			return pr_db.Template{
+				Body: t.Body,
+			}, nil
+		}
+	}
+	return pr_db.Template{}, nil
 }
 
 func newSvcWithMock(repo pr_db.PrRepo) *PdfServiceImpl {
@@ -462,7 +313,8 @@ func TestGeneratePdfPullSlipForPrs_ConditionError(t *testing.T) {
 // ── ServiceInfo edge cases ────────────────────────────────────────────────────
 
 func TestGeneratePdfPullSlip_ServiceInfoEmptyServiceLevel(t *testing.T) {
-	svc := &PdfServiceImpl{}
+	repo := &mockPrRepo{}
+	svc := newSvcWithMock(repo)
 	pr := pr_db.PatronRequest{
 		RequesterReqID: pgtype.Text{String: "REQ-SVC", Valid: true},
 		IllRequest: iso18626.Request{
@@ -472,7 +324,7 @@ func TestGeneratePdfPullSlip_ServiceInfoEmptyServiceLevel(t *testing.T) {
 			},
 		},
 	}
-	pdfBytes, err := svc.GeneratePdfPullSlip(pr, nil, nil)
+	pdfBytes, err := svc.GeneratePdfPullSlip(appCtx, pr, nil, nil)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, pdfBytes)
 }

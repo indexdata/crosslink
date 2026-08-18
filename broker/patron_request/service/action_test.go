@@ -3785,6 +3785,8 @@ func TestCreateAndSendEmail(t *testing.T) {
 		Subject: pgtype.Text{String: "Your request", Valid: true},
 	}
 
+	pr := pr_db.PatronRequest{IllRequest: iso18626.Request{}}
+
 	tests := []struct {
 		name          string
 		from          string
@@ -3859,7 +3861,7 @@ func TestCreateAndSendEmail(t *testing.T) {
 			tc.setupEmail(mockEmail)
 			svc := newActionServiceWithEmail(mockPrRepo, mockEmail)
 
-			err := svc.createAndSendEmail(appCtx, symbol, tc.from, tc.recipients, label, audience)
+			err := svc.createAndSendEmail(appCtx, pr, symbol, tc.from, tc.recipients, label, audience)
 
 			if tc.wantErrSubstr == "" {
 				assert.NoError(t, err)

@@ -3,7 +3,6 @@ package sched_service
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/email"
@@ -134,15 +133,11 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 		pdfAttachment = &email.PdfAttach{Filename: "pull-slips.pdf", Data: pdfBytes}
 	}
 
-	placeholders := map[string]string{
-		"fullCount":   fmt.Sprintf("%d", fullCount),
-		"actualCount": fmt.Sprintf("%d", len(prs)),
-		"batchQuery":  event.EventData.BatchActionData.Selector,
-	}
+	placeholders := email.GetBatchEmailData(fullCount, len(prs), event.EventData.BatchActionData.Selector)
 	messageData := email.EmailData{
 		To:         emailData.To,
-		Subject:    renderEmailTemplate(template.Subject.String, placeholders),
-		Body:       renderEmailTemplate(template.Body, placeholders),
+		Subject:    email.RenderBatchEmailTemplate(template.Subject.String, placeholders),
+		Body:       email.RenderBatchEmailTemplate(template.Body, placeholders),
 		IsHTML:     template.ContentType == string(proapi.Html),
 		IncludePdf: emailData.IncludePdf,
 	}
@@ -157,13 +152,6 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 		return events.NewErrorResult("failed to send email via SMTP", err.Error())
 	}
 	return events.EventStatusSuccess, nil
-}
-
-func renderEmailTemplate(value string, placeholders map[string]string) string {
-	for key, replacement := range placeholders {
-		value = strings.ReplaceAll(value, "{{"+key+"}}", replacement)
-	}
-	return value
 }
 
 // extractEmailData retrieves email pullslip parameters from the event's CustomData map.

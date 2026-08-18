@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"html/template"
 	"mime"
 	"mime/multipart"
 	"mime/quotedprintable"
@@ -12,8 +13,13 @@ import (
 	"net/textproto"
 	"strings"
 
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 )
+
+const DEFAULT_FOR_NO_VALUE = "n/a"
+const DATE_LAYOUT = "2006-01-02"
 
 // Environment variables for SMTP configuration.
 var (
@@ -179,4 +185,204 @@ func joinAddresses(addrs []string) string {
 		result += a
 	}
 	return result
+}
+
+type PullSlipData struct {
+	BorrowerName     string
+	ReqId            string
+	PickupLocation   string
+	Title            string
+	Author           string
+	DueDate          string
+	ReturnAddress    string
+	BarcodeBase64    string
+	ServiceType      string
+	ServiceLevel     string
+	SystemIdentifier string
+	Publisher        string
+	Volume           string
+	Issue            string
+	Pages            string
+	StaffNotes       string
+	CallNumber       string
+	LoanConditions   string
+	PatronName       string
+	PatronSurname    string
+	PatronId         string
+}
+
+func GetPullSlipData(pr pr_db.PatronRequest, notes []pr_db.Notification, conditions []pr_db.Notification, barcodeData string) PullSlipData {
+	data := PullSlipData{
+		ReqId:            pr.RequesterReqID.String,
+		PickupLocation:   getPickupLocation(pr),
+		Title:            DEFAULT_FOR_NO_VALUE,
+		Author:           DEFAULT_FOR_NO_VALUE,
+		DueDate:          DEFAULT_FOR_NO_VALUE,
+		ReturnAddress:    DEFAULT_FOR_NO_VALUE,
+		BarcodeBase64:    barcodeData,
+		ServiceType:      DEFAULT_FOR_NO_VALUE,
+		ServiceLevel:     DEFAULT_FOR_NO_VALUE,
+		SystemIdentifier: DEFAULT_FOR_NO_VALUE,
+		Publisher:        DEFAULT_FOR_NO_VALUE,
+		Volume:           DEFAULT_FOR_NO_VALUE,
+		Issue:            DEFAULT_FOR_NO_VALUE,
+		Pages:            DEFAULT_FOR_NO_VALUE,
+		StaffNotes:       getStaffNotes(notes),
+		CallNumber:       getCallNumber(pr),
+		LoanConditions:   getLoanConditions(conditions),
+		PatronName:       DEFAULT_FOR_NO_VALUE,
+		PatronSurname:    DEFAULT_FOR_NO_VALUE,
+		PatronId:         DEFAULT_FOR_NO_VALUE,
+	}
+	if pr.IllRequest.BibliographicInfo.Author != "" {
+		data.Author = pr.IllRequest.BibliographicInfo.Author
+	}
+	if pr.IllRequest.BibliographicInfo.Title != "" {
+		data.Title = pr.IllRequest.BibliographicInfo.Title
+	}
+	if pr.IllRequest.BibliographicInfo.Volume != "" {
+		data.Volume = pr.IllRequest.BibliographicInfo.Volume
+	}
+	if pr.IllRequest.BibliographicInfo.Issue != "" {
+		data.Issue = pr.IllRequest.BibliographicInfo.Issue
+	}
+	if pr.IllRequest.BibliographicInfo.EstimatedNoPages != "" {
+		data.Pages = pr.IllRequest.BibliographicInfo.EstimatedNoPages
+	}
+	if pr.IllRequest.BibliographicInfo.SupplierUniqueRecordId != "" {
+		data.SystemIdentifier = pr.IllRequest.BibliographicInfo.SupplierUniqueRecordId
+	}
+	if pr.IllRequest.PublicationInfo != nil && pr.IllRequest.PublicationInfo.Publisher != "" {
+		data.Publisher = pr.IllRequest.PublicationInfo.Publisher
+	}
+	if pr.IllResponse.StatusInfo.DueDate != nil {
+		data.DueDate = pr.IllResponse.StatusInfo.DueDate.Format(DATE_LAYOUT)
+	}
+	if pr.IllResponse.ReturnInfo != nil && pr.IllResponse.ReturnInfo.PhysicalAddress != nil {
+		data.ReturnAddress = formatPhysicalAddress(pr.IllResponse.ReturnInfo.PhysicalAddress)
+	}
+	if pr.IllRequest.ServiceInfo != nil {
+		if pr.IllRequest.ServiceInfo.ServiceLevel != nil && pr.IllRequest.ServiceInfo.ServiceLevel.Text != "" {
+			data.ServiceLevel = pr.IllRequest.ServiceInfo.ServiceLevel.Text
+		}
+		if pr.IllRequest.ServiceInfo.ServiceType != "" {
+			data.ServiceType = string(pr.IllRequest.ServiceInfo.ServiceType)
+		}
+	}
+	if pr.IllRequest.PatronInfo != nil {
+		if pr.IllRequest.PatronInfo.PatronId != "" {
+			data.PatronId = pr.IllRequest.PatronInfo.PatronId
+		}
+		if pr.IllRequest.PatronInfo.GivenName != "" {
+			data.PatronName = pr.IllRequest.PatronInfo.GivenName
+		}
+		if pr.IllRequest.PatronInfo.Surname != "" {
+			data.PatronSurname = pr.IllRequest.PatronInfo.Surname
+		}
+	}
+	return data
+}
+
+func RenderPullSlipHTMLWithTemplate(data PullSlipData, templateBody string) (string, error) {
+	tmpl, err := template.New("pull-slip").Parse(templateBody)
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+func getStaffNotes(noteList []pr_db.Notification) string {
+	noteStrings := []string{}
+	for _, note := range noteList {
+		if note.Note.Valid {
+			noteStrings = append(noteStrings, note.Note.String)
+		}
+	}
+	notes := strings.Join(noteStrings, "\n")
+	if notes == "" {
+		return DEFAULT_FOR_NO_VALUE
+	}
+	return notes
+}
+
+func getLoanConditions(conditionList []pr_db.Notification) string {
+	conditionStrings := []string{}
+	for _, note := range conditionList {
+		if note.Condition.Valid {
+			conditionStrings = append(conditionStrings, note.Condition.String)
+		}
+	}
+	conditions := strings.Join(conditionStrings, "\n")
+	if conditions == "" {
+		return DEFAULT_FOR_NO_VALUE
+	}
+	return conditions
+}
+
+func getCallNumber(request pr_db.PatronRequest) string {
+	callNumberStrings := []string{}
+	for _, item := range request.Items {
+		if item.CallNumber != nil && *item.CallNumber != "" {
+			callNumberStrings = append(callNumberStrings, *item.CallNumber)
+		}
+	}
+	callNumber := strings.Join(callNumberStrings, ", ")
+	if callNumber == "" {
+		return DEFAULT_FOR_NO_VALUE
+	}
+	return callNumber
+}
+
+func getPickupLocation(request pr_db.PatronRequest) string {
+	if len(request.IllRequest.RequestedDeliveryInfo) > 0 && request.IllRequest.RequestedDeliveryInfo[0].Address != nil {
+		address := *request.IllRequest.RequestedDeliveryInfo[0].Address
+		if address.PhysicalAddress != nil {
+			return formatPhysicalAddress(address.PhysicalAddress)
+		} else if address.ElectronicAddress != nil && address.ElectronicAddress.ElectronicAddressData != "" {
+			return address.ElectronicAddress.ElectronicAddressData
+		}
+	}
+	return DEFAULT_FOR_NO_VALUE
+}
+
+func formatPhysicalAddress(a *iso18626.PhysicalAddress) string {
+	parts := []string{}
+	if a.Line1 != "" {
+		parts = append(parts, a.Line1)
+	}
+	if a.Line2 != "" {
+		parts = append(parts, a.Line2)
+	}
+	if a.Locality != "" {
+		parts = append(parts, a.Locality)
+	}
+	if a.PostalCode != "" {
+		parts = append(parts, a.PostalCode)
+	}
+	if a.Region != nil && a.Region.Text != "" {
+		parts = append(parts, a.Region.Text)
+	}
+	if a.Country != nil && a.Country.Text != "" {
+		parts = append(parts, a.Country.Text)
+	}
+	return strings.Join(parts, ", ")
+}
+
+func GetBatchEmailData(fullCount int64, actualCount int, batchQuery string) map[string]string {
+	return map[string]string{
+		"fullCount":   fmt.Sprintf("%d", fullCount),
+		"actualCount": fmt.Sprintf("%d", actualCount),
+		"batchQuery":  batchQuery,
+	}
+}
+
+func RenderBatchEmailTemplate(value string, placeholders map[string]string) string {
+	for key, replacement := range placeholders {
+		value = strings.ReplaceAll(value, "{{"+key+"}}", replacement)
+	}
+	return value
 }

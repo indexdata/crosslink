@@ -1711,7 +1711,7 @@ func (a *PatronRequestActionService) sendEmailNotification(ctx common.ExtendedCo
 			if len(recipients) == 0 {
 				result.Note = "no recipients found for patron"
 			} else {
-				sendErr := a.createAndSendEmail(ctx, symbol, from, recipients, *params.AutoActionParams.TemplateLabel, proapi.ModelActionParamsSendToPatron)
+				sendErr := a.createAndSendEmail(ctx, pr, symbol, from, recipients, *params.AutoActionParams.TemplateLabel, proapi.ModelActionParamsSendToPatron)
 				if sendErr != nil {
 					return logNotificationErrorAndReturnSuccess(ctx, pr, "error sending email to patron", sendErr)
 				}
@@ -1731,7 +1731,7 @@ func (a *PatronRequestActionService) sendEmailNotification(ctx common.ExtendedCo
 				}
 				result.Note += "no recipients found for staff"
 			} else {
-				sendErr := a.createAndSendEmail(ctx, symbol, from, recipients, *params.AutoActionParams.TemplateLabel, proapi.ModelActionParamsSendToStaff)
+				sendErr := a.createAndSendEmail(ctx, pr, symbol, from, recipients, *params.AutoActionParams.TemplateLabel, proapi.ModelActionParamsSendToStaff)
 				if sendErr != nil {
 					return logNotificationErrorAndReturnSuccess(ctx, pr, "error sending email to staff", sendErr)
 				}
@@ -1742,7 +1742,7 @@ func (a *PatronRequestActionService) sendEmailNotification(ctx common.ExtendedCo
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
 }
 
-func (a *PatronRequestActionService) createAndSendEmail(ctx common.ExtendedContext, symbol string, from string, recipients []string, label string, audience proapi.ModelActionParamsSendTo) error {
+func (a *PatronRequestActionService) createAndSendEmail(ctx common.ExtendedContext, pr pr_db.PatronRequest, symbol string, from string, recipients []string, label string, audience proapi.ModelActionParamsSendTo) error {
 	template, err := a.prRepo.GetTemplateByPurposeAudienceLabelAndOwner(ctx, pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams{
 		Purpose:  string(proapi.Email),
 		Owner:    symbol,
@@ -1752,10 +1752,27 @@ func (a *PatronRequestActionService) createAndSendEmail(ctx common.ExtendedConte
 	if err != nil {
 		return err
 	}
+	body := template.Body
+	if template.ContentType == string(proapi.Html) {
+		notes, _, ifErr := a.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{Limit: 100, Offset: 0, PrID: pr.ID, Kind: string(pr_db.NotificationKindNote)})
+		if ifErr != nil {
+			return ifErr
+		}
+		conditions, _, ifErr := a.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{Limit: 100, Offset: 0, PrID: pr.ID, Kind: string(pr_db.NotificationKindCondition)})
+		if ifErr != nil {
+			return ifErr
+		}
+		data := email.GetPullSlipData(pr, notes, conditions, email.DEFAULT_FOR_NO_VALUE)
+		html, ifErr := email.RenderPullSlipHTMLWithTemplate(data, template.Body)
+		if ifErr != nil {
+			return ifErr
+		}
+		body = html
+	}
 	emailData := email.EmailData{
 		To:         recipients,
 		Subject:    template.Subject.String,
-		Body:       template.Body,
+		Body:       body,
 		IsHTML:     template.ContentType == string(proapi.Html),
 		IncludePdf: false,
 	}

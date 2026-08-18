@@ -27,6 +27,14 @@ func (r *ActionMappingService) GetActionMapping(request iso18626.Request) (*Acti
 	return mapping, err
 }
 
+func (r *ActionMappingService) GetStateModelForRequest(request iso18626.Request) (*proapi.StateModel, error) {
+	name, _, err := r.ResolveActionMapping(request)
+	if err != nil {
+		return nil, err
+	}
+	return r.getStateModelService().GetStateModel(name)
+}
+
 // ResolveActionMapping selects the state model once and returns both the
 // persisted model key and the effective mapping for the request's service type.
 func (r *ActionMappingService) ResolveActionMapping(request iso18626.Request) (string, *ActionMapping, error) {
