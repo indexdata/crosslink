@@ -61,11 +61,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	}
 	// Every locate run builds a replacement rota. Retire any existing rota before
 	// lookup so all failure paths observe no selected supplier, while a new request
-	// simply performs a no-op update. Keep the existing count for unique ordinals.
-	existingSuppliers, _, err := s.illRepo.GetLocatedSuppliersByIllTransaction(ctx, illTrans.ID)
-	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "failed to count existing located suppliers", err)
-	}
+	// simply performs a no-op update.
 	if err = s.illRepo.SkipLocatedSuppliersByIllTransaction(ctx, illTrans.ID); err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to update existing located supplier status", err)
 	}
@@ -257,6 +253,12 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if len(potentialSuppliers) == 0 {
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no located suppliers match",
 			map[string]any{"holdings": holdingsLog, "directory": directoryLog, ROTA_INFO_KEY: rotaInfo})
+	}
+	// Start ordinal after all previous rota entries to avoid conflicts with the
+	// unique constraint on (ill_transaction_id, ordinal) when re-locating on retry.
+	existingSuppliers, _, err := s.illRepo.GetLocatedSuppliersByIllTransaction(ctx, illTrans.ID)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to count existing located suppliers", err)
 	}
 	var locatedSuppliers []*ill_db.LocatedSupplier
 	i := len(existingSuppliers)
