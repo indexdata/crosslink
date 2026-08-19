@@ -24,6 +24,7 @@ type retryRequestRepo struct {
 	selectedSupplier     ill_db.LocatedSupplier
 	savedSupplier        ill_db.LocatedSupplier
 	savedSupplierPresent bool
+	oldRotaRetired       bool
 }
 
 func (r *retryRequestRepo) WithTxFunc(ctx common.ExtendedContext, fn func(ill_db.IllRepo) error) error {
@@ -42,6 +43,11 @@ func (r *retryRequestRepo) SaveLocatedSupplier(ctx common.ExtendedContext, param
 	r.savedSupplier = ill_db.LocatedSupplier(params)
 	r.savedSupplierPresent = true
 	return r.savedSupplier, nil
+}
+
+func (r *retryRequestRepo) SkipLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) error {
+	r.oldRotaRetired = true
+	return nil
 }
 
 func TestHandleRetryRequestResetsReusedSelectedSupplierAttempt(t *testing.T) {
@@ -79,6 +85,7 @@ func TestHandleRetryRequestResetsReusedSelectedSupplierAttempt(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "transaction-id", id)
 	assert.False(t, lookupChanged)
+	assert.False(t, repo.oldRotaRetired)
 	if assert.True(t, repo.savedSupplierPresent) {
 		assert.Equal(t, ill_db.SupplierStateSelectedPg, repo.savedSupplier.SupplierStatus)
 		assert.False(t, repo.savedSupplier.LastStatus.Valid)
@@ -89,7 +96,7 @@ func TestHandleRetryRequestResetsReusedSelectedSupplierAttempt(t *testing.T) {
 	}
 }
 
-func TestHandleRetryRequestLeavesOldSupplierForChangedLookup(t *testing.T) {
+func TestHandleRetryRequestLeavesChangedLookupRotaForLocator(t *testing.T) {
 	repo := &retryRequestRepo{
 		transaction: ill_db.IllTransaction{
 			ID: "transaction-id",
@@ -118,6 +125,7 @@ func TestHandleRetryRequestLeavesOldSupplierForChangedLookup(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "transaction-id", id)
 	assert.True(t, lookupChanged)
+	assert.False(t, repo.oldRotaRetired)
 	assert.False(t, repo.savedSupplierPresent)
 }
 

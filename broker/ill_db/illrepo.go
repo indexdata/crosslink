@@ -31,6 +31,8 @@ type IllRepo interface {
 	ListPeers(ctx common.ExtendedContext, params ListPeersParams, cql *string) ([]Peer, int64, error)
 	DeletePeer(ctx common.ExtendedContext, id string) error
 	SaveLocatedSupplier(ctx common.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error)
+	SkipLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) error
+	SkipLocatedSuppliersByIllTransactionAndStatus(ctx common.ExtendedContext, id string, status pgtype.Text) error
 	GetLocatedSuppliersByIllTransactionAndStatus(ctx common.ExtendedContext, params GetLocatedSuppliersByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
 	GetLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) ([]LocatedSupplier, int64, error)
 	GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx common.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error)
@@ -177,6 +179,21 @@ func (r *PgIllRepo) DeletePeer(ctx common.ExtendedContext, id string) error {
 func (r *PgIllRepo) SaveLocatedSupplier(ctx common.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error) {
 	row, err := r.queries.SaveLocatedSupplier(ctx, r.GetConnOrTx(), params)
 	return row.LocatedSupplier, err
+}
+
+func (r *PgIllRepo) SkipLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) error {
+	return r.queries.UpdateLocatedSuppliersStatusByIllTransaction(ctx, r.GetConnOrTx(), UpdateLocatedSuppliersStatusByIllTransactionParams{
+		IllTransactionID: id,
+		SupplierStatus:   SupplierStateSkippedPg,
+	})
+}
+
+func (r *PgIllRepo) SkipLocatedSuppliersByIllTransactionAndStatus(ctx common.ExtendedContext, id string, status pgtype.Text) error {
+	return r.queries.UpdateLocatedSuppliersStatusByIllTransactionAndCurrentStatus(ctx, r.GetConnOrTx(), UpdateLocatedSuppliersStatusByIllTransactionAndCurrentStatusParams{
+		NewStatus:        SupplierStateSkippedPg,
+		IllTransactionID: id,
+		CurrentStatus:    status,
+	})
 }
 
 func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx common.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error) {

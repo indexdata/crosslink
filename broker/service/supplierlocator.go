@@ -59,6 +59,12 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
 	}
+	// Every locate run builds a replacement rota. Retire any existing rota before
+	// lookup so all failure paths observe no selected supplier, while a new request
+	// simply performs a no-op update.
+	if err = s.illRepo.SkipLocatedSuppliersByIllTransaction(ctx, illTrans.ID); err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to update existing located supplier status", err)
+	}
 	lookupParams := catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo)
 
 	requester, err := s.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
@@ -248,22 +254,11 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no located suppliers match",
 			map[string]any{"holdings": holdingsLog, "directory": directoryLog, ROTA_INFO_KEY: rotaInfo})
 	}
-	// Start ordinal from the count of existing suppliers to avoid conflicts with
-	// the unique constraint on (ill_transaction_id, ordinal) when re-locating on retry.
+	// Start ordinal after all previous rota entries to avoid conflicts with the
+	// unique constraint on (ill_transaction_id, ordinal) when re-locating on retry.
 	existingSuppliers, _, err := s.illRepo.GetLocatedSuppliersByIllTransaction(ctx, illTrans.ID)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to count existing located suppliers", err)
-	}
-	// mark all existing suppliers as skipped
-	for _, existing := range existingSuppliers {
-		if existing.SupplierStatus == ill_db.SupplierStateSkippedPg {
-			continue
-		}
-		existing.SupplierStatus = ill_db.SupplierStateSkippedPg
-		_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(existing))
-		if err != nil {
-			return events.LogErrorAndReturnResult(ctx, "failed to update existing located supplier status", err)
-		}
 	}
 	var locatedSuppliers []*ill_db.LocatedSupplier
 	i := len(existingSuppliers)
@@ -426,23 +421,11 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 }
 
 func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
-	suppliers, err := s.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
-		IllTransactionID: event.IllTransactionID,
-		SupplierStatus:   ill_db.SupplierStateSelectedPg,
-	})
+	err := s.illRepo.SkipLocatedSuppliersByIllTransactionAndStatus(ctx, event.IllTransactionID, ill_db.SupplierStateSelectedPg)
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "could not find selected suppliers", err)
+		return events.LogErrorAndReturnResult(ctx, "could not update previous selected supplier", err)
 	}
-	if len(suppliers) > 0 {
-		for _, supplier := range suppliers {
-			supplier.SupplierStatus = ill_db.SupplierStateSkippedPg
-			_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(supplier))
-			if err != nil {
-				return events.LogErrorAndReturnResult(ctx, "could not update previous selected supplier", err)
-			}
-		}
-	}
-	suppliers, err = s.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
+	suppliers, err := s.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
 		IllTransactionID: event.IllTransactionID,
 		SupplierStatus:   ill_db.SupplierStateNewPg,
 	})

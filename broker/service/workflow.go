@@ -285,23 +285,8 @@ func (w *WorkflowManager) shouldForwardMessage(ctx common.ExtendedContext, event
 }
 
 func (w *WorkflowManager) skipAllSuppliersByStatus(ctx common.ExtendedContext, illTransId string, supplierStatus pgtype.Text) {
-	suppliers, err := w.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
-		IllTransactionID: illTransId,
-		SupplierStatus:   supplierStatus,
-	})
-	if err != nil {
-		ctx.Logger().Error("could not read supplier", "error", err)
-		return
-	}
-	if len(suppliers) > 0 {
-		for _, supplier := range suppliers {
-			supplier.SupplierStatus = ill_db.SupplierStateSkippedPg
-			_, err = w.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(supplier))
-			if err != nil {
-				ctx.Logger().Error("could not update selected supplier status", "error", err)
-				return
-			}
-		}
+	if err := w.illRepo.SkipLocatedSuppliersByIllTransactionAndStatus(ctx, illTransId, supplierStatus); err != nil {
+		ctx.Logger().Error("could not update supplier status", "error", err)
 	}
 }
 
