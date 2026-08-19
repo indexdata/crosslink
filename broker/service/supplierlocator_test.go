@@ -440,6 +440,33 @@ func TestLocateSuppliersDeduplicatesHoldingSymbolsForDirectoryLookup(t *testing.
 	assert.Equal(t, [][]string{{"ISIL:SUP1", "ISIL:SUP2"}}, mockIllRepo.refreshSymbols)
 }
 
+func TestLocateSuppliersRetiresOldRotaBeforeNoHoldingsResult(t *testing.T) {
+	mockIllRepo := &MockIllRepoLocateSuppliers{
+		illTransaction: ill_db.IllTransaction{
+			ID:          "ill-1",
+			RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+			IllTransactionData: ill_db.IllTransactionData{
+				BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "not-found"},
+			},
+		},
+		requester: ill_db.Peer{ID: "requester-1"},
+		existingSuppliers: []ill_db.LocatedSupplier{{
+			ID:               "old-selected-supplier",
+			IllTransactionID: "ill-1",
+			SupplierStatus:   ill_db.SupplierStateSelectedPg,
+		}},
+	}
+	lookupAdapter := &catalog.MockLookupAdapter{}
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.MockDirectoryLookupAdapter), "", lookupAdapter, nil)
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.MockDirectoryLookupAdapter), lookupAdapterFactory)
+
+	status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+	assert.Equal(t, events.EventStatusProblem, status)
+	assert.True(t, mockIllRepo.oldRotaRetired)
+	assert.Equal(t, "no holdings located", result.Problem.Details)
+}
+
 func TestLocateSuppliersUsesFirstHoldingLocalIdentifierForDuplicateSymbol(t *testing.T) {
 	mockIllRepo := &MockIllRepoLocateSuppliers{
 		illTransaction: ill_db.IllTransaction{
@@ -604,6 +631,8 @@ type MockIllRepoLocateSuppliers struct {
 	mocks.MockIllRepositorySuccess
 	illTransaction        ill_db.IllTransaction
 	requester             ill_db.Peer
+	existingSuppliers     []ill_db.LocatedSupplier
+	oldRotaRetired        bool
 	peers                 []ill_db.Peer
 	peerSymbols           map[string][]ill_db.Symbol
 	refreshSymbols        [][]string
@@ -617,6 +646,15 @@ func (r *MockIllRepoLocateSuppliers) GetIllTransactionById(ctx common.ExtendedCo
 
 func (r *MockIllRepoLocateSuppliers) GetPeerById(ctx common.ExtendedContext, id string) (ill_db.Peer, error) {
 	return r.requester, nil
+}
+
+func (r *MockIllRepoLocateSuppliers) GetLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) ([]ill_db.LocatedSupplier, int64, error) {
+	return r.existingSuppliers, int64(len(r.existingSuppliers)), nil
+}
+
+func (r *MockIllRepoLocateSuppliers) SkipLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) error {
+	r.oldRotaRetired = true
+	return nil
 }
 
 func (r *MockIllRepoLocateSuppliers) GetCachedPeersBySymbols(ctx common.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string, error) {

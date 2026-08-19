@@ -11,6 +11,7 @@ import (
 	"github.com/indexdata/crosslink/broker/test/mocks"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -151,10 +152,6 @@ func TestRequesterMessageReceived_BrokerCancelSkipsNewSuppliers(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	eventBus := new(MockEventBus)
 	mockIllRepo := new(MockIllRepositoryRequester)
-	mockIllRepo.On("GetLocatedSuppliersByIllTransactionAndStatus", mock.Anything,
-		mock.MatchedBy(func(params ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams) bool {
-			return params.IllTransactionID == "1" && params.SupplierStatus == ill_db.SupplierStateNewPg
-		})).Return()
 	manager := CreateWorkflowManager(eventBus, mockIllRepo, WorkflowConfig{})
 
 	var message = iso18626.NewISO18626Message()
@@ -177,7 +174,10 @@ func TestRequesterMessageReceived_BrokerCancelSkipsNewSuppliers(t *testing.T) {
 		},
 	})
 
-	mockIllRepo.AssertNumberOfCalls(t, "GetLocatedSuppliersByIllTransactionAndStatus", 1)
+	if assert.Len(t, mockIllRepo.skippedByStatus, 1) {
+		assert.Equal(t, "1", mockIllRepo.skippedByStatus[0].IllTransactionID)
+		assert.Equal(t, ill_db.SupplierStateNewPg, mockIllRepo.skippedByStatus[0].SupplierStatus)
+	}
 	assert.Equal(t, 1, eventBus.TasksCreated)
 }
 
@@ -185,7 +185,6 @@ func TestRequesterMessageReceived_SupplierCancelDoesNotSkipNewSuppliers(t *testi
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	eventBus := new(MockEventBus)
 	mockIllRepo := new(MockIllRepositoryRequester)
-	mockIllRepo.On("GetLocatedSuppliersByIllTransactionAndStatus", mock.Anything, mock.Anything).Return()
 	manager := CreateWorkflowManager(eventBus, mockIllRepo, WorkflowConfig{})
 
 	var message = iso18626.NewISO18626Message()
@@ -208,7 +207,7 @@ func TestRequesterMessageReceived_SupplierCancelDoesNotSkipNewSuppliers(t *testi
 		},
 	})
 
-	mockIllRepo.AssertNumberOfCalls(t, "GetLocatedSuppliersByIllTransactionAndStatus", 0)
+	assert.Empty(t, mockIllRepo.skippedByStatus)
 	assert.Equal(t, 1, eventBus.TasksCreated)
 }
 func messageFromSam(sam *iso18626.SupplyingAgencyMessage) *iso18626.ISO18626Message {
@@ -415,18 +414,16 @@ func TestOnMessageRequesterComplete(t *testing.T) {
 			appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 			eventBus := new(MockEventBus)
 			mockIllRepo := new(MockIllRepositoryRequester)
-			mockIllRepo.On("GetLocatedSuppliersByIllTransactionAndStatus", mock.Anything, mock.Anything).Return()
 			manager := CreateWorkflowManager(eventBus, mockIllRepo, WorkflowConfig{})
 
 			manager.OnMessageRequesterComplete(appCtx, tt.event)
 
-			mockIllRepo.AssertNumberOfCalls(t, "GetLocatedSuppliersByIllTransactionAndStatus", len(tt.supplierStatuses))
-			for _, supplierStatus := range tt.supplierStatuses {
-				mockIllRepo.AssertCalled(t, "GetLocatedSuppliersByIllTransactionAndStatus", mock.Anything,
-					mock.MatchedBy(func(params ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams) bool {
-						return params.IllTransactionID == tt.event.IllTransactionID &&
-							params.SupplierStatus.String == supplierStatus
-					}))
+			assert.Empty(t, mockIllRepo.skippedAll)
+			if assert.Len(t, mockIllRepo.skippedByStatus, len(tt.supplierStatuses)) {
+				for i, supplierStatus := range tt.supplierStatuses {
+					assert.Equal(t, tt.event.IllTransactionID, mockIllRepo.skippedByStatus[i].IllTransactionID)
+					assert.Equal(t, supplierStatus, mockIllRepo.skippedByStatus[i].SupplierStatus.String)
+				}
 			}
 			assert.Equal(t, tt.broadcastCreated, eventBus.BroadcastCreated)
 			assert.Equal(t, tt.tasksCreated, eventBus.TasksCreated)
@@ -529,6 +526,8 @@ func (r *MockEventBus) GetLatestRequestEventByAction(ctx common.ExtendedContext,
 
 type MockIllRepositoryRequester struct {
 	mocks.MockIllRepositorySuccess
+	skippedAll      []string
+	skippedByStatus []ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams
 }
 
 func (r *MockIllRepositoryRequester) GetRequesterByIllTransactionId(ctx common.ExtendedContext, illTransactionId string) (ill_db.Peer, error) {
@@ -549,4 +548,17 @@ func (r *MockIllRepositoryRequester) GetLocatedSuppliersByIllTransactionAndStatu
 		SupplierStatus:   params.SupplierStatus,
 		SupplierID:       uuid.New().String(),
 	}}, nil
+}
+
+func (r *MockIllRepositoryRequester) SkipLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) error {
+	r.skippedAll = append(r.skippedAll, id)
+	return nil
+}
+
+func (r *MockIllRepositoryRequester) SkipLocatedSuppliersByIllTransactionAndStatus(ctx common.ExtendedContext, id string, status pgtype.Text) error {
+	r.skippedByStatus = append(r.skippedByStatus, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
+		IllTransactionID: id,
+		SupplierStatus:   status,
+	})
+	return nil
 }
