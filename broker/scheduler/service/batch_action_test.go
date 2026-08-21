@@ -427,7 +427,7 @@ func TestRequestAging_FailsIfNoClosingActionForState(t *testing.T) {
 	assert.Equal(t, events.EventStatusError, status)
 	assert.NotNil(t, result)
 	assert.Equal(t, "processed patron request count: 2, failed: 1 with ids and errors in custom data", result.Note)
-	assert.Equal(t, "could not find closing action for patron request state: SHIPPED within state model: CrossLink Returnables State Model", result.CustomData["lending-1"])
+	assert.Equal(t, "could not find closing action for patron request state: SHIPPED within state model: CrossLink State Model", result.CustomData["lending-1"])
 	assert.Len(t, eventBus.createTaskCalls, 1)
 }
 

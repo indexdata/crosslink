@@ -683,6 +683,39 @@ func TestHandleSupplyingAgencyMessageLoanCompleted(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestHandleSupplyingAgencyMessageCopyCompleted(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+	deliveryURL := "https://example.com/document/123"
+
+	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
+		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCopyCompleted},
+		DeliveryInfo: &iso18626.DeliveryInfo{
+			ItemId:  deliveryURL,
+			SentVia: &iso18626.TypeSchemeValuePair{Text: string(iso18626.SentViaUrl)},
+		},
+	}, pr_db.PatronRequest{
+		IllRequest: iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopy}},
+		State:      BorrowerStateWillSupply,
+		Side:       SideBorrowing,
+	})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.NoError(t, err)
+	assert.Equal(t, BorrowerStateCompleted, mockPrRepo.savedPr.State)
+	assert.True(t, mockPrRepo.savedPr.TerminalState)
+	if assert.NotNil(t, mockPrRepo.savedPr.IllResponse.DeliveryInfo) {
+		assert.Equal(t, deliveryURL, mockPrRepo.savedPr.IllResponse.DeliveryInfo.ItemId)
+	}
+}
+
 func TestHandleSupplyingAgencyMessageUnfilled(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))

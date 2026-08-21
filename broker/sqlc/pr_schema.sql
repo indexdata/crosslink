@@ -24,7 +24,7 @@ CREATE TABLE patron_request
     next_req_id         VARCHAR,
     prev_req_id         VARCHAR,
     retry_bib_info       JSONB,
-    state_model         VARCHAR NOT NULL DEFAULT 'returnables'
+    state_model         VARCHAR NOT NULL DEFAULT 'default'
 );
 
 CREATE OR REPLACE FUNCTION get_next_hrid(prefix VARCHAR) RETURNS VARCHAR AS $$

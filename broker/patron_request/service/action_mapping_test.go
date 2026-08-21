@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewReturnableActionMapping(t *testing.T) {
+func TestNewDefaultLoanActionMapping(t *testing.T) {
 	borrowerStateActionMapping := map[pr_db.PatronRequestState][]PatronRequestAction{
 		BorrowerStateNew:              {{actionName: BorrowerActionValidatePatron, auto: true}, {actionName: BorrowerActionSkipPatronValidation}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateInvalidPatron:    {{actionName: BorrowerActionValidatePatron}, {actionName: BorrowerActionSkipPatronValidation}, {actionName: BorrowerActionCloseRequest}},
@@ -43,15 +43,15 @@ func TestNewReturnableActionMapping(t *testing.T) {
 		LenderStateCancelRequested:   {{actionName: LenderActionAcceptCancel}, {actionName: LenderActionRejectCancel}},
 	}
 
-	stateModel, err := LoadStateModelByName("returnables")
+	stateModel, err := LoadStateModelByName("default")
 	assert.Nil(t, err)
-	returnableActionMapping := NewActionMapping(stateModel)
+	loanActionMapping := NewActionMappingForServiceType(stateModel, proapi.Loan)
 
-	assert.NotNil(t, returnableActionMapping)
+	assert.NotNil(t, loanActionMapping)
 
-	mapCompare(t, borrowerStateActionMapping, returnableActionMapping.borrowerStateActionMapping)
+	mapCompare(t, borrowerStateActionMapping, loanActionMapping.borrowerStateActionMapping)
 
-	mapCompare(t, lenderStateActionMapping, returnableActionMapping.lenderStateActionMapping)
+	mapCompare(t, lenderStateActionMapping, loanActionMapping.lenderStateActionMapping)
 }
 
 var actionMappingService = ActionMappingService{}
@@ -66,7 +66,7 @@ func mustActionMapping(t *testing.T) *ActionMapping {
 	return mapping
 }
 
-func TestGetStateModelForRequestUsesSelector(t *testing.T) {
+func TestResolveActionMappingUsesSelector(t *testing.T) {
 	service := ActionMappingService{}
 
 	for _, serviceType := range []iso18626.TypeServiceType{
@@ -75,41 +75,130 @@ func TestGetStateModelForRequestUsesSelector(t *testing.T) {
 		iso18626.TypeServiceTypeCopyOrLoan,
 	} {
 		t.Run(string(serviceType), func(t *testing.T) {
-			model, err := service.GetStateModelForRequest(iso18626.Request{
+			name, mapping, err := service.ResolveActionMapping(iso18626.Request{
 				ServiceInfo: &iso18626.ServiceInfo{ServiceType: serviceType},
 			})
 			assert.NoError(t, err)
-			if assert.NotNil(t, model) {
-				assert.Equal(t, "CrossLink Returnables State Model", model.Name)
+			assert.Equal(t, "default", name)
+			if assert.NotNil(t, mapping) {
+				assert.Equal(t, "CrossLink State Model", mapping.StateModelName)
 			}
 		})
 	}
 }
 
-func TestGetStateModelNameForRequestUsesSelector(t *testing.T) {
-	name, err := (&ActionMappingService{}).GetStateModelNameForRequest(iso18626.Request{
-		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
-	})
+func TestResolveActionMappingWithoutServiceInfoUsesLegacyLoanDefault(t *testing.T) {
+	name, mapping, err := (&ActionMappingService{}).ResolveActionMapping(iso18626.Request{})
 
 	assert.NoError(t, err)
-	assert.Equal(t, "returnables", name)
-}
-
-func TestGetStateModelForRequestWithoutServiceInfoUsesOnlyConfiguredModel(t *testing.T) {
-	model, err := (&ActionMappingService{}).GetStateModelForRequest(iso18626.Request{})
-
-	assert.NoError(t, err)
-	if assert.NotNil(t, model) {
-		assert.Equal(t, "CrossLink Returnables State Model", model.Name)
+	assert.Equal(t, "default", name)
+	if assert.NotNil(t, mapping) {
+		willSupply := pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}
+		assert.True(t, mapping.IsActionSupported(willSupply, LenderActionShip))
+		assert.False(t, mapping.IsActionSupported(willSupply, LenderActionSupplyDocument))
 	}
 }
 
-func TestGetStateModelForRequestWithoutMatch(t *testing.T) {
-	model, err := (&ActionMappingService{}).GetStateModelForRequest(iso18626.Request{
+func TestGetActionMappingAppliesServiceType(t *testing.T) {
+	service := &ActionMappingService{SMService: &StateModelService{}}
+	copyRequest := iso18626.Request{
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopy},
+	}
+	copyMapping, err := service.GetActionMapping(copyRequest)
+	assert.NoError(t, err)
+	loanMapping, err := service.GetActionMapping(iso18626.Request{
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
+	})
+	assert.NoError(t, err)
+	cachedCopyMapping, err := service.GetActionMapping(copyRequest)
+	assert.NoError(t, err)
+	assert.Same(t, copyMapping, cachedCopyMapping)
+	assert.NotSame(t, copyMapping, loanMapping)
+	copyOrLoanMapping, err := service.GetActionMapping(iso18626.Request{
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopyOrLoan},
+	})
+	assert.NoError(t, err)
+
+	willSupply := pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}
+	assert.True(t, copyMapping.IsActionSupported(willSupply, LenderActionSupplyDocument))
+	assert.False(t, copyMapping.IsActionSupported(willSupply, LenderActionShip))
+	assert.True(t, copyMapping.IsActionSupported(willSupply, LenderActionAddCondition), "an action without appliesTo must apply to Copy")
+	assert.True(t, loanMapping.IsActionSupported(willSupply, LenderActionShip))
+	assert.False(t, loanMapping.IsActionSupported(willSupply, LenderActionSupplyDocument))
+	assert.True(t, copyOrLoanMapping.IsActionSupported(willSupply, LenderActionShip))
+	assert.True(t, copyOrLoanMapping.IsActionSupported(willSupply, LenderActionSupplyDocument))
+
+	localSupply := pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateLocalSupply}
+	assert.True(t, copyMapping.IsActionSupported(localSupply, BorrowerActionSupplyDocument))
+	assert.False(t, copyMapping.IsActionSupported(localSupply, BorrowerActionFillLocally))
+	assert.True(t, loanMapping.IsActionSupported(localSupply, BorrowerActionFillLocally))
+	assert.False(t, loanMapping.IsActionSupported(localSupply, BorrowerActionSupplyDocument))
+	assert.True(t, copyOrLoanMapping.IsActionSupported(localSupply, BorrowerActionFillLocally))
+	assert.True(t, copyOrLoanMapping.IsActionSupported(localSupply, BorrowerActionSupplyDocument))
+
+	_, copyHasShippedState := copyMapping.getStateConfig(pr_db.PatronRequest{Side: SideLending, State: LenderStateShipped})
+	_, loanHasShippedState := loanMapping.getStateConfig(pr_db.PatronRequest{Side: SideLending, State: LenderStateShipped})
+	assert.False(t, copyHasShippedState)
+	assert.True(t, loanHasShippedState)
+
+	copyActions := copyMapping.GetAllowedActionsForPatronRequest(willSupply, true)
+	supplyDocumentIndex := slices.IndexFunc(copyActions.Actions, func(action proapi.AllowedAction) bool {
+		return action.Name == string(LenderActionSupplyDocument)
+	})
+	if assert.NotEqual(t, -1, supplyDocumentIndex) {
+		assert.NotNil(t, copyActions.Actions[supplyDocumentIndex].Primary)
+		assert.True(t, *copyActions.Actions[supplyDocumentIndex].Primary)
+		assert.Equal(t, []string{"note", "deliveryUrl"}, copyActions.Actions[supplyDocumentIndex].Parameters)
+	}
+
+	copyOrLoanActions := copyOrLoanMapping.GetAllowedActionsForPatronRequest(willSupply, true)
+	shipIndex := slices.IndexFunc(copyOrLoanActions.Actions, func(action proapi.AllowedAction) bool {
+		return action.Name == string(LenderActionShip)
+	})
+	supplyDocumentIndex = slices.IndexFunc(copyOrLoanActions.Actions, func(action proapi.AllowedAction) bool {
+		return action.Name == string(LenderActionSupplyDocument)
+	})
+	if assert.NotEqual(t, -1, shipIndex) {
+		assert.NotNil(t, copyOrLoanActions.Actions[shipIndex].Primary)
+		assert.True(t, *copyOrLoanActions.Actions[shipIndex].Primary)
+	}
+	if assert.NotEqual(t, -1, supplyDocumentIndex) {
+		assert.Nil(t, copyOrLoanActions.Actions[supplyDocumentIndex].Primary)
+	}
+
+	copyLocalActions := copyMapping.GetAllowedActionsForPatronRequest(localSupply, true)
+	localSupplyDocumentIndex := slices.IndexFunc(copyLocalActions.Actions, func(action proapi.AllowedAction) bool {
+		return action.Name == string(BorrowerActionSupplyDocument)
+	})
+	if assert.NotEqual(t, -1, localSupplyDocumentIndex) {
+		assert.NotNil(t, copyLocalActions.Actions[localSupplyDocumentIndex].Primary)
+		assert.True(t, *copyLocalActions.Actions[localSupplyDocumentIndex].Primary)
+		assert.Equal(t, []string{"note", "deliveryUrl"}, copyLocalActions.Actions[localSupplyDocumentIndex].Parameters)
+	}
+
+	copyOrLoanLocalActions := copyOrLoanMapping.GetAllowedActionsForPatronRequest(localSupply, true)
+	fillLocallyIndex := slices.IndexFunc(copyOrLoanLocalActions.Actions, func(action proapi.AllowedAction) bool {
+		return action.Name == string(BorrowerActionFillLocally)
+	})
+	localSupplyDocumentIndex = slices.IndexFunc(copyOrLoanLocalActions.Actions, func(action proapi.AllowedAction) bool {
+		return action.Name == string(BorrowerActionSupplyDocument)
+	})
+	if assert.NotEqual(t, -1, fillLocallyIndex) {
+		assert.NotNil(t, copyOrLoanLocalActions.Actions[fillLocallyIndex].Primary)
+		assert.True(t, *copyOrLoanLocalActions.Actions[fillLocallyIndex].Primary)
+	}
+	if assert.NotEqual(t, -1, localSupplyDocumentIndex) {
+		assert.Nil(t, copyOrLoanLocalActions.Actions[localSupplyDocumentIndex].Primary)
+	}
+}
+
+func TestResolveActionMappingWithoutMatch(t *testing.T) {
+	name, mapping, err := (&ActionMappingService{}).ResolveActionMapping(iso18626.Request{
 		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceType("Unsupported")},
 	})
 
-	assert.Nil(t, model)
+	assert.Empty(t, name)
+	assert.Nil(t, mapping)
 	assert.EqualError(t, err, `no state model matches service type "Unsupported"`)
 }
 
@@ -177,7 +266,7 @@ func TestGetManualCloseState(t *testing.T) {
 
 func TestGetManualCloseStateMissing(t *testing.T) {
 	tt := true
-	mapping := NewActionMapping(&proapi.StateModel{
+	mapping := NewActionMappingForServiceType(&proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
 		Version: "1.0.0",
@@ -188,7 +277,7 @@ func TestGetManualCloseStateMissing(t *testing.T) {
 				Terminal: &tt,
 			},
 		},
-	})
+	}, proapi.Loan)
 
 	_, ok := mapping.GetManualCloseState(pr_db.PatronRequest{Side: SideBorrowing})
 	assert.False(t, ok)

@@ -268,6 +268,9 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 		setSupplierMessage(sam, &pr)
 		eventName = SupplierLoaned
 	case iso18626.TypeStatusLoanCompleted, iso18626.TypeStatusCopyCompleted:
+		if sam.StatusInfo.Status == iso18626.TypeStatusCopyCompleted {
+			setSupplierMessage(sam, &pr)
+		}
 		eventName = SupplierCompleted
 		if isLocalSupply(pr, supSymbol) {
 			eventName = SupplierCompletedLocal
@@ -429,7 +432,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessageWithPeer(ctx common.Ex
 			})
 		return status, response, existingPr, handleErr
 	}
-	stateModelName, err := m.actionMappingService.GetStateModelNameForRequest(request)
+	stateModelName, actionMapping, err := m.actionMappingService.ResolveActionMapping(request)
 	if err != nil {
 		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
@@ -437,15 +440,6 @@ func (m *PatronRequestMessageHandler) handleRequestMessageWithPeer(ctx common.Ex
 		}, err)
 		return status, response, pr_db.PatronRequest{}, handleErr
 	}
-	stateModel, err := m.actionMappingService.GetStateModel(stateModelName)
-	if err != nil {
-		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
-			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
-			ErrorValue: err.Error(),
-		}, err)
-		return status, response, pr_db.PatronRequest{}, handleErr
-	}
-	actionMapping := NewActionMapping(stateModel)
 	lenderInitialState, ok := actionMapping.GetInitialState(SideLending)
 	if !ok {
 		internalErr := fmt.Errorf("no initial state defined for lender side")

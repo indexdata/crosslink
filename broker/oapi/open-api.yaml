@@ -770,6 +770,15 @@ components:
         - type
         - version
 
+    StateModelServiceType:
+      title: StateModelServiceType
+      type: string
+      description: ISO 18626 service type used by state-model selection and applicability rules
+      enum:
+        - Copy
+        - Loan
+        - CopyOrLoan
+
     StateModelSelector:
       title: StateModelSelector
       type: object
@@ -782,13 +791,25 @@ components:
           minItems: 1
           uniqueItems: true
           items:
-            type: string
-            enum:
-              - Copy
-              - Loan
-              - CopyOrLoan
+            $ref: '#/components/schemas/StateModelServiceType'
       required:
         - serviceType
+
+    AppliesTo:
+      title: AppliesTo
+      type: object
+      description: Criteria determining whether a state, action, or event applies to a request. When omitted, the element applies to all requests.
+      additionalProperties: false
+      properties:
+        serviceTypes:
+          type: array
+          description: ISO 18626 service types for which this element applies
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/StateModelServiceType'
+      required:
+        - serviceTypes
 
     StateModelCapabilities:
       title: StateModelCapabilities
@@ -872,14 +893,16 @@ components:
           enum:
             - REQUESTER
             - SUPPLIER
+        appliesTo:
+          $ref: '#/components/schemas/AppliesTo'
         initial:
           type: boolean
           description: Indicates if the state is the initial state of the request
           default: false
         primaryAction:
           type: string
-          description: Name of the primary action for this state.
-            Must be one of the actions defined in the actions array and is only meaningful when actions is present.
+          description: Name of the unconditional primary action for this state.
+            Must be one of the actions defined in the actions array. Use primaryFor on individual actions when the primary action varies by service type.
         closingAction:
           type: string
           description: Name of the closing action for this state.
@@ -937,6 +960,12 @@ components:
             - auto
             - manual
           default: manual
+        appliesTo:
+          $ref: '#/components/schemas/AppliesTo'
+        primaryFor:
+          allOf:
+            - $ref: '#/components/schemas/AppliesTo'
+          description: Makes this the primary action for the selected service types. At most one applicable action may be primary for a service type in a state.
         transitions:
           type: object
           description: Action outcome to state transition mapping. When no transition is defined, the action is considered to be non-state-changing.
@@ -985,6 +1014,8 @@ components:
         desc:
           type: string
           description: Description of the event
+        appliesTo:
+          $ref: '#/components/schemas/AppliesTo'
         transition:
           type: string
           description: State transition after event has occurred. When no transition is defined, the event is considered to be non-state-changing.

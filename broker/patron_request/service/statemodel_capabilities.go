@@ -79,6 +79,7 @@ const (
 	BorrowerActionRejectRetry          pr_db.PatronRequestAction = "reject-retry"
 	BorrowerActionSendNotification     pr_db.PatronRequestAction = "send-notification"
 	BorrowerActionFillLocally          pr_db.PatronRequestAction = "fill-locally"
+	BorrowerActionSupplyDocument       pr_db.PatronRequestAction = "supply-document"
 	BorrowerActionCancelLocalSupply    pr_db.PatronRequestAction = "cancel-local-supply"
 	BorrowerActionCannotSupplyLocally  pr_db.PatronRequestAction = "cannot-supply-locally"
 	BorrowerActionSkipPatronValidation pr_db.PatronRequestAction = "skip-patron-validation"
@@ -90,6 +91,7 @@ const (
 	LenderActionCannotSupply           pr_db.PatronRequestAction = "cannot-supply"
 	LenderActionAddCondition           pr_db.PatronRequestAction = "add-condition"
 	LenderActionShip                   pr_db.PatronRequestAction = "ship"
+	LenderActionSupplyDocument         pr_db.PatronRequestAction = "supply-document"
 	LenderActionMarkReceived           pr_db.PatronRequestAction = "mark-received"
 	LenderActionAcceptCancel           pr_db.PatronRequestAction = "accept-cancel"
 	LenderActionAskRetry               pr_db.PatronRequestAction = "ask-retry"
@@ -224,6 +226,13 @@ func requesterBuiltInActions() []proapi.ActionCapability {
 			Parameters: []string{},
 		},
 		{
+			Name: string(BorrowerActionSupplyDocument),
+			Parameters: []string{
+				"note",
+				"deliveryUrl",
+			},
+		},
+		{
 			Name:       string(BorrowerActionCancelLocalSupply),
 			Parameters: []string{},
 		},
@@ -309,6 +318,13 @@ func supplierBuiltInActions() []proapi.ActionCapability {
 			Name: string(LenderActionShip),
 			Parameters: []string{
 				"note",
+			},
+		},
+		{
+			Name: string(LenderActionSupplyDocument),
+			Parameters: []string{
+				"note",
+				"deliveryUrl",
 			},
 		},
 		{

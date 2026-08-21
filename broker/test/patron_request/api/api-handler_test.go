@@ -25,6 +25,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
+	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
@@ -112,7 +113,7 @@ func TestCrud(t *testing.T) {
 			ServiceLevel: &iso18626.TypeSchemeValuePair{
 				Text: "Copy",
 			},
-			ServiceType: iso18626.TypeServiceTypeCopy,
+			ServiceType: iso18626.TypeServiceTypeLoan,
 			NeedBeforeDate: &utils.XSDDateTime{
 				Time: time.Now().Add(24 * time.Hour),
 			},
@@ -144,7 +145,7 @@ func TestCrud(t *testing.T) {
 
 	assert.Equal(t, *newPr.Id, foundPr.Id)
 	assert.True(t, foundPr.State != "")
-	assert.Equal(t, "returnables", foundPr.StateModel)
+	assert.Equal(t, "default", foundPr.StateModel)
 	assert.Equal(t, string(prservice.SideBorrowing), foundPr.Side)
 	if !assert.NotNil(t, foundPr.RequesterSymbol) {
 		t.FailNow()
@@ -248,7 +249,7 @@ func TestCrud(t *testing.T) {
 		respBytes = httpRequest(t, "GET", basePath+queryParams+"&cql=state%3DSHIPPED%20and%20"+
 			"side%3Dborrowing%20and%20requester_symbol%3D"+*foundPr.RequesterSymbol+
 			"%20and%20requester_req_id%3D"+*foundPr.RequesterRequestId+"%20and%20has_cost%3Dfalse%20and%20"+
-			"service_type%3DCopy%20and%20service_level%3DCopy%20and%20created_at%3E2026-03-16%20and%20needed_at%3E2026-03-16"+
+			"service_type%3DLoan%20and%20service_level%3DCopy%20and%20created_at%3E2026-03-16%20and%20needed_at%3E2026-03-16"+
 			"%20and%20title%3D%22Typed%20request%20round%20trip%22%20and%20patron%3Dp1%20and%20cql.serverChoice%20all%20round%20and%20"+
 			"terminal_state%3Dfalse%20and%20title%20%3D%20trip%20and%20author%20%3D%20john%20and%20updated_at%3E2026-03-16%20and%20"+
 			"given_name%20%3D%20john%20and%20surname%20%3D%20wick%20sortby%20created_at%2Fsort.descending", []byte{}, 200)
@@ -443,7 +444,7 @@ func TestNeedsReviewAndUpdate(t *testing.T) {
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err)
 	assert.Equal(t, string(prservice.BorrowerStateNeedsReview), foundPr.State)
-	assert.Equal(t, "returnables", foundPr.StateModel)
+	assert.Equal(t, "default", foundPr.StateModel)
 	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
 		assert.Equal(t, "Updated title, still no item ID", r.BibliographicInfo.Title)
 		assert.Empty(t, r.BibliographicInfo.SupplierUniqueRecordId)
@@ -469,7 +470,7 @@ func TestNeedsReviewAndUpdate(t *testing.T) {
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err)
 	assert.Equal(t, string(prservice.BorrowerStateNeedsReview), foundPr.State)
-	assert.Equal(t, "returnables", foundPr.StateModel)
+	assert.Equal(t, "default", foundPr.StateModel)
 	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
 		assert.Equal(t, "WILLSUPPLY_LOANED", r.BibliographicInfo.SupplierUniqueRecordId)
 	})
@@ -536,7 +537,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	assert.NoError(t, err, "failed to unmarshal patron request")
 
 	assert.Equal(t, strings.ToUpper(strings.Split(requesterSymbol, ":")[1]+"-1"), foundPr.Id)
-	assert.Equal(t, "returnables", foundPr.StateModel)
+	assert.Equal(t, "default", foundPr.StateModel)
 	requesterPrPath := basePath + "/" + foundPr.Id
 	queryParams := "?side=borrowing&symbol=" + *foundPr.RequesterSymbol
 
@@ -776,6 +777,83 @@ func TestActionsToCompleteState(t *testing.T) {
 	assert.NoError(t, err, "failed to unmarshal patron request events")
 	assert.True(t, len(events.Items) > 5)
 	assert.Equal(t, int64(len(events.Items)), events.About.Count)
+}
+
+func TestCopySupplyDocumentCompletesRequesterAndSupplier(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	requesterSymbol := "ISIL:REQ" + uuid.NewString()
+	supplierSymbol := "ISIL:SUP" + uuid.NewString()
+
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink, dirapi.Entry{}, requesterSymbol)
+	require.NotNil(t, reqPeer)
+	supPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink, dirapi.Entry{}, supplierSymbol)
+	require.NotNil(t, supPeer)
+
+	request := iso18626.Request{
+		BibliographicInfo: iso18626.BibliographicInfo{
+			SupplierUniqueRecordId: "return-" + supplierSymbol + "::COPY-DOCUMENT",
+			Title:                  "Copy delivery integration test",
+		},
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopy},
+	}
+	patron := "p1"
+	requestBytes, err := json.Marshal(proapi.CreatePatronRequest{
+		RequesterSymbol: &requesterSymbol,
+		Patron:          &patron,
+		IllRequest:      request,
+	})
+	require.NoError(t, err)
+
+	responseBytes := httpRequest(t, "POST", basePath, requestBytes, http.StatusCreated)
+	var requesterPr proapi.PatronRequest
+	require.NoError(t, json.Unmarshal(responseBytes, &requesterPr))
+	requesterPath := basePath + "/" + requesterPr.Id
+	requesterParams := "?side=borrowing&symbol=" + requesterSymbol
+
+	require.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		supplierPr, lookupErr := prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(appCtx, supplierSymbol, requesterPr.Id)
+		return lookupErr == nil && supplierPr.ID != ""
+	}), "timed out waiting for supplier patron request")
+	supplierPr, err := prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(appCtx, supplierSymbol, requesterPr.Id)
+	require.NoError(t, err)
+	supplierPath := basePath + "/" + supplierPr.ID
+	supplierParams := "?side=lending&symbol=" + supplierSymbol
+
+	require.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		responseBytes = httpRequest(t, "GET", supplierPath+"/actions"+supplierParams, nil, http.StatusOK)
+		return strings.Contains(string(responseBytes), `"name":"`+string(prservice.LenderActionSupplyDocument)+`"`)
+	}), "timed out waiting for supply-document action")
+
+	deliveryURL := "https://documents.example.org/requests/" + requesterPr.Id
+	actionParams := map[string]any{"deliveryUrl": deliveryURL, "note": "Document ready"}
+	actionBytes, err := json.Marshal(proapi.ExecuteAction{
+		Action:       string(prservice.LenderActionSupplyDocument),
+		ActionParams: &actionParams,
+	})
+	require.NoError(t, err)
+	responseBytes = httpRequest(t, "POST", supplierPath+"/action"+supplierParams, actionBytes, http.StatusOK)
+	var actionResult proapi.ActionResult
+	require.NoError(t, json.Unmarshal(responseBytes, &actionResult))
+	assert.Equal(t, string(events.EventStatusSuccess), actionResult.Result)
+
+	require.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		responseBytes = httpRequest(t, "GET", requesterPath+requesterParams, nil, http.StatusOK)
+		if json.Unmarshal(responseBytes, &requesterPr) != nil {
+			return false
+		}
+		return requesterPr.State == string(prservice.BorrowerStateCompleted)
+	}), "timed out waiting for requester Copy completion")
+	assert.True(t, requesterPr.TerminalState)
+	if assert.NotNil(t, requesterPr.IllResponse) && assert.NotNil(t, requesterPr.IllResponse.DeliveryInfo) {
+		assert.Equal(t, deliveryURL, requesterPr.IllResponse.DeliveryInfo.ItemId)
+		assert.Equal(t, string(iso18626.SentViaUrl), requesterPr.IllResponse.DeliveryInfo.SentVia.Text)
+	}
+
+	responseBytes = httpRequest(t, "GET", supplierPath+supplierParams, nil, http.StatusOK)
+	var completedSupplierPr proapi.PatronRequest
+	require.NoError(t, json.Unmarshal(responseBytes, &completedSupplierPr))
+	assert.Equal(t, string(prservice.LenderStateCompleted), completedSupplierPr.State)
+	assert.True(t, completedSupplierPr.TerminalState)
 }
 
 func TestRejectRetry(t *testing.T) {
@@ -1075,15 +1153,24 @@ func TestPostPatronRequestRejectsInvalidIllRequest(t *testing.T) {
 	assert.Contains(t, string(respBytes), "ServiceType")
 }
 
-func TestGetReturnableStateModel(t *testing.T) {
-	respBytes := httpRequest(t, "GET", "/state_model/models/returnables", []byte{}, 200)
+func TestGetDefaultStateModel(t *testing.T) {
+	respBytes := httpRequest(t, "GET", "/state_model/models/default", []byte{}, 200)
 	var retrievedStateModel proapi.StateModel
 	err := json.Unmarshal(respBytes, &retrievedStateModel)
 	assert.NoError(t, err, "failed to unmarshal state model")
-	returnablesStateModel, _ := prservice.LoadStateModelByName("returnables")
-	assert.Equal(t, returnablesStateModel.Name, retrievedStateModel.Name)
-	assert.Equal(t, returnablesStateModel.Desc, retrievedStateModel.Desc)
-	assert.Equal(t, len(returnablesStateModel.States), len(retrievedStateModel.States))
+	defaultStateModel, _ := prservice.LoadStateModelByName("default")
+	assert.Equal(t, defaultStateModel.Name, retrievedStateModel.Name)
+	assert.Equal(t, defaultStateModel.Desc, retrievedStateModel.Desc)
+	assert.Equal(t, len(defaultStateModel.States), len(retrievedStateModel.States))
+}
+
+func TestGetLegacyReturnablesStateModelAlias(t *testing.T) {
+	respBytes := httpRequest(t, "GET", "/state_model/models/returnables", []byte{}, 200)
+	var retrievedStateModel proapi.StateModel
+	err := json.Unmarshal(respBytes, &retrievedStateModel)
+	assert.NoError(t, err, "failed to unmarshal legacy state model alias")
+	defaultStateModel, _ := prservice.LoadStateModelByName("default")
+	assert.Equal(t, defaultStateModel.Name, retrievedStateModel.Name)
 }
 
 func TestGetStateModelCapabilities(t *testing.T) {

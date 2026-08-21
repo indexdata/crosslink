@@ -55,13 +55,15 @@ func (ms *PatronRequestMessageSender) sendSupplyingAgencyMessage(ctx common.Exte
 	if illMessage.SupplyingAgencyMessage.StatusInfo.LastChange.IsZero() {
 		illMessage.SupplyingAgencyMessage.StatusInfo.LastChange = utils.XSDDateTime{Time: time.Now()}
 	}
-	if illMessage.SupplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoaned {
+	deliveryStatus := illMessage.SupplyingAgencyMessage.StatusInfo.Status
+	if deliveryStatus == iso18626.TypeStatusLoaned {
 		if illMessage.SupplyingAgencyMessage.DeliveryInfo == nil {
 			illMessage.SupplyingAgencyMessage.DeliveryInfo = &iso18626.DeliveryInfo{}
 		}
-		if illMessage.SupplyingAgencyMessage.DeliveryInfo.DateSent.IsZero() {
-			illMessage.SupplyingAgencyMessage.DeliveryInfo.DateSent = utils.XSDDateTime{Time: time.Now()}
-		}
+	}
+	if (deliveryStatus == iso18626.TypeStatusLoaned || deliveryStatus == iso18626.TypeStatusCopyCompleted) &&
+		illMessage.SupplyingAgencyMessage.DeliveryInfo != nil && illMessage.SupplyingAgencyMessage.DeliveryInfo.DateSent.IsZero() {
+		illMessage.SupplyingAgencyMessage.DeliveryInfo.DateSent = utils.XSDDateTime{Time: time.Now()}
 	}
 	w := NewResponseCaptureWriter()
 	ms.iso18626Handler.HandleSupplyingAgencyMessage(ctx, illMessage, w)

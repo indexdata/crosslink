@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -124,10 +125,10 @@ func TestToApiPatronRequestSurfacesInternalNote(t *testing.T) {
 	pr := pr_db.PatronRequest{
 		ID:           "pr-1",
 		InternalNote: pgtype.Text{String: "staff note", Valid: true},
-		StateModel:   "returnables",
+		StateModel:   "default",
 	}
 	apiPr := toApiPatronRequest(req, patronRequestSearchViewFromPatronRequest(pr, false))
-	assert.Equal(t, "returnables", apiPr.StateModel)
+	assert.Equal(t, "default", apiPr.StateModel)
 	if assert.NotNil(t, apiPr.InternalNote) {
 		assert.Equal(t, "staff note", *apiPr.InternalNote)
 	}
@@ -530,6 +531,24 @@ func TestGetPatronRequestsIdActions(t *testing.T) {
 	assert.Equal(t, "{\"actions\":[{\"available\":true,\"name\":\"skip-patron-validation\",\"parameters\":[]},{\"available\":true,\"name\":\"close-request\",\"parameters\":[]}]}\n", rr.Body.String())
 }
 
+func TestGetPatronRequestsIdActionsUsesCopyApplicability(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoCopyWillSupply), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	handler.GetPatronRequestsIdActions(rr, req, "copy-will-supply", proapi.GetPatronRequestsIdActionsParams{Symbol: &symbol, Side: &proapiLendingSide})
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	var allowed proapi.AllowedActions
+	assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), &allowed))
+	assert.True(t, slices.ContainsFunc(allowed.Actions, func(action proapi.AllowedAction) bool {
+		return action.Name == string(prservice.LenderActionSupplyDocument) && action.Primary != nil && *action.Primary &&
+			slices.Equal(action.Parameters, []string{"note", "deliveryUrl"})
+	}))
+	assert.False(t, slices.ContainsFunc(allowed.Actions, func(action proapi.AllowedAction) bool {
+		return action.Name == string(prservice.LenderActionShip)
+	}))
+}
+
 func TestGetPatronRequestsIdActionsNoSymbol(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
@@ -844,7 +863,7 @@ func TestParseAndValidateIllRequestAndBuildDbPatronRequest(t *testing.T) {
 	illRequest, requesterReqID, err := handler.parseAndValidateIllRequest(ctx, reqWithID, creationTime)
 	assert.NoError(t, err)
 	assert.Equal(t, id, requesterReqID)
-	pr := buildDbPatronRequest(reqWithID, nil, pgtype.Timestamp{Valid: true, Time: creationTime}, requesterReqID, illRequest, prservice.BorrowerStateNew, "returnables")
+	pr := buildDbPatronRequest(reqWithID, nil, pgtype.Timestamp{Valid: true, Time: creationTime}, requesterReqID, illRequest, prservice.BorrowerStateNew, "default")
 	assert.Equal(t, id, pr.ID)
 	assert.True(t, pr.CreatedAt.Valid)
 	assert.True(t, pr.RequesterReqID.Valid)
@@ -852,7 +871,7 @@ func TestParseAndValidateIllRequestAndBuildDbPatronRequest(t *testing.T) {
 	assert.False(t, pr.SupplierSymbol.Valid)
 	assert.Equal(t, patron, pr.Patron.String)
 	assert.Equal(t, patron, pr.IllRequest.PatronInfo.PatronId)
-	assert.Equal(t, "returnables", pr.StateModel)
+	assert.Equal(t, "default", pr.StateModel)
 
 	reqWithoutID := &proapi.CreatePatronRequest{RequesterSymbol: &symbol}
 	_, _, err = handler.parseAndValidateIllRequest(ctx, reqWithoutID, creationTime)
@@ -1110,6 +1129,23 @@ type PrRepoOkapiOwner struct {
 
 type PrRepoTerminal struct {
 	PrRepoError
+}
+
+type PrRepoCopyWillSupply struct {
+	PrRepoError
+}
+
+func (r *PrRepoCopyWillSupply) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
+	if id != "copy-will-supply" {
+		return r.PrRepoError.GetPatronRequestById(ctx, id)
+	}
+	return pr_db.PatronRequest{
+		ID:             id,
+		State:          prservice.LenderStateWillSupply,
+		Side:           prservice.SideLending,
+		SupplierSymbol: pgtype.Text{String: symbol, Valid: true},
+		IllRequest:     validIllRequest(),
+	}, nil
 }
 
 func (r *PrRepoOkapiOwner) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
@@ -1592,7 +1628,7 @@ func TestPutPatronRequestsIdOK(t *testing.T) {
 		assert.Equal(t, patron, repo.lastUpdateParams.Patron.String)
 		assert.True(t, repo.lastUpdateParams.InternalNote.Valid)
 		assert.Equal(t, note, repo.lastUpdateParams.InternalNote.String)
-		assert.Equal(t, "returnables", repo.lastUpdateParams.StateModel)
+		assert.Equal(t, "default", repo.lastUpdateParams.StateModel)
 	}
 	var response proapi.PatronRequest
 	err := json.Unmarshal(rr.Body.Bytes(), &response)
