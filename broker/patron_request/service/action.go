@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -90,6 +91,7 @@ type actionParams struct {
 	ReasonUnfilled   string                     `json:"reasonUnfilled,omitempty"`
 	ReasonRetry      string                     `json:"reasonRetry,omitempty"`
 	ItemID           string                     `json:"itemId,omitempty"`
+	DeliveryURL      string                     `json:"deliveryUrl,omitempty"`
 	AutoActionParams *proapi.ModelAction_Params `json:"autoActionParams,omitempty"`
 }
 
@@ -475,6 +477,8 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		return a.cannotSupplyLocallyBorrowingRequest(ctx, pr, params)
 	case BorrowerActionFillLocally:
 		return a.fillLocallyBorrowingRequest(ctx, pr, lmsAdapter, illRequest, params)
+	case BorrowerActionSupplyDocument:
+		return a.supplyDocumentRequest(ctx, pr, params)
 	default:
 		status, result := logActionErrorAndReturnResult(ctx, "borrower action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -525,6 +529,8 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 		return a.addConditionsLenderRequest(ctx, pr, params)
 	case LenderActionShip:
 		return a.shipLenderRequest(ctx, pr, lms, illRequest, params)
+	case LenderActionSupplyDocument:
+		return a.supplyDocumentRequest(ctx, pr, params)
 	case LenderActionMarkReceived:
 		return a.markReceivedLenderRequest(ctx, pr, lms)
 	case LenderActionAcceptCancel:
@@ -1022,17 +1028,13 @@ func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.Exte
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 
-	completedStatus := iso18626.TypeStatusLoanCompleted
-	if illRequest.ServiceInfo != nil && illRequest.ServiceInfo.ServiceType == iso18626.TypeServiceTypeCopy {
-		completedStatus = iso18626.TypeStatusCopyCompleted
-	}
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
 		iso18626.MessageInfo{
 			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
 			Note:             params.Note,
 		},
-		iso18626.StatusInfo{Status: completedStatus},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusLoanCompleted},
 		nil)
 	if result.OutgoingMessage.SupplyingAgencyMessage != nil {
 		setSupplierMessage(*result.OutgoingMessage.SupplyingAgencyMessage, &pr)
@@ -1051,43 +1053,9 @@ func (a *PatronRequestActionService) validatePatronLenderRequest(ctx common.Exte
 }
 
 func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
-	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
-	if err != nil {
-		status, result := logActionErrorAndReturnResult(ctx, "failed to get existing items", err)
-		return actionExecutionResult{status: status, result: result, pr: pr}
-	}
-
-	// A saved item proves that RequestItem completed on an earlier attempt. Resume
-	// at the ISO message so a failed confirmation can be retried without creating
-	// a second LMS request.
-	if len(items) == 0 {
-		itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
-		requestId := illRequest.Header.RequestingAgencyRequestId
-		userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
-		pickupLocation := lmsAdapter.SupplierPickupLocation()
-		itemLocation := lmsAdapter.ItemLocation()
-		itemBarcode, callNumber, title, requestErr := lmsAdapter.RequestItem(requestId, itemId, userId, pickupLocation, itemLocation)
-		if requestErr != nil {
-			status, result := logActionErrorAndReturnResult(ctx, "LMS RequestItem failed", requestErr)
-			return actionExecutionResult{status: status, result: result, pr: pr}
-		}
-		if title == "" {
-			title = illRequest.BibliographicInfo.Title
-		}
-		_, saveErr := a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
-			ID:         uuid.NewString(),
-			CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
-			PrID:       pr.ID,
-			ItemID:     getDbText(itemId),
-			Title:      getDbTextPtr(&title),
-			CallNumber: getDbTextPtr(&callNumber),
-			Barcode:    itemBarcode,
-		})
-		if saveErr != nil {
-			if cancelErr := lmsAdapter.CancelRequestItem(requestId, userId); cancelErr != nil {
-				saveErr = errors.Join(saveErr, fmt.Errorf("LMS CancelRequestItem compensation failed: %w", cancelErr))
-			}
-			status, result := logActionErrorAndReturnResult(ctx, "failed to save item", saveErr)
+	if illRequest.ServiceInfo == nil || illRequest.ServiceInfo.ServiceType == iso18626.TypeServiceTypeLoan {
+		if message, err := a.ensureLenderRequestItem(ctx, pr, lmsAdapter, illRequest); err != nil {
+			status, result := logActionErrorAndReturnResult(ctx, message, err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
 	}
@@ -1104,6 +1072,52 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 		setSupplierMessage(*result.OutgoingMessage.SupplyingAgencyMessage, &pr)
 	}
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
+}
+
+// ensureLenderRequestItem is idempotent so a failed ISO confirmation can be
+// retried without creating a second LMS request. CopyOrLoan defers this work
+// until ship, because choosing supply-document must not leave an LMS item behind.
+func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (string, error) {
+	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
+	if err != nil {
+		return "failed to get existing items", err
+	}
+	if len(items) > 0 {
+		return "", nil
+	}
+
+	itemID := illRequest.BibliographicInfo.SupplierUniqueRecordId
+	requestID := illRequest.Header.RequestingAgencyRequestId
+	userID := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
+	itemBarcode, callNumber, title, err := lmsAdapter.RequestItem(
+		requestID,
+		itemID,
+		userID,
+		lmsAdapter.SupplierPickupLocation(),
+		lmsAdapter.ItemLocation(),
+	)
+	if err != nil {
+		return "LMS RequestItem failed", err
+	}
+	if title == "" {
+		title = illRequest.BibliographicInfo.Title
+	}
+	_, err = a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
+		ID:         uuid.NewString(),
+		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
+		PrID:       pr.ID,
+		ItemID:     getDbText(itemID),
+		Title:      getDbTextPtr(&title),
+		CallNumber: getDbTextPtr(&callNumber),
+		Barcode:    itemBarcode,
+	})
+	if err != nil {
+		if cancelErr := lmsAdapter.CancelRequestItem(requestID, userID); cancelErr != nil {
+			err = errors.Join(err, fmt.Errorf("LMS CancelRequestItem compensation failed: %w", cancelErr))
+		}
+		return "failed to save item", err
+	}
+	return "", nil
 }
 
 func (a *PatronRequestActionService) cancelLenderRequestItem(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) error {
@@ -1204,6 +1218,12 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 }
 
 func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
+	if illRequest.ServiceInfo != nil && illRequest.ServiceInfo.ServiceType == iso18626.TypeServiceTypeCopyOrLoan {
+		if message, err := a.ensureLenderRequestItem(ctx, pr, lmsAdapter, illRequest); err != nil {
+			status, result := logActionErrorAndReturnResult(ctx, message, err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+	}
 	requestId := illRequest.Header.RequestingAgencyRequestId
 	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
 	externalReferenceValue := ""
@@ -1255,6 +1275,45 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 		setSupplierMessage(*result.OutgoingMessage.SupplyingAgencyMessage, &pr)
 	}
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
+}
+
+func (a *PatronRequestActionService) supplyDocumentRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
+	deliveryURL, err := normalizeDeliveryURL(params.DeliveryURL)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, err.Error(), err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+
+	result := events.EventResult{}
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
+		iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+			Note:             params.Note,
+		},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusCopyCompleted},
+		&iso18626.DeliveryInfo{
+			ItemId: deliveryURL,
+			SentVia: &iso18626.TypeSchemeValuePair{
+				Text: string(iso18626.SentViaUrl),
+			},
+		})
+	if result.OutgoingMessage.SupplyingAgencyMessage != nil {
+		setSupplierMessage(*result.OutgoingMessage.SupplyingAgencyMessage, &pr)
+	}
+	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
+}
+
+func normalizeDeliveryURL(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", errors.New("deliveryUrl is required")
+	}
+	parsed, err := url.ParseRequestURI(value)
+	if err != nil || parsed.Host == "" ||
+		(!strings.EqualFold(parsed.Scheme, "http") && !strings.EqualFold(parsed.Scheme, "https")) {
+		return "", errors.New("deliveryUrl must be an absolute HTTP(S) URL")
+	}
+	return value, nil
 }
 
 func encodeItemsNote(items []pr_db.Item) string {

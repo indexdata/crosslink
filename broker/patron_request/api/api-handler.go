@@ -304,17 +304,11 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		api.AddInternalError(ctx, w, err)
 		return
 	}
-	stateModelName, err := a.actionMappingService.GetStateModelNameForRequest(illRequest)
+	stateModelName, actionMapping, err := a.actionMappingService.ResolveActionMapping(illRequest)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return
 	}
-	stateModel, err := a.actionMappingService.GetStateModel(stateModelName)
-	if err != nil {
-		api.AddInternalError(ctx, w, err)
-		return
-	}
-	actionMapping := prservice.NewActionMapping(stateModel)
 	borrowerInitialState, ok := actionMapping.GetInitialState(prservice.SideBorrowing)
 	if !ok {
 		api.AddInternalError(ctx, w, fmt.Errorf("no initial state defined for borrower side"))
@@ -442,21 +436,12 @@ func isSideParamValid(side *string) bool {
 }
 
 func (a *PatronRequestApiHandler) checkEditable(w http.ResponseWriter, ctx common.ExtendedContext, pr pr_db.PatronRequest) bool {
-	stateModel, err := a.actionMappingService.GetStateModelForRequest(pr.IllRequest)
+	actionMapping, err := a.actionMappingService.GetActionMapping(pr.IllRequest)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return true
 	}
-	editable := false
-	if stateModel != nil && stateModel.States != nil {
-		for _, st := range stateModel.States {
-			if st.Side == proapi.REQUESTER && st.Name == string(pr.State) {
-				editable = st.Editable != nil && *st.Editable
-				break
-			}
-		}
-	}
-	if !editable {
+	if !actionMapping.IsEditableState(pr) {
 		api.AddBadRequestError(ctx, w, fmt.Errorf("patron request is not editable in state %q", pr.State))
 		return true
 	}
@@ -540,7 +525,7 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 		api.AddInternalError(ctx, w, err)
 		return
 	}
-	stateModelName, err := a.actionMappingService.GetStateModelNameForRequest(illRequest)
+	stateModelName, _, err := a.actionMappingService.ResolveActionMapping(illRequest)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return

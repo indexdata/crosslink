@@ -23,37 +23,36 @@ func (r *ActionMappingService) NewActionMappingService() *ActionMappingService {
 }
 
 func (r *ActionMappingService) GetActionMapping(request iso18626.Request) (*ActionMapping, error) {
-	stateModel, err := r.GetStateModelForRequest(request)
-	if err != nil {
-		return nil, err
-	}
-	return NewActionMapping(stateModel), nil
+	_, mapping, err := r.ResolveActionMapping(request)
+	return mapping, err
 }
 
-func (r *ActionMappingService) GetStateModelForRequest(request iso18626.Request) (*proapi.StateModel, error) {
-	modelName, err := r.GetStateModelNameForRequest(request)
+// ResolveActionMapping selects the state model once and returns both the
+// persisted model key and the effective mapping for the request's service type.
+func (r *ActionMappingService) ResolveActionMapping(request iso18626.Request) (string, *ActionMapping, error) {
+	modelName, serviceType, err := selectStateModel(request)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
-	return r.GetStateModel(modelName)
+	mapping, err := r.getStateModelService().GetActionMapping(modelName, serviceType)
+	if err != nil {
+		return "", nil, err
+	}
+	return modelName, mapping, nil
 }
 
-func (r *ActionMappingService) GetStateModelNameForRequest(request iso18626.Request) (string, error) {
+func selectStateModel(request iso18626.Request) (string, proapi.StateModelServiceType, error) {
 	if request.ServiceInfo == nil {
-		var selectableModels []string
-		for name, stateModel := range stateModelsConfig.StateModels {
-			if stateModel.Selector != nil {
-				selectableModels = append(selectableModels, name)
-			}
+		// Preserve the state model used by legacy requests created before service
+		// type based model selection was introduced. New ISO requests require
+		// serviceInfo and are selected by service type below.
+		if _, ok := stateModelsConfig.StateModels[defaultStateModelName]; ok {
+			return defaultStateModelName, proapi.Loan, nil
 		}
-		sort.Strings(selectableModels)
-		if len(selectableModels) == 1 {
-			return selectableModels[0], nil
-		}
-		return "", fmt.Errorf("cannot select state model without service info: found %d selectable models", len(selectableModels))
+		return "", "", fmt.Errorf("cannot select state model without service info: default model not found")
 	}
 
-	serviceType := proapi.StateModelSelectorServiceType(request.ServiceInfo.ServiceType)
+	serviceType := proapi.StateModelServiceType(request.ServiceInfo.ServiceType)
 	var matches []string
 	for name, stateModel := range stateModelsConfig.StateModels {
 		if stateModel.Selector != nil && slices.Contains(stateModel.Selector.ServiceType, serviceType) {
@@ -64,11 +63,11 @@ func (r *ActionMappingService) GetStateModelNameForRequest(request iso18626.Requ
 
 	switch len(matches) {
 	case 0:
-		return "", fmt.Errorf("no state model matches service type %q", serviceType)
+		return "", "", fmt.Errorf("no state model matches service type %q", serviceType)
 	case 1:
-		return matches[0], nil
+		return matches[0], serviceType, nil
 	default:
-		return "", fmt.Errorf("multiple state models match service type %q: %s", serviceType, strings.Join(matches, ", "))
+		return "", "", fmt.Errorf("multiple state models match service type %q: %s", serviceType, strings.Join(matches, ", "))
 	}
 }
 
@@ -108,10 +107,13 @@ type stateConfig struct {
 	terminal       bool
 	needsAttention bool
 	closingAction  *pr_db.PatronRequestAction
+	editable       bool
 }
 
-// Constructor function to initialize the mappings for given StateModel
-func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
+// NewActionMappingForServiceType builds a mapping containing only states,
+// actions, and events that apply to serviceType. The source model is immutable;
+// applicability is resolved while the mapping indexes are built.
+func NewActionMappingForServiceType(stateModel *proapi.StateModel, serviceType proapi.StateModelServiceType) *ActionMapping {
 	r := new(ActionMapping)
 	if stateModel == nil || stateModel.States == nil {
 		return r
@@ -124,6 +126,9 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 	lenderConfig := make(map[pr_db.PatronRequestState]stateConfig)
 
 	for _, state := range stateModel.States {
+		if !appliesToServiceType(state.AppliesTo, serviceType) {
+			continue
+		}
 		stateName := pr_db.PatronRequestState(state.Name)
 		currentStateConfig := stateConfig{
 			actions:        make(map[pr_db.PatronRequestAction]proapi.ModelAction),
@@ -137,6 +142,9 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 		if state.NeedsAttention != nil && *state.NeedsAttention {
 			currentStateConfig.needsAttention = true
 		}
+		if state.Editable != nil && *state.Editable {
+			currentStateConfig.editable = true
+		}
 		if state.ClosingAction != nil && *state.ClosingAction != "" {
 			closingAction := pr_db.PatronRequestAction(*state.ClosingAction)
 			currentStateConfig.closingAction = &closingAction
@@ -144,13 +152,17 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 		actionEntries := make([]PatronRequestAction, 0)
 		if state.Actions != nil {
 			for _, action := range *state.Actions {
+				if !appliesToServiceType(action.AppliesTo, serviceType) {
+					continue
+				}
 				entry := PatronRequestAction{actionName: pr_db.PatronRequestAction(action.Name)}
 				currentStateConfig.actions[entry.actionName] = action
 				if action.Trigger != nil && strings.EqualFold(string(*action.Trigger), string(proapi.Auto)) {
 					currentStateConfig.autoActions = append(currentStateConfig.autoActions, action)
 					entry.auto = true
 				}
-				if state.PrimaryAction != nil && string(*state.PrimaryAction) == action.Name {
+				if (state.PrimaryAction != nil && string(*state.PrimaryAction) == action.Name) ||
+					(action.PrimaryFor != nil && appliesToServiceType(action.PrimaryFor, serviceType)) {
 					entry.primary = true
 				}
 				actionEntries = append(actionEntries, entry)
@@ -158,6 +170,9 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 		}
 		if state.Events != nil {
 			for _, event := range *state.Events {
+				if !appliesToServiceType(event.AppliesTo, serviceType) {
+					continue
+				}
 				currentStateConfig.events[event.Name] = event
 			}
 		}
@@ -194,6 +209,13 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 	r.lenderStateConfig = lenderConfig
 
 	return r
+}
+
+func appliesToServiceType(appliesTo *proapi.AppliesTo, serviceType proapi.StateModelServiceType) bool {
+	if appliesTo == nil {
+		return true
+	}
+	return slices.Contains(appliesTo.ServiceTypes, serviceType)
 }
 
 func (r *ActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_db.PatronRequestAction {
@@ -364,6 +386,11 @@ func (r *ActionMapping) GetManualCloseState(pr pr_db.PatronRequest) (pr_db.Patro
 func (r *ActionMapping) IsTerminalState(pr pr_db.PatronRequest) bool {
 	stateConfig, ok := r.getStateConfig(pr)
 	return ok && stateConfig.terminal
+}
+
+func (r *ActionMapping) IsEditableState(pr pr_db.PatronRequest) bool {
+	stateConfig, ok := r.getStateConfig(pr)
+	return ok && stateConfig.editable
 }
 
 func (r *ActionMapping) GetClosingAction(pr pr_db.PatronRequest) *pr_db.PatronRequestAction {

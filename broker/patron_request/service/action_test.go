@@ -500,7 +500,7 @@ func TestHandleInvokeActionTransitionActions(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockPrRepo := new(MockPrRepo)
 			prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), new(MockEventBus), new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
-			stateModel, err := LoadStateModelByName("returnables")
+			stateModel, err := LoadStateModelByName("default")
 			assert.NoError(t, err)
 			for stateIndex := range stateModel.States {
 				state := &stateModel.States[stateIndex]
@@ -511,7 +511,7 @@ func TestHandleInvokeActionTransitionActions(t *testing.T) {
 					(*state.Actions)[actionIndex].Trigger = nil
 				}
 			}
-			prAction.actionMappingService.SMService = &StateModelService{stateMap: map[string]*proapi.StateModel{"returnables": stateModel}}
+			prAction.actionMappingService.SMService = &StateModelService{stateMap: map[string]*proapi.StateModel{"default": stateModel}}
 			pr := pr_db.PatronRequest{
 				ID:             patronRequestId,
 				IllRequest:     iso18626.Request{},
@@ -1661,6 +1661,33 @@ func TestHandleInvokeLenderActionWillSupplyUseIllTitleWhenRequestItemEmptyOK(t *
 	}
 }
 
+func TestHandleInvokeLenderActionWillSupplyDefersLmsItemForDocumentCapableRequests(t *testing.T) {
+	for _, serviceType := range []iso18626.TypeServiceType{
+		iso18626.TypeServiceTypeCopy,
+		iso18626.TypeServiceTypeCopyOrLoan,
+	} {
+		t.Run(string(serviceType), func(t *testing.T) {
+			mockPrRepo := new(MockPrRepo)
+			lmsCreator := new(MockLmsCreator)
+			lmsAdapter := new(mockLmsAdapter)
+			lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lmsAdapter, nil)
+			mockIso18626Handler := new(MockIso18626Handler)
+			prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+			illRequest := iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{ServiceType: serviceType}}
+			mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+			action := LenderActionWillSupply
+
+			status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+			assert.Equal(t, events.EventStatusSuccess, status)
+			assert.NotNil(t, resultData)
+			assert.Equal(t, LenderStateWillSupply, mockPrRepo.savedPr.State)
+			assert.Empty(t, mockPrRepo.savedItems)
+			lmsAdapter.AssertNotCalled(t, "RequestItem", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+		})
+	}
+}
+
 func TestHandleInvokeLenderActionWillSupplyUseRequestItemTitleWhenAvailableOK(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
@@ -2384,6 +2411,87 @@ func TestHandleInvokeLenderActionShipOK(t *testing.T) {
 			assert.False(t, mockIso18626Handler.lastSupplyingAgencyMessage.DeliveryInfo.DateSent.IsZero())
 		}
 	}
+}
+
+func TestHandleInvokeLenderActionShipCopyOrLoanCreatesDeferredLmsItem(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsAdapter := new(mockLmsAdapter)
+	lmsAdapter.On("RequestItem", mock.Anything, "item-1", mock.Anything, mock.Anything, mock.Anything).Return("barcode-1", "call-1", "title-1", nil).Once()
+	lmsAdapter.On("CheckOutItem", "request-1", "barcode-1", mock.Anything, mock.Anything).Return("", nil).Once()
+	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lmsAdapter, nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	illRequest := iso18626.Request{
+		Header:            iso18626.Header{RequestingAgencyRequestId: "request-1"},
+		BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "item-1"},
+		ServiceInfo:       &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopyOrLoan},
+	}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, nil).Once()
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{PrID: patronRequestId, Barcode: "barcode-1"}}, nil).Once()
+	action := LenderActionShip
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.NotNil(t, resultData)
+	assert.Equal(t, LenderStateShipped, mockPrRepo.savedPr.State)
+	assert.Len(t, mockPrRepo.savedItems, 1)
+	lmsAdapter.AssertExpectations(t)
+}
+
+func TestHandleInvokeLenderActionSupplyDocument(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(new(mockLmsAdapter), nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	illRequest := iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopy}}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	action := LenderActionSupplyDocument
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{
+		CommonEventData: events.CommonEventData{Action: &action},
+		CustomData: map[string]any{
+			"note":        "Document ready",
+			"deliveryUrl": "https://example.com/document/123",
+		},
+	}})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.NotNil(t, resultData)
+	assert.Equal(t, LenderStateCompleted, mockPrRepo.savedPr.State)
+	if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage) {
+		message := mockIso18626Handler.lastSupplyingAgencyMessage
+		assert.Equal(t, iso18626.TypeStatusCopyCompleted, message.StatusInfo.Status)
+		assert.Equal(t, "Document ready", message.MessageInfo.Note)
+		if assert.NotNil(t, message.DeliveryInfo) {
+			assert.Equal(t, "https://example.com/document/123", message.DeliveryInfo.ItemId)
+			assert.Equal(t, string(iso18626.SentViaUrl), message.DeliveryInfo.SentVia.Text)
+			assert.False(t, message.DeliveryInfo.DateSent.IsZero())
+		}
+	}
+}
+
+func TestSupplyDocumentRequiresDeliveryURL(t *testing.T) {
+	prAction := &PatronRequestActionService{}
+
+	result := prAction.supplyDocumentRequest(appCtx, pr_db.PatronRequest{}, actionParams{})
+
+	assert.Equal(t, events.EventStatusError, result.status)
+	assert.Equal(t, "deliveryUrl is required", result.result.EventError.Message)
+	assert.Equal(t, "deliveryUrl is required", result.result.EventError.Cause)
+}
+
+func TestSupplyDocumentRejectsInvalidDeliveryURL(t *testing.T) {
+	prAction := &PatronRequestActionService{}
+
+	result := prAction.supplyDocumentRequest(appCtx, pr_db.PatronRequest{}, actionParams{DeliveryURL: "not a URL"})
+
+	assert.Equal(t, events.EventStatusError, result.status)
+	assert.Equal(t, "deliveryUrl must be an absolute HTTP(S) URL", result.result.EventError.Message)
+	assert.Equal(t, "deliveryUrl must be an absolute HTTP(S) URL", result.result.EventError.Cause)
 }
 
 func TestHandleInvokeLenderActionShipNewTitleOK(t *testing.T) {
@@ -3442,7 +3550,7 @@ func TestHandleInvokeBorrowerActionFillLocally(t *testing.T) {
 		expectedStatus iso18626.TypeStatus
 	}{
 		{name: "loan", serviceType: iso18626.TypeServiceTypeLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
-		{name: "copy", serviceType: iso18626.TypeServiceTypeCopy, expectedStatus: iso18626.TypeStatusCopyCompleted},
+		{name: "copy or loan", serviceType: iso18626.TypeServiceTypeCopyOrLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
 		{name: "NCIP disabled", serviceType: iso18626.TypeServiceTypeLoan, manualAdapter: true, expectedStatus: iso18626.TypeStatusLoanCompleted},
 	}
 
@@ -3505,6 +3613,57 @@ func TestHandleInvokeBorrowerActionFillLocally(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHandleInvokeBorrowerActionSupplyDocument(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsAdapter := new(mockLmsAdapter)
+	lmsCreator.On("GetAdapter", "ISIL:REQ1").Return(lmsAdapter, nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	illRequest := iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopy}}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{
+		ID:              patronRequestId,
+		IllRequest:      illRequest,
+		State:           BorrowerStateLocalSupply,
+		Side:            SideBorrowing,
+		SupplierSymbol:  getDbText("ISIL:REQ1"),
+		RequesterSymbol: getDbText("ISIL:REQ1"),
+		RequesterReqID:  getDbText("req-1"),
+		NeedsAttention:  true,
+	}, nil)
+	action := BorrowerActionSupplyDocument
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{
+		CommonEventData: events.CommonEventData{Action: &action},
+		CustomData: map[string]any{
+			"note":        "Local document ready",
+			"deliveryUrl": "https://example.com/local-document/123",
+		},
+	}})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	if assert.NotNil(t, resultData.ActionResult) && assert.NotNil(t, resultData.ActionResult.ToState) {
+		assert.Equal(t, string(BorrowerStateCompleted), *resultData.ActionResult.ToState)
+	}
+	assert.Equal(t, BorrowerStateCompleted, mockPrRepo.savedPr.State)
+	assert.True(t, mockPrRepo.savedPr.TerminalState)
+	assert.False(t, mockPrRepo.savedPr.NeedsAttention)
+	assert.Equal(t, iso18626.TypeStatusCopyCompleted, mockPrRepo.savedPr.IllResponse.StatusInfo.Status)
+	if assert.NotNil(t, mockPrRepo.savedPr.IllResponse.DeliveryInfo) {
+		assert.Equal(t, "https://example.com/local-document/123", mockPrRepo.savedPr.IllResponse.DeliveryInfo.ItemId)
+	}
+	if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage) {
+		message := mockIso18626Handler.lastSupplyingAgencyMessage
+		assert.Equal(t, iso18626.TypeStatusCopyCompleted, message.StatusInfo.Status)
+		assert.Equal(t, "Local document ready", message.MessageInfo.Note)
+		if assert.NotNil(t, message.DeliveryInfo) {
+			assert.Equal(t, "https://example.com/local-document/123", message.DeliveryInfo.ItemId)
+			assert.Equal(t, string(iso18626.SentViaUrl), message.DeliveryInfo.SentVia.Text)
+		}
+	}
+	lmsAdapter.AssertNotCalled(t, "RequestItem", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestUpdateMetadataBorrowingRequestAddsDecisionDetails(t *testing.T) {
@@ -4135,8 +4294,8 @@ func (*MockLmsAdapterFail) RequesterPickupLocation() string {
 	return ""
 }
 
-func TestLoadReturnableStateModel(t *testing.T) {
-	stateModel, err := LoadStateModelByName("returnables")
+func TestLoadDefaultStateModel(t *testing.T) {
+	stateModel, err := LoadStateModelByName("default")
 	assert.Nil(t, err)
 	assert.NotNil(t, stateModel)
 }
