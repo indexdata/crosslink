@@ -1280,7 +1280,7 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 func (a *PatronRequestActionService) supplyDocumentRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
 	deliveryURL, err := normalizeDeliveryURL(params.DeliveryURL)
 	if err != nil {
-		status, result := logActionErrorAndReturnResult(ctx, err.Error(), nil)
+		status, result := logActionErrorAndReturnResult(ctx, err.Error(), err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 

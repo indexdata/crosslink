@@ -2481,6 +2481,7 @@ func TestSupplyDocumentRequiresDeliveryURL(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusError, result.status)
 	assert.Equal(t, "deliveryUrl is required", result.result.EventError.Message)
+	assert.Equal(t, "deliveryUrl is required", result.result.EventError.Cause)
 }
 
 func TestSupplyDocumentRejectsInvalidDeliveryURL(t *testing.T) {
@@ -2490,6 +2491,7 @@ func TestSupplyDocumentRejectsInvalidDeliveryURL(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusError, result.status)
 	assert.Equal(t, "deliveryUrl must be an absolute HTTP(S) URL", result.result.EventError.Message)
+	assert.Equal(t, "deliveryUrl must be an absolute HTTP(S) URL", result.result.EventError.Cause)
 }
 
 func TestHandleInvokeLenderActionShipNewTitleOK(t *testing.T) {
