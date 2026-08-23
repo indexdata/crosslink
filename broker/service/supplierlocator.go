@@ -379,17 +379,18 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	eventData := map[string]any{}
 	eventData["skipped"] = false
 	eventData["localSupplier"] = sup.LocalSupplier
+	result := &events.EventResult{CustomData: eventData}
 	peer, err := s.illRepo.GetPeerById(ctx, sup.SupplierID)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not get peer", err)
 	}
 	aa, err := s.lookupAdapterFactory.GetAdapterSupplier(ctx, peer)
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "could not create availability adapter", err)
+		return events.LogErrorAndReturnExistingResult(ctx, "could not create availability adapter", err, result)
 	}
 	if aa == nil {
 		ctx.Logger().Debug("skipping availability check for supplier without availability config", "supplierSymbol", sup.SupplierSymbol)
-		return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
+		return events.EventStatusSuccess, result
 	}
 
 	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
@@ -400,11 +401,11 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	lookupParams.Identifier = sup.LocalID.String
 	lookupResult, err := aa.Lookup(lookupParams)
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "failed to perform availability lookup", err)
+		return events.LogErrorAndReturnExistingResult(ctx, "failed to perform availability lookup", err, result)
 	}
 	holdingsResults, err := lookupResult.GetHoldings()
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "failed to get holdings for availability lookup", err)
+		return events.LogErrorAndReturnExistingResult(ctx, "failed to get holdings for availability lookup", err, result)
 	}
 	if len(holdingsResults) == 0 {
 		ctx.Logger().Debug("availability lookup returned no results for supplier, skipping", "supplierSymbol", sup.SupplierSymbol)
@@ -417,7 +418,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	} else {
 		ctx.Logger().Debug("availability lookup returned results for supplier, not skipping", "supplierSymbol", sup.SupplierSymbol)
 	}
-	return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
+	return events.EventStatusSuccess, result
 }
 
 func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {

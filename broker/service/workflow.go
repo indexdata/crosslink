@@ -62,11 +62,11 @@ func (w *WorkflowManager) OnLocateSupplierComplete(ctx common.ExtendedContext, e
 func (w *WorkflowManager) OnCheckAvailabilityComplete(ctx common.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	common.Must(ctx, func() (string, error) {
-		if event.EventStatus != events.EventStatusSuccess {
+		skipped, hasAvailabilityResult := event.ResultData.CustomData["skipped"].(bool)
+		if event.EventStatus != events.EventStatusSuccess && !hasAvailabilityResult {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 		}
-		skipped, ok := event.ResultData.CustomData["skipped"].(bool)
-		if !ok {
+		if !hasAvailabilityResult {
 			return "", fmt.Errorf("failed to detect if supplier is skipped by availability check")
 		}
 		if skipped {
