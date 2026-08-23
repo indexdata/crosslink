@@ -61,6 +61,26 @@ func TestGetDateWithTimezone(t *testing.T) {
 	assert.Equal(t, "Local", date.Location().String())
 }
 
+func TestCheckAvailabilityWithoutConfiguration(t *testing.T) {
+	mockRepo := new(mocks.MockIllRepositorySuccess)
+	factory := NewLookupAdapterFactory(
+		mockRepo,
+		new(adapter.MockDirectoryLookupAdapter),
+		"",
+		nil,
+		catalog.NewLookupAdapterCreator(catalog.LookupAdapterMock, ""),
+	)
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, new(adapter.MockDirectoryLookupAdapter), factory)
+
+	status, result := locator.checkAvailability(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	if assert.NotNil(t, result) {
+		assert.Equal(t, string(AvailabilityUnknown), result.CustomData[AvailabilityKey])
+		assert.Equal(t, false, result.CustomData["localSupplier"])
+	}
+}
+
 func TestApplyHoldingsPolicy(t *testing.T) {
 	main := "MAIN"
 	other := "OTHER"

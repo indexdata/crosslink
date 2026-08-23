@@ -532,25 +532,31 @@ func TestOnCheckAvailabilityComplete(t *testing.T) {
 		{
 			name:          "available",
 			status:        events.EventStatusSuccess,
-			customData:    map[string]any{"skipped": false, "localSupplier": false},
+			customData:    map[string]any{AvailabilityKey: string(AvailabilityAvailable), "localSupplier": false},
 			expectedTasks: []events.EventName{events.EventNameMessageRequester, events.EventNameMessageSupplier},
 		},
 		{
 			name:          "availability check failed open",
 			status:        events.EventStatusError,
-			customData:    map[string]any{"skipped": false, "localSupplier": false},
+			customData:    map[string]any{AvailabilityKey: string(AvailabilityUnknown), "localSupplier": false},
+			expectedTasks: []events.EventName{events.EventNameMessageRequester, events.EventNameMessageSupplier},
+		},
+		{
+			name:          "availability not configured",
+			status:        events.EventStatusSuccess,
+			customData:    map[string]any{AvailabilityKey: string(AvailabilityUnknown), "localSupplier": false},
 			expectedTasks: []events.EventName{events.EventNameMessageRequester, events.EventNameMessageSupplier},
 		},
 		{
 			name:          "unavailable",
 			status:        events.EventStatusSuccess,
-			customData:    map[string]any{"skipped": true, "localSupplier": false},
+			customData:    map[string]any{AvailabilityKey: string(AvailabilityUnavailable), "localSupplier": false},
 			expectedTasks: []events.EventName{events.EventNameSelectSupplier},
 		},
 		{
 			name:          "local supplier",
 			status:        events.EventStatusSuccess,
-			customData:    map[string]any{"skipped": false, "localSupplier": true},
+			customData:    map[string]any{AvailabilityKey: string(AvailabilityAvailable), "localSupplier": true},
 			expectedTasks: []events.EventName{events.EventNameMessageRequester},
 		},
 		{
