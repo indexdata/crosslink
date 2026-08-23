@@ -62,15 +62,19 @@ func (w *WorkflowManager) OnLocateSupplierComplete(ctx common.ExtendedContext, e
 func (w *WorkflowManager) OnCheckAvailabilityComplete(ctx common.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	common.Must(ctx, func() (string, error) {
-		skipped, hasAvailabilityResult := event.ResultData.CustomData["skipped"].(bool)
+		availabilityValue, hasAvailabilityResult := event.ResultData.CustomData[AvailabilityKey].(string)
 		if event.EventStatus != events.EventStatusSuccess && !hasAvailabilityResult {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 		}
 		if !hasAvailabilityResult {
-			return "", fmt.Errorf("failed to detect if supplier is skipped by availability check")
+			return "", fmt.Errorf("failed to detect supplier availability")
 		}
-		if skipped {
+		availability := Availability(availabilityValue)
+		if availability == AvailabilityUnavailable {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+		}
+		if availability != AvailabilityAvailable && availability != AvailabilityUnknown {
+			return "", fmt.Errorf("unexpected supplier availability %q", availability)
 		}
 		id, err := w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 		if err != nil {

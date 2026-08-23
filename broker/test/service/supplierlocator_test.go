@@ -946,11 +946,37 @@ func TestCheckAvailability_MetadataOnlyBypassed(t *testing.T) {
 	assert.NoError(t, err)
 
 	availabilityEvent := waitForTransactionEvent(t, illTrId, events.EventNameCheckAvailability, events.EventStatusSuccess)
-	assert.Equal(t, false, availabilityEvent.ResultData.CustomData["skipped"])
+	assert.Equal(t, string(service.AvailabilityUnknown), availabilityEvent.ResultData.CustomData[service.AvailabilityKey])
 	waitForTransactionEvent(t, illTrId, events.EventNameMessageSupplier, events.EventStatusSuccess)
 }
 
-func TestCheckAvailability_Z3950AdapterSkipped(t *testing.T) {
+func TestCheckAvailability_MissingConfigurationUnknown(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	peer := apptest.CreatePeerWithModeAndVendor(
+		t,
+		illRepo,
+		"ISIL:NO-AVAILABILITY-CONFIG",
+		adapter.MOCK_PEER_URL,
+		string(common.BrokerModeOpaque),
+		dirapi.CrossLink,
+		dirapi.Entry{},
+		"ISIL:NO-AVAILABILITY-CONFIG",
+	)
+
+	illTrId := createIllTransaction(t, illRepo, "missing-availability-config")
+	supplier := apptest.CreateLocatedSupplier(t, illRepo, illTrId, peer.ID, "ISIL:NO-AVAILABILITY-CONFIG", "")
+	assert.NotNil(t, supplier)
+
+	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameCheckAvailability)
+	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
+	assert.NoError(t, err)
+
+	availabilityEvent := waitForTransactionEvent(t, illTrId, events.EventNameCheckAvailability, events.EventStatusSuccess)
+	assert.Equal(t, string(service.AvailabilityUnknown), availabilityEvent.ResultData.CustomData[service.AvailabilityKey])
+	waitForTransactionEvent(t, illTrId, events.EventNameMessageSupplier, events.EventStatusSuccess)
+}
+
+func TestCheckAvailability_Z3950AdapterUnavailable(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	// Create a peer with Catalog config in CustomData
 	customData := dirapi.Entry{CatalogConfig: &dirapi.CatalogConfig{
@@ -983,20 +1009,20 @@ func TestCheckAvailability_Z3950AdapterSkipped(t *testing.T) {
 	})
 	assert.Equal(t, ill_db.SupplierStateSkippedPg, updatedSupplier.SupplierStatus)
 
-	// Check that the event log contains the skipped flag
+	// Check that the event log contains the availability outcome
 	eventsList, _, err := eventRepo.GetIllTransactionEvents(appCtx, illTrId)
 	assert.NoError(t, err)
 	found := false
 	for _, ev := range eventsList {
-		if ev.EventName == events.EventNameCheckAvailability && ev.ResultData.CustomData["skipped"] == true {
+		if ev.EventName == events.EventNameCheckAvailability && ev.ResultData.CustomData[service.AvailabilityKey] == string(service.AvailabilityUnavailable) {
 			found = true
 			break
 		}
 	}
-	assert.True(t, found, "Expected check-availability event with skipped=true in CustomData")
+	assert.True(t, found, "Expected check-availability event with availability=unavailable in CustomData")
 }
 
-func TestCheckAvailability_Z3950AdapterNotSkipped(t *testing.T) {
+func TestCheckAvailability_Z3950AdapterAvailable(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	customData := dirapi.Entry{CatalogConfig: &dirapi.CatalogConfig{
 		Zoom: &dirapi.ZoomConfig{
@@ -1030,7 +1056,7 @@ func TestCheckAvailability_Z3950AdapterNotSkipped(t *testing.T) {
 			t.Errorf("failed to find events for ill transaction for id %v", illTrId)
 		}
 		for _, ev := range eventsList {
-			if ev.EventName == events.EventNameCheckAvailability && ev.ResultData.CustomData["skipped"] == false {
+			if ev.EventName == events.EventNameCheckAvailability && ev.ResultData.CustomData[service.AvailabilityKey] == string(service.AvailabilityAvailable) {
 				return true
 			}
 		}
@@ -1040,12 +1066,12 @@ func TestCheckAvailability_Z3950AdapterNotSkipped(t *testing.T) {
 	assert.NoError(t, err)
 	found := false
 	for _, ev := range eventsList {
-		if ev.EventName == events.EventNameCheckAvailability && ev.ResultData.CustomData["skipped"] == false {
+		if ev.EventName == events.EventNameCheckAvailability && ev.ResultData.CustomData[service.AvailabilityKey] == string(service.AvailabilityAvailable) {
 			found = true
 			break
 		}
 	}
-	assert.True(t, found, "Expected check-availability event with skipped=false in CustomData")
+	assert.True(t, found, "Expected check-availability event with availability=available in CustomData")
 }
 
 func TestCheckAvailability_Z3950AdapterError(t *testing.T) {
@@ -1074,7 +1100,7 @@ func TestCheckAvailability_Z3950AdapterError(t *testing.T) {
 
 	found := waitForTransactionEvent(t, illTrId, events.EventNameCheckAvailability, events.EventStatusError)
 	assert.Contains(t, found.ResultData.EventError.Message, "could not create availability adapter")
-	assert.Equal(t, false, found.ResultData.CustomData["skipped"])
+	assert.Equal(t, string(service.AvailabilityUnknown), found.ResultData.CustomData[service.AvailabilityKey])
 	assert.Equal(t, false, found.ResultData.CustomData["localSupplier"])
 	waitForTransactionEvent(t, illTrId, events.EventNameMessageSupplier, events.EventStatusSuccess)
 }
@@ -1105,7 +1131,7 @@ func TestCheckAvailability_Z3950LookupError(t *testing.T) {
 
 	found := waitForTransactionEvent(t, illTrId, events.EventNameCheckAvailability, events.EventStatusError)
 	assert.Contains(t, found.ResultData.EventError.Message, "failed to perform availability lookup")
-	assert.Equal(t, false, found.ResultData.CustomData["skipped"])
+	assert.Equal(t, string(service.AvailabilityUnknown), found.ResultData.CustomData[service.AvailabilityKey])
 	assert.Equal(t, false, found.ResultData.CustomData["localSupplier"])
 	waitForTransactionEvent(t, illTrId, events.EventNameMessageSupplier, events.EventStatusSuccess)
 }
@@ -1129,6 +1155,6 @@ func TestCheckAvailability_HoldingsErrorFailsOpen(t *testing.T) {
 
 	found := waitForTransactionEvent(t, illTrId, events.EventNameCheckAvailability, events.EventStatusError)
 	assert.Contains(t, found.ResultData.EventError.Message, "failed to get holdings for availability lookup")
-	assert.Equal(t, false, found.ResultData.CustomData["skipped"])
+	assert.Equal(t, string(service.AvailabilityUnknown), found.ResultData.CustomData[service.AvailabilityKey])
 	waitForTransactionEvent(t, illTrId, events.EventNameMessageSupplier, events.EventStatusSuccess)
 }

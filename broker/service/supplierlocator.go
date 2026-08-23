@@ -23,6 +23,16 @@ const SUP_PROBLEM = "no-suppliers"
 const ROTA_INFO_KEY = "rotaInfo"
 const DATE_LAYOUT = "2006-01-02"
 
+const AvailabilityKey = "availability"
+
+type Availability string
+
+const (
+	AvailabilityAvailable   Availability = "available"
+	AvailabilityUnavailable Availability = "unavailable"
+	AvailabilityUnknown     Availability = "unknown"
+)
+
 type SupplierLocator struct {
 	eventBus             events.EventBus
 	illRepo              ill_db.IllRepo
@@ -376,9 +386,10 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "multiple selected suppliers", map[string]any{"supplierCount": len(suppliers)})
 	}
 	sup := suppliers[0]
-	eventData := map[string]any{}
-	eventData["skipped"] = false
-	eventData["localSupplier"] = sup.LocalSupplier
+	eventData := map[string]any{
+		AvailabilityKey: string(AvailabilityUnknown),
+		"localSupplier": sup.LocalSupplier,
+	}
 	result := &events.EventResult{CustomData: eventData}
 	peer, err := s.illRepo.GetPeerById(ctx, sup.SupplierID)
 	if err != nil {
@@ -409,7 +420,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	}
 	if len(holdingsResults) == 0 {
 		ctx.Logger().Debug("availability lookup returned no results for supplier, skipping", "supplierSymbol", sup.SupplierSymbol)
-		eventData["skipped"] = true
+		eventData[AvailabilityKey] = string(AvailabilityUnavailable)
 		sup.SupplierStatus = ill_db.SupplierStateSkippedPg
 		_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(sup))
 		if err != nil {
@@ -417,6 +428,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 		}
 	} else {
 		ctx.Logger().Debug("availability lookup returned results for supplier, not skipping", "supplierSymbol", sup.SupplierSymbol)
+		eventData[AvailabilityKey] = string(AvailabilityAvailable)
 	}
 	return events.EventStatusSuccess, result
 }
