@@ -909,20 +909,25 @@ func getSupplierId(i int, result map[string]interface{}) string {
 func waitForTransactionEvent(t *testing.T, illTrId string, eventName events.EventName, eventStatus events.EventStatus) events.Event {
 	t.Helper()
 	var found events.Event
+	var lastErr error
 	ok := test.WaitForPredicateToBeTrue(func() bool {
 		eventsList, _, err := eventRepo.GetIllTransactionEvents(common.CreateExtCtxWithArgs(context.Background(), nil), illTrId)
 		if err != nil {
-			t.Errorf("failed to find events for ill transaction id %v", illTrId)
+			lastErr = err
 			return false
 		}
-		for _, event := range eventsList {
-			if event.EventName == eventName && (eventStatus == "" || event.EventStatus == eventStatus) {
-				found = event
+		lastErr = nil
+		for _, transactionEvent := range eventsList {
+			if transactionEvent.EventName == eventName && (eventStatus == "" || transactionEvent.EventStatus == eventStatus) {
+				found = transactionEvent
 				return true
 			}
 		}
 		return false
 	})
+	if !ok && lastErr != nil {
+		require.NoError(t, lastErr, "failed to find events for ill transaction id %v", illTrId)
+	}
 	require.True(t, ok, "expected %s event with status %s", eventName, eventStatus)
 	return found
 }
