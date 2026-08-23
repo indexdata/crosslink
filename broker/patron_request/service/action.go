@@ -85,6 +85,9 @@ func (e *autoActionFailure) Error() string {
 
 type actionParams struct {
 	Note             string                     `json:"note,omitempty"`
+	Barcode          string                     `json:"barcode,omitempty"`
+	CallNumber       string                     `json:"callNumber,omitempty"`
+	Title            string                     `json:"title,omitempty"`
 	LoanCondition    string                     `json:"loanCondition,omitempty"`
 	Cost             *float64                   `json:"cost,omitempty"`
 	Currency         string                     `json:"currency,omitempty"`
@@ -490,19 +493,20 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 		status, result := logActionErrorAndReturnResult(ctx, "missing supplier symbol", nil)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	lms, err := a.lmsCreator.GetAdapter(ctx, pr.SupplierSymbol.String)
+	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.SupplierSymbol.String)
 	if err != nil {
 		status, result := logActionErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	lms.SetLogFunc(func(outgoing map[string]any, incoming map[string]any, err error) {
+	lmsAdapter.SetLogFunc(func(outgoing map[string]any, incoming map[string]any, err error) {
 		status := events.EventStatusSuccess
 		if err != nil {
 			status = events.EventStatusError
 		}
-		var customData = make(map[string]any)
-		customData["lmsOutgoingMessage"] = outgoing
-		customData["lmsIncomingMessage"] = incoming
+		customData := map[string]any{
+			"lmsOutgoingMessage": outgoing,
+			"lmsIncomingMessage": incoming,
+		}
 		eventData := events.EventData{CustomData: customData}
 		_, createErr := a.eventBus.CreateNoticeWithParent(pr.ID, events.EventNameLmsSupplierMessage, eventData, status, events.EventDomainPatronRequest, eventID, events.SignalConsumers)
 		if createErr != nil {
@@ -516,27 +520,32 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 		status, result := logActionErrorAndReturnResult(ctx, "failed to unmarshal action parameters", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
+
 	switch action {
 	case LenderActionValidatePatron:
-		return a.validatePatronLenderRequest(ctx, pr, lms)
+		return a.validatePatronLenderRequest(ctx, pr, lmsAdapter)
 	case LenderActionWillSupply:
-		return a.willSupplyLenderRequest(ctx, pr, lms, illRequest, params)
+		return a.willSupplyLenderRequest(ctx, pr, lmsAdapter, illRequest, params)
 	case LenderActionRejectCancel:
 		return a.rejectCancelLenderRequest(ctx, pr)
 	case LenderActionCannotSupply:
-		return a.cannotSupplyLenderRequest(ctx, pr, lms, illRequest, params)
+		return a.cannotSupplyLenderRequest(ctx, pr, lmsAdapter, illRequest, params)
 	case LenderActionAddCondition:
-		return a.addConditionsLenderRequest(ctx, pr, params)
+		return a.addConditionsLenderRequest(ctx, pr, lmsAdapter, illRequest, params)
+	case LenderActionAddItem:
+		return a.addItemLenderRequest(ctx, pr, params)
+	case LenderActionRemoveItem:
+		return a.removeItemLenderRequest(ctx, pr, params, lmsAdapter)
 	case LenderActionShip:
-		return a.shipLenderRequest(ctx, pr, lms, illRequest, params)
+		return a.shipLenderRequest(ctx, pr, lmsAdapter, illRequest, params)
 	case LenderActionSupplyDocument:
 		return a.supplyDocumentRequest(ctx, pr, params)
 	case LenderActionMarkReceived:
-		return a.markReceivedLenderRequest(ctx, pr, lms)
+		return a.markReceivedLenderRequest(ctx, pr, lmsAdapter)
 	case LenderActionAcceptCancel:
-		return a.acceptCancelLenderRequest(ctx, pr, lms, illRequest)
+		return a.acceptCancelLenderRequest(ctx, pr, lmsAdapter, illRequest)
 	case LenderActionAskRetry:
-		return a.askRetryLenderRequest(ctx, pr, lms, illRequest, params)
+		return a.askRetryLenderRequest(ctx, pr, lmsAdapter, illRequest, params)
 	case LenderActionSendNotification:
 		return a.sendNotificationLenderRequest(ctx, pr, params)
 	default:
@@ -1016,15 +1025,25 @@ func (a *PatronRequestActionService) cannotSupplyLocallyBorrowingRequest(ctx com
 }
 
 func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
-	_, _, _, err := lmsAdapter.RequestItem(
-		pr.ID,
+	requestID := pr.ID
+	userID := pr.Patron.String
+	requestedItem, err := lmsAdapter.RequestItem(
+		requestID,
 		illRequest.BibliographicInfo.SupplierUniqueRecordId,
-		pr.Patron.String,
+		userID,
 		lmsAdapter.RequesterPickupLocation(),
 		lmsAdapter.ItemLocation(),
 	)
 	if err != nil {
 		status, result := logActionErrorAndReturnResult(ctx, "LMS RequestItem failed", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	if requestedItem != nil && strings.TrimSpace(requestedItem.Barcode) == "" {
+		barcodeErr := errors.New("missing item barcode")
+		if cancelErr := lmsAdapter.CancelRequestItem(requestID, userID); cancelErr != nil {
+			barcodeErr = errors.Join(barcodeErr, fmt.Errorf("LMS CancelRequestItem compensation failed: %w", cancelErr))
+		}
+		status, result := logActionErrorAndReturnResult(ctx, "LMS RequestItem returned an empty barcode", barcodeErr)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 
@@ -1054,7 +1073,10 @@ func (a *PatronRequestActionService) validatePatronLenderRequest(ctx common.Exte
 
 func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
 	if illRequest.ServiceInfo == nil || illRequest.ServiceInfo.ServiceType == iso18626.TypeServiceTypeLoan {
-		if message, err := a.ensureLenderRequestItem(ctx, pr, lmsAdapter, illRequest); err != nil {
+		var message string
+		var err error
+		pr, message, err = a.ensureLenderRequestItem(ctx, pr, lmsAdapter, illRequest)
+		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, message, err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
@@ -1077,19 +1099,25 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 // ensureLenderRequestItem is idempotent so a failed ISO confirmation can be
 // retried without creating a second LMS request. CopyOrLoan defers this work
 // until ship, because choosing supply-document must not leave an LMS item behind.
-func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (string, error) {
-	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
-	if err != nil {
-		return "failed to get existing items", err
+func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (pr_db.PatronRequest, string, error) {
+	requestID := strings.TrimSpace(illRequest.Header.RequestingAgencyRequestId)
+	items := []pr_db.Item{}
+	if requestID != "" {
+		var err error
+		items, err = a.prRepo.GetItemsByPrId(ctx, pr.ID)
+		if err != nil {
+			return pr, "failed to get existing items", err
+		}
+		pr.Items = itemsToPrItems(items)
+		for _, item := range items {
+			if item.LmsRequestID.Valid && strings.TrimSpace(item.LmsRequestID.String) == requestID {
+				return pr, "", nil
+			}
+		}
 	}
-	if len(items) > 0 {
-		return "", nil
-	}
-
 	itemID := illRequest.BibliographicInfo.SupplierUniqueRecordId
-	requestID := illRequest.Header.RequestingAgencyRequestId
 	userID := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
-	itemBarcode, callNumber, title, err := lmsAdapter.RequestItem(
+	response, err := lmsAdapter.RequestItem(
 		requestID,
 		itemID,
 		userID,
@@ -1097,50 +1125,174 @@ func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.Extended
 		lmsAdapter.ItemLocation(),
 	)
 	if err != nil {
-		return "LMS RequestItem failed", err
+		return pr, "LMS RequestItem failed", err
 	}
+	if response == nil {
+		return pr, "", nil
+	}
+	barcode := strings.TrimSpace(response.Barcode)
+	if barcode == "" {
+		barcodeErr := errors.New("missing item barcode")
+		if cancelErr := lmsAdapter.CancelRequestItem(requestID, userID); cancelErr != nil {
+			barcodeErr = errors.Join(barcodeErr, fmt.Errorf("LMS CancelRequestItem compensation failed: %w", cancelErr))
+		}
+		return pr, "LMS RequestItem returned an empty barcode", barcodeErr
+	}
+	for _, existingItem := range items {
+		if strings.TrimSpace(existingItem.Barcode) == barcode {
+			duplicateErr := errors.New("item barcode is already attached to the request")
+			if cancelErr := lmsAdapter.CancelRequestItem(requestID, userID); cancelErr != nil {
+				duplicateErr = errors.Join(duplicateErr, fmt.Errorf("LMS CancelRequestItem compensation failed: %w", cancelErr))
+			}
+			return pr, "LMS RequestItem returned a duplicate barcode", duplicateErr
+		}
+	}
+	title := response.Title
 	if title == "" {
 		title = illRequest.BibliographicInfo.Title
 	}
-	_, err = a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
-		ID:         uuid.NewString(),
-		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
-		PrID:       pr.ID,
-		ItemID:     getDbText(itemID),
-		Title:      getDbTextPtr(&title),
-		CallNumber: getDbTextPtr(&callNumber),
-		Barcode:    itemBarcode,
+	callNumber := response.CallNumber
+	item, err := a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
+		ID:           uuid.NewString(),
+		CreatedAt:    pgtype.Timestamp{Valid: true, Time: time.Now()},
+		PrID:         pr.ID,
+		ItemID:       getDbText(itemID),
+		LmsRequestID: getDbText(requestID),
+		Title:        getDbTextPtr(&title),
+		CallNumber:   getDbTextPtr(&callNumber),
+		Barcode:      barcode,
 	})
 	if err != nil {
 		if cancelErr := lmsAdapter.CancelRequestItem(requestID, userID); cancelErr != nil {
 			err = errors.Join(err, fmt.Errorf("LMS CancelRequestItem compensation failed: %w", cancelErr))
 		}
-		return "failed to save item", err
+		return pr, "failed to save item", err
 	}
-	return "", nil
+	pr.Items = append(pr.Items, itemToPrItem(item))
+	return pr, "", nil
 }
 
-func (a *PatronRequestActionService) cancelLenderRequestItem(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) error {
+func (a *PatronRequestActionService) addItemLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
+	barcode := strings.TrimSpace(params.Barcode)
+	if barcode == "" {
+		status, result := logActionErrorAndReturnResult(ctx, "barcode is required", nil)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to get existing items", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	for _, item := range items {
+		if strings.TrimSpace(item.Barcode) == barcode {
+			status, result := logActionErrorAndReturnResult(ctx, "item barcode is already attached to the request", nil)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+	}
+	title := strings.TrimSpace(params.Title)
+	if title == "" {
+		title = pr.IllRequest.BibliographicInfo.Title
+	}
+	callNumber := strings.TrimSpace(params.CallNumber)
+	itemID := strings.TrimSpace(params.ItemID)
+	item, err := a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
+		ID:         uuid.NewString(),
+		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
+		PrID:       pr.ID,
+		ItemID:     getDbTextPtr(&itemID),
+		Title:      getDbTextPtr(&title),
+		CallNumber: getDbTextPtr(&callNumber),
+		Barcode:    barcode,
+	})
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to save item", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	pr.Items = append(itemsToPrItems(items), itemToPrItem(item))
+	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
+}
+
+func (a *PatronRequestActionService) removeItemLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams, lmsAdapter lms.LmsAdapter) actionExecutionResult {
+	barcode := strings.TrimSpace(params.Barcode)
+	if barcode == "" {
+		status, result := logActionErrorAndReturnResult(ctx, "barcode is required", nil)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to get existing items", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	var matchedItems []pr_db.Item
+	for _, item := range items {
+		if strings.TrimSpace(item.Barcode) == barcode {
+			matchedItems = append(matchedItems, item)
+		}
+	}
+	if len(matchedItems) == 0 {
+		status, result := logActionErrorAndReturnResult(ctx, "item barcode is not attached to the request", nil)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	if len(matchedItems) > 1 {
+		status, result := logActionErrorAndReturnResult(ctx, "multiple items with the same barcode are attached to the request", nil)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	item := matchedItems[0]
+	if item.LmsRequestID.Valid && strings.TrimSpace(item.LmsRequestID.String) != "" {
+		if !pr.RequesterSymbol.Valid || strings.TrimSpace(pr.RequesterSymbol.String) == "" {
+			status, result := logActionErrorAndReturnResult(ctx, "invalid requester symbol", nil)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		userID := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
+		if err := lmsAdapter.CancelRequestItem(strings.TrimSpace(item.LmsRequestID.String), userID); err != nil {
+			status, result := logActionErrorAndReturnResult(ctx, "LMS CancelRequestItem failed", err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+	}
+	if err := a.prRepo.DeleteItemById(ctx, item.ID); err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to delete item", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	remainingItems := make([]pr_db.Item, 0, len(items)-1)
+	for _, existingItem := range items {
+		if existingItem.ID != item.ID {
+			remainingItems = append(remainingItems, existingItem)
+		}
+	}
+	pr.Items = itemsToPrItems(remainingItems)
+	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
+}
+
+func (a *PatronRequestActionService) cancelLenderRequestItems(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter) error {
 	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get items: %w", err)
 	}
-	if len(items) == 0 {
+	requestIDs := make(map[string]struct{})
+	for _, item := range items {
+		requestID := strings.TrimSpace(item.LmsRequestID.String)
+		if item.LmsRequestID.Valid && requestID != "" {
+			requestIDs[requestID] = struct{}{}
+		}
+	}
+	if len(requestIDs) == 0 {
 		return nil
 	}
-	requestId := illRequest.Header.RequestingAgencyRequestId
-	if requestId == "" {
-		return errors.New("missing RequestingAgencyRequestId for LMS CancelRequestItem")
-	}
-	if !pr.RequesterSymbol.Valid || pr.RequesterSymbol.String == "" {
+	if !pr.RequesterSymbol.Valid || strings.TrimSpace(pr.RequesterSymbol.String) == "" {
 		return errors.New("invalid requester symbol")
 	}
-	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
-	return lmsAdapter.CancelRequestItem(requestId, userId)
+	userID := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
+	var cancelErrors []error
+	for requestID := range requestIDs {
+		if err := lmsAdapter.CancelRequestItem(requestID, userID); err != nil {
+			cancelErrors = append(cancelErrors, fmt.Errorf("cancel LMS request %s: %w", requestID, err))
+		}
+	}
+	return errors.Join(cancelErrors...)
 }
 
 func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
-	if err := a.cancelLenderRequestItem(ctx, pr, lmsAdapter, illRequest); err != nil {
+	if err := a.cancelLenderRequestItems(ctx, pr, lmsAdapter); err != nil {
 		status, result := logActionErrorAndReturnResult(ctx, "LMS CancelRequestItem failed", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
@@ -1160,7 +1312,7 @@ func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.Extend
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
-func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
+func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
 	if params.LoanCondition == "" && params.Cost == nil {
 		status, result := logActionErrorAndReturnResult(ctx, "loanCondition or cost is required", nil)
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -1186,6 +1338,15 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 	if params.LoanCondition != "" {
 		deliveryInfo = &iso18626.DeliveryInfo{
 			LoanCondition: &iso18626.TypeSchemeValuePair{Text: params.LoanCondition},
+		}
+	}
+	if illRequest.ServiceInfo == nil || illRequest.ServiceInfo.ServiceType == iso18626.TypeServiceTypeLoan {
+		var message string
+		var err error
+		pr, message, err = a.ensureLenderRequestItem(ctx, pr, lmsAdapter, illRequest)
+		if err != nil {
+			status, result := logActionErrorAndReturnResult(ctx, message, err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
 	}
 	result := events.EventResult{}
@@ -1219,12 +1380,14 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 
 func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
 	if illRequest.ServiceInfo != nil && illRequest.ServiceInfo.ServiceType == iso18626.TypeServiceTypeCopyOrLoan {
-		if message, err := a.ensureLenderRequestItem(ctx, pr, lmsAdapter, illRequest); err != nil {
+		var message string
+		var err error
+		pr, message, err = a.ensureLenderRequestItem(ctx, pr, lmsAdapter, illRequest)
+		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, message, err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
 	}
-	requestId := illRequest.Header.RequestingAgencyRequestId
 	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
 	externalReferenceValue := ""
 
@@ -1235,6 +1398,10 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 	}
 	for i := range items {
 		item := &items[i]
+		requestId := ""
+		if item.LmsRequestID.Valid {
+			requestId = item.LmsRequestID.String
+		}
 		title, err := lmsAdapter.CheckOutItem(requestId, item.Barcode, userId, externalReferenceValue)
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
@@ -1243,13 +1410,14 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 		if title != "" {
 			item.Title = getDbText(title)
 			_, err = a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
-				ID:         item.ID,
-				CreatedAt:  item.CreatedAt,
-				PrID:       item.PrID,
-				ItemID:     item.ItemID,
-				Title:      item.Title,
-				CallNumber: item.CallNumber,
-				Barcode:    item.Barcode,
+				ID:           item.ID,
+				CreatedAt:    item.CreatedAt,
+				PrID:         item.PrID,
+				ItemID:       item.ItemID,
+				LmsRequestID: item.LmsRequestID,
+				Title:        item.Title,
+				CallNumber:   item.CallNumber,
+				Barcode:      item.Barcode,
 			})
 			if err != nil {
 				status, result := logActionErrorAndReturnResult(ctx, "failed to save item", err)
@@ -1257,6 +1425,7 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 			}
 		}
 	}
+	pr.Items = itemsToPrItems(items)
 	var note string
 	if params.Note == "" {
 		note = encodeItemsNote(items)
@@ -1332,6 +1501,37 @@ func encodeItemsNote(items []pr_db.Item) string {
 	return common.PackItemsNote(list)
 }
 
+func itemToPrItem(item pr_db.Item) pr_db.PrItem {
+	var callNumber *string
+	if item.CallNumber.Valid {
+		callNumber = &item.CallNumber.String
+	}
+	var title *string
+	if item.Title.Valid {
+		title = &item.Title.String
+	}
+	var itemID *string
+	if item.ItemID.Valid {
+		itemID = &item.ItemID.String
+	}
+	return pr_db.PrItem{
+		ID:         item.ID,
+		Barcode:    item.Barcode,
+		CallNumber: callNumber,
+		Title:      title,
+		ItemID:     itemID,
+		CreatedAt:  item.CreatedAt.Time,
+	}
+}
+
+func itemsToPrItems(items []pr_db.Item) []pr_db.PrItem {
+	result := make([]pr_db.PrItem, 0, len(items))
+	for _, item := range items {
+		result = append(result, itemToPrItem(item))
+	}
+	return result
+}
+
 func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter) actionExecutionResult {
 	items, err := a.getItems(ctx, pr)
 	if err != nil {
@@ -1369,7 +1569,7 @@ func (a *PatronRequestActionService) rejectCancelLenderRequest(ctx common.Extend
 }
 
 func (a *PatronRequestActionService) acceptCancelLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
-	if err := a.cancelLenderRequestItem(ctx, pr, lmsAdapter, illRequest); err != nil {
+	if err := a.cancelLenderRequestItems(ctx, pr, lmsAdapter); err != nil {
 		status, result := logActionErrorAndReturnResult(ctx, "LMS CancelRequestItem failed", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
@@ -1403,7 +1603,7 @@ func (a *PatronRequestActionService) askRetryLenderRequest(ctx common.ExtendedCo
 		status, result := logActionErrorAndReturnResult(ctx, fmt.Sprintf("unsupported reasonRetry %q for ask-retry action (supported: %q)", params.ReasonRetry, iso18626.ReasonRetryNotFoundAsCited), nil)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	if err := a.cancelLenderRequestItem(ctx, pr, lmsAdapter, illRequest); err != nil {
+	if err := a.cancelLenderRequestItems(ctx, pr, lmsAdapter); err != nil {
 		status, result := logActionErrorAndReturnResult(ctx, "LMS CancelRequestItem failed", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}

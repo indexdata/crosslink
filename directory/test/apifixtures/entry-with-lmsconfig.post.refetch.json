@@ -11,6 +11,7 @@
     "itemLocation":"",
     "lookupUserEnabled":true,
     "requestItemBibIdCode":"SYSNUMBER",
+    "requestItemEnabled":true,
     "requestItemPickupLocationEnabled":true,
     "requestItemRequestScopeType":"Item",
     "requestItemRequestType":"Page",

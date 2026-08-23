@@ -1900,6 +1900,10 @@ components:
           type: boolean
           description: Whether item check-out is enabled
           default: true
+        requestItemEnabled:
+          type: boolean
+          description: Whether item requesting is enabled
+          default: true
         itemLocation:
           type: string
           description: Location code to include in NCIP RequestItem messages
@@ -1955,6 +1959,9 @@ components:
           type: boolean
           nullable: true
         checkOutItemEnabled:
+          type: boolean
+          nullable: true
+        requestItemEnabled:
           type: boolean
           nullable: true
         itemLocation:

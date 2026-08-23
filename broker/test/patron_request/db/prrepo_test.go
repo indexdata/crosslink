@@ -135,6 +135,9 @@ func TestDeleteItemById(t *testing.T) {
 	assert.NoError(t, prRepo.DeleteItemById(appCtx, itemID))
 	_, err = prRepo.GetItemById(appCtx, itemID)
 	assert.ErrorIs(t, err, pgx.ErrNoRows)
+	pr, err := prRepo.GetPatronRequestById(appCtx, prID)
+	assert.NoError(t, err)
+	assert.Empty(t, pr.Items)
 }
 
 func TestDeleteNotificationById(t *testing.T) {
