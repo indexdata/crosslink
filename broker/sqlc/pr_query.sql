@@ -92,14 +92,15 @@ LIMIT 1;
 SELECT get_next_hrid($1)::TEXT AS hrid;
 
 -- name: SaveItem :one
-INSERT INTO item (id, pr_id, barcode, call_number, title, item_id, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO item (id, pr_id, barcode, call_number, title, item_id, lms_request_id, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (id) DO UPDATE
     SET pr_id       = EXCLUDED.pr_id,
         barcode = EXCLUDED.barcode,
         call_number = EXCLUDED.call_number,
         title = EXCLUDED.title,
         item_id = EXCLUDED.item_id,
+        lms_request_id = EXCLUDED.lms_request_id,
         created_at = EXCLUDED.created_at
 RETURNING sqlc.embed(item);
 

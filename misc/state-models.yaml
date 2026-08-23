@@ -3,7 +3,7 @@ stateModels:
     type: StateModel
     name: CrossLink State Model
     desc: "Requester/Supplier workflow for returnable loans and non-returnable copies over ISO18626."
-    version: 3.0.0
+    version: 3.1.0
     selector:
       serviceType: [Copy, Loan, CopyOrLoan]
     states:
@@ -532,6 +532,14 @@ stateModels:
         side: SUPPLIER
         closingAction: cannot-supply
         actions:
+          - name: add-item
+            desc: Manually attach an item to the lending request
+            appliesTo:
+              serviceTypes: [Loan, CopyOrLoan]
+          - name: remove-item
+            desc: Remove an attached item by barcode
+            appliesTo:
+              serviceTypes: [Loan, CopyOrLoan]
           - name: add-condition
             desc: Add conditions and notify requester
             transitions:
@@ -597,6 +605,14 @@ stateModels:
         side: SUPPLIER
         closingAction: cannot-supply
         actions:
+          - name: add-item
+            desc: Manually attach an item to the lending request
+            appliesTo:
+              serviceTypes: [Loan, CopyOrLoan]
+          - name: remove-item
+            desc: Remove an attached item by barcode
+            appliesTo:
+              serviceTypes: [Loan, CopyOrLoan]
           - name: add-condition
             desc: Add additional conditions and notify requester
             transitions:

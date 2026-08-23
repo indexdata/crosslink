@@ -49,6 +49,12 @@ func TestBuiltInStateModelCapabilities(t *testing.T) {
 	assert.True(t, slices.ContainsFunc(c.SupplierActions, func(a proapi.ActionCapability) bool {
 		return a.Name == string(LenderActionSupplyDocument) && slices.Equal(a.Parameters, []string{"note", "deliveryUrl"})
 	}))
+	assert.True(t, slices.ContainsFunc(c.SupplierActions, func(a proapi.ActionCapability) bool {
+		return a.Name == string(LenderActionAddItem) && slices.Equal(a.Parameters, []string{"barcode", "callNumber", "title", "itemId"})
+	}))
+	assert.True(t, slices.ContainsFunc(c.SupplierActions, func(a proapi.ActionCapability) bool {
+		return a.Name == string(LenderActionRemoveItem) && slices.Equal(a.Parameters, []string{"barcode"})
+	}))
 
 	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierWillSupply)))
 	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierCancelledLocal)))
