@@ -88,16 +88,17 @@ func TestGetAdapterOtherWithConfig(t *testing.T) {
 	assert.Contains(t, err.Error(), "unsupported lookup adapter type: other")
 }
 
-func TestGetAdapterMissingProperties(t *testing.T) {
+func TestGetAdapterMetadataOnly(t *testing.T) {
 	creator := NewLookupAdapterCreator("zoom", "")
+	mode := dirapi.Merge
 	peer := ill_db.Peer{
 		CustomData: dirapi.Entry{
-			CatalogConfig: &dirapi.CatalogConfig{},
+			CatalogConfig: &dirapi.CatalogConfig{MetadataUpdateMode: &mode},
 		},
 	}
-	_, err := creator.GetAdapter(peer)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "must specify either sru or zoom properties")
+	aa, err := creator.GetAdapter(peer)
+	assert.NoError(t, err)
+	assert.Nil(t, aa)
 }
 
 func TestGetAdapterMock(t *testing.T) {

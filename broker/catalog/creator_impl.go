@@ -57,7 +57,9 @@ func getHoldingsParser(config *dirapi.HoldingsParserConfig) (HoldingsParser, err
 func (c *LookupAdapterCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, error) {
 	entry := peer.CustomData
 	config := entry.CatalogConfig
-	if config == nil {
+	// CatalogConfig also contains settings unrelated to availability, such as
+	// metadataUpdateMode. Only an SRU or ZOOM definition enables the check.
+	if config == nil || (config.Sru == nil && config.Zoom == nil) {
 		return nil, nil // No lookup adapter for this peer
 	}
 	if c.mode == LookupAdapterMock {
@@ -91,5 +93,5 @@ func (c *LookupAdapterCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, 
 			return nil, fmt.Errorf("unsupported lookup adapter type: %s", c.mode)
 		}
 	}
-	return nil, fmt.Errorf("must specify either sru or zoom properties for lookup adapter type")
+	return nil, nil
 }

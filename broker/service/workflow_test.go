@@ -505,6 +505,7 @@ type MockEventBus struct {
 	events.PostgresEventBus
 	TasksCreated     int
 	BroadcastCreated int
+	TaskNames        []events.EventName
 }
 
 func (r *MockEventBus) CreateTask(illTransactionID string, eventName events.EventName, data events.EventData, eventClass events.EventDomain, parentId *string, target events.SignalTarget) (string, error) {
@@ -513,11 +514,70 @@ func (r *MockEventBus) CreateTask(illTransactionID string, eventName events.Even
 		return "id2", nil
 	}
 	r.TasksCreated++
+	r.TaskNames = append(r.TaskNames, eventName)
 	if target == events.SignalAll {
 		r.BroadcastCreated++
 		return "id2", nil
 	}
 	return "id1", nil
+}
+
+func TestOnCheckAvailabilityComplete(t *testing.T) {
+	tests := []struct {
+		name          string
+		status        events.EventStatus
+		customData    map[string]any
+		expectedTasks []events.EventName
+	}{
+		{
+			name:          "available",
+			status:        events.EventStatusSuccess,
+			customData:    map[string]any{"skipped": false, "localSupplier": false},
+			expectedTasks: []events.EventName{events.EventNameMessageRequester, events.EventNameMessageSupplier},
+		},
+		{
+			name:          "availability check failed open",
+			status:        events.EventStatusError,
+			customData:    map[string]any{"skipped": false, "localSupplier": false},
+			expectedTasks: []events.EventName{events.EventNameMessageRequester, events.EventNameMessageSupplier},
+		},
+		{
+			name:          "unavailable",
+			status:        events.EventStatusSuccess,
+			customData:    map[string]any{"skipped": true, "localSupplier": false},
+			expectedTasks: []events.EventName{events.EventNameSelectSupplier},
+		},
+		{
+			name:          "local supplier",
+			status:        events.EventStatusSuccess,
+			customData:    map[string]any{"skipped": false, "localSupplier": true},
+			expectedTasks: []events.EventName{events.EventNameMessageRequester},
+		},
+		{
+			name:          "fatal error without availability result",
+			status:        events.EventStatusError,
+			expectedTasks: []events.EventName{events.EventNameMessageRequester},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+			eventBus := new(MockEventBus)
+			manager := CreateWorkflowManager(eventBus, new(MockIllRepositoryRequester), WorkflowConfig{})
+
+			manager.OnCheckAvailabilityComplete(appCtx, events.Event{
+				ID:               "event-id",
+				IllTransactionID: "transaction-id",
+				EventStatus:      tt.status,
+				ResultData: events.EventResult{
+					CustomData: tt.customData,
+				},
+			})
+
+			assert.Equal(t, tt.expectedTasks, eventBus.TaskNames)
+		})
+	}
 }
 
 func (r *MockEventBus) GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (events.Event, error) {

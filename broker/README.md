@@ -135,6 +135,8 @@ Configuration is provided via environment variables:
 | `BATCH_PULLSLIP_MAX_COUNT`   | Max count of Patron request to include in pullslip batch                                | `100`                                     |
 | `BATCH_ACTION_RUN_RETENTION` | Number of batch action events to retain. Set to 0 to disable retention cleanup.         | `5`                                       |
 
+Availability checks are enabled per supplier by the presence of `catalogConfig.sru` or `catalogConfig.zoom` in its Directory entry. Other catalog settings, such as `metadataUpdateMode`, do not enable availability checks. A successful lookup with no holdings skips the supplier and advances the rota. Adapter, lookup, and result-processing failures are recorded as errors but fail open: the selected supplier still receives the request. This prevents a transient catalog failure from being treated as confirmed unavailability.
+
 # Build
 
 Generate sources and compile the main programs with:
