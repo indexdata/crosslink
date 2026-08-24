@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
@@ -273,10 +274,11 @@ func (r *MockIllRepositoryNoSelectedSupplier) GetSelectedSupplierForIllTransacti
 // configurable results for duplicate-check testing.
 type mockDuplicateCheckRepo struct {
 	mocks.MockIllRepositorySuccess
-	duplicate bool
-	err       error
-	called    bool
-	cql       string
+	duplicate          bool
+	matchedTransaction ill_db.IllTransaction
+	err                error
+	called             bool
+	cql                string
 }
 
 func (r *mockDuplicateCheckRepo) ListIllTransactions(ctx common.ExtendedContext, params ill_db.ListIllTransactionsParams, cql *string, symbols []string) ([]ill_db.IllTransaction, int64, error) {
@@ -285,7 +287,9 @@ func (r *mockDuplicateCheckRepo) ListIllTransactions(ctx common.ExtendedContext,
 	}
 	r.called = true
 	if r.duplicate {
-		return []ill_db.IllTransaction{{ID: "duplicate-id"}}, 1, nil
+		matchedTransaction := r.matchedTransaction
+		matchedTransaction.ID = "duplicate-id"
+		return []ill_db.IllTransaction{matchedTransaction}, 1, nil
 	}
 	return []ill_db.IllTransaction{}, 0, r.err
 }
@@ -335,6 +339,8 @@ func TestCheckDuplicateRequest(t *testing.T) {
 		wantIssn       string
 		wantTitle      string
 		wantSvcType    string
+		matchedInfo    iso18626.BibliographicInfo
+		wantMatched    catalog.LookupParams
 	}{
 		{
 			name:           "no DuplicateCheckWindowHours configured - skips check",
@@ -392,6 +398,15 @@ func TestCheckDuplicateRequest(t *testing.T) {
 			wantIdentifier: "rec-1",
 			wantTitle:      "Test Title",
 			wantSvcType:    "Loan",
+			matchedInfo: iso18626.BibliographicInfo{
+				SupplierUniqueRecordId: "rec-1",
+				Title:                  "test title",
+			},
+			wantMatched: catalog.LookupParams{
+				Identifier:  "rec-1",
+				Title:       "test title",
+				ServiceType: "Loan",
+			},
 		},
 		{
 			name: "nil PatronInfo - skips duplicate check (can't verify same patron)",
@@ -441,6 +456,18 @@ func TestCheckDuplicateRequest(t *testing.T) {
 			wantPatronId:   "patron-2",
 			wantIsbn:       "978-1234",
 			wantSvcType:    "Copy",
+			matchedInfo: iso18626.BibliographicInfo{
+				BibliographicItemId: []iso18626.BibliographicItemId{
+					{
+						BibliographicItemIdentifier:     "978-1-234",
+						BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{Text: "ISBN"},
+					},
+				},
+			},
+			wantMatched: catalog.LookupParams{
+				Isbn:        "978-1-234",
+				ServiceType: "Copy",
+			},
 		},
 		{
 			name:           "no duplicate - returns nil",
@@ -460,7 +487,13 @@ func TestCheckDuplicateRequest(t *testing.T) {
 			appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 			mockRepo := &mockDuplicateCheckRepo{
 				duplicate: tt.duplicate,
-				err:       tt.repoErr,
+				matchedTransaction: ill_db.IllTransaction{
+					IllTransactionData: ill_db.IllTransactionData{
+						BibliographicInfo: tt.matchedInfo,
+						ServiceInfo:       tt.request.ServiceInfo,
+					},
+				},
+				err: tt.repoErr,
 			}
 			result, err := checkDuplicateRequest(appCtx, tt.request, mockRepo, "ISIL:REQ1", tt.peer)
 			_, hasKey := result[duplicateCheckKey]
@@ -487,6 +520,9 @@ func TestCheckDuplicateRequest(t *testing.T) {
 				assert.Equal(t, window1, *dupCheck.WindowHours)
 				assert.NotNil(t, dupCheck.CutoffTime)
 				assert.Equal(t, "duplicate-id", *dupCheck.MatchedTransactionId)
+				if assert.NotNil(t, dupCheck.MatchedValues) {
+					assert.Equal(t, tt.wantMatched, *dupCheck.MatchedValues)
+				}
 			}
 		})
 	}

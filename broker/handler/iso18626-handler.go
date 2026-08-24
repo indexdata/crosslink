@@ -260,6 +260,11 @@ func checkDuplicateRequest(ctx common.ExtendedContext, request *iso18626.Request
 	}
 	duplicateCheck.Duplicate = true
 	duplicateCheck.MatchedTransactionId = &trans[0].ID
+	matchedValues := catalog.LookupParamsFromBibliographicInfo(
+		trans[0].IllTransactionData.BibliographicInfo,
+		trans[0].IllTransactionData.ServiceInfo,
+	)
+	duplicateCheck.MatchedValues = &matchedValues
 	return resultMap, ErrDuplicateRequest
 }
 

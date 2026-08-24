@@ -1,6 +1,7 @@
 package sruapi
 
 import (
+	"crypto/sha256"
 	"encoding/xml"
 	"fmt"
 	"net/http"
@@ -74,22 +75,76 @@ func (api *SruApi) getIdFromQuery(query string) (string, *diag.Diagnostic) {
 	return sc.Term, nil
 }
 
+type mockBibliographicMetadata struct {
+	identifier string
+	title      string
+	isbn       string
+	issn       string
+}
+
+func mockMetadataForId(id string) mockBibliographicMetadata {
+	digest := sha256.Sum256([]byte(id))
+	identifier := fmt.Sprintf("%x", digest[:8])
+	return mockBibliographicMetadata{
+		identifier: identifier,
+		title:      "Title record from SRU mock " + identifier,
+		isbn:       mockIsbn(digest[:9]),
+		issn:       mockIssn(digest[9:16]),
+	}
+}
+
+func mockIsbn(source []byte) string {
+	digits := "978" + mockDigits(source)
+	sum := 0
+	for i, digit := range digits {
+		weight := 1
+		if i%2 == 1 {
+			weight = 3
+		}
+		sum += int(digit-'0') * weight
+	}
+	return digits + strconv.Itoa((10-sum%10)%10)
+}
+
+func mockIssn(source []byte) string {
+	digits := mockDigits(source)
+	sum := 0
+	for i, digit := range digits {
+		sum += int(digit-'0') * (8 - i)
+	}
+	checkDigit := (11 - sum%11) % 11
+	if checkDigit == 10 {
+		return digits + "X"
+	}
+	return digits + strconv.Itoa(checkDigit)
+}
+
+func mockDigits(source []byte) string {
+	var digits strings.Builder
+	digits.Grow(len(source))
+	for _, value := range source {
+		digits.WriteByte('0' + value%10)
+	}
+	return digits.String()
+}
+
 func (api *SruApi) getMarcXmlRecord(id string) (*marcxml.Record, error) {
 	var record marcxml.Record
+	metadata := mockMetadataForId(id)
 
 	record.Id = id
 	record.Type = string(marcxml.RecordTypeTypeBibliographic)
 	record.Leader = &marcxml.LeaderFieldType{Text: "00000cam a2200000 a 4500"}
-	record.Controlfield = append(record.Controlfield, marcxml.ControlFieldType{Text: "123456", Id: "2", Tag: "001"})
+	record.Controlfield = append(record.Controlfield, marcxml.ControlFieldType{Text: marcxml.ControlDataType(metadata.identifier), Id: "2", Tag: "001"})
 	record.Datafield = append(record.Datafield, marcxml.DataFieldType{Tag: "245", Ind1: "1", Ind2: "0",
 		Subfield: []marcxml.SubfieldatafieldType{
-			{Code: "a", Text: "Title record from SRU mock"},
+			{Code: "a", Text: marcxml.SubfieldDataType(metadata.title)},
 			{Code: "b", Text: "Subtitle from SRU mock"},
 			{Code: "c", Text: "Author from SRU mock"},
 		}})
 	record.Datafield = append(record.Datafield,
-		marcxml.DataFieldType{Tag: "020", Subfield: []marcxml.SubfieldatafieldType{{Code: "a", Text: "9781402894626"}}},
-		marcxml.DataFieldType{Tag: "022", Subfield: []marcxml.SubfieldatafieldType{{Code: "a", Text: "20493630"}}},
+		marcxml.DataFieldType{Tag: "020", Subfield: []marcxml.SubfieldatafieldType{{Code: "a", Text: marcxml.SubfieldDataType(metadata.isbn)}}},
+		marcxml.DataFieldType{Tag: "022", Subfield: []marcxml.SubfieldatafieldType{{Code: "a", Text: marcxml.SubfieldDataType(metadata.issn)}}},
 		marcxml.DataFieldType{Tag: "250", Subfield: []marcxml.SubfieldatafieldType{{Code: "a", Text: "Mock edition"}}},
 	)
 	localIds := strings.Split(id, ";")

@@ -90,6 +90,8 @@ const (
 	LenderActionRejectCancel           pr_db.PatronRequestAction = "reject-cancel"
 	LenderActionCannotSupply           pr_db.PatronRequestAction = "cannot-supply"
 	LenderActionAddCondition           pr_db.PatronRequestAction = "add-condition"
+	LenderActionAddItem                pr_db.PatronRequestAction = "add-item"
+	LenderActionRemoveItem             pr_db.PatronRequestAction = "remove-item"
 	LenderActionShip                   pr_db.PatronRequestAction = "ship"
 	LenderActionSupplyDocument         pr_db.PatronRequestAction = "supply-document"
 	LenderActionMarkReceived           pr_db.PatronRequestAction = "mark-received"
@@ -312,6 +314,21 @@ func supplierBuiltInActions() []proapi.ActionCapability {
 				"loanCondition",
 				"cost",
 				"currency",
+			},
+		},
+		{
+			Name: string(LenderActionAddItem),
+			Parameters: []string{
+				"barcode",
+				"callNumber",
+				"title",
+				"itemId",
+			},
+		},
+		{
+			Name: string(LenderActionRemoveItem),
+			Parameters: []string{
+				"barcode",
 			},
 		},
 		{

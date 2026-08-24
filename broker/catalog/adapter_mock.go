@@ -8,9 +8,10 @@ import (
 )
 
 type MockLookupAdapter struct {
-	Err      error
-	Holdings []Holding
-	Metadata Metadata
+	Err         error
+	HoldingsErr error
+	Holdings    []Holding
+	Metadata    Metadata
 }
 
 type MockLookupResult struct {
@@ -28,6 +29,11 @@ func NewMockLookupAdapter(config dirapi.CatalogConfig) (LookupAdapter, error) {
 		if val, ok := options["lookup-error"]; ok && strings.ToLower(val) == "true" {
 			return &MockLookupAdapter{
 				Err: fmt.Errorf("mock error triggered by config"),
+			}, nil
+		}
+		if val, ok := options["holdings-error"]; ok && strings.ToLower(val) == "true" {
+			return &MockLookupAdapter{
+				HoldingsErr: fmt.Errorf("mock holdings error triggered by config"),
 			}, nil
 		}
 		if val, ok := options["location"]; ok {
@@ -51,6 +57,9 @@ func (a *MockLookupAdapter) Lookup(params LookupParams) (LookupResult, error) {
 }
 
 func (a *MockLookupResult) GetHoldings() ([]Holding, error) {
+	if a.parent.HoldingsErr != nil {
+		return nil, a.parent.HoldingsErr
+	}
 	return a.parent.Holdings, nil
 }
 

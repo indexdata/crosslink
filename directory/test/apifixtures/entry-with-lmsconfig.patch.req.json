@@ -2,6 +2,7 @@
     "lmsConfig" : {
     "address" : "https://thedoor.ismadeofsoup.com",
     "fromAgency" : "bongiornio",
-    "acceptItemEnabled":false
+    "acceptItemEnabled":false,
+    "requestItemEnabled":false
  }
 }
