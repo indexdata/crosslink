@@ -50,6 +50,8 @@ const (
 	BorrowerStateClosedDuplicate  pr_db.PatronRequestState = "CLOSED_DUPLICATE"
 	LenderStateNew                pr_db.PatronRequestState = "NEW"
 	LenderStateValidated          pr_db.PatronRequestState = "VALIDATED"
+	LenderStateItemPending        pr_db.PatronRequestState = "ITEM_PENDING"
+	LenderStateWillSupplyPending  pr_db.PatronRequestState = "WILL_SUPPLY_PENDING"
 	LenderStateWillSupply         pr_db.PatronRequestState = "WILL_SUPPLY"
 	LenderStateConditionPending   pr_db.PatronRequestState = "CONDITION_PENDING"
 	LenderStateConditionAccepted  pr_db.PatronRequestState = "CONDITION_ACCEPTED"
@@ -86,6 +88,7 @@ const (
 	BorrowerActionSkipMetadataUpdate   pr_db.PatronRequestAction = "skip-metadata-update"
 	BorrowerActionCloseRequest         pr_db.PatronRequestAction = "close-request"
 	LenderActionValidatePatron         pr_db.PatronRequestAction = "validate-patron"
+	LenderActionRequestItem            pr_db.PatronRequestAction = "request-item"
 	LenderActionWillSupply             pr_db.PatronRequestAction = "will-supply"
 	LenderActionRejectCancel           pr_db.PatronRequestAction = "reject-cancel"
 	LenderActionCannotSupply           pr_db.PatronRequestAction = "cannot-supply"
@@ -157,6 +160,8 @@ func supplierBuiltInStates() []string {
 	return uniqueSorted([]string{
 		string(LenderStateNew),
 		string(LenderStateValidated),
+		string(LenderStateItemPending),
+		string(LenderStateWillSupplyPending),
 		string(LenderStateWillSupply),
 		string(LenderStateConditionPending),
 		string(LenderStateConditionAccepted),
@@ -288,6 +293,10 @@ func supplierBuiltInActions() []proapi.ActionCapability {
 	return []proapi.ActionCapability{
 		{
 			Name:       string(LenderActionValidatePatron),
+			Parameters: []string{},
+		},
+		{
+			Name:       string(LenderActionRequestItem),
 			Parameters: []string{},
 		},
 		{

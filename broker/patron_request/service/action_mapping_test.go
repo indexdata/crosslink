@@ -35,7 +35,9 @@ func TestNewDefaultLoanActionMapping(t *testing.T) {
 
 	lenderStateActionMapping := map[pr_db.PatronRequestState][]PatronRequestAction{
 		LenderStateNew:               {{actionName: LenderActionSendNotification, auto: true}, {actionName: LenderActionValidatePatron, auto: true}},
-		LenderStateValidated:         {{actionName: LenderActionWillSupply, auto: true}, {actionName: LenderActionCannotSupply}, {actionName: LenderActionAddCondition}, {actionName: LenderActionAskRetry}},
+		LenderStateValidated:         {{actionName: LenderActionRequestItem, auto: true}, {actionName: LenderActionCannotSupply}, {actionName: LenderActionAskRetry}},
+		LenderStateItemPending:       {{actionName: LenderActionRequestItem}, {actionName: LenderActionAddItem}, {actionName: LenderActionRemoveItem}, {actionName: LenderActionCannotSupply}, {actionName: LenderActionAskRetry}},
+		LenderStateWillSupplyPending: {{actionName: LenderActionWillSupply, auto: true}, {actionName: LenderActionCannotSupply}, {actionName: LenderActionAddCondition}, {actionName: LenderActionAskRetry}},
 		LenderStateWillSupply:        {{actionName: LenderActionAddItem}, {actionName: LenderActionRemoveItem}, {actionName: LenderActionAddCondition}, {actionName: LenderActionShip}, {actionName: LenderActionCannotSupply}, {actionName: LenderActionAskRetry}},
 		LenderStateConditionPending:  {{actionName: LenderActionAddCondition}, {actionName: LenderActionCannotSupply}},
 		LenderStateConditionAccepted: {{actionName: LenderActionAddItem}, {actionName: LenderActionRemoveItem}, {actionName: LenderActionAddCondition}, {actionName: LenderActionShip}, {actionName: LenderActionCannotSupply}},
@@ -118,6 +120,11 @@ func TestGetActionMappingAppliesServiceType(t *testing.T) {
 		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopyOrLoan},
 	})
 	assert.NoError(t, err)
+
+	validated := pr_db.PatronRequest{Side: SideLending, State: LenderStateValidated}
+	assert.True(t, copyMapping.IsActionSupported(validated, LenderActionAddCondition))
+	assert.False(t, loanMapping.IsActionSupported(validated, LenderActionAddCondition))
+	assert.True(t, copyOrLoanMapping.IsActionSupported(validated, LenderActionAddCondition))
 
 	willSupply := pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}
 	assert.True(t, copyMapping.IsActionSupported(willSupply, LenderActionSupplyDocument))
@@ -443,12 +450,24 @@ func TestGetActionTransitionWillSupplyFailureSelfTransition(t *testing.T) {
 	mapping := mustActionMapping(t)
 
 	transition, ok := mapping.GetActionTransition(
-		pr_db.PatronRequest{Side: SideLending, State: LenderStateValidated},
+		pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupplyPending},
 		LenderActionWillSupply,
 		ActionOutcomeFailure,
 	)
 	assert.True(t, ok)
-	assert.Equal(t, LenderStateValidated, transition)
+	assert.Equal(t, LenderStateWillSupplyPending, transition)
+}
+
+func TestGetActionTransitionRemoveItemKeepsItemPending(t *testing.T) {
+	mapping := mustActionMapping(t)
+
+	transition, ok := mapping.GetActionTransition(
+		pr_db.PatronRequest{Side: SideLending, State: LenderStateItemPending},
+		LenderActionRemoveItem,
+		ActionOutcomeSuccess,
+	)
+	assert.True(t, ok)
+	assert.Equal(t, LenderStateItemPending, transition)
 }
 
 func TestGetEventTransitionRetryConditionalFromBorrowerWillSupply(t *testing.T) {

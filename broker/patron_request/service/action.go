@@ -524,14 +524,16 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 	switch action {
 	case LenderActionValidatePatron:
 		return a.validatePatronLenderRequest(ctx, pr, lmsAdapter)
+	case LenderActionRequestItem:
+		return a.requestItemLenderRequest(ctx, pr, lmsAdapter, illRequest)
 	case LenderActionWillSupply:
-		return a.willSupplyLenderRequest(ctx, pr, lmsAdapter, illRequest, params)
+		return a.willSupplyLenderRequest(ctx, pr, params)
 	case LenderActionRejectCancel:
 		return a.rejectCancelLenderRequest(ctx, pr)
 	case LenderActionCannotSupply:
 		return a.cannotSupplyLenderRequest(ctx, pr, lmsAdapter, illRequest, params)
 	case LenderActionAddCondition:
-		return a.addConditionsLenderRequest(ctx, pr, lmsAdapter, illRequest, params)
+		return a.addConditionsLenderRequest(ctx, pr, params)
 	case LenderActionAddItem:
 		return a.addItemLenderRequest(ctx, pr, params)
 	case LenderActionRemoveItem:
@@ -1071,17 +1073,16 @@ func (a *PatronRequestActionService) validatePatronLenderRequest(ctx common.Exte
 	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
 }
 
-func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
-	if illRequest.ServiceInfo == nil || illRequest.ServiceInfo.ServiceType == iso18626.TypeServiceTypeLoan {
-		var message string
-		var err error
-		pr, message, err = a.ensureLenderRequestItem(ctx, pr, lmsAdapter, illRequest)
-		if err != nil {
-			status, result := logActionErrorAndReturnResult(ctx, message, err)
-			return actionExecutionResult{status: status, result: result, pr: pr}
-		}
+func (a *PatronRequestActionService) requestItemLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
+	pr, message, err := a.ensureLenderRequestItem(ctx, pr, lmsAdapter, illRequest)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, message, err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
+	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
+}
 
+func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
 		iso18626.MessageInfo{
@@ -1096,9 +1097,10 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
-// ensureLenderRequestItem is idempotent so a failed ISO confirmation can be
-// retried without creating a second LMS request. CopyOrLoan defers this work
-// until ship, because choosing supply-document must not leave an LMS item behind.
+// ensureLenderRequestItem is idempotent so retrying request-item after its LMS
+// work was saved does not create a second reservation. CopyOrLoan defers this
+// work until ship, because choosing supply-document must not leave an LMS item
+// behind.
 func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (pr_db.PatronRequest, string, error) {
 	requestID := strings.TrimSpace(illRequest.Header.RequestingAgencyRequestId)
 	items := []pr_db.Item{}
@@ -1312,7 +1314,7 @@ func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.Extend
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
-func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
+func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
 	if params.LoanCondition == "" && params.Cost == nil {
 		status, result := logActionErrorAndReturnResult(ctx, "loanCondition or cost is required", nil)
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -1338,15 +1340,6 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 	if params.LoanCondition != "" {
 		deliveryInfo = &iso18626.DeliveryInfo{
 			LoanCondition: &iso18626.TypeSchemeValuePair{Text: params.LoanCondition},
-		}
-	}
-	if illRequest.ServiceInfo == nil || illRequest.ServiceInfo.ServiceType == iso18626.TypeServiceTypeLoan {
-		var message string
-		var err error
-		pr, message, err = a.ensureLenderRequestItem(ctx, pr, lmsAdapter, illRequest)
-		if err != nil {
-			status, result := logActionErrorAndReturnResult(ctx, message, err)
-			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
 	}
 	result := events.EventResult{}
