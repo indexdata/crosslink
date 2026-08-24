@@ -9,3 +9,4 @@ coverage.out.tmp
 /.idea
 go.work
 go.work.sum
+.worktrees/

@@ -111,6 +111,268 @@ components:
             - requester_symbol
             - supplier_symbol
   schemas:
+    ConflictPolicy:
+      type: string
+      enum: [fail, skip, update]
+      default: fail
+    ImportItemType:
+      type: string
+      enum:
+        - patronRequest
+        - batchAction
+        - template
+    ImportSectionResult:
+      type: object
+      additionalProperties: false
+      properties:
+        imported:
+          type: integer
+          format: int32
+        failed:
+          type: integer
+          format: int32
+        skipped:
+          type: integer
+          format: int32
+      required:
+        - imported
+        - failed
+        - skipped
+    ImportItemError:
+      type: object
+      additionalProperties: false
+      properties:
+        line:
+          type: integer
+          format: int32
+          description: One-based NDJSON record number.
+        type:
+          $ref: '#/components/schemas/ImportItemType'
+        error:
+          type: string
+        owner:
+          type: string
+        identifier:
+          type: string
+      required:
+        - line
+        - error
+    ImportResult:
+      type: object
+      additionalProperties: false
+      properties:
+        patronRequests: { $ref: '#/components/schemas/ImportSectionResult' }
+        batchActions: { $ref: '#/components/schemas/ImportSectionResult' }
+        templates: { $ref: '#/components/schemas/ImportSectionResult' }
+        errors:
+          type: array
+          items: { $ref: '#/components/schemas/ImportItemError' }
+      required: [patronRequests, batchActions, templates, errors]
+    ImportResourceRecord:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          $ref: '#/components/schemas/ImportItemType'
+        owner:
+          type: string
+          description: Symbol of the owning institution
+        data:
+          description: Resource data to import.
+          oneOf:
+            - $ref: '#/components/schemas/ImportPatronRequestBundle'
+            - $ref: '#/components/schemas/CreateBatchAction'
+            - $ref: '#/components/schemas/CreateTemplate'
+      required: [type, owner, data]
+    ImportPatronRequestBundle:
+      type: object
+      additionalProperties: false
+      properties:
+        patronRequest:
+          $ref: '#/components/schemas/ImportPatronRequest'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImportPatronRequestItem'
+        notifications:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImportPatronRequestNotification'
+        illTransaction:
+          $ref: '#/components/schemas/ImportIllTransaction'
+        locatedSuppliers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImportLocatedSupplier'
+      required: [patronRequest, items, notifications, locatedSuppliers]
+    ImportPatronRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        illRequest:
+          type: object
+          description: JSON of ISO18626 request
+        state:
+          type: string
+        stateModel:
+          type: string
+        side:
+          type: string
+        patron:
+          type: string
+        requesterSymbol:
+          type: string
+        supplierSymbol:
+          type: string
+        requesterRequestId:
+          type: string
+        needsAttention:
+          type: boolean
+        lastAction:
+          type: string
+        lastActionOutcome:
+          type: string
+        lastActionResult:
+          type: string
+        illResponse:
+          type: object
+          description: JSON of ISO18626 supplying agency message
+        internalNote:
+          type: string
+        nextReqId:
+          type: string
+        prevReqId:
+          type: string
+        retryBibInfo:
+          type: object
+          description: Bibliographic retry information as defined in ISO18626
+      required: [id, createdAt, updatedAt, illRequest, state, stateModel, side, requesterSymbol, requesterRequestId, needsAttention]
+    ImportPatronRequestItem:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        barcode:
+          type: string
+        callNumber:
+          type: string
+        title:
+          type: string
+        itemId:
+          type: string
+        lmsRequestId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, barcode, createdAt]
+    ImportPatronRequestNotification:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        fromSymbol:
+          type: string
+        toSymbol:
+          type: string
+        direction:
+          type: string
+          enum: [sent, received]
+        kind:
+          type: string
+          enum: [note, condition]
+        note:
+          type: string
+        cost:
+          type: number
+          format: double
+        currency:
+          type: string
+        condition:
+          type: string
+        receipt:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        acknowledgedAt:
+          type: string
+          format: date-time
+      required: [id, fromSymbol, toSymbol, direction, kind, createdAt]
+    ImportIllTransaction:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        requesterSymbol:
+          type: string
+        lastRequesterAction:
+          type: string
+        prevRequesterAction:
+          type: string
+        supplierSymbol:
+          type: string
+        requesterRequestID:
+          type: string
+        prevRequesterRequestID:
+          type: string
+        supplierRequestID:
+          type: string
+        lastSupplierStatus:
+          type: string
+        prevSupplierStatus:
+          type: string
+        illTransactionData:
+          type: object
+          additionalProperties: true
+      required: [id, timestamp, requesterSymbol, requesterRequestID, illTransactionData]
+    ImportLocatedSupplier:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        supplierSymbol:
+          type: string
+        ordinal:
+          type: integer
+          format: int32
+        supplierStatus:
+          type: string
+          enum: [new, selected, skipped]
+        prevAction:
+          type: string
+        prevStatus:
+          type: string
+        lastAction:
+          type: string
+        lastStatus:
+          type: string
+        localID:
+          type: string
+        prevReason:
+          type: string
+        lastReason:
+          type: string
+        supplierRequestID:
+          type: string
+        localSupplier:
+          type: boolean
+      required: [id, supplierSymbol, ordinal, localSupplier]
     Index:
       type: object
       properties:
@@ -1504,6 +1766,46 @@ components:
         - labels
 
 paths:
+  /import:
+    post:
+      summary: Import resources from NDJSON
+      description: Streams each NDJSON record into existing repository interfaces selected by type.
+      tags: [import-api]
+      parameters:
+        - name: conflictPolicy
+          in: query
+          description: How to handle an existing resource identity.
+          required: false
+          schema:
+            $ref: '#/components/schemas/ConflictPolicy'
+      requestBody:
+        required: true
+        content:
+          application/x-ndjson:
+            schema:
+              type: string
+              format: binary
+              description: A stream of NDJSON records, each representing a resource to import. Each record must conform to the ImportResourceRecord schema.
+        examples:
+          resources:
+            summary: Three import records
+            value: |
+              {"type":"patronRequest","owner":"ISIL:SYM","data":{"patronRequest":{"id":"pr-1","createdAt":"2026-08-26T08:00:00Z","updatedAt":"2026-08-26T09:00:00Z","illRequest":{"header":{"requestingAgencyRequestId":"request-1"},"serviceInfo":{"serviceType":"Loan"}},"state":"SENT","stateModel":"default","side":"borrowing","requesterSymbol":"ISIL:REQ","requesterRequestId":"request-1","needsAttention":false},"items":[],"notifications":[],"locatedSuppliers":[]}}
+              {"type":"batchAction","owner":"ISIL:SYM","data":{"schedule":"FREQ=DAILY;BYHOUR=6;BYMINUTE=0","actionName":"request-aging","title":"Daily aging","batchQuery":"state==NEW","actionParams":{"interval":"24h"}}}
+              {"type":"template","owner":"ISIL:SYM","data":{"title":"Request reminder","purpose":"email","subject":"Reminder","body":"Your request is ready","contentType":"text","labels":["request-reminder"],"audience":"patron"}}
+        x-ndjson-item-schema:
+          $ref: '#/components/schemas/ImportResourceRecord'
+      responses:
+        '200':
+          description: The stream was processed; individual records may have failed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportResult' }
+        '400':
+          description: The request body is missing or the content type is not application/x-ndjson.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /:
     get:
       summary: Retrieve index information
