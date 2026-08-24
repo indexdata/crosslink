@@ -336,7 +336,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		api.AddInternalError(ctx, w, err)
 		return
 	}
-	w.Header().Set("Location", api.Link(r, api.Path("patron_requests", pr.ID), nil))
+	w.Header().Set("Location", api.LinkAbs(r, api.Path("patron_requests", pr.ID), nil))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(toApiPatronRequest(r, prView))
@@ -999,7 +999,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdNotifications(w http.Respo
 		ctx.Logger().Error("failed to send notification for patron request", "notificationId", dbNotification.ID, "error", err.Error())
 	}
 
-	//w.Header().Set("Location", api.Link(r, api.Path("patron_requests", id, "notifications", dbNotification.ID), nil))
+	//w.Header().Set("Location", api.LinkAbs(r, api.Path("patron_requests", id, "notifications", dbNotification.ID), nil))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(apiN)

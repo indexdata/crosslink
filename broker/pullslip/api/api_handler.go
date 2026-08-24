@@ -158,7 +158,7 @@ func (p PullSlipApiHandler) PostPullslips(w http.ResponseWriter, r *http.Request
 		api.AddInternalError(ctx, w, err)
 		return
 	}
-	w.Header().Set("Location", api.Link(r, api.Path("pullslips", psId, "pdf"), nil))
+	w.Header().Set("Location", api.LinkAbs(r, api.Path("pullslips", psId, "pdf"), nil))
 	writePdf(w, pdf)
 }
 
@@ -185,7 +185,7 @@ func (p PullSlipApiHandler) PostPullslipsIdRegenerate(w http.ResponseWriter, r *
 		api.AddInternalError(ctx, w, err)
 		return
 	}
-	w.Header().Set("Location", api.Link(r, api.Path("pullslips", ps.ID, "pdf"), nil))
+	w.Header().Set("Location", api.LinkAbs(r, api.Path("pullslips", ps.ID, "pdf"), nil))
 	writePdf(w, pdf)
 }
 

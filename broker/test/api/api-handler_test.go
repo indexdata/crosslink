@@ -91,11 +91,11 @@ func TestGetIndex(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, vcs.GetCommit(), resp.Revision)
 	assert.Equal(t, vcs.GetSignature(), resp.Signature)
-	assert.Equal(t, getLocalhostWithPort()+api.ILL_TRANSACTIONS_PATH, resp.Links.IllTransactionsLink)
-	assert.Equal(t, getLocalhostWithPort()+api.PEERS_PATH, resp.Links.PeersLink)
-	assert.Equal(t, getLocalhostWithPort()+"/batch_actions", resp.Links.BatchActionsLink)
-	assert.Equal(t, getLocalhostWithPort()+api.PATRON_REQUESTS_PATH+"?side=borrowing", resp.Links.BorrowingRequestsLink)
-	assert.Equal(t, getLocalhostWithPort()+api.PATRON_REQUESTS_PATH+"?side=lending", resp.Links.LendingRequestsLink)
+	assert.Equal(t, api.ILL_TRANSACTIONS_PATH, resp.Links.IllTransactionsLink)
+	assert.Equal(t, api.PEERS_PATH, resp.Links.PeersLink)
+	assert.Equal(t, "/batch_actions", resp.Links.BatchActionsLink)
+	assert.Equal(t, api.PATRON_REQUESTS_PATH+"?side=borrowing", resp.Links.BorrowingRequestsLink)
+	assert.Equal(t, api.PATRON_REQUESTS_PATH+"?side=lending", resp.Links.LendingRequestsLink)
 }
 
 func TestGetEvents(t *testing.T) {
@@ -181,8 +181,8 @@ func TestGetIllTransactions(t *testing.T) {
 	assert.Nil(t, resp.About.PrevLink)
 	assert.NotNil(t, resp.About.NextLink)
 	assert.NotNil(t, resp.About.LastLink)
-	assert.Equal(t, getLocalhostWithPort()+"/ill_transactions?offset=10", *resp.About.NextLink)
-	assert.Equal(t, getLocalhostWithPort()+"/ill_transactions?offset=20", *resp.About.LastLink)
+	assert.Equal(t, "/ill_transactions?offset=10", *resp.About.NextLink)
+	assert.Equal(t, "/ill_transactions?offset=20", *resp.About.LastLink)
 
 	body = getResponseBody(t, "/ill_transactions?offset=1000")
 	err = json.Unmarshal(body, &resp)
@@ -219,9 +219,9 @@ func TestGetIllTransactions(t *testing.T) {
 	assert.NotNil(t, resp.About.LastLink)
 	nextLink := *resp.About.NextLink
 	lastLink := *resp.About.LastLink
-	assert.True(t, strings.HasPrefix(nextLink, getLocalhostWithPort()+"/broker/ill_transactions?"))
+	assert.True(t, strings.HasPrefix(nextLink, "/broker/ill_transactions?"))
 	assert.Contains(t, nextLink, "requester_symbol="+url.QueryEscape("ISIL:DK-BIB1"))
-	assert.True(t, strings.HasPrefix(lastLink, getLocalhostWithPort()+"/broker/ill_transactions?"))
+	assert.True(t, strings.HasPrefix(lastLink, "/broker/ill_transactions?"))
 	assert.Contains(t, lastLink, "requester_symbol="+url.QueryEscape("ISIL:DK-BIB1"))
 	assert.Contains(t, lastLink, "offset=10")
 
@@ -234,7 +234,7 @@ func TestGetIllTransactions(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, resp.About.PrevLink)
 	prevLink = *resp.About.PrevLink
-	assert.True(t, strings.HasPrefix(prevLink, getLocalhostWithPort()+"/broker/ill_transactions?"))
+	assert.True(t, strings.HasPrefix(prevLink, "/broker/ill_transactions?"))
 	assert.Contains(t, prevLink, "offset=0")
 
 	body = getResponseBody(t, "/ill_transactions?cql="+url.QueryEscape("requester_symbol = ISIL:DK-BIB1"))
@@ -315,8 +315,8 @@ func TestGetIllTransactionsId(t *testing.T) {
 	err := json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.Equal(t, illId, resp.Id)
-	assert.Equal(t, getLocalhostWithPort()+"/ill_transactions/"+url.PathEscape(illId)+"/events", resp.EventsLink)
-	assert.Equal(t, getLocalhostWithPort()+"/located_suppliers?ill_transaction_id="+url.PathEscape(illId), resp.LocatedSuppliersLink)
+	assert.Equal(t, "/ill_transactions/"+url.PathEscape(illId)+"/events", resp.EventsLink)
+	assert.Equal(t, "/located_suppliers?ill_transaction_id="+url.PathEscape(illId), resp.LocatedSuppliersLink)
 
 	// Delete transaction and verify owned rows cascade.
 	httpRequest(t, "DELETE", "/ill_transactions/"+illId, nil, "", http.StatusNoContent)
@@ -379,8 +379,8 @@ func TestBrokerCRUD(t *testing.T) {
 	err = json.Unmarshal(body, &tran)
 	assert.NoError(t, err)
 	assert.Equal(t, illId, tran.Id)
-	assert.Equal(t, getLocalhostWithPort()+"/broker/ill_transactions/"+url.PathEscape(illId)+"/events", tran.EventsLink)
-	assert.Equal(t, getLocalhostWithPort()+"/broker/located_suppliers?ill_transaction_id="+url.PathEscape(illId), tran.LocatedSuppliersLink)
+	assert.Equal(t, "/broker/ill_transactions/"+url.PathEscape(illId)+"/events", tran.EventsLink)
+	assert.Equal(t, "/broker/located_suppliers?ill_transaction_id="+url.PathEscape(illId), tran.LocatedSuppliersLink)
 
 	httpGet(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "diku", http.StatusOK)
 	httpGet(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "ruc", http.StatusNotFound)
@@ -498,7 +498,7 @@ func TestPeersLinks(t *testing.T) {
 	assert.GreaterOrEqual(t, int(resp.About.Count), int(2*api.LIMIT_DEFAULT))
 	assert.NotNil(t, resp.About.NextLink)
 	assert.NotNil(t, resp.About.LastLink)
-	assert.True(t, strings.HasPrefix(*resp.About.NextLink, getLocalhostWithPort()+"/peers?"))
+	assert.True(t, strings.HasPrefix(*resp.About.NextLink, "/peers?"))
 	assert.Contains(t, *resp.About.NextLink, "offset="+strconv.Itoa(int(api.LIMIT_DEFAULT)))
 	expectedLastOffset := int(((resp.About.Count - 1) / int64(api.LIMIT_DEFAULT)) * int64(api.LIMIT_DEFAULT))
 	assert.Contains(t, *resp.About.LastLink, "offset="+strconv.Itoa(expectedLastOffset))
