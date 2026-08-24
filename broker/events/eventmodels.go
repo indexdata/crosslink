@@ -169,4 +169,5 @@ type DuplicateCheck struct {
 	CutoffTime           *string               `json:"cutoffTime"`
 	Duplicate            bool                  `json:"duplicate"`
 	MatchedTransactionId *string               `json:"matchedTransactionId"`
+	MatchedValues        *catalog.LookupParams `json:"matchedValues,omitempty"`
 }
