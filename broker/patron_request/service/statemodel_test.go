@@ -120,6 +120,87 @@ func TestLegacyReturnablesStateModelAlias(t *testing.T) {
 	assert.Same(t, defaultModel, legacyModel)
 }
 
+func TestValidateImportState(t *testing.T) {
+	service := &StateModelService{}
+
+	tests := []struct {
+		name        string
+		modelName   string
+		serviceType proapi.StateModelServiceType
+		side        pr_db.PatronRequestSide
+		state       pr_db.PatronRequestState
+		terminal    bool
+		errorText   string
+	}{
+		{
+			name:        "accepts a non-initial requester state",
+			modelName:   "default",
+			serviceType: proapi.Loan,
+			side:        SideBorrowing,
+			state:       BorrowerStateSent,
+		},
+		{
+			name:        "returns the configured terminal flag",
+			modelName:   "default",
+			serviceType: proapi.Loan,
+			side:        SideLending,
+			state:       LenderStateCompleted,
+			terminal:    true,
+		},
+		{
+			name:        "supports the legacy model alias",
+			modelName:   "returnables",
+			serviceType: proapi.Loan,
+			side:        SideBorrowing,
+			state:       BorrowerStateSent,
+		},
+		{
+			name:        "rejects an unknown model",
+			modelName:   "missing",
+			serviceType: proapi.Loan,
+			side:        SideBorrowing,
+			state:       BorrowerStateSent,
+			errorText:   `state model "missing" not found`,
+		},
+		{
+			name:        "rejects an unknown state",
+			modelName:   "default",
+			serviceType: proapi.Loan,
+			side:        SideBorrowing,
+			state:       pr_db.PatronRequestState("NOT_A_STATE"),
+			errorText:   `state "NOT_A_STATE" is not supported`,
+		},
+		{
+			name:        "rejects a state from the other side",
+			modelName:   "default",
+			serviceType: proapi.Loan,
+			side:        SideBorrowing,
+			state:       LenderStateItemPending,
+			errorText:   `state "ITEM_PENDING" is not supported`,
+		},
+		{
+			name:        "rejects a state inapplicable to the service type",
+			modelName:   "default",
+			serviceType: proapi.Copy,
+			side:        SideLending,
+			state:       LenderStateShipped,
+			errorText:   `state "SHIPPED" is not supported`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			terminal, err := service.ValidateImportState(tt.modelName, tt.serviceType, tt.side, tt.state)
+			assert.Equal(t, tt.terminal, terminal)
+			if tt.errorText == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.ErrorContains(t, err, tt.errorText)
+			}
+		})
+	}
+}
+
 func TestValidateStateModelRejectsEmptyAppliesToServiceTypes(t *testing.T) {
 	model, err := LoadStateModelByName("default")
 	if !assert.NoError(t, err) {

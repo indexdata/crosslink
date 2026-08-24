@@ -16,6 +16,9 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/email"
+	importapi "github.com/indexdata/crosslink/broker/import/api"
+	importdb "github.com/indexdata/crosslink/broker/import/db"
+	importoapi "github.com/indexdata/crosslink/broker/import/oapi"
 	prapi "github.com/indexdata/crosslink/broker/patron_request/api"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
@@ -99,17 +102,18 @@ var ServeMux *http.ServeMux
 var appCtx = common.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
 
 type Context struct {
-	EventBus        events.EventBus
-	IllRepo         ill_db.IllRepo
-	EventRepo       events.EventRepo
-	DirAdapter      adapter.DirectoryLookupAdapter
-	PrRepo          pr_db.PrRepo
-	TenantResolver  *tenant.TenantResolver
-	ApiHandler      api.ApiHandler
-	PrApiHandler    prapi.PatronRequestApiHandler
-	SseBroker       *api.SseBroker
-	PsApiHandler    psapi.PullSlipApiHandler
-	SchedApiHandler schedapi.SchedulerApiHandler
+	EventBus         events.EventBus
+	IllRepo          ill_db.IllRepo
+	EventRepo        events.EventRepo
+	DirAdapter       adapter.DirectoryLookupAdapter
+	PrRepo           pr_db.PrRepo
+	TenantResolver   *tenant.TenantResolver
+	ApiHandler       api.ApiHandler
+	PrApiHandler     prapi.PatronRequestApiHandler
+	SseBroker        *api.SseBroker
+	PsApiHandler     psapi.PullSlipApiHandler
+	SchedApiHandler  schedapi.SchedulerApiHandler
+	ImportApiHandler importapi.ApiHandler
 }
 
 func configLog() slog.Handler {
@@ -221,18 +225,21 @@ func Init(ctx context.Context) (Context, error) {
 		return Context{}, err
 	}
 
+	importRepo := importdb.CreateImportRepo(pool)
+	importApiHandler := importapi.NewApiHandler(importRepo, illRepo, dirAdapter, &prservice.StateModelService{})
 	return Context{
-		EventBus:        eventBus,
-		IllRepo:         illRepo,
-		EventRepo:       eventRepo,
-		DirAdapter:      dirAdapter,
-		PrRepo:          prRepo,
-		TenantResolver:  tenantResolver,
-		ApiHandler:      apiHandler,
-		PrApiHandler:    prApiHandler,
-		SseBroker:       sseBroker,
-		PsApiHandler:    psApiHandler,
-		SchedApiHandler: schedApiHandler,
+		EventBus:         eventBus,
+		IllRepo:          illRepo,
+		EventRepo:        eventRepo,
+		DirAdapter:       dirAdapter,
+		PrRepo:           prRepo,
+		TenantResolver:   tenantResolver,
+		ApiHandler:       apiHandler,
+		PrApiHandler:     prApiHandler,
+		SseBroker:        sseBroker,
+		PsApiHandler:     psApiHandler,
+		SchedApiHandler:  schedApiHandler,
+		ImportApiHandler: importApiHandler,
 	}, nil
 }
 
@@ -267,6 +274,7 @@ func StartServer(ctx Context) error {
 	})
 	psoapi.HandlerFromMux(&ctx.PsApiHandler, ServeMux)
 	schedoapi.HandlerFromMux(&ctx.SchedApiHandler, ServeMux)
+	importoapi.HandlerFromMux(&ctx.ImportApiHandler, ServeMux)
 	ServeMux.HandleFunc("GET /sse/events", ctx.SseBroker.ServeHTTP)
 	if ctx.TenantResolver.HasTenantMapping() {
 		basePath := tenant.OKAPI_PATH_PREFIX
