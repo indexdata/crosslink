@@ -3,7 +3,7 @@ stateModels:
     type: StateModel
     name: CrossLink State Model
     desc: "Requester/Supplier workflow for returnable loans and non-returnable copies over ISO18626."
-    version: 3.1.0
+    version: 3.2.0
     selector:
       serviceType: [Copy, Loan, CopyOrLoan]
     states:
@@ -500,6 +500,89 @@ stateModels:
         display: Validated
         desc: Request is valid
         side: SUPPLIER
+        closingAction: cannot-supply
+        actions:
+          - name: request-item
+            desc: Reserve the item in the supplier LMS
+            appliesTo:
+              serviceTypes: [Loan]
+            primaryFor:
+              serviceTypes: [Loan]
+            transitions:
+              success: WILL_SUPPLY_PENDING
+              failure: ITEM_PENDING
+            trigger: auto
+          - name: will-supply
+            desc: Indicate supplier will supply and send ISO18626 WillSupply
+            appliesTo:
+              serviceTypes: [Copy, CopyOrLoan]
+            primaryFor:
+              serviceTypes: [Copy, CopyOrLoan]
+            transitions:
+              success: WILL_SUPPLY
+              failure: VALIDATED
+            trigger: auto
+          - name: cannot-supply
+            desc: Indicate cannot supply and send ISO18626 Unfilled
+            transitions:
+              success: UNFILLED
+          - name: add-condition
+            desc: Indicate will supply with conditions and send ISO18626 WillSupply
+            appliesTo:
+              serviceTypes: [Copy, CopyOrLoan]
+            transitions:
+              success: CONDITION_PENDING
+          - name: ask-retry
+            desc: Ask requester to retry with new ISO18626 metadata
+            transitions:
+              success: COMPLETED_WITH_RETRY
+        events:
+          - name: cancel-request
+            desc: Requester sent ISO18626 Cancel
+            transition: CANCEL_REQUESTED
+
+      - name: ITEM_PENDING
+        display: Item pending
+        desc: Retry the LMS item request or attach an item manually
+        side: SUPPLIER
+        appliesTo:
+          serviceTypes: [Loan]
+        primaryAction: request-item
+        closingAction: cannot-supply
+        needsAttention: true
+        actions:
+          - name: request-item
+            desc: Retry reserving the item in the supplier LMS
+            transitions:
+              success: WILL_SUPPLY_PENDING
+              failure: ITEM_PENDING
+          - name: add-item
+            desc: Manually attach an item and continue the supply workflow
+            transitions:
+              success: WILL_SUPPLY_PENDING
+          - name: remove-item
+            desc: Remove an attached item by barcode
+            transitions:
+              success: ITEM_PENDING
+          - name: cannot-supply
+            desc: Indicate cannot supply and send ISO18626 Unfilled
+            transitions:
+              success: UNFILLED
+          - name: ask-retry
+            desc: Ask requester to retry with new ISO18626 metadata
+            transitions:
+              success: COMPLETED_WITH_RETRY
+        events:
+          - name: cancel-request
+            desc: Requester sent ISO18626 Cancel
+            transition: CANCEL_REQUESTED
+
+      - name: WILL_SUPPLY_PENDING
+        display: Will supply pending
+        desc: The LMS item request succeeded, was intentionally skipped, or an item was attached manually
+        side: SUPPLIER
+        appliesTo:
+          serviceTypes: [Loan]
         primaryAction: will-supply
         closingAction: cannot-supply
         actions:
@@ -507,7 +590,7 @@ stateModels:
             desc: Indicate supplier will supply and send ISO18626 WillSupply
             transitions:
               success: WILL_SUPPLY
-              failure: VALIDATED
+              failure: WILL_SUPPLY_PENDING
             trigger: auto
           - name: cannot-supply
             desc: Indicate cannot supply and send ISO18626 Unfilled
@@ -739,7 +822,7 @@ batchActionDefaults:
   - actionName: request-aging
     titleKey: request-aging-express
     title: Request aging of express requests
-    batchQuery: "side = lending and (state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = CONDITION_ACCEPTED) and service_level = Express"
+    batchQuery: "side = lending and (state = VALIDATED or state = ITEM_PENDING or state = WILL_SUPPLY_PENDING or state = WILL_SUPPLY or state = CONDITION_PENDING or state = CONDITION_ACCEPTED) and service_level = Express"
     schedule: "FREQ=MINUTELY;INTERVAL=15"
     actionParams:
       interval: 2h
@@ -747,7 +830,7 @@ batchActionDefaults:
   - actionName: request-aging
     titleKey: request-aging-rush
     title: Request aging of rush requests
-    batchQuery: "side = lending and (state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = CONDITION_ACCEPTED) and service_level = Rush"
+    batchQuery: "side = lending and (state = VALIDATED or state = ITEM_PENDING or state = WILL_SUPPLY_PENDING or state = WILL_SUPPLY or state = CONDITION_PENDING or state = CONDITION_ACCEPTED) and service_level = Rush"
     schedule: "FREQ=HOURLY;BYMINUTE=0"
     actionParams:
       interval: 24h
@@ -755,7 +838,7 @@ batchActionDefaults:
   - actionName: request-aging
     titleKey: request-aging-all
     title: Request aging of all requests
-    batchQuery: "side = lending and (state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = CONDITION_ACCEPTED)"
+    batchQuery: "side = lending and (state = VALIDATED or state = ITEM_PENDING or state = WILL_SUPPLY_PENDING or state = WILL_SUPPLY or state = CONDITION_PENDING or state = CONDITION_ACCEPTED)"
     schedule: "FREQ=DAILY;BYHOUR=5;BYMINUTE=0"
     actionParams:
       interval: 72h

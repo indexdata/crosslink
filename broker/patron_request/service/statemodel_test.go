@@ -18,6 +18,8 @@ func TestBuiltInStateModelCapabilities(t *testing.T) {
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateLocalSupply)))
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateDuplicate)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateValidated)))
+	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateItemPending)))
+	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateWillSupplyPending)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateReceived)))
 
 	assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
@@ -40,6 +42,9 @@ func TestBuiltInStateModelCapabilities(t *testing.T) {
 		}))
 	}
 
+	assert.True(t, slices.ContainsFunc(c.SupplierActions, func(a proapi.ActionCapability) bool {
+		return a.Name == string(LenderActionRequestItem) && len(a.Parameters) == 0
+	}))
 	assert.True(t, slices.ContainsFunc(c.SupplierActions, func(a proapi.ActionCapability) bool {
 		return a.Name == string(LenderActionWillSupply)
 	}))
