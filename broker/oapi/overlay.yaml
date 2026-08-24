@@ -3,6 +3,26 @@ info:
   title: Object field codegen overrides
   version: 0.0.0
 actions:
+  - target: $.components.schemas.ImportPatronRequest.properties.illRequest
+    update:
+      x-go-type: iso18626.Request
+      x-go-type-import:
+        path: github.com/indexdata/crosslink/iso18626
+  - target: $.components.schemas.ImportPatronRequest.properties.illResponse
+    update:
+      x-go-type: iso18626.SupplyingAgencyMessage
+      x-go-type-import:
+        path: github.com/indexdata/crosslink/iso18626
+  - target: $.components.schemas.ImportPatronRequest.properties.retryBibInfo
+    update:
+      x-go-type: iso18626.BibliographicInfo
+      x-go-type-import:
+        path: github.com/indexdata/crosslink/iso18626
+  - target: $.components.schemas.ImportIllTransaction.properties.illTransactionData
+    update:
+      x-go-type: ill_db.IllTransactionData
+      x-go-type-import:
+        path: github.com/indexdata/crosslink/broker/ill_db
   - target: $.components.schemas.Event.properties.eventData
     update:
       x-go-type: events.EventData
