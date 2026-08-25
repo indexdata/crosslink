@@ -759,7 +759,7 @@ components:
           description: Version of the state model in SemVer
         selector:
           $ref: '#/components/schemas/StateModelSelector'
-        pulllslipPdfTemplateLabel:
+        pullslipPdfTemplateLabel:
           type: string
           description: Template label used to resolve the PDF pullslip template for this state model.
         states:

@@ -97,8 +97,8 @@ func (p *PdfServiceImpl) getTemplateForPatronRequest(ctx common.ExtendedContext,
 	if err != nil {
 		return "", err
 	}
-	if stateModel.PulllslipPdfTemplateLabel == nil || *stateModel.PulllslipPdfTemplateLabel == "" {
-		return "", errors.New("pulllslipPdfTemplateLabel field is required")
+	if stateModel.PullslipPdfTemplateLabel == nil || *stateModel.PullslipPdfTemplateLabel == "" {
+		return "", errors.New("pullslipPdfTemplateLabel field is required")
 	}
 	owner := pr.RequesterSymbol
 	if pr.Side == prservice.SideLending {
@@ -107,7 +107,7 @@ func (p *PdfServiceImpl) getTemplateForPatronRequest(ctx common.ExtendedContext,
 	pdfTemplate, err := p.prRepo.GetTemplateByPurposeAudienceLabelAndOwner(ctx, pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams{
 		Owner:    owner.String,
 		Purpose:  string(proapi.Pullslip),
-		Label:    *stateModel.PulllslipPdfTemplateLabel,
+		Label:    *stateModel.PullslipPdfTemplateLabel,
 		Audience: string(proapi.ModelActionParamsSendToStaff),
 	})
 	if err != nil {

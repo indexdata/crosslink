@@ -225,8 +225,8 @@ func TestReturnablesPullslipPdfTemplateLabel(t *testing.T) {
 		return
 	}
 
-	if assert.NotNil(t, model.PulllslipPdfTemplateLabel) {
-		assert.Equal(t, "pullslip-pdf", *model.PulllslipPdfTemplateLabel)
+	if assert.NotNil(t, model.PullslipPdfTemplateLabel) {
+		assert.Equal(t, "pullslip-pdf", *model.PullslipPdfTemplateLabel)
 	}
 }
 
