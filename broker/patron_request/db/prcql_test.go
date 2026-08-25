@@ -93,6 +93,13 @@ func TestHandlePatronRequestsQueryIsbnUsesNormIsxn(t *testing.T) {
 	assert.Equal(t, wantWhere, query.GetWhereClause(), "where clause = %q, want %q", query.GetWhereClause(), wantWhere)
 }
 
+func TestPatronRequestDuplicateFields(t *testing.T) {
+	query, err := ParsePatronRequestsCql(`patron_exact = "patron-1" and supplier_unique_record_id = "record-1" and title_exact = "A Title" and id <> "current-pr"`)
+	assert.NoError(t, err)
+	assert.Equal(t, "((patron = $3 AND ill_request->'bibliographicInfo'->>'supplierUniqueRecordId' = $4) AND lower(ill_request->'bibliographicInfo'->>'title') = lower($5)) AND id NOT IN($6)", query.GetWhereClause())
+	assert.Equal(t, []any{"patron-1", "record-1", "A Title", "current-pr"}, query.GetQueryArguments())
+}
+
 func searchClauseForTest(term, relation string) cql.SearchClause {
 	return cql.SearchClause{Term: term, Relation: cql.Relation(relation)}
 }

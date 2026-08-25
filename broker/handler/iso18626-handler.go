@@ -157,9 +157,13 @@ func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapt
 }
 
 func handleNewRequest(ctx common.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo, requesterSymbol pgtype.Text, peers []ill_db.Peer) (string, map[string]any, error) {
-	resultMap, err := checkDuplicateRequest(ctx, request, repo, requesterSymbol.String, peers[0])
-	if err != nil {
-		return "", resultMap, err
+	resultMap := map[string]any{}
+	if !strings.EqualFold(peers[0].Vendor, string(dirapi.CrossLink)) {
+		var err error
+		resultMap, err = checkDuplicateRequest(ctx, request, repo, requesterSymbol.String, peers[0])
+		if err != nil {
+			return "", resultMap, err
+		}
 	}
 
 	supplierSymbol := createPgText(request.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + request.Header.SupplyingAgencyId.AgencyIdValue)
@@ -182,7 +186,7 @@ func handleNewRequest(ctx common.ExtendedContext, request *iso18626.Request, rep
 		Time:  request.Header.Timestamp.Time,
 		Valid: true,
 	}
-	_, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams{
+	_, err := repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams{
 		ID:                  id,
 		Timestamp:           timestamp,
 		RequesterSymbol:     requesterSymbol,

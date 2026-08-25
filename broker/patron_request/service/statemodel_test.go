@@ -17,6 +17,7 @@ func TestBuiltInStateModelCapabilities(t *testing.T) {
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateInvalidPatron)))
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateLocalSupply)))
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateDuplicate)))
+	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateReadyToSend)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateValidated)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateItemPending)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateWillSupplyPending)))
@@ -537,10 +538,9 @@ func TestValidateStateModelClosingActionTransitionsToNonTerminalState(t *testing
 					{
 						Name: closingAction,
 						Transitions: &struct {
-							Duplicate *string `json:"duplicate,omitempty"`
-							Failure   *string `json:"failure,omitempty"`
-							Review    *string `json:"review,omitempty"`
-							Success   *string `json:"success,omitempty"`
+							Failure *string `json:"failure,omitempty"`
+							Review  *string `json:"review,omitempty"`
+							Success *string `json:"success,omitempty"`
 						}{
 							Success: &target,
 						},
@@ -707,10 +707,9 @@ func TestValidateStateModelInvalidActionSuccessTransitionTarget(t *testing.T) {
 					{
 						Name: string(BorrowerActionValidatePatron),
 						Transitions: &struct {
-							Duplicate *string `json:"duplicate,omitempty"`
-							Failure   *string `json:"failure,omitempty"`
-							Review    *string `json:"review,omitempty"`
-							Success   *string `json:"success,omitempty"`
+							Failure *string `json:"failure,omitempty"`
+							Review  *string `json:"review,omitempty"`
+							Success *string `json:"success,omitempty"`
 						}{
 							Success: &invalidTarget,
 						},
@@ -741,10 +740,9 @@ func TestValidateStateModelInvalidActionFailureTransitionTarget(t *testing.T) {
 					{
 						Name: string(BorrowerActionSendRequest),
 						Transitions: &struct {
-							Duplicate *string `json:"duplicate,omitempty"`
-							Failure   *string `json:"failure,omitempty"`
-							Review    *string `json:"review,omitempty"`
-							Success   *string `json:"success,omitempty"`
+							Failure *string `json:"failure,omitempty"`
+							Review  *string `json:"review,omitempty"`
+							Success *string `json:"success,omitempty"`
 						}{
 							Failure: &invalidTarget,
 						},
@@ -802,10 +800,9 @@ func TestValidateStateModelActionTransitionTargetMustExistInModelForSameSide(t *
 					{
 						Name: string(BorrowerActionValidatePatron),
 						Transitions: &struct {
-							Duplicate *string `json:"duplicate,omitempty"`
-							Failure   *string `json:"failure,omitempty"`
-							Review    *string `json:"review,omitempty"`
-							Success   *string `json:"success,omitempty"`
+							Failure *string `json:"failure,omitempty"`
+							Review  *string `json:"review,omitempty"`
+							Success *string `json:"success,omitempty"`
 						}{
 							Success: &transition,
 						},
@@ -836,10 +833,9 @@ func TestValidateStateModelActionTransitionCannotCrossSides(t *testing.T) {
 					{
 						Name: string(BorrowerActionValidatePatron),
 						Transitions: &struct {
-							Duplicate *string `json:"duplicate,omitempty"`
-							Failure   *string `json:"failure,omitempty"`
-							Review    *string `json:"review,omitempty"`
-							Success   *string `json:"success,omitempty"`
+							Failure *string `json:"failure,omitempty"`
+							Review  *string `json:"review,omitempty"`
+							Success *string `json:"success,omitempty"`
 						}{
 							Success: &transition,
 						},

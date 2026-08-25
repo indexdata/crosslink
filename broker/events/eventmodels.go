@@ -163,11 +163,12 @@ func NewProblemResult(kind string, details string) (EventStatus, *EventResult) {
 const MUST_LOCATE = "mustLocate"
 
 type DuplicateCheck struct {
-	Enabled              bool                  `json:"enabled"`
-	LookupParams         *catalog.LookupParams `json:"lookupParams"`
-	WindowHours          *int32                `json:"windowHours"`
-	CutoffTime           *string               `json:"cutoffTime"`
-	Duplicate            bool                  `json:"duplicate"`
-	MatchedTransactionId *string               `json:"matchedTransactionId"`
-	MatchedValues        *catalog.LookupParams `json:"matchedValues,omitempty"`
+	Enabled                bool                  `json:"enabled"`
+	LookupParams           *catalog.LookupParams `json:"lookupParams"`
+	WindowHours            *int32                `json:"windowHours"`
+	CutoffTime             *string               `json:"cutoffTime"`
+	Duplicate              bool                  `json:"duplicate"`
+	MatchedTransactionId   *string               `json:"matchedTransactionId,omitempty"`
+	MatchedPatronRequestId *string               `json:"matchedPatronRequestId,omitempty"`
+	MatchedValues          *catalog.LookupParams `json:"matchedValues,omitempty"`
 }

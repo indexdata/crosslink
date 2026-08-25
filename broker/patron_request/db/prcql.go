@@ -146,6 +146,9 @@ func ParsePatronRequestsCql(cqlString string) (pgcql.Query, error) {
 	f = pgcql.NewFieldString().WithFullText(LANGUAGE).WithColumn("ill_request->'bibliographicInfo'->>'title'")
 	def.AddField("title", f)
 
+	f = pgcql.NewFieldString().WithExact().WithLower().WithColumn("ill_request->'bibliographicInfo'->>'title'")
+	def.AddField("title_exact", f)
+
 	f = pgcql.NewFieldString().WithFullText(LANGUAGE).WithColumn("ill_request->'bibliographicInfo'->>'author'")
 	def.AddField("author", f)
 
@@ -154,6 +157,12 @@ func ParsePatronRequestsCql(cqlString string) (pgcql.Query, error) {
 
 	f = pgcql.NewFieldString().WithLikeOps()
 	def.AddField("patron", f)
+
+	f = pgcql.NewFieldString().WithExact().WithColumn("patron")
+	def.AddField("patron_exact", f)
+
+	f = pgcql.NewFieldString().WithExact().WithColumn("ill_request->'bibliographicInfo'->>'supplierUniqueRecordId'")
+	def.AddField("supplier_unique_record_id", f)
 
 	f = pgcql.NewFieldString().WithSplit().WithExact()
 	def.AddField("id", f)

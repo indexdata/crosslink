@@ -618,7 +618,7 @@ func TestPostPatronRequestsIdActionStoresTenantUserInInvokeTask(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoOkapiOwner), eventBus, mockEventRepo, tenantResolver, nil, 10)
 	handler.SetActionTaskProcessor(&MockActionTaskProcessor{})
 
-	reqBody := `{"action":"` + string(prservice.BorrowerActionSendRequest) + `"}`
+	reqBody := `{"action":"` + string(prservice.BorrowerActionCheckDuplicate) + `"}`
 	req, _ := http.NewRequest("POST", "/broker/patron_requests/3/action", strings.NewReader(reqBody))
 	req.Header.Set("X-Okapi-Tenant", "tenant1")
 	req.Header.Set("X-Okapi-User-Id", "okapi-user-1")
@@ -635,7 +635,7 @@ func TestPostPatronRequestsIdActionReturnsExclusiveTaskError(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoOkapiOwner), eventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
 	handler.SetActionTaskProcessor(&MockActionTaskProcessorExclusiveError{})
 
-	reqBody := `{"action":"` + string(prservice.BorrowerActionSendRequest) + `"}`
+	reqBody := `{"action":"` + string(prservice.BorrowerActionCheckDuplicate) + `"}`
 	req, _ := http.NewRequest("POST", "/", strings.NewReader(reqBody))
 	rr := httptest.NewRecorder()
 

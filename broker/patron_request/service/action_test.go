@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/indexdata/cql-go/pgcql"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/common"
@@ -33,6 +34,162 @@ import (
 
 var appCtx = common.CreateExtCtxWithArgs(context.Background(), nil)
 var patronRequestId = "pr1"
+
+func TestCheckDuplicateBorrowingRequestUsesPatronRequests(t *testing.T) {
+	windowHours := int32(24)
+	createdAt := time.Date(2026, time.August, 25, 12, 30, 0, 123456000, time.UTC)
+	illRepo := new(IllRepoMock)
+	illRepo.On("GetCachedPeersBySymbols", []string{"ISIL:REQ"}, mock.Anything).Return([]ill_db.Peer{{
+		CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &windowHours}},
+	}}, "", nil)
+	prRepo := new(MockPrRepo)
+	serviceInfo := &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}
+	match := pr_db.PatronRequest{
+		ID:         "matched-pr",
+		IllRequest: iso18626.Request{BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "record-1"}, ServiceInfo: serviceInfo},
+	}
+	prRepo.On("ListPatronRequests", pr_db.ListPatronRequestsParams{Limit: 1, Offset: 0}, mock.Anything).Return([]pr_db.PatronRequest{match}, int64(1), nil)
+	actionService := CreatePatronRequestActionService(prRepo, illRepo, new(MockEventBus), new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
+	pr := pr_db.PatronRequest{
+		ID:              "current-pr",
+		CreatedAt:       pgtype.Timestamp{Time: createdAt, Valid: true},
+		Side:            SideBorrowing,
+		RequesterSymbol: getDbText("ISIL:REQ"),
+		Patron:          getDbText("patron-1"),
+		IllRequest: iso18626.Request{
+			BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "record-1", Title: "A title"},
+			ServiceInfo:       serviceInfo,
+		},
+	}
+
+	got := actionService.checkDuplicateBorrowingRequest(appCtx, pr)
+
+	assert.Equal(t, events.EventStatusSuccess, got.status)
+	if assert.NotNil(t, got.result.ActionResult) {
+		assert.Equal(t, ActionOutcomeReview, got.result.ActionResult.Outcome)
+	}
+	duplicateCheck, ok := got.result.CustomData[duplicateCheckKey].(*events.DuplicateCheck)
+	if assert.True(t, ok) {
+		assert.True(t, duplicateCheck.Enabled)
+		assert.True(t, duplicateCheck.Duplicate)
+		assert.Equal(t, createdAt.Add(-24*time.Hour).Format(time.RFC3339Nano), *duplicateCheck.CutoffTime)
+		assert.Equal(t, "matched-pr", *duplicateCheck.MatchedPatronRequestId)
+		assert.Nil(t, duplicateCheck.MatchedTransactionId)
+	}
+	where := prRepo.lastListQuery.GetWhereClause()
+	assert.Contains(t, where, "requester_symbol")
+	assert.Contains(t, where, "patron")
+	assert.Contains(t, where, "created_at")
+	assert.Contains(t, where, "created_at <")
+	assert.Contains(t, where, "service_type")
+	assert.Contains(t, where, "id NOT IN")
+	queryArgs := prRepo.lastListQuery.GetQueryArguments()
+	assert.Contains(t, queryArgs, "record-1")
+	assert.Contains(t, queryArgs, "A title")
+	assert.Contains(t, queryArgs, "borrowing")
+	assert.Contains(t, queryArgs, "ISIL:REQ")
+	assert.Contains(t, queryArgs, "patron-1")
+	assert.Contains(t, queryArgs, createdAt.Add(-24*time.Hour))
+	assert.Contains(t, queryArgs, createdAt)
+	assert.Contains(t, queryArgs, "Loan")
+	assert.Contains(t, queryArgs, "current-pr")
+	prRepo.AssertExpectations(t)
+	illRepo.AssertExpectations(t)
+}
+
+func TestCheckDuplicateBorrowingRequestSkipsRetry(t *testing.T) {
+	actionService := CreatePatronRequestActionService(new(MockPrRepo), new(IllRepoMock), new(MockEventBus), new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
+	got := actionService.checkDuplicateBorrowingRequest(appCtx, pr_db.PatronRequest{PrevReqID: getDbText("previous-pr")})
+
+	assert.Equal(t, events.EventStatusSuccess, got.status)
+	assert.Nil(t, got.result.ActionResult)
+	duplicateCheck := got.result.CustomData[duplicateCheckKey].(*events.DuplicateCheck)
+	assert.False(t, duplicateCheck.Enabled)
+}
+
+func TestHandleInvokeCheckDuplicateTransitionsToDuplicate(t *testing.T) {
+	windowHours := int32(24)
+	illRepo := new(IllRepoMock)
+	illRepo.On("GetCachedPeersBySymbols", []string{"ISIL:REQ"}, mock.Anything).Return([]ill_db.Peer{{
+		CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &windowHours}},
+	}}, "", nil)
+	prRepo := new(MockPrRepo)
+	serviceInfo := &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}
+	pr := pr_db.PatronRequest{
+		ID:              "current-pr",
+		CreatedAt:       pgtype.Timestamp{Time: time.Now(), Valid: true},
+		State:           BorrowerStateMetadataUpdated,
+		Side:            SideBorrowing,
+		RequesterSymbol: getDbText("ISIL:REQ"),
+		Patron:          getDbText("patron-1"),
+		IllRequest: iso18626.Request{
+			BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "record-1"},
+			ServiceInfo:       serviceInfo,
+		},
+	}
+	prRepo.On("GetPatronRequestById", pr.ID).Return(pr, nil)
+	prRepo.On("ListPatronRequests", pr_db.ListPatronRequestsParams{Limit: 1, Offset: 0}, mock.Anything).Return([]pr_db.PatronRequest{{
+		ID:         "matched-pr",
+		IllRequest: pr.IllRequest,
+	}}, int64(1), nil)
+	actionService := CreatePatronRequestActionService(prRepo, illRepo, new(MockEventBus), new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
+	action := BorrowerActionCheckDuplicate
+
+	status, result := actionService.handleInvokeAction(appCtx, events.Event{PatronRequestID: pr.ID, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, ActionOutcomeReview, result.ActionResult.Outcome)
+	assert.Equal(t, string(BorrowerStateDuplicate), *result.ActionResult.ToState)
+	assert.Equal(t, BorrowerStateDuplicate, prRepo.savedPr.State)
+	assert.True(t, prRepo.savedPr.NeedsAttention)
+	assert.Equal(t, string(BorrowerActionCheckDuplicate), prRepo.savedPr.LastAction.String)
+	assert.Equal(t, ActionOutcomeReview, prRepo.savedPr.LastActionOutcome.String)
+	prRepo.AssertExpectations(t)
+	illRepo.AssertExpectations(t)
+}
+
+func TestHandleInvokeCheckDuplicateFailureStaysMetadataUpdated(t *testing.T) {
+	windowHours := int32(24)
+	illRepo := new(IllRepoMock)
+	illRepo.On("GetCachedPeersBySymbols", []string{"ISIL:REQ"}, mock.Anything).Return([]ill_db.Peer{{
+		CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &windowHours}},
+	}}, "", nil)
+	prRepo := new(MockPrRepo)
+	serviceInfo := &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}
+	pr := pr_db.PatronRequest{
+		ID:              "current-pr",
+		CreatedAt:       pgtype.Timestamp{Time: time.Now(), Valid: true},
+		State:           BorrowerStateMetadataUpdated,
+		Side:            SideBorrowing,
+		RequesterSymbol: getDbText("ISIL:REQ"),
+		Patron:          getDbText("patron-1"),
+		IllRequest: iso18626.Request{
+			BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "record-1"},
+			ServiceInfo:       serviceInfo,
+		},
+	}
+	prRepo.On("GetPatronRequestById", pr.ID).Return(pr, nil)
+	prRepo.On("ListPatronRequests", pr_db.ListPatronRequestsParams{Limit: 1, Offset: 0}, mock.Anything).
+		Return([]pr_db.PatronRequest{}, int64(0), errors.New("database unavailable"))
+	actionService := CreatePatronRequestActionService(prRepo, illRepo, new(MockEventBus), new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
+	action := BorrowerActionCheckDuplicate
+
+	status, result := actionService.handleInvokeAction(appCtx, events.Event{PatronRequestID: pr.ID, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "failed to check for duplicate patron requests", result.EventError.Message)
+	assert.Equal(t, ActionOutcomeFailure, result.ActionResult.Outcome)
+	assert.Nil(t, result.ActionResult.ToState)
+	duplicateCheck := result.CustomData[duplicateCheckKey].(*events.DuplicateCheck)
+	assert.True(t, duplicateCheck.Enabled)
+	assert.False(t, duplicateCheck.Duplicate)
+	assert.Equal(t, BorrowerStateMetadataUpdated, prRepo.savedPr.State)
+	assert.True(t, prRepo.savedPr.NeedsAttention)
+	assert.Equal(t, string(BorrowerActionCheckDuplicate), prRepo.savedPr.LastAction.String)
+	assert.Equal(t, ActionOutcomeFailure, prRepo.savedPr.LastActionOutcome.String)
+	prRepo.AssertExpectations(t)
+	illRepo.AssertExpectations(t)
+}
 
 var actionValidatePatron = BorrowerActionValidatePatron
 
@@ -345,12 +502,15 @@ func TestHandleInvokeActionValidateSendRequest(t *testing.T) {
 	validatedPR.State = BorrowerStateValidated
 	updatePr := initialPR
 	updatePr.State = BorrowerStateMetadataUpdated
-	sentPR := updatePr
+	readyPr := updatePr
+	readyPr.State = BorrowerStateReadyToSend
+	sentPR := readyPr
 	sentPR.State = BorrowerStateSent
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(sentPR, nil)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(initialPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(updatePr, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(readyPr, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(sentPR, nil)
 	mockEventBus.On("CreateNoticeWithParent", fakeEventID).Return("", nil)
 
@@ -363,40 +523,28 @@ func TestHandleInvokeActionValidateSendRequest(t *testing.T) {
 	assert.Equal(t, ActionOutcomeSuccess, resultData.ActionResult.Outcome)
 }
 
-func TestHandleInvokeActionValidateSendRequestDuplicate(t *testing.T) {
+func TestHandleInvokeActionValidateSendRequestDuplicateResponseIsFailure(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
-	mockEventBus := new(MockEventBus)
 	mockIso18626Handler := new(MockIso18626Handler)
 	patronRequestId := "duplicate"
 
 	lmsCreator.On("GetAdapter", "ISIL:x").Return(createLmsAdapterMockLog(), nil)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), new(MockEventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "12312"}}
-	fakeEventID := "1234"
-	initialPR := pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}}
-	validatedPR := initialPR
-	validatedPR.State = BorrowerStateValidated
-	updatePr := initialPR
-	updatePr.State = BorrowerStateMetadataUpdated
-	sentPR := initialPR
-	sentPR.State = BorrowerStateSent
-	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(sentPR, nil)
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(initialPR, nil).Once()
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(updatePr, nil).Once()
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(sentPR, nil)
-	mockEventBus.On("CreateNoticeWithParent", fakeEventID).Return("", nil)
+	readyPr := pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateReadyToSend, Side: SideBorrowing}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(readyPr, nil)
+	action := BorrowerActionSendRequest
 
-	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{ID: fakeEventID, PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidatePatron}}})
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
-	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, events.EventStatusProblem, status)
 	assert.NotNil(t, resultData)
-	assert.Equal(t, BorrowerStateDuplicate, mockPrRepo.savedPr.State)
+	assert.Equal(t, BorrowerStateReadyToSend, mockPrRepo.savedPr.State)
 	assert.False(t, mockPrRepo.savedPr.TerminalState)
 	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
 	assert.Equal(t, string(BorrowerActionSendRequest), mockPrRepo.savedPr.LastAction.String)
-	assert.Equal(t, ActionOutcomeDuplicate, mockPrRepo.savedPr.LastActionOutcome.String)
+	assert.Equal(t, ActionOutcomeFailure, mockPrRepo.savedPr.LastActionOutcome.String)
 }
 
 func TestHandleInvokeActionCloseRequestFromDuplicate(t *testing.T) {
@@ -488,6 +636,13 @@ func TestHandleInvokeActionTransitionActions(t *testing.T) {
 			terminal:      true,
 		},
 		{
+			name:          "close ready to send request locally",
+			initialState:  BorrowerStateReadyToSend,
+			action:        BorrowerActionCloseRequest,
+			expectedState: BorrowerStateManuallyClosed,
+			terminal:      true,
+		},
+		{
 			name:          "close request needing review locally",
 			initialState:  BorrowerStateNeedsReview,
 			action:        BorrowerActionCloseRequest,
@@ -564,12 +719,15 @@ func TestHandleInvokeActionSkipPatronValidationRunsConfiguredAutoActions(t *test
 	validatedPR.NeedsAttention = false
 	metadataUpdatedPR := validatedPR
 	metadataUpdatedPR.State = BorrowerStateMetadataUpdated
-	sentPR := metadataUpdatedPR
+	readyPR := metadataUpdatedPR
+	readyPR.State = BorrowerStateReadyToSend
+	sentPR := readyPR
 	sentPR.State = BorrowerStateSent
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(sentPR, nil)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(initialPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(metadataUpdatedPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(readyPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(sentPR, nil)
 	mockEventBus.On("CreateNoticeWithParent", fakeEventID).Return("", nil)
 	action := BorrowerActionSkipPatronValidation
@@ -835,7 +993,7 @@ func TestHandleInvokeActionSendRequest(t *testing.T) {
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{}
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: BorrowerStateMetadataUpdated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: BorrowerStateReadyToSend, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, nil)
 	action := BorrowerActionSendRequest
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
@@ -4412,6 +4570,7 @@ type MockPrRepo struct {
 	deletedItemIDs                       []string
 	saveItemFail                         bool
 	deleteItemFail                       bool
+	lastListQuery                        pgcql.Query
 }
 
 func (r *MockPrRepo) WithTxFunc(ctx common.ExtendedContext, fn func(repo pr_db.PrRepo) error) error {
@@ -4439,6 +4598,12 @@ func (r *MockPrRepo) GetPatronRequestByIdForUpdate(ctx common.ExtendedContext, i
 func (r *MockPrRepo) GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id string, side pr_db.PatronRequestSide) (pr_db.PatronRequest, error) {
 	args := r.Called(id, side)
 	return args.Get(0).(pr_db.PatronRequest), args.Error(1)
+}
+
+func (r *MockPrRepo) ListPatronRequests(ctx common.ExtendedContext, params pr_db.ListPatronRequestsParams, query pgcql.Query) ([]pr_db.PatronRequest, int64, error) {
+	r.lastListQuery = query
+	args := r.Called(params, query)
+	return args.Get(0).([]pr_db.PatronRequest), args.Get(1).(int64), args.Error(2)
 }
 
 func (r *MockPrRepo) UpdatePatronRequest(ctx common.ExtendedContext, params pr_db.UpdatePatronRequestParams) (pr_db.PatronRequest, error) {

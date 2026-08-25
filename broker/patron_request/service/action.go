@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/common"
@@ -32,6 +33,14 @@ import (
 )
 
 const COMP = "pr_action_service"
+
+const duplicateCheckKey = "duplicateCheck"
+
+var duplicateLookupQueryBuilder = utils.Must(catalog.NewQueryBuilderGen(&dirapi.QueryConfig{
+	Identifier: new("supplier_unique_record_id = {term}"),
+	Title:      new("title_exact = {term}"),
+	Type:       new(dirapi.Cql),
+}))
 
 type PatronRequestActionService struct {
 	PatronRequestMessageSender
@@ -161,6 +170,10 @@ func (a *PatronRequestActionService) executeAction(ctx common.ExtendedContext, e
 		execResult := actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
 		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execResult)
 	}
+	if pr.Side == SideBorrowing && action == BorrowerActionCheckDuplicate {
+		execResult := a.checkDuplicateBorrowingRequest(ctx, pr)
+		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execResult)
+	}
 	if a.lmsCreator == nil {
 		return logActionErrorAndReturnResult(ctx, "LMS creator not configured", nil)
 	}
@@ -175,6 +188,104 @@ func (a *PatronRequestActionService) executeAction(ctx common.ExtendedContext, e
 	default:
 		return logActionErrorAndReturnResult(ctx, "side "+string(pr.Side)+" is not supported", errors.New("invalid side"))
 	}
+}
+
+func (a *PatronRequestActionService) checkDuplicateBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
+	duplicateCheck := events.DuplicateCheck{}
+	result := &events.EventResult{CustomData: map[string]any{duplicateCheckKey: &duplicateCheck}}
+	success := func() actionExecutionResult {
+		return actionExecutionResult{status: events.EventStatusSuccess, result: result, pr: pr}
+	}
+	failure := func(message string, err error) actionExecutionResult {
+		status, failureResult := logActionErrorAndReturnResult(ctx, message, err)
+		failureResult.CustomData = result.CustomData
+		return actionExecutionResult{status: status, result: failureResult, pr: pr}
+	}
+
+	if pr.PrevReqID.Valid {
+		return success()
+	}
+	if !pr.RequesterSymbol.Valid || pr.RequesterSymbol.String == "" {
+		return failure("missing requester symbol for duplicate check", nil)
+	}
+	peers, _, err := a.illRepo.GetCachedPeersBySymbols(ctx, []string{pr.RequesterSymbol.String}, a.directoryLookupAdapter)
+	if err != nil {
+		return failure("failed to get requester peer for duplicate check", err)
+	}
+	if len(peers) == 0 {
+		return failure("failed to get requester peer for duplicate check", fmt.Errorf("no peer found for requester symbol %q", pr.RequesterSymbol.String))
+	}
+	if len(peers) > 1 {
+		ctx.Logger().Warn("multiple requester peers found for duplicate check, using first", "requesterSymbol", pr.RequesterSymbol.String, "peerCount", len(peers))
+	}
+
+	var windowHours *int32
+	if peers[0].CustomData.IllConfig != nil {
+		windowHours = peers[0].CustomData.IllConfig.DuplicateCheckWindowHours
+	}
+	duplicateCheck.WindowHours = windowHours
+	if windowHours == nil || *windowHours <= 0 {
+		return success()
+	}
+	duplicateCheck.Enabled = true
+	if !pr.Patron.Valid || pr.Patron.String == "" || pr.IllRequest.ServiceInfo == nil {
+		return success()
+	}
+	if !pr.CreatedAt.Valid {
+		return failure("patron request creation time missing for duplicate check", errors.New("invalid patron request creation time"))
+	}
+
+	lookupParams := catalog.LookupParamsFromBibliographicInfo(pr.IllRequest.BibliographicInfo, pr.IllRequest.ServiceInfo)
+	duplicateCheck.LookupParams = &lookupParams
+	if lookupParams.ServiceType == "" {
+		return success()
+	}
+	cqlList, _, err := duplicateLookupQueryBuilder.Build(lookupParams)
+	if err != nil || len(cqlList) == 0 {
+		if err == nil {
+			err = errors.New("duplicate lookup query is empty")
+		}
+		return failure("failed to build patron request duplicate lookup", err)
+	}
+
+	queryBuilder, err := cqlbuilder.NewQueryFromString("(" + strings.Join(cqlList, " or ") + ")")
+	if err != nil {
+		return failure("failed to build patron request duplicate query", err)
+	}
+	requestCreatedAt := pr.CreatedAt.Time.UTC()
+	cutoffTime := requestCreatedAt.Add(-time.Duration(*windowHours) * time.Hour).Format(time.RFC3339Nano)
+	requestCreatedBefore := requestCreatedAt.Format(time.RFC3339Nano)
+	duplicateCheck.CutoffTime = &cutoffTime
+	query, err := queryBuilder.
+		And().Search("side").Term(string(SideBorrowing)).
+		And().Search("requester_symbol_exact").Term(pr.RequesterSymbol.String).
+		And().Search("patron_exact").Term(pr.Patron.String).
+		And().Search("created_at").Rel(">=").Term(cutoffTime).
+		And().Search("created_at").Rel("<").Term(requestCreatedBefore).
+		And().Search("service_type").Term(lookupParams.ServiceType).
+		And().Search("id").Rel("<>").Term(pr.ID).
+		Build()
+	if err != nil {
+		return failure("failed to build patron request duplicate query", err)
+	}
+	pgQuery, err := pr_db.ParsePatronRequestsCql(query.String())
+	if err != nil {
+		return failure("failed to parse patron request duplicate query", err)
+	}
+	matches, _, err := a.prRepo.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: 1, Offset: 0}, pgQuery)
+	if err != nil {
+		return failure("failed to check for duplicate patron requests", err)
+	}
+	if len(matches) == 0 {
+		return success()
+	}
+
+	duplicateCheck.Duplicate = true
+	duplicateCheck.MatchedPatronRequestId = &matches[0].ID
+	matchedValues := catalog.LookupParamsFromBibliographicInfo(matches[0].IllRequest.BibliographicInfo, matches[0].IllRequest.ServiceInfo)
+	duplicateCheck.MatchedValues = &matchedValues
+	result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeReview}
+	return success()
 }
 
 func (a *PatronRequestActionService) handleTerminateAction(ctx common.ExtendedContext, event events.Event, actionMapping *ActionMapping, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {

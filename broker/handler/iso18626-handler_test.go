@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/common"
@@ -14,6 +15,7 @@ import (
 	dirapi "github.com/indexdata/crosslink/directory/api"
 
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
@@ -526,4 +528,38 @@ func TestCheckDuplicateRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHandleNewRequestChecksDuplicatesOnlyForExternalRequester(t *testing.T) {
+	windowHours := int32(1)
+	request := &iso18626.Request{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: "request-1",
+			Timestamp:                 utils.XSDDateTime{Time: time.Now()},
+		},
+		BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "record-1"},
+		ServiceInfo:       &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
+		PatronInfo:        &iso18626.PatronInfo{PatronId: "patron-1"},
+	}
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+
+	t.Run("CrossLink requester bypasses legacy transaction check", func(t *testing.T) {
+		repo := &mockDuplicateCheckRepo{duplicate: true}
+		_, _, err := handleNewRequest(ctx, request, repo, createPgText("ISIL:REQ"), []ill_db.Peer{{
+			Vendor:     string(dirapi.CrossLink),
+			CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &windowHours}},
+		}})
+		assert.NoError(t, err)
+		assert.False(t, repo.called)
+	})
+
+	t.Run("external requester retains legacy transaction check", func(t *testing.T) {
+		repo := &mockDuplicateCheckRepo{duplicate: true}
+		_, _, err := handleNewRequest(ctx, request, repo, createPgText("ISIL:REQ"), []ill_db.Peer{{
+			Vendor:     string(dirapi.Alma),
+			CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &windowHours}},
+		}})
+		assert.ErrorIs(t, err, ErrDuplicateRequest)
+		assert.True(t, repo.called)
+	})
 }
