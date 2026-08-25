@@ -30,17 +30,6 @@ func getSymbolAuthority() string {
 	return symbolAuthority
 }
 
-func maybeUpdateLenderOfLastResort(cur []string, patch nullable.Nullable[[]Symbol]) []string {
-	if !patch.IsSpecified() {
-		return cur
-	}
-	if patch.IsNull() {
-		return nil
-	}
-	patchVal := patch.MustGet()
-	return symbolsToFullSymbols(&patchVal)
-}
-
 func maybeUpdateEntryVendor(cur *string, patch nullable.Nullable[EntryVendor]) *string {
 	if !patch.IsSpecified() {
 		return cur
@@ -71,35 +60,36 @@ func isValidParentForType(entryType EntryType, parentEntry *db.Entry) (bool, str
 
 func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 	var (
-		id                        uuid.UUID
-		name                      string
-		description               *string
-		contactName               *string
-		organizationId            *string
-		fromEmail                 *string
-		tenant                    *string
-		vendor                    *string
-		phoneNumber               *string
-		lmsLocationCode           *string
-		lenderOfLastResort        []string
-		duplicateCheckWindowHours *int32
-		lmsConfigJSON             []byte
-		holdingsConfigJSON        []byte
-		hrid                      *string
-		timeZone                  *string
-		entryType                 *string
-		parent                    *uuid.UUID
-		symbolsJSON               [][]byte
-		endpointsJSON             [][]byte
-		addressesJSON             [][]byte
-		tiersJSON                 [][]byte
-		networksJSON              [][]byte
-		closuresJSON              [][]byte
-		totalCount                int
+		id                 uuid.UUID
+		name               string
+		description        *string
+		contactName        *string
+		organizationId     *string
+		email              *string
+		fromEmail          *string
+		tenant             *string
+		vendor             *string
+		phoneNumber        *string
+		lmsLocationCode    *string
+		illConfigJSON      []byte
+		lmsConfigJSON      []byte
+		catalogConfigJSON  []byte
+		holdingsPolicyJSON []byte
+		hrid               *string
+		timeZone           *string
+		entryType          *string
+		parent             *uuid.UUID
+		symbolsJSON        [][]byte
+		endpointsJSON      [][]byte
+		addressesJSON      [][]byte
+		tiersJSON          [][]byte
+		networksJSON       [][]byte
+		closuresJSON       [][]byte
+		totalCount         int
 	)
 
-	if err := rows.Scan(&id, &name, &description, &organizationId, &contactName, &fromEmail, &tenant, &vendor, &phoneNumber,
-		&lmsLocationCode, &lenderOfLastResort, &duplicateCheckWindowHours, &lmsConfigJSON, &holdingsConfigJSON, &hrid, &timeZone, &entryType, &parent, &symbolsJSON, &endpointsJSON,
+	if err := rows.Scan(&id, &name, &description, &organizationId, &contactName, &email, &fromEmail, &tenant, &vendor, &phoneNumber,
+		&lmsLocationCode, &illConfigJSON, &lmsConfigJSON, &catalogConfigJSON, &holdingsPolicyJSON, &hrid, &timeZone, &entryType, &parent, &symbolsJSON, &endpointsJSON,
 		&addressesJSON, &tiersJSON, &networksJSON, &closuresJSON, &totalCount); err != nil {
 		return Entry{}, 0, err
 	}
@@ -129,9 +119,13 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 		return Entry{}, 0, fmt.Errorf("unmarshalling lms config: %w", err)
 	}
 
-	holdingsConfig, err := unmarshalJSONObject[HoldingsConfig](holdingsConfigJSON)
+	catalogConfig, err := unmarshalJSONObject[CatalogConfig](catalogConfigJSON)
 	if err != nil {
 		return Entry{}, 0, fmt.Errorf("unmarshalling holdings config: %w", err)
+	}
+	holdingsPolicy, err := unmarshalJSONObject[HoldingsPolicy](holdingsPolicyJSON)
+	if err != nil {
+		return Entry{}, 0, fmt.Errorf("failed to parse holdings policy: %w", err)
 	}
 
 	tiers, err := unmarshalJSONArray[Tier](tiersJSON)
@@ -144,9 +138,9 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 		return Entry{}, 0, fmt.Errorf("unmarshalling networks config: %w", err)
 	}
 
-	lenderSymbols, err := fullSymbolsToSymbols(lenderOfLastResort)
+	illConfig, err := unmarshalJSONObject[IllConfig](illConfigJSON)
 	if err != nil {
-		return Entry{}, 0, fmt.Errorf("unmarshalling lender of last resort: %w", err)
+		return Entry{}, 0, fmt.Errorf("unmarshalling ill config: %w", err)
 	}
 
 	// Use nil for empty arrays so they're omitted in JSON (omitempty)
@@ -185,30 +179,31 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 	typeValue := EntryType(*entryType)
 
 	return Entry{
-		Id:                        &id,
-		Name:                      name,
-		Type:                      &typeValue,
-		OrganizationId:            organizationId,
-		Description:               description,
-		ContactName:               contactName,
-		FromEmail:                 fromEmail,
-		Tenant:                    tenant,
-		Hrid:                      hrid,
-		LmsLocationCode:           lmsLocationCode,
-		LenderOfLastResort:        lenderSymbols,
-		DuplicateCheckWindowHours: duplicateCheckWindowHours,
-		PhoneNumber:               phoneNumber,
-		Parent:                    parent,
-		Symbols:                   symbolsPtr,
-		Endpoints:                 endpointsPtr,
-		Addresses:                 addressesPtr,
-		Closures:                  closuresPtr,
-		LmsConfig:                 lmsConfigPtr,
-		HoldingsConfig:            holdingsConfig,
-		Tiers:                     tiersPtr,
-		Networks:                  networksPtr,
-		TimeZone:                  timeZone,
-		Vendor:                    (*EntryVendor)(vendor),
+		Id:              &id,
+		Name:            name,
+		Type:            &typeValue,
+		OrganizationId:  organizationId,
+		Description:     description,
+		ContactName:     contactName,
+		Email:           email,
+		FromEmail:       fromEmail,
+		Tenant:          tenant,
+		Hrid:            hrid,
+		LmsLocationCode: lmsLocationCode,
+		IllConfig:       illConfig,
+		PhoneNumber:     phoneNumber,
+		Parent:          parent,
+		Symbols:         symbolsPtr,
+		Endpoints:       endpointsPtr,
+		Addresses:       addressesPtr,
+		Closures:        closuresPtr,
+		LmsConfig:       lmsConfigPtr,
+		CatalogConfig:   catalogConfig,
+		HoldingsPolicy:  holdingsPolicy,
+		Tiers:           tiersPtr,
+		Networks:        networksPtr,
+		TimeZone:        timeZone,
+		Vendor:          (*EntryVendor)(vendor),
 	}, totalCount, nil
 }
 
@@ -239,7 +234,8 @@ func handleEntryCQL(cqlString string, noBaseArgs int) (pgcql.Query, error) {
 	f.SetColumn("e.tenant")
 	def.AddField("tenant", f)
 
-	def.AddField("symbol", &fieldEntrySymbol{})
+	def.AddField("symbol", &fieldEntrySymbol{index: "symbol", ownerColumn: "e.id"})
+	def.AddField("parentSymbol", &fieldEntrySymbol{index: "parentSymbol", ownerColumn: "e.parent"})
 
 	var parser cql.Parser
 	query, err := parser.Parse(cqlString)
@@ -249,7 +245,10 @@ func handleEntryCQL(cqlString string, noBaseArgs int) (pgcql.Query, error) {
 	return def.Parse(query, noBaseArgs+1)
 }
 
-type fieldEntrySymbol struct{}
+type fieldEntrySymbol struct {
+	index       string
+	ownerColumn string
+}
 
 func (f *fieldEntrySymbol) GetColumn() string  { return "" }
 func (f *fieldEntrySymbol) SetColumn(_ string) {}
@@ -259,18 +258,18 @@ func (f *fieldEntrySymbol) Generate(sc cql.SearchClause, queryArgumentIndex int)
 	case cql.EQ, cql.EXACT, "==":
 		return fmt.Sprintf(`EXISTS (
 			SELECT 1 FROM symbols entry_symbol
-			WHERE entry_symbol.owner = e.id
+			WHERE entry_symbol.owner = %s
 				AND (entry_symbol.authority || ':' || entry_symbol.symbol = $%d OR entry_symbol.symbol = $%d)
-		)`, queryArgumentIndex, queryArgumentIndex), []any{strings.ToUpper(sc.Term)}, nil
+		)`, f.ownerColumn, queryArgumentIndex, queryArgumentIndex), []any{strings.ToUpper(sc.Term)}, nil
 	case cql.ANY:
 		terms := strings.Fields(strings.ToUpper(sc.Term))
 		return fmt.Sprintf(`EXISTS (
 			SELECT 1 FROM symbols entry_symbol
-			WHERE entry_symbol.owner = e.id
+			WHERE entry_symbol.owner = %s
 				AND (entry_symbol.authority || ':' || entry_symbol.symbol = ANY($%d::text[]) OR entry_symbol.symbol = ANY($%d::text[]))
-		)`, queryArgumentIndex, queryArgumentIndex), []any{terms}, nil
+		)`, f.ownerColumn, queryArgumentIndex, queryArgumentIndex), []any{terms}, nil
 	default:
-		return "", nil, fmt.Errorf("unsupported relation %s for symbol", sc.Relation)
+		return "", nil, fmt.Errorf("unsupported relation %s for %s", sc.Relation, f.index)
 	}
 }
 
@@ -284,13 +283,32 @@ func buildEntrySQL(whereClause string) string {
 		e.description,
 		e.organization_id,
 		e.contact_name,
+		e.email,
 		e.from_email,
 		e.tenant,
 		e.vendor,
 		e.phone_number,
 		e.lms_location_code,
-		e.lender_of_last_resort,
-		e.duplicate_check_window_hours,
+		(
+		SELECT json_strip_nulls(json_build_object(
+			'iso18626Url', i.iso18626_url,
+			'iso18626Vendor', i.iso18626_vendor,
+			'lendersOfLastResort', CASE WHEN i.lenders_of_last_resort IS NULL THEN NULL ELSE (
+				SELECT json_agg(json_build_object(
+					'authority', split_part(value, ':', 1),
+					'symbol', substring(value from position(':' in value) + 1)
+				))
+				FROM unnest(i.lenders_of_last_resort) value
+			) END,
+			'includeRequestingAgencyInfo', i.include_requesting_agency_info,
+			'includeSupplierInfo', i.include_supplier_info,
+			'includeReturnInfo', i.include_return_info,
+			'includeVendorNote', i.include_vendor_note,
+			'useOfferedCosts', i.use_offered_costs,
+			'noteFieldSeparator', i.note_field_separator,
+			'supplierPatronPattern', i.supplier_patron_pattern,
+			'duplicateCheckWindowHours', i.duplicate_check_window_hours
+		)) FROM ill_configs i WHERE i.entry = e.id) as ill_config,
 		(
 		SELECT 
 			json_build_object(
@@ -303,6 +321,7 @@ func buildEntrySQL(whereClause string) string {
 				'itemLocation', l.item_location,
 				'lookupUserEnabled', l.lookup_user_enabled,
 				'requestItemBibIdCode', l.request_item_bib_code,
+				'requestItemEnabled', l.request_item_enabled,
 				'requestItemPickupLocationEnabled', l.request_item_pickup_location_enabled,
 				'requestItemRequestScopeType', l.request_item_scope_type,
 				'requestItemRequestType', l.request_item_request_type,
@@ -322,19 +341,7 @@ func buildEntrySQL(whereClause string) string {
 				)) END,
 				'zoom', CASE WHEN h.zoom_address IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
 					'address', h.zoom_address,
-					'options', json_strip_nulls(json_build_object(
-						'mockRecords', h.zoom_option_mock_records,
-						'preferredRecordSyntax', h.zoom_option_preferred_record_syntax,
-						'count', h.zoom_option_count,
-						'elementSetName', h.zoom_option_element_set_name,
-						'schema', h.zoom_option_schema,
-						'authentication', h.zoom_option_authentication,
-						'user', h.zoom_option_user,
-						'password', h.zoom_option_password,
-						'adapter-error', h.zoom_option_adapter_error,
-						'lookup-error', h.zoom_option_lookup_error,
-						'location', h.zoom_option_location
-					))
+					'options', h.zoom_options
 				)) END,
 				'queryConfig', CASE WHEN h.query_type IS NULL AND h.query_identifier IS NULL AND h.query_isbn IS NULL AND h.query_issn IS NULL AND h.query_title IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
 					'type', h.query_type,
@@ -380,7 +387,8 @@ func buildEntrySQL(whereClause string) string {
 					)) END
 				)
 			)
-		from holdings_configs h WHERE h.entry = e.id) as holdings_config,
+		from catalog_configs h WHERE h.entry = e.id) as catalog_config,
+		(SELECT hp.policy FROM holdings_policies hp WHERE hp.entry = e.id) as holdings_policy,
 		e.hrid,
 		e.time_zone,
 		e.type,
@@ -471,12 +479,11 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 			return GetEntries400TextResponse(fmt.Sprintf("CQL parse error: %v", err)), nil
 		}
 
-		whereClause := ""
 		if res.GetWhereClause() != "" {
-			whereClause = "WHERE " + res.GetWhereClause()
+			query = buildEntrySQL("WHERE " + res.GetWhereClause() + "\n" + defaultEntryOrder)
+		} else {
+			query = buildEntrySQL(defaultEntryOrder)
 		}
-
-		query = buildEntrySQL(whereClause + "\n" + defaultEntryOrder)
 		args = res.GetQueryArguments()
 	} else {
 		query = buildEntrySQL(defaultEntryOrder)
@@ -676,18 +683,19 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 	}
 
 	toInsert := db.CreateEntryParams{
-		Name:                      request.Body.Name,
-		ContactName:               request.Body.ContactName,
-		FromEmail:                 request.Body.FromEmail,
-		Tenant:                    request.Body.Tenant,
-		PhoneNumber:               request.Body.PhoneNumber,
-		TimeZone:                  request.Body.TimeZone,
-		OrganizationID:            request.Body.OrganizationId,
-		Type:                      string(entryType),
-		Parent:                    request.Body.Parent,
-		LmsLocationCode:           request.Body.LmsLocationCode,
-		LenderOfLastResort:        symbolsToFullSymbols(request.Body.LenderOfLastResort),
-		DuplicateCheckWindowHours: request.Body.DuplicateCheckWindowHours,
+		Name:            request.Body.Name,
+		Description:     request.Body.Description,
+		ContactName:     request.Body.ContactName,
+		Email:           request.Body.Email,
+		FromEmail:       request.Body.FromEmail,
+		Tenant:          request.Body.Tenant,
+		PhoneNumber:     request.Body.PhoneNumber,
+		TimeZone:        request.Body.TimeZone,
+		OrganizationID:  request.Body.OrganizationId,
+		Type:            string(entryType),
+		Parent:          request.Body.Parent,
+		LmsLocationCode: request.Body.LmsLocationCode,
+		Hrid:            request.Body.Hrid,
 	}
 	if request.Body.Vendor != nil {
 		vendor := string(*request.Body.Vendor)
@@ -779,6 +787,7 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 			RequestItemRequestType:           lmsConfig.RequestItemRequestType,
 			RequestItemScopeType:             lmsConfig.RequestItemRequestScopeType,
 			RequestItemBibCode:               lmsConfig.RequestItemBibIdCode,
+			RequestItemEnabled:               lmsConfig.RequestItemEnabled,
 			RequestItemPickupLocationEnabled: lmsConfig.RequestItemPickupLocationEnabled,
 			RequesterPickupLocation:          lmsConfig.RequesterPickupLocation,
 			RequesterPatronPattern:           lmsConfig.RequesterPatronPattern,
@@ -790,10 +799,29 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		}
 	}
 
-	if request.Body.HoldingsConfig != nil {
-		_, err := qtx.UpsertHoldingsConfig(ctx, holdingsConfigToDBParams(insertedEntry.ID, *request.Body.HoldingsConfig))
+	if request.Body.CatalogConfig != nil {
+		_, err := qtx.UpsertCatalogConfig(ctx, catalogConfigToDBParams(insertedEntry.ID, *request.Body.CatalogConfig))
 		if err != nil {
-			slog.ErrorContext(ctx, "failed to create holdingsConfig component", "error", err)
+			slog.ErrorContext(ctx, "failed to create catalogConfig component", "error", err)
+			return AddEntry500TextResponse("Internal server error"), nil
+		}
+	}
+
+	if request.Body.IllConfig != nil {
+		_, err := qtx.UpsertIllConfig(ctx, illConfigToDBParams(insertedEntry.ID, *request.Body.IllConfig))
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to create illConfig component", "error", err)
+			return AddEntry500TextResponse("Internal server error"), nil
+		}
+	}
+
+	if request.Body.HoldingsPolicy != nil {
+		_, err := qtx.UpsertHoldingsPolicy(ctx, db.UpsertHoldingsPolicyParams{
+			Entry:  insertedEntry.ID,
+			Policy: holdingsPolicyJSON(*request.Body.HoldingsPolicy),
+		})
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to create holdingsPolicy component", "error", err)
 			return AddEntry500TextResponse("Internal server error"), nil
 		}
 	}
@@ -919,25 +947,22 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		}
 	}
 
-	lenderOfLastResort := maybeUpdateLenderOfLastResort(orig.LenderOfLastResort, request.Body.LenderOfLastResort)
-
 	err = qtx.UpdateEntry(ctx, db.UpdateEntryParams{
-		Name:                      derefOrDefault(request.Body.Name, orig.Name),
-		Description:               maybeUpdateCol(orig.Description, request.Body.Description),
-		ContactName:               maybeUpdateCol(orig.ContactName, request.Body.ContactName),
-		FromEmail:                 maybeUpdateCol(orig.FromEmail, request.Body.FromEmail),
-		Tenant:                    maybeUpdateCol(orig.Tenant, request.Body.Tenant),
-		Vendor:                    maybeUpdateEntryVendor(orig.Vendor, request.Body.Vendor),
-		PhoneNumber:               maybeUpdateCol(orig.PhoneNumber, request.Body.PhoneNumber),
-		Parent:                    maybeUpdateCol(orig.Parent, request.Body.Parent),
-		LmsLocationCode:           maybeUpdateCol(orig.LmsLocationCode, request.Body.LmsLocationCode),
-		LenderOfLastResort:        lenderOfLastResort,
-		DuplicateCheckWindowHours: maybeUpdateCol(orig.DuplicateCheckWindowHours, request.Body.DuplicateCheckWindowHours),
-		Hrid:                      maybeUpdateCol(orig.Hrid, request.Body.Hrid),
-		Type:                      resultingType,
-		TimeZone:                  maybeUpdateCol(orig.TimeZone, request.Body.TimeZone),
-		OrganizationID:            maybeUpdateCol(orig.OrganizationID, request.Body.OrganizationId),
-		ID:                        orig.ID,
+		Name:            derefOrDefault(request.Body.Name, orig.Name),
+		Description:     maybeUpdateCol(orig.Description, request.Body.Description),
+		ContactName:     maybeUpdateCol(orig.ContactName, request.Body.ContactName),
+		Email:           maybeUpdateCol(orig.Email, request.Body.Email),
+		FromEmail:       maybeUpdateCol(orig.FromEmail, request.Body.FromEmail),
+		Tenant:          maybeUpdateCol(orig.Tenant, request.Body.Tenant),
+		Vendor:          maybeUpdateEntryVendor(orig.Vendor, request.Body.Vendor),
+		PhoneNumber:     maybeUpdateCol(orig.PhoneNumber, request.Body.PhoneNumber),
+		Parent:          maybeUpdateCol(orig.Parent, request.Body.Parent),
+		LmsLocationCode: maybeUpdateCol(orig.LmsLocationCode, request.Body.LmsLocationCode),
+		Hrid:            maybeUpdateCol(orig.Hrid, request.Body.Hrid),
+		Type:            resultingType,
+		TimeZone:        maybeUpdateCol(orig.TimeZone, request.Body.TimeZone),
+		OrganizationID:  maybeUpdateCol(orig.OrganizationID, request.Body.OrganizationId),
+		ID:              orig.ID,
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to update entry", "error", err, "id", orig.ID)
@@ -1107,53 +1132,125 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		}
 	}
 
-	if request.Body.LmsConfig.IsSpecified() && !request.Body.LmsConfig.IsNull() {
-		lmsConfig := request.Body.LmsConfig.MustGet()
-
-		if err != nil {
-			slog.ErrorContext(ctx, "unable to query original LMS Config", "error", err)
-			return UpdateEntry500TextResponse("Internal server error"), nil
-		}
-
-		originalLMSConfig, _ := qtx.GetLMSConfigByEntry(ctx, orig.ID)
-
-		_, err = qtx.UpsertLMSConfig(ctx, db.UpsertLMSConfigParams{
-			Entry:                            &orig.ID,
-			Address:                          derefOrDefault(lmsConfig.Address, originalLMSConfig.Address),
-			FromAgency:                       derefOrDefault(lmsConfig.FromAgency, originalLMSConfig.FromAgency),
-			FromAgencyAuthentication:         derefOrDefaultPtr(lmsConfig.FromAgencyAuthentication, originalLMSConfig.FromAgencyAuthentication),
-			ToAgency:                         derefOrDefaultPtr(lmsConfig.ToAgency, originalLMSConfig.ToAgency),
-			LookupUserEnabled:                derefOrDefaultPtr(lmsConfig.LookupUserEnabled, originalLMSConfig.LookupUserEnabled),
-			AcceptItemEnabled:                derefOrDefaultPtr(lmsConfig.AcceptItemEnabled, originalLMSConfig.AcceptItemEnabled),
-			CheckinItemEnabled:               derefOrDefaultPtr(lmsConfig.CheckInItemEnabled, originalLMSConfig.CheckinItemEnabled),
-			CheckoutItemEnabled:              derefOrDefaultPtr(lmsConfig.CheckOutItemEnabled, originalLMSConfig.CheckoutItemEnabled),
-			ItemLocation:                     derefOrDefaultPtr(lmsConfig.ItemLocation, originalLMSConfig.ItemLocation),
-			RequestItemRequestType:           derefOrDefaultPtr(lmsConfig.RequestItemRequestType, originalLMSConfig.RequestItemRequestType),
-			RequestItemScopeType:             derefOrDefaultPtr(lmsConfig.RequestItemRequestScopeType, originalLMSConfig.RequestItemScopeType),
-			RequestItemBibCode:               derefOrDefaultPtr(lmsConfig.RequestItemBibIdCode, originalLMSConfig.RequestItemBibCode),
-			RequestItemPickupLocationEnabled: derefOrDefaultPtr(lmsConfig.RequestItemPickupLocationEnabled, originalLMSConfig.RequestItemPickupLocationEnabled),
-			RequesterPickupLocation:          derefOrDefaultPtr(lmsConfig.RequesterPickupLocation, originalLMSConfig.RequesterPickupLocation),
-			SupplierPickupLocation:           derefOrDefaultPtr(lmsConfig.SupplierPickupLocation, originalLMSConfig.SupplierPickupLocation),
-			RequesterPatronPattern:           derefOrDefaultPtr(lmsConfig.RequesterPatronPattern, originalLMSConfig.RequesterPatronPattern),
-		})
-		if err != nil {
-			slog.ErrorContext(ctx, "unexpected database error during lmsConfig upsert", "error", err)
-			return UpdateEntry500TextResponse(err.Error()), nil
-		}
-	}
-
-	if request.Body.HoldingsConfig.IsSpecified() {
-		if request.Body.HoldingsConfig.IsNull() {
-			err = qtx.DeleteHoldingsConfigByEntry(ctx, orig.ID)
+	if request.Body.LmsConfig.IsSpecified() {
+		if request.Body.LmsConfig.IsNull() {
+			err = qtx.DeleteLMSConfigByEntry(ctx, orig.ID)
 			if err != nil {
-				slog.ErrorContext(ctx, "unexpected database error during holdingsConfig delete", "error", err)
+				slog.ErrorContext(ctx, "unexpected database error during lmsConfig delete", "error", err)
 				return UpdateEntry500TextResponse("Internal server error"), nil
 			}
 		} else {
-			holdingsConfig := request.Body.HoldingsConfig.MustGet()
-			_, err = qtx.UpsertHoldingsConfig(ctx, holdingsConfigToDBParams(orig.ID, holdingsConfig))
+			lmsConfig := request.Body.LmsConfig.MustGet()
+			originalLMSConfig, queryErr := qtx.GetLMSConfigByEntry(ctx, orig.ID)
+			if queryErr != nil && !errors.Is(queryErr, pgx.ErrNoRows) {
+				slog.ErrorContext(ctx, "unable to query original lmsConfig", "error", queryErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+
+			_, err = qtx.UpsertLMSConfig(ctx, db.UpsertLMSConfigParams{
+				Entry:                            &orig.ID,
+				Address:                          derefOrDefault(lmsConfig.Address, originalLMSConfig.Address),
+				FromAgency:                       derefOrDefault(lmsConfig.FromAgency, originalLMSConfig.FromAgency),
+				FromAgencyAuthentication:         maybeUpdateCol(originalLMSConfig.FromAgencyAuthentication, lmsConfig.FromAgencyAuthentication),
+				ToAgency:                         maybeUpdateCol(originalLMSConfig.ToAgency, lmsConfig.ToAgency),
+				LookupUserEnabled:                maybeUpdateCol(originalLMSConfig.LookupUserEnabled, lmsConfig.LookupUserEnabled),
+				AcceptItemEnabled:                maybeUpdateCol(originalLMSConfig.AcceptItemEnabled, lmsConfig.AcceptItemEnabled),
+				CheckinItemEnabled:               maybeUpdateCol(originalLMSConfig.CheckinItemEnabled, lmsConfig.CheckInItemEnabled),
+				CheckoutItemEnabled:              maybeUpdateCol(originalLMSConfig.CheckoutItemEnabled, lmsConfig.CheckOutItemEnabled),
+				ItemLocation:                     maybeUpdateCol(originalLMSConfig.ItemLocation, lmsConfig.ItemLocation),
+				RequestItemRequestType:           maybeUpdateCol(originalLMSConfig.RequestItemRequestType, lmsConfig.RequestItemRequestType),
+				RequestItemScopeType:             maybeUpdateCol(originalLMSConfig.RequestItemScopeType, lmsConfig.RequestItemRequestScopeType),
+				RequestItemBibCode:               maybeUpdateCol(originalLMSConfig.RequestItemBibCode, lmsConfig.RequestItemBibIdCode),
+				RequestItemEnabled:               maybeUpdateCol(originalLMSConfig.RequestItemEnabled, lmsConfig.RequestItemEnabled),
+				RequestItemPickupLocationEnabled: maybeUpdateCol(originalLMSConfig.RequestItemPickupLocationEnabled, lmsConfig.RequestItemPickupLocationEnabled),
+				RequesterPickupLocation:          maybeUpdateCol(originalLMSConfig.RequesterPickupLocation, lmsConfig.RequesterPickupLocation),
+				SupplierPickupLocation:           maybeUpdateCol(originalLMSConfig.SupplierPickupLocation, lmsConfig.SupplierPickupLocation),
+				RequesterPatronPattern:           maybeUpdateCol(originalLMSConfig.RequesterPatronPattern, lmsConfig.RequesterPatronPattern),
+			})
 			if err != nil {
-				slog.ErrorContext(ctx, "unexpected database error during holdingsConfig upsert", "error", err)
+				slog.ErrorContext(ctx, "unexpected database error during lmsConfig upsert", "error", err)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		}
+	}
+
+	if request.Body.CatalogConfig.IsSpecified() {
+		if request.Body.CatalogConfig.IsNull() {
+			err = qtx.DeleteCatalogConfigByEntry(ctx, orig.ID)
+			if err != nil {
+				slog.ErrorContext(ctx, "unexpected database error during catalogConfig delete", "error", err)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		} else {
+			catalogConfig := request.Body.CatalogConfig.MustGet()
+			originalCatalogConfig, queryErr := qtx.GetCatalogConfigByEntry(ctx, orig.ID)
+			if queryErr != nil && !errors.Is(queryErr, pgx.ErrNoRows) {
+				slog.ErrorContext(ctx, "unable to query original catalogConfig", "error", queryErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+			if validationErr := validateCatalogConfigPatch(catalogConfig, originalCatalogConfig); validationErr != nil {
+				return UpdateEntry400TextResponse(validationErr.Error()), nil
+			}
+			params, mergeErr := catalogConfigPatchToDBParams(orig.ID, catalogConfig, originalCatalogConfig)
+			if mergeErr != nil {
+				slog.ErrorContext(ctx, "unable to merge catalogConfig", "error", mergeErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+			_, err = qtx.UpsertCatalogConfig(ctx, params)
+			if err != nil {
+				slog.ErrorContext(ctx, "unexpected database error during catalogConfig upsert", "error", err)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		}
+	}
+
+	if request.Body.IllConfig.IsSpecified() {
+		if request.Body.IllConfig.IsNull() {
+			err = qtx.DeleteIllConfigByEntry(ctx, orig.ID)
+			if err != nil {
+				slog.ErrorContext(ctx, "unexpected database error during illConfig delete", "error", err)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		} else {
+			illConfig := request.Body.IllConfig.MustGet()
+			originalIllConfig, queryErr := qtx.GetIllConfigByEntry(ctx, orig.ID)
+			if queryErr != nil && !errors.Is(queryErr, pgx.ErrNoRows) {
+				slog.ErrorContext(ctx, "unable to query original illConfig", "error", queryErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+			_, err = qtx.UpsertIllConfig(ctx, illConfigPatchToDBParams(orig.ID, illConfig, originalIllConfig))
+			if err != nil {
+				slog.ErrorContext(ctx, "unexpected database error during illConfig upsert", "error", err)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		}
+	}
+
+	if request.Body.HoldingsPolicy.IsSpecified() {
+		if request.Body.HoldingsPolicy.IsNull() {
+			err = qtx.DeleteHoldingsPolicyByEntry(ctx, orig.ID)
+			if err != nil {
+				slog.ErrorContext(ctx, "unexpected database error during holdingsPolicy delete", "error", err)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		} else {
+			policyPatch := request.Body.HoldingsPolicy.MustGet()
+			originalPolicy, queryErr := qtx.GetHoldingsPolicyByEntry(ctx, orig.ID)
+			if queryErr != nil && !errors.Is(queryErr, pgx.ErrNoRows) {
+				slog.ErrorContext(ctx, "unable to query original holdingsPolicy", "error", queryErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+			policy, mergeErr := mergeHoldingsPolicy(originalPolicy.Policy, policyPatch)
+			if mergeErr != nil {
+				slog.ErrorContext(ctx, "unable to merge holdingsPolicy", "error", mergeErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+			_, err = qtx.UpsertHoldingsPolicy(ctx, db.UpsertHoldingsPolicyParams{
+				Entry:  orig.ID,
+				Policy: holdingsPolicyJSON(policy),
+			})
+			if err != nil {
+				slog.ErrorContext(ctx, "unexpected database error during holdingsPolicy upsert", "error", err)
 				return UpdateEntry500TextResponse("Internal server error"), nil
 			}
 		}

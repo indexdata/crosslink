@@ -747,6 +747,7 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	_, err = ad.Lookup(p)
 	assert.Error(t, err)
 	assert.Equal(t, "missing SRU lookup parameters. Provide at least one of: identifier (supplierUniqueRecordId)", err.Error())
+	assert.ErrorIs(t, err, ErrMissingLookupParameters)
 
 	ad = createSruAdapter(t, true, server.URL)
 	p = LookupParams{
@@ -755,4 +756,5 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	_, err = ad.Lookup(p)
 	assert.Error(t, err)
 	assert.Equal(t, "missing SRU lookup parameters. Provide at least one of: identifier (supplierUniqueRecordId), isbn, issn", err.Error())
+	assert.ErrorIs(t, err, ErrMissingLookupParameters)
 }

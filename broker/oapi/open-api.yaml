@@ -770,6 +770,15 @@ components:
         - type
         - version
 
+    StateModelServiceType:
+      title: StateModelServiceType
+      type: string
+      description: ISO 18626 service type used by state-model selection and applicability rules
+      enum:
+        - Copy
+        - Loan
+        - CopyOrLoan
+
     StateModelSelector:
       title: StateModelSelector
       type: object
@@ -782,13 +791,25 @@ components:
           minItems: 1
           uniqueItems: true
           items:
-            type: string
-            enum:
-              - Copy
-              - Loan
-              - CopyOrLoan
+            $ref: '#/components/schemas/StateModelServiceType'
       required:
         - serviceType
+
+    AppliesTo:
+      title: AppliesTo
+      type: object
+      description: Criteria determining whether a state, action, or event applies to a request. When omitted, the element applies to all requests.
+      additionalProperties: false
+      properties:
+        serviceTypes:
+          type: array
+          description: ISO 18626 service types for which this element applies
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/StateModelServiceType'
+      required:
+        - serviceTypes
 
     StateModelCapabilities:
       title: StateModelCapabilities
@@ -830,20 +851,24 @@ components:
     ActionCapability:
       title: ActionCapability
       type: object
-      description: Definition of an action and its parameters supported by the broker.
-        Action parameters are defined separately from actions because the same parameters
-        can be used for multiple actions, for example note parameter is supported for
-        multiple actions but is not required for all of them.
+      description: Definition of an action supported by the broker, including its execution kind and accepted parameters.
       additionalProperties: false
       properties:
         name:
           type: string
-          description: Name of the action parameter
+          description: Name of the action
         parameters:
           type: array
-          description: List of parameter names for this action parameter
+          description: List of parameter names for this action
           items:
             type: string
+        kind:
+          type: string
+          default: operation
+          description: How the action is executed. Operation actions invoke built-in domain logic; transition actions immediately succeed using the state model's configured success transition.
+          enum:
+            - operation
+            - transition
       required:
         - name
         - parameters
@@ -868,14 +893,16 @@ components:
           enum:
             - REQUESTER
             - SUPPLIER
+        appliesTo:
+          $ref: '#/components/schemas/AppliesTo'
         initial:
           type: boolean
           description: Indicates if the state is the initial state of the request
           default: false
         primaryAction:
           type: string
-          description: Name of the primary action for this state.
-            Must be one of the actions defined in the actions array and is only meaningful when actions is present.
+          description: Name of the unconditional primary action for this state.
+            Must be one of the actions defined in the actions array. Use primaryFor on individual actions when the primary action varies by service type.
         closingAction:
           type: string
           description: Name of the closing action for this state.
@@ -933,6 +960,12 @@ components:
             - auto
             - manual
           default: manual
+        appliesTo:
+          $ref: '#/components/schemas/AppliesTo'
+        primaryFor:
+          allOf:
+            - $ref: '#/components/schemas/AppliesTo'
+          description: Makes this the primary action for the selected service types. At most one applicable action may be primary for a service type in a state.
         transitions:
           type: object
           description: Action outcome to state transition mapping. When no transition is defined, the action is considered to be non-state-changing.
@@ -981,6 +1014,8 @@ components:
         desc:
           type: string
           description: Description of the event
+        appliesTo:
+          $ref: '#/components/schemas/AppliesTo'
         transition:
           type: string
           description: State transition after event has occurred. When no transition is defined, the event is considered to be non-state-changing.
@@ -1433,14 +1468,14 @@ components:
     UpdateTemplate:
       type: object
       title: Update Template
-      description: Request body for updating a template
+      description: Request body for replacing a template's mutable fields.
       properties:
         title:
           type: string
           description: Human-readable title for the template
         subject:
           type: string
-          description: Subject line template, supports {{x}} placeholders. Not used for pullslip templates.
+          description: Subject line template supporting {{x}} placeholders. Not used for pull slip templates. Omit to clear.
         body:
           type: string
           description: Body of the email or pull slip template. Supports {{x}} placeholders.

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -15,18 +16,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indexdata/cql-go/pgcql"
-	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
-	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
-	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/tenant"
 	"github.com/indexdata/crosslink/broker/test/mocks"
-	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -128,10 +125,10 @@ func TestToApiPatronRequestSurfacesInternalNote(t *testing.T) {
 	pr := pr_db.PatronRequest{
 		ID:           "pr-1",
 		InternalNote: pgtype.Text{String: "staff note", Valid: true},
-		StateModel:   "returnables",
+		StateModel:   "default",
 	}
 	apiPr := toApiPatronRequest(req, patronRequestSearchViewFromPatronRequest(pr, false))
-	assert.Equal(t, "returnables", apiPr.StateModel)
+	assert.Equal(t, "default", apiPr.StateModel)
 	if assert.NotNil(t, apiPr.InternalNote) {
 		assert.Equal(t, "staff note", *apiPr.InternalNote)
 	}
@@ -295,6 +292,67 @@ func TestPostPatronRequests(t *testing.T) {
 	handler.PostPatronRequests(rr, req, proapi.PostPatronRequestsParams{XOkapiTenant: &tenant})
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Contains(t, rr.Body.String(), "DB error")
+}
+
+type createdPatronRequestRepo struct {
+	PrRepoError
+	created pr_db.PatronRequest
+	view    pr_db.PatronRequestSearchView
+}
+
+func (r *createdPatronRequestRepo) CreatePatronRequest(ctx common.ExtendedContext, params pr_db.CreatePatronRequestParams) (pr_db.PatronRequest, error) {
+	return r.created, nil
+}
+
+func (r *createdPatronRequestRepo) GetPatronRequestSearchView(ctx common.ExtendedContext, id string) (pr_db.PatronRequestSearchView, error) {
+	return r.view, nil
+}
+
+type failingInitialAutoActionRunner struct{}
+
+func (failingInitialAutoActionRunner) RunAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest, parentEventID *string, user string) error {
+	return errors.New("auto-action failed")
+}
+
+func TestPostPatronRequestsReturnsCreatedWhenInitialAutoActionFails(t *testing.T) {
+	now := time.Now()
+	id := "pr-123"
+	repo := &createdPatronRequestRepo{
+		created: pr_db.PatronRequest{ID: id},
+		view: pr_db.PatronRequestSearchView{
+			ID:                id,
+			CreatedAt:         pgtype.Timestamp{Valid: true, Time: now},
+			State:             pr_db.PatronRequestState("VALIDATED"),
+			StateModel:        "default",
+			Side:              prservice.SideBorrowing,
+			IllRequest:        validIllRequest(),
+			NeedsAttention:    true,
+			LastAction:        pgtype.Text{String: "update-metadata", Valid: true},
+			LastActionOutcome: pgtype.Text{String: "failure", Valid: true},
+			LastActionResult:  pgtype.Text{String: "error", Valid: true},
+		},
+	}
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	handler.SetAutoActionRunner(failingInitialAutoActionRunner{})
+	body := proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol, IllRequest: validIllRequest()}
+	jsonBytes, err := json.Marshal(body)
+	assert.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/patron_requests", bytes.NewReader(jsonBytes))
+	rr := httptest.NewRecorder()
+	okapiTenant := proapi.Tenant("test-lib")
+
+	handler.PostPatronRequests(rr, req, proapi.PostPatronRequestsParams{XOkapiTenant: &okapiTenant})
+
+	assert.Equal(t, http.StatusCreated, rr.Code)
+	assert.Equal(t, "https://example.com/patron_requests/"+id, rr.Header().Get("Location"))
+	var response map[string]any
+	assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), &response))
+	assert.Equal(t, id, response["id"])
+	assert.Equal(t, "VALIDATED", response["state"])
+	assert.Equal(t, "update-metadata", response["lastAction"])
+	assert.Equal(t, "failure", response["lastActionOutcome"])
+	assert.Equal(t, "error", response["lastActionResult"])
+	assert.Equal(t, true, response["needsAttention"])
 }
 
 func TestPostPatronRequestsMissingSymbol(t *testing.T) {
@@ -470,7 +528,25 @@ func TestGetPatronRequestsIdActions(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsIdActions(rr, req, "3", proapi.GetPatronRequestsIdActionsParams{Symbol: &symbol, Side: &proapiBorrowingSide})
 	assert.Equal(t, http.StatusOK, rr.Code)
-	assert.Equal(t, "{\"actions\":[]}\n", rr.Body.String())
+	assert.Equal(t, "{\"actions\":[{\"available\":true,\"name\":\"skip-patron-validation\",\"parameters\":[]},{\"available\":true,\"name\":\"close-request\",\"parameters\":[]}]}\n", rr.Body.String())
+}
+
+func TestGetPatronRequestsIdActionsUsesCopyApplicability(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoCopyWillSupply), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	handler.GetPatronRequestsIdActions(rr, req, "copy-will-supply", proapi.GetPatronRequestsIdActionsParams{Symbol: &symbol, Side: &proapiLendingSide})
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	var allowed proapi.AllowedActions
+	assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), &allowed))
+	assert.True(t, slices.ContainsFunc(allowed.Actions, func(action proapi.AllowedAction) bool {
+		return action.Name == string(prservice.LenderActionSupplyDocument) && action.Primary != nil && *action.Primary &&
+			slices.Equal(action.Parameters, []string{"note", "deliveryUrl"})
+	}))
+	assert.False(t, slices.ContainsFunc(allowed.Actions, func(action proapi.AllowedAction) bool {
+		return action.Name == string(prservice.LenderActionShip)
+	}))
 }
 
 func TestGetPatronRequestsIdActionsNoSymbol(t *testing.T) {
@@ -479,7 +555,7 @@ func TestGetPatronRequestsIdActionsNoSymbol(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsIdActions(rr, req, "3", proapi.GetPatronRequestsIdActionsParams{Side: &proapiBorrowingSide})
 	assert.Equal(t, http.StatusOK, rr.Code)
-	assert.Equal(t, "{\"actions\":[]}\n", rr.Body.String())
+	assert.Equal(t, "{\"actions\":[{\"available\":true,\"name\":\"skip-patron-validation\",\"parameters\":[]},{\"available\":true,\"name\":\"close-request\",\"parameters\":[]}]}\n", rr.Body.String())
 }
 
 func TestGetPatronRequestsIdActionsDbError(t *testing.T) {
@@ -787,7 +863,7 @@ func TestParseAndValidateIllRequestAndBuildDbPatronRequest(t *testing.T) {
 	illRequest, requesterReqID, err := handler.parseAndValidateIllRequest(ctx, reqWithID, creationTime)
 	assert.NoError(t, err)
 	assert.Equal(t, id, requesterReqID)
-	pr := buildDbPatronRequest(reqWithID, nil, pgtype.Timestamp{Valid: true, Time: creationTime}, requesterReqID, illRequest, prservice.BorrowerStateNew, "returnables")
+	pr := buildDbPatronRequest(reqWithID, nil, pgtype.Timestamp{Valid: true, Time: creationTime}, requesterReqID, illRequest, prservice.BorrowerStateNew, "default")
 	assert.Equal(t, id, pr.ID)
 	assert.True(t, pr.CreatedAt.Valid)
 	assert.True(t, pr.RequesterReqID.Valid)
@@ -795,7 +871,7 @@ func TestParseAndValidateIllRequestAndBuildDbPatronRequest(t *testing.T) {
 	assert.False(t, pr.SupplierSymbol.Valid)
 	assert.Equal(t, patron, pr.Patron.String)
 	assert.Equal(t, patron, pr.IllRequest.PatronInfo.PatronId)
-	assert.Equal(t, "returnables", pr.StateModel)
+	assert.Equal(t, "default", pr.StateModel)
 
 	reqWithoutID := &proapi.CreatePatronRequest{RequesterSymbol: &symbol}
 	_, _, err = handler.parseAndValidateIllRequest(ctx, reqWithoutID, creationTime)
@@ -1055,6 +1131,23 @@ type PrRepoTerminal struct {
 	PrRepoError
 }
 
+type PrRepoCopyWillSupply struct {
+	PrRepoError
+}
+
+func (r *PrRepoCopyWillSupply) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
+	if id != "copy-will-supply" {
+		return r.PrRepoError.GetPatronRequestById(ctx, id)
+	}
+	return pr_db.PatronRequest{
+		ID:             id,
+		State:          prservice.LenderStateWillSupply,
+		Side:           prservice.SideLending,
+		SupplierSymbol: pgtype.Text{String: symbol, Valid: true},
+		IllRequest:     validIllRequest(),
+	}, nil
+}
+
 func (r *PrRepoOkapiOwner) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
 	if id == "3" {
 		return pr_db.PatronRequest{ID: id, State: prservice.BorrowerStateNeedsReview, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: "ISIL:DK-TENANT1", Valid: true}}, nil
@@ -1248,176 +1341,6 @@ func (m *MockActionTaskProcessorExclusiveError) ProcessInvokeActionTask(ctx comm
 	}, nil
 }
 
-// --- metadataUpdate tests ---
-
-// mockLookupCreator controls what GetAdapter returns when no globalLookupAdapter is pre-set.
-type mockLookupCreator struct {
-	adapter catalog.LookupAdapter
-	err     error
-}
-
-func (m *mockLookupCreator) GetAdapter(peer ill_db.Peer) (catalog.LookupAdapter, error) {
-	return m.adapter, m.err
-}
-
-// peerWithMetadataMode builds a Peer whose CustomData carries the given MetadataUpdateMode.
-// Pass nil to leave HoldingsConfig absent entirely.
-func peerWithMetadataMode(mode *dirapi.MetadataUpdateMode) ill_db.Peer {
-	var cc *dirapi.HoldingsConfig
-	if mode != nil {
-		cc = &dirapi.HoldingsConfig{MetadataUpdateMode: mode}
-	}
-	return ill_db.Peer{
-		CustomData: dirapi.Entry{Name: "test-peer", HoldingsConfig: cc},
-	}
-}
-
-// lookupFactoryWithAdapter creates a LookupAdapterFactory that returns the given adapter directly.
-func lookupFactoryWithAdapter(adapter catalog.LookupAdapter) *service.LookupAdapterFactory {
-	return service.NewLookupAdapterFactory(nil, nil, "", adapter, nil)
-}
-
-func TestMetadataUpdateNoFactory(t *testing.T) {
-	h := PatronRequestApiHandler{}
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
-	err := h.metadataUpdate(ctx, &iso18626.Request{}, ill_db.Peer{})
-	assert.NoError(t, err)
-}
-
-func TestMetadataUpdateAdapterInitError(t *testing.T) {
-	creator := &mockLookupCreator{err: errors.New("adapter init failed")}
-	factory := service.NewLookupAdapterFactory(nil, nil, "", nil, creator)
-	h := PatronRequestApiHandler{}
-	h.SetLookupAdapterFactory(factory)
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
-	err := h.metadataUpdate(ctx, &iso18626.Request{}, ill_db.Peer{})
-	assert.ErrorContains(t, err, "failed to get lookup adapter")
-}
-
-func TestMetadataUpdateNilLookupAdapter(t *testing.T) {
-	creator := &mockLookupCreator{} // returns nil adapter, nil error
-	factory := service.NewLookupAdapterFactory(nil, nil, "", nil, creator)
-	h := PatronRequestApiHandler{}
-	h.SetLookupAdapterFactory(factory)
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
-	err := h.metadataUpdate(ctx, &iso18626.Request{}, ill_db.Peer{})
-	assert.NoError(t, err)
-}
-
-func TestMetadataUpdateNoHoldingsConfig(t *testing.T) {
-	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{})
-	h := PatronRequestApiHandler{}
-	h.SetLookupAdapterFactory(factory)
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
-	peer := peerWithMetadataMode(nil) // HoldingsConfig absent → mode stays None
-	err := h.metadataUpdate(ctx, &iso18626.Request{}, peer)
-	assert.NoError(t, err)
-}
-
-func TestMetadataUpdateModeNone(t *testing.T) {
-	mode := dirapi.None
-	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{})
-	h := PatronRequestApiHandler{}
-	h.SetLookupAdapterFactory(factory)
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
-	err := h.metadataUpdate(ctx, &iso18626.Request{}, peerWithMetadataMode(&mode))
-	assert.NoError(t, err)
-}
-
-func TestMetadataUpdateMetadataLookupError(t *testing.T) {
-	mode := dirapi.Merge
-	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{Err: errors.New("lookup failed")})
-	h := PatronRequestApiHandler{}
-	h.SetLookupAdapterFactory(factory)
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
-	err := h.metadataUpdate(ctx, &iso18626.Request{}, peerWithMetadataMode(&mode))
-	assert.ErrorContains(t, err, "failed to perform lookup for patron request")
-}
-
-func TestMetadataUpdateMergePopulatesEmptyFields(t *testing.T) {
-	mode := dirapi.Merge
-	meta := catalog.Metadata{Title: "Catalog Title", Author: "Jane Doe"}
-	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{Metadata: meta})
-	h := PatronRequestApiHandler{}
-	h.SetLookupAdapterFactory(factory)
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
-	req := &iso18626.Request{} // empty bib info
-	err := h.metadataUpdate(ctx, req, peerWithMetadataMode(&mode))
-	assert.NoError(t, err)
-	assert.Equal(t, "Catalog Title", req.BibliographicInfo.Title)
-	assert.Equal(t, "Jane Doe", req.BibliographicInfo.Author)
-}
-
-func TestMetadataUpdateMergePreservesExistingFields(t *testing.T) {
-	mode := dirapi.Merge
-	meta := catalog.Metadata{Title: "Catalog Title"}
-	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{Metadata: meta})
-	h := PatronRequestApiHandler{}
-	h.SetLookupAdapterFactory(factory)
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
-	req := &iso18626.Request{
-		BibliographicInfo: iso18626.BibliographicInfo{Title: "Existing Title"},
-	}
-	err := h.metadataUpdate(ctx, req, peerWithMetadataMode(&mode))
-	assert.NoError(t, err)
-	assert.Equal(t, "Existing Title", req.BibliographicInfo.Title) // not overwritten
-}
-
-func TestMetadataUpdateAutoModeWithIdentifierReplaces(t *testing.T) {
-	mode := dirapi.Auto
-	meta := catalog.Metadata{Title: "Catalog Title", Author: "Catalog Author", Isbn: "1234567890"}
-	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{Metadata: meta})
-	h := PatronRequestApiHandler{}
-	h.SetLookupAdapterFactory(factory)
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
-	req := &iso18626.Request{
-		BibliographicInfo: iso18626.BibliographicInfo{
-			Title:                  "Old Title",
-			SupplierUniqueRecordId: "record-123", // non-empty → Auto resolves to Replace
-			BibliographicItemId: []iso18626.BibliographicItemId{
-				{
-					BibliographicItemIdentifier:     "0987654321",
-					BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{Text: "ISBN"},
-				},
-			},
-		},
-	}
-	err := h.metadataUpdate(ctx, req, peerWithMetadataMode(&mode))
-	assert.NoError(t, err)
-	assert.Equal(t, "Catalog Title", req.BibliographicInfo.Title)                                              // replaced
-	assert.Equal(t, "Catalog Author", req.BibliographicInfo.Author)                                            // replaced
-	assert.Equal(t, "1234567890", req.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifier)    // replaced
-	assert.Equal(t, "ISBN", req.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifierCode.Text) // replaced
-}
-
-func TestMetadataUpdateAutoModeWithoutIdentifierMerges(t *testing.T) {
-	mode := dirapi.Auto
-	meta := catalog.Metadata{Title: "Catalog Title", Author: "Catalog Author", Isbn: "1234567890", Issn: "4321-4321"}
-	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{Metadata: meta})
-	h := PatronRequestApiHandler{}
-	h.SetLookupAdapterFactory(factory)
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
-	req := &iso18626.Request{
-		BibliographicInfo: iso18626.BibliographicInfo{
-			Title: "Patron Title", // no SupplierUniqueRecordId → Auto resolves to Merge
-			BibliographicItemId: []iso18626.BibliographicItemId{
-				{
-					BibliographicItemIdentifier:     "0987654321",
-					BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{Text: "ISBN"},
-				},
-			},
-		},
-	}
-	err := h.metadataUpdate(ctx, req, peerWithMetadataMode(&mode))
-	assert.NoError(t, err)
-	assert.Equal(t, "Patron Title", req.BibliographicInfo.Title)                                               // preserved (Merge)
-	assert.Equal(t, "Catalog Author", req.BibliographicInfo.Author)                                            // filled in (was empty)
-	assert.Equal(t, "0987654321", req.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifier)    // kept
-	assert.Equal(t, "ISBN", req.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifierCode.Text) // kept
-	assert.Equal(t, "4321-4321", req.BibliographicInfo.BibliographicItemId[1].BibliographicItemIdentifier)     // added (not present)
-	assert.Equal(t, "ISSN", req.BibliographicInfo.BibliographicItemId[1].BibliographicItemIdentifierCode.Text) // added (not present)
-}
-
 // --- PutPatronRequestsId tests ---
 
 // illRepoNoTx returns pgx.ErrNoRows for GetIllTransactionByRequesterRequestId,
@@ -1426,11 +1349,16 @@ func TestMetadataUpdateAutoModeWithoutIdentifierMerges(t *testing.T) {
 type PrRepoUpdateCapture struct {
 	PrRepoError
 	lastUpdateParams *pr_db.UpdatePatronRequestParams
+	state            pr_db.PatronRequestState
 }
 
 func (r *PrRepoUpdateCapture) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
 	if id == "3" {
-		return pr_db.PatronRequest{ID: id, State: prservice.BorrowerStateNeedsReview, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, InternalNote: pgtype.Text{String: "original note", Valid: true}, Patron: pgtype.Text{String: "original patron", Valid: true}}, nil
+		state := r.state
+		if state == "" {
+			state = prservice.BorrowerStateNeedsReview
+		}
+		return pr_db.PatronRequest{ID: id, State: state, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, InternalNote: pgtype.Text{String: "original note", Valid: true}, Patron: pgtype.Text{String: "original patron", Valid: true}}, nil
 	}
 	return r.PrRepoError.GetPatronRequestById(ctx, id)
 }
@@ -1574,14 +1502,28 @@ func TestPutPatronRequestsIdIdMismatch(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "patron request id does not match")
 }
 
-func TestPutPatronRequestsIdNotEditable(t *testing.T) {
-	// id "3" returns a NEW state PR, which is not editable.
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+func TestPutPatronRequestsIdNewStateIsEditable(t *testing.T) {
+	repo := new(PrRepoUpdateCapture)
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
 	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
 	rr := httptest.NewRecorder()
 	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
-	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Contains(t, rr.Body.String(), "patron request is not editable in state")
+	assert.Equal(t, http.StatusOK, rr.Code)
+	if assert.NotNil(t, repo.lastUpdateParams) {
+		assert.Equal(t, "3", repo.lastUpdateParams.ID)
+	}
+}
+
+func TestPutPatronRequestsIdDuplicateStateIsEditable(t *testing.T) {
+	repo := &PrRepoUpdateCapture{state: prservice.BorrowerStateDuplicate}
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusOK, rr.Code)
+	if assert.NotNil(t, repo.lastUpdateParams) {
+		assert.Equal(t, prservice.BorrowerStateDuplicate, repo.lastUpdateParams.State)
+	}
 }
 
 func TestPutPatronRequestsIdNotFound(t *testing.T) {
@@ -1686,7 +1628,7 @@ func TestPutPatronRequestsIdOK(t *testing.T) {
 		assert.Equal(t, patron, repo.lastUpdateParams.Patron.String)
 		assert.True(t, repo.lastUpdateParams.InternalNote.Valid)
 		assert.Equal(t, note, repo.lastUpdateParams.InternalNote.String)
-		assert.Equal(t, "returnables", repo.lastUpdateParams.StateModel)
+		assert.Equal(t, "default", repo.lastUpdateParams.StateModel)
 	}
 	var response proapi.PatronRequest
 	err := json.Unmarshal(rr.Body.Bytes(), &response)

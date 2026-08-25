@@ -61,6 +61,26 @@ func TestGetDateWithTimezone(t *testing.T) {
 	assert.Equal(t, "Local", date.Location().String())
 }
 
+func TestCheckAvailabilityWithoutConfiguration(t *testing.T) {
+	mockRepo := new(mocks.MockIllRepositorySuccess)
+	factory := NewLookupAdapterFactory(
+		mockRepo,
+		new(adapter.MockDirectoryLookupAdapter),
+		"",
+		nil,
+		catalog.NewLookupAdapterCreator(catalog.LookupAdapterMock, ""),
+	)
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, new(adapter.MockDirectoryLookupAdapter), factory)
+
+	status, result := locator.checkAvailability(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	if assert.NotNil(t, result) {
+		assert.Equal(t, string(AvailabilityUnknown), result.CustomData[AvailabilityKey])
+		assert.Equal(t, false, result.CustomData["localSupplier"])
+	}
+}
+
 func TestApplyHoldingsPolicy(t *testing.T) {
 	main := "MAIN"
 	other := "OTHER"
@@ -440,6 +460,33 @@ func TestLocateSuppliersDeduplicatesHoldingSymbolsForDirectoryLookup(t *testing.
 	assert.Equal(t, [][]string{{"ISIL:SUP1", "ISIL:SUP2"}}, mockIllRepo.refreshSymbols)
 }
 
+func TestLocateSuppliersRetiresOldRotaBeforeNoHoldingsResult(t *testing.T) {
+	mockIllRepo := &MockIllRepoLocateSuppliers{
+		illTransaction: ill_db.IllTransaction{
+			ID:          "ill-1",
+			RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+			IllTransactionData: ill_db.IllTransactionData{
+				BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "not-found"},
+			},
+		},
+		requester: ill_db.Peer{ID: "requester-1"},
+		existingSuppliers: []ill_db.LocatedSupplier{{
+			ID:               "old-selected-supplier",
+			IllTransactionID: "ill-1",
+			SupplierStatus:   ill_db.SupplierStateSelectedPg,
+		}},
+	}
+	lookupAdapter := &catalog.MockLookupAdapter{}
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.MockDirectoryLookupAdapter), "", lookupAdapter, nil)
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.MockDirectoryLookupAdapter), lookupAdapterFactory)
+
+	status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+	assert.Equal(t, events.EventStatusProblem, status)
+	assert.True(t, mockIllRepo.oldRotaRetired)
+	assert.Equal(t, "no holdings located", result.Problem.Details)
+}
+
 func TestLocateSuppliersUsesFirstHoldingLocalIdentifierForDuplicateSymbol(t *testing.T) {
 	mockIllRepo := &MockIllRepoLocateSuppliers{
 		illTransaction: ill_db.IllTransaction{
@@ -483,7 +530,7 @@ func TestLocateSuppliersLastResortRequester(t *testing.T) {
 				},
 			},
 		},
-		requester: ill_db.Peer{ID: "requester-1", CustomData: dirapi.Entry{LenderOfLastResort: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUP2"}, {Symbol: "SUP3"}}}},
+		requester: ill_db.Peer{ID: "requester-1", CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{LendersOfLastResort: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUP2"}, {Symbol: "SUP3"}}}}},
 		peers: []ill_db.Peer{
 			{ID: "peer-1", BorrowsCount: 1},
 			{ID: "peer-2", BorrowsCount: 1},
@@ -529,7 +576,7 @@ func TestLocateSuppliersLastResortLookupEmpty(t *testing.T) {
 				},
 			},
 		},
-		requester: ill_db.Peer{ID: "requester-1", CustomData: dirapi.Entry{LenderOfLastResort: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUP2"}, {Symbol: "SUP3"}}}},
+		requester: ill_db.Peer{ID: "requester-1", CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{LendersOfLastResort: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUP2"}, {Symbol: "SUP3"}}}}},
 		peers: []ill_db.Peer{
 			{ID: "peer-2", BorrowsCount: 1},
 			{ID: "peer-3", BorrowsCount: 1},
@@ -579,7 +626,7 @@ func TestLocateSuppliersLastResortConsortium(t *testing.T) {
 			"peer-2": {{SymbolValue: "ISIL:SUP2", PeerID: "peer-2"}},
 		},
 		consortiumPeers: []ill_db.Peer{
-			{ID: "consortium-peer-1", CustomData: dirapi.Entry{Symbols: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUPC"}}, LenderOfLastResort: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUP2"}}}},
+			{ID: "consortium-peer-1", CustomData: dirapi.Entry{Symbols: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUPC"}}, IllConfig: &dirapi.IllConfig{LendersOfLastResort: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUP2"}}}}},
 		},
 	}
 
@@ -604,6 +651,8 @@ type MockIllRepoLocateSuppliers struct {
 	mocks.MockIllRepositorySuccess
 	illTransaction        ill_db.IllTransaction
 	requester             ill_db.Peer
+	existingSuppliers     []ill_db.LocatedSupplier
+	oldRotaRetired        bool
 	peers                 []ill_db.Peer
 	peerSymbols           map[string][]ill_db.Symbol
 	refreshSymbols        [][]string
@@ -617,6 +666,15 @@ func (r *MockIllRepoLocateSuppliers) GetIllTransactionById(ctx common.ExtendedCo
 
 func (r *MockIllRepoLocateSuppliers) GetPeerById(ctx common.ExtendedContext, id string) (ill_db.Peer, error) {
 	return r.requester, nil
+}
+
+func (r *MockIllRepoLocateSuppliers) GetLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) ([]ill_db.LocatedSupplier, int64, error) {
+	return r.existingSuppliers, int64(len(r.existingSuppliers)), nil
+}
+
+func (r *MockIllRepoLocateSuppliers) SkipLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) error {
+	r.oldRotaRetired = true
+	return nil
 }
 
 func (r *MockIllRepoLocateSuppliers) GetCachedPeersBySymbols(ctx common.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string, error) {
@@ -702,16 +760,16 @@ func metadataTestRepo(illTrans ill_db.IllTransaction, requester ill_db.Peer) *Mo
 	}
 }
 
-// metadataTestRequester returns a peer carrying the given MetadataUpdateMode in its HoldingsConfig.
-// Pass nil to leave HoldingsConfig absent (mode defaults to None).
+// metadataTestRequester returns a peer carrying the given MetadataUpdateMode in its CatalogConfig.
+// Pass nil to leave CatalogConfig absent (mode defaults to None).
 func metadataTestRequester(mode *dirapi.MetadataUpdateMode) ill_db.Peer {
-	var cc *dirapi.HoldingsConfig
+	var cc *dirapi.CatalogConfig
 	if mode != nil {
-		cc = &dirapi.HoldingsConfig{MetadataUpdateMode: mode}
+		cc = &dirapi.CatalogConfig{MetadataUpdateMode: mode}
 	}
 	return ill_db.Peer{
 		ID:         "requester-1",
-		CustomData: dirapi.Entry{Name: "test-requester", HoldingsConfig: cc},
+		CustomData: dirapi.Entry{Name: "test-requester", CatalogConfig: cc},
 	}
 }
 
@@ -726,7 +784,7 @@ func TestLocateSuppliersMetadataModeNoneSkipsUpdate(t *testing.T) {
 			},
 		},
 	}
-	mockRepo := metadataTestRepo(illTrans, metadataTestRequester(nil)) // no HoldingsConfig → mode=None
+	mockRepo := metadataTestRepo(illTrans, metadataTestRequester(nil)) // no CatalogConfig → mode=None
 	holdingsAdapter := &catalog.MockLookupAdapter{
 		Holdings: []catalog.Holding{{Symbol: "ISIL:SUP1"}},
 	}

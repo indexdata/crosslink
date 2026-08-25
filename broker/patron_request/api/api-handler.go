@@ -13,20 +13,15 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/indexdata/cql-go/cqlbuilder"
-	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/api"
-	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
-	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/oapi"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
-	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/tenant"
-	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgerrcode"
@@ -44,18 +39,15 @@ var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 var errInvalidPatronRequest = errors.New("invalid patron request")
 
 type PatronRequestApiHandler struct {
-	limitDefault           int32
-	prRepo                 pr_db.PrRepo
-	eventBus               events.EventBus
-	eventRepo              events.EventRepo
-	actionMappingService   prservice.ActionMappingService
-	autoActionRunner       prservice.AutoActionRunner
-	actionTaskProcessor    ActionTaskProcessor
-	tenantResolver         *tenant.TenantResolver
-	notificationSender     prservice.PatronRequestNotificationService
-	lookupAdapterFactory   *service.LookupAdapterFactory
-	illRepo                ill_db.IllRepo
-	directoryLookupAdapter adapter.DirectoryLookupAdapter
+	limitDefault         int32
+	prRepo               pr_db.PrRepo
+	eventBus             events.EventBus
+	eventRepo            events.EventRepo
+	actionMappingService prservice.ActionMappingService
+	autoActionRunner     prservice.AutoActionRunner
+	actionTaskProcessor  ActionTaskProcessor
+	tenantResolver       *tenant.TenantResolver
+	notificationSender   prservice.PatronRequestNotificationService
 }
 
 func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
@@ -77,18 +69,6 @@ func (a *PatronRequestApiHandler) SetAutoActionRunner(autoActionRunner prservice
 
 func (a *PatronRequestApiHandler) SetActionTaskProcessor(actionTaskProcessor ActionTaskProcessor) {
 	a.actionTaskProcessor = actionTaskProcessor
-}
-
-func (a *PatronRequestApiHandler) SetLookupAdapterFactory(lookupAdapterFactory *service.LookupAdapterFactory) {
-	a.lookupAdapterFactory = lookupAdapterFactory
-}
-
-func (a *PatronRequestApiHandler) SetIllRepo(illRepo ill_db.IllRepo) {
-	a.illRepo = illRepo
-}
-
-func (a *PatronRequestApiHandler) SetDirectoryLookupAdapter(directoryLookupAdapter adapter.DirectoryLookupAdapter) {
-	a.directoryLookupAdapter = directoryLookupAdapter
 }
 
 func decodeRequiredBody[T any](r *http.Request, dst *T) error {
@@ -288,38 +268,6 @@ func AddOwnerRestriction(queryBuilder *cqlbuilder.QueryBuilder, symbol string, s
 	return queryBuilder, err
 }
 
-func (a *PatronRequestApiHandler) metadataUpdate(ctx common.ExtendedContext, illRequest *iso18626.Request, requesterPeer ill_db.Peer) error {
-	if a.lookupAdapterFactory == nil {
-		return nil
-	}
-	lookupAdapter, configPeer, err := a.lookupAdapterFactory.GetAdapterRequester(ctx, requesterPeer)
-	if err != nil {
-		return fmt.Errorf("failed to get lookup adapter: %w", err)
-	}
-	if lookupAdapter == nil {
-		return nil
-	}
-
-	mode := dirapi.None
-	if configPeer.HoldingsConfig != nil && configPeer.HoldingsConfig.MetadataUpdateMode != nil {
-		mode = *configPeer.HoldingsConfig.MetadataUpdateMode
-	}
-	if mode == dirapi.None {
-		return nil
-	}
-	lookupParams := catalog.LookupParamsFromBibliographicInfo(illRequest.BibliographicInfo, illRequest.ServiceInfo)
-
-	lookupResult, err := lookupAdapter.Lookup(lookupParams)
-	if err != nil {
-		return fmt.Errorf("failed to perform lookup for patron request: %w", err)
-	}
-	metadata, err := lookupResult.GetMetadata()
-	if err != nil {
-		return fmt.Errorf("failed to get metadata for patron request: %w", err)
-	}
-	return catalog.MetadataRequestUpdate(&illRequest.BibliographicInfo, metadata, lookupParams, mode)
-}
-
 func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *http.Request, params proapi.PostPatronRequestsParams) {
 	logParams := map[string]string{"method": "PostPatronRequests"}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
@@ -356,44 +304,15 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		api.AddInternalError(ctx, w, err)
 		return
 	}
-	stateModelName, err := a.actionMappingService.GetStateModelNameForRequest(illRequest)
+	stateModelName, actionMapping, err := a.actionMappingService.ResolveActionMapping(illRequest)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return
 	}
-	stateModel, err := a.actionMappingService.GetStateModel(stateModelName)
-	if err != nil {
-		api.AddInternalError(ctx, w, err)
-		return
-	}
-	actionMapping := prservice.NewActionMapping(stateModel)
 	borrowerInitialState, ok := actionMapping.GetInitialState(prservice.SideBorrowing)
 	if !ok {
 		api.AddInternalError(ctx, w, fmt.Errorf("no initial state defined for borrower side"))
 		return
-	}
-
-	if a.illRepo != nil && a.directoryLookupAdapter != nil {
-		peers, _, peerErr := a.illRepo.GetCachedPeersBySymbols(ctx, []string{symbol}, a.directoryLookupAdapter)
-		if peerErr != nil {
-			api.AddInternalError(ctx, w, peerErr)
-			return
-		}
-		if len(peers) == 0 {
-			api.AddInternalError(ctx, w, fmt.Errorf("no peer found for requester symbol %q", symbol))
-			return
-		}
-		if len(peers) > 1 {
-			ctx.Logger().Warn("multiple peers found for requester symbol, using first peer", "symbol", symbol, "peerCount", len(peers))
-		}
-		requesterPeer := peers[0]
-		if requesterPeer.Vendor == string(dirapi.CrossLink) {
-			err := a.metadataUpdate(ctx, &illRequest, requesterPeer)
-			if err != nil {
-				api.AddInternalError(ctx, w, err)
-				return
-			}
-		}
 	}
 
 	dbreq := buildDbPatronRequest(&newPr, params.XOkapiTenant, creationTime, requesterReqId, illRequest, borrowerInitialState, stateModelName)
@@ -408,18 +327,16 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		return
 	}
 	if a.autoActionRunner != nil {
-		err = a.autoActionRunner.RunAutoActionsOnStateEntry(ctx, pr, nil, tenant.GetUser())
-		if err != nil {
-			api.AddInternalError(ctx, w, err)
-			return
-		}
+		// The patron request is already persisted, so return its current state
+		// even when an initial auto-action fails.
+		_ = a.autoActionRunner.RunAutoActionsOnStateEntry(ctx, pr, nil, tenant.GetUser())
 	}
 	prView, err := a.prRepo.GetPatronRequestSearchView(ctx, pr.ID)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return
 	}
-	w.Header().Set("Location", api.Link(r, api.Path("patron_requests", pr.ID), nil))
+	w.Header().Set("Location", api.LinkAbs(r, api.Path("patron_requests", pr.ID), nil))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(toApiPatronRequest(r, prView))
@@ -519,21 +436,12 @@ func isSideParamValid(side *string) bool {
 }
 
 func (a *PatronRequestApiHandler) checkEditable(w http.ResponseWriter, ctx common.ExtendedContext, pr pr_db.PatronRequest) bool {
-	stateModel, err := a.actionMappingService.GetStateModelForRequest(pr.IllRequest)
+	actionMapping, err := a.actionMappingService.GetActionMapping(pr.IllRequest)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return true
 	}
-	editable := false
-	if stateModel != nil && stateModel.States != nil {
-		for _, st := range stateModel.States {
-			if st.Side == proapi.REQUESTER && st.Name == string(pr.State) {
-				editable = st.Editable != nil && *st.Editable
-				break
-			}
-		}
-	}
-	if !editable {
+	if !actionMapping.IsEditableState(pr) {
 		api.AddBadRequestError(ctx, w, fmt.Errorf("patron request is not editable in state %q", pr.State))
 		return true
 	}
@@ -617,7 +525,7 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 		api.AddInternalError(ctx, w, err)
 		return
 	}
-	stateModelName, err := a.actionMappingService.GetStateModelNameForRequest(illRequest)
+	stateModelName, _, err := a.actionMappingService.ResolveActionMapping(illRequest)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return
@@ -1091,7 +999,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdNotifications(w http.Respo
 		ctx.Logger().Error("failed to send notification for patron request", "notificationId", dbNotification.ID, "error", err.Error())
 	}
 
-	//w.Header().Set("Location", api.Link(r, api.Path("patron_requests", id, "notifications", dbNotification.ID), nil))
+	//w.Header().Set("Location", api.LinkAbs(r, api.Path("patron_requests", id, "notifications", dbNotification.ID), nil))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(apiN)
@@ -1281,12 +1189,9 @@ func (a *PatronRequestApiHandler) PutTemplatesId(w http.ResponseWriter, r *http.
 	tem.ContentType = string(updated.ContentType)
 	tem.Labels = updated.Labels
 	tem.Title = updated.Title
-	if updated.Audience != nil {
-		tem.Audience = getDbText((*string)(updated.Audience))
-	}
-	if updated.Subject != nil {
-		tem.Subject = getDbText(updated.Subject)
-	}
+	// PUT replaces optional fields; omitted values are cleared.
+	tem.Audience = getDbText((*string)(updated.Audience))
+	tem.Subject = getDbText(updated.Subject)
 	template, err := a.prRepo.SaveTemplate(ctx, pr_db.SaveTemplateParams(*tem))
 	if err != nil {
 		api.AddInternalError(ctx, w, err)

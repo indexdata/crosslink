@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
@@ -24,6 +25,7 @@ type retryRequestRepo struct {
 	selectedSupplier     ill_db.LocatedSupplier
 	savedSupplier        ill_db.LocatedSupplier
 	savedSupplierPresent bool
+	oldRotaRetired       bool
 }
 
 func (r *retryRequestRepo) WithTxFunc(ctx common.ExtendedContext, fn func(ill_db.IllRepo) error) error {
@@ -42,6 +44,11 @@ func (r *retryRequestRepo) SaveLocatedSupplier(ctx common.ExtendedContext, param
 	r.savedSupplier = ill_db.LocatedSupplier(params)
 	r.savedSupplierPresent = true
 	return r.savedSupplier, nil
+}
+
+func (r *retryRequestRepo) SkipLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) error {
+	r.oldRotaRetired = true
+	return nil
 }
 
 func TestHandleRetryRequestResetsReusedSelectedSupplierAttempt(t *testing.T) {
@@ -79,6 +86,7 @@ func TestHandleRetryRequestResetsReusedSelectedSupplierAttempt(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "transaction-id", id)
 	assert.False(t, lookupChanged)
+	assert.False(t, repo.oldRotaRetired)
 	if assert.True(t, repo.savedSupplierPresent) {
 		assert.Equal(t, ill_db.SupplierStateSelectedPg, repo.savedSupplier.SupplierStatus)
 		assert.False(t, repo.savedSupplier.LastStatus.Valid)
@@ -89,7 +97,7 @@ func TestHandleRetryRequestResetsReusedSelectedSupplierAttempt(t *testing.T) {
 	}
 }
 
-func TestHandleRetryRequestLeavesOldSupplierForChangedLookup(t *testing.T) {
+func TestHandleRetryRequestLeavesChangedLookupRotaForLocator(t *testing.T) {
 	repo := &retryRequestRepo{
 		transaction: ill_db.IllTransaction{
 			ID: "transaction-id",
@@ -118,6 +126,7 @@ func TestHandleRetryRequestLeavesOldSupplierForChangedLookup(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "transaction-id", id)
 	assert.True(t, lookupChanged)
+	assert.False(t, repo.oldRotaRetired)
 	assert.False(t, repo.savedSupplierPresent)
 }
 
@@ -265,10 +274,11 @@ func (r *MockIllRepositoryNoSelectedSupplier) GetSelectedSupplierForIllTransacti
 // configurable results for duplicate-check testing.
 type mockDuplicateCheckRepo struct {
 	mocks.MockIllRepositorySuccess
-	duplicate bool
-	err       error
-	called    bool
-	cql       string
+	duplicate          bool
+	matchedTransaction ill_db.IllTransaction
+	err                error
+	called             bool
+	cql                string
 }
 
 func (r *mockDuplicateCheckRepo) ListIllTransactions(ctx common.ExtendedContext, params ill_db.ListIllTransactionsParams, cql *string, symbols []string) ([]ill_db.IllTransaction, int64, error) {
@@ -277,7 +287,9 @@ func (r *mockDuplicateCheckRepo) ListIllTransactions(ctx common.ExtendedContext,
 	}
 	r.called = true
 	if r.duplicate {
-		return []ill_db.IllTransaction{{ID: "duplicate-id"}}, 1, nil
+		matchedTransaction := r.matchedTransaction
+		matchedTransaction.ID = "duplicate-id"
+		return []ill_db.IllTransaction{matchedTransaction}, 1, nil
 	}
 	return []ill_db.IllTransaction{}, 0, r.err
 }
@@ -327,6 +339,8 @@ func TestCheckDuplicateRequest(t *testing.T) {
 		wantIssn       string
 		wantTitle      string
 		wantSvcType    string
+		matchedInfo    iso18626.BibliographicInfo
+		wantMatched    catalog.LookupParams
 	}{
 		{
 			name:           "no DuplicateCheckWindowHours configured - skips check",
@@ -338,21 +352,21 @@ func TestCheckDuplicateRequest(t *testing.T) {
 		{
 			name:           "window is zero - skips check",
 			request:        baseRequest,
-			peer:           ill_db.Peer{CustomData: dirapi.Entry{DuplicateCheckWindowHours: &window0}},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &window0}}},
 			wantErr:        nil,
 			wantRepoCalled: false,
 		},
 		{
 			name:           "window is negative - skips check",
 			request:        baseRequest,
-			peer:           ill_db.Peer{CustomData: dirapi.Entry{DuplicateCheckWindowHours: &windowNeg}},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &windowNeg}}},
 			wantErr:        nil,
 			wantRepoCalled: false,
 		},
 		{
 			name:           "db error - fails open, allows request through",
 			request:        baseRequest,
-			peer:           ill_db.Peer{CustomData: dirapi.Entry{DuplicateCheckWindowHours: &window1}},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &window1}}},
 			repoErr:        errors.New("db connection error"),
 			wantErr:        nil,
 			wantRepoCalled: true,
@@ -364,7 +378,7 @@ func TestCheckDuplicateRequest(t *testing.T) {
 		{
 			name:           "no duplicate found (ErrNoRows) - not a duplicate",
 			request:        baseRequest,
-			peer:           ill_db.Peer{CustomData: dirapi.Entry{DuplicateCheckWindowHours: &window1}},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &window1}}},
 			repoErr:        pgx.ErrNoRows,
 			wantErr:        nil,
 			wantRepoCalled: true,
@@ -376,7 +390,7 @@ func TestCheckDuplicateRequest(t *testing.T) {
 		{
 			name:           "duplicate found - returns ErrDuplicateRequest",
 			request:        baseRequest,
-			peer:           ill_db.Peer{CustomData: dirapi.Entry{DuplicateCheckWindowHours: &window1}},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &window1}}},
 			duplicate:      true,
 			wantErr:        ErrDuplicateRequest,
 			wantRepoCalled: true,
@@ -384,6 +398,15 @@ func TestCheckDuplicateRequest(t *testing.T) {
 			wantIdentifier: "rec-1",
 			wantTitle:      "Test Title",
 			wantSvcType:    "Loan",
+			matchedInfo: iso18626.BibliographicInfo{
+				SupplierUniqueRecordId: "rec-1",
+				Title:                  "test title",
+			},
+			wantMatched: catalog.LookupParams{
+				Identifier:  "rec-1",
+				Title:       "test title",
+				ServiceType: "Loan",
+			},
 		},
 		{
 			name: "nil PatronInfo - skips duplicate check (can't verify same patron)",
@@ -391,7 +414,7 @@ func TestCheckDuplicateRequest(t *testing.T) {
 				BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "rec-1"},
 				ServiceInfo:       &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
 			},
-			peer:           ill_db.Peer{CustomData: dirapi.Entry{DuplicateCheckWindowHours: &window1}},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &window1}}},
 			repoErr:        pgx.ErrNoRows,
 			wantErr:        nil,
 			wantRepoCalled: false,
@@ -407,7 +430,7 @@ func TestCheckDuplicateRequest(t *testing.T) {
 					PatronId: "patron-1",
 				},
 			},
-			peer:           ill_db.Peer{CustomData: dirapi.Entry{DuplicateCheckWindowHours: &window1}},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &window1}}},
 			repoErr:        pgx.ErrNoRows,
 			wantErr:        nil,
 			wantRepoCalled: false,
@@ -415,7 +438,7 @@ func TestCheckDuplicateRequest(t *testing.T) {
 		{
 			name:           "isbn passed as parameter to DB query",
 			request:        isbnRequest,
-			peer:           ill_db.Peer{CustomData: dirapi.Entry{DuplicateCheckWindowHours: &window1}},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &window1}}},
 			repoErr:        pgx.ErrNoRows,
 			wantErr:        nil,
 			wantRepoCalled: true,
@@ -426,18 +449,30 @@ func TestCheckDuplicateRequest(t *testing.T) {
 		{
 			name:           "duplicate found via isbn - returns ErrDuplicateRequest",
 			request:        isbnRequest,
-			peer:           ill_db.Peer{CustomData: dirapi.Entry{DuplicateCheckWindowHours: &window1}},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &window1}}},
 			duplicate:      true,
 			wantErr:        ErrDuplicateRequest,
 			wantRepoCalled: true,
 			wantPatronId:   "patron-2",
 			wantIsbn:       "978-1234",
 			wantSvcType:    "Copy",
+			matchedInfo: iso18626.BibliographicInfo{
+				BibliographicItemId: []iso18626.BibliographicItemId{
+					{
+						BibliographicItemIdentifier:     "978-1-234",
+						BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{Text: "ISBN"},
+					},
+				},
+			},
+			wantMatched: catalog.LookupParams{
+				Isbn:        "978-1-234",
+				ServiceType: "Copy",
+			},
 		},
 		{
 			name:           "no duplicate - returns nil",
 			request:        isbnRequest,
-			peer:           ill_db.Peer{CustomData: dirapi.Entry{DuplicateCheckWindowHours: &window1}},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &window1}}},
 			duplicate:      false,
 			wantErr:        nil,
 			wantRepoCalled: true,
@@ -452,7 +487,13 @@ func TestCheckDuplicateRequest(t *testing.T) {
 			appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 			mockRepo := &mockDuplicateCheckRepo{
 				duplicate: tt.duplicate,
-				err:       tt.repoErr,
+				matchedTransaction: ill_db.IllTransaction{
+					IllTransactionData: ill_db.IllTransactionData{
+						BibliographicInfo: tt.matchedInfo,
+						ServiceInfo:       tt.request.ServiceInfo,
+					},
+				},
+				err: tt.repoErr,
 			}
 			result, err := checkDuplicateRequest(appCtx, tt.request, mockRepo, "ISIL:REQ1", tt.peer)
 			_, hasKey := result[duplicateCheckKey]
@@ -479,6 +520,9 @@ func TestCheckDuplicateRequest(t *testing.T) {
 				assert.Equal(t, window1, *dupCheck.WindowHours)
 				assert.NotNil(t, dupCheck.CutoffTime)
 				assert.Equal(t, "duplicate-id", *dupCheck.MatchedTransactionId)
+				if assert.NotNil(t, dupCheck.MatchedValues) {
+					assert.Equal(t, tt.wantMatched, *dupCheck.MatchedValues)
+				}
 			}
 		})
 	}

@@ -15,13 +15,14 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/shim"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-var SUPPLIER_PATRON_PATTERN = utils.GetEnv("SUPPLIER_PATRON_PATTERN", "%v_user")
+var SUPPLIER_PATRON_PATTERN = common.GetDeprecatedEnv("SUPPLIER_PATRON_PATTERN", "%v_user", "use illConfig.supplierPatronPattern in the supplier directory entry instead")
 
 const COMP_MESSAGE = "pr_massage_handler"
 const iso18626UserFallback = "iso18626@unknown"
@@ -83,13 +84,13 @@ func (m *PatronRequestMessageHandler) applyEventTransition(pr pr_db.PatronReques
 	return pr, false, true, nil
 }
 
-func (m *PatronRequestMessageHandler) HandleMessage(ctx common.ExtendedContext, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
+func (m *PatronRequestMessageHandler) HandleMessage(ctx common.ExtendedContext, msg *iso18626.ISO18626Message, recipientPeer *ill_db.Peer) (*iso18626.ISO18626Message, error) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(COMP_MESSAGE))
 	if msg == nil {
 		return nil, errors.New("cannot process nil message")
 	}
 
-	_, response, _, handleErr := m.handlePatronRequestMessage(ctx, msg)
+	_, response, _, handleErr := m.handlePatronRequestMessageWithPeer(ctx, msg, recipientPeer)
 	return response, handleErr
 }
 
@@ -151,6 +152,10 @@ func taskParentID(task *events.Event) *string {
 }
 
 func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.ExtendedContext, msg *iso18626.ISO18626Message) (events.EventStatus, *iso18626.ISO18626Message, pr_db.PatronRequest, error) {
+	return m.handlePatronRequestMessageWithPeer(ctx, msg, nil)
+}
+
+func (m *PatronRequestMessageHandler) handlePatronRequestMessageWithPeer(ctx common.ExtendedContext, msg *iso18626.ISO18626Message, recipientPeer *ill_db.Peer) (events.EventStatus, *iso18626.ISO18626Message, pr_db.PatronRequest, error) {
 	if msg.SupplyingAgencyMessage != nil {
 		pr, err := m.prRepo.GetPatronRequestByIdAndSide(ctx, msg.SupplyingAgencyMessage.Header.RequestingAgencyRequestId, SideBorrowing)
 		if err != nil {
@@ -170,7 +175,7 @@ func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.Exte
 		})
 		return status, response, pr, err
 	} else if msg.Request != nil {
-		status, response, pr, err := m.handleRequestMessage(ctx, *msg.Request)
+		status, response, pr, err := m.handleRequestMessageWithPeer(ctx, *msg.Request, recipientPeer)
 		return status, response, pr, err
 	} else {
 		return events.EventStatusError, nil, pr_db.PatronRequest{}, errors.New("cannot process message without content")
@@ -263,6 +268,9 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 		setSupplierMessage(sam, &pr)
 		eventName = SupplierLoaned
 	case iso18626.TypeStatusLoanCompleted, iso18626.TypeStatusCopyCompleted:
+		if sam.StatusInfo.Status == iso18626.TypeStatusCopyCompleted {
+			setSupplierMessage(sam, &pr)
+		}
 		eventName = SupplierCompleted
 		if isLocalSupply(pr, supSymbol) {
 			eventName = SupplierCompletedLocal
@@ -389,6 +397,10 @@ func createRequestResponse(request iso18626.Request, messageStatus iso18626.Type
 }
 
 func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedContext, request iso18626.Request) (events.EventStatus, *iso18626.ISO18626Message, pr_db.PatronRequest, error) {
+	return m.handleRequestMessageWithPeer(ctx, request, nil)
+}
+
+func (m *PatronRequestMessageHandler) handleRequestMessageWithPeer(ctx common.ExtendedContext, request iso18626.Request, recipientPeer *ill_db.Peer) (events.EventStatus, *iso18626.ISO18626Message, pr_db.PatronRequest, error) {
 	raRequestId := request.Header.RequestingAgencyRequestId
 	if raRequestId == "" {
 		status, response, err := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
@@ -420,7 +432,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 			})
 		return status, response, existingPr, handleErr
 	}
-	stateModelName, err := m.actionMappingService.GetStateModelNameForRequest(request)
+	stateModelName, actionMapping, err := m.actionMappingService.ResolveActionMapping(request)
 	if err != nil {
 		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
@@ -428,15 +440,6 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 		}, err)
 		return status, response, pr_db.PatronRequest{}, handleErr
 	}
-	stateModel, err := m.actionMappingService.GetStateModel(stateModelName)
-	if err != nil {
-		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
-			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
-			ErrorValue: err.Error(),
-		}, err)
-		return status, response, pr_db.PatronRequest{}, handleErr
-	}
-	actionMapping := NewActionMapping(stateModel)
 	lenderInitialState, ok := actionMapping.GetInitialState(SideLending)
 	if !ok {
 		internalErr := fmt.Errorf("no initial state defined for lender side")
@@ -446,12 +449,16 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 		}, internalErr)
 		return status, response, pr_db.PatronRequest{}, handleErr
 	}
+	supplierPatronPattern := SUPPLIER_PATRON_PATTERN
+	if recipientPeer != nil {
+		supplierPatronPattern = common.IllConfigString(recipientPeer.CustomData, supplierPatronPattern, func(c dirapi.IllConfig) *string { return c.SupplierPatronPattern })
+	}
 	pr, err := m.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams{
 		ID:              uuid.NewString(),
 		CreatedAt:       pgtype.Timestamp{Valid: true, Time: time.Now()},
 		State:           lenderInitialState,
 		Side:            SideLending,
-		Patron:          getDbText(fmt.Sprintf(SUPPLIER_PATRON_PATTERN, request.Header.SupplyingAgencyId.AgencyIdValue)),
+		Patron:          getDbText(fmt.Sprintf(supplierPatronPattern, request.Header.SupplyingAgencyId.AgencyIdValue)),
 		RequesterSymbol: getDbText(requesterSymbol),
 		IllRequest:      request,
 		SupplierSymbol:  getDbText(supplierSymbol),

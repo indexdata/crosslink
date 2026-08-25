@@ -21,7 +21,7 @@ SELECT pg_advisory_xact_lock(hashtextextended('directoryish:consortium-entry', 0
 
 -- name: CreateEntry :one
 INSERT INTO entries (
-  name, description, contact_name, from_email, tenant, vendor, phone_number, time_zone, organization_id, type, parent, lms_location_code, lender_of_last_resort, duplicate_check_window_hours
+  name, description, contact_name, email, from_email, tenant, vendor, phone_number, time_zone, organization_id, type, parent, lms_location_code, hrid
 ) VALUES (
   $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 )
@@ -33,6 +33,7 @@ SET
   name = @name,
   description = @description,
   contact_name = @contact_name,
+  email = @email,
   from_email = @from_email,
   tenant = @tenant,
   vendor = @vendor,
@@ -42,8 +43,6 @@ SET
   type = @type,
   parent = @parent,
   lms_location_code = @lms_location_code,
-  lender_of_last_resort = @lender_of_last_resort,
-  duplicate_check_window_hours = @duplicate_check_window_hours,
   hrid = @hrid
 
 WHERE id = @id;
@@ -140,6 +139,39 @@ RETURNING *;
 -- name: DeleteAllOwnedAddressComponents :exec
 DELETE FROM address_components WHERE address = @address;
 
+-- name: UpsertIllConfig :one
+INSERT INTO ill_configs (
+  entry, iso18626_url, iso18626_vendor, lenders_of_last_resort,
+  include_requesting_agency_info, include_supplier_info, include_return_info,
+  include_vendor_note, use_offered_costs, note_field_separator,
+  supplier_patron_pattern, duplicate_check_window_hours
+) VALUES (
+  @entry, @iso18626_url, @iso18626_vendor, @lenders_of_last_resort,
+  @include_requesting_agency_info, @include_supplier_info, @include_return_info,
+  @include_vendor_note, @use_offered_costs, @note_field_separator,
+  @supplier_patron_pattern, @duplicate_check_window_hours
+)
+ON CONFLICT (entry) DO UPDATE SET
+  iso18626_url = COALESCE(@iso18626_url, ill_configs.iso18626_url),
+  iso18626_vendor = COALESCE(@iso18626_vendor, ill_configs.iso18626_vendor),
+  lenders_of_last_resort = COALESCE(@lenders_of_last_resort, ill_configs.lenders_of_last_resort),
+  include_requesting_agency_info = COALESCE(@include_requesting_agency_info, ill_configs.include_requesting_agency_info),
+  include_supplier_info = COALESCE(@include_supplier_info, ill_configs.include_supplier_info),
+  include_return_info = COALESCE(@include_return_info, ill_configs.include_return_info),
+  include_vendor_note = COALESCE(@include_vendor_note, ill_configs.include_vendor_note),
+  use_offered_costs = COALESCE(@use_offered_costs, ill_configs.use_offered_costs),
+  note_field_separator = COALESCE(@note_field_separator, ill_configs.note_field_separator),
+  supplier_patron_pattern = COALESCE(@supplier_patron_pattern, ill_configs.supplier_patron_pattern),
+  duplicate_check_window_hours = COALESCE(@duplicate_check_window_hours, ill_configs.duplicate_check_window_hours)
+RETURNING *;
+
+-- name: GetIllConfigByEntry :one
+SELECT * FROM ill_configs
+WHERE entry = @entry;
+
+-- name: DeleteIllConfigByEntry :exec
+DELETE FROM ill_configs WHERE entry = @entry;
+
 -- name: CreateTier :one
 INSERT INTO tiers (
   name, consortium, level, type, cost
@@ -166,13 +198,11 @@ INSERT INTO entry_networks (
 )
 RETURNING *;
 
--- name: UpsertHoldingsConfig :one
-INSERT INTO holdings_configs (
+-- name: UpsertCatalogConfig :one
+INSERT INTO catalog_configs (
   id, entry, metadata_update_mode,
   sru_address, sru_record_schema,
-  zoom_address, zoom_option_mock_records, zoom_option_preferred_record_syntax, zoom_option_count,
-  zoom_option_element_set_name, zoom_option_schema, zoom_option_authentication, zoom_option_user, zoom_option_password,
-  zoom_option_adapter_error, zoom_option_lookup_error, zoom_option_location,
+  zoom_address, zoom_options,
   query_type, query_identifier, query_isbn, query_issn, query_title,
   holdings_marc_call_number_subfield, holdings_marc_item_id_subfield, holdings_marc_location_subfield,
   holdings_marc_main_field, holdings_marc_restricted_subfield, holdings_marc_shelving_location_subfield,
@@ -186,17 +216,7 @@ INSERT INTO holdings_configs (
   @sru_address,
   @sru_record_schema,
   @zoom_address,
-  @zoom_option_mock_records,
-  @zoom_option_preferred_record_syntax,
-  @zoom_option_count,
-  @zoom_option_element_set_name,
-  @zoom_option_schema,
-  @zoom_option_authentication,
-  @zoom_option_user,
-  @zoom_option_password,
-  @zoom_option_adapter_error,
-  @zoom_option_lookup_error,
-  @zoom_option_location,
+  @zoom_options,
   @query_type,
   @query_identifier,
   @query_isbn,
@@ -224,17 +244,7 @@ ON CONFLICT (entry) DO UPDATE SET
   sru_address = @sru_address,
   sru_record_schema = @sru_record_schema,
   zoom_address = @zoom_address,
-  zoom_option_mock_records = @zoom_option_mock_records,
-  zoom_option_preferred_record_syntax = @zoom_option_preferred_record_syntax,
-  zoom_option_count = @zoom_option_count,
-  zoom_option_element_set_name = @zoom_option_element_set_name,
-  zoom_option_schema = @zoom_option_schema,
-  zoom_option_authentication = @zoom_option_authentication,
-  zoom_option_user = @zoom_option_user,
-  zoom_option_password = @zoom_option_password,
-  zoom_option_adapter_error = @zoom_option_adapter_error,
-  zoom_option_lookup_error = @zoom_option_lookup_error,
-  zoom_option_location = @zoom_option_location,
+  zoom_options = COALESCE(@zoom_options, catalog_configs.zoom_options),
   query_type = @query_type,
   query_identifier = @query_identifier,
   query_isbn = @query_isbn,
@@ -256,7 +266,7 @@ ON CONFLICT (entry) DO UPDATE SET
   metadata_marc21_issn = @metadata_marc21_issn,
   metadata_marc21_subtitle = @metadata_marc21_subtitle,
   metadata_marc21_title = @metadata_marc21_title
-WHERE holdings_configs.entry = sqlc.narg('entry')
+WHERE catalog_configs.entry = sqlc.narg('entry')
 RETURNING *;
 
 -- name: CreateEntryTier :one
@@ -284,7 +294,7 @@ INSERT INTO  lms_configs (
   id, entry, address, from_agency, from_agency_authentication, to_agency, lookup_user_enabled,
   accept_item_enabled, checkin_item_enabled, checkout_item_enabled, item_location, 
   request_item_request_type, request_item_scope_type, request_item_bib_code,
-  request_item_pickup_location_enabled, requester_pickup_location, supplier_pickup_location,
+  request_item_enabled, request_item_pickup_location_enabled, requester_pickup_location, supplier_pickup_location,
   requester_patron_pattern
 ) VALUES (
   coalesce(sqlc.narg('id'), gen_random_uuid()),
@@ -301,6 +311,7 @@ INSERT INTO  lms_configs (
   @request_item_request_type,
   @request_item_scope_type,
   @request_item_bib_code,
+  @request_item_enabled,
   @request_item_pickup_location_enabled,
   @requester_pickup_location,
   @supplier_pickup_location,
@@ -319,6 +330,7 @@ ON CONFLICT (entry) DO UPDATE SET
   request_item_request_type = @request_item_request_type,
   request_item_scope_type = @request_item_scope_type,
   request_item_bib_code = @request_item_bib_code,
+  request_item_enabled = @request_item_enabled,
   request_item_pickup_location_enabled = @request_item_pickup_location_enabled,
   requester_pickup_location = @requester_pickup_location,
   supplier_pickup_location = @supplier_pickup_location,
@@ -438,9 +450,25 @@ SELECT * FROM entry_tiers
 SELECT * FROM lms_configs 
   WHERE entry = @entry;
 
--- name: GetHoldingsConfigByEntry :one
-SELECT * FROM holdings_configs
+-- name: DeleteLMSConfigByEntry :exec
+DELETE FROM lms_configs WHERE entry = @entry;
+
+-- name: GetCatalogConfigByEntry :one
+SELECT * FROM catalog_configs
   WHERE entry = @entry;
 
--- name: DeleteHoldingsConfigByEntry :exec
-DELETE FROM holdings_configs WHERE entry = @entry;
+-- name: DeleteCatalogConfigByEntry :exec
+DELETE FROM catalog_configs WHERE entry = @entry;
+
+-- name: UpsertHoldingsPolicy :one
+INSERT INTO holdings_policies (entry, policy)
+VALUES (@entry, @policy)
+ON CONFLICT (entry) DO UPDATE SET policy = @policy
+RETURNING *;
+
+-- name: GetHoldingsPolicyByEntry :one
+SELECT * FROM holdings_policies
+WHERE entry = @entry;
+
+-- name: DeleteHoldingsPolicyByEntry :exec
+DELETE FROM holdings_policies WHERE entry = @entry;

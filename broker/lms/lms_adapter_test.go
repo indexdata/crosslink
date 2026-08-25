@@ -58,6 +58,12 @@ func TestLookupUser(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, "unknown user name", err.Error())
 
+	_, err = ad.LookupUser("problem user")
+	var ncipErr *ncipclient.NcipError
+	assert.ErrorAs(t, err, &ncipErr)
+	assert.Equal(t, string(ncip.UnknownUser), ncipErr.Problem.ProblemType.Text)
+	assert.Equal(t, "patron was not found", ncipErr.Problem.ProblemDetail)
+
 	userId, err = ad.LookupUser("pass")
 	assert.NoError(t, err)
 	assert.Equal(t, "pass", userId)
@@ -159,11 +165,11 @@ func TestRequestItem(t *testing.T) {
 		},
 		ncipClient: mock,
 	}
-	barcode, callNumber, title, err := ad.RequestItem("req1", "item1", "testuser", "pickloc", itemLocation)
+	response, err := ad.RequestItem("req1", "item1", "testuser", "pickloc", itemLocation)
 	assert.NoError(t, err)
-	assert.Equal(t, "123.456", barcode)
-	assert.Equal(t, "QA123 .A45", callNumber)
-	assert.Equal(t, "", title)
+	assert.Equal(t, "123.456", response.Barcode)
+	assert.Equal(t, "QA123 .A45", response.CallNumber)
+	assert.Equal(t, "", response.Title)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
 	assert.Equal(t, "item1", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
@@ -179,11 +185,11 @@ func TestRequestItem(t *testing.T) {
 		ncipClient: mock,
 	}
 	mock.(*ncipClientMock).honorTitle = true
-	barcode, callNumber, title, err = ad.RequestItem("req1", "item1", "testuser", "loc", "itemloc")
+	response, err = ad.RequestItem("req1", "item1", "testuser", "loc", "itemloc")
 	assert.NoError(t, err)
 	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
-	assert.Equal(t, "123.456", barcode)
-	assert.Equal(t, "QA123 .A45", callNumber)
+	assert.Equal(t, "123.456", response.Barcode)
+	assert.Equal(t, "QA123 .A45", response.CallNumber)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
 	assert.Equal(t, "item1", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
 	assert.Equal(t, "SYSNUMBER", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifierCode.Text)
@@ -192,11 +198,11 @@ func TestRequestItem(t *testing.T) {
 	assert.Equal(t, "Page", req.RequestType.Text)
 	assert.Equal(t, "Item", req.RequestScopeType.Text)
 
-	barcode, callNumber, title, err = ad.RequestItem("req1", "copynumber", "testuser", "loc", "itemloc")
+	response, err = ad.RequestItem("req1", "copynumber", "testuser", "loc", "itemloc")
 	assert.NoError(t, err)
 	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
-	assert.Equal(t, "234.567", barcode)
-	assert.Equal(t, "QA123 .A45", callNumber)
+	assert.Equal(t, "234.567", response.Barcode)
+	assert.Equal(t, "QA123 .A45", response.CallNumber)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
 	assert.Equal(t, "copynumber", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
 	assert.Equal(t, "SYSNUMBER", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifierCode.Text)
@@ -205,9 +211,12 @@ func TestRequestItem(t *testing.T) {
 	assert.Equal(t, "Page", req.RequestType.Text)
 	assert.Equal(t, "Item", req.RequestScopeType.Text)
 
-	_, _, _, err = ad.RequestItem("req1", "empty", "testuser", "loc", "itemloc")
-	assert.Error(t, err)
-	assert.Equal(t, "missing item barcode in RequestItem response", err.Error())
+	response, err = ad.RequestItem("req1", "empty", "testuser", "loc", "itemloc")
+	assert.NoError(t, err)
+	assert.NotNil(t, response)
+	assert.Empty(t, response.Barcode)
+	assert.Empty(t, response.CallNumber)
+	assert.Empty(t, response.Title)
 	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
 	assert.Equal(t, "empty", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
@@ -225,19 +234,35 @@ func TestRequestItem(t *testing.T) {
 		ncipClient: mock,
 	}
 	mock.(*ncipClientMock).lastRequest = nil
-	barcode, callNumber, title, err = ad.RequestItem("req1", "item1", "testuser", "pickloc", "")
+	response, err = ad.RequestItem("req1", "item1", "testuser", "pickloc", "")
 	assert.NoError(t, err)
-	assert.Equal(t, "123.456", barcode)
-	assert.Equal(t, "QA123 .A45", callNumber)
-	assert.Equal(t, "request title", title)
+	assert.Equal(t, "123.456", response.Barcode)
+	assert.Equal(t, "QA123 .A45", response.CallNumber)
+	assert.Equal(t, "request title", response.Title)
 	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Nil(t, req.PickupLocation)
 	assert.Nil(t, req.ItemOptionalFields)
 
 	mock.(*ncipClientMock).nilResponse = true
-	_, _, _, err = ad.RequestItem("req1", "item2", "testuser", "loc", "itemloc")
+	_, err = ad.RequestItem("req1", "item2", "testuser", "loc", "itemloc")
 	assert.Error(t, err)
 	assert.Equal(t, "empty response from RequestItem", err.Error())
+
+	disabled := false
+	ad = &LmsAdapterNcip{
+		config:     dirapi.LmsConfig{RequestItemEnabled: &disabled},
+		ncipClient: mock,
+	}
+	mock.(*ncipClientMock).lastRequest = nil
+	response, err = ad.RequestItem("", "item1", "testuser", "loc", "itemloc")
+	assert.NoError(t, err)
+	assert.Nil(t, response)
+	assert.Nil(t, mock.(*ncipClientMock).lastRequest)
+
+	ad = &LmsAdapterNcip{config: dirapi.LmsConfig{}, ncipClient: mock}
+	_, err = ad.RequestItem("", "item1", "testuser", "loc", "itemloc")
+	assert.EqualError(t, err, "missing request ID for RequestItem")
+	assert.Nil(t, mock.(*ncipClientMock).lastRequest)
 }
 
 func TestCancelRequestItem(t *testing.T) {
@@ -308,6 +333,12 @@ func TestCheckOutItem(t *testing.T) {
 	bytes, err = xml.Marshal(ncip.RequestId{RequestIdentifierValue: ref})
 	assert.NoError(t, err)
 	assert.Equal(t, bytes, req.Ext.XMLContent)
+
+	title, err = ad.CheckOutItem("", "item1", "barcodeid", "")
+	assert.NoError(t, err)
+	assert.Equal(t, "", title)
+	req = mock.(*ncipClientMock).lastRequest.(ncip.CheckOutItem)
+	assert.Nil(t, req.RequestId)
 
 	mock.(*ncipClientMock).nilResponse = true
 	_, err = ad.CheckOutItem("req1", "item1", "barcodeid", "extref")
@@ -450,6 +481,15 @@ func (n *ncipClientMock) LookupUser(lookup ncip.LookupUser) (*ncip.LookupUserRes
 	}
 	if lookup.AuthenticationInput[0].AuthenticationInputData == "bad user" {
 		return nil, fmt.Errorf("unknown user name")
+	}
+	if lookup.AuthenticationInput[0].AuthenticationInputData == "problem user" {
+		return nil, &ncipclient.NcipError{
+			Message: "NCIP user lookup failed",
+			Problem: ncip.Problem{
+				ProblemType:   ncip.SchemeValuePair{Text: string(ncip.UnknownUser)},
+				ProblemDetail: "patron was not found",
+			},
+		}
 	}
 	if lookup.AuthenticationInput[0].AuthenticationInputData == "missing data" {
 		return &ncip.LookupUserResponse{}, nil

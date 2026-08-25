@@ -23,6 +23,89 @@ func TestGetSurrogateDiagnostic(t *testing.T) {
 	assert.Contains(t, string(record.RecordData.XMLContent), "<uri>info:srw/diagnostic/1/64</uri>")
 }
 
+func TestMockRecordIncludesBibliographicMetadata(t *testing.T) {
+	const id = "return-ISIL:US-RS3::whatever"
+	record, err := new(SruApi).getMarcXmlRecord(id)
+	assert.NoError(t, err)
+	if !assert.NotNil(t, record) {
+		return
+	}
+
+	parserValues := marcValues(record)
+	metadata := mockMetadataForId(id)
+	assert.Equal(t, metadata.identifier, parserValues["001"])
+	assert.Equal(t, metadata.isbn, parserValues["020$a"])
+	assert.Equal(t, metadata.issn, parserValues["022$a"])
+	assert.Equal(t, metadata.title, parserValues["245$a"])
+	assert.Equal(t, "Subtitle from SRU mock", parserValues["245$b"])
+	assert.Equal(t, "Author from SRU mock", parserValues["245$c"])
+	assert.Equal(t, "Mock edition", parserValues["250$a"])
+	assert.Equal(t, "whatever", parserValues["999$l"])
+	assert.Equal(t, "ISIL:US-RS3", parserValues["999$s"])
+}
+
+func TestMockRecordMetadataIsStableAndRecordSpecific(t *testing.T) {
+	api := new(SruApi)
+	first, err := api.getMarcXmlRecord("record-1")
+	assert.NoError(t, err)
+	firstAgain, err := api.getMarcXmlRecord("record-1")
+	assert.NoError(t, err)
+	second, err := api.getMarcXmlRecord("record-2")
+	assert.NoError(t, err)
+
+	firstValues := marcValues(first)
+	assert.Equal(t, firstValues, marcValues(firstAgain))
+	secondValues := marcValues(second)
+	for _, field := range []string{"001", "020$a", "022$a", "245$a"} {
+		assert.NotEqual(t, firstValues[field], secondValues[field], field)
+	}
+	assertValidIsbn13(t, firstValues["020$a"])
+	assertValidIssn(t, firstValues["022$a"])
+}
+
+func marcValues(record *marcxml.Record) map[string]string {
+	values := map[string]string{}
+	for _, field := range record.Controlfield {
+		if field.Tag == "001" {
+			values["001"] = string(field.Text)
+		}
+	}
+	for _, field := range record.Datafield {
+		for _, subfield := range field.Subfield {
+			values[field.Tag+"$"+subfield.Code] = string(subfield.Text)
+		}
+	}
+	return values
+}
+
+func assertValidIsbn13(t *testing.T, isbn string) {
+	t.Helper()
+	assert.Len(t, isbn, 13)
+	sum := 0
+	for i, digit := range isbn {
+		weight := 1
+		if i%2 == 1 {
+			weight = 3
+		}
+		sum += int(digit-'0') * weight
+	}
+	assert.Zero(t, sum%10)
+}
+
+func assertValidIssn(t *testing.T, issn string) {
+	t.Helper()
+	assert.Len(t, issn, 8)
+	sum := 0
+	for i, digit := range issn {
+		value := int(digit - '0')
+		if digit == 'X' {
+			value = 10
+		}
+		sum += value * (8 - i)
+	}
+	assert.Zero(t, sum%11)
+}
+
 func getSr(t *testing.T, uri string) *sru.SearchRetrieveResponse {
 	resp, err := http.Get(uri)
 	assert.Nil(t, err)

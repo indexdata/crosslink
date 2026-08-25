@@ -22,13 +22,40 @@ import (
 var _ directory.StrictServerInterface = (*DirectoryMock)(nil)
 
 const (
-	directoryBasePath = "/rsdir"
+	directoryBasePath = "/directory"
 	defaultEntryLimit = 10
 	maxEntryLimit     = 1000
 )
 
 type DirectoryMock struct {
 	entries []directory.Entry
+}
+
+type peerURLContextKey struct{}
+
+func peerURLCompatibilityMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query := r.URL.Query()
+		peerURL := query.Get("peer_url")
+		if peerURL != "" {
+			query.Del("peer_url")
+			r.URL.RawQuery = query.Encode()
+			r = r.WithContext(context.WithValue(r.Context(), peerURLContextKey{}, peerURL))
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func overridePeerURL(entry directory.Entry, peerURL string) directory.Entry {
+	if entry.Endpoints == nil || peerURL == "" {
+		return entry
+	}
+	endpoints := append([]directory.ServiceEndpoint(nil), (*entry.Endpoints)...)
+	for i := range endpoints {
+		endpoints[i].Address = peerURL
+	}
+	entry.Endpoints = &endpoints
+	return entry
 }
 
 //go:embed directories.json
@@ -87,7 +114,7 @@ func NewJson(entries string) (*DirectoryMock, error) {
 	return mock, nil
 }
 
-func matchClause(clause *cql.Clause, entry directory.Entry) (bool, error) {
+func matchClause(clause *cql.Clause, entry directory.Entry, symbolsByEntryID map[string]*[]directory.Symbol) (bool, error) {
 	if clause == nil {
 		return false, nil
 	}
@@ -109,7 +136,12 @@ func matchClause(clause *cql.Clause, entry directory.Entry) (bool, error) {
 			}
 			return matchString(sc, entry.Parent.String(), false)
 		case "symbol":
-			return matchSymbol(sc, entry.Symbols)
+			return matchSymbol(sc, entry.Symbols, "symbol")
+		case "parentSymbol":
+			if entry.Parent == nil {
+				return false, nil
+			}
+			return matchSymbol(sc, symbolsByEntryID[entry.Parent.String()], "parentSymbol")
 		case "tenant":
 			return matchOptionalString(sc, entry.Tenant, false)
 		default:
@@ -118,11 +150,11 @@ func matchClause(clause *cql.Clause, entry directory.Entry) (bool, error) {
 	}
 	if clause.BoolClause != nil {
 		bc := clause.BoolClause
-		left, err := matchClause(&bc.Left, entry)
+		left, err := matchClause(&bc.Left, entry, symbolsByEntryID)
 		if err != nil {
 			return false, err
 		}
-		right, err := matchClause(&bc.Right, entry)
+		right, err := matchClause(&bc.Right, entry, symbolsByEntryID)
 		if err != nil {
 			return false, err
 		}
@@ -239,7 +271,7 @@ func parseCQLTerm(term string, allowMasking bool) (string, *regexp.Regexp, error
 	return exact.String(), compiled, nil
 }
 
-func matchSymbol(sc *cql.SearchClause, symbols *[]directory.Symbol) (bool, error) {
+func matchSymbol(sc *cql.SearchClause, symbols *[]directory.Symbol, index string) (bool, error) {
 	if symbols == nil {
 		return false, nil
 	}
@@ -264,15 +296,15 @@ func matchSymbol(sc *cql.SearchClause, symbols *[]directory.Symbol) (bool, error
 	case cql.EQ, cql.EXACT, cql.Relation("=="):
 		return matches(sc.Term), nil
 	default:
-		return false, fmt.Errorf("unsupported relation %s for symbol", sc.Relation)
+		return false, fmt.Errorf("unsupported relation %s for %s", sc.Relation, index)
 	}
 }
 
-func matchQuery(query *cql.Query, entry directory.Entry) (bool, error) {
+func matchQuery(query *cql.Query, entry directory.Entry, symbolsByEntryID map[string]*[]directory.Symbol) (bool, error) {
 	if query == nil {
 		return true, nil
 	}
-	return matchClause(&query.Clause, entry)
+	return matchClause(&query.Clause, entry, symbolsByEntryID)
 }
 
 func fullSymbol(symbol directory.Symbol) string {
@@ -280,6 +312,11 @@ func fullSymbol(symbol directory.Symbol) string {
 }
 
 func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEntriesRequestObject) (directory.GetEntriesResponseObject, error) {
+	peerURL, _ := ctx.Value(peerURLContextKey{}).(string)
+	if peerURL != "" && !strings.HasPrefix(peerURL, "http://") && !strings.HasPrefix(peerURL, "https://") {
+		return directory.GetEntries400TextResponse("peer_url must start with http:// or https://"), nil
+	}
+
 	var query *cql.Query
 	if request.Params.Cql != nil {
 		var p cql.Parser
@@ -303,15 +340,21 @@ func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEnt
 	}
 
 	filtered := make([]directory.Entry, 0)
+	symbolsByEntryID := make(map[string]*[]directory.Symbol)
 	for _, entry := range d.entries {
-		match, err := matchQuery(query, entry)
+		if entry.Id != nil {
+			symbolsByEntryID[entry.Id.String()] = entry.Symbols
+		}
+	}
+	for _, entry := range d.entries {
+		match, err := matchQuery(query, entry, symbolsByEntryID)
 		if err != nil {
 			return directory.GetEntries400TextResponse(err.Error()), nil
 		}
 		if !match {
 			continue
 		}
-		filtered = append(filtered, entry)
+		filtered = append(filtered, overridePeerURL(entry, peerURL))
 	}
 
 	sort.SliceStable(filtered, func(i, j int) bool {
@@ -353,6 +396,6 @@ func (d *DirectoryMock) HandlerFromMux(mux *http.ServeMux) error {
 		BaseURL:    directoryBasePath,
 		BaseRouter: directoryMux,
 	})
-	mux.Handle(directoryBasePath+"/", apiValidator.OapiRequestValidator(swagger)(handler))
+	mux.Handle(directoryBasePath+"/", peerURLCompatibilityMiddleware(apiValidator.OapiRequestValidator(swagger)(handler)))
 	return nil
 }

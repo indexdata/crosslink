@@ -7,11 +7,11 @@
   "networks": [
     {
       "id":"20000000-0000-0000-0000-000000000001","consortium":"00000000-0000-0000-0000-000000000004",
-      "name":"The Ultimate Network","priority":0.0
+      "name":"The Ultimate Network","priority":0
     },
     {
       "id":"20000000-0000-0000-0000-000000000003","consortium":"00000000-0000-0000-0000-000000000004",
-      "name": "The Completely Normal Network","priority":0.0
+      "name": "The Completely Normal Network","priority":0
     }
   ],
   "tiers":[

@@ -25,6 +25,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
+	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
@@ -112,7 +113,7 @@ func TestCrud(t *testing.T) {
 			ServiceLevel: &iso18626.TypeSchemeValuePair{
 				Text: "Copy",
 			},
-			ServiceType: iso18626.TypeServiceTypeCopy,
+			ServiceType: iso18626.TypeServiceTypeLoan,
 			NeedBeforeDate: &utils.XSDDateTime{
 				Time: time.Now().Add(24 * time.Hour),
 			},
@@ -144,7 +145,7 @@ func TestCrud(t *testing.T) {
 
 	assert.Equal(t, *newPr.Id, foundPr.Id)
 	assert.True(t, foundPr.State != "")
-	assert.Equal(t, "returnables", foundPr.StateModel)
+	assert.Equal(t, "default", foundPr.StateModel)
 	assert.Equal(t, string(prservice.SideBorrowing), foundPr.Side)
 	if !assert.NotNil(t, foundPr.RequesterSymbol) {
 		t.FailNow()
@@ -171,15 +172,15 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, "success", *foundPr.LastActionOutcome)
 	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
 	assert.NotNil(t, foundPr.NotificationsLink)
-	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/notifications?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPr.NotificationsLink)
+	assert.Equal(t, "/patron_requests/"+*newPr.Id+"/notifications?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPr.NotificationsLink)
 	assert.NotNil(t, foundPr.ItemsLink)
-	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/items?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPr.ItemsLink)
+	assert.Equal(t, "/patron_requests/"+*newPr.Id+"/items?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPr.ItemsLink)
 	assert.NotNil(t, foundPr.AvailableActionsLink)
-	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/actions?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPr.AvailableActionsLink)
+	assert.Equal(t, "/patron_requests/"+*newPr.Id+"/actions?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPr.AvailableActionsLink)
 	assert.NotNil(t, foundPr.EventsLink)
-	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/events?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPr.EventsLink)
+	assert.Equal(t, "/patron_requests/"+*newPr.Id+"/events?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPr.EventsLink)
 	assert.NotNil(t, foundPr.IllTransactionLink)
-	assert.Equal(t, getLocalhostWithPort()+"/ill_transactions?requester_req_id="+url.QueryEscape(*newPr.Id), *foundPr.IllTransactionLink)
+	assert.Equal(t, "/ill_transactions?requester_req_id="+url.QueryEscape(*newPr.Id), *foundPr.IllTransactionLink)
 
 	assert.Equal(t, false, foundPr.NeedsAttention)
 
@@ -197,15 +198,15 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, *newPr.Id, foundPrs.Items[0].Id)
 	assert.Nil(t, foundPrs.About.LastLink)
 	assert.NotNil(t, foundPrs.Items[0].NotificationsLink)
-	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/notifications?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPrs.Items[0].NotificationsLink)
+	assert.Equal(t, "/patron_requests/"+*newPr.Id+"/notifications?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPrs.Items[0].NotificationsLink)
 	assert.NotNil(t, foundPrs.Items[0].ItemsLink)
-	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/items?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPrs.Items[0].ItemsLink)
+	assert.Equal(t, "/patron_requests/"+*newPr.Id+"/items?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPrs.Items[0].ItemsLink)
 	assert.NotNil(t, foundPrs.Items[0].AvailableActionsLink)
-	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/actions?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPrs.Items[0].AvailableActionsLink)
+	assert.Equal(t, "/patron_requests/"+*newPr.Id+"/actions?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPrs.Items[0].AvailableActionsLink)
 	assert.NotNil(t, foundPrs.Items[0].EventsLink)
-	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/events?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPrs.Items[0].EventsLink)
+	assert.Equal(t, "/patron_requests/"+*newPr.Id+"/events?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPrs.Items[0].EventsLink)
 	assert.NotNil(t, foundPrs.Items[0].IllTransactionLink)
-	assert.Equal(t, getLocalhostWithPort()+"/ill_transactions?requester_req_id="+url.QueryEscape(*newPr.Id), *foundPrs.Items[0].IllTransactionLink)
+	assert.Equal(t, "/ill_transactions?requester_req_id="+url.QueryEscape(*newPr.Id), *foundPrs.Items[0].IllTransactionLink)
 	assertPatronRequestIllRequest(t, foundPrs.Items[0].IllRequest, func(r iso18626.Request) {
 		assert.Equal(t, "WILLSUPPLY_LOANED", r.BibliographicInfo.SupplierUniqueRecordId)
 		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
@@ -248,7 +249,7 @@ func TestCrud(t *testing.T) {
 		respBytes = httpRequest(t, "GET", basePath+queryParams+"&cql=state%3DSHIPPED%20and%20"+
 			"side%3Dborrowing%20and%20requester_symbol%3D"+*foundPr.RequesterSymbol+
 			"%20and%20requester_req_id%3D"+*foundPr.RequesterRequestId+"%20and%20has_cost%3Dfalse%20and%20"+
-			"service_type%3DCopy%20and%20service_level%3DCopy%20and%20created_at%3E2026-03-16%20and%20needed_at%3E2026-03-16"+
+			"service_type%3DLoan%20and%20service_level%3DCopy%20and%20created_at%3E2026-03-16%20and%20needed_at%3E2026-03-16"+
 			"%20and%20title%3D%22Typed%20request%20round%20trip%22%20and%20patron%3Dp1%20and%20cql.serverChoice%20all%20round%20and%20"+
 			"terminal_state%3Dfalse%20and%20title%20%3D%20trip%20and%20author%20%3D%20john%20and%20updated_at%3E2026-03-16%20and%20"+
 			"given_name%20%3D%20john%20and%20surname%20%3D%20wick%20sortby%20created_at%2Fsort.descending", []byte{}, 200)
@@ -381,7 +382,7 @@ func TestNeedsReviewAndUpdate(t *testing.T) {
 	supPeer := apptest.CreatePeer(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL)
 	assert.NotNil(t, supPeer)
 
-	// POST without SupplierUniqueRecordId: validate returns 'review' outcome → NEEDS_REVIEW
+	// POST without SupplierUniqueRecordId: update-metadata returns 'review' outcome → NEEDS_REVIEW
 	patron := "p1"
 	request := iso18626.Request{
 		BibliographicInfo: iso18626.BibliographicInfo{
@@ -416,7 +417,7 @@ func TestNeedsReviewAndUpdate(t *testing.T) {
 	}), "timed out waiting for NEEDS_REVIEW state")
 	assert.Equal(t, string(prservice.BorrowerStateNeedsReview), foundPr.State)
 	if assert.NotNil(t, foundPr.LastAction) {
-		assert.Equal(t, string(prservice.BorrowerActionValidate), *foundPr.LastAction)
+		assert.Equal(t, string(prservice.BorrowerActionUpdateMetadata), *foundPr.LastAction)
 	}
 	if assert.NotNil(t, foundPr.LastActionOutcome) {
 		assert.Equal(t, prservice.ActionOutcomeReview, *foundPr.LastActionOutcome)
@@ -443,7 +444,7 @@ func TestNeedsReviewAndUpdate(t *testing.T) {
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err)
 	assert.Equal(t, string(prservice.BorrowerStateNeedsReview), foundPr.State)
-	assert.Equal(t, "returnables", foundPr.StateModel)
+	assert.Equal(t, "default", foundPr.StateModel)
 	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
 		assert.Equal(t, "Updated title, still no item ID", r.BibliographicInfo.Title)
 		assert.Empty(t, r.BibliographicInfo.SupplierUniqueRecordId)
@@ -469,7 +470,7 @@ func TestNeedsReviewAndUpdate(t *testing.T) {
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err)
 	assert.Equal(t, string(prservice.BorrowerStateNeedsReview), foundPr.State)
-	assert.Equal(t, "returnables", foundPr.StateModel)
+	assert.Equal(t, "default", foundPr.StateModel)
 	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
 		assert.Equal(t, "WILLSUPPLY_LOANED", r.BibliographicInfo.SupplierUniqueRecordId)
 	})
@@ -536,7 +537,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	assert.NoError(t, err, "failed to unmarshal patron request")
 
 	assert.Equal(t, strings.ToUpper(strings.Split(requesterSymbol, ":")[1]+"-1"), foundPr.Id)
-	assert.Equal(t, "returnables", foundPr.StateModel)
+	assert.Equal(t, "default", foundPr.StateModel)
 	requesterPrPath := basePath + "/" + foundPr.Id
 	queryParams := "?side=borrowing&symbol=" + *foundPr.RequesterSymbol
 
@@ -776,6 +777,83 @@ func TestActionsToCompleteState(t *testing.T) {
 	assert.NoError(t, err, "failed to unmarshal patron request events")
 	assert.True(t, len(events.Items) > 5)
 	assert.Equal(t, int64(len(events.Items)), events.About.Count)
+}
+
+func TestCopySupplyDocumentCompletesRequesterAndSupplier(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	requesterSymbol := "ISIL:REQ" + uuid.NewString()
+	supplierSymbol := "ISIL:SUP" + uuid.NewString()
+
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink, dirapi.Entry{}, requesterSymbol)
+	require.NotNil(t, reqPeer)
+	supPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink, dirapi.Entry{}, supplierSymbol)
+	require.NotNil(t, supPeer)
+
+	request := iso18626.Request{
+		BibliographicInfo: iso18626.BibliographicInfo{
+			SupplierUniqueRecordId: "return-" + supplierSymbol + "::COPY-DOCUMENT",
+			Title:                  "Copy delivery integration test",
+		},
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopy},
+	}
+	patron := "p1"
+	requestBytes, err := json.Marshal(proapi.CreatePatronRequest{
+		RequesterSymbol: &requesterSymbol,
+		Patron:          &patron,
+		IllRequest:      request,
+	})
+	require.NoError(t, err)
+
+	responseBytes := httpRequest(t, "POST", basePath, requestBytes, http.StatusCreated)
+	var requesterPr proapi.PatronRequest
+	require.NoError(t, json.Unmarshal(responseBytes, &requesterPr))
+	requesterPath := basePath + "/" + requesterPr.Id
+	requesterParams := "?side=borrowing&symbol=" + requesterSymbol
+
+	require.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		supplierPr, lookupErr := prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(appCtx, supplierSymbol, requesterPr.Id)
+		return lookupErr == nil && supplierPr.ID != ""
+	}), "timed out waiting for supplier patron request")
+	supplierPr, err := prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(appCtx, supplierSymbol, requesterPr.Id)
+	require.NoError(t, err)
+	supplierPath := basePath + "/" + supplierPr.ID
+	supplierParams := "?side=lending&symbol=" + supplierSymbol
+
+	require.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		responseBytes = httpRequest(t, "GET", supplierPath+"/actions"+supplierParams, nil, http.StatusOK)
+		return strings.Contains(string(responseBytes), `"name":"`+string(prservice.LenderActionSupplyDocument)+`"`)
+	}), "timed out waiting for supply-document action")
+
+	deliveryURL := "https://documents.example.org/requests/" + requesterPr.Id
+	actionParams := map[string]any{"deliveryUrl": deliveryURL, "note": "Document ready"}
+	actionBytes, err := json.Marshal(proapi.ExecuteAction{
+		Action:       string(prservice.LenderActionSupplyDocument),
+		ActionParams: &actionParams,
+	})
+	require.NoError(t, err)
+	responseBytes = httpRequest(t, "POST", supplierPath+"/action"+supplierParams, actionBytes, http.StatusOK)
+	var actionResult proapi.ActionResult
+	require.NoError(t, json.Unmarshal(responseBytes, &actionResult))
+	assert.Equal(t, string(events.EventStatusSuccess), actionResult.Result)
+
+	require.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		responseBytes = httpRequest(t, "GET", requesterPath+requesterParams, nil, http.StatusOK)
+		if json.Unmarshal(responseBytes, &requesterPr) != nil {
+			return false
+		}
+		return requesterPr.State == string(prservice.BorrowerStateCompleted)
+	}), "timed out waiting for requester Copy completion")
+	assert.True(t, requesterPr.TerminalState)
+	if assert.NotNil(t, requesterPr.IllResponse) && assert.NotNil(t, requesterPr.IllResponse.DeliveryInfo) {
+		assert.Equal(t, deliveryURL, requesterPr.IllResponse.DeliveryInfo.ItemId)
+		assert.Equal(t, string(iso18626.SentViaUrl), requesterPr.IllResponse.DeliveryInfo.SentVia.Text)
+	}
+
+	responseBytes = httpRequest(t, "GET", supplierPath+supplierParams, nil, http.StatusOK)
+	var completedSupplierPr proapi.PatronRequest
+	require.NoError(t, json.Unmarshal(responseBytes, &completedSupplierPr))
+	assert.Equal(t, string(prservice.LenderStateCompleted), completedSupplierPr.State)
+	assert.True(t, completedSupplierPr.TerminalState)
 }
 
 func TestRejectRetry(t *testing.T) {
@@ -1075,15 +1153,24 @@ func TestPostPatronRequestRejectsInvalidIllRequest(t *testing.T) {
 	assert.Contains(t, string(respBytes), "ServiceType")
 }
 
-func TestGetReturnableStateModel(t *testing.T) {
-	respBytes := httpRequest(t, "GET", "/state_model/models/returnables", []byte{}, 200)
+func TestGetDefaultStateModel(t *testing.T) {
+	respBytes := httpRequest(t, "GET", "/state_model/models/default", []byte{}, 200)
 	var retrievedStateModel proapi.StateModel
 	err := json.Unmarshal(respBytes, &retrievedStateModel)
 	assert.NoError(t, err, "failed to unmarshal state model")
-	returnablesStateModel, _ := prservice.LoadStateModelByName("returnables")
-	assert.Equal(t, returnablesStateModel.Name, retrievedStateModel.Name)
-	assert.Equal(t, returnablesStateModel.Desc, retrievedStateModel.Desc)
-	assert.Equal(t, len(returnablesStateModel.States), len(retrievedStateModel.States))
+	defaultStateModel, _ := prservice.LoadStateModelByName("default")
+	assert.Equal(t, defaultStateModel.Name, retrievedStateModel.Name)
+	assert.Equal(t, defaultStateModel.Desc, retrievedStateModel.Desc)
+	assert.Equal(t, len(defaultStateModel.States), len(retrievedStateModel.States))
+}
+
+func TestGetLegacyReturnablesStateModelAlias(t *testing.T) {
+	respBytes := httpRequest(t, "GET", "/state_model/models/returnables", []byte{}, 200)
+	var retrievedStateModel proapi.StateModel
+	err := json.Unmarshal(respBytes, &retrievedStateModel)
+	assert.NoError(t, err, "failed to unmarshal legacy state model alias")
+	defaultStateModel, _ := prservice.LoadStateModelByName("default")
+	assert.Equal(t, defaultStateModel.Name, retrievedStateModel.Name)
 }
 
 func TestGetStateModelCapabilities(t *testing.T) {
@@ -1096,6 +1183,15 @@ func TestGetStateModelCapabilities(t *testing.T) {
 	assert.True(t, slices.Contains(capabilities.RequesterMessageEvents, string(prservice.RequesterCancelRequest)))
 	assert.True(t, slices.Contains(capabilities.RequesterMessageEvents, string(prservice.RequesterReceived)))
 	assert.True(t, slices.Contains(capabilities.SupplierMessageEvents, string(prservice.SupplierCancelRejected)))
+	skipPatronValidationIndex := slices.IndexFunc(capabilities.RequesterActions, func(action proapi.ActionCapability) bool {
+		return action.Name == string(prservice.BorrowerActionSkipPatronValidation)
+	})
+	if assert.NotEqual(t, -1, skipPatronValidationIndex, "skip-patron-validation capability not found") {
+		skipPatronValidation := capabilities.RequesterActions[skipPatronValidationIndex]
+		if assert.NotNil(t, skipPatronValidation.Kind) {
+			assert.Equal(t, proapi.Transition, *skipPatronValidation.Kind)
+		}
+	}
 }
 
 func TestServerChoice(t *testing.T) {
@@ -1536,6 +1632,30 @@ func TestCRUDTemplate(t *testing.T) {
 	assert.Equal(t, updateTemplate.Labels, updatedTemplate.Labels)
 	assert.Equal(t, updateTemplate.Body, updatedTemplate.Body)
 	assert.NotNil(t, updatedTemplate.UpdatedAt)
+
+	// PUT – omit optional fields to clear them
+	clearBytes, err := json.Marshal(proapi.UpdateTemplate{
+		Title:       updateTemplate.Title,
+		ContentType: updateTemplate.ContentType,
+		Labels:      updateTemplate.Labels,
+		Body:        updateTemplate.Body,
+	})
+	assert.NoError(t, err)
+	respBytes = httpRequest(t, "PUT", thisTemplatePath+queryParams, clearBytes, 200)
+	var clearedTemplate proapi.Template
+	err = json.Unmarshal(respBytes, &clearedTemplate)
+	assert.NoError(t, err)
+	assert.Nil(t, clearedTemplate.Audience)
+	assert.Nil(t, clearedTemplate.Subject)
+
+	// GET – cleared fields were persisted
+	respBytes = httpRequest(t, "GET", thisTemplatePath+queryParams, []byte{}, 200)
+	var reReadTemplate proapi.Template
+	err = json.Unmarshal(respBytes, &reReadTemplate)
+	assert.NoError(t, err)
+	assert.Nil(t, reReadTemplate.Audience)
+	assert.Nil(t, reReadTemplate.Subject)
+	assert.Equal(t, updateTemplate.Title, reReadTemplate.Title)
 
 	// PUT – 404 for wrong owner
 	httpRequest(t, "PUT", thisTemplatePath+"?symbol="+url.QueryEscape(otherSymbol), updateBytes, 404)

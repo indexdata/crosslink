@@ -59,7 +59,7 @@ func TestGetAdapterBadParser(t *testing.T) {
 	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
 	peer := ill_db.Peer{
 		CustomData: dirapi.Entry{
-			HoldingsConfig: &dirapi.HoldingsConfig{
+			CatalogConfig: &dirapi.CatalogConfig{
 				Zoom: &dirapi.ZoomConfig{
 					Address: "a",
 				},
@@ -76,7 +76,7 @@ func TestGetAdapterOtherWithConfig(t *testing.T) {
 	creator := NewLookupAdapterCreator("other", "")
 	peer := ill_db.Peer{
 		CustomData: dirapi.Entry{
-			HoldingsConfig: &dirapi.HoldingsConfig{
+			CatalogConfig: &dirapi.CatalogConfig{
 				Zoom: &dirapi.ZoomConfig{
 					Address: "a",
 				},
@@ -88,22 +88,23 @@ func TestGetAdapterOtherWithConfig(t *testing.T) {
 	assert.Contains(t, err.Error(), "unsupported lookup adapter type: other")
 }
 
-func TestGetAdapterMissingProperties(t *testing.T) {
+func TestGetAdapterMetadataOnly(t *testing.T) {
 	creator := NewLookupAdapterCreator("zoom", "")
+	mode := dirapi.Merge
 	peer := ill_db.Peer{
 		CustomData: dirapi.Entry{
-			HoldingsConfig: &dirapi.HoldingsConfig{},
+			CatalogConfig: &dirapi.CatalogConfig{MetadataUpdateMode: &mode},
 		},
 	}
-	_, err := creator.GetAdapter(peer)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "must specify either sru or zoom properties")
+	aa, err := creator.GetAdapter(peer)
+	assert.NoError(t, err)
+	assert.Nil(t, aa)
 }
 
 func TestGetAdapterMock(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: dirapi.Entry{
-			HoldingsConfig: &dirapi.HoldingsConfig{
+			CatalogConfig: &dirapi.CatalogConfig{
 				Zoom: &dirapi.ZoomConfig{
 					Address: "a",
 				},
@@ -119,7 +120,7 @@ func TestGetAdapterMock(t *testing.T) {
 func TestGetAdapterZoom(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: dirapi.Entry{
-			HoldingsConfig: &dirapi.HoldingsConfig{
+			CatalogConfig: &dirapi.CatalogConfig{
 				Zoom: &dirapi.ZoomConfig{
 					Address: "a",
 				},
@@ -141,7 +142,7 @@ func TestGetAdapterZoom(t *testing.T) {
 func TestGetAdapterMetaproxy(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: dirapi.Entry{
-			HoldingsConfig: &dirapi.HoldingsConfig{
+			CatalogConfig: &dirapi.CatalogConfig{
 				Zoom: &dirapi.ZoomConfig{
 					Address: "a",
 				},
@@ -157,7 +158,7 @@ func TestGetAdapterMetaproxy(t *testing.T) {
 func TestGetAdapterMetaproxyMissingProxy(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: dirapi.Entry{
-			HoldingsConfig: &dirapi.HoldingsConfig{
+			CatalogConfig: &dirapi.CatalogConfig{
 				Zoom: &dirapi.ZoomConfig{
 					Address: "a",
 				},
@@ -173,7 +174,7 @@ func TestGetAdapterMetaproxyMissingProxy(t *testing.T) {
 func TestGetAdapterSRU(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: dirapi.Entry{
-			HoldingsConfig: &dirapi.HoldingsConfig{
+			CatalogConfig: &dirapi.CatalogConfig{
 				Sru: &dirapi.SruConfig{
 					Address: "a",
 				},

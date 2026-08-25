@@ -23,6 +23,16 @@ const SUP_PROBLEM = "no-suppliers"
 const ROTA_INFO_KEY = "rotaInfo"
 const DATE_LAYOUT = "2006-01-02"
 
+const AvailabilityKey = "availability"
+
+type Availability string
+
+const (
+	AvailabilityAvailable   Availability = "available"
+	AvailabilityUnavailable Availability = "unavailable"
+	AvailabilityUnknown     Availability = "unknown"
+)
+
 type SupplierLocator struct {
 	eventBus             events.EventBus
 	illRepo              ill_db.IllRepo
@@ -59,6 +69,12 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
 	}
+	// Every locate run builds a replacement rota. Retire any existing rota before
+	// lookup so all failure paths observe no selected supplier, while a new request
+	// simply performs a no-op update.
+	if err = s.illRepo.SkipLocatedSuppliersByIllTransaction(ctx, illTrans.ID); err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to update existing located supplier status", err)
+	}
 	lookupParams := catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo)
 
 	requester, err := s.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
@@ -79,8 +95,8 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	}
 
 	metadataUpdateMode := dirapi.None
-	if configPeer.HoldingsConfig != nil && configPeer.HoldingsConfig.MetadataUpdateMode != nil {
-		metadataUpdateMode = *configPeer.HoldingsConfig.MetadataUpdateMode
+	if configPeer.CatalogConfig != nil && configPeer.CatalogConfig.MetadataUpdateMode != nil {
+		metadataUpdateMode = *configPeer.CatalogConfig.MetadataUpdateMode
 	}
 
 	var query string
@@ -134,10 +150,10 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	// deal with last resort symbols configured for requester or consortium (if any) - these are added as holdings results to
 	// be processed like normal holdings, but just use bibliographicInfo.SupplierUniqueRecordId for localIdentifier
 	var lenderLastResort []dirapi.Symbol
-	if requester.CustomData.LenderOfLastResort != nil {
-		lenderLastResort = *requester.CustomData.LenderOfLastResort
-	} else if configPeer.LenderOfLastResort != nil {
-		lenderLastResort = *configPeer.LenderOfLastResort
+	if requester.CustomData.IllConfig != nil && requester.CustomData.IllConfig.LendersOfLastResort != nil {
+		lenderLastResort = *requester.CustomData.IllConfig.LendersOfLastResort
+	} else if configPeer.IllConfig != nil && configPeer.IllConfig.LendersOfLastResort != nil {
+		lenderLastResort = *configPeer.IllConfig.LendersOfLastResort
 	}
 	if lookupParams.Identifier != "" {
 		for _, sym := range lenderLastResort {
@@ -248,22 +264,11 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no located suppliers match",
 			map[string]any{"holdings": holdingsLog, "directory": directoryLog, ROTA_INFO_KEY: rotaInfo})
 	}
-	// Start ordinal from the count of existing suppliers to avoid conflicts with
-	// the unique constraint on (ill_transaction_id, ordinal) when re-locating on retry.
+	// Start ordinal after all previous rota entries to avoid conflicts with the
+	// unique constraint on (ill_transaction_id, ordinal) when re-locating on retry.
 	existingSuppliers, _, err := s.illRepo.GetLocatedSuppliersByIllTransaction(ctx, illTrans.ID)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to count existing located suppliers", err)
-	}
-	// mark all existing suppliers as skipped
-	for _, existing := range existingSuppliers {
-		if existing.SupplierStatus == ill_db.SupplierStateSkippedPg {
-			continue
-		}
-		existing.SupplierStatus = ill_db.SupplierStateSkippedPg
-		_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(existing))
-		if err != nil {
-			return events.LogErrorAndReturnResult(ctx, "failed to update existing located supplier status", err)
-		}
 	}
 	var locatedSuppliers []*ill_db.LocatedSupplier
 	i := len(existingSuppliers)
@@ -381,20 +386,22 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "multiple selected suppliers", map[string]any{"supplierCount": len(suppliers)})
 	}
 	sup := suppliers[0]
-	eventData := map[string]any{}
-	eventData["skipped"] = false
-	eventData["localSupplier"] = sup.LocalSupplier
+	eventData := map[string]any{
+		AvailabilityKey: string(AvailabilityUnknown),
+		"localSupplier": sup.LocalSupplier,
+	}
+	result := &events.EventResult{CustomData: eventData}
 	peer, err := s.illRepo.GetPeerById(ctx, sup.SupplierID)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not get peer", err)
 	}
 	aa, err := s.lookupAdapterFactory.GetAdapterSupplier(ctx, peer)
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "could not create availability adapter", err)
+		return events.LogErrorAndReturnExistingResult(ctx, "could not create availability adapter", err, result)
 	}
 	if aa == nil {
 		ctx.Logger().Debug("skipping availability check for supplier without availability config", "supplierSymbol", sup.SupplierSymbol)
-		return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
+		return events.EventStatusSuccess, result
 	}
 
 	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
@@ -405,15 +412,15 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	lookupParams.Identifier = sup.LocalID.String
 	lookupResult, err := aa.Lookup(lookupParams)
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "failed to perform availability lookup", err)
+		return events.LogErrorAndReturnExistingResult(ctx, "failed to perform availability lookup", err, result)
 	}
 	holdingsResults, err := lookupResult.GetHoldings()
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "failed to get holdings for availability lookup", err)
+		return events.LogErrorAndReturnExistingResult(ctx, "failed to get holdings for availability lookup", err, result)
 	}
 	if len(holdingsResults) == 0 {
 		ctx.Logger().Debug("availability lookup returned no results for supplier, skipping", "supplierSymbol", sup.SupplierSymbol)
-		eventData["skipped"] = true
+		eventData[AvailabilityKey] = string(AvailabilityUnavailable)
 		sup.SupplierStatus = ill_db.SupplierStateSkippedPg
 		_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(sup))
 		if err != nil {
@@ -421,28 +428,17 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 		}
 	} else {
 		ctx.Logger().Debug("availability lookup returned results for supplier, not skipping", "supplierSymbol", sup.SupplierSymbol)
+		eventData[AvailabilityKey] = string(AvailabilityAvailable)
 	}
-	return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
+	return events.EventStatusSuccess, result
 }
 
 func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
-	suppliers, err := s.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
-		IllTransactionID: event.IllTransactionID,
-		SupplierStatus:   ill_db.SupplierStateSelectedPg,
-	})
+	err := s.illRepo.SkipLocatedSuppliersByIllTransactionAndStatus(ctx, event.IllTransactionID, ill_db.SupplierStateSelectedPg)
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "could not find selected suppliers", err)
+		return events.LogErrorAndReturnResult(ctx, "could not update previous selected supplier", err)
 	}
-	if len(suppliers) > 0 {
-		for _, supplier := range suppliers {
-			supplier.SupplierStatus = ill_db.SupplierStateSkippedPg
-			_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(supplier))
-			if err != nil {
-				return events.LogErrorAndReturnResult(ctx, "could not update previous selected supplier", err)
-			}
-		}
-	}
-	suppliers, err = s.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
+	suppliers, err := s.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
 		IllTransactionID: event.IllTransactionID,
 		SupplierStatus:   ill_db.SupplierStateNewPg,
 	})

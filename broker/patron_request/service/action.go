@@ -5,21 +5,27 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/broker/adapter"
+	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/email"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/lms"
+	"github.com/indexdata/crosslink/broker/ncipclient"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
+	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/shim"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -29,12 +35,14 @@ const COMP = "pr_action_service"
 
 type PatronRequestActionService struct {
 	PatronRequestMessageSender
-	prRepo               pr_db.PrRepo
-	illRepo              ill_db.IllRepo
-	eventBus             events.EventBus
-	lmsCreator           lms.LmsCreator
-	actionMappingService ActionMappingService
-	emailService         email.EmailService
+	prRepo                 pr_db.PrRepo
+	illRepo                ill_db.IllRepo
+	eventBus               events.EventBus
+	lmsCreator             lms.LmsCreator
+	actionMappingService   ActionMappingService
+	emailService           email.EmailService
+	directoryLookupAdapter adapter.DirectoryLookupAdapter
+	lookupAdapterFactory   *service.LookupAdapterFactory
 }
 
 type actionExecutionResult struct {
@@ -42,6 +50,28 @@ type actionExecutionResult struct {
 	result  *events.EventResult
 	pr      pr_db.PatronRequest
 	retryPr pr_db.PatronRequest
+}
+
+type actionDecisionDetailMetadataUpdate struct {
+	Type          string                               `json:"type"`
+	Outcome       string                               `json:"outcome"`
+	Reason        string                               `json:"reason,omitempty"`
+	Mode          string                               `json:"mode"`
+	EffectiveMode string                               `json:"effectiveMode"`
+	LookupParams  catalog.LookupParams                 `json:"lookupParams"`
+	Source        actionDecisionDetailMetadataSource   `json:"source"`
+	Changes       []actionDecisionDetailMetadataChange `json:"changes"`
+}
+
+type actionDecisionDetailMetadataSource struct {
+	AdapterType         string `json:"adapterType"`
+	ConfigurationPeerID string `json:"configurationPeerId"`
+}
+
+type actionDecisionDetailMetadataChange struct {
+	Field         string `json:"field"`
+	PreviousValue string `json:"previousValue"`
+	NewValue      string `json:"newValue"`
 }
 
 type autoActionFailure struct {
@@ -55,16 +85,22 @@ func (e *autoActionFailure) Error() string {
 
 type actionParams struct {
 	Note             string                     `json:"note,omitempty"`
+	Barcode          string                     `json:"barcode,omitempty"`
+	CallNumber       string                     `json:"callNumber,omitempty"`
+	Title            string                     `json:"title,omitempty"`
 	LoanCondition    string                     `json:"loanCondition,omitempty"`
 	Cost             *float64                   `json:"cost,omitempty"`
 	Currency         string                     `json:"currency,omitempty"`
 	ReasonUnfilled   string                     `json:"reasonUnfilled,omitempty"`
 	ReasonRetry      string                     `json:"reasonRetry,omitempty"`
 	ItemID           string                     `json:"itemId,omitempty"`
+	DeliveryURL      string                     `json:"deliveryUrl,omitempty"`
 	AutoActionParams *proapi.ModelAction_Params `json:"autoActionParams,omitempty"`
 }
 
-func CreatePatronRequestActionService(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator, emailService email.EmailService) *PatronRequestActionService {
+func CreatePatronRequestActionService(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, eventBus events.EventBus,
+	iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator, emailService email.EmailService,
+	lookupAdapterFactory *service.LookupAdapterFactory, directoryLookupAdapter adapter.DirectoryLookupAdapter) *PatronRequestActionService {
 	return &PatronRequestActionService{
 		PatronRequestMessageSender: PatronRequestMessageSender{iso18626Handler: iso18626Handler, logErrorAndReturnResult: logActionErrorAndReturnResult},
 		prRepo:                     prRepo,
@@ -73,6 +109,8 @@ func CreatePatronRequestActionService(prRepo pr_db.PrRepo, illRepo ill_db.IllRep
 		lmsCreator:                 lmsCreator,
 		actionMappingService:       ActionMappingService{SMService: &StateModelService{}},
 		emailService:               emailService,
+		lookupAdapterFactory:       lookupAdapterFactory,
+		directoryLookupAdapter:     directoryLookupAdapter,
 	}
 }
 
@@ -110,10 +148,18 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 		return logActionErrorAndReturnResult(ctx, "failed to load state model", err)
 	}
 	if action == TerminateAction {
-		return a.handleTerminateAction(ctx, actionMapping, pr, action)
+		return a.handleTerminateAction(ctx, event, actionMapping, pr)
 	}
+	return a.executeAction(ctx, event, actionMapping, pr, action)
+}
+
+func (a *PatronRequestActionService) executeAction(ctx common.ExtendedContext, event events.Event, actionMapping *ActionMapping, pr pr_db.PatronRequest, action pr_db.PatronRequestAction) (events.EventStatus, *events.EventResult) {
 	if !actionMapping.IsActionSupported(pr, action) {
 		return logActionErrorAndReturnResult(ctx, "state "+string(pr.State)+" does not support action "+string(action), errors.New("invalid action"))
+	}
+	if actionMapping.IsTransitionAction(pr, action) {
+		execResult := actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
+		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execResult)
 	}
 	if a.lmsCreator == nil {
 		return logActionErrorAndReturnResult(ctx, "LMS creator not configured", nil)
@@ -131,10 +177,53 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 	}
 }
 
-func (a *PatronRequestActionService) handleTerminateAction(ctx common.ExtendedContext, actionMapping *ActionMapping, pr pr_db.PatronRequest, action pr_db.PatronRequestAction) (events.EventStatus, *events.EventResult) {
+func (a *PatronRequestActionService) handleTerminateAction(ctx common.ExtendedContext, event events.Event, actionMapping *ActionMapping, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
 	if actionMapping.IsTerminalState(pr) || pr.TerminalState {
 		return logActionErrorAndReturnResult(ctx, "patron request "+pr.ID+" is already terminal", errors.New("invalid action"))
 	}
+
+	var closingActionError *string
+	if closingAction := actionMapping.GetClosingAction(pr); closingAction != nil {
+		status, result := a.executeAction(ctx, event, actionMapping, pr, *closingAction)
+		if status == events.EventStatusSuccess && result != nil && result.ActionResult != nil &&
+			result.ActionResult.Outcome == ActionOutcomeSuccess && result.ActionResult.ChildActionError == nil {
+			return status, result
+		}
+		message := closingActionFailureMessage(*closingAction, status, result)
+		closingActionError = &message
+		refreshedPr, err := a.prRepo.GetPatronRequestById(ctx, pr.ID)
+		if err != nil {
+			return logActionErrorAndReturnResult(ctx, "failed to reload patron request before local close", err)
+		}
+		pr = refreshedPr
+	}
+
+	return a.closeLocally(ctx, actionMapping, pr, closingActionError)
+}
+
+func closingActionFailureMessage(action pr_db.PatronRequestAction, status events.EventStatus, result *events.EventResult) string {
+	message := fmt.Sprintf("closing action %s failed with status %s", action, status)
+	if result == nil {
+		return message
+	}
+	if result.ActionResult != nil {
+		if result.ActionResult.ChildActionError != nil {
+			return message + ": " + *result.ActionResult.ChildActionError
+		}
+		if result.ActionResult.Outcome != "" {
+			message += " and outcome " + result.ActionResult.Outcome
+		}
+	}
+	if result.EventError != nil && result.EventError.Message != "" {
+		return message + ": " + result.EventError.Message
+	}
+	if result.Problem != nil && result.Problem.Details != "" {
+		return message + ": " + result.Problem.Details
+	}
+	return message
+}
+
+func (a *PatronRequestActionService) closeLocally(ctx common.ExtendedContext, actionMapping *ActionMapping, pr pr_db.PatronRequest, closingActionError *string) (events.EventStatus, *events.EventResult) {
 	manualCloseState, ok := actionMapping.GetManualCloseState(pr)
 	if !ok {
 		return logActionErrorAndReturnResult(ctx, "state model does not define a manual close target for side "+string(pr.Side), errors.New("invalid state model"))
@@ -143,7 +232,7 @@ func (a *PatronRequestActionService) handleTerminateAction(ctx common.ExtendedCo
 	updatedPr := pr
 	updatedPr.State = manualCloseState
 	updatedPr.TerminalState = true
-	updatedPr.LastAction = getDbText(string(action))
+	updatedPr.LastAction = getDbText(string(TerminateAction))
 	updatedPr.LastActionOutcome = getDbText(ActionOutcomeSuccess)
 	updatedPr.LastActionResult = getDbText(string(events.EventStatusSuccess))
 	updatedPr.NeedsAttention = false
@@ -160,8 +249,9 @@ func (a *PatronRequestActionService) handleTerminateAction(ctx common.ExtendedCo
 	return events.EventStatusSuccess, &events.EventResult{
 		CommonEventData: events.CommonEventData{
 			ActionResult: &events.ActionResult{
-				Outcome: ActionOutcomeSuccess,
-				ToState: &toState,
+				Outcome:          ActionOutcomeSuccess,
+				ToState:          &toState,
+				ChildActionError: closingActionError,
 			},
 		},
 	}
@@ -186,17 +276,24 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 		updatedPr.NeedsAttention = true
 	}
 	stateChanged := false
-	if transitionState, ok := actionMapping.GetActionTransition(currentPr, action, outcome); ok && transitionState != updatedPr.State {
-		updatedPr.State = transitionState
+	if transitionState, ok := actionMapping.GetActionTransition(currentPr, action, outcome); ok {
+		toState := string(transitionState)
+		execResult.result.ActionResult.ToState = &toState
+		if transitionState != updatedPr.State {
+			updatedPr.State = transitionState
+			stateChanged = true
+		}
 		if config, configOk := actionMapping.getStateConfig(updatedPr); configOk {
 			if config.terminal {
 				updatedPr.TerminalState = true
 			}
 			updatedPr.NeedsAttention = config.needsAttention
 		}
-		toState := string(transitionState)
-		execResult.result.ActionResult.ToState = &toState
-		stateChanged = true
+	}
+	// A failed action always requires attention, including when its configured
+	// failure transition targets the current state and reapplies its config.
+	if outcome == ActionOutcomeFailure {
+		updatedPr.NeedsAttention = true
 	}
 
 	var retryPr pr_db.PatronRequest
@@ -281,14 +378,22 @@ func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.Exten
 		if err != nil {
 			return &autoActionFailure{action: actionName, msg: err.Error()}
 		}
+		actionResult := completedEvent.ResultData.ActionResult
+		if actionResult != nil && actionResult.ChildActionError != nil {
+			return &autoActionFailure{action: actionName, msg: *actionResult.ChildActionError}
+		}
 		if completedEvent.EventStatus != events.EventStatusSuccess {
+			// A persisted failure transition means the state model has handled the
+			// outcome. Stop this auto-action chain without propagating the failure
+			// to its parent. ToState is also populated for self-transitions and is
+			// only returned after the patron request update succeeds.
+			if actionResult != nil && actionResult.Outcome == ActionOutcomeFailure && actionResult.ToState != nil {
+				return nil
+			}
 			return &autoActionFailure{
 				action: actionName,
 				msg:    fmt.Sprintf("auto action %s failed with status %s%s", actionName, completedEvent.EventStatus, autoActionErrorSuffix(completedEvent)),
 			}
-		}
-		if completedEvent.ResultData.ActionResult != nil && completedEvent.ResultData.ActionResult.ChildActionError != nil {
-			return &autoActionFailure{action: actionName, msg: *completedEvent.ResultData.ActionResult.ChildActionError}
 		}
 
 		updatedPr, err := a.prRepo.GetPatronRequestById(ctx, pr.ID)
@@ -345,8 +450,10 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	switch action {
-	case BorrowerActionValidate:
-		return a.validateBorrowingRequest(ctx, pr, lmsAdapter, illRequest)
+	case BorrowerActionValidatePatron:
+		return a.validatePatronBorrowingRequest(ctx, pr, lmsAdapter, illRequest)
+	case BorrowerActionUpdateMetadata:
+		return a.updateMetadataBorrowingRequest(ctx, pr, illRequest)
 	case BorrowerActionSendRequest:
 		return a.sendBorrowingRequest(ctx, pr, illRequest)
 	case BorrowerActionReceive:
@@ -363,8 +470,6 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		return a.acceptConditionBorrowingRequest(ctx, pr)
 	case BorrowerActionRejectCondition:
 		return a.rejectConditionBorrowingRequest(ctx, pr)
-	case BorrowerActionRejectRetry:
-		return a.rejectRetryBorrowingRequest(pr)
 	case BorrowerActionAcceptRetry:
 		return a.acceptRetryBorrowingRequest(ctx, pr)
 	case BorrowerActionSendNotification:
@@ -375,6 +480,8 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		return a.cannotSupplyLocallyBorrowingRequest(ctx, pr, params)
 	case BorrowerActionFillLocally:
 		return a.fillLocallyBorrowingRequest(ctx, pr, lmsAdapter, illRequest, params)
+	case BorrowerActionSupplyDocument:
+		return a.supplyDocumentRequest(ctx, pr, params)
 	default:
 		status, result := logActionErrorAndReturnResult(ctx, "borrower action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -386,19 +493,20 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 		status, result := logActionErrorAndReturnResult(ctx, "missing supplier symbol", nil)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	lms, err := a.lmsCreator.GetAdapter(ctx, pr.SupplierSymbol.String)
+	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.SupplierSymbol.String)
 	if err != nil {
 		status, result := logActionErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	lms.SetLogFunc(func(outgoing map[string]any, incoming map[string]any, err error) {
+	lmsAdapter.SetLogFunc(func(outgoing map[string]any, incoming map[string]any, err error) {
 		status := events.EventStatusSuccess
 		if err != nil {
 			status = events.EventStatusError
 		}
-		var customData = make(map[string]any)
-		customData["lmsOutgoingMessage"] = outgoing
-		customData["lmsIncomingMessage"] = incoming
+		customData := map[string]any{
+			"lmsOutgoingMessage": outgoing,
+			"lmsIncomingMessage": incoming,
+		}
 		eventData := events.EventData{CustomData: customData}
 		_, createErr := a.eventBus.CreateNoticeWithParent(pr.ID, events.EventNameLmsSupplierMessage, eventData, status, events.EventDomainPatronRequest, eventID, events.SignalConsumers)
 		if createErr != nil {
@@ -412,25 +520,34 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 		status, result := logActionErrorAndReturnResult(ctx, "failed to unmarshal action parameters", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
+
 	switch action {
-	case LenderActionValidate:
-		return a.validateLenderRequest(ctx, pr, lms)
+	case LenderActionValidatePatron:
+		return a.validatePatronLenderRequest(ctx, pr, lmsAdapter)
+	case LenderActionRequestItem:
+		return a.requestItemLenderRequest(ctx, pr, lmsAdapter, illRequest)
 	case LenderActionWillSupply:
-		return a.willSupplyLenderRequest(ctx, pr, lms, illRequest, params)
+		return a.willSupplyLenderRequest(ctx, pr, params)
 	case LenderActionRejectCancel:
 		return a.rejectCancelLenderRequest(ctx, pr)
 	case LenderActionCannotSupply:
-		return a.cannotSupplyLenderRequest(ctx, pr, lms, illRequest, params)
+		return a.cannotSupplyLenderRequest(ctx, pr, lmsAdapter, illRequest, params)
 	case LenderActionAddCondition:
 		return a.addConditionsLenderRequest(ctx, pr, params)
+	case LenderActionAddItem:
+		return a.addItemLenderRequest(ctx, pr, params)
+	case LenderActionRemoveItem:
+		return a.removeItemLenderRequest(ctx, pr, params, lmsAdapter)
 	case LenderActionShip:
-		return a.shipLenderRequest(ctx, pr, lms, illRequest, params)
+		return a.shipLenderRequest(ctx, pr, lmsAdapter, illRequest, params)
+	case LenderActionSupplyDocument:
+		return a.supplyDocumentRequest(ctx, pr, params)
 	case LenderActionMarkReceived:
-		return a.markReceivedLenderRequest(ctx, pr, lms)
+		return a.markReceivedLenderRequest(ctx, pr, lmsAdapter)
 	case LenderActionAcceptCancel:
-		return a.acceptCancelLenderRequest(ctx, pr, lms, illRequest)
+		return a.acceptCancelLenderRequest(ctx, pr, lmsAdapter, illRequest)
 	case LenderActionAskRetry:
-		return a.askRetryLenderRequest(ctx, pr, lms, illRequest, params)
+		return a.askRetryLenderRequest(ctx, pr, lmsAdapter, illRequest, params)
 	case LenderActionSendNotification:
 		return a.sendNotificationLenderRequest(ctx, pr, params)
 	default:
@@ -439,13 +556,27 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 	}
 }
 
-func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
+func (a *PatronRequestActionService) validatePatronBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
 	patron := ""
 	if pr.Patron.Valid {
 		patron = pr.Patron.String
 	}
 	userId, err := lmsAdapter.LookupUser(patron)
 	if err != nil {
+		var ncipErr *ncipclient.NcipError
+		if errors.As(err, &ncipErr) {
+			problemType := ncipErr.Problem.ProblemType.Text
+			if problemType == "" {
+				problemType = "LMS LookupUser failed"
+			}
+			problemDetails := ncipErr.Problem.ProblemDetail
+			if problemDetails == "" {
+				problemDetails = ncipErr.Error()
+			}
+			status, result := events.LogProblemAndReturnResult(ctx, problemType, problemDetails, nil)
+			result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeReview}
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
 		status, result := logActionErrorAndReturnResult(ctx, "LMS LookupUser failed", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
@@ -453,12 +584,174 @@ func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.Extende
 	// perhaps it would be better to have both original and canonical id stored?
 	pr.Patron = pgtype.Text{String: userId, Valid: true}
 
+	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
+}
+
+func (a *PatronRequestActionService) updateMetadataBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, illRequest iso18626.Request) actionExecutionResult {
+	peers, _, peerErr := a.illRepo.GetCachedPeersBySymbols(ctx, []string{pr.RequesterSymbol.String}, a.directoryLookupAdapter)
+	if peerErr != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to get requester peer", peerErr)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	if len(peers) == 0 {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to get requester peer", fmt.Errorf("no peer found for requester symbol %q", pr.RequesterSymbol.String))
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	if len(peers) > 1 {
+		ctx.Logger().Warn("multiple peers found for requester symbol, using first peer", "symbol", pr.RequesterSymbol.String, "peerCount", len(peers))
+	}
+	requesterPeer := peers[0]
+	var decisionDetails []actionDecisionDetailMetadataUpdate
+	if requesterPeer.Vendor == string(dirapi.CrossLink) {
+		detail, err := a.metadataUpdateWithDetails(ctx, &illRequest, requesterPeer)
+		if err != nil {
+			status, result := logActionErrorAndReturnResult(ctx, "metadata update failed", err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		if detail != nil {
+			decisionDetails = append(decisionDetails, *detail)
+		}
+	}
+
+	pr.IllRequest = illRequest
+
 	res := actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
-	if illRequest.BibliographicInfo.SupplierUniqueRecordId == "" {
+	if len(decisionDetails) > 0 || illRequest.BibliographicInfo.SupplierUniqueRecordId == "" {
 		res.result = &events.EventResult{}
+		if len(decisionDetails) > 0 {
+			res.result.CustomData = map[string]any{"decisionDetails": decisionDetails}
+		}
+	}
+	if illRequest.BibliographicInfo.SupplierUniqueRecordId == "" {
 		res.result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeReview}
 	}
 	return res
+}
+
+func (a *PatronRequestActionService) metadataUpdate(ctx common.ExtendedContext, illRequest *iso18626.Request, requesterPeer ill_db.Peer) error {
+	_, err := a.metadataUpdateWithDetails(ctx, illRequest, requesterPeer)
+	return err
+}
+
+func (a *PatronRequestActionService) metadataUpdateWithDetails(ctx common.ExtendedContext, illRequest *iso18626.Request, requesterPeer ill_db.Peer) (*actionDecisionDetailMetadataUpdate, error) {
+	if a.lookupAdapterFactory == nil {
+		return nil, nil
+	}
+	lookupAdapter, configPeer, err := a.lookupAdapterFactory.GetAdapterRequester(ctx, requesterPeer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get lookup adapter: %w", err)
+	}
+	if lookupAdapter == nil {
+		return nil, nil
+	}
+
+	mode := dirapi.None
+	if configPeer.CatalogConfig != nil && configPeer.CatalogConfig.MetadataUpdateMode != nil {
+		mode = *configPeer.CatalogConfig.MetadataUpdateMode
+	}
+	if mode == dirapi.None {
+		return nil, nil
+	}
+	lookupParams := catalog.LookupParamsFromBibliographicInfo(illRequest.BibliographicInfo, illRequest.ServiceInfo)
+	detail := &actionDecisionDetailMetadataUpdate{
+		Type:          "metadata-update",
+		Mode:          string(mode),
+		EffectiveMode: string(effectiveMetadataUpdateMode(mode, lookupParams)),
+		LookupParams:  lookupParams,
+		Source:        metadataUpdateSource(configPeer),
+	}
+
+	lookupResult, err := lookupAdapter.Lookup(lookupParams)
+	if err != nil {
+		if errors.Is(err, catalog.ErrMissingLookupParameters) {
+			detail.Outcome = "skipped"
+			detail.Reason = "missing-lookup-parameters"
+			return detail, nil
+		}
+		return nil, fmt.Errorf("failed to perform lookup for patron request: %w", err)
+	}
+	metadata, err := lookupResult.GetMetadata()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get metadata for patron request: %w", err)
+	}
+	before := cloneBibliographicInfo(illRequest.BibliographicInfo)
+	err = catalog.MetadataRequestUpdate(&illRequest.BibliographicInfo, metadata, lookupParams, mode)
+	if err != nil {
+		return nil, err
+	}
+	changes := metadataUpdateChanges(before, illRequest.BibliographicInfo)
+	detail.Outcome = metadataUpdateOutcome(changes)
+	detail.Changes = changes
+	return detail, nil
+}
+
+func cloneBibliographicInfo(info iso18626.BibliographicInfo) iso18626.BibliographicInfo {
+	info.BibliographicItemId = append([]iso18626.BibliographicItemId(nil), info.BibliographicItemId...)
+	return info
+}
+
+func effectiveMetadataUpdateMode(mode dirapi.MetadataUpdateMode, params catalog.LookupParams) dirapi.MetadataUpdateMode {
+	if mode != dirapi.Auto {
+		return mode
+	}
+	if params.Identifier != "" {
+		return dirapi.Replace
+	}
+	return dirapi.Merge
+}
+
+func metadataUpdateOutcome(changes []actionDecisionDetailMetadataChange) string {
+	if len(changes) == 0 {
+		return "unchanged"
+	}
+	return "updated"
+}
+
+func metadataUpdateSource(configPeer dirapi.Entry) actionDecisionDetailMetadataSource {
+	source := actionDecisionDetailMetadataSource{}
+	if configPeer.Id != nil {
+		source.ConfigurationPeerID = configPeer.Id.String()
+	}
+	if configPeer.CatalogConfig != nil {
+		switch {
+		case configPeer.CatalogConfig.Sru != nil:
+			source.AdapterType = "sru"
+		case configPeer.CatalogConfig.Zoom != nil:
+			source.AdapterType = "zoom"
+		}
+	}
+	return source
+}
+
+func metadataUpdateChanges(before iso18626.BibliographicInfo, after iso18626.BibliographicInfo) []actionDecisionDetailMetadataChange {
+	changes := make([]actionDecisionDetailMetadataChange, 0)
+	addMetadataStringChange := func(field string, previousValue string, newValue string) {
+		if previousValue == newValue {
+			return
+		}
+		changes = append(changes, actionDecisionDetailMetadataChange{
+			Field:         field,
+			PreviousValue: previousValue,
+			NewValue:      newValue,
+		})
+	}
+	addMetadataStringChange("title", before.Title, after.Title)
+	addMetadataStringChange("subtitle", before.Subtitle, after.Subtitle)
+	addMetadataStringChange("author", before.Author, after.Author)
+	addMetadataStringChange("supplierUniqueRecordId", before.SupplierUniqueRecordId, after.SupplierUniqueRecordId)
+	addMetadataStringChange("edition", before.Edition, after.Edition)
+	addMetadataStringChange("isbn", bibliographicItemValue(before.BibliographicItemId, "ISBN"), bibliographicItemValue(after.BibliographicItemId, "ISBN"))
+	addMetadataStringChange("issn", bibliographicItemValue(before.BibliographicItemId, "ISSN"), bibliographicItemValue(after.BibliographicItemId, "ISSN"))
+	return changes
+}
+
+func bibliographicItemValue(items []iso18626.BibliographicItemId, code string) string {
+	for _, id := range items {
+		if strings.TrimSpace(id.BibliographicItemIdentifierCode.Text) == code {
+			return id.BibliographicItemIdentifier
+		}
+	}
+	return ""
 }
 
 func deepCopyISO18626Request(request iso18626.Request) (iso18626.Request, error) {
@@ -638,11 +931,6 @@ func (a *PatronRequestActionService) rejectConditionBorrowingRequest(ctx common.
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
 }
 
-func (a *PatronRequestActionService) rejectRetryBorrowingRequest(pr pr_db.PatronRequest) actionExecutionResult {
-	result := events.EventResult{}
-	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
-}
-
 func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
 	retryPr := pr_db.PatronRequest{}
 	retryPr.Side = pr.Side
@@ -705,7 +993,7 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 
 func (a *PatronRequestActionService) sendNotificationBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
 	if !a.emailService.IsReadyToSend() {
-		return actionExecutionResult{status: events.EventStatusSuccess, result: &events.EventResult{CommonEventData: events.CommonEventData{Note: "email service is not ready to send"}}, pr: pr}
+		return logNotificationErrorAndReturnSuccess(ctx, pr, "email service is not ready to send", nil)
 	}
 	return a.sendEmailNotification(ctx, pr, params, pr.RequesterSymbol.String)
 }
@@ -739,10 +1027,12 @@ func (a *PatronRequestActionService) cannotSupplyLocallyBorrowingRequest(ctx com
 }
 
 func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
-	_, _, _, err := lmsAdapter.RequestItem(
-		pr.ID,
+	requestID := pr.ID
+	userID := pr.Patron.String
+	requestedItem, err := lmsAdapter.RequestItem(
+		requestID,
 		illRequest.BibliographicInfo.SupplierUniqueRecordId,
-		pr.Patron.String,
+		userID,
 		lmsAdapter.RequesterPickupLocation(),
 		lmsAdapter.ItemLocation(),
 	)
@@ -750,18 +1040,22 @@ func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.Exte
 		status, result := logActionErrorAndReturnResult(ctx, "LMS RequestItem failed", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-
-	completedStatus := iso18626.TypeStatusLoanCompleted
-	if illRequest.ServiceInfo != nil && illRequest.ServiceInfo.ServiceType == iso18626.TypeServiceTypeCopy {
-		completedStatus = iso18626.TypeStatusCopyCompleted
+	if requestedItem != nil && strings.TrimSpace(requestedItem.Barcode) == "" {
+		barcodeErr := errors.New("missing item barcode")
+		if cancelErr := lmsAdapter.CancelRequestItem(requestID, userID); cancelErr != nil {
+			barcodeErr = errors.Join(barcodeErr, fmt.Errorf("LMS CancelRequestItem compensation failed: %w", cancelErr))
+		}
+		status, result := logActionErrorAndReturnResult(ctx, "LMS RequestItem returned an empty barcode", barcodeErr)
+		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
+
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
 		iso18626.MessageInfo{
 			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
 			Note:             params.Note,
 		},
-		iso18626.StatusInfo{Status: completedStatus},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusLoanCompleted},
 		nil)
 	if result.OutgoingMessage.SupplyingAgencyMessage != nil {
 		setSupplierMessage(*result.OutgoingMessage.SupplyingAgencyMessage, &pr)
@@ -769,7 +1063,7 @@ func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.Exte
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
-func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) actionExecutionResult {
+func (a *PatronRequestActionService) validatePatronLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) actionExecutionResult {
 	institutionalPatron := lms.InstitutionalPatron(pr.RequesterSymbol.String)
 	_, err := lms.LookupUser(institutionalPatron)
 	if err != nil {
@@ -779,36 +1073,16 @@ func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedCo
 	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
 }
 
-func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
-	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
-	requestId := illRequest.Header.RequestingAgencyRequestId
-	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
-	pickupLocation := lmsAdapter.SupplierPickupLocation()
-	itemLocation := lmsAdapter.ItemLocation()
-	itemBarcode, callNumber, title, err := lmsAdapter.RequestItem(requestId, itemId, userId, pickupLocation, itemLocation)
+func (a *PatronRequestActionService) requestItemLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
+	pr, message, err := a.ensureLenderRequestItem(ctx, pr, lmsAdapter, illRequest)
 	if err != nil {
-		status, result := logActionErrorAndReturnResult(ctx, "LMS RequestItem failed", err)
+		status, result := logActionErrorAndReturnResult(ctx, message, err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	if title == "" {
-		title = illRequest.BibliographicInfo.Title
-	}
-	_, err = a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
-		ID:         uuid.NewString(),
-		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
-		PrID:       pr.ID,
-		ItemID:     getDbText(itemId),
-		Title:      getDbTextPtr(&title),
-		CallNumber: getDbTextPtr(&callNumber),
-		Barcode:    itemBarcode,
-	})
-	if err != nil {
-		if cancelErr := lmsAdapter.CancelRequestItem(requestId, userId); cancelErr != nil {
-			err = errors.Join(err, fmt.Errorf("LMS CancelRequestItem compensation failed: %w", cancelErr))
-		}
-		status, result := logActionErrorAndReturnResult(ctx, "failed to save item", err)
-		return actionExecutionResult{status: status, result: result, pr: pr}
-	}
+	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
+}
+
+func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
 		iso18626.MessageInfo{
@@ -823,27 +1097,204 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
-func (a *PatronRequestActionService) cancelLenderRequestItem(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) error {
+// ensureLenderRequestItem is idempotent so retrying request-item after its LMS
+// work was saved does not create a second reservation. CopyOrLoan defers this
+// work until ship, because choosing supply-document must not leave an LMS item
+// behind.
+func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (pr_db.PatronRequest, string, error) {
+	requestID := strings.TrimSpace(illRequest.Header.RequestingAgencyRequestId)
+	items := []pr_db.Item{}
+	if requestID != "" {
+		var err error
+		items, err = a.prRepo.GetItemsByPrId(ctx, pr.ID)
+		if err != nil {
+			return pr, "failed to get existing items", err
+		}
+		pr.Items = itemsToPrItems(items)
+		for _, item := range items {
+			if item.LmsRequestID.Valid && strings.TrimSpace(item.LmsRequestID.String) == requestID {
+				return pr, "", nil
+			}
+		}
+	}
+	itemID := illRequest.BibliographicInfo.SupplierUniqueRecordId
+	userID := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
+	response, err := lmsAdapter.RequestItem(
+		requestID,
+		itemID,
+		userID,
+		lmsAdapter.SupplierPickupLocation(),
+		lmsAdapter.ItemLocation(),
+	)
+	if err != nil {
+		return pr, "LMS RequestItem failed", err
+	}
+	if response == nil {
+		return pr, "", nil
+	}
+	barcode := strings.TrimSpace(response.Barcode)
+	if barcode == "" {
+		barcodeErr := errors.New("missing item barcode")
+		if cancelErr := lmsAdapter.CancelRequestItem(requestID, userID); cancelErr != nil {
+			barcodeErr = errors.Join(barcodeErr, fmt.Errorf("LMS CancelRequestItem compensation failed: %w", cancelErr))
+		}
+		return pr, "LMS RequestItem returned an empty barcode", barcodeErr
+	}
+	for _, existingItem := range items {
+		if strings.TrimSpace(existingItem.Barcode) == barcode {
+			duplicateErr := errors.New("item barcode is already attached to the request")
+			if cancelErr := lmsAdapter.CancelRequestItem(requestID, userID); cancelErr != nil {
+				duplicateErr = errors.Join(duplicateErr, fmt.Errorf("LMS CancelRequestItem compensation failed: %w", cancelErr))
+			}
+			return pr, "LMS RequestItem returned a duplicate barcode", duplicateErr
+		}
+	}
+	title := response.Title
+	if title == "" {
+		title = illRequest.BibliographicInfo.Title
+	}
+	callNumber := response.CallNumber
+	item, err := a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
+		ID:           uuid.NewString(),
+		CreatedAt:    pgtype.Timestamp{Valid: true, Time: time.Now()},
+		PrID:         pr.ID,
+		ItemID:       getDbText(itemID),
+		LmsRequestID: getDbText(requestID),
+		Title:        getDbTextPtr(&title),
+		CallNumber:   getDbTextPtr(&callNumber),
+		Barcode:      barcode,
+	})
+	if err != nil {
+		if cancelErr := lmsAdapter.CancelRequestItem(requestID, userID); cancelErr != nil {
+			err = errors.Join(err, fmt.Errorf("LMS CancelRequestItem compensation failed: %w", cancelErr))
+		}
+		return pr, "failed to save item", err
+	}
+	pr.Items = append(pr.Items, itemToPrItem(item))
+	return pr, "", nil
+}
+
+func (a *PatronRequestActionService) addItemLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
+	barcode := strings.TrimSpace(params.Barcode)
+	if barcode == "" {
+		status, result := logActionErrorAndReturnResult(ctx, "barcode is required", nil)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to get existing items", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	for _, item := range items {
+		if strings.TrimSpace(item.Barcode) == barcode {
+			status, result := logActionErrorAndReturnResult(ctx, "item barcode is already attached to the request", nil)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+	}
+	title := strings.TrimSpace(params.Title)
+	if title == "" {
+		title = pr.IllRequest.BibliographicInfo.Title
+	}
+	callNumber := strings.TrimSpace(params.CallNumber)
+	itemID := strings.TrimSpace(params.ItemID)
+	item, err := a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
+		ID:         uuid.NewString(),
+		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
+		PrID:       pr.ID,
+		ItemID:     getDbTextPtr(&itemID),
+		Title:      getDbTextPtr(&title),
+		CallNumber: getDbTextPtr(&callNumber),
+		Barcode:    barcode,
+	})
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to save item", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	pr.Items = append(itemsToPrItems(items), itemToPrItem(item))
+	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
+}
+
+func (a *PatronRequestActionService) removeItemLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams, lmsAdapter lms.LmsAdapter) actionExecutionResult {
+	barcode := strings.TrimSpace(params.Barcode)
+	if barcode == "" {
+		status, result := logActionErrorAndReturnResult(ctx, "barcode is required", nil)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to get existing items", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	var matchedItems []pr_db.Item
+	for _, item := range items {
+		if strings.TrimSpace(item.Barcode) == barcode {
+			matchedItems = append(matchedItems, item)
+		}
+	}
+	if len(matchedItems) == 0 {
+		status, result := logActionErrorAndReturnResult(ctx, "item barcode is not attached to the request", nil)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	if len(matchedItems) > 1 {
+		status, result := logActionErrorAndReturnResult(ctx, "multiple items with the same barcode are attached to the request", nil)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	item := matchedItems[0]
+	if item.LmsRequestID.Valid && strings.TrimSpace(item.LmsRequestID.String) != "" {
+		if !pr.RequesterSymbol.Valid || strings.TrimSpace(pr.RequesterSymbol.String) == "" {
+			status, result := logActionErrorAndReturnResult(ctx, "invalid requester symbol", nil)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		userID := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
+		if err := lmsAdapter.CancelRequestItem(strings.TrimSpace(item.LmsRequestID.String), userID); err != nil {
+			status, result := logActionErrorAndReturnResult(ctx, "LMS CancelRequestItem failed", err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+	}
+	if err := a.prRepo.DeleteItemById(ctx, item.ID); err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to delete item", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	remainingItems := make([]pr_db.Item, 0, len(items)-1)
+	for _, existingItem := range items {
+		if existingItem.ID != item.ID {
+			remainingItems = append(remainingItems, existingItem)
+		}
+	}
+	pr.Items = itemsToPrItems(remainingItems)
+	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
+}
+
+func (a *PatronRequestActionService) cancelLenderRequestItems(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter) error {
 	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get items: %w", err)
 	}
-	if len(items) == 0 {
+	requestIDs := make(map[string]struct{})
+	for _, item := range items {
+		requestID := strings.TrimSpace(item.LmsRequestID.String)
+		if item.LmsRequestID.Valid && requestID != "" {
+			requestIDs[requestID] = struct{}{}
+		}
+	}
+	if len(requestIDs) == 0 {
 		return nil
 	}
-	requestId := illRequest.Header.RequestingAgencyRequestId
-	if requestId == "" {
-		return errors.New("missing RequestingAgencyRequestId for LMS CancelRequestItem")
-	}
-	if !pr.RequesterSymbol.Valid || pr.RequesterSymbol.String == "" {
+	if !pr.RequesterSymbol.Valid || strings.TrimSpace(pr.RequesterSymbol.String) == "" {
 		return errors.New("invalid requester symbol")
 	}
-	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
-	return lmsAdapter.CancelRequestItem(requestId, userId)
+	userID := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
+	var cancelErrors []error
+	for requestID := range requestIDs {
+		if err := lmsAdapter.CancelRequestItem(requestID, userID); err != nil {
+			cancelErrors = append(cancelErrors, fmt.Errorf("cancel LMS request %s: %w", requestID, err))
+		}
+	}
+	return errors.Join(cancelErrors...)
 }
 
 func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
-	if err := a.cancelLenderRequestItem(ctx, pr, lmsAdapter, illRequest); err != nil {
+	if err := a.cancelLenderRequestItems(ctx, pr, lmsAdapter); err != nil {
 		status, result := logActionErrorAndReturnResult(ctx, "LMS CancelRequestItem failed", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
@@ -921,7 +1372,15 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 }
 
 func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
-	requestId := illRequest.Header.RequestingAgencyRequestId
+	if illRequest.ServiceInfo != nil && illRequest.ServiceInfo.ServiceType == iso18626.TypeServiceTypeCopyOrLoan {
+		var message string
+		var err error
+		pr, message, err = a.ensureLenderRequestItem(ctx, pr, lmsAdapter, illRequest)
+		if err != nil {
+			status, result := logActionErrorAndReturnResult(ctx, message, err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+	}
 	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
 	externalReferenceValue := ""
 
@@ -932,6 +1391,10 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 	}
 	for i := range items {
 		item := &items[i]
+		requestId := ""
+		if item.LmsRequestID.Valid {
+			requestId = item.LmsRequestID.String
+		}
 		title, err := lmsAdapter.CheckOutItem(requestId, item.Barcode, userId, externalReferenceValue)
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
@@ -940,13 +1403,14 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 		if title != "" {
 			item.Title = getDbText(title)
 			_, err = a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
-				ID:         item.ID,
-				CreatedAt:  item.CreatedAt,
-				PrID:       item.PrID,
-				ItemID:     item.ItemID,
-				Title:      item.Title,
-				CallNumber: item.CallNumber,
-				Barcode:    item.Barcode,
+				ID:           item.ID,
+				CreatedAt:    item.CreatedAt,
+				PrID:         item.PrID,
+				ItemID:       item.ItemID,
+				LmsRequestID: item.LmsRequestID,
+				Title:        item.Title,
+				CallNumber:   item.CallNumber,
+				Barcode:      item.Barcode,
 			})
 			if err != nil {
 				status, result := logActionErrorAndReturnResult(ctx, "failed to save item", err)
@@ -954,6 +1418,7 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 			}
 		}
 	}
+	pr.Items = itemsToPrItems(items)
 	var note string
 	if params.Note == "" {
 		note = encodeItemsNote(items)
@@ -974,6 +1439,45 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
+func (a *PatronRequestActionService) supplyDocumentRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
+	deliveryURL, err := normalizeDeliveryURL(params.DeliveryURL)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, err.Error(), err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+
+	result := events.EventResult{}
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
+		iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+			Note:             params.Note,
+		},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusCopyCompleted},
+		&iso18626.DeliveryInfo{
+			ItemId: deliveryURL,
+			SentVia: &iso18626.TypeSchemeValuePair{
+				Text: string(iso18626.SentViaUrl),
+			},
+		})
+	if result.OutgoingMessage.SupplyingAgencyMessage != nil {
+		setSupplierMessage(*result.OutgoingMessage.SupplyingAgencyMessage, &pr)
+	}
+	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
+}
+
+func normalizeDeliveryURL(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", errors.New("deliveryUrl is required")
+	}
+	parsed, err := url.ParseRequestURI(value)
+	if err != nil || parsed.Host == "" ||
+		(!strings.EqualFold(parsed.Scheme, "http") && !strings.EqualFold(parsed.Scheme, "https")) {
+		return "", errors.New("deliveryUrl must be an absolute HTTP(S) URL")
+	}
+	return value, nil
+}
+
 func encodeItemsNote(items []pr_db.Item) string {
 	var list [][]string
 	for _, item := range items {
@@ -988,6 +1492,37 @@ func encodeItemsNote(items []pr_db.Item) string {
 		list = append(list, []string{item.Barcode, callnumber, title})
 	}
 	return common.PackItemsNote(list)
+}
+
+func itemToPrItem(item pr_db.Item) pr_db.PrItem {
+	var callNumber *string
+	if item.CallNumber.Valid {
+		callNumber = &item.CallNumber.String
+	}
+	var title *string
+	if item.Title.Valid {
+		title = &item.Title.String
+	}
+	var itemID *string
+	if item.ItemID.Valid {
+		itemID = &item.ItemID.String
+	}
+	return pr_db.PrItem{
+		ID:         item.ID,
+		Barcode:    item.Barcode,
+		CallNumber: callNumber,
+		Title:      title,
+		ItemID:     itemID,
+		CreatedAt:  item.CreatedAt.Time,
+	}
+}
+
+func itemsToPrItems(items []pr_db.Item) []pr_db.PrItem {
+	result := make([]pr_db.PrItem, 0, len(items))
+	for _, item := range items {
+		result = append(result, itemToPrItem(item))
+	}
+	return result
 }
 
 func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter) actionExecutionResult {
@@ -1027,7 +1562,7 @@ func (a *PatronRequestActionService) rejectCancelLenderRequest(ctx common.Extend
 }
 
 func (a *PatronRequestActionService) acceptCancelLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
-	if err := a.cancelLenderRequestItem(ctx, pr, lmsAdapter, illRequest); err != nil {
+	if err := a.cancelLenderRequestItems(ctx, pr, lmsAdapter); err != nil {
 		status, result := logActionErrorAndReturnResult(ctx, "LMS CancelRequestItem failed", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
@@ -1061,7 +1596,7 @@ func (a *PatronRequestActionService) askRetryLenderRequest(ctx common.ExtendedCo
 		status, result := logActionErrorAndReturnResult(ctx, fmt.Sprintf("unsupported reasonRetry %q for ask-retry action (supported: %q)", params.ReasonRetry, iso18626.ReasonRetryNotFoundAsCited), nil)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	if err := a.cancelLenderRequestItem(ctx, pr, lmsAdapter, illRequest); err != nil {
+	if err := a.cancelLenderRequestItems(ctx, pr, lmsAdapter); err != nil {
 		status, result := logActionErrorAndReturnResult(ctx, "LMS CancelRequestItem failed", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
@@ -1083,25 +1618,29 @@ func (a *PatronRequestActionService) askRetryLenderRequest(ctx common.ExtendedCo
 
 func (a *PatronRequestActionService) sendNotificationLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
 	if !a.emailService.IsReadyToSend() {
-		return actionExecutionResult{status: events.EventStatusSuccess, result: &events.EventResult{CommonEventData: events.CommonEventData{Note: "email service is not ready to send"}}, pr: pr}
+		return logNotificationErrorAndReturnSuccess(ctx, pr, "email service is not ready to send", nil)
 	}
 	return a.sendEmailNotification(ctx, pr, params, pr.SupplierSymbol.String)
 }
 
-func logErrorAndReturnActionExecutionResult(ctx common.ExtendedContext, pr pr_db.PatronRequest, msg string, err error) actionExecutionResult {
-	status, result := logActionErrorAndReturnResult(ctx, msg, err)
-	return actionExecutionResult{status: status, result: result, pr: pr}
+func logNotificationErrorAndReturnSuccess(ctx common.ExtendedContext, pr pr_db.PatronRequest, msg string, err error) actionExecutionResult {
+	ctx.Logger().Error(msg, "error", err)
+	return actionExecutionResult{
+		status: events.EventStatusSuccess,
+		result: &events.EventResult{CommonEventData: events.CommonEventData{Note: msg}},
+		pr:     pr,
+	}
 }
 
 func (a *PatronRequestActionService) sendEmailNotification(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams, symbol string) actionExecutionResult {
 	result := events.EventResult{}
 	if params.AutoActionParams != nil && params.AutoActionParams.SendTo != nil && len(*params.AutoActionParams.SendTo) > 0 {
 		if params.AutoActionParams.TemplateLabel == nil {
-			return logErrorAndReturnActionExecutionResult(ctx, pr, "template label is not set", nil)
+			return logNotificationErrorAndReturnSuccess(ctx, pr, "template label is not set", nil)
 		}
 		from, to, err := a.getDirectoryEmailData(ctx, symbol, slices.Contains(*params.AutoActionParams.SendTo, proapi.ModelActionParamsSendToStaff))
 		if err != nil {
-			return logErrorAndReturnActionExecutionResult(ctx, pr, "error getting directory email data", err)
+			return logNotificationErrorAndReturnSuccess(ctx, pr, "error getting directory email data", err)
 		}
 		if slices.Contains(*params.AutoActionParams.SendTo, proapi.ModelActionParamsSendToPatron) {
 			recipients := patronEmail(pr)
@@ -1110,7 +1649,7 @@ func (a *PatronRequestActionService) sendEmailNotification(ctx common.ExtendedCo
 			} else {
 				sendErr := a.createAndSendEmail(ctx, symbol, from, recipients, *params.AutoActionParams.TemplateLabel, proapi.ModelActionParamsSendToPatron)
 				if sendErr != nil {
-					return logErrorAndReturnActionExecutionResult(ctx, pr, "error sending email to patron", sendErr)
+					return logNotificationErrorAndReturnSuccess(ctx, pr, "error sending email to patron", sendErr)
 				}
 				result.Note = "patron email sent successfully"
 			}
@@ -1130,7 +1669,7 @@ func (a *PatronRequestActionService) sendEmailNotification(ctx common.ExtendedCo
 			} else {
 				sendErr := a.createAndSendEmail(ctx, symbol, from, recipients, *params.AutoActionParams.TemplateLabel, proapi.ModelActionParamsSendToStaff)
 				if sendErr != nil {
-					return logErrorAndReturnActionExecutionResult(ctx, pr, "error sending email to staff", sendErr)
+					return logNotificationErrorAndReturnSuccess(ctx, pr, "error sending email to staff", sendErr)
 				}
 				result.Note = "staff email sent successfully"
 			}

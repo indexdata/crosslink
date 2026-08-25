@@ -1,7 +1,6 @@
 package catalog
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -108,7 +107,7 @@ func (s *QueryBuilderGen) Build(params LookupParams) (cql []string, pqf []string
 				allowedLookupIdentifiers = append(allowedLookupIdentifiers, pm.name)
 			}
 		}
-		return nil, nil, errors.New("missing lookup parameters. Provide at least one of: " + strings.Join(allowedLookupIdentifiers, ", "))
+		return nil, nil, newMissingLookupParametersError("missing lookup parameters. Provide at least one of: " + strings.Join(allowedLookupIdentifiers, ", "))
 	}
 	return cqlList, pqfList, nil
 }

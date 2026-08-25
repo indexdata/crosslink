@@ -98,8 +98,25 @@ func TestSendHttpPost(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestGetPeerShimUsesDirectoryConfiguration(t *testing.T) {
+	enabled := true
+	separator := " | "
+	peer := &ill_db.Peer{
+		Vendor: string(dirapi.ReShare),
+		CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{
+			UseOfferedCosts:    &enabled,
+			NoteFieldSeparator: &separator,
+		}},
+	}
+
+	configuredShim := getPeerShim(peer).(*shim.Iso18626ReShareShim)
+
+	assert.True(t, configuredShim.UseOfferedCosts)
+	assert.Equal(t, separator, configuredShim.NoteFieldSeparator)
+}
+
 func TestGetPeerNameAndAddress(t *testing.T) {
-	jsonString := "{\"id\":\"758f6cc5-0a5a-5d34-922a-8e981d7902f5\",\"name\":\"ACTLegislativeAssemblyLibrary\",\"description\":\"act\",\"type\":\"institution\",\"fromEmail\":\"LALibrary@parliament.act.gov.au\",\"symbols\":[{\"id\":\"f4ea1bf8-8278-5c0f-8e0f-9db9b35fa3cf\",\"symbol\":\"AU-ACT\",\"authority\":\"ISIL\"}],\"endpoints\":[{\"id\":\"e7c5c06b-d1ce-5294-a07c-ae13522ed0e3\",\"entry\":\"758f6cc5-0a5a-5d34-922a-8e981d7902f5\",\"name\":\"ACTISO18626Service\",\"type\":\"ISO18626\",\"address\":\"https://act-okapi.au.reshare.indexdata.com/_/invoke/tenant/act/rs/externalApi/iso18626\"}],\"networks\":[{\"id\":\"b35cf98c-2341-5f64-8a7c-a0e6343413ff\",\"name\":\"NSW&ACTGovt&Arts\",\"consortium\":\"d5ab4617-d503-588e-802c-df8d25bb411f\",\"priority\":1}],\"tiers\":[{\"id\":\"6bb0026f-8127-528f-bb39-30d8d90e47bd\",\"name\":\"ReciprocalPeertoPeer-CoreLoan\",\"consortium\":\"d5ab4617-d503-588e-802c-df8d25bb411f\",\"type\":\"Loan\",\"level\":\"Standard\",\"cost\":0.0}],\"addresses\":[{\"id\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"entry\":\"758f6cc5-0a5a-5d34-922a-8e981d7902f5\",\"type\":\"Shipping\",\"addressComponents\":[{\"id\":\"06f2dbed-6e86-5627-9305-1e0dfc773521\",\"address\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"type\":\"Thoroughfare\",\"value\":\"196LondonCircuit\"},{\"id\":\"e69b518d-1b03-528e-a1fb-8dc92385aff5\",\"address\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"type\":\"Locality\",\"value\":\"Canberra\"},{\"id\":\"8a585d89-f37d-5827-bfac-e7cfb3cdbbb5\",\"address\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"type\":\"AdministrativeArea\",\"value\":\"ACT\"},{\"id\":\"b7883220-3110-57c0-9895-61abbbe0d830\",\"address\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"type\":\"PostalCode\",\"value\":\"2601\"},{\"id\":\"af5b9560-4562-52a8-bdfc-100191a712ca\",\"address\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"type\":\"CountryCode\",\"value\":\"AUS\"}]}]}"
+	jsonString := "{\"id\":\"758f6cc5-0a5a-5d34-922a-8e981d7902f5\",\"name\":\"ACTLegislativeAssemblyLibrary\",\"description\":\"act\",\"type\":\"institution\",\"email\":\"LALibrary@parliament.act.gov.au\",\"fromEmail\":\"LALibrary@parliament.act.gov.au\",\"symbols\":[{\"id\":\"f4ea1bf8-8278-5c0f-8e0f-9db9b35fa3cf\",\"symbol\":\"AU-ACT\",\"authority\":\"ISIL\"}],\"endpoints\":[{\"id\":\"e7c5c06b-d1ce-5294-a07c-ae13522ed0e3\",\"entry\":\"758f6cc5-0a5a-5d34-922a-8e981d7902f5\",\"name\":\"ACTISO18626Service\",\"type\":\"ISO18626\",\"address\":\"https://act-okapi.au.reshare.indexdata.com/_/invoke/tenant/act/rs/externalApi/iso18626\"}],\"networks\":[{\"id\":\"b35cf98c-2341-5f64-8a7c-a0e6343413ff\",\"name\":\"NSW&ACTGovt&Arts\",\"consortium\":\"d5ab4617-d503-588e-802c-df8d25bb411f\",\"priority\":1}],\"tiers\":[{\"id\":\"6bb0026f-8127-528f-bb39-30d8d90e47bd\",\"name\":\"ReciprocalPeertoPeer-CoreLoan\",\"consortium\":\"d5ab4617-d503-588e-802c-df8d25bb411f\",\"type\":\"Loan\",\"level\":\"Standard\",\"cost\":0.0}],\"addresses\":[{\"id\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"entry\":\"758f6cc5-0a5a-5d34-922a-8e981d7902f5\",\"type\":\"Shipping\",\"addressComponents\":[{\"id\":\"06f2dbed-6e86-5627-9305-1e0dfc773521\",\"address\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"type\":\"Thoroughfare\",\"value\":\"196LondonCircuit\"},{\"id\":\"e69b518d-1b03-528e-a1fb-8dc92385aff5\",\"address\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"type\":\"Locality\",\"value\":\"Canberra\"},{\"id\":\"8a585d89-f37d-5827-bfac-e7cfb3cdbbb5\",\"address\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"type\":\"AdministrativeArea\",\"value\":\"ACT\"},{\"id\":\"b7883220-3110-57c0-9895-61abbbe0d830\",\"address\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"type\":\"PostalCode\",\"value\":\"2601\"},{\"id\":\"af5b9560-4562-52a8-bdfc-100191a712ca\",\"address\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"type\":\"CountryCode\",\"value\":\"AUS\"}]}]}"
 	var data dirapi.Entry
 	err := json.Unmarshal([]byte(jsonString), &data)
 	assert.Nil(t, err)
@@ -749,6 +766,38 @@ func TestBuildSupplyingAgencyMessage_SupplierAndVendorNoteForCrossLinkToAlma(t *
 	assert.Equal(t, "Vendor: Alma, Supplier: sup1", message.MessageInfo.Note)
 }
 
+func TestBuildSupplyingAgencyMessageUsesRequesterAndSupplierIllConfig(t *testing.T) {
+	disabled := false
+	separator := " | "
+	event := createSupplyingAgencyMessageEvent(true)
+	event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo.Note = "original"
+	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
+	supPeer := &ill_db.Peer{
+		Name:   "isil:sup1",
+		Vendor: string(dirapi.Alma),
+		CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{
+			IncludeReturnInfo: &disabled,
+		}},
+	}
+	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeOpaque)
+	trCtx.requester.Vendor = string(dirapi.CrossLink)
+	trCtx.requester.CustomData.IllConfig = &dirapi.IllConfig{
+		IncludeVendorNote:  &disabled,
+		NoteFieldSeparator: &separator,
+	}
+	msgTarget := messageTarget{
+		status:            iso18626.TypeStatusLoaned,
+		brokerInfoMessage: true,
+		supplier:          sup,
+		peer:              supPeer,
+	}
+
+	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
+
+	assert.Nil(t, message.ReturnInfo)
+	assert.Equal(t, "Supplier: sup1 | original", message.MessageInfo.Note)
+}
+
 func TestBuildSupplyingAgencyMessage_NoSupplierNoteForCrossLinkToCrossLink(t *testing.T) {
 	event := createSupplyingAgencyMessageEvent(true)
 	event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo.Note = "Original note"
@@ -802,6 +851,24 @@ func TestCreateRequestMessage(t *testing.T) {
 	assert.Equal(t, "id1", message.Request.BibliographicInfo.SupplierUniqueRecordId)
 	assert.Equal(t, "#RETURN_TO#\nisil:sup1 (isil:sup1)\n#RT_END#\n", message.Request.SupplierInfo[0].SupplierDescription)
 	assert.Equal(t, "Requester (ISIL:REQ)", message.Request.RequestingAgencyInfo.Name)
+}
+
+func TestCreateRequestMessageUsesDirectoryInfoFlags(t *testing.T) {
+	disabled := false
+	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1", LocalID: getPgText("id1")}
+	supPeer := &ill_db.Peer{
+		Name: "isil:sup1",
+		CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{
+			IncludeSupplierInfo: &disabled,
+		}},
+	}
+	trCtx := createTransactionContext(events.Event{}, sup, supPeer, common.BrokerModeTransparent)
+	trCtx.requester.CustomData.IllConfig = &dirapi.IllConfig{IncludeRequestingAgencyInfo: &disabled}
+
+	message, _ := createRequestMessage(trCtx)
+
+	assert.Empty(t, message.Request.SupplierInfo)
+	assert.Nil(t, message.Request.RequestingAgencyInfo)
 }
 
 func TestCreateRequestingAgencyMessage(t *testing.T) {
@@ -986,4 +1053,16 @@ func (r *MockPrRepo) GetPatronRequestById(ctx common.ExtendedContext, id string)
 
 func (r *MockPrRepo) GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id string, side pr_db.PatronRequestSide) (pr_db.PatronRequest, error) {
 	return pr_db.PatronRequest{}, errors.New("searching pr with id=" + id)
+}
+
+func TestGetPeerInfoUsesContactEmail(t *testing.T) {
+	contactEmail := "contact@example.org"
+	fromEmail := "sender@example.org"
+	peer := &ill_db.Peer{CustomData: dirapi.Entry{
+		Email:     &contactEmail,
+		FromEmail: &fromEmail,
+	}}
+
+	_, _, _, electronicAddress := getPeerInfo(peer, "")
+	assert.Equal(t, contactEmail, electronicAddress.ElectronicAddressData)
 }

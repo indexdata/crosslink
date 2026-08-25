@@ -42,6 +42,15 @@
                 "version"
             ]
         },
+        "StateModelServiceType": {
+            "type": "string",
+            "description": "ISO 18626 service type used by state-model selection and applicability rules.",
+            "enum": [
+                "Copy",
+                "Loan",
+                "CopyOrLoan"
+            ]
+        },
         "StateModelSelector": {
             "type": "object",
             "additionalProperties": false,
@@ -53,17 +62,31 @@
                     "minItems": 1,
                     "uniqueItems": true,
                     "items": {
-                        "type": "string",
-                        "enum": [
-                            "Copy",
-                            "Loan",
-                            "CopyOrLoan"
-                        ]
+                        "$ref": "#/definitions/StateModelServiceType"
                     }
                 }
             },
             "required": [
                 "serviceType"
+            ]
+        },
+        "AppliesTo": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Criteria determining whether a state, action, or event applies to a request. When omitted, the element applies to all requests.",
+            "properties": {
+                "serviceTypes": {
+                    "type": "array",
+                    "description": "ISO 18626 service types for which this element applies.",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": {
+                        "$ref": "#/definitions/StateModelServiceType"
+                    }
+                }
+            },
+            "required": [
+                "serviceTypes"
             ]
         },
         "State": {
@@ -90,6 +113,9 @@
                         "SUPPLIER"
                     ]
                 },
+                "appliesTo": {
+                    "$ref": "#/definitions/AppliesTo"
+                },
                 "initial": {
                     "type": "boolean",
                     "description": "Indicates if the state is the initial state of the request",
@@ -97,7 +123,7 @@
                 },
                 "primaryAction": {
                     "type": "string",
-                    "description": "Indicates the primary action for the state, i.e., the most common or recommended action to be performed when in the state. The value must match the name of one of the actions defined for the state."
+                    "description": "Indicates the unconditional primary action for the state. The value must match the name of one of the actions defined for the state. Use primaryFor on individual actions when the primary action varies by service type."
                 },
                 "closingAction": {
                     "type": "string",
@@ -183,9 +209,20 @@
                     ],
                     "default": "manual"
                 },
+                "appliesTo": {
+                    "$ref": "#/definitions/AppliesTo"
+                },
+                "primaryFor": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/AppliesTo"
+                        }
+                    ],
+                    "description": "Makes this the primary action for the selected service types. At most one applicable action may be primary for a service type in a state."
+                },
                 "transitions": {
                     "type": "object",
-                    "description": "Action outcome to state transition mapping. When no transition is defined, the action is considered to be non-state-changing.",
+                    "description": "Action outcome to state transition mapping. When no transition is defined, the action is considered to be non-state-changing. A failure transition handles a persisted failure within an automatic action chain; an unbound failure propagates to the parent.",
                     "additionalProperties": false,
                     "properties": {
                         "success": {
@@ -194,7 +231,7 @@
                         },
                         "failure": {
                             "type": "string",
-                            "description": "Target state when the action fails."
+                            "description": "Target state when the action fails. Once persisted, this transition prevents the failure from propagating through an automatic action chain."
                         },
                         "review": {
                             "type": "string",
@@ -246,6 +283,9 @@
                 "desc": {
                     "type": "string",
                     "description": "Description of the event"
+                },
+                "appliesTo": {
+                    "$ref": "#/definitions/AppliesTo"
                 },
                 "transition": {
                     "type": "string",

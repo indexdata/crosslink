@@ -165,7 +165,7 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	w.Header().Set("Location", brokerapi.Link(r, brokerapi.Path("batch_actions", task.ID), nil))
+	w.Header().Set("Location", brokerapi.LinkAbs(r, brokerapi.Path("batch_actions", task.ID), nil))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(toBatchAction(r, task))

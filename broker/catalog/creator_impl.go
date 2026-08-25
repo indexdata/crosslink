@@ -32,7 +32,7 @@ func getMetadataParser(config *dirapi.MetadataParserConfig) (MetadataParser, err
 	if config.Marc21 != nil {
 		return NewMetadataParserMarc(*config.Marc21), nil
 	}
-	return nil, fmt.Errorf("holdingsConfig.metadataFormat must set marc21 (only marc21 is supported for now)")
+	return nil, fmt.Errorf("catalogConfig.metadataFormat must set marc21 (only marc21 is supported for now)")
 }
 
 func getHoldingsParser(config *dirapi.HoldingsParserConfig) (HoldingsParser, error) {
@@ -51,13 +51,15 @@ func getHoldingsParser(config *dirapi.HoldingsParserConfig) (HoldingsParser, err
 	if config.Marc21plus1 != nil {
 		return NewMarc21Plus1HoldingsParser(), nil
 	}
-	return nil, fmt.Errorf("holdingsConfig.holdingsFormat must set marc, opac, reservoir, or marc21plus1 properties")
+	return nil, fmt.Errorf("catalogConfig.holdingsFormat must set marc, opac, reservoir, or marc21plus1 properties")
 }
 
 func (c *LookupAdapterCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, error) {
 	entry := peer.CustomData
-	config := entry.HoldingsConfig
-	if config == nil {
+	config := entry.CatalogConfig
+	// CatalogConfig also contains settings unrelated to availability, such as
+	// metadataUpdateMode. Only an SRU or ZOOM definition enables the check.
+	if config == nil || (config.Sru == nil && config.Zoom == nil) {
 		return nil, nil // No lookup adapter for this peer
 	}
 	if c.mode == LookupAdapterMock {
@@ -91,5 +93,5 @@ func (c *LookupAdapterCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, 
 			return nil, fmt.Errorf("unsupported lookup adapter type: %s", c.mode)
 		}
 	}
-	return nil, fmt.Errorf("must specify either sru or zoom properties for lookup adapter type")
+	return nil, nil
 }

@@ -29,7 +29,7 @@ var Host = cmp.Or(os.Getenv("HOST"), "localhost")
 var Port = cmp.Or(os.Getenv("HTTP_PORT"), "8086")
 var ConnectionString = cmp.Or(os.Getenv("DATABASE_URL"), "postgresql://postgres:directory@localhost:54322/directory")
 var MigrationsFolder = "file://migrations"
-var BasePath = "/rsdir"
+var BasePath = "/directory"
 
 func httpLoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

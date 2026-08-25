@@ -24,7 +24,9 @@ const (
 
 const (
 	BorrowerStateNew              pr_db.PatronRequestState = "NEW"
+	BorrowerStateInvalidPatron    pr_db.PatronRequestState = "INVALID_PATRON"
 	BorrowerStateValidated        pr_db.PatronRequestState = "VALIDATED"
+	BorrowerStateMetadataUpdated  pr_db.PatronRequestState = "METADATA_UPDATED"
 	BorrowerStateNeedsReview      pr_db.PatronRequestState = "NEEDS_REVIEW"
 	BorrowerStateLocalSupply      pr_db.PatronRequestState = "LOCAL_SUPPLY"
 	BorrowerStateSent             pr_db.PatronRequestState = "SENT"
@@ -43,10 +45,13 @@ const (
 	BorrowerStateRetryPending     pr_db.PatronRequestState = "RETRY_PENDING"
 	BorrowerStateRetryAccepted    pr_db.PatronRequestState = "RETRY_ACCEPTED"
 	BorrowerStateRetryRejected    pr_db.PatronRequestState = "RETRY_REJECTED"
+	BorrowerStateDuplicate        pr_db.PatronRequestState = "DUPLICATE"
 	BorrowerStateManuallyClosed   pr_db.PatronRequestState = "MANUALLY_CLOSED"
 	BorrowerStateClosedDuplicate  pr_db.PatronRequestState = "CLOSED_DUPLICATE"
 	LenderStateNew                pr_db.PatronRequestState = "NEW"
 	LenderStateValidated          pr_db.PatronRequestState = "VALIDATED"
+	LenderStateItemPending        pr_db.PatronRequestState = "ITEM_PENDING"
+	LenderStateWillSupplyPending  pr_db.PatronRequestState = "WILL_SUPPLY_PENDING"
 	LenderStateWillSupply         pr_db.PatronRequestState = "WILL_SUPPLY"
 	LenderStateConditionPending   pr_db.PatronRequestState = "CONDITION_PENDING"
 	LenderStateConditionAccepted  pr_db.PatronRequestState = "CONDITION_ACCEPTED"
@@ -62,31 +67,40 @@ const (
 )
 
 const (
-	BorrowerActionValidate            pr_db.PatronRequestAction = "validate"
-	BorrowerActionSendRequest         pr_db.PatronRequestAction = "send-request"
-	BorrowerActionCancelRequest       pr_db.PatronRequestAction = "cancel-request"
-	BorrowerActionAcceptCondition     pr_db.PatronRequestAction = "accept-condition"
-	BorrowerActionRejectCondition     pr_db.PatronRequestAction = "reject-condition"
-	BorrowerActionReceive             pr_db.PatronRequestAction = "receive"
-	BorrowerActionCheckOut            pr_db.PatronRequestAction = "check-out"
-	BorrowerActionCheckIn             pr_db.PatronRequestAction = "check-in"
-	BorrowerActionShipReturn          pr_db.PatronRequestAction = "ship-return"
-	BorrowerActionAcceptRetry         pr_db.PatronRequestAction = "accept-retry"
-	BorrowerActionRejectRetry         pr_db.PatronRequestAction = "reject-retry"
-	BorrowerActionSendNotification    pr_db.PatronRequestAction = "send-notification"
-	BorrowerActionFillLocally         pr_db.PatronRequestAction = "fill-locally"
-	BorrowerActionCancelLocalSupply   pr_db.PatronRequestAction = "cancel-local-supply"
-	BorrowerActionCannotSupplyLocally pr_db.PatronRequestAction = "cannot-supply-locally"
-	LenderActionValidate              pr_db.PatronRequestAction = "validate"
-	LenderActionWillSupply            pr_db.PatronRequestAction = "will-supply"
-	LenderActionRejectCancel          pr_db.PatronRequestAction = "reject-cancel"
-	LenderActionCannotSupply          pr_db.PatronRequestAction = "cannot-supply"
-	LenderActionAddCondition          pr_db.PatronRequestAction = "add-condition"
-	LenderActionShip                  pr_db.PatronRequestAction = "ship"
-	LenderActionMarkReceived          pr_db.PatronRequestAction = "mark-received"
-	LenderActionAcceptCancel          pr_db.PatronRequestAction = "accept-cancel"
-	LenderActionAskRetry              pr_db.PatronRequestAction = "ask-retry"
-	LenderActionSendNotification      pr_db.PatronRequestAction = "send-notification"
+	BorrowerActionValidatePatron       pr_db.PatronRequestAction = "validate-patron"
+	BorrowerActionUpdateMetadata       pr_db.PatronRequestAction = "update-metadata"
+	BorrowerActionSendRequest          pr_db.PatronRequestAction = "send-request"
+	BorrowerActionCancelRequest        pr_db.PatronRequestAction = "cancel-request"
+	BorrowerActionAcceptCondition      pr_db.PatronRequestAction = "accept-condition"
+	BorrowerActionRejectCondition      pr_db.PatronRequestAction = "reject-condition"
+	BorrowerActionReceive              pr_db.PatronRequestAction = "receive"
+	BorrowerActionCheckOut             pr_db.PatronRequestAction = "check-out"
+	BorrowerActionCheckIn              pr_db.PatronRequestAction = "check-in"
+	BorrowerActionShipReturn           pr_db.PatronRequestAction = "ship-return"
+	BorrowerActionAcceptRetry          pr_db.PatronRequestAction = "accept-retry"
+	BorrowerActionRejectRetry          pr_db.PatronRequestAction = "reject-retry"
+	BorrowerActionSendNotification     pr_db.PatronRequestAction = "send-notification"
+	BorrowerActionFillLocally          pr_db.PatronRequestAction = "fill-locally"
+	BorrowerActionSupplyDocument       pr_db.PatronRequestAction = "supply-document"
+	BorrowerActionCancelLocalSupply    pr_db.PatronRequestAction = "cancel-local-supply"
+	BorrowerActionCannotSupplyLocally  pr_db.PatronRequestAction = "cannot-supply-locally"
+	BorrowerActionSkipPatronValidation pr_db.PatronRequestAction = "skip-patron-validation"
+	BorrowerActionSkipMetadataUpdate   pr_db.PatronRequestAction = "skip-metadata-update"
+	BorrowerActionCloseRequest         pr_db.PatronRequestAction = "close-request"
+	LenderActionValidatePatron         pr_db.PatronRequestAction = "validate-patron"
+	LenderActionRequestItem            pr_db.PatronRequestAction = "request-item"
+	LenderActionWillSupply             pr_db.PatronRequestAction = "will-supply"
+	LenderActionRejectCancel           pr_db.PatronRequestAction = "reject-cancel"
+	LenderActionCannotSupply           pr_db.PatronRequestAction = "cannot-supply"
+	LenderActionAddCondition           pr_db.PatronRequestAction = "add-condition"
+	LenderActionAddItem                pr_db.PatronRequestAction = "add-item"
+	LenderActionRemoveItem             pr_db.PatronRequestAction = "remove-item"
+	LenderActionShip                   pr_db.PatronRequestAction = "ship"
+	LenderActionSupplyDocument         pr_db.PatronRequestAction = "supply-document"
+	LenderActionMarkReceived           pr_db.PatronRequestAction = "mark-received"
+	LenderActionAcceptCancel           pr_db.PatronRequestAction = "accept-cancel"
+	LenderActionAskRetry               pr_db.PatronRequestAction = "ask-retry"
+	LenderActionSendNotification       pr_db.PatronRequestAction = "send-notification"
 
 	TerminateAction pr_db.PatronRequestAction = "terminate"
 )
@@ -115,7 +129,9 @@ const (
 func requesterBuiltInStates() []string {
 	return uniqueSorted([]string{
 		string(BorrowerStateNew),
+		string(BorrowerStateInvalidPatron),
 		string(BorrowerStateValidated),
+		string(BorrowerStateMetadataUpdated),
 		string(BorrowerStateNeedsReview),
 		string(BorrowerStateLocalSupply),
 		string(BorrowerStateSent),
@@ -134,6 +150,7 @@ func requesterBuiltInStates() []string {
 		string(BorrowerStateRetryAccepted),
 		string(BorrowerStateRetryRejected),
 		string(BorrowerStateRetryPending),
+		string(BorrowerStateDuplicate),
 		string(BorrowerStateManuallyClosed),
 		string(BorrowerStateClosedDuplicate),
 	})
@@ -143,6 +160,8 @@ func supplierBuiltInStates() []string {
 	return uniqueSorted([]string{
 		string(LenderStateNew),
 		string(LenderStateValidated),
+		string(LenderStateItemPending),
+		string(LenderStateWillSupplyPending),
 		string(LenderStateWillSupply),
 		string(LenderStateConditionPending),
 		string(LenderStateConditionAccepted),
@@ -159,9 +178,13 @@ func supplierBuiltInStates() []string {
 }
 
 func requesterBuiltInActions() []proapi.ActionCapability {
-	return []proapi.ActionCapability{
+	actions := []proapi.ActionCapability{
 		{
-			Name:       string(BorrowerActionValidate),
+			Name:       string(BorrowerActionValidatePatron),
+			Parameters: []string{},
+		},
+		{
+			Name:       string(BorrowerActionUpdateMetadata),
 			Parameters: []string{},
 		},
 		{
@@ -200,10 +223,7 @@ func requesterBuiltInActions() []proapi.ActionCapability {
 			Name:       string(BorrowerActionAcceptRetry),
 			Parameters: []string{},
 		},
-		{
-			Name:       string(BorrowerActionRejectRetry),
-			Parameters: []string{},
-		},
+		transitionActionCapability(BorrowerActionRejectRetry),
 		{
 			Name:       string(BorrowerActionSendNotification),
 			Parameters: []string{},
@@ -213,6 +233,13 @@ func requesterBuiltInActions() []proapi.ActionCapability {
 			Parameters: []string{},
 		},
 		{
+			Name: string(BorrowerActionSupplyDocument),
+			Parameters: []string{
+				"note",
+				"deliveryUrl",
+			},
+		},
+		{
 			Name:       string(BorrowerActionCancelLocalSupply),
 			Parameters: []string{},
 		},
@@ -220,13 +247,56 @@ func requesterBuiltInActions() []proapi.ActionCapability {
 			Name:       string(BorrowerActionCannotSupplyLocally),
 			Parameters: []string{},
 		},
+		transitionActionCapability(BorrowerActionSkipPatronValidation),
+		transitionActionCapability(BorrowerActionSkipMetadataUpdate),
+		transitionActionCapability(BorrowerActionCloseRequest),
 	}
+	return actions
+}
+
+func transitionActionCapability(name pr_db.PatronRequestAction) proapi.ActionCapability {
+	kind := proapi.Transition
+	return proapi.ActionCapability{
+		Name:       string(name),
+		Parameters: []string{},
+		Kind:       &kind,
+	}
+}
+
+func isTransitionCapability(capability proapi.ActionCapability) bool {
+	return capability.Kind != nil && *capability.Kind == proapi.Transition
+}
+
+var actionCapabilitiesBySide = map[pr_db.PatronRequestSide]map[pr_db.PatronRequestAction]proapi.ActionCapability{
+	SideBorrowing: indexActionCapabilities(requesterBuiltInActions()),
+	SideLending:   indexActionCapabilities(supplierBuiltInActions()),
+}
+
+func indexActionCapabilities(capabilities []proapi.ActionCapability) map[pr_db.PatronRequestAction]proapi.ActionCapability {
+	indexed := make(map[pr_db.PatronRequestAction]proapi.ActionCapability, len(capabilities))
+	for _, capability := range capabilities {
+		indexed[pr_db.PatronRequestAction(capability.Name)] = capability
+	}
+	return indexed
+}
+
+func getActionCapability(side pr_db.PatronRequestSide, action pr_db.PatronRequestAction) (proapi.ActionCapability, bool) {
+	capabilities, ok := actionCapabilitiesBySide[side]
+	if !ok {
+		return proapi.ActionCapability{}, false
+	}
+	capability, ok := capabilities[action]
+	return capability, ok
 }
 
 func supplierBuiltInActions() []proapi.ActionCapability {
 	return []proapi.ActionCapability{
 		{
-			Name:       string(LenderActionValidate),
+			Name:       string(LenderActionValidatePatron),
+			Parameters: []string{},
+		},
+		{
+			Name:       string(LenderActionRequestItem),
 			Parameters: []string{},
 		},
 		{
@@ -256,9 +326,31 @@ func supplierBuiltInActions() []proapi.ActionCapability {
 			},
 		},
 		{
+			Name: string(LenderActionAddItem),
+			Parameters: []string{
+				"barcode",
+				"callNumber",
+				"title",
+				"itemId",
+			},
+		},
+		{
+			Name: string(LenderActionRemoveItem),
+			Parameters: []string{
+				"barcode",
+			},
+		},
+		{
 			Name: string(LenderActionShip),
 			Parameters: []string{
 				"note",
+			},
+		},
+		{
+			Name: string(LenderActionSupplyDocument),
+			Parameters: []string{
+				"note",
+				"deliveryUrl",
 			},
 		},
 		{

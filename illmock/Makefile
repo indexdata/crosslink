@@ -63,6 +63,5 @@ clean:
 	$(GO) clean -cache
 	rm -f $(PROGRAMS)
 	rm -f $(COVERAGE)
-	rm -f $(COMMIT_ID)
 	rm -f README.html
 	rm -f $(OAPI_GEN)

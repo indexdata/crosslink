@@ -52,11 +52,16 @@ func Query(params ...string) url.Values {
 }
 
 func Link(r *http.Request, path string, query url.Values) string {
-	return link(r, withBasePath(r, path), query.Encode())
+	return link(withBasePath(r, path), query.Encode())
 }
 
 func LinkRel(r *http.Request, relPath string, urlValues url.Values) string {
-	return link(r, path(false, r.URL.Path, relPath), urlValues.Encode())
+	return link(path(false, r.URL.Path, relPath), urlValues.Encode())
+}
+
+// LinkAbs is the absolute form, for Location headers.
+func LinkAbs(r *http.Request, path string, query url.Values) string {
+	return getProto(r) + "://" + getHost(r) + link(withBasePath(r, path), query.Encode())
 }
 
 func hostOnly(host string) string {
@@ -111,13 +116,11 @@ func getProto(r *http.Request) string {
 	return proto
 }
 
-func link(r *http.Request, path string, query string) string {
+func link(path string, query string) string {
 	if query != "" {
-		path = path + "?" + query
+		return path + "?" + query
 	}
-	scheme := getProto(r)
-	host := getHost(r)
-	return scheme + "://" + host + path
+	return path
 }
 
 func CollectAboutData(fullCount int64, offset int32, limit int32, r *http.Request) oapi.About {

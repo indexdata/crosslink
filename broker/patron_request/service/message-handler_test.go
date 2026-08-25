@@ -10,6 +10,7 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/shim"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5"
@@ -21,7 +22,7 @@ import (
 func TestHandleMessageNoMessage(t *testing.T) {
 	handler := CreatePatronRequestMessageHandler(*new(pr_db.PrRepo), *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
 
-	mes, err := handler.HandleMessage(appCtx, nil)
+	mes, err := handler.HandleMessage(appCtx, nil, nil)
 
 	assert.Nil(t, mes)
 	assert.Equal(t, "cannot process nil message", err.Error())
@@ -39,7 +40,7 @@ func TestHandleMessageFetchPRError(t *testing.T) {
 			RequestingAgencyRequestId: patronRequestId,
 		},
 	}
-	mes, err := handler.HandleMessage(appCtx, message)
+	mes, err := handler.HandleMessage(appCtx, message, nil)
 
 	assert.Nil(t, mes)
 	assert.Equal(t, "db error", err.Error())
@@ -58,7 +59,7 @@ func TestHandleMessageFetchEventError(t *testing.T) {
 			RequestingAgencyRequestId: patronRequestId,
 		},
 	}
-	mes, err := handler.HandleMessage(appCtx, message)
+	mes, err := handler.HandleMessage(appCtx, message, nil)
 
 	assert.Nil(t, mes)
 	assert.Equal(t, "event bus error", err.Error())
@@ -87,7 +88,9 @@ func TestHandleMessageRequestCreatesTaskForCreatedPatronRequest(t *testing.T) {
 			RequestingAgencyRequestId: "req-id-1",
 		},
 	}
-	resp, err := handler.HandleMessage(appCtx, message)
+	patronPattern := "local-%v"
+	recipientPeer := &ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{SupplierPatronPattern: &patronPattern}}}
+	resp, err := handler.HandleMessage(appCtx, message, recipientPeer)
 
 	assert.NoError(t, err)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.RequestConfirmation.ConfirmationHeader.MessageStatus)
@@ -95,6 +98,7 @@ func TestHandleMessageRequestCreatesTaskForCreatedPatronRequest(t *testing.T) {
 	assert.False(t, resp.RequestConfirmation.ConfirmationHeader.Timestamp.IsZero())
 	assert.Len(t, mockEventBus.createdTaskData, 1)
 	assert.NotNil(t, mockEventBus.createdTaskData[0].IncomingMessage)
+	assert.Equal(t, "local-SUP1", mockPrRepo.createdPr.Patron.String)
 }
 
 func TestHandleMessageRequestCreatesTaskBeforeAutoActions(t *testing.T) {
@@ -124,7 +128,7 @@ func TestHandleMessageRequestCreatesTaskBeforeAutoActions(t *testing.T) {
 			RequestingAgencyRequestId: "req-id-1",
 		},
 	}
-	_, err := handler.HandleMessage(appCtx, message)
+	_, err := handler.HandleMessage(appCtx, message, nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, 1, mockAutoActionRunner.callCount)
@@ -167,7 +171,7 @@ func TestHandleMessageSupplyingAgencyCreatesTaskBeforeAutoActions(t *testing.T) 
 		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
 	}
-	resp, err := handler.HandleMessage(appCtx, message)
+	resp, err := handler.HandleMessage(appCtx, message, nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
@@ -210,7 +214,7 @@ func TestHandleMessageRequestingAgencyCreatesTaskBeforeAutoActions(t *testing.T)
 		},
 		Action: iso18626.TypeActionReceived,
 	}
-	resp, err := handler.HandleMessage(appCtx, message)
+	resp, err := handler.HandleMessage(appCtx, message, nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
@@ -244,7 +248,7 @@ func TestHandleMessageSupplyingAgencyTaskResultIncludesOutgoingAndNoErrorOnSucce
 		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
 	}
-	resp, err := handler.HandleMessage(appCtx, message)
+	resp, err := handler.HandleMessage(appCtx, message, nil)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -272,7 +276,7 @@ func TestHandleMessageRequestingAgencyTaskResultIncludesOutgoingAndErrorOnFailur
 			SupplyingAgencyRequestId: "lender-pr-id-2",
 		},
 	}
-	resp, err := handler.HandleMessage(appCtx, message)
+	resp, err := handler.HandleMessage(appCtx, message, nil)
 
 	assert.Error(t, err)
 	assert.NotNil(t, resp)
@@ -312,7 +316,7 @@ func TestHandleMessageDuplicateRequestCreatesTaskOnExistingPatronRequest(t *test
 			RequestingAgencyRequestId: "req-id-1",
 		},
 	}
-	resp, err := handler.HandleMessage(appCtx, message)
+	resp, err := handler.HandleMessage(appCtx, message, nil)
 
 	if assert.Error(t, err) {
 		assert.Equal(t, "duplicate request: there is already a request with this id req-id-1", err.Error())
@@ -351,7 +355,7 @@ func TestHandleMessageRequestTaskStatusUsesHandlerStatusWhenAutoActionFails(t *t
 			RequestingAgencyRequestId: "req-id-1",
 		},
 	}
-	_, err := handler.HandleMessage(appCtx, message)
+	_, err := handler.HandleMessage(appCtx, message, nil)
 
 	assert.Error(t, err)
 	if assert.NotEmpty(t, mockEventBus.processedTaskEvents) {
@@ -677,6 +681,39 @@ func TestHandleSupplyingAgencyMessageLoanCompleted(t *testing.T) {
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, BorrowerStateCompleted, mockPrRepo.savedPr.State)
 	assert.NoError(t, err)
+}
+
+func TestHandleSupplyingAgencyMessageCopyCompleted(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+	deliveryURL := "https://example.com/document/123"
+
+	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
+		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCopyCompleted},
+		DeliveryInfo: &iso18626.DeliveryInfo{
+			ItemId:  deliveryURL,
+			SentVia: &iso18626.TypeSchemeValuePair{Text: string(iso18626.SentViaUrl)},
+		},
+	}, pr_db.PatronRequest{
+		IllRequest: iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopy}},
+		State:      BorrowerStateWillSupply,
+		Side:       SideBorrowing,
+	})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.NoError(t, err)
+	assert.Equal(t, BorrowerStateCompleted, mockPrRepo.savedPr.State)
+	assert.True(t, mockPrRepo.savedPr.TerminalState)
+	if assert.NotNil(t, mockPrRepo.savedPr.IllResponse.DeliveryInfo) {
+		assert.Equal(t, deliveryURL, mockPrRepo.savedPr.IllResponse.DeliveryInfo.ItemId)
+	}
 }
 
 func TestHandleSupplyingAgencyMessageUnfilled(t *testing.T) {

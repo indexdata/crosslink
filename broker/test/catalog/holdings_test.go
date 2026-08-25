@@ -95,7 +95,7 @@ func TestMain(m *testing.M) {
 
 	// patch consortium peer with SRU server URL for zoom
 	entry := &directoryEntries[0]
-	entry.HoldingsConfig.Zoom.Address = sruServer.URL
+	entry.CatalogConfig.Zoom.Address = sruServer.URL
 
 	// MOCK_PEER_URL is only for DIRECTORY_ADAPTER=mock, so we have to patch all peers here
 	for _, entry := range directoryEntries {
@@ -110,7 +110,7 @@ func TestMain(m *testing.M) {
 	test.Expect(os.Setenv("PEER_URL", brokerUrl), "failed to set peer URL")
 	app.AVAILABILITY_ADAPTER = catalog.LookupAdapterZoom
 	app.DIRECTORY_ADAPTER = "api"
-	app.DIRECTORY_API_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/rsdir/entries"
+	app.DIRECTORY_API_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/directory/entries"
 	app.HOLDINGS_ADAPTER = "consortium"
 	app.CONSORTIUM_SYMBOL = "ISIL:GVIC"
 

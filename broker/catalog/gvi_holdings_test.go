@@ -397,7 +397,7 @@ func TestGviHoldings(t *testing.T) {
 	qtype := dirapi.Cql
 	peer := ill_db.Peer{
 		CustomData: dirapi.Entry{
-			HoldingsConfig: &dirapi.HoldingsConfig{
+			CatalogConfig: &dirapi.CatalogConfig{
 				Zoom: &dirapi.ZoomConfig{
 					Address: server.URL,
 					Options: &map[string]string{

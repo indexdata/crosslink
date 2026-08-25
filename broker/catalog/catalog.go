@@ -1,5 +1,27 @@
 package catalog
 
+import "errors"
+
+// ErrMissingLookupParameters identifies a lookup that cannot be performed
+// because none of the parameters supported by its query builder are present.
+var ErrMissingLookupParameters = errors.New("missing lookup parameters")
+
+type missingLookupParametersError struct {
+	message string
+}
+
+func (e *missingLookupParametersError) Error() string {
+	return e.message
+}
+
+func (e *missingLookupParametersError) Unwrap() error {
+	return ErrMissingLookupParameters
+}
+
+func newMissingLookupParametersError(message string) error {
+	return &missingLookupParametersError{message: message}
+}
+
 type LookupAdapter interface {
 	Lookup(params LookupParams) (LookupResult, error)
 }

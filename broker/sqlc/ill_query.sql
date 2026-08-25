@@ -145,6 +145,18 @@ WHERE ill_transaction_id = $1
   AND supplier_status = $2
 ORDER BY ordinal;
 
+-- name: UpdateLocatedSuppliersStatusByIllTransaction :exec
+UPDATE located_supplier
+SET supplier_status = sqlc.arg(supplier_status)
+WHERE ill_transaction_id = sqlc.arg(ill_transaction_id)
+  AND supplier_status IS DISTINCT FROM sqlc.arg(supplier_status);
+
+-- name: UpdateLocatedSuppliersStatusByIllTransactionAndCurrentStatus :exec
+UPDATE located_supplier
+SET supplier_status = sqlc.arg(new_status)
+WHERE ill_transaction_id = sqlc.arg(ill_transaction_id)
+  AND supplier_status = sqlc.arg(current_status);
+
 -- name: GetLocatedSupplierByPeerId :many
 SELECT sqlc.embed(located_supplier)
 FROM located_supplier

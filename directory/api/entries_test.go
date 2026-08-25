@@ -76,6 +76,19 @@ func TestHandleEntryCQL(t *testing.T) {
 		t.Errorf("Expected 2 arguments, got %d", len(args))
 	}
 
+	// Test parent symbol search
+	res, err = handleEntryCQL(`parentSymbol any "ISIL:PARENT PARENT2"`, 0)
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+	if !strings.Contains(res.GetWhereClause(), "entry_symbol.owner = e.parent") {
+		t.Errorf("Expected parentSymbol to match symbols owned by the parent: %s", res.GetWhereClause())
+	}
+	args = res.GetQueryArguments()
+	if len(args) != 1 {
+		t.Errorf("Expected 1 parentSymbol argument, got %d", len(args))
+	}
+
 	// Test invalid CQL
 	_, err = handleEntryCQL("invalid cql query (((", 0)
 	if err == nil {

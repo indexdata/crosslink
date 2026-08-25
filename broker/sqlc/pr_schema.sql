@@ -24,7 +24,7 @@ CREATE TABLE patron_request
     next_req_id         VARCHAR,
     prev_req_id         VARCHAR,
     retry_bib_info       JSONB,
-    state_model         VARCHAR NOT NULL DEFAULT 'returnables'
+    state_model         VARCHAR NOT NULL DEFAULT 'default'
 );
 
 CREATE OR REPLACE FUNCTION get_next_hrid(prefix VARCHAR) RETURNS VARCHAR AS $$
@@ -36,13 +36,14 @@ $$ LANGUAGE plpgsql;
 
 CREATE TABLE item
 (
-    id          VARCHAR PRIMARY KEY,
-    pr_id       VARCHAR   NOT NULL REFERENCES patron_request (id) ON DELETE CASCADE,
-    barcode     VARCHAR   NOT NULL,
-    call_number VARCHAR,
-    title       VARCHAR,
-    item_id     VARCHAR,
-    created_at  TIMESTAMP NOT NULL DEFAULT now()
+    id             VARCHAR PRIMARY KEY,
+    pr_id          VARCHAR   NOT NULL REFERENCES patron_request (id) ON DELETE CASCADE,
+    barcode        VARCHAR   NOT NULL,
+    call_number    VARCHAR,
+    title          VARCHAR,
+    item_id        VARCHAR,
+    lms_request_id VARCHAR,
+    created_at     TIMESTAMP NOT NULL DEFAULT now()
 );
 
 CREATE TABLE notification

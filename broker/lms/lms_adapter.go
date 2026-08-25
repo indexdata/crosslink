@@ -2,6 +2,15 @@ package lms
 
 import "github.com/indexdata/crosslink/broker/ncipclient"
 
+// RequestedItem contains data returned by a performed LMS RequestItem
+// call. A nil response with a nil error means the adapter intentionally skipped
+// the operation, for example because RequestItem is disabled or handled manually.
+type RequestedItem struct {
+	Barcode    string
+	CallNumber string
+	Title      string
+}
+
 // LmsAdapter is an interface defining methods for interacting with a Library Management System (LMS)
 // https://github.com/openlibraryenvironment/mod-rs/blob/master/service/src/main/groovy/org/olf/rs/lms/HostLMSActions.groovy
 type LmsAdapter interface {
@@ -29,7 +38,7 @@ type LmsAdapter interface {
 		userId string,
 		pickupLocation string,
 		itemLocation string,
-	) (barcode string, callNumber string, title string, err error)
+	) (*RequestedItem, error)
 
 	CancelRequestItem(requestId string, userId string) error
 

@@ -165,7 +165,13 @@ func (l *LmsAdapterNcip) RequestItem(
 	userId string,
 	pickupLocation string,
 	itemLocation string,
-) (string, string, string, error) {
+) (*RequestedItem, error) {
+	if l.config.RequestItemEnabled != nil && !*l.config.RequestItemEnabled {
+		return nil, nil
+	}
+	if strings.TrimSpace(requestId) == "" {
+		return nil, fmt.Errorf("missing request ID for RequestItem")
+	}
 	var pickupLocationField *ncip.SchemeValuePair
 	if pickupLocation != "" && (l.config.RequestItemPickupLocationEnabled == nil || *l.config.RequestItemPickupLocationEnabled) {
 		pickupLocationField = &ncip.SchemeValuePair{Text: pickupLocation}
@@ -226,10 +232,10 @@ func (l *LmsAdapterNcip) RequestItem(
 	}
 	response, err := l.ncipClient.RequestItem(arg)
 	if err != nil {
-		return "", "", "", err
+		return nil, err
 	}
 	if response == nil {
-		return "", "", "", fmt.Errorf("empty response from RequestItem")
+		return nil, fmt.Errorf("empty response from RequestItem")
 	}
 	barcode := ""
 	callNumber := ""
@@ -247,10 +253,11 @@ func (l *LmsAdapterNcip) RequestItem(
 	if response.ItemOptionalFields != nil && response.ItemOptionalFields.BibliographicDescription != nil {
 		title = response.ItemOptionalFields.BibliographicDescription.Title
 	}
-	if barcode == "" {
-		return "", "", "", fmt.Errorf("missing item barcode in RequestItem response")
-	}
-	return barcode, callNumber, title, nil
+	return &RequestedItem{
+		Barcode:    barcode,
+		CallNumber: callNumber,
+		Title:      title,
+	}, nil
 }
 
 func (l *LmsAdapterNcip) CancelRequestItem(requestId string, userId string) error {
@@ -299,8 +306,12 @@ func (l *LmsAdapterNcip) CheckOutItem(
 	itemElements := []ncip.SchemeValuePair{
 		{Text: string(NCIPBibliographicDescription)},
 	}
+	var requestID *ncip.RequestId
+	if requestId != "" {
+		requestID = &ncip.RequestId{RequestIdentifierValue: requestId}
+	}
 	arg := ncip.CheckOutItem{
-		RequestId:       &ncip.RequestId{RequestIdentifierValue: requestId},
+		RequestId:       requestID,
 		UserId:          &ncip.UserId{UserIdentifierValue: userId},
 		ItemId:          ncip.ItemId{ItemIdentifierValue: itemBarcode},
 		ItemElementType: itemElements,
