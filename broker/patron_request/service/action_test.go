@@ -1253,17 +1253,18 @@ func TestHandleInvokeActionShipReturnFails(t *testing.T) {
 }
 
 func TestHandleInvokeActionCancelRequest(t *testing.T) {
+	previousBrokerSymbol := configuredBrokerSymbol
+	configuredBrokerSymbol = "ISIL:BROKER"
+	t.Cleanup(func() { configuredBrokerSymbol = previousBrokerSymbol })
+
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
 	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(createLmsAdapterMockFail(), nil)
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
-	illRequest := iso18626.Request{Header: iso18626.Header{
-		SupplyingAgencyId: iso18626.TypeAgencyId{
-			AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
-			AgencyIdValue: "BROKER",
-		},
-	}}
+	// Leave the original request target empty to cover requests created before
+	// broker-target normalization was introduced.
+	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: BorrowerStateWillSupply, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 	action := BorrowerActionCancelRequest
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
@@ -1275,6 +1276,17 @@ func TestHandleInvokeActionCancelRequest(t *testing.T) {
 		assert.Equal(t, "BROKER", mockIso18626Handler.lastRequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 	}
 	assert.Equal(t, BorrowerStateCancelPending, mockPrRepo.savedPr.State)
+}
+
+func TestCancelBorrowingRequestMissingRequesterSymbol(t *testing.T) {
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(new(MockPrRepo), new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, nil, new(EmailSenderMock), nil, nil)
+
+	result := prAction.cancelBorrowingRequest(appCtx, pr_db.PatronRequest{})
+
+	assert.Equal(t, events.EventStatusError, result.status)
+	assert.Equal(t, "missing requester symbol", result.result.EventError.Message)
+	assert.Nil(t, mockIso18626Handler.lastRequestingAgencyMessage)
 }
 
 func TestHandleInvokeActionAcceptCondition(t *testing.T) {

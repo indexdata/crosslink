@@ -18,6 +18,8 @@ type PatronRequestMessageSender struct {
 	logErrorAndReturnResult func(ctx common.ExtendedContext, message string, err error) (events.EventStatus, *events.EventResult)
 }
 
+var configuredBrokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
+
 func (ms *PatronRequestMessageSender) sendSupplyingAgencyMessage(ctx common.ExtendedContext, pr pr_db.PatronRequest, result *events.EventResult, messageInfo iso18626.MessageInfo, statusInfo iso18626.StatusInfo, deliveryInfo *iso18626.DeliveryInfo) (events.EventStatus, *events.EventResult, *int) {
 	reqAuthority, reqSymbol, err := common.SplitSymbol(pr.RequesterSymbol.String)
 	if err != nil {
@@ -73,10 +75,6 @@ func (ms *PatronRequestMessageSender) sendSupplyingAgencyMessage(ctx common.Exte
 }
 
 func (ms *PatronRequestMessageSender) sendRequestingAgencyMessage(ctx common.ExtendedContext, pr pr_db.PatronRequest, result *events.EventResult, action iso18626.TypeAction, note string) (events.EventStatus, *events.EventResult, *int) {
-	if !pr.RequesterSymbol.Valid {
-		status, eventResult := ms.logErrorAndReturnResult(ctx, "missing requester symbol", nil)
-		return status, eventResult, nil
-	}
 	if !pr.SupplierSymbol.Valid {
 		status, eventResult := ms.logErrorAndReturnResult(ctx, "missing supplier symbol", nil)
 		return status, eventResult, nil
@@ -85,13 +83,17 @@ func (ms *PatronRequestMessageSender) sendRequestingAgencyMessage(ctx common.Ext
 }
 
 func (ms *PatronRequestMessageSender) sendRequestingAgencyMessageTo(ctx common.ExtendedContext, pr pr_db.PatronRequest, result *events.EventResult, action iso18626.TypeAction, note string, supplierSymbol string) (events.EventStatus, *events.EventResult, *int) {
+	if !pr.RequesterSymbol.Valid {
+		status, eventResult := ms.logErrorAndReturnResult(ctx, "missing requester symbol", nil)
+		return status, eventResult, nil
+	}
 	reqAuthority, reqSymbol, err := common.SplitSymbol(pr.RequesterSymbol.String)
-	if err != nil {
+	if err != nil || reqAuthority == "" || reqSymbol == "" {
 		status, eventResult := ms.logErrorAndReturnResult(ctx, "invalid requester symbol", err)
 		return status, eventResult, nil
 	}
 	supAuthority, supSymbol, err := common.SplitSymbol(supplierSymbol)
-	if err != nil {
+	if err != nil || supAuthority == "" || supSymbol == "" {
 		status, eventResult := ms.logErrorAndReturnResult(ctx, "invalid supplier symbol", err)
 		return status, eventResult, nil
 	}
