@@ -15,9 +15,6 @@ $(SUBDIRS):
 $(TOOL_SUBDIR_TARGETS):
 	$(MAKE) -C $(@:-tools-update=) tools-update
 
-deps-update:
-	$(GO) work sync
-
 tools-update: .git/hooks/pre-push $(TOOL_SUBDIR_TARGETS)
 
 .git/hooks/pre-push: pre-push
