@@ -1,4 +1,5 @@
 GO ?= go
+DEPS_UPDATE_CONSTRAINTS := github.com/dprotaso/go-yit@v0.0.0-20250513224043-18a80f8f6df4
 GIT ?= git
 GOFMT ?= gofmt "-s"
 OS ?= $(shell uname)
@@ -130,7 +131,7 @@ check-coverage: check
 	$(GO) run github.com/vladopajic/go-test-coverage/v2@latest --config=./.testcoverage.yaml
 
 deps-update:
-	$(GO) get -u ./...
+	$(GO) get -t -u ./... $(DEPS_UPDATE_CONSTRAINTS)
 	$(GO) mod tidy
 
 tools-update:

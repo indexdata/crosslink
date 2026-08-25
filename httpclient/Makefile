@@ -23,7 +23,7 @@ check-coverage: check
 	$(GO) run github.com/vladopajic/go-test-coverage/v2@latest --config=./.testcoverage.yaml
 
 deps-update:
-	$(GO) get -u ./...
+	$(GO) get -t -u ./...
 	$(GO) mod tidy
 
 clean:
