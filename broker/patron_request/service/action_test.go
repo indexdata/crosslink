@@ -1289,6 +1289,23 @@ func TestCancelBorrowingRequestMissingRequesterSymbol(t *testing.T) {
 	assert.Nil(t, mockIso18626Handler.lastRequestingAgencyMessage)
 }
 
+func TestCancelBorrowingRequestInvalidBrokerSymbol(t *testing.T) {
+	previousBrokerSymbol := configuredBrokerSymbol
+	configuredBrokerSymbol = "BROKER"
+	t.Cleanup(func() { configuredBrokerSymbol = previousBrokerSymbol })
+
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(new(MockPrRepo), new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, nil, new(EmailSenderMock), nil, nil)
+
+	result := prAction.cancelBorrowingRequest(appCtx, pr_db.PatronRequest{
+		RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"},
+	})
+
+	assert.Equal(t, events.EventStatusError, result.status)
+	assert.Equal(t, "invalid supplier symbol", result.result.EventError.Message)
+	assert.Nil(t, mockIso18626Handler.lastRequestingAgencyMessage)
+}
+
 func TestHandleInvokeActionAcceptCondition(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
