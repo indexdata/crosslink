@@ -1253,11 +1253,17 @@ func TestHandleInvokeActionShipReturnFails(t *testing.T) {
 }
 
 func TestHandleInvokeActionCancelRequest(t *testing.T) {
+	previousBrokerSymbol := configuredBrokerSymbol
+	configuredBrokerSymbol = "ISIL:BROKER"
+	t.Cleanup(func() { configuredBrokerSymbol = previousBrokerSymbol })
+
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
 	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(createLmsAdapterMockFail(), nil)
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	// Leave the original request target empty to cover requests created before
+	// broker-target normalization was introduced.
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: BorrowerStateWillSupply, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 	action := BorrowerActionCancelRequest
@@ -1265,7 +1271,39 @@ func TestHandleInvokeActionCancelRequest(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resultData.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	if assert.NotNil(t, mockIso18626Handler.lastRequestingAgencyMessage) {
+		assert.Equal(t, "ISIL", mockIso18626Handler.lastRequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text)
+		assert.Equal(t, "BROKER", mockIso18626Handler.lastRequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
+	}
 	assert.Equal(t, BorrowerStateCancelPending, mockPrRepo.savedPr.State)
+}
+
+func TestCancelBorrowingRequestMissingRequesterSymbol(t *testing.T) {
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(new(MockPrRepo), new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, nil, new(EmailSenderMock), nil, nil)
+
+	result := prAction.cancelBorrowingRequest(appCtx, pr_db.PatronRequest{})
+
+	assert.Equal(t, events.EventStatusError, result.status)
+	assert.Equal(t, "missing requester symbol", result.result.EventError.Message)
+	assert.Nil(t, mockIso18626Handler.lastRequestingAgencyMessage)
+}
+
+func TestCancelBorrowingRequestInvalidBrokerSymbol(t *testing.T) {
+	previousBrokerSymbol := configuredBrokerSymbol
+	configuredBrokerSymbol = "BROKER"
+	t.Cleanup(func() { configuredBrokerSymbol = previousBrokerSymbol })
+
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(new(MockPrRepo), new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, nil, new(EmailSenderMock), nil, nil)
+
+	result := prAction.cancelBorrowingRequest(appCtx, pr_db.PatronRequest{
+		RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"},
+	})
+
+	assert.Equal(t, events.EventStatusError, result.status)
+	assert.Equal(t, "invalid supplier symbol", result.result.EventError.Message)
+	assert.Nil(t, mockIso18626Handler.lastRequestingAgencyMessage)
 }
 
 func TestHandleInvokeActionAcceptCondition(t *testing.T) {
@@ -1333,6 +1371,7 @@ func TestHandleInvokeActionRejectCondition(t *testing.T) {
 	if assert.NotNil(t, mockIso18626Handler.lastRequestingAgencyMessage) {
 		assert.Equal(t, iso18626.TypeActionCancel, mockIso18626Handler.lastRequestingAgencyMessage.Action)
 		assert.Equal(t, shim.RESHARE_LOAN_CONDITION_REJECT, mockIso18626Handler.lastRequestingAgencyMessage.Note)
+		assert.Equal(t, "SUP1", mockIso18626Handler.lastRequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 		assert.False(t, mockIso18626Handler.lastRequestingAgencyMessage.Header.Timestamp.IsZero())
 	}
 	assert.Equal(t, BorrowerStateCancelPending, mockPrRepo.savedPr.State)
