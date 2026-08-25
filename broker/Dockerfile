@@ -1,4 +1,4 @@
-FROM golang:1.26 AS build
+FROM golang:1.27 AS build
 
 RUN apt-get update && apt-get install -y libyaz-dev pkg-config
 

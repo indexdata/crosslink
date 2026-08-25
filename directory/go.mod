@@ -1,6 +1,6 @@
 module github.com/indexdata/crosslink/directory
 
-go 1.26.0
+go 1.27.0
 
 require (
 	github.com/getkin/kin-openapi v0.147.0
