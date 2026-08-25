@@ -196,21 +196,24 @@ func (a *PatronRequestActionService) checkDuplicateBorrowingRequest(ctx common.E
 	success := func() actionExecutionResult {
 		return actionExecutionResult{status: events.EventStatusSuccess, result: result, pr: pr}
 	}
+	failure := func(message string, err error) actionExecutionResult {
+		status, failureResult := logActionErrorAndReturnResult(ctx, message, err)
+		failureResult.CustomData = result.CustomData
+		return actionExecutionResult{status: status, result: failureResult, pr: pr}
+	}
 
 	if pr.PrevReqID.Valid {
 		return success()
 	}
 	if !pr.RequesterSymbol.Valid || pr.RequesterSymbol.String == "" {
-		return success()
+		return failure("missing requester symbol for duplicate check", nil)
 	}
 	peers, _, err := a.illRepo.GetCachedPeersBySymbols(ctx, []string{pr.RequesterSymbol.String}, a.directoryLookupAdapter)
 	if err != nil {
-		ctx.Logger().Warn("failed to get requester peer for duplicate check, proceeding", "error", err)
-		return success()
+		return failure("failed to get requester peer for duplicate check", err)
 	}
 	if len(peers) == 0 {
-		ctx.Logger().Warn("requester peer not found for duplicate check, proceeding", "requesterSymbol", pr.RequesterSymbol.String)
-		return success()
+		return failure("failed to get requester peer for duplicate check", fmt.Errorf("no peer found for requester symbol %q", pr.RequesterSymbol.String))
 	}
 	if len(peers) > 1 {
 		ctx.Logger().Warn("multiple requester peers found for duplicate check, using first", "requesterSymbol", pr.RequesterSymbol.String, "peerCount", len(peers))
@@ -229,8 +232,7 @@ func (a *PatronRequestActionService) checkDuplicateBorrowingRequest(ctx common.E
 		return success()
 	}
 	if !pr.CreatedAt.Valid {
-		ctx.Logger().Warn("patron request creation time missing for duplicate check, proceeding", "patronRequestId", pr.ID)
-		return success()
+		return failure("patron request creation time missing for duplicate check", errors.New("invalid patron request creation time"))
 	}
 
 	lookupParams := catalog.LookupParamsFromBibliographicInfo(pr.IllRequest.BibliographicInfo, pr.IllRequest.ServiceInfo)
@@ -240,14 +242,15 @@ func (a *PatronRequestActionService) checkDuplicateBorrowingRequest(ctx common.E
 	}
 	cqlList, _, err := duplicateLookupQueryBuilder.Build(lookupParams)
 	if err != nil || len(cqlList) == 0 {
-		ctx.Logger().Warn("failed to build patron request duplicate lookup, proceeding", "error", err)
-		return success()
+		if err == nil {
+			err = errors.New("duplicate lookup query is empty")
+		}
+		return failure("failed to build patron request duplicate lookup", err)
 	}
 
 	queryBuilder, err := cqlbuilder.NewQueryFromString("(" + strings.Join(cqlList, " or ") + ")")
 	if err != nil {
-		ctx.Logger().Warn("failed to build patron request duplicate query, proceeding", "error", err)
-		return success()
+		return failure("failed to build patron request duplicate query", err)
 	}
 	requestCreatedAt := pr.CreatedAt.Time.UTC()
 	cutoffTime := requestCreatedAt.Add(-time.Duration(*windowHours) * time.Hour).Format(time.RFC3339Nano)
@@ -263,18 +266,15 @@ func (a *PatronRequestActionService) checkDuplicateBorrowingRequest(ctx common.E
 		And().Search("id").Rel("<>").Term(pr.ID).
 		Build()
 	if err != nil {
-		ctx.Logger().Warn("failed to build patron request duplicate query, proceeding", "error", err)
-		return success()
+		return failure("failed to build patron request duplicate query", err)
 	}
 	pgQuery, err := pr_db.ParsePatronRequestsCql(query.String())
 	if err != nil {
-		ctx.Logger().Warn("failed to parse patron request duplicate query, proceeding", "error", err)
-		return success()
+		return failure("failed to parse patron request duplicate query", err)
 	}
 	matches, _, err := a.prRepo.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: 1, Offset: 0}, pgQuery)
 	if err != nil {
-		ctx.Logger().Warn("failed to check for duplicate patron requests, proceeding", "error", err)
-		return success()
+		return failure("failed to check for duplicate patron requests", err)
 	}
 	if len(matches) == 0 {
 		return success()

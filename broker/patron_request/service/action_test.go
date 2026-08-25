@@ -148,6 +148,49 @@ func TestHandleInvokeCheckDuplicateTransitionsToDuplicate(t *testing.T) {
 	illRepo.AssertExpectations(t)
 }
 
+func TestHandleInvokeCheckDuplicateFailureStaysMetadataUpdated(t *testing.T) {
+	windowHours := int32(24)
+	illRepo := new(IllRepoMock)
+	illRepo.On("GetCachedPeersBySymbols", []string{"ISIL:REQ"}, mock.Anything).Return([]ill_db.Peer{{
+		CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &windowHours}},
+	}}, "", nil)
+	prRepo := new(MockPrRepo)
+	serviceInfo := &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}
+	pr := pr_db.PatronRequest{
+		ID:              "current-pr",
+		CreatedAt:       pgtype.Timestamp{Time: time.Now(), Valid: true},
+		State:           BorrowerStateMetadataUpdated,
+		Side:            SideBorrowing,
+		RequesterSymbol: getDbText("ISIL:REQ"),
+		Patron:          getDbText("patron-1"),
+		IllRequest: iso18626.Request{
+			BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "record-1"},
+			ServiceInfo:       serviceInfo,
+		},
+	}
+	prRepo.On("GetPatronRequestById", pr.ID).Return(pr, nil)
+	prRepo.On("ListPatronRequests", pr_db.ListPatronRequestsParams{Limit: 1, Offset: 0}, mock.Anything).
+		Return([]pr_db.PatronRequest{}, int64(0), errors.New("database unavailable"))
+	actionService := CreatePatronRequestActionService(prRepo, illRepo, new(MockEventBus), new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
+	action := BorrowerActionCheckDuplicate
+
+	status, result := actionService.handleInvokeAction(appCtx, events.Event{PatronRequestID: pr.ID, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "failed to check for duplicate patron requests", result.EventError.Message)
+	assert.Equal(t, ActionOutcomeFailure, result.ActionResult.Outcome)
+	assert.Nil(t, result.ActionResult.ToState)
+	duplicateCheck := result.CustomData[duplicateCheckKey].(*events.DuplicateCheck)
+	assert.True(t, duplicateCheck.Enabled)
+	assert.False(t, duplicateCheck.Duplicate)
+	assert.Equal(t, BorrowerStateMetadataUpdated, prRepo.savedPr.State)
+	assert.True(t, prRepo.savedPr.NeedsAttention)
+	assert.Equal(t, string(BorrowerActionCheckDuplicate), prRepo.savedPr.LastAction.String)
+	assert.Equal(t, ActionOutcomeFailure, prRepo.savedPr.LastActionOutcome.String)
+	prRepo.AssertExpectations(t)
+	illRepo.AssertExpectations(t)
+}
+
 var actionValidatePatron = BorrowerActionValidatePatron
 
 func TestInvokeAction(t *testing.T) {
