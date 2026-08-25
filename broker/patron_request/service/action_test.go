@@ -1258,13 +1258,22 @@ func TestHandleInvokeActionCancelRequest(t *testing.T) {
 	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(createLmsAdapterMockFail(), nil)
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
-	illRequest := iso18626.Request{}
+	illRequest := iso18626.Request{Header: iso18626.Header{
+		SupplyingAgencyId: iso18626.TypeAgencyId{
+			AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+			AgencyIdValue: "BROKER",
+		},
+	}}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: BorrowerStateWillSupply, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 	action := BorrowerActionCancelRequest
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resultData.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	if assert.NotNil(t, mockIso18626Handler.lastRequestingAgencyMessage) {
+		assert.Equal(t, "ISIL", mockIso18626Handler.lastRequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text)
+		assert.Equal(t, "BROKER", mockIso18626Handler.lastRequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
+	}
 	assert.Equal(t, BorrowerStateCancelPending, mockPrRepo.savedPr.State)
 }
 
@@ -1333,6 +1342,7 @@ func TestHandleInvokeActionRejectCondition(t *testing.T) {
 	if assert.NotNil(t, mockIso18626Handler.lastRequestingAgencyMessage) {
 		assert.Equal(t, iso18626.TypeActionCancel, mockIso18626Handler.lastRequestingAgencyMessage.Action)
 		assert.Equal(t, shim.RESHARE_LOAN_CONDITION_REJECT, mockIso18626Handler.lastRequestingAgencyMessage.Note)
+		assert.Equal(t, "SUP1", mockIso18626Handler.lastRequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 		assert.False(t, mockIso18626Handler.lastRequestingAgencyMessage.Header.Timestamp.IsZero())
 	}
 	assert.Equal(t, BorrowerStateCancelPending, mockPrRepo.savedPr.State)

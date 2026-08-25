@@ -988,7 +988,10 @@ func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.Exten
 
 func (a *PatronRequestActionService) cancelBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
 	result := events.EventResult{}
-	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionCancel, "")
+	// Address the cancellation to the original request target. The broker treats a
+	// cancel addressed directly to the selected supplier as a rota continuation.
+	cancelTarget := pr.IllRequest.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + pr.IllRequest.Header.SupplyingAgencyId.AgencyIdValue
+	status, eventResult, httpStatus := a.sendRequestingAgencyMessageTo(ctx, pr, &result, iso18626.TypeActionCancel, "", cancelTarget)
 	if httpStatus == nil {
 		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}

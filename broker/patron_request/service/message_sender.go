@@ -81,12 +81,16 @@ func (ms *PatronRequestMessageSender) sendRequestingAgencyMessage(ctx common.Ext
 		status, eventResult := ms.logErrorAndReturnResult(ctx, "missing supplier symbol", nil)
 		return status, eventResult, nil
 	}
+	return ms.sendRequestingAgencyMessageTo(ctx, pr, result, action, note, pr.SupplierSymbol.String)
+}
+
+func (ms *PatronRequestMessageSender) sendRequestingAgencyMessageTo(ctx common.ExtendedContext, pr pr_db.PatronRequest, result *events.EventResult, action iso18626.TypeAction, note string, supplierSymbol string) (events.EventStatus, *events.EventResult, *int) {
 	reqAuthority, reqSymbol, err := common.SplitSymbol(pr.RequesterSymbol.String)
 	if err != nil {
 		status, eventResult := ms.logErrorAndReturnResult(ctx, "invalid requester symbol", err)
 		return status, eventResult, nil
 	}
-	supAuthority, supSymbol, err := common.SplitSymbol(pr.SupplierSymbol.String)
+	supAuthority, supSymbol, err := common.SplitSymbol(supplierSymbol)
 	if err != nil {
 		status, eventResult := ms.logErrorAndReturnResult(ctx, "invalid supplier symbol", err)
 		return status, eventResult, nil
