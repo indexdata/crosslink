@@ -319,10 +319,6 @@ func (r *ActionMapping) GetActionTransition(pr pr_db.PatronRequest, action pr_db
 		if actionConfig.Transitions.Review != nil && *actionConfig.Transitions.Review != "" {
 			return pr_db.PatronRequestState(*actionConfig.Transitions.Review), true
 		}
-	case ActionOutcomeDuplicate:
-		if actionConfig.Transitions.Duplicate != nil && *actionConfig.Transitions.Duplicate != "" {
-			return pr_db.PatronRequestState(*actionConfig.Transitions.Duplicate), true
-		}
 	}
 	return "", false
 }

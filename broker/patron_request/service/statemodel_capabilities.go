@@ -11,10 +11,9 @@ import (
 type MessageEvent string
 
 const (
-	ActionOutcomeSuccess   = "success"
-	ActionOutcomeFailure   = "failure"
-	ActionOutcomeReview    = "review"
-	ActionOutcomeDuplicate = "duplicate"
+	ActionOutcomeSuccess = "success"
+	ActionOutcomeFailure = "failure"
+	ActionOutcomeReview  = "review"
 )
 
 const (
@@ -28,6 +27,7 @@ const (
 	BorrowerStateValidated        pr_db.PatronRequestState = "VALIDATED"
 	BorrowerStateMetadataUpdated  pr_db.PatronRequestState = "METADATA_UPDATED"
 	BorrowerStateNeedsReview      pr_db.PatronRequestState = "NEEDS_REVIEW"
+	BorrowerStateReadyToSend      pr_db.PatronRequestState = "READY_TO_SEND"
 	BorrowerStateLocalSupply      pr_db.PatronRequestState = "LOCAL_SUPPLY"
 	BorrowerStateSent             pr_db.PatronRequestState = "SENT"
 	BorrowerStateSupplierLocated  pr_db.PatronRequestState = "SUPPLIER_LOCATED"
@@ -69,6 +69,7 @@ const (
 const (
 	BorrowerActionValidatePatron       pr_db.PatronRequestAction = "validate-patron"
 	BorrowerActionUpdateMetadata       pr_db.PatronRequestAction = "update-metadata"
+	BorrowerActionCheckDuplicate       pr_db.PatronRequestAction = "check-duplicate"
 	BorrowerActionSendRequest          pr_db.PatronRequestAction = "send-request"
 	BorrowerActionCancelRequest        pr_db.PatronRequestAction = "cancel-request"
 	BorrowerActionAcceptCondition      pr_db.PatronRequestAction = "accept-condition"
@@ -133,6 +134,7 @@ func requesterBuiltInStates() []string {
 		string(BorrowerStateValidated),
 		string(BorrowerStateMetadataUpdated),
 		string(BorrowerStateNeedsReview),
+		string(BorrowerStateReadyToSend),
 		string(BorrowerStateLocalSupply),
 		string(BorrowerStateSent),
 		string(BorrowerStateSupplierLocated),
@@ -185,6 +187,10 @@ func requesterBuiltInActions() []proapi.ActionCapability {
 		},
 		{
 			Name:       string(BorrowerActionUpdateMetadata),
+			Parameters: []string{},
+		},
+		{
+			Name:       string(BorrowerActionCheckDuplicate),
 			Parameters: []string{},
 		},
 		{

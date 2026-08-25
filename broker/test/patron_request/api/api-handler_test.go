@@ -475,8 +475,8 @@ func TestNeedsReviewAndUpdate(t *testing.T) {
 		assert.Equal(t, "WILLSUPPLY_LOANED", r.BibliographicInfo.SupplierUniqueRecordId)
 	})
 
-	// Manually invoke send-request: transitions out of NEEDS_REVIEW
-	sendAction := proapi.ExecuteAction{Action: string(prservice.BorrowerActionSendRequest)}
+	// Manually invoke check-duplicate: a successful check resumes the pre-send chain.
+	sendAction := proapi.ExecuteAction{Action: string(prservice.BorrowerActionCheckDuplicate)}
 	sendActionBytes, err := json.Marshal(sendAction)
 	assert.NoError(t, err)
 	respBytes = httpRequest(t, "POST", prPath+"/action"+queryParams, sendActionBytes, 200)
@@ -490,7 +490,7 @@ func TestNeedsReviewAndUpdate(t *testing.T) {
 		respBytes = httpRequest(t, "GET", prPath+queryParams, []byte{}, 200)
 		err = json.Unmarshal(respBytes, &foundPr)
 		return err == nil && foundPr.State != string(prservice.BorrowerStateNeedsReview)
-	}), "timed out waiting for state to advance past NEEDS_REVIEW after send-request")
+	}), "timed out waiting for state to advance past NEEDS_REVIEW after check-duplicate")
 	assert.NotEqual(t, string(prservice.BorrowerStateNeedsReview), foundPr.State)
 }
 
