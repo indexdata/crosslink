@@ -1,6 +1,6 @@
 module github.com/indexdata/crosslink/ncip
 
-go 1.26.0
+go 1.27.0
 
 require (
 	github.com/indexdata/go-utils v1.0.0
