@@ -1223,7 +1223,6 @@ func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.Extended
 		if err != nil {
 			return pr, "failed to get existing items", err
 		}
-		pr.Items = itemsToPrItems(items)
 		for _, item := range items {
 			if item.LmsRequestID.Valid && strings.TrimSpace(item.LmsRequestID.String) == requestID {
 				return pr, "", nil
@@ -1267,7 +1266,7 @@ func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.Extended
 		title = illRequest.BibliographicInfo.Title
 	}
 	callNumber := response.CallNumber
-	item, err := a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
+	_, err = a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
 		ID:           uuid.NewString(),
 		CreatedAt:    pgtype.Timestamp{Valid: true, Time: time.Now()},
 		PrID:         pr.ID,
@@ -1283,7 +1282,6 @@ func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.Extended
 		}
 		return pr, "failed to save item", err
 	}
-	pr.Items = append(pr.Items, itemToPrItem(item))
 	return pr, "", nil
 }
 
@@ -1310,7 +1308,7 @@ func (a *PatronRequestActionService) addItemLenderRequest(ctx common.ExtendedCon
 	}
 	callNumber := strings.TrimSpace(params.CallNumber)
 	itemID := strings.TrimSpace(params.ItemID)
-	item, err := a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
+	_, err = a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
 		ID:         uuid.NewString(),
 		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
 		PrID:       pr.ID,
@@ -1323,7 +1321,6 @@ func (a *PatronRequestActionService) addItemLenderRequest(ctx common.ExtendedCon
 		status, result := logActionErrorAndReturnResult(ctx, "failed to save item", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	pr.Items = append(itemsToPrItems(items), itemToPrItem(item))
 	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
 }
 
@@ -1368,13 +1365,6 @@ func (a *PatronRequestActionService) removeItemLenderRequest(ctx common.Extended
 		status, result := logActionErrorAndReturnResult(ctx, "failed to delete item", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	remainingItems := make([]pr_db.Item, 0, len(items)-1)
-	for _, existingItem := range items {
-		if existingItem.ID != item.ID {
-			remainingItems = append(remainingItems, existingItem)
-		}
-	}
-	pr.Items = itemsToPrItems(remainingItems)
 	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
 }
 
@@ -1531,7 +1521,6 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 			}
 		}
 	}
-	pr.Items = itemsToPrItems(items)
 	var note string
 	if params.Note == "" {
 		note = encodeItemsNote(items)
@@ -1605,37 +1594,6 @@ func encodeItemsNote(items []pr_db.Item) string {
 		list = append(list, []string{item.Barcode, callnumber, title})
 	}
 	return common.PackItemsNote(list)
-}
-
-func itemToPrItem(item pr_db.Item) pr_db.PrItem {
-	var callNumber *string
-	if item.CallNumber.Valid {
-		callNumber = &item.CallNumber.String
-	}
-	var title *string
-	if item.Title.Valid {
-		title = &item.Title.String
-	}
-	var itemID *string
-	if item.ItemID.Valid {
-		itemID = &item.ItemID.String
-	}
-	return pr_db.PrItem{
-		ID:         item.ID,
-		Barcode:    item.Barcode,
-		CallNumber: callNumber,
-		Title:      title,
-		ItemID:     itemID,
-		CreatedAt:  item.CreatedAt.Time,
-	}
-}
-
-func itemsToPrItems(items []pr_db.Item) []pr_db.PrItem {
-	result := make([]pr_db.PrItem, 0, len(items))
-	for _, item := range items {
-		result = append(result, itemToPrItem(item))
-	}
-	return result
 }
 
 func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter) actionExecutionResult {
