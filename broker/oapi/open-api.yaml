@@ -1454,10 +1454,10 @@ components:
           $ref: '#/components/schemas/TemplatePurpose'
         subject:
           type: string
-          description: Subject line template, supports {{x}} placeholders. Not used for pullslip templates.
+          description: Subject line template, supports {{.X}} placeholders. Not used for pullslip templates. For full list of supported placeholders, see the Template object.
         body:
           type: string
-          description: Body of the email or pull slip template. Supports {{x}} placeholders.
+          description: Body of the email or pull slip template. Supports {{.X}} placeholders. For full list of supported placeholders, see the Template object.
         contentType:
           $ref: '#/components/schemas/TemplateContentType'
         labels:
@@ -1484,10 +1484,10 @@ components:
           description: Human-readable title for the template
         subject:
           type: string
-          description: Subject line template supporting {{x}} placeholders. Not used for pull slip templates. Omit to clear.
+          description: Subject line template supporting {{.X}} placeholders. Not used for pull slip templates. Omit to clear. For full list of supported placeholders, see the Template object.
         body:
           type: string
-          description: Body of the email or pull slip template. Supports {{x}} placeholders.
+          description: Body of the email or pull slip template. Supports {{.X}} placeholders. For full list of supported placeholders, see the Template object.
         contentType:
           $ref: '#/components/schemas/TemplateContentType'
         labels:
