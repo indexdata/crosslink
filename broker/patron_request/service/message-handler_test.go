@@ -1529,7 +1529,7 @@ func TestExtractRequestNotifications(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 0, len(mockPrRepo.savedNotifications))
 
-	// Note
+	// A request note is ignored, while maximum cost is saved without the note.
 	err = handler.extractRequestNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.Request{
 		Header: iso18626.Header{
 			SupplyingAgencyId: iso18626.TypeAgencyId{
@@ -1552,18 +1552,18 @@ func TestExtractRequestNotifications(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(mockPrRepo.savedNotifications))
-	assert.Equal(t, "save this", mockPrRepo.savedNotifications[0].Note.String)
+	assert.False(t, mockPrRepo.savedNotifications[0].Note.Valid)
 	assert.Equal(t, "ISIL:REQ", mockPrRepo.savedNotifications[0].FromSymbol)
 	assert.Equal(t, "ISIL:SUP", mockPrRepo.savedNotifications[0].ToSymbol)
 	cost, err := mockPrRepo.savedNotifications[0].Cost.Float64Value()
 	assert.NoError(t, err)
 	assert.Equal(t, 1.23, cost.Float64)
 
-	// Error
+	// A request containing only a note does not create a notification.
 	mockPrRepo.savedNotifications = nil
 	err = handler.extractRequestNotifications(appCtx, pr_db.PatronRequest{ID: "error"}, iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{Note: "save this"}})
-	assert.Equal(t, "db error", err.Error())
-	assert.Equal(t, 1, len(mockPrRepo.savedNotifications))
+	assert.NoError(t, err)
+	assert.Empty(t, mockPrRepo.savedNotifications)
 
 	// Error
 	mockPrRepo.savedNotifications = nil
