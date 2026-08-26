@@ -6,6 +6,7 @@ import "github.com/indexdata/crosslink/broker/ncipclient"
 // call. A nil response with a nil error means the adapter intentionally skipped
 // the operation, for example because RequestItem is disabled or handled manually.
 type RequestedItem struct {
+	RequestID  string
 	Barcode    string
 	CallNumber string
 	Title      string

@@ -170,6 +170,7 @@ func TestRequestItem(t *testing.T) {
 	assert.Equal(t, "123.456", response.Barcode)
 	assert.Equal(t, "QA123 .A45", response.CallNumber)
 	assert.Equal(t, "", response.Title)
+	assert.Equal(t, "lms-req-1", response.RequestID)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
 	assert.Equal(t, "item1", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
@@ -275,6 +276,8 @@ func TestCancelRequestItem(t *testing.T) {
 	req := mock.(*ncipClientMock).lastRequest.(ncip.CancelRequestItem)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
 	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
+	assert.Equal(t, "Page", req.RequestType.Text)
+	assert.Equal(t, "Item", req.RequestScopeType.Text)
 }
 
 func TestCheckInItem(t *testing.T) {
@@ -534,6 +537,7 @@ func (n *ncipClientMock) RequestItem(request ncip.RequestItem) (*ncip.RequestIte
 		return nil, nil
 	}
 	res := &ncip.RequestItemResponse{
+		RequestId: &ncip.RequestId{RequestIdentifierValue: "lms-req-1"},
 		ItemOptionalFields: &ncip.ItemOptionalFields{
 			ItemDescription: &ncip.ItemDescription{
 				CallNumber: "QA123 .A45",
