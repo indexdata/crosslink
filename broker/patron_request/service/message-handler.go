@@ -791,11 +791,6 @@ func toNotificationCost(value *iso18626.TypeCosts) (pgtype.Numeric, pgtype.Text,
 
 func (m *PatronRequestMessageHandler) extractRequestNotifications(ctx common.ExtendedContext, pr pr_db.PatronRequest, request iso18626.Request) error {
 	supSymbol, reqSymbol := getSymbolsFromHeader(request.Header)
-	var note pgtype.Text
-	if request.ServiceInfo != nil && request.ServiceInfo.Note != "" {
-		note = getDbText(request.ServiceInfo.Note)
-	}
-
 	var currency pgtype.Text
 	var cost pgtype.Numeric
 	if request.BillingInfo != nil && request.BillingInfo.MaximumCosts != nil {
@@ -806,18 +801,17 @@ func (m *PatronRequestMessageHandler) extractRequestNotifications(ctx common.Ext
 		}
 	}
 
-	if !note.Valid && !cost.Valid {
+	if !cost.Valid {
 		return nil
 	}
 
 	_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
 		ID:         uuid.NewString(),
 		PrID:       pr.ID,
-		Note:       note,
 		FromSymbol: reqSymbol,
 		ToSymbol:   supSymbol,
 		Direction:  pr_db.NotificationDirectionReceived,
-		Kind:       inferNotificationKind(note.Valid, false, cost.Valid),
+		Kind:       pr_db.NotificationKindCondition,
 		Currency:   currency,
 		Cost:       cost,
 		CreatedAt: pgtype.Timestamp{
