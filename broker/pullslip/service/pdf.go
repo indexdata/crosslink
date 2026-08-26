@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"image/png"
+	"slices"
 
 	"github.com/boombuler/barcode"
 	"github.com/boombuler/barcode/code128"
@@ -16,6 +17,7 @@ import (
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
+	"github.com/jackc/pgx/v5"
 )
 
 type PdfService interface {
@@ -79,7 +81,7 @@ func (p *PdfServiceImpl) GeneratePdfPullSlip(ctx common.ExtendedContext, pr pr_d
 	doc := document.NewDocument(document.PageSizeA4)
 
 	data := email.GetPullSlipData(pr, notes, conditions, barcodeData)
-	html, err := email.RenderPullSlipHTMLWithTemplate(data, templateBody)
+	html, err := email.RenderHtmlTemplate(data, templateBody)
 	if err != nil {
 		return nil, err
 	}
@@ -111,10 +113,16 @@ func (p *PdfServiceImpl) getTemplateForPatronRequest(ctx common.ExtendedContext,
 		Audience: string(proapi.ModelActionParamsSendToStaff),
 	})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return getDefaultTemplate(*stateModel.PullslipPdfTemplateLabel)
+		}
 		return "", err
 	}
 	if pdfTemplate.Body == "" {
 		return "", errors.New("invalid pullslip pdf template, body field is required")
+	}
+	if pdfTemplate.ContentType != string(proapi.Html) {
+		return "", errors.New("invalid pullslip pdf template, it must be of type HTML")
 	}
 	return pdfTemplate.Body, nil
 }
@@ -153,4 +161,13 @@ func getBarcodeBase64(data string) (string, error) {
 		return "", err
 	}
 	return base64.StdEncoding.EncodeToString(buf.Bytes()), nil
+}
+
+func getDefaultTemplate(label string) (string, error) {
+	for _, t := range prservice.GetStateModelTemplateDefaults() {
+		if slices.Contains(t.Labels, label) {
+			return t.Body, nil
+		}
+	}
+	return "", errors.New("no default template found for label: " + label)
 }

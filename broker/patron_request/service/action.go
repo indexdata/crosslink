@@ -1752,26 +1752,28 @@ func (a *PatronRequestActionService) createAndSendEmail(ctx common.ExtendedConte
 	if err != nil {
 		return err
 	}
-	body := template.Body
+	var body string
+	notes, _, err := a.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{Limit: 100, Offset: 0, PrID: pr.ID, Kind: string(pr_db.NotificationKindNote)})
+	if err != nil {
+		return err
+	}
+	conditions, _, err := a.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{Limit: 100, Offset: 0, PrID: pr.ID, Kind: string(pr_db.NotificationKindCondition)})
+	if err != nil {
+		return err
+	}
+	data := email.GetPullSlipData(pr, notes, conditions, email.DEFAULT_FOR_NO_VALUE)
 	if template.ContentType == string(proapi.Html) {
-		notes, _, ifErr := a.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{Limit: 100, Offset: 0, PrID: pr.ID, Kind: string(pr_db.NotificationKindNote)})
-		if ifErr != nil {
-			return ifErr
-		}
-		conditions, _, ifErr := a.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{Limit: 100, Offset: 0, PrID: pr.ID, Kind: string(pr_db.NotificationKindCondition)})
-		if ifErr != nil {
-			return ifErr
-		}
-		data := email.GetPullSlipData(pr, notes, conditions, email.DEFAULT_FOR_NO_VALUE)
-		html, ifErr := email.RenderPullSlipHTMLWithTemplate(data, template.Body)
+		html, ifErr := email.RenderHtmlTemplate(data, template.Body)
 		if ifErr != nil {
 			return ifErr
 		}
 		body = html
+	} else {
+		body = email.RenderTextTemplate(data, template.Body)
 	}
 	emailData := email.EmailData{
 		To:         recipients,
-		Subject:    template.Subject.String,
+		Subject:    email.RenderTextTemplate(data, template.Subject.String),
 		Body:       body,
 		IsHTML:     template.ContentType == string(proapi.Html),
 		IncludePdf: false,

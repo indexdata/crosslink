@@ -1389,10 +1389,19 @@ components:
           $ref: '#/components/schemas/TemplatePurpose'
         subject:
           type: string
-          description: Subject line template, supports {{x}} placeholders. Not used for pullslip templates.
+          description: Subject line template, supports {{.X}} placeholders. Not used for pullslip templates. Supports same placeholders as template body.
         body:
           type: string
-          description: Body of the email or pull slip template. Supports {{x}} placeholders.
+          description: >-
+            Body of the email or pull slip template. Supports {{.X}} placeholders.
+            Supported placeholders for patron request templates include
+            {{.BorrowerName}}, {{.ReqId}}, {{.PickupLocation}}, {{.Title}},
+            {{.Author}}, {{.DueDate}}, {{.ReturnAddress}}, {{.BarcodeBase64}},
+            {{.ServiceType}}, {{.ServiceLevel}}, {{.SystemIdentifier}},
+            {{.Publisher}}, {{.Volume}}, {{.Issue}}, {{.Pages}}, {{.StaffNotes}},
+            {{.CallNumber}}, {{.LoanConditions}}, {{.PatronName}},
+            {{.PatronSurname}}, {{.PatronId}} and batch templates include
+            {{.FullCount}}, {{.ActualCount}}, {{.BatchQuery}}.
         contentType:
           $ref: '#/components/schemas/TemplateContentType'
         labels:

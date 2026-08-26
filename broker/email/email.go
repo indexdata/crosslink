@@ -11,6 +11,7 @@ import (
 	"mime/quotedprintable"
 	"net/smtp"
 	"net/textproto"
+	"reflect"
 	"strings"
 
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
@@ -187,6 +188,7 @@ func joinAddresses(addrs []string) string {
 	return result
 }
 
+// Only string fields are allowed
 type PullSlipData struct {
 	BorrowerName     string
 	ReqId            string
@@ -209,6 +211,13 @@ type PullSlipData struct {
 	PatronName       string
 	PatronSurname    string
 	PatronId         string
+}
+
+// Only string fields are allowed
+type BatchEmailData struct {
+	FullCount   string
+	ActualCount string
+	BatchQuery  string
 }
 
 func GetPullSlipData(pr pr_db.PatronRequest, notes []pr_db.Notification, conditions []pr_db.Notification, barcodeData string) PullSlipData {
@@ -283,7 +292,7 @@ func GetPullSlipData(pr pr_db.PatronRequest, notes []pr_db.Notification, conditi
 	return data
 }
 
-func RenderPullSlipHTMLWithTemplate(data PullSlipData, templateBody string) (string, error) {
+func RenderHtmlTemplate(data any, templateBody string) (string, error) {
 	tmpl, err := template.New("pull-slip").Parse(templateBody)
 	if err != nil {
 		return "", err
@@ -372,17 +381,21 @@ func formatPhysicalAddress(a *iso18626.PhysicalAddress) string {
 	return strings.Join(parts, ", ")
 }
 
-func GetBatchEmailData(fullCount int64, actualCount int, batchQuery string) map[string]string {
-	return map[string]string{
-		"fullCount":   fmt.Sprintf("%d", fullCount),
-		"actualCount": fmt.Sprintf("%d", actualCount),
-		"batchQuery":  batchQuery,
+func GetBatchEmailData(fullCount int64, actualCount int, batchQuery string) BatchEmailData {
+	return BatchEmailData{
+		FullCount:   fmt.Sprintf("%d", fullCount),
+		ActualCount: fmt.Sprintf("%d", actualCount),
+		BatchQuery:  batchQuery,
 	}
 }
 
-func RenderBatchEmailTemplate(value string, placeholders map[string]string) string {
-	for key, replacement := range placeholders {
-		value = strings.ReplaceAll(value, "{{"+key+"}}", replacement)
+func RenderTextTemplate(data any, template string) string {
+	v := reflect.ValueOf(data)
+	t := v.Type()
+	for i := 0; i < t.NumField(); i++ {
+		key := t.Field(i).Name
+		replacement := v.Field(i).String()
+		template = strings.ReplaceAll(template, "{{."+key+"}}", replacement)
 	}
-	return value
+	return template
 }

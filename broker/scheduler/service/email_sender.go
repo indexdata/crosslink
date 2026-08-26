@@ -136,8 +136,8 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 	placeholders := email.GetBatchEmailData(fullCount, len(prs), event.EventData.BatchActionData.Selector)
 	messageData := email.EmailData{
 		To:         emailData.To,
-		Subject:    email.RenderBatchEmailTemplate(template.Subject.String, placeholders),
-		Body:       email.RenderBatchEmailTemplate(template.Body, placeholders),
+		Subject:    email.RenderTextTemplate(placeholders, template.Subject.String),
+		Body:       email.RenderTextTemplate(placeholders, template.Body),
 		IsHTML:     template.ContentType == string(proapi.Html),
 		IncludePdf: emailData.IncludePdf,
 	}
