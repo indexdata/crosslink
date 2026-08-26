@@ -261,6 +261,45 @@ func TestItem(t *testing.T) {
 	assert.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
+func TestUpdatePatronRequestPreservesTriggerMaintainedItems(t *testing.T) {
+	prId := uuid.NewString()
+	pr, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID:        prId,
+		CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Language:  "english",
+		Items:     []pr_db.PrItem{},
+	})
+	assert.NoError(t, err)
+	t.Cleanup(func() {
+		assert.NoError(t, prRepo.DeletePatronRequest(appCtx, prId))
+	})
+
+	// Saving an item fires trigger_update_patron_request_items, which updates
+	// patron_request.items in the DB independently of the in-memory pr above.
+	_, err = prRepo.SaveItem(appCtx, pr_db.SaveItemParams{
+		ID:        uuid.NewString(),
+		PrID:      prId,
+		Barcode:   "b1",
+		CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+	})
+	assert.NoError(t, err)
+
+	// pr.Items is stale (still the empty value from before SaveItem); a generic
+	// update must not let it clobber the trigger-maintained cache.
+	pr.Items = []pr_db.PrItem{}
+	updatedPr, err := prRepo.UpdatePatronRequest(appCtx, pr_db.UpdatePatronRequestParams(pr))
+	assert.NoError(t, err)
+	if assert.Len(t, updatedPr.Items, 1) {
+		assert.Equal(t, "b1", updatedPr.Items[0].Barcode)
+	}
+
+	persistedPr, err := prRepo.GetPatronRequestById(appCtx, prId)
+	assert.NoError(t, err)
+	if assert.Len(t, persistedPr.Items, 1) {
+		assert.Equal(t, "b1", persistedPr.Items[0].Barcode)
+	}
+}
+
 func TestTemplateUpdatedAtInitializedFromCreatedAt(t *testing.T) {
 	createdAt := pgtype.Timestamp{Time: time.Now(), Valid: true}
 	template, err := prRepo.SaveTemplate(appCtx, pr_db.SaveTemplateParams{
