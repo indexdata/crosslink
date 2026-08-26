@@ -1946,7 +1946,7 @@ func TestRequestItemLenderRequestUsesResponseTitleWhenAvailable(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsAdapter := new(mockLmsAdapter)
 	lmsAdapter.On("RequestItem", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(&lms.RequestedItem{Barcode: "1", CallNumber: "2", Title: "title2"}, nil)
+		Return(&lms.RequestedItem{RequestID: "lms-req-1", Barcode: "1", CallNumber: "2", Title: "title2"}, nil)
 	prAction := &PatronRequestActionService{prRepo: mockPrRepo}
 	illRequest := iso18626.Request{Header: iso18626.Header{RequestingAgencyRequestId: "req-1"}, BibliographicInfo: iso18626.BibliographicInfo{Title: "title1"}}
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, nil).Once()
@@ -1957,11 +1957,12 @@ func TestRequestItemLenderRequestUsesResponseTitleWhenAvailable(t *testing.T) {
 	assert.Equal(t, "1", mockPrRepo.savedItems[0].Barcode)
 	assert.Equal(t, "2", mockPrRepo.savedItems[0].CallNumber.String)
 	assert.Equal(t, "title2", mockPrRepo.savedItems[0].Title.String)
+	assert.Equal(t, "lms-req-1", mockPrRepo.savedItems[0].LmsRequestID.String)
 	lmsAdapter.AssertNumberOfCalls(t, "RequestItem", 1)
 }
 
 func TestRequestItemLenderRequestResumesAfterSavedItem(t *testing.T) {
-	savedItems := []pr_db.Item{{PrID: patronRequestId, Barcode: "item-1", LmsRequestID: getDbText("req-1")}}
+	savedItems := []pr_db.Item{{PrID: patronRequestId, Barcode: "item-1", LmsRequestID: getDbText("lms-req-1")}}
 	mockPrRepo := &MockPrRepo{savedItems: savedItems}
 	lmsAdapter := new(mockLmsAdapter)
 	prAction := &PatronRequestActionService{prRepo: mockPrRepo}
@@ -2065,8 +2066,8 @@ func TestHandleInvokeLenderActionRequestItemSaveItemFailed(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
 	lmsAdapter := new(mockLmsAdapter)
-	lmsAdapter.On("RequestItem", "req-1", "", "", "", "").Return(&lms.RequestedItem{Barcode: "item-1"}, nil)
-	lmsAdapter.On("CancelRequestItem", "req-1", "").Return(nil)
+	lmsAdapter.On("RequestItem", "req-1", "", "", "", "").Return(&lms.RequestedItem{RequestID: "lms-req-1", Barcode: "item-1"}, nil)
+	lmsAdapter.On("CancelRequestItem", "lms-req-1", "").Return(nil)
 	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lmsAdapter, nil)
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
@@ -2087,8 +2088,8 @@ func TestHandleInvokeLenderActionRequestItemRejectsEmptyBarcode(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
 	lmsAdapter := new(mockLmsAdapter)
-	lmsAdapter.On("RequestItem", "req-1", "", "", "", "").Return(&lms.RequestedItem{}, nil)
-	lmsAdapter.On("CancelRequestItem", "req-1", "").Return(nil)
+	lmsAdapter.On("RequestItem", "req-1", "", "", "", "").Return(&lms.RequestedItem{RequestID: "lms-req-1"}, nil)
+	lmsAdapter.On("CancelRequestItem", "lms-req-1", "").Return(nil)
 	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lmsAdapter, nil)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(MockIso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{Header: iso18626.Header{RequestingAgencyRequestId: "req-1"}, ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}}
@@ -4259,8 +4260,8 @@ func TestHandleInvokeBorrowerActionFillLocallyCancelsRequestItemWithoutBarcode(t
 	lmsCreator := new(MockLmsCreator)
 	lmsAdapter := new(mockLmsAdapter)
 	lmsAdapter.On("RequestItem", patronRequestId, "local-record-1", "patron-1", "", "").
-		Return(&lms.RequestedItem{}, nil).Once()
-	lmsAdapter.On("CancelRequestItem", patronRequestId, "patron-1").Return(nil).Once()
+		Return(&lms.RequestedItem{RequestID: "lms-req-1"}, nil).Once()
+	lmsAdapter.On("CancelRequestItem", "lms-req-1", "patron-1").Return(nil).Once()
 	lmsCreator.On("GetAdapter", "ISIL:REQ1").Return(lmsAdapter, nil)
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)

@@ -33,6 +33,20 @@ type LmsAdapterNcip struct {
 	config     dirapi.LmsConfig
 }
 
+func (l *LmsAdapterNcip) requestItemRequestType() string {
+	if l.config.RequestItemRequestType != nil {
+		return *l.config.RequestItemRequestType
+	}
+	return "Page"
+}
+
+func (l *LmsAdapterNcip) requestItemRequestScopeType() string {
+	if l.config.RequestItemRequestScopeType != nil {
+		return *l.config.RequestItemRequestScopeType
+	}
+	return "Item"
+}
+
 func CreateLmsAdapterNcip(lmsConfig dirapi.LmsConfig) (LmsAdapter, error) {
 	l := &LmsAdapterNcip{config: lmsConfig}
 	toAgency := "default-to-agency"
@@ -189,17 +203,8 @@ func (l *LmsAdapterNcip) RequestItem(
 			BibliographicRecordIdentifier:     itemId,
 			BibliographicRecordIdentifierCode: &ncip.SchemeValuePair{Text: code},
 		}}
-	scopeType := "Item"
-	if l.config.RequestItemRequestScopeType != nil {
-		scopeType = *l.config.RequestItemRequestScopeType
-	}
-	requestScopeTypeField := ncip.SchemeValuePair{Text: scopeType}
-
-	requestType := "Page"
-	if l.config.RequestItemRequestType != nil {
-		requestType = *l.config.RequestItemRequestType
-	}
-	requestTypeField := ncip.SchemeValuePair{Text: requestType}
+	requestScopeTypeField := ncip.SchemeValuePair{Text: l.requestItemRequestScopeType()}
+	requestTypeField := ncip.SchemeValuePair{Text: l.requestItemRequestType()}
 
 	var itemOptionalFields *ncip.ItemOptionalFields
 	if itemLocation != "" {
@@ -253,7 +258,12 @@ func (l *LmsAdapterNcip) RequestItem(
 	if response.ItemOptionalFields != nil && response.ItemOptionalFields.BibliographicDescription != nil {
 		title = response.ItemOptionalFields.BibliographicDescription.Title
 	}
+	lmsRequestID := requestId
+	if response.RequestId != nil && strings.TrimSpace(response.RequestId.RequestIdentifierValue) != "" {
+		lmsRequestID = response.RequestId.RequestIdentifierValue
+	}
 	return &RequestedItem{
+		RequestID:  lmsRequestID,
 		Barcode:    barcode,
 		CallNumber: callNumber,
 		Title:      title,
@@ -262,8 +272,10 @@ func (l *LmsAdapterNcip) RequestItem(
 
 func (l *LmsAdapterNcip) CancelRequestItem(requestId string, userId string) error {
 	arg := ncip.CancelRequestItem{
-		UserId:    &ncip.UserId{UserIdentifierValue: userId},
-		RequestId: &ncip.RequestId{RequestIdentifierValue: requestId},
+		UserId:           &ncip.UserId{UserIdentifierValue: userId},
+		RequestId:        &ncip.RequestId{RequestIdentifierValue: requestId},
+		RequestType:      ncip.SchemeValuePair{Text: l.requestItemRequestType()},
+		RequestScopeType: &ncip.SchemeValuePair{Text: l.requestItemRequestScopeType()},
 	}
 	_, err := l.ncipClient.CancelRequestItem(arg)
 	return err

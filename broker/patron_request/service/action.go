@@ -1155,7 +1155,11 @@ func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.Exte
 	}
 	if requestedItem != nil && strings.TrimSpace(requestedItem.Barcode) == "" {
 		barcodeErr := errors.New("missing item barcode")
-		if cancelErr := lmsAdapter.CancelRequestItem(requestID, userID); cancelErr != nil {
+		lmsRequestID := strings.TrimSpace(requestedItem.RequestID)
+		if lmsRequestID == "" {
+			lmsRequestID = requestID
+		}
+		if cancelErr := lmsAdapter.CancelRequestItem(lmsRequestID, userID); cancelErr != nil {
 			barcodeErr = errors.Join(barcodeErr, fmt.Errorf("LMS CancelRequestItem compensation failed: %w", cancelErr))
 		}
 		status, result := logActionErrorAndReturnResult(ctx, "LMS RequestItem returned an empty barcode", barcodeErr)
@@ -1224,7 +1228,7 @@ func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.Extended
 			return pr, "failed to get existing items", err
 		}
 		for _, item := range items {
-			if item.LmsRequestID.Valid && strings.TrimSpace(item.LmsRequestID.String) == requestID {
+			if item.LmsRequestID.Valid && strings.TrimSpace(item.LmsRequestID.String) != "" {
 				return pr, "", nil
 			}
 		}
@@ -1244,10 +1248,14 @@ func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.Extended
 	if response == nil {
 		return pr, "", nil
 	}
+	lmsRequestID := strings.TrimSpace(response.RequestID)
+	if lmsRequestID == "" {
+		lmsRequestID = requestID
+	}
 	barcode := strings.TrimSpace(response.Barcode)
 	if barcode == "" {
 		barcodeErr := errors.New("missing item barcode")
-		if cancelErr := lmsAdapter.CancelRequestItem(requestID, userID); cancelErr != nil {
+		if cancelErr := lmsAdapter.CancelRequestItem(lmsRequestID, userID); cancelErr != nil {
 			barcodeErr = errors.Join(barcodeErr, fmt.Errorf("LMS CancelRequestItem compensation failed: %w", cancelErr))
 		}
 		return pr, "LMS RequestItem returned an empty barcode", barcodeErr
@@ -1255,7 +1263,7 @@ func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.Extended
 	for _, existingItem := range items {
 		if strings.TrimSpace(existingItem.Barcode) == barcode {
 			duplicateErr := errors.New("item barcode is already attached to the request")
-			if cancelErr := lmsAdapter.CancelRequestItem(requestID, userID); cancelErr != nil {
+			if cancelErr := lmsAdapter.CancelRequestItem(lmsRequestID, userID); cancelErr != nil {
 				duplicateErr = errors.Join(duplicateErr, fmt.Errorf("LMS CancelRequestItem compensation failed: %w", cancelErr))
 			}
 			return pr, "LMS RequestItem returned a duplicate barcode", duplicateErr
@@ -1271,13 +1279,13 @@ func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.Extended
 		CreatedAt:    pgtype.Timestamp{Valid: true, Time: time.Now()},
 		PrID:         pr.ID,
 		ItemID:       getDbText(itemID),
-		LmsRequestID: getDbText(requestID),
+		LmsRequestID: getDbText(lmsRequestID),
 		Title:        getDbTextPtr(&title),
 		CallNumber:   getDbTextPtr(&callNumber),
 		Barcode:      barcode,
 	})
 	if err != nil {
-		if cancelErr := lmsAdapter.CancelRequestItem(requestID, userID); cancelErr != nil {
+		if cancelErr := lmsAdapter.CancelRequestItem(lmsRequestID, userID); cancelErr != nil {
 			err = errors.Join(err, fmt.Errorf("LMS CancelRequestItem compensation failed: %w", cancelErr))
 		}
 		return pr, "failed to save item", err
