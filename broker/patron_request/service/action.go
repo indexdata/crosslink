@@ -1596,37 +1596,6 @@ func encodeItemsNote(items []pr_db.Item) string {
 	return common.PackItemsNote(list)
 }
 
-func itemToPrItem(item pr_db.Item) pr_db.PrItem {
-	var callNumber *string
-	if item.CallNumber.Valid {
-		callNumber = &item.CallNumber.String
-	}
-	var title *string
-	if item.Title.Valid {
-		title = &item.Title.String
-	}
-	var itemID *string
-	if item.ItemID.Valid {
-		itemID = &item.ItemID.String
-	}
-	return pr_db.PrItem{
-		ID:         item.ID,
-		Barcode:    item.Barcode,
-		CallNumber: callNumber,
-		Title:      title,
-		ItemID:     itemID,
-		CreatedAt:  item.CreatedAt.Time,
-	}
-}
-
-func itemsToPrItems(items []pr_db.Item) []pr_db.PrItem {
-	result := make([]pr_db.PrItem, 0, len(items))
-	for _, item := range items {
-		result = append(result, itemToPrItem(item))
-	}
-	return result
-}
-
 func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter) actionExecutionResult {
 	items, err := a.getItems(ctx, pr)
 	if err != nil {
