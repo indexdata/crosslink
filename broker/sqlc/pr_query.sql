@@ -39,6 +39,10 @@ LIMIT $1 OFFSET $2;
 -- name: UpdatePatronRequest :one
 -- internal_note ($20) is a pass-through to keep PatronRequest <-> UpdatePatronRequestParams
 -- convertible; edits go through UpdatePatronRequestInternalNote.
+-- items ($15) is likewise a pass-through: it is intentionally ignored (COALESCE always keeps
+-- the stored value, since items is NOT NULL) so this generic update can never clobber the
+-- item cache maintained by trigger_update_patron_request_items. Do not set PatronRequest.Items
+-- before calling this query; items are only ever written by that trigger.
 UPDATE patron_request
 SET ill_request         = $3,
     state               = $4,
@@ -52,7 +56,7 @@ SET ill_request         = $3,
     last_action         = $12,
     last_action_outcome = $13,
     last_action_result  = $14,
-    items               = $15,
+    items               = COALESCE(items, $15),
     language            = $16,
     terminal_state      = $17,
     updated_at          = now(),
