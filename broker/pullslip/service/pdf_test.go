@@ -12,6 +12,7 @@ import (
 
 	"github.com/indexdata/crosslink/broker/common"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
@@ -259,7 +260,8 @@ func (m *mockPrRepo) GetTemplateByPurposeAudienceLabelAndOwner(_ common.Extended
 	for _, t := range prservice.GetStateModelTemplateDefaults() {
 		if slices.Contains(t.Labels, params.Label) {
 			return pr_db.Template{
-				Body: t.Body,
+				Body:        t.Body,
+				ContentType: string(proapi.Html),
 			}, nil
 		}
 	}

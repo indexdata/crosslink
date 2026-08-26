@@ -12,6 +12,7 @@ import (
 	"github.com/indexdata/cql-go/pgcql"
 	"github.com/indexdata/crosslink/broker/common"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	ps_db "github.com/indexdata/crosslink/broker/pullslip/db"
 	psoapi "github.com/indexdata/crosslink/broker/pullslip/oapi"
@@ -58,7 +59,8 @@ func (m *MockPrRepo) GetTemplateByPurposeAudienceLabelAndOwner(_ common.Extended
 	for _, t := range prservice.GetStateModelTemplateDefaults() {
 		if slices.Contains(t.Labels, params.Label) {
 			return pr_db.Template{
-				Body: t.Body,
+				Body:        t.Body,
+				ContentType: string(proapi.Html),
 			}, nil
 		}
 	}

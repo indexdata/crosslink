@@ -378,8 +378,8 @@ func TestGenerateAndEmailPullslip_PerformsPlaceholderSubstitution(t *testing.T) 
 		fullCount:  5,
 		template: pr_db.Template{
 			ID:          "template-id",
-			Subject:     pgtype.Text{String: "Selected {{fullCount}}", Valid: true},
-			Body:        "Attached {{actualCount}} of {{fullCount}} from {{batchQuery}}",
+			Subject:     pgtype.Text{String: "Selected {{.FullCount}}", Valid: true},
+			Body:        "Attached {{.ActualCount}} of {{.FullCount}} from {{.BatchQuery}}",
 			ContentType: "text",
 		},
 	}

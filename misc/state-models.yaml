@@ -80,16 +80,16 @@ stateModels:
 
       - name: METADATA_UPDATED
         display: Metadata Updated
-        desc: Request metadata update has completed or been skipped
+        desc: Request preparation has completed and pre-send checks can run
         side: REQUESTER
-        primaryAction: send-request
+        primaryAction: check-duplicate
         closingAction: close-request
         actions:
-          - name: send-request
-            desc: Send ISO18626 request to the supplier or broker
+          - name: check-duplicate
+            desc: Check for a recent matching patron request
             transitions:
-              success: SENT
-              duplicate: DUPLICATE
+              success: READY_TO_SEND
+              review: DUPLICATE
             trigger: auto
           - name: close-request
             desc: Close the request locally
@@ -100,16 +100,33 @@ stateModels:
         display: Needs review
         desc: Request is valid but needs staff review before sending
         side: REQUESTER
-        primaryAction: send-request
+        primaryAction: check-duplicate
         closingAction: close-request
         needsAttention: true
         editable: true
+        actions:
+          - name: check-duplicate
+            desc: Check for a recent matching patron request before sending
+            transitions:
+              success: READY_TO_SEND
+              review: DUPLICATE
+          - name: close-request
+            desc: Close the request locally
+            transitions:
+              success: MANUALLY_CLOSED
+
+      - name: READY_TO_SEND
+        display: Ready to send
+        desc: Duplicate check has completed and the request is ready to send
+        side: REQUESTER
+        primaryAction: send-request
+        closingAction: close-request
         actions:
           - name: send-request
             desc: Send ISO18626 request to the supplier or broker
             transitions:
               success: SENT
-              duplicate: DUPLICATE
+            trigger: auto
           - name: close-request
             desc: Close the request locally
             transitions:
@@ -117,7 +134,7 @@ stateModels:
 
       - name: DUPLICATE
         display: Duplicate
-        desc: A duplicate request was reported by the supplier or broker
+        desc: A recent matching patron request was found
         side: REQUESTER
         primaryAction: send-request
         needsAttention: true
@@ -125,10 +142,9 @@ stateModels:
         closingAction: close-request
         actions:
           - name: send-request
-            desc: Retry sending the request to the supplier or broker
+            desc: Send the request despite the duplicate warning
             transitions:
               success: SENT
-              duplicate: DUPLICATE
           - name: close-request
             desc: Close the duplicate request
             transitions:
