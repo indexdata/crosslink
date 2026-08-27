@@ -35,6 +35,14 @@ import (
 var appCtx = common.CreateExtCtxWithArgs(context.Background(), nil)
 var patronRequestId = "pr1"
 
+func TestLmsNoticeStatus(t *testing.T) {
+	assert.Equal(t, events.EventStatusSuccess, lmsNoticeStatus(nil))
+	assert.Equal(t, events.EventStatusProblem, lmsNoticeStatus(&ncipclient.NcipError{
+		Problem: ncip.Problem{ProblemType: ncip.SchemeValuePair{Text: string(ncip.UnknownUser)}},
+	}))
+	assert.Equal(t, events.EventStatusError, lmsNoticeStatus(errors.New("transport failed")))
+}
+
 func TestCheckDuplicateBorrowingRequestUsesPatronRequests(t *testing.T) {
 	windowHours := int32(24)
 	createdAt := time.Date(2026, time.August, 25, 12, 30, 0, 123456000, time.UTC)
@@ -2314,7 +2322,7 @@ func TestHandleInvokeLenderActionCannotSupplyWithReason(t *testing.T) {
 	}
 }
 
-func TestHandleInvokeLenderActionCannotSupplyCancelRequestItemFailed(t *testing.T) {
+func TestHandleInvokeLenderActionCannotSupplyContinuesWhenCancelRequestItemFails(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
 	lmsAdapter := new(mockLmsAdapter)
@@ -2331,11 +2339,44 @@ func TestHandleInvokeLenderActionCannotSupplyCancelRequestItemFailed(t *testing.
 		CommonEventData: events.CommonEventData{Action: &action},
 	}})
 
-	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "LMS CancelRequestItem failed", resultData.EventError.Message)
-	assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, LenderStateUnfilled, mockPrRepo.savedPr.State)
+	assert.True(t, mockPrRepo.savedPr.TerminalState)
+	assert.False(t, mockPrRepo.savedPr.NeedsAttention)
+	assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
+	compensation, ok := resultData.CustomData[compensationResultKey].(actionCompensationResult)
+	if assert.True(t, ok) {
+		assert.Equal(t, "CancelRequestItem", compensation.Operation)
+		assert.Equal(t, ActionOutcomeFailure, compensation.Outcome)
+		assert.Contains(t, compensation.Error, "cancel failed")
+	}
+	lmsAdapter.AssertExpectations(t)
+}
+
+func TestHandleInvokeLenderActionCannotSupplyIsoFailureStillBlocksTransition(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsAdapter := new(mockLmsAdapter)
+	lmsAdapter.On("CancelRequestItem", "req-1", "").Return(errors.New("cancel failed"))
+	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lmsAdapter, nil)
+	mockIso18626Handler := &MockIso18626Handler{failSupplyingAgencyMessage: true}
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	illRequest := iso18626.Request{Header: iso18626.Header{RequestingAgencyRequestId: "req-1"}}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "item-1", LmsRequestID: getDbText("req-1")}}, nil)
+	action := LenderActionCannotSupply
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{
+		CommonEventData: events.CommonEventData{Action: &action},
+	}})
+
+	assert.Equal(t, events.EventStatusProblem, status)
 	assert.Equal(t, LenderStateValidated, mockPrRepo.savedPr.State)
-	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
+	assert.False(t, mockPrRepo.savedPr.TerminalState)
+	compensation, ok := resultData.CustomData[compensationResultKey].(actionCompensationResult)
+	if assert.True(t, ok) {
+		assert.Contains(t, compensation.Error, "cancel failed")
+	}
 	lmsAdapter.AssertExpectations(t)
 }
 
@@ -2735,6 +2776,41 @@ func TestHandleInvokeLenderActionAskRetryMissingReasonRetry(t *testing.T) {
 	assert.Equal(t, "missing reasonRetry for ask-retry action", resultData.EventError.Message)
 }
 
+func TestHandleInvokeLenderActionAskRetryInvalidRequesterDoesNotPanic(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsAdapter := new(mockLmsAdapter)
+	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lmsAdapter, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(MockIso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
+	illRequest := iso18626.Request{Header: iso18626.Header{RequestingAgencyRequestId: "req-1"}}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{
+		ID:              patronRequestId,
+		IllRequest:      illRequest,
+		State:           LenderStateValidated,
+		Side:            SideLending,
+		SupplierSymbol:  getDbText("ISIL:SUP1"),
+		RequesterSymbol: pgtype.Text{},
+	}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "item-1", LmsRequestID: getDbText("req-1")}}, nil)
+	action := LenderActionAskRetry
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{
+		CommonEventData: events.CommonEventData{Action: &action},
+		CustomData: map[string]any{
+			"itemId":      "0201896834",
+			"reasonRetry": string(iso18626.ReasonRetryNotFoundAsCited),
+		},
+	}})
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "invalid requester symbol", resultData.EventError.Message)
+	assert.Equal(t, LenderStateValidated, mockPrRepo.savedPr.State)
+	compensation, ok := resultData.CustomData[compensationResultKey].(actionCompensationResult)
+	if assert.True(t, ok) {
+		assert.Contains(t, compensation.Error, "invalid requester symbol")
+	}
+}
+
 func TestHandleInvokeLenderActionAskRetryFull(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
@@ -2772,7 +2848,7 @@ func TestHandleInvokeLenderActionAskRetryFull(t *testing.T) {
 	}
 }
 
-func TestHandleInvokeLenderActionAskRetryCancelRequestItemFailed(t *testing.T) {
+func TestHandleInvokeLenderActionAskRetryContinuesWhenCancelRequestItemFails(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
 	lmsAdapter := new(mockLmsAdapter)
@@ -2793,12 +2869,17 @@ func TestHandleInvokeLenderActionAskRetryCancelRequestItemFailed(t *testing.T) {
 		},
 	}})
 
-	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "LMS CancelRequestItem failed", resultData.EventError.Message)
-	assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
-	assert.Equal(t, LenderStateValidated, mockPrRepo.savedPr.State)
-	assert.False(t, mockPrRepo.savedPr.TerminalState)
-	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, LenderStateCompletedWithRetry, mockPrRepo.savedPr.State)
+	assert.True(t, mockPrRepo.savedPr.TerminalState)
+	assert.False(t, mockPrRepo.savedPr.NeedsAttention)
+	assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
+	compensation, ok := resultData.CustomData[compensationResultKey].(actionCompensationResult)
+	if assert.True(t, ok) {
+		assert.Equal(t, "CancelRequestItem", compensation.Operation)
+		assert.Equal(t, ActionOutcomeFailure, compensation.Outcome)
+		assert.Contains(t, compensation.Error, "cancel failed")
+	}
 	lmsAdapter.AssertExpectations(t)
 }
 
@@ -3345,7 +3426,7 @@ func TestHandleInvokeLenderActionAcceptCancel(t *testing.T) {
 	}
 }
 
-func TestHandleInvokeLenderActionAcceptCancelCancelRequestItemFailed(t *testing.T) {
+func TestHandleInvokeLenderActionAcceptCancelContinuesWhenCancelRequestItemFails(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
 	lmsAdapter := new(mockLmsAdapter)
@@ -3360,12 +3441,17 @@ func TestHandleInvokeLenderActionAcceptCancelCancelRequestItemFailed(t *testing.
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
-	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "LMS CancelRequestItem failed", resultData.EventError.Message)
-	assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
-	assert.Equal(t, LenderStateCancelRequested, mockPrRepo.savedPr.State)
-	assert.False(t, mockPrRepo.savedPr.TerminalState)
-	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, LenderStateCancelled, mockPrRepo.savedPr.State)
+	assert.True(t, mockPrRepo.savedPr.TerminalState)
+	assert.False(t, mockPrRepo.savedPr.NeedsAttention)
+	assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
+	compensation, ok := resultData.CustomData[compensationResultKey].(actionCompensationResult)
+	if assert.True(t, ok) {
+		assert.Equal(t, "CancelRequestItem", compensation.Operation)
+		assert.Equal(t, ActionOutcomeFailure, compensation.Outcome)
+		assert.Contains(t, compensation.Error, "cancel failed")
+	}
 	lmsAdapter.AssertExpectations(t)
 }
 
