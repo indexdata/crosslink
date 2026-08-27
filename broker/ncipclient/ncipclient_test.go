@@ -70,6 +70,10 @@ func TestLookupUserAutoOK(t *testing.T) {
 
 func TestLookupUserAutoInvalidUser(t *testing.T) {
 	ncipClient := createTestClient()
+	var logErr error
+	ncipClient.SetLogFunc(func(outgoing map[string]any, incoming map[string]any, err error) {
+		logErr = err
+	})
 	lookup := ncip.LookupUser{
 		UserId: &ncip.UserId{
 			UserIdentifierValue: "foo",
@@ -78,6 +82,9 @@ func TestLookupUserAutoInvalidUser(t *testing.T) {
 	_, err := ncipClient.LookupUser(lookup)
 	assert.Error(t, err)
 	assert.Equal(t, "NCIP user lookup failed: Unknown User: foo", err.Error())
+	var ncipErr *NcipError
+	assert.ErrorAs(t, logErr, &ncipErr)
+	assert.Equal(t, string(ncip.UnknownUser), ncipErr.Problem.ProblemType.Text)
 }
 
 func TestLookupUserMissingAddress(t *testing.T) {
@@ -206,7 +213,7 @@ func TestEmptyNcipResponse(t *testing.T) {
 	assert.Equal(t, "invalid NCIP response: missing LookupUserResponse", err.Error())
 	assert.NotNil(t, logOutgoing)
 	assert.NotNil(t, logIncoming)
-	assert.Nil(t, logError)
+	assert.EqualError(t, logError, "invalid NCIP response: missing LookupUserResponse")
 
 	accept := ncip.AcceptItem{
 		RequestId: ncip.RequestId{
@@ -282,6 +289,10 @@ func TestLookupUserProblemResponse(t *testing.T) {
 	ncipClient.fromAgencyAuthentication = "pass"
 	ncipClient.toAgency = "ILL-MOCK"
 	ncipClient.address = server.URL
+	var logErr error
+	ncipClient.SetLogFunc(func(outgoing map[string]any, incoming map[string]any, err error) {
+		logErr = err
+	})
 
 	lookup := ncip.LookupUser{
 		UserId: &ncip.UserId{
@@ -291,6 +302,9 @@ func TestLookupUserProblemResponse(t *testing.T) {
 	_, err := ncipClient.LookupUser(lookup)
 	assert.Error(t, err)
 	assert.Equal(t, "NCIP message processing failed: Some Problem: Details about the problem", err.Error())
+	var ncipErr *NcipError
+	assert.ErrorAs(t, logErr, &ncipErr)
+	assert.Equal(t, "Some Problem", ncipErr.Problem.ProblemType.Text)
 }
 
 func TestAcceptItemOK(t *testing.T) {

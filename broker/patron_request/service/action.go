@@ -61,6 +61,43 @@ type actionExecutionResult struct {
 	retryPr pr_db.PatronRequest
 }
 
+const compensationResultKey = "compensation"
+
+type actionCompensationResult struct {
+	Operation string `json:"operation"`
+	Outcome   string `json:"outcome"`
+	Error     string `json:"error,omitempty"`
+}
+
+func lmsNoticeStatus(err error) events.EventStatus {
+	if err == nil {
+		return events.EventStatusSuccess
+	}
+	var ncipErr *ncipclient.NcipError
+	if errors.As(err, &ncipErr) {
+		return events.EventStatusProblem
+	}
+	return events.EventStatusError
+}
+
+func withCompensationFailure(result actionExecutionResult, operation string, err error) actionExecutionResult {
+	if err == nil {
+		return result
+	}
+	if result.result == nil {
+		result.result = &events.EventResult{}
+	}
+	if result.result.CustomData == nil {
+		result.result.CustomData = make(map[string]any)
+	}
+	result.result.CustomData[compensationResultKey] = actionCompensationResult{
+		Operation: operation,
+		Outcome:   ActionOutcomeFailure,
+		Error:     err.Error(),
+	}
+	return result
+}
+
 type actionDecisionDetailMetadataUpdate struct {
 	Type          string                               `json:"type"`
 	Outcome       string                               `json:"outcome"`
@@ -541,10 +578,7 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	lmsAdapter.SetLogFunc(func(outgoing map[string]any, incoming map[string]any, err error) {
-		status := events.EventStatusSuccess
-		if err != nil {
-			status = events.EventStatusError
-		}
+		status := lmsNoticeStatus(err)
 		var customData = make(map[string]any)
 		customData["lmsOutgoingMessage"] = outgoing
 		customData["lmsIncomingMessage"] = incoming
@@ -610,10 +644,7 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	lmsAdapter.SetLogFunc(func(outgoing map[string]any, incoming map[string]any, err error) {
-		status := events.EventStatusSuccess
-		if err != nil {
-			status = events.EventStatusError
-		}
+		status := lmsNoticeStatus(err)
 		customData := map[string]any{
 			"lmsOutgoingMessage": outgoing,
 			"lmsIncomingMessage": incoming,
@@ -1405,10 +1436,7 @@ func (a *PatronRequestActionService) cancelLenderRequestItems(ctx common.Extende
 }
 
 func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
-	if err := a.cancelLenderRequestItems(ctx, pr, lmsAdapter); err != nil {
-		status, result := logActionErrorAndReturnResult(ctx, "LMS CancelRequestItem failed", err)
-		return actionExecutionResult{status: status, result: result, pr: pr}
-	}
+	compensationErr := a.cancelLenderRequestItems(ctx, pr, lmsAdapter)
 	result := events.EventResult{}
 	var reasonUnfilled *iso18626.TypeSchemeValuePair
 	if params.ReasonUnfilled != "" {
@@ -1422,7 +1450,8 @@ func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.Extend
 		},
 		iso18626.StatusInfo{Status: iso18626.TypeStatusUnfilled},
 		nil)
-	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
+	execResult := a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
+	return withCompensationFailure(execResult, "CancelRequestItem", compensationErr)
 }
 
 func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
@@ -1641,10 +1670,7 @@ func (a *PatronRequestActionService) rejectCancelLenderRequest(ctx common.Extend
 }
 
 func (a *PatronRequestActionService) acceptCancelLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
-	if err := a.cancelLenderRequestItems(ctx, pr, lmsAdapter); err != nil {
-		status, result := logActionErrorAndReturnResult(ctx, "LMS CancelRequestItem failed", err)
-		return actionExecutionResult{status: status, result: result, pr: pr}
-	}
+	compensationErr := a.cancelLenderRequestItems(ctx, pr, lmsAdapter)
 	yes := iso18626.TypeYesNoY
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
@@ -1654,7 +1680,8 @@ func (a *PatronRequestActionService) acceptCancelLenderRequest(ctx common.Extend
 		},
 		iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled},
 		nil)
-	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
+	execResult := a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
+	return withCompensationFailure(execResult, "CancelRequestItem", compensationErr)
 }
 
 func (a *PatronRequestActionService) askRetryLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
@@ -1675,10 +1702,7 @@ func (a *PatronRequestActionService) askRetryLenderRequest(ctx common.ExtendedCo
 		status, result := logActionErrorAndReturnResult(ctx, fmt.Sprintf("unsupported reasonRetry %q for ask-retry action (supported: %q)", params.ReasonRetry, iso18626.ReasonRetryNotFoundAsCited), nil)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	if err := a.cancelLenderRequestItems(ctx, pr, lmsAdapter); err != nil {
-		status, result := logActionErrorAndReturnResult(ctx, "LMS CancelRequestItem failed", err)
-		return actionExecutionResult{status: status, result: result, pr: pr}
-	}
+	compensationErr := a.cancelLenderRequestItems(ctx, pr, lmsAdapter)
 	reasonRetry := iso18626.TypeSchemeValuePair{Text: params.ReasonRetry}
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
@@ -1689,10 +1713,11 @@ func (a *PatronRequestActionService) askRetryLenderRequest(ctx common.ExtendedCo
 		},
 		iso18626.StatusInfo{Status: iso18626.TypeStatusRetryPossible},
 		deliveryInfo)
-	if result.OutgoingMessage.SupplyingAgencyMessage != nil {
+	if result.OutgoingMessage != nil && result.OutgoingMessage.SupplyingAgencyMessage != nil {
 		setSupplierMessage(*result.OutgoingMessage.SupplyingAgencyMessage, &pr)
 	}
-	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
+	execResult := a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
+	return withCompensationFailure(execResult, "CancelRequestItem", compensationErr)
 }
 
 func (a *PatronRequestActionService) sendNotificationLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {

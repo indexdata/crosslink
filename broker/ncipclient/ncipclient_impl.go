@@ -34,134 +34,158 @@ func (n *NcipClientImpl) SetLogFunc(logFunc NcipLogFunc) {
 	n.logFunc = logFunc
 }
 
-func (n *NcipClientImpl) LookupUser(lookup ncip.LookupUser) (*ncip.LookupUserResponse, error) {
+func (n *NcipClientImpl) LookupUser(lookup ncip.LookupUser) (response *ncip.LookupUserResponse, err error) {
 	lookup.InitiationHeader = n.prepareHeader(lookup.InitiationHeader)
 
 	ncipMessage := &ncip.NCIPMessage{
 		LookupUser: &lookup,
 	}
-	ncipResponse, err := n.sendReceiveMessage(ncipMessage)
+	var ncipResponse *ncip.NCIPMessage
+	defer func() { n.logOperation(ncipMessage, ncipResponse, err) }()
+	ncipResponse, err = n.sendReceiveMessage(ncipMessage)
 	if err != nil {
 		return nil, err
 	}
-	response := ncipResponse.LookupUserResponse
+	response = ncipResponse.LookupUserResponse
 	if response == nil {
 		return nil, fmt.Errorf("invalid NCIP response: missing LookupUserResponse")
 	}
-	return response, n.checkProblem("NCIP user lookup", response.Problem)
+	err = n.checkProblem("NCIP user lookup", response.Problem)
+	return response, err
 }
 
-func (n *NcipClientImpl) AcceptItem(accept ncip.AcceptItem) (*ncip.AcceptItemResponse, error) {
+func (n *NcipClientImpl) AcceptItem(accept ncip.AcceptItem) (response *ncip.AcceptItemResponse, err error) {
 	accept.InitiationHeader = n.prepareHeader(accept.InitiationHeader)
 	ncipMessage := &ncip.NCIPMessage{
 		AcceptItem: &accept,
 	}
-	ncipResponse, err := n.sendReceiveMessage(ncipMessage)
+	var ncipResponse *ncip.NCIPMessage
+	defer func() { n.logOperation(ncipMessage, ncipResponse, err) }()
+	ncipResponse, err = n.sendReceiveMessage(ncipMessage)
 	if err != nil {
 		return nil, err
 	}
-	response := ncipResponse.AcceptItemResponse
+	response = ncipResponse.AcceptItemResponse
 	if response == nil {
 		return nil, fmt.Errorf("invalid NCIP response: missing AcceptItemResponse")
 	}
-	return response, n.checkProblem("NCIP accept item", response.Problem)
+	err = n.checkProblem("NCIP accept item", response.Problem)
+	return response, err
 }
 
-func (n *NcipClientImpl) DeleteItem(delete ncip.DeleteItem) (*ncip.DeleteItemResponse, error) {
+func (n *NcipClientImpl) DeleteItem(delete ncip.DeleteItem) (response *ncip.DeleteItemResponse, err error) {
 	delete.InitiationHeader = n.prepareHeader(delete.InitiationHeader)
 	ncipMessage := &ncip.NCIPMessage{
 		DeleteItem: &delete,
 	}
-	ncipResponse, err := n.sendReceiveMessage(ncipMessage)
+	var ncipResponse *ncip.NCIPMessage
+	defer func() { n.logOperation(ncipMessage, ncipResponse, err) }()
+	ncipResponse, err = n.sendReceiveMessage(ncipMessage)
 	if err != nil {
 		return nil, err
 	}
-	response := ncipResponse.DeleteItemResponse
+	response = ncipResponse.DeleteItemResponse
 	if response == nil {
 		return nil, fmt.Errorf("invalid NCIP response: missing DeleteItemResponse")
 	}
-	return response, n.checkProblem("NCIP delete item", response.Problem)
+	err = n.checkProblem("NCIP delete item", response.Problem)
+	return response, err
 }
 
-func (n *NcipClientImpl) RequestItem(request ncip.RequestItem) (*ncip.RequestItemResponse, error) {
+func (n *NcipClientImpl) RequestItem(request ncip.RequestItem) (response *ncip.RequestItemResponse, err error) {
 	request.InitiationHeader = n.prepareHeader(request.InitiationHeader)
 	ncipMessage := &ncip.NCIPMessage{
 		RequestItem: &request,
 	}
-	ncipResponse, err := n.sendReceiveMessage(ncipMessage)
+	var ncipResponse *ncip.NCIPMessage
+	defer func() { n.logOperation(ncipMessage, ncipResponse, err) }()
+	ncipResponse, err = n.sendReceiveMessage(ncipMessage)
 	if err != nil {
 		return nil, err
 	}
-	response := ncipResponse.RequestItemResponse
+	response = ncipResponse.RequestItemResponse
 	if response == nil {
 		return nil, fmt.Errorf("invalid NCIP response: missing RequestItemResponse")
 	}
-	return response, n.checkProblem("NCIP request item", response.Problem)
+	err = n.checkProblem("NCIP request item", response.Problem)
+	return response, err
 }
 
-func (n *NcipClientImpl) CancelRequestItem(request ncip.CancelRequestItem) (*ncip.CancelRequestItemResponse, error) {
+func (n *NcipClientImpl) CancelRequestItem(request ncip.CancelRequestItem) (response *ncip.CancelRequestItemResponse, err error) {
 	request.InitiationHeader = n.prepareHeader(request.InitiationHeader)
 	ncipMessage := &ncip.NCIPMessage{
 		CancelRequestItem: &request,
 	}
-	ncipResponse, err := n.sendReceiveMessage(ncipMessage)
+	var ncipResponse *ncip.NCIPMessage
+	defer func() { n.logOperation(ncipMessage, ncipResponse, err) }()
+	ncipResponse, err = n.sendReceiveMessage(ncipMessage)
 	if err != nil {
 		return nil, err
 	}
-	response := ncipResponse.CancelRequestItemResponse
+	response = ncipResponse.CancelRequestItemResponse
 	if response == nil {
 		return nil, fmt.Errorf("invalid NCIP response: missing CancelRequestItemResponse")
 	}
-	return response, n.checkProblem("NCIP cancel request item", response.Problem)
+	err = n.checkProblem("NCIP cancel request item", response.Problem)
+	return response, err
 }
 
-func (n *NcipClientImpl) CheckInItem(request ncip.CheckInItem) (*ncip.CheckInItemResponse, error) {
+func (n *NcipClientImpl) CheckInItem(request ncip.CheckInItem) (response *ncip.CheckInItemResponse, err error) {
 	request.InitiationHeader = n.prepareHeader(request.InitiationHeader)
 	ncipMessage := &ncip.NCIPMessage{
 		CheckInItem: &request,
 	}
-	ncipResponse, err := n.sendReceiveMessage(ncipMessage)
+	var ncipResponse *ncip.NCIPMessage
+	defer func() { n.logOperation(ncipMessage, ncipResponse, err) }()
+	ncipResponse, err = n.sendReceiveMessage(ncipMessage)
 	if err != nil {
 		return nil, err
 	}
-	response := ncipResponse.CheckInItemResponse
+	response = ncipResponse.CheckInItemResponse
 	if response == nil {
 		return nil, fmt.Errorf("invalid NCIP response: missing CheckInItemResponse")
 	}
-	return response, n.checkProblem("NCIP check in item", response.Problem)
+	err = n.checkProblem("NCIP check in item", response.Problem)
+	return response, err
 }
 
-func (n *NcipClientImpl) CheckOutItem(request ncip.CheckOutItem) (*ncip.CheckOutItemResponse, error) {
+func (n *NcipClientImpl) CheckOutItem(request ncip.CheckOutItem) (response *ncip.CheckOutItemResponse, err error) {
 	request.InitiationHeader = n.prepareHeader(request.InitiationHeader)
 	ncipMessage := &ncip.NCIPMessage{
 		CheckOutItem: &request,
 	}
-	ncipResponse, err := n.sendReceiveMessage(ncipMessage)
+	var ncipResponse *ncip.NCIPMessage
+	defer func() { n.logOperation(ncipMessage, ncipResponse, err) }()
+	ncipResponse, err = n.sendReceiveMessage(ncipMessage)
 	if err != nil {
 		return nil, err
 	}
-	response := ncipResponse.CheckOutItemResponse
+	response = ncipResponse.CheckOutItemResponse
 	if response == nil {
 		return nil, fmt.Errorf("invalid NCIP response: missing CheckOutItemResponse")
 	}
-	return response, n.checkProblem("NCIP check out item", response.Problem)
+	err = n.checkProblem("NCIP check out item", response.Problem)
+	return response, err
 }
 
-func (n *NcipClientImpl) CreateUserFiscalTransaction(request ncip.CreateUserFiscalTransaction) (*ncip.CreateUserFiscalTransactionResponse, error) {
+func (n *NcipClientImpl) CreateUserFiscalTransaction(request ncip.CreateUserFiscalTransaction) (response *ncip.CreateUserFiscalTransactionResponse, err error) {
 	request.InitiationHeader = n.prepareHeader(request.InitiationHeader)
 
 	ncipMessage := &ncip.NCIPMessage{
 		CreateUserFiscalTransaction: &request,
 	}
-	ncipResponse, err := n.sendReceiveMessage(ncipMessage)
+	var ncipResponse *ncip.NCIPMessage
+	defer func() { n.logOperation(ncipMessage, ncipResponse, err) }()
+	ncipResponse, err = n.sendReceiveMessage(ncipMessage)
 	if err != nil {
 		return nil, err
 	}
-	response := ncipResponse.CreateUserFiscalTransactionResponse
+	response = ncipResponse.CreateUserFiscalTransactionResponse
 	if response == nil {
 		return nil, fmt.Errorf("invalid NCIP response: missing CreateUserFiscalTransactionResponse")
 	}
-	return response, n.checkProblem("NCIP create user fiscal transaction", response.Problem)
+	err = n.checkProblem("NCIP create user fiscal transaction", response.Problem)
+	return response, err
 }
 
 func (n *NcipClientImpl) checkProblem(op string, responseProblems []ncip.Problem) error {
@@ -198,36 +222,41 @@ func (n *NcipClientImpl) sendReceiveMessage(message *ncip.NCIPMessage) (*ncip.NC
 
 	err := httpclient.NewClient().RequestResponse(n.client, http.MethodPost, []string{httpclient.ContentTypeApplicationXml},
 		n.address, message, &respMessage, xml.Marshal, xml.Unmarshal)
-	if n.logFunc != nil {
-		hideSensitive(message)
-		var outgoing map[string]any
-		var err1 error
-		outgoing, err1 = common.StructToMap(message)
-
-		hideSensitive(&respMessage)
-		var incoming map[string]any
-		var err2 error
-		incoming, err2 = common.StructToMap(&respMessage)
-
-		logErr := err
-		if logErr == nil {
-			logErr = err1
-		}
-		if logErr == nil {
-			logErr = err2
-		}
-		n.logFunc(outgoing, incoming, logErr)
-	}
 	if err != nil {
-		return nil, fmt.Errorf("NCIP message exchange failed: %s", err.Error())
+		return &respMessage, fmt.Errorf("NCIP message exchange failed: %s", err.Error())
 	}
 	if len(respMessage.Problem) > 0 {
-		return nil, &NcipError{
+		return &respMessage, &NcipError{
 			Message: "NCIP message processing failed",
 			Problem: respMessage.Problem[0],
 		}
 	}
 	return &respMessage, nil
+}
+
+func (n *NcipClientImpl) logOperation(outgoingMessage *ncip.NCIPMessage, incomingMessage *ncip.NCIPMessage, operationErr error) {
+	if n.logFunc == nil {
+		return
+	}
+
+	hideSensitive(outgoingMessage)
+	outgoing, outgoingErr := common.StructToMap(outgoingMessage)
+
+	var incoming map[string]any
+	var incomingErr error
+	if incomingMessage != nil {
+		hideSensitive(incomingMessage)
+		incoming, incomingErr = common.StructToMap(incomingMessage)
+	}
+
+	logErr := operationErr
+	if logErr == nil {
+		logErr = outgoingErr
+	}
+	if logErr == nil {
+		logErr = incomingErr
+	}
+	n.logFunc(outgoing, incoming, logErr)
 }
 
 func hideSensitive(message *ncip.NCIPMessage) {
