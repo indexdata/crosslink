@@ -3851,6 +3851,38 @@ func TestCreateAndSendEmail(t *testing.T) {
 			},
 			wantErrSubstr: "header injection",
 		},
+		{
+			name:       "invalid template body",
+			from:       "from@example.com",
+			recipients: recipients,
+			setupPrRepo: func(m *MockPrRepo) {
+				m.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(pr_db.Template{
+					Body:    "Hello patron {{.PatronEmai ",
+					Subject: pgtype.Text{String: "Your request", Valid: true},
+				}, nil)
+			},
+			setupEmail: func(m *EmailSenderMock) {},
+			assertEmail: func(t *testing.T, m *EmailSenderMock) {
+				m.AssertNotCalled(t, "SendEmail", mock.Anything)
+			},
+			wantErrSubstr: "template: pull-slip:1: unclosed action",
+		},
+		{
+			name:       "invalid template body",
+			from:       "from@example.com",
+			recipients: recipients,
+			setupPrRepo: func(m *MockPrRepo) {
+				m.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(pr_db.Template{
+					Body:    "Hello patron",
+					Subject: pgtype.Text{String: "Your request {{.PatronEmai ", Valid: true},
+				}, nil)
+			},
+			setupEmail: func(m *EmailSenderMock) {},
+			assertEmail: func(t *testing.T, m *EmailSenderMock) {
+				m.AssertNotCalled(t, "SendEmail", mock.Anything)
+			},
+			wantErrSubstr: "template: pull-slip:1: unclosed action",
+		},
 	}
 
 	for _, tc := range tests {

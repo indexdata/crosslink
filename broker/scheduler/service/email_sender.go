@@ -134,10 +134,18 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 	}
 
 	placeholders := email.GetBatchEmailData(fullCount, len(prs), event.EventData.BatchActionData.Selector)
+	body, err := email.RenderTemplate(placeholders, template.Body)
+	if err != nil {
+		return events.NewErrorResult("failed to render email body", err.Error())
+	}
+	subject, err := email.RenderTemplate(placeholders, template.Subject.String)
+	if err != nil {
+		return events.NewErrorResult("failed to render email subject", err.Error())
+	}
 	messageData := email.EmailData{
 		To:         emailData.To,
-		Subject:    email.RenderTextTemplate(placeholders, template.Subject.String),
-		Body:       email.RenderTextTemplate(placeholders, template.Body),
+		Subject:    subject,
+		Body:       body,
 		IsHTML:     template.ContentType == string(proapi.Html),
 		IncludePdf: emailData.IncludePdf,
 	}

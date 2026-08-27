@@ -99,7 +99,7 @@ func TestBuildRawMessage_WithoutAttachment(t *testing.T) {
 
 func TestRenderPullSlipHTML(t *testing.T) {
 	template := "<div class=\"section\">\n              <b>Service Type:</b> {{.ServiceType}} <br/>\n              <b>Service Level:</b> {{.ServiceLevel}} <br/>\n              <b>System Identifier:</b> {{.SystemIdentifier}} <br/>\n              <b>Title:</b> {{.Title}} <br/>\n              <b>Author:</b> {{.Author}} <br/>\n              <b>Publisher:</b> {{.Publisher}} <br/>\n              <b>Volume(s):</b> {{.Volume}} <br/>\n              <b>Issue:</b> {{.Issue}} <br/>\n              <b>Pages:</b> {{.Pages}} <br/>\n          </div>"
-	html, err := RenderHtmlTemplate(PullSlipData{
+	html, err := RenderTemplate(PullSlipData{
 		ServiceType:      "Loan",
 		Title:            "Big Shark",
 		Author:           "John Doe",
@@ -115,19 +115,19 @@ func TestRenderPullSlipHTML(t *testing.T) {
 }
 
 func TestRenderPullSlipHTML_UsesProvidedTemplate(t *testing.T) {
-	html, err := RenderHtmlTemplate(PullSlipData{ReqId: "REQ-1"}, "<main>{{.ReqId}}</main>")
+	html, err := RenderTemplate(PullSlipData{ReqId: "REQ-1"}, "<main>{{.ReqId}}</main>")
 
 	assert.NoError(t, err)
 	assert.Equal(t, "<main>REQ-1</main>", html)
 }
 
 func TestRenderPullSlipHTML_InvalidTemplate(t *testing.T) {
-	_, err := RenderHtmlTemplate(PullSlipData{ReqId: "X"}, "{{.Unclosed")
+	_, err := RenderTemplate(PullSlipData{ReqId: "X"}, "{{.Unclosed")
 	assert.Error(t, err)
 }
 
 func TestRenderPullSlipHTML_ExecuteError(t *testing.T) {
-	_, err := RenderHtmlTemplate(PullSlipData{ReqId: "X"}, "{{index . \"nonexistent\"}}")
+	_, err := RenderTemplate(PullSlipData{ReqId: "X"}, "{{index . \"nonexistent\"}}")
 	// Execute on a struct with map-access fails
 	assert.Error(t, err)
 }
@@ -412,13 +412,13 @@ func TestGetPickupLocation_AddressWithNoUsableFields(t *testing.T) {
 func TestRenderTextTemplate(t *testing.T) {
 	template := "This is query '{{.BatchQuery}}'."
 	data := GetBatchEmailData(1, 1, "select 1 from dual")
-	assert.Equal(t, "This is query 'select 1 from dual'.", RenderTextTemplate(data, template))
+	result, err := RenderTemplate(data, template)
+	assert.NoError(t, err)
+	assert.Equal(t, "This is query 'select 1 from dual'.", result)
 
 	template = "<p>This is request {{.ReqId}}.</p>"
 	prData := GetPullSlipData(pr_db.PatronRequest{RequesterReqID: pgtype.Text{String: "REQ-1", Valid: true}}, nil, nil, "")
-	assert.Equal(t, "<p>This is request REQ-1.</p>", RenderTextTemplate(prData, template))
-
-	result, err := RenderHtmlTemplate(prData, template)
+	result, err = RenderTemplate(prData, template)
 	assert.NoError(t, err)
 	assert.Equal(t, "<p>This is request REQ-1.</p>", result)
 }

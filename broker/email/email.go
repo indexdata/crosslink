@@ -11,7 +11,6 @@ import (
 	"mime/quotedprintable"
 	"net/smtp"
 	"net/textproto"
-	"reflect"
 	"strings"
 
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
@@ -292,7 +291,7 @@ func GetPullSlipData(pr pr_db.PatronRequest, notes []pr_db.Notification, conditi
 	return data
 }
 
-func RenderHtmlTemplate(data any, templateBody string) (string, error) {
+func RenderTemplate(data any, templateBody string) (string, error) {
 	tmpl, err := template.New("pull-slip").Parse(templateBody)
 	if err != nil {
 		return "", err
@@ -387,15 +386,4 @@ func GetBatchEmailData(fullCount int64, actualCount int, batchQuery string) Batc
 		ActualCount: fmt.Sprintf("%d", actualCount),
 		BatchQuery:  batchQuery,
 	}
-}
-
-func RenderTextTemplate(data any, template string) string {
-	v := reflect.ValueOf(data)
-	t := v.Type()
-	for i := 0; i < t.NumField(); i++ {
-		key := t.Field(i).Name
-		replacement := v.Field(i).String()
-		template = strings.ReplaceAll(template, "{{."+key+"}}", replacement)
-	}
-	return template
 }

@@ -323,6 +323,40 @@ func TestGenerateAndEmailPullslip_TemplateEmptySubject(t *testing.T) {
 	assert.NotNil(t, result)
 }
 
+func TestGenerateAndEmailPullslip_TemplateInvalidBody(t *testing.T) {
+	prRepo := &mockEmailPrRepo{template: pr_db.Template{
+		ID: "template-id",
+		Subject: pgtype.Text{
+			Valid:  true,
+			String: "Subject",
+		},
+		Body:        "Body {{.Invalid text",
+		ContentType: "text",
+	}}
+	svc := newEmailSvc(prRepo, &mockEmailService{}, nil)
+	status, result := svc.generateAndEmailPullslip(testCtx, validEmailEvent())
+	assert.Equal(t, events.EventStatusError, status)
+	assert.NotNil(t, result)
+	assert.Equal(t, "failed to render email body", result.EventError.Message)
+}
+
+func TestGenerateAndEmailPullslip_TemplateInvalidSubject(t *testing.T) {
+	prRepo := &mockEmailPrRepo{template: pr_db.Template{
+		ID: "template-id",
+		Subject: pgtype.Text{
+			Valid:  true,
+			String: "Subject {{.Invalid text",
+		},
+		Body:        "Body",
+		ContentType: "text",
+	}}
+	svc := newEmailSvc(prRepo, &mockEmailService{}, nil)
+	status, result := svc.generateAndEmailPullslip(testCtx, validEmailEvent())
+	assert.Equal(t, events.EventStatusError, status)
+	assert.NotNil(t, result)
+	assert.Equal(t, "failed to render email subject", result.EventError.Message)
+}
+
 func TestGenerateAndEmailPullslip_TemplateEmptyBody(t *testing.T) {
 	prRepo := &mockEmailPrRepo{template: pr_db.Template{
 		ID:          "template-id",

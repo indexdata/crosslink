@@ -1752,7 +1752,6 @@ func (a *PatronRequestActionService) createAndSendEmail(ctx common.ExtendedConte
 	if err != nil {
 		return err
 	}
-	var body string
 	notes, _, err := a.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{Limit: 100, Offset: 0, PrID: pr.ID, Kind: string(pr_db.NotificationKindNote)})
 	if err != nil {
 		return err
@@ -1762,18 +1761,17 @@ func (a *PatronRequestActionService) createAndSendEmail(ctx common.ExtendedConte
 		return err
 	}
 	data := email.GetPullSlipData(pr, notes, conditions, email.DEFAULT_FOR_NO_VALUE)
-	if template.ContentType == string(proapi.Html) {
-		html, ifErr := email.RenderHtmlTemplate(data, template.Body)
-		if ifErr != nil {
-			return ifErr
-		}
-		body = html
-	} else {
-		body = email.RenderTextTemplate(data, template.Body)
+	body, err := email.RenderTemplate(data, template.Body)
+	if err != nil {
+		return err
+	}
+	subject, err := email.RenderTemplate(data, template.Subject.String)
+	if err != nil {
+		return err
 	}
 	emailData := email.EmailData{
 		To:         recipients,
-		Subject:    email.RenderTextTemplate(data, template.Subject.String),
+		Subject:    subject,
 		Body:       body,
 		IsHTML:     template.ContentType == string(proapi.Html),
 		IncludePdf: false,
