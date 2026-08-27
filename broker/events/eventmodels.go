@@ -51,6 +51,8 @@ const (
 	EventNameConfirmSupplierMsg     EventName = "confirm-supplier-msg"
 	EventNameInvokeAction           EventName = "invoke-action"
 	EventNamePatronRequestMessage   EventName = "patron-request-message"
+	EventNameIllRequesterMessage    EventName = "ill-requester-message"
+	EventNameIllSupplierMessage     EventName = "ill-supplier-message"
 	EventNameLmsRequesterMessage    EventName = "lms-requester-message"
 	EventNameLmsSupplierMessage     EventName = "lms-supplier-message"
 	EventNameSendNotification       EventName = "send-notification"

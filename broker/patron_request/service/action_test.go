@@ -535,10 +535,11 @@ func TestHandleInvokeActionValidateSendRequestDuplicateResponseIsFailure(t *test
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
 	mockIso18626Handler := new(MockIso18626Handler)
+	mockEventBus := new(MockEventBus)
 	patronRequestId := "duplicate"
 
 	lmsCreator.On("GetAdapter", "ISIL:x").Return(createLmsAdapterMockLog(), nil)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), new(MockEventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "12312"}}
 	readyPr := pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateReadyToSend, Side: SideBorrowing}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(readyPr, nil)
@@ -553,6 +554,14 @@ func TestHandleInvokeActionValidateSendRequestDuplicateResponseIsFailure(t *test
 	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
 	assert.Equal(t, string(BorrowerActionSendRequest), mockPrRepo.savedPr.LastAction.String)
 	assert.Equal(t, ActionOutcomeFailure, mockPrRepo.savedPr.LastActionOutcome.String)
+	assert.Nil(t, resultData.OutgoingMessage)
+	assert.Nil(t, resultData.IncomingMessage)
+	if assert.Len(t, mockEventBus.createdNoticeData, 1) {
+		assert.Equal(t, events.EventNameIllRequesterMessage, mockEventBus.createdNoticeNames[0])
+		assert.Equal(t, events.EventStatusProblem, mockEventBus.createdNoticeStatus[0])
+		assert.NotNil(t, mockEventBus.createdNoticeData[0].OutgoingMessage.Request)
+		assert.Equal(t, iso18626.TypeMessageStatusERROR, mockEventBus.createdNoticeData[0].IncomingMessage.RequestConfirmation.ConfirmationHeader.MessageStatus)
+	}
 }
 
 func TestHandleInvokeActionCloseRequestFromDuplicate(t *testing.T) {
@@ -1006,7 +1015,7 @@ func TestHandleInvokeActionSendRequest(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Equal(t, iso18626.TypeMessageStatusOK, resultData.IncomingMessage.RequestConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Nil(t, resultData.IncomingMessage)
 	assert.Equal(t, BorrowerStateSent, mockPrRepo.savedPr.State)
 }
 
@@ -1042,7 +1051,13 @@ func TestHandleInvokeActionReceiveOK(t *testing.T) {
 	action := BorrowerActionReceive
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Equal(t, iso18626.TypeMessageStatusOK, resultData.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Nil(t, resultData.OutgoingMessage)
+	assert.Nil(t, resultData.IncomingMessage)
+	if assert.Len(t, mockEventBus.createdNoticeData, 1) {
+		assert.Equal(t, events.EventNameIllRequesterMessage, mockEventBus.createdNoticeNames[0])
+		assert.Equal(t, events.EventStatusSuccess, mockEventBus.createdNoticeStatus[0])
+		assert.Equal(t, iso18626.TypeMessageStatusOK, mockEventBus.createdNoticeData[0].IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	}
 	assert.Equal(t, BorrowerStateReceived, mockPrRepo.savedPr.State)
 	lmsAdapter.AssertNumberOfCalls(t, "AcceptItem", 2)
 	if assert.Len(t, lmsAdapter.Calls, 2) {
@@ -1221,7 +1236,7 @@ func TestHandleInvokeActionShipReturnOK(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Equal(t, iso18626.TypeMessageStatusOK, resultData.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Nil(t, resultData.IncomingMessage)
 	assert.Equal(t, BorrowerStateShippedReturned, mockPrRepo.savedPr.State)
 }
 
@@ -1278,7 +1293,7 @@ func TestHandleInvokeActionCancelRequest(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Equal(t, iso18626.TypeMessageStatusOK, resultData.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Nil(t, resultData.IncomingMessage)
 	if assert.NotNil(t, mockIso18626Handler.lastRequestingAgencyMessage) {
 		assert.Equal(t, "ISIL", mockIso18626Handler.lastRequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text)
 		assert.Equal(t, "BROKER", mockIso18626Handler.lastRequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
@@ -1290,7 +1305,7 @@ func TestCancelBorrowingRequestMissingRequesterSymbol(t *testing.T) {
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(new(MockPrRepo), new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, nil, new(EmailSenderMock), nil, nil)
 
-	result := prAction.cancelBorrowingRequest(appCtx, pr_db.PatronRequest{})
+	result := prAction.cancelBorrowingRequest(appCtx, "", pr_db.PatronRequest{})
 
 	assert.Equal(t, events.EventStatusError, result.status)
 	assert.Equal(t, "missing requester symbol", result.result.EventError.Message)
@@ -1305,7 +1320,7 @@ func TestCancelBorrowingRequestInvalidBrokerSymbol(t *testing.T) {
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(new(MockPrRepo), new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, nil, new(EmailSenderMock), nil, nil)
 
-	result := prAction.cancelBorrowingRequest(appCtx, pr_db.PatronRequest{
+	result := prAction.cancelBorrowingRequest(appCtx, "", pr_db.PatronRequest{
 		RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"},
 	})
 
@@ -1326,9 +1341,7 @@ func TestHandleInvokeActionAcceptCondition(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
-	if assert.NotNil(t, resultData) && assert.NotNil(t, resultData.IncomingMessage) {
-		assert.Equal(t, iso18626.TypeMessageStatusOK, resultData.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
-	}
+	assert.Nil(t, resultData.IncomingMessage)
 	if assert.NotNil(t, mockIso18626Handler.lastRequestingAgencyMessage) {
 		assert.Equal(t, iso18626.TypeActionNotification, mockIso18626Handler.lastRequestingAgencyMessage.Action)
 		assert.Equal(t, shim.RESHARE_LOAN_CONDITION_AGREE, mockIso18626Handler.lastRequestingAgencyMessage.Note)
@@ -1373,9 +1386,7 @@ func TestHandleInvokeActionRejectCondition(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
-	if assert.NotNil(t, resultData) && assert.NotNil(t, resultData.IncomingMessage) {
-		assert.Equal(t, iso18626.TypeMessageStatusOK, resultData.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
-	}
+	assert.Nil(t, resultData.IncomingMessage)
 	if assert.NotNil(t, mockIso18626Handler.lastRequestingAgencyMessage) {
 		assert.Equal(t, iso18626.TypeActionCancel, mockIso18626Handler.lastRequestingAgencyMessage.Action)
 		assert.Equal(t, shim.RESHARE_LOAN_CONDITION_REJECT, mockIso18626Handler.lastRequestingAgencyMessage.Note)
@@ -1412,18 +1423,20 @@ func TestSendBorrowingRequestInvalidSymbol(t *testing.T) {
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, nil, new(EmailSenderMock), nil, nil)
 	var request iso18626.Request
-	result := prAction.sendBorrowingRequest(appCtx, pr_db.PatronRequest{State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "x"}}, request)
+	status, result, err := prAction.messageSender.sendBorrowingRequest(appCtx, "", pr_db.PatronRequest{State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "x"}}, request)
 
-	assert.Equal(t, events.EventStatusError, result.status)
-	assert.Equal(t, "invalid requester symbol", result.result.EventError.Message)
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Nil(t, result)
+	assert.EqualError(t, err, "invalid requester symbol")
 }
 
 func TestSendBorrowingRequestZeroValueIllRequest(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
+	mockEventBus := new(MockEventBus)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, nil, new(EmailSenderMock), nil, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, nil, new(EmailSenderMock), nil, nil)
 
-	result := prAction.sendBorrowingRequest(appCtx, pr_db.PatronRequest{
+	status, _, err := prAction.messageSender.sendBorrowingRequest(appCtx, "", pr_db.PatronRequest{
 		ID:              patronRequestId,
 		State:           BorrowerStateValidated,
 		Side:            SideBorrowing,
@@ -1431,10 +1444,12 @@ func TestSendBorrowingRequestZeroValueIllRequest(t *testing.T) {
 		RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"},
 	}, iso18626.Request{})
 
-	assert.Equal(t, events.EventStatusSuccess, result.status)
-	if assert.NotNil(t, result.result) && assert.NotNil(t, result.result.OutgoingMessage) &&
-		assert.NotNil(t, result.result.OutgoingMessage.Request) {
-		request := result.result.OutgoingMessage.Request
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.NoError(t, err)
+	if assert.Len(t, mockEventBus.createdNoticeData, 1) &&
+		assert.NotNil(t, mockEventBus.createdNoticeData[0].OutgoingMessage) &&
+		assert.NotNil(t, mockEventBus.createdNoticeData[0].OutgoingMessage.Request) {
+		request := mockEventBus.createdNoticeData[0].OutgoingMessage.Request
 		assert.Equal(t, "ISIL", request.Header.RequestingAgencyId.AgencyIdType.Text)
 		assert.Equal(t, "REC1", request.Header.RequestingAgencyId.AgencyIdValue)
 		assert.Equal(t, patronRequestId, request.Header.RequestingAgencyRequestId)
@@ -1442,13 +1457,14 @@ func TestSendBorrowingRequestZeroValueIllRequest(t *testing.T) {
 		assert.Equal(t, "patron1", request.PatronInfo.PatronId)
 		assert.Equal(t, iso18626.BibliographicInfo{}, request.BibliographicInfo)
 	}
-	assert.Equal(t, iso18626.TypeMessageStatusOK, result.result.IncomingMessage.RequestConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, mockEventBus.createdNoticeData[0].IncomingMessage.RequestConfirmation.ConfirmationHeader.MessageStatus)
 }
 
 func TestSendBorrowingRequestPreservesIllRequestFields(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
+	mockEventBus := new(MockEventBus)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, nil, new(EmailSenderMock), nil, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, nil, new(EmailSenderMock), nil, nil)
 
 	requestType := iso18626.TypeRequestTypeNew
 	illRequest := iso18626.Request{
@@ -1476,7 +1492,7 @@ func TestSendBorrowingRequestPreservesIllRequestFields(t *testing.T) {
 		},
 	}
 
-	result := prAction.sendBorrowingRequest(appCtx, pr_db.PatronRequest{
+	status, _, err := prAction.messageSender.sendBorrowingRequest(appCtx, "", pr_db.PatronRequest{
 		ID:              patronRequestId,
 		State:           BorrowerStateValidated,
 		Side:            SideBorrowing,
@@ -1484,10 +1500,12 @@ func TestSendBorrowingRequestPreservesIllRequestFields(t *testing.T) {
 		RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"},
 	}, illRequest)
 
-	assert.Equal(t, events.EventStatusSuccess, result.status)
-	if assert.NotNil(t, result.result) && assert.NotNil(t, result.result.OutgoingMessage) &&
-		assert.NotNil(t, result.result.OutgoingMessage.Request) {
-		request := result.result.OutgoingMessage.Request
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.NoError(t, err)
+	if assert.Len(t, mockEventBus.createdNoticeData, 1) &&
+		assert.NotNil(t, mockEventBus.createdNoticeData[0].OutgoingMessage) &&
+		assert.NotNil(t, mockEventBus.createdNoticeData[0].OutgoingMessage.Request) {
+		request := mockEventBus.createdNoticeData[0].OutgoingMessage.Request
 		assert.Equal(t, "ISIL", request.Header.RequestingAgencyId.AgencyIdType.Text)
 		assert.Equal(t, "REC1", request.Header.RequestingAgencyId.AgencyIdValue)
 		assert.Equal(t, patronRequestId, request.Header.RequestingAgencyRequestId)
@@ -1510,7 +1528,7 @@ func TestSendBorrowingRequestPreservesIllRequestFields(t *testing.T) {
 		assert.Equal(t, "old-patron", illRequest.PatronInfo.PatronId)
 		assert.Equal(t, "Doe", illRequest.PatronInfo.Surname)
 	}
-	assert.Equal(t, iso18626.TypeMessageStatusOK, result.result.IncomingMessage.RequestConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, mockEventBus.createdNoticeData[0].IncomingMessage.RequestConfirmation.ConfirmationHeader.MessageStatus)
 }
 
 func TestShipReturnBorrowingRequestMissingSupplierSymbol(t *testing.T) {
@@ -1524,7 +1542,7 @@ func TestShipReturnBorrowingRequestMissingSupplierSymbol(t *testing.T) {
 
 	illRequest := iso18626.Request{}
 	var request iso18626.Request
-	result := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateValidated, Side: SideBorrowing, Patron: pgtype.Text{Valid: true, String: "patron1"}, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, lmsAdapter, request)
+	result := prAction.shipReturnBorrowingRequest(appCtx, "", pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateValidated, Side: SideBorrowing, Patron: pgtype.Text{Valid: true, String: "patron1"}, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, lmsAdapter, request)
 
 	assert.Equal(t, events.EventStatusError, result.status)
 	assert.Equal(t, "missing supplier symbol", result.result.EventError.Message)
@@ -1540,7 +1558,7 @@ func TestShipReturnBorrowingRequestMissingRequesterSymbol(t *testing.T) {
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}}, nil)
 
 	var request iso18626.Request
-	result := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateValidated, Side: SideBorrowing, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, lmsAdapter, request)
+	result := prAction.shipReturnBorrowingRequest(appCtx, "", pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateValidated, Side: SideBorrowing, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, lmsAdapter, request)
 
 	assert.Equal(t, events.EventStatusError, result.status)
 	assert.Equal(t, "missing requester symbol", result.result.EventError.Message)
@@ -1556,7 +1574,7 @@ func TestShipReturnBorrowingRequestInvalidSupplierSymbol(t *testing.T) {
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}}, nil)
 
 	var request iso18626.Request
-	result := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "x"}}, lmsAdapter, request)
+	result := prAction.shipReturnBorrowingRequest(appCtx, "", pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "x"}}, lmsAdapter, request)
 
 	assert.Equal(t, events.EventStatusError, result.status)
 	assert.Equal(t, "invalid supplier symbol", result.result.EventError.Message)
@@ -1572,7 +1590,7 @@ func TestShipReturnBorrowingRequestInvalidRequesterSymbol(t *testing.T) {
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}}, nil)
 
 	var request iso18626.Request
-	result := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "x"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, lmsAdapter, request)
+	result := prAction.shipReturnBorrowingRequest(appCtx, "", pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "x"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, lmsAdapter, request)
 
 	assert.Equal(t, events.EventStatusError, result.status)
 	assert.Equal(t, "invalid requester symbol", result.result.EventError.Message)
@@ -2262,11 +2280,12 @@ func TestCancelLenderRequestItemsAttemptsAllRequestsWhenCancellationFails(t *tes
 func TestHandleInvokeLenderActionCannotSupply(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
+	mockEventBus := new(MockEventBus)
 	lmsAdapter := new(mockLmsAdapter)
 	lmsAdapter.On("CancelRequestItem", "req-1", "").Return(nil)
 	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lmsAdapter, nil)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{Header: iso18626.Header{RequestingAgencyRequestId: "req-1"}}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "item-1", LmsRequestID: getDbText("req-1")}}, nil)
@@ -2277,8 +2296,15 @@ func TestHandleInvokeLenderActionCannotSupply(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.NotNil(t, resultData)
+	assert.Nil(t, resultData.OutgoingMessage)
+	assert.Nil(t, resultData.IncomingMessage)
 	assert.Equal(t, LenderStateUnfilled, mockPrRepo.savedPr.State)
 	lmsAdapter.AssertExpectations(t)
+	if assert.Len(t, mockEventBus.createdNoticeData, 1) {
+		assert.Equal(t, events.EventStatusSuccess, mockEventBus.createdNoticeStatus[0])
+		assert.NotNil(t, mockEventBus.createdNoticeData[0].OutgoingMessage.SupplyingAgencyMessage)
+		assert.NotNil(t, mockEventBus.createdNoticeData[0].IncomingMessage.SupplyingAgencyMessageConfirmation)
+	}
 
 	if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage) {
 		assert.Equal(t, iso18626.TypeStatusUnfilled, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.Status)
@@ -2680,6 +2706,41 @@ func TestHandleInvokeLenderActionAddConditionOK(t *testing.T) {
 		assert.Equal(t, "ISIL:REQ1", n.ToSymbol)
 		assert.False(t, n.Note.Valid)
 		assert.Equal(t, "my condition", n.Condition.String)
+	}
+}
+
+func TestHandleInvokeLenderActionAddConditionLogsIsoExchangeWhenSavingNotificationFails(t *testing.T) {
+	mockPrRepo := &MockPrRepo{saveNotificationFail: true}
+	mockEventBus := new(MockEventBus)
+	mockIso18626Handler := new(MockIso18626Handler)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lms.CreateLmsAdapterMockOK(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	illRequest := iso18626.Request{
+		Header:      iso18626.Header{RequestingAgencyRequestId: "req-1"},
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
+	}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateWillSupplyPending, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	action := LenderActionAddCondition
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
+		ID:              "invoke-add-condition",
+		PatronRequestID: patronRequestId,
+		EventData: events.EventData{
+			CommonEventData: events.CommonEventData{Action: &action},
+			CustomData:      map[string]any{"loanCondition": "my condition"},
+		},
+	})
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "failed to save add-condition notification", resultData.EventError.Message)
+	assert.Nil(t, resultData.OutgoingMessage)
+	assert.Nil(t, resultData.IncomingMessage)
+	if assert.Len(t, mockEventBus.createdNoticeData, 1) {
+		assert.Equal(t, events.EventStatusSuccess, mockEventBus.createdNoticeStatus[0])
+		assert.Equal(t, "invoke-add-condition", mockEventBus.createdNoticeParent[0])
+		assert.NotNil(t, mockEventBus.createdNoticeData[0].OutgoingMessage.SupplyingAgencyMessage)
+		assert.NotNil(t, mockEventBus.createdNoticeData[0].IncomingMessage.SupplyingAgencyMessageConfirmation)
 	}
 }
 
@@ -3198,7 +3259,7 @@ func TestHandleInvokeLenderActionSupplyDocument(t *testing.T) {
 func TestSupplyDocumentRequiresDeliveryURL(t *testing.T) {
 	prAction := &PatronRequestActionService{}
 
-	result := prAction.supplyDocumentRequest(appCtx, pr_db.PatronRequest{}, actionParams{})
+	result := prAction.supplyDocumentRequest(appCtx, "", pr_db.PatronRequest{}, actionParams{})
 
 	assert.Equal(t, events.EventStatusError, result.status)
 	assert.Equal(t, "deliveryUrl is required", result.result.EventError.Message)
@@ -3208,7 +3269,7 @@ func TestSupplyDocumentRequiresDeliveryURL(t *testing.T) {
 func TestSupplyDocumentRejectsInvalidDeliveryURL(t *testing.T) {
 	prAction := &PatronRequestActionService{}
 
-	result := prAction.supplyDocumentRequest(appCtx, pr_db.PatronRequest{}, actionParams{DeliveryURL: "not a URL"})
+	result := prAction.supplyDocumentRequest(appCtx, "", pr_db.PatronRequest{}, actionParams{DeliveryURL: "not a URL"})
 
 	assert.Equal(t, events.EventStatusError, result.status)
 	assert.Equal(t, "deliveryUrl must be an absolute HTTP(S) URL", result.result.EventError.Message)
@@ -4590,8 +4651,10 @@ type MockEventBus struct {
 	createdTaskIDs      []string
 	createdTaskNames    []events.EventName
 	createdNoticeIDs    []string
+	createdNoticeNames  []events.EventName
 	createdNoticeData   []events.EventData
 	createdNoticeStatus []events.EventStatus
+	createdNoticeParent []string
 	processedTaskEvents []events.Event
 	createTaskErr       error
 	runTaskHandler      bool
@@ -4661,8 +4724,10 @@ func (m *MockEventBus) CreateTask(id string, eventName events.EventName, data ev
 
 func (m *MockEventBus) CreateNotice(id string, eventName events.EventName, data events.EventData, status events.EventStatus, eventDomain events.EventDomain, target events.SignalTarget) (string, error) {
 	m.createdNoticeIDs = append(m.createdNoticeIDs, id)
+	m.createdNoticeNames = append(m.createdNoticeNames, eventName)
 	m.createdNoticeData = append(m.createdNoticeData, data)
 	m.createdNoticeStatus = append(m.createdNoticeStatus, status)
+	m.createdNoticeParent = append(m.createdNoticeParent, "")
 	if id == "error" {
 		return "", errors.New("event bus error")
 	}
@@ -4674,10 +4739,12 @@ func (m *MockEventBus) CreateNoticeWithParent(id string, eventName events.EventN
 		return "", errors.New("event bus error")
 	}
 	m.createdNoticeIDs = append(m.createdNoticeIDs, id)
+	m.createdNoticeNames = append(m.createdNoticeNames, eventName)
 	m.createdNoticeData = append(m.createdNoticeData, data)
 	m.createdNoticeStatus = append(m.createdNoticeStatus, status)
+	m.createdNoticeParent = append(m.createdNoticeParent, *parentId)
 	for _, call := range m.ExpectedCalls {
-		if call.Method == "CreateNoticeWithParent" {
+		if call.Method == "CreateNoticeWithParent" && len(call.Arguments) > 0 && call.Arguments.Get(0) == *parentId {
 			args := m.Called(*parentId)
 			return args.Get(0).(string), args.Error(1)
 		}
@@ -4696,6 +4763,7 @@ type MockPrRepo struct {
 	deletedItemIDs                       []string
 	saveItemFail                         bool
 	deleteItemFail                       bool
+	saveNotificationFail                 bool
 	lastListQuery                        pgcql.Query
 }
 
@@ -4836,7 +4904,7 @@ func (r *MockPrRepo) SaveNotification(ctx common.ExtendedContext, params pr_db.S
 		r.savedNotifications = []pr_db.Notification{}
 	}
 	r.savedNotifications = append(r.savedNotifications, pr_db.Notification(params))
-	if params.PrID == "error" {
+	if r.saveNotificationFail || params.PrID == "error" {
 		return pr_db.Notification{}, errors.New("db error")
 	}
 	return pr_db.Notification(params), nil

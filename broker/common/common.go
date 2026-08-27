@@ -119,15 +119,15 @@ func UnpackItemNote(input string) []string {
 	return result
 }
 
-func SplitSymbol(symbol string) (string, string, error) {
-	symbolParts := strings.SplitN(symbol, ":", 2)
-	if len(symbolParts) != 2 {
+func SplitSymbol(symbol string) (authority, value string, err error) {
+	authority, value, found := strings.Cut(symbol, ":")
+	if !found || authority == "" || value == "" {
 		return "", "", fmt.Errorf("invalid symbol: %s", symbol)
 	}
-	return symbolParts[0], symbolParts[1], nil
+	return authority, value, nil
 }
 
-func SplitAgencySymbol(symbol string) (string, string) {
+func SplitSymbolLenient(symbol string) (string, string) {
 	symbolParts := strings.SplitN(symbol, ":", 2)
 	if len(symbolParts) != 2 {
 		return "", symbol

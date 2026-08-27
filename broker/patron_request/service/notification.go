@@ -2,7 +2,6 @@ package prservice
 
 import (
 	"errors"
-	"net/http"
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
@@ -12,16 +11,16 @@ import (
 )
 
 type PatronRequestNotificationService struct {
-	PatronRequestMessageSender
-	prRepo   pr_db.PrRepo
-	eventBus events.EventBus
+	messageSender PatronRequestMessageSender
+	prRepo        pr_db.PrRepo
+	eventBus      events.EventBus
 }
 
 func CreatePatronRequestNotificationService(prRepo pr_db.PrRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface) *PatronRequestNotificationService {
 	return &PatronRequestNotificationService{
-		PatronRequestMessageSender: PatronRequestMessageSender{iso18626Handler: iso18626Handler, logErrorAndReturnResult: events.LogErrorAndReturnResult},
-		prRepo:                     prRepo,
-		eventBus:                   eventBus,
+		messageSender: PatronRequestMessageSender{iso18626Handler: iso18626Handler, eventBus: eventBus},
+		prRepo:        prRepo,
+		eventBus:      eventBus,
 	}
 }
 
@@ -61,38 +60,33 @@ func (n *PatronRequestNotificationService) handleInvokeNotification(ctx common.E
 	if err != nil {
 		return logActionErrorAndReturnResult(ctx, "failed to read notification", err)
 	}
-	result := events.EventResult{}
-	var status events.EventStatus
-	var eventResult *events.EventResult
-	var httpStatus *int
-	var failure bool
+	var sendStatus events.EventStatus
+	var sendErr error
 	if pr.Side == SideLending {
-		status, eventResult, httpStatus = n.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{
+		sendStatus, _, sendErr = n.messageSender.sendSupplyingAgencyMessage(ctx, event.ID, pr, iso18626.MessageInfo{
 			ReasonForMessage: iso18626.TypeReasonForMessageNotification,
 			Note:             notification.Note.String,
 		}, iso18626.StatusInfo{}, nil)
-		failure = result.IncomingMessage == nil || result.IncomingMessage.SupplyingAgencyMessageConfirmation == nil ||
-			result.IncomingMessage.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK
 	} else {
-		status, eventResult, httpStatus = n.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionNotification, notification.Note.String)
-		failure = result.IncomingMessage == nil || result.IncomingMessage.RequestingAgencyMessageConfirmation == nil ||
-			result.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK
+		sendStatus, _, sendErr = n.messageSender.sendRequestingAgencyMessage(ctx, event.ID, pr, iso18626.TypeActionNotification, notification.Note.String)
 	}
 
-	if httpStatus == nil {
+	if sendErr != nil {
 		notification.Receipt = pr_db.NotificationFailedToSend
-		return n.updateNotification(ctx, notification, status, eventResult)
+		status, result := events.LogErrorAndReturnResult(ctx, sendErr.Error(), sendErr)
+		return n.updateNotification(ctx, notification, status, result)
 	}
-	if *httpStatus != http.StatusOK || failure {
+	result := &events.EventResult{}
+	if sendStatus != events.EventStatusSuccess {
 		result.EventError = &events.EventError{
 			Message: "failed to send notification",
 			Cause:   "not successful response",
 		}
 		notification.Receipt = pr_db.NotificationFailedToSend
-		return n.updateNotification(ctx, notification, events.EventStatusProblem, &result)
+		return n.updateNotification(ctx, notification, sendStatus, result)
 	}
 	notification.Receipt = pr_db.NotificationSent
-	return n.updateNotification(ctx, notification, events.EventStatusSuccess, &result)
+	return n.updateNotification(ctx, notification, events.EventStatusSuccess, result)
 }
 
 func (n *PatronRequestNotificationService) updateNotification(ctx common.ExtendedContext, notification pr_db.Notification, status events.EventStatus, result *events.EventResult) (events.EventStatus, *events.EventResult) {

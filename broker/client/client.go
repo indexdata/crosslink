@@ -315,8 +315,8 @@ func createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedS
 	if sup != nil && sup.SupplierSymbol != "" && (isRequestingMessage || brokerMode == string(common.BrokerModeTransparent)) {
 		supplierSymbol = sup.SupplierSymbol
 	}
-	requesterAgencyType, requesterAgencyValue := common.SplitAgencySymbol(requesterSymbol)
-	supplierAgencyType, supplierAgencyValue := common.SplitAgencySymbol(supplierSymbol)
+	requesterAgencyType, requesterAgencyValue := common.SplitSymbolLenient(requesterSymbol)
+	supplierAgencyType, supplierAgencyValue := common.SplitSymbolLenient(supplierSymbol)
 	return iso18626.Header{
 		RequestingAgencyId: iso18626.TypeAgencyId{
 			AgencyIdType:  iso18626.TypeSchemeValuePair{Text: requesterAgencyType},
@@ -510,7 +510,7 @@ func getPeerInfo(peer *ill_db.Peer, symbol string) (string, iso18626.TypeAgencyI
 	agencyId := iso18626.TypeAgencyId{}
 	if symbol != "" {
 		name = fmt.Sprintf("%v (%v)", peer.Name, symbol)
-		agencyType, agencyValue := common.SplitAgencySymbol(symbol)
+		agencyType, agencyValue := common.SplitSymbolLenient(symbol)
 		agencyId.AgencyIdType = iso18626.TypeSchemeValuePair{Text: agencyType}
 		agencyId.AgencyIdValue = agencyValue
 	}
@@ -706,7 +706,7 @@ func isCrossLinkVendor(peer *ill_db.Peer) bool {
 func prependSupplierSymbolNote(trCtx transactionContext, target *messageTarget, sam *iso18626.SupplyingAgencyMessage) {
 	if trCtx.requester != nil && trCtx.requester.BrokerMode == string(common.BrokerModeOpaque) &&
 		target != nil && target.supplier != nil {
-		_, symbol := common.SplitAgencySymbol(target.supplier.SupplierSymbol)
+		_, symbol := common.SplitSymbolLenient(target.supplier.SupplierSymbol)
 		if sam.MessageInfo.Note != "" {
 			sep := common.IllConfigString(trCtx.requester.CustomData, shim.NOTE_FIELD_SEP, func(c dirapi.IllConfig) *string { return c.NoteFieldSeparator })
 			if strings.HasPrefix(sam.MessageInfo.Note, "#") {
