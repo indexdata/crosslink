@@ -81,7 +81,7 @@ func (p *PdfServiceImpl) GeneratePdfPullSlip(ctx common.ExtendedContext, pr pr_d
 	doc := document.NewDocument(document.PageSizeA4)
 
 	data := email.GetPullSlipData(pr, notes, conditions, barcodeData)
-	html, err := email.RenderTemplate(data, templateBody)
+	html, err := email.RenderHtmlTemplate(data, templateBody)
 	if err != nil {
 		return nil, err
 	}

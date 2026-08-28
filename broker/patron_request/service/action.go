@@ -1761,11 +1761,16 @@ func (a *PatronRequestActionService) createAndSendEmail(ctx common.ExtendedConte
 		return err
 	}
 	data := email.GetPullSlipData(pr, notes, conditions, email.DEFAULT_FOR_NO_VALUE)
-	body, err := email.RenderTemplate(data, template.Body)
+	var body string
+	if template.ContentType == string(proapi.Html) {
+		body, err = email.RenderHtmlTemplate(data, template.Body)
+	} else {
+		body, err = email.RenderTextTemplate(data, template.Body)
+	}
 	if err != nil {
 		return err
 	}
-	subject, err := email.RenderTemplate(data, template.Subject.String)
+	subject, err := email.RenderTextTemplate(data, template.Subject.String)
 	if err != nil {
 		return err
 	}

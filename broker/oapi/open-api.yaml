@@ -1395,7 +1395,7 @@ components:
           description: >-
             Body of the email or pull slip template. Supports {{.X}} placeholders.
             Supported placeholders for patron request templates include
-            {{.BorrowerName}}, {{.ReqId}}, {{.PickupLocation}}, {{.Title}},
+            {{.ReqId}}, {{.PickupLocation}}, {{.Title}},
             {{.Author}}, {{.DueDate}}, {{.ReturnAddress}}, {{.BarcodeBase64}},
             {{.ServiceType}}, {{.ServiceLevel}}, {{.SystemIdentifier}},
             {{.Publisher}}, {{.Volume}}, {{.Issue}}, {{.Pages}}, {{.StaffNotes}},

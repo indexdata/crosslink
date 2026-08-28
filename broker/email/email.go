@@ -12,6 +12,7 @@ import (
 	"net/smtp"
 	"net/textproto"
 	"strings"
+	text_template "text/template"
 
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/iso18626"
@@ -189,7 +190,6 @@ func joinAddresses(addrs []string) string {
 
 // Only string fields are allowed
 type PullSlipData struct {
-	BorrowerName     string
 	ReqId            string
 	PickupLocation   string
 	Title            string
@@ -291,8 +291,20 @@ func GetPullSlipData(pr pr_db.PatronRequest, notes []pr_db.Notification, conditi
 	return data
 }
 
-func RenderTemplate(data any, templateBody string) (string, error) {
+func RenderHtmlTemplate(data any, templateBody string) (string, error) {
 	tmpl, err := template.New("pull-slip").Parse(templateBody)
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+func RenderTextTemplate(data any, templateBody string) (string, error) {
+	tmpl, err := text_template.New("pull-slip").Parse(templateBody)
 	if err != nil {
 		return "", err
 	}
