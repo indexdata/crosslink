@@ -1,0 +1,315 @@
+@page {
+  size: 13.333in 7.5in;
+  margin: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+  color: #454545;
+  font-family: Arial, Helvetica, sans-serif;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+header#title-block-header,
+section.level1 {
+  position: relative;
+  width: 13.333in;
+  height: 7.5in;
+  margin: 0;
+  overflow: hidden;
+  break-after: page;
+  page-break-after: always;
+}
+
+header#title-block-header {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0.9in 1.05in;
+  color: #ffffff;
+  background: #053754;
+}
+
+header#title-block-header::before {
+  position: absolute;
+  top: -0.75in;
+  right: -0.55in;
+  width: 3.2in;
+  height: 3.2in;
+  border: 0.18in solid #199dd9;
+  border-radius: 50%;
+  content: "";
+}
+
+header#title-block-header::after {
+  position: absolute;
+  right: 0.9in;
+  bottom: 0.7in;
+  width: 1.2in;
+  height: 1.2in;
+  border-radius: 50%;
+  background: #f78b1e;
+  content: "";
+}
+
+header#title-block-header h1 {
+  width: 9.8in;
+  margin: 0 0 0.35in;
+  color: #ffffff;
+  font-size: 50pt;
+  line-height: 1.04;
+}
+
+header#title-block-header .subtitle {
+  width: 9.5in;
+  margin: 0 0 0.65in;
+  color: #d9edf5;
+  font-size: 25pt;
+  line-height: 1.22;
+}
+
+header#title-block-header .author {
+  margin: 0;
+  color: #ffffff;
+  font-size: 19pt;
+  font-weight: 700;
+}
+
+section.level1 {
+  padding: 1.48in 0.72in 0.55in;
+  background: #ffffff;
+}
+
+section.level1::before {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 1.28in;
+  border-bottom: 0.09in solid #199dd9;
+  background: #053754;
+  content: "";
+}
+
+section.level1::after {
+  position: absolute;
+  right: 0.5in;
+  bottom: 0.18in;
+  color: #8a8a8a;
+  content: "ReShare · Next Generation";
+  font-size: 10pt;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+section.level1 > h1 {
+  position: absolute;
+  z-index: 1;
+  top: 0.31in;
+  right: 2.35in;
+  left: 0.72in;
+  margin: 0;
+  color: #ffffff;
+  font-size: 31pt;
+  line-height: 1.08;
+}
+
+section.level1 > h1::after {
+  position: fixed;
+  top: 0.42in;
+  right: 0.58in;
+  color: #ffffff;
+  content: "WOLFcon 2026";
+  font-size: 13pt;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+}
+
+h2 {
+  margin: 0 0 0.18in;
+  color: #002f56;
+  font-size: 25pt;
+  line-height: 1.1;
+}
+
+p,
+li {
+  font-size: 21pt;
+  line-height: 1.25;
+}
+
+p {
+  margin: 0.12in 0 0.2in;
+}
+
+ul,
+ol {
+  margin: 0.08in 0 0.14in 0.4in;
+  padding-left: 0.22in;
+}
+
+li {
+  margin: 0 0 0.105in;
+  padding-left: 0.05in;
+}
+
+li::marker {
+  color: #007693;
+  font-weight: 700;
+}
+
+strong {
+  color: #002f56;
+}
+
+blockquote {
+  margin: 0.28in 0;
+  padding: 0.18in 0.28in;
+  border-left: 0.09in solid #b31782;
+  background: #f7edf4;
+  color: #002f56;
+}
+
+blockquote p {
+  margin: 0;
+  font-size: 25pt;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.columns {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  width: 100%;
+  height: 5.15in;
+  gap: 0.35in;
+}
+
+.column {
+  min-width: 0;
+}
+
+.column section.level2 {
+  height: auto;
+  margin: 0;
+  padding: 0;
+}
+
+figure {
+  margin: 0;
+  text-align: center;
+}
+
+figcaption {
+  display: none;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+  max-height: 5.25in;
+  margin: 0 auto;
+  object-fit: contain;
+}
+
+.column img {
+  max-height: 4.95in;
+}
+
+table {
+  width: 100%;
+  margin: 0.08in 0 0;
+  border-spacing: 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 17pt;
+}
+
+th {
+  padding: 0.14in 0.16in;
+  border: 1.5px solid #ffffff;
+  color: #ffffff;
+  background: #007693;
+  font-size: 19pt;
+  text-align: left;
+}
+
+td {
+  padding: 0.13in 0.16in;
+  border: 1.5px solid #b8cbd3;
+  vertical-align: top;
+}
+
+tr:nth-child(even) td {
+  background: #edf5f8;
+}
+
+pre {
+  margin: 0.05in 0 0.2in;
+  padding: 0.25in 0.32in;
+  border-left: 0.08in solid #f78b1e;
+  border-radius: 0.08in;
+  background: #eef3f6;
+  color: #002f56;
+  font-size: 15pt;
+  line-height: 1.2;
+  white-space: pre-wrap;
+}
+
+code {
+  font-family: Menlo, Consolas, monospace;
+}
+
+.notes {
+  display: none !important;
+}
+
+#system-at-a-glance img {
+  max-height: 5.32in;
+}
+
+#one-architectural-idea img {
+  max-height: 3.55in;
+}
+
+#anatomy-of-the-state-model img,
+#a-borrowing-request-step-by-step img,
+#migration-continuity-before-cutover img {
+  max-height: 5.35in;
+}
+
+#a-platform-that-evolves-with-the-service {
+  padding-top: 1.75in;
+  color: #ffffff;
+  background: #053754;
+}
+
+#a-platform-that-evolves-with-the-service::before {
+  height: 1.35in;
+  border-bottom-color: #f78b1e;
+  background: #053754;
+}
+
+#a-platform-that-evolves-with-the-service::after {
+  color: #d9edf5;
+}
+
+#a-platform-that-evolves-with-the-service li,
+#a-platform-that-evolves-with-the-service blockquote p {
+  color: #ffffff;
+}
+
+#a-platform-that-evolves-with-the-service blockquote {
+  border-left-color: #f78b1e;
+  background: rgba(255, 255, 255, 0.1);
+}

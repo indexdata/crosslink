@@ -1,0 +1,307 @@
+---
+title: "The Next Generation of ReShare"
+subtitle: "Architecture, adaptable workflows, interoperability, and migration"
+author: "Jakub Skoczen · Lead Architect, Index Data · WolfCON 2026"
+---
+
+# From broker to platform
+
+| WolfCON 2025 | WolfCON 2026 |
+|---|---|
+| Standards-based ILL broker | Complete ReShare workflow platform |
+| Connect external peers | Native borrowing and lending |
+| Route and observe transactions | Model and operate the lifecycle |
+
+New: Patron Requests API · NCIP · explicit state model · live UI events · scheduling
+
+::: notes
+Last year we presented CrossLink as a standards-based broker. This year the broker has become the foundation for ReShare's own borrowing and lending workflows. The key addition is not simply another API; workflow itself is now explicit.
+:::
+
+# ReShare proved the service model
+
+- Community-owned and ILS-neutral
+- Production workflows shaped by practitioners
+- Integrations across diverse library systems
+- Years of knowledge about the happy path—and every exception
+
+> We are replacing an implementation, not starting the product over.
+
+::: notes
+Start from continuity and success. Legacy ReShare proved that the community service model works. The redesign preserves that accumulated service knowledge.
+:::
+
+# Why the backend needed a successor
+
+- A broad FOLIO/Okapi stack for a focused ILL service
+- Many modules and infrastructure dependencies to operate
+- Workflow spread across domain logic, status handlers, protocols, and events
+- Changes required code tracing, releases, and cross-integration testing
+- Vendor behavior accumulated beside the core workflow
+
+::: notes
+The original choices accelerated early delivery and got ReShare into production. Production experience showed an increasing mismatch between the operational shape of the platform and the focused job it needed to do. The legacy development tooling described roughly 30 containers and mod-rs used Kafka-based asynchronous processing. Validate the community-facing wording before the conference.
+:::
+
+# Requirements before technology
+
+:::::::::::::: {.columns}
+::: {.column width="48%"}
+## Preserve
+
+- ILS/LSP neutrality
+- ISO 18626 and NCIP
+- Borrowing and lending workflows
+- Consortial policy and supplier selection
+- Multi-tenant operation
+:::
+::: {.column width="48%"}
+## Improve
+
+- Small operational footprint
+- Explicit, inspectable workflows
+- Clear adapter boundaries
+- Complete transaction visibility
+- Safe, staged migration
+:::
+::::::::::::::
+
+::: notes
+These requirements came before the technology choices. The goal was not a rewrite for its own sake: preserve the service contract while making the platform much easier to operate and evolve.
+:::
+
+# One architectural idea
+
+> A lightweight broker with open edges and a declarative workflow core.
+
+![Simplified CrossLink system context](../misc/crosslink-arch.png){width=70%}
+
+::: notes
+Internal clients use JSON and Server-Sent Events. External ILL peers use ISO 18626. ILS integration uses NCIP. Catalog and directory services remain replaceable dependencies.
+:::
+
+# System at a glance
+
+![CrossLink component architecture](../misc/crosslink-component-diagram.jpg){width=83%}
+
+::: notes
+Do not explain every box. Introduce the color layers and the center of gravity: a request changes through a state model, and meaningful changes become events. We will walk the same diagram from left to right and top to bottom.
+:::
+
+# Step 1: a request enters
+
+:::::::::::::: {.columns}
+::: {.column width="61%"}
+![Request entry points](../misc/crosslink-component-diagram.jpg){width=100%}
+:::
+::: {.column width="35%"}
+- Staff UI → OpenAPI JSON
+- Browser updates → SSE
+- External ILL → ISO 18626
+- One observable transaction
+:::
+::::::::::::::
+
+::: notes
+Native ReShare requests and brokered third-party requests share infrastructure without pretending their interfaces are identical. Both become observable transactions inside the broker.
+:::
+
+# Step 2: prepare and source
+
+:::::::::::::: {.columns}
+::: {.column width="61%"}
+![Discovery components](../misc/crosslink-component-diagram.jpg){width=100%}
+:::
+::: {.column width="35%"}
+- Resolve institutions and policy
+- Locate and rank suppliers
+- Check real-time availability
+- Swap discovery implementations
+- Fail open on adapter errors
+:::
+::::::::::::::
+
+::: notes
+Directory information and consortium policy guide supplier resolution. Discovery is a capability behind an interface, not a permanent dependency on one catalog. A temporary adapter failure is recorded but is not treated as confirmed unavailability.
+:::
+
+# Step 3: standards outside, normalized inside
+
+- **ISO 18626** — peer ILL messages
+- **NCIP** — patron and circulation operations
+- **SRU / Z39.50** — discovery and availability
+- **Vendor shims** — isolate implementation differences
+- **Schema-generated models** — stay close to the standards
+
+::: notes
+Standards define the edges. Real implementations still differ, so a dedicated compatibility layer isolates known vendor behavior instead of mixing it into core workflow decisions.
+:::
+
+# Step 4: changes become events
+
+:::::::::::::: {.columns}
+::: {.column width="61%"}
+![Workflow, events and persistence](../misc/crosslink-component-diagram.jpg){width=100%}
+:::
+::: {.column width="35%"}
+- Actions and messages become events
+- Consumers perform valid transitions
+- Durable state lives in PostgreSQL
+- `LISTEN/NOTIFY` signals work
+- History explains the current state
+:::
+::::::::::::::
+
+::: notes
+The request is not a mutable black box. The event history lets staff and operators explain how it reached its current state. Scheduler, batch work, notifications, and UI updates build on the same mechanism.
+:::
+
+# Simpler to deploy and scale
+
+- One lightweight Go service around shared durable state
+- PostgreSQL is the primary operational dependency
+- No Kafka cluster for core broker messaging
+- Compact containers and fast startup
+- Explicit, separable database migrations
+- Helm support for repeatable deployment
+
+::: notes
+Refresh the proof points before WolfCON: current image size, startup time, idle memory, minimal and production container counts, and horizontal scaling evidence.
+:::
+
+# Interoperability by design
+
+:::::::::::::: {.columns}
+::: {.column width="48%"}
+## Transparent mode
+
+- Requester sees the supplier
+- Supplier changes remain visible
+- Enables granular cancellation and local supply
+:::
+::: {.column width="48%"}
+## Opaque mode
+
+- Broker appears as a conventional peer
+- Supports point-to-point assumptions
+- Supplier context carried safely in messages
+- Compatibility shims bridge real-world differences
+:::
+::::::::::::::
+
+::: notes
+The same broker can participate in mixed ecosystems. Confirm which ReShare, Alma/Rapido, ILLiad, and other production or tested integrations may be named in the final presentation.
+:::
+
+# The central change: workflow is a model
+
+```yaml
+- name: NEW
+  side: REQUESTER
+  initial: true
+  primaryAction: validate-patron
+  actions:
+    - name: validate-patron
+      trigger: auto
+      transitions:
+        success: VALIDATED
+        review: INVALID_PATRON
+```
+
+One definition connects backend behavior, automation, and UI affordances.
+
+::: notes
+The workflow is no longer only an emergent property of application code. Today the unified default model covers Loan, Copy, and CopyOrLoan with separate requester and supplier views. The current repository has 42 state entries, but the exact count is better as speaker evidence than as the headline.
+:::
+
+# Anatomy of the state model
+
+![State model grammar](wolfcon-2026-state-model-anatomy.svg){width=94%}
+
+::: notes
+A state says what is true now. An action says what a person or automation may do. An incoming protocol event says what happened elsewhere. Outcomes map to permitted next states. Applicability rules allow parts of the model to differ by service type.
+:::
+
+# A borrowing request, step by step
+
+![Simplified borrowing workflow](wolfcon-2026-borrowing-flow.svg){width=96%}
+
+::: notes
+The happy path remains easy to follow. The value of the model becomes clear at the branches: invalid patrons pause for review, an unfilled supplier advances the rota, and conditional supply becomes an explicit negotiation state.
+:::
+
+# Customizable without becoming arbitrary
+
+- Choose the supported actions available in each state
+- Make an action manual or automatic
+- Map success, review, and failure to different states
+- Map incoming messages to transitions
+- Mark primary, closing, editable, terminal, and attention states
+- Apply behavior to Loan, Copy, or CopyOrLoan
+- Attach notifications and templates
+
+::: notes
+Concrete examples include requiring or skipping patron validation, stopping for metadata review, automatically checking for duplicates, and using different fulfillment actions for physical loans and digital copies. Today the YAML model is generated, validated, and embedded at build time. Runtime model CRUD is roadmap unless completed before WolfCON.
+:::
+
+# Flexibility with guardrails
+
+- Publish the broker's supported capabilities
+- Reject unknown actions and events
+- Prevent requester/supplier crossovers
+- Verify initial, terminal, primary, and closing states
+- Check service-type consistency
+- Version models and record the model used by each request
+
+> Configuration with a contract—not an unbounded rules engine.
+
+::: notes
+Open roadmap questions: model upgrades for in-flight requests, coexistence of multiple versions, consortium publishing permissions, and promotion between test and production environments.
+:::
+
+# Demo: one request, every boundary
+
+1. Create a borrowing request
+2. Watch automatic preparation actions
+3. Locate suppliers, check availability, and send
+4. Receive `Unfilled` and advance the rota
+5. Receive `Loaned` and update the UI through SSE
+6. Perform an NCIP action and inspect the event history
+
+::: notes
+Prepare a complete recording, a known-good request ID, and captured event history as fallback. The live demo can still be attempted first.
+:::
+
+# Migration: continuity before cutover
+
+![Four-stage migration path](wolfcon-2026-migration.svg){width=96%}
+
+::: notes
+The migration unit should be a controlled cohort with observable acceptance criteria, not an all-at-once database replacement. We still need product decisions on in-flight requests, completed-request history, and the length of any dual-system period.
+:::
+
+# Roadmap to production adoption
+
+| Now | Next | Later |
+|---|---|---|
+| Core borrowing/lending workflow | Production UI and operational hardening | Governed custom state models |
+| ISO 18626, NCIP, discovery | Migration and history tooling | Multiple active model versions |
+| State model and event history | Pilot cohort and conformance testing | Broader service models |
+
+::: notes
+This is a structure, not yet a set of public commitments. Every roadmap item needs an agreed status, owner, and date before the final deck.
+:::
+
+# A platform that evolves with the service
+
+- Open at the edges
+- Explicit at the center
+- Small enough to operate
+- Flexible enough to evolve
+- A migration path that protects continuity
+
+> The next generation of ReShare makes the community's ILL workflow a first-class part of the platform.
+
+::: notes
+This is not simply a smaller backend. It preserves the community service model while making workflow visible, testable, and evolvable.
+:::

@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="720" viewBox="0 0 1800 720">
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 Z" fill="#007693"/></marker>
+    <style>
+      .num { font: 700 34px Arial, sans-serif; fill: #ffffff; }
+      .head { font: 700 29px Arial, sans-serif; fill: #002f56; }
+      .body { font: 23px Arial, sans-serif; fill: #454545; }
+      .footer { font: 700 26px Arial, sans-serif; fill: #007693; }
+    </style>
+  </defs>
+  <rect width="1800" height="720" fill="#ffffff"/>
+  <line x1="220" y1="255" x2="1580" y2="255" stroke="#007693" stroke-width="8" marker-end="url(#arrow)"/>
+  <g>
+    <circle cx="245" cy="255" r="64" fill="#002f56"/><text x="245" y="268" text-anchor="middle" class="num">1</text>
+    <text x="245" y="385" text-anchor="middle" class="head">INVENTORY</text>
+    <text x="245" y="430" text-anchor="middle" class="body">workflows · policies</text><text x="245" y="464" text-anchor="middle" class="body">integrations · data</text>
+  </g>
+  <g>
+    <circle cx="680" cy="255" r="64" fill="#007693"/><text x="680" y="268" text-anchor="middle" class="num">2</text>
+    <text x="680" y="385" text-anchor="middle" class="head">VALIDATE</text>
+    <text x="680" y="430" text-anchor="middle" class="body">translate configuration</text><text x="680" y="464" text-anchor="middle" class="body">test every boundary</text>
+  </g>
+  <g>
+    <circle cx="1115" cy="255" r="64" fill="#b31782"/><text x="1115" y="268" text-anchor="middle" class="num">3</text>
+    <text x="1115" y="385" text-anchor="middle" class="head">RUN IN PARALLEL</text>
+    <text x="1115" y="430" text-anchor="middle" class="body">controlled cohorts</text><text x="1115" y="464" text-anchor="middle" class="body">observable acceptance</text>
+  </g>
+  <g>
+    <circle cx="1550" cy="255" r="64" fill="#f78b1e"/><text x="1550" y="268" text-anchor="middle" class="num">4</text>
+    <text x="1550" y="385" text-anchor="middle" class="head">CUT OVER</text>
+    <text x="1550" y="430" text-anchor="middle" class="body">drain or migrate work</text><text x="1550" y="464" text-anchor="middle" class="body">preserve history</text>
+  </g>
+  <text x="900" y="620" text-anchor="middle" class="footer">Continuity first: migration by cohort, not by leap of faith.</text>
+</svg>
