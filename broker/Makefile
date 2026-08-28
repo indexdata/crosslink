@@ -62,7 +62,7 @@ SCHED_OAPI_CFG = $(SCHED_OAPI_DIR)/sched-cfg.yaml
 SCHED_OAPI_SPEC = $(SCHED_OAPI_DIR)/open-api.yaml
 SCHED_OAPI_GEN = scheduler/oapi/sched_openapi_gen.go
 
-.PHONY: all docker generate generate-sqlc generate-api generate-commit-id check run fmt fmt-check clean view-coverage deps-update tools-update lint vulncheck check-coverage
+.PHONY: all docker generate generate-sqlc generate-api generate-commit-id check run fmt fmt-check clean clean-build-caches view-coverage deps-update tools-update lint vulncheck check-coverage
 
 all: $(BINARY) archive
 
@@ -140,8 +140,6 @@ tools-update:
 	$(GO) mod tidy
 
 clean:
-	$(GO) clean -testcache
-	$(GO) clean -cache
 	rm -f $(BINARY) archive
 	rm -f $(COVERAGE)
 	rm -f $(COMMIT_ID)
@@ -152,3 +150,7 @@ clean:
 	rm -f $(PR_OAPI_GEN)
 	rm -f $(PS_OAPI_GEN)
 	rm -f $(SCHED_OAPI_GEN)
+
+clean-build-caches:
+	$(GO) clean -cache
+	$(DOCKER) builder prune --all --force

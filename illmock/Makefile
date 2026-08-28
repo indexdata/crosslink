@@ -14,7 +14,7 @@ OAPI_SPEC=../directory/api.yaml
 OAPI_GEN=dirmock/api/directory.gen.go
 OAPI_CODEGEN ?= $(GO) tool oapi-codegen
 
-.PHONY: all check clean coverage docker fmt fmt-check generate run doc view-coverage deps-update lint vulncheck
+.PHONY: all check clean clean-build-caches coverage docker fmt fmt-check generate run doc view-coverage deps-update lint vulncheck
 
 all: $(PROGRAMS)
 
@@ -60,9 +60,11 @@ deps-update:
 	$(GO) mod tidy
 
 clean:
-	$(GO) clean -testcache
-	$(GO) clean -cache
 	rm -f $(PROGRAMS)
 	rm -f $(COVERAGE)
 	rm -f README.html
 	rm -f $(OAPI_GEN)
+
+clean-build-caches:
+	$(GO) clean -cache
+	$(DOCKER) builder prune --all --force
