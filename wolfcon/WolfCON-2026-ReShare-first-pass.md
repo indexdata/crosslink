@@ -33,9 +33,9 @@ Start from continuity and success. Legacy ReShare proved that the community serv
 
 # Why the backend needed a successor
 
-- The original implementation combined a substantial application framework with Kafka-based messaging
+- The original implementation combined a substantial application framework and messaging overhead
 - Many modules and infrastructure dependencies to operate
-- Workflow spread across domain logic, status handlers, protocols, and events
+- Workflow definition spread across domain logic, status handlers, protocols, and events
 - Workflow changes required code tracing, releases, and cross-integration testing
 - Vendor behavior accumulated beside the core workflow
 
@@ -70,22 +70,12 @@ The original choices accelerated early delivery and got ReShare into production.
 These requirements came before the technology choices. The goal was not a rewrite for its own sake: preserve the service contract while making the platform much easier to operate and evolve.
 :::
 
-# One architectural idea
-
-> A lightweight broker with open edges and a declarative workflow core.
-
-![Simplified CrossLink system context](../misc/crosslink-arch.png){width=70%}
-
-::: notes
-Internal clients use JSON and Server-Sent Events. External ILL peers use ISO 18626. ILS integration uses NCIP. Catalog and directory services remain replaceable dependencies.
-:::
-
 # System at a glance
 
-![CrossLink component architecture](../misc/crosslink-component-diagram.jpg){width=83%}
+![CrossLink component architecture](../misc/crosslink-component-diagram.jpg){width=76%}
 
 ::: notes
-Do not explain every box. Introduce the color layers and the center of gravity: a request changes through a state model, and meaningful changes become events. We will walk the same diagram from left to right and top to bottom.
+Internal clients use JSON and Server-Sent Events. External ILL peers use ISO 18626. ILS integration uses NCIP. Catalog and directory services remain replaceable dependencies. Do not explain every box. Introduce the center of gravity: a request changes through a state model, and meaningful changes become events.
 :::
 
 # Step 1: a request enters
@@ -104,6 +94,31 @@ Do not explain every box. Introduce the color layers and the center of gravity: 
 
 ::: notes
 Native ReShare requests and brokered third-party requests share infrastructure without pretending their interfaces are identical. Both become observable transactions inside the broker.
+:::
+
+# One request, two complementary views
+
+:::::::::::::: {.columns}
+::: {.column width="47%"}
+## Patron Request
+
+- Practitioner-facing lifecycle
+- Current state and available actions
+- Items, notifications, and attention flags
+- Borrowing or lending perspective
+:::
+::: {.column width="47%"}
+## ILL Transaction
+
+- ISO 18626 message exchange
+- Supplier location and rota decisions
+- Adapter calls and protocol details
+- Complete technical event history
+:::
+::::::::::::::
+
+::: notes
+Every native Patron Request is backed by an ILL transaction. Staff work with a workflow-oriented resource; implementers and support teams can follow the underlying protocol, routing, and integration trace. The API links the two resources rather than collapsing them into one overloaded object.
 :::
 
 # Step 2: prepare and source
@@ -125,48 +140,76 @@ Native ReShare requests and brokered third-party requests share infrastructure w
 Directory information and consortium policy guide supplier resolution. Discovery is a capability behind an interface, not a permanent dependency on one catalog. A temporary adapter failure is recorded but is not treated as confirmed unavailability.
 :::
 
-# Step 3: standards outside, normalized inside
+# Step 3: contracts at the boundaries
+
+:::::::::::::: {.columns}
+::: {.column width="47%"}
+## Open interfaces
 
 - **ISO 18626** — peer ILL messages
 - **NCIP** — patron and circulation operations
 - **SRU / Z39.50** — discovery and availability
-- **Vendor shims** — isolate implementation differences
-- **Schema-generated models** — stay close to the standards
-
-::: notes
-Standards define the edges. Real implementations still differ, so a dedicated compatibility layer isolates known vendor behavior instead of mixing it into core workflow decisions.
+- **OpenAPI JSON** — internal clients and staff UI
 :::
+::: {.column width="47%"}
+## Keep them honest
 
-# Step 4: changes become events
-
-:::::::::::::: {.columns}
-::: {.column width="61%"}
-![Workflow, events and persistence](../misc/crosslink-component-diagram.jpg){width=100%}
-:::
-::: {.column width="35%"}
-- Actions and messages become events
-- Consumers perform valid transitions
-- Durable state lives in PostgreSQL
-- `LISTEN/NOTIFY` signals work
-- History explains the current state
+- Schema-generated protocol models
+- Generated API types and routing contracts
+- Typed SQL access through `sqlc`
+- Vendor shims and `illmock` integration tests
 :::
 ::::::::::::::
 
 ::: notes
-The request is not a mutable black box. The event history lets staff and operators explain how it reached its current state. Scheduler, batch work, notifications, and UI updates build on the same mechanism.
+Standards define the edges. OpenAPI, protocol schemas, and SQL generate much of the boundary code so handwritten code can concentrate on workflow decisions. Real implementations still differ, so a dedicated compatibility layer isolates known vendor behavior. The mock service and integration suites exercise the same contracts used in production.
 :::
 
-# Simpler to deploy and scale
+# Step 4: a transition becomes durable work
 
-- One lightweight Go service around shared durable state
-- PostgreSQL is the primary operational dependency
-- No Kafka cluster for core broker messaging
-- Compact containers and fast startup
-- Explicit, separable database migrations
-- Helm support for repeatable deployment
+```text
+User action or ISO message
+          ↓
+Durable event in PostgreSQL
+          ↓  LISTEN / NOTIFY wakes workers
+One worker claims and processes the event
+          ↓
+Result, next state, and history are recorded
+```
+
+- Work survives restarts and failures remain visible
+- Multiple instances can safely compete for work
+- Retries, scheduling, and batch processing use the same core
 
 ::: notes
-Refresh the proof points before WolfCON: current image size, startup time, idle memory, minimal and production container counts, and horizontal scaling evidence.
+PostgreSQL is both the durable source of truth and the lightweight wake-up mechanism. A notification is not the work itself: workers claim durable event rows before processing them. The request is not a mutable black box; the history explains how it reached its current state. Scheduled work includes recovery for tasks left running after interruption.
+:::
+
+# A small core supports a complete platform
+
+:::::::::::::: {.columns}
+::: {.column width="47%"}
+## Core runtime
+
+- One Go service around durable state
+- PostgreSQL as the primary dependency
+- No Kafka cluster for core messaging
+- Separate database migrations
+- Helm deployment and health endpoints
+:::
+::: {.column width="47%"}
+## Built on the same core
+
+- Scheduler and batch actions
+- Request aging and retries
+- Notifications and email templates
+- Pull slips and document delivery
+- Live UI updates through SSE
+:::
+::::::::::::::
+
+::: notes
+Multi-tenant ownership is resolved at the API boundary and carried through request operations. Refresh the proof points before WolfCON: current image size, startup time, idle memory, minimal and production container counts, and horizontal scaling evidence.
 :::
 
 # Interoperability by design
@@ -230,33 +273,49 @@ A state says what is true now. An action says what a person or automation may do
 The happy path remains easy to follow. The value of the model becomes clear at the branches: invalid patrons pause for review, an unfilled supplier advances the rota, and conditional supply becomes an explicit negotiation state.
 :::
 
-# Customizable without becoming arbitrary
+# From model to API to UI
 
-- Choose the supported actions available in each state
-- Make an action manual or automatic
-- Map success, review, and failure to different states
-- Map incoming messages to transitions
-- Mark primary, closing, editable, terminal, and attention states
-- Apply behavior to Loan, Copy, or CopyOrLoan
-- Attach notifications and templates
+```text
+YAML model
+    ↓ validated for Loan / Copy / CopyOrLoan
+Action mapping for the request's current state
+    ↓                         ↓
+GET available actions        POST selected action
+    ↓                         ↓
+UI renders valid choices     Backend enforces the same rules
+```
+
+Example: `INVALID_PATRON` offers revalidate, skip validation, or close—not check out.
 
 ::: notes
-Concrete examples include requiring or skipping patron validation, stopping for metadata review, automatically checking for duplicates, and using different fulfillment actions for physical loans and digital copies. Today the YAML model is generated, validated, and embedded at build time. Runtime model CRUD is roadmap unless completed before WolfCON.
+This is where the model becomes product behavior. The API publishes the allowed actions, their parameters, availability, and which one is primary. Automatic actions are omitted from the manual choice list unless they fail and need intervention. The backend checks the same mapping when an action is submitted, so the UI and server do not maintain separate workflow rules.
 :::
 
-# Flexibility with guardrails
+# Customizable with guardrails
 
-- Publish the broker's supported capabilities
+:::::::::::::: {.columns}
+::: {.column width="47%"}
+## Shape the workflow
+
+- Choose supported actions per state
+- Make actions manual or automatic
+- Map outcomes and incoming messages
+- Apply behavior by service type
+- Mark primary, editable, terminal, and attention states
+:::
+::: {.column width="47%"}
+## Enforce the contract
+
+- Publish supported capabilities
 - Reject unknown actions and events
 - Prevent requester/supplier crossovers
-- Verify initial, terminal, primary, and closing states
+- Validate transitions and closing paths
 - Check service-type consistency
-- Version models and record the model used by each request
-
-> Configuration with a contract—not an unbounded rules engine.
+:::
+::::::::::::::
 
 ::: notes
-Open roadmap questions: model upgrades for in-flight requests, coexistence of multiple versions, consortium publishing permissions, and promotion between test and production environments.
+Concrete examples include requiring or skipping patron validation, stopping for metadata review, automatically checking for duplicates, and using different fulfillment actions for loans and digital copies. The model is semantically versioned, generated, validated, and embedded. Administration and promotion of consortium models can evolve without changing the execution engine. Open questions include upgrades for in-flight requests and coexistence of multiple versions.
 :::
 
 # Demo: one request, every boundary

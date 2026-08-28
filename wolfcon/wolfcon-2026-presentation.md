@@ -131,24 +131,13 @@ The outline assumes a 40–45 minute session plus questions. Timing and slide co
 
 **Key line:** “The technology stack was selected against these requirements.”
 
-### 6. The architectural idea in one sentence
+### 6. System at a glance
 
-**Purpose:** Give the audience a mental model before showing the large component diagram.
+**Purpose:** Give the audience a mental model and reveal the full design once before walking through it.
 
 **On slide:**
 
 > A lightweight broker with open edges and a declarative workflow core.
-
-Optionally use `misc/crosslink-arch.png` here as the simplified context diagram:
-
-- Internal requesters and suppliers use JSON/SSE APIs.
-- External ILL systems use ISO 18626.
-- ILS integration uses NCIP.
-- Directory and catalog services remain replaceable dependencies.
-
-### 7. System at a glance
-
-**Purpose:** Reveal the full design once, then use cropped/highlighted versions on subsequent slides.
 
 **Primary visual:** `misc/crosslink-component-diagram.jpg`.
 
@@ -164,7 +153,9 @@ Optionally use `misc/crosslink-arch.png` here as the simplified context diagram:
 
 **Key line:** “The diagram looks detailed, but there is one center of gravity: a request changes through a state model, and every meaningful change becomes an event.”
 
-### 8. Step 1: A request enters through the appropriate edge
+Internal requesters and suppliers use JSON/SSE APIs, external ILL systems use ISO 18626, ILS integration uses NCIP, and Directory and catalog services remain replaceable dependencies.
+
+### 7. Step 1: A request enters through the appropriate edge
 
 **Purpose:** Start the architecture walkthrough using a single request.
 
@@ -178,6 +169,30 @@ Optionally use `misc/crosslink-arch.png` here as the simplified context diagram:
 - Server-Sent Events provide live updates to browser clients.
 
 **Message:** Native ReShare requests and brokered third-party requests share infrastructure without pretending their interfaces are identical.
+
+### 8. One request, two complementary views
+
+**Purpose:** Explain how the platform serves practitioners without hiding the protocol and routing detail needed by implementers and support teams.
+
+**On slide:** Two linked columns.
+
+**Patron Request:**
+
+- Practitioner-facing borrowing or lending lifecycle
+- Current state and available actions
+- Items, notifications, and attention flags
+- Links to events and the underlying ILL transaction
+
+**ILL Transaction:**
+
+- ISO 18626 message exchange
+- Supplier location and rota decisions
+- Adapter calls and normalized protocol data
+- Complete technical event history
+
+**Key line:** “One service journey, linked at two levels of detail.”
+
+Every native Patron Request is backed by an ILL transaction. The API keeps these views connected rather than collapsing practitioner workflow and protocol diagnostics into one overloaded object.
 
 ### 9. Step 2: The broker prepares and sources the request
 
@@ -195,50 +210,82 @@ Optionally use `misc/crosslink-arch.png` here as the simplified context diagram:
 
 **Message:** Discovery is a capability behind an interface, not a permanent dependency on one catalog product.
 
-### 10. Step 3: Standards at the boundary, normalization inside
+### 10. Step 3: Contracts at the boundaries
 
-**Purpose:** Show how a shared workflow survives uneven vendor implementations.
+**Purpose:** Show both the open standards and the implementation techniques that keep those boundaries precise and testable.
 
 **Highlight:** ISO 18626 Handler and Client, Vendor Compatibility Layer, LMS Adapter, schema-driven protocol models.
 
-**On slide:**
+**On slide:** Two columns: “Open interfaces” and “Keep them honest.”
+
+**Open interfaces:**
 
 - ISO 18626 for peer ILL messages
-- NCIP for patron validation, item requests, checkout, check-in, and related ILS operations
-- SRU/Z39.50 and catalog adapters for discovery and availability
-- Vendor compatibility shims isolate known protocol differences
-- Schema-generated models keep protocol handling close to the standards
+- NCIP for patron and circulation operations
+- SRU/Z39.50 for discovery and availability
+- OpenAPI JSON for internal clients and staff UI
+
+**Keep them honest:**
+
+- Schema-generated protocol models
+- Generated API types and routing contracts
+- Typed SQL access through `sqlc`
+- Vendor compatibility shims
+- `illmock` and integration suites exercising real boundaries
+
+**Message:** Generated and tested contracts let the handwritten code concentrate on workflow decisions.
 
 **Reuse/adapt:** 2025 slides 5, 6, and 8.
 
-### 11. Step 4: Every meaningful change becomes an event
+### 11. Step 4: A transition becomes durable work
 
-**Purpose:** Explain reliability, observability, and background work.
+**Purpose:** Explain exactly how event-driven behavior remains durable, observable, and safe across multiple service instances.
 
 **Highlight:** State Model ↔ Event Bus ↔ PostgreSQL, plus Scheduler, Batch Actions, and Notifications.
 
 **On slide:**
 
-- Actions and incoming messages are recorded as events.
-- Workflow consumers react to those events and move requests through valid transitions.
-- PostgreSQL provides both durable data and lightweight event signaling via `LISTEN/NOTIFY`.
-- Scheduler and batch actions use the same event-driven mechanisms.
-- The event history supports troubleshooting, audit, and the demo narrative.
+```text
+User action or ISO message
+          ↓
+Durable event in PostgreSQL
+          ↓  LISTEN / NOTIFY wakes workers
+One worker claims and processes the event
+          ↓
+Result, next state, and history are recorded
+```
+
+- The durable row—not the notification—is the work.
+- Work survives restarts and failed work remains visible.
+- Multiple instances can safely compete for work.
+- Retries, scheduled tasks, and batch actions use the same core patterns.
 
 **Message:** The request is not a mutable black box. We can explain how it arrived at its current state.
 
-### 12. Why this is simpler to deploy and scale
+**Implementation detail:** Event processing claims durable rows before work begins. Scheduled tasks use database locking to avoid duplicate execution and include recovery for work left running after interruption.
 
-**Purpose:** Translate implementation choices into operator outcomes.
+### 12. A small core supports a complete platform
 
-**On slide:**
+**Purpose:** Translate the compact runtime into both operator benefits and visible practitioner functionality.
 
-- Go service with compact container images and fast startup
+**On slide:** Two columns.
+
+**Core runtime:**
+
+- One Go service around shared durable state
 - PostgreSQL as the primary operational dependency
-- No standalone application framework or Kafka cluster required for core broker messaging
-- Stateless service instances around shared durable state
+- No Kafka cluster required for core broker messaging
 - Database migrations are explicit and can run separately from the service
-- Helm deployment support and standard health/operations patterns
+- Helm deployment and health/operations endpoints
+
+**Built on the same core:**
+
+- Scheduler and batch actions
+- Request aging and retry workflows
+- Notifications, templates, and email delivery
+- Pull-slip generation and document delivery
+- Live UI updates through Server-Sent Events
+- Multi-tenant request ownership and API resolution
 
 **Reuse/adapt:** 2025 slide 7.
 
@@ -332,46 +379,57 @@ Add three side branches:
 
 For copy requests, branch from `SHIPPED` to a digital supply action and omit the physical return states. Verify final labels immediately before deck production.
 
-### 17. Customizable without becoming arbitrary
+### 17. From model to API to UI
 
-**Purpose:** Explain what “flexible” means in operational terms.
-
-**On slide:**
-
-- Choose which supported actions are available in each state.
-- Mark actions automatic or manual.
-- Map action outcomes to different next states.
-- Map protocol events to state transitions.
-- Designate the primary and closing actions the UI should emphasize.
-- Mark states editable, terminal, or requiring staff attention.
-- Apply parts of the model only to selected service types.
-- Attach notification behavior and templates to workflow actions.
-
-**Concrete examples:**
-
-- Require patron validation or allow it to be skipped.
-- Insert a staff review stop when metadata cannot be enriched confidently.
-- Make duplicate detection automatic and route a possible duplicate to review.
-- Use different primary fulfillment actions for a returnable loan and a digital copy.
-- Automatically notify a patron when an item is received, cancelled, or unfilled.
-
-**Accuracy note:** In the current repository, model definitions are maintained as YAML, generated to JSON, validated, and embedded in the broker build. The current API exposes the model and its capabilities but does not provide runtime CRUD for state models. Runtime-managed consortium-specific models should be described as roadmap unless implemented before WolfCON.
-
-### 18. Flexibility with guardrails
-
-**Purpose:** Answer “what stops a bad model from breaking live requests?”
+**Purpose:** Prove that the state model is executable product behavior rather than documentation beside the code.
 
 **On slide:**
 
-- The broker publishes the states, actions, parameters, and message events it actually supports.
-- Model validation checks initial and terminal states, valid transitions, side boundaries, service-type applicability, primary/closing actions, and supported capabilities.
-- A state model has a name and semantic version.
-- Each request records the model that governs it.
-- Tests exercise model validation and action/message mappings.
+```text
+YAML model
+    ↓ validated for Loan / Copy / CopyOrLoan
+Action mapping for the request's current state
+    ↓                         ↓
+GET available actions        POST selected action
+    ↓                         ↓
+UI renders valid choices     Backend enforces the same rules
+```
+
+**Concrete example:** In `INVALID_PATRON`, the API can offer revalidate, skip validation, or close. It will not offer—or accept—an unrelated action such as check out.
+
+The available-actions response includes action names, parameters, availability, and which action is primary. Automatic actions normally do not appear as manual choices; after a failure, the model can expose the action for staff intervention.
+
+**Message:** The UI and backend do not maintain separate workflow rules.
+
+### 18. Customizable with guardrails
+
+**Purpose:** Explain what can change while answering “what stops a bad model from breaking live requests?”
+
+**On slide:** Two columns.
+
+**Shape the workflow:**
+
+- Choose supported actions in each state
+- Make actions automatic or manual
+- Map success, review, and failure outcomes
+- Map incoming protocol messages to transitions
+- Apply states and actions by service type
+- Mark primary, closing, editable, terminal, and attention behavior
+
+**Enforce the contract:**
+
+- Publish the broker's supported capabilities
+- Reject unknown actions and message events
+- Prevent requester/supplier crossovers
+- Validate initial states, transitions, and closing paths
+- Check service-type applicability and consistency
+- Exercise action and message mappings in tests
 
 **Message:** The model is configuration with a contract, not an unbounded rules engine.
 
-**Roadmap questions:** How will model upgrades apply to in-flight requests? Will multiple versions remain active simultaneously? Who can publish a consortium model, and how is it promoted between environments?
+**Concrete examples:** Require or skip patron validation, insert a metadata-review stop, make duplicate detection automatic, use different fulfillment actions for physical loans and digital copies, or attach notifications to significant workflow actions.
+
+Model definitions are semantically versioned, generated, validated, and embedded. Administration and promotion of consortium-specific models can evolve without changing the execution engine itself.
 
 ### 19. Demo: follow one request across every boundary
 
