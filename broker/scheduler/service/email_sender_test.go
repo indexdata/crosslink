@@ -379,7 +379,7 @@ func TestGenerateAndEmailPullslip_ListPatronRequestsError(t *testing.T) {
 }
 
 func TestGenerateAndEmailPullslip_SMTPError(t *testing.T) {
-	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
+	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{{ID: "pr-1"}}}
 	mailer := &mockEmailService{err: errors.New("SMTP unavailable")}
 	svc := newEmailSvc(prRepo, mailer, nil)
 	status, result := svc.generateAndEmailPullslip(testCtx, validEmailEvent())
@@ -388,8 +388,18 @@ func TestGenerateAndEmailPullslip_SMTPError(t *testing.T) {
 	assert.True(t, mailer.called)
 }
 
-func TestGenerateAndEmailPullslip_Success(t *testing.T) {
+func TestGenerateAndEmailPullslip_SuccessNoEmail(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
+	mailer := &mockEmailService{}
+	svc := newEmailSvc(prRepo, mailer, nil)
+	status, result := svc.generateAndEmailPullslip(testCtx, validEmailEvent())
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, "no patron requests matched the selector", result.Note)
+	assert.False(t, mailer.called)
+}
+
+func TestGenerateAndEmailPullslip_Success(t *testing.T) {
+	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{{ID: "pr-1"}}}
 	mailer := &mockEmailService{}
 	svc := newEmailSvc(prRepo, mailer, nil)
 	status, result := svc.generateAndEmailPullslip(testCtx, validEmailEvent())
@@ -430,12 +440,14 @@ func TestGenerateAndEmailPullslip_PerformsPlaceholderSubstitution(t *testing.T) 
 }
 
 func TestGenerateAndEmailPullslip_HtmlTemplate(t *testing.T) {
-	prRepo := &mockEmailPrRepo{template: pr_db.Template{
-		ID:          "template-id",
-		Subject:     pgtype.Text{String: "Subject", Valid: true},
-		Body:        "<p>Body</p>",
-		ContentType: "html",
-	}}
+	prRepo := &mockEmailPrRepo{
+		listResult: []pr_db.PatronRequest{{ID: "pr-1"}},
+		template: pr_db.Template{
+			ID:          "template-id",
+			Subject:     pgtype.Text{String: "Subject", Valid: true},
+			Body:        "<p>Body</p>",
+			ContentType: "html",
+		}}
 	mailer := &mockEmailService{}
 	svc := newEmailSvc(prRepo, mailer, nil)
 
@@ -447,7 +459,7 @@ func TestGenerateAndEmailPullslip_HtmlTemplate(t *testing.T) {
 }
 
 func TestGenerateAndEmailPullslip_WithPDF_Success(t *testing.T) {
-	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
+	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{{ID: "pr-1"}}}
 	mailer := &mockEmailService{}
 	pdf := &mockPdfGen{data: []byte("%PDF fake")}
 	svc := newEmailSvc(prRepo, mailer, pdf)
@@ -463,7 +475,7 @@ func TestGenerateAndEmailPullslip_WithPDF_Success(t *testing.T) {
 }
 
 func TestGenerateAndEmailPullslip_WithPDF_NilGenerator(t *testing.T) {
-	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
+	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{{ID: "pr-1"}}}
 	mailer := &mockEmailService{}
 	// pdf generator is nil — IncludePdf=true must return an error, not panic.
 	svc := newEmailSvc(prRepo, mailer, nil)
@@ -478,7 +490,7 @@ func TestGenerateAndEmailPullslip_WithPDF_NilGenerator(t *testing.T) {
 }
 
 func TestGenerateAndEmailPullslip_WithPDF_GenerateError(t *testing.T) {
-	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
+	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{{ID: "pr-1"}}}
 	mailer := &mockEmailService{}
 	pdf := &mockPdfGen{err: errors.New("pdf engine failure")}
 	svc := newEmailSvc(prRepo, mailer, pdf)
@@ -497,7 +509,7 @@ func TestGenerateAndEmailPullslip_WithPDF_GenerateError(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestEmailPullslip_WhenReadyToSend_SendsEmail(t *testing.T) {
-	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
+	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{{ID: "pr-1"}}}
 	mailer := &mockEmailService{ready: true}
 	svc := EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, nil)
 
