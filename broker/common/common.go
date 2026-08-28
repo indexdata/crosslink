@@ -128,11 +128,11 @@ func SplitSymbol(symbol string) (authority, value string, err error) {
 }
 
 func SplitSymbolLenient(symbol string) (string, string) {
-	symbolParts := strings.SplitN(symbol, ":", 2)
-	if len(symbolParts) != 2 {
+	authority, value, found := strings.Cut(symbol, ":")
+	if !found {
 		return "", symbol
 	}
-	return symbolParts[0], symbolParts[1]
+	return authority, value
 }
 
 func ToInt32(i int) int32 {
