@@ -18,7 +18,7 @@ New: Patron Requests API · NCIP · explicit state model · live UI events · sc
 Last year we presented CrossLink as a standards-based broker. This year the broker has become the foundation for ReShare's own borrowing and lending workflows. The key addition is not simply another API; workflow itself is now explicit.
 :::
 
-# ReShare proved the service model
+# ReShare proved community-owned resource sharing works
 
 - Community-owned and ILS-neutral
 - Production workflows shaped by practitioners
@@ -33,14 +33,14 @@ Start from continuity and success. Legacy ReShare proved that the community serv
 
 # Why the backend needed a successor
 
-- A broad FOLIO/Okapi stack for a focused ILL service
+- The original implementation combined a substantial application framework with Kafka-based messaging
 - Many modules and infrastructure dependencies to operate
 - Workflow spread across domain logic, status handlers, protocols, and events
-- Changes required code tracing, releases, and cross-integration testing
+- Workflow changes required code tracing, releases, and cross-integration testing
 - Vendor behavior accumulated beside the core workflow
 
 ::: notes
-The original choices accelerated early delivery and got ReShare into production. Production experience showed an increasing mismatch between the operational shape of the platform and the focused job it needed to do. The legacy development tooling described roughly 30 containers and mod-rs used Kafka-based asynchronous processing. Validate the community-facing wording before the conference.
+The original choices accelerated early delivery and got ReShare into production. FOLIO and Okapi provided useful modularity; the operational weight came from the particular combination of Grails/Groovy/GORM, Kafka-based asynchronous processing, and numerous deployable modules. Production experience gave us clearer requirements for a smaller successor. The legacy development tooling described roughly 30 containers. Validate the community-facing wording before the conference.
 :::
 
 # Requirements before technology

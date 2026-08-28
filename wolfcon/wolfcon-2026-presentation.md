@@ -74,7 +74,7 @@ The outline assumes a 40–45 minute session plus questions. Timing and slide co
 
 **Reuse:** The 2025 deck's broker and interoperability material becomes evidence for the platform story rather than the opening premise.
 
-### 3. ReShare proved the service model
+### 3. ReShare proved community-owned resource sharing works
 
 **Purpose:** Begin from success and continuity.
 
@@ -93,11 +93,11 @@ The outline assumes a 40–45 minute session plus questions. Timing and slide co
 
 **Draft content—validate with the ReShare team before converting to slides:**
 
-- The original platform reused a broad FOLIO/Okapi technology base to accelerate early delivery.
-- Operating the complete environment meant many services and infrastructure dependencies for a focused ILL application.
+- The original backend combined a Grails/Groovy/GORM application stack, Kafka-based asynchronous processing, and a modular deployment model.
+- Those choices supported rapid development and integration, but operating the complete environment meant many services and infrastructure dependencies.
 - Core workflow behavior was spread across domain logic, status handlers, protocol handling, and asynchronous events.
 - Changing a workflow often meant tracing and changing application code, then testing the effects across integrations.
-- Kafka, framework, module, and platform lifecycle concerns increased the cost of deployment, upgrades, troubleshooting, and local development.
+- Maintaining the application framework, messaging infrastructure, and module lifecycle increased the cost of deployment, upgrades, troubleshooting, and local development.
 - Vendor-specific protocol behavior accumulated alongside the core workflow and made boundaries harder to see.
 
 **Evidence to visualize:** The legacy development tooling describes a full Okapi/FOLIO/ReShare environment of roughly 30 containers. The `mod-rs` documentation describes a Grails/GORM domain application whose application events are distributed over Kafka. These facts do not by themselves prove failure; they illustrate the operational shape we wanted to simplify.
