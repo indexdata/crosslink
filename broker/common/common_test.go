@@ -175,6 +175,16 @@ func TestSplitSymbol(t *testing.T) {
 	assert.Equal(t, "", authority)
 	assert.Equal(t, "", symbol)
 
+	authority, symbol, err = SplitSymbol(":REQ")
+	assert.Error(t, err)
+	assert.Equal(t, "", authority)
+	assert.Equal(t, "", symbol)
+
+	authority, symbol, err = SplitSymbol("ISIL:")
+	assert.Error(t, err)
+	assert.Equal(t, "", authority)
+	assert.Equal(t, "", symbol)
+
 	authority, symbol, err = SplitSymbol("ISIL:REQ")
 	assert.NoError(t, err)
 	assert.Equal(t, "ISIL", authority)
@@ -186,20 +196,20 @@ func TestSplitSymbol(t *testing.T) {
 	assert.Equal(t, "REQ:1", symbol)
 }
 
-func TestSplitAgencySymbol(t *testing.T) {
-	authority, symbol := SplitAgencySymbol("")
+func TestSplitSymbolLenient(t *testing.T) {
+	authority, symbol := SplitSymbolLenient("")
 	assert.Equal(t, "", authority)
 	assert.Equal(t, "", symbol)
 
-	authority, symbol = SplitAgencySymbol("REQ")
+	authority, symbol = SplitSymbolLenient("REQ")
 	assert.Equal(t, "", authority)
 	assert.Equal(t, "REQ", symbol)
 
-	authority, symbol = SplitAgencySymbol("ISIL:REQ")
+	authority, symbol = SplitSymbolLenient("ISIL:REQ")
 	assert.Equal(t, "ISIL", authority)
 	assert.Equal(t, "REQ", symbol)
 
-	authority, symbol = SplitAgencySymbol("ISIL:REQ:1")
+	authority, symbol = SplitSymbolLenient("ISIL:REQ:1")
 	assert.Equal(t, "ISIL", authority)
 	assert.Equal(t, "REQ:1", symbol)
 }

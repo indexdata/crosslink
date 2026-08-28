@@ -1103,7 +1103,7 @@ func TestAcceptRetry(t *testing.T) {
 	// check cloned request
 	newId := *foundPr.NextReqId
 	assert.NotEqual(t, newId, id)
-	_, requesterHridPrefix := common.SplitAgencySymbol(requesterSymbol)
+	_, requesterHridPrefix := common.SplitSymbolLenient(requesterSymbol)
 	assert.True(t, strings.HasPrefix(newId, strings.ToUpper(requesterHridPrefix)+"-"), "retry request should use requester HRID, got %q", newId)
 
 	thisPrPath = basePath + "/" + newId

@@ -128,7 +128,7 @@ func applyToIncomingRequest(message *iso18626.ISO18626Message, supplier *ill_db.
 			// condition reject is handled as a non-terminal Cancel addressed to the supplier
 			// regular Cancel is always terminal (addressed to broker)
 			copyMessage.RequestingAgencyMessage.Action = iso18626.TypeActionCancel
-			symbolType, symbolValue := common.SplitAgencySymbol(supplier.SupplierSymbol)
+			symbolType, symbolValue := common.SplitSymbolLenient(supplier.SupplierSymbol)
 			copyMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text = symbolType
 			copyMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue = symbolValue
 		}

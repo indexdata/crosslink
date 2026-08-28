@@ -1331,7 +1331,7 @@ func (a *PatronRequestApiHandler) parseAndValidateIllRequest(
 	if request.RequesterSymbol == nil || *request.RequesterSymbol == "" {
 		return iso18626.Request{}, "", fmt.Errorf("%w: requesterSymbol must be specified", errInvalidPatronRequest)
 	}
-	reqSymbolType, reqSymbolValue, err := parseAgencySymbol(*request.RequesterSymbol)
+	reqSymbolType, reqSymbolValue, err := common.SplitSymbol(*request.RequesterSymbol)
 	if err != nil {
 		return iso18626.Request{}, "", fmt.Errorf("%w: requesterSymbol: %w", errInvalidPatronRequest, err)
 	}
@@ -1377,14 +1377,6 @@ func getDbText(value *string) pgtype.Text {
 	}
 }
 
-func parseAgencySymbol(symbol string) (string, string, error) {
-	scheme, value, ok := strings.Cut(symbol, ":")
-	if !ok || scheme == "" || value == "" {
-		return "", "", fmt.Errorf("expected format SCHEME:VALUE, got %q", symbol)
-	}
-	return scheme, value, nil
-}
-
 func prepareAndValidateIllRequest(
 	rawIllRequest iso18626.Request,
 	reqSymbolType string,
@@ -1397,7 +1389,7 @@ func prepareAndValidateIllRequest(
 		return iso18626.Request{}, fmt.Errorf("%w: illRequest must not be empty", errInvalidPatronRequest)
 	}
 	illRequest := rawIllRequest
-	suppSymbolType, suppSymbolValue, err := parseAgencySymbol(brokerSymbol)
+	suppSymbolType, suppSymbolValue, err := common.SplitSymbol(brokerSymbol)
 	if err != nil {
 		return iso18626.Request{}, fmt.Errorf("invalid BROKER_SYMBOL %q: %w", brokerSymbol, err)
 	}
