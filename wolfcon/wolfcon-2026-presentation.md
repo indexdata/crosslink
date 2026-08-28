@@ -159,7 +159,7 @@ Internal requesters and suppliers use JSON/SSE APIs, external ILL systems use IS
 
 **Purpose:** Start the architecture walkthrough using a single request.
 
-**Highlight on component diagram:** Staff UI → Patron Requests API → State Model; external ILL peer → ISO 18626 Handler → State Model.
+**Focused visual:** `misc/crosslink-component-step-1-entry.png`—Staff UI → Patron Requests API → State Model; external ILL peer → ISO 18626 Handler → State Model.
 
 **On slide:**
 
@@ -198,7 +198,7 @@ Every native Patron Request is backed by an ILL transaction. The API keeps these
 
 **Purpose:** Explain service coordination around the workflow.
 
-**Highlight:** Directory Client, Supplier Locator, Availability/Holdings Discovery, CQO layer, Catalog.
+**Focused visual:** `misc/crosslink-component-step-2-sourcing.png`—Directory Client, Supplier Locator, Availability/Holdings Discovery, CQL layer, and Catalog.
 
 **On slide:**
 
@@ -556,6 +556,8 @@ Most of this should be shortened and reorganized around the request walkthrough.
 Local implementation sources:
 
 - `misc/crosslink-component-diagram.jpg`—primary architecture visual.
+- `misc/crosslink-component-step-1-entry.png`—focused request-entry path.
+- `misc/crosslink-component-step-2-sourcing.png`—focused preparation and sourcing path.
 - `misc/crosslink-arch.png`—simplified system context visual.
 - `broker/README.md`—broker responsibilities, APIs, interoperability modes, adapter behavior, and deployment configuration.
 - `misc/state-models.yaml`—human-maintained state model, batch action defaults, and notification template defaults.

@@ -82,7 +82,7 @@ Internal clients use JSON and Server-Sent Events. External ILL peers use ISO 186
 
 :::::::::::::: {.columns}
 ::: {.column width="61%"}
-![Request entry points](../misc/crosslink-component-diagram.jpg){width=100%}
+![Request entry points](../misc/crosslink-component-step-1-entry.png){width=100%}
 :::
 ::: {.column width="35%"}
 - Staff UI → OpenAPI JSON
@@ -125,7 +125,7 @@ Every native Patron Request is backed by an ILL transaction. Staff work with a w
 
 :::::::::::::: {.columns}
 ::: {.column width="61%"}
-![Discovery components](../misc/crosslink-component-diagram.jpg){width=100%}
+![Discovery components](../misc/crosslink-component-step-2-sourcing.png){width=100%}
 :::
 ::: {.column width="35%"}
 - Resolve institutions and policy
