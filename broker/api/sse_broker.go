@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
@@ -14,12 +15,19 @@ import (
 	"github.com/indexdata/crosslink/iso18626"
 )
 
+const (
+	sseHeartbeatInterval = 15 * time.Second
+	sseWriteTimeout      = 30 * time.Second
+	sseRetryMilliseconds = 3000
+)
+
 type SseBroker struct {
 	input          chan SseMessage
 	clients        map[string]map[chan string]bool
 	mu             sync.Mutex
 	ctx            common.ExtendedContext
 	tenantResolver *tenant.TenantResolver
+	heartbeat      time.Duration
 }
 
 func NewSseBroker(ctx common.ExtendedContext, tenantResolver *tenant.TenantResolver) (broker *SseBroker) {
@@ -28,6 +36,7 @@ func NewSseBroker(ctx common.ExtendedContext, tenantResolver *tenant.TenantResol
 		clients:        make(map[string]map[chan string]bool),
 		ctx:            ctx,
 		tenantResolver: tenantResolver,
+		heartbeat:      sseHeartbeatInterval,
 	}
 
 	// Start the single broadcaster goroutine
@@ -47,23 +56,31 @@ func (b *SseBroker) run() {
 				// Successfully sent
 			default:
 				// Client is slow or disconnected, remove them to prevent memory leak
-				b.removeClient(event.receiver, clientChannel)
+				if b.removeClientLocked(event.receiver, clientChannel) {
+					b.ctx.Logger().Warn("SSE client evicted because its message buffer is full", "receiver", event.receiver)
+				}
 			}
 		}
 		b.mu.Unlock()
 	}
 }
 
-func (b *SseBroker) removeClient(receiver string, clientChannel chan string) {
+// removeClientLocked removes and closes a client channel if it is still
+// registered. The caller must hold b.mu.
+func (b *SseBroker) removeClientLocked(receiver string, clientChannel chan string) bool {
 	clients := b.clients[receiver]
-	if clients != nil {
-		delete(clients, clientChannel)
-		if len(clients) == 0 {
-			delete(b.clients, receiver)
-		}
+	if clients == nil {
+		return false
+	}
+	if _, registered := clients[clientChannel]; !registered {
+		return false
+	}
+	delete(clients, clientChannel)
+	if len(clients) == 0 {
+		delete(b.clients, receiver)
 	}
 	close(clientChannel)
-	b.ctx.Logger().Debug("Client channel closed and removed.")
+	return true
 }
 
 // ServeHTTP implements the http.Handler interface for the SSE endpoint.
@@ -72,12 +89,12 @@ func (b *SseBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ectx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
 	suppliedSymbol := r.URL.Query().Get("symbol")
-	tenant, err := b.tenantResolver.Resolve(ectx, r, &suppliedSymbol)
+	resolvedTenant, err := b.tenantResolver.Resolve(ectx, r, &suppliedSymbol)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	symbol, err := tenant.GetRequestSymbol()
+	symbol, err := resolvedTenant.GetRequestSymbol()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -110,36 +127,70 @@ func (b *SseBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		b.mu.Lock()
 		defer b.mu.Unlock()
-		b.removeClient(receiver, clientChannel)
+		if b.removeClientLocked(receiver, clientChannel) {
+			b.ctx.Logger().Debug("SSE client disconnected", "receiver", receiver)
+		}
 	}()
 
-	// Set SSE Headers and get Flusher
+	// Set SSE headers. Okapi owns CORS for proxied requests and supplies the
+	// credential-aware origin headers. The wildcard is retained only for direct
+	// access to the broker.
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+	if !tenant.IsOkapiRequest(r) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+	}
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
+	controller := http.NewResponseController(w)
+
+	// Sending retry also commits and flushes the headers, so the client can
+	// distinguish an established idle stream from a request that never arrived.
+	if !b.writeSseFrame(w, controller, receiver, "initial", fmt.Sprintf("retry: %d\n\n", sseRetryMilliseconds)) {
 		return
 	}
 
 	// Context for connection status check
 	ctx := r.Context()
+	heartbeat := time.NewTicker(b.heartbeat)
+	defer heartbeat.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			// Client connection closed
 			return
 
-		case event := <-clientChannel:
-			if _, err := fmt.Fprintf(w, "data: %s\n\n", event); err != nil {
+		case <-heartbeat.C:
+			if !b.writeSseFrame(w, controller, receiver, "heartbeat", ": ping\n\n") {
 				return
 			}
-			flusher.Flush()
+
+		case event, ok := <-clientChannel:
+			if !ok {
+				return
+			}
+			if !b.writeSseFrame(w, controller, receiver, "event", fmt.Sprintf("data: %s\n\n", event)) {
+				return
+			}
 		}
 	}
+}
+
+func (b *SseBroker) writeSseFrame(w http.ResponseWriter, controller *http.ResponseController, receiver, frameType, frame string) bool {
+	// Refresh the deadline before every frame. Heartbeats keep healthy streams
+	// alive while a client that stops reading cannot block a handler forever.
+	if err := controller.SetWriteDeadline(time.Now().Add(sseWriteTimeout)); err != nil {
+		b.ctx.Logger().Warn("failed to set SSE write deadline", "receiver", receiver, "frame", frameType, "error", err)
+	}
+	if _, err := fmt.Fprint(w, frame); err != nil {
+		b.ctx.Logger().Debug("failed to write SSE frame", "receiver", receiver, "frame", frameType, "error", err)
+		return false
+	}
+	if err := controller.Flush(); err != nil {
+		b.ctx.Logger().Debug("failed to flush SSE frame", "receiver", receiver, "frame", frameType, "error", err)
+		return false
+	}
+	return true
 }
 
 func (b *SseBroker) SubmitMessageToChannels(message SseMessage) {

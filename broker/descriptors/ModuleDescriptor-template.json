@@ -400,6 +400,7 @@
         "broker.ill_transactions.get",
         "broker.located_suppliers.get",
         "broker.events.get",
+        "broker.sse.events.get",
         "broker.peers.item.get",
         "broker.peers.get"
       ]
@@ -671,6 +672,7 @@
         "broker.patron_requests.item.events.get",
         "broker.patron_requests.item.items.get",
         "broker.patron_requests.item.notifications.get",
+        "broker.sse.events.get",
         "broker.pullslips.item.get",
         "broker.pullslips.item.pdf.get"
       ]
