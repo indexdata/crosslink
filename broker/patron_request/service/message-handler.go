@@ -636,12 +636,12 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ct
 
 func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) error {
 	result, _, _ := common.UnpackItemsNote(sam.MessageInfo.Note)
-	for _, item := range result {
+	for index, item := range result {
 		var loopErr error
 		if len(item) == 1 && item[0] != "" {
-			loopErr = m.saveItem(ctx, pr.ID, &item[0], nil, nil)
+			loopErr = m.saveItem(ctx, pr.ID, requesterItemBarcode(pr.ID, index, len(result)), &item[0], nil, nil)
 		} else if len(item) == 3 {
-			loopErr = m.saveItem(ctx, pr.ID, &item[0], &item[1], &item[2])
+			loopErr = m.saveItem(ctx, pr.ID, requesterItemBarcode(pr.ID, index, len(result)), &item[0], &item[1], &item[2])
 		} else {
 			loopErr = errors.New("incorrect item param count: " + strconv.Itoa(len(item)))
 		}
@@ -652,10 +652,14 @@ func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr p
 	return nil
 }
 
-func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId string, supplierBarcode *string, callNumber *string, name *string) error {
-	// not using supplier barcode as it may not be unique, using prId instead to link item to request, as
-	// each request can have only one item without barcode and prId is unique for each request
-	requesterBarcode := prId
+func requesterItemBarcode(prID string, index int, itemCount int) string {
+	if itemCount == 1 {
+		return prID
+	}
+	return fmt.Sprintf("%s-%d", prID, index+1)
+}
+
+func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId string, requesterBarcode string, supplierBarcode *string, callNumber *string, name *string) error {
 	_, err := m.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
 		ID:         uuid.NewString(),
 		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
