@@ -120,7 +120,6 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 			"matched", fullCount, "limit", MAX_RECORDS_PER_EMAIL)
 	}
 	if len(prs) == 0 {
-		ctx.Logger().Warn("email batch empty: selector matched no records", "selector", event.EventData.BatchActionData.Selector)
 		return events.EventStatusSuccess, &events.EventResult{CommonEventData: events.CommonEventData{Note: "no patron requests matched the selector"}}
 	}
 
