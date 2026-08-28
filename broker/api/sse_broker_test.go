@@ -117,8 +117,8 @@ func registeredSseClient(t *testing.T, broker *SseBroker, receiver string) chan 
 	return nil
 }
 
-func TestSseResponseEstablishesStreamAndSendsHeartbeat(t *testing.T) {
-	broker := newTestSseBroker(5 * time.Millisecond)
+func TestSseResponseEstablishesStream(t *testing.T) {
+	broker := newTestSseBroker(time.Hour)
 	ctx, cancel := context.WithCancel(t.Context())
 	req := httptest.NewRequest(http.MethodGet, "/sse/events?side=borrowing&symbol=ISIL:REQ", nil).WithContext(ctx)
 	w := newSseResponseWriter()
@@ -137,11 +137,6 @@ func TestSseResponseEstablishesStreamAndSendsHeartbeat(t *testing.T) {
 	deadlines := w.writeDeadlines()
 	require.Len(t, deadlines, 1)
 	assert.WithinDuration(t, started.Add(sseWriteTimeout), deadlines[0], time.Second)
-	assert.Equal(t, ": ping\n\n", readSseWrite(t, w))
-	assert.Equal(t, 2, w.flushCount())
-	deadlines = w.writeDeadlines()
-	require.Len(t, deadlines, 2)
-	assert.True(t, deadlines[1].After(deadlines[0]))
 
 	cancel()
 	require.Eventually(t, func() bool {
@@ -152,6 +147,36 @@ func TestSseResponseEstablishesStreamAndSendsHeartbeat(t *testing.T) {
 			return false
 		}
 	}, time.Second, time.Millisecond)
+}
+
+func TestSseResponseSendsHeartbeat(t *testing.T) {
+	broker := newTestSseBroker(100 * time.Millisecond)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/sse/events?side=borrowing&symbol=ISIL:REQ", nil).WithContext(ctx)
+	w := newSseResponseWriter()
+	done := make(chan struct{})
+	go func() {
+		broker.ServeHTTP(w, req)
+		close(done)
+	}()
+
+	assert.Equal(t, "retry: 3000\n\n", readSseWrite(t, w))
+	assert.Equal(t, ": ping\n\n", readSseWrite(t, w))
+	cancel()
+	require.Eventually(t, func() bool {
+		select {
+		case <-done:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, time.Millisecond)
+
+	assert.GreaterOrEqual(t, w.flushCount(), 2)
+	deadlines := w.writeDeadlines()
+	require.GreaterOrEqual(t, len(deadlines), 2)
+	assert.True(t, deadlines[len(deadlines)-1].After(deadlines[0]))
 }
 
 func TestSseResponseWritesAndFlushesDataEvent(t *testing.T) {
