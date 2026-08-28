@@ -122,6 +122,7 @@ func TestSseResponseEstablishesStreamAndSendsHeartbeat(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	req := httptest.NewRequest(http.MethodGet, "/sse/events?side=borrowing&symbol=ISIL:REQ", nil).WithContext(ctx)
 	w := newSseResponseWriter()
+	started := time.Now()
 	done := make(chan struct{})
 	go func() {
 		broker.ServeHTTP(w, req)
@@ -135,9 +136,12 @@ func TestSseResponseEstablishesStreamAndSendsHeartbeat(t *testing.T) {
 	assert.Equal(t, 1, w.flushCount())
 	deadlines := w.writeDeadlines()
 	require.Len(t, deadlines, 1)
-	assert.True(t, deadlines[0].IsZero())
+	assert.WithinDuration(t, started.Add(sseWriteTimeout), deadlines[0], time.Second)
 	assert.Equal(t, ": ping\n\n", readSseWrite(t, w))
 	assert.Equal(t, 2, w.flushCount())
+	deadlines = w.writeDeadlines()
+	require.Len(t, deadlines, 2)
+	assert.True(t, deadlines[1].After(deadlines[0]))
 
 	cancel()
 	require.Eventually(t, func() bool {
@@ -167,6 +171,9 @@ func TestSseResponseWritesAndFlushesDataEvent(t *testing.T) {
 	client <- `{"event":"message-requester"}`
 	assert.Equal(t, "data: {\"event\":\"message-requester\"}\n\n", readSseWrite(t, w))
 	assert.Equal(t, 2, w.flushCount())
+	deadlines := w.writeDeadlines()
+	require.Len(t, deadlines, 2)
+	assert.True(t, deadlines[1].After(deadlines[0]))
 
 	cancel()
 	require.Eventually(t, func() bool {

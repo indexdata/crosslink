@@ -17,6 +17,7 @@ import (
 
 const (
 	sseHeartbeatInterval = 15 * time.Second
+	sseWriteTimeout      = 30 * time.Second
 	sseRetryMilliseconds = 3000
 )
 
@@ -142,18 +143,10 @@ func (b *SseBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	controller := http.NewResponseController(w)
-	if err := controller.SetWriteDeadline(time.Time{}); err != nil {
-		b.ctx.Logger().Warn("failed to clear SSE write deadline", "receiver", receiver, "error", err)
-	}
 
 	// Sending retry also commits and flushes the headers, so the client can
 	// distinguish an established idle stream from a request that never arrived.
-	if _, err := fmt.Fprintf(w, "retry: %d\n\n", sseRetryMilliseconds); err != nil {
-		b.ctx.Logger().Debug("failed to establish SSE stream", "receiver", receiver, "error", err)
-		return
-	}
-	if err := controller.Flush(); err != nil {
-		b.ctx.Logger().Debug("failed to flush SSE stream", "receiver", receiver, "error", err)
+	if !b.writeSseFrame(w, controller, receiver, "initial", fmt.Sprintf("retry: %d\n\n", sseRetryMilliseconds)) {
 		return
 	}
 
@@ -168,12 +161,7 @@ func (b *SseBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 
 		case <-heartbeat.C:
-			if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil {
-				b.ctx.Logger().Debug("failed to write SSE heartbeat", "receiver", receiver, "error", err)
-				return
-			}
-			if err := controller.Flush(); err != nil {
-				b.ctx.Logger().Debug("failed to flush SSE heartbeat", "receiver", receiver, "error", err)
+			if !b.writeSseFrame(w, controller, receiver, "heartbeat", ": ping\n\n") {
 				return
 			}
 
@@ -181,16 +169,28 @@ func (b *SseBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if _, err := fmt.Fprintf(w, "data: %s\n\n", event); err != nil {
-				b.ctx.Logger().Debug("failed to write SSE event", "receiver", receiver, "error", err)
-				return
-			}
-			if err := controller.Flush(); err != nil {
-				b.ctx.Logger().Debug("failed to flush SSE event", "receiver", receiver, "error", err)
+			if !b.writeSseFrame(w, controller, receiver, "event", fmt.Sprintf("data: %s\n\n", event)) {
 				return
 			}
 		}
 	}
+}
+
+func (b *SseBroker) writeSseFrame(w http.ResponseWriter, controller *http.ResponseController, receiver, frameType, frame string) bool {
+	// Refresh the deadline before every frame. Heartbeats keep healthy streams
+	// alive while a client that stops reading cannot block a handler forever.
+	if err := controller.SetWriteDeadline(time.Now().Add(sseWriteTimeout)); err != nil {
+		b.ctx.Logger().Warn("failed to set SSE write deadline", "receiver", receiver, "frame", frameType, "error", err)
+	}
+	if _, err := fmt.Fprint(w, frame); err != nil {
+		b.ctx.Logger().Debug("failed to write SSE frame", "receiver", receiver, "frame", frameType, "error", err)
+		return false
+	}
+	if err := controller.Flush(); err != nil {
+		b.ctx.Logger().Debug("failed to flush SSE frame", "receiver", receiver, "frame", frameType, "error", err)
+		return false
+	}
+	return true
 }
 
 func (b *SseBroker) SubmitMessageToChannels(message SseMessage) {
