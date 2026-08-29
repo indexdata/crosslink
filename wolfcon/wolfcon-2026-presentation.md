@@ -93,14 +93,15 @@ The outline assumes a 40–45 minute session plus questions. Timing and slide co
 
 **Draft content—validate with the ReShare team before converting to slides:**
 
-- The original backend combined a Grails/Groovy/GORM application stack, Kafka-based asynchronous processing, and a modular deployment model.
-- Those choices supported rapid development and integration, but operating the complete environment meant many services and infrastructure dependencies.
+- The original backend used a substantial Grails/Groovy/GORM application and persistence stack.
+- The tenancy architecture required separate application and database deployments for individual tenants, multiplying into hundreds of instances at production scale.
+- Kafka-based asynchronous processing also required Kafka and ZooKeeper infrastructure to be deployed, monitored, and maintained.
 - Core workflow behavior was spread across domain logic, status handlers, protocol handling, and asynchronous events.
 - Changing a workflow often meant tracing and changing application code, then testing the effects across integrations.
-- Maintaining the application framework, messaging infrastructure, and module lifecycle increased the cost of deployment, upgrades, troubleshooting, and local development.
+- Maintaining the application framework, tenant-specific deployments, and messaging infrastructure increased the cost of deployment, upgrades, troubleshooting, and local development.
 - Vendor-specific protocol behavior accumulated alongside the core workflow and made boundaries harder to see.
 
-**Evidence to visualize:** The legacy development tooling describes a full Okapi/FOLIO/ReShare environment of roughly 30 containers. The `mod-rs` documentation describes a Grails/GORM domain application whose application events are distributed over Kafka. These facts do not by themselves prove failure; they illustrate the operational shape we wanted to simplify.
+**Evidence to visualize:** Production estate counts can show the number of tenant-specific application and database instances. The `mod-rs` documentation describes a Grails/GORM domain application whose application events are distributed over Kafka. These facts do not by themselves prove failure; they illustrate the operational shape we wanted to simplify.
 
 **Avoid:** “The old system was bad.” Better: “The original choices got ReShare into production; operating experience gave us better requirements for the next generation.”
 
@@ -237,7 +238,7 @@ Every native Patron Request is backed by an ILL transaction. The API keeps these
 
 **Reuse/adapt:** 2025 slides 5, 6, and 8.
 
-### 11. Step 4: A transition becomes durable work
+### 11. Step 4: Workflow events are durable
 
 **Purpose:** Explain exactly how event-driven behavior remains durable, observable, and safe across multiple service instances.
 

@@ -33,14 +33,15 @@ Start from continuity and success. Legacy ReShare proved that the community serv
 
 # Why the backend needed a successor
 
-- The original implementation combined a substantial application framework and messaging overhead
-- Many modules and infrastructure dependencies to operate
+- The original implementation had a substantial application/persistence/language framework overhead
+- Separate application and database deployments per tenant multiplied into hundreds of instances
+- External messaging added infrastructure to deploy, monitor, and maintain
 - Workflow definition spread across domain logic, status handlers, protocols, and events
 - Workflow changes required code tracing, releases, and cross-integration testing
 - Vendor behavior accumulated beside the core workflow
 
 ::: notes
-The original choices accelerated early delivery and got ReShare into production. FOLIO and Okapi provided useful modularity; the operational weight came from the particular combination of Grails/Groovy/GORM, Kafka-based asynchronous processing, and numerous deployable modules. Production experience gave us clearer requirements for a smaller successor. The legacy development tooling described roughly 30 containers. Validate the community-facing wording before the conference.
+The original choices accelerated early delivery and got ReShare into production. FOLIO and Okapi provided useful modularity. The operational issue highlighted here is more specific: the tenancy architecture multiplied application and database deployments across individual tenants, while Kafka and ZooKeeper added services that also had to be deployed and maintained. CrossLink instead carries tenant ownership inside one shared deployment. Production experience gave us clearer requirements for a smaller successor.
 :::
 
 # Requirements before technology
@@ -165,7 +166,7 @@ Directory information and consortium policy guide supplier resolution. Discovery
 Standards define the edges. OpenAPI, protocol schemas, and SQL generate much of the boundary code so handwritten code can concentrate on workflow decisions. Real implementations still differ, so a dedicated compatibility layer isolates known vendor behavior. The mock service and integration suites exercise the same contracts used in production.
 :::
 
-# Step 4: a transition becomes durable work
+# Step 4: workflow events are durable
 
 ```text
 User action or ISO message
@@ -177,9 +178,9 @@ One worker claims and processes the event
 Result, next state, and history are recorded
 ```
 
-- Work survives restarts and failures remain visible
-- Multiple instances can safely compete for work
-- Retries, scheduling, and batch processing use the same core
+- Work survives application restarts and failures remain visible
+- Multiple instances can safely compete for work without an external message queue
+- Retries, scheduling, and batch processing use the same internal core
 
 ::: notes
 PostgreSQL is both the durable source of truth and the lightweight wake-up mechanism. A notification is not the work itself: workers claim durable event rows before processing them. The request is not a mutable black box; the history explains how it reached its current state. Scheduled work includes recovery for tasks left running after interruption.
