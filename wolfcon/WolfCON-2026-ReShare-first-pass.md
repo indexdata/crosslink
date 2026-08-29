@@ -209,7 +209,56 @@ PostgreSQL is both the durable source of truth and the lightweight wake-up mecha
 ::::::::::::::
 
 ::: notes
-Multi-tenant ownership is resolved at the API boundary and carried through request operations. Refresh the proof points before WolfCON: current image size, startup time, idle memory, minimal and production container counts, and horizontal scaling evidence.
+Multi-tenant ownership is resolved at the API boundary and carried through request operations. The next slide supplies measured local proof points for image size, startup time, memory, and core runtime components. Production capacity and horizontal scaling remain separate measurements.
+:::
+
+# Lightweight is measurable
+
+| Measure | New broker | mod-rs 2.13 | Difference |
+|---|---:|---:|---:|
+| Container image | 35.6 MB | 246.0 MB | **6.9× smaller** |
+| Slowest cold start—3 runs | 0.667 s | 37.006 s | **55× faster** |
+| Service process RSS at 60 s | 39.2 MiB | 992 MiB | **25× lower** |
+| App working set | 19.7 MiB | 1,509.2 MiB | **77× lower** |
+| Core runtime pieces | 2 | 5 | **3 fewer** |
+
+Native ARM and a 2 GiB app limit. Legacy app tier includes Kafka + ZooKeeper; PostgreSQL and Okapi excluded.
+
+::: notes
+These are local comparative measurements, not production capacity figures. The startup row deliberately uses the slowest of three successful runs for both applications: 0.667 seconds for the new broker and 37.006 seconds for mod-rs 2.13. The official mod-rs image is x86-only, so its unchanged platform-neutral JAR was run on native ARM Java 11. The app-working-set row was measured with the services running together: 19.69 MiB for the broker, versus approximately 1,509.2 MiB for mod-rs, Kafka, and ZooKeeper. PostgreSQL and Okapi are excluded from that row. The historical Kafka and ZooKeeper images are x86-only; the combined native measurement used a protocol-compatible Kafka 7.9 and ZooKeeper 3.9 baseline, so treat it as an operational-footprint estimate rather than an exact reconstruction of the historical deployment. Docker image sizes come from the same image metadata field, although the published mod-rs image is amd64 and the broker image is arm64.
+:::
+
+# A smaller maintenance surface
+
+| Maintenance measure | New broker | mod-rs 2.13 | Difference |
+|---|---:|---:|---:|
+| Tracked core source files | 82 | 297 | **72% fewer** |
+| Core production source | 20,239 lines | 31,000 lines | **35% less** |
+| Direct declared dependencies | 28 | 67 | **58% fewer** |
+| Tracked test source files | 61 | 35 | **74% more** |
+| Test source | 34,695 lines | 4,868 lines | **7.1× more** |
+
+> Less code is not the goal. Less code between a workflow decision and its behavior is.
+
+::: notes
+Production counts exclude tests, generated code, and database migrations. Test counts include tracked `_test.go` files for the broker and tracked Groovy/Java test sources for mod-rs. They compare the current broker module with the mod-rs 2.13.0 release tag. Lines of code across Go and Groovy/Java are only engineering-volume indicators—not coverage, productivity, or quality scores. The architectural point is that protocol generation, typed database access, adapters, and the declarative workflow leave less handwritten application machinery to trace and maintain, while the new implementation carries substantially more executable test code.
+:::
+
+# Small does not mean simplistic
+
+| Default state-model capability | Current model |
+|---|---:|
+| Workflow variants | Loan · Copy · CopyOrLoan |
+| Perspectives | Borrower · Supplier |
+| Workflow states | 42 |
+| Distinct actions | 32 |
+| Declared action outcomes | 69 |
+| Distinct incoming events | 18 |
+
+> The complexity is visible and validated—not scattered through the application.
+
+::: notes
+The measurements establish that the runtime is small; this table establishes that the workflow is still capable. The default model represents both sides of loan and copy workflows, including branches and exceptions. Repeated state names reflect states that apply differently by side or service type. Action outcomes are the declared outcome-to-next-state mappings in the current generated model.
 :::
 
 # Interoperability by design
