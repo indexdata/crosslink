@@ -58,13 +58,13 @@ func jsonReq(t *testing.T, method string, endpoint string, bodyStr string, addlH
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 
-	pgContainer, err := postgres.Run(ctx, "postgres",
+	pgContainer, err := postgres.Run(ctx, "postgres:16",
 		postgres.WithDatabase("directory_test"),
 		postgres.WithUsername("directory"),
 		postgres.WithPassword("directory"),
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(5*time.Second)),
+				WithOccurrence(2).WithStartupTimeout(30*time.Second)),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("failed to start db container: %s", err))

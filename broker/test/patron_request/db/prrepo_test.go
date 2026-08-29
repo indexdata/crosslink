@@ -36,7 +36,7 @@ func TestMain(m *testing.M) {
 	ctx := context.Background()
 	app.DB_PROVISION = true
 
-	pgContainer, err := postgres.Run(ctx, "postgres",
+	pgContainer, err := postgres.Run(ctx, "postgres:16",
 		postgres.WithDatabase("crosslink"),
 		postgres.WithUsername("crosslink"),
 		postgres.WithPassword("crosslink"),

@@ -49,7 +49,7 @@ func TestMain(m *testing.M) {
 	app.DB_PROVISION = true
 	app.DB_EXPLAIN_ANALYZE = false
 
-	pgContainer, err := postgres.Run(ctx, "postgres",
+	pgContainer, err := postgres.Run(ctx, "postgres:16",
 		postgres.WithDatabase("crosslink"),
 		postgres.WithUsername("crosslink"),
 		postgres.WithPassword("crosslink"),
