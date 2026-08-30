@@ -3,12 +3,12 @@ set -eu
 
 deck_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 template="$deck_root/wolfcon/WOLFcon-2026-PowerPoint-Template.pptx"
-source_md="$deck_root/wolfcon/WolfCON-2026-ReShare-first-pass.md"
-output="$deck_root/wolfcon/WolfCON-2026-ReShare-first-pass.pptx"
+source_md="$deck_root/wolfcon/WolfCON-2026-ReShare.md"
+output="$deck_root/wolfcon/WolfCON-2026-ReShare.pptx"
 shape_id_fixer="$deck_root/wolfcon/fix-pptx-shape-ids.py"
 reference_dir=$(mktemp -d /private/tmp/wolfcon-reference.XXXXXX)
 reference_pptx="$reference_dir/WOLFcon-2026-reference-for-pandoc.pptx"
-source_for_pptx="$reference_dir/WolfCON-2026-ReShare-first-pass.md"
+source_for_pptx="$reference_dir/WolfCON-2026-ReShare.md"
 generated_pptx="$reference_dir/WolfCON-2026-ReShare-generated.pptx"
 fixed_pptx="$reference_dir/WolfCON-2026-ReShare-fixed.pptx"
 package_dir="$reference_dir/package"

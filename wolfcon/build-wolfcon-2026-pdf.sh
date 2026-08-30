@@ -2,11 +2,11 @@
 set -eu
 
 deck_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-source_md="$deck_root/wolfcon/WolfCON-2026-ReShare-first-pass.md"
+source_md="$deck_root/wolfcon/WolfCON-2026-ReShare.md"
 style="$deck_root/wolfcon/wolfcon-2026-pdf.css"
-output="$deck_root/wolfcon/WolfCON-2026-ReShare-first-pass.pdf"
+output="$deck_root/wolfcon/WolfCON-2026-ReShare.pdf"
 render_dir=$(mktemp -d /private/tmp/wolfcon-pdf.XXXXXX)
-html="$render_dir/WolfCON-2026-ReShare-first-pass.html"
+html="$render_dir/WolfCON-2026-ReShare.html"
 chrome_profile="$render_dir/chrome-profile"
 chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 

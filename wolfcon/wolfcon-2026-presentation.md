@@ -2,7 +2,7 @@
 
 High-level narrative and background for the presentation. This document is not
 kept in sync with individual slides. The authoritative slide source is
-`WolfCON-2026-ReShare-first-pass.md`.
+`WolfCON-2026-ReShare.md`.
 
 ## Working abstract
 
