@@ -47,11 +47,15 @@ rsvg-convert -w 1800 \
 rsvg-convert -w 1800 \
   -o "$reference_dir/wolfcon-2026-migration.png" \
   "$deck_root/wolfcon/wolfcon-2026-migration.svg"
+rsvg-convert -w 1800 \
+  -o "$reference_dir/wolfcon-2026-durable-events.png" \
+  "$deck_root/wolfcon/wolfcon-2026-durable-events.svg"
 
 cp "$source_md" "$source_for_pptx"
 perl -pi -e 's/wolfcon-2026-state-model-anatomy\.svg/wolfcon-2026-state-model-anatomy.png/g' "$source_for_pptx"
 perl -pi -e 's/wolfcon-2026-borrowing-flow\.svg/wolfcon-2026-borrowing-flow.png/g' "$source_for_pptx"
 perl -pi -e 's/wolfcon-2026-migration\.svg/wolfcon-2026-migration.png/g' "$source_for_pptx"
+perl -pi -e 's/wolfcon-2026-durable-events\.svg/wolfcon-2026-durable-events.png/g' "$source_for_pptx"
 
 pandoc "$source_for_pptx" \
   --from=markdown \

@@ -169,15 +169,7 @@ Standards define the edges. OpenAPI, protocol schemas, and SQL generate much of 
 
 # Step 4: workflow events are durable
 
-```text
-User action or ISO message
-          ↓
-Durable event in PostgreSQL
-          ↓  LISTEN / NOTIFY wakes workers
-One worker claims and processes the event
-          ↓
-Result, next state, and history are recorded
-```
+![Durable workflow event processing](wolfcon-2026-durable-events.svg){width=96%}
 
 - Work survives application restarts and failures remain visible
 - Multiple instances can safely compete for work without an external message queue
@@ -240,7 +232,7 @@ These are local comparative measurements, not production capacity figures. The s
 | Tracked test source files | 61 | 35 | **74% more** |
 | Test source | 34,695 lines | 4,868 lines | **7.1× more** |
 
-> Less code is not the goal. Less code between a workflow decision and its behavior is.
+> The goal is not less code—it is easier maintenance and faster time to market for new features.
 
 ::: notes
 Production counts exclude tests, generated code, and database migrations. Test counts include tracked `_test.go` files for the broker and tracked Groovy/Java test sources for mod-rs. They compare the current broker module with the mod-rs 2.13.0 release tag. Lines of code across Go and Groovy/Java are only engineering-volume indicators—not coverage, productivity, or quality scores. The architectural point is that protocol generation, typed database access, adapters, and the declarative workflow leave less handwritten application machinery to trace and maintain, while the new implementation carries substantially more executable test code.
