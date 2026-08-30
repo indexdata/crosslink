@@ -318,15 +318,7 @@ The happy path remains easy to follow. The value of the model becomes clear at t
 
 # From model to API to UI
 
-```text
-YAML model
-    ↓ validated for Loan / Copy / CopyOrLoan
-Action mapping for the request's current state
-    ↓                         ↓
-GET available actions        POST selected action
-    ↓                         ↓
-UI renders valid choices     Backend enforces the same rules
-```
+![State model to API and UI](wolfcon-2026-model-api-ui.svg){width=96%}
 
 Example: `INVALID_PATRON` offers revalidate, skip validation, or close—not check out.
 
