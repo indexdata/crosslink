@@ -3,8 +3,9 @@
 This directory contains the tracked source material for the WolfCON 2026
 ReShare presentation.
 
-- `wolfcon-2026-presentation.md` is the working narrative and content outline.
-- `WolfCON-2026-ReShare-first-pass.md` is the renderable slide source.
+- `WolfCON-2026-ReShare-first-pass.md` is the authoritative, renderable slide source.
+- `wolfcon-2026-presentation.md` preserves the high-level narrative and background
+  thinking. It is not kept in sync with individual slide wording.
 - The SVG, CSS, and PowerPoint files are source assets and templates.
 - Shared architecture diagrams remain in `misc/`.
 - `ILL-wolfcon-2025.pptx` is the previous presentation used as reference.
