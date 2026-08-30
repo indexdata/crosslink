@@ -96,6 +96,7 @@ The outline assumes a 40–45 minute session plus questions. Timing and slide co
 - The original backend used a substantial Grails/Groovy/GORM application and persistence stack.
 - The tenancy architecture required separate application and database deployments for individual tenants, multiplying into hundreds of instances at production scale.
 - Kafka-based asynchronous processing also required Kafka and ZooKeeper infrastructure to be deployed, monitored, and maintained.
+- Workflow progress depended on a non-transactional handoff between database state and Kafka events.
 - Core workflow behavior was spread across domain logic, status handlers, protocol handling, and asynchronous events.
 - Changing a workflow often meant tracing and changing application code, then testing the effects across integrations.
 - Maintaining the application framework, tenant-specific deployments, and messaging infrastructure increased the cost of deployment, upgrades, troubleshooting, and local development.
