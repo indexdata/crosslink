@@ -4,11 +4,11 @@ subtitle: "Architecture, adaptable workflows, interoperability, and migration"
 author: "Jakub Skoczen · Head of Engineering, Index Data · WOLFcon 2026"
 ---
 
-# From broker to platform
+# From CrossLink broker to CrossLink platform
 
 | WOLFcon 2025 | WOLFcon 2026 |
 |---|---|
-| Standards-based ILL broker | Complete ReShare workflow platform |
+| Standards-based ILL broker | Complete ILL workflow platform |
 | Connect external peers | Native borrowing and lending |
 | Route and observe transactions | Model and operate the lifecycle |
 
@@ -23,7 +23,7 @@ Last year we presented CrossLink as a standards-based broker. This year the brok
 - Community-owned and ILS-neutral
 - Production workflows shaped by practitioners
 - Integrations across diverse library systems
-- Years of knowledge about the happy path—and every exception
+- A wealth of knowledge about the happy path—and every exception
 
 > We are replacing an implementation, not the product.
 
@@ -33,13 +33,13 @@ Start from continuity and success. Legacy ReShare proved that the community serv
 
 # Why the backend needed a successor
 
-- The original implementation had a substantial application/persistence/language framework overhead
-- Separate application and database deployments per tenant multiplied into hundreds of instances
-- External messaging added infrastructure to deploy, monitor, and maintain
-- Workflow progress depended on a non-transactional handoff between database state and Kafka events
+- The original implementation had substantial app and persistence framework overhead
+- Separate app and DB deployments for every tenant multiplied into hundreds of instances
+- External Kafka-based messaging added infrastructure to deploy, monitor, and maintain
+- Workflow progress still depended on a non-transactional handoff between database state and Kafka events
 - Workflow definition spread across domain logic, status handlers, protocols, and events
 - Workflow changes required code tracing, releases, and cross-integration testing
-- Vendor behavior accumulated beside the core workflow
+- Vendor behavior accumulated in the core application
 
 ::: notes
 The original choices accelerated early delivery and got ReShare into production. FOLIO and Okapi provided useful modularity. The operational issue highlighted here is more specific: the tenancy architecture multiplied application and database deployments across individual tenants, while Kafka and ZooKeeper added services that also had to be deployed and maintained. Database commits and Kafka publication were not one atomic operation, creating failure windows in which state and pending work could diverge. CrossLink instead carries tenant ownership inside one shared deployment and records workflow events durably in PostgreSQL. Production experience gave us clearer requirements for a smaller successor.
@@ -62,7 +62,7 @@ The original choices accelerated early delivery and got ReShare into production.
 
 - Small operational footprint
 - Explicit, inspectable workflows
-- Clear adapter boundaries
+- Clear adapter boundaries and a rich, observable API
 - Complete transaction visibility
 - Safe, staged migration
 :::
