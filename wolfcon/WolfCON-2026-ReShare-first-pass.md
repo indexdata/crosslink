@@ -25,7 +25,7 @@ Last year we presented CrossLink as a standards-based broker. This year the brok
 - Integrations across diverse library systems
 - Years of knowledge about the happy path—and every exception
 
-> We are replacing an implementation, not starting the product over.
+> We are replacing an implementation, not the product.
 
 ::: notes
 Start from continuity and success. Legacy ReShare proved that the community service model works. The redesign preserves that accumulated service knowledge.
@@ -52,7 +52,7 @@ The original choices accelerated early delivery and got ReShare into production.
 ## Preserve
 
 - ILS/LSP neutrality
-- ISO 18626 and NCIP
+- First class ISO 18626 and NCIP
 - Borrowing and lending workflows
 - Consortial policy and supplier selection
 - Multi-tenant operation
@@ -146,7 +146,7 @@ Directory information and consortium policy guide supplier resolution. Discovery
 
 :::::::::::::: {.columns}
 ::: {.column width="47%"}
-## Open interfaces
+## Use open interfaces
 
 - **ISO 18626** — peer ILL messages
 - **NCIP** — patron and circulation operations
@@ -154,7 +154,7 @@ Directory information and consortium policy guide supplier resolution. Discovery
 - **OpenAPI JSON** — internal clients and staff UI
 :::
 ::: {.column width="47%"}
-## Keep them honest
+## Keep them compliant
 
 - Schema-generated protocol models
 - Generated API types and routing contracts
