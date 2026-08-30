@@ -189,6 +189,24 @@ blockquote {
   color: #002f56;
 }
 
+#one-request-two-complementary-views .api-observability-banner {
+  position: relative;
+  top: -0.52in;
+  margin: 0.16in 0 0;
+  padding: 0.11in 0.2in;
+  border: 0.035in solid #b31782;
+  border-radius: 0.14in;
+  background: #f7edf4;
+  text-align: center;
+}
+
+#one-request-two-complementary-views .api-observability-banner p {
+  margin: 0;
+  color: #002f56;
+  font-size: 15pt;
+  line-height: 1.15;
+}
+
 blockquote p {
   margin: 0;
   font-size: 25pt;

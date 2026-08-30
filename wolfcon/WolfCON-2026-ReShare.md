@@ -105,9 +105,11 @@ Native ReShare requests and brokered third-party requests share infrastructure w
 ## Patron Request
 
 - Practitioner-facing lifecycle
+- Borrowing or lending perspective
 - Current state and available actions
 - Items, notifications, and attention flags
-- Borrowing or lending perspective
+- Search, filtering, paging, and batch selection
+
 :::
 ::: {.column width="47%"}
 ## ILL Transaction
@@ -118,6 +120,10 @@ Native ReShare requests and brokered third-party requests share infrastructure w
 - Complete technical event history
 :::
 ::::::::::::::
+
+::: {.api-observability-banner}
+**A hyperlinked API surface connects each request to its transaction, protocol activity, and durable event history—complete observability from intent to outcome.**
+:::
 
 ::: notes
 Every native Patron Request is backed by an ILL transaction. Staff work with a workflow-oriented resource; implementers and support teams can follow the underlying protocol, routing, and integration trace. The API links the two resources rather than collapsing them into one overloaded object.

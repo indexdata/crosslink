@@ -7,6 +7,8 @@ source_md="$deck_root/wolfcon/WolfCON-2026-ReShare.md"
 output="$deck_root/wolfcon/WolfCON-2026-ReShare.pptx"
 shape_id_fixer="$deck_root/wolfcon/fix-pptx-shape-ids.py"
 title_logo_inserter="$deck_root/wolfcon/insert-title-logo.py"
+api_banner_inserter="$deck_root/wolfcon/insert-api-banner.py"
+api_banner_text="A hyperlinked API surface connects each request to its transaction, protocol activity, and durable event history—complete observability from intent to outcome."
 reference_dir=$(mktemp -d /private/tmp/wolfcon-reference.XXXXXX)
 reference_pptx="$reference_dir/WOLFcon-2026-reference-for-pandoc.pptx"
 source_for_pptx="$reference_dir/WolfCON-2026-ReShare.md"
@@ -62,6 +64,9 @@ rsvg-convert -w 1800 \
   "$deck_root/wolfcon/wolfcon-2026-model-api-ui.svg"
 
 cp "$source_md" "$source_for_pptx"
+# Pandoc puts content following a column group on a new PowerPoint slide. The
+# banner is restored as a native shape on the existing slide after generation.
+perl -0pi -e 's/\n::: \{\.api-observability-banner\}\n.*?\n:::\n/\n/s' "$source_for_pptx"
 perl -pi -e 's/wolfcon-2026-state-model-anatomy\.svg/wolfcon-2026-state-model-anatomy.png/g' "$source_for_pptx"
 perl -pi -e 's/wolfcon-2026-borrowing-flow\.svg/wolfcon-2026-borrowing-flow.png/g' "$source_for_pptx"
 perl -pi -e 's/wolfcon-2026-migration\.svg/wolfcon-2026-migration.png/g' "$source_for_pptx"
@@ -87,6 +92,7 @@ unzip -q "$generated_pptx" -d "$package_dir"
 cp "$reference_dir/template/ppt/media/image3.png" \
   "$package_dir/ppt/media/wolfcon-2026-logo.png"
 python3 "$title_logo_inserter" "$package_dir"
+python3 "$api_banner_inserter" "$package_dir" "$api_banner_text"
 
 python3 "$shape_id_fixer" "$package_dir"
 
