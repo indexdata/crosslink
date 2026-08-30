@@ -6,6 +6,7 @@ template="$deck_root/wolfcon/WOLFcon-2026-PowerPoint-Template.pptx"
 source_md="$deck_root/wolfcon/WolfCON-2026-ReShare.md"
 output="$deck_root/wolfcon/WolfCON-2026-ReShare.pptx"
 shape_id_fixer="$deck_root/wolfcon/fix-pptx-shape-ids.py"
+title_logo_inserter="$deck_root/wolfcon/insert-title-logo.py"
 reference_dir=$(mktemp -d /private/tmp/wolfcon-reference.XXXXXX)
 reference_pptx="$reference_dir/WOLFcon-2026-reference-for-pandoc.pptx"
 source_for_pptx="$reference_dir/WolfCON-2026-ReShare.md"
@@ -80,6 +81,12 @@ pandoc "$source_for_pptx" \
 # Pandoc can reuse cNvPr id="1" when it inserts images into a reference
 # template. PowerPoint considers those drawing IDs invalid and requests repair.
 unzip -q "$generated_pptx" -d "$package_dir"
+
+# The official title-slide logo is a slide-level object in the template, so
+# Pandoc does not copy it with the title layout. Restore it after generation.
+cp "$reference_dir/template/ppt/media/image3.png" \
+  "$package_dir/ppt/media/wolfcon-2026-logo.png"
+python3 "$title_logo_inserter" "$package_dir"
 
 python3 "$shape_id_fixer" "$package_dir"
 

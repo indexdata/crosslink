@@ -61,7 +61,7 @@ header#title-block-header::after {
 }
 
 header#title-block-header h1 {
-  width: 9.8in;
+  width: 9in;
   margin: 0 0 0.35in;
   color: #ffffff;
   font-size: 50pt;
@@ -69,7 +69,7 @@ header#title-block-header h1 {
 }
 
 header#title-block-header .subtitle {
-  width: 9.5in;
+  width: 9in;
   margin: 0 0 0.65in;
   color: #d9edf5;
   font-size: 25pt;
@@ -81,6 +81,16 @@ header#title-block-header .author {
   color: #ffffff;
   font-size: 19pt;
   font-weight: 700;
+}
+
+header#title-block-header .title-logo {
+  position: absolute;
+  z-index: 2;
+  top: 0.35in;
+  right: 0.35in;
+  width: 2.05in;
+  height: auto;
+  background: #053754;
 }
 
 section.level1 {

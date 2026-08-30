@@ -1,8 +1,8 @@
-# WolfCON 2026: The Next Generation of ReShare
+# WOLFcon 2026: The Next Generation of ReShare
 
 High-level narrative and background for the presentation. This document is not
 kept in sync with individual slides. The authoritative slide source is
-`WolfCON-2026-ReShare.md`.
+`WOLFcon-2026-ReShare.md`.
 
 ## Working abstract
 
@@ -88,7 +88,7 @@ Before converting this document into slides, confirm or measure:
 - Treatment of in-flight requests and historical data during migration.
 - Whether the roadmap includes non-returnables, digital delivery, DCB, or other service models beyond the default Loan/Copy workflow.
 
-## Material reusable from WolfCON 2025
+## Material reusable from WOLFcon 2025
 
 Source: `wolfcon/ILL-wolfcon-2025.pptx`.
 

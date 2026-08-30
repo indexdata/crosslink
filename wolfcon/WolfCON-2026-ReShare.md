@@ -1,12 +1,12 @@
 ---
 title: "The Next Generation of ReShare"
 subtitle: "Architecture, adaptable workflows, interoperability, and migration"
-author: "Jakub Skoczen · Lead Architect, Index Data · WolfCON 2026"
+author: "Jakub Skoczen · Head of Engineering, Index Data · WOLFcon 2026"
 ---
 
 # From broker to platform
 
-| WolfCON 2025 | WolfCON 2026 |
+| WOLFcon 2025 | WOLFcon 2026 |
 |---|---|
 | Standards-based ILL broker | Complete ReShare workflow platform |
 | Connect external peers | Native borrowing and lending |
