@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="720" viewBox="0 0 1800 720">
+  <defs>
+    <marker id="arrow" markerWidth="24" markerHeight="24" refX="23" refY="12" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L24,12 L0,24 Z" fill="#007693"/>
+    </marker>
+    <style>
+      .head { font: 700 30px Arial, sans-serif; fill: #002f56; }
+      .label { font: 700 25px Arial, sans-serif; fill: #002f56; }
+      .body { font: 21px Arial, sans-serif; fill: #454545; }
+      .small { font: 19px Arial, sans-serif; fill: #454545; }
+      .footer { font: 700 25px Arial, sans-serif; fill: #ffffff; }
+    </style>
+  </defs>
+
+  <rect width="1800" height="720" fill="#ffffff"/>
+
+  <g>
+    <rect x="55" y="85" width="310" height="120" rx="22" fill="#eaf0fb" stroke="#3e75cf" stroke-width="5"/>
+    <text x="210" y="137" text-anchor="middle" class="label">TENANT A</text>
+    <text x="210" y="174" text-anchor="middle" class="small">institution + branches</text>
+
+    <rect x="55" y="250" width="310" height="120" rx="22" fill="#eaf0fb" stroke="#3e75cf" stroke-width="5"/>
+    <text x="210" y="302" text-anchor="middle" class="label">TENANT B</text>
+    <text x="210" y="339" text-anchor="middle" class="small">institution + branches</text>
+
+    <rect x="55" y="415" width="310" height="120" rx="22" fill="#eaf0fb" stroke="#3e75cf" stroke-width="5"/>
+    <text x="210" y="467" text-anchor="middle" class="label">TENANT C</text>
+    <text x="210" y="504" text-anchor="middle" class="small">institution + branches</text>
+
+    <path d="M365 145 H455 V310 M365 310 H455 M365 475 H455 V310" fill="none" stroke="#007693" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <line x1="455" y1="310" x2="570" y2="310" stroke="#007693" stroke-width="6" marker-end="url(#arrow)"/>
+    <text x="210" y="575" text-anchor="middle" class="body">Resolved at the API boundary</text>
+  </g>
+
+  <g>
+    <rect x="570" y="105" width="560" height="410" rx="30" fill="#e8f2f7" stroke="#007693" stroke-width="6"/>
+    <text x="850" y="165" text-anchor="middle" class="head">STATELESS BROKER FLEET</text>
+
+    <rect x="650" y="215" width="120" height="145" rx="18" fill="#ffffff" stroke="#007693" stroke-width="4"/>
+    <rect x="790" y="215" width="120" height="145" rx="18" fill="#ffffff" stroke="#007693" stroke-width="4"/>
+    <rect x="930" y="215" width="120" height="145" rx="18" fill="#ffffff" stroke="#007693" stroke-width="4"/>
+    <circle cx="710" cy="257" r="13" fill="#69a33f"/>
+    <circle cx="850" cy="257" r="13" fill="#69a33f"/>
+    <circle cx="990" cy="257" r="13" fill="#69a33f"/>
+    <path d="M682 300 H738 M682 326 H728 M822 300 H878 M822 326 H868 M962 300 H1018 M962 326 H1008" stroke="#007693" stroke-width="5" stroke-linecap="round"/>
+
+    <text x="850" y="410" text-anchor="middle" class="label">API · EVENTS · SCHEDULER · SSE</text>
+    <text x="850" y="452" text-anchor="middle" class="body">One deployment serves the consortium</text>
+    <text x="850" y="575" text-anchor="middle" class="body">Scale replicas for total demand</text>
+  </g>
+
+  <line x1="1130" y1="310" x2="1315" y2="310" stroke="#007693" stroke-width="6" marker-end="url(#arrow)"/>
+
+  <g>
+    <path d="M1315 170 H1700 V455 C1700 500 1315 500 1315 455 Z" fill="#fff4e7" stroke="#f78b1e" stroke-width="6"/>
+    <ellipse cx="1507.5" cy="170" rx="192.5" ry="58" fill="#fffaf4" stroke="#f78b1e" stroke-width="6"/>
+    <path d="M1315 280 C1315 325 1700 325 1700 280 M1315 390 C1315 435 1700 435 1700 390" fill="none" stroke="#f78b1e" stroke-width="4" opacity="0.75"/>
+    <text x="1508" y="265" text-anchor="middle" class="head">SHARED POSTGRESQL</text>
+    <text x="1508" y="350" text-anchor="middle" class="body">requests · transactions</text>
+    <text x="1508" y="386" text-anchor="middle" class="body">jobs · event history</text>
+    <text x="1508" y="575" text-anchor="middle" class="body">One database and schema</text>
+  </g>
+
+  <rect x="190" y="625" width="1420" height="70" rx="22" fill="#053754"/>
+  <text x="900" y="670" text-anchor="middle" class="footer">One shared service—not an application and database pair for every member.</text>
+</svg>

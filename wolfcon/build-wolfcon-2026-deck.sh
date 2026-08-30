@@ -62,6 +62,9 @@ rsvg-convert -w 1800 \
 rsvg-convert -w 1800 \
   -o "$reference_dir/wolfcon-2026-model-api-ui.png" \
   "$deck_root/wolfcon/wolfcon-2026-model-api-ui.svg"
+rsvg-convert -w 1800 \
+  -o "$reference_dir/wolfcon-2026-shared-runtime.png" \
+  "$deck_root/wolfcon/wolfcon-2026-shared-runtime.svg"
 
 cp "$source_md" "$source_for_pptx"
 # Pandoc puts content following a column group on a new PowerPoint slide. The
@@ -74,6 +77,7 @@ perl -pi -e 's/wolfcon-2026-migration-validation\.svg/wolfcon-2026-migration-val
 perl -pi -e 's/wolfcon-2026-migration-cutover\.svg/wolfcon-2026-migration-cutover.png/g' "$source_for_pptx"
 perl -pi -e 's/wolfcon-2026-durable-events\.svg/wolfcon-2026-durable-events.png/g' "$source_for_pptx"
 perl -pi -e 's/wolfcon-2026-model-api-ui\.svg/wolfcon-2026-model-api-ui.png/g' "$source_for_pptx"
+perl -pi -e 's/wolfcon-2026-shared-runtime\.svg/wolfcon-2026-shared-runtime.png/g' "$source_for_pptx"
 
 pandoc "$source_for_pptx" \
   --from=markdown \

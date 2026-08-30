@@ -214,6 +214,14 @@ PostgreSQL is both the durable source of truth and the lightweight wake-up mecha
 Multi-tenant ownership is resolved at the API boundary and carried through request operations. The next slide supplies measured local proof points for image size, startup time, memory, and core runtime components. Production capacity and horizontal scaling remain separate measurements.
 :::
 
+# One deployment, many tenants
+
+![Shared multi-tenant runtime](wolfcon-2026-shared-runtime.svg){width=96%}
+
+::: notes
+Tenant identity is part of the request and authorization context, not the deployment topology. In an Okapi request, the tenant resolver maps the tenant to the institution symbols it owns, including branches. APIs and operational features authorize access against those symbols. Patron requests record tenant and requester/supplier identity; templates, pull slips, and scheduled work carry an owner; workflow events remain linked to the scoped request and transaction. All institutions share the broker fleet, tables, migrations, and PostgreSQL deployment. Typed sqlc access keeps database code explicit, while isolation itself comes from tenant resolution, ownership checks, and owner-scoped operations.
+:::
+
 # Lightweight is measurable
 
 | Measure | New broker | mod-rs 2.13 | Difference |

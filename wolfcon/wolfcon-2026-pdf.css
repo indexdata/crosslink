@@ -318,6 +318,10 @@ code {
   max-height: 5.35in;
 }
 
+#one-deployment-many-tenants img {
+  max-height: 5.35in;
+}
+
 #a-platform-that-evolves-with-the-service {
   padding-top: 1.75in;
   color: #ffffff;
