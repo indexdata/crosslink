@@ -313,7 +313,7 @@ A state says what is true now. An action says what a person or automation may do
 ![Simplified borrowing workflow](wolfcon-2026-borrowing-flow.svg){width=96%}
 
 ::: notes
-The happy path remains easy to follow. The value of the model becomes clear at the branches: invalid patrons pause for review, an unfilled supplier advances the rota, and conditional supply becomes an explicit negotiation state.
+The happy path remains easy to follow. The branches are explicit: invalid patrons pause for review, metadata that cannot be completed automatically enters NEEDS REVIEW, SENT hands the request to the common transaction flow for routing, and conditional supply becomes an explicit negotiation state.
 :::
 
 # From model to API to UI
