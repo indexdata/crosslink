@@ -162,9 +162,8 @@ Directory information and consortium policy guide supplier resolution. Discovery
 ::: {.column width="47%"}
 ## Keep them compliant
 
-- Schema-generated protocol models
-- Generated API types and routing contracts
-- Typed SQL access through `sqlc`
+- Schema-generated protocol models (xsd2go.xsl)
+- Generated API types and routing contracts (OpenAPI codegen)
 - Vendor shims and `illmock` integration tests
 :::
 ::::::::::::::
@@ -180,6 +179,7 @@ Standards define the edges. OpenAPI, protocol schemas, and SQL generate much of 
 - Work survives application restarts and failures remain visible
 - Multiple instances can safely compete for work without an external message queue
 - Retries, scheduling, and batch processing use the same internal core
+- Typed, explicit SQL access (sqlc)—without an ORM
 
 ::: notes
 PostgreSQL is both the durable source of truth and the lightweight wake-up mechanism. A notification is not the work itself: workers claim durable event rows before processing them. The request is not a mutable black box; the history explains how it reached its current state. Scheduled work includes recovery for tasks left running after interruption.
