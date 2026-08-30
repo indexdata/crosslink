@@ -186,14 +186,17 @@ PostgreSQL is both the durable source of truth and the lightweight wake-up mecha
 ## Core runtime
 
 - One Go service around durable state
-- PostgreSQL as the primary dependency
+- PostgreSQL as the only infrastruture dependency
 - No Kafka cluster for core messaging
-- Separate database migrations
-- Helm deployment and health endpoints
+- Custom event bus implementation
+- Included database migrations
+- Stateless Kubernets/Helm deployment and health endpoints
+- Rolling updates
 :::
 ::: {.column width="47%"}
-## Built on the same core
+## Core features built on the common core
 
+- Workflow execution
 - Scheduler and batch actions
 - Request aging and retries
 - Notifications and email templates
