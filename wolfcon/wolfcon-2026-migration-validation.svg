@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="720" viewBox="0 0 1800 720">
+  <defs>
+    <marker id="arrow" markerWidth="30" markerHeight="30" refX="29" refY="15" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L30,15 L0,30 Z" fill="#69a33f"/></marker>
+    <style>
+      .gate { font: 700 31px Arial, sans-serif; fill: #002f56; }
+      .body { font: 23px Arial, sans-serif; fill: #454545; }
+      .final { font: 700 31px Arial, sans-serif; fill: #ffffff; }
+      .footer { font: 700 23px Arial, sans-serif; fill: #007693; }
+    </style>
+  </defs>
+  <rect width="1800" height="720" fill="#ffffff"/>
+  <g>
+    <rect x="55" y="65" width="510" height="430" rx="28" fill="#eaf0fb" stroke="#3e75cf" stroke-width="5"/>
+    <circle cx="310" cy="132" r="37" fill="#ffffff" stroke="#3e75cf" stroke-width="5"/>
+    <path d="M292 133 L306 147 L331 117" fill="none" stroke="#3e75cf" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="310" y="208" text-anchor="middle" class="gate">DATA</text>
+    <text x="110" y="275" class="body">• Counts reconcile</text>
+    <text x="110" y="328" class="body">• Every state maps</text>
+    <text x="110" y="381" class="body">• Identifiers and links survive</text>
+    <text x="110" y="434" class="body">• Exceptions are reported</text>
+  </g>
+  <g>
+    <rect x="645" y="65" width="510" height="430" rx="28" fill="#f6e8f2" stroke="#b31782" stroke-width="5"/>
+    <circle cx="900" cy="132" r="37" fill="#ffffff" stroke="#b31782" stroke-width="5"/>
+    <path d="M882 133 L896 147 L921 117" fill="none" stroke="#b31782" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="900" y="208" text-anchor="middle" class="gate">WORKFLOW</text>
+    <text x="700" y="275" class="body">• Requests expose correct actions</text>
+    <text x="700" y="328" class="body">• Search and batch selection work</text>
+    <text x="700" y="381" class="body">• Email is captured and reviewed</text>
+    <text x="700" y="434" class="body">• Pull slips render correctly</text>
+  </g>
+  <g>
+    <rect x="1235" y="65" width="510" height="430" rx="28" fill="#fff4e7" stroke="#f78b1e" stroke-width="5"/>
+    <circle cx="1490" cy="132" r="37" fill="#ffffff" stroke="#f78b1e" stroke-width="5"/>
+    <path d="M1472 133 L1486 147 L1511 117" fill="none" stroke="#f78b1e" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="1490" y="208" text-anchor="middle" class="gate">INTEGRATIONS</text>
+    <text x="1290" y="275" class="body">• NCIP against the ILS sandbox</text>
+    <text x="1290" y="328" class="body">• ISO18626 with test peers</text>
+    <text x="1290" y="381" class="body">• VuFind test submission path</text>
+    <text x="1290" y="434" class="body">• No uncontrolled live effects</text>
+  </g>
+  <line x1="310" y1="495" x2="480" y2="565" stroke="#69a33f" stroke-width="6" marker-end="url(#arrow)"/>
+  <line x1="900" y1="495" x2="900" y2="565" stroke="#69a33f" stroke-width="6" marker-end="url(#arrow)"/>
+  <line x1="1490" y1="495" x2="1320" y2="565" stroke="#69a33f" stroke-width="6" marker-end="url(#arrow)"/>
+  <rect x="455" y="565" width="890" height="105" rx="28" fill="#69a33f" stroke="#4b7f2d" stroke-width="5"/>
+  <text x="900" y="632" text-anchor="middle" class="final">PRODUCTION CANDIDATE</text>
+  <text x="900" y="704" text-anchor="middle" class="footer">The data, workflows, and integrations must pass together.</text>
+</svg>

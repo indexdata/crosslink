@@ -48,6 +48,12 @@ rsvg-convert -w 1800 \
   -o "$reference_dir/wolfcon-2026-migration.png" \
   "$deck_root/wolfcon/wolfcon-2026-migration.svg"
 rsvg-convert -w 1800 \
+  -o "$reference_dir/wolfcon-2026-migration-validation.png" \
+  "$deck_root/wolfcon/wolfcon-2026-migration-validation.svg"
+rsvg-convert -w 1800 \
+  -o "$reference_dir/wolfcon-2026-migration-cutover.png" \
+  "$deck_root/wolfcon/wolfcon-2026-migration-cutover.svg"
+rsvg-convert -w 1800 \
   -o "$reference_dir/wolfcon-2026-durable-events.png" \
   "$deck_root/wolfcon/wolfcon-2026-durable-events.svg"
 rsvg-convert -w 1800 \
@@ -58,6 +64,8 @@ cp "$source_md" "$source_for_pptx"
 perl -pi -e 's/wolfcon-2026-state-model-anatomy\.svg/wolfcon-2026-state-model-anatomy.png/g' "$source_for_pptx"
 perl -pi -e 's/wolfcon-2026-borrowing-flow\.svg/wolfcon-2026-borrowing-flow.png/g' "$source_for_pptx"
 perl -pi -e 's/wolfcon-2026-migration\.svg/wolfcon-2026-migration.png/g' "$source_for_pptx"
+perl -pi -e 's/wolfcon-2026-migration-validation\.svg/wolfcon-2026-migration-validation.png/g' "$source_for_pptx"
+perl -pi -e 's/wolfcon-2026-migration-cutover\.svg/wolfcon-2026-migration-cutover.png/g' "$source_for_pptx"
 perl -pi -e 's/wolfcon-2026-durable-events\.svg/wolfcon-2026-durable-events.png/g' "$source_for_pptx"
 perl -pi -e 's/wolfcon-2026-model-api-ui\.svg/wolfcon-2026-model-api-ui.png/g' "$source_for_pptx"
 

@@ -284,7 +284,9 @@ code {
 
 #anatomy-of-the-state-model img,
 #a-borrowing-request-step-by-step img,
-#migration-continuity-before-cutover img {
+#migration-is-rehearsed-not-improvised img,
+#cutover-is-earned-by-three-acceptance-gates img,
+#plan-for-a-bounded-maintenance-window img {
   max-height: 5.35in;
 }
 

@@ -366,12 +366,28 @@ Concrete examples include requiring or skipping patron validation, stopping for 
 Prepare a complete recording, a known-good request ID, and captured event history as fallback. The live demo can still be attempted first.
 :::
 
-# Migration: continuity before cutover
+# Migration is rehearsed, not improvised
 
-![Four-stage migration path](wolfcon-2026-migration.svg){width=96%}
+![Migration rehearsal loop](wolfcon-2026-migration.svg){width=96%}
 
 ::: notes
-The migration unit should be a controlled cohort with observable acceptance criteria, not an all-at-once database replacement. We still need product decisions on in-flight requests, completed-request history, and the length of any dual-system period.
+Start with a representative first cohort and give staff a migration rehearsal environment: real data, but isolated from live ILS, ISO 18626, discovery, and email effects. Import open and recently created requests with a dedicated migration path that restores their current state without replaying live workflow actions. Staff review the requests as operational work—not just rows in a database. Fix mappings, importer behavior, or configuration, reset the environment, and repeat from a clean import until the evidence passes.
+:::
+
+# Cutover is earned by three acceptance gates
+
+![Migration acceptance gates](wolfcon-2026-migration-validation.svg){width=96%}
+
+::: notes
+Acceptance has three dimensions. Data must reconcile and retain its identifiers, links, and meaningful workflow state. Staff must be able to find requests, take the correct actions, use batch operations, review email, and produce pull slips. Integrations must be exercised safely: especially NCIP against an ILS sandbox, ISO 18626 with test peers, and the VuFind submission path. Only when all three pass do we have a production candidate.
+:::
+
+# Plan for a bounded maintenance window
+
+![Controlled migration cutover](wolfcon-2026-migration-cutover.svg){width=96%}
+
+::: notes
+We should not promise zero downtime because live submission and ILS connections must move between systems. Instead, plan a short, controlled maintenance window: freeze writes in legacy ReShare, capture and import the final delta, reconcile it, switch VuFind, ISO 18626, and NCIP, then smoke-test before reopening. Crosslink becomes the only writable system; legacy ReShare remains read-only for reference. Rehearsals make the duration and operational steps measurable before the real cutover.
 :::
 
 # Roadmap to production adoption
