@@ -38,7 +38,7 @@
   <g>
     <rect x="95" y="510" width="285" height="86" rx="18" fill="#b31782"/>
     <text x="237" y="562" class="branch" text-anchor="middle">INVALID PATRON</text>
-    <path d="M122 340 C122 420,237 420,237 500" fill="none" stroke="#b31782" stroke-width="5" marker-end="url(#arr)"/>
+    <path d="M122 340 C122 410,237 410,237 440 L237 500" fill="none" stroke="#b31782" stroke-width="5" marker-end="url(#arr)"/>
     <text x="237" y="635" class="note" text-anchor="middle">Pause for staff review</text>
 
     <rect x="890" y="510" width="290" height="86" rx="18" fill="#f78b1e"/>
@@ -48,7 +48,7 @@
 
     <rect x="1210" y="510" width="330" height="86" rx="18" fill="#3e75cf"/>
     <text x="1375" y="562" class="branch" text-anchor="middle">CONDITION PENDING</text>
-    <path d="M1267 340 C1267 430,1375 430,1375 500" fill="none" stroke="#3e75cf" stroke-width="5" marker-end="url(#arr)"/>
+    <path d="M1267 340 C1267 420,1375 420,1375 440 L1375 500" fill="none" stroke="#3e75cf" stroke-width="5" marker-end="url(#arr)"/>
     <text x="1375" y="635" class="note" text-anchor="middle">Accept or reject terms</text>
   </g>
   <text x="900" y="790" class="note" text-anchor="middle">The happy path is simple. The model makes exceptions explicit.</text>
