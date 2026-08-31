@@ -324,15 +324,18 @@ func TestGenerateAndEmailPullslip_TemplateEmptySubject(t *testing.T) {
 }
 
 func TestGenerateAndEmailPullslip_TemplateInvalidBody(t *testing.T) {
-	prRepo := &mockEmailPrRepo{template: pr_db.Template{
-		ID: "template-id",
-		Subject: pgtype.Text{
-			Valid:  true,
-			String: "Subject",
+	prRepo := &mockEmailPrRepo{
+		template: pr_db.Template{
+			ID: "template-id",
+			Subject: pgtype.Text{
+				Valid:  true,
+				String: "Subject",
+			},
+			Body:        "Body {{.Invalid text",
+			ContentType: "text",
 		},
-		Body:        "Body {{.Invalid text",
-		ContentType: "text",
-	}}
+		listResult: []pr_db.PatronRequest{{ID: "pr-1"}},
+	}
 	svc := newEmailSvc(prRepo, &mockEmailService{}, nil)
 	status, result := svc.generateAndEmailPullslip(testCtx, validEmailEvent())
 	assert.Equal(t, events.EventStatusError, status)
@@ -341,15 +344,18 @@ func TestGenerateAndEmailPullslip_TemplateInvalidBody(t *testing.T) {
 }
 
 func TestGenerateAndEmailPullslip_TemplateInvalidSubject(t *testing.T) {
-	prRepo := &mockEmailPrRepo{template: pr_db.Template{
-		ID: "template-id",
-		Subject: pgtype.Text{
-			Valid:  true,
-			String: "Subject {{.Invalid text",
+	prRepo := &mockEmailPrRepo{
+		template: pr_db.Template{
+			ID: "template-id",
+			Subject: pgtype.Text{
+				Valid:  true,
+				String: "Subject {{.Invalid text",
+			},
+			Body:        "Body",
+			ContentType: "text",
 		},
-		Body:        "Body",
-		ContentType: "text",
-	}}
+		listResult: []pr_db.PatronRequest{{ID: "pr-1"}},
+	}
 	svc := newEmailSvc(prRepo, &mockEmailService{}, nil)
 	status, result := svc.generateAndEmailPullslip(testCtx, validEmailEvent())
 	assert.Equal(t, events.EventStatusError, status)
