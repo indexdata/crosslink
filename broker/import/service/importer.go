@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -31,7 +32,10 @@ const (
 	importItemTypePatronRequest = "patronRequest"
 	importItemTypeBatchAction   = "batchAction"
 	importItemTypeTemplate      = "template"
+	maxImportRecordBytes        = 1 << 20
 )
+
+var ErrImportRecordTooLarge = errors.New("import record too large")
 
 type importStateValidator interface {
 	ValidateImportState(string, proapi.StateModelServiceType, pr_db.PatronRequestSide, pr_db.PatronRequestState) (bool, error)
@@ -47,6 +51,7 @@ type Importer struct {
 	directoryAdapter adapter.DirectoryLookupAdapter
 	stateValidator   importStateValidator
 	clock            func() time.Time
+	maxRecordBytes   int
 }
 
 type importItem struct {
@@ -63,7 +68,14 @@ func newImporter(repo importdb.ImportRepo, peerCache importPeerCache, directoryA
 	if clock == nil {
 		clock = time.Now
 	}
-	return Importer{repo: repo, peerCache: peerCache, directoryAdapter: directoryAdapter, stateValidator: stateValidator, clock: clock}
+	return Importer{
+		repo:             repo,
+		peerCache:        peerCache,
+		directoryAdapter: directoryAdapter,
+		stateValidator:   stateValidator,
+		clock:            clock,
+		maxRecordBytes:   maxImportRecordBytes,
+	}
 }
 
 func decodeImportItem(raw json.RawMessage) (importItem, error) {
@@ -90,27 +102,40 @@ func decodeImportItem(raw json.RawMessage) (importItem, error) {
 	return envelope, nil
 }
 
-func (i Importer) Import(ctx common.ExtendedContext, policy importdb.ConflictPolicy, dec *json.Decoder) importoapi.ImportResult {
+func (i Importer) Import(ctx common.ExtendedContext, policy importdb.ConflictPolicy, input io.Reader) (importoapi.ImportResult, error) {
 	result := importoapi.ImportResult{Errors: make([]importoapi.ImportItemError, 0)}
-	for line := int32(1); ; line++ {
-		var raw json.RawMessage
-		err := dec.Decode(&raw)
+	maxRecordBytes := i.maxRecordBytes
+	if maxRecordBytes <= 0 {
+		maxRecordBytes = maxImportRecordBytes
+	}
+	reader := bufio.NewReaderSize(input, maxRecordBytes+2)
+	for line := int32(1); ; {
+		raw, err := readImportRecord(reader, maxRecordBytes)
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			result.Errors = append(result.Errors, importoapi.ImportItemError{Line: line, Error: err.Error()})
-			break
+			return result, err
+		}
+		if len(bytes.TrimSpace(raw)) == 0 {
+			continue
 		}
 
 		item, err := decodeImportItem(raw)
 		if err != nil {
+			var syntaxError *json.SyntaxError
+			if errors.As(err, &syntaxError) || errors.Is(err, io.ErrUnexpectedEOF) {
+				result.Errors = append(result.Errors, importoapi.ImportItemError{Line: line, Error: err.Error()})
+				break
+			}
 			addImportFailure(&result, line, item.Type, err, &item.Owner, nil)
+			line++
 			continue
 		}
 		identifier, repoResult, err := i.importItem(ctx, policy, item)
 		if err != nil {
 			addImportFailure(&result, line, item.Type, err, &item.Owner, identifier)
+			line++
 			continue
 		}
 		switch repoResult.Outcome {
@@ -121,8 +146,32 @@ func (i Importer) Import(ctx common.ExtendedContext, policy importdb.ConflictPol
 		default:
 			addImportFailure(&result, line, item.Type, fmt.Errorf("repository returned unknown outcome %q", repoResult.Outcome), &item.Owner, identifier)
 		}
+		line++
 	}
-	return result
+	return result, nil
+}
+
+func readImportRecord(reader *bufio.Reader, maxBytes int) (json.RawMessage, error) {
+	record, err := reader.ReadSlice('\n')
+	if errors.Is(err, bufio.ErrBufferFull) {
+		return nil, ErrImportRecordTooLarge
+	}
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, err
+	}
+	if len(record) == 0 && errors.Is(err, io.EOF) {
+		return nil, io.EOF
+	}
+	if record[len(record)-1] == '\n' {
+		record = record[:len(record)-1]
+		if len(record) > 0 && record[len(record)-1] == '\r' {
+			record = record[:len(record)-1]
+		}
+	}
+	if len(record) > maxBytes {
+		return nil, ErrImportRecordTooLarge
+	}
+	return json.RawMessage(record), nil
 }
 
 func (i Importer) importItem(ctx common.ExtendedContext, policy importdb.ConflictPolicy, item importItem) (*string, importdb.Result, error) {
@@ -373,6 +422,15 @@ func (i Importer) importTemplate(ctx common.ExtendedContext, policy importdb.Con
 	if create.Title == "" || create.Body == "" || create.Purpose == "" || create.ContentType == "" || create.Audience == nil {
 		return &labels, importdb.Result{}, errors.New("title, body, purpose, contentType, and audience are required")
 	}
+	if !create.Purpose.Valid() {
+		return &labels, importdb.Result{}, fmt.Errorf("invalid purpose: %s", create.Purpose)
+	}
+	if !create.ContentType.Valid() {
+		return &labels, importdb.Result{}, fmt.Errorf("invalid contentType: %s", create.ContentType)
+	}
+	if !create.Audience.Valid() {
+		return &labels, importdb.Result{}, fmt.Errorf("invalid audience: %s", *create.Audience)
+	}
 	now := pgtype.Timestamp{Time: i.clock(), Valid: true}
 	result, err := i.repo.ImportTemplate(ctx, pr_db.SaveTemplateParams{ID: uuid.NewString(), Owner: owner, Title: create.Title, Purpose: string(create.Purpose), Subject: pgTextFromPtr(create.Subject), Body: create.Body, ContentType: string(create.ContentType), Labels: create.Labels, Audience: pgTextFromString(string(*create.Audience)), CreatedAt: now, UpdatedAt: now}, policy)
 	return &labels, result, err
@@ -479,8 +537,11 @@ func addImportSkipped(result *importoapi.ImportResult, line int32, itemType, dia
 	case importItemTypeTemplate:
 		result.Templates.Skipped++
 	}
-	importType := importItemType(itemType)
-	result.Errors = append(result.Errors, importoapi.ImportItemError{Line: line, Type: &importType, Error: diagnostic, Owner: owner, Identifier: identifier})
+	importError := importoapi.ImportItemError{Line: line, Error: diagnostic, Owner: owner, Identifier: identifier}
+	if importType := importItemType(itemType); importType.Valid() {
+		importError.Type = &importType
+	}
+	result.Errors = append(result.Errors, importError)
 }
 
 func addImportFailure(result *importoapi.ImportResult, line int32, itemType string, err error, owner, identifier *string) {
@@ -492,8 +553,11 @@ func addImportFailure(result *importoapi.ImportResult, line int32, itemType stri
 	case importItemTypeTemplate:
 		result.Templates.Failed++
 	}
-	importType := importItemType(itemType)
-	result.Errors = append(result.Errors, importoapi.ImportItemError{Line: line, Type: &importType, Error: err.Error(), Owner: owner, Identifier: identifier})
+	importError := importoapi.ImportItemError{Line: line, Error: err.Error(), Owner: owner, Identifier: identifier}
+	if importType := importItemType(itemType); importType.Valid() {
+		importError.Type = &importType
+	}
+	result.Errors = append(result.Errors, importError)
 }
 
 func importItemType(itemType string) importoapi.ImportItemType {

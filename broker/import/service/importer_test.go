@@ -91,7 +91,8 @@ func TestImporterAccountsForImportedSkippedAndFailed(t *testing.T) {
 	for range 3 {
 		body += `{"type":"template","owner":"ISIL:OWNER","data":` + string(validTemplateData()) + `}` + "\n"
 	}
-	result := importer.Import(testCtx(), importdb.ConflictPolicySkip, json.NewDecoder(strings.NewReader(body)))
+	result, err := importer.Import(testCtx(), importdb.ConflictPolicySkip, strings.NewReader(body))
+	require.NoError(t, err)
 	assert.Equal(t, int32(1), result.Templates.Imported)
 	assert.Equal(t, int32(1), result.Templates.Skipped)
 	assert.Equal(t, int32(1), result.Templates.Failed)
@@ -100,6 +101,69 @@ func TestImporterAccountsForImportedSkippedAndFailed(t *testing.T) {
 	assert.Equal(t, "labels already exist", result.Errors[0].Error)
 	assert.Equal(t, int32(3), result.Errors[1].Line)
 	assert.Equal(t, importdb.ConflictPolicySkip, repo.templatePolicy)
+}
+
+func TestImportTemplateRejectsInvalidEnums(t *testing.T) {
+	tests := []struct {
+		name    string
+		data    string
+		wantErr string
+	}{
+		{
+			name:    "purpose",
+			data:    `{"title":"Title","purpose":"sms","body":"Body","contentType":"text","labels":["first"],"audience":"patron"}`,
+			wantErr: "invalid purpose",
+		},
+		{
+			name:    "content type",
+			data:    `{"title":"Title","purpose":"email","body":"Body","contentType":"text/plain","labels":["first"],"audience":"patron"}`,
+			wantErr: "invalid contentType",
+		},
+		{
+			name:    "audience",
+			data:    `{"title":"Title","purpose":"email","body":"Body","contentType":"text","labels":["first"],"audience":"external"}`,
+			wantErr: "invalid audience",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &recordingImportRepo{}
+			cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+			importer := newImporter(repo, cache, nil, nil, fixedClock)
+
+			_, _, err := importer.importTemplate(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", json.RawMessage(tt.data))
+
+			require.ErrorContains(t, err, tt.wantErr)
+			assert.Zero(t, repo.templateCalls)
+		})
+	}
+}
+
+func TestImporterAcceptsRecordAtSizeLimit(t *testing.T) {
+	repo := &recordingImportRepo{}
+	importer := newImporter(repo, &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}, nil, nil, fixedClock)
+	importer.maxRecordBytes = 256
+	prefix := `{"type":"template","owner":"ISIL:OWNER","data":{"title":"Title","purpose":"email","body":"`
+	suffix := `","contentType":"text","labels":["first"],"audience":"patron"}}`
+	record := prefix + strings.Repeat("x", 256-len(prefix)-len(suffix)) + suffix
+
+	result, err := importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader(record+"\n"))
+
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), result.Templates.Imported)
+}
+
+func TestImporterRejectsRecordOverSizeLimit(t *testing.T) {
+	repo := &recordingImportRepo{}
+	importer := newImporter(repo, &recordingPeerCache{}, nil, nil, fixedClock)
+	importer.maxRecordBytes = 128
+
+	_, err := importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader(strings.Repeat("x", 129)+"\n"))
+
+	assert.ErrorIs(t, err, ErrImportRecordTooLarge)
+	assert.Zero(t, repo.patronCalls)
+	assert.Zero(t, repo.templateCalls)
 }
 
 func TestImporterForwardsPolicyToBatchAction(t *testing.T) {
@@ -200,7 +264,7 @@ func validPatronBundleData() json.RawMessage {
     }`)
 }
 func validTemplateData() json.RawMessage {
-	return json.RawMessage(`{"title":"Title","purpose":"email","body":"Body","contentType":"text/plain","labels":["first"],"audience":"patron"}`)
+	return json.RawMessage(`{"title":"Title","purpose":"email","body":"Body","contentType":"text","labels":["first"],"audience":"patron"}`)
 }
 func validBatchActionData() json.RawMessage {
 	return json.RawMessage(`{"actionName":"request-aging","batchQuery":"state==NEW","schedule":"FREQ=DAILY;BYHOUR=6;BYMINUTE=0","title":"Daily aging"}`)

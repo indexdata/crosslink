@@ -649,7 +649,7 @@ type CreateTemplate struct {
 	// Audience Intended audience for the template. Omit to apply to both patron and staff.
 	Audience *TemplateAudience `json:"audience,omitempty"`
 
-	// Body Body of the email or pull slip template. Supports {{x}} placeholders.
+	// Body Body of the email or pull slip template. Supports {{.X}} placeholders. For full list of supported placeholders, see the Template object.
 	Body string `json:"body"`
 
 	// ContentType Output content type for the template body
@@ -661,7 +661,7 @@ type CreateTemplate struct {
 	// Purpose Purpose of the template
 	Purpose TemplatePurpose `json:"purpose"`
 
-	// Subject Subject line template, supports {{x}} placeholders. Not used for pullslip templates.
+	// Subject Subject line template, supports {{.X}} placeholders. Not used for pullslip templates. For full list of supported placeholders, see the Template object.
 	Subject *string `json:"subject,omitempty"`
 
 	// Title Human-readable title for the template
@@ -1445,6 +1445,9 @@ type StateModel struct {
 	// Name Name of the state model
 	Name string `json:"name"`
 
+	// PullslipPdfTemplateLabel Template label used to resolve the PDF pullslip template for this state model.
+	PullslipPdfTemplateLabel *string `json:"pullslipPdfTemplateLabel,omitempty"`
+
 	// Selector Criteria used to select this state model for an ISO 18626 request
 	Selector *StateModelSelector `json:"selector,omitempty"`
 
@@ -1491,7 +1494,7 @@ type Template struct {
 	// Audience Intended audience for the template. Omit to apply to both patron and staff.
 	Audience *TemplateAudience `json:"audience,omitempty"`
 
-	// Body Body of the email or pull slip template. Supports {{x}} placeholders.
+	// Body Body of the email or pull slip template. Supports {{.X}} placeholders. Supported placeholders for patron request templates include {{.ReqId}}, {{.PickupLocation}}, {{.Title}}, {{.Author}}, {{.DueDate}}, {{.ReturnAddress}}, {{.BarcodeBase64}}, {{.ServiceType}}, {{.ServiceLevel}}, {{.SystemIdentifier}}, {{.Publisher}}, {{.Volume}}, {{.Issue}}, {{.Pages}}, {{.StaffNotes}}, {{.CallNumber}}, {{.LoanConditions}}, {{.PatronName}}, {{.PatronSurname}}, {{.PatronId}} and batch templates include {{.FullCount}}, {{.ActualCount}}, {{.BatchQuery}}.
 	Body string `json:"body"`
 
 	// ContentType Output content type for the template body
@@ -1509,7 +1512,7 @@ type Template struct {
 	// Purpose Purpose of the template
 	Purpose TemplatePurpose `json:"purpose"`
 
-	// Subject Subject line template, supports {{x}} placeholders. Not used for pullslip templates.
+	// Subject Subject line template, supports {{.X}} placeholders. Not used for pullslip templates. Supports same placeholders as template body.
 	Subject *string `json:"subject,omitempty"`
 
 	// Title Human-readable title for the template
@@ -1571,7 +1574,7 @@ type UpdateTemplate struct {
 	// Audience Intended audience for the template. Omit to apply to both patron and staff.
 	Audience *TemplateAudience `json:"audience,omitempty"`
 
-	// Body Body of the email or pull slip template. Supports {{x}} placeholders.
+	// Body Body of the email or pull slip template. Supports {{.X}} placeholders. For full list of supported placeholders, see the Template object.
 	Body string `json:"body"`
 
 	// ContentType Output content type for the template body
@@ -1580,7 +1583,7 @@ type UpdateTemplate struct {
 	// Labels Labels identifying the template's usage context
 	Labels []string `json:"labels"`
 
-	// Subject Subject line template supporting {{x}} placeholders. Not used for pull slip templates. Omit to clear.
+	// Subject Subject line template supporting {{.X}} placeholders. Not used for pull slip templates. Omit to clear. For full list of supported placeholders, see the Template object.
 	Subject *string `json:"subject,omitempty"`
 
 	// Title Human-readable title for the template
