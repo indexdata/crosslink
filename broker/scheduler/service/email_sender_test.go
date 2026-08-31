@@ -404,6 +404,26 @@ func TestGenerateAndEmailPullslip_SuccessNoEmail(t *testing.T) {
 	assert.False(t, mailer.called)
 }
 
+func TestGenerateAndEmailPullslip_SuccessEmailWithZero(t *testing.T) {
+	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
+	mailer := &mockEmailService{}
+	svc := newEmailSvc(prRepo, mailer, nil)
+	event := validEmailEvent()
+	event.EventData.CustomData["sendEmpty"] = true
+	status, result := svc.generateAndEmailPullslip(testCtx, event)
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Nil(t, result)
+	assert.True(t, mailer.called)
+
+	assert.True(t, strings.Contains(string(mailer.data), "user@example.com"))
+	assert.Equal(t, pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams{
+		Owner:    "ISIL:OWNER",
+		Purpose:  "email",
+		Label:    "pullslips",
+		Audience: "staff",
+	}, prRepo.gotTemplate)
+}
+
 func TestGenerateAndEmailPullslip_Success(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{{ID: "pr-1"}}}
 	mailer := &mockEmailService{}

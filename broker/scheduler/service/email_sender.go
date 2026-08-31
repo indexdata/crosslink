@@ -24,6 +24,7 @@ type pullslipEmailData struct {
 	To            []string `json:"to"`
 	TemplateLabel string   `json:"templateLabel"`
 	IncludePdf    bool     `json:"includePdf"`
+	SendEmpty     bool     `json:"sendEmpty"`
 }
 
 type EmailSenderService struct {
@@ -119,13 +120,14 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 		ctx.Logger().Warn("email batch truncated: selector matched more records than the per-email limit",
 			"matched", fullCount, "limit", MAX_RECORDS_PER_EMAIL)
 	}
-	if len(prs) == 0 {
+	if len(prs) == 0 && !emailData.SendEmpty {
 		return events.EventStatusSuccess, &events.EventResult{CommonEventData: events.CommonEventData{Note: "no patron requests matched the selector"}}
 	}
 
 	// Optionally generate a pull-slip PDF and attach it.
 	var pdfAttachment *email.PdfAttach
-	if emailData.IncludePdf {
+	includePdf := emailData.IncludePdf && len(prs) > 0
+	if includePdf {
 		if s.pdf == nil {
 			return events.NewErrorResult("pdf not configured", "no PDF generator is available on this service instance")
 		}
@@ -155,7 +157,7 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 		Subject:    subject,
 		Body:       body,
 		IsHTML:     template.ContentType == string(proapi.Html),
-		IncludePdf: emailData.IncludePdf,
+		IncludePdf: includePdf,
 	}
 
 	raw, err := email.BuildRawMessage(*owner.CustomData.FromEmail, messageData, pdfAttachment)
@@ -198,10 +200,12 @@ func extractEmailData(eventData events.EventData) (pullslipEmailData, error) {
 
 	templateLabel, _ := eventData.CustomData["templateLabel"].(string)
 	includePdf, _ := eventData.CustomData["includePdf"].(bool)
+	sendEmpty, _ := eventData.CustomData["sendEmpty"].(bool)
 
 	return pullslipEmailData{
 		To:            toAddrs,
 		TemplateLabel: templateLabel,
 		IncludePdf:    includePdf,
+		SendEmpty:     sendEmpty,
 	}, nil
 }
