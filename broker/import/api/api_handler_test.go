@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/ill_db"
 	importdb "github.com/indexdata/crosslink/broker/import/db"
 	importoapi "github.com/indexdata/crosslink/broker/import/oapi"
 	"github.com/indexdata/crosslink/broker/import/service"
@@ -17,11 +19,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var cache = &recordingPeerCache{peers: []ill_db.Peer{{ID: "peer-requester"}, {ID: "peer-supplier"}}}
+
 func fixedClock() time.Time { return time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC) }
 
 func TestPostImportDefaultsConflictPolicyToFail(t *testing.T) {
 	repo := &recordingImportRepo{}
-	handler := ApiHandler{importer: service.NewImporter(repo, nil, nil, nil, fixedClock)}
+	handler := ApiHandler{importer: service.NewImporter(repo, cache, nil, nil, fixedClock)}
 	recorder := httptest.NewRecorder()
 	handler.PostImport(recorder, ndjsonRequest(`{"type":"template","owner":"ISIL:OWNER","data":`+string(validTemplateData())+`}`+"\n"), importoapi.PostImportParams{})
 
@@ -32,7 +36,7 @@ func TestPostImportDefaultsConflictPolicyToFail(t *testing.T) {
 
 func TestPostImportAcceptsExplicitConflictPolicy(t *testing.T) {
 	repo := &recordingImportRepo{}
-	handler := ApiHandler{importer: service.NewImporter(repo, nil, nil, nil, fixedClock)}
+	handler := ApiHandler{importer: service.NewImporter(repo, cache, nil, nil, fixedClock)}
 	policy := importoapi.Update
 	recorder := httptest.NewRecorder()
 	handler.PostImport(recorder, ndjsonRequest(`{"type":"template","owner":"ISIL:OWNER","data":`+string(validTemplateData())+`}`+"\n"), importoapi.PostImportParams{ConflictPolicy: &policy})
@@ -42,7 +46,7 @@ func TestPostImportAcceptsExplicitConflictPolicy(t *testing.T) {
 }
 
 func TestPostImportRejectsUnknownConflictPolicyBeforeBodyValidation(t *testing.T) {
-	handler := ApiHandler{importer: service.NewImporter(&recordingImportRepo{}, nil, nil, nil, fixedClock)}
+	handler := ApiHandler{importer: service.NewImporter(&recordingImportRepo{}, cache, nil, nil, fixedClock)}
 	policy := importoapi.ConflictPolicy("unknown")
 	recorder := httptest.NewRecorder()
 	handler.PostImport(recorder, httptest.NewRequest(http.MethodPost, "/import", http.NoBody), importoapi.PostImportParams{ConflictPolicy: &policy})
@@ -52,7 +56,7 @@ func TestPostImportRejectsUnknownConflictPolicyBeforeBodyValidation(t *testing.T
 }
 
 func TestPostImportValidatesBodyAndContentType(t *testing.T) {
-	handler := ApiHandler{importer: service.NewImporter(&recordingImportRepo{}, nil, nil, nil, fixedClock)}
+	handler := ApiHandler{importer: service.NewImporter(&recordingImportRepo{}, cache, nil, nil, fixedClock)}
 
 	missingBody := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/import", http.NoBody)
@@ -65,6 +69,49 @@ func TestPostImportValidatesBodyAndContentType(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	handler.PostImport(wrongType, req, importoapi.PostImportParams{})
 	assert.Equal(t, http.StatusBadRequest, wrongType.Code)
+}
+
+func TestPostImportRejectsKnownOversizedBody(t *testing.T) {
+	handler := ApiHandler{
+		importer:           service.NewImporter(&recordingImportRepo{}, cache, nil, nil, fixedClock),
+		maxImportBodyBytes: 128,
+	}
+	req := ndjsonRequest(strings.Repeat("x", 129))
+	recorder := httptest.NewRecorder()
+
+	handler.PostImport(recorder, req, importoapi.PostImportParams{})
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, recorder.Code)
+}
+
+func TestPostImportRejectsChunkedOversizedBody(t *testing.T) {
+	repo := &recordingImportRepo{}
+	handler := ApiHandler{
+		importer:           service.NewImporter(repo, cache, nil, nil, fixedClock),
+		maxImportBodyBytes: 128,
+	}
+	req := ndjsonRequest(strings.Repeat("x", 129))
+	req.ContentLength = -1
+	recorder := httptest.NewRecorder()
+
+	handler.PostImport(recorder, req, importoapi.PostImportParams{})
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, recorder.Code)
+	assert.Zero(t, repo.patronCalls)
+	assert.Zero(t, repo.templateCalls)
+}
+
+func TestPostImportRejectsOversizedRecord(t *testing.T) {
+	repo := &recordingImportRepo{}
+	handler := ApiHandler{importer: service.NewImporter(repo, cache, nil, nil, fixedClock)}
+	req := ndjsonRequest(strings.Repeat("x", (1<<20)+1) + "\n")
+	recorder := httptest.NewRecorder()
+
+	handler.PostImport(recorder, req, importoapi.PostImportParams{})
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, recorder.Code)
+	assert.Zero(t, repo.patronCalls)
+	assert.Zero(t, repo.templateCalls)
 }
 
 func ndjsonRequest(body string) *http.Request {
@@ -117,5 +164,19 @@ func (r *recordingImportRepo) ImportBatchAction(_ common.ExtendedContext, params
 	return r.batchResult, r.batchErr
 }
 func validTemplateData() json.RawMessage {
-	return json.RawMessage(`{"title":"Title","purpose":"email","body":"Body","contentType":"text/plain","labels":["first"],"audience":"patron"}`)
+	return json.RawMessage(`{"title":"Title","purpose":"email","body":"Body","contentType":"text","labels":["first"],"audience":"patron"}`)
+}
+
+type recordingPeerCache struct {
+	ill_db.PgIllRepo
+	symbols []string
+	peers   []ill_db.Peer
+	err     error
+	calls   int
+}
+
+func (c *recordingPeerCache) GetCachedPeersBySymbols(_ common.ExtendedContext, symbols []string, _ adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string, error) {
+	c.calls++
+	c.symbols = append([]string(nil), symbols...)
+	return c.peers, "test", c.err
 }

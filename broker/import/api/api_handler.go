@@ -1,7 +1,6 @@
 package importapi
 
 import (
-	"encoding/json"
 	"errors"
 	"mime"
 	"net/http"
@@ -17,8 +16,11 @@ import (
 )
 
 type ApiHandler struct {
-	importer service.Importer
+	importer           service.Importer
+	maxImportBodyBytes int64
 }
+
+const maxImportBodyBytes int64 = 2 << 30 // 2 GB
 
 var _ importoapi.ServerInterface = (*ApiHandler)(nil)
 
@@ -50,7 +52,26 @@ func (a *ApiHandler) PostImport(w http.ResponseWriter, r *http.Request, params i
 		return
 	}
 
-	result := a.importer.Import(ctx, policy, json.NewDecoder(r.Body))
+	bodyLimit := a.maxImportBodyBytes
+	if bodyLimit <= 0 {
+		bodyLimit = maxImportBodyBytes
+	}
+	if r.ContentLength > bodyLimit {
+		http.Error(w, "import request too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, bodyLimit)
+	result, err := a.importer.Import(ctx, policy, r.Body)
+	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) || errors.Is(err, service.ErrImportRecordTooLarge) {
+			http.Error(w, "import request too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		ctx.Logger().Error("failed to read import request", "error", err)
+		http.Error(w, "failed to read import request", http.StatusInternalServerError)
+		return
+	}
 	brokerapi.WriteJsonResponse(w, result)
 }
 
