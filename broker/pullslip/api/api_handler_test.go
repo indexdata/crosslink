@@ -5,12 +5,15 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/indexdata/cql-go/pgcql"
 	"github.com/indexdata/crosslink/broker/common"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	"github.com/indexdata/crosslink/broker/patron_request/proapi"
+	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	ps_db "github.com/indexdata/crosslink/broker/pullslip/db"
 	psoapi "github.com/indexdata/crosslink/broker/pullslip/oapi"
 	"github.com/indexdata/crosslink/broker/tenant"
@@ -50,6 +53,18 @@ func (m *MockPrRepo) ListPatronRequests(ctx common.ExtendedContext, params pr_db
 func (m *MockPrRepo) GetNotificationsByPrId(ctx common.ExtendedContext, params pr_db.GetNotificationsByPrIdParams) ([]pr_db.Notification, int64, error) {
 	args := m.Called(params.PrID, params.Kind)
 	return args.Get(0).([]pr_db.Notification), args.Get(1).(int64), args.Error(2)
+}
+
+func (m *MockPrRepo) GetTemplateByPurposeAudienceLabelAndOwner(_ common.ExtendedContext, params pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams) (pr_db.Template, error) {
+	for _, t := range prservice.GetStateModelTemplateDefaults() {
+		if slices.Contains(t.Labels, params.Label) {
+			return pr_db.Template{
+				Body:        t.Body,
+				ContentType: string(proapi.Html),
+			}, nil
+		}
+	}
+	return pr_db.Template{}, nil
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
