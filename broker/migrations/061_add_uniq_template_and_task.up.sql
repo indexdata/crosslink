@@ -6,7 +6,7 @@ BEGIN
         FROM template t
         WHERE t.owner = NEW.owner
           AND t.labels && NEW.labels
-          AND (TG_OP = 'INSERT' OR t.id <> NEW.id)
+          AND (TG_OP = 'INSERT' AND t.id <> NEW.id)
     ) THEN
         RAISE EXCEPTION
             'One or more labels already exist for owner %',
