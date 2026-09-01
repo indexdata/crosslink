@@ -15,7 +15,7 @@ const postgresImage = "postgres:16"
 // Crosslink integration tests.
 func RunPostgres(ctx context.Context) (*postgres.PostgresContainer, error) {
 	return postgres.Run(ctx, postgresImage,
-		postgres.WithDatabase("crosslink"),
+		postgres.WithDatabase("crosslink_test"),
 		postgres.WithUsername("crosslink"),
 		postgres.WithPassword("crosslink"),
 		testcontainers.WithWaitStrategy(
