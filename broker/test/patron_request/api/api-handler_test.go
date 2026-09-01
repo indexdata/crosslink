@@ -30,12 +30,10 @@ import (
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	test "github.com/indexdata/crosslink/broker/test/utils"
+	"github.com/indexdata/crosslink/testutil"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 var basePath = "/patron_requests"
@@ -49,14 +47,7 @@ func TestMain(m *testing.M) {
 	app.DB_PROVISION = true
 	app.DB_EXPLAIN_ANALYZE = false
 
-	pgContainer, err := postgres.Run(ctx, "postgres",
-		postgres.WithDatabase("crosslink"),
-		postgres.WithUsername("crosslink"),
-		postgres.WithPassword("crosslink"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(30*time.Second)),
-	)
+	pgContainer, err := testutil.RunPostgres(ctx)
 	test.Expect(err, "failed to start db container")
 
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")

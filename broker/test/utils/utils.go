@@ -12,8 +12,6 @@ import (
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 func GetNow() pgtype.Timestamp {
@@ -82,27 +80,6 @@ func WaitForServiceUp(port int) {
 	} else {
 		fmt.Println("Service up")
 	}
-}
-
-func StartPGContainer() (context.Context, *postgres.PostgresContainer, string, error) {
-	ctx := context.Background()
-	pgContainer, err := postgres.Run(ctx, "postgres",
-		postgres.WithDatabase("crosslink"),
-		postgres.WithUsername("crosslink"),
-		postgres.WithPassword("crosslink"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(30*time.Second)),
-	)
-	if err != nil {
-		return ctx, pgContainer, "", fmt.Errorf("failed to start db container: %w", err)
-	}
-
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		return ctx, pgContainer, "", fmt.Errorf("failed to get conn string: %w", err)
-	}
-	return ctx, pgContainer, connStr, nil
 }
 
 // TerminatePGContainer stops a Postgres test container. It silently ignores the
