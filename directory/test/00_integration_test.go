@@ -14,12 +14,10 @@ import (
 	"time"
 
 	"github.com/go-testfixtures/testfixtures/v3"
+	"github.com/indexdata/crosslink/testutil"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/kinbiko/jsonassert"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/indexdata/crosslink/directory/app"
 )
@@ -58,14 +56,7 @@ func jsonReq(t *testing.T, method string, endpoint string, bodyStr string, addlH
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 
-	pgContainer, err := postgres.Run(ctx, "postgres:16",
-		postgres.WithDatabase("directory_test"),
-		postgres.WithUsername("directory"),
-		postgres.WithPassword("directory"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(30*time.Second)),
-	)
+	pgContainer, err := testutil.RunPostgres(ctx)
 	if err != nil {
 		panic(fmt.Sprintf("failed to start db container: %s", err))
 	}

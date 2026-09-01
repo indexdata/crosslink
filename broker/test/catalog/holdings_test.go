@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/indexdata/crosslink/broker/app"
 	"github.com/indexdata/crosslink/broker/catalog"
@@ -20,12 +19,10 @@ import (
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	test "github.com/indexdata/crosslink/broker/test/utils"
 	dirapi "github.com/indexdata/crosslink/directory/api"
+	"github.com/indexdata/crosslink/testutil"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 var eventBus events.EventBus
@@ -41,14 +38,7 @@ func TestMain(m *testing.M) {
 	ill_db.PeerRefreshInterval = 0 //force refresh for every test
 	ctx := context.Background()
 	app.DB_PROVISION = true
-	pgContainer, err := postgres.Run(ctx, "postgres:16",
-		postgres.WithDatabase("crosslink"),
-		postgres.WithUsername("crosslink"),
-		postgres.WithPassword("crosslink"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(30*time.Second)),
-	)
+	pgContainer, err := testutil.RunPostgres(ctx)
 	test.Expect(err, "failed to start db container")
 
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
