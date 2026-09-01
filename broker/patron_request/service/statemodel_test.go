@@ -219,6 +219,38 @@ func TestDefaultIncludesLocalSupplyRequesterState(t *testing.T) {
 	assert.NotEqual(t, -1, stateIndex)
 }
 
+func TestReturnablesPullslipPdfTemplateLabel(t *testing.T) {
+	model, err := LoadStateModelByName("returnables")
+	if !assert.NoError(t, err) || !assert.NotNil(t, model) {
+		return
+	}
+
+	if assert.NotNil(t, model.PullslipPdfTemplateLabel) {
+		assert.Equal(t, "pullslip-pdf", *model.PullslipPdfTemplateLabel)
+	}
+}
+
+func TestStateModelTemplateDefaultsIncludePullslipPdf(t *testing.T) {
+	templates := GetStateModelTemplateDefaults()
+
+	idx := slices.IndexFunc(templates, func(template proapi.CreateTemplate) bool {
+		return slices.Contains(template.Labels, "pullslip-pdf")
+	})
+	if !assert.NotEqual(t, -1, idx) {
+		return
+	}
+
+	template := templates[idx]
+	assert.Equal(t, "Pullslip PDF template", template.Title)
+	assert.Equal(t, proapi.Pullslip, template.Purpose)
+	assert.Equal(t, proapi.Html, template.ContentType)
+	if assert.NotNil(t, template.Audience) {
+		assert.Equal(t, proapi.TemplateAudienceStaff, *template.Audience)
+	}
+	assert.Contains(t, template.Body, "{{.BarcodeBase64}}")
+	assert.Contains(t, template.Body, "{{.ReqId}}")
+}
+
 func TestDefaultInvalidPatronStateIsEditableAndNeedsAttention(t *testing.T) {
 	model, err := LoadStateModelByName("default")
 	if !assert.NoError(t, err) || !assert.NotNil(t, model) {

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -115,6 +116,30 @@ func TestCreateSinglePullSlip(t *testing.T) {
 		Items:         []pr_db.PrItem{},
 		TerminalState: false,
 	})
+
+	for _, tmpl := range prservice.GetStateModelTemplateDefaults() {
+		if slices.Contains(tmpl.Labels, "pullslip-pdf") {
+			_, inErr := prRepo.SaveTemplate(appCtx, pr_db.SaveTemplateParams{
+				ID:          "pullslip-pdf-1",
+				Owner:       supSymbol,
+				Title:       tmpl.Title,
+				Purpose:     string(tmpl.Purpose),
+				Body:        tmpl.Body,
+				ContentType: string(tmpl.ContentType),
+				Labels:      tmpl.Labels,
+				Audience: pgtype.Text{
+					String: string(*tmpl.Audience),
+					Valid:  true,
+				},
+				CreatedAt: pgtype.Timestamp{
+					Time:  time.Now(),
+					Valid: true,
+				},
+			})
+			assert.NoError(t, inErr, "failed to save template")
+		}
+	}
+
 	assert.NoError(t, err)
 
 	// Create pull slip

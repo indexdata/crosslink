@@ -22,7 +22,6 @@ GIT_COMMIT_DEPS = $(GIT_HEAD_FILE) $(wildcard $(GIT_HEAD_REF_FILE)) $(wildcard $
 COVERAGE=coverage.out
 STATE_MODELS_JSON=patron_request/service/statemodels/state-models.json
 STATE_MODELS_YAML=../misc/state-models.yaml
-PULLSLIP_TEMPLATE=pullslip/service/pull_slip_template.html
 
 # SQLC
 SQLC ?= $(GO) tool sqlc
@@ -100,10 +99,10 @@ $(SQL_GEN_OUT): $(SQL_GEN_IN) $(SQLC_CONFIG)
 $(COMMIT_ID): $(GIT_COMMIT_DEPS)
 	commit_id="$$( $(GIT) rev-parse --short HEAD )" && printf '%s' "$$commit_id" > $(COMMIT_ID)
 
-$(BINARY):  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(BUILD_GOFILES) $(STATE_MODELS_JSON) $(PULLSLIP_TEMPLATE)
+$(BINARY):  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(BUILD_GOFILES) $(STATE_MODELS_JSON)
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
 
-archive:  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(BUILD_GOFILES) $(STATE_MODELS_JSON) $(PULLSLIP_TEMPLATE)
+archive:  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(BUILD_GOFILES) $(STATE_MODELS_JSON)
 	$(GO) build -v -o archive ./cmd/archive
 
 check: generate
