@@ -1,30 +1,32 @@
 FROM golang:1.27 AS build
 
-# Builds from the workspace root dir
 WORKDIR /app
 
-# Copy only the Directory module manifests before sources to leverage Docker cache.
-# Build with GOWORK=off so the root workspace does not require unrelated modules.
+# Copy manifests first so source changes do not invalidate the dependency cache.
 COPY directory/go.mod directory/go.sum ./directory/
+COPY testutil/go.mod testutil/go.sum ./testutil/
 
-# Set destination for COPY
+RUN go work init \
+    ./directory \
+    ./testutil
+
 WORKDIR /app/directory
 
-# see .dockerignore for what is getting copied
-COPY directory/ ./
-
-# download go deps, caches GOMODPATH
 RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
-  GOWORK=off go mod download
+  go mod download
+
+# Copy sources after dependencies have been downloaded.
+COPY testutil/ /app/testutil/
+COPY directory/ ./
 
 # Generate API and database code from the tracked specifications.
 RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
-  GOWORK=off go generate .
+  go generate .
 
-# Build, caches GOCACHE
-RUN --mount=type=cache,sharing=shared,target=/root/.cache/go-build \
+# Build
+RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
+  --mount=type=cache,sharing=shared,target=/root/.cache/go-build \
   CGO_ENABLED=0 \
-  GOWORK=off \
   GOOS=linux \
   go build -o /directory ./cmd/directory
 
@@ -47,7 +49,7 @@ COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=build /etc/passwd /etc/passwd
 COPY --from=build /etc/group /etc/group
 
-# copy binaries
+# copy the binary
 COPY --from=build /directory .
 # copy migrations
 COPY --from=build /app/directory/migrations /migrations

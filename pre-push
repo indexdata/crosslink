@@ -7,4 +7,6 @@ cd broker
 make docker
 cd ../illmock
 make docker
+cd ../directory
+make docker
 
