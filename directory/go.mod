@@ -8,6 +8,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
 	github.com/indexdata/cql-go v1.0.1
+	github.com/indexdata/crosslink/testutil v0.0.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/kinbiko/jsonassert v1.2.0
 	github.com/oapi-codegen/nethttp-middleware v1.2.0
@@ -15,11 +16,11 @@ require (
 	github.com/oapi-codegen/oapi-codegen/v2 v2.8.0
 	github.com/oapi-codegen/runtime v1.7.0
 	github.com/sqlc-dev/sqlc v1.31.1
-	github.com/testcontainers/testcontainers-go v0.44.0
-	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
 	github.com/veqryn/slog-context v0.9.0
 	github.com/vgarvardt/pgx-google-uuid/v5 v5.6.0
 )
+
+replace github.com/indexdata/crosslink/testutil => ../testutil
 
 require (
 	cel.dev/expr v0.25.3 // indirect
@@ -97,6 +98,8 @@ require (
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/sqlc-dev/doubleclick v1.0.0 // indirect
 	github.com/stretchr/testify v1.12.1 // indirect
+	github.com/testcontainers/testcontainers-go v0.44.0 // indirect
+	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0 // indirect
 	github.com/tetratelabs/wazero v1.12.0 // indirect
 	github.com/tklauser/go-sysconf v0.4.0 // indirect
 	github.com/tklauser/numcpus v0.12.0 // indirect

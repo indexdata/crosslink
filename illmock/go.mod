@@ -2,15 +2,6 @@ module github.com/indexdata/crosslink/illmock
 
 go 1.27.0
 
-require (
-	github.com/indexdata/crosslink/httpclient v0.0.0
-	github.com/indexdata/crosslink/iso18626 v0.0.0
-	github.com/indexdata/crosslink/marcxml v0.0.0
-	github.com/indexdata/crosslink/ncip v0.0.0
-	github.com/indexdata/crosslink/sru v0.0.0
-	github.com/indexdata/crosslink/testutil v0.0.0
-)
-
 replace (
 	github.com/indexdata/crosslink/directory => ../directory
 	github.com/indexdata/crosslink/httpclient => ../httpclient
@@ -25,6 +16,12 @@ require (
 	github.com/getkin/kin-openapi v0.147.0
 	github.com/google/uuid v1.6.0
 	github.com/indexdata/cql-go v1.0.1
+	github.com/indexdata/crosslink/httpclient v0.0.0
+	github.com/indexdata/crosslink/iso18626 v0.0.0
+	github.com/indexdata/crosslink/marcxml v0.0.0
+	github.com/indexdata/crosslink/ncip v0.0.0
+	github.com/indexdata/crosslink/sru v0.0.0
+	github.com/indexdata/crosslink/testutil v0.0.0
 	github.com/indexdata/go-utils v1.0.0
 	github.com/oapi-codegen/nethttp-middleware v1.2.0
 	github.com/oapi-codegen/nullable v1.2.0
@@ -79,6 +76,7 @@ require (
 	github.com/speakeasy-api/jsonpath v0.6.3 // indirect
 	github.com/speakeasy-api/openapi v1.25.0 // indirect
 	github.com/testcontainers/testcontainers-go v0.44.0 // indirect
+	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0 // indirect
 	github.com/tklauser/go-sysconf v0.4.0 // indirect
 	github.com/tklauser/numcpus v0.12.0 // indirect
 	github.com/vmware-labs/yaml-jsonpath v0.3.2 // indirect

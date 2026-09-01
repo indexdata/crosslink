@@ -15,6 +15,7 @@ import (
 	"github.com/indexdata/crosslink/broker/dbutil"
 	test "github.com/indexdata/crosslink/broker/test/utils"
 	dirapi "github.com/indexdata/crosslink/directory/api"
+	"github.com/indexdata/crosslink/testutil"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 )
@@ -28,9 +29,12 @@ func createDirectoryAdapter(urls ...string) adapter.DirectoryLookupAdapter {
 }
 
 func TestMain(m *testing.M) {
-	ctx, pgc, connStr, err := test.StartPGContainer()
-	connStr = connStr + dbutil.SearchPath("crosslink_broker")
+	ctx := context.Background()
+	pgc, err := testutil.RunPostgres(ctx)
 	test.Expect(err, "failed to start db container")
+	connStr, err := pgc.ConnectionString(ctx, "sslmode=disable")
+	test.Expect(err, "failed to get conn string")
+	connStr = connStr + dbutil.SearchPath("crosslink_broker")
 	pgIllRepo := new(PgIllRepo)
 	pgIllRepo.Pool, err = dbutil.InitDbPool(connStr)
 	test.Expect(err, "failed to create ill repo")

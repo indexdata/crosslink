@@ -20,11 +20,9 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/vcs"
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/indexdata/crosslink/testutil"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
@@ -49,14 +47,7 @@ var illRepo ill_db.IllRepo
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 	app.DB_PROVISION = true
-	pgContainer, err := postgres.Run(ctx, "postgres",
-		postgres.WithDatabase("crosslink"),
-		postgres.WithUsername("crosslink"),
-		postgres.WithPassword("crosslink"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(30*time.Second)),
-	)
+	pgContainer, err := testutil.RunPostgres(ctx)
 	test.Expect(err, "failed to start db container")
 
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")

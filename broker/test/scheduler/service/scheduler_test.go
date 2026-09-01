@@ -15,12 +15,10 @@ import (
 	sched_db "github.com/indexdata/crosslink/broker/scheduler/db"
 	sched_service "github.com/indexdata/crosslink/broker/scheduler/service"
 	test "github.com/indexdata/crosslink/broker/test/utils"
+	"github.com/indexdata/crosslink/testutil"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 var connString string
@@ -30,14 +28,7 @@ var appCtx = common.CreateExtCtxWithArgs(context.Background(), nil)
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 
-	pgContainer, err := postgres.Run(ctx, "postgres",
-		postgres.WithDatabase("crosslink"),
-		postgres.WithUsername("crosslink"),
-		postgres.WithPassword("crosslink"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(30*time.Second)),
-	)
+	pgContainer, err := testutil.RunPostgres(ctx)
 	test.Expect(err, "failed to start db container")
 
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
