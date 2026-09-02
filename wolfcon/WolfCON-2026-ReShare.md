@@ -62,13 +62,13 @@ The original choices accelerated early delivery and got ReShare into production.
 - Small operational footprint
 - Explicit, inspectable workflows
 - Clear adapter boundaries and a rich, observable API
-- Complete transaction visibility
-- Safe, staged migration
+- Support for native direct borrowing across the consortium
+- A richer, OpenAPI-based Directory for networks, tiers, policies, and integrations
 :::
 ::::::::::::::
 
 ::: notes
-These requirements came before the technology choices. The goal was not a rewrite for its own sake: preserve the service contract while making the platform much easier to operate and evolve.
+These requirements came before the technology choices. The goal was not a rewrite for its own sake: preserve the service contract while making the platform much easier to operate and evolve. The Directory is now the authoritative source for institution-specific configuration: network and tier membership, ILL behavior, LMS and NCIP settings, catalog and Z39.50 connections, and holdings policies. The broker reads this through a regular OpenAPI service instead of synchronizing Directory changes through Kafka. This independent contract also gives us a path toward standardization with relevant standards bodies.
 :::
 
 # System at a glance
