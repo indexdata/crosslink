@@ -381,18 +381,6 @@ Acceptance has three dimensions. Data must reconcile and retain its identifiers,
 We should not promise zero downtime because live submission and ILS connections must move between systems. Instead, plan a short, controlled maintenance window: freeze writes in legacy ReShare, capture and import the final delta, reconcile it, switch VuFind, ISO 18626, and NCIP, then smoke-test before reopening. Crosslink becomes the only writable system; legacy ReShare remains read-only for reference. Rehearsals make the duration and operational steps measurable before the real cutover.
 :::
 
-# Roadmap to production adoption
-
-| Now | Next | Later |
-|---|---|---|
-| Core borrowing/lending workflow | Production UI and operational hardening | Governed custom state models |
-| ISO 18626, NCIP, discovery | Migration and history tooling | Multiple active model versions |
-| State model and event history | Pilot cohort and conformance testing | Broader service models |
-
-::: notes
-This is a structure, not yet a set of public commitments. Every roadmap item needs an agreed status, owner, and date before the final deck.
-:::
-
 # A platform that evolves with the service
 
 - Open at the edges
