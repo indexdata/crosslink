@@ -373,7 +373,7 @@ Start with a representative first cohort and give staff a migration rehearsal en
 Acceptance has three dimensions. Data must reconcile and retain its identifiers, links, and meaningful workflow state. Staff must be able to find requests, take the correct actions, use batch operations, review email, and produce pull slips. Integrations must be exercised safely: especially NCIP against an ILS sandbox, ISO 18626 with test peers, and the VuFind submission path. Only when all three pass do we have a production candidate.
 :::
 
-# Plan for a bounded maintenance window
+# Two paths to a controlled cutover
 
 ![Controlled migration cutover](wolfcon-2026-migration-cutover.svg){width=96%}
 

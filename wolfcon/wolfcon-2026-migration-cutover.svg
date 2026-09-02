@@ -1,61 +1,109 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1800" height="720" viewBox="0 0 1800 720">
   <defs>
-    <marker id="arrow" markerWidth="28" markerHeight="28" refX="27" refY="14" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L28,14 L0,28 Z" fill="#007693"/></marker>
+    <marker id="arrow" markerWidth="18" markerHeight="18" refX="17" refY="9" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L18,9 L0,18 Z" fill="#007693"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="18" markerHeight="18" refX="17" refY="9" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L18,9 L0,18 Z" fill="#69a33f"/>
+    </marker>
     <style>
-      .num { font: 700 23px Arial, sans-serif; fill: #ffffff; }
-      .head { font: 700 24px Arial, sans-serif; fill: #002f56; }
-      .body { font: 19px Arial, sans-serif; fill: #454545; }
-      .window { font: 700 21px Arial, sans-serif; fill: #c5680b; }
-      .system { font: 700 27px Arial, sans-serif; fill: #002f56; }
-      .state { font: 700 22px Arial, sans-serif; fill: #007693; }
-      .footer { font: 700 22px Arial, sans-serif; fill: #007693; }
+      .lane { font: 700 22px Arial, sans-serif; letter-spacing: 1px; }
+      .num { font: 700 21px Arial, sans-serif; fill: #ffffff; }
+      .head { font: 700 21px Arial, sans-serif; fill: #002f56; }
+      .body { font: 18px Arial, sans-serif; fill: #454545; }
+      .system { font: 700 23px Arial, sans-serif; fill: #002f56; }
+      .state { font: 700 19px Arial, sans-serif; fill: #007693; }
+      .state-green { font: 700 19px Arial, sans-serif; fill: #4f812e; }
+      .callout { font: 700 20px Arial, sans-serif; fill: #4f812e; }
     </style>
   </defs>
+
   <rect width="1800" height="720" fill="#ffffff"/>
-  <rect x="25" y="55" width="1750" height="385" rx="30" fill="#fff9f0" stroke="#f78b1e" stroke-width="4" stroke-dasharray="12 10"/>
-  <text x="1715" y="90" text-anchor="end" class="window">BOUNDED MAINTENANCE WINDOW</text>
+
+  <!-- Option A: transfer active requests -->
+  <rect x="25" y="25" width="1750" height="300" rx="28" fill="#fff9f0" stroke="#f78b1e" stroke-width="4"/>
+  <text x="65" y="68" class="lane" fill="#c5680b">OPTION A · TRANSFER ACTIVE REQUESTS</text>
+  <text x="1735" y="68" text-anchor="end" class="lane" fill="#c5680b">BOUNDED MAINTENANCE WINDOW</text>
+
   <g>
-    <rect x="45" y="140" width="280" height="210" rx="25" fill="#eaf0fb" stroke="#3e75cf" stroke-width="5"/>
-    <circle cx="90" cy="180" r="25" fill="#3e75cf"/><text x="90" y="188" text-anchor="middle" class="num">1</text>
-    <text x="185" y="228" text-anchor="middle" class="head">FREEZE LEGACY</text>
-    <text x="185" y="270" text-anchor="middle" class="body">pause staff writes</text><text x="185" y="302" text-anchor="middle" class="body">and new submissions</text>
+    <rect x="45" y="95" width="280" height="180" rx="22" fill="#eaf0fb" stroke="#3e75cf" stroke-width="5"/>
+    <circle cx="86" cy="133" r="22" fill="#3e75cf"/><text x="86" y="140" text-anchor="middle" class="num">1</text>
+    <text x="185" y="175" text-anchor="middle" class="head">FREEZE LEGACY</text>
+    <text x="185" y="215" text-anchor="middle" class="body">pause staff writes</text>
+    <text x="185" y="245" text-anchor="middle" class="body">and new submissions</text>
   </g>
-  <line x1="325" y1="245" x2="375" y2="245" stroke="#007693" stroke-width="6" marker-end="url(#arrow)"/>
+  <line x1="325" y1="185" x2="375" y2="185" stroke="#007693" stroke-width="5" marker-end="url(#arrow)"/>
+
   <g>
-    <rect x="375" y="140" width="280" height="210" rx="25" fill="#e8f2f7" stroke="#007693" stroke-width="5"/>
-    <circle cx="420" cy="180" r="25" fill="#007693"/><text x="420" y="188" text-anchor="middle" class="num">2</text>
-    <text x="515" y="220" text-anchor="middle" class="head">FINAL EXPORT</text><text x="515" y="250" text-anchor="middle" class="head">AND IMPORT</text>
-    <text x="515" y="294" text-anchor="middle" class="body">capture the final delta</text>
+    <rect x="375" y="95" width="280" height="180" rx="22" fill="#e8f2f7" stroke="#007693" stroke-width="5"/>
+    <circle cx="416" cy="133" r="22" fill="#007693"/><text x="416" y="140" text-anchor="middle" class="num">2</text>
+    <text x="515" y="165" text-anchor="middle" class="head">FINAL EXPORT</text>
+    <text x="515" y="193" text-anchor="middle" class="head">AND IMPORT</text>
+    <text x="515" y="235" text-anchor="middle" class="body">capture the final delta</text>
   </g>
-  <line x1="655" y1="245" x2="705" y2="245" stroke="#007693" stroke-width="6" marker-end="url(#arrow)"/>
+  <line x1="655" y1="185" x2="705" y2="185" stroke="#007693" stroke-width="5" marker-end="url(#arrow)"/>
+
   <g>
-    <rect x="705" y="140" width="280" height="210" rx="25" fill="#f6e8f2" stroke="#b31782" stroke-width="5"/>
-    <circle cx="750" cy="180" r="25" fill="#b31782"/><text x="750" y="188" text-anchor="middle" class="num">3</text>
-    <text x="845" y="228" text-anchor="middle" class="head">RECONCILE</text>
-    <text x="845" y="270" text-anchor="middle" class="body">counts · states · IDs</text><text x="845" y="302" text-anchor="middle" class="body">resolve every exception</text>
+    <rect x="705" y="95" width="280" height="180" rx="22" fill="#f6e8f2" stroke="#b31782" stroke-width="5"/>
+    <circle cx="746" cy="133" r="22" fill="#b31782"/><text x="746" y="140" text-anchor="middle" class="num">3</text>
+    <text x="845" y="175" text-anchor="middle" class="head">RECONCILE</text>
+    <text x="845" y="215" text-anchor="middle" class="body">counts · states · IDs</text>
+    <text x="845" y="245" text-anchor="middle" class="body">resolve exceptions</text>
   </g>
-  <line x1="985" y1="245" x2="1035" y2="245" stroke="#007693" stroke-width="6" marker-end="url(#arrow)"/>
+  <line x1="985" y1="185" x2="1035" y2="185" stroke="#007693" stroke-width="5" marker-end="url(#arrow)"/>
+
   <g>
-    <rect x="1035" y="140" width="310" height="210" rx="25" fill="#fff4e7" stroke="#f78b1e" stroke-width="5"/>
-    <circle cx="1080" cy="180" r="25" fill="#f78b1e"/><text x="1080" y="188" text-anchor="middle" class="num">4</text>
-    <text x="1190" y="220" text-anchor="middle" class="head">SWITCH</text><text x="1190" y="250" text-anchor="middle" class="head">INTEGRATIONS</text>
-    <text x="1190" y="294" text-anchor="middle" class="body">VuFind · ISO18626 · NCIP</text>
+    <rect x="1035" y="95" width="310" height="180" rx="22" fill="#fff4e7" stroke="#f78b1e" stroke-width="5"/>
+    <circle cx="1076" cy="133" r="22" fill="#f78b1e"/><text x="1076" y="140" text-anchor="middle" class="num">4</text>
+    <text x="1190" y="165" text-anchor="middle" class="head">SWITCH</text>
+    <text x="1190" y="193" text-anchor="middle" class="head">INTEGRATIONS</text>
+    <text x="1190" y="235" text-anchor="middle" class="body">VuFind · ISO 18626 · NCIP</text>
   </g>
-  <line x1="1345" y1="245" x2="1395" y2="245" stroke="#007693" stroke-width="6" marker-end="url(#arrow)"/>
+  <line x1="1345" y1="185" x2="1395" y2="185" stroke="#007693" stroke-width="5" marker-end="url(#arrow)"/>
+
   <g>
-    <rect x="1395" y="140" width="360" height="210" rx="25" fill="#f3f8eb" stroke="#69a33f" stroke-width="5"/>
-    <circle cx="1440" cy="180" r="25" fill="#69a33f"/><text x="1440" y="188" text-anchor="middle" class="num">5</text>
-    <text x="1575" y="220" text-anchor="middle" class="head">SMOKE TEST</text><text x="1575" y="250" text-anchor="middle" class="head">AND OPEN</text>
-    <text x="1575" y="294" text-anchor="middle" class="body">enable live traffic and monitor</text>
+    <rect x="1395" y="95" width="360" height="180" rx="22" fill="#f3f8eb" stroke="#69a33f" stroke-width="5"/>
+    <circle cx="1436" cy="133" r="22" fill="#69a33f"/><text x="1436" y="140" text-anchor="middle" class="num">5</text>
+    <text x="1575" y="165" text-anchor="middle" class="head">SMOKE TEST</text>
+    <text x="1575" y="193" text-anchor="middle" class="head">AND OPEN</text>
+    <text x="1575" y="235" text-anchor="middle" class="body">enable live traffic and monitor</text>
   </g>
+
+  <!-- Option B: finish active requests in legacy -->
+  <rect x="25" y="350" width="1750" height="345" rx="28" fill="#f5faef" stroke="#69a33f" stroke-width="4"/>
+  <text x="65" y="393" class="lane" fill="#4f812e">OPTION B · FINISH ACTIVE REQUESTS IN LEGACY</text>
+  <text x="1735" y="393" text-anchor="end" class="callout">NO LIVE-REQUEST MIGRATION</text>
+
   <g>
-    <rect x="150" y="500" width="610" height="115" rx="28" fill="#eef3f6" stroke="#002f56" stroke-width="5"/>
-    <text x="455" y="548" text-anchor="middle" class="system">LEGACY RESHARE</text><text x="455" y="588" text-anchor="middle" class="state">LIVE → READ-ONLY</text>
+    <rect x="70" y="445" width="390" height="170" rx="24" fill="#eef3f6" stroke="#002f56" stroke-width="5"/>
+    <text x="265" y="495" text-anchor="middle" class="system">LEGACY RESHARE</text>
+    <text x="265" y="535" text-anchor="middle" class="state">LIVE BEFORE CUTOVER</text>
+    <text x="265" y="575" text-anchor="middle" class="body">holds the current requests</text>
   </g>
-  <line x1="760" y1="558" x2="1040" y2="558" stroke="#007693" stroke-width="6" marker-end="url(#arrow)"/>
+
+  <line x1="460" y1="530" x2="555" y2="530" stroke="#69a33f" stroke-width="5" marker-end="url(#arrow-green)"/>
+
   <g>
-    <rect x="1040" y="500" width="610" height="115" rx="28" fill="#f3f8eb" stroke="#69a33f" stroke-width="5"/>
-    <text x="1345" y="548" text-anchor="middle" class="system">CROSSLINK</text><text x="1345" y="588" text-anchor="middle" class="state">CANDIDATE → LIVE</text>
+    <rect x="555" y="445" width="390" height="170" rx="24" fill="#fff4e7" stroke="#f78b1e" stroke-width="5"/>
+    <text x="750" y="485" text-anchor="middle" class="system">CONTROLLED CUTOVER</text>
+    <text x="750" y="525" text-anchor="middle" class="body">route new requests to Crosslink</text>
+    <text x="750" y="565" text-anchor="middle" class="body">retain what legacy needs to finish</text>
   </g>
-  <text x="900" y="680" text-anchor="middle" class="footer">Avoid two writable systems; keep legacy available for reference.</text>
+
+  <path d="M945 530 L1010 530 L1010 465 L1100 465" fill="none" stroke="#69a33f" stroke-width="5" marker-end="url(#arrow-green)"/>
+  <path d="M945 530 L1010 530 L1010 600 L1100 600" fill="none" stroke="#69a33f" stroke-width="5" marker-end="url(#arrow-green)"/>
+
+  <g>
+    <rect x="1100" y="415" width="620" height="100" rx="22" fill="#eef3f6" stroke="#002f56" stroke-width="5"/>
+    <text x="1410" y="455" text-anchor="middle" class="system">LEGACY RESHARE</text>
+    <text x="1410" y="487" text-anchor="middle" class="state">FINISH EXISTING REQUESTS, THEN RETIRE</text>
+  </g>
+
+  <g>
+    <rect x="1100" y="550" width="620" height="100" rx="22" fill="#eaf6df" stroke="#69a33f" stroke-width="5"/>
+    <text x="1410" y="590" text-anchor="middle" class="system">CROSSLINK</text>
+    <text x="1410" y="622" text-anchor="middle" class="state-green">ALL NEW REQUESTS START HERE</text>
+  </g>
+
+  <text x="750" y="665" text-anchor="middle" class="callout">Both systems run in parallel—but each request stays in one system.</text>
 </svg>
