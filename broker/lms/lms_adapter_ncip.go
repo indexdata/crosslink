@@ -166,6 +166,9 @@ func (l *LmsAdapterNcip) AcceptItem(
 }
 
 func (l *LmsAdapterNcip) DeleteItem(itemId string) error {
+	if l.config.AcceptItemEnabled != nil && !*l.config.AcceptItemEnabled {
+		return nil
+	}
 	arg := ncip.DeleteItem{
 		ItemId: ncip.ItemId{ItemIdentifierValue: itemId},
 	}

@@ -43,6 +43,7 @@ CREATE TABLE item
     title          VARCHAR,
     item_id        VARCHAR,
     lms_request_id VARCHAR,
+    requester_lms_item_created BOOLEAN NOT NULL DEFAULT false,
     created_at     TIMESTAMP NOT NULL DEFAULT now()
 );
 

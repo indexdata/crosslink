@@ -201,7 +201,16 @@ func TestItem(t *testing.T) {
 	assert.Equal(t, "c123", item.CallNumber.String)
 	assert.Equal(t, "t123", item.Title.String)
 	assert.Equal(t, "i123", item.ItemID.String)
+	assert.False(t, item.RequesterLmsItemCreated)
 	assert.True(t, item.CreatedAt.Valid)
+
+	assert.NoError(t, prRepo.SetRequesterLmsItemCreated(appCtx, pr_db.SetRequesterLmsItemCreatedParams{
+		ID:                      itemId,
+		RequesterLmsItemCreated: true,
+	}))
+	item, err = prRepo.GetItemById(appCtx, itemId)
+	assert.NoError(t, err)
+	assert.True(t, item.RequesterLmsItemCreated)
 
 	// Update works
 	item, err = prRepo.SaveItem(appCtx, pr_db.SaveItemParams{
@@ -228,6 +237,7 @@ func TestItem(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, itemId, item.ID)
+	assert.True(t, item.RequesterLmsItemCreated)
 	assert.Equal(t, prId, item.PrID)
 	assert.Equal(t, "b12", item.Barcode)
 	assert.Equal(t, "c12", item.CallNumber.String)

@@ -135,7 +135,9 @@ func TestAcceptItem(t *testing.T) {
 
 func TestDeleteItem(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
+	b := true
 	ad := &LmsAdapterNcip{
+		config:     dirapi.LmsConfig{AcceptItemEnabled: &b},
 		ncipClient: mock,
 	}
 	err := ad.DeleteItem("item1")
@@ -146,6 +148,12 @@ func TestDeleteItem(t *testing.T) {
 	err = ad.DeleteItem("error")
 	assert.Error(t, err)
 	assert.Equal(t, "deletion error", err.Error())
+
+	b = false
+	mock.(*ncipClientMock).lastRequest = nil
+	err = ad.DeleteItem("item1")
+	assert.NoError(t, err)
+	assert.Nil(t, mock.(*ncipClientMock).lastRequest)
 }
 
 func TestRequestItem(t *testing.T) {

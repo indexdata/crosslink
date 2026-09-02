@@ -391,14 +391,13 @@ func TestHandleInvokeActionTerminateFallsBackWithoutClosingAction(t *testing.T) 
 
 func TestHandleInvokeActionTerminateDeletesRequesterItem(t *testing.T) {
 	for _, tt := range []struct {
-		name       string
-		state      pr_db.PatronRequestState
-		lastAction pgtype.Text
+		name  string
+		state pr_db.PatronRequestState
 	}{
 		{name: string(BorrowerStateReceived), state: BorrowerStateReceived},
 		{name: string(BorrowerStateCheckedOut), state: BorrowerStateCheckedOut},
 		{name: string(BorrowerStateCheckedIn), state: BorrowerStateCheckedIn},
-		{name: "SHIPPED after AcceptItem", state: BorrowerStateShipped, lastAction: getDbText(string(BorrowerActionReceive))},
+		{name: "SHIPPED after partial receive", state: BorrowerStateShipped},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			mockPrRepo := new(MockPrRepo)
@@ -412,10 +411,12 @@ func TestHandleInvokeActionTerminateDeletesRequesterItem(t *testing.T) {
 				State:           tt.state,
 				Side:            SideBorrowing,
 				RequesterSymbol: getDbText("ISIL:REC1"),
-				LastAction:      tt.lastAction,
 			}
 			mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil).Once()
-			mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "item-1"}}, nil).Once()
+			mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{
+				{ID: "item-record-1", Barcode: "item-1", RequesterLmsItemCreated: true},
+				{ID: "item-record-2", Barcode: "pre-existing-item", RequesterLmsItemCreated: false},
+			}, nil).Once()
 			action := TerminateAction
 
 			status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
@@ -426,6 +427,8 @@ func TestHandleInvokeActionTerminateDeletesRequesterItem(t *testing.T) {
 			assert.Equal(t, BorrowerStateManuallyClosed, mockPrRepo.savedPr.State)
 			assert.True(t, mockPrRepo.savedPr.TerminalState)
 			assert.Equal(t, string(TerminateAction), mockPrRepo.savedPr.LastAction.String)
+			assert.False(t, mockPrRepo.requesterLmsItemCreated["item-record-1"])
+			lmsAdapter.AssertNotCalled(t, "DeleteItem", "pre-existing-item")
 			lmsAdapter.AssertExpectations(t)
 		})
 	}
@@ -443,7 +446,7 @@ func TestHandleInvokeActionTerminateReportsRequesterDeleteItemFailure(t *testing
 		RequesterSymbol: getDbText("ISIL:REC1"),
 	}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil).Once()
-	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "item-1"}}, nil).Once()
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{ID: "item-record-1", Barcode: "item-1", RequesterLmsItemCreated: true}}, nil).Once()
 	action := TerminateAction
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
@@ -456,6 +459,32 @@ func TestHandleInvokeActionTerminateReportsRequesterDeleteItemFailure(t *testing
 	}
 	assert.Equal(t, BorrowerStateManuallyClosed, mockPrRepo.savedPr.State)
 	assert.Equal(t, string(TerminateAction), mockPrRepo.savedPr.LastAction.String)
+}
+
+func TestHandleInvokeActionTerminateDoesNotDeleteUnconfirmedRequesterItem(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(handler.Iso18626Handler), nil, new(EmailSenderMock), nil, nil)
+	pr := pr_db.PatronRequest{
+		ID:              patronRequestId,
+		State:           BorrowerStateShipped,
+		Side:            SideBorrowing,
+		RequesterSymbol: getDbText("ISIL:REC1"),
+		LastAction:      getDbText(string(BorrowerActionReceive)),
+	}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil).Once()
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{
+		ID:                      "item-record-1",
+		Barcode:                 "pre-existing-item",
+		RequesterLmsItemCreated: false,
+	}}, nil).Once()
+	action := TerminateAction
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, string(BorrowerStateManuallyClosed), *resultData.ActionResult.ToState)
+	assert.Nil(t, resultData.ActionResult.ChildActionError)
+	assert.Equal(t, BorrowerStateManuallyClosed, mockPrRepo.savedPr.State)
 }
 
 func TestHandleInvokeActionTerminateRejectsTerminal(t *testing.T) {
@@ -1128,6 +1157,8 @@ func TestHandleInvokeActionReceiveOK(t *testing.T) {
 		assert.Equal(t, iso18626.TypeMessageStatusOK, mockEventBus.createdNoticeData[0].IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	}
 	assert.Equal(t, BorrowerStateReceived, mockPrRepo.savedPr.State)
+	assert.True(t, mockPrRepo.requesterLmsItemCreated["item1"])
+	assert.True(t, mockPrRepo.requesterLmsItemCreated["item2"])
 	lmsAdapter.AssertNumberOfCalls(t, "AcceptItem", 2)
 	if assert.Len(t, lmsAdapter.Calls, 2) {
 		assert.Equal(t, "AcceptItem", lmsAdapter.Calls[0].Method)
@@ -1135,6 +1166,67 @@ func TestHandleInvokeActionReceiveOK(t *testing.T) {
 		assert.Equal(t, "AcceptItem", lmsAdapter.Calls[1].Method)
 		assert.Equal(t, "5678", lmsAdapter.Calls[1].Arguments.String(0))
 	}
+}
+
+func TestHandleInvokeActionReceivePersistsOnlyAcceptedItems(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsAdapter := new(mockLmsAdapter)
+	lmsAdapter.On("AcceptItem", "1234", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+	lmsAdapter.On("AcceptItem", "5678", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("accept failed")).Once()
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(lmsAdapter, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(MockIso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
+	pr := pr_db.PatronRequest{
+		ID:              patronRequestId,
+		State:           BorrowerStateShipped,
+		Side:            SideBorrowing,
+		RequesterSymbol: getDbText("ISIL:REC1"),
+	}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{
+		{ID: "item1", PrID: patronRequestId, Barcode: "1234"},
+		{ID: "item2", PrID: patronRequestId, Barcode: "5678"},
+	}, nil).Once()
+	action := BorrowerActionReceive
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "LMS AcceptItem failed", resultData.EventError.Message)
+	assert.True(t, mockPrRepo.requesterLmsItemCreated["item1"])
+	_, secondAccepted := mockPrRepo.requesterLmsItemCreated["item2"]
+	assert.False(t, secondAccepted)
+	lmsAdapter.AssertExpectations(t)
+}
+
+func TestHandleInvokeActionReceiveCompensatesWhenAcceptedItemCannotBeRecorded(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsAdapter := new(mockLmsAdapter)
+	lmsAdapter.On("AcceptItem", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+	lmsAdapter.On("DeleteItem", "1234").Return(nil).Once()
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(lmsAdapter, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(MockIso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
+	pr := pr_db.PatronRequest{
+		ID:              patronRequestId,
+		State:           BorrowerStateShipped,
+		Side:            SideBorrowing,
+		RequesterSymbol: getDbText("ISIL:REC1"),
+	}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{ID: "item1", PrID: patronRequestId, Barcode: "1234"}}, nil).Once()
+	mockPrRepo.On("SetRequesterLmsItemCreated", pr_db.SetRequesterLmsItemCreatedParams{
+		ID:                      "item1",
+		RequesterLmsItemCreated: true,
+	}).Return(errors.New("database unavailable")).Once()
+	action := BorrowerActionReceive
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "failed to record LMS AcceptItem", resultData.EventError.Message)
+	lmsAdapter.AssertExpectations(t)
+	mockPrRepo.AssertExpectations(t)
 }
 
 func TestHandleInvokeActionReceiveAcceptItemFailed(t *testing.T) {
@@ -4868,6 +4960,7 @@ type MockPrRepo struct {
 	deleteItemFail                       bool
 	saveNotificationFail                 bool
 	lastListQuery                        pgcql.Query
+	requesterLmsItemCreated              map[string]bool
 }
 
 func (r *MockPrRepo) WithTxFunc(ctx common.ExtendedContext, fn func(repo pr_db.PrRepo) error) error {
@@ -4949,13 +5042,47 @@ func (r *MockPrRepo) SaveItem(ctx common.ExtendedContext, params pr_db.SaveItemP
 	if r.savedItems == nil {
 		r.savedItems = []pr_db.Item{}
 	}
-	r.savedItems = append(r.savedItems, pr_db.Item(params))
-	return pr_db.Item(params), nil
+	item := pr_db.Item{
+		ID:           params.ID,
+		PrID:         params.PrID,
+		Barcode:      params.Barcode,
+		CallNumber:   params.CallNumber,
+		Title:        params.Title,
+		ItemID:       params.ItemID,
+		LmsRequestID: params.LmsRequestID,
+		CreatedAt:    params.CreatedAt,
+	}
+	r.savedItems = append(r.savedItems, item)
+	return item, nil
 }
 
 func (r *MockPrRepo) GetItemsByPrId(ctx common.ExtendedContext, id string) ([]pr_db.Item, error) {
-	args := r.Called(id)
-	return args.Get(0).([]pr_db.Item), args.Error(1)
+	for _, call := range r.ExpectedCalls {
+		if call.Method == "GetItemsByPrId" {
+			args := r.Called(id)
+			return args.Get(0).([]pr_db.Item), args.Error(1)
+		}
+	}
+	items := make([]pr_db.Item, 0)
+	for _, item := range r.savedItems {
+		if item.PrID == id {
+			items = append(items, item)
+		}
+	}
+	return items, nil
+}
+
+func (r *MockPrRepo) SetRequesterLmsItemCreated(ctx common.ExtendedContext, params pr_db.SetRequesterLmsItemCreatedParams) error {
+	for _, call := range r.ExpectedCalls {
+		if call.Method == "SetRequesterLmsItemCreated" {
+			return r.Called(params).Error(0)
+		}
+	}
+	if r.requesterLmsItemCreated == nil {
+		r.requesterLmsItemCreated = make(map[string]bool)
+	}
+	r.requesterLmsItemCreated[params.ID] = params.RequesterLmsItemCreated
+	return nil
 }
 
 func (r *MockPrRepo) DeleteItemById(ctx common.ExtendedContext, id string) error {

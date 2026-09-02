@@ -351,13 +351,23 @@ func (a *PatronRequestActionService) handleTerminateAction(ctx common.ExtendedCo
 	}
 
 	var closingActionError *string
+	if pr.Side == SideBorrowing {
+		if err := a.deleteRequesterItemsOnClose(ctx, event.ID, pr); err != nil {
+			message := "requester item cleanup failed: " + err.Error()
+			closingActionError = &message
+		}
+	}
 	if closingAction := actionMapping.GetClosingAction(pr); closingAction != nil {
 		status, result := a.executeAction(ctx, event, actionMapping, pr, *closingAction)
 		if status == events.EventStatusSuccess && result != nil && result.ActionResult != nil &&
 			result.ActionResult.Outcome == ActionOutcomeSuccess && result.ActionResult.ChildActionError == nil {
+			result.ActionResult.ChildActionError = closingActionError
 			return status, result
 		}
 		message := closingActionFailureMessage(*closingAction, status, result)
+		if closingActionError != nil {
+			message = *closingActionError + "; " + message
+		}
 		closingActionError = &message
 		refreshedPr, err := a.prRepo.GetPatronRequestById(ctx, pr.ID)
 		if err != nil {
@@ -365,36 +375,20 @@ func (a *PatronRequestActionService) handleTerminateAction(ctx common.ExtendedCo
 		}
 		pr = refreshedPr
 	}
-	if requesterItemNeedsCleanup(pr) {
-		if err := a.deleteRequesterItemsOnClose(ctx, event.ID, pr); err != nil {
-			message := "requester item cleanup failed: " + err.Error()
-			if closingActionError != nil {
-				message = *closingActionError + "; " + message
-			}
-			closingActionError = &message
-		}
-	}
-
 	return a.closeLocally(ctx, actionMapping, pr, closingActionError)
 }
 
-func requesterItemNeedsCleanup(pr pr_db.PatronRequest) bool {
-	if pr.Side != SideBorrowing {
-		return false
-	}
-	switch pr.State {
-	case BorrowerStateReceived, BorrowerStateCheckedOut, BorrowerStateCheckedIn:
-		return true
-	case BorrowerStateShipped:
-		// AcceptItem can succeed before sending Received fails, leaving the
-		// request in SHIPPED with a temporary LMS item to clean up.
-		return pr.LastAction.Valid && pr.LastAction.String == string(BorrowerActionReceive)
-	default:
-		return false
-	}
-}
-
 func (a *PatronRequestActionService) deleteRequesterItemsOnClose(ctx common.ExtendedContext, eventID string, pr pr_db.PatronRequest) error {
+	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get items by PR ID: %w", err)
+	}
+	items = slices.DeleteFunc(items, func(item pr_db.Item) bool {
+		return !item.RequesterLmsItemCreated
+	})
+	if len(items) == 0 {
+		return nil
+	}
 	if a.lmsCreator == nil {
 		return errors.New("LMS creator not configured")
 	}
@@ -405,14 +399,17 @@ func (a *PatronRequestActionService) deleteRequesterItemsOnClose(ctx common.Exte
 	if err != nil {
 		return fmt.Errorf("failed to create LMS adapter: %w", err)
 	}
-	items, err := a.getItems(ctx, pr)
-	if err != nil {
-		return fmt.Errorf("failed to get items by PR ID: %w", err)
-	}
 	var cleanupErrors []error
 	for _, item := range items {
 		if err := lmsAdapter.DeleteItem(item.Barcode); err != nil {
 			cleanupErrors = append(cleanupErrors, fmt.Errorf("LMS DeleteItem failed for item %s: %w", item.Barcode, err))
+			continue
+		}
+		if err := a.prRepo.SetRequesterLmsItemCreated(ctx, pr_db.SetRequesterLmsItemCreatedParams{
+			ID:                      item.ID,
+			RequesterLmsItemCreated: false,
+		}); err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("failed to record requester LMS item deletion for item %s: %w", item.Barcode, err))
 		}
 	}
 	return errors.Join(cleanupErrors...)
@@ -1015,6 +1012,17 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 			status, result := logActionErrorAndReturnResult(ctx, "LMS AcceptItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
+		err = a.prRepo.SetRequesterLmsItemCreated(ctx, pr_db.SetRequesterLmsItemCreatedParams{
+			ID:                      item.ID,
+			RequesterLmsItemCreated: true,
+		})
+		if err != nil {
+			if deleteErr := lmsAdapter.DeleteItem(itemId); deleteErr != nil {
+				err = errors.Join(err, fmt.Errorf("LMS DeleteItem compensation failed: %w", deleteErr))
+			}
+			status, result := logActionErrorAndReturnResult(ctx, "failed to record LMS AcceptItem", err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
 	}
 	status, result, err := a.messageSender.sendRequestingAgencyMessage(ctx, parentEventID, pr, iso18626.TypeActionReceived, "")
 	return actionResultFromIllSend(ctx, status, result, err, pr)
@@ -1071,6 +1079,16 @@ func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.Exten
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "LMS DeleteItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		if item.RequesterLmsItemCreated {
+			err = a.prRepo.SetRequesterLmsItemCreated(ctx, pr_db.SetRequesterLmsItemCreatedParams{
+				ID:                      item.ID,
+				RequesterLmsItemCreated: false,
+			})
+			if err != nil {
+				status, result := logActionErrorAndReturnResult(ctx, "failed to record requester LMS item deletion", err)
+				return actionExecutionResult{status: status, result: result, pr: pr}
+			}
 		}
 	}
 	status, result, err := a.messageSender.sendRequestingAgencyMessage(ctx, parentEventID, pr, iso18626.TypeActionShippedReturn, "")
