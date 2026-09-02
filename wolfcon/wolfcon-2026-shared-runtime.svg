@@ -8,13 +8,16 @@
       .label { font: 700 25px Arial, sans-serif; fill: #002f56; }
       .body { font: 21px Arial, sans-serif; fill: #454545; }
       .small { font: 19px Arial, sans-serif; fill: #454545; }
-      .footer { font: 700 25px Arial, sans-serif; fill: #ffffff; }
+      .footer { font: 700 27px Arial, sans-serif; fill: #ffffff; }
+      .footer-detail { font: 22px Arial, sans-serif; fill: #ffffff; }
     </style>
   </defs>
 
   <rect width="1800" height="720" fill="#ffffff"/>
 
   <g>
+    <text x="210" y="48" text-anchor="middle" class="label">VIRTUAL TENANTS</text>
+
     <rect x="55" y="85" width="310" height="120" rx="22" fill="#eaf0fb" stroke="#3e75cf" stroke-width="5"/>
     <text x="210" y="137" text-anchor="middle" class="label">TENANT A</text>
     <text x="210" y="174" text-anchor="middle" class="small">institution + branches</text>
@@ -29,7 +32,8 @@
 
     <path d="M365 145 H455 V310 M365 310 H455 M365 475 H455 V310" fill="none" stroke="#007693" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
     <line x1="455" y1="310" x2="570" y2="310" stroke="#007693" stroke-width="6" marker-end="url(#arrow)"/>
-    <text x="210" y="575" text-anchor="middle" class="body">Resolved at the API boundary</text>
+    <text x="210" y="565" text-anchor="middle" class="small">Identity, ownership, and policy</text>
+    <text x="210" y="594" text-anchor="middle" class="small">—not infrastructure</text>
   </g>
 
   <g>
@@ -61,6 +65,7 @@
     <text x="1508" y="575" text-anchor="middle" class="body">One database and schema</text>
   </g>
 
-  <rect x="190" y="625" width="1420" height="70" rx="22" fill="#053754"/>
-  <text x="900" y="670" text-anchor="middle" class="footer">One shared service—not an application and database pair for every member.</text>
+  <rect x="145" y="610" width="1510" height="95" rx="25" fill="#053754"/>
+  <text x="900" y="650" text-anchor="middle" class="footer">The new architecture enables native DCB support in ReShare</text>
+  <text x="900" y="684" text-anchor="middle" class="footer-detail">Union catalog → live availability → internal fulfillment → local ILS</text>
 </svg>
