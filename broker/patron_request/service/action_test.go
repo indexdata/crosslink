@@ -427,7 +427,9 @@ func TestHandleInvokeActionTerminateDeletesRequesterItem(t *testing.T) {
 			assert.Equal(t, BorrowerStateManuallyClosed, mockPrRepo.savedPr.State)
 			assert.True(t, mockPrRepo.savedPr.TerminalState)
 			assert.Equal(t, string(TerminateAction), mockPrRepo.savedPr.LastAction.String)
-			assert.False(t, mockPrRepo.requesterLmsItemCreated["item-record-1"])
+			created, recorded := mockPrRepo.requesterLmsItemCreated["item-record-1"]
+			assert.True(t, recorded)
+			assert.False(t, created)
 			lmsAdapter.AssertNotCalled(t, "DeleteItem", "pre-existing-item")
 			lmsAdapter.AssertExpectations(t)
 		})
@@ -1446,7 +1448,9 @@ func TestHandleInvokeActionShipReturnOK(t *testing.T) {
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Nil(t, resultData.IncomingMessage)
 	assert.Equal(t, BorrowerStateShippedReturned, mockPrRepo.savedPr.State)
-	assert.False(t, mockPrRepo.requesterLmsItemCreated["item-created"])
+	created, recorded := mockPrRepo.requesterLmsItemCreated["item-created"]
+	assert.True(t, recorded)
+	assert.False(t, created)
 	lmsAdapter.AssertNotCalled(t, "DeleteItem", "already-deleted")
 	lmsAdapter.AssertExpectations(t)
 }
