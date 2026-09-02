@@ -59,9 +59,9 @@ The original choices accelerated early delivery and got ReShare into production.
 ::: {.column width="48%"}
 ## Improve
 
-- Small operational footprint
+- Small operational footprint and reliability
 - Explicit, inspectable workflows
-- Clear adapter boundaries and a rich, observable API
+- Fully observable and auditable API
 - Support for native direct borrowing across the consortium
 - A richer, OpenAPI-based Directory for networks, tiers, policies, and integrations
 :::
