@@ -270,30 +270,6 @@ Production counts exclude tests, generated code, and database migrations. Test c
 The measurements establish that the runtime is small; this table establishes that the workflow is still capable. The default model represents both sides of loan and copy workflows, including branches and exceptions. Repeated state names reflect states that apply differently by side or service type. Action outcomes are the declared outcome-to-next-state mappings in the current generated model.
 :::
 
-# Interoperability by design
-
-:::::::::::::: {.columns}
-::: {.column width="48%"}
-## Transparent mode
-
-- Requester sees the supplier
-- Supplier changes remain visible
-- Enables granular cancellation and local supply
-:::
-::: {.column width="48%"}
-## Opaque mode
-
-- Broker appears as a conventional peer
-- Supports point-to-point assumptions
-- Supplier context carried safely in messages
-- Compatibility shims bridge real-world differences
-:::
-::::::::::::::
-
-::: notes
-The same broker can participate in mixed ecosystems. Confirm which ReShare, Alma/Rapido, ILLiad, and other production or tested integrations may be named in the final presentation.
-:::
-
 # The central change: workflow is a model
 
 ```yaml
