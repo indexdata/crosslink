@@ -389,6 +389,75 @@ func TestHandleInvokeActionTerminateFallsBackWithoutClosingAction(t *testing.T) 
 	assert.Nil(t, resultData.ActionResult.ChildActionError)
 }
 
+func TestHandleInvokeActionTerminateDeletesRequesterItem(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		state      pr_db.PatronRequestState
+		lastAction pgtype.Text
+	}{
+		{name: string(BorrowerStateReceived), state: BorrowerStateReceived},
+		{name: string(BorrowerStateCheckedOut), state: BorrowerStateCheckedOut},
+		{name: string(BorrowerStateCheckedIn), state: BorrowerStateCheckedIn},
+		{name: "SHIPPED after AcceptItem", state: BorrowerStateShipped, lastAction: getDbText(string(BorrowerActionReceive))},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			mockPrRepo := new(MockPrRepo)
+			lmsAdapter := new(mockLmsAdapter)
+			lmsAdapter.On("DeleteItem", "item-1").Return(nil).Once()
+			lmsCreator := new(MockLmsCreator)
+			lmsCreator.On("GetAdapter", "ISIL:REC1").Return(lmsAdapter, nil)
+			prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
+			pr := pr_db.PatronRequest{
+				ID:              patronRequestId,
+				State:           tt.state,
+				Side:            SideBorrowing,
+				RequesterSymbol: getDbText("ISIL:REC1"),
+				LastAction:      tt.lastAction,
+			}
+			mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil).Once()
+			mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "item-1"}}, nil).Once()
+			action := TerminateAction
+
+			status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+			assert.Equal(t, events.EventStatusSuccess, status)
+			assert.Equal(t, string(BorrowerStateManuallyClosed), *resultData.ActionResult.ToState)
+			assert.Nil(t, resultData.ActionResult.ChildActionError)
+			assert.Equal(t, BorrowerStateManuallyClosed, mockPrRepo.savedPr.State)
+			assert.True(t, mockPrRepo.savedPr.TerminalState)
+			assert.Equal(t, string(TerminateAction), mockPrRepo.savedPr.LastAction.String)
+			lmsAdapter.AssertExpectations(t)
+		})
+	}
+}
+
+func TestHandleInvokeActionTerminateReportsRequesterDeleteItemFailure(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(new(MockLmsAdapterFail), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
+	pr := pr_db.PatronRequest{
+		ID:              patronRequestId,
+		State:           BorrowerStateReceived,
+		Side:            SideBorrowing,
+		RequesterSymbol: getDbText("ISIL:REC1"),
+	}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil).Once()
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "item-1"}}, nil).Once()
+	action := TerminateAction
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, string(BorrowerStateManuallyClosed), *resultData.ActionResult.ToState)
+	if assert.NotNil(t, resultData.ActionResult.ChildActionError) {
+		assert.Contains(t, *resultData.ActionResult.ChildActionError, "requester item cleanup failed")
+		assert.Contains(t, *resultData.ActionResult.ChildActionError, "LMS DeleteItem failed")
+	}
+	assert.Equal(t, BorrowerStateManuallyClosed, mockPrRepo.savedPr.State)
+	assert.Equal(t, string(TerminateAction), mockPrRepo.savedPr.LastAction.String)
+}
+
 func TestHandleInvokeActionTerminateRejectsTerminal(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(handler.Iso18626Handler), nil, new(EmailSenderMock), nil, nil)
@@ -5248,6 +5317,10 @@ func (m *mockLmsAdapter) AcceptItem(
 ) error {
 	args := m.Called(itemId, requestId, userId, author, title, isbn, callNumber, pickupLocation, requestedAction)
 	return args.Error(0)
+}
+
+func (m *mockLmsAdapter) DeleteItem(itemId string) error {
+	return m.Called(itemId).Error(0)
 }
 
 type EmailSenderMock struct {
