@@ -124,6 +124,11 @@ DELETE
 FROM item
 WHERE id = $1;
 
+-- name: SetRequesterLmsItemCreated :execrows
+UPDATE item
+SET requester_lms_item_created = $2
+WHERE id = $1;
+
 -- name: SaveNotification :one
 INSERT INTO notification (id, pr_id, from_symbol, to_symbol, direction, kind, note, cost, currency, condition, receipt, created_at, acknowledged_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)

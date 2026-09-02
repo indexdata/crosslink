@@ -135,7 +135,9 @@ func TestAcceptItem(t *testing.T) {
 
 func TestDeleteItem(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
+	b := true
 	ad := &LmsAdapterNcip{
+		config:     dirapi.LmsConfig{AcceptItemEnabled: &b},
 		ncipClient: mock,
 	}
 	err := ad.DeleteItem("item1")
@@ -146,6 +148,22 @@ func TestDeleteItem(t *testing.T) {
 	err = ad.DeleteItem("error")
 	assert.Error(t, err)
 	assert.Equal(t, "deletion error", err.Error())
+
+	err = ad.DeleteItem("unknown-item")
+	assert.NoError(t, err)
+
+	err = ad.DeleteItem("other-problem")
+	assert.Error(t, err)
+	var ncipErr *ncipclient.NcipError
+	if assert.ErrorAs(t, err, &ncipErr) {
+		assert.Equal(t, string(ncip.UnknownUser), ncipErr.Problem.ProblemType.Text)
+	}
+
+	b = false
+	mock.(*ncipClientMock).lastRequest = nil
+	err = ad.DeleteItem("item1")
+	assert.NoError(t, err)
+	assert.Nil(t, mock.(*ncipClientMock).lastRequest)
 }
 
 func TestRequestItem(t *testing.T) {
@@ -517,8 +535,19 @@ func (n *ncipClientMock) AcceptItem(accept ncip.AcceptItem) (*ncip.AcceptItemRes
 }
 
 func (n *ncipClientMock) DeleteItem(delete ncip.DeleteItem) (*ncip.DeleteItemResponse, error) {
-	if delete.ItemId.ItemIdentifierValue == "error" {
+	switch delete.ItemId.ItemIdentifierValue {
+	case "error":
 		return nil, fmt.Errorf("deletion error")
+	case "unknown-item":
+		return nil, &ncipclient.NcipError{
+			Message: "NCIP delete item failed",
+			Problem: ncip.Problem{ProblemType: ncip.SchemeValuePair{Text: string(ncip.UnknownItem)}},
+		}
+	case "other-problem":
+		return nil, &ncipclient.NcipError{
+			Message: "NCIP delete item failed",
+			Problem: ncip.Problem{ProblemType: ncip.SchemeValuePair{Text: string(ncip.UnknownUser)}},
+		}
 	}
 	n.lastRequest = delete
 	return nil, nil

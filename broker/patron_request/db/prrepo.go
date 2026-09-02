@@ -31,6 +31,7 @@ type PrRepo interface {
 	SaveItem(ctx common.ExtendedContext, params SaveItemParams) (Item, error)
 	GetItemById(ctx common.ExtendedContext, id string) (Item, error)
 	GetItemsByPrId(ctx common.ExtendedContext, prId string) ([]Item, error)
+	SetRequesterLmsItemCreated(ctx common.ExtendedContext, params SetRequesterLmsItemCreatedParams) error
 	SaveNotification(ctx common.ExtendedContext, params SaveNotificationParams) (Notification, error)
 	GetNotificationById(ctx common.ExtendedContext, id string) (Notification, error)
 	GetNotificationsByPrId(ctx common.ExtendedContext, params GetNotificationsByPrIdParams) ([]Notification, int64, error)
@@ -278,6 +279,17 @@ func (r *PgPrRepo) GetItemsByPrId(ctx common.ExtendedContext, prId string) ([]It
 		list = append(list, row.Item)
 	}
 	return list, err
+}
+
+func (r *PgPrRepo) SetRequesterLmsItemCreated(ctx common.ExtendedContext, params SetRequesterLmsItemCreatedParams) error {
+	rows, err := r.queries.SetRequesterLmsItemCreated(ctx, r.GetConnOrTx(), params)
+	if err != nil {
+		return err
+	}
+	if rows != 1 {
+		return fmt.Errorf("expected to update one item, updated %d", rows)
+	}
+	return nil
 }
 
 func (r *PgPrRepo) SaveNotification(ctx common.ExtendedContext, params SaveNotificationParams) (Notification, error) {
