@@ -1199,6 +1199,43 @@ func TestHandleInvokeActionReceivePersistsOnlyAcceptedItems(t *testing.T) {
 	lmsAdapter.AssertExpectations(t)
 }
 
+func TestHandleInvokeActionReceiveSkipsPreviouslyAcceptedItems(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsAdapter := new(mockLmsAdapter)
+	lmsAdapter.On("AcceptItem", "5678", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(lmsAdapter, nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	mockEventBus := new(MockEventBus)
+	emailMock := new(EmailSenderMock)
+	emailMock.On("IsReadyToSend").Return(false)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, emailMock, nil, nil)
+	pr := pr_db.PatronRequest{
+		ID:              patronRequestId,
+		State:           BorrowerStateShipped,
+		Side:            SideBorrowing,
+		RequesterSymbol: getDbText("ISIL:REC1"),
+		SupplierSymbol:  getDbText("ISIL:SUP1"),
+	}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Once().Return(pr, nil)
+	receivedPr := pr
+	receivedPr.State = BorrowerStateReceived
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(receivedPr, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{
+		{ID: "item1", PrID: patronRequestId, Barcode: "1234", RequesterLmsItemCreated: true},
+		{ID: "item2", PrID: patronRequestId, Barcode: "5678"},
+	}, nil).Once()
+	action := BorrowerActionReceive
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, string(BorrowerStateReceived), *resultData.ActionResult.ToState)
+	assert.True(t, mockPrRepo.requesterLmsItemCreated["item2"])
+	lmsAdapter.AssertNotCalled(t, "AcceptItem", "1234", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	lmsAdapter.AssertExpectations(t)
+}
+
 func TestHandleInvokeActionReceiveCompensatesWhenAcceptedItemCannotBeRecorded(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsAdapter := new(mockLmsAdapter)

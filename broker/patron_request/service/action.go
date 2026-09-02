@@ -994,6 +994,9 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	for _, item := range items {
+		if item.RequesterLmsItemCreated {
+			continue
+		}
 		callNumber := ""
 		if item.CallNumber.Valid {
 			callNumber = item.CallNumber.String
