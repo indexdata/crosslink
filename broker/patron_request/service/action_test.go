@@ -1183,10 +1183,10 @@ func TestHandleInvokeActionReceivePersistsOnlyAcceptedItems(t *testing.T) {
 		RequesterSymbol: getDbText("ISIL:REC1"),
 	}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil)
-	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{
+	mockPrRepo.savedItems = []pr_db.Item{
 		{ID: "item1", PrID: patronRequestId, Barcode: "1234"},
 		{ID: "item2", PrID: patronRequestId, Barcode: "5678"},
-	}, nil).Once()
+	}
 	action := BorrowerActionReceive
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
@@ -1196,6 +1196,11 @@ func TestHandleInvokeActionReceivePersistsOnlyAcceptedItems(t *testing.T) {
 	assert.True(t, mockPrRepo.requesterLmsItemCreated["item1"])
 	_, secondAccepted := mockPrRepo.requesterLmsItemCreated["item2"]
 	assert.False(t, secondAccepted)
+	items, err := mockPrRepo.GetItemsByPrId(appCtx, patronRequestId)
+	if assert.NoError(t, err) && assert.Len(t, items, 2) {
+		assert.True(t, items[0].RequesterLmsItemCreated)
+		assert.False(t, items[1].RequesterLmsItemCreated)
+	}
 	lmsAdapter.AssertExpectations(t)
 }
 
@@ -5120,13 +5125,22 @@ func (r *MockPrRepo) GetItemsByPrId(ctx common.ExtendedContext, id string) ([]pr
 func (r *MockPrRepo) SetRequesterLmsItemCreated(ctx common.ExtendedContext, params pr_db.SetRequesterLmsItemCreatedParams) error {
 	for _, call := range r.ExpectedCalls {
 		if call.Method == "SetRequesterLmsItemCreated" {
-			return r.Called(params).Error(0)
+			if err := r.Called(params).Error(0); err != nil {
+				return err
+			}
+			break
 		}
 	}
 	if r.requesterLmsItemCreated == nil {
 		r.requesterLmsItemCreated = make(map[string]bool)
 	}
 	r.requesterLmsItemCreated[params.ID] = params.RequesterLmsItemCreated
+	for i := range r.savedItems {
+		if r.savedItems[i].ID == params.ID {
+			r.savedItems[i].RequesterLmsItemCreated = params.RequesterLmsItemCreated
+			break
+		}
+	}
 	return nil
 }
 
