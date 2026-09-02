@@ -1077,21 +1077,22 @@ func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.Exten
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	for _, item := range items {
+		if !item.RequesterLmsItemCreated {
+			continue
+		}
 		itemId := item.Barcode
 		err = lmsAdapter.DeleteItem(itemId)
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "LMS DeleteItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
-		if item.RequesterLmsItemCreated {
-			err = a.prRepo.SetRequesterLmsItemCreated(ctx, pr_db.SetRequesterLmsItemCreatedParams{
-				ID:                      item.ID,
-				RequesterLmsItemCreated: false,
-			})
-			if err != nil {
-				status, result := logActionErrorAndReturnResult(ctx, "failed to record requester LMS item deletion", err)
-				return actionExecutionResult{status: status, result: result, pr: pr}
-			}
+		err = a.prRepo.SetRequesterLmsItemCreated(ctx, pr_db.SetRequesterLmsItemCreatedParams{
+			ID:                      item.ID,
+			RequesterLmsItemCreated: false,
+		})
+		if err != nil {
+			status, result := logActionErrorAndReturnResult(ctx, "failed to record requester LMS item deletion", err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
 	}
 	status, result, err := a.messageSender.sendRequestingAgencyMessage(ctx, parentEventID, pr, iso18626.TypeActionShippedReturn, "")

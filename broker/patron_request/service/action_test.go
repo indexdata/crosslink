@@ -1424,11 +1424,16 @@ func TestHandleInvokeActionShipReturnOK(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
 	lmsCreator := new(MockLmsCreator)
-	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(lms.CreateLmsAdapterMockOK(), nil)
+	lmsAdapter := new(mockLmsAdapter)
+	lmsAdapter.On("DeleteItem", "1234").Return(nil).Once()
+	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(lmsAdapter, nil)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateCheckedIn, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
-	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{
+		{ID: "item-cleared", Barcode: "already-deleted", RequesterLmsItemCreated: false},
+		{ID: "item-created", Barcode: "1234", RequesterLmsItemCreated: true},
+	}, nil)
 
 	action := BorrowerActionShipReturn
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
@@ -1436,6 +1441,9 @@ func TestHandleInvokeActionShipReturnOK(t *testing.T) {
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Nil(t, resultData.IncomingMessage)
 	assert.Equal(t, BorrowerStateShippedReturned, mockPrRepo.savedPr.State)
+	assert.False(t, mockPrRepo.requesterLmsItemCreated["item-created"])
+	lmsAdapter.AssertNotCalled(t, "DeleteItem", "already-deleted")
+	lmsAdapter.AssertExpectations(t)
 }
 
 func TestHandleInvokeActionShipReturnItemFails(t *testing.T) {
@@ -1464,7 +1472,7 @@ func TestHandleInvokeActionShipReturnFails(t *testing.T) {
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateCheckedIn, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
-	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{ID: "item-created", Barcode: "1234", RequesterLmsItemCreated: true}}, nil)
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(pr_db.PatronRequest{RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}, IllRequest: illRequest}, nil)
 	action := BorrowerActionShipReturn
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
@@ -1736,7 +1744,7 @@ func TestShipReturnBorrowingRequestMissingSupplierSymbol(t *testing.T) {
 	lmsAdapter := lms.CreateLmsAdapterMockOK()
 	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lmsAdapter, nil)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
-	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{ID: "item-created", Barcode: "1234", RequesterLmsItemCreated: true}}, nil)
 
 	illRequest := iso18626.Request{}
 	var request iso18626.Request
@@ -1753,7 +1761,7 @@ func TestShipReturnBorrowingRequestMissingRequesterSymbol(t *testing.T) {
 	lmsAdapter := lms.CreateLmsAdapterMockOK()
 	lmsCreator.On("GetAdapter", pgtype.Text{}).Return(lmsAdapter, nil)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
-	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{ID: "item-created", Barcode: "1234", RequesterLmsItemCreated: true}}, nil)
 
 	var request iso18626.Request
 	result := prAction.shipReturnBorrowingRequest(appCtx, "", pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateValidated, Side: SideBorrowing, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, lmsAdapter, request)
@@ -1769,7 +1777,7 @@ func TestShipReturnBorrowingRequestInvalidSupplierSymbol(t *testing.T) {
 	lmsAdapter := lms.CreateLmsAdapterMockOK()
 	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lmsAdapter, nil)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
-	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{ID: "item-created", Barcode: "1234", RequesterLmsItemCreated: true}}, nil)
 
 	var request iso18626.Request
 	result := prAction.shipReturnBorrowingRequest(appCtx, "", pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "x"}}, lmsAdapter, request)
@@ -1785,7 +1793,7 @@ func TestShipReturnBorrowingRequestInvalidRequesterSymbol(t *testing.T) {
 	lmsAdapter := lms.CreateLmsAdapterMockOK()
 	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "x"}).Return(lmsAdapter, nil)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
-	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{ID: "item-created", Barcode: "1234", RequesterLmsItemCreated: true}}, nil)
 
 	var request iso18626.Request
 	result := prAction.shipReturnBorrowingRequest(appCtx, "", pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "x"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, lmsAdapter, request)
