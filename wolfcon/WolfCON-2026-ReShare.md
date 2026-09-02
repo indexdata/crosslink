@@ -34,15 +34,14 @@ Start from continuity and success. Legacy ReShare proved that the community serv
 # Why the backend needed a successor
 
 - The original implementation had substantial app and persistence framework overhead
-- Separate app and DB deployments for every tenant multiplied into hundreds of instances
+- In practice, schema-per-tenant deployments meant operating hundreds of application instances
 - External Kafka-based messaging added infrastructure to deploy, monitor, and maintain
 - Workflow progress still depended on a non-transactional handoff between database state and Kafka events
 - Workflow definition spread across domain logic, status handlers, protocols, and events
 - Workflow changes required code tracing, releases, and cross-integration testing
-- Vendor behavior accumulated in the core application
 
 ::: notes
-The original choices accelerated early delivery and got ReShare into production. FOLIO and Okapi provided useful modularity. The operational issue highlighted here is more specific: the tenancy architecture multiplied application and database deployments across individual tenants, while Kafka and ZooKeeper added services that also had to be deployed and maintained. Database commits and Kafka publication were not one atomic operation, creating failure windows in which state and pending work could diverge. CrossLink instead carries tenant ownership inside one shared deployment and records workflow events durably in PostgreSQL. Production experience gave us clearer requirements for a smaller successor.
+The original choices accelerated early delivery and got ReShare into production. FOLIO and Okapi provided useful modularity. The operational issue highlighted here is more specific: in practice, schema-per-tenant deployments meant operating hundreds of application instances, while Kafka and ZooKeeper added services that also had to be deployed and maintained. Database commits and Kafka publication were not one atomic operation, creating failure windows in which state and pending work could diverge. CrossLink instead carries tenant ownership inside one shared deployment and records workflow events durably in PostgreSQL. Production experience gave us clearer requirements for a smaller successor.
 :::
 
 # Requirements before technology
