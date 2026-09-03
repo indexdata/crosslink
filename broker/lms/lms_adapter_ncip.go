@@ -142,52 +142,82 @@ func (l *LmsAdapterNcip) validatePatronProfile(response *ncip.LookupUserResponse
 	if l.config.PatronProfiles == nil {
 		return nil
 	}
-	profileCode, profileName := patronProfile(response)
+	candidates := patronProfileCandidates(response)
+	if len(candidates) == 0 {
+		// Keep an empty candidate so a rule with neither code nor name can
+		// provide the configured default when no profile was returned.
+		candidates = []patronProfileCandidate{{}}
+	}
 	for _, profile := range *l.config.PatronProfiles {
-		codeMatches := profile.Code == nil || strings.EqualFold(strings.TrimSpace(*profile.Code), profileCode)
-		nameMatches := profile.Name == nil || strings.EqualFold(strings.TrimSpace(*profile.Name), profileName)
-		if codeMatches && nameMatches {
-			if !profile.CanCreateRequests {
-				return &PatronProfileIneligibleError{ProfileCode: profileCode, ProfileName: profileName}
+		for _, candidate := range candidates {
+			codeMatches := profile.Code == nil || strings.EqualFold(strings.TrimSpace(*profile.Code), candidate.code)
+			nameMatches := profile.Name == nil || strings.EqualFold(strings.TrimSpace(*profile.Name), candidate.name)
+			if codeMatches && nameMatches {
+				if !profile.CanCreateRequests {
+					return &PatronProfileIneligibleError{ProfileCode: candidate.code, ProfileName: candidate.name}
+				}
+				return nil
 			}
-			return nil
 		}
 	}
 	return nil
 }
 
-func patronProfile(response *ncip.LookupUserResponse) (code string, name string) {
+type patronProfileCandidate struct {
+	code string
+	name string
+}
+
+func patronProfileCandidates(response *ncip.LookupUserResponse) []patronProfileCandidate {
 	if response == nil || response.UserOptionalFields == nil {
-		return "", ""
+		return nil
 	}
 	privileges := response.UserOptionalFields.UserPrivilege
 
 	// Most implementations return PROFILE as the privilege type and the
-	// patron profile code as its status value.
+	// patron profile code as its status value. Treat this explicit discriminator
+	// as authoritative when it is present.
+	var candidates []patronProfileCandidate
 	for _, privilege := range privileges {
 		privilegeType := strings.TrimSpace(privilege.AgencyUserPrivilegeType.Text)
 		status := userPrivilegeStatus(privilege)
 		if strings.EqualFold(privilegeType, "PROFILE") && status != "" {
-			return status, strings.TrimSpace(privilege.UserPrivilegeDescription)
+			candidates = append(candidates, patronProfileCandidate{
+				code: status,
+				name: strings.TrimSpace(privilege.UserPrivilegeDescription),
+			})
 		}
+	}
+	if len(candidates) > 0 {
+		return candidates
 	}
 
 	// Other implementations put the profile code in the privilege type and
-	// use Active or OK as its status.
+	// use Active or OK as its status. All such privileges are candidates: NCIP
+	// permits UserPrivilege to repeat and unrelated privileges may come first.
 	for _, privilege := range privileges {
 		privilegeType := strings.TrimSpace(privilege.AgencyUserPrivilegeType.Text)
 		status := userPrivilegeStatus(privilege)
 		if privilegeType != "" && (strings.EqualFold(status, "ACTIVE") || strings.EqualFold(status, "OK")) {
-			return privilegeType, strings.TrimSpace(privilege.UserPrivilegeDescription)
+			candidates = append(candidates, patronProfileCandidate{
+				code: privilegeType,
+				name: strings.TrimSpace(privilege.UserPrivilegeDescription),
+			})
 		}
+	}
+	if len(candidates) > 0 {
+		return candidates
 	}
 
 	// Some implementations return just one privilege containing the profile
 	// code, without a status.
 	if len(privileges) == 1 && userPrivilegeStatus(privileges[0]) == "" {
-		return strings.TrimSpace(privileges[0].AgencyUserPrivilegeType.Text), strings.TrimSpace(privileges[0].UserPrivilegeDescription)
+		return []patronProfileCandidate{{
+			code: strings.TrimSpace(privileges[0].AgencyUserPrivilegeType.Text),
+			name: strings.TrimSpace(privileges[0].UserPrivilegeDescription),
+		}}
 	}
-	return "", ""
+	return nil
 }
 
 func userPrivilegeStatus(privilege ncip.UserPrivilege) string {

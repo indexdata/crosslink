@@ -190,22 +190,19 @@ func TestLookupUserElements(t *testing.T) {
 
 func TestPatronProfile(t *testing.T) {
 	tests := []struct {
-		name       string
-		privileges []ncip.UserPrivilege
-		expectCode string
-		expectName string
+		name             string
+		privileges       []ncip.UserPrivilege
+		expectCandidates []patronProfileCandidate
 	}{
 		{
-			name:       "profile status value",
-			privileges: []ncip.UserPrivilege{testUserPrivilege("PROFILE", "STAFF", "Staff")},
-			expectCode: "STAFF",
-			expectName: "Staff",
+			name:             "profile status value",
+			privileges:       []ncip.UserPrivilege{testUserPrivilege("PROFILE", "STAFF", "Staff")},
+			expectCandidates: []patronProfileCandidate{{code: "STAFF", name: "Staff"}},
 		},
 		{
-			name:       "active profile privilege",
-			privileges: []ncip.UserPrivilege{testUserPrivilege("STAFF", "Active", "Staff")},
-			expectCode: "STAFF",
-			expectName: "Staff",
+			name:             "active profile privilege",
+			privileges:       []ncip.UserPrivilege{testUserPrivilege("STAFF", "Active", "Staff")},
+			expectCandidates: []patronProfileCandidate{{code: "STAFF", name: "Staff"}},
 		},
 		{
 			name: "OK profile among other privileges",
@@ -213,14 +210,23 @@ func TestPatronProfile(t *testing.T) {
 				testUserPrivilege("STAFF", "01/01/01", "Staff"),
 				testUserPrivilege("STAFF", "OK", "Staff"),
 			},
-			expectCode: "STAFF",
-			expectName: "Staff",
+			expectCandidates: []patronProfileCandidate{{code: "STAFF", name: "Staff"}},
 		},
 		{
-			name:       "single privilege without status",
-			privileges: []ncip.UserPrivilege{testUserPrivilege("STAFF", "", "Staff")},
-			expectCode: "STAFF",
-			expectName: "Staff",
+			name: "multiple active privileges",
+			privileges: []ncip.UserPrivilege{
+				testUserPrivilege("BORROWING", "Active", "Borrowing enabled"),
+				testUserPrivilege("STAFF", "Active", "Staff"),
+			},
+			expectCandidates: []patronProfileCandidate{
+				{code: "BORROWING", name: "Borrowing enabled"},
+				{code: "STAFF", name: "Staff"},
+			},
+		},
+		{
+			name:             "single privilege without status",
+			privileges:       []ncip.UserPrivilege{testUserPrivilege("STAFF", "", "Staff")},
+			expectCandidates: []patronProfileCandidate{{code: "STAFF", name: "Staff"}},
 		},
 		{
 			name:       "profile unavailable",
@@ -233,14 +239,10 @@ func TestPatronProfile(t *testing.T) {
 			response := &ncip.LookupUserResponse{
 				UserOptionalFields: &ncip.UserOptionalFields{UserPrivilege: test.privileges},
 			}
-			code, name := patronProfile(response)
-			assert.Equal(t, test.expectCode, code)
-			assert.Equal(t, test.expectName, name)
+			assert.Equal(t, test.expectCandidates, patronProfileCandidates(response))
 		})
 	}
-	code, name := patronProfile(nil)
-	assert.Empty(t, code)
-	assert.Empty(t, name)
+	assert.Empty(t, patronProfileCandidates(nil))
 }
 
 func TestValidatePatronProfileRules(t *testing.T) {
@@ -279,6 +281,24 @@ func TestValidatePatronProfileRules(t *testing.T) {
 	noMatch := dirapi.PatronProfiles{{Code: strPtr("OTHER"), CanCreateRequests: false}}
 	adapter.config.PatronProfiles = &noMatch
 	assert.NoError(t, adapter.validatePatronProfile(response))
+
+	multipleActivePrivileges := &ncip.LookupUserResponse{
+		UserOptionalFields: &ncip.UserOptionalFields{UserPrivilege: []ncip.UserPrivilege{
+			testUserPrivilege("BORROWING", "Active", "Borrowing enabled"),
+			testUserPrivilege("STAFF", "Active", "Staff"),
+		}},
+	}
+	denyStaff := dirapi.PatronProfiles{
+		{Code: strPtr("STAFF"), CanCreateRequests: false},
+		{CanCreateRequests: true},
+	}
+	adapter.config.PatronProfiles = &denyStaff
+	err := adapter.validatePatronProfile(multipleActivePrivileges)
+	var ineligibleErr *PatronProfileIneligibleError
+	if assert.ErrorAs(t, err, &ineligibleErr) {
+		assert.Equal(t, "STAFF", ineligibleErr.ProfileCode)
+		assert.Equal(t, "Staff", ineligibleErr.ProfileName)
+	}
 }
 
 func testUserPrivilege(privilegeType string, status string, description string) ncip.UserPrivilege {
