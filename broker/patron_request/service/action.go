@@ -740,6 +740,12 @@ func (a *PatronRequestActionService) validatePatronBorrowingRequest(ctx common.E
 			result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeReview}
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
+		var ineligibleErr *lms.PatronProfileIneligibleError
+		if errors.As(err, &ineligibleErr) {
+			status, result := events.LogProblemAndReturnResult(ctx, "Patron profile ineligible", ineligibleErr.Error(), nil)
+			result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeReview}
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
 		status, result := logActionErrorAndReturnResult(ctx, "LMS LookupUser failed", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}

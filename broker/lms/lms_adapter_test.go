@@ -67,6 +67,11 @@ func TestLookupUser(t *testing.T) {
 
 	_, err = ad.LookupUser("blocked-profile")
 	assert.EqualError(t, err, `patron profile with code "BLOCKED" and name "Blocked patrons" is not eligible to create ILL requests`)
+	var ineligibleErr *PatronProfileIneligibleError
+	if assert.ErrorAs(t, err, &ineligibleErr) {
+		assert.Equal(t, "BLOCKED", ineligibleErr.ProfileCode)
+		assert.Equal(t, "Blocked patrons", ineligibleErr.ProfileName)
+	}
 
 	_, err = ad.LookupUser("blocked user")
 	assert.EqualError(t, err, `patron profile with code "BLOCKED" and name "Blocked patrons" is not eligible to create ILL requests`)

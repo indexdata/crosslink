@@ -977,6 +977,35 @@ func TestHandleInvokeActionValidatePatronProblem(t *testing.T) {
 	assert.Equal(t, string(events.EventStatusProblem), mockPrRepo.savedPr.LastActionResult.String)
 }
 
+func TestHandleInvokeActionValidatePatronProfileIneligible(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(&MockLmsAdapterPatronProfileIneligible{}, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
+	illRequest := iso18626.Request{}
+	pr := pr_db.PatronRequest{
+		ID:              patronRequestId,
+		IllRequest:      illRequest,
+		RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"},
+		State:           BorrowerStateNew,
+		Side:            SideBorrowing,
+		Tenant:          pgtype.Text{Valid: true, String: "testlib"},
+	}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidatePatron}}})
+
+	assert.Equal(t, events.EventStatusProblem, status)
+	assert.Equal(t, ActionOutcomeReview, resultData.ActionResult.Outcome)
+	assert.Equal(t, string(BorrowerStateInvalidPatron), *resultData.ActionResult.ToState)
+	assert.Equal(t, "Patron profile ineligible", resultData.Problem.Kind)
+	assert.Equal(t, `patron profile with code "BLOCKED" and name "Blocked patrons" is not eligible to create ILL requests`, resultData.Problem.Details)
+	assert.Equal(t, BorrowerStateInvalidPatron, mockPrRepo.savedPr.State)
+	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
+	assert.Equal(t, ActionOutcomeReview, mockPrRepo.savedPr.LastActionOutcome.String)
+	assert.Equal(t, string(events.EventStatusProblem), mockPrRepo.savedPr.LastActionResult.String)
+}
+
 func TestHandleInvokeActionRepeatedPatronProblemKeepsNeedsAttention(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
@@ -5105,6 +5134,10 @@ type MockLmsAdapterPatronProblem struct {
 	MockLmsAdapterFail
 }
 
+type MockLmsAdapterPatronProfileIneligible struct {
+	MockLmsAdapterFail
+}
+
 func (l *MockLmsAdapterPatronProblem) LookupUser(patron string) (string, error) {
 	return "", &ncipclient.NcipError{
 		Message: "NCIP user lookup failed",
@@ -5112,6 +5145,13 @@ func (l *MockLmsAdapterPatronProblem) LookupUser(patron string) (string, error) 
 			ProblemType:   ncip.SchemeValuePair{Text: string(ncip.UnknownUser)},
 			ProblemDetail: "patron was not found",
 		},
+	}
+}
+
+func (l *MockLmsAdapterPatronProfileIneligible) LookupUser(patron string) (string, error) {
+	return "", &lms.PatronProfileIneligibleError{
+		ProfileCode: "BLOCKED",
+		ProfileName: "Blocked patrons",
 	}
 }
 

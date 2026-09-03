@@ -144,7 +144,7 @@ func (l *LmsAdapterNcip) validatePatronProfile(response *ncip.LookupUserResponse
 		nameMatches := profile.Name == nil || strings.EqualFold(strings.TrimSpace(*profile.Name), profileName)
 		if codeMatches && nameMatches {
 			if !profile.CanCreateRequests {
-				return fmt.Errorf("patron profile with code %q and name %q is not eligible to create ILL requests", profileCode, profileName)
+				return &PatronProfileIneligibleError{ProfileCode: profileCode, ProfileName: profileName}
 			}
 			return nil
 		}

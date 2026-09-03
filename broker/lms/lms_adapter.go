@@ -1,6 +1,21 @@
 package lms
 
-import "github.com/indexdata/crosslink/broker/ncipclient"
+import (
+	"fmt"
+
+	"github.com/indexdata/crosslink/broker/ncipclient"
+)
+
+// PatronProfileIneligibleError indicates that a patron was found in the LMS,
+// but their configured profile does not permit creating ILL requests.
+type PatronProfileIneligibleError struct {
+	ProfileCode string
+	ProfileName string
+}
+
+func (e *PatronProfileIneligibleError) Error() string {
+	return fmt.Sprintf("patron profile with code %q and name %q is not eligible to create ILL requests", e.ProfileCode, e.ProfileName)
+}
 
 // RequestedItem contains data returned by a performed LMS RequestItem
 // call. A nil response with a nil error means the adapter intentionally skipped
