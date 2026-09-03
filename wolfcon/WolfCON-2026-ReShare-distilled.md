@@ -36,7 +36,7 @@ Last year we presented CrossLink as a standards-based broker. This year the brok
 - Tenant topology multiplied operational work
 - Kafka added infrastructure and failure windows
 - Workflow behavior was spread across the application
-- Changes required tracing, releases, and broad testing
+- Workflow changes required tracing, releases, and broad testing
 :::
 ::::::::::::::
 
@@ -231,7 +231,7 @@ Tenant identity and ownership are part of each request, not the deployment topol
 
 # Lightweight is measurable
 
-| Measure | New broker | mod-rs 2.13 | Difference |
+| Measure | CrossLink | mod-rs | Difference |
 |---|---:|---:|---:|
 | Container image | 35.6 MB | 246.0 MB | **6.9× smaller** |
 | Slowest cold start—3 runs | 0.667 s | 37.006 s | **55× faster** |
