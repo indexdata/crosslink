@@ -51,21 +51,21 @@ func TestLookupUser(t *testing.T) {
 		ncipClient: mock,
 		config:     config,
 	}
-	_, err := ad.LookupUser("")
+	_, err := ad.LookupUser("", true)
 	assert.Error(t, err)
 	assert.Equal(t, "empty patron identifier", err.Error())
 
-	userId, err := ad.LookupUser("testuser")
+	userId, err := ad.LookupUser("testuser", true)
 	assert.NoError(t, err)
 	assert.Equal(t, "testuser", userId)
 	request := mock.(*ncipClientMock).lastRequest.(ncip.LookupUser)
 	assert.Equal(t, []ncip.SchemeValuePair{{Text: NCIPUserId}, {Text: NCIPUserPrivilege}}, request.UserElementType)
 
-	userId, err = ad.LookupUser("staff-profile")
+	userId, err = ad.LookupUser("staff-profile", true)
 	assert.NoError(t, err)
 	assert.Equal(t, "staff-profile", userId)
 
-	_, err = ad.LookupUser("blocked-profile")
+	_, err = ad.LookupUser("blocked-profile", true)
 	assert.EqualError(t, err, `patron profile with code "BLOCKED" and name "Blocked patrons" is not eligible to create ILL requests`)
 	var ineligibleErr *PatronProfileIneligibleError
 	if assert.ErrorAs(t, err, &ineligibleErr) {
@@ -73,44 +73,56 @@ func TestLookupUser(t *testing.T) {
 		assert.Equal(t, "Blocked patrons", ineligibleErr.ProfileName)
 	}
 
-	_, err = ad.LookupUser("blocked user")
+	_, err = ad.LookupUser("blocked user", true)
 	assert.EqualError(t, err, `patron profile with code "BLOCKED" and name "Blocked patrons" is not eligible to create ILL requests`)
 	request = mock.(*ncipClientMock).lastRequest.(ncip.LookupUser)
 	assert.Equal(t, []ncip.SchemeValuePair{{Text: NCIPUserId}, {Text: NCIPUserPrivilege}}, request.UserElementType)
 
-	_, err = ad.LookupUser("bad user")
+	userId, err = ad.LookupUser("blocked-profile", false)
+	assert.NoError(t, err)
+	assert.Equal(t, "blocked-profile", userId)
+	request = mock.(*ncipClientMock).lastRequest.(ncip.LookupUser)
+	assert.Empty(t, request.UserElementType)
+
+	userId, err = ad.LookupUser("blocked user", false)
+	assert.NoError(t, err)
+	assert.Equal(t, "blocked-user-id", userId)
+	request = mock.(*ncipClientMock).lastRequest.(ncip.LookupUser)
+	assert.Equal(t, []ncip.SchemeValuePair{{Text: NCIPUserId}}, request.UserElementType)
+
+	_, err = ad.LookupUser("bad user", true)
 	assert.Error(t, err)
 	assert.Equal(t, "unknown user name", err.Error())
 
-	_, err = ad.LookupUser("problem user")
+	_, err = ad.LookupUser("problem user", true)
 	var ncipErr *ncipclient.NcipError
 	assert.ErrorAs(t, err, &ncipErr)
 	assert.Equal(t, string(ncip.UnknownUser), ncipErr.Problem.ProblemType.Text)
 	assert.Equal(t, "patron was not found", ncipErr.Problem.ProblemDetail)
 
-	userId, err = ad.LookupUser("pass")
+	userId, err = ad.LookupUser("pass", true)
 	assert.NoError(t, err)
 	assert.Equal(t, "pass", userId)
 
-	_, err = ad.LookupUser("missing data")
+	_, err = ad.LookupUser("missing data", true)
 	assert.Error(t, err)
 	assert.Equal(t, "missing User ID in LookupUser response", err.Error())
 
-	userId, err = ad.LookupUser("good user")
+	userId, err = ad.LookupUser("good user", true)
 	assert.NoError(t, err)
 	assert.Equal(t, "user124", userId)
 
-	userId, err = ad.LookupUser("other user")
+	userId, err = ad.LookupUser("other user", true)
 	assert.NoError(t, err)
 	assert.Equal(t, "user123", userId)
 
 	b = false
-	userId, err = ad.LookupUser("")
+	userId, err = ad.LookupUser("", true)
 	assert.NoError(t, err)
 	assert.Equal(t, "", userId)
 
 	mock.(*ncipClientMock).lastRequest = nil
-	userId, err = ad.LookupUser("anyuser")
+	userId, err = ad.LookupUser("anyuser", true)
 	assert.NoError(t, err)
 	assert.Equal(t, "anyuser", userId)
 	assert.Nil(t, mock.(*ncipClientMock).lastRequest) // not called
@@ -153,15 +165,25 @@ func TestLookupUserElements(t *testing.T) {
 				config:     dirapi.LmsConfig{PatronProfiles: test.profiles},
 			}
 
-			_, err := adapter.LookupUser("testuser")
+			_, err := adapter.LookupUser("testuser", true)
 			assert.NoError(t, err)
 			directRequest := mock.lastRequest.(ncip.LookupUser)
 			assert.Equal(t, test.directElements, directRequest.UserElementType)
 
-			_, err = adapter.LookupUser("other user")
+			_, err = adapter.LookupUser("other user", true)
 			assert.NoError(t, err)
 			fallbackRequest := mock.lastRequest.(ncip.LookupUser)
 			assert.Equal(t, test.fallbackElements, fallbackRequest.UserElementType)
+
+			_, err = adapter.LookupUser("testuser", false)
+			assert.NoError(t, err)
+			directRequest = mock.lastRequest.(ncip.LookupUser)
+			assert.Empty(t, directRequest.UserElementType)
+
+			_, err = adapter.LookupUser("other user", false)
+			assert.NoError(t, err)
+			fallbackRequest = mock.lastRequest.(ncip.LookupUser)
+			assert.Equal(t, userIDElement, fallbackRequest.UserElementType)
 		})
 	}
 }

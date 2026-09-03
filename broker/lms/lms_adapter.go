@@ -32,7 +32,7 @@ type RequestedItem struct {
 type LmsAdapter interface {
 	SetLogFunc(logFunc ncipclient.NcipLogFunc)
 
-	LookupUser(patron string) (userId string, err error)
+	LookupUser(patron string, validatePatronProfile bool) (userId string, err error)
 
 	AcceptItem(
 		itemId string,

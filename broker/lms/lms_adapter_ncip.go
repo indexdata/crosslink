@@ -72,7 +72,7 @@ func (l *LmsAdapterNcip) SetLogFunc(logFunc ncipclient.NcipLogFunc) {
 	l.ncipClient.SetLogFunc(logFunc)
 }
 
-func (l *LmsAdapterNcip) LookupUser(patron string) (string, error) {
+func (l *LmsAdapterNcip) LookupUser(patron string, validatePatronProfile bool) (string, error) {
 	if l.config.LookupUserEnabled != nil && !*l.config.LookupUserEnabled {
 		return patron, nil // could even be empty
 	}
@@ -82,12 +82,14 @@ func (l *LmsAdapterNcip) LookupUser(patron string) (string, error) {
 	// first try to check if patron is actually user Id
 	arg := ncip.LookupUser{
 		UserId:          &ncip.UserId{UserIdentifierValue: patron},
-		UserElementType: l.getUserElements(false),
+		UserElementType: l.getUserElements(false, validatePatronProfile),
 	}
 	response, err := l.ncipClient.LookupUser(arg)
 	if err == nil {
-		if err = l.validatePatronProfile(response); err != nil {
-			return "", err
+		if validatePatronProfile {
+			if err = l.validatePatronProfile(response); err != nil {
+				return "", err
+			}
 		}
 		return patron, nil
 	}
@@ -101,14 +103,16 @@ func (l *LmsAdapterNcip) LookupUser(patron string) (string, error) {
 	})
 	arg = ncip.LookupUser{
 		AuthenticationInput: authenticationInput,
-		UserElementType:     l.getUserElements(true),
+		UserElementType:     l.getUserElements(true, validatePatronProfile),
 	}
 	response, err = l.ncipClient.LookupUser(arg)
 	if err != nil {
 		return "", err
 	}
-	if err = l.validatePatronProfile(response); err != nil {
-		return "", err
+	if validatePatronProfile {
+		if err = l.validatePatronProfile(response); err != nil {
+			return "", err
+		}
 	}
 	if response != nil && response.UserOptionalFields != nil && len(response.UserOptionalFields.UserId) != 0 {
 		return response.UserOptionalFields.UserId[0].UserIdentifierValue, nil
@@ -119,8 +123,8 @@ func (l *LmsAdapterNcip) LookupUser(patron string) (string, error) {
 	return "", fmt.Errorf("missing User ID in LookupUser response")
 }
 
-func (l *LmsAdapterNcip) getUserElements(userId bool) []ncip.SchemeValuePair {
-	if l.config.PatronProfiles != nil && len(*l.config.PatronProfiles) > 0 {
+func (l *LmsAdapterNcip) getUserElements(userId bool, validatePatronProfile bool) []ncip.SchemeValuePair {
+	if validatePatronProfile && l.config.PatronProfiles != nil && len(*l.config.PatronProfiles) > 0 {
 		return []ncip.SchemeValuePair{
 			{Text: NCIPUserId},
 			{Text: NCIPUserPrivilege},
