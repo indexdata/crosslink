@@ -15,6 +15,7 @@ Build the PowerPoint and PDF versions from the repository root:
 ```sh
 ./wolfcon/build-wolfcon-2026-deck.sh
 ./wolfcon/build-wolfcon-2026-pdf.sh
+./wolfcon/build-wolfcon-2026-pdf.sh wolfcon/WolfCON-2026-ReShare-distilled.md
 ```
 
 The generated `WolfCON-2026-ReShare.pptx` and `.pdf` files are kept
