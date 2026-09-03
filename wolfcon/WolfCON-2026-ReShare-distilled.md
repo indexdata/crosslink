@@ -86,6 +86,35 @@ The requirements came before the technology choices. Preserve the service contra
 Do not explain every box. Follow one request through the platform. Staff clients use OpenAPI JSON and receive live updates through Server-Sent Events. External ILL peers use ISO 18626; ILS integration uses NCIP; discovery uses SRU or Z39.50 behind replaceable adapters. At the center, requests progress through an explicit state model and meaningful changes become durable PostgreSQL events. Go, typed sqlc access, and a lightweight internal event bus keep the implementation small without giving up reliability.
 :::
 
+# A small core supports a complete platform
+
+:::::::::::::: {.columns}
+::: {.column width="47%"}
+## Lightweight core runtime
+
+- One Go service around durable state
+- PostgreSQL as the only infrastructure dependency
+- No Kafka cluster for core messaging
+- Custom event bus implementation
+- Stateless Kubernetes/Helm deployment and health endpoints
+- Packaged database migrations and rolling updates
+:::
+::: {.column width="47%"}
+## Main features built on the shared core
+
+- Workflow execution
+- Scheduler and batch actions
+- Request aging and retries
+- Notifications and email templates
+- Pull slips and document delivery
+- Live UI updates through SSE
+:::
+::::::::::::::
+
+::: notes
+Multi-tenant ownership is resolved at the API boundary and carried through request operations. The next slide supplies measured local proof points for image size, startup time, memory, and core runtime components. Production capacity and horizontal scaling remain separate measurements.
+:::
+
 # One request, two complementary views
 
 :::::::::::::: {.columns style="height: 4.35in;"}
@@ -135,6 +164,18 @@ Every native Patron Request is backed by an ILL transaction. Staff work with the
 A state says what is true now. An action says what a person or automation may do. An incoming protocol event says what happened elsewhere, and outcomes map to permitted next states. The YAML example makes that grammar concrete: a new requester-side request automatically validates the patron, then follows an explicit success or review path. One definition connects backend behavior, automation, and UI affordances.
 :::
 
+# One workflow model drives the API and UI
+
+![State model to API and UI](wolfcon-2026-model-api-ui.svg){width=96%}
+
+::: {.durable-events-banner}
+**Accepted actions become durable database events: recoverable after failure, observable through the API, and safely distributed across broker instances.**
+:::
+
+::: notes
+The API publishes the actions allowed in the current state, their parameters, availability, and which action is primary. The UI renders those choices, and the backend checks the same model when an action is submitted. Accepted actions create durable events in PostgreSQL before workers process them, so restarts do not lose the work, failures remain visible, and multiple broker instances can safely compete for it. A consortium can choose supported actions, make them manual or automatic, map outcomes and incoming messages, and vary behavior by service type. Generated validation rejects unknown actions, impossible transitions, requester/supplier crossovers, and invalid closing paths. Customization changes the workflow without creating a separate set of UI rules.
+:::
+
 # A borrowing request, step by step
 
 ![Simplified borrowing workflow](wolfcon-2026-borrowing-flow.svg){width=80%}
@@ -145,12 +186,31 @@ A state says what is true now. An action says what a person or automation may do
 A state says what is true now. An action says what a person or automation may do. An incoming event says what happened elsewhere, and an outcome selects a permitted next state. The default model covers Loan, Copy, and CopyOrLoan from both borrower and supplier perspectives, with 42 workflow states and 32 distinct actions. The diagram shows that the common path remains understandable while invalid patrons, metadata review, conditional supply, and transaction routing are represented explicitly.
 :::
 
-# One workflow model drives the API and UI
+# Customizable with guardrails
 
-![State model to API and UI](wolfcon-2026-model-api-ui.svg){width=96%}
+:::::::::::::: {.columns}
+::: {.column width="47%"}
+## Shape the workflow
+
+- Choose supported actions per state
+- Make actions manual or automatic
+- Map outcomes and incoming messages
+- Apply behavior by service type
+- Mark primary, editable, terminal, and attention states
+:::
+::: {.column width="47%"}
+## Enforce the contract
+
+- Publish supported capabilities
+- Reject unknown actions and events
+- Prevent requester/supplier crossovers
+- Validate transitions and closing paths
+- Check service-type consistency
+:::
+::::::::::::::
 
 ::: notes
-The API publishes the actions allowed in the current state, their parameters, availability, and which action is primary. The UI renders those choices, and the backend checks the same model when an action is submitted. A consortium can choose supported actions, make them manual or automatic, map outcomes and incoming messages, and vary behavior by service type. Generated validation rejects unknown actions, impossible transitions, requester/supplier crossovers, and invalid closing paths. Customization changes the workflow without creating a separate set of UI rules.
+Concrete examples include requiring or skipping patron validation, stopping for metadata review, automatically checking for duplicates, and using different fulfillment actions for loans and digital copies. The model is semantically versioned, generated, validated, and embedded. Administration and promotion of consortium models can evolve without changing the execution engine. Open questions include upgrades for in-flight requests and coexistence of multiple versions.
 :::
 
 # One deployment, many virtual tenants

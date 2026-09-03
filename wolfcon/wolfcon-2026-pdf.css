@@ -229,6 +229,23 @@ blockquote {
   font-weight: 700;
 }
 
+#one-workflow-model-drives-the-api-and-ui .durable-events-banner {
+  width: 92%;
+  margin: 0.08in auto 0;
+  padding: 0.11in 0.18in;
+  border-radius: 0.16in;
+  background: #053754;
+  text-align: center;
+}
+
+#one-workflow-model-drives-the-api-and-ui .durable-events-banner p,
+#one-workflow-model-drives-the-api-and-ui .durable-events-banner strong {
+  margin: 0;
+  color: #ffffff;
+  font-size: 14.5pt;
+  line-height: 1.12;
+}
+
 #lightweight-is-measurable .measurement-note p {
   margin: 0.04in 0 0.08in;
   color: #666666;
