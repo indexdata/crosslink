@@ -10,6 +10,11 @@
     "checkOutItemEnabled":true,
     "itemLocation":"",
     "lookupUserEnabled":true,
+    "patronProfiles":[
+      {"code":"STAFF","name":"Staff","canCreateRequests":true},
+      {"code":"BLOCKED","canCreateRequests":false},
+      {"canCreateRequests":true}
+    ],
     "requestItemBibIdCode":"SYSNUMBER",
     "requestItemEnabled":true,
     "requestItemPickupLocationEnabled":true,

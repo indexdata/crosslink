@@ -724,7 +724,7 @@ func (a *PatronRequestActionService) validatePatronBorrowingRequest(ctx common.E
 	if pr.Patron.Valid {
 		patron = pr.Patron.String
 	}
-	userId, err := lmsAdapter.LookupUser(patron)
+	userId, err := lmsAdapter.LookupUser(patron, true)
 	if err != nil {
 		var ncipErr *ncipclient.NcipError
 		if errors.As(err, &ncipErr) {
@@ -737,6 +737,12 @@ func (a *PatronRequestActionService) validatePatronBorrowingRequest(ctx common.E
 				problemDetails = ncipErr.Error()
 			}
 			status, result := events.LogProblemAndReturnResult(ctx, problemType, problemDetails, nil)
+			result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeReview}
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		var ineligibleErr *lms.PatronProfileIneligibleError
+		if errors.As(err, &ineligibleErr) {
+			status, result := events.LogProblemAndReturnResult(ctx, "Patron profile ineligible", ineligibleErr.Error(), nil)
 			result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeReview}
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
@@ -1192,7 +1198,7 @@ func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.Exte
 
 func (a *PatronRequestActionService) validatePatronLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) actionExecutionResult {
 	institutionalPatron := lms.InstitutionalPatron(pr.RequesterSymbol.String)
-	_, err := lms.LookupUser(institutionalPatron)
+	_, err := lms.LookupUser(institutionalPatron, false)
 	if err != nil {
 		status, result := logActionErrorAndReturnResult(ctx, "LMS LookupUser failed", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}

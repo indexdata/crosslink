@@ -39,57 +39,279 @@ func TestCreateLmsAdapterNcip(t *testing.T) {
 func TestLookupUser(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	b := true
+	profiles := dirapi.PatronProfiles{
+		{Code: strPtr("STAFF"), Name: strPtr("Staff"), CanCreateRequests: true},
+		{Code: strPtr("BLOCKED"), Name: strPtr("Blocked patrons"), CanCreateRequests: false},
+	}
 	config := dirapi.LmsConfig{
 		LookupUserEnabled: &b,
+		PatronProfiles:    &profiles,
 	}
 	ad := &LmsAdapterNcip{
 		ncipClient: mock,
 		config:     config,
 	}
-	_, err := ad.LookupUser("")
+	_, err := ad.LookupUser("", true)
 	assert.Error(t, err)
 	assert.Equal(t, "empty patron identifier", err.Error())
 
-	userId, err := ad.LookupUser("testuser")
+	userId, err := ad.LookupUser("testuser", true)
 	assert.NoError(t, err)
 	assert.Equal(t, "testuser", userId)
+	request := mock.(*ncipClientMock).lastRequest.(ncip.LookupUser)
+	assert.Equal(t, []ncip.SchemeValuePair{{Text: NCIPUserId}, {Text: NCIPUserPrivilege}}, request.UserElementType)
 
-	_, err = ad.LookupUser("bad user")
+	userId, err = ad.LookupUser("staff-profile", true)
+	assert.NoError(t, err)
+	assert.Equal(t, "staff-profile", userId)
+
+	_, err = ad.LookupUser("blocked-profile", true)
+	assert.EqualError(t, err, `patron profile with code "BLOCKED" and name "Blocked patrons" is not eligible to create ILL requests`)
+	var ineligibleErr *PatronProfileIneligibleError
+	if assert.ErrorAs(t, err, &ineligibleErr) {
+		assert.Equal(t, "BLOCKED", ineligibleErr.ProfileCode)
+		assert.Equal(t, "Blocked patrons", ineligibleErr.ProfileName)
+	}
+
+	_, err = ad.LookupUser("blocked user", true)
+	assert.EqualError(t, err, `patron profile with code "BLOCKED" and name "Blocked patrons" is not eligible to create ILL requests`)
+	request = mock.(*ncipClientMock).lastRequest.(ncip.LookupUser)
+	assert.Equal(t, []ncip.SchemeValuePair{{Text: NCIPUserId}, {Text: NCIPUserPrivilege}}, request.UserElementType)
+
+	userId, err = ad.LookupUser("blocked-profile", false)
+	assert.NoError(t, err)
+	assert.Equal(t, "blocked-profile", userId)
+	request = mock.(*ncipClientMock).lastRequest.(ncip.LookupUser)
+	assert.Empty(t, request.UserElementType)
+
+	userId, err = ad.LookupUser("blocked user", false)
+	assert.NoError(t, err)
+	assert.Equal(t, "blocked-user-id", userId)
+	request = mock.(*ncipClientMock).lastRequest.(ncip.LookupUser)
+	assert.Equal(t, []ncip.SchemeValuePair{{Text: NCIPUserId}}, request.UserElementType)
+
+	_, err = ad.LookupUser("bad user", true)
 	assert.Error(t, err)
 	assert.Equal(t, "unknown user name", err.Error())
 
-	_, err = ad.LookupUser("problem user")
+	_, err = ad.LookupUser("problem user", true)
 	var ncipErr *ncipclient.NcipError
 	assert.ErrorAs(t, err, &ncipErr)
 	assert.Equal(t, string(ncip.UnknownUser), ncipErr.Problem.ProblemType.Text)
 	assert.Equal(t, "patron was not found", ncipErr.Problem.ProblemDetail)
 
-	userId, err = ad.LookupUser("pass")
+	userId, err = ad.LookupUser("pass", true)
 	assert.NoError(t, err)
 	assert.Equal(t, "pass", userId)
 
-	_, err = ad.LookupUser("missing data")
+	_, err = ad.LookupUser("missing data", true)
 	assert.Error(t, err)
 	assert.Equal(t, "missing User ID in LookupUser response", err.Error())
 
-	userId, err = ad.LookupUser("good user")
+	userId, err = ad.LookupUser("good user", true)
 	assert.NoError(t, err)
 	assert.Equal(t, "user124", userId)
 
-	userId, err = ad.LookupUser("other user")
+	userId, err = ad.LookupUser("other user", true)
 	assert.NoError(t, err)
 	assert.Equal(t, "user123", userId)
 
 	b = false
-	userId, err = ad.LookupUser("")
+	userId, err = ad.LookupUser("", true)
 	assert.NoError(t, err)
 	assert.Equal(t, "", userId)
 
 	mock.(*ncipClientMock).lastRequest = nil
-	userId, err = ad.LookupUser("anyuser")
+	userId, err = ad.LookupUser("anyuser", true)
 	assert.NoError(t, err)
 	assert.Equal(t, "anyuser", userId)
 	assert.Nil(t, mock.(*ncipClientMock).lastRequest) // not called
+}
+
+func TestLookupUserElements(t *testing.T) {
+	emptyProfiles := dirapi.PatronProfiles{}
+	configuredProfiles := dirapi.PatronProfiles{{CanCreateRequests: true}}
+	userIDElement := []ncip.SchemeValuePair{{Text: NCIPUserId}}
+	profileElements := []ncip.SchemeValuePair{{Text: NCIPUserId}, {Text: NCIPUserPrivilege}}
+
+	tests := []struct {
+		name             string
+		profiles         *dirapi.PatronProfiles
+		directElements   []ncip.SchemeValuePair
+		fallbackElements []ncip.SchemeValuePair
+	}{
+		{
+			name:             "profiles omitted",
+			fallbackElements: userIDElement,
+		},
+		{
+			name:             "profiles empty",
+			profiles:         &emptyProfiles,
+			fallbackElements: userIDElement,
+		},
+		{
+			name:             "profiles configured",
+			profiles:         &configuredProfiles,
+			directElements:   profileElements,
+			fallbackElements: profileElements,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mock := new(ncipClientMock)
+			adapter := &LmsAdapterNcip{
+				ncipClient: mock,
+				config:     dirapi.LmsConfig{PatronProfiles: test.profiles},
+			}
+
+			_, err := adapter.LookupUser("testuser", true)
+			assert.NoError(t, err)
+			directRequest := mock.lastRequest.(ncip.LookupUser)
+			assert.Equal(t, test.directElements, directRequest.UserElementType)
+
+			_, err = adapter.LookupUser("other user", true)
+			assert.NoError(t, err)
+			fallbackRequest := mock.lastRequest.(ncip.LookupUser)
+			assert.Equal(t, test.fallbackElements, fallbackRequest.UserElementType)
+
+			_, err = adapter.LookupUser("testuser", false)
+			assert.NoError(t, err)
+			directRequest = mock.lastRequest.(ncip.LookupUser)
+			assert.Empty(t, directRequest.UserElementType)
+
+			_, err = adapter.LookupUser("other user", false)
+			assert.NoError(t, err)
+			fallbackRequest = mock.lastRequest.(ncip.LookupUser)
+			assert.Equal(t, userIDElement, fallbackRequest.UserElementType)
+		})
+	}
+}
+
+func TestPatronProfile(t *testing.T) {
+	tests := []struct {
+		name             string
+		privileges       []ncip.UserPrivilege
+		expectCandidates []patronProfileCandidate
+	}{
+		{
+			name:             "profile status value",
+			privileges:       []ncip.UserPrivilege{testUserPrivilege("PROFILE", "STAFF", "Staff")},
+			expectCandidates: []patronProfileCandidate{{code: "STAFF", name: "Staff"}},
+		},
+		{
+			name:             "active profile privilege",
+			privileges:       []ncip.UserPrivilege{testUserPrivilege("STAFF", "Active", "Staff")},
+			expectCandidates: []patronProfileCandidate{{code: "STAFF", name: "Staff"}},
+		},
+		{
+			name: "OK profile among other privileges",
+			privileges: []ncip.UserPrivilege{
+				testUserPrivilege("STAFF", "01/01/01", "Staff"),
+				testUserPrivilege("STAFF", "OK", "Staff"),
+			},
+			expectCandidates: []patronProfileCandidate{{code: "STAFF", name: "Staff"}},
+		},
+		{
+			name: "multiple active privileges",
+			privileges: []ncip.UserPrivilege{
+				testUserPrivilege("BORROWING", "Active", "Borrowing enabled"),
+				testUserPrivilege("STAFF", "Active", "Staff"),
+			},
+			expectCandidates: []patronProfileCandidate{
+				{code: "BORROWING", name: "Borrowing enabled"},
+				{code: "STAFF", name: "Staff"},
+			},
+		},
+		{
+			name:             "single privilege without status",
+			privileges:       []ncip.UserPrivilege{testUserPrivilege("STAFF", "", "Staff")},
+			expectCandidates: []patronProfileCandidate{{code: "STAFF", name: "Staff"}},
+		},
+		{
+			name:       "profile unavailable",
+			privileges: []ncip.UserPrivilege{testUserPrivilege("BORROWING", "DENIED", "")},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			response := &ncip.LookupUserResponse{
+				UserOptionalFields: &ncip.UserOptionalFields{UserPrivilege: test.privileges},
+			}
+			assert.Equal(t, test.expectCandidates, patronProfileCandidates(response))
+		})
+	}
+	assert.Empty(t, patronProfileCandidates(nil))
+}
+
+func TestValidatePatronProfileRules(t *testing.T) {
+	response := lookupUserResponseWithProfile("user-id", "PROFILE", "STAFF", "Staff")
+
+	nameOnly := dirapi.PatronProfiles{{Name: strPtr("Staff"), CanCreateRequests: false}}
+	adapter := LmsAdapterNcip{config: dirapi.LmsConfig{PatronProfiles: &nameOnly}}
+	assert.Error(t, adapter.validatePatronProfile(response))
+
+	codeOnly := dirapi.PatronProfiles{{Code: strPtr("staff"), CanCreateRequests: true}}
+	adapter.config.PatronProfiles = &codeOnly
+	assert.NoError(t, adapter.validatePatronProfile(response))
+
+	firstMatchWins := dirapi.PatronProfiles{
+		{Code: strPtr("STAFF"), Name: strPtr("Staff"), CanCreateRequests: true},
+		{CanCreateRequests: false},
+	}
+	adapter.config.PatronProfiles = &firstMatchWins
+	assert.NoError(t, adapter.validatePatronProfile(response))
+
+	bothComponentsMustMatch := dirapi.PatronProfiles{
+		{Code: strPtr("STAFF"), Name: strPtr("Student"), CanCreateRequests: false},
+		{CanCreateRequests: true},
+	}
+	adapter.config.PatronProfiles = &bothComponentsMustMatch
+	assert.NoError(t, adapter.validatePatronProfile(response))
+
+	defaultDenied := dirapi.PatronProfiles{
+		{Code: strPtr("OTHER"), CanCreateRequests: true},
+		{CanCreateRequests: false},
+	}
+	adapter.config.PatronProfiles = &defaultDenied
+	assert.Error(t, adapter.validatePatronProfile(response))
+	assert.Error(t, adapter.validatePatronProfile(nil))
+
+	noMatch := dirapi.PatronProfiles{{Code: strPtr("OTHER"), CanCreateRequests: false}}
+	adapter.config.PatronProfiles = &noMatch
+	assert.NoError(t, adapter.validatePatronProfile(response))
+
+	multipleActivePrivileges := &ncip.LookupUserResponse{
+		UserOptionalFields: &ncip.UserOptionalFields{UserPrivilege: []ncip.UserPrivilege{
+			testUserPrivilege("BORROWING", "Active", "Borrowing enabled"),
+			testUserPrivilege("STAFF", "Active", "Staff"),
+		}},
+	}
+	denyStaff := dirapi.PatronProfiles{
+		{Code: strPtr("STAFF"), CanCreateRequests: false},
+		{CanCreateRequests: true},
+	}
+	adapter.config.PatronProfiles = &denyStaff
+	err := adapter.validatePatronProfile(multipleActivePrivileges)
+	var ineligibleErr *PatronProfileIneligibleError
+	if assert.ErrorAs(t, err, &ineligibleErr) {
+		assert.Equal(t, "STAFF", ineligibleErr.ProfileCode)
+		assert.Equal(t, "Staff", ineligibleErr.ProfileName)
+	}
+}
+
+func testUserPrivilege(privilegeType string, status string, description string) ncip.UserPrivilege {
+	privilege := ncip.UserPrivilege{
+		AgencyUserPrivilegeType:  ncip.SchemeValuePair{Text: privilegeType},
+		UserPrivilegeDescription: description,
+	}
+	if status != "" {
+		privilege.UserPrivilegeStatus = &ncip.UserPrivilegeStatus{
+			UserPrivilegeStatusType: ncip.SchemeValuePair{Text: status},
+		}
+	}
+	return privilege
 }
 
 func TestAcceptItem(t *testing.T) {
@@ -472,6 +694,12 @@ func (n *ncipClientMock) SetLogFunc(logFunc ncipclient.NcipLogFunc) {
 func (n *ncipClientMock) LookupUser(lookup ncip.LookupUser) (*ncip.LookupUserResponse, error) {
 	n.lastRequest = lookup
 	if lookup.UserId != nil {
+		if lookup.UserId.UserIdentifierValue == "staff-profile" {
+			return lookupUserResponseWithProfile(lookup.UserId.UserIdentifierValue, "PROFILE", "STAFF", "Staff"), nil
+		}
+		if lookup.UserId.UserIdentifierValue == "blocked-profile" {
+			return lookupUserResponseWithProfile(lookup.UserId.UserIdentifierValue, "PROFILE", "BLOCKED", "Blocked patrons"), nil
+		}
 		if lookup.UserId.UserIdentifierValue == "pass" {
 			return nil, nil
 		}
@@ -484,6 +712,9 @@ func (n *ncipClientMock) LookupUser(lookup ncip.LookupUser) (*ncip.LookupUserRes
 	}
 	if lookup.AuthenticationInput[0].AuthenticationInputData == "bad user" {
 		return nil, fmt.Errorf("unknown user name")
+	}
+	if lookup.AuthenticationInput[0].AuthenticationInputData == "blocked user" {
+		return lookupUserResponseWithProfile("blocked-user-id", "BLOCKED", "Active", "Blocked patrons"), nil
 	}
 	if lookup.AuthenticationInput[0].AuthenticationInputData == "problem user" {
 		return nil, &ncipclient.NcipError{
@@ -509,6 +740,15 @@ func (n *ncipClientMock) LookupUser(lookup ncip.LookupUser) (*ncip.LookupUserRes
 	return &ncip.LookupUserResponse{
 		UserId: &ncip.UserId{UserIdentifierValue: "user123"},
 	}, nil
+}
+
+func lookupUserResponseWithProfile(userID string, privilegeType string, status string, description string) *ncip.LookupUserResponse {
+	return &ncip.LookupUserResponse{
+		UserId: &ncip.UserId{UserIdentifierValue: userID},
+		UserOptionalFields: &ncip.UserOptionalFields{
+			UserPrivilege: []ncip.UserPrivilege{testUserPrivilege(privilegeType, status, description)},
+		},
+	}
 }
 
 func (n *ncipClientMock) AcceptItem(accept ncip.AcceptItem) (*ncip.AcceptItemResponse, error) {
