@@ -63,7 +63,7 @@ The original choices accelerated early delivery and got ReShare into production.
 - Explicit, inspectable workflows
 - Fully observable and auditable API
 - Support for native direct borrowing across the consortium
-- A richer, OpenAPI-based Directory for networks, tiers, policies, and integrations
+- A richer, OpenAPI-based Directory for networks, tiers, policies, and integrations (NCIP, Z3950)
 :::
 ::::::::::::::
 
