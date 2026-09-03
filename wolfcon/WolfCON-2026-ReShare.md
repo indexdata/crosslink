@@ -51,7 +51,7 @@ The original choices accelerated early delivery and got ReShare into production.
 ## Preserve
 
 - ILS/LSP neutrality
-- First class ISO 18626 and NCIP
+- First-class ISO 18626 and NCIP
 - Borrowing and lending workflows
 - Consortial policy and supplier selection
 - Multi-tenant operation
@@ -191,10 +191,10 @@ PostgreSQL is both the durable source of truth and the lightweight wake-up mecha
 ## Lightweight core runtime
 
 - One Go service around durable state
-- PostgreSQL as the only infrastruture dependency
+- PostgreSQL as the only infrastructure dependency
 - No Kafka cluster for core messaging
 - Custom event bus implementation
-- Stateless Kubernets/Helm deployment and health endpoints
+- Stateless Kubernetes/Helm deployment and health endpoints
 - Packaged database migrations and rolling updates
 :::
 ::: {.column width="47%"}
