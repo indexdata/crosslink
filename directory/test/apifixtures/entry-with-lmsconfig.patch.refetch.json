@@ -25,6 +25,9 @@
         "fromAgency" : "bongiornio",
         "fromAgencyAuthentication" : "the_beaver_flies_at_twilight",
         "acceptItemEnabled":false,
-        "requestItemEnabled":false
+        "requestItemEnabled":false,
+        "patronProfiles":[
+            {"code":"FACULTY","name":"Faculty","canCreateRequests":true}
+        ]
     }
 }

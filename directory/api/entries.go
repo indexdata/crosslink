@@ -328,6 +328,7 @@ func buildEntrySQL(whereClause string) string {
 				'requesterPatronPattern', l.requester_patron_pattern,
 				'requesterPickupLocation', l.requester_pickup_location,
 				'supplierPickupLocation', l.supplier_pickup_location,
+				'patronProfiles', l.patron_profiles,
 				'toAgency', l.to_agency
 			) 
 		from lms_configs l WHERE l.entry = e.id) as lms_config,
@@ -792,6 +793,7 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 			RequesterPickupLocation:          lmsConfig.RequesterPickupLocation,
 			RequesterPatronPattern:           lmsConfig.RequesterPatronPattern,
 			SupplierPickupLocation:           lmsConfig.SupplierPickupLocation,
+			PatronProfiles:                   patronProfilesJSON(lmsConfig.PatronProfiles),
 		})
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to create lmsConfig component", "error", err, "to_agency", lmsConfig.ToAgency)
@@ -1166,6 +1168,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 				RequesterPickupLocation:          maybeUpdateCol(originalLMSConfig.RequesterPickupLocation, lmsConfig.RequesterPickupLocation),
 				SupplierPickupLocation:           maybeUpdateCol(originalLMSConfig.SupplierPickupLocation, lmsConfig.SupplierPickupLocation),
 				RequesterPatronPattern:           maybeUpdateCol(originalLMSConfig.RequesterPatronPattern, lmsConfig.RequesterPatronPattern),
+				PatronProfiles:                   maybeUpdatePatronProfiles(originalLMSConfig.PatronProfiles, lmsConfig.PatronProfiles),
 			})
 			if err != nil {
 				slog.ErrorContext(ctx, "unexpected database error during lmsConfig upsert", "error", err)

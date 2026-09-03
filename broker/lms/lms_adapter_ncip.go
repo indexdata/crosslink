@@ -14,8 +14,9 @@ import (
 type NcipUserElement string
 
 const (
-	NCIPUserId      string = "User Id"
-	NCIPItemBarcode string = "Item Barcode"
+	NCIPUserId        string = "User Id"
+	NCIPUserPrivilege string = "User Privilege"
+	NCIPItemBarcode   string = "Item Barcode"
 )
 
 type NcipItemElement string
@@ -78,12 +79,20 @@ func (l *LmsAdapterNcip) LookupUser(patron string) (string, error) {
 	if patron == "" {
 		return "", fmt.Errorf("empty patron identifier")
 	}
+	userElements := []ncip.SchemeValuePair{
+		{Text: NCIPUserId},
+		{Text: NCIPUserPrivilege},
+	}
 	// first try to check if patron is actually user Id
 	arg := ncip.LookupUser{
-		UserId: &ncip.UserId{UserIdentifierValue: patron},
+		UserId:          &ncip.UserId{UserIdentifierValue: patron},
+		UserElementType: userElements,
 	}
-	_, err := l.ncipClient.LookupUser(arg)
+	response, err := l.ncipClient.LookupUser(arg)
 	if err == nil {
+		if err = l.validatePatronProfile(response); err != nil {
+			return "", err
+		}
 		return patron, nil
 	}
 	// then try by user username
@@ -94,22 +103,84 @@ func (l *LmsAdapterNcip) LookupUser(patron string) (string, error) {
 		AuthenticationInputType: ncip.SchemeValuePair{Text: "username"},
 		AuthenticationInputData: patron,
 	})
-	userElements := []ncip.SchemeValuePair{{Text: string(NCIPUserId)}}
 	arg = ncip.LookupUser{
 		AuthenticationInput: authenticationInput,
 		UserElementType:     userElements,
 	}
-	response, err := l.ncipClient.LookupUser(arg)
+	response, err = l.ncipClient.LookupUser(arg)
 	if err != nil {
 		return "", err
 	}
-	if response.UserOptionalFields != nil && len(response.UserOptionalFields.UserId) != 0 {
+	if err = l.validatePatronProfile(response); err != nil {
+		return "", err
+	}
+	if response != nil && response.UserOptionalFields != nil && len(response.UserOptionalFields.UserId) != 0 {
 		return response.UserOptionalFields.UserId[0].UserIdentifierValue, nil
 	}
-	if response.UserId != nil {
+	if response != nil && response.UserId != nil {
 		return response.UserId.UserIdentifierValue, nil
 	}
 	return "", fmt.Errorf("missing User ID in LookupUser response")
+}
+
+func (l *LmsAdapterNcip) validatePatronProfile(response *ncip.LookupUserResponse) error {
+	if l.config.PatronProfiles == nil {
+		return nil
+	}
+	profileCode := patronProfileCode(response)
+	if profileCode == "" {
+		return nil
+	}
+	for _, profile := range *l.config.PatronProfiles {
+		if strings.EqualFold(profile.Code, profileCode) {
+			if !profile.CanCreateRequests {
+				return fmt.Errorf("patron profile %q is not eligible to create ILL requests", profile.Code)
+			}
+			return nil
+		}
+	}
+	return nil
+}
+
+func patronProfileCode(response *ncip.LookupUserResponse) string {
+	if response == nil || response.UserOptionalFields == nil {
+		return ""
+	}
+	privileges := response.UserOptionalFields.UserPrivilege
+
+	// Most implementations return PROFILE as the privilege type and the
+	// patron profile code as its status value.
+	for _, privilege := range privileges {
+		privilegeType := strings.TrimSpace(privilege.AgencyUserPrivilegeType.Text)
+		status := userPrivilegeStatus(privilege)
+		if strings.EqualFold(privilegeType, "PROFILE") && status != "" {
+			return status
+		}
+	}
+
+	// Other implementations put the profile code in the privilege type and
+	// use Active or OK as its status.
+	for _, privilege := range privileges {
+		privilegeType := strings.TrimSpace(privilege.AgencyUserPrivilegeType.Text)
+		status := userPrivilegeStatus(privilege)
+		if privilegeType != "" && (strings.EqualFold(status, "ACTIVE") || strings.EqualFold(status, "OK")) {
+			return privilegeType
+		}
+	}
+
+	// Some implementations return just one privilege containing the profile
+	// code, without a status.
+	if len(privileges) == 1 && userPrivilegeStatus(privileges[0]) == "" {
+		return strings.TrimSpace(privileges[0].AgencyUserPrivilegeType.Text)
+	}
+	return ""
+}
+
+func userPrivilegeStatus(privilege ncip.UserPrivilege) string {
+	if privilege.UserPrivilegeStatus == nil {
+		return ""
+	}
+	return strings.TrimSpace(privilege.UserPrivilegeStatus.UserPrivilegeStatusType.Text)
 }
 
 func (l *LmsAdapterNcip) AcceptItem(
