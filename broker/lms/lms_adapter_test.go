@@ -111,6 +111,56 @@ func TestLookupUser(t *testing.T) {
 	assert.Nil(t, mock.(*ncipClientMock).lastRequest) // not called
 }
 
+func TestLookupUserElements(t *testing.T) {
+	emptyProfiles := dirapi.PatronProfiles{}
+	configuredProfiles := dirapi.PatronProfiles{{CanCreateRequests: true}}
+	userIDElement := []ncip.SchemeValuePair{{Text: NCIPUserId}}
+	profileElements := []ncip.SchemeValuePair{{Text: NCIPUserId}, {Text: NCIPUserPrivilege}}
+
+	tests := []struct {
+		name             string
+		profiles         *dirapi.PatronProfiles
+		directElements   []ncip.SchemeValuePair
+		fallbackElements []ncip.SchemeValuePair
+	}{
+		{
+			name:             "profiles omitted",
+			fallbackElements: userIDElement,
+		},
+		{
+			name:             "profiles empty",
+			profiles:         &emptyProfiles,
+			fallbackElements: userIDElement,
+		},
+		{
+			name:             "profiles configured",
+			profiles:         &configuredProfiles,
+			directElements:   profileElements,
+			fallbackElements: profileElements,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mock := new(ncipClientMock)
+			adapter := &LmsAdapterNcip{
+				ncipClient: mock,
+				config:     dirapi.LmsConfig{PatronProfiles: test.profiles},
+			}
+
+			_, err := adapter.LookupUser("testuser")
+			assert.NoError(t, err)
+			directRequest := mock.lastRequest.(ncip.LookupUser)
+			assert.Equal(t, test.directElements, directRequest.UserElementType)
+
+			_, err = adapter.LookupUser("other user")
+			assert.NoError(t, err)
+			fallbackRequest := mock.lastRequest.(ncip.LookupUser)
+			assert.Equal(t, test.fallbackElements, fallbackRequest.UserElementType)
+		})
+	}
+}
+
 func TestPatronProfile(t *testing.T) {
 	tests := []struct {
 		name       string

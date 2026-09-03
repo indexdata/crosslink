@@ -79,14 +79,10 @@ func (l *LmsAdapterNcip) LookupUser(patron string) (string, error) {
 	if patron == "" {
 		return "", fmt.Errorf("empty patron identifier")
 	}
-	userElements := []ncip.SchemeValuePair{
-		{Text: NCIPUserId},
-		{Text: NCIPUserPrivilege},
-	}
 	// first try to check if patron is actually user Id
 	arg := ncip.LookupUser{
 		UserId:          &ncip.UserId{UserIdentifierValue: patron},
-		UserElementType: userElements,
+		UserElementType: l.getUserElements(false),
 	}
 	response, err := l.ncipClient.LookupUser(arg)
 	if err == nil {
@@ -105,7 +101,7 @@ func (l *LmsAdapterNcip) LookupUser(patron string) (string, error) {
 	})
 	arg = ncip.LookupUser{
 		AuthenticationInput: authenticationInput,
-		UserElementType:     userElements,
+		UserElementType:     l.getUserElements(true),
 	}
 	response, err = l.ncipClient.LookupUser(arg)
 	if err != nil {
@@ -121,6 +117,21 @@ func (l *LmsAdapterNcip) LookupUser(patron string) (string, error) {
 		return response.UserId.UserIdentifierValue, nil
 	}
 	return "", fmt.Errorf("missing User ID in LookupUser response")
+}
+
+func (l *LmsAdapterNcip) getUserElements(userId bool) []ncip.SchemeValuePair {
+	if l.config.PatronProfiles != nil && len(*l.config.PatronProfiles) > 0 {
+		return []ncip.SchemeValuePair{
+			{Text: NCIPUserId},
+			{Text: NCIPUserPrivilege},
+		}
+	}
+	if userId {
+		return []ncip.SchemeValuePair{
+			{Text: NCIPUserId},
+		}
+	}
+	return nil
 }
 
 func (l *LmsAdapterNcip) validatePatronProfile(response *ncip.LookupUserResponse) error {
