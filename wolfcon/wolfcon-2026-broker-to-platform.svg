@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="720" viewBox="0 0 1800 720">
+  <defs>
+    <marker id="blueArrow" markerWidth="20" markerHeight="20" refX="19" refY="10" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L20,10 L0,20 Z" fill="#3e75cf"/>
+    </marker>
+    <marker id="tealArrow" markerWidth="20" markerHeight="20" refX="19" refY="10" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L20,10 L0,20 Z" fill="#007693"/>
+    </marker>
+    <style>
+      .year { font: 700 30px Arial, sans-serif; fill: #002f56; }
+      .role { font: 700 20px Arial, sans-serif; letter-spacing: 1.2px; }
+      .claim { font: 700 23px Arial, sans-serif; fill: #002f56; }
+      .small { font: 19px Arial, sans-serif; fill: #454545; }
+      .state { font: 700 17px Arial, sans-serif; fill: #002f56; }
+      .arrowLabel { font: 700 21px Arial, sans-serif; fill: #ffffff; letter-spacing: 0.8px; }
+      .chip { font: 700 18px Arial, sans-serif; fill: #002f56; }
+      .new { font: 700 21px Arial, sans-serif; fill: #ffffff; }
+    </style>
+  </defs>
+
+  <rect width="1800" height="720" fill="#ffffff"/>
+
+  <rect x="40" y="45" width="675" height="485" rx="30" fill="#eaf0fb" stroke="#3e75cf" stroke-width="6"/>
+  <text x="377" y="98" text-anchor="middle" class="year">WOLFcon 2025</text>
+  <text x="377" y="132" text-anchor="middle" class="role" fill="#3e75cf">CROSSLINK BROKER</text>
+
+  <g>
+    <circle cx="125" cy="215" r="37" fill="#ffffff" stroke="#3e75cf" stroke-width="5"/>
+    <circle cx="125" cy="310" r="37" fill="#ffffff" stroke="#3e75cf" stroke-width="5"/>
+    <circle cx="125" cy="405" r="37" fill="#ffffff" stroke="#3e75cf" stroke-width="5"/>
+    <path d="M107 215 H143 M125 197 V233 M107 310 H143 M125 292 V328 M107 405 H143 M125 387 V423" stroke="#3e75cf" stroke-width="4" stroke-linecap="round"/>
+
+    <line x1="162" y1="215" x2="270" y2="275" stroke="#3e75cf" stroke-width="5" marker-end="url(#blueArrow)"/>
+    <line x1="162" y1="310" x2="270" y2="310" stroke="#3e75cf" stroke-width="5" marker-end="url(#blueArrow)"/>
+    <line x1="162" y1="405" x2="270" y2="345" stroke="#3e75cf" stroke-width="5" marker-end="url(#blueArrow)"/>
+    <rect x="270" y="250" width="145" height="120" rx="20" fill="#3e75cf"/>
+    <text x="342" y="300" text-anchor="middle" class="arrowLabel">ILL</text>
+    <text x="342" y="334" text-anchor="middle" class="arrowLabel">BROKER</text>
+  </g>
+
+  <g>
+    <rect x="445" y="190" width="230" height="72" rx="17" fill="#ffffff" stroke="#b7c9e8" stroke-width="3"/>
+    <text x="560" y="221" text-anchor="middle" class="claim">Standards-based</text>
+    <text x="560" y="247" text-anchor="middle" class="small">ILL broker</text>
+    <rect x="445" y="285" width="230" height="72" rx="17" fill="#ffffff" stroke="#b7c9e8" stroke-width="3"/>
+    <text x="560" y="315" text-anchor="middle" class="claim">Connect</text>
+    <text x="560" y="341" text-anchor="middle" class="small">external peers</text>
+    <rect x="445" y="380" width="230" height="92" rx="17" fill="#ffffff" stroke="#b7c9e8" stroke-width="3"/>
+    <text x="560" y="414" text-anchor="middle" class="claim">Route and observe</text>
+    <text x="560" y="442" text-anchor="middle" class="small">transactions</text>
+  </g>
+
+  <polygon points="750,255 965,255 965,215 1065,287 965,359 965,319 750,319" fill="#f78b1e"/>
+  <text x="905" y="295" text-anchor="middle" class="arrowLabel">BROKER → PLATFORM</text>
+
+  <rect x="1090" y="45" width="670" height="485" rx="30" fill="#e8f2f7" stroke="#007693" stroke-width="6"/>
+  <text x="1425" y="98" text-anchor="middle" class="year">WOLFcon 2026</text>
+  <text x="1425" y="132" text-anchor="middle" class="role" fill="#007693">CROSSLINK PLATFORM</text>
+
+  <g>
+    <rect x="1140" y="210" width="105" height="72" rx="15" fill="#ffffff" stroke="#007693" stroke-width="4"/>
+    <text x="1192" y="254" text-anchor="middle" class="state">REQUEST</text>
+    <line x1="1245" y1="246" x2="1305" y2="246" stroke="#007693" stroke-width="5" marker-end="url(#tealArrow)"/>
+    <rect x="1305" y="190" width="145" height="112" rx="18" fill="#007693"/>
+    <text x="1377" y="238" text-anchor="middle" class="arrowLabel">STATE</text>
+    <text x="1377" y="270" text-anchor="middle" class="arrowLabel">MODEL</text>
+    <line x1="1450" y1="246" x2="1510" y2="246" stroke="#007693" stroke-width="5" marker-end="url(#tealArrow)"/>
+    <rect x="1510" y="210" width="105" height="72" rx="15" fill="#ffffff" stroke="#007693" stroke-width="4"/>
+    <text x="1562" y="254" text-anchor="middle" class="state">ACTION</text>
+    <path d="M1377 302 V365 H1192 V330" fill="none" stroke="#b31782" stroke-width="5" marker-end="url(#tealArrow)"/>
+    <path d="M1377 302 V365 H1562 V330" fill="none" stroke="#b31782" stroke-width="5" marker-end="url(#tealArrow)"/>
+    <rect x="1125" y="330" width="135" height="67" rx="15" fill="#f6e8f2" stroke="#b31782" stroke-width="4"/>
+    <text x="1192" y="372" text-anchor="middle" class="state">AUTOMATION</text>
+    <rect x="1495" y="330" width="135" height="67" rx="15" fill="#f6e8f2" stroke="#b31782" stroke-width="4"/>
+    <text x="1562" y="372" text-anchor="middle" class="state">STAFF UI</text>
+  </g>
+
+  <g>
+    <rect x="1160" y="418" width="530" height="74" rx="18" fill="#ffffff" stroke="#a8cdd8" stroke-width="3"/>
+    <text x="1425" y="450" text-anchor="middle" class="claim">Complete ILL workflow platform</text>
+    <text x="1425" y="478" text-anchor="middle" class="small">Native borrowing and lending · model and operate the lifecycle</text>
+  </g>
+
+  <g>
+    <rect x="40" y="565" width="118" height="76" rx="19" fill="#053754"/>
+    <text x="99" y="611" text-anchor="middle" class="new">NEW</text>
+
+    <rect x="180" y="565" width="298" height="76" rx="19" fill="#f3f8eb" stroke="#69a33f" stroke-width="4"/>
+    <text x="329" y="611" text-anchor="middle" class="chip">PATRON REQUESTS API</text>
+    <rect x="500" y="565" width="158" height="76" rx="19" fill="#fff4e7" stroke="#f78b1e" stroke-width="4"/>
+    <text x="579" y="611" text-anchor="middle" class="chip">NCIP</text>
+    <rect x="680" y="565" width="330" height="76" rx="19" fill="#e8f2f7" stroke="#007693" stroke-width="4"/>
+    <text x="845" y="611" text-anchor="middle" class="chip">EXPLICIT STATE MODEL</text>
+    <rect x="1032" y="565" width="298" height="76" rx="19" fill="#f6e8f2" stroke="#b31782" stroke-width="4"/>
+    <text x="1181" y="611" text-anchor="middle" class="chip">LIVE UI EVENTS</text>
+    <rect x="1352" y="565" width="408" height="76" rx="19" fill="#eaf0fb" stroke="#3e75cf" stroke-width="4"/>
+    <text x="1556" y="611" text-anchor="middle" class="chip">SCHEDULING</text>
+  </g>
+</svg>

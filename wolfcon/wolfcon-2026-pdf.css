@@ -207,6 +207,14 @@ blockquote {
   line-height: 1.15;
 }
 
+#lightweight-is-measurable .measurement-note p {
+  margin: 0.04in 0 0.08in;
+  color: #666666;
+  font-size: 10.5pt;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 blockquote p {
   margin: 0;
   font-size: 25pt;
@@ -292,6 +300,24 @@ pre {
   font-size: 15pt;
   line-height: 1.2;
   white-space: pre-wrap;
+}
+
+pre.compact-state-yaml {
+  width: 72%;
+  margin: 0.03in auto 0;
+  padding: 0.11in 0.22in;
+  font-size: 11pt;
+  line-height: 1.08;
+}
+
+#a-borrowing-request-step-by-step blockquote {
+  margin: 0.08in 0 0.02in;
+  padding: 0.07in 0.16in;
+}
+
+#a-borrowing-request-step-by-step blockquote p {
+  font-size: 17pt;
+  line-height: 1.1;
 }
 
 code {
