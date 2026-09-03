@@ -5,7 +5,7 @@
     "acceptItemEnabled":false,
     "requestItemEnabled":false,
     "patronProfiles":[
-      {"code":"FACULTY","name":"Faculty","canCreateRequests":true}
+      {"name":"Faculty","canCreateRequests":true}
     ]
  }
 }

@@ -127,14 +127,13 @@ func (l *LmsAdapterNcip) validatePatronProfile(response *ncip.LookupUserResponse
 	if l.config.PatronProfiles == nil {
 		return nil
 	}
-	profileCode := patronProfileCode(response)
-	if profileCode == "" {
-		return nil
-	}
+	profileCode, profileName := patronProfile(response)
 	for _, profile := range *l.config.PatronProfiles {
-		if strings.EqualFold(profile.Code, profileCode) {
+		codeMatches := profile.Code == nil || strings.EqualFold(strings.TrimSpace(*profile.Code), profileCode)
+		nameMatches := profile.Name == nil || strings.EqualFold(strings.TrimSpace(*profile.Name), profileName)
+		if codeMatches && nameMatches {
 			if !profile.CanCreateRequests {
-				return fmt.Errorf("patron profile %q is not eligible to create ILL requests", profile.Code)
+				return fmt.Errorf("patron profile with code %q and name %q is not eligible to create ILL requests", profileCode, profileName)
 			}
 			return nil
 		}
@@ -142,9 +141,9 @@ func (l *LmsAdapterNcip) validatePatronProfile(response *ncip.LookupUserResponse
 	return nil
 }
 
-func patronProfileCode(response *ncip.LookupUserResponse) string {
+func patronProfile(response *ncip.LookupUserResponse) (code string, name string) {
 	if response == nil || response.UserOptionalFields == nil {
-		return ""
+		return "", ""
 	}
 	privileges := response.UserOptionalFields.UserPrivilege
 
@@ -154,7 +153,7 @@ func patronProfileCode(response *ncip.LookupUserResponse) string {
 		privilegeType := strings.TrimSpace(privilege.AgencyUserPrivilegeType.Text)
 		status := userPrivilegeStatus(privilege)
 		if strings.EqualFold(privilegeType, "PROFILE") && status != "" {
-			return status
+			return status, strings.TrimSpace(privilege.UserPrivilegeDescription)
 		}
 	}
 
@@ -164,16 +163,16 @@ func patronProfileCode(response *ncip.LookupUserResponse) string {
 		privilegeType := strings.TrimSpace(privilege.AgencyUserPrivilegeType.Text)
 		status := userPrivilegeStatus(privilege)
 		if privilegeType != "" && (strings.EqualFold(status, "ACTIVE") || strings.EqualFold(status, "OK")) {
-			return privilegeType
+			return privilegeType, strings.TrimSpace(privilege.UserPrivilegeDescription)
 		}
 	}
 
 	// Some implementations return just one privilege containing the profile
 	// code, without a status.
 	if len(privileges) == 1 && userPrivilegeStatus(privileges[0]) == "" {
-		return strings.TrimSpace(privileges[0].AgencyUserPrivilegeType.Text)
+		return strings.TrimSpace(privileges[0].AgencyUserPrivilegeType.Text), strings.TrimSpace(privileges[0].UserPrivilegeDescription)
 	}
-	return ""
+	return "", ""
 }
 
 func userPrivilegeStatus(privilege ncip.UserPrivilege) string {

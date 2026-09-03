@@ -14,7 +14,7 @@ func TestMaybeUpdatePatronProfiles(t *testing.T) {
 	assert.Equal(t, current, maybeUpdatePatronProfiles(current, unspecified))
 	assert.Nil(t, maybeUpdatePatronProfiles(current, nullable.NewNullNullable[PatronProfiles]()))
 
-	replacement := PatronProfiles{{Code: "BLOCKED", Name: "Blocked patrons", CanCreateRequests: false}}
+	replacement := PatronProfiles{{Code: strPtr("BLOCKED"), Name: strPtr("Blocked patrons"), CanCreateRequests: false}}
 	assert.JSONEq(t,
 		`[{"code":"BLOCKED","name":"Blocked patrons","canCreateRequests":false}]`,
 		string(maybeUpdatePatronProfiles(current, nullable.NewNullableWithValue(replacement))),

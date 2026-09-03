@@ -12,7 +12,8 @@
     "lookupUserEnabled":true,
     "patronProfiles":[
       {"code":"STAFF","name":"Staff","canCreateRequests":true},
-      {"code":"BLOCKED","name":"Blocked patrons","canCreateRequests":false}
+      {"code":"BLOCKED","canCreateRequests":false},
+      {"canCreateRequests":true}
     ],
     "requestItemBibIdCode":"SYSNUMBER",
     "requestItemEnabled":true,
