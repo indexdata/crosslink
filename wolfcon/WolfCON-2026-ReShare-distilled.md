@@ -117,8 +117,11 @@ Multi-tenant ownership is resolved at the API boundary and carried through reque
 
 # One request, two complementary views
 
-:::::::::::::: {.columns style="height: 4.35in;"}
-::: {.column width="47%"}
+:::::::::::::: {.columns .request-entry-layout style="height: 4.35in;"}
+::: {.column width="58%"}
+![Request entry points](../misc/crosslink-component-step-1-entry.png){width=100%}
+:::
+::: {.column width="38%"}
 ## Patron Request
 
 - The lifecycle practitioners operate
@@ -126,8 +129,7 @@ Multi-tenant ownership is resolved at the API boundary and carried through reque
 - Current state and available actions
 - Items, notifications, and attention flags
 - Search, filtering, and batch work
-:::
-::: {.column width="47%"}
+
 ## ILL Transaction
 
 - Supplier and rota decisions
@@ -142,7 +144,7 @@ Multi-tenant ownership is resolved at the API boundary and carried through reque
 :::
 
 ::: notes
-Every native Patron Request is backed by an ILL transaction. Staff work with the lifecycle-oriented resource, while implementers and support teams can follow routing, protocol, and integration detail. The API links these complementary views rather than collapsing them into one overloaded object. This is complete observability without exposing technical complexity in the everyday staff workflow.
+Native ReShare requests enter through the OpenAPI-based Patron Request interface, while third-party ILL traffic enters through ISO 18626. Both use the same underlying broker transaction. Every native Patron Request is backed by an ILL transaction. Staff work with the lifecycle-oriented resource, while implementers and support teams can follow routing, protocol, and integration detail. The API links these complementary views rather than collapsing them into one overloaded object. This is complete observability without exposing technical complexity in the everyday staff workflow.
 :::
 
 # Workflow is now a YAML model
@@ -220,7 +222,7 @@ Concrete examples include requiring or skipping patron validation, stopping for 
 ::: {.peer-network-banner}
 **A shared deployment is an option, not a constraint**
 
-Independent local brokers can still form a peer-to-peer ILL network
+**Independent local brokers can still form a peer-to-peer ILL network**
 :::
 
 ::: notes
@@ -255,4 +257,18 @@ These are local comparative measurements, not production capacity figures. The c
 
 ::: notes
 Return from the demo to adoption. First rehearse with representative data in an environment isolated from live effects. Validate three things: data reconciliation, staff work such as actions, email and pull slips, and integrations such as NCIP, ISO 18626, and discovery. Then choose between two controlled paths. A consortium can transfer active requests during a bounded maintenance window, or leave existing requests in legacy ReShare while routing all new work to CrossLink. In either case, each request remains owned by one system and the change is made only after the evidence passes. Close on continuity: the next generation keeps the community's service model while making it easier to operate, understand, and evolve.
+:::
+
+# A platform that evolves with the service
+
+- Open at the edges
+- Explicit at the center
+- Small enough to operate
+- Flexible enough to evolve
+- A migration path that protects continuity
+
+> The next generation of ReShare makes the community's ILL workflow a first-class part of the platform.
+
+::: notes
+This is not simply a smaller backend. It preserves the community service model while making workflow visible, testable, and evolvable.
 :::

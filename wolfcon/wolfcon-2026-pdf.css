@@ -207,7 +207,39 @@ blockquote {
   line-height: 1.15;
 }
 
+#one-request-two-complementary-views .request-entry-layout {
+  align-items: center;
+}
+
+#one-request-two-complementary-views .request-entry-layout img {
+  max-height: 4.2in;
+}
+
+#one-request-two-complementary-views .request-entry-layout h2 {
+  margin: 0 0 0.08in;
+  font-size: 19pt;
+}
+
+#one-request-two-complementary-views .request-entry-layout h2:not(:first-child) {
+  margin-top: 0.2in;
+}
+
+#one-request-two-complementary-views .request-entry-layout ul {
+  margin: 0.04in 0 0.08in 0.3in;
+  padding-left: 0.16in;
+}
+
+#one-request-two-complementary-views .request-entry-layout li {
+  margin-bottom: 0.045in;
+  font-size: 14pt;
+  line-height: 1.13;
+}
+
 #one-deployment-many-virtual-tenants .peer-network-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   width: 80%;
   margin: 0.06in auto 0;
   padding: 0.07in 0.14in;
@@ -220,7 +252,12 @@ blockquote {
   margin: 0;
   color: #ffffff;
   font-size: 11.5pt;
+  font-weight: 700;
   line-height: 1.05;
+}
+
+#one-deployment-many-virtual-tenants .peer-network-banner strong {
+  color: #ffffff;
 }
 
 #one-deployment-many-virtual-tenants .peer-network-banner p:first-child {
