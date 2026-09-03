@@ -207,6 +207,28 @@ blockquote {
   line-height: 1.15;
 }
 
+#one-deployment-many-virtual-tenants .peer-network-banner {
+  width: 80%;
+  margin: 0.06in auto 0;
+  padding: 0.07in 0.14in;
+  border-radius: 0.16in;
+  background: #053754;
+  text-align: center;
+}
+
+#one-deployment-many-virtual-tenants .peer-network-banner p {
+  margin: 0;
+  color: #ffffff;
+  font-size: 11.5pt;
+  line-height: 1.05;
+}
+
+#one-deployment-many-virtual-tenants .peer-network-banner p:first-child {
+  margin-bottom: 0.03in;
+  font-size: 14.5pt;
+  font-weight: 700;
+}
+
 #lightweight-is-measurable .measurement-note p {
   margin: 0.04in 0 0.08in;
   color: #666666;

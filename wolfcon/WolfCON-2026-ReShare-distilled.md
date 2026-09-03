@@ -157,8 +157,14 @@ The API publishes the actions allowed in the current state, their parameters, av
 
 ![Shared multi-tenant runtime](wolfcon-2026-shared-runtime.svg){width=96%}
 
+::: {.peer-network-banner}
+**A shared deployment is an option, not a constraint**
+
+Independent local brokers can still form a peer-to-peer ILL network
+:::
+
 ::: notes
-Tenant identity and ownership are part of each request, not the deployment topology. Institutions share the broker fleet, tables, migrations, and PostgreSQL deployment while authorization and owner-scoped operations preserve isolation. This removes the need to multiply application deployments as the consortium grows. The same architecture enables native direct borrowing: a shared union catalog, live availability, internal fulfillment, and local ILS integration can operate across the consortium.
+Tenant identity and ownership are part of each request, not the deployment topology. Institutions share the broker fleet, tables, migrations, and PostgreSQL deployment while authorization and owner-scoped operations preserve isolation. This removes the need to multiply application deployments as the consortium grows. The same architecture enables native direct borrowing: a shared union catalog, live availability, internal fulfillment, and local ILS integration can operate across the consortium. Where local control is preferred, independently operated brokers can connect through the same standards-based peer network.
 :::
 
 # Lightweight is measurable
