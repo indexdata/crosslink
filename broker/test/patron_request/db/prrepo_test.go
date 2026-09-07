@@ -207,10 +207,12 @@ func TestItem(t *testing.T) {
 	assert.NoError(t, prRepo.SetItemLmsRequestID(appCtx, pr_db.SetItemLmsRequestIDParams{
 		ID:           itemId,
 		LmsRequestID: pgtype.Text{String: "requester-request-id", Valid: true},
+		ItemID:       pgtype.Text{String: "accepted-item-id", Valid: true},
 	}))
 	item, err = prRepo.GetItemById(appCtx, itemId)
 	assert.NoError(t, err)
 	assert.Equal(t, "requester-request-id", item.LmsRequestID.String)
+	assert.Equal(t, "accepted-item-id", item.ItemID.String)
 
 	// Update works
 	item, err = prRepo.SaveItem(appCtx, pr_db.SaveItemParams{

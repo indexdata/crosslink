@@ -401,7 +401,7 @@ func (a *PatronRequestActionService) deleteRequesterItemsOnClose(ctx common.Exte
 	}
 	var cleanupErrors []error
 	for _, item := range items {
-		if err := lmsAdapter.DeleteItem(item.Barcode); err != nil {
+		if err := lmsAdapter.DeleteItem(requesterLmsItemID(item)); err != nil {
 			cleanupErrors = append(cleanupErrors, fmt.Errorf("LMS DeleteItem failed for item %s: %w", item.Barcode, err))
 			continue
 		}
@@ -989,6 +989,13 @@ func deepCopyISO18626Request(request iso18626.Request) (iso18626.Request, error)
 	return clone, nil
 }
 
+func requesterLmsItemID(item pr_db.Item) string {
+	if item.ItemID.Valid && strings.TrimSpace(item.ItemID.String) != "" {
+		return item.ItemID.String
+	}
+	return item.Barcode
+}
+
 func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.ExtendedContext, parentEventID string, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
 	patron := ""
 	if pr.Patron.Valid {
@@ -1026,6 +1033,7 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 		err = a.prRepo.SetItemLmsRequestID(ctx, pr_db.SetItemLmsRequestIDParams{
 			ID:           item.ID,
 			LmsRequestID: getDbText(requestID),
+			ItemID:       getDbText(itemId),
 		})
 		if err != nil {
 			if deleteErr := lmsAdapter.DeleteItem(itemId); deleteErr != nil {
@@ -1088,7 +1096,7 @@ func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.Exten
 		if !item.LmsRequestID.Valid || strings.TrimSpace(item.LmsRequestID.String) == "" {
 			continue
 		}
-		itemId := item.Barcode
+		itemId := requesterLmsItemID(item)
 		err = lmsAdapter.DeleteItem(itemId)
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "LMS DeleteItem failed", err)

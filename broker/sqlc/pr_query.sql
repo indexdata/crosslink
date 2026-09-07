@@ -124,11 +124,13 @@ DELETE
 FROM item
 WHERE id = $1;
 
--- For requester items, record the AcceptItem request ID only after success and
--- clear it after DeleteItem succeeds. NULL/empty means no item needs cleanup.
+-- For requester items, record the identifiers sent to AcceptItem only after
+-- success. Clear the request ID after DeleteItem succeeds; NULL/empty means no
+-- item needs cleanup.
 -- name: SetItemLmsRequestID :execrows
 UPDATE item
-SET lms_request_id = $2
+SET lms_request_id = $2,
+    item_id = COALESCE($3, item_id)
 WHERE id = $1;
 
 -- name: SaveNotification :one

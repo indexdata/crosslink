@@ -414,7 +414,7 @@ func TestHandleInvokeActionTerminateDeletesRequesterItem(t *testing.T) {
 			}
 			mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil).Once()
 			mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{
-				{ID: "item-record-1", Barcode: "item-1", LmsRequestID: getDbText(patronRequestId)},
+				{ID: "item-record-1", Barcode: "changed-barcode", ItemID: getDbText("item-1"), LmsRequestID: getDbText(patronRequestId)},
 				{ID: "item-record-2", Barcode: "pre-existing-item", LmsRequestID: pgtype.Text{}},
 			}, nil).Once()
 			action := TerminateAction
@@ -1232,6 +1232,7 @@ func TestHandleInvokeActionReceivePersistsOnlyAcceptedItems(t *testing.T) {
 	items, err := mockPrRepo.GetItemsByPrId(appCtx, patronRequestId)
 	if assert.NoError(t, err) && assert.Len(t, items, 2) {
 		assert.Equal(t, getDbText(patronRequestId), items[0].LmsRequestID)
+		assert.Equal(t, getDbText("1234"), items[0].ItemID)
 		assert.False(t, items[1].LmsRequestID.Valid)
 	}
 	lmsAdapter.AssertExpectations(t)
@@ -1293,6 +1294,7 @@ func TestHandleInvokeActionReceiveCompensatesWhenAcceptedItemCannotBeRecorded(t 
 	mockPrRepo.On("SetItemLmsRequestID", pr_db.SetItemLmsRequestIDParams{
 		ID:           "item1",
 		LmsRequestID: getDbText(patronRequestId),
+		ItemID:       getDbText("1234"),
 	}).Return(errors.New("database unavailable")).Once()
 	action := BorrowerActionReceive
 
@@ -1470,7 +1472,7 @@ func TestHandleInvokeActionShipReturnOK(t *testing.T) {
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateCheckedIn, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{
 		{ID: "item-cleared", Barcode: "already-deleted", LmsRequestID: pgtype.Text{}},
-		{ID: "item-created", Barcode: "1234", LmsRequestID: getDbText("custom-request-id")},
+		{ID: "item-created", Barcode: "changed-barcode", ItemID: getDbText("1234"), LmsRequestID: getDbText("custom-request-id")},
 		{ID: "item-empty", Barcode: "empty-id", LmsRequestID: pgtype.Text{Valid: true}},
 		{ID: "item-whitespace", Barcode: "whitespace-id", LmsRequestID: getDbText("  ")},
 	}, nil)
@@ -5168,6 +5170,9 @@ func (r *MockPrRepo) SetItemLmsRequestID(ctx common.ExtendedContext, params pr_d
 	for i := range r.savedItems {
 		if r.savedItems[i].ID == params.ID {
 			r.savedItems[i].LmsRequestID = params.LmsRequestID
+			if params.ItemID.Valid {
+				r.savedItems[i].ItemID = params.ItemID
+			}
 			break
 		}
 	}
