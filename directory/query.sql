@@ -295,7 +295,7 @@ INSERT INTO  lms_configs (
   accept_item_enabled, checkin_item_enabled, checkout_item_enabled, item_location, 
   request_item_request_type, request_item_scope_type, request_item_bib_code,
   request_item_enabled, request_item_pickup_location_enabled, requester_pickup_location, supplier_pickup_location,
-  requester_patron_pattern
+  requester_patron_pattern, patron_profiles
 ) VALUES (
   coalesce(sqlc.narg('id'), gen_random_uuid()),
   @entry,
@@ -315,7 +315,8 @@ INSERT INTO  lms_configs (
   @request_item_pickup_location_enabled,
   @requester_pickup_location,
   @supplier_pickup_location,
-  @requester_patron_pattern
+  @requester_patron_pattern,
+  @patron_profiles
 )
 ON CONFLICT (entry) DO UPDATE SET
   address = @address,
@@ -334,7 +335,8 @@ ON CONFLICT (entry) DO UPDATE SET
   request_item_pickup_location_enabled = @request_item_pickup_location_enabled,
   requester_pickup_location = @requester_pickup_location,
   supplier_pickup_location = @supplier_pickup_location,
-  requester_patron_pattern = @requester_patron_pattern
+  requester_patron_pattern = @requester_patron_pattern,
+  patron_profiles = @patron_profiles
 WHERE lms_configs.entry = sqlc.narg('entry')
 RETURNING *;
 

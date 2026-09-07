@@ -607,7 +607,10 @@ func TestPatchEntryLMSConfigNullValues(t *testing.T) {
 		"lmsConfig":{
 			"toAgency":null,
 			"acceptItemEnabled":null,
-			"itemLocation":""
+			"itemLocation":"",
+			"patronProfiles":[
+				{"code":"STAFF","name":"Staff","canCreateRequests":true}
+			]
 		}
 	}`, headers)
 	if res.StatusCode != http.StatusNoContent {
@@ -617,12 +620,13 @@ func TestPatchEntryLMSConfigNullValues(t *testing.T) {
 	var address, fromAgency string
 	var toAgency, itemLocation, requesterPatronPattern *string
 	var acceptItemEnabled *bool
+	var patronProfiles []byte
 	err = dbpool.QueryRow(
 		context.Background(),
-		`SELECT address, from_agency, to_agency, accept_item_enabled, item_location, requester_patron_pattern
+		`SELECT address, from_agency, to_agency, accept_item_enabled, item_location, requester_patron_pattern, patron_profiles
 		 FROM lms_configs WHERE entry = $1`,
 		entryID,
-	).Scan(&address, &fromAgency, &toAgency, &acceptItemEnabled, &itemLocation, &requesterPatronPattern)
+	).Scan(&address, &fromAgency, &toAgency, &acceptItemEnabled, &itemLocation, &requesterPatronPattern, &patronProfiles)
 	if err != nil {
 		t.Fatalf("failed to fetch patched LMS config: %v", err)
 	}
@@ -635,6 +639,28 @@ func TestPatchEntryLMSConfigNullValues(t *testing.T) {
 	if address != originalAddress || fromAgency != originalFromAgency ||
 		!reflect.DeepEqual(requesterPatronPattern, originalRequesterPatronPattern) {
 		t.Fatalf("nested LMS null PATCH changed omitted fields")
+	}
+	var profiles []map[string]any
+	if err := json.Unmarshal(patronProfiles, &profiles); err != nil {
+		t.Fatalf("failed to decode persisted patron profiles: %v", err)
+	}
+	if len(profiles) != 1 || profiles[0]["code"] != "STAFF" || profiles[0]["canCreateRequests"] != true {
+		t.Fatalf("unexpected persisted patron profiles: %#v", profiles)
+	}
+
+	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+entryID, `{"lmsConfig":{"patronProfiles":null}}`, headers)
+	if res.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected patron profile clear PATCH status %d, got %d and body %s", http.StatusNoContent, res.StatusCode, data)
+	}
+	if err := dbpool.QueryRow(
+		context.Background(),
+		"SELECT patron_profiles FROM lms_configs WHERE entry = $1",
+		entryID,
+	).Scan(&patronProfiles); err != nil {
+		t.Fatalf("failed to fetch cleared patron profiles: %v", err)
+	}
+	if patronProfiles != nil {
+		t.Fatalf("expected patron profiles to be cleared, got %s", patronProfiles)
 	}
 
 	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+entryID, `{"lmsConfig":{"address":null,"fromAgency":null}}`, headers)

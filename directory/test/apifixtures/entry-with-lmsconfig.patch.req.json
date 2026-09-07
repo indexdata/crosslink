@@ -3,6 +3,9 @@
     "address" : "https://thedoor.ismadeofsoup.com",
     "fromAgency" : "bongiornio",
     "acceptItemEnabled":false,
-    "requestItemEnabled":false
+    "requestItemEnabled":false,
+    "patronProfiles":[
+      {"name":"Faculty","canCreateRequests":true}
+    ]
  }
 }
