@@ -201,13 +201,28 @@ func TestItem(t *testing.T) {
 	assert.Equal(t, "c123", item.CallNumber.String)
 	assert.Equal(t, "t123", item.Title.String)
 	assert.Equal(t, "i123", item.ItemID.String)
+	assert.False(t, item.LmsRequestID.Valid)
+	assert.False(t, item.LmsItemID.Valid)
 	assert.True(t, item.CreatedAt.Valid)
+
+	assert.NoError(t, prRepo.SetItemLmsRequestID(appCtx, pr_db.SetItemLmsRequestIDParams{
+		ID:           itemId,
+		LmsRequestID: pgtype.Text{String: "requester-request-id", Valid: true},
+		LmsItemID:    pgtype.Text{String: "accepted-item-id", Valid: true},
+	}))
+	item, err = prRepo.GetItemById(appCtx, itemId)
+	assert.NoError(t, err)
+	assert.Equal(t, "requester-request-id", item.LmsRequestID.String)
+	assert.Equal(t, "i123", item.ItemID.String)
+	assert.Equal(t, "accepted-item-id", item.LmsItemID.String)
 
 	// Update works
 	item, err = prRepo.SaveItem(appCtx, pr_db.SaveItemParams{
-		ID:      itemId,
-		PrID:    prId,
-		Barcode: "b12",
+		ID:           itemId,
+		PrID:         prId,
+		Barcode:      "b12",
+		LmsRequestID: item.LmsRequestID,
+		LmsItemID:    item.LmsItemID,
 		CallNumber: pgtype.Text{
 			String: "c12",
 			Valid:  true,
@@ -228,6 +243,8 @@ func TestItem(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, itemId, item.ID)
+	assert.Equal(t, "requester-request-id", item.LmsRequestID.String)
+	assert.Equal(t, "accepted-item-id", item.LmsItemID.String)
 	assert.Equal(t, prId, item.PrID)
 	assert.Equal(t, "b12", item.Barcode)
 	assert.Equal(t, "c12", item.CallNumber.String)
@@ -245,6 +262,12 @@ func TestItem(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, items, 1)
 	assert.Equal(t, itemId, items[0].ID)
+
+	assert.NoError(t, prRepo.SetItemLmsRequestID(appCtx, pr_db.SetItemLmsRequestIDParams{ID: itemId}))
+	item, err = prRepo.GetItemById(appCtx, itemId)
+	assert.NoError(t, err)
+	assert.False(t, item.LmsRequestID.Valid)
+	assert.False(t, item.LmsItemID.Valid)
 
 	err = prRepo.DeletePatronRequest(appCtx, prId)
 	assert.NoError(t, err)

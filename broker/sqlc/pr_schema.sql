@@ -43,6 +43,7 @@ CREATE TABLE item
     title          VARCHAR,
     item_id        VARCHAR,
     lms_request_id VARCHAR,
+    lms_item_id    VARCHAR,
     created_at     TIMESTAMP NOT NULL DEFAULT now()
 );
 
