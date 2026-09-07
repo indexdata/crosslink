@@ -430,7 +430,6 @@ func buildEntrySQL(whereClause string) string {
 				'id', networks.id,
 				'consortium', networks.consortium,
 				'name', networks.name,
-				'priority', networks.priority,
 				'reciprocal', networks.reciprocal
 			) from entry_networks INNER JOIN networks ON networks.id = entry_networks.network
 			WHERE entry_networks.entry = e.id

@@ -2199,7 +2199,6 @@ components:
       required:
         - id
         - consortium
-        - priority
       properties:
         id:
           readOnly: true
@@ -2211,10 +2210,6 @@ components:
           format: uuid
         name:
           type: string
-        priority:
-          type: integer
-          format: int32
-          default: 0
         reciprocal:
           type: boolean
 
@@ -2264,6 +2259,7 @@ components:
         - id
         - entry
         - network
+        - priority
       properties:
         id:
           readOnly: true
@@ -2278,6 +2274,13 @@ components:
           type: string
           format: uuid
           description: ID of network
+        priority:
+          type: integer
+          format: int32
+          default: 0
+          minimum: -2147483648
+          maximum: 2147483647
+          description: Priority of this network for the associated entry
 
     EntryTier:
       type: object
@@ -2319,3 +2322,11 @@ components:
           type: string
           format: uuid
           description: Unique identifier
+        priority:
+          type: integer
+          format: int32
+          default: 0
+          minimum: -2147483648
+          maximum: 2147483647
+          description: Priority of this network for the associated entry
+

@@ -21,8 +21,7 @@
             {
               "id": "078473d7-71e8-41c0-a8c8-2a9d29920cd4",
               "name": "reshare2",
-              "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
-              "priority": 1
+              "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449"
             }
           ],
           "tiers": [
@@ -125,8 +124,7 @@
             {
               "id": "078473d7-71e8-41c0-a8c8-2a9d29920cd4",
               "name": "reshare2",
-              "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
-              "priority": 1
+              "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449"
             }
           ],
           "tiers": [
@@ -229,8 +227,7 @@
             {
               "id": "078473d7-71e8-41c0-a8c8-2a9d29920cd4",
               "name": "reshare2",
-              "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
-              "priority": 1
+              "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449"
             }
           ],
           "tiers": [
