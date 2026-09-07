@@ -23,6 +23,8 @@ import (
 	"github.com/indexdata/crosslink/directory/auth"
 	"github.com/indexdata/crosslink/directory/db"
 	"github.com/indexdata/crosslink/directory/enhancedcontext"
+	importdb "github.com/indexdata/crosslink/directory/import/db"
+	importservice "github.com/indexdata/crosslink/directory/import/service"
 )
 
 var Host = cmp.Or(os.Getenv("HOST"), "localhost")
@@ -62,7 +64,9 @@ func InitHandler(ctx context.Context, dbpool *pgxpool.Pool) http.Handler {
 	}
 
 	queries := db.New(dbpool)
-	impl := api.NewApiImpl(dbpool, queries)
+	importRepo := importdb.New(dbpool)
+	importer := importservice.New(importRepo)
+	impl := api.NewApiImpl(dbpool, queries, importer)
 	si := api.NewStrictHandler(impl, nil)
 	m := http.NewServeMux()
 	h := api.HandlerWithOptions(si, api.StdHTTPServerOptions{
@@ -72,7 +76,8 @@ func InitHandler(ctx context.Context, dbpool *pgxpool.Pool) http.Handler {
 	handlerWithValidation := apiValidator.OapiRequestValidator(swagger)
 	handlerWithLogging := httpLoggingMiddleware(handlerWithValidation(h))
 	handlerWithHelper := enhancedcontext.EnhancedContextMiddleware(handlerWithLogging)
-	handlerWithAuth := auth.FolioTokenAwareMiddleware(handlerWithHelper)
+	handlerWithLimit := ImportBodyLimitMiddleware(MaxImportBodyBytes, handlerWithHelper)
+	handlerWithAuth := auth.FolioTokenAwareMiddleware(handlerWithLimit)
 	return handlerWithAuth
 }
 

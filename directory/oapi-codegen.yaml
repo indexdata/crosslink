@@ -7,3 +7,4 @@ generate:
 output: api/directory.gen.go
 output-options:
   nullable-type: true
+  skip-prune: true
