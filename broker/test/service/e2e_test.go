@@ -439,7 +439,7 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testi
 	assert.Equal(t, string(iso18626.TypeStatusLoanCompleted), illTrans.LastSupplierStatus.String)
 	assert.Equal(t, string(iso18626.TypeActionShippedReturn), illTrans.LastRequesterAction.String)
 	assert.Equal(t, requester.ID, illTrans.RequesterID.String)
-	assertReceiptEventOrder(t, "NOTICE, request-received = SUCCESS\n"+
+	assertHandshakeEventOrder(t, "NOTICE, request-received = SUCCESS\n"+
 		"TASK, locate-suppliers = SUCCESS\n"+
 		"TASK, select-supplier = SUCCESS\n"+
 		"TASK, check-availability = SUCCESS\n"+
@@ -466,7 +466,7 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testi
 		"NOTICE, supplier-msg-received = SUCCESS, reason=StatusChange, LoanCompleted\n"+
 		"TASK, message-requester = SUCCESS, reason=StatusChange, LoanCompleted\n"+
 		"TASK, confirm-supplier-msg = SUCCESS\n",
-		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 25, false, formatEvent))
+		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 27, false, formatEvent))
 }
 
 func TestRequestUNFILLED_LOANED(t *testing.T) {
@@ -892,15 +892,19 @@ func formatEvent(e events.Event) string {
 	return fmt.Sprintf(apptest.EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
 }
 
-// A requester can acknowledge a loan before the supplier confirmation is
-// recorded. Normalize only these adjacent successful events, preserving every
-// event, status, detail, and all other ordering constraints.
-func assertReceiptEventOrder(t *testing.T, expected, actual string) {
+// A peer can respond before confirmation of the preceding message is recorded.
+// Normalize only adjacent successful loan-receipt and cancellation handshakes,
+// preserving every event, status, detail, and all other ordering constraints.
+func assertHandshakeEventOrder(t *testing.T, expected, actual string) {
 	t.Helper()
 	lines := strings.Split(actual, "\n")
 	for i := 0; i+1 < len(lines); i++ {
-		if (lines[i] == "NOTICE, requester-msg-received = SUCCESS" || lines[i] == "NOTICE, requester-msg-received = SUCCESS, Received") &&
-			lines[i+1] == "TASK, confirm-supplier-msg = SUCCESS" {
+		receiptBeforeConfirmation := (lines[i] == "NOTICE, requester-msg-received = SUCCESS" || lines[i] == "NOTICE, requester-msg-received = SUCCESS, Received") &&
+			lines[i+1] == "TASK, confirm-supplier-msg = SUCCESS"
+		cancellationBeforeConfirmation := i > 0 && lines[i-1] == "TASK, message-supplier = SUCCESS, Cancel" &&
+			lines[i] == "NOTICE, supplier-msg-received = SUCCESS, reason=CancelResponse, Cancelled" &&
+			lines[i+1] == "TASK, confirm-requester-msg = SUCCESS"
+		if receiptBeforeConfirmation || cancellationBeforeConfirmation {
 			lines[i], lines[i+1] = lines[i+1], lines[i]
 			i++
 		}
@@ -913,5 +917,5 @@ func compareWorkflowEvents(appCtx common.ExtendedContext, eventRepo events.Event
 	actual := apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illID, strings.Count(expected, "\n"), false, func(e events.Event) string {
 		return fmt.Sprintf(apptest.EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
 	})
-	assertReceiptEventOrder(t, expected, actual)
+	assertHandshakeEventOrder(t, expected, actual)
 }

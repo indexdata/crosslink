@@ -180,7 +180,7 @@ func TestEntryNetworkPriorityMigration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	exec := func(sql string) {
 		t.Helper()
 		if _, err := tx.Exec(ctx, sql); err != nil {
