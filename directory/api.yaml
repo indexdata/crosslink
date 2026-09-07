@@ -1936,6 +1936,34 @@ components:
           type: string
           description: "'{requesterSymbol}' occurrences are replaced with requesting agency ISIL"
           default: "INST-{requesterSymbol}"
+        patronProfiles:
+          description: Patron profiles used to determine whether a user returned by NCIP LookupUser is eligible to create ILL requests.
+          $ref: '#/components/schemas/PatronProfiles'
+
+    PatronProfiles:
+      type: array
+      description: Patron profile eligibility rules, inspected in order until both configured profile components match.
+      items:
+        $ref: '#/components/schemas/PatronProfile'
+
+    PatronProfile:
+      type: object
+      required:
+        - canCreateRequests
+      properties:
+        code:
+          type: string
+          minLength: 1
+          description: Profile code returned by the LMS (for example, "STAFF"). When omitted, any code matches.
+        name:
+          type: string
+          minLength: 1
+          description: Profile name returned by the LMS (for example, "Staff"). When omitted, any name matches.
+        canCreateRequests:
+          type: boolean
+          description: Whether patrons with this profile may create ILL requests.
+      additionalProperties: false
+
     LmsConfigPatch:
       type: object
       properties:
@@ -1987,6 +2015,10 @@ components:
           nullable: true
         requesterPatronPattern:
           type: string
+          nullable: true
+        patronProfiles:
+          allOf:
+            - $ref: '#/components/schemas/PatronProfiles'
           nullable: true
 
     SymbolProperties:

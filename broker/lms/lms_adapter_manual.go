@@ -8,7 +8,7 @@ type LmsAdapterManual struct {
 func (l *LmsAdapterManual) SetLogFunc(logFunc ncipclient.NcipLogFunc) {
 }
 
-func (l *LmsAdapterManual) LookupUser(patron string) (string, error) {
+func (l *LmsAdapterManual) LookupUser(patron string, validatePatronProfile bool) (string, error) {
 	return patron, nil
 }
 
