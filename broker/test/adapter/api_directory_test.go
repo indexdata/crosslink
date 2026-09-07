@@ -773,7 +773,7 @@ func TestFilterAndSortPaidNetworkAllowsPaidTiers(t *testing.T) {
 func TestFilterAndSortUsesCompatibleNetworkPriority(t *testing.T) {
 	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
-	requesterNetworks := []dirapi.Network{
+	requesterNetworks := []dirapi.EntryNetworkDetails{
 		{Name: stringPtr("Reciprocal"), Priority: 1, Reciprocal: boolPtr(true)},
 		{Name: stringPtr("Paid Low"), Priority: 5, Reciprocal: boolPtr(false)},
 		{Name: stringPtr("Paid High"), Priority: 3, Reciprocal: boolPtr(false)},
@@ -782,12 +782,12 @@ func TestFilterAndSortUsesCompatibleNetworkPriority(t *testing.T) {
 		{Name: stringPtr("Paid Core Loan"), Level: dirapi.Standard, Type: dirapi.Loan, Cost: 34.4},
 	}
 	requesterData := dirapi.Entry{Name: "Requester", Networks: &requesterNetworks}
-	supplierANetworks := []dirapi.Network{
+	supplierANetworks := []dirapi.EntryNetworkDetails{
 		{Name: stringPtr("Reciprocal"), Priority: 1, Reciprocal: boolPtr(true)},
-		{Name: stringPtr("Paid Low"), Priority: 5, Reciprocal: boolPtr(false)},
+		{Name: stringPtr("Paid Low"), Priority: -10, Reciprocal: boolPtr(false)},
 	}
-	supplierBNetworks := []dirapi.Network{
-		{Name: stringPtr("Paid High"), Priority: 3, Reciprocal: boolPtr(false)},
+	supplierBNetworks := []dirapi.EntryNetworkDetails{
+		{Name: stringPtr("Paid High"), Priority: 99, Reciprocal: boolPtr(false)},
 	}
 	entries := []adapter.Supplier{
 		{PeerId: "A", Symbol: "A", CustomData: dirapi.Entry{Name: "Supplier A", Networks: &supplierANetworks, Tiers: &paidTier}},
@@ -795,7 +795,7 @@ func TestFilterAndSortUsesCompatibleNetworkPriority(t *testing.T) {
 	}
 	serviceInfo := iso18626.ServiceInfo{
 		ServiceLevel: &iso18626.TypeSchemeValuePair{
-			Text: "Core",
+			Text: "Standard",
 		},
 		ServiceType: iso18626.TypeServiceTypeLoan,
 	}
@@ -808,9 +808,26 @@ func TestFilterAndSortUsesCompatibleNetworkPriority(t *testing.T) {
 		},
 	}
 
-	entries, _ = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	entries, rota := ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
 
-	assert.Empty(t, entries)
+	if !assert.Len(t, entries, 2) {
+		return
+	}
+	assert.Equal(t, "B", entries[0].PeerId)
+	assert.Equal(t, 3, entries[0].Priority)
+	assert.Equal(t, "A", entries[1].PeerId)
+	assert.Equal(t, 5, entries[1].Priority)
+	assert.Equal(t, 99, rota.Suppliers[0].Networks[0].Priority)
+
+	(*requesterData.Networks)[1].Priority = -2
+	(*requesterData.Networks)[2].Priority = 0
+	entries, _ = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	if !assert.Len(t, entries, 2) {
+		return
+	}
+	assert.Equal(t, "A", entries[0].PeerId)
+	assert.Equal(t, -2, entries[0].Priority)
+	assert.Equal(t, 0, entries[1].Priority)
 }
 
 func TestFilterAndSortNoFilters(t *testing.T) {
@@ -905,7 +922,7 @@ func strPtr(i string) *string {
 func TestFilterAndSortAppliesHoldingsPolicy(t *testing.T) {
 	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
-	networks := []dirapi.Network{{Name: strPtr("Reciprocal"), Priority: 1}}
+	networks := []dirapi.EntryNetworkDetails{{Name: strPtr("Reciprocal"), Priority: 1}}
 	tiers := []dirapi.Tier{{Name: strPtr("Core Loan"), Level: "Core", Type: "Loan", Cost: 0}}
 	customData := dirapi.Entry{
 		Name:     "Supplier",

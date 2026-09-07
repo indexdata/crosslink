@@ -1483,7 +1483,7 @@ components:
           readOnly: true
           type: array
           items:
-            $ref: '#/components/schemas/Network'
+            $ref: '#/components/schemas/EntryNetworkDetails'
         tiers:
           readOnly: true
           type: array
@@ -2212,6 +2212,18 @@ components:
           type: string
         reciprocal:
           type: boolean
+
+    EntryNetworkDetails:
+      allOf:
+        - $ref: '#/components/schemas/Network'
+        - type: object
+          required:
+            - priority
+          properties:
+            priority:
+              type: integer
+              format: int32
+              description: Priority of this network for the associated entry
 
     Tier:
       type: object

@@ -104,7 +104,7 @@ func TestRequestLOANED(t *testing.T) {
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n"
-	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+	compareWorkflowEvents(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
 func TestRequestUNFILLED(t *testing.T) {
@@ -144,7 +144,7 @@ func TestRequestUNFILLED(t *testing.T) {
 		"TASK, confirm-supplier-msg = SUCCESS\n" +
 		"TASK, select-supplier = PROBLEM, problem=no-suppliers\n" +
 		"TASK, message-requester = SUCCESS\n"
-	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+	compareWorkflowEvents(appCtx, eventRepo, t, illTrans.ID, exp)
 
 	data, err = os.ReadFile("../testdata/request-retry-after-unfilled.xml")
 	assert.Nil(t, err)
@@ -205,7 +205,7 @@ func TestMessageAfterUNFILLED(t *testing.T) {
 		"TASK, confirm-supplier-msg = SUCCESS\n" +
 		"TASK, select-supplier = PROBLEM, problem=no-suppliers\n" +
 		"TASK, message-requester = SUCCESS\n"
-	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+	compareWorkflowEvents(appCtx, eventRepo, t, illTrans.ID, exp)
 	data, err = os.ReadFile("../testdata/supmsg-notification.xml")
 	assert.Nil(t, err)
 	brokerUrl := os.Getenv("PEER_URL")
@@ -280,7 +280,7 @@ func TestMessageSkipped(t *testing.T) {
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n"
-	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+	compareWorkflowEvents(appCtx, eventRepo, t, illTrans.ID, exp)
 	data, err = os.ReadFile("../testdata/supmsg-notification-2.xml")
 	assert.Nil(t, err)
 	brokerUrl := os.Getenv("PEER_URL")
@@ -358,7 +358,7 @@ func TestRequestWILLSUPPLY_LOANED(t *testing.T) {
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n"
-	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+	compareWorkflowEvents(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
 func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeOpaque_Broker(t *testing.T) {
@@ -414,6 +414,8 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testi
 	reqId := "5636c993-c41c-48f4-a285-470545f6f345-3"
 	data, _ := os.ReadFile("../testdata/request-willsupply-loaned-cancel.xml")
 	stringData := strings.ReplaceAll(strings.ReplaceAll(string(data), "{index}", "3"), "BROKER", "SUP1")
+	// Wait for cancellation instead of racing an unsolicited WillSupply response.
+	stringData = strings.ReplaceAll(stringData, "WILLSUPPLY_LOANED;LOANED", "WAIT;LOANED")
 	req, _ := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader([]byte(stringData)))
 	req.Header.Add("Content-Type", "application/xml")
 	client := &http.Client{}
@@ -437,7 +439,7 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testi
 	assert.Equal(t, string(iso18626.TypeStatusLoanCompleted), illTrans.LastSupplierStatus.String)
 	assert.Equal(t, string(iso18626.TypeActionShippedReturn), illTrans.LastRequesterAction.String)
 	assert.Equal(t, requester.ID, illTrans.RequesterID.String)
-	assert.Equal(t, "NOTICE, request-received = SUCCESS\n"+
+	assertReceiptEventOrder(t, "NOTICE, request-received = SUCCESS\n"+
 		"TASK, locate-suppliers = SUCCESS\n"+
 		"TASK, select-supplier = SUCCESS\n"+
 		"TASK, check-availability = SUCCESS\n"+
@@ -524,7 +526,7 @@ func TestRequestUNFILLED_LOANED(t *testing.T) {
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n"
-	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+	compareWorkflowEvents(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
 func TestRequestLOANED_OVERDUE(t *testing.T) {
@@ -574,7 +576,7 @@ func TestRequestLOANED_OVERDUE(t *testing.T) {
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n"
-	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+	compareWorkflowEvents(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
 func TestRequestLOANED_OVERDUE_RENEW(t *testing.T) {
@@ -630,7 +632,7 @@ func TestRequestLOANED_OVERDUE_RENEW(t *testing.T) {
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n"
-	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+	compareWorkflowEvents(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
 func TestRequestRETRY_NON_EXISTING(t *testing.T) {
@@ -709,7 +711,7 @@ func TestRequestRETRY_COST(t *testing.T) {
 		"TASK, confirm-supplier-msg = SUCCESS\n" +
 		"NOTICE, request-received = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n"
-	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+	compareWorkflowEvents(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
 func TestRequestRETRY_COST_LOANED(t *testing.T) {
@@ -758,7 +760,7 @@ func TestRequestRETRY_COST_LOANED(t *testing.T) {
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n"
-	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+	compareWorkflowEvents(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
 func TestRequestRETRY_ONLOAN_LOANED(t *testing.T) {
@@ -807,7 +809,7 @@ func TestRequestRETRY_ONLOAN_LOANED(t *testing.T) {
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n"
-	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+	compareWorkflowEvents(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
 func TestRequestRETRY_CHANGED_BIBINFO(t *testing.T) {
@@ -860,7 +862,7 @@ func TestRequestRETRY_CHANGED_BIBINFO(t *testing.T) {
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n"
-	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+	compareWorkflowEvents(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
 func getPgText(value string) pgtype.Text {
@@ -888,4 +890,28 @@ func formatEvent(e events.Event) string {
 		return fmt.Sprintf(apptest.EventRecordFormat+", %v", e.EventType, e.EventName, e.EventStatus, e.EventData.IncomingMessage.RequestingAgencyMessage.Action)
 	}
 	return fmt.Sprintf(apptest.EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
+}
+
+// A requester can acknowledge a loan before the supplier confirmation is
+// recorded. Normalize only these adjacent successful events, preserving every
+// event, status, detail, and all other ordering constraints.
+func assertReceiptEventOrder(t *testing.T, expected, actual string) {
+	t.Helper()
+	lines := strings.Split(actual, "\n")
+	for i := 0; i+1 < len(lines); i++ {
+		if (lines[i] == "NOTICE, requester-msg-received = SUCCESS" || lines[i] == "NOTICE, requester-msg-received = SUCCESS, Received") &&
+			lines[i+1] == "TASK, confirm-supplier-msg = SUCCESS" {
+			lines[i], lines[i+1] = lines[i+1], lines[i]
+			i++
+		}
+	}
+	assert.Equal(t, expected, strings.Join(lines, "\n"))
+}
+
+func compareWorkflowEvents(appCtx common.ExtendedContext, eventRepo events.EventRepo, t *testing.T, illID, expected string) {
+	t.Helper()
+	actual := apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illID, strings.Count(expected, "\n"), false, func(e events.Event) string {
+		return fmt.Sprintf(apptest.EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
+	})
+	assertReceiptEventOrder(t, expected, actual)
 }

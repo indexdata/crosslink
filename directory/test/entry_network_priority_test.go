@@ -86,7 +86,65 @@ func TestEntryNetworkPriority(t *testing.T) {
 			t.Fatalf("independent priorities missing: %s", data)
 		}
 	}
-	for _, path := range []string{"/networks", "/networks/" + network, "/entries", "/entries/by-id/00000000-0000-0000-0000-000000000001", "/entries/by-id/00000000-0000-0000-0000-000000000001/networks", "/entries/by-id/00000000-0000-0000-0000-000000000004/networks"} {
+	resetDb()
+	res, data := jsonReq(t, http.MethodPost, "/entry-networks", `{"entry":"`+entry+`","network":"`+network+`","priority":-8}`, headers)
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("create independent membership: %d %s", res.StatusCode, data)
+	}
+	for _, path := range []string{"/entries", "/entries/by-id/00000000-0000-0000-0000-000000000001", "/entries/by-id/" + entry} {
+		res, data := jsonReq(t, http.MethodGet, path, "", headers)
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("%s: %d %s", path, res.StatusCode, data)
+		}
+		type embeddedEntry struct {
+			ID       string `json:"id"`
+			Networks []struct {
+				ID       string `json:"id"`
+				Priority *int32 `json:"priority"`
+			} `json:"networks"`
+		}
+		var entries []embeddedEntry
+		if path == "/entries" {
+			var response struct {
+				Items []embeddedEntry `json:"items"`
+			}
+			if err := json.Unmarshal([]byte(data), &response); err != nil {
+				t.Fatal(err)
+			}
+			entries = response.Items
+		} else {
+			var response embeddedEntry
+			if err := json.Unmarshal([]byte(data), &response); err != nil {
+				t.Fatal(err)
+			}
+			entries = []embeddedEntry{response}
+		}
+		found := 0
+		for _, e := range entries {
+			for _, n := range e.Networks {
+				if n.ID != network {
+					continue
+				}
+				want := int32(7)
+				if e.ID == entry {
+					want = -8
+				}
+				if n.Priority == nil || *n.Priority != want {
+					t.Fatalf("%s: incorrect membership priority: %s", path, data)
+				}
+				found++
+			}
+		}
+		wantCount := 1
+		if path == "/entries" {
+			wantCount = 2
+		}
+		if found != wantCount {
+			t.Fatalf("%s: expected %d memberships, got %d", path, wantCount, found)
+		}
+	}
+
+	for _, path := range []string{"/networks", "/networks/" + network, "/entries/by-id/00000000-0000-0000-0000-000000000001/networks", "/entries/by-id/00000000-0000-0000-0000-000000000004/networks"} {
 		res, data := jsonReq(t, http.MethodGet, path, "", headers)
 		if res.StatusCode != http.StatusOK {
 			t.Fatalf("%s: %d %s", path, res.StatusCode, data)
