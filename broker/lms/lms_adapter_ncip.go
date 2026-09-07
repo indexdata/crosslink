@@ -2,6 +2,7 @@ package lms
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -281,10 +282,17 @@ func (l *LmsAdapterNcip) AcceptItem(
 }
 
 func (l *LmsAdapterNcip) DeleteItem(itemId string) error {
+	if l.config.AcceptItemEnabled != nil && !*l.config.AcceptItemEnabled {
+		return nil
+	}
 	arg := ncip.DeleteItem{
 		ItemId: ncip.ItemId{ItemIdentifierValue: itemId},
 	}
 	_, err := l.ncipClient.DeleteItem(arg)
+	var ncipErr *ncipclient.NcipError
+	if errors.As(err, &ncipErr) && ncipErr.Problem.ProblemType.Text == string(ncip.UnknownItem) {
+		return nil
+	}
 	return err
 }
 
