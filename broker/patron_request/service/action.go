@@ -990,8 +990,8 @@ func deepCopyISO18626Request(request iso18626.Request) (iso18626.Request, error)
 }
 
 func requesterLmsItemID(item pr_db.Item) string {
-	if item.ItemID.Valid && strings.TrimSpace(item.ItemID.String) != "" {
-		return item.ItemID.String
+	if item.LmsItemID.Valid && strings.TrimSpace(item.LmsItemID.String) != "" {
+		return item.LmsItemID.String
 	}
 	return item.Barcode
 }
@@ -1033,7 +1033,7 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 		err = a.prRepo.SetItemLmsRequestID(ctx, pr_db.SetItemLmsRequestIDParams{
 			ID:           item.ID,
 			LmsRequestID: getDbText(requestID),
-			ItemID:       getDbText(itemId),
+			LmsItemID:    getDbText(itemId),
 		})
 		if err != nil {
 			if deleteErr := lmsAdapter.DeleteItem(itemId); deleteErr != nil {
@@ -1615,6 +1615,7 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 				PrID:         item.PrID,
 				ItemID:       item.ItemID,
 				LmsRequestID: item.LmsRequestID,
+				LmsItemID:    item.LmsItemID,
 				Title:        item.Title,
 				CallNumber:   item.CallNumber,
 				Barcode:      item.Barcode,

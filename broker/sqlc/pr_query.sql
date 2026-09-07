@@ -96,8 +96,8 @@ LIMIT 1;
 SELECT get_next_hrid($1)::TEXT AS hrid;
 
 -- name: SaveItem :one
-INSERT INTO item (id, pr_id, barcode, call_number, title, item_id, lms_request_id, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO item (id, pr_id, barcode, call_number, title, item_id, lms_request_id, lms_item_id, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (id) DO UPDATE
     SET pr_id       = EXCLUDED.pr_id,
         barcode = EXCLUDED.barcode,
@@ -105,6 +105,7 @@ ON CONFLICT (id) DO UPDATE
         title = EXCLUDED.title,
         item_id = EXCLUDED.item_id,
         lms_request_id = EXCLUDED.lms_request_id,
+        lms_item_id = EXCLUDED.lms_item_id,
         created_at = EXCLUDED.created_at
 RETURNING sqlc.embed(item);
 
@@ -124,13 +125,13 @@ DELETE
 FROM item
 WHERE id = $1;
 
--- For requester items, record the identifiers sent to AcceptItem only after
--- success. Clear the request ID after DeleteItem succeeds; NULL/empty means no
--- item needs cleanup.
+-- For requester items, record the request ID and item ID sent to AcceptItem
+-- after success and clear both after deletion. NULL/empty request ID means no
+-- cleanup is needed.
 -- name: SetItemLmsRequestID :execrows
 UPDATE item
 SET lms_request_id = $2,
-    item_id = COALESCE($3, item_id)
+    lms_item_id = $3
 WHERE id = $1;
 
 -- name: SaveNotification :one
