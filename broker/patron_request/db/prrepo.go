@@ -31,7 +31,7 @@ type PrRepo interface {
 	SaveItem(ctx common.ExtendedContext, params SaveItemParams) (Item, error)
 	GetItemById(ctx common.ExtendedContext, id string) (Item, error)
 	GetItemsByPrId(ctx common.ExtendedContext, prId string) ([]Item, error)
-	SetRequesterLmsItemCreated(ctx common.ExtendedContext, params SetRequesterLmsItemCreatedParams) error
+	SetItemLmsRequestID(ctx common.ExtendedContext, params SetItemLmsRequestIDParams) error
 	SaveNotification(ctx common.ExtendedContext, params SaveNotificationParams) (Notification, error)
 	GetNotificationById(ctx common.ExtendedContext, id string) (Notification, error)
 	GetNotificationsByPrId(ctx common.ExtendedContext, params GetNotificationsByPrIdParams) ([]Notification, int64, error)
@@ -281,8 +281,8 @@ func (r *PgPrRepo) GetItemsByPrId(ctx common.ExtendedContext, prId string) ([]It
 	return list, err
 }
 
-func (r *PgPrRepo) SetRequesterLmsItemCreated(ctx common.ExtendedContext, params SetRequesterLmsItemCreatedParams) error {
-	rows, err := r.queries.SetRequesterLmsItemCreated(ctx, r.GetConnOrTx(), params)
+func (r *PgPrRepo) SetItemLmsRequestID(ctx common.ExtendedContext, params SetItemLmsRequestIDParams) error {
+	rows, err := r.queries.SetItemLmsRequestID(ctx, r.GetConnOrTx(), params)
 	if err != nil {
 		return err
 	}

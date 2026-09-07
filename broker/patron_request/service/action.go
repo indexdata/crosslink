@@ -384,7 +384,7 @@ func (a *PatronRequestActionService) deleteRequesterItemsOnClose(ctx common.Exte
 		return fmt.Errorf("failed to get items by PR ID: %w", err)
 	}
 	items = slices.DeleteFunc(items, func(item pr_db.Item) bool {
-		return !item.RequesterLmsItemCreated
+		return !item.LmsRequestID.Valid || strings.TrimSpace(item.LmsRequestID.String) == ""
 	})
 	if len(items) == 0 {
 		return nil
@@ -405,9 +405,9 @@ func (a *PatronRequestActionService) deleteRequesterItemsOnClose(ctx common.Exte
 			cleanupErrors = append(cleanupErrors, fmt.Errorf("LMS DeleteItem failed for item %s: %w", item.Barcode, err))
 			continue
 		}
-		if err := a.prRepo.SetRequesterLmsItemCreated(ctx, pr_db.SetRequesterLmsItemCreatedParams{
-			ID:                      item.ID,
-			RequesterLmsItemCreated: false,
+		if err := a.prRepo.SetItemLmsRequestID(ctx, pr_db.SetItemLmsRequestIDParams{
+			ID:           item.ID,
+			LmsRequestID: pgtype.Text{},
 		}); err != nil {
 			cleanupErrors = append(cleanupErrors, fmt.Errorf("failed to record requester LMS item deletion for item %s: %w", item.Barcode, err))
 		}
@@ -1000,7 +1000,7 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	for _, item := range items {
-		if item.RequesterLmsItemCreated {
+		if item.LmsRequestID.Valid && strings.TrimSpace(item.LmsRequestID.String) != "" {
 			continue
 		}
 		callNumber := ""
@@ -1016,14 +1016,16 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 		isbn := ""
 		pickupLocation := lmsAdapter.RequesterPickupLocation()
 		requestedAction := "Hold For Pickup"
-		err = lmsAdapter.AcceptItem(itemId, pr.ID, patron, author, title, isbn, callNumber, pickupLocation, requestedAction)
+		// Persist the same identifier sent to the requester LMS after acceptance.
+		requestID := pr.ID
+		err = lmsAdapter.AcceptItem(itemId, requestID, patron, author, title, isbn, callNumber, pickupLocation, requestedAction)
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "LMS AcceptItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
-		err = a.prRepo.SetRequesterLmsItemCreated(ctx, pr_db.SetRequesterLmsItemCreatedParams{
-			ID:                      item.ID,
-			RequesterLmsItemCreated: true,
+		err = a.prRepo.SetItemLmsRequestID(ctx, pr_db.SetItemLmsRequestIDParams{
+			ID:           item.ID,
+			LmsRequestID: getDbText(requestID),
 		})
 		if err != nil {
 			if deleteErr := lmsAdapter.DeleteItem(itemId); deleteErr != nil {
@@ -1083,7 +1085,7 @@ func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.Exten
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	for _, item := range items {
-		if !item.RequesterLmsItemCreated {
+		if !item.LmsRequestID.Valid || strings.TrimSpace(item.LmsRequestID.String) == "" {
 			continue
 		}
 		itemId := item.Barcode
@@ -1092,9 +1094,9 @@ func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.Exten
 			status, result := logActionErrorAndReturnResult(ctx, "LMS DeleteItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
-		err = a.prRepo.SetRequesterLmsItemCreated(ctx, pr_db.SetRequesterLmsItemCreatedParams{
-			ID:                      item.ID,
-			RequesterLmsItemCreated: false,
+		err = a.prRepo.SetItemLmsRequestID(ctx, pr_db.SetItemLmsRequestIDParams{
+			ID:           item.ID,
+			LmsRequestID: pgtype.Text{},
 		})
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "failed to record requester LMS item deletion", err)

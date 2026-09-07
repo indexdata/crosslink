@@ -414,8 +414,8 @@ func TestHandleInvokeActionTerminateDeletesRequesterItem(t *testing.T) {
 			}
 			mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil).Once()
 			mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{
-				{ID: "item-record-1", Barcode: "item-1", RequesterLmsItemCreated: true},
-				{ID: "item-record-2", Barcode: "pre-existing-item", RequesterLmsItemCreated: false},
+				{ID: "item-record-1", Barcode: "item-1", LmsRequestID: getDbText(patronRequestId)},
+				{ID: "item-record-2", Barcode: "pre-existing-item", LmsRequestID: pgtype.Text{}},
 			}, nil).Once()
 			action := TerminateAction
 
@@ -427,9 +427,9 @@ func TestHandleInvokeActionTerminateDeletesRequesterItem(t *testing.T) {
 			assert.Equal(t, BorrowerStateManuallyClosed, mockPrRepo.savedPr.State)
 			assert.True(t, mockPrRepo.savedPr.TerminalState)
 			assert.Equal(t, string(TerminateAction), mockPrRepo.savedPr.LastAction.String)
-			created, recorded := mockPrRepo.requesterLmsItemCreated["item-record-1"]
+			requestID, recorded := mockPrRepo.itemLmsRequestIDs["item-record-1"]
 			assert.True(t, recorded)
-			assert.False(t, created)
+			assert.False(t, requestID.Valid)
 			lmsAdapter.AssertNotCalled(t, "DeleteItem", "pre-existing-item")
 			lmsAdapter.AssertExpectations(t)
 		})
@@ -448,7 +448,7 @@ func TestHandleInvokeActionTerminateReportsRequesterDeleteItemFailure(t *testing
 		RequesterSymbol: getDbText("ISIL:REC1"),
 	}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil).Once()
-	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{ID: "item-record-1", Barcode: "item-1", RequesterLmsItemCreated: true}}, nil).Once()
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{ID: "item-record-1", Barcode: "item-1", LmsRequestID: getDbText(patronRequestId)}}, nil).Once()
 	action := TerminateAction
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
@@ -475,9 +475,9 @@ func TestHandleInvokeActionTerminateDoesNotDeleteUnconfirmedRequesterItem(t *tes
 	}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil).Once()
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{
-		ID:                      "item-record-1",
-		Barcode:                 "pre-existing-item",
-		RequesterLmsItemCreated: false,
+		ID:           "item-record-1",
+		Barcode:      "pre-existing-item",
+		LmsRequestID: pgtype.Text{},
 	}}, nil).Once()
 	action := TerminateAction
 
@@ -1190,8 +1190,8 @@ func TestHandleInvokeActionReceiveOK(t *testing.T) {
 		assert.Equal(t, iso18626.TypeMessageStatusOK, mockEventBus.createdNoticeData[0].IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	}
 	assert.Equal(t, BorrowerStateReceived, mockPrRepo.savedPr.State)
-	assert.True(t, mockPrRepo.requesterLmsItemCreated["item1"])
-	assert.True(t, mockPrRepo.requesterLmsItemCreated["item2"])
+	assert.Equal(t, getDbText(patronRequestId), mockPrRepo.itemLmsRequestIDs["item1"])
+	assert.Equal(t, getDbText(patronRequestId), mockPrRepo.itemLmsRequestIDs["item2"])
 	lmsAdapter.AssertNumberOfCalls(t, "AcceptItem", 2)
 	if assert.Len(t, lmsAdapter.Calls, 2) {
 		assert.Equal(t, "AcceptItem", lmsAdapter.Calls[0].Method)
@@ -1226,13 +1226,13 @@ func TestHandleInvokeActionReceivePersistsOnlyAcceptedItems(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "LMS AcceptItem failed", resultData.EventError.Message)
-	assert.True(t, mockPrRepo.requesterLmsItemCreated["item1"])
-	_, secondAccepted := mockPrRepo.requesterLmsItemCreated["item2"]
+	assert.Equal(t, getDbText(patronRequestId), mockPrRepo.itemLmsRequestIDs["item1"])
+	_, secondAccepted := mockPrRepo.itemLmsRequestIDs["item2"]
 	assert.False(t, secondAccepted)
 	items, err := mockPrRepo.GetItemsByPrId(appCtx, patronRequestId)
 	if assert.NoError(t, err) && assert.Len(t, items, 2) {
-		assert.True(t, items[0].RequesterLmsItemCreated)
-		assert.False(t, items[1].RequesterLmsItemCreated)
+		assert.Equal(t, getDbText(patronRequestId), items[0].LmsRequestID)
+		assert.False(t, items[1].LmsRequestID.Valid)
 	}
 	lmsAdapter.AssertExpectations(t)
 }
@@ -1260,7 +1260,7 @@ func TestHandleInvokeActionReceiveSkipsPreviouslyAcceptedItems(t *testing.T) {
 	receivedPr.State = BorrowerStateReceived
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(receivedPr, nil)
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{
-		{ID: "item1", PrID: patronRequestId, Barcode: "1234", RequesterLmsItemCreated: true},
+		{ID: "item1", PrID: patronRequestId, Barcode: "1234", LmsRequestID: getDbText(patronRequestId)},
 		{ID: "item2", PrID: patronRequestId, Barcode: "5678"},
 	}, nil).Once()
 	action := BorrowerActionReceive
@@ -1269,7 +1269,7 @@ func TestHandleInvokeActionReceiveSkipsPreviouslyAcceptedItems(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, string(BorrowerStateReceived), *resultData.ActionResult.ToState)
-	assert.True(t, mockPrRepo.requesterLmsItemCreated["item2"])
+	assert.Equal(t, getDbText(patronRequestId), mockPrRepo.itemLmsRequestIDs["item2"])
 	lmsAdapter.AssertNotCalled(t, "AcceptItem", "1234", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 	lmsAdapter.AssertExpectations(t)
 }
@@ -1290,9 +1290,9 @@ func TestHandleInvokeActionReceiveCompensatesWhenAcceptedItemCannotBeRecorded(t 
 	}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil)
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{ID: "item1", PrID: patronRequestId, Barcode: "1234"}}, nil).Once()
-	mockPrRepo.On("SetRequesterLmsItemCreated", pr_db.SetRequesterLmsItemCreatedParams{
-		ID:                      "item1",
-		RequesterLmsItemCreated: true,
+	mockPrRepo.On("SetItemLmsRequestID", pr_db.SetItemLmsRequestIDParams{
+		ID:           "item1",
+		LmsRequestID: getDbText(patronRequestId),
 	}).Return(errors.New("database unavailable")).Once()
 	action := BorrowerActionReceive
 
@@ -1469,8 +1469,10 @@ func TestHandleInvokeActionShipReturnOK(t *testing.T) {
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateCheckedIn, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{
-		{ID: "item-cleared", Barcode: "already-deleted", RequesterLmsItemCreated: false},
-		{ID: "item-created", Barcode: "1234", RequesterLmsItemCreated: true},
+		{ID: "item-cleared", Barcode: "already-deleted", LmsRequestID: pgtype.Text{}},
+		{ID: "item-created", Barcode: "1234", LmsRequestID: getDbText("custom-request-id")},
+		{ID: "item-empty", Barcode: "empty-id", LmsRequestID: pgtype.Text{Valid: true}},
+		{ID: "item-whitespace", Barcode: "whitespace-id", LmsRequestID: getDbText("  ")},
 	}, nil)
 
 	action := BorrowerActionShipReturn
@@ -1479,9 +1481,9 @@ func TestHandleInvokeActionShipReturnOK(t *testing.T) {
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Nil(t, resultData.IncomingMessage)
 	assert.Equal(t, BorrowerStateShippedReturned, mockPrRepo.savedPr.State)
-	created, recorded := mockPrRepo.requesterLmsItemCreated["item-created"]
+	requestID, recorded := mockPrRepo.itemLmsRequestIDs["item-created"]
 	assert.True(t, recorded)
-	assert.False(t, created)
+	assert.False(t, requestID.Valid)
 	lmsAdapter.AssertNotCalled(t, "DeleteItem", "already-deleted")
 	lmsAdapter.AssertExpectations(t)
 }
@@ -1512,7 +1514,7 @@ func TestHandleInvokeActionShipReturnFails(t *testing.T) {
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateCheckedIn, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
-	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{ID: "item-created", Barcode: "1234", RequesterLmsItemCreated: true}}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{ID: "item-created", Barcode: "1234", LmsRequestID: getDbText(patronRequestId)}}, nil)
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(pr_db.PatronRequest{RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}, IllRequest: illRequest}, nil)
 	action := BorrowerActionShipReturn
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
@@ -1784,7 +1786,7 @@ func TestShipReturnBorrowingRequestMissingSupplierSymbol(t *testing.T) {
 	lmsAdapter := lms.CreateLmsAdapterMockOK()
 	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lmsAdapter, nil)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
-	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{ID: "item-created", Barcode: "1234", RequesterLmsItemCreated: true}}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{ID: "item-created", Barcode: "1234", LmsRequestID: getDbText(patronRequestId)}}, nil)
 
 	illRequest := iso18626.Request{}
 	var request iso18626.Request
@@ -1801,7 +1803,7 @@ func TestShipReturnBorrowingRequestMissingRequesterSymbol(t *testing.T) {
 	lmsAdapter := lms.CreateLmsAdapterMockOK()
 	lmsCreator.On("GetAdapter", pgtype.Text{}).Return(lmsAdapter, nil)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
-	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{ID: "item-created", Barcode: "1234", RequesterLmsItemCreated: true}}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{ID: "item-created", Barcode: "1234", LmsRequestID: getDbText(patronRequestId)}}, nil)
 
 	var request iso18626.Request
 	result := prAction.shipReturnBorrowingRequest(appCtx, "", pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateValidated, Side: SideBorrowing, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, lmsAdapter, request)
@@ -1817,7 +1819,7 @@ func TestShipReturnBorrowingRequestInvalidSupplierSymbol(t *testing.T) {
 	lmsAdapter := lms.CreateLmsAdapterMockOK()
 	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lmsAdapter, nil)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
-	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{ID: "item-created", Barcode: "1234", RequesterLmsItemCreated: true}}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{ID: "item-created", Barcode: "1234", LmsRequestID: getDbText(patronRequestId)}}, nil)
 
 	var request iso18626.Request
 	result := prAction.shipReturnBorrowingRequest(appCtx, "", pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "x"}}, lmsAdapter, request)
@@ -1833,7 +1835,7 @@ func TestShipReturnBorrowingRequestInvalidRequesterSymbol(t *testing.T) {
 	lmsAdapter := lms.CreateLmsAdapterMockOK()
 	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "x"}).Return(lmsAdapter, nil)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
-	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{ID: "item-created", Barcode: "1234", RequesterLmsItemCreated: true}}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{ID: "item-created", Barcode: "1234", LmsRequestID: getDbText(patronRequestId)}}, nil)
 
 	var request iso18626.Request
 	result := prAction.shipReturnBorrowingRequest(appCtx, "", pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "x"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, lmsAdapter, request)
@@ -5047,7 +5049,7 @@ type MockPrRepo struct {
 	deleteItemFail                       bool
 	saveNotificationFail                 bool
 	lastListQuery                        pgcql.Query
-	requesterLmsItemCreated              map[string]bool
+	itemLmsRequestIDs                    map[string]pgtype.Text
 }
 
 func (r *MockPrRepo) WithTxFunc(ctx common.ExtendedContext, fn func(repo pr_db.PrRepo) error) error {
@@ -5159,22 +5161,22 @@ func (r *MockPrRepo) GetItemsByPrId(ctx common.ExtendedContext, id string) ([]pr
 	return items, nil
 }
 
-func (r *MockPrRepo) SetRequesterLmsItemCreated(ctx common.ExtendedContext, params pr_db.SetRequesterLmsItemCreatedParams) error {
+func (r *MockPrRepo) SetItemLmsRequestID(ctx common.ExtendedContext, params pr_db.SetItemLmsRequestIDParams) error {
 	for _, call := range r.ExpectedCalls {
-		if call.Method == "SetRequesterLmsItemCreated" {
+		if call.Method == "SetItemLmsRequestID" {
 			if err := r.Called(params).Error(0); err != nil {
 				return err
 			}
 			break
 		}
 	}
-	if r.requesterLmsItemCreated == nil {
-		r.requesterLmsItemCreated = make(map[string]bool)
+	if r.itemLmsRequestIDs == nil {
+		r.itemLmsRequestIDs = make(map[string]pgtype.Text)
 	}
-	r.requesterLmsItemCreated[params.ID] = params.RequesterLmsItemCreated
+	r.itemLmsRequestIDs[params.ID] = params.LmsRequestID
 	for i := range r.savedItems {
 		if r.savedItems[i].ID == params.ID {
-			r.savedItems[i].RequesterLmsItemCreated = params.RequesterLmsItemCreated
+			r.savedItems[i].LmsRequestID = params.LmsRequestID
 			break
 		}
 	}

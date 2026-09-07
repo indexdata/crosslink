@@ -124,9 +124,11 @@ DELETE
 FROM item
 WHERE id = $1;
 
--- name: SetRequesterLmsItemCreated :execrows
+-- For requester items, record the AcceptItem request ID only after success and
+-- clear it after DeleteItem succeeds. NULL/empty means no item needs cleanup.
+-- name: SetItemLmsRequestID :execrows
 UPDATE item
-SET requester_lms_item_created = $2
+SET lms_request_id = $2
 WHERE id = $1;
 
 -- name: SaveNotification :one
