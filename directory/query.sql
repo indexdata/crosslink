@@ -475,3 +475,40 @@ WHERE entry = @entry;
 
 -- name: DeleteHoldingsPolicyByEntry :exec
 DELETE FROM holdings_policies WHERE entry = @entry;
+
+-- name: LockTierByBusinessKey :one
+SELECT * FROM tiers
+WHERE consortium = @consortium AND name = @name
+FOR UPDATE;
+
+-- name: UpdateImportedTier :exec
+UPDATE tiers
+SET level = @level, type = @type, cost = @cost
+WHERE id = @id;
+
+-- name: DeleteEntryTiersByTier :exec
+DELETE FROM entry_tiers WHERE tier = @tier;
+
+-- name: LockNetworkByBusinessKey :one
+SELECT * FROM networks
+WHERE consortium = @consortium AND name = @name
+FOR UPDATE;
+
+-- name: UpdateImportedNetwork :exec
+UPDATE networks
+SET priority = @priority, reciprocal = @reciprocal
+WHERE id = @id;
+
+-- name: DeleteEntryNetworksByNetwork :exec
+DELETE FROM entry_networks WHERE network = @network;
+
+-- name: DeleteClosuresByEntry :exec
+DELETE FROM closures WHERE entry = @entry;
+
+-- name: WouldCreateEntryCycle :one
+WITH RECURSIVE descendants AS (
+  SELECT id FROM entries WHERE parent = @child
+  UNION ALL
+  SELECT e.id FROM entries e JOIN descendants d ON e.parent = d.id
+)
+SELECT @parent::uuid = @child::uuid OR EXISTS (SELECT 1 FROM descendants WHERE id = @parent);

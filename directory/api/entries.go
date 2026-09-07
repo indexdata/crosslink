@@ -17,6 +17,7 @@ import (
 
 	"github.com/indexdata/crosslink/directory/auth"
 	"github.com/indexdata/crosslink/directory/db"
+	"github.com/indexdata/crosslink/directory/domain"
 )
 
 const defaultSymbolAuthority string = "TEST"
@@ -39,23 +40,6 @@ func maybeUpdateEntryVendor(cur *string, patch nullable.Nullable[EntryVendor]) *
 	}
 	value := string(patch.MustGet())
 	return &value
-}
-
-func isValidParentForType(entryType EntryType, parentEntry *db.Entry) (bool, string) {
-	switch entryType {
-	case "Institution":
-		if parentEntry.Type == "Consortium" {
-			return true, ""
-		}
-		return false, "Institution parent must be of type Consortium"
-	case "Branch":
-		if parentEntry.Type == "Institution" {
-			return true, ""
-		}
-		return false, "Branch parent must be of type Institution"
-	default:
-		return false, "Invalid type to have parent"
-	}
 }
 
 func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
@@ -677,7 +661,7 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 			slog.ErrorContext(ctx, "failed to fetch parent entry", "error", err)
 			return AddEntry500TextResponse("Internal server error"), nil
 		}
-		validParent, reason := isValidParentForType(entryType, &parentEntry)
+		validParent, reason := domain.ValidParentForType(string(entryType), parentEntry.Type)
 		if !validParent {
 			return AddEntry400TextResponse("Invalid entry for parent: " + reason), nil
 		}
@@ -911,7 +895,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 	}
 
 	if parent != nil {
-		validParent, reason := isValidParentForType(EntryType(resultingType), &parentEntry)
+		validParent, reason := domain.ValidParentForType(resultingType, parentEntry.Type)
 		if !validParent {
 			return UpdateEntry400TextResponse("Invalid entry for parent: " + reason), nil
 		}
@@ -926,7 +910,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		resultingParent := orig
 		resultingParent.Type = resultingType
 		for _, child := range children {
-			valid, reason := isValidParentForType(EntryType(child.Type), &resultingParent)
+			valid, reason := domain.ValidParentForType(child.Type, resultingParent.Type)
 			if !valid {
 				return UpdateEntry400TextResponse("Entry type is invalid for existing child: " + reason), nil
 			}
