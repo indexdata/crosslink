@@ -5131,16 +5131,7 @@ func (r *MockPrRepo) SaveItem(ctx common.ExtendedContext, params pr_db.SaveItemP
 	if r.savedItems == nil {
 		r.savedItems = []pr_db.Item{}
 	}
-	item := pr_db.Item{
-		ID:           params.ID,
-		PrID:         params.PrID,
-		Barcode:      params.Barcode,
-		CallNumber:   params.CallNumber,
-		Title:        params.Title,
-		ItemID:       params.ItemID,
-		LmsRequestID: params.LmsRequestID,
-		CreatedAt:    params.CreatedAt,
-	}
+	item := pr_db.Item(params)
 	r.savedItems = append(r.savedItems, item)
 	return item, nil
 }
