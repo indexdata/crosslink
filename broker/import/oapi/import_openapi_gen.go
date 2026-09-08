@@ -918,6 +918,7 @@ type ImportPatronRequestItem struct {
 	CreatedAt    time.Time `json:"createdAt"`
 	Id           string    `json:"id"`
 	ItemId       *string   `json:"itemId,omitempty"`
+	LmsItemId    *string   `json:"lmsItemId,omitempty"`
 	LmsRequestId *string   `json:"lmsRequestId,omitempty"`
 	Title        *string   `json:"title,omitempty"`
 }

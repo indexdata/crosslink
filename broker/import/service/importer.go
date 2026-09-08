@@ -124,7 +124,16 @@ func loadImportSchemas() (importSchemas, error) {
 
 func decodeImportItem(raw json.RawMessage) (importItem, error) {
 	var envelope importItem
-	if err := json.Unmarshal(raw, &envelope); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&envelope); err != nil {
+		return importItem{}, err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return importItem{}, errors.New("multiple JSON values")
+		}
 		return importItem{}, err
 	}
 	if envelope.Type == "" {
@@ -170,7 +179,8 @@ func (i Importer) Import(ctx common.ExtendedContext, policy importdb.ConflictPol
 			var syntaxError *json.SyntaxError
 			if errors.As(err, &syntaxError) || errors.Is(err, io.ErrUnexpectedEOF) {
 				result.Errors = append(result.Errors, importoapi.ImportItemError{Line: line, Error: err.Error()})
-				break
+				line++
+				continue
 			}
 			addImportFailure(&result, line, item.Type, err, &item.Owner, nil)
 			line++
@@ -354,7 +364,7 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 			return importdb.PatronRequestBundle{}, nil, fmt.Errorf("duplicate item id %q", item.Id)
 		}
 		seenItems[item.Id] = struct{}{}
-		bundle.Items = append(bundle.Items, pr_db.SaveItemParams{ID: item.Id, Barcode: item.Barcode, CallNumber: pgTextFromPtr(item.CallNumber), Title: pgTextFromPtr(item.Title), ItemID: pgTextFromPtr(item.ItemId), LmsRequestID: pgTextFromPtr(item.LmsRequestId), CreatedAt: pgTimestamp(item.CreatedAt)})
+		bundle.Items = append(bundle.Items, pr_db.SaveItemParams{ID: item.Id, Barcode: item.Barcode, CallNumber: pgTextFromPtr(item.CallNumber), Title: pgTextFromPtr(item.Title), ItemID: pgTextFromPtr(item.ItemId), LmsRequestID: pgTextFromPtr(item.LmsRequestId), LmsItemID: pgTextFromPtr(item.LmsItemId), CreatedAt: pgTimestamp(item.CreatedAt)})
 	}
 
 	seenNotifications := make(map[string]struct{}, len(apiBundle.Notifications))
