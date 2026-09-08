@@ -39,6 +39,7 @@ type Item struct {
 	Title        pgtype.Text
 	ItemID       pgtype.Text
 	LmsRequestID pgtype.Text
+	LmsItemID    pgtype.Text
 	CreatedAt    pgtype.Timestamp
 }
 
