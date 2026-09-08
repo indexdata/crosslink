@@ -329,6 +329,9 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 	default:
 		return importdb.PatronRequestBundle{}, nil, fmt.Errorf("unsupported patron request side %q", request.Side)
 	}
+	if side != prservice.SideBorrowing && apiBundle.IllTransaction != nil {
+		return importdb.PatronRequestBundle{}, nil, errors.New("illTransaction is only allowed for borrowing patron requests")
+	}
 	if i.stateValidator == nil {
 		return importdb.PatronRequestBundle{}, nil, errors.New("state validator is required")
 	}

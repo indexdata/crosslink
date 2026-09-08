@@ -154,6 +154,20 @@ func TestImportPatronRequestAllowsEmptyCollections(t *testing.T) {
 	assert.Equal(t, 1, cache.calls)
 }
 
+func TestImportPatronRequestRejectsIllTransactionForLendingRequest(t *testing.T) {
+	repo := &recordingImportRepo{}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		bundle["patronRequest"].(map[string]any)["side"] = "lending"
+	})
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+
+	require.ErrorContains(t, err, "illTransaction is only allowed for borrowing patron requests")
+	assert.Zero(t, repo.patronCalls)
+}
+
 func TestImportPatronRequestRejectsSchemaInvalidFields(t *testing.T) {
 	tests := []struct {
 		name   string
