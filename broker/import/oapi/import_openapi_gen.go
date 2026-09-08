@@ -118,6 +118,24 @@ func (e ImportLocatedSupplierSupplierStatus) Valid() bool {
 	}
 }
 
+// Defines values for ImportPatronRequestSide.
+const (
+	Borrowing ImportPatronRequestSide = "borrowing"
+	Lending   ImportPatronRequestSide = "lending"
+)
+
+// Valid indicates whether the value is a known member of the ImportPatronRequestSide enum.
+func (e ImportPatronRequestSide) Valid() bool {
+	switch e {
+	case Borrowing:
+		return true
+	case Lending:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ImportPatronRequestNotificationDirection.
 const (
 	Received ImportPatronRequestNotificationDirection = "received"
@@ -570,7 +588,7 @@ type BatchActionDefault struct {
 	Schedule string `json:"schedule"`
 
 	// Title Title of the batch action, for display purposes
-	Title *string `json:"title,omitempty"`
+	Title string `json:"title"`
 
 	// TitleKey Stable identifier for this default, for clients to look up a localized title
 	TitleKey string `json:"titleKey"`
@@ -608,7 +626,7 @@ type CreateBatchAction struct {
 	Schedule string `json:"schedule"`
 
 	// Title Title of the batch action, for display purposes
-	Title *string `json:"title,omitempty"`
+	Title string `json:"title"`
 }
 
 // CreatePatronRequest defines model for CreatePatronRequest.
@@ -874,12 +892,15 @@ type ImportPatronRequest struct {
 
 	// RetryBibInfo Bibliographic retry information as defined in ISO18626
 	RetryBibInfo   *iso18626.BibliographicInfo `json:"retryBibInfo,omitempty"`
-	Side           string                      `json:"side"`
+	Side           ImportPatronRequestSide     `json:"side"`
 	State          string                      `json:"state"`
 	StateModel     string                      `json:"stateModel"`
 	SupplierSymbol *string                     `json:"supplierSymbol,omitempty"`
 	UpdatedAt      time.Time                   `json:"updatedAt"`
 }
+
+// ImportPatronRequestSide defines model for ImportPatronRequest.Side.
+type ImportPatronRequestSide string
 
 // ImportPatronRequestBundle defines model for ImportPatronRequestBundle.
 type ImportPatronRequestBundle struct {

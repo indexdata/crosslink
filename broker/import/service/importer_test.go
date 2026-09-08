@@ -83,6 +83,147 @@ func TestImportPatronRequestRejectsIncompletePeerResolution(t *testing.T) {
 	assert.Zero(t, repo.patronCalls)
 }
 
+func TestImportPatronRequestRejectsMissingNeedsAttention(t *testing.T) {
+	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	validator := &recordingStateValidator{}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "peer-requester"}, {ID: "peer-supplier"}}}
+	importer := newImporter(repo, cache, nil, validator, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		delete(bundle["patronRequest"].(map[string]any), "needsAttention")
+	})
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+
+	require.ErrorContains(t, err, "needsAttention")
+	assert.Zero(t, repo.patronCalls)
+}
+
+func TestImportPatronRequestRejectsUnknownProperty(t *testing.T) {
+	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	validator := &recordingStateValidator{}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "peer-requester"}, {ID: "peer-supplier"}}}
+	importer := newImporter(repo, cache, nil, validator, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		bundle["unexpected"] = true
+	})
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+
+	require.ErrorContains(t, err, "unexpected")
+	assert.Zero(t, repo.patronCalls)
+}
+
+func TestImporterPreservesPatronRequestIdentifierOnSchemaError(t *testing.T) {
+	repo := &recordingImportRepo{}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		bundle["patronRequest"].(map[string]any)["side"] = "other"
+	})
+	record := `{"type":"patronRequest","owner":"ISIL:OWNER","data":` + string(data) + `}`
+
+	result, err := importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader(record))
+
+	require.NoError(t, err)
+	require.Len(t, result.Errors, 1)
+	require.NotNil(t, result.Errors[0].Identifier)
+	assert.Equal(t, "pr-1", *result.Errors[0].Identifier)
+}
+
+func TestImportPatronRequestAllowsEmptyCollections(t *testing.T) {
+	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	validator := &recordingStateValidator{}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+	importer := newImporter(repo, cache, nil, validator, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		bundle["items"] = []any{}
+		bundle["notifications"] = []any{}
+		bundle["locatedSuppliers"] = []any{}
+		delete(bundle, "illTransaction")
+	})
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+
+	require.NoError(t, err)
+	assert.Empty(t, repo.patron.Items)
+	assert.Empty(t, repo.patron.Notifications)
+	assert.Empty(t, repo.patron.LocatedSuppliers)
+	assert.Equal(t, 1, cache.calls)
+}
+
+func TestImportPatronRequestRejectsSchemaInvalidFields(t *testing.T) {
+	tests := []struct {
+		name   string
+		path   string
+		mutate func(map[string]any)
+	}{
+		{
+			name: "empty patron request id",
+			path: "/patronRequest/id",
+			mutate: func(bundle map[string]any) {
+				bundle["patronRequest"].(map[string]any)["id"] = ""
+			},
+		},
+		{
+			name: "invalid side",
+			path: "/patronRequest/side",
+			mutate: func(bundle map[string]any) {
+				bundle["patronRequest"].(map[string]any)["side"] = "other"
+			},
+		},
+		{
+			name: "empty item barcode",
+			path: "/items/0/barcode",
+			mutate: func(bundle map[string]any) {
+				bundle["items"].([]any)[0].(map[string]any)["barcode"] = ""
+			},
+		},
+		{
+			name: "invalid notification direction",
+			path: "/notifications/0/direction",
+			mutate: func(bundle map[string]any) {
+				bundle["notifications"].([]any)[0].(map[string]any)["direction"] = "other"
+			},
+		},
+		{
+			name: "null ILL transaction data",
+			path: "/illTransaction/illTransactionData",
+			mutate: func(bundle map[string]any) {
+				bundle["illTransaction"].(map[string]any)["illTransactionData"] = nil
+			},
+		},
+		{
+			name: "empty located supplier id",
+			path: "/locatedSuppliers/0/id",
+			mutate: func(bundle map[string]any) {
+				bundle["locatedSuppliers"].([]any)[0].(map[string]any)["id"] = ""
+			},
+		},
+		{
+			name: "missing items",
+			path: "items",
+			mutate: func(bundle map[string]any) {
+				delete(bundle, "items")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &recordingImportRepo{}
+			cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+			importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
+			data := mutatePatronBundleData(t, tt.mutate)
+
+			_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+
+			require.ErrorContains(t, err, "validate patron request")
+			require.ErrorContains(t, err, tt.path)
+			assert.Zero(t, repo.patronCalls)
+		})
+	}
+}
+
 func TestImporterAccountsForImportedSkippedAndFailed(t *testing.T) {
 	repo := &recordingImportRepo{templateResults: []importdb.Result{{Outcome: importdb.OutcomeImported}, {Outcome: importdb.OutcomeSkipped, Diagnostic: "labels already exist"}}, templateErrors: []error{nil, nil, errors.New("write failed")}}
 	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "only-one"}}}
@@ -112,17 +253,17 @@ func TestImportTemplateRejectsInvalidEnums(t *testing.T) {
 		{
 			name:    "purpose",
 			data:    `{"title":"Title","purpose":"sms","body":"Body","contentType":"text","labels":["first"],"audience":"patron"}`,
-			wantErr: "invalid purpose",
+			wantErr: `"/purpose"`,
 		},
 		{
 			name:    "content type",
 			data:    `{"title":"Title","purpose":"email","body":"Body","contentType":"text/plain","labels":["first"],"audience":"patron"}`,
-			wantErr: "invalid contentType",
+			wantErr: `"/contentType"`,
 		},
 		{
 			name:    "audience",
 			data:    `{"title":"Title","purpose":"email","body":"Body","contentType":"text","labels":["first"],"audience":"external"}`,
-			wantErr: "invalid audience",
+			wantErr: `"/audience"`,
 		},
 	}
 
@@ -138,6 +279,68 @@ func TestImportTemplateRejectsInvalidEnums(t *testing.T) {
 			assert.Zero(t, repo.templateCalls)
 		})
 	}
+}
+
+func TestImportTemplateRejectsMissingOrEmptyRequiredValues(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+	}{
+		{name: "missing title", data: `{"purpose":"email","body":"Body","contentType":"text","labels":["first"]}`},
+		{name: "empty title", data: `{"title":"","purpose":"email","body":"Body","contentType":"text","labels":["first"]}`},
+		{name: "missing purpose", data: `{"title":"Title","body":"Body","contentType":"text","labels":["first"]}`},
+		{name: "missing body", data: `{"title":"Title","purpose":"email","contentType":"text","labels":["first"]}`},
+		{name: "empty body", data: `{"title":"Title","purpose":"email","body":"","contentType":"text","labels":["first"]}`},
+		{name: "missing content type", data: `{"title":"Title","purpose":"email","body":"Body","labels":["first"]}`},
+		{name: "missing labels", data: `{"title":"Title","purpose":"email","body":"Body","contentType":"text"}`},
+		{name: "empty labels", data: `{"title":"Title","purpose":"email","body":"Body","contentType":"text","labels":[]}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &recordingImportRepo{}
+			cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+			importer := newImporter(repo, cache, nil, nil, fixedClock)
+
+			_, _, err := importer.importTemplate(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", json.RawMessage(tt.data))
+
+			require.Error(t, err)
+			assert.Zero(t, repo.templateCalls)
+		})
+	}
+}
+
+func TestImportTemplateAllowsMissingAudience(t *testing.T) {
+	repo := &recordingImportRepo{templateResults: []importdb.Result{{Outcome: importdb.OutcomeImported}}}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+	importer := newImporter(repo, cache, nil, nil, fixedClock)
+
+	_, _, err := importer.importTemplate(
+		testCtx(),
+		importdb.ConflictPolicyFail,
+		"ISIL:OWNER",
+		json.RawMessage(`{"title":"Title","purpose":"email","body":"Body","contentType":"text","labels":["first"]}`),
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, repo.templateCalls)
+	assert.False(t, repo.template.Audience.Valid)
+}
+
+func TestImportTemplateRejectsEmptyLabel(t *testing.T) {
+	repo := &recordingImportRepo{}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+	importer := newImporter(repo, cache, nil, nil, fixedClock)
+
+	_, _, err := importer.importTemplate(
+		testCtx(),
+		importdb.ConflictPolicyFail,
+		"ISIL:OWNER",
+		json.RawMessage(`{"title":"Title","purpose":"email","body":"Body","contentType":"text","labels":[""],"audience":"patron"}`),
+	)
+
+	require.ErrorContains(t, err, "labels")
+	assert.Zero(t, repo.templateCalls)
 }
 
 func TestImporterAcceptsRecordAtSizeLimit(t *testing.T) {
@@ -174,6 +377,67 @@ func TestImporterForwardsPolicyToBatchAction(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, importdb.ConflictPolicyUpdate, repo.batchPolicy)
 	assert.Equal(t, "ISIL:OWNER", repo.batch.Owner)
+	assert.Equal(t, pgText("Daily aging"), repo.batch.Title)
+}
+
+func TestImportBatchActionRejectsMissingOrEmptyRequiredValues(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+	}{
+		{name: "missing title", data: `{"actionName":"request-aging","batchQuery":"state==NEW","schedule":"FREQ=DAILY"}`},
+		{name: "empty title", data: `{"actionName":"request-aging","batchQuery":"state==NEW","schedule":"FREQ=DAILY","title":""}`},
+		{name: "missing action name", data: `{"batchQuery":"state==NEW","schedule":"FREQ=DAILY","title":"Daily aging"}`},
+		{name: "missing batch query", data: `{"actionName":"request-aging","schedule":"FREQ=DAILY","title":"Daily aging"}`},
+		{name: "empty batch query", data: `{"actionName":"request-aging","batchQuery":"","schedule":"FREQ=DAILY","title":"Daily aging"}`},
+		{name: "missing schedule", data: `{"actionName":"request-aging","batchQuery":"state==NEW","title":"Daily aging"}`},
+		{name: "empty schedule", data: `{"actionName":"request-aging","batchQuery":"state==NEW","schedule":"","title":"Daily aging"}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &recordingImportRepo{}
+			cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+			importer := newImporter(repo, cache, nil, nil, fixedClock)
+
+			_, _, err := importer.importBatchAction(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", json.RawMessage(tt.data))
+
+			require.Error(t, err)
+			assert.Zero(t, repo.batchCalls)
+		})
+	}
+}
+
+func TestImportBatchActionRejectsInvalidActionName(t *testing.T) {
+	repo := &recordingImportRepo{}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+	importer := newImporter(repo, cache, nil, nil, fixedClock)
+
+	_, _, err := importer.importBatchAction(
+		testCtx(),
+		importdb.ConflictPolicyFail,
+		"ISIL:OWNER",
+		json.RawMessage(`{"actionName":"unknown","batchQuery":"state==NEW","schedule":"FREQ=DAILY","title":"Daily aging"}`),
+	)
+
+	require.Error(t, err)
+	assert.Zero(t, repo.batchCalls)
+}
+
+func TestImportBatchActionRejectsInvalidSchedule(t *testing.T) {
+	repo := &recordingImportRepo{}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+	importer := newImporter(repo, cache, nil, nil, fixedClock)
+
+	_, _, err := importer.importBatchAction(
+		testCtx(),
+		importdb.ConflictPolicyFail,
+		"ISIL:OWNER",
+		json.RawMessage(`{"actionName":"request-aging","batchQuery":"state==NEW","schedule":"not-a-rule","title":"Daily aging"}`),
+	)
+
+	require.Error(t, err)
+	assert.Zero(t, repo.batchCalls)
 }
 
 type recordingImportRepo struct {
@@ -191,6 +455,7 @@ type recordingImportRepo struct {
 	batchPolicy     importdb.ConflictPolicy
 	batchResult     importdb.Result
 	batchErr        error
+	batchCalls      int
 }
 
 func (r *recordingImportRepo) WithTxFunc(_ common.ExtendedContext, fn func(importdb.ImportRepo) error) error {
@@ -216,7 +481,7 @@ func (r *recordingImportRepo) ImportTemplate(_ common.ExtendedContext, params pr
 	return result, nil
 }
 func (r *recordingImportRepo) ImportBatchAction(_ common.ExtendedContext, params sched_db.SaveScheduledTaskParams, policy importdb.ConflictPolicy) (importdb.Result, error) {
-	r.batch, r.batchPolicy = params, policy
+	r.batch, r.batchPolicy, r.batchCalls = params, policy, r.batchCalls+1
 	return r.batchResult, r.batchErr
 }
 
@@ -263,6 +528,17 @@ func validPatronBundleData() json.RawMessage {
       "locatedSuppliers":[{"id":"located-1","supplierSymbol":"ISIL:SUP","ordinal":1,"supplierStatus":"selected","localSupplier":false}]
     }`)
 }
+
+func mutatePatronBundleData(t *testing.T, mutate func(map[string]any)) json.RawMessage {
+	t.Helper()
+	var bundle map[string]any
+	require.NoError(t, json.Unmarshal(validPatronBundleData(), &bundle))
+	mutate(bundle)
+	data, err := json.Marshal(bundle)
+	require.NoError(t, err)
+	return data
+}
+
 func validTemplateData() json.RawMessage {
 	return json.RawMessage(`{"title":"Title","purpose":"email","body":"Body","contentType":"text","labels":["first"],"audience":"patron"}`)
 }

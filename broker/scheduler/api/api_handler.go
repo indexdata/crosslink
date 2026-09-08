@@ -110,6 +110,10 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 		brokerapi.AddBadRequestError(ctx, w, err)
 		return
 	}
+	if create.Title == "" {
+		brokerapi.AddBadRequestError(ctx, w, errors.New("title must not be empty"))
+		return
+	}
 	if !create.ActionName.Valid() {
 		brokerapi.AddBadRequestError(ctx, w, errors.New("unknown actionName: "+string(create.ActionName)))
 		return
@@ -156,7 +160,7 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 			},
 			CustomData: paramsMap,
 		},
-		Title:     toPgText(create.Title),
+		Title:     pgtype.Text{String: create.Title, Valid: true},
 		RunAt:     next,
 		CreatedAt: now,
 	})

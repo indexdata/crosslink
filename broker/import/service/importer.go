@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
@@ -18,6 +19,7 @@ import (
 	ill_db "github.com/indexdata/crosslink/broker/ill_db"
 	importdb "github.com/indexdata/crosslink/broker/import/db"
 	importoapi "github.com/indexdata/crosslink/broker/import/oapi"
+	brokeroapi "github.com/indexdata/crosslink/broker/oapi"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
@@ -52,6 +54,13 @@ type Importer struct {
 	stateValidator   importStateValidator
 	clock            func() time.Time
 	maxRecordBytes   int
+	schemas          importSchemas
+}
+
+type importSchemas struct {
+	batchAction   *openapi3.Schema
+	patronRequest *openapi3.Schema
+	template      *openapi3.Schema
 }
 
 type importItem struct {
@@ -68,6 +77,10 @@ func newImporter(repo importdb.ImportRepo, peerCache importPeerCache, directoryA
 	if clock == nil {
 		clock = time.Now
 	}
+	schemas, err := loadImportSchemas()
+	if err != nil {
+		panic(fmt.Errorf("load import schemas: %w", err))
+	}
 	return Importer{
 		repo:             repo,
 		peerCache:        peerCache,
@@ -75,7 +88,38 @@ func newImporter(repo importdb.ImportRepo, peerCache importPeerCache, directoryA
 		stateValidator:   stateValidator,
 		clock:            clock,
 		maxRecordBytes:   maxImportRecordBytes,
+		schemas:          schemas,
 	}
+}
+
+func loadImportSchemas() (importSchemas, error) {
+	spec, err := openapi3.NewLoader().LoadFromData(brokeroapi.OpenAPISpecYAML)
+	if err != nil {
+		return importSchemas{}, err
+	}
+	if spec.Components == nil {
+		return importSchemas{}, errors.New("OpenAPI components are missing")
+	}
+	getSchema := func(name string) (*openapi3.Schema, error) {
+		schemaRef, ok := spec.Components.Schemas[name]
+		if !ok || schemaRef.Value == nil {
+			return nil, fmt.Errorf("%s schema is missing", name)
+		}
+		return schemaRef.Value, nil
+	}
+	batchAction, err := getSchema("CreateBatchAction")
+	if err != nil {
+		return importSchemas{}, err
+	}
+	patronRequest, err := getSchema("ImportPatronRequestBundle")
+	if err != nil {
+		return importSchemas{}, err
+	}
+	template, err := getSchema("CreateTemplate")
+	if err != nil {
+		return importSchemas{}, err
+	}
+	return importSchemas{batchAction: batchAction, patronRequest: patronRequest, template: template}, nil
 }
 
 func decodeImportItem(raw json.RawMessage) (importItem, error) {
@@ -195,25 +239,18 @@ func (i Importer) importPatronRequest(ctx common.ExtendedContext, policy importd
 	if err != nil {
 		return nil, importdb.Result{}, fmt.Errorf("validate owner: %w", err)
 	}
+	var value any
+	if err = json.Unmarshal(data, &value); err != nil {
+		return nil, importdb.Result{}, err
+	}
+	identifier := patronRequestIdentifier(value)
+	if err = i.schemas.patronRequest.VisitJSON(value, openapi3.VisitAsRequest(), openapi3.MultiErrors()); err != nil {
+		return identifier, importdb.Result{}, fmt.Errorf("validate patron request: %w", err)
+	}
 	var apiBundle importoapi.ImportPatronRequestBundle
 	if err = json.Unmarshal(data, &apiBundle); err != nil {
 		return nil, importdb.Result{}, err
 	}
-	var requiredFields struct {
-		IllTransaction *struct {
-			IllTransactionData json.RawMessage `json:"illTransactionData"`
-		} `json:"illTransaction"`
-	}
-	if err := json.Unmarshal(data, &requiredFields); err != nil {
-		return nil, importdb.Result{}, err
-	}
-	if requiredFields.IllTransaction != nil {
-		transactionData := bytes.TrimSpace(requiredFields.IllTransaction.IllTransactionData)
-		if len(transactionData) == 0 || bytes.Equal(transactionData, []byte("null")) {
-			return nil, importdb.Result{}, errors.New("illTransaction.illTransactionData is required")
-		}
-	}
-	identifier := stringPtr(apiBundle.PatronRequest.Id)
 	bundle, symbols, err := i.normalizePatronRequest(owner, apiBundle)
 	if err != nil {
 		return identifier, importdb.Result{}, err
@@ -245,19 +282,26 @@ func (i Importer) importPatronRequest(ctx common.ExtendedContext, policy importd
 	return identifier, result, err
 }
 
+func patronRequestIdentifier(value any) *string {
+	bundle, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	request, ok := bundle["patronRequest"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	id, ok := request["id"].(string)
+	if !ok || id == "" {
+		return nil
+	}
+	return &id
+}
+
 func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.ImportPatronRequestBundle) (importdb.PatronRequestBundle, []string, error) {
 	request := apiBundle.PatronRequest
-	if request.Id == "" {
-		return importdb.PatronRequestBundle{}, nil, errors.New("a required full migration bundle is required: patronRequest.id is required")
-	}
 	if request.CreatedAt.IsZero() || request.UpdatedAt.IsZero() {
 		return importdb.PatronRequestBundle{}, nil, errors.New("patronRequest.createdAt and updatedAt are required")
-	}
-	if request.RequesterRequestId == "" || request.RequesterSymbol == "" || request.StateModel == "" || request.State == "" {
-		return importdb.PatronRequestBundle{}, nil, errors.New("patronRequest requesterRequestId, requesterSymbol, stateModel, and state are required")
-	}
-	if apiBundle.Items == nil || apiBundle.Notifications == nil || apiBundle.LocatedSuppliers == nil {
-		return importdb.PatronRequestBundle{}, nil, errors.New("items, notifications, and locatedSuppliers arrays are required")
 	}
 	if request.IllRequest.ServiceInfo == nil || request.IllRequest.ServiceInfo.ServiceType == "" {
 		return importdb.PatronRequestBundle{}, nil, errors.New("patronRequest.illRequest.serviceInfo.serviceType is required")
@@ -303,8 +347,8 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 
 	seenItems := make(map[string]struct{}, len(apiBundle.Items))
 	for _, item := range apiBundle.Items {
-		if item.Id == "" || item.Barcode == "" || item.CreatedAt.IsZero() {
-			return importdb.PatronRequestBundle{}, nil, errors.New("every item requires id, barcode, and createdAt")
+		if item.CreatedAt.IsZero() {
+			return importdb.PatronRequestBundle{}, nil, errors.New("every item requires createdAt")
 		}
 		if _, duplicate := seenItems[item.Id]; duplicate {
 			return importdb.PatronRequestBundle{}, nil, fmt.Errorf("duplicate item id %q", item.Id)
@@ -315,11 +359,8 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 
 	seenNotifications := make(map[string]struct{}, len(apiBundle.Notifications))
 	for _, notification := range apiBundle.Notifications {
-		if notification.Id == "" || notification.FromSymbol == "" || notification.ToSymbol == "" || notification.CreatedAt.IsZero() {
-			return importdb.PatronRequestBundle{}, nil, errors.New("every notification requires id, fromSymbol, toSymbol, and createdAt")
-		}
-		if !notification.Direction.Valid() || !notification.Kind.Valid() {
-			return importdb.PatronRequestBundle{}, nil, fmt.Errorf("notification %q has invalid direction or kind", notification.Id)
+		if notification.CreatedAt.IsZero() {
+			return importdb.PatronRequestBundle{}, nil, errors.New("every notification requires createdAt")
 		}
 		if _, duplicate := seenNotifications[notification.Id]; duplicate {
 			return importdb.PatronRequestBundle{}, nil, fmt.Errorf("duplicate notification id %q", notification.Id)
@@ -339,8 +380,8 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 		return bundle, nil, nil
 	}
 	ill := apiBundle.IllTransaction
-	if ill.Id == "" || ill.RequesterRequestID == "" || ill.RequesterSymbol == "" || ill.Timestamp.IsZero() {
-		return importdb.PatronRequestBundle{}, nil, errors.New("illTransaction id, requesterRequestID, requesterSymbol, and timestamp are required")
+	if ill.Timestamp.IsZero() {
+		return importdb.PatronRequestBundle{}, nil, errors.New("illTransaction timestamp is required")
 	}
 	if ill.RequesterRequestID != request.RequesterRequestId {
 		return importdb.PatronRequestBundle{}, nil, errors.New("patronRequest and illTransaction requester request IDs must match")
@@ -349,12 +390,6 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 	symbols := []string{ill.RequesterSymbol}
 	seenSuppliers := make(map[string]struct{}, len(apiBundle.LocatedSuppliers))
 	for _, supplier := range apiBundle.LocatedSuppliers {
-		if supplier.Id == "" || supplier.SupplierSymbol == "" {
-			return importdb.PatronRequestBundle{}, nil, errors.New("every located supplier requires id and supplierSymbol")
-		}
-		if supplier.SupplierStatus != nil && !supplier.SupplierStatus.Valid() {
-			return importdb.PatronRequestBundle{}, nil, fmt.Errorf("located supplier %q has invalid status", supplier.Id)
-		}
 		if _, duplicate := seenSuppliers[supplier.Id]; duplicate {
 			return importdb.PatronRequestBundle{}, nil, fmt.Errorf("duplicate located supplier id %q", supplier.Id)
 		}
@@ -373,25 +408,20 @@ func (i Importer) importBatchAction(ctx common.ExtendedContext, policy importdb.
 	if err != nil {
 		return nil, importdb.Result{}, fmt.Errorf("validate owner: %w", err)
 	}
+	var value any
+	if err = json.Unmarshal(data, &value); err != nil {
+		return nil, importdb.Result{}, err
+	}
+	if err = i.schemas.batchAction.VisitJSON(value, openapi3.VisitAsRequest(), openapi3.MultiErrors()); err != nil {
+		return nil, importdb.Result{}, fmt.Errorf("validate batch action: %w", err)
+	}
 	var create schedoapi.CreateBatchAction
 	if err = json.Unmarshal(data, &create); err != nil {
 		return nil, importdb.Result{}, err
 	}
-	if create.Title == nil || *create.Title == "" {
-		return nil, importdb.Result{}, errors.New("title must not be empty")
-	}
-	if !create.ActionName.Valid() {
-		return create.Title, importdb.Result{}, fmt.Errorf("unknown actionName: %s", create.ActionName)
-	}
-	if create.Schedule == "" {
-		return create.Title, importdb.Result{}, errors.New("schedule must not be empty")
-	}
-	if create.BatchQuery == "" {
-		return create.Title, importdb.Result{}, errors.New("batchQuery must not be empty")
-	}
 	nextRun, err := schedservice.NextScheduleTime(create.Schedule)
 	if err != nil {
-		return create.Title, importdb.Result{}, err
+		return &create.Title, importdb.Result{}, err
 	}
 	taskID := uuid.NewString()
 	paramsMap := map[string]any{}
@@ -399,8 +429,8 @@ func (i Importer) importBatchAction(ctx common.ExtendedContext, policy importdb.
 		paramsMap = *create.ActionParams
 	}
 	now := pgtype.Timestamptz{Time: i.clock(), Valid: true}
-	result, err := i.repo.ImportBatchAction(ctx, sched_db.SaveScheduledTaskParams{ID: taskID, EventName: events.EventNameInvokeBatchAction, Schedule: create.Schedule, ActionData: events.EventData{CommonEventData: events.CommonEventData{BatchActionData: &events.BatchActionData{ActionName: string(create.ActionName), Selector: create.BatchQuery, TaskId: taskID, Owner: owner}}, CustomData: paramsMap}, Title: pgTextFromPtr(create.Title), RunAt: nextRun, Status: sched_db.ScheduledTaskStatusPending, Owner: owner, CreatedAt: now, UpdatedAt: now}, policy)
-	return create.Title, result, err
+	result, err := i.repo.ImportBatchAction(ctx, sched_db.SaveScheduledTaskParams{ID: taskID, EventName: events.EventNameInvokeBatchAction, Schedule: create.Schedule, ActionData: events.EventData{CommonEventData: events.CommonEventData{BatchActionData: &events.BatchActionData{ActionName: string(create.ActionName), Selector: create.BatchQuery, TaskId: taskID, Owner: owner}}, CustomData: paramsMap}, Title: pgTextFromString(create.Title), RunAt: nextRun, Status: sched_db.ScheduledTaskStatusPending, Owner: owner, CreatedAt: now, UpdatedAt: now}, policy)
+	return &create.Title, result, err
 }
 
 func (i Importer) importTemplate(ctx common.ExtendedContext, policy importdb.ConflictPolicy, owner string, data json.RawMessage) (*string, importdb.Result, error) {
@@ -411,28 +441,25 @@ func (i Importer) importTemplate(ctx common.ExtendedContext, policy importdb.Con
 	if err != nil {
 		return nil, importdb.Result{}, fmt.Errorf("validate owner: %w", err)
 	}
+	var value any
+	if err = json.Unmarshal(data, &value); err != nil {
+		return nil, importdb.Result{}, err
+	}
+	if err = i.schemas.template.VisitJSON(value, openapi3.VisitAsRequest(), openapi3.MultiErrors()); err != nil {
+		return nil, importdb.Result{}, fmt.Errorf("validate template: %w", err)
+	}
 	var create proapi.CreateTemplate
 	if err = json.Unmarshal(data, &create); err != nil {
 		return nil, importdb.Result{}, err
 	}
-	if len(create.Labels) == 0 {
-		return nil, importdb.Result{}, errors.New("labels is required")
-	}
+
 	labels := strings.Join(create.Labels, ",")
-	if create.Title == "" || create.Body == "" || create.Purpose == "" || create.ContentType == "" || create.Audience == nil {
-		return &labels, importdb.Result{}, errors.New("title, body, purpose, contentType, and audience are required")
-	}
-	if !create.Purpose.Valid() {
-		return &labels, importdb.Result{}, fmt.Errorf("invalid purpose: %s", create.Purpose)
-	}
-	if !create.ContentType.Valid() {
-		return &labels, importdb.Result{}, fmt.Errorf("invalid contentType: %s", create.ContentType)
-	}
-	if !create.Audience.Valid() {
-		return &labels, importdb.Result{}, fmt.Errorf("invalid audience: %s", *create.Audience)
+	audience := pgtype.Text{}
+	if create.Audience != nil {
+		audience = pgTextFromString(string(*create.Audience))
 	}
 	now := pgtype.Timestamp{Time: i.clock(), Valid: true}
-	result, err := i.repo.ImportTemplate(ctx, pr_db.SaveTemplateParams{ID: uuid.NewString(), Owner: owner, Title: create.Title, Purpose: string(create.Purpose), Subject: pgTextFromPtr(create.Subject), Body: create.Body, ContentType: string(create.ContentType), Labels: create.Labels, Audience: pgTextFromString(string(*create.Audience)), CreatedAt: now, UpdatedAt: now}, policy)
+	result, err := i.repo.ImportTemplate(ctx, pr_db.SaveTemplateParams{ID: uuid.NewString(), Owner: owner, Title: create.Title, Purpose: string(create.Purpose), Subject: pgTextFromPtr(create.Subject), Body: create.Body, ContentType: string(create.ContentType), Labels: create.Labels, Audience: audience, CreatedAt: now, UpdatedAt: now}, policy)
 	return &labels, result, err
 }
 
@@ -467,12 +494,6 @@ func pgTimestampFromPtr(value *time.Time) pgtype.Timestamp {
 		return pgtype.Timestamp{}
 	}
 	return pgTimestamp(*value)
-}
-func stringPtr(value string) *string {
-	if value == "" {
-		return nil
-	}
-	return &value
 }
 func valueOrEmpty(value *string) string {
 	if value == nil {
