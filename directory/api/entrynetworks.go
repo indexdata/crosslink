@@ -194,7 +194,7 @@ func (a ApiImpl) GetNetworksForEntry(ctx context.Context, request GetNetworksFor
 		}
 	}
 
-	networkList := make([]Network, 0)
+	networkList := make([]NetworkForEntryDetails, 0)
 
 	if entry.Type == string(EntryTypeConsortium) {
 		rows, err := a.queries.ListNetworksForConsortium(ctx, entry.ID)
@@ -204,7 +204,7 @@ func (a ApiImpl) GetNetworksForEntry(ctx context.Context, request GetNetworksFor
 		}
 
 		for _, row := range rows {
-			network := Network{
+			network := NetworkForEntryDetails{
 				Id:         &row.ID,
 				Consortium: row.Consortium,
 				Name:       row.Name,
@@ -219,16 +219,17 @@ func (a ApiImpl) GetNetworksForEntry(ctx context.Context, request GetNetworksFor
 		}
 
 		for _, row := range rows {
-			network := Network{
+			network := NetworkForEntryDetails{
 				Id:         &row.ID,
 				Consortium: row.Consortium,
 				Name:       row.Name,
+				Priority:   &row.Priority,
 			}
 			networkList = append(networkList, network)
 		}
 	}
 
-	resp := NetworksResponse{
+	resp := NetworksForEntryResponse{
 		Items: networkList,
 		About: About{Count: int64(len(networkList))},
 	}

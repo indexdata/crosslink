@@ -334,7 +334,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NetworksResponse'
+                $ref: '#/components/schemas/NetworksForEntryResponse'
         '400':
           description: Bad request
           content:
@@ -1332,6 +1332,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Network'
+    NetworksForEntryResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NetworkForEntryDetails'
     TiersResponse:
       type: object
       required:
@@ -2225,6 +2237,18 @@ components:
               format: int32
               description: Priority of this network for the associated entry
 
+    NetworkForEntryDetails:
+      allOf:
+        - $ref: '#/components/schemas/Network'
+        - type: object
+          properties:
+            priority:
+              type: integer
+              format: int32
+              minimum: -2147483648
+              maximum: 2147483647
+              description: Priority of this network for the associated entry; omitted for consortium-owned network listings
+
     Tier:
       type: object
       required:
@@ -2341,4 +2365,3 @@ components:
           minimum: -2147483648
           maximum: 2147483647
           description: Priority of this network for the associated entry
-

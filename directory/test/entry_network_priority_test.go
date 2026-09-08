@@ -91,6 +91,23 @@ func TestEntryNetworkPriority(t *testing.T) {
 	if res.StatusCode != http.StatusCreated {
 		t.Fatalf("create independent membership: %d %s", res.StatusCode, data)
 	}
+	res, data = jsonReq(t, http.MethodGet, "/entries/by-id/"+entry+"/networks", "", headers)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("list membership networks: %d %s", res.StatusCode, data)
+	}
+	var membershipNetworks struct {
+		Items []struct {
+			ID       string `json:"id"`
+			Priority *int32 `json:"priority"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal([]byte(data), &membershipNetworks); err != nil {
+		t.Fatal(err)
+	}
+	if len(membershipNetworks.Items) != 1 || membershipNetworks.Items[0].ID != network ||
+		membershipNetworks.Items[0].Priority == nil || *membershipNetworks.Items[0].Priority != -8 {
+		t.Fatalf("membership priority missing from entry network listing: %s", data)
+	}
 	for _, path := range []string{"/entries", "/entries/by-id/00000000-0000-0000-0000-000000000001", "/entries/by-id/" + entry} {
 		res, data := jsonReq(t, http.MethodGet, path, "", headers)
 		if res.StatusCode != http.StatusOK {
@@ -144,7 +161,7 @@ func TestEntryNetworkPriority(t *testing.T) {
 		}
 	}
 
-	for _, path := range []string{"/networks", "/networks/" + network, "/entries/by-id/00000000-0000-0000-0000-000000000001/networks", "/entries/by-id/00000000-0000-0000-0000-000000000004/networks"} {
+	for _, path := range []string{"/networks", "/networks/" + network, "/entries/by-id/00000000-0000-0000-0000-000000000004/networks"} {
 		res, data := jsonReq(t, http.MethodGet, path, "", headers)
 		if res.StatusCode != http.StatusOK {
 			t.Fatalf("%s: %d %s", path, res.StatusCode, data)

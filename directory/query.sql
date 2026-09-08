@@ -394,7 +394,7 @@ SELECT * FROM networks
   OFFSET sqlc.arg('offset');
 
 -- name: ListNetworksForEntry :many
-SELECT n.* FROM networks n
+SELECT n.*, en.priority FROM networks n
 JOIN entry_networks en ON n.id = en.network
 WHERE en.entry = $1;
 
