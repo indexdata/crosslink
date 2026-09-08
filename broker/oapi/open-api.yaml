@@ -211,29 +211,38 @@ components:
       properties:
         id:
           type: string
+          minLength: 1
         createdAt:
           type: string
+          minLength: 1
           format: date-time
         updatedAt:
           type: string
+          minLength: 1
           format: date-time
         illRequest:
           type: object
           description: JSON of ISO18626 request
         state:
           type: string
+          minLength: 1
         stateModel:
           type: string
+          minLength: 1
         side:
           type: string
+          minLength: 1
+          enum: [borrowing, lending]
         patron:
           type: string
         requesterSymbol:
           type: string
+          minLength: 1
         supplierSymbol:
           type: string
         requesterRequestId:
           type: string
+          minLength: 1
         needsAttention:
           type: boolean
         lastAction:
@@ -261,8 +270,10 @@ components:
       properties:
         id:
           type: string
+          minLength: 1
         barcode:
           type: string
+          minLength: 1
         callNumber:
           type: string
         title:
@@ -273,6 +284,7 @@ components:
           type: string
         createdAt:
           type: string
+          minLength: 1
           format: date-time
       required: [id, barcode, createdAt]
     ImportPatronRequestNotification:
@@ -281,15 +293,20 @@ components:
       properties:
         id:
           type: string
+          minLength: 1
         fromSymbol:
           type: string
+          minLength: 1
         toSymbol:
           type: string
+          minLength: 1
         direction:
           type: string
+          minLength: 1
           enum: [sent, received]
         kind:
           type: string
+          minLength: 1
           enum: [note, condition]
         note:
           type: string
@@ -304,6 +321,7 @@ components:
           type: string
         createdAt:
           type: string
+          minLength: 1
           format: date-time
         acknowledgedAt:
           type: string
@@ -315,11 +333,14 @@ components:
       properties:
         id:
           type: string
+          minLength: 1
         timestamp:
           type: string
+          minLength: 1
           format: date-time
         requesterSymbol:
           type: string
+          minLength: 1
         lastRequesterAction:
           type: string
         prevRequesterAction:
@@ -328,6 +349,7 @@ components:
           type: string
         requesterRequestID:
           type: string
+          minLength: 1
         prevRequesterRequestID:
           type: string
         supplierRequestID:
@@ -346,8 +368,10 @@ components:
       properties:
         id:
           type: string
+          minLength: 1
         supplierSymbol:
           type: string
+          minLength: 1
         ordinal:
           type: integer
           format: int32
@@ -1544,14 +1568,17 @@ components:
       properties:
         schedule:
           type: string
+          minLength: 1
           description: RRULE schedule expression, e.g. "FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0" (every Monday at 06:00)
         actionName:
           $ref: '#/components/schemas/BatchActionName'
         title:
           type: string
+          minLength: 1
           description: Title of the batch action, for display purposes
         batchQuery:
           type: string
+          minLength: 1
           description: Batch action selection query in CQL format
         actionParams:
           type: object
@@ -1560,6 +1587,7 @@ components:
       required:
         - schedule
         - actionName
+        - title
         - batchQuery
 
     BatchActionDefault:
@@ -1711,6 +1739,7 @@ components:
       properties:
         title:
           type: string
+          minLength: 1
           description: Human-readable title for the template
         purpose:
           $ref: '#/components/schemas/TemplatePurpose'
@@ -1719,14 +1748,17 @@ components:
           description: Subject line template, supports {{.X}} placeholders. Not used for pullslip templates. For full list of supported placeholders, see the Template object.
         body:
           type: string
+          minLength: 1
           description: Body of the email or pull slip template. Supports {{.X}} placeholders. For full list of supported placeholders, see the Template object.
         contentType:
           $ref: '#/components/schemas/TemplateContentType'
         labels:
           type: array
+          minItems: 1
           description: Labels identifying the template's usage context
           items:
             type: string
+            minLength: 1
         audience:
           $ref: '#/components/schemas/TemplateAudience'
       required:
