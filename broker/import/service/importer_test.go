@@ -26,6 +26,8 @@ func TestDecodeImportItemRejectsInvalidEnvelopes(t *testing.T) {
 		{`{"type":"template"}`, "data is required"},
 		{`{"type":"template","data":[]}`, "data must be an object"},
 		{`{"type":"unknown","data":{}}`, "unknown type: unknown"},
+		{`{"type":"template","owner":"ISIL:SYM","data":{},"unexpected":true}`, `json: unknown field "unexpected"`},
+		{`{"type":"template","owner":"ISIL:SYM","data":{}} {}`, "multiple JSON values"},
 	} {
 		_, err := decodeImportItem(json.RawMessage(tt.raw))
 		require.EqualError(t, err, tt.want)
@@ -52,6 +54,7 @@ func TestImportPatronRequestNormalizesCompleteBundle(t *testing.T) {
 	assert.Equal(t, fixedTime("2026-08-01T10:00:00Z"), repo.patron.PatronRequest.CreatedAt.Time)
 	require.Len(t, repo.patron.Items, 1)
 	assert.Equal(t, "lms-1", repo.patron.Items[0].LmsRequestID.String)
+	assert.Equal(t, pgText("lms-item-1"), repo.patron.Items[0].LmsItemID)
 	require.Len(t, repo.patron.Notifications, 1)
 	assert.True(t, repo.patron.Notifications[0].AcknowledgedAt.Valid)
 	require.NotNil(t, repo.patron.IllTransaction)
@@ -522,7 +525,7 @@ func pgText(value string) pgtype.Text  { return pgtype.Text{String: value, Valid
 func validPatronBundleData() json.RawMessage {
 	return json.RawMessage(`{
       "patronRequest":{"id":"pr-1","createdAt":"2026-08-01T10:00:00Z","updatedAt":"2026-08-02T10:00:00Z","illRequest":{"header":{"requestingAgencyRequestId":"pr-1"},"serviceInfo":{"serviceType":"Loan"}},"state":"SENT","side":"borrowing","requesterSymbol":"ISIL:REQ","requesterRequestId":"request-1","needsAttention":false,"stateModel":"default"},
-      "items":[{"id":"item-1","barcode":"barcode-1","lmsRequestId":"lms-1","createdAt":"2026-08-01T10:01:00Z"}],
+      "items":[{"id":"item-1","barcode":"barcode-1","lmsRequestId":"lms-1","lmsItemId":"lms-item-1","createdAt":"2026-08-01T10:01:00Z"}],
       "notifications":[{"id":"note-1","fromSymbol":"ISIL:REQ","toSymbol":"ISIL:SUP","direction":"sent","kind":"note","cost":1.25,"createdAt":"2026-08-01T10:02:00Z","acknowledgedAt":"2026-08-01T10:03:00Z"}],
       "illTransaction":{"id":"ill-1","timestamp":"2026-08-01T10:00:00Z","requesterSymbol":"ISIL:REQ","requesterRequestID":"request-1","supplierSymbol":"ISIL:SUP","illTransactionData":{"bibliographicInfo":{}}},
       "locatedSuppliers":[{"id":"located-1","supplierSymbol":"ISIL:SUP","ordinal":1,"supplierStatus":"selected","localSupplier":false}]
