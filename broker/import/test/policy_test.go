@@ -1,4 +1,4 @@
-package importdb
+package test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/events"
+	importdb "github.com/indexdata/crosslink/broker/import/db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	sched_db "github.com/indexdata/crosslink/broker/scheduler/db"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -17,22 +18,22 @@ import (
 func TestImportTemplatePolicies(t *testing.T) {
 	owner := uuid.NewString()
 	original := pr_db.SaveTemplateParams{ID: uuid.NewString(), Owner: owner, Title: "Original", Purpose: "email", Body: "body", ContentType: "text/plain", Labels: []string{"notice"}, Audience: pgtype.Text{String: "patron", Valid: true}, CreatedAt: testTimestamp(0), UpdatedAt: testTimestamp(1)}
-	result, err := importTestRepo.ImportTemplate(importTestCtx, original, ConflictPolicyFail)
+	result, err := importTestRepo.ImportTemplate(importTestCtx, original, importdb.ConflictPolicyFail)
 	require.NoError(t, err)
-	assert.Equal(t, OutcomeImported, result.Outcome)
+	assert.Equal(t, importdb.OutcomeImported, result.Outcome)
 
 	incoming := original
 	incoming.ID = uuid.NewString()
 	incoming.Title = "Updated"
-	_, err = importTestRepo.ImportTemplate(importTestCtx, incoming, ConflictPolicyFail)
-	var conflict *ConflictError
+	_, err = importTestRepo.ImportTemplate(importTestCtx, incoming, importdb.ConflictPolicyFail)
+	var conflict *importdb.ConflictError
 	assert.ErrorAs(t, err, &conflict)
-	skipped, err := importTestRepo.ImportTemplate(importTestCtx, incoming, ConflictPolicySkip)
+	skipped, err := importTestRepo.ImportTemplate(importTestCtx, incoming, importdb.ConflictPolicySkip)
 	require.NoError(t, err)
-	assert.Equal(t, OutcomeSkipped, skipped.Outcome)
-	updated, err := importTestRepo.ImportTemplate(importTestCtx, incoming, ConflictPolicyUpdate)
+	assert.Equal(t, importdb.OutcomeSkipped, skipped.Outcome)
+	updated, err := importTestRepo.ImportTemplate(importTestCtx, incoming, importdb.ConflictPolicyUpdate)
 	require.NoError(t, err)
-	assert.Equal(t, OutcomeImported, updated.Outcome)
+	assert.Equal(t, importdb.OutcomeImported, updated.Outcome)
 
 	var id, title string
 	require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT id,title FROM template WHERE owner=$1", owner).Scan(&id, &title))
@@ -44,11 +45,11 @@ func TestImportTemplateUpdateRejectsAmbiguousLabelOverlap(t *testing.T) {
 	owner := uuid.NewString()
 	for _, label := range []string{"first", "second"} {
 		params := pr_db.SaveTemplateParams{ID: uuid.NewString(), Owner: owner, Title: label, Purpose: "email", Body: "body", ContentType: "text/plain", Labels: []string{label}, Audience: pgtype.Text{String: "patron", Valid: true}, CreatedAt: testTimestamp(0), UpdatedAt: testTimestamp(1)}
-		_, err := importTestRepo.ImportTemplate(importTestCtx, params, ConflictPolicyFail)
+		_, err := importTestRepo.ImportTemplate(importTestCtx, params, importdb.ConflictPolicyFail)
 		require.NoError(t, err)
 	}
 	incoming := pr_db.SaveTemplateParams{ID: uuid.NewString(), Owner: owner, Title: "ambiguous", Purpose: "email", Body: "body", ContentType: "text/plain", Labels: []string{"first", "second"}, Audience: pgtype.Text{String: "patron", Valid: true}, CreatedAt: testTimestamp(0), UpdatedAt: testTimestamp(1)}
-	_, err := importTestRepo.ImportTemplate(importTestCtx, incoming, ConflictPolicyUpdate)
+	_, err := importTestRepo.ImportTemplate(importTestCtx, incoming, importdb.ConflictPolicyUpdate)
 	require.ErrorContains(t, err, "labels overlap multiple templates")
 	assert.Equal(t, 2, queryCount(t, "SELECT count(*) FROM template WHERE owner=$1", owner))
 }
@@ -63,9 +64,9 @@ func TestImportBatchActionPolicies(t *testing.T) {
 	_, err = listener.Exec(context.Background(), "LISTEN "+sched_db.SchedulerChannel)
 	require.NoError(t, err)
 	original := sched_db.SaveScheduledTaskParams{ID: uuid.NewString(), EventName: events.EventNameInvokeBatchAction, Schedule: "FREQ=DAILY", ActionData: events.EventData{}, Title: pgtype.Text{String: "Daily", Valid: true}, Status: sched_db.ScheduledTaskStatusPending, Owner: owner, CreatedAt: pgtype.Timestamptz{Time: testTimestamp(0).Time, Valid: true}, UpdatedAt: pgtype.Timestamptz{Time: testTimestamp(1).Time, Valid: true}}
-	result, err := importTestRepo.ImportBatchAction(importTestCtx, original, ConflictPolicyFail)
+	result, err := importTestRepo.ImportBatchAction(importTestCtx, original, importdb.ConflictPolicyFail)
 	require.NoError(t, err)
-	assert.Equal(t, OutcomeImported, result.Outcome)
+	assert.Equal(t, importdb.OutcomeImported, result.Outcome)
 	notifyCtx, cancelNotify := context.WithTimeout(context.Background(), time.Second)
 	_, err = listener.Conn().WaitForNotification(notifyCtx)
 	cancelNotify()
@@ -74,18 +75,18 @@ func TestImportBatchActionPolicies(t *testing.T) {
 	incoming := original
 	incoming.ID = uuid.NewString()
 	incoming.Schedule = "FREQ=WEEKLY"
-	_, err = importTestRepo.ImportBatchAction(importTestCtx, incoming, ConflictPolicyFail)
+	_, err = importTestRepo.ImportBatchAction(importTestCtx, incoming, importdb.ConflictPolicyFail)
 	assert.Error(t, err)
-	skipped, err := importTestRepo.ImportBatchAction(importTestCtx, incoming, ConflictPolicySkip)
+	skipped, err := importTestRepo.ImportBatchAction(importTestCtx, incoming, importdb.ConflictPolicySkip)
 	require.NoError(t, err)
-	assert.Equal(t, OutcomeSkipped, skipped.Outcome)
+	assert.Equal(t, importdb.OutcomeSkipped, skipped.Outcome)
 	quietCtx, cancelQuiet := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	_, err = listener.Conn().WaitForNotification(quietCtx)
 	cancelQuiet()
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
-	updated, err := importTestRepo.ImportBatchAction(importTestCtx, incoming, ConflictPolicyUpdate)
+	updated, err := importTestRepo.ImportBatchAction(importTestCtx, incoming, importdb.ConflictPolicyUpdate)
 	require.NoError(t, err)
-	assert.Equal(t, OutcomeImported, updated.Outcome)
+	assert.Equal(t, importdb.OutcomeImported, updated.Outcome)
 
 	var id, schedule string
 	require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT id,schedule FROM scheduled_task WHERE owner=$1", owner).Scan(&id, &schedule))
