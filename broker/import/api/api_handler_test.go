@@ -26,7 +26,7 @@ func fixedClock() time.Time { return time.Date(2026, 8, 19, 12, 0, 0, 0, time.UT
 func TestPostImportDefaultsConflictPolicyToFail(t *testing.T) {
 	repo := &recordingImportRepo{}
 	handler := ApiHandler{importer: service.NewImporter(repo, cache, nil, nil, fixedClock)}
-	recorder := httptest.NewRecorder()
+	recorder := newResponseRecorder()
 	handler.PostImport(recorder, ndjsonRequest(`{"type":"template","owner":"ISIL:OWNER","data":`+string(validTemplateData())+`}`+"\n"), importoapi.PostImportParams{})
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
@@ -38,7 +38,7 @@ func TestPostImportAcceptsExplicitConflictPolicy(t *testing.T) {
 	repo := &recordingImportRepo{}
 	handler := ApiHandler{importer: service.NewImporter(repo, cache, nil, nil, fixedClock)}
 	policy := importoapi.Update
-	recorder := httptest.NewRecorder()
+	recorder := newResponseRecorder()
 	handler.PostImport(recorder, ndjsonRequest(`{"type":"template","owner":"ISIL:OWNER","data":`+string(validTemplateData())+`}`+"\n"), importoapi.PostImportParams{ConflictPolicy: &policy})
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
@@ -48,7 +48,7 @@ func TestPostImportAcceptsExplicitConflictPolicy(t *testing.T) {
 func TestPostImportRejectsUnknownConflictPolicyBeforeBodyValidation(t *testing.T) {
 	handler := ApiHandler{importer: service.NewImporter(&recordingImportRepo{}, cache, nil, nil, fixedClock)}
 	policy := importoapi.ConflictPolicy("unknown")
-	recorder := httptest.NewRecorder()
+	recorder := newResponseRecorder()
 	handler.PostImport(recorder, httptest.NewRequest(http.MethodPost, "/import", http.NoBody), importoapi.PostImportParams{ConflictPolicy: &policy})
 
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -58,13 +58,13 @@ func TestPostImportRejectsUnknownConflictPolicyBeforeBodyValidation(t *testing.T
 func TestPostImportValidatesBodyAndContentType(t *testing.T) {
 	handler := ApiHandler{importer: service.NewImporter(&recordingImportRepo{}, cache, nil, nil, fixedClock)}
 
-	missingBody := httptest.NewRecorder()
+	missingBody := newResponseRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/import", http.NoBody)
 	req.Header.Set("Content-Type", "application/x-ndjson")
 	handler.PostImport(missingBody, req, importoapi.PostImportParams{})
 	assert.Equal(t, http.StatusBadRequest, missingBody.Code)
 
-	wrongType := httptest.NewRecorder()
+	wrongType := newResponseRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/import", strings.NewReader(""))
 	req.Header.Set("Content-Type", "application/json")
 	handler.PostImport(wrongType, req, importoapi.PostImportParams{})
@@ -77,7 +77,7 @@ func TestPostImportRejectsKnownOversizedBody(t *testing.T) {
 		maxImportBodyBytes: 128,
 	}
 	req := ndjsonRequest(strings.Repeat("x", 129))
-	recorder := httptest.NewRecorder()
+	recorder := newResponseRecorder()
 
 	handler.PostImport(recorder, req, importoapi.PostImportParams{})
 
@@ -92,7 +92,7 @@ func TestPostImportRejectsChunkedOversizedBody(t *testing.T) {
 	}
 	req := ndjsonRequest(strings.Repeat("x", 129))
 	req.ContentLength = -1
-	recorder := httptest.NewRecorder()
+	recorder := newResponseRecorder()
 
 	handler.PostImport(recorder, req, importoapi.PostImportParams{})
 
@@ -105,7 +105,7 @@ func TestPostImportRejectsOversizedRecord(t *testing.T) {
 	repo := &recordingImportRepo{}
 	handler := ApiHandler{importer: service.NewImporter(repo, cache, nil, nil, fixedClock)}
 	req := ndjsonRequest(strings.Repeat("x", (1<<20)+1) + "\n")
-	recorder := httptest.NewRecorder()
+	recorder := newResponseRecorder()
 
 	handler.PostImport(recorder, req, importoapi.PostImportParams{})
 
@@ -119,6 +119,17 @@ func ndjsonRequest(body string) *http.Request {
 	req.Header.Set("Content-Type", "application/x-ndjson")
 	return req
 }
+
+type responseRecorder struct {
+	*httptest.ResponseRecorder
+}
+
+func newResponseRecorder() *responseRecorder {
+	return &responseRecorder{ResponseRecorder: httptest.NewRecorder()}
+}
+
+func (*responseRecorder) SetReadDeadline(time.Time) error  { return nil }
+func (*responseRecorder) SetWriteDeadline(time.Time) error { return nil }
 
 type recordingImportRepo struct {
 	patron          importdb.PatronRequestBundle
