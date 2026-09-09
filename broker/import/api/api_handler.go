@@ -4,6 +4,7 @@ import (
 	"errors"
 	"mime"
 	"net/http"
+	"time"
 
 	"github.com/indexdata/crosslink/broker/adapter"
 	brokerapi "github.com/indexdata/crosslink/broker/api"
@@ -21,6 +22,8 @@ type ApiHandler struct {
 }
 
 const maxImportBodyBytes int64 = 2 << 30 // 2 GB
+const importReadTimeout = 10 * time.Minute
+const importWriteTimeout = 10 * time.Minute
 
 var _ importoapi.ServerInterface = (*ApiHandler)(nil)
 
@@ -34,6 +37,15 @@ func (a *ApiHandler) PostImport(w http.ResponseWriter, r *http.Request, params i
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "PostImport"},
 	})
+	controller := http.NewResponseController(w)
+	if err := controller.SetReadDeadline(time.Now().Add(importReadTimeout)); err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return
+	}
+	if err := controller.SetWriteDeadline(time.Now().Add(importWriteTimeout)); err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return
+	}
 	policyValue := ""
 	if params.ConflictPolicy != nil {
 		policyValue = string(*params.ConflictPolicy)
