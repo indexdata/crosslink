@@ -69,32 +69,16 @@ func GetFreePort() (int, error) {
 }
 
 func WaitForServiceUp(port int) {
-	// Provisioning and migrations can exceed the short predicate timeout when
-	// multiple integration packages start their databases concurrently.
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	ticker := time.NewTicker(20 * time.Millisecond)
-	defer ticker.Stop()
-	client := &http.Client{Timeout: time.Second}
-	for {
-		select {
-		case <-ctx.Done():
-			panic("failed to start broker: health check timed out")
-		case <-ticker.C:
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:"+strconv.Itoa(port)+"/healthz", nil)
-			if err != nil {
-				panic(err)
-			}
-			resp, err := client.Do(req)
-			if err != nil {
-				continue
-			}
-			resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				fmt.Println("Service up")
-				return
-			}
+	if !WaitForPredicateToBeTrue(func() bool {
+		resp, err := http.Get("http://localhost:" + strconv.Itoa(port) + "/healthz")
+		if err != nil {
+			return false
 		}
+		return resp.StatusCode == http.StatusOK
+	}) {
+		panic("failed to start broker")
+	} else {
+		fmt.Println("Service up")
 	}
 }
 

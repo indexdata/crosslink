@@ -242,5 +242,3 @@ envConfigMaps:
     name: directory-config
 ```
 1. Restart the deployment to apply the new config map. For example, `kubectl -n trove-dev rollout restart deployment crosslink-illmock`.
-
-The supplier scenario `WAIT` accepts a request without sending an unsolicited status response. It still handles requester actions, allowing cancellation tests to proceed without racing a delayed supplier response.

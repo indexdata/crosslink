@@ -126,7 +126,6 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 
 	switch scenario {
 	case "": // retry done and no further scenarios
-	case "WAIT": // wait for a requester action, such as cancellation
 	case "RETRY:COST":
 		status = append(status, iso18626.TypeStatusRetryPossible)
 		x := iso18626.ReasonRetryCostExceedsMaxCost
