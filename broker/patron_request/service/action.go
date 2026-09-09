@@ -1026,7 +1026,10 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 		itemId := item.Barcode // requester bar code
 		author := pr.IllRequest.BibliographicInfo.Author
 		isbn := ""
-		pickupLocation := lmsAdapter.RequesterPickupLocation()
+		pickupLocation := pr.RequesterPickupLocation.String
+		if pickupLocation == "" {
+			pickupLocation = lmsAdapter.RequesterPickupLocation()
+		}
 		requestedAction := "Hold For Pickup"
 		// Persist the same identifier sent to the requester LMS after acceptance.
 		requestID := pr.ID

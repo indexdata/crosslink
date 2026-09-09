@@ -1151,53 +1151,70 @@ func TestHandleInvokeActionSendRequest(t *testing.T) {
 }
 
 func TestHandleInvokeActionReceiveOK(t *testing.T) {
-	mockPrRepo := new(MockPrRepo)
-	mockIso18626Handler := new(MockIso18626Handler)
-	lmsCreator := new(MockLmsCreator)
-	lmsAdapter := new(mockLmsAdapter)
-	lmsAdapter.On("AcceptItem", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(lmsAdapter, nil)
-	mockEventBus := new(MockEventBus)
-	emailMock := new(EmailSenderMock)
-	emailMock.On("IsReadyToSend").Return(false)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, emailMock, nil, nil)
-	illRequest := iso18626.Request{}
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Once().Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateShipped, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateReceived, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
-	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{
-		{
-			ID:        "item1",
-			PrID:      patronRequestId,
-			Barcode:   "1234",
-			CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
-		},
-		{
-			ID:        "item2",
-			PrID:      patronRequestId,
-			Barcode:   "5678",
-			CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
-		},
-	}, nil)
+	for _, tt := range []struct {
+		name       string
+		selected   pgtype.Text
+		configured string
+		expected   string
+	}{
+		{name: "selected branch overrides configured location", selected: getDbText("branch-1"), configured: "main", expected: "branch-1"},
+		{name: "selected branch without configured location", selected: getDbText("branch-1"), expected: "branch-1"},
+		{name: "omitted selection uses configured location", configured: "main", expected: "main"},
+		{name: "empty selection uses configured location", selected: getDbText(""), configured: "main", expected: "main"},
+		{name: "no pickup location configured"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			mockPrRepo := new(MockPrRepo)
+			mockIso18626Handler := new(MockIso18626Handler)
+			lmsCreator := new(MockLmsCreator)
+			lmsAdapter := &mockLmsAdapter{requesterPickupLocation: tt.configured}
+			lmsAdapter.On("AcceptItem", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, tt.expected, "Hold For Pickup").Return(nil).Twice()
+			lmsCreator.On("GetAdapter", "ISIL:REC1").Return(lmsAdapter, nil)
+			mockEventBus := new(MockEventBus)
+			emailMock := new(EmailSenderMock)
+			emailMock.On("IsReadyToSend").Return(false)
+			prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, emailMock, nil, nil)
+			illRequest := iso18626.Request{}
+			mockPrRepo.On("GetPatronRequestById", patronRequestId).Once().Return(pr_db.PatronRequest{ID: patronRequestId, RequesterPickupLocation: tt.selected, IllRequest: illRequest, State: BorrowerStateShipped, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
+			mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, RequesterPickupLocation: tt.selected, IllRequest: illRequest, State: BorrowerStateReceived, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
+			mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{
+				{
+					ID:        "item1",
+					PrID:      patronRequestId,
+					Barcode:   "1234",
+					CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+				},
+				{
+					ID:        "item2",
+					PrID:      patronRequestId,
+					Barcode:   "5678",
+					CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+				},
+			}, nil)
 
-	action := BorrowerActionReceive
-	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
-	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Nil(t, resultData.OutgoingMessage)
-	assert.Nil(t, resultData.IncomingMessage)
-	if assert.Len(t, mockEventBus.createdNoticeData, 1) {
-		assert.Equal(t, events.EventNameIllRequesterMessage, mockEventBus.createdNoticeNames[0])
-		assert.Equal(t, events.EventStatusSuccess, mockEventBus.createdNoticeStatus[0])
-		assert.Equal(t, iso18626.TypeMessageStatusOK, mockEventBus.createdNoticeData[0].IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
-	}
-	assert.Equal(t, BorrowerStateReceived, mockPrRepo.savedPr.State)
-	assert.Equal(t, getDbText(patronRequestId), mockPrRepo.itemLmsRequestIDs["item1"])
-	assert.Equal(t, getDbText(patronRequestId), mockPrRepo.itemLmsRequestIDs["item2"])
-	lmsAdapter.AssertNumberOfCalls(t, "AcceptItem", 2)
-	if assert.Len(t, lmsAdapter.Calls, 2) {
-		assert.Equal(t, "AcceptItem", lmsAdapter.Calls[0].Method)
-		assert.Equal(t, "1234", lmsAdapter.Calls[0].Arguments.String(0))
-		assert.Equal(t, "AcceptItem", lmsAdapter.Calls[1].Method)
-		assert.Equal(t, "5678", lmsAdapter.Calls[1].Arguments.String(0))
+			action := BorrowerActionReceive
+			status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+			assert.Equal(t, events.EventStatusSuccess, status)
+			assert.Nil(t, resultData.OutgoingMessage)
+			assert.Nil(t, resultData.IncomingMessage)
+			if assert.Len(t, mockEventBus.createdNoticeData, 1) {
+				assert.Equal(t, events.EventNameIllRequesterMessage, mockEventBus.createdNoticeNames[0])
+				assert.Equal(t, events.EventStatusSuccess, mockEventBus.createdNoticeStatus[0])
+				assert.Equal(t, iso18626.TypeMessageStatusOK, mockEventBus.createdNoticeData[0].IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+			}
+			assert.Equal(t, BorrowerStateReceived, mockPrRepo.savedPr.State)
+			assert.Equal(t, getDbText(patronRequestId), mockPrRepo.itemLmsRequestIDs["item1"])
+			assert.Equal(t, getDbText(patronRequestId), mockPrRepo.itemLmsRequestIDs["item2"])
+			lmsAdapter.AssertNumberOfCalls(t, "AcceptItem", 2)
+			if assert.Len(t, lmsAdapter.Calls, 2) {
+				assert.Equal(t, "AcceptItem", lmsAdapter.Calls[0].Method)
+				assert.Equal(t, "1234", lmsAdapter.Calls[0].Arguments.String(0))
+				assert.Equal(t, "AcceptItem", lmsAdapter.Calls[1].Method)
+				assert.Equal(t, "5678", lmsAdapter.Calls[1].Arguments.String(0))
+			}
+			lmsAdapter.AssertExpectations(t)
+			lmsCreator.AssertExpectations(t)
+		})
 	}
 }
 

@@ -64,7 +64,6 @@ func TestPickupLocationAddress(t *testing.T) {
 				require.Len(t, result.RequestedDeliveryInfo, 2)
 				require.Equal(t, "library@example.org", result.RequestedDeliveryInfo[0].Address.ElectronicAddress.ElectronicAddressData)
 				require.Equal(t, "Branch Street 1", result.RequestedDeliveryInfo[1].Address.PhysicalAddress.Line1)
-
 			}
 		})
 	}

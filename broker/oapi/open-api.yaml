@@ -535,7 +535,10 @@ components:
           description: User who requested item
         requesterPickupLocation:
           type: string
-          description: Directory LMS pickup location code used to select the requester branch shipping address
+          description: >-
+            Directory LMS pickup location code used to select the requester branch
+            shipping address and the NCIP AcceptItem pickup location. When omitted
+            or empty, AcceptItem uses the requester LMS configuration.
         requesterSymbol:
           type: string
           description: Requester symbol
@@ -646,7 +649,10 @@ components:
           description: User who requested item
         requesterPickupLocation:
           type: string
-          description: Directory LMS pickup location code used to select the requester branch shipping address
+          description: >-
+            Directory LMS pickup location code used to select the requester branch
+            shipping address and the NCIP AcceptItem pickup location. When omitted
+            or empty, AcceptItem uses the requester LMS configuration.
         requesterSymbol:
           type: string
           description: Requester symbol
