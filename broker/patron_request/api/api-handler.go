@@ -533,6 +533,7 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 
 	existingPr.RequesterReqID = getDbText(&requesterReqId)
 	existingPr.IllRequest = illRequest
+	existingPr.RequesterPickupLocation = getDbText(newPr.RequesterPickupLocation)
 	existingPr.StateModel = stateModelName
 	existingPr.Patron = getDbText(newPr.Patron)
 	if newPr.InternalNote != nil {
@@ -1283,6 +1284,7 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequestSearchView) 
 		Side:                     string(request.Side),
 		Patron:                   toString(request.Patron),
 		RequesterSymbol:          toString(request.RequesterSymbol),
+		RequesterPickupLocation:  toString(request.RequesterPickupLocation),
 		SupplierSymbol:           toString(request.SupplierSymbol),
 		IllRequest:               request.IllRequest,
 		RequesterRequestId:       toString(request.RequesterReqID),
@@ -1425,22 +1427,23 @@ func buildDbPatronRequest(
 	stateModel string,
 ) pr_db.PatronRequest {
 	return pr_db.PatronRequest{
-		ID:              requesterReqId,
-		CreatedAt:       creationTime,
-		State:           initialState,
-		Side:            prservice.SideBorrowing,
-		Patron:          getDbText(request.Patron),
-		RequesterSymbol: getDbText(request.RequesterSymbol),
-		SupplierSymbol:  getDbText(nil),
-		IllRequest:      illRequest,
-		Tenant:          getDbText(tenant),
-		RequesterReqID:  getDbText(&requesterReqId),
-		InternalNote:    getDbText(request.InternalNote),
-		Language:        pr_db.LANGUAGE,
-		Items:           []pr_db.PrItem{},
-		TerminalState:   false,
-		NeedsAttention:  true,
-		StateModel:      stateModel,
+		ID:                      requesterReqId,
+		CreatedAt:               creationTime,
+		State:                   initialState,
+		Side:                    prservice.SideBorrowing,
+		Patron:                  getDbText(request.Patron),
+		RequesterSymbol:         getDbText(request.RequesterSymbol),
+		RequesterPickupLocation: getDbText(request.RequesterPickupLocation),
+		SupplierSymbol:          getDbText(nil),
+		IllRequest:              illRequest,
+		Tenant:                  getDbText(tenant),
+		RequesterReqID:          getDbText(&requesterReqId),
+		InternalNote:            getDbText(request.InternalNote),
+		Language:                pr_db.LANGUAGE,
+		Items:                   []pr_db.PrItem{},
+		TerminalState:           false,
+		NeedsAttention:          true,
+		StateModel:              stateModel,
 		// LastAction, LastActionOutcome and LastActionResult are not set on creation
 		// they will be updated when the first action is executed.
 	}

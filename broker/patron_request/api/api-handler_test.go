@@ -29,6 +29,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 var mockEventBus = new(MockEventBus)
@@ -136,28 +137,29 @@ func TestToApiPatronRequestSurfacesInternalNote(t *testing.T) {
 
 func patronRequestSearchViewFromPatronRequest(pr pr_db.PatronRequest, hasCost bool) pr_db.PatronRequestSearchView {
 	return pr_db.PatronRequestSearchView{
-		ID:                pr.ID,
-		CreatedAt:         pr.CreatedAt,
-		IllRequest:        pr.IllRequest,
-		State:             pr.State,
-		Side:              pr.Side,
-		Patron:            pr.Patron,
-		RequesterSymbol:   pr.RequesterSymbol,
-		SupplierSymbol:    pr.SupplierSymbol,
-		Tenant:            pr.Tenant,
-		RequesterReqID:    pr.RequesterReqID,
-		NeedsAttention:    pr.NeedsAttention,
-		LastAction:        pr.LastAction,
-		LastActionOutcome: pr.LastActionOutcome,
-		LastActionResult:  pr.LastActionResult,
-		Items:             pr.Items,
-		Language:          pr.Language,
-		TerminalState:     pr.TerminalState,
-		UpdatedAt:         pr.UpdatedAt,
-		IllResponse:       pr.IllResponse,
-		InternalNote:      pr.InternalNote,
-		StateModel:        pr.StateModel,
-		HasCost:           hasCost,
+		ID:                      pr.ID,
+		CreatedAt:               pr.CreatedAt,
+		IllRequest:              pr.IllRequest,
+		State:                   pr.State,
+		Side:                    pr.Side,
+		Patron:                  pr.Patron,
+		RequesterSymbol:         pr.RequesterSymbol,
+		SupplierSymbol:          pr.SupplierSymbol,
+		Tenant:                  pr.Tenant,
+		RequesterReqID:          pr.RequesterReqID,
+		NeedsAttention:          pr.NeedsAttention,
+		LastAction:              pr.LastAction,
+		LastActionOutcome:       pr.LastActionOutcome,
+		LastActionResult:        pr.LastActionResult,
+		Items:                   pr.Items,
+		Language:                pr.Language,
+		TerminalState:           pr.TerminalState,
+		UpdatedAt:               pr.UpdatedAt,
+		IllResponse:             pr.IllResponse,
+		InternalNote:            pr.InternalNote,
+		StateModel:              pr.StateModel,
+		RequesterPickupLocation: pr.RequesterPickupLocation,
+		HasCost:                 hasCost,
 	}
 }
 
@@ -1688,4 +1690,14 @@ func TestPutPatronRequestsIdInvalidBrokerSymbol(t *testing.T) {
 	handler.PutPatronRequestsId(rr, req, "5", proapi.PutPatronRequestsIdParams{})
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Contains(t, rr.Body.String(), "invalid BROKER_SYMBOL")
+}
+
+func TestPatronRequestPickupLocationRoundTrip(t *testing.T) {
+	var request proapi.CreatePatronRequest
+	require.NoError(t, json.Unmarshal([]byte(`{"requesterSymbol":"ISIL:MAIN","requesterPickupLocation":"branch-1","illRequest":{}}`), &request))
+	pr := buildDbPatronRequest(&request, nil, pgtype.Timestamp{}, "request-1", request.IllRequest, "", "default")
+	assert.Equal(t, pgtype.Text{String: "branch-1", Valid: true}, pr.RequesterPickupLocation)
+	result := toApiPatronRequest(httptest.NewRequest(http.MethodGet, "/patron_requests/request-1", nil), patronRequestSearchViewFromPatronRequest(pr, false))
+	require.NotNil(t, result.RequesterPickupLocation)
+	assert.Equal(t, "branch-1", *result.RequesterPickupLocation)
 }

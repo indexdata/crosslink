@@ -533,6 +533,9 @@ components:
         patron:
           type: string
           description: User who requested item
+        requesterPickupLocation:
+          type: string
+          description: Directory LMS pickup location code used to select the requester branch shipping address
         requesterSymbol:
           type: string
           description: Requester symbol
@@ -641,6 +644,9 @@ components:
         patron:
           type: string
           description: User who requested item
+        requesterPickupLocation:
+          type: string
+          description: Directory LMS pickup location code used to select the requester branch shipping address
         requesterSymbol:
           type: string
           description: Requester symbol

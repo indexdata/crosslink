@@ -655,6 +655,11 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 	case BorrowerActionUpdateMetadata:
 		return a.updateMetadataBorrowingRequest(ctx, pr, illRequest)
 	case BorrowerActionSendRequest:
+		illRequest, err = a.applyPickupLocationAddress(ctx, pr, illRequest)
+		if err != nil {
+			status, result := logActionErrorAndReturnResult(ctx, "failed to resolve pickup location address", err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
 		status, result, err := a.messageSender.sendBorrowingRequest(ctx, eventID, pr, illRequest)
 		return actionResultFromIllSend(ctx, status, result, err, pr)
 	case BorrowerActionReceive:
@@ -1158,6 +1163,7 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 	retryPr := pr_db.PatronRequest{}
 	retryPr.Side = pr.Side
 	retryPr.RequesterSymbol = pr.RequesterSymbol
+	retryPr.RequesterPickupLocation = pr.RequesterPickupLocation
 	retryPr.SupplierSymbol = pr.SupplierSymbol
 	retryPr.Patron = pr.Patron
 	retryPr.Tenant = pr.Tenant
@@ -1992,4 +1998,49 @@ func (a *PatronRequestActionService) saveLendingAddConditionNotification(ctx com
 		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
 	})
 	return err
+}
+
+// applyPickupLocationAddress changes only delivery information, leaving agency identity intact.
+func (a *PatronRequestActionService) applyPickupLocationAddress(ctx common.ExtendedContext, pr pr_db.PatronRequest, request iso18626.Request) (iso18626.Request, error) {
+	code := pr.RequesterPickupLocation.String
+	if code == "" || (request.PatronInfo != nil && request.PatronInfo.SendToPatron != nil && *request.PatronInfo.SendToPatron == iso18626.TypeYesNoY) {
+		return request, nil
+	}
+	entries, _, err := a.directoryLookupAdapter.Lookup(ctx, adapter.DirectoryLookupParams{
+		Symbols:                 []string{pr.RequesterSymbol.String},
+		RequesterPickupLocation: code,
+	})
+	if err != nil {
+		return request, err
+	}
+	var matches []dirapi.Entry
+	for _, entry := range entries {
+		if entry.CustomData.LmsConfig != nil && entry.CustomData.LmsConfig.RequesterPickupLocation != nil && *entry.CustomData.LmsConfig.RequesterPickupLocation == code {
+			matches = append(matches, entry.CustomData)
+		}
+	}
+	if len(matches) != 1 {
+		return request, fmt.Errorf("pickup location %q: expected one directory entry, found %d", code, len(matches))
+	}
+	address := common.DirectoryShippingAddress(matches[0])
+	if address.Line1 == "" {
+		return request, fmt.Errorf("pickup location %q has no shipping address", code)
+	}
+	request, err = deepCopyISO18626Request(request)
+	if err != nil {
+		return request, err
+	}
+	// Replace physical delivery addresses while preserving delivery options and electronic addresses.
+	replaced := false
+	for i := range request.RequestedDeliveryInfo {
+		info := &request.RequestedDeliveryInfo[i]
+		if info.Address != nil && info.Address.PhysicalAddress != nil {
+			info.Address.PhysicalAddress = &address
+			replaced = true
+		}
+	}
+	if !replaced {
+		request.RequestedDeliveryInfo = append(request.RequestedDeliveryInfo, iso18626.RequestedDeliveryInfo{Address: &iso18626.Address{PhysicalAddress: &address}})
+	}
+	return request, nil
 }

@@ -32,7 +32,7 @@ func CreateApiDirectory(client *http.Client, urls []string) DirectoryLookupAdapt
 	return &ApiDirectory{client: client, urls: urls}
 }
 
-func (a *ApiDirectory) getDirectory(ctx common.ExtendedContext, symbols []string, tenant string, durl string) ([]DirectoryEntry, string, error) {
+func (a *ApiDirectory) getDirectory(ctx common.ExtendedContext, symbols []string, tenant string, durl string, pickupLocation string) ([]DirectoryEntry, string, error) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(COMP))
 	var cql string
 	if len(symbols) > 0 {
@@ -47,6 +47,9 @@ func (a *ApiDirectory) getDirectory(ctx common.ExtendedContext, symbols []string
 	}
 	if cql == "" {
 		return []DirectoryEntry{}, "", fmt.Errorf("no symbols or tenant provided for directory lookup")
+	}
+	if pickupLocation != "" {
+		cql += " and requesterPickupLocation=\"" + cqlbuilder.EscapeMaskingChars(cqlbuilder.EscapeSpecialChars(pickupLocation)) + "\""
 	}
 	var dirEntries []DirectoryEntry
 	query := "?limit=1000&cql=" + url.QueryEscape(cql)
@@ -91,7 +94,7 @@ func (a *ApiDirectory) getDirectory(ctx common.ExtendedContext, symbols []string
 				childSymbolsById[parentID] = append(childSymbolsById[parentID], symbols...)
 			}
 		}
-		if len(symbols) == 0 {
+		if len(symbols) == 0 && pickupLocation == "" {
 			ctx.Logger().Info("Directory entry has no symbols and will be ignored", "entryName", d.Name)
 			continue
 		}
@@ -146,7 +149,7 @@ func (a *ApiDirectory) Lookup(ctx common.ExtendedContext, params DirectoryLookup
 	var directoryList []DirectoryEntry
 	var query string
 	for _, durl := range a.urls {
-		d, queryVal, err := a.getDirectory(ctx, params.Symbols, params.Tenant, durl)
+		d, queryVal, err := a.getDirectory(ctx, params.Symbols, params.Tenant, durl, params.RequesterPickupLocation)
 		query = queryVal
 		if err != nil {
 			return []DirectoryEntry{}, query, err

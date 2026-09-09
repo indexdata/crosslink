@@ -812,3 +812,24 @@ func TestListPatronRequests(t *testing.T) {
 		assert.NoError(t, err)
 	}
 }
+
+func TestRequesterPickupLocationPersistence(t *testing.T) {
+	pickup := pgtype.Text{String: "branch-1", Valid: true}
+	pr, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID: uuid.NewString(), CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Language: "english", Items: []pr_db.PrItem{}, RequesterPickupLocation: pickup,
+	})
+	if !assert.NoError(t, err) {
+		return
+	}
+	assert.Equal(t, pickup, pr.RequesterPickupLocation)
+	view, err := prRepo.GetPatronRequestSearchView(appCtx, pr.ID)
+	if assert.NoError(t, err) {
+		assert.Equal(t, pickup, view.RequesterPickupLocation)
+	}
+	pr.RequesterPickupLocation = pgtype.Text{String: "branch-2", Valid: true}
+	updated, err := prRepo.UpdatePatronRequest(appCtx, pr_db.UpdatePatronRequestParams(pr))
+	if assert.NoError(t, err) {
+		assert.Equal(t, pr.RequesterPickupLocation, updated.RequesterPickupLocation)
+	}
+}
