@@ -37,7 +37,7 @@ func (a ApiImpl) AddEntryNetwork(ctx context.Context, request AddEntryNetworkReq
 	insertedEntryNetwork, err := qtx.CreateEntryNetwork(ctx, db.CreateEntryNetworkParams{
 		Entry:    request.Body.Entry,
 		Network:  request.Body.Network,
-		Priority: request.Body.Priority,
+		Priority: derefOrDefault(request.Body.Priority, int32(0)),
 	})
 
 	if err != nil {

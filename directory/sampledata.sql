@@ -1,11 +1,11 @@
 -- Two institutions share one network, with independently assigned priorities.
 WITH consortium AS (
   INSERT INTO entries (name, type)
-  VALUES ('Example Consortium', 'consortium')
+  VALUES ('Example Consortium', 'Consortium')
   RETURNING id
 ), institutions AS (
   INSERT INTO entries (name, type, parent)
-  SELECT name, 'institution', consortium.id
+  SELECT name, 'Institution', consortium.id
   FROM consortium CROSS JOIN (VALUES ('First Library'), ('Second Library')) AS names(name)
   RETURNING id, name
 ), network AS (

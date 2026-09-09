@@ -970,7 +970,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EntryNetwork'
+              $ref: '#/components/schemas/CreateEntryNetwork'
       responses:
         '201':
           description: Entry Network response
@@ -2302,6 +2302,28 @@ components:
           type: string
           format: uuid
           description: Unique identifier
+        entry:
+          type: string
+          format: uuid
+          description: ID of entry
+        network:
+          type: string
+          format: uuid
+          description: ID of network
+        priority:
+          type: integer
+          format: int32
+          default: 0
+          minimum: -2147483648
+          maximum: 2147483647
+          description: Priority of this network for the associated entry
+
+    CreateEntryNetwork:
+      type: object
+      required:
+        - entry
+        - network
+      properties:
         entry:
           type: string
           format: uuid

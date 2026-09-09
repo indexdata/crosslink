@@ -270,6 +270,9 @@ func TestEntryNetworkPriorityMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	exec(string(sample))
+	assertCount("SELECT count(*) FROM entries WHERE type='Consortium'", 1)
+	assertCount("SELECT count(*) FROM entries WHERE type='Institution'", 2)
+	assertCount("SELECT count(*) FROM entries WHERE type IN ('consortium', 'institution')", 0)
 	assertCount("SELECT count(DISTINCT priority) FROM entry_networks", 2)
 	assertCount("SELECT count(DISTINCT network) FROM entry_networks", 1)
 }
