@@ -237,10 +237,12 @@ func TestEntryNetworkPriorityMigration(t *testing.T) {
 		}
 	}
 	assertCount("SELECT count(*) FROM entry_networks WHERE priority=7", 2)
+	assertCount("SELECT count(*) FROM migration_007_network_priority_backup", 2)
 	assertCount("SELECT count(*) FROM information_schema.columns WHERE table_schema='priority_migration_test' AND table_name='networks' AND column_name='priority'", 0)
 	apply("007_*.down.sql")
 	assertCount("SELECT count(*) FROM networks WHERE priority=7", 1)
-	assertCount("SELECT count(*) FROM networks WHERE priority=0", 1)
+	assertCount("SELECT count(*) FROM networks WHERE priority=9", 1)
+	assertCount("SELECT count(*) FROM information_schema.tables WHERE table_schema='priority_migration_test' AND table_name='migration_007_network_priority_backup'", 0)
 	apply("007_*.up.sql")
 	exec("UPDATE entry_networks SET priority=3 WHERE entry='00000000-0000-0000-0000-000000000002'")
 	nested, err := tx.Begin(ctx)
@@ -259,6 +261,7 @@ func TestEntryNetworkPriorityMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertCount("SELECT count(*) FROM entry_networks WHERE priority=3", 1)
+	assertCount("SELECT count(*) FROM migration_007_network_priority_backup", 2)
 	assertCount("SELECT count(*) FROM information_schema.columns WHERE table_schema='priority_migration_test' AND table_name='networks' AND column_name='priority'", 0)
 	exec(`INSERT INTO entry_networks (entry,network) VALUES ('00000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000002')`)
 	assertCount("SELECT count(*) FROM entry_networks WHERE priority=0", 1)
