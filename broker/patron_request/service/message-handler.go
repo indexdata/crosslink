@@ -636,6 +636,10 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ct
 
 func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) error {
 	result, _, _ := common.UnpackItemsNote(sam.MessageInfo.Note)
+	if len(result) == 0 {
+		title := pr.IllRequest.BibliographicInfo.Title
+		return m.saveItem(ctx, pr.ID, requesterItemBarcode(pr.ID, 0, 1), nil, nil, &title)
+	}
 	for index, item := range result {
 		var loopErr error
 		if len(item) == 1 && item[0] != "" {

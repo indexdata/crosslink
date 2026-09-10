@@ -1449,14 +1449,25 @@ func TestSaveItems(t *testing.T) {
 	mockEventBus := new(MockEventBus)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
 
-	// Empty message
+	// A Loaned message without item details still needs a requester-side item so
+	// the borrowing request can be received in the LMS.
 	sam := iso18626.SupplyingAgencyMessage{}
-	err := handler.saveItems(appCtx, pr_db.PatronRequest{ID: "pr1"}, sam)
+	err := handler.saveItems(appCtx, pr_db.PatronRequest{
+		ID: "pr1",
+		IllRequest: iso18626.Request{BibliographicInfo: iso18626.BibliographicInfo{
+			Title: "Request title",
+		}},
+	}, sam)
 	assert.NoError(t, err)
-	assert.Equal(t, 0, len(mockPrRepo.savedItems))
+	if assert.Len(t, mockPrRepo.savedItems, 1) {
+		assert.Equal(t, "pr1", mockPrRepo.savedItems[0].Barcode)
+		assert.False(t, mockPrRepo.savedItems[0].ItemID.Valid)
+		assert.Equal(t, "Request title", mockPrRepo.savedItems[0].Title.String)
+	}
 
 	// One Item
 	sam.MessageInfo.Note = "#MultipleItems#\n1|2|3\n#MultipleItemsEnd#"
+	mockPrRepo.savedItems = nil
 	err = handler.saveItems(appCtx, pr_db.PatronRequest{ID: "pr1"}, sam)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(mockPrRepo.savedItems))
