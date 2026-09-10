@@ -635,9 +635,12 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ct
 }
 
 func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) error {
-	result, _, _ := common.UnpackItemsNote(sam.MessageInfo.Note)
+	result, startIdx, endIdx := common.UnpackItemsNote(sam.MessageInfo.Note)
 	if len(result) == 0 {
-		_, err := saveRequesterItemWithoutSupplierDetails(ctx, m.prRepo, pr)
+		if startIdx >= 0 || endIdx >= 0 {
+			return errors.New("malformed multiple items note: start and end markers must both be present in order")
+		}
+		_, err := ensureFallbackRequesterItem(ctx, m.prRepo, pr)
 		return err
 	}
 	for index, item := range result {
@@ -654,24 +657,6 @@ func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr p
 		}
 	}
 	return nil
-}
-
-func saveRequesterItemWithoutSupplierDetails(ctx common.ExtendedContext, repo pr_db.PrRepo, pr pr_db.PatronRequest) (pr_db.Item, error) {
-	title := pr.IllRequest.BibliographicInfo.Title
-	return repo.SaveItem(ctx, pr_db.SaveItemParams{
-		ID:        uuid.NewString(),
-		CreatedAt: pgtype.Timestamp{Valid: true, Time: time.Now()},
-		PrID:      pr.ID,
-		Title:     getDbTextPtr(&title),
-		Barcode:   requesterItemBarcode(pr.ID, 0, 1),
-	})
-}
-
-func requesterItemBarcode(prID string, index int, itemCount int) string {
-	if itemCount == 1 {
-		return prID
-	}
-	return fmt.Sprintf("%s-%d", prID, index+1)
 }
 
 func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId string, requesterBarcode string, supplierBarcode *string, callNumber *string, name *string) error {

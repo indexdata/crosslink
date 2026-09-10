@@ -1341,7 +1341,7 @@ func TestHandleInvokeActionReceiveNoItem(t *testing.T) {
 	receivedPr := shippedPr
 	receivedPr.State = BorrowerStateReceived
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(receivedPr, nil)
-	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, nil).Once()
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, nil).Twice()
 
 	action := BorrowerActionReceive
 	status, _ := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})

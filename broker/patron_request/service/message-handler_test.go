@@ -1459,10 +1459,30 @@ func TestSaveItems(t *testing.T) {
 		}},
 	}, sam)
 	assert.NoError(t, err)
+	if !assert.Len(t, mockPrRepo.savedItems, 1) {
+		return
+	}
+	assert.Equal(t, "pr1", mockPrRepo.savedItems[0].Barcode)
+	assert.False(t, mockPrRepo.savedItems[0].ItemID.Valid)
+	assert.Equal(t, "Request title", mockPrRepo.savedItems[0].Title.String)
+	fallbackItemID := mockPrRepo.savedItems[0].ID
+	err = handler.saveItems(appCtx, pr_db.PatronRequest{ID: "pr1"}, sam)
+	assert.NoError(t, err)
 	if assert.Len(t, mockPrRepo.savedItems, 1) {
-		assert.Equal(t, "pr1", mockPrRepo.savedItems[0].Barcode)
-		assert.False(t, mockPrRepo.savedItems[0].ItemID.Valid)
-		assert.Equal(t, "Request title", mockPrRepo.savedItems[0].Title.String)
+		assert.Equal(t, fallbackItemID, mockPrRepo.savedItems[0].ID)
+	}
+
+	// Partial or misordered markers are malformed payloads, not missing item data.
+	for _, note := range []string{
+		common.MULTIPLE_ITEMS + "\n1",
+		"1\n" + common.MULTIPLE_ITEMS_END,
+		common.MULTIPLE_ITEMS_END + "\n1\n" + common.MULTIPLE_ITEMS,
+	} {
+		sam.MessageInfo.Note = note
+		mockPrRepo.savedItems = nil
+		err = handler.saveItems(appCtx, pr_db.PatronRequest{ID: "pr1"}, sam)
+		assert.EqualError(t, err, "malformed multiple items note: start and end markers must both be present in order")
+		assert.Empty(t, mockPrRepo.savedItems)
 	}
 
 	// One Item
