@@ -1001,10 +1001,20 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 	if pr.Patron.Valid {
 		patron = pr.Patron.String
 	}
-	items, err := a.getItems(ctx, pr)
+	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
 	if err != nil {
+		err = fmt.Errorf("failed to get items: %w", err)
 		status, result := logActionErrorAndReturnResult(ctx, "receiveBorrowingRequest failed to get items by PR ID", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	if len(items) == 0 {
+		ctx.Logger().Warn("creating requester item omitted from Loaned message", "pr_id", pr.ID)
+		item, saveErr := saveRequesterItemWithoutSupplierDetails(ctx, a.prRepo, pr)
+		if saveErr != nil {
+			status, result := logActionErrorAndReturnResult(ctx, "receiveBorrowingRequest failed to create fallback item", saveErr)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		items = []pr_db.Item{item}
 	}
 	for _, item := range items {
 		if item.LmsRequestID.Valid && strings.TrimSpace(item.LmsRequestID.String) != "" {
