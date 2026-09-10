@@ -2245,8 +2245,6 @@ components:
             priority:
               type: integer
               format: int32
-              minimum: -2147483648
-              maximum: 2147483647
               description: Priority of this network for the associated entry; omitted for consortium-owned network listings
 
     Tier:
@@ -2314,8 +2312,6 @@ components:
           type: integer
           format: int32
           default: 0
-          minimum: -2147483648
-          maximum: 2147483647
           description: Priority of this network for the associated entry
 
     CreateEntryNetwork:
@@ -2336,8 +2332,6 @@ components:
           type: integer
           format: int32
           default: 0
-          minimum: -2147483648
-          maximum: 2147483647
           description: Priority of this network for the associated entry
 
     EntryTier:
@@ -2384,6 +2378,4 @@ components:
           type: integer
           format: int32
           default: 0
-          minimum: -2147483648
-          maximum: 2147483647
           description: Priority of this network for the associated entry
