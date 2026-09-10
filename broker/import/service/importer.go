@@ -163,6 +163,9 @@ func (i Importer) Import(ctx common.ExtendedContext, policy importdb.ConflictPol
 	}
 	reader := bufio.NewReaderSize(input, maxRecordBytes+2)
 	for line := int32(1); ; {
+		if line%100 == 0 {
+			ctx.Logger().Info("import process in progress", "line", line, "errorCount", len(result.Errors))
+		}
 		raw, err := readImportRecord(reader, maxRecordBytes)
 		if errors.Is(err, io.EOF) {
 			break
@@ -202,6 +205,7 @@ func (i Importer) Import(ctx common.ExtendedContext, policy importdb.ConflictPol
 		}
 		line++
 	}
+	ctx.Logger().Info("import process in finished", "result", result)
 	return result, nil
 }
 
