@@ -502,6 +502,23 @@ func TestHandleSupplyingAgencyMessageSupplierFailoverAfterWillSupply(t *testing.
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, BorrowerStateSupplierLocated, mockPrRepo.savedPr.State)
 	assert.Equal(t, "ISIL:SUP2", mockPrRepo.savedPr.SupplierSymbol.String)
+
+	status, resp, err = handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+				AgencyIdValue: "SUP2",
+			},
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		MessageInfo: iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange},
+		StatusInfo:  iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
+	}, mockPrRepo.savedPr)
+	require.NoError(t, err)
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, BorrowerStateWillSupply, mockPrRepo.savedPr.State)
+	assert.Equal(t, "ISIL:SUP2", mockPrRepo.savedPr.SupplierSymbol.String)
 }
 
 func TestHandleSupplyingAgencyMessageExpectToSupplyDuringSupplierFailover(t *testing.T) {
@@ -512,6 +529,8 @@ func TestHandleSupplyingAgencyMessageExpectToSupplyDuringSupplierFailover(t *tes
 		expectedState    pr_db.PatronRequestState
 		expectedSupplier string
 	}{
+		{name: "sent to remote", currentState: BorrowerStateSent, expectedState: BorrowerStateSupplierLocated, expectedSupplier: "ISIL:SUP2"},
+		{name: "sent to local", currentState: BorrowerStateSent, local: true, expectedState: BorrowerStateLocalSupply, expectedSupplier: "ISIL:REQ"},
 		{name: "supplier located to remote", currentState: BorrowerStateSupplierLocated, expectedState: BorrowerStateSupplierLocated, expectedSupplier: "ISIL:SUP2"},
 		{name: "supplier located to local", currentState: BorrowerStateSupplierLocated, local: true, expectedState: BorrowerStateLocalSupply, expectedSupplier: "ISIL:REQ"},
 		{name: "condition pending to remote", currentState: BorrowerStateConditionPending, expectedState: BorrowerStateSupplierLocated, expectedSupplier: "ISIL:SUP2"},
@@ -554,6 +573,42 @@ func TestHandleSupplyingAgencyMessageExpectToSupplyDuringSupplierFailover(t *tes
 			assert.Equal(t, tt.expectedState, mockPrRepo.savedPr.State)
 			assert.Equal(t, tt.expectedSupplier, mockPrRepo.savedPr.SupplierSymbol.String)
 			assert.Equal(t, tt.local, mockPrRepo.savedPr.NeedsAttention)
+		})
+	}
+}
+
+func TestHandleSupplyingAgencyMessageExpectToSupplyFromCurrentSupplierRejected(t *testing.T) {
+	for _, state := range []pr_db.PatronRequestState{
+		BorrowerStateSupplierLocated,
+		BorrowerStateConditionPending,
+		BorrowerStateWillSupply,
+	} {
+		t.Run(string(state), func(t *testing.T) {
+			mockPrRepo := new(MockPrRepo)
+			handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+
+			status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+				Header: iso18626.Header{
+					SupplyingAgencyId: iso18626.TypeAgencyId{
+						AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+						AgencyIdValue: "SUP1",
+					},
+					RequestingAgencyRequestId: patronRequestId,
+				},
+				MessageInfo: iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange},
+				StatusInfo:  iso18626.StatusInfo{Status: iso18626.TypeStatusExpectToSupply},
+			}, pr_db.PatronRequest{
+				ID:             patronRequestId,
+				State:          state,
+				Side:           SideBorrowing,
+				SupplierSymbol: getDbText("ISIL:SUP1"),
+				NeedsAttention: state == BorrowerStateConditionPending,
+			})
+
+			assert.Equal(t, events.EventStatusProblem, status)
+			assert.Equal(t, iso18626.TypeMessageStatusERROR, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+			assert.ErrorContains(t, err, "status change not allowed: ExpectToSupply")
+			assert.Empty(t, mockPrRepo.savedPr.ID)
 		})
 	}
 }

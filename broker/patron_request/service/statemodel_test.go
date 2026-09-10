@@ -63,6 +63,8 @@ func TestBuiltInStateModelCapabilities(t *testing.T) {
 	}))
 
 	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierWillSupply)))
+	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierNewExpectToSupply)))
+	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierNewExpectToSupplyLocal)))
 	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierCancelledLocal)))
 	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierCompletedLocal)))
 	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierUnfilledLocal)))
