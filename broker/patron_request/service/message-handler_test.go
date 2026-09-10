@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHandleMessageNoMessage(t *testing.T) {
@@ -451,6 +452,165 @@ func TestHandleSupplyingAgencyMessageExpectToSupply(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, BorrowerStateSupplierLocated, mockPrRepo.savedPr.State)
+}
+
+func TestHandleSupplyingAgencyMessageSupplierFailoverAfterWillSupply(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+	pr := pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateSent, Side: SideBorrowing}
+
+	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+				AgencyIdValue: "SUP1",
+			},
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		MessageInfo: iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange},
+		StatusInfo:  iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
+	}, pr)
+	require.NoError(t, err)
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, BorrowerStateWillSupply, mockPrRepo.savedPr.State)
+	assert.Equal(t, "ISIL:SUP1", mockPrRepo.savedPr.SupplierSymbol.String)
+
+	status, resp, err = handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		MessageInfo: iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageNotification},
+		StatusInfo:  iso18626.StatusInfo{Status: iso18626.TypeStatusUnfilled},
+	}, mockPrRepo.savedPr)
+	require.NoError(t, err)
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, BorrowerStateWillSupply, mockPrRepo.savedPr.State)
+	assert.Equal(t, "ISIL:SUP1", mockPrRepo.savedPr.SupplierSymbol.String)
+
+	status, resp, err = handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+				AgencyIdValue: "SUP2",
+			},
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		MessageInfo: iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange},
+		StatusInfo:  iso18626.StatusInfo{Status: iso18626.TypeStatusExpectToSupply},
+	}, mockPrRepo.savedPr)
+	require.NoError(t, err)
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, BorrowerStateSupplierLocated, mockPrRepo.savedPr.State)
+	assert.Equal(t, "ISIL:SUP2", mockPrRepo.savedPr.SupplierSymbol.String)
+
+	status, resp, err = handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+				AgencyIdValue: "SUP2",
+			},
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		MessageInfo: iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange},
+		StatusInfo:  iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
+	}, mockPrRepo.savedPr)
+	require.NoError(t, err)
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, BorrowerStateWillSupply, mockPrRepo.savedPr.State)
+	assert.Equal(t, "ISIL:SUP2", mockPrRepo.savedPr.SupplierSymbol.String)
+}
+
+func TestHandleSupplyingAgencyMessageExpectToSupplyDuringSupplierFailover(t *testing.T) {
+	tests := []struct {
+		name             string
+		currentState     pr_db.PatronRequestState
+		local            bool
+		expectedState    pr_db.PatronRequestState
+		expectedSupplier string
+	}{
+		{name: "sent to remote", currentState: BorrowerStateSent, expectedState: BorrowerStateSupplierLocated, expectedSupplier: "ISIL:SUP2"},
+		{name: "sent to local", currentState: BorrowerStateSent, local: true, expectedState: BorrowerStateLocalSupply, expectedSupplier: "ISIL:REQ"},
+		{name: "supplier located to remote", currentState: BorrowerStateSupplierLocated, expectedState: BorrowerStateSupplierLocated, expectedSupplier: "ISIL:SUP2"},
+		{name: "supplier located to local", currentState: BorrowerStateSupplierLocated, local: true, expectedState: BorrowerStateLocalSupply, expectedSupplier: "ISIL:REQ"},
+		{name: "condition pending to remote", currentState: BorrowerStateConditionPending, expectedState: BorrowerStateSupplierLocated, expectedSupplier: "ISIL:SUP2"},
+		{name: "condition pending to local", currentState: BorrowerStateConditionPending, local: true, expectedState: BorrowerStateLocalSupply, expectedSupplier: "ISIL:REQ"},
+		{name: "will supply to remote", currentState: BorrowerStateWillSupply, expectedState: BorrowerStateSupplierLocated, expectedSupplier: "ISIL:SUP2"},
+		{name: "will supply to local", currentState: BorrowerStateWillSupply, local: true, expectedState: BorrowerStateLocalSupply, expectedSupplier: "ISIL:REQ"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockPrRepo := new(MockPrRepo)
+			handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+			supplier := "SUP2"
+			if tt.local {
+				supplier = "REQ"
+			}
+
+			status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+				Header: iso18626.Header{
+					SupplyingAgencyId: iso18626.TypeAgencyId{
+						AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+						AgencyIdValue: supplier,
+					},
+					RequestingAgencyRequestId: patronRequestId,
+				},
+				MessageInfo: iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange},
+				StatusInfo:  iso18626.StatusInfo{Status: iso18626.TypeStatusExpectToSupply},
+			}, pr_db.PatronRequest{
+				ID:              patronRequestId,
+				State:           tt.currentState,
+				Side:            SideBorrowing,
+				RequesterSymbol: getDbText("ISIL:REQ"),
+				SupplierSymbol:  getDbText("ISIL:SUP1"),
+				NeedsAttention:  tt.currentState == BorrowerStateConditionPending,
+			})
+
+			require.NoError(t, err)
+			assert.Equal(t, events.EventStatusSuccess, status)
+			assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+			assert.Equal(t, tt.expectedState, mockPrRepo.savedPr.State)
+			assert.Equal(t, tt.expectedSupplier, mockPrRepo.savedPr.SupplierSymbol.String)
+			assert.Equal(t, tt.local, mockPrRepo.savedPr.NeedsAttention)
+		})
+	}
+}
+
+func TestHandleSupplyingAgencyMessageExpectToSupplyFromCurrentSupplierRejected(t *testing.T) {
+	for _, state := range []pr_db.PatronRequestState{
+		BorrowerStateSupplierLocated,
+		BorrowerStateConditionPending,
+		BorrowerStateWillSupply,
+	} {
+		t.Run(string(state), func(t *testing.T) {
+			mockPrRepo := new(MockPrRepo)
+			handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+
+			status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+				Header: iso18626.Header{
+					SupplyingAgencyId: iso18626.TypeAgencyId{
+						AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+						AgencyIdValue: "SUP1",
+					},
+					RequestingAgencyRequestId: patronRequestId,
+				},
+				MessageInfo: iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange},
+				StatusInfo:  iso18626.StatusInfo{Status: iso18626.TypeStatusExpectToSupply},
+			}, pr_db.PatronRequest{
+				ID:             patronRequestId,
+				State:          state,
+				Side:           SideBorrowing,
+				SupplierSymbol: getDbText("ISIL:SUP1"),
+				NeedsAttention: state == BorrowerStateConditionPending,
+			})
+
+			assert.Equal(t, events.EventStatusProblem, status)
+			assert.Equal(t, iso18626.TypeMessageStatusERROR, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+			assert.ErrorContains(t, err, "status change not allowed: ExpectToSupply")
+			assert.Empty(t, mockPrRepo.savedPr.ID)
+		})
+	}
 }
 
 func TestHandleSupplyingAgencyMessageExpectToSupplyLocally(t *testing.T) {
@@ -1886,6 +2046,74 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 			c, err := n.Cost.Float64Value()
 			assert.NoError(t, err)
 			assert.Equal(t, 5.0, c.Float64)
+		}
+	})
+
+	t.Run("SAM empty terms", func(t *testing.T) {
+		mockPrRepo := new(MockPrRepo)
+		handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), new(MockEventBus))
+		err := handler.extractSamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.SupplyingAgencyMessage{
+			Header: makeHeader(),
+			MessageInfo: iso18626.MessageInfo{
+				OfferedCosts: &iso18626.TypeCosts{CurrencyCode: iso18626.TypeSchemeValuePair{Text: "EUR"}},
+			},
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				DeliveryCosts: &iso18626.TypeCosts{CurrencyCode: iso18626.TypeSchemeValuePair{Text: "EUR"}},
+				LoanCondition: &iso18626.TypeSchemeValuePair{Text: "  "},
+			},
+		})
+		assert.NoError(t, err)
+		assert.Empty(t, mockPrRepo.savedNotifications)
+	})
+
+	t.Run("SAM note with empty terms", func(t *testing.T) {
+		mockPrRepo := new(MockPrRepo)
+		handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), new(MockEventBus))
+		err := handler.extractSamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.SupplyingAgencyMessage{
+			Header: makeHeader(),
+			MessageInfo: iso18626.MessageInfo{
+				Note:         "plain sam note",
+				OfferedCosts: &iso18626.TypeCosts{CurrencyCode: iso18626.TypeSchemeValuePair{Text: "EUR"}},
+			},
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				DeliveryCosts: &iso18626.TypeCosts{CurrencyCode: iso18626.TypeSchemeValuePair{Text: "EUR"}},
+				LoanCondition: &iso18626.TypeSchemeValuePair{Text: "  "},
+			},
+		})
+		assert.NoError(t, err)
+		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
+			n := mockPrRepo.savedNotifications[0]
+			assert.Equal(t, pr_db.NotificationKindNote, n.Kind)
+			assert.Equal(t, "plain sam note", n.Note.String)
+			assert.False(t, n.Cost.Valid)
+			assert.False(t, n.Currency.Valid)
+			assert.False(t, n.Condition.Valid)
+		}
+	})
+
+	t.Run("SAM empty offered cost falls back to delivery cost", func(t *testing.T) {
+		mockPrRepo := new(MockPrRepo)
+		handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), new(MockEventBus))
+		err := handler.extractSamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.SupplyingAgencyMessage{
+			Header: makeHeader(),
+			MessageInfo: iso18626.MessageInfo{
+				OfferedCosts: &iso18626.TypeCosts{CurrencyCode: iso18626.TypeSchemeValuePair{Text: "EUR"}},
+			},
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				DeliveryCosts: &iso18626.TypeCosts{
+					CurrencyCode:  iso18626.TypeSchemeValuePair{Text: "DKK"},
+					MonetaryValue: utils.XSDDecimal{Base: 2500, Exp: -2},
+				},
+			},
+		})
+		assert.NoError(t, err)
+		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
+			n := mockPrRepo.savedNotifications[0]
+			assert.Equal(t, pr_db.NotificationKindCondition, n.Kind)
+			assert.Equal(t, "DKK", n.Currency.String)
+			cost, err := n.Cost.Float64Value()
+			assert.NoError(t, err)
+			assert.Equal(t, 25.0, cost.Float64)
 		}
 	})
 
