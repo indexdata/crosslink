@@ -399,12 +399,10 @@ func getPeerNetworks(peerData dirapi.Entry) map[string]Network {
 	networks := map[string]Network{}
 	if peerData.Networks != nil {
 		for _, n := range *peerData.Networks {
-			if n.Name != nil {
-				networks[*n.Name] = Network{
-					Name:       *n.Name,
-					Priority:   int(n.Priority),
-					Reciprocal: n.Reciprocal,
-				}
+			networks[n.Name] = Network{
+				Name:       n.Name,
+				Priority:   int(n.Priority),
+				Reciprocal: n.Reciprocal,
 			}
 		}
 	}
@@ -415,12 +413,8 @@ func getPeerTiers(peerData dirapi.Entry) []Tier {
 	tiers := []Tier{}
 	if peerData.Tiers != nil {
 		for _, t := range *peerData.Tiers {
-			name := ""
-			if t.Name != nil {
-				name = *t.Name
-			}
 			tiers = append(tiers, Tier{
-				Name:  name,
+				Name:  t.Name,
 				Level: string(t.Level),
 				Type:  string(t.Type),
 				Cost:  t.Cost,

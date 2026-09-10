@@ -26,6 +26,12 @@ func (r *PgImportRepo) ImportEntry(ctx context.Context, aggregate model.EntryAgg
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	if err := queries.LockEntryImportKey(ctx, db.LockEntryImportKeyParams{
+		Authority: aggregate.Key.Authority,
+		Symbol:    aggregate.Key.Symbol,
+	}); err != nil {
+		return model.RepoResult{}, fmt.Errorf("lock entry %s", key)
+	}
 	existing, lookupErr := queries.EntryBySymbolForUpdate(ctx, db.EntryBySymbolForUpdateParams{
 		Authority: aggregate.Key.Authority,
 		Symbol:    aggregate.Key.Symbol,

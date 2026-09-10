@@ -1,14 +1,20 @@
 package api
 
 import (
+	"context"
 	"testing"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/stretchr/testify/require"
 )
 
 func TestImportOpenAPIContract(t *testing.T) {
 	spec, err := GetSpec()
 	require.NoError(t, err)
+	require.NoError(t, spec.Validate(context.Background()))
+	sourceSpec, err := openapi3.NewLoader().LoadFromFile("../api.yaml")
+	require.NoError(t, err)
+	require.NoError(t, sourceSpec.Validate(context.Background()))
 	operation := spec.Paths.Find("/import")
 	require.NotNil(t, operation)
 	require.NotNil(t, operation.Post)

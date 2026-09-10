@@ -3,9 +3,11 @@ package api
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"strings"
+
 	"github.com/indexdata/crosslink/directory/auth"
 	"github.com/indexdata/crosslink/directory/db"
-	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -21,6 +23,9 @@ func (a ApiImpl) AddTier(ctx context.Context, request AddTierRequestObject) (Add
 
 	if request.Body == nil || request.Body.Consortium == uuid.Nil {
 		return AddTier400TextResponse("You must provide a consortium"), nil
+	}
+	if strings.TrimSpace(request.Body.Name) == "" {
+		return AddTier400TextResponse("You must provide a tier name"), nil
 	}
 
 	consortium, err := a.queries.EntryById(ctx, request.Body.Consortium)
@@ -75,6 +80,9 @@ func (a ApiImpl) AddTier(ctx context.Context, request AddTierRequestObject) (Add
 	})
 
 	if err != nil {
+		if isUniqueConstraintViolation(err, "tiers_consortium_name_unique") {
+			return AddTier409TextResponse("A tier with this name already exists in the consortium"), nil
+		}
 		slog.ErrorContext(ctx, "failed to create tier", "error", err, "name", request.Body.Name)
 		return AddTier500TextResponse("Error creating tier"), nil
 	}

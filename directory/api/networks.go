@@ -3,9 +3,11 @@ package api
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"strings"
+
 	"github.com/indexdata/crosslink/directory/auth"
 	"github.com/indexdata/crosslink/directory/db"
-	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -21,6 +23,9 @@ func (a ApiImpl) AddNetwork(ctx context.Context, request AddNetworkRequestObject
 
 	if request.Body == nil || request.Body.Consortium == uuid.Nil {
 		return AddNetwork400TextResponse("You must provide a consortium"), nil
+	}
+	if strings.TrimSpace(request.Body.Name) == "" {
+		return AddNetwork400TextResponse("You must provide a network name"), nil
 	}
 
 	consortium, err := a.queries.EntryById(ctx, request.Body.Consortium)
@@ -54,6 +59,9 @@ func (a ApiImpl) AddNetwork(ctx context.Context, request AddNetworkRequestObject
 	})
 
 	if err != nil {
+		if isUniqueConstraintViolation(err, "networks_consortium_name_unique") {
+			return AddNetwork409TextResponse("A network with this name already exists in the consortium"), nil
+		}
 		slog.ErrorContext(ctx, "failed to create network", "error", err, "name", request.Body.Name)
 		return AddNetwork500TextResponse("Error creating network"), nil
 	}

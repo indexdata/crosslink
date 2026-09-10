@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/indexdata/crosslink/directory/import/model"
 )
 
@@ -23,11 +24,30 @@ type Repository interface {
 
 type Importer struct {
 	repository     Repository
+	recordSchemas  map[string]*openapi3.Schema
 	maxRecordBytes int
 }
 
-func New(repository Repository) *Importer {
-	return &Importer{repository: repository, maxRecordBytes: maxRecordBytes}
+func New(repository Repository, spec *openapi3.T) (*Importer, error) {
+	schemas := make(map[string]*openapi3.Schema, 3)
+	for _, recordSchema := range []struct {
+		recordType    string
+		componentName string
+	}{
+		{recordType: "entry", componentName: "ImportEntryRecord"},
+		{recordType: "tier", componentName: "ImportTierRecord"},
+		{recordType: "network", componentName: "ImportNetworkRecord"},
+	} {
+		var schemaRef *openapi3.SchemaRef
+		if spec != nil && spec.Components != nil {
+			schemaRef = spec.Components.Schemas[recordSchema.componentName]
+		}
+		if schemaRef == nil || schemaRef.Value == nil {
+			return nil, fmt.Errorf("OpenAPI component schema %q is missing", recordSchema.componentName)
+		}
+		schemas[recordSchema.recordType] = schemaRef.Value
+	}
+	return &Importer{repository: repository, recordSchemas: schemas, maxRecordBytes: maxRecordBytes}, nil
 }
 
 func (i *Importer) Import(ctx context.Context, policy model.ConflictPolicy, input io.Reader) (model.ImportResult, error) {
@@ -61,7 +81,7 @@ func (i *Importer) Import(ctx context.Context, policy model.ConflictPolicy, inpu
 }
 
 func (i *Importer) importRecord(ctx context.Context, policy model.ConflictPolicy, line int32, data []byte, result *model.ImportResult) {
-	record, err := decodeRecord(data)
+	record, err := decodeRecord(data, i.recordSchemas)
 	if err != nil {
 		incrementFailed(result, record.recordType)
 		appendError(result, line, record.recordType, record.key, err.Error())

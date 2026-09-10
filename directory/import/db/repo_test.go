@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -60,8 +61,22 @@ func TestImportBusinessKeyConstraints(t *testing.T) {
 		VALUES ($1, 'Loan', 'standard', 'loan', 0), ($1, 'Loan', 'standard', 'loan', 0)`, consortiumID)
 	requirePgCode(t, err, "23505")
 
+	_, err = testPool.Exec(ctx, `
+		INSERT INTO networks (consortium, name, priority)
+		VALUES ($1, 'Main', 0), ($1, 'Main', 0)`, consortiumID)
+	requirePgCode(t, err, "23505")
+
+	_, err = testPool.Exec(ctx, `INSERT INTO tiers (consortium, name, level, type, cost) VALUES ($1, NULL, 'standard', 'loan', 0)`, consortiumID)
+	requirePgCode(t, err, "23502")
+
 	_, err = testPool.Exec(ctx, `INSERT INTO networks (consortium, name, priority) VALUES ($1, NULL, 0)`, consortiumID)
 	requirePgCode(t, err, "23502")
+
+	_, err = testPool.Exec(ctx, `INSERT INTO tiers (consortium, name, level, type, cost) VALUES ($1, E'\t\n', 'standard', 'loan', 0)`, consortiumID)
+	requirePgCode(t, err, "23514")
+
+	_, err = testPool.Exec(ctx, `INSERT INTO networks (consortium, name, priority) VALUES ($1, E'\t\n', 0)`, consortiumID)
+	requirePgCode(t, err, "23514")
 }
 
 func TestImportEntryCreatesCompleteAggregateWithGeneratedIDs(t *testing.T) {
@@ -130,6 +145,38 @@ func TestImportEntryConflictPoliciesAndUpdateFullSynchronization(t *testing.T) {
 	var replacementEndpointID uuid.UUID
 	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT id FROM service_endpoints WHERE entry=$1`, entryID).Scan(&replacementEndpointID))
 	require.NotEqual(t, originalEndpointID, replacementEndpointID)
+}
+
+func TestConcurrentImportEntrySkipHonorsConflictPolicyForMissingKey(t *testing.T) {
+	resetImportDatabase(t)
+	newAggregate := func() model.EntryAggregate { return minimalEntryAggregate("concurrent", "Institution") }
+	results, errs := concurrentlyImportEntry(t, newAggregate, model.ConflictPolicySkip, 8)
+
+	var imported, skipped int
+	for index, err := range errs {
+		require.NoError(t, err)
+		switch results[index].Outcome {
+		case model.OutcomeImported:
+			imported++
+		case model.OutcomeSkipped:
+			skipped++
+		}
+	}
+	require.Equal(t, 1, imported)
+	require.Equal(t, 7, skipped)
+	require.Equal(t, 1, entryCount(t))
+}
+
+func TestConcurrentImportEntryUpdateHonorsConflictPolicyForMissingKey(t *testing.T) {
+	resetImportDatabase(t)
+	newAggregate := func() model.EntryAggregate { return minimalEntryAggregate("concurrent", "Institution") }
+	results, errs := concurrentlyImportEntry(t, newAggregate, model.ConflictPolicyUpdate, 8)
+
+	for index, err := range errs {
+		require.NoError(t, err)
+		require.Equal(t, model.OutcomeImported, results[index].Outcome)
+	}
+	require.Equal(t, 1, entryCount(t))
 }
 
 func TestImportEntryRejectsInvalidHierarchy(t *testing.T) {
@@ -234,6 +281,34 @@ func TestImportTierConflictPoliciesAndUpdateReplacesAssignments(t *testing.T) {
 	require.Equal(t, []model.SymbolRef{second}, tierAssignments(t, id))
 }
 
+func TestConcurrentImportTierSkipHonorsConflictPolicyForMissingKey(t *testing.T) {
+	repo, consortium, _, _ := importRepoFixture(t)
+	newAggregate := func() model.TierAggregate {
+		return model.TierAggregate{
+			Key:  model.TierKey{Consortium: consortium, Name: "Concurrent"},
+			Data: model.TierData{Level: "standard", Type: "loan", Entries: []model.SymbolRef{}},
+		}
+	}
+	results, errs := concurrentlyImportTier(repo, newAggregate, model.ConflictPolicySkip, 8)
+
+	requireImportOutcomes(t, results, errs, 1, 7)
+	require.Equal(t, 1, aggregateCount(t, "tiers"))
+}
+
+func TestConcurrentImportTierUpdateHonorsConflictPolicyForMissingKey(t *testing.T) {
+	repo, consortium, _, _ := importRepoFixture(t)
+	newAggregate := func() model.TierAggregate {
+		return model.TierAggregate{
+			Key:  model.TierKey{Consortium: consortium, Name: "Concurrent"},
+			Data: model.TierData{Level: "standard", Type: "loan", Entries: []model.SymbolRef{}},
+		}
+	}
+	results, errs := concurrentlyImportTier(repo, newAggregate, model.ConflictPolicyUpdate, 8)
+
+	requireImportOutcomes(t, results, errs, 8, 0)
+	require.Equal(t, 1, aggregateCount(t, "tiers"))
+}
+
 func TestImportTierRollsBackWhenMemberIsMissing(t *testing.T) {
 	repo, consortium, first, _ := importRepoFixture(t)
 	missing := model.SymbolRef{Authority: "ISIL", Symbol: "MISSING"}
@@ -276,6 +351,34 @@ func TestImportNetworkConflictPoliciesAndUpdateReplacesAssignments(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, id, networkIDByKey(t, consortium, "Main"))
 	require.Equal(t, []model.SymbolRef{second}, networkAssignments(t, id))
+}
+
+func TestConcurrentImportNetworkSkipHonorsConflictPolicyForMissingKey(t *testing.T) {
+	repo, consortium, _, _ := importRepoFixture(t)
+	newAggregate := func() model.NetworkAggregate {
+		return model.NetworkAggregate{
+			Key:  model.NetworkKey{Consortium: consortium, Name: "Concurrent"},
+			Data: model.NetworkData{Priority: 1, Entries: []model.SymbolRef{}},
+		}
+	}
+	results, errs := concurrentlyImportNetwork(repo, newAggregate, model.ConflictPolicySkip, 8)
+
+	requireImportOutcomes(t, results, errs, 1, 7)
+	require.Equal(t, 1, aggregateCount(t, "networks"))
+}
+
+func TestConcurrentImportNetworkUpdateHonorsConflictPolicyForMissingKey(t *testing.T) {
+	repo, consortium, _, _ := importRepoFixture(t)
+	newAggregate := func() model.NetworkAggregate {
+		return model.NetworkAggregate{
+			Key:  model.NetworkKey{Consortium: consortium, Name: "Concurrent"},
+			Data: model.NetworkData{Priority: 1, Entries: []model.SymbolRef{}},
+		}
+	}
+	results, errs := concurrentlyImportNetwork(repo, newAggregate, model.ConflictPolicyUpdate, 8)
+
+	requireImportOutcomes(t, results, errs, 8, 0)
+	require.Equal(t, 1, aggregateCount(t, "networks"))
 }
 
 func TestImportNetworkRejectsNonConsortiumOwner(t *testing.T) {
@@ -398,6 +501,93 @@ func minimalEntryAggregate(symbol, entryType string) model.EntryAggregate {
 			Addresses: []model.Address{}, Closures: []model.Closure{},
 		},
 	}
+}
+
+func concurrentlyImportEntry(t *testing.T, newAggregate func() model.EntryAggregate, policy model.ConflictPolicy, count int) ([]model.RepoResult, []error) {
+	t.Helper()
+	repo := importdb.New(testPool)
+	start := make(chan struct{})
+	results := make([]model.RepoResult, count)
+	errs := make([]error, count)
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(count)
+	for index := range count {
+		go func() {
+			defer waitGroup.Done()
+			<-start
+			results[index], errs[index] = repo.ImportEntry(context.Background(), newAggregate(), policy)
+		}()
+	}
+	close(start)
+	waitGroup.Wait()
+	return results, errs
+}
+
+func concurrentlyImportTier(repo *importdb.PgImportRepo, newAggregate func() model.TierAggregate, policy model.ConflictPolicy, count int) ([]model.RepoResult, []error) {
+	start := make(chan struct{})
+	results := make([]model.RepoResult, count)
+	errs := make([]error, count)
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(count)
+	for index := range count {
+		go func() {
+			defer waitGroup.Done()
+			<-start
+			results[index], errs[index] = repo.ImportTier(context.Background(), newAggregate(), policy)
+		}()
+	}
+	close(start)
+	waitGroup.Wait()
+	return results, errs
+}
+
+func concurrentlyImportNetwork(repo *importdb.PgImportRepo, newAggregate func() model.NetworkAggregate, policy model.ConflictPolicy, count int) ([]model.RepoResult, []error) {
+	start := make(chan struct{})
+	results := make([]model.RepoResult, count)
+	errs := make([]error, count)
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(count)
+	for index := range count {
+		go func() {
+			defer waitGroup.Done()
+			<-start
+			results[index], errs[index] = repo.ImportNetwork(context.Background(), newAggregate(), policy)
+		}()
+	}
+	close(start)
+	waitGroup.Wait()
+	return results, errs
+}
+
+func requireImportOutcomes(t *testing.T, results []model.RepoResult, errs []error, expectedImported, expectedSkipped int) {
+	t.Helper()
+	var imported, skipped int
+	for index, err := range errs {
+		require.NoError(t, err)
+		switch results[index].Outcome {
+		case model.OutcomeImported:
+			imported++
+		case model.OutcomeSkipped:
+			skipped++
+		}
+	}
+	require.Equal(t, expectedImported, imported)
+	require.Equal(t, expectedSkipped, skipped)
+}
+
+func aggregateCount(t *testing.T, table string) int {
+	t.Helper()
+	query := fmt.Sprintf(`SELECT count(*) FROM %s`, table) //nolint:gosec // table names are fixed test constants
+	var count int
+	require.NoError(t, testPool.QueryRow(context.Background(), query).Scan(&count))
+	return count
+}
+
+func entryCount(t *testing.T) int {
+	t.Helper()
+	var count int
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT count(*) FROM entries`).Scan(&count))
+	return count
 }
 
 func resetImportDatabase(t *testing.T) {

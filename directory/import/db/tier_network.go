@@ -28,7 +28,7 @@ func (r *PgImportRepo) ImportTier(ctx context.Context, aggregate model.TierAggre
 		return model.RepoResult{}, err
 	}
 	name := aggregate.Key.Name
-	existing, lookupErr := queries.LockTierByBusinessKey(ctx, db.LockTierByBusinessKeyParams{Consortium: consortium.ID, Name: &name})
+	existing, lookupErr := queries.LockTierByBusinessKey(ctx, db.LockTierByBusinessKeyParams{Consortium: consortium.ID, Name: name})
 	exists := lookupErr == nil
 	if lookupErr != nil && !errors.Is(lookupErr, pgx.ErrNoRows) {
 		return model.RepoResult{}, fmt.Errorf("resolve tier %s", key)
@@ -46,7 +46,7 @@ func (r *PgImportRepo) ImportTier(ctx context.Context, aggregate model.TierAggre
 		err = queries.UpdateImportedTier(ctx, db.UpdateImportedTierParams{ID: tierID, Level: aggregate.Data.Level, Type: aggregate.Data.Type, Cost: aggregate.Data.Cost})
 	} else {
 		var created db.Tier
-		created, err = queries.CreateTier(ctx, db.CreateTierParams{Name: &name, Consortium: consortium.ID, Level: aggregate.Data.Level, Type: aggregate.Data.Type, Cost: aggregate.Data.Cost})
+		created, err = queries.CreateTier(ctx, db.CreateTierParams{Name: name, Consortium: consortium.ID, Level: aggregate.Data.Level, Type: aggregate.Data.Type, Cost: aggregate.Data.Cost})
 		tierID = created.ID
 	}
 	if err != nil {
@@ -77,7 +77,7 @@ func (r *PgImportRepo) ImportNetwork(ctx context.Context, aggregate model.Networ
 		return model.RepoResult{}, err
 	}
 	name := aggregate.Key.Name
-	existing, lookupErr := queries.LockNetworkByBusinessKey(ctx, db.LockNetworkByBusinessKeyParams{Consortium: consortium.ID, Name: &name})
+	existing, lookupErr := queries.LockNetworkByBusinessKey(ctx, db.LockNetworkByBusinessKeyParams{Consortium: consortium.ID, Name: name})
 	exists := lookupErr == nil
 	if lookupErr != nil && !errors.Is(lookupErr, pgx.ErrNoRows) {
 		return model.RepoResult{}, fmt.Errorf("resolve network %s", key)
@@ -95,7 +95,7 @@ func (r *PgImportRepo) ImportNetwork(ctx context.Context, aggregate model.Networ
 		err = queries.UpdateImportedNetwork(ctx, db.UpdateImportedNetworkParams{ID: networkID, Priority: aggregate.Data.Priority, Reciprocal: aggregate.Data.Reciprocal})
 	} else {
 		var created db.Network
-		created, err = queries.CreateNetwork(ctx, db.CreateNetworkParams{Name: &name, Consortium: consortium.ID, Priority: aggregate.Data.Priority, Reciprocal: aggregate.Data.Reciprocal})
+		created, err = queries.CreateNetwork(ctx, db.CreateNetworkParams{Name: name, Consortium: consortium.ID, Priority: aggregate.Data.Priority, Reciprocal: aggregate.Data.Reciprocal})
 		networkID = created.ID
 	}
 	if err != nil {
@@ -110,6 +110,9 @@ func (r *PgImportRepo) ImportNetwork(ctx context.Context, aggregate model.Networ
 	return model.RepoResult{Outcome: model.OutcomeImported}, nil
 }
 
+// resolveConsortium locks the consortium entry for the transaction. Besides
+// protecting the reference, this serializes missing tier and network business
+// keys within a consortium before their lookup-and-create flows.
 func resolveConsortium(ctx context.Context, queries *db.Queries, key model.SymbolRef) (db.Entry, error) {
 	entry, err := resolveEntry(ctx, queries, key)
 	if err != nil {

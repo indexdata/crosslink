@@ -41,10 +41,6 @@ func boolPtr(v bool) *bool {
 	return &v
 }
 
-func stringPtr(v string) *string {
-	return &v
-}
-
 func withNetworkReciprocal(entry dirapi.Entry, reciprocal *bool) dirapi.Entry {
 	if entry.Networks == nil {
 		return entry
@@ -916,9 +912,6 @@ func TestCompareSuppliers(t *testing.T) {
 	assert.False(t, suppliers[1].Local)
 }
 
-func strPtr(i string) *string {
-	return &i
-}
 func TestFilterAndSortAppliesHoldingsPolicy(t *testing.T) {
 	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
