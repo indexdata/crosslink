@@ -1889,6 +1889,74 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 		}
 	})
 
+	t.Run("SAM empty terms", func(t *testing.T) {
+		mockPrRepo := new(MockPrRepo)
+		handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), new(MockEventBus))
+		err := handler.extractSamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.SupplyingAgencyMessage{
+			Header: makeHeader(),
+			MessageInfo: iso18626.MessageInfo{
+				OfferedCosts: &iso18626.TypeCosts{CurrencyCode: iso18626.TypeSchemeValuePair{Text: "EUR"}},
+			},
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				DeliveryCosts: &iso18626.TypeCosts{CurrencyCode: iso18626.TypeSchemeValuePair{Text: "EUR"}},
+				LoanCondition: &iso18626.TypeSchemeValuePair{Text: "  "},
+			},
+		})
+		assert.NoError(t, err)
+		assert.Empty(t, mockPrRepo.savedNotifications)
+	})
+
+	t.Run("SAM note with empty terms", func(t *testing.T) {
+		mockPrRepo := new(MockPrRepo)
+		handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), new(MockEventBus))
+		err := handler.extractSamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.SupplyingAgencyMessage{
+			Header: makeHeader(),
+			MessageInfo: iso18626.MessageInfo{
+				Note:         "plain sam note",
+				OfferedCosts: &iso18626.TypeCosts{CurrencyCode: iso18626.TypeSchemeValuePair{Text: "EUR"}},
+			},
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				DeliveryCosts: &iso18626.TypeCosts{CurrencyCode: iso18626.TypeSchemeValuePair{Text: "EUR"}},
+				LoanCondition: &iso18626.TypeSchemeValuePair{Text: "  "},
+			},
+		})
+		assert.NoError(t, err)
+		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
+			n := mockPrRepo.savedNotifications[0]
+			assert.Equal(t, pr_db.NotificationKindNote, n.Kind)
+			assert.Equal(t, "plain sam note", n.Note.String)
+			assert.False(t, n.Cost.Valid)
+			assert.False(t, n.Currency.Valid)
+			assert.False(t, n.Condition.Valid)
+		}
+	})
+
+	t.Run("SAM empty offered cost falls back to delivery cost", func(t *testing.T) {
+		mockPrRepo := new(MockPrRepo)
+		handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), new(MockEventBus))
+		err := handler.extractSamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.SupplyingAgencyMessage{
+			Header: makeHeader(),
+			MessageInfo: iso18626.MessageInfo{
+				OfferedCosts: &iso18626.TypeCosts{CurrencyCode: iso18626.TypeSchemeValuePair{Text: "EUR"}},
+			},
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				DeliveryCosts: &iso18626.TypeCosts{
+					CurrencyCode:  iso18626.TypeSchemeValuePair{Text: "DKK"},
+					MonetaryValue: utils.XSDDecimal{Base: 2500, Exp: -2},
+				},
+			},
+		})
+		assert.NoError(t, err)
+		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
+			n := mockPrRepo.savedNotifications[0]
+			assert.Equal(t, pr_db.NotificationKindCondition, n.Kind)
+			assert.Equal(t, "DKK", n.Currency.String)
+			cost, err := n.Cost.Float64Value()
+			assert.NoError(t, err)
+			assert.Equal(t, 25.0, cost.Float64)
+		}
+	})
+
 	t.Run("Request cost only", func(t *testing.T) {
 		mockPrRepo := new(MockPrRepo)
 		handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), new(MockEventBus))
