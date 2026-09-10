@@ -35,8 +35,9 @@ func (a ApiImpl) AddEntryNetwork(ctx context.Context, request AddEntryNetworkReq
 	qtx := a.queries.WithTx(tx)
 
 	insertedEntryNetwork, err := qtx.CreateEntryNetwork(ctx, db.CreateEntryNetworkParams{
-		Entry:   request.Body.Entry,
-		Network: request.Body.Network,
+		Entry:    request.Body.Entry,
+		Network:  request.Body.Network,
+		Priority: derefOrDefault(request.Body.Priority, int32(0)),
 	})
 
 	if err != nil {
@@ -105,8 +106,9 @@ func (a ApiImpl) AddNetworkForEntry(ctx context.Context, request AddNetworkForEn
 	}
 
 	insertedNetworkForEntry, err := qtx.CreateEntryNetwork(ctx, db.CreateEntryNetworkParams{
-		Entry:   orig.ID,
-		Network: request.Body.Id,
+		Entry:    orig.ID,
+		Network:  request.Body.Id,
+		Priority: derefOrDefault(request.Body.Priority, int32(0)),
 	})
 
 	if err != nil {
@@ -149,9 +151,10 @@ func (a ApiImpl) GetEntryNetworkByID(ctx context.Context, request GetEntryNetwor
 	}
 
 	entryNetworkResponse := EntryNetwork{
-		Id:      &entryNetwork.ID,
-		Entry:   entryNetwork.Entry,
-		Network: entryNetwork.Network,
+		Id:       &entryNetwork.ID,
+		Entry:    entryNetwork.Entry,
+		Network:  entryNetwork.Network,
+		Priority: entryNetwork.Priority,
 	}
 
 	return GetEntryNetworkByID200JSONResponse(entryNetworkResponse), nil
@@ -191,7 +194,7 @@ func (a ApiImpl) GetNetworksForEntry(ctx context.Context, request GetNetworksFor
 		}
 	}
 
-	networkList := make([]Network, 0)
+	networkList := make([]NetworkForEntryDetails, 0)
 
 	if entry.Type == string(EntryTypeConsortium) {
 		rows, err := a.queries.ListNetworksForConsortium(ctx, entry.ID)
@@ -201,11 +204,10 @@ func (a ApiImpl) GetNetworksForEntry(ctx context.Context, request GetNetworksFor
 		}
 
 		for _, row := range rows {
-			network := Network{
+			network := NetworkForEntryDetails{
 				Id:         &row.ID,
 				Consortium: row.Consortium,
 				Name:       row.Name,
-				Priority:   row.Priority,
 			}
 			networkList = append(networkList, network)
 		}
@@ -217,17 +219,17 @@ func (a ApiImpl) GetNetworksForEntry(ctx context.Context, request GetNetworksFor
 		}
 
 		for _, row := range rows {
-			network := Network{
+			network := NetworkForEntryDetails{
 				Id:         &row.ID,
 				Consortium: row.Consortium,
 				Name:       row.Name,
-				Priority:   row.Priority,
+				Priority:   &row.Priority,
 			}
 			networkList = append(networkList, network)
 		}
 	}
 
-	resp := NetworksResponse{
+	resp := NetworksForEntryResponse{
 		Items: networkList,
 		About: About{Count: int64(len(networkList))},
 	}
@@ -267,9 +269,10 @@ func (a ApiImpl) GetEntryNetworks(ctx context.Context, request GetEntryNetworksR
 
 	for _, row := range rows {
 		entryNetwork := EntryNetwork{
-			Id:      &row.ID,
-			Entry:   row.Entry,
-			Network: row.Network,
+			Id:       &row.ID,
+			Entry:    row.Entry,
+			Network:  row.Network,
+			Priority: row.Priority,
 		}
 		entryNetworkList = append(entryNetworkList, entryNetwork)
 	}
