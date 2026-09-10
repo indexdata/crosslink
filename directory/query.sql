@@ -19,6 +19,9 @@ SELECT * FROM entries WHERE parent = @parent;
 -- name: LockConsortiumEntryChanges :exec
 SELECT pg_advisory_xact_lock(hashtextextended('directoryish:consortium-entry', 0));
 
+-- name: LockEntryImportKey :exec
+SELECT pg_advisory_xact_lock(hashtextextended('directoryish:entry:' || @authority::text || ':' || @symbol::text, 0));
+
 -- name: CreateEntry :one
 INSERT INTO entries (
   name, description, contact_name, email, from_email, tenant, vendor, phone_number, time_zone, organization_id, type, parent, lms_location_code, hrid

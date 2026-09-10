@@ -1,9 +1,9 @@
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM tiers WHERE name IS NULL OR btrim(name) = '') THEN
+  IF EXISTS (SELECT 1 FROM tiers WHERE name IS NULL OR name !~ '[^[:space:]]') THEN
     RAISE EXCEPTION 'cannot add tier business key: tiers contain null or blank names';
   END IF;
-  IF EXISTS (SELECT 1 FROM networks WHERE name IS NULL OR btrim(name) = '') THEN
+  IF EXISTS (SELECT 1 FROM networks WHERE name IS NULL OR name !~ '[^[:space:]]') THEN
     RAISE EXCEPTION 'cannot add network business key: networks contain null or blank names';
   END IF;
   IF EXISTS (
@@ -27,3 +27,9 @@ ALTER TABLE tiers
 
 ALTER TABLE networks
   ADD CONSTRAINT networks_consortium_name_unique UNIQUE (consortium, name);
+
+ALTER TABLE tiers
+  ADD CONSTRAINT tiers_name_not_blank CHECK (name ~ '[^[:space:]]');
+
+ALTER TABLE networks
+  ADD CONSTRAINT networks_name_not_blank CHECK (name ~ '[^[:space:]]');

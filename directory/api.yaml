@@ -570,6 +570,12 @@ paths:
             text/plain:
               schema:
                 type: string
+        '409':
+          description: A tier with the same name already exists in the consortium
+          content:
+            text/plain:
+              schema:
+                type: string
         '500':
           description: Internal server error
           content:
@@ -726,6 +732,12 @@ paths:
                 type: string
         '401':
           description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '409':
+          description: A network with the same name already exists in the consortium
           content:
             text/plain:
               schema:
@@ -1940,12 +1952,14 @@ components:
             $ref: '#/components/schemas/Tier'
         lmsConfig:
           description: Configuration for LMS (Library Management System) integration via NCIP protocol
-          $ref: '#/components/schemas/LmsConfig'
+          allOf:
+            - $ref: '#/components/schemas/LmsConfig'
         catalogConfig:
           $ref: '#/components/schemas/CatalogConfig'
         holdingsPolicy:
           description: Policy that determines whether and in which order holdings may supply an item.
-          $ref: '#/components/schemas/HoldingsPolicy'
+          allOf:
+            - $ref: '#/components/schemas/HoldingsPolicy'
     IllConfig:
       type: object
       properties:
@@ -1954,7 +1968,8 @@ components:
           description: URL of the ISO18626 service. When set, used instead of an ISO18626 service from endpoints.
         iso18626Vendor:
           description: ISO18626 service vendor. Used only when iso18626Url is non-empty.
-          $ref: '#/components/schemas/EntryVendor'
+          allOf:
+            - $ref: '#/components/schemas/EntryVendor'
         lendersOfLastResort:
           type: array
           description: Suppliers appended to the end of the rota when no regular supplier can fill the request.
@@ -2387,7 +2402,8 @@ components:
           default: "INST-{requesterSymbol}"
         patronProfiles:
           description: Patron profiles used to determine whether a user returned by NCIP LookupUser is eligible to create ILL requests.
-          $ref: '#/components/schemas/PatronProfiles'
+          allOf:
+            - $ref: '#/components/schemas/PatronProfiles'
 
     PatronProfiles:
       type: array
@@ -2648,6 +2664,7 @@ components:
       required:
         - id
         - consortium
+        - name
       properties:
         id:
           readOnly: true
@@ -2659,6 +2676,8 @@ components:
           format: uuid
         name:
           type: string
+          minLength: 1
+          pattern: '.*\S.*'
         reciprocal:
           type: boolean
 
@@ -2689,6 +2708,7 @@ components:
       required:
         - id
         - consortium
+        - name
         - level
         - type
         - cost
@@ -2703,6 +2723,8 @@ components:
           format: uuid
         name:
           type: string
+          minLength: 1
+          pattern: '.*\S.*'
         level:
           type: string
           enum:

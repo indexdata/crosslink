@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/indexdata/crosslink/directory/import/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,7 +39,7 @@ func TestImportDispatchesAllAggregateTypes(t *testing.T) {
 	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
 	input := strings.Join([]string{validEntryRecord(), validTierRecord(), validNetworkRecord()}, "\n")
 
-	result, err := New(repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(input))
+	result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(input))
 
 	require.NoError(t, err)
 	assert.Equal(t, model.ImportSectionResult{Imported: 1}, result.Entries)
@@ -54,7 +55,7 @@ func TestImportContinuesAfterMalformedRecord(t *testing.T) {
 	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
 	input := "{bad json}\n\n" + validEntryRecord() + "\n"
 
-	result, err := New(repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(input))
+	result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(input))
 
 	require.NoError(t, err)
 	assert.Zero(t, result.Entries.Failed)
@@ -68,9 +69,9 @@ func TestImportContinuesAfterMalformedRecord(t *testing.T) {
 
 func TestImportContinuesAfterSemanticFailure(t *testing.T) {
 	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
-	badTier := strings.Replace(validTierRecord(), `"level":"standard"`, `"level":"invalid"`, 1)
+	badTier := strings.Replace(validTierRecord(), `"name":"Primary"`, `"name":"   "`, 1)
 
-	result, err := New(repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(badTier+"\n"+validTierRecord()))
+	result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(badTier+"\n"+validTierRecord()))
 
 	require.NoError(t, err)
 	assert.Equal(t, model.ImportSectionResult{Imported: 1, Failed: 1}, result.Tiers)
@@ -81,12 +82,30 @@ func TestImportContinuesAfterSemanticFailure(t *testing.T) {
 	assert.Equal(t, 1, repo.tierCalls)
 }
 
+func TestImportDoesNotEchoSchemaRejectedValues(t *testing.T) {
+	for name, record := range map[string]string{
+		"schema violation":    strings.Replace(validTierRecord(), `"level":"standard"`, `"level":"private-secret"`, 1),
+		"unknown record type": strings.Replace(validTierRecord(), `"type":"tier"`, `"type":"private-secret"`, 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
+
+			result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(record))
+
+			require.NoError(t, err)
+			require.Len(t, result.Errors, 1)
+			assert.NotContains(t, result.Errors[0].Error, "private-secret")
+			assert.Zero(t, repo.tierCalls)
+		})
+	}
+}
+
 func TestImportBlankLinesDoNotIncrementRecordNumber(t *testing.T) {
 	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
 	badTier := strings.Replace(validTierRecord(), `"level":"standard"`, `"level":"invalid"`, 1)
 	input := "\n" + validTierRecord() + "\n\r\n" + badTier
 
-	result, err := New(repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(input))
+	result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(input))
 
 	require.NoError(t, err)
 	require.Len(t, result.Errors, 1)
@@ -95,7 +114,7 @@ func TestImportBlankLinesDoNotIncrementRecordNumber(t *testing.T) {
 
 func TestImportReturnsFatalReaderError(t *testing.T) {
 	fatal := errors.New("transport failed")
-	result, err := New(&recordingRepo{}).Import(context.Background(), model.ConflictPolicyFail, errorReader{err: fatal})
+	result, err := newTestImporter(t, &recordingRepo{}).Import(context.Background(), model.ConflictPolicyFail, errorReader{err: fatal})
 
 	require.ErrorIs(t, err, fatal)
 	require.Empty(t, result.Errors)
@@ -116,7 +135,7 @@ func TestImportRejectsMissingAndUnknownProperties(t *testing.T) {
 	for name, record := range tests {
 		t.Run(name, func(t *testing.T) {
 			repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
-			result, err := New(repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(record))
+			result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(record))
 			require.NoError(t, err)
 			require.Len(t, result.Errors, 1)
 			assert.NotContains(t, result.Errors[0].Error, "do-not-echo")
@@ -132,7 +151,7 @@ func validILLConfig() string {
 func TestImportAccountsForSkippedAndRepositoryFailures(t *testing.T) {
 	t.Run("skipped", func(t *testing.T) {
 		repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeSkipped, Diagnostic: "entry already exists"}}
-		result, err := New(repo).Import(context.Background(), model.ConflictPolicySkip, strings.NewReader(validEntryRecord()))
+		result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicySkip, strings.NewReader(validEntryRecord()))
 		require.NoError(t, err)
 		assert.Equal(t, model.ImportSectionResult{Skipped: 1}, result.Entries)
 		require.Len(t, result.Errors, 1)
@@ -141,7 +160,7 @@ func TestImportAccountsForSkippedAndRepositoryFailures(t *testing.T) {
 
 	t.Run("failed", func(t *testing.T) {
 		repo := &recordingRepo{err: errors.New("entry parent does not exist")}
-		result, err := New(repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(validEntryRecord()))
+		result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(validEntryRecord()))
 		require.NoError(t, err)
 		assert.Equal(t, model.ImportSectionResult{Failed: 1}, result.Entries)
 		require.Len(t, result.Errors, 1)
@@ -152,7 +171,7 @@ func TestImportAccountsForSkippedAndRepositoryFailures(t *testing.T) {
 func TestImportRecordLimitIsExact(t *testing.T) {
 	record := validTierRecord()
 	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
-	importer := New(repo)
+	importer := newTestImporter(t, repo)
 	importer.maxRecordBytes = len(record)
 
 	result, err := importer.Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(record+"\r\n"))
@@ -160,7 +179,7 @@ func TestImportRecordLimitIsExact(t *testing.T) {
 	assert.Equal(t, int32(1), result.Tiers.Imported)
 
 	repo = &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
-	importer = New(repo)
+	importer = newTestImporter(t, repo)
 	importer.maxRecordBytes = len(record) - 1
 	_, err = importer.Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(record+"\n"))
 	require.ErrorIs(t, err, ErrRecordTooLarge)
@@ -182,3 +201,42 @@ func validNetworkRecord() string {
 type errorReader struct{ err error }
 
 func (r errorReader) Read([]byte) (int, error) { return 0, r.err }
+
+func TestNewRejectsMissingImportRecordSchema(t *testing.T) {
+	_, err := New(&recordingRepo{}, &openapi3.T{Components: &openapi3.Components{Schemas: openapi3.Schemas{}}})
+
+	require.ErrorContains(t, err, "ImportEntryRecord")
+}
+
+func TestImportUsesInjectedOpenAPIRecordSchema(t *testing.T) {
+	spec := loadImportSpec(t)
+	minimumCost := 1.0
+	spec.Components.Schemas["ImportTierData"].Value.Properties["cost"].Value.Min = &minimumCost
+	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
+	importer, err := New(repo, spec)
+	require.NoError(t, err)
+
+	result, err := importer.Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(validTierRecord()))
+
+	require.NoError(t, err)
+	assert.Equal(t, model.ImportSectionResult{Failed: 1}, result.Tiers)
+	require.Len(t, result.Errors, 1)
+	assert.Zero(t, repo.tierCalls)
+}
+
+func newTestImporter(t *testing.T, repository Repository) *Importer {
+	t.Helper()
+	spec := loadImportSpec(t)
+	importer, err := New(repository, spec)
+	require.NoError(t, err)
+	return importer
+}
+
+func loadImportSpec(t *testing.T) *openapi3.T {
+	t.Helper()
+	loader := openapi3.NewLoader()
+	spec, err := loader.LoadFromFile("../../api.yaml")
+	require.NoError(t, err)
+	require.NoError(t, spec.Validate(context.Background()))
+	return spec
+}

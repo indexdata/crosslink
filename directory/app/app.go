@@ -62,10 +62,18 @@ func InitHandler(ctx context.Context, dbpool *pgxpool.Pool) http.Handler {
 		slog.ErrorContext(ctx, "Error loading API spec", "error", err)
 		os.Exit(1)
 	}
+	if err := swagger.Validate(ctx); err != nil {
+		slog.ErrorContext(ctx, "Invalid API spec", "error", err)
+		os.Exit(1)
+	}
 
 	queries := db.New(dbpool)
 	importRepo := importdb.New(dbpool)
-	importer := importservice.New(importRepo)
+	importer, err := importservice.New(importRepo, swagger)
+	if err != nil {
+		slog.ErrorContext(ctx, "Invalid import schemas", "error", err)
+		os.Exit(1)
+	}
 	impl := api.NewApiImpl(dbpool, queries, importer)
 	si := api.NewStrictHandler(impl, nil)
 	m := http.NewServeMux()

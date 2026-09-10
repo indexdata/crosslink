@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/oapi-codegen/nullable"
 	"github.com/oapi-codegen/runtime/types"
@@ -58,6 +59,11 @@ func derefOrDefaultPtr[T any](ptr *T, defaultValue *T) *T {
 		return ptr
 	}
 	return defaultValue
+}
+
+func isUniqueConstraintViolation(err error, constraint string) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == constraint
 }
 
 // Returns true if there is a struct in slice that has a prop with the given name
