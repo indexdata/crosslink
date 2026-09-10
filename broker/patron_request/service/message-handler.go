@@ -230,6 +230,7 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	}
 
 	supSymbol := sam.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + sam.Header.SupplyingAgencyId.AgencyIdValue
+	isNewSupplier := supSymbol != ":" && pr.SupplierSymbol.Valid && pr.SupplierSymbol.String != supSymbol
 	if supSymbol != ":" {
 		pr.SupplierSymbol = pgtype.Text{
 			String: supSymbol,
@@ -240,9 +241,15 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	var retryBibInfo *iso18626.BibliographicInfo
 	switch sam.StatusInfo.Status {
 	case iso18626.TypeStatusExpectToSupply:
-		eventName = SupplierExpectToSupply
-		if isLocalSupply(pr, supSymbol) {
+		switch {
+		case isNewSupplier && isLocalSupply(pr, supSymbol):
+			eventName = SupplierNewExpectToSupplyLocal
+		case isNewSupplier:
+			eventName = SupplierNewExpectToSupply
+		case isLocalSupply(pr, supSymbol):
 			eventName = SupplierExpectToSupplyLocal
+		default:
+			eventName = SupplierExpectToSupply
 		}
 	case iso18626.TypeStatusWillSupply:
 		if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse {
@@ -258,13 +265,6 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 			setSupplierMessage(sam, &pr)
 		}
 	case iso18626.TypeStatusLoaned:
-		err := m.saveItems(ctx, pr, sam)
-		if err != nil {
-			return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
-				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
-				ErrorValue: err.Error(),
-			}, err)
-		}
 		setSupplierMessage(sam, &pr)
 		eventName = SupplierLoaned
 	case iso18626.TypeStatusLoanCompleted, iso18626.TypeStatusCopyCompleted:
@@ -315,6 +315,15 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	}
 	if !eventDefined {
 		return statusChangeNotAllowed()
+	}
+	if eventName == SupplierLoaned {
+		err = m.saveItems(ctx, pr, sam)
+		if err != nil {
+			return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+				ErrorValue: err.Error(),
+			}, err)
+		}
 	}
 	if stateChanged &&
 		(eventName == SupplierCompletedLocal ||
@@ -635,7 +644,14 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ct
 }
 
 func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) error {
-	result, _, _ := common.UnpackItemsNote(sam.MessageInfo.Note)
+	result, startIdx, endIdx := common.UnpackItemsNote(sam.MessageInfo.Note)
+	if len(result) == 0 {
+		if startIdx >= 0 || endIdx >= 0 {
+			return errors.New("malformed multiple items note: start and end markers must both be present in order")
+		}
+		_, err := ensureFallbackRequesterItem(ctx, m.prRepo, pr)
+		return err
+	}
 	for index, item := range result {
 		var loopErr error
 		if len(item) == 1 && item[0] != "" {
@@ -650,13 +666,6 @@ func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr p
 		}
 	}
 	return nil
-}
-
-func requesterItemBarcode(prID string, index int, itemCount int) string {
-	if itemCount == 1 {
-		return prID
-	}
-	return fmt.Sprintf("%s-%d", prID, index+1)
 }
 
 func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId string, requesterBarcode string, supplierBarcode *string, callNumber *string, name *string) error {
@@ -681,20 +690,20 @@ func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.Extende
 	}
 	var condition pgtype.Text
 	if sam.DeliveryInfo != nil && sam.DeliveryInfo.LoanCondition != nil {
-		if sam.DeliveryInfo.LoanCondition.Text != "" {
-			condition = getDbText(sam.DeliveryInfo.LoanCondition.Text)
+		if value := strings.TrimSpace(sam.DeliveryInfo.LoanCondition.Text); value != "" {
+			condition = getDbText(value)
 		}
 	}
 
 	var currency pgtype.Text
 	var cost pgtype.Numeric
-	if sam.MessageInfo.OfferedCosts != nil {
+	if hasNonZeroCost(sam.MessageInfo.OfferedCosts) {
 		var err error
 		cost, currency, err = toNotificationCost(sam.MessageInfo.OfferedCosts)
 		if err != nil {
 			return err
 		}
-	} else if sam.DeliveryInfo != nil && sam.DeliveryInfo.DeliveryCosts != nil {
+	} else if sam.DeliveryInfo != nil && hasNonZeroCost(sam.DeliveryInfo.DeliveryCosts) {
 		var err error
 		cost, currency, err = toNotificationCost(sam.DeliveryInfo.DeliveryCosts)
 		if err != nil {
@@ -777,6 +786,10 @@ func stripReShareConditionMarkers(note string) string {
 	cleaned = strings.ReplaceAll(cleaned, shim.RESHARE_LOAN_CONDITION_AGREE, "")
 	cleaned = strings.ReplaceAll(cleaned, shim.RESHARE_LOAN_CONDITION_REJECT, "")
 	return strings.TrimSpace(cleaned)
+}
+
+func hasNonZeroCost(value *iso18626.TypeCosts) bool {
+	return value != nil && value.MonetaryValue.Base != 0
 }
 
 func toNotificationCost(value *iso18626.TypeCosts) (pgtype.Numeric, pgtype.Text, error) {
