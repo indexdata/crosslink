@@ -1008,8 +1008,17 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 	}
 	items, err := a.getItems(ctx, pr)
 	if err != nil {
-		status, result := logActionErrorAndReturnResult(ctx, "receiveBorrowingRequest failed to get items by PR ID", err)
-		return actionExecutionResult{status: status, result: result, pr: pr}
+		if !errors.Is(err, errNoItemsFound) {
+			status, result := logActionErrorAndReturnResult(ctx, "receiveBorrowingRequest failed to get items by PR ID", err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		ctx.Logger().Warn("creating requester item omitted from Loaned message", "pr_id", pr.ID)
+		item, saveErr := ensureFallbackRequesterItem(ctx, a.prRepo, pr)
+		if saveErr != nil {
+			status, result := logActionErrorAndReturnResult(ctx, "receiveBorrowingRequest failed to create fallback item", saveErr)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		items = []pr_db.Item{item}
 	}
 	for _, item := range items {
 		if item.LmsRequestID.Valid && strings.TrimSpace(item.LmsRequestID.String) != "" {
@@ -1960,7 +1969,7 @@ func (a *PatronRequestActionService) getItems(ctx common.ExtendedContext, pr pr_
 		return nil, fmt.Errorf("failed to get items: %w", err)
 	}
 	if len(items) == 0 {
-		return nil, errors.New("no items found for patron request")
+		return nil, errNoItemsFound
 	}
 	return items, nil
 }
