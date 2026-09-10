@@ -209,6 +209,12 @@ stateModels:
           - name: expect-to-supply-local
             desc: "Local supplier indicates an intention to supply (ISO18626 ExpectToSupply)"
             transition: LOCAL_SUPPLY
+          - name: new-expect-to-supply
+            desc: "A newly selected supplier indicates an intention to supply (ISO18626 ExpectToSupply)"
+            transition: SUPPLIER_LOCATED
+          - name: new-expect-to-supply-local
+            desc: "A newly selected local supplier indicates an intention to supply (ISO18626 ExpectToSupply)"
+            transition: LOCAL_SUPPLY
           - name: will-supply
             desc: "Supplier will supply without conditions (ISO18626 WillSupply)"
             transition: WILL_SUPPLY
@@ -243,6 +249,12 @@ stateModels:
             transitions:
               success: CANCEL_PENDING
         events:
+          - name: new-expect-to-supply
+            desc: "A newly selected supplier indicates an intention to supply (ISO18626 ExpectToSupply)"
+            transition: SUPPLIER_LOCATED
+          - name: new-expect-to-supply-local
+            desc: "A newly selected local supplier indicates an intention to supply (ISO18626 ExpectToSupply)"
+            transition: LOCAL_SUPPLY
           - name: will-supply
             desc: "Supplier will supply without conditions (ISO18626 WillSupply)"
             transition: WILL_SUPPLY
@@ -282,6 +294,12 @@ stateModels:
             transitions:
               success: CANCEL_PENDING
         events:
+          - name: new-expect-to-supply
+            desc: "A newly selected supplier indicates an intention to supply (ISO18626 ExpectToSupply)"
+            transition: SUPPLIER_LOCATED
+          - name: new-expect-to-supply-local
+            desc: "A newly selected local supplier indicates an intention to supply (ISO18626 ExpectToSupply)"
+            transition: LOCAL_SUPPLY
           - name: will-supply-conditional
             desc: Supplier updates/extends conditions while still pending
             transition: CONDITION_PENDING
@@ -321,6 +339,12 @@ stateModels:
             transitions:
               success: CANCEL_PENDING
         events:
+          - name: new-expect-to-supply
+            desc: "A newly selected supplier indicates an intention to supply (ISO18626 ExpectToSupply)"
+            transition: SUPPLIER_LOCATED
+          - name: new-expect-to-supply-local
+            desc: "A newly selected local supplier indicates an intention to supply (ISO18626 ExpectToSupply)"
+            transition: LOCAL_SUPPLY
           - name: will-supply-conditional
             desc: "Supplier adds conditions after initial WillSupply (ISO18626 WillSupply with conditions)"
             transition: CONDITION_PENDING

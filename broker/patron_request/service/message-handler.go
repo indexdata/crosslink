@@ -230,6 +230,7 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	}
 
 	supSymbol := sam.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + sam.Header.SupplyingAgencyId.AgencyIdValue
+	isNewSupplier := supSymbol != ":" && pr.SupplierSymbol.Valid && pr.SupplierSymbol.String != supSymbol
 	if supSymbol != ":" {
 		pr.SupplierSymbol = pgtype.Text{
 			String: supSymbol,
@@ -240,9 +241,15 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	var retryBibInfo *iso18626.BibliographicInfo
 	switch sam.StatusInfo.Status {
 	case iso18626.TypeStatusExpectToSupply:
-		eventName = SupplierExpectToSupply
-		if isLocalSupply(pr, supSymbol) {
+		switch {
+		case isNewSupplier && isLocalSupply(pr, supSymbol):
+			eventName = SupplierNewExpectToSupplyLocal
+		case isNewSupplier:
+			eventName = SupplierNewExpectToSupply
+		case isLocalSupply(pr, supSymbol):
 			eventName = SupplierExpectToSupplyLocal
+		default:
+			eventName = SupplierExpectToSupply
 		}
 	case iso18626.TypeStatusWillSupply:
 		if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse {

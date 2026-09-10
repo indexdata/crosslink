@@ -107,24 +107,26 @@ const (
 )
 
 const (
-	SupplierExpectToSupply      MessageEvent = "expect-to-supply"
-	SupplierExpectToSupplyLocal MessageEvent = "expect-to-supply-local"
-	SupplierWillSupply          MessageEvent = "will-supply"
-	SupplierWillSupplyCond      MessageEvent = "will-supply-conditional"
-	SupplierLoaned              MessageEvent = "loaned"
-	SupplierCompleted           MessageEvent = "completed"
-	SupplierCompletedLocal      MessageEvent = "completed-local"
-	SupplierUnfilled            MessageEvent = "unfilled"
-	SupplierUnfilledLocal       MessageEvent = "unfilled-local"
-	SupplierCancelledLocal      MessageEvent = "cancelled-local"
-	SupplierCancelAccepted      MessageEvent = "cancel-accepted"
-	SupplierCancelRejected      MessageEvent = "cancel-rejected"
-	SupplierRetryConditional    MessageEvent = "retry-conditional"
-	RequesterCancelRequest      MessageEvent = "cancel-request"
-	RequesterReceived           MessageEvent = "received"
-	RequesterShippedReturn      MessageEvent = "shipped-return"
-	RequesterCondAccepted       MessageEvent = "conditions-accepted"
-	RequesterCondRejected       MessageEvent = "condition-rejected"
+	SupplierExpectToSupply         MessageEvent = "expect-to-supply"
+	SupplierExpectToSupplyLocal    MessageEvent = "expect-to-supply-local"
+	SupplierNewExpectToSupply      MessageEvent = "new-expect-to-supply"
+	SupplierNewExpectToSupplyLocal MessageEvent = "new-expect-to-supply-local"
+	SupplierWillSupply             MessageEvent = "will-supply"
+	SupplierWillSupplyCond         MessageEvent = "will-supply-conditional"
+	SupplierLoaned                 MessageEvent = "loaned"
+	SupplierCompleted              MessageEvent = "completed"
+	SupplierCompletedLocal         MessageEvent = "completed-local"
+	SupplierUnfilled               MessageEvent = "unfilled"
+	SupplierUnfilledLocal          MessageEvent = "unfilled-local"
+	SupplierCancelledLocal         MessageEvent = "cancelled-local"
+	SupplierCancelAccepted         MessageEvent = "cancel-accepted"
+	SupplierCancelRejected         MessageEvent = "cancel-rejected"
+	SupplierRetryConditional       MessageEvent = "retry-conditional"
+	RequesterCancelRequest         MessageEvent = "cancel-request"
+	RequesterReceived              MessageEvent = "received"
+	RequesterShippedReturn         MessageEvent = "shipped-return"
+	RequesterCondAccepted          MessageEvent = "conditions-accepted"
+	RequesterCondRejected          MessageEvent = "condition-rejected"
 )
 
 func requesterBuiltInStates() []string {
@@ -396,6 +398,8 @@ func supplierBuiltInMessageEvents() []string {
 	return uniqueSorted([]string{
 		string(SupplierExpectToSupply),
 		string(SupplierExpectToSupplyLocal),
+		string(SupplierNewExpectToSupply),
+		string(SupplierNewExpectToSupplyLocal),
 		string(SupplierWillSupply),
 		string(SupplierWillSupplyCond),
 		string(SupplierLoaned),
