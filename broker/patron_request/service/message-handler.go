@@ -258,13 +258,6 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 			setSupplierMessage(sam, &pr)
 		}
 	case iso18626.TypeStatusLoaned:
-		err := m.saveItems(ctx, pr, sam)
-		if err != nil {
-			return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
-				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
-				ErrorValue: err.Error(),
-			}, err)
-		}
 		setSupplierMessage(sam, &pr)
 		eventName = SupplierLoaned
 	case iso18626.TypeStatusLoanCompleted, iso18626.TypeStatusCopyCompleted:
@@ -315,6 +308,15 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	}
 	if !eventDefined {
 		return statusChangeNotAllowed()
+	}
+	if eventName == SupplierLoaned {
+		err = m.saveItems(ctx, pr, sam)
+		if err != nil {
+			return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+				ErrorValue: err.Error(),
+			}, err)
+		}
 	}
 	if stateChanged &&
 		(eventName == SupplierCompletedLocal ||

@@ -664,6 +664,27 @@ func TestHandleSupplyingAgencyMessageLoanedFromSupplierLocated(t *testing.T) {
 	assert.Len(t, mockPrRepo.savedItems, 1)
 }
 
+func TestHandleSupplyingAgencyMessageLoanedRetryDoesNotSaveItems(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+
+	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusLoaned},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
+	}, pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateShipped, Side: SideBorrowing})
+
+	assert.Equal(t, events.EventStatusProblem, status)
+	assert.Equal(t, iso18626.TypeMessageStatusERROR, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.ErrorContains(t, err, "status change not allowed: Loaned")
+	assert.Empty(t, mockPrRepo.savedItems)
+	assert.Empty(t, mockPrRepo.savedPr.ID)
+}
+
 func TestHandleSupplyingAgencyMessageLoanCompleted(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
