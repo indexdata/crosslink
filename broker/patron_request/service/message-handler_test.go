@@ -664,6 +664,27 @@ func TestHandleSupplyingAgencyMessageLoanedFromSupplierLocated(t *testing.T) {
 	assert.Len(t, mockPrRepo.savedItems, 1)
 }
 
+func TestHandleSupplyingAgencyMessageLoanedRetryDoesNotSaveItems(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+
+	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusLoaned},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
+	}, pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateShipped, Side: SideBorrowing})
+
+	assert.Equal(t, events.EventStatusProblem, status)
+	assert.Equal(t, iso18626.TypeMessageStatusERROR, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.ErrorContains(t, err, "status change not allowed: Loaned")
+	assert.Empty(t, mockPrRepo.savedItems)
+	assert.Empty(t, mockPrRepo.savedPr.ID)
+}
+
 func TestHandleSupplyingAgencyMessageLoanCompleted(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
@@ -1449,14 +1470,45 @@ func TestSaveItems(t *testing.T) {
 	mockEventBus := new(MockEventBus)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
 
-	// Empty message
+	// A Loaned message without item details still needs a requester-side item so
+	// the borrowing request can be received in the LMS.
 	sam := iso18626.SupplyingAgencyMessage{}
-	err := handler.saveItems(appCtx, pr_db.PatronRequest{ID: "pr1"}, sam)
+	err := handler.saveItems(appCtx, pr_db.PatronRequest{
+		ID: "pr1",
+		IllRequest: iso18626.Request{BibliographicInfo: iso18626.BibliographicInfo{
+			Title: "Request title",
+		}},
+	}, sam)
 	assert.NoError(t, err)
-	assert.Equal(t, 0, len(mockPrRepo.savedItems))
+	if !assert.Len(t, mockPrRepo.savedItems, 1) {
+		return
+	}
+	assert.Equal(t, "pr1", mockPrRepo.savedItems[0].Barcode)
+	assert.False(t, mockPrRepo.savedItems[0].ItemID.Valid)
+	assert.Equal(t, "Request title", mockPrRepo.savedItems[0].Title.String)
+	fallbackItemID := mockPrRepo.savedItems[0].ID
+	err = handler.saveItems(appCtx, pr_db.PatronRequest{ID: "pr1"}, sam)
+	assert.NoError(t, err)
+	if assert.Len(t, mockPrRepo.savedItems, 1) {
+		assert.Equal(t, fallbackItemID, mockPrRepo.savedItems[0].ID)
+	}
+
+	// Partial or misordered markers are malformed payloads, not missing item data.
+	for _, note := range []string{
+		common.MULTIPLE_ITEMS + "\n1",
+		"1\n" + common.MULTIPLE_ITEMS_END,
+		common.MULTIPLE_ITEMS_END + "\n1\n" + common.MULTIPLE_ITEMS,
+	} {
+		sam.MessageInfo.Note = note
+		mockPrRepo.savedItems = nil
+		err = handler.saveItems(appCtx, pr_db.PatronRequest{ID: "pr1"}, sam)
+		assert.EqualError(t, err, "malformed multiple items note: start and end markers must both be present in order")
+		assert.Empty(t, mockPrRepo.savedItems)
+	}
 
 	// One Item
 	sam.MessageInfo.Note = "#MultipleItems#\n1|2|3\n#MultipleItemsEnd#"
+	mockPrRepo.savedItems = nil
 	err = handler.saveItems(appCtx, pr_db.PatronRequest{ID: "pr1"}, sam)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(mockPrRepo.savedItems))

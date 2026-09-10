@@ -1328,18 +1328,55 @@ func TestHandleInvokeActionReceiveNoItem(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
 	lmsCreator := new(MockLmsCreator)
+	lmsAdapter := new(mockLmsAdapter)
+	lmsAdapter.On("AcceptItem", patronRequestId, patronRequestId, mock.Anything, mock.Anything, "Request title", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(lmsAdapter, nil)
+	mockEventBus := new(MockEventBus)
+	emailMock := new(EmailSenderMock)
+	emailMock.On("IsReadyToSend").Return(false)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, emailMock, nil, nil)
+	illRequest := iso18626.Request{BibliographicInfo: iso18626.BibliographicInfo{Title: "Request title"}}
+	shippedPr := pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateShipped, Side: SideBorrowing, RequesterSymbol: getDbText("ISIL:REC1"), SupplierSymbol: getDbText("ISIL:SUP1")}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Once().Return(shippedPr, nil)
+	receivedPr := shippedPr
+	receivedPr.State = BorrowerStateReceived
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(receivedPr, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, nil).Twice()
+
+	action := BorrowerActionReceive
+	status, _ := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, BorrowerStateReceived, mockPrRepo.savedPr.State)
+	if assert.Len(t, mockPrRepo.savedItems, 1) {
+		item := mockPrRepo.savedItems[0]
+		assert.NotEmpty(t, item.ID)
+		assert.Equal(t, patronRequestId, item.PrID)
+		assert.Equal(t, patronRequestId, item.Barcode)
+		assert.False(t, item.ItemID.Valid)
+		assert.Equal(t, "Request title", item.Title.String)
+		assert.Equal(t, getDbText(patronRequestId), item.LmsRequestID)
+		assert.Equal(t, getDbText(patronRequestId), item.LmsItemID)
+	}
+	lmsAdapter.AssertExpectations(t)
+}
+
+func TestHandleInvokeActionReceiveNoItemSaveFailed(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
 	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(lms.CreateLmsAdapterMockOK(), nil)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(MockIso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{}
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateShipped, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateShipped, Side: SideBorrowing, RequesterSymbol: getDbText("ISIL:REC1"), SupplierSymbol: getDbText("ISIL:SUP1")}, nil)
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, nil)
-	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(pr_db.PatronRequest{RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}, IllRequest: illRequest}, nil)
+	mockPrRepo.saveItemFail = true
 
 	action := BorrowerActionReceive
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
 	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "receiveBorrowingRequest failed to get items by PR ID", resultData.EventError.Message)
-	assert.Equal(t, "no items found for patron request", resultData.EventError.Cause)
+	assert.Equal(t, "receiveBorrowingRequest failed to create fallback item", resultData.EventError.Message)
+	assert.Equal(t, "db error", resultData.EventError.Cause)
 }
 
 func TestHandleInvokeActionReceiveItemLookupFailure(t *testing.T) {

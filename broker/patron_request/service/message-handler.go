@@ -258,13 +258,6 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 			setSupplierMessage(sam, &pr)
 		}
 	case iso18626.TypeStatusLoaned:
-		err := m.saveItems(ctx, pr, sam)
-		if err != nil {
-			return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
-				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
-				ErrorValue: err.Error(),
-			}, err)
-		}
 		setSupplierMessage(sam, &pr)
 		eventName = SupplierLoaned
 	case iso18626.TypeStatusLoanCompleted, iso18626.TypeStatusCopyCompleted:
@@ -315,6 +308,15 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	}
 	if !eventDefined {
 		return statusChangeNotAllowed()
+	}
+	if eventName == SupplierLoaned {
+		err = m.saveItems(ctx, pr, sam)
+		if err != nil {
+			return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+				ErrorValue: err.Error(),
+			}, err)
+		}
 	}
 	if stateChanged &&
 		(eventName == SupplierCompletedLocal ||
@@ -635,7 +637,14 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ct
 }
 
 func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) error {
-	result, _, _ := common.UnpackItemsNote(sam.MessageInfo.Note)
+	result, startIdx, endIdx := common.UnpackItemsNote(sam.MessageInfo.Note)
+	if len(result) == 0 {
+		if startIdx >= 0 || endIdx >= 0 {
+			return errors.New("malformed multiple items note: start and end markers must both be present in order")
+		}
+		_, err := ensureFallbackRequesterItem(ctx, m.prRepo, pr)
+		return err
+	}
 	for index, item := range result {
 		var loopErr error
 		if len(item) == 1 && item[0] != "" {
@@ -650,13 +659,6 @@ func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr p
 		}
 	}
 	return nil
-}
-
-func requesterItemBarcode(prID string, index int, itemCount int) string {
-	if itemCount == 1 {
-		return prID
-	}
-	return fmt.Sprintf("%s-%d", prID, index+1)
 }
 
 func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId string, requesterBarcode string, supplierBarcode *string, callNumber *string, name *string) error {

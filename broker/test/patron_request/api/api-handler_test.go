@@ -281,13 +281,17 @@ func TestCrud(t *testing.T) {
 		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
 	})
 
-	// GET items (initially empty): should return object with empty items list, not null
+	// A supplier may omit deliveryInfo.itemId. CrossLink still creates the
+	// requester-side item needed by the receive action.
 	respBytes = httpRequest(t, "GET", thisPrPath+"/items"+queryParams, []byte{}, 200)
 	var initialPrItems proapi.PrItems
 	err = json.Unmarshal(respBytes, &initialPrItems)
 	assert.NoError(t, err, "failed to unmarshal initial patron request items")
-	assert.Equal(t, int64(0), initialPrItems.About.Count)
-	assert.Equal(t, []proapi.PrItem{}, initialPrItems.Items)
+	assert.Equal(t, int64(1), initialPrItems.About.Count)
+	if assert.Len(t, initialPrItems.Items, 1) {
+		assert.Equal(t, *newPr.Id, initialPrItems.Items[0].Barcode)
+		assert.Nil(t, initialPrItems.Items[0].ItemId)
+	}
 
 	var action proapi.ExecuteAction
 	var pResult proapi.ActionResult
@@ -324,26 +328,24 @@ func TestCrud(t *testing.T) {
 		}
 		return pResult.Message == nil || *pResult.Message != "another invoke-action task in progress"
 	}), "timed out waiting for receive to run without task conflict")
-	// used to succeed, but the illmock currently does not include items as part of the Loaned message, which causes the action to fail.
-	// We should either update the mock to include items or change the test to not use blocking action.
-	assert.Equal(t, "ERROR", pResult.Result)
-	if assert.NotNil(t, pResult.Message) {
-		assert.Equal(t, "receiveBorrowingRequest failed to get items by PR ID", *pResult.Message)
-	}
-	assert.Equal(t, "failure", pResult.Outcome)
+	assert.Equal(t, "SUCCESS", pResult.Result)
+	assert.Nil(t, pResult.Message)
+	assert.Equal(t, "success", pResult.Outcome)
 
 	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, *newPr.Id, foundPr.Id)
+	assert.Equal(t, string(prservice.BorrowerStateReceived), foundPr.State)
 	if assert.NotNil(t, foundPr.LastAction) {
-		assert.Equal(t, "receive", *foundPr.LastAction)
+		// Entering RECEIVED triggers the configured patron notification.
+		assert.Equal(t, "send-notification", *foundPr.LastAction)
 	}
 	if assert.NotNil(t, foundPr.LastActionOutcome) {
-		assert.Equal(t, "failure", *foundPr.LastActionOutcome)
+		assert.Equal(t, "success", *foundPr.LastActionOutcome)
 	}
 	if assert.NotNil(t, foundPr.LastActionResult) {
-		assert.Equal(t, "ERROR", *foundPr.LastActionResult)
+		assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
 	}
 
 	// TODO Do we really want to delete from DB or just add DELETED status ?
