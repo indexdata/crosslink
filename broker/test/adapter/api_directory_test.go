@@ -960,3 +960,42 @@ func TestFilterAndSortAppliesHoldingsPolicy(t *testing.T) {
 		assert.False(t, supplier.Match)
 	}
 }
+
+func TestFilterAndSortResolvesHoldingsPolicyForNonMatchingSuppliers(t *testing.T) {
+	networks := []dirapi.Network{{Name: strPtr("Reciprocal"), Priority: 1}}
+	tiers := []dirapi.Tier{{Name: strPtr("Core Loan"), Level: "Core", Type: "Loan", Cost: 0}}
+	requester := dirapi.Entry{Networks: &networks, Tiers: &tiers}
+	for _, tc := range []struct {
+		name     string
+		networks []dirapi.Network
+		tiers    []dirapi.Tier
+	}{
+		{name: "no shared network", networks: []dirapi.Network{{Name: strPtr("Other"), Priority: 1}}, tiers: tiers},
+		{name: "no matching tier", networks: networks, tiers: []dirapi.Tier{{Type: "Copy", Cost: 0}}},
+		{name: "no matching cost", networks: networks, tiers: []dirapi.Tier{{Type: "Loan", Cost: 10}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			supplier := adapter.Supplier{
+				Symbol: "A", Location: "MAIN", ShelvingLocation: "STACKS",
+				LocationPreference: 99, ShelvingPreference: 98,
+				CustomData: dirapi.Entry{
+					Networks: &tc.networks, Tiers: &tc.tiers,
+					HoldingsPolicy: &dirapi.HoldingsPolicy{
+						Locations:         &[]dirapi.HoldingsLocation{{Code: "MAIN", SupplyPreference: 2}},
+						ShelvingLocations: &[]dirapi.HoldingsShelvingLocation{{Code: "STACKS", SupplyPreference: 1}},
+						LocationPolicies:  &[]dirapi.HoldingsLocationPolicy{{LocationCode: strPtr("MAIN"), ShelvingLocationCode: "STACKS", SupplyPreference: 3}},
+					},
+				},
+			}
+			serviceInfo := iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}
+			filtered, rotaInfo := createDirectoryAdapter("").FilterAndSort(createLookupCtx(), []adapter.Supplier{supplier}, requester, &serviceInfo, nil)
+			assert.Empty(t, filtered)
+			if assert.Len(t, rotaInfo.Suppliers, 1) {
+				match := rotaInfo.Suppliers[0]
+				assert.False(t, match.Match)
+				assert.Equal(t, 2, match.LocationPreference)
+				assert.Equal(t, 3, match.ShelvingPreference)
+			}
+		})
+	}
+}

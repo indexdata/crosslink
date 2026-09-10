@@ -187,6 +187,7 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 		rotaInfo.Request.Cost = utils.FormatDecimal(billingInfo.MaximumCosts.MonetaryValue.Base, billingInfo.MaximumCosts.MonetaryValue.Exp) + curSuffix
 	}
 	for _, sup := range entries {
+		applyHoldingsPolicy(&sup)
 		var supMatch SupplierMatch
 		supMatch.Symbol = sup.Symbol
 		supMatch.Location = sup.Location
@@ -282,9 +283,6 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 				}
 				return cmp.Compare(a.Name, b.Name)
 			})
-			if cost < math.MaxFloat64 {
-				applyHoldingsPolicy(&sup)
-			}
 			if cost < math.MaxFloat64 && holdingMatchesPolicy(sup) {
 				supMatch.Match = true
 				supMatch.Cost = fmt.Sprintf("%.2f", cost)
