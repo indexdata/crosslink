@@ -683,20 +683,20 @@ func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.Extende
 	}
 	var condition pgtype.Text
 	if sam.DeliveryInfo != nil && sam.DeliveryInfo.LoanCondition != nil {
-		if sam.DeliveryInfo.LoanCondition.Text != "" {
-			condition = getDbText(sam.DeliveryInfo.LoanCondition.Text)
+		if value := strings.TrimSpace(sam.DeliveryInfo.LoanCondition.Text); value != "" {
+			condition = getDbText(value)
 		}
 	}
 
 	var currency pgtype.Text
 	var cost pgtype.Numeric
-	if sam.MessageInfo.OfferedCosts != nil {
+	if hasNonZeroCost(sam.MessageInfo.OfferedCosts) {
 		var err error
 		cost, currency, err = toNotificationCost(sam.MessageInfo.OfferedCosts)
 		if err != nil {
 			return err
 		}
-	} else if sam.DeliveryInfo != nil && sam.DeliveryInfo.DeliveryCosts != nil {
+	} else if sam.DeliveryInfo != nil && hasNonZeroCost(sam.DeliveryInfo.DeliveryCosts) {
 		var err error
 		cost, currency, err = toNotificationCost(sam.DeliveryInfo.DeliveryCosts)
 		if err != nil {
@@ -779,6 +779,10 @@ func stripReShareConditionMarkers(note string) string {
 	cleaned = strings.ReplaceAll(cleaned, shim.RESHARE_LOAN_CONDITION_AGREE, "")
 	cleaned = strings.ReplaceAll(cleaned, shim.RESHARE_LOAN_CONDITION_REJECT, "")
 	return strings.TrimSpace(cleaned)
+}
+
+func hasNonZeroCost(value *iso18626.TypeCosts) bool {
+	return value != nil && value.MonetaryValue.Base != 0
 }
 
 func toNotificationCost(value *iso18626.TypeCosts) (pgtype.Numeric, pgtype.Text, error) {
