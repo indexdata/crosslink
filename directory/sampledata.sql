@@ -1,18 +1,19 @@
-WITH auth_isil AS (  
-  INSERT INTO authorities (symbol)
-  VALUES ('ISIL')
+-- Two institutions share one network, with independently assigned priorities.
+WITH consortium AS (
+  INSERT INTO entries (name, type)
+  VALUES ('Example Consortium', 'Consortium')
   RETURNING id
-), auth_rs AS (
-  INSERT INTO authorities (symbol)
-  VALUES ('RESHARE')
-  RETURNING id
-), new_entry AS (
-  INSERT INTO entries (name, description, contact_name, email)
-  VALUES ('Some Institution', 'Some library sort of place', 'Bob', 'bob@someinst.edu')
+), institutions AS (
+  INSERT INTO entries (name, type, parent)
+  SELECT name, 'Institution', consortium.id
+  FROM consortium CROSS JOIN (VALUES ('First Library'), ('Second Library')) AS names(name)
+  RETURNING id, name
+), network AS (
+  INSERT INTO networks (name, consortium)
+  SELECT 'Shared Network', id FROM consortium
   RETURNING id
 )
-INSERT INTO symbols (symbol, authority, owner)
-VALUES
-  ('CA-SMINST', (SELECT id FROM auth_isil), (SELECT id FROM new_entry)),
-  ('SOMEINST', (SELECT id FROM auth_rs), (SELECT id FROM new_entry))
-;
+INSERT INTO entry_networks (entry, network, priority)
+SELECT institutions.id, network.id,
+       CASE institutions.name WHEN 'First Library' THEN 1 ELSE 5 END
+FROM institutions CROSS JOIN network;

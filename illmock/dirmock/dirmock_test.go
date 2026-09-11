@@ -253,3 +253,25 @@ func TestNewEnv(t *testing.T) {
 	_, err = NewEnv()
 	assert.NoError(t, err, "failed to create new env")
 }
+
+func TestEmbeddedNetworkPriorities(t *testing.T) {
+	mock, err := NewJson(`[{"name":"Alpha","networks":[{"name":"Negative","priority":-8},{"name":"Positive","priority":7},{"name":"Default"}]}]`)
+	assert.NoError(t, err)
+	mux := http.NewServeMux()
+	assert.NoError(t, mock.HandlerFromMux(mux))
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/directory/entries", nil))
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	var response directory.EntriesResponse
+	assert.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	if !assert.Len(t, response.Items, 1) || !assert.NotNil(t, response.Items[0].Networks) {
+		return
+	}
+	networks := *response.Items[0].Networks
+	if !assert.Len(t, networks, 3) {
+		return
+	}
+	assert.Equal(t, int32(-8), networks[0].Priority)
+	assert.Equal(t, int32(7), networks[1].Priority)
+	assert.Equal(t, int32(0), networks[2].Priority)
+}

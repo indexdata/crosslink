@@ -1,11 +1,32 @@
 package api
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/oapi-codegen/nullable"
 )
+
+func TestEntryNetworkPriorityContract(t *testing.T) {
+	spec, err := GetSpec()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	createSchema := spec.Components.Schemas["CreateEntryNetwork"].Value
+	if slices.Contains(createSchema.Required, "priority") {
+		t.Error("CreateEntryNetwork priority must be optional")
+	}
+	if createSchema.Properties["priority"].Value.Default != float64(0) {
+		t.Errorf("CreateEntryNetwork priority default = %v, want 0", createSchema.Properties["priority"].Value.Default)
+	}
+
+	responseSchema := spec.Components.Schemas["EntryNetwork"].Value
+	if !slices.Contains(responseSchema.Required, "priority") {
+		t.Error("EntryNetwork response priority must be required")
+	}
+}
 
 func TestMaybeUpdateCol(t *testing.T) {
 	unspecifiedNullable := nullable.NewNullNullable[string]()

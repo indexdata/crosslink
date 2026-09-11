@@ -1,0 +1,25 @@
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT network FROM entry_networks
+    GROUP BY network HAVING count(DISTINCT priority) > 1
+  ) THEN
+    RAISE EXCEPTION 'cannot restore networks.priority: memberships have different priorities';
+  END IF;
+END $$;
+
+ALTER TABLE networks ADD COLUMN priority integer NOT NULL DEFAULT 0;
+
+UPDATE networks n
+SET priority = backup.priority
+FROM migration_007_network_priority_backup backup
+WHERE backup.network = n.id;
+
+UPDATE networks n
+SET priority = en.priority
+FROM entry_networks en
+WHERE en.network = n.id;
+
+DROP TABLE migration_007_network_priority_backup;
+
+ALTER TABLE entry_networks DROP COLUMN priority;

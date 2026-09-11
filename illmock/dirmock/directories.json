@@ -36,22 +36,22 @@
     ],
     "networks": [
       {
+        "priority": 7,
         "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
         "name": "NSW & ACT",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 1
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 6,
         "id": "84fcd0ff-da15-5285-a45a-5abcc6e1b023",
         "name": "Victoria",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 2
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 2,
         "id": "a6a1451d-c0d0-5416-bfce-bcefa310cc78",
         "name": "Queensland",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 3
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       }
     ],
     "tiers": [
@@ -125,40 +125,40 @@
     ],
     "networks": [
       {
+        "priority": 7,
         "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
         "name": "NSW & ACT",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 1
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 6,
         "id": "84fcd0ff-da15-5285-a45a-5abcc6e1b023",
         "name": "Victoria",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 2
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 2,
         "id": "a6a1451d-c0d0-5416-bfce-bcefa310cc78",
         "name": "Queensland",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 3
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 3,
         "id": "b191dac1-f9f6-51c1-8599-f6c795d4f6f9",
         "name": "South Australia",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 4
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 2,
         "id": "36801e6d-ed11-5203-99f5-4736107adceb",
         "name": "Western Australia",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 5
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 9,
         "id": "d4284915-859b-59b2-b6f2-2990340278c2",
         "name": "National",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 9
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       }
     ],
     "tiers": [
@@ -232,40 +232,40 @@
     ],
     "networks": [
       {
+        "priority": 7,
         "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
         "name": "NSW & ACT",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 1
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 2,
         "id": "e4680812-e622-5f8d-b420-36a6bc33e6c8",
         "name": "NSW & ACT Public",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 2
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 3,
         "id": "cf3a39cf-4596-5c23-aa81-3b289c052c08",
         "name": "Queensland Public",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 3
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 1,
         "id": "50f29d43-fada-5afe-a185-510833e01af8",
         "name": "Victoria Public",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 4
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 5,
         "id": "d55f3cff-bf71-500e-85f9-b4a74199c1b1",
         "name": "NSW & ACT Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 5
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 9,
         "id": "d4284915-859b-59b2-b6f2-2990340278c2",
         "name": "National",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 9
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       }
     ],
     "tiers": [
@@ -323,40 +323,40 @@
     ],
     "networks": [
       {
+        "priority": 5,
         "id": "d55f3cff-bf71-500e-85f9-b4a74199c1b1",
         "name": "NSW & ACT Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 1
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 3,
         "id": "5dcb365d-ee82-58b6-8b80-591bf891900c",
         "name": "Queensland Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 2
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 4,
         "id": "879f4ac5-9a2d-5e2d-94a6-0b72c9e18fff",
         "name": "Victoria Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 3
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 1,
         "id": "1c0346cd-f7e2-565a-9068-55fa6ab29ca6",
         "name": "Western Australia Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 4
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 8,
         "id": "94964646-3266-588d-90a9-408e40055216",
         "name": "National Academic and Research",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 8
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 9,
         "id": "d4284915-859b-59b2-b6f2-2990340278c2",
         "name": "National",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 9
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       }
     ],
     "tiers": [
@@ -430,34 +430,34 @@
     ],
     "networks": [
       {
+        "priority": 2,
         "id": "e4680812-e622-5f8d-b420-36a6bc33e6c8",
         "name": "NSW & ACT Public",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 1
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 3,
         "id": "cf3a39cf-4596-5c23-aa81-3b289c052c08",
         "name": "Queensland Public",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 2
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 1,
         "id": "50f29d43-fada-5afe-a185-510833e01af8",
         "name": "Victoria Public",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 3
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 5,
         "id": "d55f3cff-bf71-500e-85f9-b4a74199c1b1",
         "name": "NSW & ACT Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 4
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 5,
         "id": "7a763dd2-53ed-580a-bfd4-6cdb8a91eebf",
         "name": "Sydney Metro",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 5
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       }
     ],
     "tiers": [
@@ -531,46 +531,46 @@
     ],
     "networks": [
       {
+        "priority": 3,
         "id": "5dcb365d-ee82-58b6-8b80-591bf891900c",
         "name": "Queensland Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 1
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 2,
         "id": "a6a1451d-c0d0-5416-bfce-bcefa310cc78",
         "name": "Queensland",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 2
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 7,
         "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
         "name": "NSW & ACT",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 3
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 3,
         "id": "b191dac1-f9f6-51c1-8599-f6c795d4f6f9",
         "name": "South Australia",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 4
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 2,
         "id": "36801e6d-ed11-5203-99f5-4736107adceb",
         "name": "Western Australia",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 5
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 8,
         "id": "94964646-3266-588d-90a9-408e40055216",
         "name": "National Academic and Research",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 8
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 9,
         "id": "d4284915-859b-59b2-b6f2-2990340278c2",
         "name": "National",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 9
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       }
     ],
     "tiers": [
@@ -676,28 +676,28 @@
     ],
     "networks": [
       {
+        "priority": 3,
         "id": "5dcb365d-ee82-58b6-8b80-591bf891900c",
         "name": "Queensland Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 1
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 5,
         "id": "d55f3cff-bf71-500e-85f9-b4a74199c1b1",
         "name": "NSW & ACT Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 2
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 3,
         "id": "39a8ee32-d038-5c8d-a1a4-a26246f3882f",
         "name": "Queensland Health",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 3
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 4,
         "id": "879f4ac5-9a2d-5e2d-94a6-0b72c9e18fff",
         "name": "Victoria Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 4
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       }
     ],
     "tiers": [
@@ -755,40 +755,40 @@
     ],
     "networks": [
       {
+        "priority": 3,
         "id": "cf3a39cf-4596-5c23-aa81-3b289c052c08",
         "name": "Queensland Public",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 1
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 2,
         "id": "e4680812-e622-5f8d-b420-36a6bc33e6c8",
         "name": "NSW & ACT Public",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 2
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 1,
         "id": "50f29d43-fada-5afe-a185-510833e01af8",
         "name": "Victoria Public",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 3
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 2,
         "id": "a6a1451d-c0d0-5416-bfce-bcefa310cc78",
         "name": "Queensland",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 4
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 7,
         "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
         "name": "NSW & ACT",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 5
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 9,
         "id": "d4284915-859b-59b2-b6f2-2990340278c2",
         "name": "National",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 9
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       }
     ],
     "tiers": [
@@ -862,46 +862,46 @@
     ],
     "networks": [
       {
+        "priority": 1,
         "id": "5f63ba91-c7a4-5068-ada7-97e34a40f26a",
         "name": "South Australia Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 1
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 4,
         "id": "879f4ac5-9a2d-5e2d-94a6-0b72c9e18fff",
         "name": "Victoria Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 2
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 5,
         "id": "d55f3cff-bf71-500e-85f9-b4a74199c1b1",
         "name": "NSW & ACT Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 3
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 3,
         "id": "5dcb365d-ee82-58b6-8b80-591bf891900c",
         "name": "Queensland Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 4
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 1,
         "id": "1c0346cd-f7e2-565a-9068-55fa6ab29ca6",
         "name": "Western Australia Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 5
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 8,
         "id": "94964646-3266-588d-90a9-408e40055216",
         "name": "National Academic and Research",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 8
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 9,
         "id": "d4284915-859b-59b2-b6f2-2990340278c2",
         "name": "National",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 9
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       }
     ],
     "tiers": [
@@ -1007,10 +1007,10 @@
     ],
     "networks": [
       {
+        "priority": 1,
         "id": "5f63ba91-c7a4-5068-ada7-97e34a40f26a",
         "name": "South Australia Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 1
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       }
     ],
     "tiers": [
@@ -1189,58 +1189,58 @@
     ],
     "networks": [
       {
+        "priority": 4,
         "id": "879f4ac5-9a2d-5e2d-94a6-0b72c9e18fff",
         "name": "Victoria Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 1
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 5,
         "id": "d55f3cff-bf71-500e-85f9-b4a74199c1b1",
         "name": "NSW & ACT Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 2
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 3,
         "id": "5dcb365d-ee82-58b6-8b80-591bf891900c",
         "name": "Queensland Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 3
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 1,
         "id": "50f29d43-fada-5afe-a185-510833e01af8",
         "name": "Victoria Public",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 4
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 2,
         "id": "e4680812-e622-5f8d-b420-36a6bc33e6c8",
         "name": "NSW & ACT Public",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 5
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 6,
         "id": "12e1ecd4-2177-52af-ae84-3161e4eceb46",
         "name": "Tasmania Public",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 6
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 7,
         "id": "dd9217f1-07b5-5545-8bb5-7c9f5fd571fd",
         "name": "Tasmania Health",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 7
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 8,
         "id": "94964646-3266-588d-90a9-408e40055216",
         "name": "National Academic and Research",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 8
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 9,
         "id": "d4284915-859b-59b2-b6f2-2990340278c2",
         "name": "National",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 9
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       }
     ],
     "tiers": [
@@ -1346,10 +1346,10 @@
     ],
     "networks": [
       {
+        "priority": 4,
         "id": "879f4ac5-9a2d-5e2d-94a6-0b72c9e18fff",
         "name": "Victoria Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 1
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       }
     ],
     "tiers": [
@@ -1487,34 +1487,34 @@
     ],
     "networks": [
       {
+        "priority": 6,
         "id": "84fcd0ff-da15-5285-a45a-5abcc6e1b023",
         "name": "Victoria",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 1
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 7,
         "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
         "name": "NSW & ACT",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 2
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 2,
         "id": "a6a1451d-c0d0-5416-bfce-bcefa310cc78",
         "name": "Queensland",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 3
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 2,
         "id": "36801e6d-ed11-5203-99f5-4736107adceb",
         "name": "Western Australia",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 4
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 3,
         "id": "b191dac1-f9f6-51c1-8599-f6c795d4f6f9",
         "name": "South Australia",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 5
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       }
     ],
     "tiers": [
@@ -1588,46 +1588,46 @@
     ],
     "networks": [
       {
+        "priority": 6,
         "id": "84fcd0ff-da15-5285-a45a-5abcc6e1b023",
         "name": "Victoria",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 1
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 2,
         "id": "60612a26-68dc-5a93-a356-b4eee7d4567f",
         "name": "Victoria Govt & Arts",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 2
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 4,
         "id": "879f4ac5-9a2d-5e2d-94a6-0b72c9e18fff",
         "name": "Victoria Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 3
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 7,
         "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
         "name": "NSW & ACT",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 4
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 2,
         "id": "a6a1451d-c0d0-5416-bfce-bcefa310cc78",
         "name": "Queensland",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 5
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 8,
         "id": "94964646-3266-588d-90a9-408e40055216",
         "name": "National Academic and Research",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 8
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 9,
         "id": "d4284915-859b-59b2-b6f2-2990340278c2",
         "name": "National",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 9
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       }
     ],
     "tiers": [
@@ -1701,28 +1701,28 @@
     ],
     "networks": [
       {
+        "priority": 6,
         "id": "84fcd0ff-da15-5285-a45a-5abcc6e1b023",
         "name": "Victoria",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 1
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 2,
         "id": "60612a26-68dc-5a93-a356-b4eee7d4567f",
         "name": "Victoria Govt & Arts",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 2
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 3,
         "id": "af2e044f-3b22-597e-bd10-20d949ede45c",
         "name": "Victoria Health",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 3
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 9,
         "id": "d4284915-859b-59b2-b6f2-2990340278c2",
         "name": "National",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 9
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       }
     ],
     "tiers": [
@@ -1828,34 +1828,34 @@
     ],
     "networks": [
       {
+        "priority": 1,
         "id": "50f29d43-fada-5afe-a185-510833e01af8",
         "name": "Victoria Public",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 1
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 2,
         "id": "e4680812-e622-5f8d-b420-36a6bc33e6c8",
         "name": "NSW & ACT Public",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 2
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 3,
         "id": "cf3a39cf-4596-5c23-aa81-3b289c052c08",
         "name": "Queensland Public",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 3
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 4,
         "id": "879f4ac5-9a2d-5e2d-94a6-0b72c9e18fff",
         "name": "Victoria Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 4
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 5,
         "id": "d55f3cff-bf71-500e-85f9-b4a74199c1b1",
         "name": "NSW & ACT Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 5
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       }
     ],
     "tiers": [
@@ -1929,52 +1929,52 @@
     ],
     "networks": [
       {
+        "priority": 2,
         "id": "36801e6d-ed11-5203-99f5-4736107adceb",
         "name": "Western Australia",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 1
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 2,
         "id": "a6a1451d-c0d0-5416-bfce-bcefa310cc78",
         "name": "Queensland",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 2
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 3,
         "id": "b191dac1-f9f6-51c1-8599-f6c795d4f6f9",
         "name": "South Australia",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 3
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 4,
         "id": "7d0f82de-905f-57de-b041-928fddd0f6b1",
         "name": "Tasmania",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 4
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 5,
         "id": "de90f131-08e8-5df6-a069-c1c34131884f",
         "name": "Northern Territory",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 5
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 6,
         "id": "84fcd0ff-da15-5285-a45a-5abcc6e1b023",
         "name": "Victoria",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 6
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 7,
         "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
         "name": "NSW & ACT",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 7
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 9,
         "id": "d4284915-859b-59b2-b6f2-2990340278c2",
         "name": "National",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 9
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       }
     ],
     "tiers": [
@@ -2112,28 +2112,28 @@
     ],
     "networks": [
       {
+        "priority": 1,
         "id": "1c0346cd-f7e2-565a-9068-55fa6ab29ca6",
         "name": "Western Australia Higher Education",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 1
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 2,
         "id": "36801e6d-ed11-5203-99f5-4736107adceb",
         "name": "Western Australia",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 2
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 8,
         "id": "94964646-3266-588d-90a9-408e40055216",
         "name": "National Academic and Research",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 8
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       },
       {
+        "priority": 9,
         "id": "d4284915-859b-59b2-b6f2-2990340278c2",
         "name": "National",
-        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-        "priority": 9
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f"
       }
     ],
     "tiers": [
