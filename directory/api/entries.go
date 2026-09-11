@@ -133,7 +133,7 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 		return Entry{}, 0, fmt.Errorf("unmarshalling tiers: %w", err)
 	}
 
-	networks, err := unmarshalJSONArray[Network](networksJSON)
+	networks, err := unmarshalJSONArray[EntryNetworkDetails](networksJSON)
 	if err != nil {
 		return Entry{}, 0, fmt.Errorf("unmarshalling networks config: %w", err)
 	}
@@ -169,7 +169,7 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 		tiersPtr = &tiers
 	}
 
-	var networksPtr *[]Network
+	var networksPtr *[]EntryNetworkDetails
 	if len(networks) > 0 {
 		networksPtr = &networks
 	}
@@ -434,7 +434,7 @@ func buildEntrySQL(whereClause string) string {
 				'id', networks.id,
 				'consortium', networks.consortium,
 				'name', networks.name,
-				'priority', networks.priority,
+				'priority', entry_networks.priority,
 				'reciprocal', networks.reciprocal
 			) from entry_networks INNER JOIN networks ON networks.id = entry_networks.network
 			WHERE entry_networks.entry = e.id

@@ -182,19 +182,20 @@ RETURNING *;
 
 -- name: CreateNetwork :one
 INSERT INTO networks (
-  name, consortium, priority, reciprocal
+  name, consortium, reciprocal
 ) VALUES (
-  @name, @consortium, @priority, @reciprocal
+  @name, @consortium, @reciprocal
 )
 RETURNING *;
 
 
 -- name: CreateEntryNetwork :one
 INSERT INTO entry_networks (
-  entry, network
+  entry, network, priority
 ) VALUES (
   @entry,
-  @network
+  @network,
+  @priority
 )
 RETURNING *;
 
@@ -393,7 +394,7 @@ SELECT * FROM networks
   OFFSET sqlc.arg('offset');
 
 -- name: ListNetworksForEntry :many
-SELECT * FROM networks n
+SELECT n.*, en.priority FROM networks n
 JOIN entry_networks en ON n.id = en.network
 WHERE en.entry = $1;
 

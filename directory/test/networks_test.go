@@ -82,7 +82,6 @@ func TestNetworkReciprocalCreateAndRead(t *testing.T) {
 	body := `{
 		"name":"Reciprocal Test Network",
 		"consortium":"00000000-0000-0000-0000-000000000004",
-		"priority":7,
 		"reciprocal":true
 	}`
 
