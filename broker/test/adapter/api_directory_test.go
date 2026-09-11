@@ -770,20 +770,20 @@ func TestFilterAndSortUsesCompatibleNetworkPriority(t *testing.T) {
 	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
 	requesterNetworks := []dirapi.EntryNetworkDetails{
-		{Name: stringPtr("Reciprocal"), Priority: 1, Reciprocal: boolPtr(true)},
-		{Name: stringPtr("Paid Low"), Priority: 5, Reciprocal: boolPtr(false)},
-		{Name: stringPtr("Paid High"), Priority: 3, Reciprocal: boolPtr(false)},
+		{Name: "Reciprocal", Priority: 1, Reciprocal: boolPtr(true)},
+		{Name: "Paid Low", Priority: 5, Reciprocal: boolPtr(false)},
+		{Name: "Paid High", Priority: 3, Reciprocal: boolPtr(false)},
 	}
 	paidTier := []dirapi.Tier{
-		{Name: stringPtr("Paid Core Loan"), Level: dirapi.Standard, Type: dirapi.Loan, Cost: 34.4},
+		{Name: "Paid Core Loan", Level: dirapi.Standard, Type: dirapi.Loan, Cost: 34.4},
 	}
 	requesterData := dirapi.Entry{Name: "Requester", Networks: &requesterNetworks}
 	supplierANetworks := []dirapi.EntryNetworkDetails{
-		{Name: stringPtr("Reciprocal"), Priority: 1, Reciprocal: boolPtr(true)},
-		{Name: stringPtr("Paid Low"), Priority: -10, Reciprocal: boolPtr(false)},
+		{Name: "Reciprocal", Priority: 1, Reciprocal: boolPtr(true)},
+		{Name: "Paid Low", Priority: -10, Reciprocal: boolPtr(false)},
 	}
 	supplierBNetworks := []dirapi.EntryNetworkDetails{
-		{Name: stringPtr("Paid High"), Priority: 99, Reciprocal: boolPtr(false)},
+		{Name: "Paid High", Priority: 99, Reciprocal: boolPtr(false)},
 	}
 	entries := []adapter.Supplier{
 		{PeerId: "A", Symbol: "A", CustomData: dirapi.Entry{Name: "Supplier A", Networks: &supplierANetworks, Tiers: &paidTier}},
@@ -915,8 +915,8 @@ func TestCompareSuppliers(t *testing.T) {
 func TestFilterAndSortAppliesHoldingsPolicy(t *testing.T) {
 	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
-	networks := []dirapi.EntryNetworkDetails{{Name: strPtr("Reciprocal"), Priority: 1}}
-	tiers := []dirapi.Tier{{Name: strPtr("Core Loan"), Level: "Core", Type: "Loan", Cost: 0}}
+	networks := []dirapi.EntryNetworkDetails{{Name: "Reciprocal", Priority: 1}}
+	tiers := []dirapi.Tier{{Name: "Core Loan", Level: "Core", Type: "Loan", Cost: 0}}
 	customData := dirapi.Entry{
 		Name:     "Supplier",
 		Networks: &networks,

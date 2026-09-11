@@ -502,7 +502,7 @@ FOR UPDATE;
 
 -- name: UpdateImportedNetwork :exec
 UPDATE networks
-SET priority = @priority, reciprocal = @reciprocal
+SET reciprocal = @reciprocal
 WHERE id = @id;
 
 -- name: DeleteEntryNetworksByNetwork :exec

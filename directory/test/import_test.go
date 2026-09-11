@@ -26,7 +26,10 @@ func TestImportOrderedAggregates(t *testing.T) {
 		entryImportRecord(institution, "Institution", consortium, "Institution"),
 		entryImportRecord(branch, "Branch", institution, "Branch"),
 		map[string]any{"type": "tier", "key": map[string]any{"consortium": consortium, "name": "Loan"}, "data": map[string]any{"level": "standard", "type": "loan", "cost": 1.5, "entries": []any{institution, branch}}},
-		map[string]any{"type": "network", "key": map[string]any{"consortium": consortium, "name": "Main"}, "data": map[string]any{"priority": 1, "reciprocal": true, "entries": []any{institution}}},
+		map[string]any{"type": "network", "key": map[string]any{"consortium": consortium, "name": "Main"}, "data": map[string]any{"reciprocal": true, "entries": []any{
+			map[string]any{"authority": "ISIL", "symbol": "INST", "priority": 7},
+			map[string]any{"authority": "ISIL", "symbol": "BRANCH", "priority": 3},
+		}}},
 	}
 
 	response, result := importRequest(t, records, "", standardHeaders)
@@ -63,7 +66,12 @@ func TestImportOrderedAggregates(t *testing.T) {
 	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT count(*) FROM entry_tiers`).Scan(&tierAssignments))
 	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT count(*) FROM entry_networks`).Scan(&networkAssignments))
 	require.Equal(t, 2, tierAssignments)
-	require.Equal(t, 1, networkAssignments)
+	require.Equal(t, 2, networkAssignments)
+	var institutionPriority, branchPriority int32
+	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT priority FROM entry_networks WHERE entry=$1`, institutionID).Scan(&institutionPriority))
+	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT priority FROM entry_networks WHERE entry=$1`, branchID).Scan(&branchPriority))
+	require.Equal(t, int32(7), institutionPriority)
+	require.Equal(t, int32(3), branchPriority)
 }
 
 func TestImportPartialCommitAndConflictPolicies(t *testing.T) {

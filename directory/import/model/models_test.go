@@ -56,9 +56,9 @@ func TestTierAggregateRejectsInvalidEnum(t *testing.T) {
 func TestNetworkAggregateRejectsDuplicateEntries(t *testing.T) {
 	aggregate := NetworkAggregate{
 		Key: NetworkKey{Consortium: SymbolRef{Authority: "isil", Symbol: "consortium"}, Name: "Main"},
-		Data: NetworkData{Entries: []SymbolRef{
-			{Authority: "isil", Symbol: "lib"},
-			{Authority: "ISIL", Symbol: "LIB"},
+		Data: NetworkData{Entries: []NetworkAssignment{
+			{SymbolRef: SymbolRef{Authority: "isil", Symbol: "lib"}, Priority: 1},
+			{SymbolRef: SymbolRef{Authority: "ISIL", Symbol: "LIB"}, Priority: 2},
 		}},
 	}
 

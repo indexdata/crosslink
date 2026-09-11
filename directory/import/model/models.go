@@ -229,10 +229,14 @@ type NetworkKey struct {
 	Name       string    `json:"name"`
 }
 
+type NetworkAssignment struct {
+	SymbolRef
+	Priority int32 `json:"priority"`
+}
+
 type NetworkData struct {
-	Priority   int32       `json:"priority"`
-	Reciprocal *bool       `json:"reciprocal"`
-	Entries    []SymbolRef `json:"entries"`
+	Reciprocal *bool               `json:"reciprocal"`
+	Entries    []NetworkAssignment `json:"entries"`
 }
 
 type NetworkAggregate struct {
@@ -247,7 +251,18 @@ func (a *NetworkAggregate) NormalizeAndValidate() error {
 	if strings.TrimSpace(a.Key.Name) == "" {
 		return fmt.Errorf("network name is required")
 	}
-	return normalizeUniqueRefs(a.Data.Entries, "network", func(refs []SymbolRef) { a.Data.Entries = refs })
+	seen := make(map[string]struct{}, len(a.Data.Entries))
+	for index := range a.Data.Entries {
+		if err := a.Data.Entries[index].NormalizeAndValidate(); err != nil {
+			return fmt.Errorf("network entry %d: %w", index+1, err)
+		}
+		key := a.Data.Entries[index].String()
+		if _, exists := seen[key]; exists {
+			return fmt.Errorf("duplicate network entry %s", key)
+		}
+		seen[key] = struct{}{}
+	}
+	return nil
 }
 
 func normalizeUniqueRefs(refs []SymbolRef, resource string, assign func([]SymbolRef)) error {

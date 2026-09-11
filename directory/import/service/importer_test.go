@@ -291,7 +291,7 @@ func validTierRecord() string {
 }
 
 func validNetworkRecord() string {
-	return `{"type":"network","key":{"consortium":{"authority":"isil","symbol":"con"},"name":"Main"},"data":{"priority":1,"reciprocal":null,"entries":[]}}`
+	return `{"type":"network","key":{"consortium":{"authority":"isil","symbol":"con"},"name":"Main"},"data":{"reciprocal":null,"entries":[]}}`
 }
 
 type errorReader struct{ err error }
