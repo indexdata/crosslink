@@ -34,7 +34,6 @@ type ActionTaskProcessor interface {
 	ProcessInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error)
 }
 
-var illRequestValidator = validator.New(validator.WithRequiredStructEnabled())
 var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 var errInvalidPatronRequest = errors.New("invalid patron request")
 
@@ -1403,7 +1402,7 @@ func prepareAndValidateIllRequest(
 	}
 	illRequest.Header.Timestamp = utils.XSDDateTime{Time: creationTime}
 	illRequest.Header.RequestingAgencyRequestId = requesterReqId
-	if err = validateIllRequest(illRequest); err != nil {
+	if err = prservice.ValidateIllRequest(illRequest); err != nil {
 		return iso18626.Request{}, fmt.Errorf("%w: invalid illRequest: %w", errInvalidPatronRequest, err)
 	}
 	if patron != nil {
@@ -1444,15 +1443,6 @@ func buildDbPatronRequest(
 		// LastAction, LastActionOutcome and LastActionResult are not set on creation
 		// they will be updated when the first action is executed.
 	}
-}
-
-func validateIllRequest(request iso18626.Request) error {
-	requestForValidation := request
-	if requestForValidation.Header.MultipleItemRequestId == "" {
-		//schema workaround
-		requestForValidation.Header.MultipleItemRequestId = "#empty"
-	}
-	return illRequestValidator.Struct(requestForValidation)
 }
 
 func toApiItem(item pr_db.Item) proapi.PrItem {

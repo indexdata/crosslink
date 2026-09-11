@@ -1797,7 +1797,7 @@ paths:
               resources:
                 summary: Three import records
                 value: |
-                  {"type":"patronRequest","owner":"ISIL:SYM","data":{"patronRequest":{"id":"pr-1","createdAt":"2026-08-26T08:00:00Z","updatedAt":"2026-08-26T09:00:00Z","illRequest":{"header":{"requestingAgencyRequestId":"request-1"},"serviceInfo":{"serviceType":"Loan"}},"state":"SENT","stateModel":"default","side":"borrowing","requesterSymbol":"ISIL:REQ","requesterRequestId":"request-1","needsAttention":false},"items":[],"notifications":[],"locatedSuppliers":[]}}
+                  {"type":"patronRequest","owner":"ISIL:SYM","data":{"patronRequest":{"id":"pr-1","createdAt":"2026-08-26T08:00:00Z","updatedAt":"2026-08-26T09:00:00Z","illRequest":{"header":{"requestingAgencyId":{"agencyIdType":{"#text":"ISIL"},"agencyIdValue":"REQ"},"supplyingAgencyId":{"agencyIdType":{"#text":"ISIL"},"agencyIdValue":"SUP"},"timestamp":"2026-08-26T08:00:00Z","requestingAgencyRequestId":"pr-1"},"bibliographicInfo":{"title":"Example title"},"serviceInfo":{"serviceType":"Loan"}},"state":"SENT","stateModel":"default","side":"borrowing","requesterSymbol":"ISIL:REQ","requesterRequestId":"pr-1","needsAttention":false},"items":[],"notifications":[],"locatedSuppliers":[]}}
                   {"type":"batchAction","owner":"ISIL:SYM","data":{"schedule":"FREQ=DAILY;BYHOUR=6;BYMINUTE=0","actionName":"request-aging","title":"Daily aging","batchQuery":"state==NEW","actionParams":{"interval":"24h"}}}
                   {"type":"template","owner":"ISIL:SYM","data":{"title":"Request reminder","purpose":"email","subject":"Reminder","body":"Your request is ready","contentType":"text","labels":["request-reminder"],"audience":"patron"}}
         x-ndjson-item-schema:
@@ -1813,6 +1813,13 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '413':
+          description: The request body or an individual NDJSON record exceeds the configured size limit.
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "import request too large\n"
   /:
     get:
       summary: Retrieve index information
