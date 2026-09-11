@@ -209,7 +209,7 @@ INSERT INTO catalog_configs (
   holdings_marc_main_field, holdings_marc_restricted_subfield, holdings_marc_shelving_location_subfield,
   holdings_marc21plus1_enabled, holdings_opac_enabled, holdings_reservoir_enabled,
   metadata_marc21_author, metadata_marc21_edition, metadata_marc21_identifier, metadata_marc21_isbn,
-  metadata_marc21_issn, metadata_marc21_subtitle, metadata_marc21_title
+  metadata_marc21_issn, metadata_marc21_subtitle, metadata_marc21_title, profile, holdings_config
 ) VALUES (
   coalesce(sqlc.narg('id'), gen_random_uuid()),
   @entry,
@@ -238,9 +238,13 @@ INSERT INTO catalog_configs (
   @metadata_marc21_isbn,
   @metadata_marc21_issn,
   @metadata_marc21_subtitle,
-  @metadata_marc21_title
+  @metadata_marc21_title,
+  @profile,
+  @holdings_config
 )
 ON CONFLICT (entry) DO UPDATE SET
+  profile = @profile,
+  holdings_config = @holdings_config,
   metadata_update_mode = @metadata_update_mode,
   sru_address = @sru_address,
   sru_record_schema = @sru_record_schema,
@@ -296,7 +300,7 @@ INSERT INTO  lms_configs (
   accept_item_enabled, checkin_item_enabled, checkout_item_enabled, item_location, 
   request_item_request_type, request_item_scope_type, request_item_bib_code,
   request_item_enabled, request_item_pickup_location_enabled, requester_pickup_location, supplier_pickup_location,
-  requester_patron_pattern, patron_profiles
+  requester_patron_pattern, patron_profiles, vendor, ncip_namespace_enabled, bib_id_normalization
 ) VALUES (
   coalesce(sqlc.narg('id'), gen_random_uuid()),
   @entry,
@@ -317,9 +321,15 @@ INSERT INTO  lms_configs (
   @requester_pickup_location,
   @supplier_pickup_location,
   @requester_patron_pattern,
-  @patron_profiles
+  @patron_profiles,
+  @vendor,
+  @ncip_namespace_enabled,
+  @bib_id_normalization
 )
 ON CONFLICT (entry) DO UPDATE SET
+  vendor = @vendor,
+  ncip_namespace_enabled = @ncip_namespace_enabled,
+  bib_id_normalization = @bib_id_normalization,
   address = @address,
   from_agency = @from_agency,
   from_agency_authentication = @from_agency_authentication,

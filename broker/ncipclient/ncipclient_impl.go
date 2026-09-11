@@ -1,8 +1,10 @@
 package ncipclient
 
 import (
+	"bytes"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"net/http"
 	"reflect"
 
@@ -12,6 +14,7 @@ import (
 )
 
 type NcipClientImpl struct {
+	DisableNamespace         bool
 	client                   *http.Client
 	address                  string
 	fromAgency               string
@@ -221,7 +224,7 @@ func (n *NcipClientImpl) sendReceiveMessage(message *ncip.NCIPMessage) (*ncip.NC
 	var respMessage ncip.NCIPMessage
 
 	err := httpclient.NewClient().RequestResponse(n.client, http.MethodPost, []string{httpclient.ContentTypeApplicationXml},
-		n.address, message, &respMessage, xml.Marshal, xml.Unmarshal)
+		n.address, message, &respMessage, n.marshal, n.unmarshal)
 	if err != nil {
 		return &respMessage, fmt.Errorf("NCIP message exchange failed: %s", err.Error())
 	}
@@ -311,4 +314,75 @@ func traverse(v reflect.Value, level int) {
 			traverse(v.Field(i), level)
 		}
 	}
+}
+
+// transformNamespace handles namespace-free NCIP integrations while keeping
+// the strongly typed NCIP model and all text/attribute values intact.
+func transformNamespace(data []byte, remove bool) ([]byte, error) {
+	const ns = "http://www.niso.org/2008/ncip"
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	var out bytes.Buffer
+	encoder := xml.NewEncoder(&out)
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		switch t := token.(type) {
+		case xml.StartElement:
+			if remove && t.Name.Space == ns {
+				t.Name.Space = ""
+			} else if !remove && t.Name.Space == "" {
+				t.Name.Space = ns
+			}
+			attrs := t.Attr[:0]
+			for _, a := range t.Attr {
+				if a.Name.Local == "xmlns" || a.Name.Space == "xmlns" {
+					continue
+				}
+				if remove && a.Name.Space == ns {
+					a.Name.Space = ""
+				}
+				attrs = append(attrs, a)
+			}
+			t.Attr = attrs
+			token = t
+		case xml.EndElement:
+			if remove && t.Name.Space == ns {
+				t.Name.Space = ""
+			} else if !remove && t.Name.Space == "" {
+				t.Name.Space = ns
+			}
+			token = t
+		}
+		if err := encoder.EncodeToken(token); err != nil {
+			return nil, err
+		}
+	}
+	if err := encoder.Flush(); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+func (n *NcipClientImpl) marshal(v any) ([]byte, error) {
+	b, err := xml.Marshal(v)
+	if err != nil || !n.DisableNamespace {
+		return b, err
+	}
+	return transformNamespace(b, true)
+}
+
+func (n *NcipClientImpl) unmarshal(b []byte, v any) error {
+	if n.DisableNamespace {
+		var err error
+		b, err = transformNamespace(b, false)
+		if err != nil {
+			return err
+		}
+	}
+	return xml.Unmarshal(b, v)
 }

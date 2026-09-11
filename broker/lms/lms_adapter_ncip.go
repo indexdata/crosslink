@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"github.com/indexdata/crosslink/broker/profiles"
 	"net/http"
 	"strings"
 
@@ -50,6 +51,14 @@ func (l *LmsAdapterNcip) requestItemRequestScopeType() string {
 }
 
 func CreateLmsAdapterNcip(lmsConfig dirapi.LmsConfig) (LmsAdapter, error) {
+	effective, err := profiles.Resolve(dirapi.Entry{LmsConfig: &lmsConfig})
+	if err != nil {
+		return nil, err
+	}
+	return createResolvedLmsAdapterNcip(*effective.LMS)
+}
+
+func createResolvedLmsAdapterNcip(lmsConfig dirapi.LmsConfig) (LmsAdapter, error) {
 	l := &LmsAdapterNcip{config: lmsConfig}
 	toAgency := "default-to-agency"
 	if l.config.ToAgency != nil {
@@ -65,7 +74,9 @@ func CreateLmsAdapterNcip(lmsConfig dirapi.LmsConfig) (LmsAdapter, error) {
 	if l.config.FromAgency == "" {
 		return nil, fmt.Errorf("missing From Agency in LMS configuration")
 	}
-	l.ncipClient = ncipclient.NewNcipClient(http.DefaultClient, l.config.Address, l.config.FromAgency, toAgency, FromAgencyAuthentication)
+	client := ncipclient.NewNcipClient(http.DefaultClient, l.config.Address, l.config.FromAgency, toAgency, FromAgencyAuthentication)
+	client.(*ncipclient.NcipClientImpl).DisableNamespace = l.config.NcipNamespaceEnabled != nil && !*l.config.NcipNamespaceEnabled
+	l.ncipClient = client
 	return l, nil
 }
 
@@ -320,6 +331,12 @@ func (l *LmsAdapterNcip) RequestItem(
 	code := "SYSNUMBER"
 	if l.config.RequestItemBibIdCode != nil {
 		code = *l.config.RequestItemBibIdCode
+	}
+	if l.config.BibIdNormalization != nil && *l.config.BibIdNormalization == "sierra" {
+		itemId = strings.TrimPrefix(itemId, ".b")
+		if len(itemId) > 1 && itemId[len(itemId)-1] >= '0' && itemId[len(itemId)-1] <= '9' {
+			itemId = itemId[:len(itemId)-1]
+		}
 	}
 	bibIdField := ncip.BibliographicId{
 		BibliographicRecordId: &ncip.BibliographicRecordId{

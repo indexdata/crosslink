@@ -41,13 +41,14 @@ type LookupParams struct {
 }
 
 type Holding struct {
-	Symbol           string
-	LocalIdentifier  string
-	Location         string
-	ShelvingLocation string
-	ItemLoanPolicy   string
-	CallNumber       string
-	ItemId           string
+	Symbol                    string
+	LocalIdentifier           string
+	Location                  string
+	ShelvingLocation          string
+	TemporaryShelvingLocation string
+	ItemLoanPolicy            string
+	CallNumber                string
+	ItemId                    string
 }
 
 type HoldingsParser interface {

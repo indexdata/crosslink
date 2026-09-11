@@ -26,14 +26,14 @@ func TestCreateLmsAdapterNcip(t *testing.T) {
 	}
 	_, err = CreateLmsAdapterNcip(config)
 	assert.Error(t, err)
-	assert.Equal(t, "missing NCIP address in LMS configuration", err.Error())
+	assert.Contains(t, err.Error(), "lmsConfig.address and fromAgency")
 
 	config = dirapi.LmsConfig{
 		Address: "http://ncip.example.com",
 	}
 	_, err = CreateLmsAdapterNcip(config)
 	assert.Error(t, err)
-	assert.Equal(t, "missing From Agency in LMS configuration", err.Error())
+	assert.Contains(t, err.Error(), "lmsConfig.address and fromAgency")
 }
 
 func TestLookupUser(t *testing.T) {

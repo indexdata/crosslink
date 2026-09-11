@@ -59,7 +59,7 @@ func TestGetAdapterNcipOK(t *testing.T) {
 	assert.IsType(t, &LmsAdapterNcip{}, LmsAdapter)
 }
 
-func TestGetAdapterNcipFail(t *testing.T) {
+func TestGetAdapterEmptyConfigDoesNotEnableNcip(t *testing.T) {
 	illRepo := &MockIllRepo{}
 	peer := ill_db.Peer{
 		CustomData: dirapi.Entry{
@@ -71,8 +71,7 @@ func TestGetAdapterNcipFail(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	symbol := "TEST"
 	_, err := creator.GetAdapter(ctx, symbol)
-	assert.Error(t, err)
-	assert.Equal(t, "missing NCIP address in LMS configuration", err.Error())
+	assert.NoError(t, err)
 }
 
 type MockIllRepo struct {

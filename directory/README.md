@@ -62,3 +62,8 @@ Run `make generate` before invoking `go build` or `go test` directly.
 | `TENANT_SYMBOL_AUTHORITY` | Authority paired with an incoming institution/tenant to form a complete symbol | `TEST`                                                      |
 | `LOG_LEVEL`               | Log level: `debug`, `info`, `warn`, or `error`                                 | `info`                                                      |
 | `LOG_FORMAT`              | Log output format; set to `json` for structured JSON logs                      | `text`                                                      |
+
+## Host integration profiles
+
+See [Host LMS and catalog profiles](host-profiles.md) for `lmsConfig.vendor`,
+`catalogConfig.profile`, precedence, parser overrides, diagnostics and migration.
