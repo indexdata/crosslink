@@ -203,6 +203,72 @@ func TestImportPatronRequestRejectsMissingOrBlankSupplierSymbolForLending(t *tes
 	}
 }
 
+func TestImportPatronRequestRejectsRequesterRequestIDDifferentFromISOHeader(t *testing.T) {
+	repo := &recordingImportRepo{}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		request := bundle["patronRequest"].(map[string]any)
+		request["illRequest"].(map[string]any)["header"].(map[string]any)["requestingAgencyRequestId"] = "other-request"
+	})
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+
+	require.ErrorContains(t, err, "requesterRequestId must match illRequest.header.requestingAgencyRequestId")
+	assert.Zero(t, repo.patronCalls)
+}
+
+func TestImportPatronRequestRejectsBorrowingIDDifferentFromRequesterRequestID(t *testing.T) {
+	repo := &recordingImportRepo{}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		request := bundle["patronRequest"].(map[string]any)
+		request["id"] = "other-request"
+	})
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+
+	require.ErrorContains(t, err, "borrowing patronRequest.id must match requesterRequestId")
+	assert.Zero(t, repo.patronCalls)
+}
+
+func TestImportPatronRequestRunsISORequestValidation(t *testing.T) {
+	repo := &recordingImportRepo{}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		header := bundle["patronRequest"].(map[string]any)["illRequest"].(map[string]any)["header"].(map[string]any)
+		delete(header, "timestamp")
+	})
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+
+	require.ErrorContains(t, err, "invalid illRequest")
+	require.ErrorContains(t, err, "Timestamp")
+	assert.Zero(t, repo.patronCalls)
+}
+
+func TestImportPatronRequestAllowsLendingIDDifferentFromRequesterRequestID(t *testing.T) {
+	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		request := bundle["patronRequest"].(map[string]any)
+		request["side"] = "lending"
+		request["id"] = "local-lending-id"
+		request["supplierSymbol"] = "ISIL:SUP"
+		delete(bundle, "illTransaction")
+		bundle["locatedSuppliers"] = []any{}
+	})
+
+	id, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+
+	require.NoError(t, err)
+	require.NotNil(t, id)
+	assert.Equal(t, "local-lending-id", *id)
+}
+
 func TestImportPatronRequestRejectsSchemaInvalidFields(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -628,10 +694,10 @@ func stringPointer(value string) *string { return &value }
 
 func validPatronBundleData() json.RawMessage {
 	return json.RawMessage(`{
-      "patronRequest":{"id":"pr-1","createdAt":"2026-08-01T10:00:00Z","updatedAt":"2026-08-02T10:00:00Z","illRequest":{"header":{"requestingAgencyRequestId":"pr-1"},"serviceInfo":{"serviceType":"Loan"}},"state":"SENT","side":"borrowing","requesterSymbol":"ISIL:REQ","requesterRequestId":"request-1","needsAttention":false,"stateModel":"default"},
+      "patronRequest":{"id":"pr-1","createdAt":"2026-08-01T10:00:00Z","updatedAt":"2026-08-02T10:00:00Z","illRequest":{"header":{"requestingAgencyId":{"agencyIdType":{"#text":"ISIL"},"agencyIdValue":"REQ"},"supplyingAgencyId":{"agencyIdType":{"#text":"ISIL"},"agencyIdValue":"SUP"},"timestamp":"2026-08-01T10:00:00Z","requestingAgencyRequestId":"pr-1"},"bibliographicInfo":{"title":"Test title"},"serviceInfo":{"serviceType":"Loan"}},"state":"SENT","side":"borrowing","requesterSymbol":"ISIL:REQ","requesterRequestId":"pr-1","needsAttention":false,"stateModel":"default"},
       "items":[{"id":"item-1","barcode":"barcode-1","lmsRequestId":"lms-1","lmsItemId":"lms-item-1","createdAt":"2026-08-01T10:01:00Z"}],
       "notifications":[{"id":"note-1","fromSymbol":"ISIL:REQ","toSymbol":"ISIL:SUP","direction":"sent","kind":"note","cost":1.25,"createdAt":"2026-08-01T10:02:00Z","acknowledgedAt":"2026-08-01T10:03:00Z"}],
-      "illTransaction":{"id":"ill-1","timestamp":"2026-08-01T10:00:00Z","requesterSymbol":"ISIL:REQ","requesterRequestID":"request-1","supplierSymbol":"ISIL:SUP","illTransactionData":{"bibliographicInfo":{}}},
+      "illTransaction":{"id":"ill-1","timestamp":"2026-08-01T10:00:00Z","requesterSymbol":"ISIL:REQ","requesterRequestID":"pr-1","supplierSymbol":"ISIL:SUP","illTransactionData":{"bibliographicInfo":{}}},
       "locatedSuppliers":[{"id":"located-1","supplierSymbol":"ISIL:SUP","ordinal":1,"supplierStatus":"selected","localSupplier":false}]
     }`)
 }

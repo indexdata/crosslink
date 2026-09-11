@@ -334,6 +334,15 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 	default:
 		return importdb.PatronRequestBundle{}, nil, fmt.Errorf("unsupported patron request side %q", request.Side)
 	}
+	if request.RequesterRequestId != request.IllRequest.Header.RequestingAgencyRequestId {
+		return importdb.PatronRequestBundle{}, nil, errors.New("patronRequest.requesterRequestId must match illRequest.header.requestingAgencyRequestId")
+	}
+	if side == prservice.SideBorrowing && request.Id != request.RequesterRequestId {
+		return importdb.PatronRequestBundle{}, nil, errors.New("borrowing patronRequest.id must match requesterRequestId")
+	}
+	if err := prservice.ValidateIllRequest(request.IllRequest); err != nil {
+		return importdb.PatronRequestBundle{}, nil, fmt.Errorf("invalid illRequest: %w", err)
+	}
 	if side != prservice.SideBorrowing && apiBundle.IllTransaction != nil {
 		return importdb.PatronRequestBundle{}, nil, errors.New("illTransaction is only allowed for borrowing patron requests")
 	}
