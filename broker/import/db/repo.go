@@ -297,6 +297,11 @@ func (r *PgImportRepo) ImportBatchAction(ctx common.ExtendedContext, params sche
 				return nil
 			case ConflictPolicyUpdate:
 				params.ID = existing.ID
+				if params.ActionData.BatchActionData != nil {
+					batchActionData := *params.ActionData.BatchActionData
+					batchActionData.TaskId = existing.ID
+					params.ActionData.BatchActionData = &batchActionData
+				}
 				params.CreatedAt = existing.CreatedAt
 			default:
 				return fmt.Errorf("unsupported conflict policy %q", policy)

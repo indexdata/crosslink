@@ -35,6 +35,7 @@ const (
 	importItemTypeBatchAction   = "batchAction"
 	importItemTypeTemplate      = "template"
 	maxImportRecordBytes        = 1 << 20
+	maxRetainedImportErrors     = 100
 )
 
 var ErrImportRecordTooLarge = errors.New("import record too large")
@@ -156,7 +157,7 @@ func decodeImportItem(raw json.RawMessage) (importItem, error) {
 }
 
 func (i Importer) Import(ctx common.ExtendedContext, policy importdb.ConflictPolicy, input io.Reader) (importoapi.ImportResult, error) {
-	result := importoapi.ImportResult{Errors: make([]importoapi.ImportItemError, 0)}
+	result := importoapi.ImportResult{Errors: make([]importoapi.ImportItemError, 0, maxRetainedImportErrors)}
 	maxRecordBytes := i.maxRecordBytes
 	if maxRecordBytes <= 0 {
 		maxRecordBytes = maxImportRecordBytes
@@ -181,7 +182,7 @@ func (i Importer) Import(ctx common.ExtendedContext, policy importdb.ConflictPol
 		if err != nil {
 			var syntaxError *json.SyntaxError
 			if errors.As(err, &syntaxError) || errors.Is(err, io.ErrUnexpectedEOF) {
-				result.Errors = append(result.Errors, importoapi.ImportItemError{Line: line, Error: err.Error()})
+				appendImportError(&result, importoapi.ImportItemError{Line: line, Error: err.Error()})
 				line++
 				continue
 			}
@@ -335,6 +336,9 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 	}
 	if side != prservice.SideBorrowing && apiBundle.IllTransaction != nil {
 		return importdb.PatronRequestBundle{}, nil, errors.New("illTransaction is only allowed for borrowing patron requests")
+	}
+	if side == prservice.SideLending && (request.SupplierSymbol == nil || strings.TrimSpace(*request.SupplierSymbol) == "") {
+		return importdb.PatronRequestBundle{}, nil, errors.New("patronRequest.supplierSymbol is required for lending requests")
 	}
 	if i.stateValidator == nil {
 		return importdb.PatronRequestBundle{}, nil, errors.New("state validator is required")
@@ -579,7 +583,7 @@ func addImportSkipped(result *importoapi.ImportResult, line int32, itemType, dia
 	if importType := importItemType(itemType); importType.Valid() {
 		importError.Type = &importType
 	}
-	result.Errors = append(result.Errors, importError)
+	appendImportError(result, importError)
 }
 
 func addImportFailure(result *importoapi.ImportResult, line int32, itemType string, err error, owner, identifier *string) {
@@ -595,7 +599,15 @@ func addImportFailure(result *importoapi.ImportResult, line int32, itemType stri
 	if importType := importItemType(itemType); importType.Valid() {
 		importError.Type = &importType
 	}
-	result.Errors = append(result.Errors, importError)
+	appendImportError(result, importError)
+}
+
+func appendImportError(result *importoapi.ImportResult, importError importoapi.ImportItemError) {
+	if len(result.Errors) < maxRetainedImportErrors {
+		result.Errors = append(result.Errors, importError)
+		return
+	}
+	result.ErrorsOmitted++
 }
 
 func importItemType(itemType string) importoapi.ImportItemType {

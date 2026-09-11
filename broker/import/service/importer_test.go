@@ -168,6 +168,41 @@ func TestImportPatronRequestRejectsIllTransactionForLendingRequest(t *testing.T)
 	assert.Zero(t, repo.patronCalls)
 }
 
+func TestImportPatronRequestRejectsMissingOrBlankSupplierSymbolForLending(t *testing.T) {
+	tests := []struct {
+		name           string
+		supplierSymbol *string
+	}{
+		{name: "missing"},
+		{name: "empty", supplierSymbol: stringPointer("")},
+		{name: "whitespace", supplierSymbol: stringPointer(" \t ")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &recordingImportRepo{}
+			cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+			importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
+			data := mutatePatronBundleData(t, func(bundle map[string]any) {
+				request := bundle["patronRequest"].(map[string]any)
+				request["side"] = "lending"
+				if tt.supplierSymbol == nil {
+					delete(request, "supplierSymbol")
+				} else {
+					request["supplierSymbol"] = *tt.supplierSymbol
+				}
+				delete(bundle, "illTransaction")
+				bundle["locatedSuppliers"] = []any{}
+			})
+
+			_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+
+			require.ErrorContains(t, err, "patronRequest.supplierSymbol is required for lending requests")
+			assert.Zero(t, repo.patronCalls)
+		})
+	}
+}
+
 func TestImportPatronRequestRejectsSchemaInvalidFields(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -259,6 +294,60 @@ func TestImporterAccountsForImportedSkippedAndFailed(t *testing.T) {
 	assert.Equal(t, "labels already exist", result.Errors[0].Error)
 	assert.Equal(t, int32(3), result.Errors[1].Line)
 	assert.Equal(t, importdb.ConflictPolicySkip, repo.templatePolicy)
+}
+
+func TestImporterCapsFailureDetailsWhilePreservingCounters(t *testing.T) {
+	const recordCount = 105
+	repo := &recordingImportRepo{templateErrors: make([]error, recordCount)}
+	for index := range repo.templateErrors {
+		repo.templateErrors[index] = errors.New("write failed")
+	}
+	importer := newImporter(repo, &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}, nil, nil, fixedClock)
+	record := `{"type":"template","owner":"ISIL:OWNER","data":` + string(validTemplateData()) + `}` + "\n"
+
+	result, err := importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader(strings.Repeat(record, recordCount)))
+
+	require.NoError(t, err)
+	assert.Equal(t, int32(recordCount), result.Templates.Failed)
+	assert.Len(t, result.Errors, 100)
+	assertImportErrorsOmitted(t, result, 5)
+}
+
+func TestImporterCapsSkippedDetailsWhilePreservingCounters(t *testing.T) {
+	const recordCount = 105
+	repo := &recordingImportRepo{templateResults: make([]importdb.Result, recordCount)}
+	for index := range repo.templateResults {
+		repo.templateResults[index] = importdb.Result{Outcome: importdb.OutcomeSkipped, Diagnostic: "labels already exist"}
+	}
+	importer := newImporter(repo, &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}, nil, nil, fixedClock)
+	record := `{"type":"template","owner":"ISIL:OWNER","data":` + string(validTemplateData()) + `}` + "\n"
+
+	result, err := importer.Import(testCtx(), importdb.ConflictPolicySkip, strings.NewReader(strings.Repeat(record, recordCount)))
+
+	require.NoError(t, err)
+	assert.Equal(t, int32(recordCount), result.Templates.Skipped)
+	assert.Len(t, result.Errors, 100)
+	assertImportErrorsOmitted(t, result, 5)
+}
+
+func TestImporterCapsMalformedRecordDetails(t *testing.T) {
+	const recordCount = 105
+	importer := newImporter(&recordingImportRepo{}, &recordingPeerCache{}, nil, nil, fixedClock)
+
+	result, err := importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader(strings.Repeat("{bad json}\n", recordCount)))
+
+	require.NoError(t, err)
+	assert.Len(t, result.Errors, 100)
+	assertImportErrorsOmitted(t, result, 5)
+}
+
+func assertImportErrorsOmitted(t *testing.T, result any, want float64) {
+	t.Helper()
+	encoded, err := json.Marshal(result)
+	require.NoError(t, err)
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &response))
+	assert.Equal(t, want, response["errorsOmitted"])
 }
 
 func TestImportTemplateRejectsInvalidEnums(t *testing.T) {
@@ -532,9 +621,10 @@ func (c *recordingPeerCache) GetCachedPeersBySymbols(_ common.ExtendedContext, s
 func testCtx() common.ExtendedContext {
 	return common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 }
-func fixedClock() time.Time            { return time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC) }
-func fixedTime(value string) time.Time { parsed, _ := time.Parse(time.RFC3339, value); return parsed }
-func pgText(value string) pgtype.Text  { return pgtype.Text{String: value, Valid: true} }
+func fixedClock() time.Time              { return time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC) }
+func fixedTime(value string) time.Time   { parsed, _ := time.Parse(time.RFC3339, value); return parsed }
+func pgText(value string) pgtype.Text    { return pgtype.Text{String: value, Valid: true} }
+func stringPointer(value string) *string { return &value }
 
 func validPatronBundleData() json.RawMessage {
 	return json.RawMessage(`{
