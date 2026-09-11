@@ -31,7 +31,7 @@ func TestPostImportDefaultsConflictPolicyToFail(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
 	assert.Equal(t, importdb.ConflictPolicyFail, repo.templatePolicy)
-	assert.JSONEq(t, `{"patronRequests":{"imported":0,"failed":0,"skipped":0},"batchActions":{"imported":0,"failed":0,"skipped":0},"templates":{"imported":1,"failed":0,"skipped":0},"errors":[]}`, recorder.Body.String())
+	assert.JSONEq(t, `{"patronRequests":{"imported":0,"failed":0,"skipped":0},"batchActions":{"imported":0,"failed":0,"skipped":0},"templates":{"imported":1,"failed":0,"skipped":0},"errors":[],"errorsOmitted":0}`, recorder.Body.String())
 }
 
 func TestPostImportAcceptsExplicitConflictPolicy(t *testing.T) {

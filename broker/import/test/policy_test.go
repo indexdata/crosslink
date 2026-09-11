@@ -63,7 +63,8 @@ func TestImportBatchActionPolicies(t *testing.T) {
 	defer listener.Release()
 	_, err = listener.Exec(context.Background(), "LISTEN "+sched_db.SchedulerChannel)
 	require.NoError(t, err)
-	original := sched_db.SaveScheduledTaskParams{ID: uuid.NewString(), EventName: events.EventNameInvokeBatchAction, Schedule: "FREQ=DAILY", ActionData: events.EventData{}, Title: pgtype.Text{String: "Daily", Valid: true}, Status: sched_db.ScheduledTaskStatusPending, Owner: owner, CreatedAt: pgtype.Timestamptz{Time: testTimestamp(0).Time, Valid: true}, UpdatedAt: pgtype.Timestamptz{Time: testTimestamp(1).Time, Valid: true}}
+	originalID := uuid.NewString()
+	original := sched_db.SaveScheduledTaskParams{ID: originalID, EventName: events.EventNameInvokeBatchAction, Schedule: "FREQ=DAILY", ActionData: events.EventData{CommonEventData: events.CommonEventData{BatchActionData: &events.BatchActionData{ActionName: "request-aging", Selector: "state = NEW", TaskId: originalID, Owner: owner}}}, Title: pgtype.Text{String: "Daily", Valid: true}, Status: sched_db.ScheduledTaskStatusPending, Owner: owner, CreatedAt: pgtype.Timestamptz{Time: testTimestamp(0).Time, Valid: true}, UpdatedAt: pgtype.Timestamptz{Time: testTimestamp(1).Time, Valid: true}}
 	result, err := importTestRepo.ImportBatchAction(importTestCtx, original, importdb.ConflictPolicyFail)
 	require.NoError(t, err)
 	assert.Equal(t, importdb.OutcomeImported, result.Outcome)
@@ -74,6 +75,7 @@ func TestImportBatchActionPolicies(t *testing.T) {
 
 	incoming := original
 	incoming.ID = uuid.NewString()
+	incoming.ActionData.BatchActionData = &events.BatchActionData{ActionName: "request-aging", Selector: "state = NEW", TaskId: incoming.ID, Owner: owner}
 	incoming.Schedule = "FREQ=WEEKLY"
 	_, err = importTestRepo.ImportBatchAction(importTestCtx, incoming, importdb.ConflictPolicyFail)
 	assert.Error(t, err)
@@ -89,7 +91,10 @@ func TestImportBatchActionPolicies(t *testing.T) {
 	assert.Equal(t, importdb.OutcomeImported, updated.Outcome)
 
 	var id, schedule string
-	require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT id,schedule FROM scheduled_task WHERE owner=$1", owner).Scan(&id, &schedule))
+	var actionData events.EventData
+	require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT id,schedule,action_data FROM scheduled_task WHERE owner=$1", owner).Scan(&id, &schedule, &actionData))
 	assert.Equal(t, original.ID, id)
 	assert.Equal(t, "FREQ=WEEKLY", schedule)
+	require.NotNil(t, actionData.BatchActionData)
+	assert.Equal(t, original.ID, actionData.BatchActionData.TaskId)
 }

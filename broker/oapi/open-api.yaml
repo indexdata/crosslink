@@ -166,8 +166,14 @@ components:
         templates: { $ref: '#/components/schemas/ImportSectionResult' }
         errors:
           type: array
+          maxItems: 100
           items: { $ref: '#/components/schemas/ImportItemError' }
-      required: [patronRequests, batchActions, templates, errors]
+        errorsOmitted:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of additional error details omitted from this response.
+      required: [patronRequests, batchActions, templates, errors, errorsOmitted]
     ImportResourceRecord:
       type: object
       additionalProperties: false

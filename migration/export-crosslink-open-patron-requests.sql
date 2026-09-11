@@ -86,7 +86,7 @@ INSERT INTO crosslink_state_map (legacy_state, side, crosslink_state) VALUES
     ('RES_PENDING_CONDITIONAL_ANSWER',   'lending', 'CONDITION_PENDING'),
     ('RES_NEW_AWAIT_PULL_SLIP',          'lending', 'WILL_SUPPLY'),
     ('RES_AWAIT_PICKING',                'lending', 'ITEM_PENDING'),
-    ('RES_COPY_AWAIT_PICKING',           'lending', 'ITEM_PENDING'),
+    ('RES_COPY_AWAIT_PICKING',           'lending', 'WILL_SUPPLY'),
     ('RES_SEQUESTERED',                  'lending', 'ITEM_PENDING'),
     ('RES_AWAIT_PROXY_BORROWER',         'lending', 'ITEM_PENDING'),
     ('RES_HOLD_PLACED',                  'lending', 'ITEM_PENDING'),
@@ -107,9 +107,29 @@ INSERT INTO crosslink_state_map (legacy_state, side, crosslink_state) VALUES
     ('SLNP_RES_AWAIT_SHIP',              'lending', 'WILL_SUPPLY_PENDING'),
     ('SLNP_RES_ITEM_SHIPPED',            'lending', 'SHIPPED');
 
+CREATE TEMP VIEW crosslink_request_ids AS
+SELECT
+    patron_request.pr_id AS legacy_id,
+    CASE
+        WHEN patron_request.pr_is_requester IS NOT TRUE
+            THEN patron_request.pr_id
+        WHEN state_model.sm_shortcode IN ('SLNPRequester', 'SLNPResponder',
+                                          'SLNPNonReturnableRequester',
+                                          'SLNPNonReturnableResponder')
+            THEN coalesce(patron_request.pr_hrid, patron_request.pr_id)
+        ELSE coalesce(patron_request.pr_hrid, patron_request.pr_id)
+             || '~' || coalesce(patron_request.pr_rota_position::text, 'norota')
+    END AS import_id
+FROM patron_request
+JOIN state_model
+  ON state_model.sm_id = patron_request.pr_state_model_fk;
+
 CREATE TEMP VIEW crosslink_open_requests AS
 SELECT
     patron_request.*,
+    request_identity.import_id AS import_patron_request_id,
+    next_request_identity.import_id AS import_next_request_id,
+    previous_request_identity.import_id AS import_previous_request_id,
     status.st_code AS legacy_state,
     coalesce(patron_request.pr_needs_attention, status.st_needs_attention, false)
         AS import_needs_attention,
@@ -132,14 +152,20 @@ SELECT
     CASE
         WHEN patron_request.pr_is_requester IS NOT TRUE
             THEN patron_request.pr_peer_request_identifier
-        WHEN state_model.sm_shortcode IN ('SLNPRequester', 'SLNPResponder',
-                                          'SLNPNonReturnableRequester',
-                                          'SLNPNonReturnableResponder')
-            THEN coalesce(patron_request.pr_hrid, patron_request.pr_id)
-        ELSE coalesce(patron_request.pr_hrid, patron_request.pr_id)
-             || '~' || coalesce(patron_request.pr_rota_position::text, 'norota')
-    END AS import_requester_request_id
+        ELSE request_identity.import_id
+    END AS import_requester_request_id,
+    CASE
+        WHEN patron_request.pr_is_requester IS NOT TRUE
+            THEN patron_request.pr_id
+        ELSE patron_request.pr_peer_request_identifier
+    END AS import_supplier_request_id
 FROM patron_request
+JOIN crosslink_request_ids AS request_identity
+  ON request_identity.legacy_id = patron_request.pr_id
+LEFT JOIN crosslink_request_ids AS next_request_identity
+  ON next_request_identity.legacy_id = patron_request.pr_succeeded_by_fk
+LEFT JOIN crosslink_request_ids AS previous_request_identity
+  ON previous_request_identity.legacy_id = patron_request.pr_preceded_by_fk
 JOIN status
   ON status.st_id = patron_request.pr_state_fk
 JOIN state_model
@@ -243,7 +269,7 @@ WITH request_payloads AS (
                     'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
                 ),
                 'requestingAgencyRequestId', request.import_requester_request_id,
-                'supplyingAgencyRequestId', request.pr_peer_request_identifier
+                'supplyingAgencyRequestId', request.import_supplier_request_id
             )),
             'bibliographicInfo', jsonb_strip_nulls(jsonb_build_object(
                 'supplierUniqueRecordId', request.pr_supplier_unique_record_id,
@@ -329,10 +355,10 @@ WITH request_payloads AS (
 ),
 request_bundles AS (
     SELECT
-        request.pr_id,
+        request.import_patron_request_id AS pr_id,
         jsonb_strip_nulls(jsonb_build_object(
             'patronRequest', jsonb_strip_nulls(jsonb_build_object(
-                'id', request.pr_id,
+                'id', request.import_patron_request_id,
                 'createdAt', to_char(
                     request.pr_date_created,
                     'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
@@ -351,8 +377,8 @@ request_bundles AS (
                 'requesterRequestId', request.import_requester_request_id,
                 'needsAttention', request.import_needs_attention,
                 'internalNote', request.pr_local_note,
-                'nextReqId', request.pr_succeeded_by_fk,
-                'prevReqId', request.pr_preceded_by_fk
+                'nextReqId', request.import_next_request_id,
+                'prevReqId', request.import_previous_request_id
             )),
             'items', CASE
                 WHEN nullif(btrim(request.pr_selected_item_barcode), '') IS NULL
