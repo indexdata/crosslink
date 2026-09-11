@@ -14,7 +14,7 @@ import (
 )
 
 type NcipClientImpl struct {
-	DisableNamespace         bool
+	disableNamespace         bool
 	client                   *http.Client
 	address                  string
 	fromAgency               string
@@ -23,8 +23,9 @@ type NcipClientImpl struct {
 	logFunc                  NcipLogFunc
 }
 
-func NewNcipClient(client *http.Client, address string, fromAgency string, toAgency string, fromAgencyAuthentication string) NcipClient {
+func NewNcipClient(client *http.Client, address string, fromAgency string, toAgency string, fromAgencyAuthentication string, disableNamespace bool) NcipClient {
 	return &NcipClientImpl{
+		disableNamespace:         disableNamespace,
 		client:                   client,
 		address:                  address,
 		fromAgency:               fromAgency,
@@ -370,14 +371,14 @@ func transformNamespace(data []byte, remove bool) ([]byte, error) {
 
 func (n *NcipClientImpl) marshal(v any) ([]byte, error) {
 	b, err := xml.Marshal(v)
-	if err != nil || !n.DisableNamespace {
+	if err != nil || !n.disableNamespace {
 		return b, err
 	}
 	return transformNamespace(b, true)
 }
 
 func (n *NcipClientImpl) unmarshal(b []byte, v any) error {
-	if n.DisableNamespace {
+	if n.disableNamespace {
 		var err error
 		b, err = transformNamespace(b, false)
 		if err != nil {

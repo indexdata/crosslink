@@ -40,7 +40,7 @@ func createTestClient() NcipClient {
 		"http://localhost:"+os.Getenv("HTTP_PORT")+"/ncip",
 		"ILL-MOCK",
 		"ILL-MOCK",
-		"pass").(*NcipClientImpl)
+		"pass", false)
 }
 
 func TestPrepareHeaderValues(t *testing.T) {

@@ -74,9 +74,8 @@ func createResolvedLmsAdapterNcip(lmsConfig dirapi.LmsConfig) (LmsAdapter, error
 	if l.config.FromAgency == "" {
 		return nil, fmt.Errorf("missing From Agency in LMS configuration")
 	}
-	client := ncipclient.NewNcipClient(http.DefaultClient, l.config.Address, l.config.FromAgency, toAgency, FromAgencyAuthentication)
-	client.(*ncipclient.NcipClientImpl).DisableNamespace = l.config.NcipNamespaceEnabled != nil && !*l.config.NcipNamespaceEnabled
-	l.ncipClient = client
+	disableNamespace := l.config.NcipNamespaceEnabled != nil && !*l.config.NcipNamespaceEnabled
+	l.ncipClient = ncipclient.NewNcipClient(http.DefaultClient, l.config.Address, l.config.FromAgency, toAgency, FromAgencyAuthentication, disableNamespace)
 	return l, nil
 }
 

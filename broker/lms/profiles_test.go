@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/indexdata/crosslink/broker/ncipclient"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/ncip"
 	"github.com/stretchr/testify/require"
@@ -17,7 +16,7 @@ func TestLmsProfileDefaults(t *testing.T) {
 		adapter, err := CreateLmsAdapterNcip(cfg)
 		require.NoError(t, err)
 		a := adapter.(*LmsAdapterNcip)
-		require.Equal(t, vendor == "Koha", a.ncipClient.(*ncipclient.NcipClientImpl).DisableNamespace)
+		require.Equal(t, vendor != "Koha", *a.config.NcipNamespaceEnabled)
 		if vendor == "Sierra" {
 			require.Equal(t, "Hold", a.requestItemRequestType())
 			require.Equal(t, "Title", a.requestItemRequestScopeType())

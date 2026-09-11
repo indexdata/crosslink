@@ -34,8 +34,7 @@ func TestNamespaceFreeExchange(t *testing.T) {
 		require.NoError(t, err)
 	}))
 	defer server.Close()
-	client := NewNcipClient(server.Client(), server.URL, "agency", "", "").(*NcipClientImpl)
-	client.DisableNamespace = true
+	client := NewNcipClient(server.Client(), server.URL, "agency", "", "", true)
 	resp, err := client.LookupUser(ncip.LookupUser{UserId: &ncip.UserId{UserIdentifierValue: "patron&1"}})
 	require.NoError(t, err)
 	require.Equal(t, "patron&1", resp.UserId.UserIdentifierValue)
