@@ -101,7 +101,11 @@ func (r *PgImportRepo) importNetworkAttempt(ctx context.Context, aggregate model
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	consortium, assignments, err := resolveAndLockAssignments(ctx, queries, aggregate.Key.Consortium, aggregate.Data.Entries)
+	refs := make([]model.SymbolRef, len(aggregate.Data.Entries))
+	for index, assignment := range aggregate.Data.Entries {
+		refs[index] = assignment.SymbolRef
+	}
+	consortium, assignments, err := resolveAndLockAssignments(ctx, queries, aggregate.Key.Consortium, refs)
 	if err != nil {
 		return model.RepoResult{}, err
 	}
@@ -125,16 +129,16 @@ func (r *PgImportRepo) importNetworkAttempt(ctx context.Context, aggregate model
 	var networkID uuid.UUID
 	if exists {
 		networkID = existing.ID
-		err = queries.UpdateImportedNetwork(ctx, db.UpdateImportedNetworkParams{ID: networkID, Priority: aggregate.Data.Priority, Reciprocal: aggregate.Data.Reciprocal})
+		err = queries.UpdateImportedNetwork(ctx, db.UpdateImportedNetworkParams{ID: networkID, Reciprocal: aggregate.Data.Reciprocal})
 	} else {
 		var created db.Network
-		created, err = queries.CreateNetwork(ctx, db.CreateNetworkParams{Name: name, Consortium: consortium.ID, Priority: aggregate.Data.Priority, Reciprocal: aggregate.Data.Reciprocal})
+		created, err = queries.CreateNetwork(ctx, db.CreateNetworkParams{Name: name, Consortium: consortium.ID, Reciprocal: aggregate.Data.Reciprocal})
 		networkID = created.ID
 	}
 	if err != nil {
 		return model.RepoResult{}, persistenceError("network", key, err)
 	}
-	if err := replaceNetworkAssignments(ctx, queries, networkID, assignmentEntries); err != nil {
+	if err := replaceNetworkAssignments(ctx, queries, networkID, assignmentEntries, aggregate.Data.Entries); err != nil {
 		return model.RepoResult{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -218,12 +222,15 @@ func replaceTierAssignments(ctx context.Context, queries *db.Queries, tierID uui
 	return nil
 }
 
-func replaceNetworkAssignments(ctx context.Context, queries *db.Queries, networkID uuid.UUID, entries []db.Entry) error {
+func replaceNetworkAssignments(ctx context.Context, queries *db.Queries, networkID uuid.UUID, entries []db.Entry, assignments []model.NetworkAssignment) error {
+	if len(entries) != len(assignments) {
+		return fmt.Errorf("replace network assignments: entry count mismatch")
+	}
 	if err := queries.DeleteEntryNetworksByNetwork(ctx, networkID); err != nil {
 		return fmt.Errorf("replace network assignments")
 	}
-	for _, entry := range entries {
-		if _, err := queries.CreateEntryNetwork(ctx, db.CreateEntryNetworkParams{Entry: entry.ID, Network: networkID}); err != nil {
+	for index, entry := range entries {
+		if _, err := queries.CreateEntryNetwork(ctx, db.CreateEntryNetworkParams{Entry: entry.ID, Network: networkID, Priority: assignments[index].Priority}); err != nil {
 			return fmt.Errorf("replace network assignments")
 		}
 	}

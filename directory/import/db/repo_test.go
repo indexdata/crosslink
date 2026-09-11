@@ -64,20 +64,20 @@ func TestImportBusinessKeyConstraints(t *testing.T) {
 	requirePgCode(t, err, "23505")
 
 	_, err = testPool.Exec(ctx, `
-		INSERT INTO networks (consortium, name, priority)
-		VALUES ($1, 'Main', 0), ($1, 'Main', 0)`, consortiumID)
+		INSERT INTO networks (consortium, name)
+		VALUES ($1, 'Main'), ($1, 'Main')`, consortiumID)
 	requirePgCode(t, err, "23505")
 
 	_, err = testPool.Exec(ctx, `INSERT INTO tiers (consortium, name, level, type, cost) VALUES ($1, NULL, 'standard', 'loan', 0)`, consortiumID)
 	requirePgCode(t, err, "23502")
 
-	_, err = testPool.Exec(ctx, `INSERT INTO networks (consortium, name, priority) VALUES ($1, NULL, 0)`, consortiumID)
+	_, err = testPool.Exec(ctx, `INSERT INTO networks (consortium, name) VALUES ($1, NULL)`, consortiumID)
 	requirePgCode(t, err, "23502")
 
 	_, err = testPool.Exec(ctx, `INSERT INTO tiers (consortium, name, level, type, cost) VALUES ($1, E'\t\n', 'standard', 'loan', 0)`, consortiumID)
 	requirePgCode(t, err, "23514")
 
-	_, err = testPool.Exec(ctx, `INSERT INTO networks (consortium, name, priority) VALUES ($1, E'\t\n', 0)`, consortiumID)
+	_, err = testPool.Exec(ctx, `INSERT INTO networks (consortium, name) VALUES ($1, E'\t\n')`, consortiumID)
 	requirePgCode(t, err, "23514")
 }
 
@@ -608,7 +608,7 @@ func TestImportNetworkConflictPoliciesAndUpdateReplacesAssignments(t *testing.T)
 	reciprocal := true
 	aggregate := model.NetworkAggregate{
 		Key:  model.NetworkKey{Consortium: consortium, Name: "Main"},
-		Data: model.NetworkData{Priority: 1, Reciprocal: &reciprocal, Entries: []model.SymbolRef{first}},
+		Data: model.NetworkData{Reciprocal: &reciprocal, Entries: []model.NetworkAssignment{{SymbolRef: first, Priority: 1}}},
 	}
 
 	result, err := repo.ImportNetwork(context.Background(), aggregate, model.ConflictPolicyFail)
@@ -616,7 +616,7 @@ func TestImportNetworkConflictPoliciesAndUpdateReplacesAssignments(t *testing.T)
 	require.Equal(t, model.OutcomeImported, result.Outcome)
 	id := networkIDByKey(t, consortium, "Main")
 	require.NotEqual(t, uuid.Nil, id)
-	require.Equal(t, []model.SymbolRef{first}, networkAssignments(t, id))
+	require.Equal(t, []model.NetworkAssignment{{SymbolRef: first, Priority: 1}}, networkAssignments(t, id))
 
 	_, err = repo.ImportNetwork(context.Background(), aggregate, model.ConflictPolicyFail)
 	require.ErrorContains(t, err, "already exists")
@@ -624,13 +624,12 @@ func TestImportNetworkConflictPoliciesAndUpdateReplacesAssignments(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, model.OutcomeSkipped, skipped.Outcome)
 
-	aggregate.Data.Priority = 2
 	aggregate.Data.Reciprocal = nil
-	aggregate.Data.Entries = []model.SymbolRef{second}
+	aggregate.Data.Entries = []model.NetworkAssignment{{SymbolRef: second, Priority: 2}}
 	_, err = repo.ImportNetwork(context.Background(), aggregate, model.ConflictPolicyUpdate)
 	require.NoError(t, err)
 	require.Equal(t, id, networkIDByKey(t, consortium, "Main"))
-	require.Equal(t, []model.SymbolRef{second}, networkAssignments(t, id))
+	require.Equal(t, []model.NetworkAssignment{{SymbolRef: second, Priority: 2}}, networkAssignments(t, id))
 }
 
 func TestConcurrentEntryAndNetworkImportsUseSameEntryLockOrder(t *testing.T) {
@@ -644,7 +643,7 @@ func TestConcurrentEntryAndNetworkImportsUseSameEntryLockOrder(t *testing.T) {
 	require.NoError(t, err)
 	_, err = testPool.Exec(ctx, `INSERT INTO symbols (owner, authority, symbol) VALUES ($1, 'ISIL', 'MEMBER'), ($2, 'ISIL', 'CON')`, memberID, consortiumID)
 	require.NoError(t, err)
-	_, err = testPool.Exec(ctx, `INSERT INTO networks (id, consortium, name, priority) VALUES ($1, $2, 'Main', 0)`, networkID, consortiumID)
+	_, err = testPool.Exec(ctx, `INSERT INTO networks (id, consortium, name) VALUES ($1, $2, 'Main')`, networkID, consortiumID)
 	require.NoError(t, err)
 
 	blocker, err := testPool.Begin(ctx)
@@ -658,7 +657,7 @@ func TestConcurrentEntryAndNetworkImportsUseSameEntryLockOrder(t *testing.T) {
 	member := model.SymbolRef{Authority: "ISIL", Symbol: "MEMBER"}
 	network := model.NetworkAggregate{
 		Key:  model.NetworkKey{Consortium: consortium, Name: "Main"},
-		Data: model.NetworkData{Priority: 1, Entries: []model.SymbolRef{member}},
+		Data: model.NetworkData{Entries: []model.NetworkAssignment{{SymbolRef: member, Priority: 1}}},
 	}
 	networkDone := make(chan error, 1)
 	go func() {
@@ -686,7 +685,7 @@ func TestConcurrentImportNetworkSkipHonorsConflictPolicyForMissingKey(t *testing
 	newAggregate := func() model.NetworkAggregate {
 		return model.NetworkAggregate{
 			Key:  model.NetworkKey{Consortium: consortium, Name: "Concurrent"},
-			Data: model.NetworkData{Priority: 1, Entries: []model.SymbolRef{}},
+			Data: model.NetworkData{Entries: []model.NetworkAssignment{}},
 		}
 	}
 	results, errs := concurrentlyImportNetwork(repo, newAggregate, model.ConflictPolicySkip, 8)
@@ -700,7 +699,7 @@ func TestConcurrentImportNetworkUpdateHonorsConflictPolicyForMissingKey(t *testi
 	newAggregate := func() model.NetworkAggregate {
 		return model.NetworkAggregate{
 			Key:  model.NetworkKey{Consortium: consortium, Name: "Concurrent"},
-			Data: model.NetworkData{Priority: 1, Entries: []model.SymbolRef{}},
+			Data: model.NetworkData{Entries: []model.NetworkAssignment{}},
 		}
 	}
 	results, errs := concurrentlyImportNetwork(repo, newAggregate, model.ConflictPolicyUpdate, 8)
@@ -713,7 +712,7 @@ func TestImportNetworkRejectsNonConsortiumOwner(t *testing.T) {
 	repo, _, first, _ := importRepoFixture(t)
 	aggregate := model.NetworkAggregate{
 		Key:  model.NetworkKey{Consortium: first, Name: "Main"},
-		Data: model.NetworkData{Entries: []model.SymbolRef{}},
+		Data: model.NetworkData{Entries: []model.NetworkAssignment{}},
 	}
 
 	_, err := repo.ImportNetwork(context.Background(), aggregate, model.ConflictPolicyFail)
@@ -762,9 +761,24 @@ func tierAssignments(t *testing.T, id uuid.UUID) []model.SymbolRef {
 	return aggregateAssignments(t, "entry_tiers", "tier", id)
 }
 
-func networkAssignments(t *testing.T, id uuid.UUID) []model.SymbolRef {
+func networkAssignments(t *testing.T, id uuid.UUID) []model.NetworkAssignment {
 	t.Helper()
-	return aggregateAssignments(t, "entry_networks", "network", id)
+	rows, err := testPool.Query(context.Background(), `
+		SELECT s.authority, s.symbol, en.priority
+		FROM entry_networks en
+		JOIN symbols s ON s.owner=en.entry
+		WHERE en.network=$1
+		ORDER BY s.authority, s.symbol`, id)
+	require.NoError(t, err)
+	defer rows.Close()
+	var result []model.NetworkAssignment
+	for rows.Next() {
+		var assignment model.NetworkAssignment
+		require.NoError(t, rows.Scan(&assignment.Authority, &assignment.Symbol, &assignment.Priority))
+		result = append(result, assignment)
+	}
+	require.NoError(t, rows.Err())
+	return result
 }
 
 func aggregateAssignments(t *testing.T, table, aggregateColumn string, id uuid.UUID) []model.SymbolRef {

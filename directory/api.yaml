@@ -1434,6 +1434,15 @@ components:
         authority: { type: string, minLength: 1 }
         symbol: { type: string, minLength: 1 }
 
+    ImportNetworkAssignment:
+      type: object
+      additionalProperties: false
+      required: [authority, symbol, priority]
+      properties:
+        authority: { type: string, minLength: 1 }
+        symbol: { type: string, minLength: 1 }
+        priority: { type: integer, format: int32 }
+
     ImportEntryKey:
       $ref: '#/components/schemas/ImportSymbolRef'
 
@@ -1731,13 +1740,12 @@ components:
     ImportNetworkData:
       type: object
       additionalProperties: false
-      required: [priority, reciprocal, entries]
+      required: [reciprocal, entries]
       properties:
-        priority: { type: integer, format: int32 }
         reciprocal: { type: boolean, nullable: true }
         entries:
           type: array
-          items: { $ref: '#/components/schemas/ImportSymbolRef' }
+          items: { $ref: '#/components/schemas/ImportNetworkAssignment' }
 
     ImportEntryRecord:
       type: object
