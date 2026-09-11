@@ -45,11 +45,8 @@ func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.E
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if err := queries.LockEntryImportKey(ctx, db.LockEntryImportKeyParams{
-		Authority: aggregate.Key.Authority,
-		Symbol:    aggregate.Key.Symbol,
-	}); err != nil {
-		return model.RepoResult{}, fmt.Errorf("lock entry %s", key)
+	if err := lockEntryImportKeys(ctx, queries, aggregate.Data.Symbols); err != nil {
+		return model.RepoResult{}, fmt.Errorf("lock entry %s symbols: %w", key, err)
 	}
 	existing, lookupErr := queries.EntryBySymbol(ctx, db.EntryBySymbolParams{
 		Authority: aggregate.Key.Authority,
@@ -80,16 +77,21 @@ func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.E
 	if err != nil {
 		return model.RepoResult{}, err
 	}
+	symbolMappings, symbolOwnerIDs, err := resolveImportSymbolMappings(ctx, queries, aggregate.Key, aggregate.Data.Symbols, existing, exists)
+	if err != nil {
+		return model.RepoResult{}, err
+	}
 	var owner *db.Entry
 	if exists {
 		owner = &existing
 	}
 	entryIDs := entryLockIDs(owner, parent, lenders)
+	entryIDs = append(entryIDs, symbolOwnerIDs...)
 	lockedEntries, err := lockEntryRows(ctx, queries, entryIDs...)
 	if err != nil {
 		return model.RepoResult{}, fmt.Errorf("lock entry hierarchy: %w", err)
 	}
-	mappings := []entryMapping{{ref: aggregate.Key, expectedOwner: entryIDPointer(existing, exists)}}
+	mappings := append([]entryMapping(nil), symbolMappings...)
 	if aggregate.Data.Parent != nil {
 		mappings = append(mappings, entryMapping{ref: *aggregate.Data.Parent, expectedOwner: &parent.ID})
 	}
@@ -100,6 +102,9 @@ func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.E
 	}
 	if err := lockEntryMappings(ctx, queries, mappings...); err != nil {
 		return model.RepoResult{}, fmt.Errorf("revalidate entry hierarchy: %w", err)
+	}
+	if err := validateImportSymbolOwnership(symbolMappings, entryIDPointer(existing, exists)); err != nil {
+		return model.RepoResult{}, err
 	}
 	if exists {
 		existing = lockedEntries[existing.ID]
@@ -157,6 +162,57 @@ func entryIDPointer(entry db.Entry, exists bool) *uuid.UUID {
 type entryMapping struct {
 	ref           model.SymbolRef
 	expectedOwner *uuid.UUID
+}
+
+func lockEntryImportKeys(ctx context.Context, queries *db.Queries, refs []model.SymbolRef) error {
+	ordered := append([]model.SymbolRef(nil), refs...)
+	sort.Slice(ordered, func(i, j int) bool {
+		if ordered[i].Authority != ordered[j].Authority {
+			return ordered[i].Authority < ordered[j].Authority
+		}
+		return ordered[i].Symbol < ordered[j].Symbol
+	})
+	for index, ref := range ordered {
+		if index > 0 && ref == ordered[index-1] {
+			continue
+		}
+		if err := queries.LockEntryImportKey(ctx, db.LockEntryImportKeyParams{Authority: ref.Authority, Symbol: ref.Symbol}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func resolveImportSymbolMappings(ctx context.Context, queries *db.Queries, key model.SymbolRef, refs []model.SymbolRef, existing db.Entry, exists bool) ([]entryMapping, []uuid.UUID, error) {
+	mappings := make([]entryMapping, 0, len(refs))
+	ownerIDs := make([]uuid.UUID, 0, len(refs))
+	for _, ref := range refs {
+		if ref == key {
+			mappings = append(mappings, entryMapping{ref: ref, expectedOwner: entryIDPointer(existing, exists)})
+			continue
+		}
+		entry, err := queries.EntryBySymbol(ctx, db.EntryBySymbolParams{Authority: ref.Authority, Symbol: ref.Symbol})
+		if errors.Is(err, pgx.ErrNoRows) {
+			mappings = append(mappings, entryMapping{ref: ref})
+			continue
+		}
+		if err != nil {
+			return nil, nil, fmt.Errorf("resolve entry symbol %s: %w", ref.String(), err)
+		}
+		ownerID := entry.ID
+		mappings = append(mappings, entryMapping{ref: ref, expectedOwner: &ownerID})
+		ownerIDs = append(ownerIDs, ownerID)
+	}
+	return mappings, ownerIDs, nil
+}
+
+func validateImportSymbolOwnership(mappings []entryMapping, entryID *uuid.UUID) error {
+	for _, mapping := range mappings {
+		if mapping.expectedOwner != nil && !sameEntryID(mapping.expectedOwner, entryID) {
+			return fmt.Errorf("entry symbol %s already belongs to another entry", mapping.ref.String())
+		}
+	}
+	return nil
 }
 
 func lockEntryMappings(ctx context.Context, queries *db.Queries, mappings ...entryMapping) error {
