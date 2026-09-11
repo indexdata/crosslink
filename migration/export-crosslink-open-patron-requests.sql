@@ -46,7 +46,7 @@ CREATE TEMP TABLE crosslink_state_map (
 ) ON COMMIT DROP;
 
 INSERT INTO crosslink_state_map (legacy_state, side, crosslink_state) VALUES
-    -- Borrowing/requester states
+    -- States whose CrossLink targets apply to every service type
     ('REQ_IDLE',                         'borrowing', 'NEW'),
     ('REQ_VALIDATED',                    'borrowing', 'VALIDATED'),
     ('REQ_INVALID_PATRON',               'borrowing', 'INVALID_PATRON'),
@@ -60,59 +60,78 @@ INSERT INTO crosslink_state_map (legacy_state, side, crosslink_state) VALUES
     ('REQ_PENDING',                      'borrowing', 'SENT'),
     ('REQ_WILL_SUPPLY',                  'borrowing', 'WILL_SUPPLY'),
     ('REQ_EXPECTS_TO_SUPPLY',            'borrowing', 'WILL_SUPPLY'),
-    ('REQ_SHIPPED',                      'borrowing', 'SHIPPED'),
-    ('REQ_BORROWING_LIBRARY_RECEIVED',   'borrowing', 'RECEIVED'),
-    ('REQ_LOANED_DIGITALLY',             'borrowing', 'CHECKED_OUT'),
-    ('REQ_OVERDUE',                      'borrowing', 'CHECKED_OUT'),
-    ('REQ_RECALLED',                     'borrowing', 'CHECKED_OUT'),
-    ('REQ_AWAITING_RETURN_SHIPPING',     'borrowing', 'CHECKED_IN'),
-    ('REQ_CHECKED_IN',                   'borrowing', 'CHECKED_IN'),
-    ('REQ_SHIPPED_TO_SUPPLIER',          'borrowing', 'SHIPPED_RETURNED'),
-    ('REQ_BORROWER_RETURNED',            'borrowing', 'SHIPPED_RETURNED'),
     ('REQ_LOCAL_REVIEW',                 'borrowing', 'NEEDS_REVIEW'),
     ('REQ_BLANK_FORM_REVIEW',            'borrowing', 'NEEDS_REVIEW'),
     ('REQ_DUPLICATE_REVIEW',             'borrowing', 'DUPLICATE'),
     ('REQ_ERROR',                        'borrowing', 'NEEDS_REVIEW'),
     ('SLNP_REQ_IDLE',                    'borrowing', 'NEW'),
     ('SLNP_REQ_ABORTED',                 'borrowing', 'NEEDS_REVIEW'),
-    ('SLNP_REQ_SHIPPED',                 'borrowing', 'SHIPPED'),
-    ('SLNP_REQ_CHECKED_IN',              'borrowing', 'CHECKED_IN'),
-    ('SLNP_REQ_AWAITING_RETURN_SHIPPING','borrowing', 'CHECKED_IN'),
     ('SLNP_REQ_ITEM_LOST',               'borrowing', 'NEEDS_REVIEW'),
     ('SLNP_REQ_PATRON_INVALID',          'borrowing', 'INVALID_PATRON'),
-    ('SLNP_REQ_DOCUMENT_AVAILABLE',      'borrowing', 'RECEIVED'),
-
-    -- Lending/supplier states
     ('RES_IDLE',                         'lending', 'NEW'),
     ('RES_PENDING_CONDITIONAL_ANSWER',   'lending', 'CONDITION_PENDING'),
     ('RES_NEW_AWAIT_PULL_SLIP',          'lending', 'WILL_SUPPLY'),
-    ('RES_AWAIT_PICKING',                'lending', 'ITEM_PENDING'),
     ('RES_COPY_AWAIT_PICKING',           'lending', 'WILL_SUPPLY'),
-    ('RES_SEQUESTERED',                  'lending', 'ITEM_PENDING'),
-    ('RES_AWAIT_PROXY_BORROWER',         'lending', 'ITEM_PENDING'),
-    ('RES_HOLD_PLACED',                  'lending', 'ITEM_PENDING'),
-    ('RES_AWAIT_SHIP',                   'lending', 'WILL_SUPPLY_PENDING'),
-    ('RES_ITEM_SHIPPED',                 'lending', 'SHIPPED'),
-    ('RES_ITEM_RETURNED',                'lending', 'RECEIVED'),
-    ('RES_CHECKED_IN_TO_RESHARE',        'lending', 'RECEIVED'),
-    ('RES_AWAITING_RETURN_SHIPPING',     'lending', 'SHIPPED_RETURN'),
-    ('RES_AWAIT_DESEQUESTRATION',        'lending', 'SHIPPED_RETURN'),
-    ('RES_OVERDUE',                      'lending', 'SHIPPED_RETURN'),
     ('RES_CANCEL_REQUEST_RECEIVED',      'lending', 'CANCEL_REQUESTED'),
-    ('RES_ERROR',                        'lending', 'ITEM_PENDING'),
     ('SLNP_RES_IDLE',                    'lending', 'NEW'),
-    ('SLNP_RES_ABORTED',                 'lending', 'ITEM_PENDING'),
-    ('SLNP_RES_NEW_AWAIT_PULL_SLIP',     'lending', 'WILL_SUPPLY'),
-    ('SLNP_RES_AWAIT_PICKING',           'lending', 'ITEM_PENDING'),
-    ('SLNP_RES_AWAIT_SHIP',              'lending', 'WILL_SUPPLY_PENDING'),
-    ('SLNP_RES_ITEM_SHIPPED',            'lending', 'SHIPPED');
+    ('SLNP_RES_NEW_AWAIT_PULL_SLIP',     'lending', 'WILL_SUPPLY');
+
+-- Loan lifecycle targets apply to Loan and CopyOrLoan, but not Copy.
+INSERT INTO crosslink_state_map
+    (legacy_state, side, service_type, crosslink_state)
+SELECT
+    mapping.legacy_state,
+    mapping.side,
+    service_types.service_type,
+    mapping.crosslink_state
+FROM (VALUES
+    ('REQ_SHIPPED',                       'borrowing', 'SHIPPED'),
+    ('REQ_BORROWING_LIBRARY_RECEIVED',    'borrowing', 'RECEIVED'),
+    ('REQ_OVERDUE',                       'borrowing', 'CHECKED_OUT'),
+    ('REQ_RECALLED',                      'borrowing', 'CHECKED_OUT'),
+    ('REQ_AWAITING_RETURN_SHIPPING',      'borrowing', 'CHECKED_IN'),
+    ('REQ_CHECKED_IN',                    'borrowing', 'CHECKED_IN'),
+    ('REQ_SHIPPED_TO_SUPPLIER',           'borrowing', 'SHIPPED_RETURNED'),
+    ('REQ_BORROWER_RETURNED',             'borrowing', 'SHIPPED_RETURNED'),
+    ('SLNP_REQ_SHIPPED',                  'borrowing', 'SHIPPED'),
+    ('SLNP_REQ_CHECKED_IN',               'borrowing', 'CHECKED_IN'),
+    ('SLNP_REQ_AWAITING_RETURN_SHIPPING', 'borrowing', 'CHECKED_IN'),
+    ('RES_ITEM_SHIPPED',                  'lending',   'SHIPPED'),
+    ('RES_ITEM_RETURNED',                 'lending',   'RECEIVED'),
+    ('RES_CHECKED_IN_TO_RESHARE',         'lending',   'RECEIVED'),
+    ('RES_AWAITING_RETURN_SHIPPING',      'lending',   'SHIPPED_RETURN'),
+    ('RES_AWAIT_DESEQUESTRATION',         'lending',   'SHIPPED_RETURN'),
+    ('RES_OVERDUE',                       'lending',   'SHIPPED_RETURN'),
+    ('SLNP_RES_ITEM_SHIPPED',             'lending',   'SHIPPED')
+) AS mapping(legacy_state, side, crosslink_state)
+CROSS JOIN (VALUES ('Loan'), ('CopyOrLoan')) AS service_types(service_type);
+
+-- These supplier work states apply only to Loan in the default model.
+INSERT INTO crosslink_state_map
+    (legacy_state, side, service_type, crosslink_state)
+VALUES
+    ('RES_AWAIT_PICKING',       'lending', 'Loan', 'ITEM_PENDING'),
+    ('RES_SEQUESTERED',         'lending', 'Loan', 'ITEM_PENDING'),
+    ('RES_AWAIT_PROXY_BORROWER','lending', 'Loan', 'ITEM_PENDING'),
+    ('RES_HOLD_PLACED',         'lending', 'Loan', 'ITEM_PENDING'),
+    ('RES_AWAIT_SHIP',          'lending', 'Loan', 'WILL_SUPPLY_PENDING'),
+    ('RES_ERROR',               'lending', 'Loan', 'ITEM_PENDING'),
+    ('SLNP_RES_ABORTED',        'lending', 'Loan', 'ITEM_PENDING'),
+    ('SLNP_RES_AWAIT_PICKING',  'lending', 'Loan', 'ITEM_PENDING'),
+    ('SLNP_RES_AWAIT_SHIP',     'lending', 'Loan', 'WILL_SUPPLY_PENDING');
 
 INSERT INTO crosslink_state_map
     (legacy_state, side, service_type, crosslink_state)
 VALUES
-    ('RES_LOANED_DIGITALLY', 'lending', 'Copy',       'COMPLETED'),
-    ('RES_LOANED_DIGITALLY', 'lending', 'Loan',       'SHIPPED'),
-    ('RES_LOANED_DIGITALLY', 'lending', 'CopyOrLoan', 'SHIPPED');
+    ('REQ_LOANED_DIGITALLY',         'borrowing', 'Copy',       'COMPLETED'),
+    ('REQ_LOANED_DIGITALLY',         'borrowing', 'Loan',       'CHECKED_OUT'),
+    ('REQ_LOANED_DIGITALLY',         'borrowing', 'CopyOrLoan', 'CHECKED_OUT'),
+    ('SLNP_REQ_DOCUMENT_AVAILABLE',  'borrowing', 'Copy',       'COMPLETED'),
+    ('SLNP_REQ_DOCUMENT_AVAILABLE',  'borrowing', 'Loan',       'RECEIVED'),
+    ('SLNP_REQ_DOCUMENT_AVAILABLE',  'borrowing', 'CopyOrLoan', 'RECEIVED'),
+    ('RES_LOANED_DIGITALLY',           'lending',   'Copy',       'COMPLETED'),
+    ('RES_LOANED_DIGITALLY',           'lending',   'Loan',       'SHIPPED'),
+    ('RES_LOANED_DIGITALLY',           'lending',   'CopyOrLoan', 'SHIPPED');
 
 CREATE TEMP VIEW crosslink_request_ids AS
 SELECT
