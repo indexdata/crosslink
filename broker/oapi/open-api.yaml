@@ -71,7 +71,7 @@ components:
       in: query
       description: Patron request side, valid values "borrowing" and "lending"
       schema:
-        type: string
+        $ref: '#/components/schemas/PatronRequestSide'
     Symbol:
       name: symbol
       in: query
@@ -83,10 +83,7 @@ components:
       in: query
       description: Notification kind, valid values "note" and "condition"
       schema:
-        type: string
-        enum:
-          - note
-          - condition
+        $ref: '#/components/schemas/NotificationKind'
     PatronRequestId:
       name: pr_id
       in: query
@@ -115,6 +112,24 @@ components:
       type: string
       enum: [fail, skip, update]
       default: fail
+    PatronRequestSide:
+      type: string
+      description: Patron request side
+      enum: [borrowing, lending]
+    NotificationDirection:
+      type: string
+      description: Direction of a patron request notification
+      minLength: 1
+      enum: [sent, received]
+    NotificationKind:
+      type: string
+      description: Kind of patron request notification
+      minLength: 1
+      enum: [note, condition]
+    LocatedSupplierStatus:
+      type: string
+      description: Status of a located supplier
+      enum: [new, selected, skipped]
     ImportItemType:
       type: string
       enum:
@@ -236,9 +251,7 @@ components:
           type: string
           minLength: 1
         side:
-          type: string
-          minLength: 1
-          enum: [borrowing, lending]
+          $ref: '#/components/schemas/PatronRequestSide'
         patron:
           type: string
         requesterSymbol:
@@ -267,8 +280,7 @@ components:
         prevReqId:
           type: string
         retryBibInfo:
-          type: object
-          description: Bibliographic retry information as defined in ISO18626
+          $ref: '#/components/schemas/BibliographicInfo'
       required: [id, createdAt, updatedAt, illRequest, state, stateModel, side, requesterSymbol, requesterRequestId, needsAttention]
     ImportPatronRequestItem:
       type: object
@@ -295,46 +307,56 @@ components:
           minLength: 1
           format: date-time
       required: [id, barcode, createdAt]
-    ImportPatronRequestNotification:
+    PatronRequestNotification:
       type: object
+      title: Notification
+      description: Patron request notification
       additionalProperties: false
       properties:
         id:
           type: string
           minLength: 1
+          description: Notification id
         fromSymbol:
           type: string
           minLength: 1
+          description: Symbol of notification sender
         toSymbol:
           type: string
           minLength: 1
+          description: Symbol of notification receiver
         direction:
-          type: string
-          minLength: 1
-          enum: [sent, received]
+          $ref: '#/components/schemas/NotificationDirection'
         kind:
-          type: string
-          minLength: 1
-          enum: [note, condition]
+          $ref: '#/components/schemas/NotificationKind'
         note:
           type: string
+          description: Note of notification
         cost:
           type: number
           format: double
+          description: Cost amount
         currency:
           type: string
+          description: Currency symbol
         condition:
           type: string
+          description: Condition of notification
         receipt:
           type: string
+          description: Receipt of notification
         createdAt:
           type: string
           minLength: 1
           format: date-time
+          description: Notification creation date time
         acknowledgedAt:
           type: string
           format: date-time
+          description: Notification acknowledged at date time
       required: [id, fromSymbol, toSymbol, direction, kind, createdAt]
+    ImportPatronRequestNotification:
+      $ref: '#/components/schemas/PatronRequestNotification'
     ImportIllTransaction:
       type: object
       additionalProperties: false
@@ -384,8 +406,7 @@ components:
           type: integer
           format: int32
         supplierStatus:
-          type: string
-          enum: [new, selected, skipped]
+          $ref: '#/components/schemas/LocatedSupplierStatus'
         prevAction:
           type: string
         prevStatus:
@@ -762,8 +783,7 @@ components:
           format: int32
           description: Ordinal number for ordering
         supplierStatus:
-          type: string
-          description: Supplier status, possible values (new, selected, skipped)
+          $ref: '#/components/schemas/LocatedSupplierStatus'
         prevAction:
           type: string
           description: Previous requester action
@@ -822,8 +842,7 @@ components:
           type: string
           description: State model configuration key governing this request
         side:
-          type: string
-          description: Patron request side - borrowing or lending
+          $ref: '#/components/schemas/PatronRequestSide'
         patron:
           type: string
           description: User who requested item
@@ -1374,59 +1393,7 @@ components:
             $ref: '#/components/schemas/PrItem'
 
     PrNotification:
-      type: object
-      title: Notification
-      description: Patron request notification
-      properties:
-        id:
-          type: string
-          description: Notification id
-        fromSymbol:
-          type: string
-          description: Symbol of notification sender
-        toSymbol:
-          type: string
-          description: Symbol of notification receiver
-        direction:
-          type: string
-          description: Direction of the notification, either sent or received
-        kind:
-          type: string
-          description: Kind of notification, either note or condition
-          enum:
-            - note
-            - condition
-        note:
-          type: string
-          description: Note of notification
-        cost:
-          type: number
-          format: double
-          description: Cost amount
-        currency:
-          type: string
-          description: Currency symbol
-        condition:
-          type: string
-          description: Condition of notification
-        receipt:
-          type: string
-          description: Receipt of notification
-        createdAt:
-          type: string
-          format: date-time
-          description: Notification creation date time
-        acknowledgedAt:
-          type: string
-          format: date-time
-          description: Notification acknowledged at date time
-      required:
-        - id
-        - fromSymbol
-        - toSymbol
-        - direction
-        - kind
-        - createdAt
+      $ref: '#/components/schemas/PatronRequestNotification'
 
     CreatePrNotification:
       type: object
