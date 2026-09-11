@@ -10,6 +10,9 @@ SELECT e.* FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = @aut
 -- name: EntryBySymbol :one
 SELECT e.* FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = @authority AND s.symbol = @symbol LIMIT 1;
 
+-- name: SymbolByAuthorityAndSymbolForUpdate :one
+SELECT * FROM symbols WHERE authority = @authority AND symbol = @symbol LIMIT 1 FOR UPDATE;
+
 -- name: GetConsortialEntry :one
 SELECT * FROM entries WHERE type = 'Consortium' LIMIT 1;
 
@@ -18,6 +21,9 @@ SELECT * FROM entries WHERE parent = @parent;
 
 -- name: LockConsortiumEntryChanges :exec
 SELECT pg_advisory_xact_lock(hashtextextended('directoryish:consortium-entry', 0));
+
+-- name: LockEntryImportKey :exec
+SELECT pg_advisory_xact_lock(hashtextextended('directoryish:entry:' || @authority::text || ':' || @symbol::text, 0));
 
 -- name: CreateEntry :one
 INSERT INTO entries (
@@ -475,3 +481,40 @@ WHERE entry = @entry;
 
 -- name: DeleteHoldingsPolicyByEntry :exec
 DELETE FROM holdings_policies WHERE entry = @entry;
+
+-- name: LockTierByBusinessKey :one
+SELECT * FROM tiers
+WHERE consortium = @consortium AND name = @name
+FOR UPDATE;
+
+-- name: UpdateImportedTier :exec
+UPDATE tiers
+SET level = @level, type = @type, cost = @cost
+WHERE id = @id;
+
+-- name: DeleteEntryTiersByTier :exec
+DELETE FROM entry_tiers WHERE tier = @tier;
+
+-- name: LockNetworkByBusinessKey :one
+SELECT * FROM networks
+WHERE consortium = @consortium AND name = @name
+FOR UPDATE;
+
+-- name: UpdateImportedNetwork :exec
+UPDATE networks
+SET reciprocal = @reciprocal
+WHERE id = @id;
+
+-- name: DeleteEntryNetworksByNetwork :exec
+DELETE FROM entry_networks WHERE network = @network;
+
+-- name: DeleteClosuresByEntry :exec
+DELETE FROM closures WHERE entry = @entry;
+
+-- name: WouldCreateEntryCycle :one
+WITH RECURSIVE descendants AS (
+  SELECT id FROM entries WHERE parent = @child
+  UNION ALL
+  SELECT e.id FROM entries e JOIN descendants d ON e.parent = d.id
+)
+SELECT @parent::uuid = @child::uuid OR EXISTS (SELECT 1 FROM descendants WHERE id = @parent);

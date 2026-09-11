@@ -5,6 +5,53 @@ info:
 servers:
   - url: /directory
 paths:
+  /import:
+    post:
+      summary: Import complete directory aggregates
+      description: Imports ordered NDJSON entry, tier, and network aggregates. Parent entries must appear in earlier committed records.
+      operationId: postImport
+      parameters:
+        - name: conflictPolicy
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ConflictPolicy'
+      requestBody:
+        required: true
+        content:
+          application/x-ndjson:
+            schema:
+              type: string
+              format: binary
+            x-ndjson-item-schema:
+              $ref: '#/components/schemas/ImportRecord'
+      responses:
+        '200':
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportResult'
+        '400':
+          description: Invalid import request
+          content:
+            text/plain:
+              schema: { type: string }
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema: { type: string }
+        '413':
+          description: Import request or record is too large
+          content:
+            text/plain:
+              schema: { type: string }
+        '500':
+          description: Failed to read the import stream
+          content:
+            text/plain:
+              schema: { type: string }
   /entries:
     get:
       summary: Returns all entries
@@ -523,6 +570,12 @@ paths:
             text/plain:
               schema:
                 type: string
+        '409':
+          description: A tier with the same name already exists in the consortium
+          content:
+            text/plain:
+              schema:
+                type: string
         '500':
           description: Internal server error
           content:
@@ -679,6 +732,12 @@ paths:
                 type: string
         '401':
           description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '409':
+          description: A network with the same name already exists in the consortium
           content:
             text/plain:
               schema:
@@ -1320,6 +1379,413 @@ components:
         type: string
 
   schemas:
+    ConflictPolicy:
+      type: string
+      enum: [fail, skip, update]
+      default: fail
+
+    ImportItemType:
+      type: string
+      enum: [entry, tier, network]
+
+    ImportSectionResult:
+      type: object
+      additionalProperties: false
+      required: [imported, failed, skipped]
+      properties:
+        imported: { type: integer, format: int32 }
+        failed: { type: integer, format: int32 }
+        skipped: { type: integer, format: int32 }
+
+    ImportItemError:
+      type: object
+      additionalProperties: false
+      required: [line, error]
+      properties:
+        line: { type: integer, format: int32 }
+        type:
+          $ref: '#/components/schemas/ImportItemType'
+        key: { type: string }
+        error: { type: string }
+
+    ImportResult:
+      type: object
+      additionalProperties: false
+      required: [entries, tiers, networks, errors, errorsOmitted]
+      properties:
+        entries: { $ref: '#/components/schemas/ImportSectionResult' }
+        tiers: { $ref: '#/components/schemas/ImportSectionResult' }
+        networks: { $ref: '#/components/schemas/ImportSectionResult' }
+        errors:
+          type: array
+          maxItems: 1000
+          items: { $ref: '#/components/schemas/ImportItemError' }
+        errorsOmitted:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of additional error details omitted from the response.
+
+    ImportSymbolRef:
+      type: object
+      additionalProperties: false
+      required: [authority, symbol]
+      properties:
+        authority: { type: string, minLength: 1 }
+        symbol: { type: string, minLength: 1 }
+
+    ImportNetworkAssignment:
+      type: object
+      additionalProperties: false
+      required: [authority, symbol, priority]
+      properties:
+        authority: { type: string, minLength: 1 }
+        symbol: { type: string, minLength: 1 }
+        priority: { type: integer, format: int32 }
+
+    ImportEntryKey:
+      $ref: '#/components/schemas/ImportSymbolRef'
+
+    ImportTierKey:
+      type: object
+      additionalProperties: false
+      required: [consortium, name]
+      properties:
+        consortium: { $ref: '#/components/schemas/ImportSymbolRef' }
+        name: { type: string, minLength: 1 }
+
+    ImportNetworkKey:
+      type: object
+      additionalProperties: false
+      required: [consortium, name]
+      properties:
+        consortium: { $ref: '#/components/schemas/ImportSymbolRef' }
+        name: { type: string, minLength: 1 }
+
+    ImportServiceEndpoint:
+      type: object
+      additionalProperties: false
+      required: [name, type, address]
+      properties:
+        name: { type: string }
+        type: { type: string }
+        address: { type: string }
+
+    ImportAddressComponent:
+      type: object
+      additionalProperties: false
+      required: [seq, type, value]
+      properties:
+        seq: { type: integer, format: int32 }
+        type:
+          type: string
+          pattern: '^(Thoroughfare|Locality|AdministrativeArea|PostalCode|CountryCode|Other)$'
+        value: { type: string }
+
+    ImportAddress:
+      type: object
+      additionalProperties: false
+      required: [type, addressComponents]
+      properties:
+        type:
+          type: string
+          pattern: '^(Default|Shipping|Billing|Other)$'
+        addressComponents:
+          type: array
+          items: { $ref: '#/components/schemas/ImportAddressComponent' }
+
+    ImportClosure:
+      type: object
+      additionalProperties: false
+      required: [startDate, endDate, reason]
+      properties:
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        reason: { type: string }
+
+    ImportLmsConfig:
+      type: object
+      additionalProperties: false
+      required: [address, fromAgency, fromAgencyAuthentication, toAgency, lookupUserEnabled, acceptItemEnabled, checkInItemEnabled, checkOutItemEnabled, itemLocation, requestItemRequestType, requestItemRequestScopeType, requestItemBibIdCode, requestItemEnabled, requestItemPickupLocationEnabled, requesterPickupLocation, supplierPickupLocation, requesterPatronPattern, patronProfiles]
+      properties:
+        address: { type: string }
+        fromAgency: { type: string }
+        fromAgencyAuthentication: { type: string, nullable: true }
+        toAgency: { type: string, nullable: true }
+        lookupUserEnabled: { type: boolean, nullable: true }
+        acceptItemEnabled: { type: boolean, nullable: true }
+        checkInItemEnabled: { type: boolean, nullable: true }
+        checkOutItemEnabled: { type: boolean, nullable: true }
+        itemLocation: { type: string, nullable: true }
+        requestItemRequestType: { type: string, nullable: true }
+        requestItemRequestScopeType: { type: string, nullable: true }
+        requestItemBibIdCode: { type: string, nullable: true }
+        requestItemEnabled: { type: boolean, nullable: true }
+        requestItemPickupLocationEnabled: { type: boolean, nullable: true }
+        requesterPickupLocation: { type: string, nullable: true }
+        supplierPickupLocation: { type: string, nullable: true }
+        requesterPatronPattern: { type: string, nullable: true }
+        patronProfiles:
+          allOf: [{ $ref: '#/components/schemas/PatronProfiles' }]
+          nullable: true
+
+    ImportIllConfig:
+      type: object
+      additionalProperties: false
+      required: [iso18626Url, iso18626Vendor, lendersOfLastResort, includeRequestingAgencyInfo, includeSupplierInfo, includeReturnInfo, includeVendorNote, useOfferedCosts, noteFieldSeparator, supplierPatronPattern, duplicateCheckWindowHours]
+      properties:
+        iso18626Url: { type: string, nullable: true }
+        iso18626Vendor:
+          allOf: [{ $ref: '#/components/schemas/EntryVendor' }]
+          nullable: true
+        lendersOfLastResort:
+          type: array
+          items: { $ref: '#/components/schemas/ImportSymbolRef' }
+        includeRequestingAgencyInfo: { type: boolean, nullable: true }
+        includeSupplierInfo: { type: boolean, nullable: true }
+        includeReturnInfo: { type: boolean, nullable: true }
+        includeVendorNote: { type: boolean, nullable: true }
+        useOfferedCosts: { type: boolean, nullable: true }
+        noteFieldSeparator: { type: string, nullable: true }
+        supplierPatronPattern: { type: string, nullable: true }
+        duplicateCheckWindowHours: { type: integer, format: int32, minimum: 0, nullable: true }
+
+    ImportCatalogConfig:
+      type: object
+      additionalProperties: false
+      required: [metadataUpdateMode, sru, zoom, queryConfig, holdingsFormat, metadataFormat]
+      properties:
+        metadataUpdateMode:
+          allOf: [{ $ref: '#/components/schemas/MetadataUpdateMode' }]
+          nullable: true
+        sru:
+          allOf: [{ $ref: '#/components/schemas/ImportSruConfig' }]
+          nullable: true
+        zoom:
+          allOf: [{ $ref: '#/components/schemas/ImportZoomConfig' }]
+          nullable: true
+        queryConfig:
+          allOf: [{ $ref: '#/components/schemas/ImportQueryConfig' }]
+          nullable: true
+        holdingsFormat:
+          allOf: [{ $ref: '#/components/schemas/ImportHoldingsParserConfig' }]
+          nullable: true
+        metadataFormat:
+          allOf: [{ $ref: '#/components/schemas/ImportMetadataParserConfig' }]
+          nullable: true
+
+    ImportSruConfig:
+      type: object
+      additionalProperties: false
+      required: [address, recordSchema]
+      properties:
+        address: { type: string }
+        recordSchema: { type: string, nullable: true }
+
+    ImportZoomConfig:
+      type: object
+      additionalProperties: false
+      required: [address, options]
+      properties:
+        address: { type: string }
+        options:
+          type: object
+          nullable: true
+          additionalProperties: { type: string }
+
+    ImportQueryConfig:
+      type: object
+      additionalProperties: false
+      required: [type, identifier, isbn, issn, title]
+      properties:
+        type: { type: string, pattern: '^(cql|pqf)$', nullable: true }
+        identifier: { type: string, nullable: true }
+        isbn: { type: string, nullable: true }
+        issn: { type: string, nullable: true }
+        title: { type: string, nullable: true }
+
+    ImportHoldingsParserConfig:
+      type: object
+      additionalProperties: false
+      required: [marc, marc21plus1, opac, reservoir]
+      properties:
+        marc:
+          allOf: [{ $ref: '#/components/schemas/ImportMarcHoldingsParserConfig' }]
+          nullable: true
+        marc21plus1: { type: object, nullable: true }
+        opac: { type: object, nullable: true }
+        reservoir: { type: object, nullable: true }
+
+    ImportMarcHoldingsParserConfig:
+      type: object
+      additionalProperties: false
+      required: [callNumberSubField, itemIdSubField, locationSubField, mainField, restrictedSubField, shelvingLocationSubField]
+      properties:
+        callNumberSubField: { type: string, nullable: true }
+        itemIdSubField: { type: string, nullable: true }
+        locationSubField: { type: string, nullable: true }
+        mainField: { type: string, nullable: true }
+        restrictedSubField: { type: string, nullable: true }
+        shelvingLocationSubField: { type: string, nullable: true }
+
+    ImportMetadataParserConfig:
+      type: object
+      additionalProperties: false
+      required: [marc21]
+      properties:
+        marc21:
+          allOf: [{ $ref: '#/components/schemas/ImportMarcMetadataParserConfig' }]
+          nullable: true
+
+    ImportMarcMetadataParserConfig:
+      type: object
+      additionalProperties: false
+      required: [author, edition, identifier, isbn, issn, subtitle, title]
+      properties:
+        author: { type: string, nullable: true }
+        edition: { type: string, nullable: true }
+        identifier: { type: string, nullable: true }
+        isbn: { type: string, nullable: true }
+        issn: { type: string, nullable: true }
+        subtitle: { type: string, nullable: true }
+        title: { type: string, nullable: true }
+
+    ImportHoldingsPolicy:
+      type: object
+      additionalProperties: false
+      required: [locations, shelvingLocations, locationPolicies, itemLoanPolicies]
+      properties:
+        locations:
+          type: array
+          items: { $ref: '#/components/schemas/HoldingsLocation' }
+        shelvingLocations:
+          type: array
+          items: { $ref: '#/components/schemas/HoldingsShelvingLocation' }
+        locationPolicies:
+          type: array
+          items: { $ref: '#/components/schemas/ImportHoldingsLocationPolicy' }
+        itemLoanPolicies:
+          type: array
+          items: { $ref: '#/components/schemas/HoldingsItemLoanPolicy' }
+
+    ImportHoldingsLocationPolicy:
+      type: object
+      additionalProperties: false
+      required: [locationCode, shelvingLocationCode, supplyPreference]
+      properties:
+        locationCode: { type: string, nullable: true }
+        shelvingLocationCode: { type: string }
+        supplyPreference: { $ref: '#/components/schemas/HoldingsSupplyPreference' }
+
+    ImportEntryData:
+      type: object
+      additionalProperties: false
+      required: [name, type, parent, description, organizationId, contactName, email, fromEmail, tenant, vendor, phoneNumber, lmsLocationCode, hrid, timeZone, symbols, endpoints, addresses, closures, lmsConfig, catalogConfig, illConfig, holdingsPolicy]
+      properties:
+        name: { type: string, minLength: 1 }
+        type: { type: string, pattern: '^(Institution|Consortium|Branch)$' }
+        parent:
+          allOf: [{ $ref: '#/components/schemas/ImportSymbolRef' }]
+          nullable: true
+        description: { type: string, nullable: true }
+        organizationId: { type: string, nullable: true }
+        contactName: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        fromEmail: { type: string, nullable: true }
+        tenant: { type: string, nullable: true }
+        vendor:
+          allOf: [{ $ref: '#/components/schemas/EntryVendor' }]
+          nullable: true
+        phoneNumber: { type: string, nullable: true }
+        lmsLocationCode: { type: string, nullable: true }
+        hrid: { type: string, nullable: true }
+        timeZone: { type: string, nullable: true }
+        symbols:
+          type: array
+          items: { $ref: '#/components/schemas/ImportSymbolRef' }
+        endpoints:
+          type: array
+          items: { $ref: '#/components/schemas/ImportServiceEndpoint' }
+        addresses:
+          type: array
+          items: { $ref: '#/components/schemas/ImportAddress' }
+        closures:
+          type: array
+          items: { $ref: '#/components/schemas/ImportClosure' }
+        lmsConfig:
+          allOf: [{ $ref: '#/components/schemas/ImportLmsConfig' }]
+          nullable: true
+        catalogConfig:
+          allOf: [{ $ref: '#/components/schemas/ImportCatalogConfig' }]
+          nullable: true
+        illConfig:
+          allOf: [{ $ref: '#/components/schemas/ImportIllConfig' }]
+          nullable: true
+        holdingsPolicy:
+          allOf: [{ $ref: '#/components/schemas/ImportHoldingsPolicy' }]
+          nullable: true
+
+    ImportTierData:
+      type: object
+      additionalProperties: false
+      required: [level, type, cost, entries]
+      properties:
+        level: { type: string, pattern: '^(express|normal|rush|secondarymail|standard|urgent)$' }
+        type: { type: string, pattern: '^(loan|copy)$' }
+        cost: { type: number, format: double }
+        entries:
+          type: array
+          items: { $ref: '#/components/schemas/ImportSymbolRef' }
+
+    ImportNetworkData:
+      type: object
+      additionalProperties: false
+      required: [reciprocal, entries]
+      properties:
+        reciprocal: { type: boolean, nullable: true }
+        entries:
+          type: array
+          items: { $ref: '#/components/schemas/ImportNetworkAssignment' }
+
+    ImportEntryRecord:
+      type: object
+      additionalProperties: false
+      required: [type, key, data]
+      properties:
+        type: { type: string, enum: [entry] }
+        key: { $ref: '#/components/schemas/ImportEntryKey' }
+        data: { $ref: '#/components/schemas/ImportEntryData' }
+
+    ImportTierRecord:
+      type: object
+      additionalProperties: false
+      required: [type, key, data]
+      properties:
+        type: { type: string, enum: [tier] }
+        key: { $ref: '#/components/schemas/ImportTierKey' }
+        data: { $ref: '#/components/schemas/ImportTierData' }
+
+    ImportNetworkRecord:
+      type: object
+      additionalProperties: false
+      required: [type, key, data]
+      properties:
+        type: { type: string, enum: [network] }
+        key: { $ref: '#/components/schemas/ImportNetworkKey' }
+        data: { $ref: '#/components/schemas/ImportNetworkData' }
+
+    ImportRecord:
+      oneOf:
+        - $ref: '#/components/schemas/ImportEntryRecord'
+        - $ref: '#/components/schemas/ImportTierRecord'
+        - $ref: '#/components/schemas/ImportNetworkRecord'
+      discriminator:
+        propertyName: type
+        mapping:
+          entry: '#/components/schemas/ImportEntryRecord'
+          tier: '#/components/schemas/ImportTierRecord'
+          network: '#/components/schemas/ImportNetworkRecord'
+
     NetworksResponse:
       type: object
       required:
@@ -1503,12 +1969,14 @@ components:
             $ref: '#/components/schemas/Tier'
         lmsConfig:
           description: Configuration for LMS (Library Management System) integration via NCIP protocol
-          $ref: '#/components/schemas/LmsConfig'
+          allOf:
+            - $ref: '#/components/schemas/LmsConfig'
         catalogConfig:
           $ref: '#/components/schemas/CatalogConfig'
         holdingsPolicy:
           description: Policy that determines whether and in which order holdings may supply an item.
-          $ref: '#/components/schemas/HoldingsPolicy'
+          allOf:
+            - $ref: '#/components/schemas/HoldingsPolicy'
     IllConfig:
       type: object
       properties:
@@ -1517,7 +1985,8 @@ components:
           description: URL of the ISO18626 service. When set, used instead of an ISO18626 service from endpoints.
         iso18626Vendor:
           description: ISO18626 service vendor. Used only when iso18626Url is non-empty.
-          $ref: '#/components/schemas/EntryVendor'
+          allOf:
+            - $ref: '#/components/schemas/EntryVendor'
         lendersOfLastResort:
           type: array
           description: Suppliers appended to the end of the rota when no regular supplier can fill the request.
@@ -1950,7 +2419,8 @@ components:
           default: "INST-{requesterSymbol}"
         patronProfiles:
           description: Patron profiles used to determine whether a user returned by NCIP LookupUser is eligible to create ILL requests.
-          $ref: '#/components/schemas/PatronProfiles'
+          allOf:
+            - $ref: '#/components/schemas/PatronProfiles'
 
     PatronProfiles:
       type: array
@@ -2211,6 +2681,7 @@ components:
       required:
         - id
         - consortium
+        - name
       properties:
         id:
           readOnly: true
@@ -2222,6 +2693,8 @@ components:
           format: uuid
         name:
           type: string
+          minLength: 1
+          pattern: '.*\S.*'
         reciprocal:
           type: boolean
 
@@ -2252,6 +2725,7 @@ components:
       required:
         - id
         - consortium
+        - name
         - level
         - type
         - cost
@@ -2266,6 +2740,8 @@ components:
           format: uuid
         name:
           type: string
+          minLength: 1
+          pattern: '.*\S.*'
         level:
           type: string
           enum:
