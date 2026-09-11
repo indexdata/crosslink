@@ -40,8 +40,9 @@ BEGIN;
 CREATE TEMP TABLE crosslink_state_map (
     legacy_state TEXT NOT NULL,
     side TEXT NOT NULL,
+    service_type TEXT NOT NULL DEFAULT '*',
     crosslink_state TEXT NOT NULL,
-    PRIMARY KEY (legacy_state, side)
+    PRIMARY KEY (legacy_state, side, service_type)
 ) ON COMMIT DROP;
 
 INSERT INTO crosslink_state_map (legacy_state, side, crosslink_state) VALUES
@@ -92,7 +93,6 @@ INSERT INTO crosslink_state_map (legacy_state, side, crosslink_state) VALUES
     ('RES_HOLD_PLACED',                  'lending', 'ITEM_PENDING'),
     ('RES_AWAIT_SHIP',                   'lending', 'WILL_SUPPLY_PENDING'),
     ('RES_ITEM_SHIPPED',                 'lending', 'SHIPPED'),
-    ('RES_LOANED_DIGITALLY',             'lending', 'SHIPPED'),
     ('RES_ITEM_RETURNED',                'lending', 'RECEIVED'),
     ('RES_CHECKED_IN_TO_RESHARE',        'lending', 'RECEIVED'),
     ('RES_AWAITING_RETURN_SHIPPING',     'lending', 'SHIPPED_RETURN'),
@@ -106,6 +106,13 @@ INSERT INTO crosslink_state_map (legacy_state, side, crosslink_state) VALUES
     ('SLNP_RES_AWAIT_PICKING',           'lending', 'ITEM_PENDING'),
     ('SLNP_RES_AWAIT_SHIP',              'lending', 'WILL_SUPPLY_PENDING'),
     ('SLNP_RES_ITEM_SHIPPED',            'lending', 'SHIPPED');
+
+INSERT INTO crosslink_state_map
+    (legacy_state, side, service_type, crosslink_state)
+VALUES
+    ('RES_LOANED_DIGITALLY', 'lending', 'Copy',       'COMPLETED'),
+    ('RES_LOANED_DIGITALLY', 'lending', 'Loan',       'SHIPPED'),
+    ('RES_LOANED_DIGITALLY', 'lending', 'CopyOrLoan', 'SHIPPED');
 
 CREATE TEMP VIEW crosslink_request_ids AS
 SELECT
@@ -139,11 +146,7 @@ SELECT
         ELSE 'lending'
     END AS import_side,
     crosslink_state_map.crosslink_state AS import_state,
-    CASE lower(replace(service_type.rdv_value, ' ', ''))
-        WHEN 'loan' THEN 'Loan'
-        WHEN 'copy' THEN 'Copy'
-        WHEN 'copyorloan' THEN 'CopyOrLoan'
-    END AS import_service_type,
+    normalized_service_type.value AS import_service_type,
     service_level.rdv_value AS import_service_level,
     publication_type.rdv_value AS import_publication_type,
     copyright_type.rdv_value AS import_copyright_type,
@@ -173,14 +176,22 @@ JOIN state_model
 JOIN state_model_status
   ON state_model_status.sms_state_model = patron_request.pr_state_model_fk
  AND state_model_status.sms_state = patron_request.pr_state_fk
+LEFT JOIN refdata_value AS service_type
+  ON service_type.rdv_id = patron_request.pr_service_type_fk
+LEFT JOIN LATERAL (
+    SELECT CASE lower(replace(service_type.rdv_value, ' ', ''))
+        WHEN 'loan' THEN 'Loan'
+        WHEN 'copy' THEN 'Copy'
+        WHEN 'copyorloan' THEN 'CopyOrLoan'
+    END AS value
+) AS normalized_service_type ON true
 LEFT JOIN crosslink_state_map
   ON crosslink_state_map.legacy_state = status.st_code
  AND crosslink_state_map.side = CASE
         WHEN patron_request.pr_is_requester IS TRUE THEN 'borrowing'
         ELSE 'lending'
      END
-LEFT JOIN refdata_value AS service_type
-  ON service_type.rdv_id = patron_request.pr_service_type_fk
+ AND crosslink_state_map.service_type IN ('*', normalized_service_type.value)
 LEFT JOIN refdata_value AS service_level
   ON service_level.rdv_id = patron_request.pr_service_level_fk
 LEFT JOIN refdata_value AS publication_type
@@ -201,8 +212,9 @@ BEGIN
     INTO problems
     FROM (
         SELECT DISTINCT
-            'unmapped open state: ' || legacy_state || ' (' || import_side || ')'
-                AS problem
+            'unmapped open state/service type: ' || legacy_state || ' ('
+                || import_side || ', '
+                || coalesce(import_service_type, 'missing') || ')' AS problem
         FROM crosslink_open_requests
         WHERE import_state IS NULL
 
@@ -246,6 +258,7 @@ BEGIN
 END
 $preflight$;
 
+CREATE TEMP TABLE crosslink_request_records ON COMMIT DROP AS
 WITH request_payloads AS (
     SELECT
         request.*,
@@ -581,12 +594,38 @@ request_bundles AS (
         )) AS bundle
     FROM request_payloads AS request
 )
-SELECT jsonb_build_object(
-    'type', 'patronRequest',
-    'owner', :'owner',
-    'data', request_bundles.bundle
-)::text
-FROM request_bundles
-ORDER BY request_bundles.pr_id;
+SELECT
+    request_bundles.pr_id,
+    jsonb_build_object(
+        'type', 'patronRequest',
+        'owner', :'owner',
+        'data', request_bundles.bundle
+    ) AS record
+FROM request_bundles;
+
+-- Keep this boundary in sync with broker/import/service.maxImportRecordBytes.
+DO $record_size_preflight$
+DECLARE
+    problems TEXT;
+BEGIN
+    SELECT string_agg(
+        pr_id || ' (' || octet_length(record::text) || ' bytes)',
+        E'\n' ORDER BY pr_id
+    )
+    INTO problems
+    FROM crosslink_request_records
+    WHERE octet_length(record::text) > 1048576;
+
+    IF problems IS NOT NULL THEN
+        RAISE EXCEPTION
+            E'CrossLink patron-request export records exceed the 1048576-byte import limit:\n%',
+            problems;
+    END IF;
+END
+$record_size_preflight$;
+
+SELECT record::text
+FROM crosslink_request_records
+ORDER BY pr_id;
 
 ROLLBACK;
