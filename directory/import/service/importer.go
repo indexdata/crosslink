@@ -7,12 +7,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"unicode/utf8"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/indexdata/crosslink/directory/import/model"
 )
 
-const maxRecordBytes = 1 << 20
+const (
+	maxRecordBytes             = 1 << 20
+	maxRetainedErrorDetails    = 1000
+	maxRetainedErrorFieldBytes = 1024
+)
 
 var ErrRecordTooLarge = errors.New("import record exceeds 1 MiB limit")
 
@@ -139,12 +144,30 @@ func section(result *model.ImportResult, recordType string) *model.ImportSection
 }
 
 func appendError(result *model.ImportResult, line int32, recordType, key, message string) {
-	item := model.ImportItemError{Line: line, Error: message}
-	if recordType != "" {
+	if len(result.Errors) >= maxRetainedErrorDetails {
+		result.ErrorsOmitted++
+		return
+	}
+	item := model.ImportItemError{Line: line, Error: truncateErrorField(message)}
+	switch recordType {
+	case "entry", "tier", "network":
 		item.Type = &recordType
 	}
 	if key != "" {
+		key = truncateErrorField(key)
 		item.Key = &key
 	}
 	result.Errors = append(result.Errors, item)
+}
+
+func truncateErrorField(value string) string {
+	if len(value) <= maxRetainedErrorFieldBytes {
+		return value
+	}
+	const suffix = "..."
+	end := maxRetainedErrorFieldBytes - len(suffix)
+	for end > 0 && !utf8.RuneStart(value[end]) {
+		end--
+	}
+	return value[:end] + suffix
 }

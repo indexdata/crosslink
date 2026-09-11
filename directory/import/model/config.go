@@ -3,23 +3,30 @@ package model
 import "fmt"
 
 type LMSConfig struct {
-	Address                          string  `json:"address"`
-	FromAgency                       string  `json:"fromAgency"`
-	FromAgencyAuthentication         *string `json:"fromAgencyAuthentication"`
-	ToAgency                         *string `json:"toAgency"`
-	LookupUserEnabled                *bool   `json:"lookupUserEnabled"`
-	AcceptItemEnabled                *bool   `json:"acceptItemEnabled"`
-	CheckInItemEnabled               *bool   `json:"checkInItemEnabled"`
-	CheckOutItemEnabled              *bool   `json:"checkOutItemEnabled"`
-	ItemLocation                     *string `json:"itemLocation"`
-	RequestItemRequestType           *string `json:"requestItemRequestType"`
-	RequestItemRequestScopeType      *string `json:"requestItemRequestScopeType"`
-	RequestItemBibIDCode             *string `json:"requestItemBibIdCode"`
-	RequestItemEnabled               *bool   `json:"requestItemEnabled"`
-	RequestItemPickupLocationEnabled *bool   `json:"requestItemPickupLocationEnabled"`
-	RequesterPickupLocation          *string `json:"requesterPickupLocation"`
-	SupplierPickupLocation           *string `json:"supplierPickupLocation"`
-	RequesterPatronPattern           *string `json:"requesterPatronPattern"`
+	Address                          string           `json:"address"`
+	FromAgency                       string           `json:"fromAgency"`
+	FromAgencyAuthentication         *string          `json:"fromAgencyAuthentication"`
+	ToAgency                         *string          `json:"toAgency"`
+	LookupUserEnabled                *bool            `json:"lookupUserEnabled"`
+	AcceptItemEnabled                *bool            `json:"acceptItemEnabled"`
+	CheckInItemEnabled               *bool            `json:"checkInItemEnabled"`
+	CheckOutItemEnabled              *bool            `json:"checkOutItemEnabled"`
+	ItemLocation                     *string          `json:"itemLocation"`
+	RequestItemRequestType           *string          `json:"requestItemRequestType"`
+	RequestItemRequestScopeType      *string          `json:"requestItemRequestScopeType"`
+	RequestItemBibIDCode             *string          `json:"requestItemBibIdCode"`
+	RequestItemEnabled               *bool            `json:"requestItemEnabled"`
+	RequestItemPickupLocationEnabled *bool            `json:"requestItemPickupLocationEnabled"`
+	RequesterPickupLocation          *string          `json:"requesterPickupLocation"`
+	SupplierPickupLocation           *string          `json:"supplierPickupLocation"`
+	RequesterPatronPattern           *string          `json:"requesterPatronPattern"`
+	PatronProfiles                   *[]PatronProfile `json:"patronProfiles"`
+}
+
+type PatronProfile struct {
+	Code              *string `json:"code,omitempty"`
+	Name              *string `json:"name,omitempty"`
+	CanCreateRequests bool    `json:"canCreateRequests"`
 }
 
 type ILLConfig struct {

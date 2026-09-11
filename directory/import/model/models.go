@@ -53,10 +53,11 @@ type ImportItemError struct {
 }
 
 type ImportResult struct {
-	Entries  ImportSectionResult `json:"entries"`
-	Tiers    ImportSectionResult `json:"tiers"`
-	Networks ImportSectionResult `json:"networks"`
-	Errors   []ImportItemError   `json:"errors"`
+	Entries       ImportSectionResult `json:"entries"`
+	Tiers         ImportSectionResult `json:"tiers"`
+	Networks      ImportSectionResult `json:"networks"`
+	Errors        []ImportItemError   `json:"errors"`
+	ErrorsOmitted int32               `json:"errorsOmitted"`
 }
 
 type SymbolRef struct {

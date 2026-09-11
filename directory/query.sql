@@ -10,6 +10,9 @@ SELECT e.* FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = @aut
 -- name: EntryBySymbol :one
 SELECT e.* FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = @authority AND s.symbol = @symbol LIMIT 1;
 
+-- name: SymbolByAuthorityAndSymbolForUpdate :one
+SELECT * FROM symbols WHERE authority = @authority AND symbol = @symbol LIMIT 1 FOR UPDATE;
+
 -- name: GetConsortialEntry :one
 SELECT * FROM entries WHERE type = 'Consortium' LIMIT 1;
 
