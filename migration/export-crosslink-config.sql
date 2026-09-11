@@ -15,9 +15,11 @@
 --   * Only English localized templates are exported because CrossLink templates
 --     do not have a locale field.
 --   * Template labels are stable and take the form "mod-rs-template-<UUID>".
---   * Legacy template containers are email templates, including the template
---     selected by pull_slip_template_id. The attached pull-slip PDF is rendered
---     separately in both systems and is controlled by includePdf.
+--   * Legacy template containers are email templates. A pull-slip timer uses its
+--     configured template only when an eligible English template is exported;
+--     otherwise it uses CrossLink's built-in pullslip-email template.
+--     The attached pull-slip PDF is rendered separately in both systems and is
+--     controlled by includePdf.
 --   * Only enabled PrintPullSlips timers with a non-empty RRULE and at least one
 --     recipient are compatible with CrossLink batch actions.
 --   * Timer location filters cannot be carried across: CrossLink's patron-request
@@ -60,7 +62,16 @@ pull_slip_timers AS (
         ) AS title,
         regexp_replace(timer.tr_rrule, '^RRULE:', '', 'i') AS schedule,
         timer.tr_task_config::jsonb AS config,
-        export_settings.pull_slip_template_id
+        CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM english_templates
+                WHERE english_templates.container_id::text =
+                    nullif(btrim(export_settings.pull_slip_template_id), '')
+            ) THEN 'mod-rs-template-'
+                || btrim(export_settings.pull_slip_template_id)
+            ELSE 'pullslip-email'
+        END AS template_label
     FROM timer
     CROSS JOIN export_settings
     WHERE timer.tr_enabled IS TRUE
@@ -103,10 +114,7 @@ export_records AS (
                 'schedule', pull_slip_timers.schedule,
                 'actionParams', jsonb_build_object(
                     'to', pull_slip_timers.config -> 'emailAddresses',
-                    'templateLabel', coalesce(
-                        'mod-rs-template-' || pull_slip_timers.pull_slip_template_id,
-                        'pullslip-email'
-                    ),
+                    'templateLabel', pull_slip_timers.template_label,
                     'includePdf', coalesce(
                         (pull_slip_timers.config ->> 'attachPullSlips')::boolean,
                         false
