@@ -27,8 +27,6 @@
         }
     ],
     "lmsConfig" : {
-        "address" : "",
-        "fromAgency" : "",
         "acceptItemEnabled":false
     }
 }

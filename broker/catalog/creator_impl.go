@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"fmt"
+	"github.com/indexdata/crosslink/broker/profiles"
 
 	"github.com/indexdata/crosslink/broker/ill_db"
 	dirapi "github.com/indexdata/crosslink/directory/api"
@@ -56,7 +57,11 @@ func getHoldingsParser(config *dirapi.HoldingsParserConfig) (HoldingsParser, err
 
 func (c *LookupAdapterCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, error) {
 	entry := peer.CustomData
-	config := entry.CatalogConfig
+	effective, err := profiles.Resolve(entry)
+	if err != nil {
+		return nil, err
+	}
+	config := effective.Catalog
 	// CatalogConfig also contains settings unrelated to availability, such as
 	// metadataUpdateMode. Only an SRU or ZOOM definition enables the check.
 	if config == nil || (config.Sru == nil && config.Zoom == nil) {

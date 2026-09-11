@@ -311,7 +311,10 @@ func buildEntrySQL(whereClause string) string {
 		)) FROM ill_configs i WHERE i.entry = e.id) as ill_config,
 		(
 		SELECT 
-			json_build_object(
+			json_strip_nulls(json_build_object(
+				'vendor', l.vendor,
+				'ncipNamespaceEnabled', l.ncip_namespace_enabled,
+				'bibIdNormalization', l.bib_id_normalization,
 				'acceptItemEnabled', l.accept_item_enabled,
 				'address',l.address, 
 				'checkInItemEnabled', l.checkin_item_enabled,
@@ -330,11 +333,12 @@ func buildEntrySQL(whereClause string) string {
 				'supplierPickupLocation', l.supplier_pickup_location,
 				'patronProfiles', l.patron_profiles,
 				'toAgency', l.to_agency
-			) 
+			))
 		from lms_configs l WHERE l.entry = e.id) as lms_config,
 		(
 		SELECT
 			json_strip_nulls(json_build_object(
+				'profile', h.profile,
 				'metadataUpdateMode', h.metadata_update_mode,
 				'sru', CASE WHEN h.sru_address IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
 					'address', h.sru_address,
@@ -351,7 +355,7 @@ func buildEntrySQL(whereClause string) string {
 					'issn', h.query_issn,
 					'title', h.query_title
 				)) END,
-				'holdingsFormat', json_strip_nulls(json_build_object(
+				'holdingsFormat', COALESCE(h.holdings_config, NULLIF(jsonb_strip_nulls(jsonb_build_object(
 					'marc', CASE WHEN h.holdings_marc_call_number_subfield IS NULL
 						AND h.holdings_marc_item_id_subfield IS NULL
 						AND h.holdings_marc_location_subfield IS NULL
@@ -368,7 +372,7 @@ func buildEntrySQL(whereClause string) string {
 					'marc21plus1', CASE WHEN h.holdings_marc21plus1_enabled THEN json_build_object() ELSE NULL END,
 					'opac', CASE WHEN h.holdings_opac_enabled THEN json_build_object() ELSE NULL END,
 					'reservoir', CASE WHEN h.holdings_reservoir_enabled THEN json_build_object() ELSE NULL END
-				)),
+				)), '{}'::jsonb)),
 				'metadataFormat', CASE WHEN h.metadata_marc21_author IS NULL
 					AND h.metadata_marc21_edition IS NULL
 					AND h.metadata_marc21_identifier IS NULL
@@ -776,6 +780,9 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		lmsConfig := request.Body.LmsConfig
 		_, err := qtx.UpsertLMSConfig(ctx, db.UpsertLMSConfigParams{
 			Entry:                            &insertedEntry.ID,
+			Vendor:                           maybeUpdateCol[string](nil, lmsConfig.Vendor),
+			NcipNamespaceEnabled:             lmsConfig.NcipNamespaceEnabled,
+			BibIDNormalization:               lmsConfig.BibIdNormalization,
 			Address:                          lmsConfig.Address,
 			FromAgency:                       lmsConfig.FromAgency,
 			FromAgencyAuthentication:         lmsConfig.FromAgencyAuthentication,
@@ -1151,6 +1158,9 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 
 			_, err = qtx.UpsertLMSConfig(ctx, db.UpsertLMSConfigParams{
 				Entry:                            &orig.ID,
+				Vendor:                           maybeUpdateCol(originalLMSConfig.Vendor, lmsConfig.Vendor),
+				NcipNamespaceEnabled:             maybeUpdateCol(originalLMSConfig.NcipNamespaceEnabled, lmsConfig.NcipNamespaceEnabled),
+				BibIDNormalization:               maybeUpdateCol(originalLMSConfig.BibIDNormalization, lmsConfig.BibIdNormalization),
 				Address:                          derefOrDefault(lmsConfig.Address, originalLMSConfig.Address),
 				FromAgency:                       derefOrDefault(lmsConfig.FromAgency, originalLMSConfig.FromAgency),
 				FromAgencyAuthentication:         maybeUpdateCol(originalLMSConfig.FromAgencyAuthentication, lmsConfig.FromAgencyAuthentication),
