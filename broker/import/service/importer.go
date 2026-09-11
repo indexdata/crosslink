@@ -206,7 +206,7 @@ func (i Importer) Import(ctx common.ExtendedContext, policy importdb.ConflictPol
 		}
 		line++
 	}
-	ctx.Logger().Info("import process in finished", "result", result)
+	ctx.Logger().Info("import process finished", "result", result)
 	return result, nil
 }
 

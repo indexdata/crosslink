@@ -1,7 +1,6 @@
 package importdb
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -98,13 +97,11 @@ func (r *PgImportRepo) ImportPatronRequest(ctx common.ExtendedContext, bundle Pa
 
 		itemIDs := make([]string, 0, len(bundle.Items))
 		for _, item := range bundle.Items {
-			if err := ensureImportParent(ctx, item.ID, bundle.PatronRequest.ID, "item", func(id string) (string, error) {
-				return r.queries.GetImportItemParent(ctx, tx, id)
-			}); err != nil {
-				return err
-			}
 			item.PrID = bundle.PatronRequest.ID
 			if _, err := r.prQueries.SaveItem(ctx, tx, item); err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return &ConflictError{Resource: "item", Identifier: item.ID, Reason: "belongs to another patron request"}
+				}
 				return fmt.Errorf("save item %q: %w", item.ID, err)
 			}
 			itemIDs = append(itemIDs, item.ID)
@@ -117,13 +114,11 @@ func (r *PgImportRepo) ImportPatronRequest(ctx common.ExtendedContext, bundle Pa
 
 		notificationIDs := make([]string, 0, len(bundle.Notifications))
 		for _, notification := range bundle.Notifications {
-			if err := ensureImportParent(ctx, notification.ID, bundle.PatronRequest.ID, "notification", func(id string) (string, error) {
-				return r.queries.GetImportNotificationParent(ctx, tx, id)
-			}); err != nil {
-				return err
-			}
 			notification.PrID = bundle.PatronRequest.ID
 			if _, err := r.prQueries.SaveNotification(ctx, tx, notification); err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return &ConflictError{Resource: "notification", Identifier: notification.ID, Reason: "belongs to another patron request"}
+				}
 				return fmt.Errorf("save notification %q: %w", notification.ID, err)
 			}
 			notificationIDs = append(notificationIDs, notification.ID)
@@ -156,20 +151,6 @@ func importedPatronRequestParams(params pr_db.CreatePatronRequestParams) UpdateI
 		NextReqID: params.NextReqID, PrevReqID: params.PrevReqID,
 		RetryBibInfo: params.RetryBibInfo, StateModel: params.StateModel,
 	}
-}
-
-func ensureImportParent(ctx context.Context, id, expectedParent, resource string, getParent func(string) (string, error)) error {
-	parent, err := getParent(id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("check %s %q ownership: %w", resource, id, err)
-	}
-	if parent != expectedParent {
-		return &ConflictError{Resource: resource, Identifier: id, Reason: fmt.Sprintf("belongs to %q, not %q", parent, expectedParent)}
-	}
-	return nil
 }
 
 func (r *PgImportRepo) saveIllAggregate(ctx common.ExtendedContext, tx DBTX, bundle PatronRequestBundle, updating bool) error {
@@ -218,13 +199,11 @@ func (r *PgImportRepo) saveIllAggregate(ctx common.ExtendedContext, tx DBTX, bun
 
 	locatedSupplierIDs := make([]string, 0, len(bundle.LocatedSuppliers))
 	for _, supplier := range bundle.LocatedSuppliers {
-		if err := ensureImportParent(ctx, supplier.ID, ill.ID, "located supplier", func(id string) (string, error) {
-			return r.queries.GetImportLocatedSupplierParent(ctx, tx, id)
-		}); err != nil {
-			return err
-		}
 		supplier.IllTransactionID = ill.ID
 		if _, err := r.illQueries.SaveLocatedSupplier(ctx, tx, supplier); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return &ConflictError{Resource: "located supplier", Identifier: supplier.ID, Reason: "belongs to another ILL transaction"}
+			}
 			return fmt.Errorf("save located supplier %q: %w", supplier.ID, err)
 		}
 		locatedSupplierIDs = append(locatedSupplierIDs, supplier.ID)

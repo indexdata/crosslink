@@ -194,8 +194,7 @@ INSERT INTO located_supplier (id, ill_transaction_id, supplier_id, supplier_symb
                               last_action, last_status, local_id, prev_reason, last_reason, supplier_request_id, local_supplier)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 ON CONFLICT (id) DO UPDATE
-    SET ill_transaction_id  = EXCLUDED.ill_transaction_id,
-        supplier_id         = EXCLUDED.supplier_id,
+    SET supplier_id         = EXCLUDED.supplier_id,
         supplier_symbol     = EXCLUDED.supplier_symbol,
         ordinal             = EXCLUDED.ordinal,
         supplier_status     = EXCLUDED.supplier_status,
@@ -208,6 +207,7 @@ ON CONFLICT (id) DO UPDATE
         last_reason         = EXCLUDED.last_reason,
         supplier_request_id = EXCLUDED.supplier_request_id,
         local_supplier      = EXCLUDED.local_supplier
+    WHERE located_supplier.ill_transaction_id = EXCLUDED.ill_transaction_id
 RETURNING sqlc.embed(located_supplier);
 
 -- name: DeleteLocatedSupplier :exec
