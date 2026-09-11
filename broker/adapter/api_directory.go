@@ -187,13 +187,12 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 		rotaInfo.Request.Cost = utils.FormatDecimal(billingInfo.MaximumCosts.MonetaryValue.Base, billingInfo.MaximumCosts.MonetaryValue.Exp) + curSuffix
 	}
 	for _, sup := range entries {
+		applyHoldingsPolicy(&sup)
 		var supMatch SupplierMatch
 		supMatch.Symbol = sup.Symbol
 		supMatch.Location = sup.Location
 		supMatch.ShelvingLocation = sup.ShelvingLocation
 		supMatch.ItemLoanPolicy = sup.ItemLoanPolicy
-		supMatch.LocationPreference = sup.LocationPreference
-		supMatch.ShelvingPreference = sup.ShelvingPreference
 		supNetworks := getPeerNetworks(sup.CustomData)
 		supMatch.Networks = make([]NetworkMatch, 0, len(supNetworks))
 		for name := range supNetworks {
@@ -295,6 +294,8 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 			supMatch.Local = sup.Local
 			supMatch.Ratio = sup.Ratio
 		}
+		supMatch.LocationPreference = sup.LocationPreference
+		supMatch.ShelvingPreference = sup.ShelvingPreference
 		rotaInfo.Suppliers = append(rotaInfo.Suppliers, supMatch)
 	}
 	slices.SortFunc(rotaInfo.Suppliers, func(a, b SupplierMatch) int {
@@ -374,6 +375,50 @@ func CompareSuppliers(a, b SupplierOrdering) int {
 		return sort
 	}
 	return cmp.Compare(a.GetSymbol(), b.GetSymbol())
+}
+
+func applyHoldingsPolicy(supplier *Supplier) {
+	policy := supplier.CustomData.HoldingsPolicy
+	if policy == nil {
+		return
+	}
+	if policy.Locations != nil {
+		for _, location := range *policy.Locations {
+			if location.Code == supplier.Location {
+				supplier.LocationPreference = location.SupplyPreference
+				break
+			}
+		}
+	}
+	if policy.ShelvingLocations != nil {
+		for _, shelvingLocation := range *policy.ShelvingLocations {
+			if shelvingLocation.Code == supplier.ShelvingLocation {
+				supplier.ShelvingPreference = shelvingLocation.SupplyPreference
+				break
+			}
+		}
+	}
+	var generalOverride *int
+	var exactOverride *int
+	if policy.LocationPolicies != nil {
+		for i := range *policy.LocationPolicies {
+			locationPolicy := &(*policy.LocationPolicies)[i]
+			if locationPolicy.ShelvingLocationCode != supplier.ShelvingLocation {
+				continue
+			}
+			if locationPolicy.LocationCode == nil {
+				generalOverride = &locationPolicy.SupplyPreference
+			} else if *locationPolicy.LocationCode == supplier.Location {
+				exactOverride = &locationPolicy.SupplyPreference
+			}
+		}
+	}
+	if exactOverride != nil {
+		// A location/shelving pair is more specific than an all-locations shelving override.
+		supplier.ShelvingPreference = *exactOverride
+	} else if generalOverride != nil {
+		supplier.ShelvingPreference = *generalOverride
+	}
 }
 
 func holdingMatchesPolicy(sup Supplier) bool {
