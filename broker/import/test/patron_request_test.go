@@ -15,6 +15,7 @@ import (
 	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/crosslink/testutil"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
@@ -108,6 +109,136 @@ func TestImportPatronRequestCollisionRollsBackRoot(t *testing.T) {
 	assert.Equal(t, 1, queryCount(t, "SELECT count(*) FROM item WHERE id=$1 AND pr_id=$2", first.Items[0].ID, first.PatronRequest.ID))
 }
 
+func TestSaveItemDoesNotReparentAfterConcurrentMissingChecks(t *testing.T) {
+	prefix := uuid.NewString()
+	first := testPatronBundle(prefix+"-first", prefix+"-request-first")
+	second := testPatronBundle(prefix+"-second", prefix+"-request-second")
+	for _, bundle := range []*importdb.PatronRequestBundle{&first, &second} {
+		bundle.Items = nil
+		bundle.Notifications = nil
+		bundle.IllTransaction = nil
+		bundle.LocatedSuppliers = nil
+		require.NoError(t, importOnly(*bundle))
+	}
+
+	childID := prefix + "-shared-item"
+	tx1, err := importTestPool.Begin(context.Background())
+	require.NoError(t, err)
+	defer func() {
+		_ = tx1.Rollback(context.Background())
+	}()
+	tx2, err := importTestPool.Begin(context.Background())
+	require.NoError(t, err)
+	defer func() {
+		_ = tx2.Rollback(context.Background())
+	}()
+	assertMissingChild(t, tx1, "item", childID)
+	assertMissingChild(t, tx2, "item", childID)
+
+	queries := pr_db.New()
+	_, err = queries.SaveItem(context.Background(), tx1, pr_db.SaveItemParams{ID: childID, PrID: first.PatronRequest.ID, Barcode: "first", CreatedAt: testTimestamp(2)})
+	require.NoError(t, err)
+	require.NoError(t, tx1.Commit(context.Background()))
+	_, err = queries.SaveItem(context.Background(), tx2, pr_db.SaveItemParams{ID: childID, PrID: second.PatronRequest.ID, Barcode: "second", CreatedAt: testTimestamp(3)})
+	if err == nil {
+		require.NoError(t, tx2.Commit(context.Background()))
+	} else {
+		require.NoError(t, tx2.Rollback(context.Background()))
+	}
+
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+	assert.Equal(t, 1, queryCount(t, "SELECT count(*) FROM item WHERE id=$1 AND pr_id=$2", childID, first.PatronRequest.ID))
+	assert.Equal(t, 1, queryCount(t, "SELECT count(*) FROM patron_request, jsonb_array_elements(items) AS child WHERE patron_request.id=$1 AND child->>'id'=$2", first.PatronRequest.ID, childID))
+	assert.Equal(t, 0, queryCount(t, "SELECT count(*) FROM patron_request, jsonb_array_elements(items) AS child WHERE patron_request.id=$1 AND child->>'id'=$2", second.PatronRequest.ID, childID))
+}
+
+func TestSaveNotificationDoesNotReparentAfterConcurrentMissingChecks(t *testing.T) {
+	prefix := uuid.NewString()
+	first := testPatronBundle(prefix+"-first", prefix+"-request-first")
+	second := testPatronBundle(prefix+"-second", prefix+"-request-second")
+	for _, bundle := range []*importdb.PatronRequestBundle{&first, &second} {
+		bundle.Items = nil
+		bundle.Notifications = nil
+		bundle.IllTransaction = nil
+		bundle.LocatedSuppliers = nil
+		require.NoError(t, importOnly(*bundle))
+	}
+
+	childID := prefix + "-shared-notification"
+	tx1, err := importTestPool.Begin(context.Background())
+	require.NoError(t, err)
+	defer func() {
+		_ = tx1.Rollback(context.Background())
+	}()
+	tx2, err := importTestPool.Begin(context.Background())
+	require.NoError(t, err)
+	defer func() {
+		_ = tx2.Rollback(context.Background())
+	}()
+	assertMissingChild(t, tx1, "notification", childID)
+	assertMissingChild(t, tx2, "notification", childID)
+
+	queries := pr_db.New()
+	firstNotification := pr_db.SaveNotificationParams{ID: childID, PrID: first.PatronRequest.ID, FromSymbol: prefix + "-REQ", ToSymbol: prefix + "-SUP", Direction: pr_db.NotificationDirectionSent, Kind: pr_db.NotificationKindNote, CreatedAt: testTimestamp(2)}
+	_, err = queries.SaveNotification(context.Background(), tx1, firstNotification)
+	require.NoError(t, err)
+	require.NoError(t, tx1.Commit(context.Background()))
+	firstNotification.PrID = second.PatronRequest.ID
+	_, err = queries.SaveNotification(context.Background(), tx2, firstNotification)
+	if err == nil {
+		require.NoError(t, tx2.Commit(context.Background()))
+	} else {
+		require.NoError(t, tx2.Rollback(context.Background()))
+	}
+
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+	assert.Equal(t, 1, queryCount(t, "SELECT count(*) FROM notification WHERE id=$1 AND pr_id=$2", childID, first.PatronRequest.ID))
+}
+
+func TestSaveLocatedSupplierDoesNotReparentAfterConcurrentMissingChecks(t *testing.T) {
+	prefix := uuid.NewString()
+	firstPrefix := prefix + "-first"
+	secondPrefix := prefix + "-second"
+	first := testPatronBundle(firstPrefix, prefix+"-request-first")
+	second := testPatronBundle(secondPrefix, prefix+"-request-second")
+	for _, bundle := range []*importdb.PatronRequestBundle{&first, &second} {
+		bundle.Items = nil
+		bundle.Notifications = nil
+		bundle.LocatedSuppliers = nil
+		require.NoError(t, importOnly(*bundle))
+	}
+
+	childID := prefix + "-shared-located-supplier"
+	tx1, err := importTestPool.Begin(context.Background())
+	require.NoError(t, err)
+	defer func() {
+		_ = tx1.Rollback(context.Background())
+	}()
+	tx2, err := importTestPool.Begin(context.Background())
+	require.NoError(t, err)
+	defer func() {
+		_ = tx2.Rollback(context.Background())
+	}()
+	assertMissingChild(t, tx1, "located_supplier", childID)
+	assertMissingChild(t, tx2, "located_supplier", childID)
+
+	queries := ill_db.New()
+	firstSupplier := ill_db.SaveLocatedSupplierParams{ID: childID, IllTransactionID: first.IllTransaction.ID, SupplierID: firstPrefix + "-supplier-peer", SupplierSymbol: firstPrefix + "-SUP", Ordinal: 1}
+	_, err = queries.SaveLocatedSupplier(context.Background(), tx1, firstSupplier)
+	require.NoError(t, err)
+	require.NoError(t, tx1.Commit(context.Background()))
+	firstSupplier.IllTransactionID = second.IllTransaction.ID
+	_, err = queries.SaveLocatedSupplier(context.Background(), tx2, firstSupplier)
+	if err == nil {
+		require.NoError(t, tx2.Commit(context.Background()))
+	} else {
+		require.NoError(t, tx2.Rollback(context.Background()))
+	}
+
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+	assert.Equal(t, 1, queryCount(t, "SELECT count(*) FROM located_supplier WHERE id=$1 AND ill_transaction_id=$2", childID, first.IllTransaction.ID))
+}
+
 func TestImportPatronRequestCannotOmitExistingIllAssociation(t *testing.T) {
 	prefix := uuid.NewString()
 	bundle := testPatronBundle(prefix, prefix+"-request")
@@ -167,4 +298,11 @@ func queryCount(t *testing.T, query string, args ...any) int {
 	var count int
 	require.NoError(t, importTestPool.QueryRow(context.Background(), query, args...).Scan(&count))
 	return count
+}
+
+func assertMissingChild(t *testing.T, tx pgx.Tx, table, id string) {
+	t.Helper()
+	var foundID string
+	err := tx.QueryRow(context.Background(), "SELECT id FROM "+table+" WHERE id=$1", id).Scan(&foundID)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
 }

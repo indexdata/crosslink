@@ -46,15 +46,6 @@ DELETE FROM located_supplier
 WHERE ill_transaction_id = sqlc.arg(ill_transaction_id)
   AND id <> ALL(sqlc.arg(ids)::text[]);
 
--- name: GetImportItemParent :one
-SELECT pr_id FROM item WHERE id = $1;
-
--- name: GetImportNotificationParent :one
-SELECT pr_id FROM notification WHERE id = $1;
-
--- name: GetImportLocatedSupplierParent :one
-SELECT ill_transaction_id FROM located_supplier WHERE id = $1;
-
 -- name: LockImportIllTransaction :one
 SELECT id, requester_request_id
 FROM ill_transaction

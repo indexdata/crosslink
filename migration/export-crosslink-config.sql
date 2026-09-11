@@ -7,7 +7,7 @@
 --   psql "$DATABASE_URL" \
 --     --set=ON_ERROR_STOP=1 \
 --     --set=owner='ISIL:US-RS1' \
---     --file=other-scripts/export-crosslink-config.sql \
+--     --file=migration/export-crosslink-config.sql \
 --     --quiet --tuples-only --no-align \
 --     > crosslink-import.ndjson
 --

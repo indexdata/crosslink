@@ -8,7 +8,7 @@
 --   psql "$DATABASE_URL" \
 --     --set=ON_ERROR_STOP=1 \
 --     --set=owner='ISIL:US-RS1' \
---     --file=other-scripts/export-crosslink-open-patron-requests.sql \
+--     --file=migration/export-crosslink-open-patron-requests.sql \
 --     --quiet --tuples-only --no-align \
 --     > crosslink-open-patron-requests.ndjson
 --
