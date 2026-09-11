@@ -53,10 +53,11 @@ func mapImportResult(result model.ImportResult) ImportResult {
 		errors = append(errors, item)
 	}
 	return ImportResult{
-		Entries:  mapImportSection(result.Entries),
-		Tiers:    mapImportSection(result.Tiers),
-		Networks: mapImportSection(result.Networks),
-		Errors:   errors,
+		Entries:       mapImportSection(result.Entries),
+		Tiers:         mapImportSection(result.Tiers),
+		Networks:      mapImportSection(result.Networks),
+		Errors:        errors,
+		ErrorsOmitted: result.ErrorsOmitted,
 	}
 }
 

@@ -1,10 +1,12 @@
 package importdb
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,10 +17,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const maxImportLockAttempts = 3
+
+var errImportEntryMappingChanged = errors.New("entry symbol mapping changed while acquiring import locks")
+
 func (r *PgImportRepo) ImportEntry(ctx context.Context, aggregate model.EntryAggregate, policy model.ConflictPolicy) (model.RepoResult, error) {
 	if err := aggregate.NormalizeAndValidate(); err != nil {
 		return model.RepoResult{}, err
 	}
+	for range maxImportLockAttempts {
+		result, err := r.importEntryAttempt(ctx, aggregate, policy)
+		if !errors.Is(err, errImportEntryMappingChanged) {
+			return result, err
+		}
+		if err := ctx.Err(); err != nil {
+			return model.RepoResult{}, err
+		}
+	}
+	return model.RepoResult{}, fmt.Errorf("import entry %s: hierarchy changed repeatedly", aggregate.Key.String())
+}
+
+func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.EntryAggregate, policy model.ConflictPolicy) (model.RepoResult, error) {
 	key := aggregate.Key.String()
 	tx, queries, err := r.begin(ctx)
 	if err != nil {
@@ -32,7 +51,7 @@ func (r *PgImportRepo) ImportEntry(ctx context.Context, aggregate model.EntryAgg
 	}); err != nil {
 		return model.RepoResult{}, fmt.Errorf("lock entry %s", key)
 	}
-	existing, lookupErr := queries.EntryBySymbolForUpdate(ctx, db.EntryBySymbolForUpdateParams{
+	existing, lookupErr := queries.EntryBySymbol(ctx, db.EntryBySymbolParams{
 		Authority: aggregate.Key.Authority,
 		Symbol:    aggregate.Key.Symbol,
 	})
@@ -41,10 +60,57 @@ func (r *PgImportRepo) ImportEntry(ctx context.Context, aggregate model.EntryAgg
 		return model.RepoResult{}, fmt.Errorf("resolve entry %s", key)
 	}
 	if exists && policy != model.ConflictPolicyUpdate {
+		if _, err := lockEntryRows(ctx, queries, existing.ID); err != nil {
+			return model.RepoResult{}, fmt.Errorf("lock entry %s: %w", key, err)
+		}
+		if err := lockEntryMappings(ctx, queries, entryMapping{ref: aggregate.Key, expectedOwner: &existing.ID}); err != nil {
+			return model.RepoResult{}, fmt.Errorf("revalidate entry %s: %w", key, err)
+		}
 		return conflictResult("entry", key, policy)
 	}
 	if !exists && policy != model.ConflictPolicyFail && policy != model.ConflictPolicySkip && policy != model.ConflictPolicyUpdate {
 		return model.RepoResult{}, fmt.Errorf("invalid conflict policy")
+	}
+
+	parent, err := resolveParent(ctx, queries, aggregate.Data.Parent)
+	if err != nil {
+		return model.RepoResult{}, err
+	}
+	lenders, err := resolveLenders(ctx, queries, aggregate.Data.ILLConfig)
+	if err != nil {
+		return model.RepoResult{}, err
+	}
+	var owner *db.Entry
+	if exists {
+		owner = &existing
+	}
+	entryIDs := entryLockIDs(owner, parent, lenders)
+	lockedEntries, err := lockEntryRows(ctx, queries, entryIDs...)
+	if err != nil {
+		return model.RepoResult{}, fmt.Errorf("lock entry hierarchy: %w", err)
+	}
+	mappings := []entryMapping{{ref: aggregate.Key, expectedOwner: entryIDPointer(existing, exists)}}
+	if aggregate.Data.Parent != nil {
+		mappings = append(mappings, entryMapping{ref: *aggregate.Data.Parent, expectedOwner: &parent.ID})
+	}
+	if aggregate.Data.ILLConfig != nil {
+		for index, lender := range aggregate.Data.ILLConfig.LendersOfLastResort {
+			mappings = append(mappings, entryMapping{ref: lender, expectedOwner: &lenders[index].ID})
+		}
+	}
+	if err := lockEntryMappings(ctx, queries, mappings...); err != nil {
+		return model.RepoResult{}, fmt.Errorf("revalidate entry hierarchy: %w", err)
+	}
+	if exists {
+		existing = lockedEntries[existing.ID]
+	}
+	var parentID *uuid.UUID
+	if parent != nil {
+		lockedParent := lockedEntries[parent.ID]
+		if valid, reason := domain.ValidParentForType(aggregate.Data.Type, lockedParent.Type); !valid {
+			return model.RepoResult{}, fmt.Errorf("invalid parent %s: %s", aggregate.Data.Parent.String(), reason)
+		}
+		parentID = &lockedParent.ID
 	}
 
 	if aggregate.Data.Type == "Consortium" || (exists && existing.Type == "Consortium") {
@@ -62,10 +128,6 @@ func (r *PgImportRepo) ImportEntry(ctx context.Context, aggregate model.EntryAgg
 		}
 	}
 
-	parentID, err := resolveParent(ctx, queries, aggregate.Data.Parent, aggregate.Data.Type)
-	if err != nil {
-		return model.RepoResult{}, err
-	}
 	if exists {
 		if err := validateEntryUpdateHierarchy(ctx, queries, existing, aggregate.Data.Type, parentID); err != nil {
 			return model.RepoResult{}, err
@@ -85,21 +147,139 @@ func (r *PgImportRepo) ImportEntry(ctx context.Context, aggregate model.EntryAgg
 	return model.RepoResult{Outcome: model.OutcomeImported}, nil
 }
 
-func resolveParent(ctx context.Context, queries *db.Queries, parent *model.SymbolRef, entryType string) (*uuid.UUID, error) {
+func entryIDPointer(entry db.Entry, exists bool) *uuid.UUID {
+	if !exists {
+		return nil
+	}
+	return &entry.ID
+}
+
+type entryMapping struct {
+	ref           model.SymbolRef
+	expectedOwner *uuid.UUID
+}
+
+func lockEntryMappings(ctx context.Context, queries *db.Queries, mappings ...entryMapping) error {
+	sort.Slice(mappings, func(i, j int) bool {
+		if mappings[i].ref.Authority != mappings[j].ref.Authority {
+			return mappings[i].ref.Authority < mappings[j].ref.Authority
+		}
+		return mappings[i].ref.Symbol < mappings[j].ref.Symbol
+	})
+	locked := make(map[string]*uuid.UUID, len(mappings))
+	for _, mapping := range mappings {
+		key := mapping.ref.String()
+		if expectedOwner, exists := locked[key]; exists {
+			if !sameEntryID(expectedOwner, mapping.expectedOwner) {
+				return errImportEntryMappingChanged
+			}
+			continue
+		}
+		symbol, err := queries.SymbolByAuthorityAndSymbolForUpdate(ctx, db.SymbolByAuthorityAndSymbolForUpdateParams{
+			Authority: mapping.ref.Authority,
+			Symbol:    mapping.ref.Symbol,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			if mapping.expectedOwner != nil {
+				return errImportEntryMappingChanged
+			}
+			locked[key] = nil
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if mapping.expectedOwner == nil || symbol.Owner != *mapping.expectedOwner {
+			return errImportEntryMappingChanged
+		}
+		owner := symbol.Owner
+		locked[key] = &owner
+	}
+	return nil
+}
+
+func sameEntryID(first, second *uuid.UUID) bool {
+	if first == nil || second == nil {
+		return first == nil && second == nil
+	}
+	return *first == *second
+}
+
+func resolveParent(ctx context.Context, queries *db.Queries, parent *model.SymbolRef) (*db.Entry, error) {
 	if parent == nil {
 		return nil, nil
 	}
-	entry, err := queries.EntryBySymbolForUpdate(ctx, db.EntryBySymbolForUpdateParams{Authority: parent.Authority, Symbol: parent.Symbol})
+	entry, err := queries.EntryBySymbol(ctx, db.EntryBySymbolParams{Authority: parent.Authority, Symbol: parent.Symbol})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("parent %s does not exist", parent.String())
 	}
 	if err != nil {
 		return nil, fmt.Errorf("resolve parent %s", parent.String())
 	}
-	if valid, reason := domain.ValidParentForType(entryType, entry.Type); !valid {
-		return nil, fmt.Errorf("invalid parent %s: %s", parent.String(), reason)
+	return &entry, nil
+}
+
+func resolveLenders(ctx context.Context, queries *db.Queries, config *model.ILLConfig) ([]db.Entry, error) {
+	if config == nil {
+		return nil, nil
 	}
-	return &entry.ID, nil
+	lenders := make([]db.Entry, 0, len(config.LendersOfLastResort))
+	for _, lender := range config.LendersOfLastResort {
+		entry, err := queries.EntryBySymbol(ctx, db.EntryBySymbolParams{Authority: lender.Authority, Symbol: lender.Symbol})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("lender of last resort %s does not exist", lender.String())
+		}
+		if err != nil {
+			return nil, fmt.Errorf("resolve lender of last resort %s", lender.String())
+		}
+		lenders = append(lenders, entry)
+	}
+	return lenders, nil
+}
+
+func entryLockIDs(owner, parent *db.Entry, lenders []db.Entry) []uuid.UUID {
+	ids := make([]uuid.UUID, 0, 2+len(lenders))
+	if owner != nil {
+		ids = append(ids, owner.ID)
+	}
+	if parent != nil {
+		ids = append(ids, parent.ID)
+	}
+	for _, lender := range lenders {
+		ids = append(ids, lender.ID)
+	}
+	return orderedUniqueEntryIDs(ids...)
+}
+
+func lockEntryRows(ctx context.Context, queries *db.Queries, ids ...uuid.UUID) (map[uuid.UUID]db.Entry, error) {
+	entries := make(map[uuid.UUID]db.Entry, len(ids))
+	for _, id := range orderedUniqueEntryIDs(ids...) {
+		entry, err := queries.EntryByIdForUpdate(ctx, id)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errImportEntryMappingChanged
+		}
+		if err != nil {
+			return nil, err
+		}
+		entries[id] = entry
+	}
+	return entries, nil
+}
+
+func orderedUniqueEntryIDs(ids ...uuid.UUID) []uuid.UUID {
+	unique := make(map[uuid.UUID]struct{}, len(ids))
+	ordered := make([]uuid.UUID, 0, len(ids))
+	for _, id := range ids {
+		if _, exists := unique[id]; exists {
+			continue
+		}
+		unique[id] = struct{}{}
+		ordered = append(ordered, id)
+	}
+	sort.Slice(ordered, func(i, j int) bool {
+		return bytes.Compare(ordered[i][:], ordered[j][:]) < 0
+	})
+	return ordered
 }
 
 func validateEntryUpdateHierarchy(ctx context.Context, queries *db.Queries, existing db.Entry, resultingType string, parentID *uuid.UUID) error {
@@ -197,6 +377,10 @@ func replaceEntryConfigs(ctx context.Context, queries *db.Queries, entryID uuid.
 	}
 	if data.LMSConfig != nil {
 		cfg := data.LMSConfig
+		var patronProfiles []byte
+		if cfg.PatronProfiles != nil {
+			patronProfiles, _ = json.Marshal(cfg.PatronProfiles)
+		}
 		if _, err := queries.UpsertLMSConfig(ctx, db.UpsertLMSConfigParams{
 			Entry: &entryID, Address: cfg.Address, FromAgency: cfg.FromAgency, FromAgencyAuthentication: cfg.FromAgencyAuthentication,
 			ToAgency: cfg.ToAgency, LookupUserEnabled: cfg.LookupUserEnabled, AcceptItemEnabled: cfg.AcceptItemEnabled,
@@ -205,6 +389,7 @@ func replaceEntryConfigs(ctx context.Context, queries *db.Queries, entryID uuid.
 			RequestItemBibCode: cfg.RequestItemBibIDCode, RequestItemEnabled: cfg.RequestItemEnabled,
 			RequestItemPickupLocationEnabled: cfg.RequestItemPickupLocationEnabled, RequesterPickupLocation: cfg.RequesterPickupLocation,
 			SupplierPickupLocation: cfg.SupplierPickupLocation, RequesterPatronPattern: cfg.RequesterPatronPattern,
+			PatronProfiles: patronProfiles,
 		}); err != nil {
 			return err
 		}
@@ -273,9 +458,6 @@ func replaceILLConfig(ctx context.Context, queries *db.Queries, entryID uuid.UUI
 	}
 	lenders := make([]string, 0, len(config.LendersOfLastResort))
 	for _, lender := range config.LendersOfLastResort {
-		if _, err := resolveEntry(ctx, queries, lender); err != nil {
-			return fmt.Errorf("lender of last resort %s does not exist", lender.String())
-		}
 		lenders = append(lenders, lender.String())
 	}
 	_, err := queries.UpsertIllConfig(ctx, db.UpsertIllConfigParams{

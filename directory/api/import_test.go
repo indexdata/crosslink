@@ -32,8 +32,9 @@ func (i *recordingAggregateImporter) Import(_ context.Context, policy model.Conf
 
 func TestPostImportDefaultsPolicyAndMapsResult(t *testing.T) {
 	importer := &recordingAggregateImporter{result: model.ImportResult{
-		Entries: model.ImportSectionResult{Imported: 1},
-		Errors:  []model.ImportItemError{},
+		Entries:       model.ImportSectionResult{Imported: 1},
+		Errors:        []model.ImportItemError{},
+		ErrorsOmitted: 7,
 	}}
 	impl := NewApiImpl(nil, nil, importer)
 
@@ -45,6 +46,7 @@ func TestPostImportDefaultsPolicyAndMapsResult(t *testing.T) {
 	mapped := ImportResult(response.(PostImport200JSONResponse))
 	require.Equal(t, int32(1), mapped.Entries.Imported)
 	require.Empty(t, mapped.Errors)
+	require.Equal(t, int32(7), mapped.ErrorsOmitted)
 }
 
 func TestPostImportRejectsUnauthorizedCallerBeforeReadingBody(t *testing.T) {

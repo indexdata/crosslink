@@ -16,12 +16,14 @@ type recordingRepo struct {
 	entryCalls   int
 	tierCalls    int
 	networkCalls int
+	entry        *model.EntryAggregate
 	result       model.RepoResult
 	err          error
 }
 
-func (r *recordingRepo) ImportEntry(context.Context, model.EntryAggregate, model.ConflictPolicy) (model.RepoResult, error) {
+func (r *recordingRepo) ImportEntry(_ context.Context, aggregate model.EntryAggregate, _ model.ConflictPolicy) (model.RepoResult, error) {
 	r.entryCalls++
+	r.entry = &aggregate
 	return r.result, r.err
 }
 
@@ -131,6 +133,9 @@ func TestImportRejectsMissingAndUnknownProperties(t *testing.T) {
 		"missing config field": strings.Replace(
 			strings.Replace(validEntryRecord(), `"illConfig":null`, validILLConfig(), 1),
 			`,"supplierPatronPattern":null`, "", 1),
+		"missing patron profiles": strings.Replace(
+			strings.Replace(validEntryRecord(), `"lmsConfig":null`, validLMSConfig(), 1),
+			`,"patronProfiles":[{"code":"STAFF","canCreateRequests":true}]`, "", 1),
 	}
 	for name, record := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -142,6 +147,45 @@ func TestImportRejectsMissingAndUnknownProperties(t *testing.T) {
 			assert.Zero(t, repo.entryCalls+repo.tierCalls+repo.networkCalls)
 		})
 	}
+}
+
+func TestImportAcceptsLMSPatronProfiles(t *testing.T) {
+	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
+	record := strings.Replace(validEntryRecord(), `"lmsConfig":null`, validLMSConfig(), 1)
+
+	result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(record))
+
+	require.NoError(t, err)
+	assert.Equal(t, model.ImportSectionResult{Imported: 1}, result.Entries)
+	assert.Empty(t, result.Errors)
+	assert.Equal(t, 1, repo.entryCalls)
+	require.NotNil(t, repo.entry)
+	require.NotNil(t, repo.entry.Data.LMSConfig)
+	require.NotNil(t, repo.entry.Data.LMSConfig.PatronProfiles)
+	profiles := *repo.entry.Data.LMSConfig.PatronProfiles
+	require.Len(t, profiles, 1)
+	require.NotNil(t, profiles[0].Code)
+	require.Equal(t, "STAFF", *profiles[0].Code)
+	require.True(t, profiles[0].CanCreateRequests)
+}
+
+func TestImportAcceptsNullLMSPatronProfiles(t *testing.T) {
+	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
+	lmsConfig := strings.Replace(validLMSConfig(), `"patronProfiles":[{"code":"STAFF","canCreateRequests":true}]`, `"patronProfiles":null`, 1)
+	record := strings.Replace(validEntryRecord(), `"lmsConfig":null`, lmsConfig, 1)
+
+	result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(record))
+
+	require.NoError(t, err)
+	assert.Equal(t, model.ImportSectionResult{Imported: 1}, result.Entries)
+	assert.Empty(t, result.Errors)
+	require.NotNil(t, repo.entry)
+	require.NotNil(t, repo.entry.Data.LMSConfig)
+	require.Nil(t, repo.entry.Data.LMSConfig.PatronProfiles)
+}
+
+func validLMSConfig() string {
+	return `"lmsConfig":{"address":"https://example.test/ncip","fromAgency":"FROM","fromAgencyAuthentication":null,"toAgency":null,"lookupUserEnabled":true,"acceptItemEnabled":true,"checkInItemEnabled":true,"checkOutItemEnabled":true,"itemLocation":null,"requestItemRequestType":null,"requestItemRequestScopeType":null,"requestItemBibIdCode":null,"requestItemEnabled":true,"requestItemPickupLocationEnabled":true,"requesterPickupLocation":null,"supplierPickupLocation":null,"requesterPatronPattern":null,"patronProfiles":[{"code":"STAFF","canCreateRequests":true}]}`
 }
 
 func validILLConfig() string {
@@ -166,6 +210,58 @@ func TestImportAccountsForSkippedAndRepositoryFailures(t *testing.T) {
 		require.Len(t, result.Errors, 1)
 		assert.Equal(t, "entry parent does not exist", result.Errors[0].Error)
 	})
+}
+
+func TestImportCapsFailureDetailsWhilePreservingCounters(t *testing.T) {
+	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
+	badTier := strings.Replace(validTierRecord(), `"name":"Primary"`, `"name":"   "`, 1)
+	input := strings.Repeat(badTier+"\n", 1005)
+
+	result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(input))
+
+	require.NoError(t, err)
+	require.Equal(t, model.ImportSectionResult{Failed: 1005}, result.Tiers)
+	require.Len(t, result.Errors, 1000)
+	require.Equal(t, int32(5), result.ErrorsOmitted)
+	require.Zero(t, repo.tierCalls)
+}
+
+func TestImportCapsSkippedDetailsWhilePreservingCounters(t *testing.T) {
+	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeSkipped, Diagnostic: "entry already exists"}}
+	input := strings.Repeat(validEntryRecord()+"\n", 1005)
+
+	result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicySkip, strings.NewReader(input))
+
+	require.NoError(t, err)
+	require.Equal(t, model.ImportSectionResult{Skipped: 1005}, result.Entries)
+	require.Len(t, result.Errors, 1000)
+	require.Equal(t, int32(5), result.ErrorsOmitted)
+	require.Equal(t, 1005, repo.entryCalls)
+}
+
+func TestImportCapsRetainedErrorFieldSizes(t *testing.T) {
+	repo := &recordingRepo{err: errors.New(strings.Repeat("failure", 1000))}
+	longSymbol := strings.Repeat("x", 5000)
+	record := strings.ReplaceAll(validEntryRecord(), `"symbol":"abc"`, `"symbol":"`+longSymbol+`"`)
+
+	result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(record))
+
+	require.NoError(t, err)
+	require.Len(t, result.Errors, 1)
+	require.NotNil(t, result.Errors[0].Key)
+	require.LessOrEqual(t, len(*result.Errors[0].Key), 1024)
+	require.LessOrEqual(t, len(result.Errors[0].Error), 1024)
+}
+
+func TestImportDoesNotRetainUnknownRecordType(t *testing.T) {
+	unknownType := strings.Repeat("x", 5000)
+	record := `{"type":"` + unknownType + `","key":{},"data":{}}`
+
+	result, err := newTestImporter(t, &recordingRepo{}).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(record))
+
+	require.NoError(t, err)
+	require.Len(t, result.Errors, 1)
+	require.Nil(t, result.Errors[0].Type)
 }
 
 func TestImportRecordLimitIsExact(t *testing.T) {

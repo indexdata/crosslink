@@ -2,7 +2,6 @@ package importdb
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/indexdata/crosslink/directory/db"
@@ -38,17 +37,6 @@ func conflictResult(resource, key string, policy model.ConflictPolicy) (model.Re
 	default:
 		return model.RepoResult{}, fmt.Errorf("invalid conflict policy")
 	}
-}
-
-func resolveEntry(ctx context.Context, queries *db.Queries, key model.SymbolRef) (db.Entry, error) {
-	entry, err := queries.EntryBySymbolForUpdate(ctx, db.EntryBySymbolForUpdateParams{Authority: key.Authority, Symbol: key.Symbol})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return db.Entry{}, fmt.Errorf("entry %s does not exist", key.String())
-	}
-	if err != nil {
-		return db.Entry{}, fmt.Errorf("resolve entry %s", key.String())
-	}
-	return entry, nil
 }
 
 func persistenceError(resource, key string, err error) error {

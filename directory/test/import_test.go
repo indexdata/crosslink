@@ -166,7 +166,7 @@ func entryImportRecord(key map[string]any, name string, parent map[string]any, e
 			"checkOutItemEnabled": nil, "itemLocation": nil, "requestItemRequestType": nil,
 			"requestItemRequestScopeType": nil, "requestItemBibIdCode": nil, "requestItemEnabled": nil,
 			"requestItemPickupLocationEnabled": nil, "requesterPickupLocation": nil, "supplierPickupLocation": nil,
-			"requesterPatronPattern": nil,
+			"requesterPatronPattern": nil, "patronProfiles": nil,
 		}
 	}
 	return map[string]any{"type": "entry", "key": key, "data": data}

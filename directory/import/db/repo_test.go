@@ -2,8 +2,10 @@ package importdb_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -147,6 +149,25 @@ func TestImportEntryConflictPoliciesAndUpdateFullSynchronization(t *testing.T) {
 	require.NotEqual(t, originalEndpointID, replacementEndpointID)
 }
 
+func TestImportEntryUpdateReplacesLMSPatronProfiles(t *testing.T) {
+	resetImportDatabase(t)
+	repo := importdb.New(testPool)
+	aggregate := completeEntryAggregate("CON")
+	initialProfiles := []model.PatronProfile{{Code: stringPointer("STAFF"), CanCreateRequests: true}}
+	aggregate.Data.LMSConfig.PatronProfiles = &initialProfiles
+
+	_, err := repo.ImportEntry(context.Background(), aggregate, model.ConflictPolicyFail)
+	require.NoError(t, err)
+	entryID := entryIDBySymbol(t, aggregate.Key)
+	require.JSONEq(t, `[{"code":"STAFF","canCreateRequests":true}]`, lmsPatronProfiles(t, entryID))
+
+	replacementProfiles := []model.PatronProfile{{Name: stringPointer("Blocked"), CanCreateRequests: false}}
+	aggregate.Data.LMSConfig.PatronProfiles = &replacementProfiles
+	_, err = repo.ImportEntry(context.Background(), aggregate, model.ConflictPolicyUpdate)
+	require.NoError(t, err)
+	require.JSONEq(t, `[{"name":"Blocked","canCreateRequests":false}]`, lmsPatronProfiles(t, entryID))
+}
+
 func TestConcurrentImportEntrySkipHonorsConflictPolicyForMissingKey(t *testing.T) {
 	resetImportDatabase(t)
 	newAggregate := func() model.EntryAggregate { return minimalEntryAggregate("concurrent", "Institution") }
@@ -177,6 +198,217 @@ func TestConcurrentImportEntryUpdateHonorsConflictPolicyForMissingKey(t *testing
 		require.Equal(t, model.OutcomeImported, results[index].Outcome)
 	}
 	require.Equal(t, 1, entryCount(t))
+}
+
+func TestConcurrentImportEntryOpposingParentsDoNotDeadlock(t *testing.T) {
+	resetImportDatabase(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	const pairCount = 12
+	type importPair struct {
+		first  model.EntryAggregate
+		second model.EntryAggregate
+	}
+	pairs := make([]importPair, pairCount)
+	for index := range pairCount {
+		firstID, secondID := uuid.New(), uuid.New()
+		firstSymbol := fmt.Sprintf("A-%d", index)
+		secondSymbol := fmt.Sprintf("B-%d", index)
+		_, err := testPool.Exec(ctx, `INSERT INTO entries (id, name, type) VALUES ($1, $2, 'Institution'), ($3, $4, 'Institution')`,
+			firstID, "Institution "+firstSymbol, secondID, "Institution "+secondSymbol)
+		require.NoError(t, err)
+		_, err = testPool.Exec(ctx, `INSERT INTO symbols (owner, authority, symbol) VALUES ($1, 'ISIL', $2), ($3, 'ISIL', $4)`,
+			firstID, firstSymbol, secondID, secondSymbol)
+		require.NoError(t, err)
+
+		first := minimalEntryAggregate(firstSymbol, "Branch")
+		first.Data.Parent = &model.SymbolRef{Authority: "ISIL", Symbol: secondSymbol}
+		second := minimalEntryAggregate(secondSymbol, "Branch")
+		second.Data.Parent = &model.SymbolRef{Authority: "ISIL", Symbol: firstSymbol}
+		pairs[index] = importPair{first: first, second: second}
+	}
+
+	repo := importdb.New(testPool)
+	start := make(chan struct{})
+	errs := make([][2]error, pairCount)
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(pairCount * 2)
+	for index := range pairs {
+		go func() {
+			defer waitGroup.Done()
+			<-start
+			_, errs[index][0] = repo.ImportEntry(ctx, pairs[index].first, model.ConflictPolicyUpdate)
+		}()
+		go func() {
+			defer waitGroup.Done()
+			<-start
+			_, errs[index][1] = repo.ImportEntry(ctx, pairs[index].second, model.ConflictPolicyUpdate)
+		}()
+	}
+	close(start)
+	waitGroup.Wait()
+	require.NoError(t, ctx.Err())
+
+	for index, pairErrors := range errs {
+		var imported int
+		for _, err := range pairErrors {
+			if err == nil {
+				imported++
+				continue
+			}
+			var pgErr *pgconn.PgError
+			require.Falsef(t, errors.As(err, &pgErr) && pgErr.Code == "40P01", "pair %d deadlocked: %v", index, err)
+			require.Truef(t,
+				strings.Contains(err.Error(), "invalid parent") || strings.Contains(err.Error(), "would create a cycle"),
+				"pair %d returned an unexpected error: %v", index, err)
+		}
+		require.Equalf(t, 1, imported, "pair %d should serialize before hierarchy validation", index)
+	}
+}
+
+func TestConcurrentImportEntryOpposingLendersDoNotDeadlock(t *testing.T) {
+	resetImportDatabase(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	const pairCount = 12
+	type importPair struct {
+		first  model.EntryAggregate
+		second model.EntryAggregate
+	}
+	pairs := make([]importPair, pairCount)
+	for index := range pairCount {
+		firstID, secondID := uuid.New(), uuid.New()
+		firstSymbol := fmt.Sprintf("LENDER-A-%d", index)
+		secondSymbol := fmt.Sprintf("LENDER-B-%d", index)
+		_, err := testPool.Exec(ctx, `INSERT INTO entries (id, name, type) VALUES ($1, $2, 'Institution'), ($3, $4, 'Institution')`,
+			firstID, "Institution "+firstSymbol, secondID, "Institution "+secondSymbol)
+		require.NoError(t, err)
+		_, err = testPool.Exec(ctx, `INSERT INTO symbols (owner, authority, symbol) VALUES ($1, 'ISIL', $2), ($3, 'ISIL', $4)`,
+			firstID, firstSymbol, secondID, secondSymbol)
+		require.NoError(t, err)
+
+		first := minimalEntryAggregate(firstSymbol, "Institution")
+		first.Data.ILLConfig = &model.ILLConfig{LendersOfLastResort: []model.SymbolRef{{Authority: "ISIL", Symbol: secondSymbol}}}
+		second := minimalEntryAggregate(secondSymbol, "Institution")
+		second.Data.ILLConfig = &model.ILLConfig{LendersOfLastResort: []model.SymbolRef{{Authority: "ISIL", Symbol: firstSymbol}}}
+		pairs[index] = importPair{first: first, second: second}
+	}
+
+	repo := importdb.New(testPool)
+	start := make(chan struct{})
+	errs := make([][2]error, pairCount)
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(pairCount * 2)
+	for index := range pairs {
+		go func() {
+			defer waitGroup.Done()
+			<-start
+			_, errs[index][0] = repo.ImportEntry(ctx, pairs[index].first, model.ConflictPolicyUpdate)
+		}()
+		go func() {
+			defer waitGroup.Done()
+			<-start
+			_, errs[index][1] = repo.ImportEntry(ctx, pairs[index].second, model.ConflictPolicyUpdate)
+		}()
+	}
+	close(start)
+	waitGroup.Wait()
+	require.NoError(t, ctx.Err())
+
+	for index, pairErrors := range errs {
+		require.NoErrorf(t, pairErrors[0], "first import in pair %d failed", index)
+		require.NoErrorf(t, pairErrors[1], "second import in pair %d failed", index)
+	}
+}
+
+func TestImportEntryRetriesWhenParentSymbolChangesBeforeRowLock(t *testing.T) {
+	resetImportDatabase(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	originalParentID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	ownerID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	replacementParentID := uuid.MustParse("00000000-0000-0000-0000-000000000003")
+	_, err := testPool.Exec(ctx, `
+		INSERT INTO entries (id, name, type) VALUES
+			($1, 'Original parent', 'Institution'),
+			($2, 'Imported branch', 'Branch'),
+			($3, 'Replacement parent', 'Institution')`, originalParentID, ownerID, replacementParentID)
+	require.NoError(t, err)
+	_, err = testPool.Exec(ctx, `
+		INSERT INTO symbols (owner, authority, symbol) VALUES
+			($1, 'ISIL', 'PARENT'),
+			($2, 'ISIL', 'BRANCH')`, originalParentID, ownerID)
+	require.NoError(t, err)
+
+	blocker, err := testPool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = blocker.Rollback(ctx) }()
+	_, err = blocker.Exec(ctx, `SELECT id FROM entries WHERE id=$1 FOR UPDATE`, originalParentID)
+	require.NoError(t, err)
+
+	aggregate := minimalEntryAggregate("BRANCH", "Branch")
+	aggregate.Data.Parent = &model.SymbolRef{Authority: "ISIL", Symbol: "PARENT"}
+	importDone := make(chan error, 1)
+	go func() {
+		_, importErr := importdb.New(testPool).ImportEntry(ctx, aggregate, model.ConflictPolicyUpdate)
+		importDone <- importErr
+	}()
+	require.Eventually(t, func() bool {
+		var waiting bool
+		err := testPool.QueryRow(ctx, `SELECT EXISTS (
+			SELECT 1 FROM pg_stat_activity
+			WHERE datname=current_database() AND pid <> pg_backend_pid() AND wait_event_type='Lock'
+		)`).Scan(&waiting)
+		return err == nil && waiting
+	}, 2*time.Second, 10*time.Millisecond)
+
+	_, err = testPool.Exec(ctx, `UPDATE symbols SET owner=$1 WHERE authority='ISIL' AND symbol='PARENT'`, replacementParentID)
+	require.NoError(t, err)
+	require.NoError(t, blocker.Commit(ctx))
+	require.NoError(t, <-importDone)
+
+	var parentID uuid.UUID
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT parent FROM entries WHERE id=$1`, ownerID).Scan(&parentID))
+	require.Equal(t, replacementParentID, parentID)
+}
+
+func TestImportEntryRetriesWhenParentIsDeletedBeforeRowLock(t *testing.T) {
+	resetImportDatabase(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	parentID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	ownerID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	_, err := testPool.Exec(ctx, `INSERT INTO entries (id, name, type) VALUES ($1, 'Parent', 'Institution'), ($2, 'Branch', 'Branch')`, parentID, ownerID)
+	require.NoError(t, err)
+	_, err = testPool.Exec(ctx, `INSERT INTO symbols (owner, authority, symbol) VALUES ($1, 'ISIL', 'PARENT'), ($2, 'ISIL', 'BRANCH')`, parentID, ownerID)
+	require.NoError(t, err)
+
+	blocker, err := testPool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = blocker.Rollback(ctx) }()
+	_, err = blocker.Exec(ctx, `SELECT id FROM entries WHERE id=$1 FOR UPDATE`, parentID)
+	require.NoError(t, err)
+
+	aggregate := minimalEntryAggregate("BRANCH", "Branch")
+	aggregate.Data.Parent = &model.SymbolRef{Authority: "ISIL", Symbol: "PARENT"}
+	importDone := make(chan error, 1)
+	go func() {
+		_, importErr := importdb.New(testPool).ImportEntry(ctx, aggregate, model.ConflictPolicyUpdate)
+		importDone <- importErr
+	}()
+	require.Eventually(t, func() bool {
+		var waiting bool
+		err := testPool.QueryRow(ctx, `SELECT EXISTS (
+			SELECT 1 FROM pg_stat_activity
+			WHERE datname=current_database() AND pid <> pg_backend_pid() AND wait_event_type='Lock'
+		)`).Scan(&waiting)
+		return err == nil && waiting
+	}, 2*time.Second, 10*time.Millisecond)
+
+	_, err = blocker.Exec(ctx, `DELETE FROM entries WHERE id=$1`, parentID)
+	require.NoError(t, err)
+	require.NoError(t, blocker.Commit(ctx))
+	require.ErrorContains(t, <-importDone, "parent ISIL:PARENT does not exist")
 }
 
 func TestImportEntryRejectsInvalidHierarchy(t *testing.T) {
@@ -281,6 +513,54 @@ func TestImportTierConflictPoliciesAndUpdateReplacesAssignments(t *testing.T) {
 	require.Equal(t, []model.SymbolRef{second}, tierAssignments(t, id))
 }
 
+func TestConcurrentEntryAndTierImportsUseSameEntryLockOrder(t *testing.T) {
+	resetImportDatabase(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	memberID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	consortiumID := uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")
+	tierID := uuid.New()
+	_, err := testPool.Exec(ctx, `INSERT INTO entries (id, name, type) VALUES ($1, 'Member', 'Institution'), ($2, 'Consortium', 'Consortium')`, memberID, consortiumID)
+	require.NoError(t, err)
+	_, err = testPool.Exec(ctx, `INSERT INTO symbols (owner, authority, symbol) VALUES ($1, 'ISIL', 'MEMBER'), ($2, 'ISIL', 'CON')`, memberID, consortiumID)
+	require.NoError(t, err)
+	_, err = testPool.Exec(ctx, `INSERT INTO tiers (id, consortium, name, level, type, cost) VALUES ($1, $2, 'Loan', 'standard', 'loan', 0)`, tierID, consortiumID)
+	require.NoError(t, err)
+
+	blocker, err := testPool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = blocker.Rollback(ctx) }()
+	_, err = blocker.Exec(ctx, `SELECT id FROM tiers WHERE id=$1 FOR UPDATE`, tierID)
+	require.NoError(t, err)
+
+	repo := importdb.New(testPool)
+	consortium := model.SymbolRef{Authority: "ISIL", Symbol: "CON"}
+	member := model.SymbolRef{Authority: "ISIL", Symbol: "MEMBER"}
+	tier := model.TierAggregate{
+		Key:  model.TierKey{Consortium: consortium, Name: "Loan"},
+		Data: model.TierData{Level: "standard", Type: "loan", Entries: []model.SymbolRef{member}},
+	}
+	tierDone := make(chan error, 1)
+	go func() {
+		_, importErr := repo.ImportTier(ctx, tier, model.ConflictPolicyUpdate)
+		tierDone <- importErr
+	}()
+	waitForDatabaseLockWaiters(t, ctx, 1)
+
+	entry := minimalEntryAggregate("MEMBER", "Institution")
+	entry.Data.Parent = &consortium
+	entryDone := make(chan error, 1)
+	go func() {
+		_, importErr := repo.ImportEntry(ctx, entry, model.ConflictPolicyUpdate)
+		entryDone <- importErr
+	}()
+	waitForDatabaseLockWaiters(t, ctx, 2)
+
+	require.NoError(t, blocker.Commit(ctx))
+	require.NoError(t, <-tierDone)
+	require.NoError(t, <-entryDone)
+}
+
 func TestConcurrentImportTierSkipHonorsConflictPolicyForMissingKey(t *testing.T) {
 	repo, consortium, _, _ := importRepoFixture(t)
 	newAggregate := func() model.TierAggregate {
@@ -351,6 +631,54 @@ func TestImportNetworkConflictPoliciesAndUpdateReplacesAssignments(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, id, networkIDByKey(t, consortium, "Main"))
 	require.Equal(t, []model.SymbolRef{second}, networkAssignments(t, id))
+}
+
+func TestConcurrentEntryAndNetworkImportsUseSameEntryLockOrder(t *testing.T) {
+	resetImportDatabase(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	memberID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	consortiumID := uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")
+	networkID := uuid.New()
+	_, err := testPool.Exec(ctx, `INSERT INTO entries (id, name, type) VALUES ($1, 'Member', 'Institution'), ($2, 'Consortium', 'Consortium')`, memberID, consortiumID)
+	require.NoError(t, err)
+	_, err = testPool.Exec(ctx, `INSERT INTO symbols (owner, authority, symbol) VALUES ($1, 'ISIL', 'MEMBER'), ($2, 'ISIL', 'CON')`, memberID, consortiumID)
+	require.NoError(t, err)
+	_, err = testPool.Exec(ctx, `INSERT INTO networks (id, consortium, name, priority) VALUES ($1, $2, 'Main', 0)`, networkID, consortiumID)
+	require.NoError(t, err)
+
+	blocker, err := testPool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = blocker.Rollback(ctx) }()
+	_, err = blocker.Exec(ctx, `SELECT id FROM networks WHERE id=$1 FOR UPDATE`, networkID)
+	require.NoError(t, err)
+
+	repo := importdb.New(testPool)
+	consortium := model.SymbolRef{Authority: "ISIL", Symbol: "CON"}
+	member := model.SymbolRef{Authority: "ISIL", Symbol: "MEMBER"}
+	network := model.NetworkAggregate{
+		Key:  model.NetworkKey{Consortium: consortium, Name: "Main"},
+		Data: model.NetworkData{Priority: 1, Entries: []model.SymbolRef{member}},
+	}
+	networkDone := make(chan error, 1)
+	go func() {
+		_, importErr := repo.ImportNetwork(ctx, network, model.ConflictPolicyUpdate)
+		networkDone <- importErr
+	}()
+	waitForDatabaseLockWaiters(t, ctx, 1)
+
+	entry := minimalEntryAggregate("MEMBER", "Institution")
+	entry.Data.Parent = &consortium
+	entryDone := make(chan error, 1)
+	go func() {
+		_, importErr := repo.ImportEntry(ctx, entry, model.ConflictPolicyUpdate)
+		entryDone <- importErr
+	}()
+	waitForDatabaseLockWaiters(t, ctx, 2)
+
+	require.NoError(t, blocker.Commit(ctx))
+	require.NoError(t, <-networkDone)
+	require.NoError(t, <-entryDone)
 }
 
 func TestConcurrentImportNetworkSkipHonorsConflictPolicyForMissingKey(t *testing.T) {
@@ -463,6 +791,13 @@ func assertTierDoesNotExist(t *testing.T, consortium model.SymbolRef, name strin
 	require.Zero(t, count)
 }
 
+func lmsPatronProfiles(t *testing.T, entryID uuid.UUID) string {
+	t.Helper()
+	var profiles []byte
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT patron_profiles FROM lms_configs WHERE entry=$1`, entryID).Scan(&profiles))
+	return string(profiles)
+}
+
 func completeEntryAggregate(symbol string) model.EntryAggregate {
 	aggregate := minimalEntryAggregate(symbol, "Consortium")
 	text := "value"
@@ -521,6 +856,16 @@ func concurrentlyImportEntry(t *testing.T, newAggregate func() model.EntryAggreg
 	close(start)
 	waitGroup.Wait()
 	return results, errs
+}
+
+func waitForDatabaseLockWaiters(t *testing.T, ctx context.Context, minimum int) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		var count int
+		err := testPool.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity
+			WHERE datname=current_database() AND pid <> pg_backend_pid() AND wait_event_type='Lock'`).Scan(&count)
+		return err == nil && count >= minimum
+	}, 2*time.Second, 10*time.Millisecond)
 }
 
 func concurrentlyImportTier(repo *importdb.PgImportRepo, newAggregate func() model.TierAggregate, policy model.ConflictPolicy, count int) ([]model.RepoResult, []error) {

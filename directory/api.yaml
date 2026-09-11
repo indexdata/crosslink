@@ -1411,14 +1411,20 @@ components:
     ImportResult:
       type: object
       additionalProperties: false
-      required: [entries, tiers, networks, errors]
+      required: [entries, tiers, networks, errors, errorsOmitted]
       properties:
         entries: { $ref: '#/components/schemas/ImportSectionResult' }
         tiers: { $ref: '#/components/schemas/ImportSectionResult' }
         networks: { $ref: '#/components/schemas/ImportSectionResult' }
         errors:
           type: array
+          maxItems: 1000
           items: { $ref: '#/components/schemas/ImportItemError' }
+        errorsOmitted:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of additional error details omitted from the response.
 
     ImportSymbolRef:
       type: object
@@ -1491,7 +1497,7 @@ components:
     ImportLmsConfig:
       type: object
       additionalProperties: false
-      required: [address, fromAgency, fromAgencyAuthentication, toAgency, lookupUserEnabled, acceptItemEnabled, checkInItemEnabled, checkOutItemEnabled, itemLocation, requestItemRequestType, requestItemRequestScopeType, requestItemBibIdCode, requestItemEnabled, requestItemPickupLocationEnabled, requesterPickupLocation, supplierPickupLocation, requesterPatronPattern]
+      required: [address, fromAgency, fromAgencyAuthentication, toAgency, lookupUserEnabled, acceptItemEnabled, checkInItemEnabled, checkOutItemEnabled, itemLocation, requestItemRequestType, requestItemRequestScopeType, requestItemBibIdCode, requestItemEnabled, requestItemPickupLocationEnabled, requesterPickupLocation, supplierPickupLocation, requesterPatronPattern, patronProfiles]
       properties:
         address: { type: string }
         fromAgency: { type: string }
@@ -1510,6 +1516,9 @@ components:
         requesterPickupLocation: { type: string, nullable: true }
         supplierPickupLocation: { type: string, nullable: true }
         requesterPatronPattern: { type: string, nullable: true }
+        patronProfiles:
+          allOf: [{ $ref: '#/components/schemas/PatronProfiles' }]
+          nullable: true
 
     ImportIllConfig:
       type: object
