@@ -137,7 +137,7 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, *newPr.Id, foundPr.Id)
 	assert.True(t, foundPr.State != "")
 	assert.Equal(t, "default", foundPr.StateModel)
-	assert.Equal(t, string(prservice.SideBorrowing), foundPr.Side)
+	assert.Equal(t, proapi.PatronRequestSide(prservice.SideBorrowing), foundPr.Side)
 	if !assert.NotNil(t, foundPr.RequesterSymbol) {
 		t.FailNow()
 	}
@@ -900,7 +900,7 @@ func TestRejectRetry(t *testing.T) {
 
 	assert.Equal(t, *newPr.Id, foundPr.Id)
 	assert.True(t, foundPr.State != "")
-	assert.Equal(t, string(prservice.SideBorrowing), foundPr.Side)
+	assert.Equal(t, proapi.PatronRequestSide(prservice.SideBorrowing), foundPr.Side)
 	assert.Equal(t, *newPr.RequesterSymbol, *foundPr.RequesterSymbol)
 	assert.Nil(t, foundPr.SupplierSymbol)
 	assert.Equal(t, *newPr.Patron, *foundPr.Patron)
@@ -1024,7 +1024,7 @@ func TestAcceptRetry(t *testing.T) {
 
 	assert.Equal(t, id, foundPr.Id)
 	assert.True(t, foundPr.State != "")
-	assert.Equal(t, string(prservice.SideBorrowing), foundPr.Side)
+	assert.Equal(t, proapi.PatronRequestSide(prservice.SideBorrowing), foundPr.Side)
 	assert.Equal(t, *newPr.RequesterSymbol, *foundPr.RequesterSymbol)
 	assert.Nil(t, foundPr.SupplierSymbol)
 	assert.Equal(t, *newPr.Patron, *foundPr.Patron)
