@@ -979,15 +979,15 @@ func TestFilterAndSortAppliesHoldingsPolicy(t *testing.T) {
 }
 
 func TestFilterAndSortResolvesHoldingsPolicyForNonMatchingSuppliers(t *testing.T) {
-	networks := []dirapi.Network{{Name: strPtr("Reciprocal"), Priority: 1}}
+	networks := []dirapi.EntryNetworkDetails{{Name: strPtr("Reciprocal"), Priority: 1}}
 	tiers := []dirapi.Tier{{Name: strPtr("Core Loan"), Level: "Core", Type: "Loan", Cost: 0}}
 	requester := dirapi.Entry{Networks: &networks, Tiers: &tiers}
 	for _, tc := range []struct {
 		name     string
-		networks []dirapi.Network
+		networks []dirapi.EntryNetworkDetails
 		tiers    []dirapi.Tier
 	}{
-		{name: "no shared network", networks: []dirapi.Network{{Name: strPtr("Other"), Priority: 1}}, tiers: tiers},
+		{name: "no shared network", networks: []dirapi.EntryNetworkDetails{{Name: strPtr("Other"), Priority: 1}}, tiers: tiers},
 		{name: "no matching tier", networks: networks, tiers: []dirapi.Tier{{Type: "Copy", Cost: 0}}},
 		{name: "no matching cost", networks: networks, tiers: []dirapi.Tier{{Type: "Loan", Cost: 10}}},
 	} {
