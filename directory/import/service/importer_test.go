@@ -19,11 +19,15 @@ type recordingRepo struct {
 	entry        *model.EntryAggregate
 	result       model.RepoResult
 	err          error
+	beforeEntry  func()
 }
 
 func (r *recordingRepo) ImportEntry(_ context.Context, aggregate model.EntryAggregate, _ model.ConflictPolicy) (model.RepoResult, error) {
 	r.entryCalls++
 	r.entry = &aggregate
+	if r.beforeEntry != nil {
+		r.beforeEntry()
+	}
 	return r.result, r.err
 }
 
@@ -120,6 +124,50 @@ func TestImportReturnsFatalReaderError(t *testing.T) {
 
 	require.ErrorIs(t, err, fatal)
 	require.Empty(t, result.Errors)
+}
+
+func TestImportPropagatesRepositoryCancellation(t *testing.T) {
+	for name, fatal := range map[string]error{
+		"canceled": context.Canceled,
+		"deadline": context.DeadlineExceeded,
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo := &recordingRepo{err: fatal}
+			input := validEntryRecord() + "\n" + validEntryRecord()
+
+			result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(input))
+
+			require.ErrorIs(t, err, fatal)
+			require.Equal(t, 1, repo.entryCalls)
+			require.Zero(t, result.Entries.Failed)
+			require.Empty(t, result.Errors)
+		})
+	}
+}
+
+func TestImportPropagatesCanceledContextWhenRepositoryMasksCause(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	repo := &recordingRepo{err: errors.New("database operation failed"), beforeEntry: cancel}
+	input := validEntryRecord() + "\n" + validEntryRecord()
+
+	result, err := newTestImporter(t, repo).Import(ctx, model.ConflictPolicyFail, strings.NewReader(input))
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, 1, repo.entryCalls)
+	require.Zero(t, result.Entries.Failed)
+	require.Empty(t, result.Errors)
+}
+
+func TestImportStopsBeforeReadingWhenContextAlreadyCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
+
+	result, err := newTestImporter(t, repo).Import(ctx, model.ConflictPolicyFail, strings.NewReader(validEntryRecord()))
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.Zero(t, repo.entryCalls)
+	require.Zero(t, result.Entries.Imported)
 }
 
 func TestImportRejectsMissingAndUnknownProperties(t *testing.T) {

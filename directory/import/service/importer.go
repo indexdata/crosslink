@@ -61,7 +61,13 @@ func (i *Importer) Import(ctx context.Context, policy model.ConflictPolicy, inpu
 	var recordNumber int32
 
 	for {
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
 		line, readErr := reader.ReadSlice('\n')
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
 		if errors.Is(readErr, bufio.ErrBufferFull) {
 			return result, ErrRecordTooLarge
 		}
@@ -76,7 +82,9 @@ func (i *Importer) Import(ctx context.Context, policy model.ConflictPolicy, inpu
 		}
 		if len(bytes.TrimSpace(line)) != 0 {
 			recordNumber++
-			i.importRecord(ctx, policy, recordNumber, line, &result)
+			if err := i.importRecord(ctx, policy, recordNumber, line, &result); err != nil {
+				return result, err
+			}
 		}
 
 		if errors.Is(readErr, io.EOF) {
@@ -85,12 +93,15 @@ func (i *Importer) Import(ctx context.Context, policy model.ConflictPolicy, inpu
 	}
 }
 
-func (i *Importer) importRecord(ctx context.Context, policy model.ConflictPolicy, line int32, data []byte, result *model.ImportResult) {
+func (i *Importer) importRecord(ctx context.Context, policy model.ConflictPolicy, line int32, data []byte, result *model.ImportResult) error {
 	record, err := decodeRecord(data, i.recordSchemas)
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		incrementFailed(result, record.recordType)
 		appendError(result, line, record.recordType, record.key, err.Error())
-		return
+		return nil
 	}
 
 	var repoResult model.RepoResult
@@ -103,9 +114,18 @@ func (i *Importer) importRecord(ctx context.Context, policy model.ConflictPolicy
 		repoResult, err = i.repository.ImportNetwork(ctx, *record.network, policy)
 	}
 	if err != nil {
+		if isContextError(err) {
+			return err
+		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		incrementFailed(result, record.recordType)
 		appendError(result, line, record.recordType, record.key, err.Error())
-		return
+		return nil
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
 	}
 
 	switch repoResult.Outcome {
@@ -122,6 +142,11 @@ func (i *Importer) importRecord(ctx context.Context, policy model.ConflictPolicy
 		incrementFailed(result, record.recordType)
 		appendError(result, line, record.recordType, record.key, "repository returned an invalid import outcome")
 	}
+	return nil
+}
+
+func isContextError(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func incrementFailed(result *model.ImportResult, recordType string) {

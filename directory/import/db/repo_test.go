@@ -200,6 +200,43 @@ func TestConcurrentImportEntryUpdateHonorsConflictPolicyForMissingKey(t *testing
 	require.Equal(t, 1, entryCount(t))
 }
 
+func TestImportEntryLocksAndRevalidatesSecondarySymbols(t *testing.T) {
+	resetImportDatabase(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	repo := importdb.New(testPool)
+	owner := minimalEntryAggregate("OWNER", "Institution")
+	_, err := repo.ImportEntry(ctx, owner, model.ConflictPolicyFail)
+	require.NoError(t, err)
+	ownerID := entryIDBySymbol(t, owner.Key)
+
+	secondary := model.SymbolRef{Authority: "ISIL", Symbol: "SHARED"}
+	blocker, err := testPool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = blocker.Rollback(ctx) }()
+	_, err = blocker.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('directoryish:entry:ISIL:SHARED', 0))`)
+	require.NoError(t, err)
+
+	aggregate := minimalEntryAggregate("IMPORTED", "Institution")
+	aggregate.Data.Symbols = append(aggregate.Data.Symbols, secondary)
+	importDone := make(chan error, 1)
+	go func() {
+		_, importErr := repo.ImportEntry(ctx, aggregate, model.ConflictPolicyFail)
+		importDone <- importErr
+	}()
+	waitForDatabaseLockWaiters(t, ctx, 1)
+
+	_, err = blocker.Exec(ctx, `INSERT INTO symbols (owner, authority, symbol) VALUES ($1, $2, $3)`, ownerID, secondary.Authority, secondary.Symbol)
+	require.NoError(t, err)
+	require.NoError(t, blocker.Commit(ctx))
+
+	importErr := <-importDone
+	require.ErrorContains(t, importErr, "entry symbol ISIL:SHARED already belongs to another entry")
+	assertEntryDoesNotExist(t, aggregate.Key)
+	require.Equal(t, ownerID, entryIDBySymbol(t, secondary))
+}
+
 func TestConcurrentImportEntryOpposingParentsDoNotDeadlock(t *testing.T) {
 	resetImportDatabase(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
