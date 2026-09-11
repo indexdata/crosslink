@@ -1,5 +1,5 @@
 -- name: LockImportPatronRequest :one
-SELECT id, requester_req_id
+SELECT id, requester_req_id, side, requester_symbol, supplier_symbol
 FROM patron_request
 WHERE id = $1
 FOR UPDATE;

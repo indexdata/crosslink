@@ -221,6 +221,14 @@ BEGIN
 
         UNION ALL
 
+        SELECT 'request ' || pr_id || ': missing canonical supplier symbol'
+        FROM crosslink_open_requests
+        WHERE import_side = 'lending'
+          AND (nullif(btrim(pr_sup_inst_symbol), '') IS NULL
+               OR position(':' IN pr_sup_inst_symbol) = 0)
+
+        UNION ALL
+
         SELECT 'request ' || pr_id || ': unsupported or missing service type'
         FROM crosslink_open_requests
         WHERE import_service_type IS NULL
@@ -390,7 +398,6 @@ request_bundles AS (
                     'title', request.pr_title,
                     'itemId', request.pr_system_instance_id,
                     'lmsRequestId', request.pr_external_hold_request_id,
-                    'lmsItemId', request.pr_supplier_unique_record_id,
                     'createdAt', to_char(
                         request.pr_date_created,
                         'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'

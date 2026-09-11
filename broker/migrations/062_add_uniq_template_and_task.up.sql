@@ -1,3 +1,37 @@
+-- Prevent template writes from introducing an overlap between this preflight
+-- and installation of the row-level trigger below.
+LOCK TABLE template IN SHARE ROW EXCLUSIVE MODE;
+
+DO $$
+DECLARE
+    conflicts TEXT;
+BEGIN
+    WITH overlapping_labels AS (
+        SELECT t.owner, label_value.label
+        FROM template t
+        CROSS JOIN LATERAL unnest(t.labels) AS label_value(label)
+        WHERE label_value.label IS NOT NULL
+        GROUP BY t.owner, label_value.label
+        HAVING COUNT(DISTINCT t.id) > 1
+    ), overlaps_by_owner AS (
+        SELECT owner, ARRAY_AGG(label ORDER BY label) AS labels
+        FROM overlapping_labels
+        GROUP BY owner
+    )
+    SELECT STRING_AGG(
+        FORMAT('owner=%L labels=%s', owner, labels::TEXT),
+        '; ' ORDER BY owner
+    )
+    INTO conflicts
+    FROM overlaps_by_owner;
+
+    IF conflicts IS NOT NULL THEN
+        RAISE EXCEPTION 'Template label overlaps already exist: %', conflicts
+            USING ERRCODE = 'unique_violation';
+    END IF;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION check_template_owner_labels_unique()
     RETURNS trigger AS $$
 BEGIN

@@ -92,6 +92,65 @@ func TestImportPatronRequestInsertsAndSynchronizesCompleteBundle(t *testing.T) {
 	assert.Equal(t, "updated-patron", patron)
 }
 
+func TestImportPatronRequestUpdateRejectsIdentityChanges(t *testing.T) {
+	tests := []struct {
+		name    string
+		prepare func(*importdb.PatronRequestBundle)
+		mutate  func(*importdb.PatronRequestBundle)
+	}{
+		{
+			name:    "side",
+			prepare: func(*importdb.PatronRequestBundle) {},
+			mutate: func(bundle *importdb.PatronRequestBundle) {
+				bundle.PatronRequest.Side = "lending"
+			},
+		},
+		{
+			name:    "borrowing owner symbol",
+			prepare: func(*importdb.PatronRequestBundle) {},
+			mutate: func(bundle *importdb.PatronRequestBundle) {
+				bundle.PatronRequest.RequesterSymbol = pgtype.Text{String: "ISIL:OTHER-REQUESTER", Valid: true}
+			},
+		},
+		{
+			name: "lending owner symbol",
+			prepare: func(bundle *importdb.PatronRequestBundle) {
+				bundle.PatronRequest.Side = "lending"
+				bundle.PatronRequest.SupplierSymbol = pgtype.Text{String: "ISIL:SUPPLIER", Valid: true}
+			},
+			mutate: func(bundle *importdb.PatronRequestBundle) {
+				bundle.PatronRequest.SupplierSymbol = pgtype.Text{String: "ISIL:OTHER-SUPPLIER", Valid: true}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prefix := uuid.NewString()
+			bundle := testPatronBundle(prefix, prefix+"-request")
+			bundle.IllTransaction = nil
+			bundle.LocatedSuppliers = nil
+			tt.prepare(&bundle)
+			expectedSide := bundle.PatronRequest.Side
+			expectedRequesterSymbol := bundle.PatronRequest.RequesterSymbol
+			expectedSupplierSymbol := bundle.PatronRequest.SupplierSymbol
+			require.NoError(t, importOnly(bundle))
+
+			tt.mutate(&bundle)
+			_, err := importTestRepo.ImportPatronRequest(importTestCtx, bundle, importdb.ConflictPolicyUpdate)
+
+			var conflict *importdb.ConflictError
+			require.ErrorAs(t, err, &conflict)
+			var side string
+			var requesterSymbol, supplierSymbol pgtype.Text
+			require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT side, requester_symbol, supplier_symbol FROM patron_request WHERE id=$1", bundle.PatronRequest.ID).Scan(&side, &requesterSymbol, &supplierSymbol))
+			assert.Equal(t, string(expectedSide), side)
+			assert.Equal(t, expectedRequesterSymbol, requesterSymbol)
+			assert.Equal(t, expectedSupplierSymbol, supplierSymbol)
+		})
+	}
+}
+
 func TestImportPatronRequestCollisionRollsBackRoot(t *testing.T) {
 	prefix := uuid.NewString()
 	first := testPatronBundle(prefix+"-first", prefix+"-request-first")

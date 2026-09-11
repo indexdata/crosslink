@@ -80,6 +80,19 @@ func (r *PgImportRepo) ImportPatronRequest(ctx common.ExtendedContext, bundle Pa
 				if existing.RequesterReqID != bundle.PatronRequest.RequesterReqID {
 					return &ConflictError{Resource: "patron request", Identifier: bundle.PatronRequest.ID, Reason: "requester request ID does not match existing aggregate"}
 				}
+				if existing.Side != bundle.PatronRequest.Side {
+					return &ConflictError{Resource: "patron request", Identifier: bundle.PatronRequest.ID, Reason: "side does not match existing aggregate"}
+				}
+				switch existing.Side {
+				case pr_db.PatronRequestSide("borrowing"):
+					if existing.RequesterSymbol != bundle.PatronRequest.RequesterSymbol {
+						return &ConflictError{Resource: "patron request", Identifier: bundle.PatronRequest.ID, Reason: "requester symbol does not match existing aggregate owner"}
+					}
+				case pr_db.PatronRequestSide("lending"):
+					if existing.SupplierSymbol != bundle.PatronRequest.SupplierSymbol {
+						return &ConflictError{Resource: "patron request", Identifier: bundle.PatronRequest.ID, Reason: "supplier symbol does not match existing aggregate owner"}
+					}
+				}
 			default:
 				return fmt.Errorf("unsupported conflict policy %q", policy)
 			}
