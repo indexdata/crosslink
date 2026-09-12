@@ -353,8 +353,14 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 	if side != prservice.SideBorrowing && apiBundle.IllTransaction != nil {
 		return importdb.PatronRequestBundle{}, nil, errors.New("illTransaction is only allowed for borrowing patron requests")
 	}
-	if side == prservice.SideLending && (request.SupplierSymbol == nil || strings.TrimSpace(*request.SupplierSymbol) == "") {
-		return importdb.PatronRequestBundle{}, nil, errors.New("patronRequest.supplierSymbol is required for lending requests")
+	if side == prservice.SideLending {
+		if request.SupplierSymbol == nil || strings.TrimSpace(*request.SupplierSymbol) == "" {
+			return importdb.PatronRequestBundle{}, nil, errors.New("patronRequest.supplierSymbol is required for lending requests")
+		}
+		supplierSymbol := request.IllRequest.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + request.IllRequest.Header.SupplyingAgencyId.AgencyIdValue
+		if *request.SupplierSymbol != supplierSymbol {
+			return importdb.PatronRequestBundle{}, nil, errors.New("patronRequest.supplierSymbol must match illRequest.header.supplyingAgencyId for lending requests")
+		}
 	}
 	if i.stateValidator == nil {
 		return importdb.PatronRequestBundle{}, nil, errors.New("state validator is required")
