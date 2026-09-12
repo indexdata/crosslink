@@ -2054,19 +2054,9 @@ func (a *PatronRequestActionService) applyPickupLocationAddress(ctx common.Exten
 }
 
 func (a *PatronRequestActionService) pickupLocationEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest) (dirapi.Entry, error) {
-	id := uuid.UUID(pr.RequesterPickupLocationID.Bytes)
-	entries, _, err := a.directoryLookupAdapter.Lookup(ctx, adapter.DirectoryLookupParams{EntryID: id.String()})
+	peer, _, err := a.illRepo.GetCachedPeerByDirectoryEntryID(ctx, uuid.UUID(pr.RequesterPickupLocationID.Bytes), a.directoryLookupAdapter)
 	if err != nil {
 		return dirapi.Entry{}, err
 	}
-	var matches []dirapi.Entry
-	for _, entry := range entries {
-		if entry.CustomData.Id != nil && *entry.CustomData.Id == id {
-			matches = append(matches, entry.CustomData)
-		}
-	}
-	if len(matches) != 1 {
-		return dirapi.Entry{}, fmt.Errorf("pickup location %s: expected one directory entry, found %d", id, len(matches))
-	}
-	return matches[0], nil
+	return peer.CustomData, nil
 }

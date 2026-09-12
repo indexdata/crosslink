@@ -2,11 +2,11 @@ package prservice
 
 import (
 	"context"
+	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -31,6 +31,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 var appCtx = common.CreateExtCtxWithArgs(context.Background(), nil)
@@ -1175,12 +1176,14 @@ func TestHandleInvokeActionReceiveOK(t *testing.T) {
 			emailMock := new(EmailSenderMock)
 			emailMock.On("IsReadyToSend").Return(false)
 			prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, emailMock, nil, nil)
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, "/by-id/11111111-1111-4111-8111-111111111111", r.URL.Path)
-				_, _ = w.Write([]byte(`{"id":"11111111-1111-4111-8111-111111111111","name":"Branch","lmsConfig":{"requesterPickupLocation":"branch-1"}}`))
-			}))
-			defer server.Close()
-			prAction.directoryLookupAdapter = adapter.CreateApiDirectory(server.Client(), []string{server.URL})
+			pickupRepo := new(IllRepoMock)
+			if tt.selected.Valid {
+				var entry dirapi.Entry
+				require.NoError(t, json.Unmarshal([]byte(`{"id":"11111111-1111-4111-8111-111111111111","name":"Branch","lmsConfig":{"requesterPickupLocation":"branch-1"}}`), &entry))
+				pickupRepo.On("GetCachedPeerByDirectoryEntryID", uuid.UUID(tt.selected.Bytes), mock.Anything).Return(ill_db.Peer{CustomData: entry}, "<cached>", nil).Once()
+			}
+			prAction.illRepo = pickupRepo
+			t.Cleanup(func() { pickupRepo.AssertExpectations(t) })
 			illRequest := iso18626.Request{}
 			mockPrRepo.On("GetPatronRequestById", patronRequestId).Once().Return(pr_db.PatronRequest{ID: patronRequestId, RequesterPickupLocationID: tt.selected, IllRequest: illRequest, State: BorrowerStateShipped, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 			mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, RequesterPickupLocationID: tt.selected, IllRequest: illRequest, State: BorrowerStateReceived, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
@@ -5677,4 +5680,9 @@ func peerWithMetadataMode(mode *dirapi.MetadataUpdateMode) ill_db.Peer {
 	return ill_db.Peer{
 		CustomData: dirapi.Entry{Name: "test-peer", CatalogConfig: cc},
 	}
+}
+
+func (i *IllRepoMock) GetCachedPeerByDirectoryEntryID(ctx common.ExtendedContext, id uuid.UUID, directoryAdapter adapter.DirectoryLookupAdapter) (ill_db.Peer, string, error) {
+	args := i.Called(id, directoryAdapter)
+	return args.Get(0).(ill_db.Peer), args.String(1), args.Error(2)
 }

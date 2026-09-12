@@ -241,3 +241,8 @@ SELECT archive_ill_transaction_by_date_and_status($1, $2);
 SELECT sqlc.embed(branch_symbol)
 FROM branch_symbol b
 WHERE b.peer_id = $1 AND b.symbol_value not in (SELECT s.symbol_value FROM symbol s);
+
+-- name: GetPeerByDirectoryEntryId :one
+SELECT sqlc.embed(peer)
+FROM peer
+WHERE custom_data ->> 'id' = sqlc.arg(directory_entry_id)::text;

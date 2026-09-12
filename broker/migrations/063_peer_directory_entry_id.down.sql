@@ -1,0 +1,1 @@
+DROP INDEX peer_directory_entry_id_idx;
