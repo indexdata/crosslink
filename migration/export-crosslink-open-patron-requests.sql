@@ -8,6 +8,7 @@
 --   psql "$DATABASE_URL" \
 --     --set=ON_ERROR_STOP=1 \
 --     --set=owner='ISIL:US-RS1' \
+--     --set=broker='ISIL:BROKER' \
 --     --file=migration/export-crosslink-open-patron-requests.sql \
 --     --quiet --tuples-only --no-align \
 --     > crosslink-open-patron-requests.ndjson
@@ -21,6 +22,8 @@
 --   * Standard mod-rs, nonreturnable, and SLNP states are mapped to the closest
 --     state in CrossLink's "default" model. Review the mapping below before use.
 --   * The ISO18626 request is reconstructed from normalized mod-rs columns.
+--     Unsourced borrowing requests use the configured CrossLink broker symbol
+--     as the required supplying agency without acquiring a supplier assignment.
 --   * A selected item is emitted only when pr_selected_item_barcode is present.
 --   * Borrowing requests include a synthesized ILL transaction and their rota as
 --     located suppliers. Lending requests must not include an ILL transaction.
@@ -34,6 +37,23 @@
 -- an open request has an unmapped state or is missing required import data.
 
 \set ON_ERROR_STOP on
+
+\if :{?broker}
+\else
+\set broker ''
+\endif
+
+SELECT :'broker' = btrim(:'broker')
+   AND position(':' IN :'broker') > 1
+   AND regexp_replace(:'broker', '^[^:]+:', '') <> ''
+    AS crosslink_broker_symbol_valid
+\gset
+
+\if :crosslink_broker_symbol_valid
+\else
+\warn Invalid or missing broker symbol. Re-run with --set=broker=AUTHORITY:VALUE.
+SELECT 1 / 0;
+\endif
 
 BEGIN;
 
@@ -180,7 +200,15 @@ SELECT
         WHEN patron_request.pr_is_requester IS NOT TRUE
             THEN patron_request.pr_id
         ELSE patron_request.pr_peer_request_identifier
-    END AS import_supplier_request_id
+    END AS import_supplier_request_id,
+    CASE
+        WHEN patron_request.pr_is_requester IS TRUE
+            THEN coalesce(
+                nullif(btrim(patron_request.pr_sup_inst_symbol), ''),
+                :'broker'
+            )
+        ELSE patron_request.pr_sup_inst_symbol
+    END AS import_supplying_agency_symbol
 FROM patron_request
 JOIN crosslink_request_ids AS request_identity
   ON request_identity.legacy_id = patron_request.pr_id
@@ -291,18 +319,16 @@ WITH request_payloads AS (
                         request.pr_req_inst_symbol, '^[^:]+:', ''
                     )
                 ),
-                'supplyingAgencyId', CASE
-                    WHEN nullif(btrim(request.pr_sup_inst_symbol), '') IS NULL
-                        THEN NULL
-                    ELSE jsonb_build_object(
-                        'agencyIdType', jsonb_build_object(
-                            '#text', split_part(request.pr_sup_inst_symbol, ':', 1)
-                        ),
-                        'agencyIdValue', regexp_replace(
-                            request.pr_sup_inst_symbol, '^[^:]+:', ''
+                'supplyingAgencyId', jsonb_build_object(
+                    'agencyIdType', jsonb_build_object(
+                        '#text', split_part(
+                            request.import_supplying_agency_symbol, ':', 1
                         )
+                    ),
+                    'agencyIdValue', regexp_replace(
+                        request.import_supplying_agency_symbol, '^[^:]+:', ''
                     )
-                END,
+                ),
                 'multipleItemRequestId', request.pr_id,
                 'timestamp', to_char(
                     request.pr_date_created,

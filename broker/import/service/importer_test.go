@@ -218,6 +218,43 @@ func TestImportPatronRequestRejectsRequesterRequestIDDifferentFromISOHeader(t *t
 	assert.Zero(t, repo.patronCalls)
 }
 
+func TestImportPatronRequestRejectsRequesterSymbolMismatches(t *testing.T) {
+	tests := []struct {
+		name   string
+		want   string
+		mutate func(map[string]any)
+	}{
+		{
+			name: "patron request differs from ISO header",
+			want: "patronRequest.requesterSymbol must match illRequest.header.requestingAgencyId",
+			mutate: func(bundle map[string]any) {
+				bundle["patronRequest"].(map[string]any)["requesterSymbol"] = "ISIL:OTHER"
+			},
+		},
+		{
+			name: "ILL transaction differs from ISO header",
+			want: "illTransaction.requesterSymbol must match illRequest.header.requestingAgencyId",
+			mutate: func(bundle map[string]any) {
+				bundle["illTransaction"].(map[string]any)["requesterSymbol"] = "ISIL:OTHER"
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &recordingImportRepo{}
+			cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+			importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
+			data := mutatePatronBundleData(t, tt.mutate)
+
+			_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+
+			require.ErrorContains(t, err, tt.want)
+			assert.Zero(t, repo.patronCalls)
+		})
+	}
+}
+
 func TestImportPatronRequestRejectsBorrowingIDDifferentFromRequesterRequestID(t *testing.T) {
 	repo := &recordingImportRepo{}
 	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
