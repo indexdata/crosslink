@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/common"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/stretchr/testify/assert"
@@ -63,4 +64,27 @@ func TestMockFilterAndSortAppliesHoldingsPolicy(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMockDirectoryLookupByEntryID(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	id := uuid.New()
+	adapter := &MockDirectoryLookupAdapter{}
+	for _, params := range []DirectoryLookupParams{
+		{EntryID: id.String()},
+		{EntryID: id.String(), Symbols: []string{"error"}, Tenant: "tenanterror"},
+	} {
+		entries, query, err := adapter.Lookup(ctx, params)
+		require.NoError(t, err)
+		require.Len(t, entries, 1)
+		require.Equal(t, "/by-id/"+id.String(), query)
+		entry := entries[0]
+		require.Equal(t, id, *entry.CustomData.Id)
+		require.Equal(t, MOCK_PEER_URL, entry.URL)
+		require.NotNil(t, entry.CustomData.LmsConfig)
+		require.Equal(t, id.String(), *entry.CustomData.LmsConfig.RequesterPickupLocation)
+		require.NotEmpty(t, common.DirectoryShippingAddress(entry.CustomData).Line1)
+	}
+	_, _, err := adapter.Lookup(ctx, DirectoryLookupParams{EntryID: "invalid"})
+	require.ErrorContains(t, err, "invalid directory entry ID")
 }

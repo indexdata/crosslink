@@ -430,16 +430,34 @@ func (r *PgIllRepo) createNewPeer(ctx common.ExtendedContext, dirEntry adapter.D
 	var peer Peer
 	var err error
 	err = r.WithTxFunc(ctx, func(illRepo IllRepo) error {
-		peer, err = illRepo.SavePeer(ctx, SavePeerParams{
-			ID:            uuid.New().String(),
-			Url:           dirEntry.URL,
-			Name:          dirEntry.Name,
-			RefreshPolicy: RefreshPolicyTransaction,
-			RefreshTime:   GetPgNow(),
-			Vendor:        string(dirEntry.Vendor),
-			CustomData:    dirEntry.CustomData,
-			BrokerMode:    string(dirEntry.BrokerMode),
-		})
+		if dirEntry.CustomData.Id != nil {
+			txRepo := illRepo.(*PgIllRepo)
+			row, createErr := txRepo.queries.CreateDirectoryPeer(ctx, txRepo.GetConnOrTx(), CreateDirectoryPeerParams{
+				ID: uuid.NewString(), Name: dirEntry.Name, Url: dirEntry.URL,
+				RefreshPolicy: RefreshPolicyTransaction, RefreshTime: GetPgNow(),
+				Vendor: string(dirEntry.Vendor), BrokerMode: string(dirEntry.BrokerMode), CustomData: dirEntry.CustomData,
+			})
+			if errors.Is(createErr, pgx.ErrNoRows) {
+				// The conflicting insert has committed. A new statement sees that winner,
+				// including when it was created by a concurrent symbol lookup.
+				existing, lookupErr := txRepo.queries.GetPeerByDirectoryEntryId(ctx, txRepo.GetConnOrTx(), dirEntry.CustomData.Id.String())
+				peer = existing.Peer
+				return lookupErr
+			}
+			peer, err = row.Peer, createErr
+		} else {
+			peer, err = illRepo.SavePeer(ctx, SavePeerParams{
+				ID:            uuid.New().String(),
+				Url:           dirEntry.URL,
+				Name:          dirEntry.Name,
+				RefreshPolicy: RefreshPolicyTransaction,
+				RefreshTime:   GetPgNow(),
+				Vendor:        string(dirEntry.Vendor),
+				CustomData:    dirEntry.CustomData,
+				BrokerMode:    string(dirEntry.BrokerMode),
+			})
+		}
+
 		if err != nil {
 			ctx.Logger().Warn("could not save peer", "peerId", peer.ID, "symbols", dirEntry.Symbols, "error", err)
 			return err

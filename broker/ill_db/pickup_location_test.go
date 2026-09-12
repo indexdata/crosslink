@@ -3,13 +3,19 @@ package ill_db
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	dirapi "github.com/indexdata/crosslink/directory/api"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -112,4 +118,135 @@ func TestDirectoryEntryCacheRejectsInvalidResponses(t *testing.T) {
 			require.Error(t, err)
 		})
 	}
+}
+
+func TestMockDirectoryPickupLocationCache(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	id := uuid.New()
+	directory := &adapter.MockDirectoryLookupAdapter{}
+	peer, _, err := illRepo.GetCachedPeerByDirectoryEntryID(ctx, id, directory)
+	require.NoError(t, err)
+	require.Equal(t, id, *peer.CustomData.Id)
+	require.NotEmpty(t, common.DirectoryShippingAddress(peer.CustomData).Line1)
+	require.NotEmpty(t, *peer.CustomData.LmsConfig.RequesterPickupLocation)
+	cached, query, err := illRepo.GetCachedPeerByDirectoryEntryID(ctx, id, directory)
+	require.NoError(t, err)
+	require.Equal(t, "<cached>", query)
+	require.Equal(t, peer, cached)
+}
+
+func TestConcurrentDirectoryPeerCreation(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	id := uuid.New()
+	const workers = 8
+	var arrived atomic.Int32
+	ready := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if arrived.Add(1) == workers {
+			close(ready)
+		}
+		select {
+		case <-ready:
+		case <-r.Context().Done():
+			return
+		}
+		entry := dirapi.Entry{Id: &id, Name: "Concurrent pickup location", Symbols: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: id.String()}}}
+		if r.URL.Query().Get("cql") != "" {
+			require.NoError(t, json.NewEncoder(w).Encode(dirapi.EntriesResponse{Items: []dirapi.Entry{entry}}))
+		} else {
+			require.NoError(t, json.NewEncoder(w).Encode(entry))
+		}
+	}))
+	defer server.Close()
+	da := createDirectoryAdapter(server.URL)
+	type result struct {
+		peer Peer
+		err  error
+	}
+	results := make(chan result, workers)
+	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	lookupCtx := common.CreateExtCtxWithArgs(timeoutCtx, nil)
+	for worker := range workers {
+		go func() {
+			if worker%2 == 0 {
+				peers, _, err := illRepo.GetCachedPeersBySymbols(lookupCtx, []string{"ISIL:" + id.String()}, da)
+				if err == nil && len(peers) != 1 {
+					err = errors.New("expected one cached peer")
+				}
+				peer := Peer{}
+				if len(peers) == 1 {
+					peer = peers[0]
+				}
+				results <- result{peer, err}
+			} else {
+				peer, _, err := illRepo.GetCachedPeerByDirectoryEntryID(lookupCtx, id, da)
+				results <- result{peer, err}
+			}
+		}()
+	}
+	var peerID string
+	for range workers {
+		result := <-results
+		require.NoError(t, result.err)
+		if peerID == "" {
+			peerID = result.peer.ID
+		}
+		require.Equal(t, peerID, result.peer.ID)
+	}
+	var count int
+	err := illRepo.(*PgIllRepo).Pool.QueryRow(ctx, "SELECT count(*) FROM peer WHERE custom_data ->> 'id' = $1", id.String()).Scan(&count)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+}
+
+func TestDeduplicateDirectoryPeersMigration(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	tx, err := illRepo.(*PgIllRepo).Pool.Begin(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+	_, err = tx.Exec(ctx, "DROP INDEX peer_directory_entry_id_idx; CREATE INDEX peer_directory_entry_id_idx ON peer ((custom_data ->> 'id'))")
+	require.NoError(t, err)
+	id := uuid.NewString()
+	// Equal timestamps exercise the deterministic local-ID tiebreaker.
+	_, err = tx.Exec(ctx, `INSERT INTO peer (id, name, refresh_policy, refresh_time, url, vendor, broker_mode, custom_data, loans_count, borrows_count)
+ VALUES ('dedup-a', 'Survivor', 'never', '2026-01-01', '', '', '', jsonb_build_object('id', $1::text), 2, 3),
+        ('dedup-b', 'Duplicate', 'transaction', '2026-01-01', '', '', '', jsonb_build_object('id', $1::text), 5, 7)`, id)
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, `INSERT INTO symbol VALUES ('dedup-symbol', 'dedup-b'); INSERT INTO branch_symbol VALUES ('dedup-branch', 'dedup-b')`)
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, `INSERT INTO ill_transaction (id, timestamp, requester_id, ill_transaction_data)
+        VALUES ('dedup-transaction', now(), 'dedup-b', '{}');
+        INSERT INTO located_supplier (id, ill_transaction_id, supplier_id, supplier_symbol)
+        VALUES ('dedup-supplier', 'dedup-transaction', 'dedup-b', 'dedup-symbol')`)
+	require.NoError(t, err)
+	migration, err := os.ReadFile("../migrations/064_unique_peer_directory_entry_id.up.sql")
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, string(migration))
+	require.NoError(t, err)
+	var survivor, name, policy string
+	var loans, borrows int
+	err = tx.QueryRow(ctx, "SELECT id, name, refresh_policy, loans_count, borrows_count FROM peer WHERE custom_data ->> 'id' = $1", id).Scan(&survivor, &name, &policy, &loans, &borrows)
+	require.NoError(t, err)
+	require.Equal(t, "dedup-a", survivor)
+	require.Equal(t, "Survivor", name)
+	require.Equal(t, "never", policy)
+	require.Equal(t, 7, loans)
+	require.Equal(t, 10, borrows)
+	for _, table := range []string{"symbol", "branch_symbol"} {
+		var peerID string
+		err = tx.QueryRow(ctx, "SELECT peer_id FROM "+table+" WHERE peer_id = 'dedup-a'").Scan(&peerID)
+		require.NoError(t, err)
+	}
+	var requesterID, supplierID string
+	require.NoError(t, tx.QueryRow(ctx, "SELECT requester_id FROM ill_transaction WHERE id = 'dedup-transaction'").Scan(&requesterID))
+	require.NoError(t, tx.QueryRow(ctx, "SELECT supplier_id FROM located_supplier WHERE id = 'dedup-supplier'").Scan(&supplierID))
+	require.Equal(t, survivor, requesterID)
+	require.Equal(t, survivor, supplierID)
+	// The unique index rejects duplicates even outside the cache creation helper.
+	_, err = tx.Exec(ctx, `INSERT INTO peer (id, name, refresh_policy, url, vendor, broker_mode, custom_data)
+ VALUES ('dedup-c', '', '', '', '', '', jsonb_build_object('id', $1::text))`, id)
+	require.Error(t, err)
+	require.True(t, errors.As(err, new(*pgconn.PgError)))
+	require.Equal(t, "23505", err.(*pgconn.PgError).Code)
 }

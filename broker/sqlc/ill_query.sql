@@ -246,3 +246,9 @@ WHERE b.peer_id = $1 AND b.symbol_value not in (SELECT s.symbol_value FROM symbo
 SELECT sqlc.embed(peer)
 FROM peer
 WHERE custom_data ->> 'id' = sqlc.arg(directory_entry_id)::text;
+
+-- name: CreateDirectoryPeer :one
+INSERT INTO peer (id, name, refresh_policy, refresh_time, url, vendor, broker_mode, custom_data)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT ((custom_data ->> 'id')) DO NOTHING
+RETURNING sqlc.embed(peer);
