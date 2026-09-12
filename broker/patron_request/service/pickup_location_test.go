@@ -80,3 +80,90 @@ func pickupID(id string) pgtype.UUID {
 	}
 	return pgtype.UUID{Bytes: uuid.MustParse(id), Valid: true}
 }
+
+func TestPickupLocationTenantValidation(t *testing.T) {
+	for _, query := range []string{"<cached>", "/by-id/entry"} {
+		t.Run(query, func(t *testing.T) {
+			for _, tc := range []struct {
+				name          string
+				requestTenant pgtype.Text
+				entryTenant   *string
+				allowed       bool
+			}{
+				{name: "same tenant", requestTenant: pgtype.Text{String: "tenant-a", Valid: true}, entryTenant: new("tenant-a"), allowed: true},
+				{name: "different tenant", requestTenant: pgtype.Text{String: "tenant-a", Valid: true}, entryTenant: new("tenant-b")},
+				{name: "missing entry tenant", requestTenant: pgtype.Text{String: "tenant-a", Valid: true}},
+				{name: "empty entry tenant", requestTenant: pgtype.Text{String: "tenant-a", Valid: true}, entryTenant: new("")},
+				{name: "normalized request tenant", requestTenant: pgtype.Text{String: " tenant-a ", Valid: true}, entryTenant: new("tenant-a"), allowed: true},
+				{name: "standalone request", allowed: true},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					id := uuid.New()
+					entry := dirapi.Entry{Id: &id, Name: "Branch", Tenant: tc.entryTenant}
+					pickupRepo := new(IllRepoMock)
+					pickupRepo.On("GetCachedPeerByDirectoryEntryID", id, mock.Anything).Return(ill_db.Peer{CustomData: entry}, query, nil).Once()
+					service := PatronRequestActionService{illRepo: pickupRepo}
+					result, err := service.pickupLocationEntry(appCtx, pr_db.PatronRequest{
+						Tenant:                    tc.requestTenant,
+						RequesterPickupLocationID: pgtype.UUID{Bytes: id, Valid: true},
+					})
+					if tc.allowed {
+						require.NoError(t, err)
+						require.Equal(t, entry, result)
+					} else {
+						require.ErrorContains(t, err, "does not belong to request tenant")
+						require.Equal(t, dirapi.Entry{}, result)
+					}
+					pickupRepo.AssertExpectations(t)
+				})
+			}
+		})
+	}
+}
+
+func TestPickupLocationInheritedTenant(t *testing.T) {
+	childID, parentID, grandparentID := uuid.New(), uuid.New(), uuid.New()
+	for _, tc := range []struct {
+		name        string
+		childTenant *string
+		parents     []dirapi.Entry
+		lookupError error
+		allowed     bool
+	}{
+		{name: "parent tenant", parents: []dirapi.Entry{{Id: &parentID, Tenant: new("tenant-a")}}, allowed: true},
+		{name: "empty child tenant inherits", childTenant: new(""), parents: []dirapi.Entry{{Id: &parentID, Tenant: new("tenant-a")}}, allowed: true},
+		{name: "grandparent tenant", parents: []dirapi.Entry{{Id: &parentID, Parent: &grandparentID}, {Id: &grandparentID, Tenant: new("tenant-a")}}, allowed: true},
+		{name: "different parent tenant", parents: []dirapi.Entry{{Id: &parentID, Tenant: new("tenant-b")}}},
+		{name: "explicit child mismatch stops inheritance", childTenant: new("tenant-b")},
+		{name: "explicit child match needs no parent", childTenant: new("tenant-a"), allowed: true},
+		{name: "nearest parent mismatch stops inheritance", parents: []dirapi.Entry{{Id: &parentID, Parent: &grandparentID, Tenant: new("tenant-b")}}},
+		{name: "no tenant on ancestors", parents: []dirapi.Entry{{Id: &parentID}}},
+		{name: "missing parent", lookupError: errors.New("parent not found"), parents: []dirapi.Entry{{Id: &parentID}}},
+		{name: "parent cycle", parents: []dirapi.Entry{{Id: &parentID, Parent: &childID}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			child := dirapi.Entry{Id: &childID, Name: "Selected branch", Parent: &parentID, Tenant: tc.childTenant,
+				LmsConfig: &dirapi.LmsConfig{RequesterPickupLocation: new("branch-1")},
+			}
+			pickupRepo := new(IllRepoMock)
+			pickupRepo.On("GetCachedPeerByDirectoryEntryID", childID, mock.Anything).Return(ill_db.Peer{CustomData: child}, "<cached>", nil).Once()
+			for _, parent := range tc.parents {
+				pickupRepo.On("GetCachedPeerByDirectoryEntryID", *parent.Id, mock.Anything).Return(ill_db.Peer{CustomData: parent}, "<cached>", tc.lookupError).Once()
+			}
+			service := PatronRequestActionService{illRepo: pickupRepo}
+			result, err := service.pickupLocationEntry(appCtx, pr_db.PatronRequest{
+				Tenant:                    pgtype.Text{String: "tenant-a", Valid: true},
+				RequesterPickupLocationID: pgtype.UUID{Bytes: childID, Valid: true},
+			})
+			if tc.allowed {
+				require.NoError(t, err)
+				// Tenant inheritance must not replace the selected branch's pickup data.
+				require.Equal(t, child, result)
+			} else {
+				require.Error(t, err)
+				require.Equal(t, dirapi.Entry{}, result)
+			}
+			pickupRepo.AssertExpectations(t)
+		})
+	}
+}

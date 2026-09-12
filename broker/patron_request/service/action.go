@@ -2058,5 +2058,26 @@ func (a *PatronRequestActionService) pickupLocationEntry(ctx common.ExtendedCont
 	if err != nil {
 		return dirapi.Entry{}, err
 	}
+	// The peer cache is shared across tenants, so validate ownership even on cache hits.
+	if requestTenant := strings.TrimSpace(pr.Tenant.String); requestTenant != "" {
+		owner := peer.CustomData
+		visited := map[uuid.UUID]bool{uuid.UUID(pr.RequesterPickupLocationID.Bytes): true}
+		// An explicit tenant takes precedence over inherited ownership.
+		for (owner.Tenant == nil || *owner.Tenant == "") && owner.Parent != nil {
+			parentID := *owner.Parent
+			if visited[parentID] {
+				return dirapi.Entry{}, fmt.Errorf("pickup location %s: cycle in directory parent chain", uuid.UUID(pr.RequesterPickupLocationID.Bytes))
+			}
+			visited[parentID] = true
+			parent, _, err := a.illRepo.GetCachedPeerByDirectoryEntryID(ctx, parentID, a.directoryLookupAdapter)
+			if err != nil {
+				return dirapi.Entry{}, fmt.Errorf("pickup location %s: cannot resolve parent tenant: %w", uuid.UUID(pr.RequesterPickupLocationID.Bytes), err)
+			}
+			owner = parent.CustomData
+		}
+		if owner.Tenant == nil || *owner.Tenant != requestTenant {
+			return dirapi.Entry{}, fmt.Errorf("pickup location %s does not belong to request tenant %q", uuid.UUID(pr.RequesterPickupLocationID.Bytes), requestTenant)
+		}
+	}
 	return peer.CustomData, nil
 }
