@@ -34,7 +34,6 @@ import (
 var mockEventBus = new(MockEventBus)
 var mockEventRepo = new(mocks.MockEventRepositorySuccess)
 var symbol = "ISIL:REQ"
-var lendingString = string(prservice.SideLending)
 var proapiBorrowingSide = proapi.Side(prservice.SideBorrowing)
 var proapiLendingSide = proapi.Side(prservice.SideLending)
 
@@ -166,7 +165,7 @@ func TestGetPatronRequests(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	params := proapi.GetPatronRequestsParams{
-		Side:   &lendingString,
+		Side:   &proapiLendingSide,
 		Symbol: &symbol,
 	}
 	handler.GetPatronRequests(rr, req, params)
@@ -206,7 +205,7 @@ func TestGetPatronRequestsNoSymbol(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	params := proapi.GetPatronRequestsParams{
-		Side: &lendingString,
+		Side: &proapiLendingSide,
 	}
 	handler.GetPatronRequests(rr, req, params)
 	assert.Equal(t, http.StatusOK, rr.Code)
@@ -225,7 +224,7 @@ func TestGetPatronRequestsWithLimits(t *testing.T) {
 	limit := proapi.Limit(10)
 	cql := "state = NEW"
 	params := proapi.GetPatronRequestsParams{
-		Side:   &lendingString,
+		Side:   &proapiLendingSide,
 		Symbol: &symbol,
 		Offset: &offset,
 		Limit:  &limit,
@@ -243,7 +242,7 @@ func TestGetPatronRequestsWithRequesterReqId(t *testing.T) {
 	rr := httptest.NewRecorder()
 	requesterReqID := "req-123"
 	params := proapi.GetPatronRequestsParams{
-		Side:           &lendingString,
+		Side:           &proapiLendingSide,
 		Symbol:         &symbol,
 		RequesterReqId: &requesterReqID,
 	}
@@ -817,7 +816,7 @@ func TestGetPatronRequestsIdNotificationsWithKindFilter(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 
-	kind := proapi.GetPatronRequestsIdNotificationsParamsKind(proapi.PrNotificationKindCondition)
+	kind := proapi.NotificationKind("condition")
 	limit := proapi.Limit(5)
 	offset := proapi.Offset(2)
 	handler.GetPatronRequestsIdNotifications(rr, req, "3", proapi.GetPatronRequestsIdNotificationsParams{
@@ -840,7 +839,7 @@ func TestGetPatronRequestsIdNotificationsWithKindFilter(t *testing.T) {
 	err := json.Unmarshal(rr.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	if assert.Len(t, response.Items, 1) {
-		assert.Equal(t, proapi.PrNotificationKindCondition, response.Items[0].Kind)
+		assert.Equal(t, proapi.NotificationKind("condition"), response.Items[0].Kind)
 		assert.Equal(t, "NoReproduction", *response.Items[0].Condition)
 		assert.Equal(t, "please do not copy", *response.Items[0].Note)
 	}

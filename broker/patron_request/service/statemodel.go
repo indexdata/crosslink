@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 )
 
@@ -77,6 +78,46 @@ func (s *StateModelService) GetStateModel(modelName string) (*proapi.StateModel,
 	}
 	s.stateMap[modelName] = stateModel
 	return stateModel, nil
+}
+
+// ValidateImportState verifies that an imported patron-request state belongs to
+// the selected state model, request side, and service type. It returns the
+// model's terminal flag so callers do not need to trust imported derived data.
+func (s *StateModelService) ValidateImportState(
+	modelName string,
+	serviceType proapi.StateModelServiceType,
+	side pr_db.PatronRequestSide,
+	state pr_db.PatronRequestState,
+) (bool, error) {
+	stateModel, err := s.GetStateModel(modelName)
+	if err != nil {
+		return false, fmt.Errorf("load state model %q: %w", modelName, err)
+	}
+	if stateModel == nil {
+		return false, fmt.Errorf("state model %q not found", modelName)
+	}
+
+	var modelSide proapi.ModelStateSide
+	switch side {
+	case SideBorrowing:
+		modelSide = proapi.REQUESTER
+	case SideLending:
+		modelSide = proapi.SUPPLIER
+	default:
+		return false, fmt.Errorf("unsupported patron request side %q", side)
+	}
+
+	for _, modelState := range stateModel.States {
+		if modelState.Name == string(state) && modelState.Side == modelSide &&
+			appliesToServiceType(modelState.AppliesTo, serviceType) {
+			return modelState.Terminal != nil && *modelState.Terminal, nil
+		}
+	}
+
+	return false, fmt.Errorf(
+		"state %q is not supported by state model %q for side %q and service type %q",
+		state, modelName, side, serviceType,
+	)
 }
 
 func (s *StateModelService) GetActionMapping(modelName string, serviceType proapi.StateModelServiceType) (*ActionMapping, error) {

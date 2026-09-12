@@ -31,7 +31,8 @@ SQL_GEN_OUT_EVENT = events/event_db_gen.go events/event_models_gen.go events/eve
 SQL_GEN_OUT_PR = patron_request/db/pr_db_gen.go patron_request/db/pr_models_gen.go patron_request/db/pr_query.sql_gen.go
 SQL_GEN_OUT_PS = pullslip/db/ps_db_gen.go pullslip/db/ps_models_gen.go pullslip/db/ps_query.sql_gen.go
 SQL_GEN_OUT_SCHED = scheduler/db/sched_db_gen.go scheduler/db/sched_models_gen.go scheduler/db/sched_query.sql_gen.go
-SQL_GEN_OUT = $(SQL_GEN_OUT_ILL_DB) $(SQL_GEN_OUT_EVENT) $(SQL_GEN_OUT_PR) $(SQL_GEN_OUT_PS) $(SQL_GEN_OUT_SCHED)
+SQL_GEN_OUT_IMPORT = import/db/import_db_gen.go import/db/import_models_gen.go import/db/import_query.sql_gen.go
+SQL_GEN_OUT = $(SQL_GEN_OUT_ILL_DB) $(SQL_GEN_OUT_EVENT) $(SQL_GEN_OUT_PR) $(SQL_GEN_OUT_PS) $(SQL_GEN_OUT_SCHED) $(SQL_GEN_OUT_IMPORT)
 SQL_GEN_IN = sqlc/*.sql
 
 # OpenAPI
@@ -61,6 +62,12 @@ SCHED_OAPI_CFG = $(SCHED_OAPI_DIR)/sched-cfg.yaml
 SCHED_OAPI_SPEC = $(SCHED_OAPI_DIR)/open-api.yaml
 SCHED_OAPI_GEN = scheduler/oapi/sched_openapi_gen.go
 
+# Import OpenAPI
+IMPORT_OAPI_DIR=oapi
+IMPORT_OAPI_CFG = $(IMPORT_OAPI_DIR)/import-cfg.yaml
+IMPORT_OAPI_SPEC = $(IMPORT_OAPI_DIR)/open-api.yaml
+IMPORT_OAPI_GEN = import/oapi/import_openapi_gen.go
+
 .PHONY: all docker generate generate-sqlc generate-api generate-commit-id check run fmt fmt-check clean clean-build-caches view-coverage deps-update tools-update lint vulncheck check-coverage
 
 all: $(BINARY) archive
@@ -74,7 +81,7 @@ generate-commit-id: $(COMMIT_ID)
 
 generate-sqlc: $(SQL_GEN_OUT)
 
-generate-api: $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN)
+generate-api: $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(IMPORT_OAPI_GEN)
 
 $(STATE_MODELS_JSON): $(STATE_MODELS_YAML)
 	mkdir -p $(@D)
@@ -93,16 +100,19 @@ $(PS_OAPI_GEN): $(PS_OAPI_CFG) $(PS_OAPI_SPEC)
 $(SCHED_OAPI_GEN): $(SCHED_OAPI_CFG) $(SCHED_OAPI_SPEC)
 	$(OAPI_CODEGEN) -config ./$(SCHED_OAPI_CFG) ./$(SCHED_OAPI_SPEC)
 
+$(IMPORT_OAPI_GEN): $(IMPORT_OAPI_CFG) $(IMPORT_OAPI_SPEC) $(OAPI_OVERLAY)
+	$(OAPI_CODEGEN) -config ./$(IMPORT_OAPI_CFG) ./$(IMPORT_OAPI_SPEC)
+
 $(SQL_GEN_OUT): $(SQL_GEN_IN) $(SQLC_CONFIG)
 	$(SQLC) generate -f $(SQLC_CONFIG)
 
 $(COMMIT_ID): $(GIT_COMMIT_DEPS)
 	commit_id="$$( $(GIT) rev-parse --short HEAD )" && printf '%s' "$$commit_id" > $(COMMIT_ID)
 
-$(BINARY):  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(BUILD_GOFILES) $(STATE_MODELS_JSON)
+$(BINARY):  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(IMPORT_OAPI_GEN) $(BUILD_GOFILES) $(STATE_MODELS_JSON)
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
 
-archive:  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(BUILD_GOFILES) $(STATE_MODELS_JSON)
+archive:  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(IMPORT_OAPI_GEN) $(BUILD_GOFILES) $(STATE_MODELS_JSON)
 	$(GO) build -v -o archive ./cmd/archive
 
 check: generate
@@ -149,6 +159,7 @@ clean:
 	rm -f $(PR_OAPI_GEN)
 	rm -f $(PS_OAPI_GEN)
 	rm -f $(SCHED_OAPI_GEN)
+	rm -f $(IMPORT_OAPI_GEN)
 
 clean-build-caches:
 	$(GO) clean -cache

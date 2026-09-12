@@ -99,14 +99,14 @@ SELECT get_next_hrid($1)::TEXT AS hrid;
 INSERT INTO item (id, pr_id, barcode, call_number, title, item_id, lms_request_id, lms_item_id, created_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (id) DO UPDATE
-    SET pr_id       = EXCLUDED.pr_id,
-        barcode = EXCLUDED.barcode,
+    SET barcode = EXCLUDED.barcode,
         call_number = EXCLUDED.call_number,
         title = EXCLUDED.title,
         item_id = EXCLUDED.item_id,
         lms_request_id = EXCLUDED.lms_request_id,
         lms_item_id = EXCLUDED.lms_item_id,
         created_at = EXCLUDED.created_at
+    WHERE item.pr_id = EXCLUDED.pr_id
 RETURNING sqlc.embed(item);
 
 -- name: GetItemById :one
@@ -138,8 +138,7 @@ WHERE id = $1;
 INSERT INTO notification (id, pr_id, from_symbol, to_symbol, direction, kind, note, cost, currency, condition, receipt, created_at, acknowledged_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 ON CONFLICT (id) DO UPDATE
-    SET pr_id           = EXCLUDED.pr_id,
-        from_symbol     = EXCLUDED.from_symbol,
+    SET from_symbol     = EXCLUDED.from_symbol,
         to_symbol       = EXCLUDED.to_symbol,
         direction       = EXCLUDED.direction,
         kind            = EXCLUDED.kind,
@@ -150,6 +149,7 @@ ON CONFLICT (id) DO UPDATE
         receipt         = EXCLUDED.receipt,
         created_at      = EXCLUDED.created_at,
         acknowledged_at = EXCLUDED.acknowledged_at
+    WHERE notification.pr_id = EXCLUDED.pr_id
 RETURNING sqlc.embed(notification);
 
 -- name: GetNotificationById :one

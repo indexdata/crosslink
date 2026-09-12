@@ -649,7 +649,7 @@ func toApiLocatedSupplier(r *http.Request, sup ill_db.LocatedSupplier) oapi.Loca
 		SupplierID:        sup.SupplierID,
 		SupplierSymbol:    sup.SupplierSymbol,
 		Ordinal:           sup.Ordinal,
-		SupplierStatus:    toString(sup.SupplierStatus),
+		SupplierStatus:    toLocatedSupplierStatus(sup.SupplierStatus),
 		PrevAction:        toString(sup.PrevAction),
 		PrevStatus:        toString(sup.PrevStatus),
 		LastAction:        toString(sup.LastAction),
@@ -799,4 +799,12 @@ func toString(text pgtype.Text) *string {
 	} else {
 		return nil
 	}
+}
+
+func toLocatedSupplierStatus(text pgtype.Text) *oapi.LocatedSupplierStatus {
+	if !text.Valid {
+		return nil
+	}
+	status := oapi.LocatedSupplierStatus(text.String)
+	return &status
 }

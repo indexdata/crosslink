@@ -176,3 +176,48 @@ sql:
             go_type:
               import: "github.com/indexdata/crosslink/broker/events"
               type: "EventData"
+  - engine: "postgresql"
+    queries: "import_query.sql"
+    schema:
+      - "ill_schema.sql"
+      - "pr_schema.sql"
+      - "sched_schema.sql"
+    gen:
+      go:
+        package: "importdb"
+        out: "../import/db"
+        output_db_file_name: "import_db_gen.go"
+        output_models_file_name: "import_models_gen.go"
+        output_files_suffix: "_gen"
+        sql_package: "pgx/v5"
+        emit_methods_with_db_argument: true
+        overrides:
+          - column: "patron_request.ill_request"
+            go_type:
+              import: "github.com/indexdata/crosslink/iso18626"
+              type: "Request"
+          - column: "patron_request.ill_response"
+            go_type:
+              import: "github.com/indexdata/crosslink/iso18626"
+              type: "SupplyingAgencyMessage"
+          - column: "patron_request.state"
+            go_type:
+              import: "github.com/indexdata/crosslink/broker/patron_request/db"
+              package: "pr_db"
+              type: "PatronRequestState"
+          - column: "patron_request.side"
+            go_type:
+              import: "github.com/indexdata/crosslink/broker/patron_request/db"
+              package: "pr_db"
+              type: "PatronRequestSide"
+          - column: "patron_request.items"
+            go_type:
+              import: "github.com/indexdata/crosslink/broker/patron_request/db"
+              package: "pr_db"
+              type: "PrItem"
+              slice: true
+          - column: "patron_request.retry_bib_info"
+            go_type:
+              import: "github.com/indexdata/crosslink/iso18626"
+              type: "BibliographicInfo"
+              pointer: true

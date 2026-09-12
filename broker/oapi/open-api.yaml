@@ -71,7 +71,7 @@ components:
       in: query
       description: Patron request side, valid values "borrowing" and "lending"
       schema:
-        type: string
+        $ref: '#/components/schemas/PatronRequestSide'
     Symbol:
       name: symbol
       in: query
@@ -83,10 +83,7 @@ components:
       in: query
       description: Notification kind, valid values "note" and "condition"
       schema:
-        type: string
-        enum:
-          - note
-          - condition
+        $ref: '#/components/schemas/NotificationKind'
     PatronRequestId:
       name: pr_id
       in: query
@@ -111,6 +108,324 @@ components:
             - requester_symbol
             - supplier_symbol
   schemas:
+    ConflictPolicy:
+      type: string
+      enum: [fail, skip, update]
+      default: fail
+    PatronRequestSide:
+      type: string
+      description: Patron request side
+      enum: [borrowing, lending]
+    NotificationDirection:
+      type: string
+      description: Direction of a patron request notification
+      minLength: 1
+      enum: [sent, received]
+    NotificationKind:
+      type: string
+      description: Kind of patron request notification
+      minLength: 1
+      enum: [note, condition]
+    LocatedSupplierStatus:
+      type: string
+      description: Status of a located supplier
+      enum: [new, selected, skipped]
+    ImportItemType:
+      type: string
+      enum:
+        - patronRequest
+        - batchAction
+        - template
+    ImportSectionResult:
+      type: object
+      additionalProperties: false
+      properties:
+        imported:
+          type: integer
+          format: int32
+        failed:
+          type: integer
+          format: int32
+        skipped:
+          type: integer
+          format: int32
+      required:
+        - imported
+        - failed
+        - skipped
+    ImportItemError:
+      type: object
+      additionalProperties: false
+      properties:
+        line:
+          type: integer
+          format: int32
+          description: One-based NDJSON record number.
+        type:
+          $ref: '#/components/schemas/ImportItemType'
+        error:
+          type: string
+        owner:
+          type: string
+        identifier:
+          type: string
+      required:
+        - line
+        - error
+    ImportResult:
+      type: object
+      additionalProperties: false
+      properties:
+        patronRequests: { $ref: '#/components/schemas/ImportSectionResult' }
+        batchActions: { $ref: '#/components/schemas/ImportSectionResult' }
+        templates: { $ref: '#/components/schemas/ImportSectionResult' }
+        errors:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/ImportItemError' }
+        errorsOmitted:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of additional error details omitted from this response.
+      required: [patronRequests, batchActions, templates, errors, errorsOmitted]
+    ImportResourceRecord:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          $ref: '#/components/schemas/ImportItemType'
+        owner:
+          type: string
+          description: Symbol of the owning institution
+        data:
+          description: Resource data to import.
+          oneOf:
+            - $ref: '#/components/schemas/ImportPatronRequestBundle'
+            - $ref: '#/components/schemas/CreateBatchAction'
+            - $ref: '#/components/schemas/CreateTemplate'
+      required: [type, owner, data]
+    ImportPatronRequestBundle:
+      type: object
+      additionalProperties: false
+      properties:
+        patronRequest:
+          $ref: '#/components/schemas/ImportPatronRequest'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImportPatronRequestItem'
+        notifications:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImportPatronRequestNotification'
+        illTransaction:
+          $ref: '#/components/schemas/ImportIllTransaction'
+        locatedSuppliers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImportLocatedSupplier'
+      required: [patronRequest, items, notifications, locatedSuppliers]
+    ImportPatronRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          minLength: 1
+        createdAt:
+          type: string
+          minLength: 1
+          format: date-time
+        updatedAt:
+          type: string
+          minLength: 1
+          format: date-time
+        illRequest:
+          type: object
+          description: JSON of ISO18626 request
+        state:
+          type: string
+          minLength: 1
+        stateModel:
+          type: string
+          minLength: 1
+        side:
+          $ref: '#/components/schemas/PatronRequestSide'
+        patron:
+          type: string
+        requesterSymbol:
+          type: string
+          minLength: 1
+        supplierSymbol:
+          type: string
+        requesterRequestId:
+          type: string
+          minLength: 1
+        needsAttention:
+          type: boolean
+        lastAction:
+          type: string
+        lastActionOutcome:
+          type: string
+        lastActionResult:
+          type: string
+        illResponse:
+          type: object
+          description: JSON of ISO18626 supplying agency message
+        internalNote:
+          type: string
+        nextReqId:
+          type: string
+        prevReqId:
+          type: string
+        retryBibInfo:
+          $ref: '#/components/schemas/BibliographicInfo'
+      required: [id, createdAt, updatedAt, illRequest, state, stateModel, side, requesterSymbol, requesterRequestId, needsAttention]
+    ImportPatronRequestItem:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          minLength: 1
+        barcode:
+          type: string
+          minLength: 1
+        callNumber:
+          type: string
+        title:
+          type: string
+        itemId:
+          type: string
+        lmsRequestId:
+          type: string
+        lmsItemId:
+          type: string
+        createdAt:
+          type: string
+          minLength: 1
+          format: date-time
+      required: [id, barcode, createdAt]
+    PatronRequestNotification:
+      type: object
+      title: Notification
+      description: Patron request notification
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          minLength: 1
+          description: Notification id
+        fromSymbol:
+          type: string
+          minLength: 1
+          description: Symbol of notification sender
+        toSymbol:
+          type: string
+          minLength: 1
+          description: Symbol of notification receiver
+        direction:
+          $ref: '#/components/schemas/NotificationDirection'
+        kind:
+          $ref: '#/components/schemas/NotificationKind'
+        note:
+          type: string
+          description: Note of notification
+        cost:
+          type: number
+          format: double
+          description: Cost amount
+        currency:
+          type: string
+          description: Currency symbol
+        condition:
+          type: string
+          description: Condition of notification
+        receipt:
+          type: string
+          description: Receipt of notification
+        createdAt:
+          type: string
+          minLength: 1
+          format: date-time
+          description: Notification creation date time
+        acknowledgedAt:
+          type: string
+          format: date-time
+          description: Notification acknowledged at date time
+      required: [id, fromSymbol, toSymbol, direction, kind, createdAt]
+    ImportPatronRequestNotification:
+      $ref: '#/components/schemas/PatronRequestNotification'
+    ImportIllTransaction:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          minLength: 1
+        timestamp:
+          type: string
+          minLength: 1
+          format: date-time
+        requesterSymbol:
+          type: string
+          minLength: 1
+        lastRequesterAction:
+          type: string
+        prevRequesterAction:
+          type: string
+        supplierSymbol:
+          type: string
+        requesterRequestID:
+          type: string
+          minLength: 1
+        prevRequesterRequestID:
+          type: string
+        supplierRequestID:
+          type: string
+        lastSupplierStatus:
+          type: string
+        prevSupplierStatus:
+          type: string
+        illTransactionData:
+          type: object
+          additionalProperties: true
+      required: [id, timestamp, requesterSymbol, requesterRequestID, illTransactionData]
+    ImportLocatedSupplier:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          minLength: 1
+        supplierSymbol:
+          type: string
+          minLength: 1
+        ordinal:
+          type: integer
+          format: int32
+        supplierStatus:
+          $ref: '#/components/schemas/LocatedSupplierStatus'
+        prevAction:
+          type: string
+        prevStatus:
+          type: string
+        lastAction:
+          type: string
+        lastStatus:
+          type: string
+        localID:
+          type: string
+        prevReason:
+          type: string
+        lastReason:
+          type: string
+        supplierRequestID:
+          type: string
+        localSupplier:
+          type: boolean
+      required: [id, supplierSymbol, ordinal, localSupplier]
     Index:
       type: object
       properties:
@@ -468,8 +783,7 @@ components:
           format: int32
           description: Ordinal number for ordering
         supplierStatus:
-          type: string
-          description: Supplier status, possible values (new, selected, skipped)
+          $ref: '#/components/schemas/LocatedSupplierStatus'
         prevAction:
           type: string
           description: Previous requester action
@@ -528,8 +842,7 @@ components:
           type: string
           description: State model configuration key governing this request
         side:
-          type: string
-          description: Patron request side - borrowing or lending
+          $ref: '#/components/schemas/PatronRequestSide'
         patron:
           type: string
           description: User who requested item
@@ -1080,59 +1393,7 @@ components:
             $ref: '#/components/schemas/PrItem'
 
     PrNotification:
-      type: object
-      title: Notification
-      description: Patron request notification
-      properties:
-        id:
-          type: string
-          description: Notification id
-        fromSymbol:
-          type: string
-          description: Symbol of notification sender
-        toSymbol:
-          type: string
-          description: Symbol of notification receiver
-        direction:
-          type: string
-          description: Direction of the notification, either sent or received
-        kind:
-          type: string
-          description: Kind of notification, either note or condition
-          enum:
-            - note
-            - condition
-        note:
-          type: string
-          description: Note of notification
-        cost:
-          type: number
-          format: double
-          description: Cost amount
-        currency:
-          type: string
-          description: Currency symbol
-        condition:
-          type: string
-          description: Condition of notification
-        receipt:
-          type: string
-          description: Receipt of notification
-        createdAt:
-          type: string
-          format: date-time
-          description: Notification creation date time
-        acknowledgedAt:
-          type: string
-          format: date-time
-          description: Notification acknowledged at date time
-      required:
-        - id
-        - fromSymbol
-        - toSymbol
-        - direction
-        - kind
-        - createdAt
+      $ref: '#/components/schemas/PatronRequestNotification'
 
     CreatePrNotification:
       type: object
@@ -1282,14 +1543,17 @@ components:
       properties:
         schedule:
           type: string
+          minLength: 1
           description: RRULE schedule expression, e.g. "FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0" (every Monday at 06:00)
         actionName:
           $ref: '#/components/schemas/BatchActionName'
         title:
           type: string
+          minLength: 1
           description: Title of the batch action, for display purposes
         batchQuery:
           type: string
+          minLength: 1
           description: Batch action selection query in CQL format
         actionParams:
           type: object
@@ -1298,6 +1562,7 @@ components:
       required:
         - schedule
         - actionName
+        - title
         - batchQuery
 
     BatchActionDefault:
@@ -1449,6 +1714,7 @@ components:
       properties:
         title:
           type: string
+          minLength: 1
           description: Human-readable title for the template
         purpose:
           $ref: '#/components/schemas/TemplatePurpose'
@@ -1457,14 +1723,17 @@ components:
           description: Subject line template, supports {{.X}} placeholders. Not used for pullslip templates. For full list of supported placeholders, see the Template object.
         body:
           type: string
+          minLength: 1
           description: Body of the email or pull slip template. Supports {{.X}} placeholders. For full list of supported placeholders, see the Template object.
         contentType:
           $ref: '#/components/schemas/TemplateContentType'
         labels:
           type: array
+          minItems: 1
           description: Labels identifying the template's usage context
           items:
             type: string
+            minLength: 1
         audience:
           $ref: '#/components/schemas/TemplateAudience'
       required:
@@ -1504,6 +1773,53 @@ components:
         - labels
 
 paths:
+  /import:
+    post:
+      summary: Import resources from NDJSON
+      description: Streams each NDJSON record into existing repository interfaces selected by type.
+      tags: [import-api]
+      parameters:
+        - name: conflictPolicy
+          in: query
+          description: How to handle an existing resource identity.
+          required: false
+          schema:
+            $ref: '#/components/schemas/ConflictPolicy'
+      requestBody:
+        required: true
+        content:
+          application/x-ndjson:
+            schema:
+              type: string
+              format: binary
+              description: A stream of NDJSON records, each representing a resource to import. Each record must conform to the ImportResourceRecord schema.
+            examples:
+              resources:
+                summary: Three import records
+                value: |
+                  {"type":"patronRequest","owner":"ISIL:SYM","data":{"patronRequest":{"id":"pr-1","createdAt":"2026-08-26T08:00:00Z","updatedAt":"2026-08-26T09:00:00Z","illRequest":{"header":{"requestingAgencyId":{"agencyIdType":{"#text":"ISIL"},"agencyIdValue":"REQ"},"supplyingAgencyId":{"agencyIdType":{"#text":"ISIL"},"agencyIdValue":"SUP"},"timestamp":"2026-08-26T08:00:00Z","requestingAgencyRequestId":"pr-1"},"bibliographicInfo":{"title":"Example title"},"serviceInfo":{"serviceType":"Loan"}},"state":"SENT","stateModel":"default","side":"borrowing","requesterSymbol":"ISIL:REQ","requesterRequestId":"pr-1","needsAttention":false},"items":[],"notifications":[],"locatedSuppliers":[]}}
+                  {"type":"batchAction","owner":"ISIL:SYM","data":{"schedule":"FREQ=DAILY;BYHOUR=6;BYMINUTE=0","actionName":"request-aging","title":"Daily aging","batchQuery":"state==NEW","actionParams":{"interval":"24h"}}}
+                  {"type":"template","owner":"ISIL:SYM","data":{"title":"Request reminder","purpose":"email","subject":"Reminder","body":"Your request is ready","contentType":"text","labels":["request-reminder"],"audience":"patron"}}
+        x-ndjson-item-schema:
+          $ref: '#/components/schemas/ImportResourceRecord'
+      responses:
+        '200':
+          description: The stream was processed; individual records may have failed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportResult' }
+        '400':
+          description: The request body is missing or the content type is not application/x-ndjson.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '413':
+          description: The request body or an individual NDJSON record exceeds the configured size limit.
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "import request too large\n"
   /:
     get:
       summary: Retrieve index information
