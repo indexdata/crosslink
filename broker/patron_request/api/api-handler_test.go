@@ -1353,6 +1353,7 @@ type PrRepoUpdateCapture struct {
 	PrRepoError
 	lastUpdateParams *pr_db.UpdatePatronRequestParams
 	state            pr_db.PatronRequestState
+	pickupLocationID pgtype.UUID
 }
 
 func (r *PrRepoUpdateCapture) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
@@ -1361,7 +1362,7 @@ func (r *PrRepoUpdateCapture) GetPatronRequestById(ctx common.ExtendedContext, i
 		if state == "" {
 			state = prservice.BorrowerStateNeedsReview
 		}
-		return pr_db.PatronRequest{ID: id, State: state, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, InternalNote: pgtype.Text{String: "original note", Valid: true}, Patron: pgtype.Text{String: "original patron", Valid: true}}, nil
+		return pr_db.PatronRequest{ID: id, RequesterPickupLocationID: r.pickupLocationID, State: state, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, InternalNote: pgtype.Text{String: "original note", Valid: true}, Patron: pgtype.Text{String: "original patron", Valid: true}}, nil
 	}
 	return r.PrRepoError.GetPatronRequestById(ctx, id)
 }
@@ -1712,4 +1713,32 @@ func TestPatronRequestPickupLocationIDValidation(t *testing.T) {
 	pr := buildDbPatronRequest(&request, nil, pgtype.Timestamp{}, "request-1", request.IllRequest, "", "default")
 	require.False(t, pr.RequesterPickupLocationID.Valid)
 	require.Nil(t, toPickupLocationID(pr.RequesterPickupLocationID))
+}
+
+func TestPutPatronRequestsIdPickupLocationOptional(t *testing.T) {
+	original, replacement := uuid.New(), uuid.New()
+	for _, tc := range []struct {
+		name     string
+		supplied *uuid.UUID
+		expected uuid.UUID
+	}{
+		{name: "omitted preserves selection", expected: original},
+		{name: "supplied replaces selection", supplied: &replacement, expected: replacement},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &PrRepoUpdateCapture{pickupLocationID: pgtype.UUID{Bytes: original, Valid: true}}
+			handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+			id := "3"
+			body, err := json.Marshal(proapi.CreatePatronRequest{
+				Id: &id, RequesterSymbol: &symbol, IllRequest: validIllRequest(), RequesterPickupLocationId: tc.supplied,
+			})
+			require.NoError(t, err)
+			req := httptest.NewRequest(http.MethodPut, "/", bytes.NewReader(body))
+			rr := httptest.NewRecorder()
+			handler.PutPatronRequestsId(rr, req, id, proapi.PutPatronRequestsIdParams{})
+			require.Equal(t, http.StatusOK, rr.Code)
+			require.NotNil(t, repo.lastUpdateParams)
+			require.Equal(t, pgtype.UUID{Bytes: tc.expected, Valid: true}, repo.lastUpdateParams.RequesterPickupLocationID)
+		})
+	}
 }

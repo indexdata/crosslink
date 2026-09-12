@@ -4684,8 +4684,10 @@ func TestHandleInvokeBorrowerActionFillLocally(t *testing.T) {
 		name           string
 		serviceType    iso18626.TypeServiceType
 		manualAdapter  bool
+		selected       bool
 		expectedStatus iso18626.TypeStatus
 	}{
+		{name: "selected pickup", selected: true, serviceType: iso18626.TypeServiceTypeLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
 		{name: "loan", serviceType: iso18626.TypeServiceTypeLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
 		{name: "copy or loan", serviceType: iso18626.TypeServiceTypeCopyOrLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
 		{name: "NCIP disabled", serviceType: iso18626.TypeServiceTypeLoan, manualAdapter: true, expectedStatus: iso18626.TypeStatusLoanCompleted},
@@ -4712,6 +4714,17 @@ func TestHandleInvokeBorrowerActionFillLocally(t *testing.T) {
 				NeedsAttention:  true,
 			}
 
+			pickupRepo := new(IllRepoMock)
+			expectedPickup := "pickup-1"
+			if tt.selected {
+				id := uuid.New()
+				pr.RequesterPickupLocationID = pgtype.UUID{Bytes: id, Valid: true}
+				pr.Tenant = getDbText("tenant-a")
+				expectedPickup = "selected-branch"
+				entry := dirapi.Entry{Id: &id, Tenant: new("tenant-a"), LmsConfig: &dirapi.LmsConfig{RequesterPickupLocation: &expectedPickup}}
+				pickupRepo.On("GetCachedPeerByDirectoryEntryID", id, mock.Anything).Return(ill_db.Peer{CustomData: entry}, "<cached>", nil).Once()
+			}
+			t.Cleanup(func() { pickupRepo.AssertExpectations(t) })
 			var lmsAdapter lms.LmsAdapter
 			if tt.manualAdapter {
 				lmsAdapter = &lms.LmsAdapterManual{}
@@ -4720,13 +4733,13 @@ func TestHandleInvokeBorrowerActionFillLocally(t *testing.T) {
 					requesterPickupLocation: "pickup-1",
 					itemLocation:            "item-location-1",
 				}
-				adapterMock.On("RequestItem", patronRequestId, "local-record-1", "patron-1", "pickup-1", "item-location-1").
+				adapterMock.On("RequestItem", patronRequestId, "local-record-1", "patron-1", expectedPickup, "item-location-1").
 					Return(&lms.RequestedItem{Barcode: "item-barcode"}, nil)
 				lmsAdapter = adapterMock
 			}
 			lmsCreator.On("GetAdapter", "ISIL:REQ1").Return(lmsAdapter, nil)
 			mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil)
-			prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+			prAction := CreatePatronRequestActionService(mockPrRepo, pickupRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 			action := BorrowerActionFillLocally
 
 			status, resultData := prAction.handleInvokeAction(appCtx, events.Event{

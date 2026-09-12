@@ -533,7 +533,9 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 
 	existingPr.RequesterReqID = getDbText(&requesterReqId)
 	existingPr.IllRequest = illRequest
-	existingPr.RequesterPickupLocationID = getPickupLocationID(newPr.RequesterPickupLocationId)
+	if newPr.RequesterPickupLocationId != nil {
+		existingPr.RequesterPickupLocationID = getPickupLocationID(newPr.RequesterPickupLocationId)
+	}
 	existingPr.StateModel = stateModelName
 	existingPr.Patron = getDbText(newPr.Patron)
 	if newPr.InternalNote != nil {

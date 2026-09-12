@@ -1020,18 +1020,10 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 		}
 		items = []pr_db.Item{item}
 	}
-	pickupLocation := lmsAdapter.RequesterPickupLocation()
-	if pr.RequesterPickupLocationID.Valid {
-		entry, lookupErr := a.pickupLocationEntry(ctx, pr)
-		if lookupErr != nil {
-			status, result := logActionErrorAndReturnResult(ctx, "Pickup location lookup failed", lookupErr)
-			return actionExecutionResult{status: status, result: result, pr: pr}
-		}
-		if entry.LmsConfig == nil || entry.LmsConfig.RequesterPickupLocation == nil || *entry.LmsConfig.RequesterPickupLocation == "" {
-			status, result := logActionErrorAndReturnResult(ctx, "Pickup location lookup failed", fmt.Errorf("pickup location %s has no LMS pickup location code", uuid.UUID(pr.RequesterPickupLocationID.Bytes)))
-			return actionExecutionResult{status: status, result: result, pr: pr}
-		}
-		pickupLocation = *entry.LmsConfig.RequesterPickupLocation
+	pickupLocation, err := a.requesterPickupCode(ctx, pr, lmsAdapter)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "Pickup location lookup failed", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	for _, item := range items {
 		if item.LmsRequestID.Valid && strings.TrimSpace(item.LmsRequestID.String) != "" {
@@ -1277,11 +1269,16 @@ func (a *PatronRequestActionService) cannotSupplyLocallyBorrowingRequest(ctx com
 func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.ExtendedContext, parentEventID string, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
 	requestID := pr.ID
 	userID := pr.Patron.String
+	pickupLocation, err := a.requesterPickupCode(ctx, pr, lmsAdapter)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "Pickup location lookup failed", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
 	requestedItem, err := lmsAdapter.RequestItem(
 		requestID,
 		illRequest.BibliographicInfo.SupplierUniqueRecordId,
 		userID,
-		lmsAdapter.RequesterPickupLocation(),
+		pickupLocation,
 		lmsAdapter.ItemLocation(),
 	)
 	if err != nil {
@@ -2080,4 +2077,18 @@ func (a *PatronRequestActionService) pickupLocationEntry(ctx common.ExtendedCont
 		}
 	}
 	return peer.CustomData, nil
+}
+
+func (a *PatronRequestActionService) requesterPickupCode(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter) (string, error) {
+	if !pr.RequesterPickupLocationID.Valid {
+		return lmsAdapter.RequesterPickupLocation(), nil
+	}
+	entry, err := a.pickupLocationEntry(ctx, pr)
+	if err != nil {
+		return "", err
+	}
+	if entry.LmsConfig == nil || entry.LmsConfig.RequesterPickupLocation == nil || *entry.LmsConfig.RequesterPickupLocation == "" {
+		return "", fmt.Errorf("pickup location %s has no LMS pickup location code", uuid.UUID(pr.RequesterPickupLocationID.Bytes))
+	}
+	return *entry.LmsConfig.RequesterPickupLocation, nil
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	dirapi "github.com/indexdata/crosslink/directory/api"
@@ -163,6 +164,35 @@ func TestPickupLocationInheritedTenant(t *testing.T) {
 				require.Error(t, err)
 				require.Equal(t, dirapi.Entry{}, result)
 			}
+			pickupRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestFillLocallyRejectsInvalidPickupSelection(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		tenant      string
+		config      *dirapi.LmsConfig
+		lookupError error
+	}{
+		{name: "lookup fails", lookupError: errors.New("directory unavailable")},
+		{name: "missing pickup code", tenant: "tenant-a"},
+		{name: "empty pickup code", tenant: "tenant-a", config: &dirapi.LmsConfig{RequesterPickupLocation: new("")}},
+		{name: "wrong tenant", tenant: "tenant-b", config: &dirapi.LmsConfig{RequesterPickupLocation: new("branch")}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			id := uuid.New()
+			pickupRepo := new(IllRepoMock)
+			pickupRepo.On("GetCachedPeerByDirectoryEntryID", id, mock.Anything).Return(ill_db.Peer{CustomData: dirapi.Entry{
+				Id: &id, Tenant: &tc.tenant, LmsConfig: tc.config,
+			}}, "<cached>", tc.lookupError).Once()
+			service := PatronRequestActionService{illRepo: pickupRepo}
+			lmsAdapter := &mockLmsAdapter{requesterPickupLocation: "default"}
+			pr := pr_db.PatronRequest{Tenant: pgtype.Text{String: "tenant-a", Valid: true}, RequesterPickupLocationID: pgtype.UUID{Bytes: id, Valid: true}}
+			result := service.fillLocallyBorrowingRequest(appCtx, "", pr, lmsAdapter, iso18626.Request{}, actionParams{})
+			require.Equal(t, events.EventStatusError, result.status)
+			lmsAdapter.AssertNotCalled(t, "RequestItem", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 			pickupRepo.AssertExpectations(t)
 		})
 	}
