@@ -29,6 +29,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 var mockEventBus = new(MockEventBus)
@@ -136,28 +137,29 @@ func TestToApiPatronRequestSurfacesInternalNote(t *testing.T) {
 
 func patronRequestSearchViewFromPatronRequest(pr pr_db.PatronRequest, hasCost bool) pr_db.PatronRequestSearchView {
 	return pr_db.PatronRequestSearchView{
-		ID:                pr.ID,
-		CreatedAt:         pr.CreatedAt,
-		IllRequest:        pr.IllRequest,
-		State:             pr.State,
-		Side:              pr.Side,
-		Patron:            pr.Patron,
-		RequesterSymbol:   pr.RequesterSymbol,
-		SupplierSymbol:    pr.SupplierSymbol,
-		Tenant:            pr.Tenant,
-		RequesterReqID:    pr.RequesterReqID,
-		NeedsAttention:    pr.NeedsAttention,
-		LastAction:        pr.LastAction,
-		LastActionOutcome: pr.LastActionOutcome,
-		LastActionResult:  pr.LastActionResult,
-		Items:             pr.Items,
-		Language:          pr.Language,
-		TerminalState:     pr.TerminalState,
-		UpdatedAt:         pr.UpdatedAt,
-		IllResponse:       pr.IllResponse,
-		InternalNote:      pr.InternalNote,
-		StateModel:        pr.StateModel,
-		HasCost:           hasCost,
+		ID:                        pr.ID,
+		CreatedAt:                 pr.CreatedAt,
+		IllRequest:                pr.IllRequest,
+		State:                     pr.State,
+		Side:                      pr.Side,
+		Patron:                    pr.Patron,
+		RequesterSymbol:           pr.RequesterSymbol,
+		SupplierSymbol:            pr.SupplierSymbol,
+		Tenant:                    pr.Tenant,
+		RequesterReqID:            pr.RequesterReqID,
+		NeedsAttention:            pr.NeedsAttention,
+		LastAction:                pr.LastAction,
+		LastActionOutcome:         pr.LastActionOutcome,
+		LastActionResult:          pr.LastActionResult,
+		Items:                     pr.Items,
+		Language:                  pr.Language,
+		TerminalState:             pr.TerminalState,
+		UpdatedAt:                 pr.UpdatedAt,
+		IllResponse:               pr.IllResponse,
+		InternalNote:              pr.InternalNote,
+		StateModel:                pr.StateModel,
+		RequesterPickupLocationID: pr.RequesterPickupLocationID,
+		HasCost:                   hasCost,
 	}
 }
 
@@ -1351,6 +1353,7 @@ type PrRepoUpdateCapture struct {
 	PrRepoError
 	lastUpdateParams *pr_db.UpdatePatronRequestParams
 	state            pr_db.PatronRequestState
+	pickupLocationID pgtype.UUID
 }
 
 func (r *PrRepoUpdateCapture) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
@@ -1359,7 +1362,7 @@ func (r *PrRepoUpdateCapture) GetPatronRequestById(ctx common.ExtendedContext, i
 		if state == "" {
 			state = prservice.BorrowerStateNeedsReview
 		}
-		return pr_db.PatronRequest{ID: id, State: state, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, InternalNote: pgtype.Text{String: "original note", Valid: true}, Patron: pgtype.Text{String: "original patron", Valid: true}}, nil
+		return pr_db.PatronRequest{ID: id, RequesterPickupLocationID: r.pickupLocationID, State: state, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, InternalNote: pgtype.Text{String: "original note", Valid: true}, Patron: pgtype.Text{String: "original patron", Valid: true}}, nil
 	}
 	return r.PrRepoError.GetPatronRequestById(ctx, id)
 }
@@ -1688,4 +1691,54 @@ func TestPutPatronRequestsIdInvalidBrokerSymbol(t *testing.T) {
 	handler.PutPatronRequestsId(rr, req, "5", proapi.PutPatronRequestsIdParams{})
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Contains(t, rr.Body.String(), "invalid BROKER_SYMBOL")
+}
+
+func TestPatronRequestPickupLocationRoundTrip(t *testing.T) {
+	var request proapi.CreatePatronRequest
+	require.NoError(t, json.Unmarshal([]byte(`{"requesterSymbol":"ISIL:MAIN","requesterPickupLocationId":"11111111-1111-4111-8111-111111111111","illRequest":{}}`), &request))
+	pr := buildDbPatronRequest(&request, nil, pgtype.Timestamp{}, "request-1", request.IllRequest, "", "default")
+	assert.Equal(t, pgtype.UUID{Bytes: uuid.MustParse("11111111-1111-4111-8111-111111111111"), Valid: true}, pr.RequesterPickupLocationID)
+	result := toApiPatronRequest(httptest.NewRequest(http.MethodGet, "/patron_requests/request-1", nil), patronRequestSearchViewFromPatronRequest(pr, false))
+	require.NotNil(t, result.RequesterPickupLocationId)
+	assert.Equal(t, uuid.MustParse("11111111-1111-4111-8111-111111111111"), *result.RequesterPickupLocationId)
+}
+
+func TestPatronRequestPickupLocationIDValidation(t *testing.T) {
+	for _, value := range []string{"branch-1", ""} {
+		var request proapi.CreatePatronRequest
+		require.Error(t, json.Unmarshal([]byte(`{"requesterPickupLocationId":"`+value+`","illRequest":{}}`), &request))
+	}
+	var request proapi.CreatePatronRequest
+	require.NoError(t, json.Unmarshal([]byte(`{"illRequest":{}}`), &request))
+	pr := buildDbPatronRequest(&request, nil, pgtype.Timestamp{}, "request-1", request.IllRequest, "", "default")
+	require.False(t, pr.RequesterPickupLocationID.Valid)
+	require.Nil(t, toPickupLocationID(pr.RequesterPickupLocationID))
+}
+
+func TestPutPatronRequestsIdPickupLocationOptional(t *testing.T) {
+	original, replacement := uuid.New(), uuid.New()
+	for _, tc := range []struct {
+		name     string
+		supplied *uuid.UUID
+		expected uuid.UUID
+	}{
+		{name: "omitted preserves selection", expected: original},
+		{name: "supplied replaces selection", supplied: &replacement, expected: replacement},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &PrRepoUpdateCapture{pickupLocationID: pgtype.UUID{Bytes: original, Valid: true}}
+			handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+			id := "3"
+			body, err := json.Marshal(proapi.CreatePatronRequest{
+				Id: &id, RequesterSymbol: &symbol, IllRequest: validIllRequest(), RequesterPickupLocationId: tc.supplied,
+			})
+			require.NoError(t, err)
+			req := httptest.NewRequest(http.MethodPut, "/", bytes.NewReader(body))
+			rr := httptest.NewRecorder()
+			handler.PutPatronRequestsId(rr, req, id, proapi.PutPatronRequestsIdParams{})
+			require.Equal(t, http.StatusOK, rr.Code)
+			require.NotNil(t, repo.lastUpdateParams)
+			require.Equal(t, pgtype.UUID{Bytes: tc.expected, Valid: true}, repo.lastUpdateParams.RequesterPickupLocationID)
+		})
+	}
 }

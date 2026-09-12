@@ -3,9 +3,11 @@ package adapter
 import (
 	"cmp"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/common"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
@@ -17,6 +19,30 @@ type MockDirectoryLookupAdapter struct {
 }
 
 func (m *MockDirectoryLookupAdapter) Lookup(ctx common.ExtendedContext, params DirectoryLookupParams) ([]DirectoryEntry, string, error) {
+	if params.EntryID != "" {
+		id, err := uuid.Parse(params.EntryID)
+		if err != nil {
+			return nil, "", fmt.Errorf("invalid directory entry ID: %w", err)
+		}
+		// Like symbol lookups, synthesize a usable entry for the requested identity.
+		pickupCode := id.String()
+		name := "Mock pickup location " + pickupCode
+		return []DirectoryEntry{{
+			Name:       name,
+			URL:        MOCK_PEER_URL,
+			Vendor:     dirapi.Unknown,
+			BrokerMode: DEFAULT_BROKER_MODE,
+			CustomData: dirapi.Entry{
+				Id:        &id,
+				Name:      name,
+				LmsConfig: &dirapi.LmsConfig{RequesterPickupLocation: &pickupCode},
+				Addresses: &[]dirapi.Address{{
+					Type:              "Shipping",
+					AddressComponents: &[]dirapi.AddressComponent{{Type: "Thoroughfare", Value: "1 Mock Library Street"}},
+				}},
+			},
+		}}, "/by-id/" + pickupCode, nil
+	}
 	if params.Tenant != "" {
 		if params.Tenant == "tenanterror" {
 			return []DirectoryEntry{}, "", errors.New("there is an error")

@@ -655,6 +655,11 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 	case BorrowerActionUpdateMetadata:
 		return a.updateMetadataBorrowingRequest(ctx, pr, illRequest)
 	case BorrowerActionSendRequest:
+		illRequest, err = a.applyPickupLocationAddress(ctx, pr, illRequest)
+		if err != nil {
+			status, result := logActionErrorAndReturnResult(ctx, "failed to resolve pickup location address", err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
 		status, result, err := a.messageSender.sendBorrowingRequest(ctx, eventID, pr, illRequest)
 		return actionResultFromIllSend(ctx, status, result, err, pr)
 	case BorrowerActionReceive:
@@ -1015,9 +1020,19 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 		}
 		items = []pr_db.Item{item}
 	}
+	var pickupLocation string
+	pickupResolved := false
 	for _, item := range items {
 		if item.LmsRequestID.Valid && strings.TrimSpace(item.LmsRequestID.String) != "" {
 			continue
+		}
+		if !pickupResolved {
+			pickupLocation, err = a.requesterPickupCode(ctx, pr, lmsAdapter)
+			if err != nil {
+				status, result := logActionErrorAndReturnResult(ctx, "Pickup location lookup failed", err)
+				return actionExecutionResult{status: status, result: result, pr: pr}
+			}
+			pickupResolved = true
 		}
 		callNumber := ""
 		if item.CallNumber.Valid {
@@ -1030,7 +1045,6 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 		itemId := item.Barcode // requester bar code
 		author := pr.IllRequest.BibliographicInfo.Author
 		isbn := ""
-		pickupLocation := lmsAdapter.RequesterPickupLocation()
 		requestedAction := "Hold For Pickup"
 		// Persist the same identifier sent to the requester LMS after acceptance.
 		requestID := pr.ID
@@ -1167,6 +1181,7 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 	retryPr := pr_db.PatronRequest{}
 	retryPr.Side = pr.Side
 	retryPr.RequesterSymbol = pr.RequesterSymbol
+	retryPr.RequesterPickupLocationID = pr.RequesterPickupLocationID
 	retryPr.SupplierSymbol = pr.SupplierSymbol
 	retryPr.Patron = pr.Patron
 	retryPr.Tenant = pr.Tenant
@@ -1259,11 +1274,16 @@ func (a *PatronRequestActionService) cannotSupplyLocallyBorrowingRequest(ctx com
 func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.ExtendedContext, parentEventID string, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
 	requestID := pr.ID
 	userID := pr.Patron.String
+	pickupLocation, err := a.requesterPickupCode(ctx, pr, lmsAdapter)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "Pickup location lookup failed", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
 	requestedItem, err := lmsAdapter.RequestItem(
 		requestID,
 		illRequest.BibliographicInfo.SupplierUniqueRecordId,
 		userID,
-		lmsAdapter.RequesterPickupLocation(),
+		pickupLocation,
 		lmsAdapter.ItemLocation(),
 	)
 	if err != nil {
@@ -2001,4 +2021,79 @@ func (a *PatronRequestActionService) saveLendingAddConditionNotification(ctx com
 		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
 	})
 	return err
+}
+
+// applyPickupLocationAddress changes only delivery information, leaving agency identity intact.
+func (a *PatronRequestActionService) applyPickupLocationAddress(ctx common.ExtendedContext, pr pr_db.PatronRequest, request iso18626.Request) (iso18626.Request, error) {
+	if !pr.RequesterPickupLocationID.Valid || (request.PatronInfo != nil && request.PatronInfo.SendToPatron != nil && *request.PatronInfo.SendToPatron == iso18626.TypeYesNoY) {
+		return request, nil
+	}
+	entry, err := a.pickupLocationEntry(ctx, pr)
+	if err != nil {
+		return request, err
+	}
+	address := common.DirectoryShippingAddress(entry)
+	if address.Line1 == "" {
+		return request, fmt.Errorf("pickup location %s has no shipping address", uuid.UUID(pr.RequesterPickupLocationID.Bytes))
+	}
+	request, err = deepCopyISO18626Request(request)
+	if err != nil {
+		return request, err
+	}
+	// Replace physical delivery addresses while preserving delivery options and electronic addresses.
+	replaced := false
+	for i := range request.RequestedDeliveryInfo {
+		info := &request.RequestedDeliveryInfo[i]
+		if info.Address != nil && info.Address.PhysicalAddress != nil {
+			info.Address.PhysicalAddress = &address
+			replaced = true
+		}
+	}
+	if !replaced {
+		request.RequestedDeliveryInfo = append(request.RequestedDeliveryInfo, iso18626.RequestedDeliveryInfo{Address: &iso18626.Address{PhysicalAddress: &address}})
+	}
+	return request, nil
+}
+
+func (a *PatronRequestActionService) pickupLocationEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest) (dirapi.Entry, error) {
+	peer, _, err := a.illRepo.GetCachedPeerByDirectoryEntryID(ctx, uuid.UUID(pr.RequesterPickupLocationID.Bytes), a.directoryLookupAdapter)
+	if err != nil {
+		return dirapi.Entry{}, err
+	}
+	// The peer cache is shared across tenants, so validate ownership even on cache hits.
+	if requestTenant := strings.TrimSpace(pr.Tenant.String); requestTenant != "" {
+		owner := peer.CustomData
+		visited := map[uuid.UUID]bool{uuid.UUID(pr.RequesterPickupLocationID.Bytes): true}
+		// An explicit tenant takes precedence over inherited ownership.
+		for (owner.Tenant == nil || *owner.Tenant == "") && owner.Parent != nil {
+			parentID := *owner.Parent
+			if visited[parentID] {
+				return dirapi.Entry{}, fmt.Errorf("pickup location %s: cycle in directory parent chain", uuid.UUID(pr.RequesterPickupLocationID.Bytes))
+			}
+			visited[parentID] = true
+			parent, _, err := a.illRepo.GetCachedPeerByDirectoryEntryID(ctx, parentID, a.directoryLookupAdapter)
+			if err != nil {
+				return dirapi.Entry{}, fmt.Errorf("pickup location %s: cannot resolve parent tenant: %w", uuid.UUID(pr.RequesterPickupLocationID.Bytes), err)
+			}
+			owner = parent.CustomData
+		}
+		if owner.Tenant == nil || *owner.Tenant != requestTenant {
+			return dirapi.Entry{}, fmt.Errorf("pickup location %s does not belong to request tenant %q", uuid.UUID(pr.RequesterPickupLocationID.Bytes), requestTenant)
+		}
+	}
+	return peer.CustomData, nil
+}
+
+func (a *PatronRequestActionService) requesterPickupCode(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter) (string, error) {
+	if !pr.RequesterPickupLocationID.Valid {
+		return lmsAdapter.RequesterPickupLocation(), nil
+	}
+	entry, err := a.pickupLocationEntry(ctx, pr)
+	if err != nil {
+		return "", err
+	}
+	if entry.LmsConfig == nil || entry.LmsConfig.RequesterPickupLocation == nil || *entry.LmsConfig.RequesterPickupLocation == "" {
+		return "", fmt.Errorf("pickup location %s has no LMS pickup location code", uuid.UUID(pr.RequesterPickupLocationID.Bytes))
+	}
+	return *entry.LmsConfig.RequesterPickupLocation, nil
 }

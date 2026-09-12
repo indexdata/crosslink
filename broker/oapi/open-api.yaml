@@ -533,6 +533,13 @@ components:
         patron:
           type: string
           description: User who requested item
+        requesterPickupLocationId:
+          type: string
+          format: uuid
+          description: >-
+            UUID of the directory entry providing the requester pickup location code
+            and shipping address. When omitted, AcceptItem uses the requester LMS
+            configuration.
         requesterSymbol:
           type: string
           description: Requester symbol
@@ -641,6 +648,13 @@ components:
         patron:
           type: string
           description: User who requested item
+        requesterPickupLocationId:
+          type: string
+          format: uuid
+          description: >-
+            UUID of the directory entry providing the requester pickup location code
+            and shipping address. When omitted, AcceptItem uses the requester LMS
+            configuration.
         requesterSymbol:
           type: string
           description: Requester symbol
