@@ -32,6 +32,9 @@
 
 \set ON_ERROR_STOP on
 
+BEGIN;
+
+CREATE TEMP TABLE crosslink_config_records ON COMMIT DROP AS
 WITH export_settings AS (
     SELECT max(st_value) FILTER (
         WHERE st_key = 'pull_slip_template_id'
@@ -82,14 +85,27 @@ pull_slip_timers AS (
 exportable_pull_slip_timers AS (
     SELECT *
     FROM pull_slip_timers
-    WHERE jsonb_typeof(config) = 'object'
-      AND jsonb_typeof(config -> 'emailAddresses') = 'array'
-      AND jsonb_array_length(config -> 'emailAddresses') > 0
+    WHERE CASE
+        WHEN jsonb_typeof(config) IS DISTINCT FROM 'object' THEN false
+        WHEN jsonb_typeof(config -> 'emailAddresses')
+            IS DISTINCT FROM 'array' THEN false
+        ELSE jsonb_array_length(config -> 'emailAddresses') > 0
+             AND NOT EXISTS (
+                 SELECT 1
+                 FROM jsonb_array_elements(
+                     config -> 'emailAddresses'
+                 ) AS address(value)
+                 WHERE jsonb_typeof(address.value)
+                     IS DISTINCT FROM 'string'
+             )
+    END
 ),
 export_records AS (
     SELECT
         1 AS record_type_order,
         english_templates.container_id AS record_order,
+        'template'::text AS record_type,
+        'mod-rs-template-' || english_templates.container_id AS record_id,
         jsonb_build_object(
             'type', 'template',
             'owner', :'owner',
@@ -111,6 +127,8 @@ export_records AS (
     SELECT
         2 AS record_type_order,
         NULL AS record_order,
+        'template'::text AS record_type,
+        'pullslip-email'::text AS record_id,
         jsonb_build_object(
             'type', 'template',
             'owner', :'owner',
@@ -141,6 +159,8 @@ export_records AS (
     SELECT
         3 AS record_type_order,
         pull_slip_timers.timer_id AS record_order,
+        'batchAction'::text AS record_type,
+        pull_slip_timers.timer_id::text AS record_id,
         jsonb_build_object(
             'type', 'batchAction',
             'owner', :'owner',
@@ -161,6 +181,33 @@ export_records AS (
         ) AS record
     FROM exportable_pull_slip_timers AS pull_slip_timers
 )
+SELECT *
+FROM export_records;
+
+-- Keep this boundary in sync with broker/import/service.maxImportRecordBytes.
+DO $record_size_preflight$
+DECLARE
+    problems TEXT;
+BEGIN
+    SELECT string_agg(
+        record_type || ' ' || record_id || ' ('
+            || octet_length(record::text) || ' bytes)',
+        E'\n' ORDER BY record_type_order, record_order
+    )
+    INTO problems
+    FROM crosslink_config_records
+    WHERE octet_length(record::text) > 1048576;
+
+    IF problems IS NOT NULL THEN
+        RAISE EXCEPTION
+            E'CrossLink config export records exceed the 1048576-byte import limit:\n%',
+            problems;
+    END IF;
+END
+$record_size_preflight$;
+
 SELECT record::text
-FROM export_records
+FROM crosslink_config_records
 ORDER BY record_type_order, record_order;
+
+ROLLBACK;
