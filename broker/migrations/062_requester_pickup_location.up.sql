@@ -1,4 +1,4 @@
-ALTER TABLE patron_request ADD COLUMN requester_pickup_location VARCHAR;
+ALTER TABLE patron_request ADD COLUMN requester_pickup_location_id UUID;
 DROP VIEW patron_request_search_view;
 CREATE VIEW patron_request_search_view AS
 SELECT

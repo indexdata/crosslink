@@ -814,22 +814,22 @@ func TestListPatronRequests(t *testing.T) {
 }
 
 func TestRequesterPickupLocationPersistence(t *testing.T) {
-	pickup := pgtype.Text{String: "branch-1", Valid: true}
+	pickup := pgtype.UUID{Bytes: uuid.New(), Valid: true}
 	pr, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
 		ID: uuid.NewString(), CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
-		Language: "english", Items: []pr_db.PrItem{}, RequesterPickupLocation: pickup,
+		Language: "english", Items: []pr_db.PrItem{}, RequesterPickupLocationID: pickup,
 	})
 	if !assert.NoError(t, err) {
 		return
 	}
-	assert.Equal(t, pickup, pr.RequesterPickupLocation)
+	assert.Equal(t, pickup, pr.RequesterPickupLocationID)
 	view, err := prRepo.GetPatronRequestSearchView(appCtx, pr.ID)
 	if assert.NoError(t, err) {
-		assert.Equal(t, pickup, view.RequesterPickupLocation)
+		assert.Equal(t, pickup, view.RequesterPickupLocationID)
 	}
-	pr.RequesterPickupLocation = pgtype.Text{String: "branch-2", Valid: true}
+	pr.RequesterPickupLocationID = pgtype.UUID{Bytes: uuid.New(), Valid: true}
 	updated, err := prRepo.UpdatePatronRequest(appCtx, pr_db.UpdatePatronRequestParams(pr))
 	if assert.NoError(t, err) {
-		assert.Equal(t, pr.RequesterPickupLocation, updated.RequesterPickupLocation)
+		assert.Equal(t, pr.RequesterPickupLocationID, updated.RequesterPickupLocationID)
 	}
 }

@@ -32,7 +32,7 @@ func CreateApiDirectory(client *http.Client, urls []string) DirectoryLookupAdapt
 	return &ApiDirectory{client: client, urls: urls}
 }
 
-func (a *ApiDirectory) getDirectory(ctx common.ExtendedContext, symbols []string, tenant string, durl string, pickupLocation string) ([]DirectoryEntry, string, error) {
+func (a *ApiDirectory) getDirectory(ctx common.ExtendedContext, symbols []string, tenant string, durl string, entryID string) ([]DirectoryEntry, string, error) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(COMP))
 	var cql string
 	if len(symbols) > 0 {
@@ -45,15 +45,15 @@ func (a *ApiDirectory) getDirectory(ctx common.ExtendedContext, symbols []string
 		}
 		cql += "tenant=\"" + cqlbuilder.EscapeMaskingChars(cqlbuilder.EscapeSpecialChars(tenant)) + "\""
 	}
-	if cql == "" {
+	if cql == "" && entryID == "" {
 		return []DirectoryEntry{}, "", fmt.Errorf("no symbols or tenant provided for directory lookup")
-	}
-	if pickupLocation != "" {
-		cql += " and requesterPickupLocation=\"" + cqlbuilder.EscapeMaskingChars(cqlbuilder.EscapeSpecialChars(pickupLocation)) + "\""
 	}
 	var dirEntries []DirectoryEntry
 	query := "?limit=1000&cql=" + url.QueryEscape(cql)
-	fullUrl := durl + query
+	if entryID != "" {
+		query = "/by-id/" + url.PathEscape(entryID)
+	}
+	fullUrl := strings.TrimRight(durl, "/") + query
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullUrl, nil)
 	if err != nil {
 		return []DirectoryEntry{}, query, err
@@ -69,12 +69,21 @@ func (a *ApiDirectory) getDirectory(ctx common.ExtendedContext, symbols []string
 	defer response.Body.Close()
 
 	body := utils.Must(io.ReadAll(response.Body))
+	if entryID != "" && response.StatusCode == http.StatusNotFound {
+		return []DirectoryEntry{}, query, nil
+	}
 	if response.StatusCode != http.StatusOK {
 		return []DirectoryEntry{}, query, fmt.Errorf("API returned non-OK status: %d, body: %s", response.StatusCode, body)
 	}
 
 	var responseList dirapi.EntriesResponse
-	err = json.Unmarshal(body, &responseList)
+	if entryID != "" {
+		var entry dirapi.Entry
+		err = json.Unmarshal(body, &entry)
+		responseList.Items = []dirapi.Entry{entry}
+	} else {
+		err = json.Unmarshal(body, &responseList)
+	}
 	if err != nil {
 		return []DirectoryEntry{}, query, err
 	}
@@ -94,7 +103,7 @@ func (a *ApiDirectory) getDirectory(ctx common.ExtendedContext, symbols []string
 				childSymbolsById[parentID] = append(childSymbolsById[parentID], symbols...)
 			}
 		}
-		if len(symbols) == 0 && pickupLocation == "" {
+		if len(symbols) == 0 && entryID == "" {
 			ctx.Logger().Info("Directory entry has no symbols and will be ignored", "entryName", d.Name)
 			continue
 		}
@@ -149,7 +158,7 @@ func (a *ApiDirectory) Lookup(ctx common.ExtendedContext, params DirectoryLookup
 	var directoryList []DirectoryEntry
 	var query string
 	for _, durl := range a.urls {
-		d, queryVal, err := a.getDirectory(ctx, params.Symbols, params.Tenant, durl, params.RequesterPickupLocation)
+		d, queryVal, err := a.getDirectory(ctx, params.Symbols, params.Tenant, durl, params.EntryID)
 		query = queryVal
 		if err != nil {
 			return []DirectoryEntry{}, query, err

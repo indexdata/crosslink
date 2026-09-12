@@ -1,5 +1,5 @@
 DROP VIEW patron_request_search_view;
-ALTER TABLE patron_request DROP COLUMN requester_pickup_location;
+ALTER TABLE patron_request DROP COLUMN requester_pickup_location_id;
 CREATE VIEW patron_request_search_view AS
 SELECT
     pr.*,

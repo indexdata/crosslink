@@ -1020,6 +1020,19 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 		}
 		items = []pr_db.Item{item}
 	}
+	pickupLocation := lmsAdapter.RequesterPickupLocation()
+	if pr.RequesterPickupLocationID.Valid {
+		entry, lookupErr := a.pickupLocationEntry(ctx, pr)
+		if lookupErr != nil {
+			status, result := logActionErrorAndReturnResult(ctx, "Pickup location lookup failed", lookupErr)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		if entry.LmsConfig == nil || entry.LmsConfig.RequesterPickupLocation == nil || *entry.LmsConfig.RequesterPickupLocation == "" {
+			status, result := logActionErrorAndReturnResult(ctx, "Pickup location lookup failed", fmt.Errorf("pickup location %s has no LMS pickup location code", uuid.UUID(pr.RequesterPickupLocationID.Bytes)))
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		pickupLocation = *entry.LmsConfig.RequesterPickupLocation
+	}
 	for _, item := range items {
 		if item.LmsRequestID.Valid && strings.TrimSpace(item.LmsRequestID.String) != "" {
 			continue
@@ -1035,10 +1048,6 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 		itemId := item.Barcode // requester bar code
 		author := pr.IllRequest.BibliographicInfo.Author
 		isbn := ""
-		pickupLocation := pr.RequesterPickupLocation.String
-		if pickupLocation == "" {
-			pickupLocation = lmsAdapter.RequesterPickupLocation()
-		}
 		requestedAction := "Hold For Pickup"
 		// Persist the same identifier sent to the requester LMS after acceptance.
 		requestID := pr.ID
@@ -1175,7 +1184,7 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 	retryPr := pr_db.PatronRequest{}
 	retryPr.Side = pr.Side
 	retryPr.RequesterSymbol = pr.RequesterSymbol
-	retryPr.RequesterPickupLocation = pr.RequesterPickupLocation
+	retryPr.RequesterPickupLocationID = pr.RequesterPickupLocationID
 	retryPr.SupplierSymbol = pr.SupplierSymbol
 	retryPr.Patron = pr.Patron
 	retryPr.Tenant = pr.Tenant
@@ -2014,29 +2023,16 @@ func (a *PatronRequestActionService) saveLendingAddConditionNotification(ctx com
 
 // applyPickupLocationAddress changes only delivery information, leaving agency identity intact.
 func (a *PatronRequestActionService) applyPickupLocationAddress(ctx common.ExtendedContext, pr pr_db.PatronRequest, request iso18626.Request) (iso18626.Request, error) {
-	code := pr.RequesterPickupLocation.String
-	if code == "" || (request.PatronInfo != nil && request.PatronInfo.SendToPatron != nil && *request.PatronInfo.SendToPatron == iso18626.TypeYesNoY) {
+	if !pr.RequesterPickupLocationID.Valid || (request.PatronInfo != nil && request.PatronInfo.SendToPatron != nil && *request.PatronInfo.SendToPatron == iso18626.TypeYesNoY) {
 		return request, nil
 	}
-	entries, _, err := a.directoryLookupAdapter.Lookup(ctx, adapter.DirectoryLookupParams{
-		Symbols:                 []string{pr.RequesterSymbol.String},
-		RequesterPickupLocation: code,
-	})
+	entry, err := a.pickupLocationEntry(ctx, pr)
 	if err != nil {
 		return request, err
 	}
-	var matches []dirapi.Entry
-	for _, entry := range entries {
-		if entry.CustomData.LmsConfig != nil && entry.CustomData.LmsConfig.RequesterPickupLocation != nil && *entry.CustomData.LmsConfig.RequesterPickupLocation == code {
-			matches = append(matches, entry.CustomData)
-		}
-	}
-	if len(matches) != 1 {
-		return request, fmt.Errorf("pickup location %q: expected one directory entry, found %d", code, len(matches))
-	}
-	address := common.DirectoryShippingAddress(matches[0])
+	address := common.DirectoryShippingAddress(entry)
 	if address.Line1 == "" {
-		return request, fmt.Errorf("pickup location %q has no shipping address", code)
+		return request, fmt.Errorf("pickup location %s has no shipping address", uuid.UUID(pr.RequesterPickupLocationID.Bytes))
 	}
 	request, err = deepCopyISO18626Request(request)
 	if err != nil {
@@ -2055,4 +2051,22 @@ func (a *PatronRequestActionService) applyPickupLocationAddress(ctx common.Exten
 		request.RequestedDeliveryInfo = append(request.RequestedDeliveryInfo, iso18626.RequestedDeliveryInfo{Address: &iso18626.Address{PhysicalAddress: &address}})
 	}
 	return request, nil
+}
+
+func (a *PatronRequestActionService) pickupLocationEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest) (dirapi.Entry, error) {
+	id := uuid.UUID(pr.RequesterPickupLocationID.Bytes)
+	entries, _, err := a.directoryLookupAdapter.Lookup(ctx, adapter.DirectoryLookupParams{EntryID: id.String()})
+	if err != nil {
+		return dirapi.Entry{}, err
+	}
+	var matches []dirapi.Entry
+	for _, entry := range entries {
+		if entry.CustomData.Id != nil && *entry.CustomData.Id == id {
+			matches = append(matches, entry.CustomData)
+		}
+	}
+	if len(matches) != 1 {
+		return dirapi.Entry{}, fmt.Errorf("pickup location %s: expected one directory entry, found %d", id, len(matches))
+	}
+	return matches[0], nil
 }

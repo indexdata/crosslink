@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -1153,14 +1154,14 @@ func TestHandleInvokeActionSendRequest(t *testing.T) {
 func TestHandleInvokeActionReceiveOK(t *testing.T) {
 	for _, tt := range []struct {
 		name       string
-		selected   pgtype.Text
+		selected   pgtype.UUID
 		configured string
 		expected   string
 	}{
-		{name: "selected branch overrides configured location", selected: getDbText("branch-1"), configured: "main", expected: "branch-1"},
-		{name: "selected branch without configured location", selected: getDbText("branch-1"), expected: "branch-1"},
+		{name: "selected branch overrides configured location", selected: pickupID("11111111-1111-4111-8111-111111111111"), configured: "main", expected: "branch-1"},
+		{name: "selected branch without configured location", selected: pickupID("11111111-1111-4111-8111-111111111111"), expected: "branch-1"},
 		{name: "omitted selection uses configured location", configured: "main", expected: "main"},
-		{name: "empty selection uses configured location", selected: getDbText(""), configured: "main", expected: "main"},
+		{name: "empty selection uses configured location", selected: pgtype.UUID{}, configured: "main", expected: "main"},
 		{name: "no pickup location configured"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1174,9 +1175,15 @@ func TestHandleInvokeActionReceiveOK(t *testing.T) {
 			emailMock := new(EmailSenderMock)
 			emailMock.On("IsReadyToSend").Return(false)
 			prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, emailMock, nil, nil)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/by-id/11111111-1111-4111-8111-111111111111", r.URL.Path)
+				_, _ = w.Write([]byte(`{"id":"11111111-1111-4111-8111-111111111111","name":"Branch","lmsConfig":{"requesterPickupLocation":"branch-1"}}`))
+			}))
+			defer server.Close()
+			prAction.directoryLookupAdapter = adapter.CreateApiDirectory(server.Client(), []string{server.URL})
 			illRequest := iso18626.Request{}
-			mockPrRepo.On("GetPatronRequestById", patronRequestId).Once().Return(pr_db.PatronRequest{ID: patronRequestId, RequesterPickupLocation: tt.selected, IllRequest: illRequest, State: BorrowerStateShipped, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
-			mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, RequesterPickupLocation: tt.selected, IllRequest: illRequest, State: BorrowerStateReceived, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
+			mockPrRepo.On("GetPatronRequestById", patronRequestId).Once().Return(pr_db.PatronRequest{ID: patronRequestId, RequesterPickupLocationID: tt.selected, IllRequest: illRequest, State: BorrowerStateShipped, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
+			mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, RequesterPickupLocationID: tt.selected, IllRequest: illRequest, State: BorrowerStateReceived, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 			mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{
 				{
 					ID:        "item1",

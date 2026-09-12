@@ -25,7 +25,7 @@ CREATE TABLE patron_request
     prev_req_id         VARCHAR,
     retry_bib_info       JSONB,
     state_model         VARCHAR NOT NULL DEFAULT 'default',
-    requester_pickup_location VARCHAR
+    requester_pickup_location_id UUID
 );
 
 CREATE OR REPLACE FUNCTION get_next_hrid(prefix VARCHAR) RETURNS VARCHAR AS $$

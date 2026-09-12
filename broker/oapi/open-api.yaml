@@ -533,12 +533,13 @@ components:
         patron:
           type: string
           description: User who requested item
-        requesterPickupLocation:
+        requesterPickupLocationId:
           type: string
+          format: uuid
           description: >-
-            Directory LMS pickup location code used to select the requester branch
-            shipping address and the NCIP AcceptItem pickup location. When omitted
-            or empty, AcceptItem uses the requester LMS configuration.
+            UUID of the directory entry providing the requester pickup location code
+            and shipping address. When omitted, AcceptItem uses the requester LMS
+            configuration.
         requesterSymbol:
           type: string
           description: Requester symbol
@@ -647,12 +648,13 @@ components:
         patron:
           type: string
           description: User who requested item
-        requesterPickupLocation:
+        requesterPickupLocationId:
           type: string
+          format: uuid
           description: >-
-            Directory LMS pickup location code used to select the requester branch
-            shipping address and the NCIP AcceptItem pickup location. When omitted
-            or empty, AcceptItem uses the requester LMS configuration.
+            UUID of the directory entry providing the requester pickup location code
+            and shipping address. When omitted, AcceptItem uses the requester LMS
+            configuration.
         requesterSymbol:
           type: string
           description: Requester symbol

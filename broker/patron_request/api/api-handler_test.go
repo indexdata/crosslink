@@ -137,29 +137,29 @@ func TestToApiPatronRequestSurfacesInternalNote(t *testing.T) {
 
 func patronRequestSearchViewFromPatronRequest(pr pr_db.PatronRequest, hasCost bool) pr_db.PatronRequestSearchView {
 	return pr_db.PatronRequestSearchView{
-		ID:                      pr.ID,
-		CreatedAt:               pr.CreatedAt,
-		IllRequest:              pr.IllRequest,
-		State:                   pr.State,
-		Side:                    pr.Side,
-		Patron:                  pr.Patron,
-		RequesterSymbol:         pr.RequesterSymbol,
-		SupplierSymbol:          pr.SupplierSymbol,
-		Tenant:                  pr.Tenant,
-		RequesterReqID:          pr.RequesterReqID,
-		NeedsAttention:          pr.NeedsAttention,
-		LastAction:              pr.LastAction,
-		LastActionOutcome:       pr.LastActionOutcome,
-		LastActionResult:        pr.LastActionResult,
-		Items:                   pr.Items,
-		Language:                pr.Language,
-		TerminalState:           pr.TerminalState,
-		UpdatedAt:               pr.UpdatedAt,
-		IllResponse:             pr.IllResponse,
-		InternalNote:            pr.InternalNote,
-		StateModel:              pr.StateModel,
-		RequesterPickupLocation: pr.RequesterPickupLocation,
-		HasCost:                 hasCost,
+		ID:                        pr.ID,
+		CreatedAt:                 pr.CreatedAt,
+		IllRequest:                pr.IllRequest,
+		State:                     pr.State,
+		Side:                      pr.Side,
+		Patron:                    pr.Patron,
+		RequesterSymbol:           pr.RequesterSymbol,
+		SupplierSymbol:            pr.SupplierSymbol,
+		Tenant:                    pr.Tenant,
+		RequesterReqID:            pr.RequesterReqID,
+		NeedsAttention:            pr.NeedsAttention,
+		LastAction:                pr.LastAction,
+		LastActionOutcome:         pr.LastActionOutcome,
+		LastActionResult:          pr.LastActionResult,
+		Items:                     pr.Items,
+		Language:                  pr.Language,
+		TerminalState:             pr.TerminalState,
+		UpdatedAt:                 pr.UpdatedAt,
+		IllResponse:               pr.IllResponse,
+		InternalNote:              pr.InternalNote,
+		StateModel:                pr.StateModel,
+		RequesterPickupLocationID: pr.RequesterPickupLocationID,
+		HasCost:                   hasCost,
 	}
 }
 
@@ -1694,10 +1694,22 @@ func TestPutPatronRequestsIdInvalidBrokerSymbol(t *testing.T) {
 
 func TestPatronRequestPickupLocationRoundTrip(t *testing.T) {
 	var request proapi.CreatePatronRequest
-	require.NoError(t, json.Unmarshal([]byte(`{"requesterSymbol":"ISIL:MAIN","requesterPickupLocation":"branch-1","illRequest":{}}`), &request))
+	require.NoError(t, json.Unmarshal([]byte(`{"requesterSymbol":"ISIL:MAIN","requesterPickupLocationId":"11111111-1111-4111-8111-111111111111","illRequest":{}}`), &request))
 	pr := buildDbPatronRequest(&request, nil, pgtype.Timestamp{}, "request-1", request.IllRequest, "", "default")
-	assert.Equal(t, pgtype.Text{String: "branch-1", Valid: true}, pr.RequesterPickupLocation)
+	assert.Equal(t, pgtype.UUID{Bytes: uuid.MustParse("11111111-1111-4111-8111-111111111111"), Valid: true}, pr.RequesterPickupLocationID)
 	result := toApiPatronRequest(httptest.NewRequest(http.MethodGet, "/patron_requests/request-1", nil), patronRequestSearchViewFromPatronRequest(pr, false))
-	require.NotNil(t, result.RequesterPickupLocation)
-	assert.Equal(t, "branch-1", *result.RequesterPickupLocation)
+	require.NotNil(t, result.RequesterPickupLocationId)
+	assert.Equal(t, uuid.MustParse("11111111-1111-4111-8111-111111111111"), *result.RequesterPickupLocationId)
+}
+
+func TestPatronRequestPickupLocationIDValidation(t *testing.T) {
+	for _, value := range []string{"branch-1", ""} {
+		var request proapi.CreatePatronRequest
+		require.Error(t, json.Unmarshal([]byte(`{"requesterPickupLocationId":"`+value+`","illRequest":{}}`), &request))
+	}
+	var request proapi.CreatePatronRequest
+	require.NoError(t, json.Unmarshal([]byte(`{"illRequest":{}}`), &request))
+	pr := buildDbPatronRequest(&request, nil, pgtype.Timestamp{}, "request-1", request.IllRequest, "", "default")
+	require.False(t, pr.RequesterPickupLocationID.Valid)
+	require.Nil(t, toPickupLocationID(pr.RequesterPickupLocationID))
 }

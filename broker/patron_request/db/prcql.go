@@ -328,7 +328,7 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 			&i.PatronRequestSearchView.PrevReqID,
 			&i.PatronRequestSearchView.RetryBibInfo,
 			&i.PatronRequestSearchView.StateModel,
-			&i.PatronRequestSearchView.RequesterPickupLocation,
+			&i.PatronRequestSearchView.RequesterPickupLocationID,
 			&i.PatronRequestSearchView.HasNotification,
 			&i.PatronRequestSearchView.HasCost,
 			&i.PatronRequestSearchView.HasUnreadNotification,
