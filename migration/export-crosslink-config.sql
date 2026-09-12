@@ -17,7 +17,7 @@
 --   * Template labels are stable and take the form "mod-rs-template-<UUID>".
 --   * Legacy template containers are email templates. A pull-slip timer uses its
 --     configured template only when an eligible English template is exported;
---     otherwise it uses CrossLink's built-in pullslip-email template.
+--     otherwise this script exports CrossLink's default pullslip-email template.
 --     The attached pull-slip PDF is rendered separately in both systems and is
 --     controlled by includePdf.
 --   * Only enabled PrintPullSlips timers with a non-empty RRULE and at least one
@@ -79,6 +79,13 @@ pull_slip_timers AS (
       AND nullif(btrim(timer.tr_rrule), '') IS NOT NULL
       AND nullif(btrim(timer.tr_task_config), '') IS NOT NULL
 ),
+exportable_pull_slip_timers AS (
+    SELECT *
+    FROM pull_slip_timers
+    WHERE jsonb_typeof(config) = 'object'
+      AND jsonb_typeof(config -> 'emailAddresses') = 'array'
+      AND jsonb_array_length(config -> 'emailAddresses') > 0
+),
 export_records AS (
     SELECT
         1 AS record_type_order,
@@ -103,6 +110,36 @@ export_records AS (
 
     SELECT
         2 AS record_type_order,
+        NULL AS record_order,
+        jsonb_build_object(
+            'type', 'template',
+            'owner', :'owner',
+            'data', jsonb_build_object(
+                'title', 'Scheduled pullslips email template',
+                'purpose', 'email',
+                'subject', 'Scheduled pullslips',
+                'body', '<p>This is an automated pull slip summary.</p>
+<p>
+  <strong>Query:</strong> {{.BatchQuery}}<br>
+  <strong>Matching requests:</strong> {{.ActualCount}} (of {{.FullCount}} total)
+</p>
+<p>Please process the attached pull slips at your earliest convenience.</p>
+',
+                'contentType', 'html',
+                'labels', jsonb_build_array('pullslip-email'),
+                'audience', 'staff'
+            )
+        ) AS record
+    WHERE EXISTS (
+        SELECT 1
+        FROM exportable_pull_slip_timers
+        WHERE template_label = 'pullslip-email'
+    )
+
+    UNION ALL
+
+    SELECT
+        3 AS record_type_order,
         pull_slip_timers.timer_id AS record_order,
         jsonb_build_object(
             'type', 'batchAction',
@@ -122,12 +159,7 @@ export_records AS (
                 )
             )
         ) AS record
-    FROM pull_slip_timers
-    WHERE jsonb_typeof(pull_slip_timers.config) = 'object'
-      AND jsonb_typeof(pull_slip_timers.config -> 'emailAddresses') = 'array'
-      AND jsonb_array_length(
-          pull_slip_timers.config -> 'emailAddresses'
-      ) > 0
+    FROM exportable_pull_slip_timers AS pull_slip_timers
 )
 SELECT record::text
 FROM export_records

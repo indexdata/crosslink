@@ -203,6 +203,24 @@ func TestImportPatronRequestRejectsMissingOrBlankSupplierSymbolForLending(t *tes
 	}
 }
 
+func TestImportPatronRequestRejectsSupplierSymbolDifferentFromISOHeaderForLending(t *testing.T) {
+	repo := &recordingImportRepo{}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		request := bundle["patronRequest"].(map[string]any)
+		request["side"] = "lending"
+		request["supplierSymbol"] = "ISIL:OTHER"
+		delete(bundle, "illTransaction")
+		bundle["locatedSuppliers"] = []any{}
+	})
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+
+	require.ErrorContains(t, err, "patronRequest.supplierSymbol must match illRequest.header.supplyingAgencyId for lending requests")
+	assert.Zero(t, repo.patronCalls)
+}
+
 func TestImportPatronRequestRejectsRequesterRequestIDDifferentFromISOHeader(t *testing.T) {
 	repo := &recordingImportRepo{}
 	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
