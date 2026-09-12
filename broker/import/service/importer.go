@@ -337,6 +337,13 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 	if request.RequesterRequestId != request.IllRequest.Header.RequestingAgencyRequestId {
 		return importdb.PatronRequestBundle{}, nil, errors.New("patronRequest.requesterRequestId must match illRequest.header.requestingAgencyRequestId")
 	}
+	requesterSymbol := request.IllRequest.Header.RequestingAgencyId.AgencyIdType.Text + ":" + request.IllRequest.Header.RequestingAgencyId.AgencyIdValue
+	if request.RequesterSymbol != requesterSymbol {
+		return importdb.PatronRequestBundle{}, nil, errors.New("patronRequest.requesterSymbol must match illRequest.header.requestingAgencyId")
+	}
+	if apiBundle.IllTransaction != nil && apiBundle.IllTransaction.RequesterSymbol != requesterSymbol {
+		return importdb.PatronRequestBundle{}, nil, errors.New("illTransaction.requesterSymbol must match illRequest.header.requestingAgencyId")
+	}
 	if side == prservice.SideBorrowing && request.Id != request.RequesterRequestId {
 		return importdb.PatronRequestBundle{}, nil, errors.New("borrowing patronRequest.id must match requesterRequestId")
 	}
