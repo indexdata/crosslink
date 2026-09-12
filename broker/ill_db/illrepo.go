@@ -448,10 +448,10 @@ func (r *PgIllRepo) createNewPeer(ctx common.ExtendedContext, dirEntry adapter.D
 				// The conflicting insert has committed. A new statement sees that winner,
 				// including when it was created by a concurrent symbol lookup.
 				existing, lookupErr := txRepo.queries.GetPeerByDirectoryEntryId(ctx, txRepo.GetConnOrTx(), dirEntry.CustomData.Id.String())
-				peer = existing.Peer
-				return lookupErr
+				peer, err = existing.Peer, lookupErr
+			} else {
+				peer, err = row.Peer, createErr
 			}
-			peer, err = row.Peer, createErr
 		} else {
 			peer, err = illRepo.SavePeer(ctx, SavePeerParams{
 				ID:            uuid.New().String(),

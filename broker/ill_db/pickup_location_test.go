@@ -303,3 +303,37 @@ func TestDirectoryEntryCacheWithReplicas(t *testing.T) {
 		})
 	}
 }
+
+func TestDirectoryPeerInsertConflictSavesSymbols(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	id := uuid.New()
+	// A direct-ID lookup wins the insert without any symbol associations.
+	winner, _, err := illRepo.GetCachedPeerByDirectoryEntryID(ctx, id, &adapter.MockDirectoryLookupAdapter{})
+	require.NoError(t, err)
+	symbols, err := illRepo.GetSymbolsByPeerId(ctx, winner.ID)
+	require.NoError(t, err)
+	require.Empty(t, symbols)
+
+	symbol := "ISIL:" + uuid.NewString()
+	branch := "ISIL:" + uuid.NewString()
+	// Reproduce a symbol lookup that already observed a cache miss before the winner committed.
+	peer, err := illRepo.(*PgIllRepo).createNewPeer(ctx, adapter.DirectoryEntry{
+		CustomData:    winner.CustomData,
+		Symbols:       []string{symbol},
+		BranchSymbols: []string{branch},
+	})
+	require.NoError(t, err)
+	require.Equal(t, winner.ID, peer.ID)
+	associated, err := illRepo.GetPeerBySymbol(ctx, symbol)
+	require.NoError(t, err)
+	require.Equal(t, winner.ID, associated.ID)
+	branches, err := illRepo.GetBranchSymbolsByPeerId(ctx, winner.ID)
+	require.NoError(t, err)
+	require.Equal(t, []BranchSymbol{{SymbolValue: branch, PeerID: winner.ID}}, branches)
+
+	// Subsequent symbol lookups must use the cache without contacting the directory.
+	cached, query, err := illRepo.GetCachedPeersBySymbols(ctx, []string{symbol}, nil)
+	require.NoError(t, err)
+	require.Equal(t, "<cached>", query)
+	require.Equal(t, []Peer{winner}, cached)
+}
