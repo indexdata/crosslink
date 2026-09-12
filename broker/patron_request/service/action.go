@@ -1020,14 +1020,19 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 		}
 		items = []pr_db.Item{item}
 	}
-	pickupLocation, err := a.requesterPickupCode(ctx, pr, lmsAdapter)
-	if err != nil {
-		status, result := logActionErrorAndReturnResult(ctx, "Pickup location lookup failed", err)
-		return actionExecutionResult{status: status, result: result, pr: pr}
-	}
+	var pickupLocation string
+	pickupResolved := false
 	for _, item := range items {
 		if item.LmsRequestID.Valid && strings.TrimSpace(item.LmsRequestID.String) != "" {
 			continue
+		}
+		if !pickupResolved {
+			pickupLocation, err = a.requesterPickupCode(ctx, pr, lmsAdapter)
+			if err != nil {
+				status, result := logActionErrorAndReturnResult(ctx, "Pickup location lookup failed", err)
+				return actionExecutionResult{status: status, result: result, pr: pr}
+			}
+			pickupResolved = true
 		}
 		callNumber := ""
 		if item.CallNumber.Valid {

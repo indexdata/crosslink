@@ -5699,3 +5699,41 @@ func (i *IllRepoMock) GetCachedPeerByDirectoryEntryID(ctx common.ExtendedContext
 	args := i.Called(id, directoryAdapter)
 	return args.Get(0).(ill_db.Peer), args.String(1), args.Error(2)
 }
+
+func TestHandleInvokeActionReceiveFullyAcceptedRetrySkipsPickupLookup(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsAdapter := new(mockLmsAdapter)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(lmsAdapter, nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	mockEventBus := new(MockEventBus)
+	emailMock := new(EmailSenderMock)
+	emailMock.On("IsReadyToSend").Return(false)
+	pickupRepo := new(IllRepoMock)
+	prAction := CreatePatronRequestActionService(mockPrRepo, pickupRepo, mockEventBus, mockIso18626Handler, lmsCreator, emailMock, nil, nil)
+	pr := pr_db.PatronRequest{
+		ID:                        patronRequestId,
+		RequesterPickupLocationID: pgtype.UUID{Bytes: uuid.New(), Valid: true},
+		State:                     BorrowerStateShipped,
+		Side:                      SideBorrowing,
+		RequesterSymbol:           getDbText("ISIL:REC1"),
+		SupplierSymbol:            getDbText("ISIL:SUP1"),
+	}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Once().Return(pr, nil)
+	receivedPr := pr
+	receivedPr.State = BorrowerStateReceived
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(receivedPr, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{
+		{ID: "item1", PrID: patronRequestId, Barcode: "1234", LmsRequestID: getDbText(patronRequestId)},
+		{ID: "item2", PrID: patronRequestId, Barcode: "5678", LmsRequestID: getDbText(patronRequestId)},
+	}, nil).Once()
+	action := BorrowerActionReceive
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, string(BorrowerStateReceived), *resultData.ActionResult.ToState)
+	lmsAdapter.AssertNotCalled(t, "AcceptItem", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	pickupRepo.AssertNotCalled(t, "GetCachedPeerByDirectoryEntryID", mock.Anything, mock.Anything)
+	lmsAdapter.AssertExpectations(t)
+}
