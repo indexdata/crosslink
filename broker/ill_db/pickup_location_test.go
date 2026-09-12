@@ -204,7 +204,7 @@ func TestDeduplicateDirectoryPeersMigration(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	tx, err := illRepo.(*PgIllRepo).Pool.Begin(ctx)
 	require.NoError(t, err)
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	_, err = tx.Exec(ctx, "DROP INDEX peer_directory_entry_id_idx; CREATE INDEX peer_directory_entry_id_idx ON peer ((custom_data ->> 'id'))")
 	require.NoError(t, err)
 	id := uuid.NewString()
@@ -249,4 +249,57 @@ func TestDeduplicateDirectoryPeersMigration(t *testing.T) {
 	require.Error(t, err)
 	require.True(t, errors.As(err, new(*pgconn.PgError)))
 	require.Equal(t, "23505", err.(*pgconn.PgError).Code)
+}
+
+func TestDirectoryEntryCacheWithReplicas(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	for _, tc := range []struct {
+		name     string
+		code     string
+		street   string
+		conflict bool
+	}{
+		{name: "identical entries", code: "branch-1", street: "1 Library Street"},
+		{name: "conflicting pickup codes", code: "branch-2", street: "1 Library Street", conflict: true},
+		{name: "conflicting shipping addresses", code: "branch-1", street: "2 Library Street", conflict: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			id := uuid.New()
+			calls := 0
+			replica := func(code, street string) *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					calls++
+					require.Equal(t, "/by-id/"+id.String(), r.URL.Path)
+					require.NoError(t, json.NewEncoder(w).Encode(dirapi.Entry{
+						Id: &id, Name: "Branch",
+						LmsConfig: &dirapi.LmsConfig{RequesterPickupLocation: &code},
+						Addresses: &[]dirapi.Address{{Type: "Shipping", AddressComponents: &[]dirapi.AddressComponent{{Type: "Thoroughfare", Value: street}}}},
+					}))
+				}))
+			}
+			first := replica("branch-1", "1 Library Street")
+			defer first.Close()
+			second := replica(tc.code, tc.street)
+			defer second.Close()
+			directory := createDirectoryAdapter(first.URL, second.URL)
+			peer, _, err := illRepo.GetCachedPeerByDirectoryEntryID(ctx, id, directory)
+			require.Equal(t, 2, calls)
+			if tc.conflict {
+				require.ErrorContains(t, err, "conflicting responses")
+				var count int
+				require.NoError(t, illRepo.(*PgIllRepo).Pool.QueryRow(ctx, "SELECT count(*) FROM peer WHERE custom_data ->> 'id' = $1", id.String()).Scan(&count))
+				require.Zero(t, count)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, id, *peer.CustomData.Id)
+			require.Equal(t, "branch-1", *peer.CustomData.LmsConfig.RequesterPickupLocation)
+			require.Equal(t, "1 Library Street", common.DirectoryShippingAddress(peer.CustomData).Line1)
+			cached, query, err := illRepo.GetCachedPeerByDirectoryEntryID(ctx, id, directory)
+			require.NoError(t, err)
+			require.Equal(t, "<cached>", query)
+			require.Equal(t, peer, cached)
+			require.Equal(t, 2, calls)
+		})
+	}
 }

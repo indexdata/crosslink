@@ -3,6 +3,7 @@ package ill_db
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"time"
 
@@ -338,6 +339,12 @@ func (r *PgIllRepo) GetCachedPeerByDirectoryEntryID(ctx common.ExtendedContext, 
 	var matches []adapter.DirectoryEntry
 	for _, entry := range entries {
 		if entry.CustomData.Id != nil && *entry.CustomData.Id == id {
+			if len(matches) > 0 {
+				if !reflect.DeepEqual(matches[0], entry) {
+					return Peer{}, query, fmt.Errorf("directory entry %s: conflicting responses from directory replicas", id)
+				}
+				continue
+			}
 			matches = append(matches, entry)
 		}
 	}
