@@ -175,6 +175,7 @@ func (i Importer) Import(ctx common.ExtendedContext, policy importdb.ConflictPol
 			return result, err
 		}
 		if len(bytes.TrimSpace(raw)) == 0 {
+			line++
 			continue
 		}
 
@@ -437,7 +438,7 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 			return importdb.PatronRequestBundle{}, nil, fmt.Errorf("duplicate located supplier id %q", supplier.Id)
 		}
 		seenSuppliers[supplier.Id] = struct{}{}
-		bundle.LocatedSuppliers = append(bundle.LocatedSuppliers, ill_db.SaveLocatedSupplierParams{ID: supplier.Id, SupplierSymbol: supplier.SupplierSymbol, Ordinal: supplier.Ordinal, SupplierStatus: pgTextFromString(stringValue(supplier.SupplierStatus)), PrevAction: pgTextFromPtr(supplier.PrevAction), PrevStatus: pgTextFromPtr(supplier.PrevStatus), LastAction: pgTextFromPtr(supplier.LastAction), LastStatus: pgTextFromPtr(supplier.LastStatus), LocalID: pgTextFromPtr(supplier.LocalID), PrevReason: pgTextFromPtr(supplier.PrevReason), LastReason: pgTextFromPtr(supplier.LastReason), SupplierRequestID: pgTextFromPtr(supplier.SupplierRequestID), LocalSupplier: supplier.LocalSupplier})
+		bundle.LocatedSuppliers = append(bundle.LocatedSuppliers, ill_db.SaveLocatedSupplierParams{ID: supplier.Id, SupplierSymbol: supplier.SupplierSymbol, Ordinal: supplier.Ordinal, SupplierStatus: pgTextFromString(string(supplier.SupplierStatus)), PrevAction: pgTextFromPtr(supplier.PrevAction), PrevStatus: pgTextFromPtr(supplier.PrevStatus), LastAction: pgTextFromPtr(supplier.LastAction), LastStatus: pgTextFromPtr(supplier.LastStatus), LocalID: pgTextFromPtr(supplier.LocalID), PrevReason: pgTextFromPtr(supplier.PrevReason), LastReason: pgTextFromPtr(supplier.LastReason), SupplierRequestID: pgTextFromPtr(supplier.SupplierRequestID), LocalSupplier: supplier.LocalSupplier})
 		symbols = appendStableUnique(symbols, supplier.SupplierSymbol)
 	}
 	return bundle, symbols, nil
@@ -543,12 +544,6 @@ func valueOrEmpty(value *string) string {
 		return ""
 	}
 	return *value
-}
-func stringValue[T ~string](value *T) string {
-	if value == nil {
-		return ""
-	}
-	return string(*value)
 }
 
 func pgNumericFromFloat(value *float64) (pgtype.Numeric, error) {

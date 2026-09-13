@@ -373,6 +373,13 @@ func TestImportPatronRequestRejectsSchemaInvalidFields(t *testing.T) {
 			},
 		},
 		{
+			name: "missing located supplier status",
+			path: "/locatedSuppliers/0/supplierStatus",
+			mutate: func(bundle map[string]any) {
+				delete(bundle["locatedSuppliers"].([]any)[0].(map[string]any), "supplierStatus")
+			},
+		},
+		{
 			name: "missing items",
 			path: "items",
 			mutate: func(bundle map[string]any) {
@@ -460,6 +467,16 @@ func TestImporterCapsMalformedRecordDetails(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, result.Errors, 100)
 	assertImportErrorsOmitted(t, result, 5)
+}
+
+func TestImporterCountsBlankLinesInDiagnosticLineNumbers(t *testing.T) {
+	importer := newImporter(&recordingImportRepo{}, &recordingPeerCache{}, nil, nil, fixedClock)
+
+	result, err := importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader("\n{bad json}\n"))
+
+	require.NoError(t, err)
+	require.Len(t, result.Errors, 1)
+	assert.Equal(t, int32(2), result.Errors[0].Line)
 }
 
 func assertImportErrorsOmitted(t *testing.T, result any, want float64) {

@@ -19,7 +19,7 @@ func TestImportModelsReuseDomainEnums(t *testing.T) {
 	_ = PrNotification{Direction: direction, Kind: kind}
 
 	status := LocatedSupplierStatus("new")
-	_ = ImportLocatedSupplier{SupplierStatus: &status}
+	_ = ImportLocatedSupplier{SupplierStatus: status}
 	_ = LocatedSupplier{SupplierStatus: &status}
 
 	for _, value := range []PatronRequestSide{"borrowing", "lending"} {

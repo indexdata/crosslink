@@ -425,7 +425,7 @@ components:
           type: string
         localSupplier:
           type: boolean
-      required: [id, supplierSymbol, ordinal, localSupplier]
+      required: [id, supplierSymbol, ordinal, supplierStatus, localSupplier]
     Index:
       type: object
       properties:
