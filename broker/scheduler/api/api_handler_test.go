@@ -654,6 +654,41 @@ func TestPutBatchActionsId_OK_RecomputesRunAtAndPersistsActionData(t *testing.T)
 	repo.AssertExpectations(t)
 }
 
+func TestPutBatchActionsId_OmittedTitlePreservesExistingTitle(t *testing.T) {
+	repo := new(MockSchedRepo)
+	task := scheduledTaskFixture("task-1")
+	task.Title = pgtype.Text{String: "Existing title", Valid: true}
+	var saved sched_db.SaveScheduledTaskParams
+	repo.On("GetScheduledTaskByIdForUpdate", "task-1", testOwnerScope).Return(task, nil)
+	repo.On("SaveScheduledTask", mock.Anything).
+		Run(func(args mock.Arguments) {
+			saved = args.Get(0).(sched_db.SaveScheduledTaskParams)
+		}).
+		Return(task, nil)
+
+	h := newHandler(repo)
+	req := newReq(http.MethodPut, `{"batchQuery":"author=doe","schedule":"FREQ=DAILY"}`)
+	rr := httptest.NewRecorder()
+	h.PutBatchActionsId(rr, req, "task-1", schedoapi.PutBatchActionsIdParams{Symbol: symPtr(testSymbol)})
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, pgtype.Text{String: "Existing title", Valid: true}, saved.Title)
+}
+
+func TestPutBatchActionsId_RejectsEmptyTitle(t *testing.T) {
+	repo := new(MockSchedRepo)
+	task := scheduledTaskFixture("task-1")
+	repo.On("GetScheduledTaskByIdForUpdate", "task-1", testOwnerScope).Maybe().Return(task, nil)
+	repo.On("SaveScheduledTask", mock.Anything).Maybe().Return(task, nil)
+
+	h := newHandler(repo)
+	req := newReq(http.MethodPut, `{"title":"","batchQuery":"author=doe","schedule":"FREQ=DAILY"}`)
+	rr := httptest.NewRecorder()
+	h.PutBatchActionsId(rr, req, "task-1", schedoapi.PutBatchActionsIdParams{Symbol: symPtr(testSymbol)})
+
+	assertErrorStatus(t, rr, http.StatusBadRequest)
+}
+
 func TestPutBatchActionsId_InvalidSchedule(t *testing.T) {
 	repo := new(MockSchedRepo)
 

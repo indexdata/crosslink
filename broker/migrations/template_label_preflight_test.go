@@ -7,6 +7,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/indexdata/crosslink/broker/dbutil"
 	"github.com/indexdata/crosslink/testutil"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 )
@@ -40,6 +41,39 @@ func TestTemplateLabelUniquenessMigrationIgnoresNullArrayElements(t *testing.T) 
 	require.NoError(t, err)
 
 	require.NoError(t, migrator.Migrate(62))
+}
+
+func TestBatchActionTitleUniquenessMigrationBackfillsAndRequiresTitles(t *testing.T) {
+	ctx, migrator, pool := migrationAtVersion61(t)
+	_, err := pool.Exec(ctx, `
+		INSERT INTO scheduled_task (id, event_name, schedule, title, owner)
+		VALUES
+			('batch-null', 'invoke-batch-action', 'FREQ=DAILY', NULL, 'ISIL:OWNER'),
+			('batch-empty', 'invoke-batch-action', 'FREQ=DAILY', '', 'ISIL:OWNER'),
+			('background-null', 'invoke-background-action', 'FREQ=DAILY', NULL, 'ISIL:OWNER')`)
+	require.NoError(t, err)
+
+	require.NoError(t, migrator.Migrate(62))
+
+	var nullTitle, emptyTitle pgtype.Text
+	require.NoError(t, pool.QueryRow(ctx, `SELECT title FROM scheduled_task WHERE id = 'batch-null'`).Scan(&nullTitle))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT title FROM scheduled_task WHERE id = 'batch-empty'`).Scan(&emptyTitle))
+	require.Equal(t, pgtype.Text{String: "Untitled batch action batch-null", Valid: true}, nullTitle)
+	require.Equal(t, pgtype.Text{String: "Untitled batch action batch-empty", Valid: true}, emptyTitle)
+
+	var backgroundTitle pgtype.Text
+	require.NoError(t, pool.QueryRow(ctx, `SELECT title FROM scheduled_task WHERE id = 'background-null'`).Scan(&backgroundTitle))
+	require.False(t, backgroundTitle.Valid)
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO scheduled_task (id, event_name, schedule, title, owner)
+		VALUES ('new-batch-null', 'invoke-batch-action', 'FREQ=DAILY', NULL, 'ISIL:OWNER')`)
+	require.Error(t, err)
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO scheduled_task (id, event_name, schedule, title, owner)
+		VALUES ('new-background-null', 'invoke-background-action', 'FREQ=DAILY', NULL, 'ISIL:OWNER')`)
+	require.NoError(t, err)
 }
 
 func migrationAtVersion61(t *testing.T) (context.Context, *migrate.Migrate, *pgxpool.Pool) {

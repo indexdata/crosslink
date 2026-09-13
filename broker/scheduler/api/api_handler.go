@@ -281,6 +281,10 @@ func (h SchedulerApiHandler) PutBatchActionsId(w http.ResponseWriter, r *http.Re
 		brokerapi.AddBadRequestError(ctx, w, errors.New("batchQuery must not be empty"))
 		return
 	}
+	if update.Title != nil && *update.Title == "" {
+		brokerapi.AddBadRequestError(ctx, w, errors.New("title must not be empty"))
+		return
+	}
 	next, err := sched_service.NextScheduleTime(update.Schedule)
 	if err != nil {
 		brokerapi.AddBadRequestError(ctx, w, err)
@@ -290,7 +294,9 @@ func (h SchedulerApiHandler) PutBatchActionsId(w http.ResponseWriter, r *http.Re
 		task.Schedule = update.Schedule
 		task.RunAt = next
 		task.ActionData.BatchActionData.Selector = update.BatchQuery
-		task.Title = toPgText(update.Title)
+		if update.Title != nil {
+			task.Title = toPgText(update.Title)
+		}
 		if update.ActionParams != nil {
 			task.ActionData.CustomData = *update.ActionParams
 		}

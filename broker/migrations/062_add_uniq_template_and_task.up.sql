@@ -56,6 +56,19 @@ CREATE OR REPLACE TRIGGER  trg_check_template_owner_labels_unique
                          FOR EACH ROW
                          EXECUTE FUNCTION check_template_owner_labels_unique();
 
+-- Batch-action titles are import identities. Preserve nullable titles for
+-- other scheduler jobs, but repair legacy batch actions before enforcing the
+-- invariant used by the owner/title uniqueness index.
+UPDATE scheduled_task
+SET title = 'Untitled batch action ' || id
+WHERE event_name = 'invoke-batch-action'
+  AND (title IS NULL OR title = '');
+
+ALTER TABLE scheduled_task
+    ADD CONSTRAINT chk_scheduled_task_batch_action_title
+    CHECK (event_name <> 'invoke-batch-action'
+        OR (title IS NOT NULL AND title <> ''));
+
 -- Remove duplicates if already exist
 WITH duplicates AS (
     SELECT
