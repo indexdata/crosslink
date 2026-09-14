@@ -4,6 +4,9 @@ SELECT * FROM entries WHERE id = $1 LIMIT 1;
 -- name: EntryByIdForUpdate :one
 SELECT * FROM entries WHERE id = $1 LIMIT 1 FOR UPDATE;
 
+-- name: EntryByIdForImportUpdate :one
+SELECT * FROM entries WHERE id = $1 LIMIT 1 FOR UPDATE NOWAIT;
+
 -- name: EntryBySymbolForUpdate :one
 SELECT e.* FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = @authority AND s.symbol = @symbol LIMIT 1 FOR UPDATE OF e;
 

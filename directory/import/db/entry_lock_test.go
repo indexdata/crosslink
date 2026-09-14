@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/directory/db"
@@ -75,6 +76,33 @@ func TestRunImportEntryAttemptsDoesNotStartWithCanceledContext(t *testing.T) {
 	require.Zero(t, attempts)
 }
 
+func TestRunImportEntryAttemptsExhaustsLockUnavailableRetries(t *testing.T) {
+	attempts := 0
+	lockErr := &pgconn.PgError{Code: "55P03"}
+
+	_, err := runImportEntryAttempts(context.Background(), "ISIL:TEST", func() (model.RepoResult, error) {
+		attempts++
+		return model.RepoResult{}, lockErr
+	})
+
+	require.ErrorIs(t, err, lockErr)
+	require.Equal(t, 5, attempts)
+}
+
+func TestRunImportEntryAttemptsStopsWhenRetryWaitIsCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	attempts := 0
+
+	_, err := runImportEntryAttempts(ctx, "ISIL:TEST", func() (model.RepoResult, error) {
+		attempts++
+		time.AfterFunc(time.Millisecond, cancel)
+		return model.RepoResult{}, &pgconn.PgError{Code: "55P03"}
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, 1, attempts)
+}
+
 func TestRetryableImportError(t *testing.T) {
 	tests := []struct {
 		name string
@@ -84,6 +112,7 @@ func TestRetryableImportError(t *testing.T) {
 		{name: "entry mapping changed", err: errImportEntryMappingChanged, want: true},
 		{name: "deadlock", err: &pgconn.PgError{Code: "40P01"}, want: true},
 		{name: "wrapped serialization failure", err: fmt.Errorf("lock entry hierarchy: %w", &pgconn.PgError{Code: "40001"}), want: true},
+		{name: "entry row lock unavailable", err: fmt.Errorf("lock entry hierarchy: %w", &pgconn.PgError{Code: "55P03"}), want: true},
 		{name: "symbol key created concurrently", err: &pgconn.PgError{Code: "23505", ConstraintName: "symbols_authority_symbol_key"}, want: true},
 		{name: "other unique violation", err: &pgconn.PgError{Code: "23505", ConstraintName: "entries_hrid_key"}, want: false},
 		{name: "ordinary error", err: errors.New("failed"), want: false},

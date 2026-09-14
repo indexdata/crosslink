@@ -18,7 +18,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const maxImportLockAttempts = 3
+const (
+	maxImportEntryLockAttempts = 5
+	maxImportMappingAttempts   = 3
+	importLockRetryBaseWait    = 10 * time.Millisecond
+)
 
 const entrySymbolUniqueConstraint = "symbols_authority_symbol_key"
 
@@ -35,7 +39,7 @@ func (r *PgImportRepo) ImportEntry(ctx context.Context, aggregate model.EntryAgg
 
 func runImportEntryAttempts(ctx context.Context, key string, attempt func() (model.RepoResult, error)) (model.RepoResult, error) {
 	var lastErr error
-	for range maxImportLockAttempts {
+	for attemptIndex := 0; attemptIndex < maxImportEntryLockAttempts; attemptIndex++ {
 		if err := ctx.Err(); err != nil {
 			return model.RepoResult{}, err
 		}
@@ -46,6 +50,11 @@ func runImportEntryAttempts(ctx context.Context, key string, attempt func() (mod
 		lastErr = err
 		if err := ctx.Err(); err != nil {
 			return model.RepoResult{}, err
+		}
+		if attemptIndex+1 < maxImportEntryLockAttempts {
+			if err := waitForImportRetry(ctx, attemptIndex); err != nil {
+				return model.RepoResult{}, err
+			}
 		}
 	}
 	return model.RepoResult{}, fmt.Errorf("import entry %s: transaction conflicted repeatedly: %w", key, lastErr)
@@ -61,7 +70,19 @@ func retryableImportError(err error) bool {
 	}
 	return pgErr.Code == "40P01" ||
 		pgErr.Code == "40001" ||
+		pgErr.Code == "55P03" ||
 		(pgErr.Code == "23505" && pgErr.ConstraintName == entrySymbolUniqueConstraint)
+}
+
+func waitForImportRetry(ctx context.Context, attempt int) error {
+	timer := time.NewTimer(importLockRetryBaseWait << attempt)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.EntryAggregate, policy model.ConflictPolicy) (model.RepoResult, error) {
@@ -114,7 +135,7 @@ func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.E
 	}
 	entryIDs := entryLockIDs(owner, parent, lenders)
 	entryIDs = append(entryIDs, symbolOwnerIDs...)
-	lockedEntries, err := lockEntryRows(ctx, queries, entryIDs...)
+	lockedEntries, err := lockEntryRowsWithoutWaiting(ctx, queries, entryIDs...)
 	if err != nil {
 		return model.RepoResult{}, fmt.Errorf("lock entry hierarchy: %w", err)
 	}
@@ -338,6 +359,21 @@ func lockEntryRows(ctx context.Context, queries *db.Queries, ids ...uuid.UUID) (
 	entries := make(map[uuid.UUID]db.Entry, len(ids))
 	for _, id := range orderedUniqueEntryIDs(ids...) {
 		entry, err := queries.EntryByIdForUpdate(ctx, id)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errImportEntryMappingChanged
+		}
+		if err != nil {
+			return nil, err
+		}
+		entries[id] = entry
+	}
+	return entries, nil
+}
+
+func lockEntryRowsWithoutWaiting(ctx context.Context, queries *db.Queries, ids ...uuid.UUID) (map[uuid.UUID]db.Entry, error) {
+	entries := make(map[uuid.UUID]db.Entry, len(ids))
+	for _, id := range orderedUniqueEntryIDs(ids...) {
+		entry, err := queries.EntryByIdForImportUpdate(ctx, id)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errImportEntryMappingChanged
 		}

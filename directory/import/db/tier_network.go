@@ -16,7 +16,7 @@ func (r *PgImportRepo) ImportTier(ctx context.Context, aggregate model.TierAggre
 		return model.RepoResult{}, err
 	}
 	key := aggregate.Key.Consortium.String() + "/" + aggregate.Key.Name
-	for range maxImportLockAttempts {
+	for range maxImportMappingAttempts {
 		result, err := r.importTierAttempt(ctx, aggregate, policy, key)
 		if !errors.Is(err, errImportEntryMappingChanged) {
 			return result, err
@@ -82,7 +82,7 @@ func (r *PgImportRepo) ImportNetwork(ctx context.Context, aggregate model.Networ
 		return model.RepoResult{}, err
 	}
 	key := aggregate.Key.Consortium.String() + "/" + aggregate.Key.Name
-	for range maxImportLockAttempts {
+	for range maxImportMappingAttempts {
 		result, err := r.importNetworkAttempt(ctx, aggregate, policy, key)
 		if !errors.Is(err, errImportEntryMappingChanged) {
 			return result, err
@@ -158,7 +158,7 @@ func resolveAndLockAssignments(ctx context.Context, queries *db.Queries, consort
 		return db.Entry{}, nil, fmt.Errorf("consortium %s does not exist", consortiumRef.String())
 	}
 	if err != nil {
-		return db.Entry{}, nil, fmt.Errorf("resolve consortium %s", consortiumRef.String())
+		return db.Entry{}, nil, fmt.Errorf("resolve consortium %s: %w", consortiumRef.String(), err)
 	}
 
 	assignments := make([]resolvedAssignment, 0, len(refs))
@@ -172,7 +172,7 @@ func resolveAndLockAssignments(ctx context.Context, queries *db.Queries, consort
 			continue
 		}
 		if err != nil {
-			return db.Entry{}, nil, fmt.Errorf("resolve entry %s", ref.String())
+			return db.Entry{}, nil, fmt.Errorf("resolve entry %s: %w", ref.String(), err)
 		}
 		assignments = append(assignments, resolvedAssignment{ref: ref, entry: &entry})
 		entryIDs = append(entryIDs, entry.ID)
@@ -212,11 +212,11 @@ func requireAssignmentEntries(assignments []resolvedAssignment) ([]db.Entry, err
 
 func replaceTierAssignments(ctx context.Context, queries *db.Queries, tierID uuid.UUID, entries []db.Entry) error {
 	if err := queries.DeleteEntryTiersByTier(ctx, tierID); err != nil {
-		return fmt.Errorf("replace tier assignments")
+		return fmt.Errorf("replace tier assignments: delete existing assignments: %w", err)
 	}
 	for _, entry := range entries {
 		if _, err := queries.CreateEntryTier(ctx, db.CreateEntryTierParams{Entry: entry.ID, Tier: tierID}); err != nil {
-			return fmt.Errorf("replace tier assignments")
+			return fmt.Errorf("replace tier assignments: create assignment: %w", err)
 		}
 	}
 	return nil
@@ -227,11 +227,11 @@ func replaceNetworkAssignments(ctx context.Context, queries *db.Queries, network
 		return fmt.Errorf("replace network assignments: entry count mismatch")
 	}
 	if err := queries.DeleteEntryNetworksByNetwork(ctx, networkID); err != nil {
-		return fmt.Errorf("replace network assignments")
+		return fmt.Errorf("replace network assignments: delete existing assignments: %w", err)
 	}
 	for index, entry := range entries {
 		if _, err := queries.CreateEntryNetwork(ctx, db.CreateEntryNetworkParams{Entry: entry.ID, Network: networkID, Priority: assignments[index].Priority}); err != nil {
-			return fmt.Errorf("replace network assignments")
+			return fmt.Errorf("replace network assignments: create assignment: %w", err)
 		}
 	}
 	return nil

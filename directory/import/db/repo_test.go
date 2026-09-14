@@ -14,6 +14,7 @@ import (
 	"github.com/indexdata/crosslink/directory/app"
 	importdb "github.com/indexdata/crosslink/directory/import/db"
 	"github.com/indexdata/crosslink/directory/import/model"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -23,6 +24,24 @@ import (
 )
 
 var testPool *pgxpool.Pool
+
+type lockUnavailableTracer struct {
+	observed chan struct{}
+}
+
+func (t lockUnavailableTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryStartData) context.Context {
+	return ctx
+}
+
+func (t lockUnavailableTracer) TraceQueryEnd(_ context.Context, _ *pgx.Conn, data pgx.TraceQueryEndData) {
+	var pgErr *pgconn.PgError
+	if errors.As(data.Err, &pgErr) && pgErr.Code == "55P03" {
+		select {
+		case t.observed <- struct{}{}:
+		default:
+		}
+	}
+}
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
@@ -385,19 +404,13 @@ func TestImportEntryRetriesWhenParentSymbolChangesBeforeRowLock(t *testing.T) {
 
 	aggregate := minimalEntryAggregate("BRANCH", "Branch")
 	aggregate.Data.Parent = &model.SymbolRef{Authority: "ISIL", Symbol: "PARENT"}
+	repo, lockUnavailable := importRepoObservingLockUnavailable(t, ctx)
 	importDone := make(chan error, 1)
 	go func() {
-		_, importErr := importdb.New(testPool).ImportEntry(ctx, aggregate, model.ConflictPolicyUpdate)
+		_, importErr := repo.ImportEntry(ctx, aggregate, model.ConflictPolicyUpdate)
 		importDone <- importErr
 	}()
-	require.Eventually(t, func() bool {
-		var waiting bool
-		err := testPool.QueryRow(ctx, `SELECT EXISTS (
-			SELECT 1 FROM pg_stat_activity
-			WHERE datname=current_database() AND pid <> pg_backend_pid() AND wait_event_type='Lock'
-		)`).Scan(&waiting)
-		return err == nil && waiting
-	}, 2*time.Second, 10*time.Millisecond)
+	waitForLockUnavailable(t, ctx, lockUnavailable)
 
 	_, err = testPool.Exec(ctx, `UPDATE symbols SET owner=$1 WHERE authority='ISIL' AND symbol='PARENT'`, replacementParentID)
 	require.NoError(t, err)
@@ -428,19 +441,13 @@ func TestImportEntryRetriesWhenParentIsDeletedBeforeRowLock(t *testing.T) {
 
 	aggregate := minimalEntryAggregate("BRANCH", "Branch")
 	aggregate.Data.Parent = &model.SymbolRef{Authority: "ISIL", Symbol: "PARENT"}
+	repo, lockUnavailable := importRepoObservingLockUnavailable(t, ctx)
 	importDone := make(chan error, 1)
 	go func() {
-		_, importErr := importdb.New(testPool).ImportEntry(ctx, aggregate, model.ConflictPolicyUpdate)
+		_, importErr := repo.ImportEntry(ctx, aggregate, model.ConflictPolicyUpdate)
 		importDone <- importErr
 	}()
-	require.Eventually(t, func() bool {
-		var waiting bool
-		err := testPool.QueryRow(ctx, `SELECT EXISTS (
-			SELECT 1 FROM pg_stat_activity
-			WHERE datname=current_database() AND pid <> pg_backend_pid() AND wait_event_type='Lock'
-		)`).Scan(&waiting)
-		return err == nil && waiting
-	}, 2*time.Second, 10*time.Millisecond)
+	waitForLockUnavailable(t, ctx, lockUnavailable)
 
 	_, err = blocker.Exec(ctx, `DELETE FROM entries WHERE id=$1`, parentID)
 	require.NoError(t, err)
@@ -656,12 +663,13 @@ func TestConcurrentEntryAndTierImportsUseSameEntryLockOrder(t *testing.T) {
 
 	entry := minimalEntryAggregate("MEMBER", "Institution")
 	entry.Data.Parent = &consortium
+	entryRepo, lockUnavailable := importRepoObservingLockUnavailable(t, ctx)
 	entryDone := make(chan error, 1)
 	go func() {
-		_, importErr := repo.ImportEntry(ctx, entry, model.ConflictPolicyUpdate)
+		_, importErr := entryRepo.ImportEntry(ctx, entry, model.ConflictPolicyUpdate)
 		entryDone <- importErr
 	}()
-	waitForDatabaseLockWaiters(t, ctx, 2)
+	waitForLockUnavailable(t, ctx, lockUnavailable)
 
 	require.NoError(t, blocker.Commit(ctx))
 	require.NoError(t, <-tierDone)
@@ -775,12 +783,13 @@ func TestConcurrentEntryAndNetworkImportsUseSameEntryLockOrder(t *testing.T) {
 
 	entry := minimalEntryAggregate("MEMBER", "Institution")
 	entry.Data.Parent = &consortium
+	entryRepo, lockUnavailable := importRepoObservingLockUnavailable(t, ctx)
 	entryDone := make(chan error, 1)
 	go func() {
-		_, importErr := repo.ImportEntry(ctx, entry, model.ConflictPolicyUpdate)
+		_, importErr := entryRepo.ImportEntry(ctx, entry, model.ConflictPolicyUpdate)
 		entryDone <- importErr
 	}()
-	waitForDatabaseLockWaiters(t, ctx, 2)
+	waitForLockUnavailable(t, ctx, lockUnavailable)
 
 	require.NoError(t, blocker.Commit(ctx))
 	require.NoError(t, <-networkDone)
@@ -853,6 +862,160 @@ func TestBusinessKeyLookupErrorsPreservePostgreSQLCause(t *testing.T) {
 			}
 
 			require.ErrorContains(t, err, "resolve "+resource)
+			var pgErr *pgconn.PgError
+			require.ErrorAs(t, err, &pgErr)
+			require.Equal(t, "42P01", pgErr.Code)
+		})
+	}
+}
+
+func TestAssignmentDeleteErrorsPreservePostgreSQLCause(t *testing.T) {
+	for _, resource := range []string{"tier", "network"} {
+		t.Run(resource, func(t *testing.T) {
+			repo, consortium, first, _ := importRepoFixture(t)
+			table := "entry_" + resource + "s"
+			unavailableTable := table + "_unavailable"
+			_, err := testPool.Exec(context.Background(), fmt.Sprintf("ALTER TABLE %s RENAME TO %s", table, unavailableTable)) //nolint:gosec // fixed test identifiers
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				_, restoreErr := testPool.Exec(context.Background(), fmt.Sprintf("ALTER TABLE %s RENAME TO %s", unavailableTable, table)) //nolint:gosec // fixed test identifiers
+				require.NoError(t, restoreErr)
+			})
+
+			err = importAggregateWithAssignment(repo, resource, consortium, first)
+
+			require.ErrorContains(t, err, "replace "+resource+" assignments: delete existing assignments")
+			var pgErr *pgconn.PgError
+			require.ErrorAs(t, err, &pgErr)
+			require.Equal(t, "42P01", pgErr.Code)
+		})
+	}
+}
+
+func TestAssignmentCreateErrorsPreservePostgreSQLCause(t *testing.T) {
+	for _, resource := range []string{"tier", "network"} {
+		t.Run(resource, func(t *testing.T) {
+			repo, consortium, first, _ := importRepoFixture(t)
+			table := "entry_" + resource + "s"
+			trigger := "fail_" + resource + "_assignment_create"
+			_, err := testPool.Exec(context.Background(), `
+				CREATE OR REPLACE FUNCTION fail_import_assignment_create() RETURNS trigger AS $$
+				BEGIN
+					RAISE EXCEPTION 'forced assignment create failure' USING ERRCODE = '23514';
+				END;
+				$$ LANGUAGE plpgsql`)
+			require.NoError(t, err)
+			_, err = testPool.Exec(context.Background(), fmt.Sprintf(`
+				CREATE TRIGGER %s
+				BEFORE INSERT ON %s
+				FOR EACH ROW EXECUTE FUNCTION fail_import_assignment_create()`, trigger, table)) //nolint:gosec // fixed test identifiers
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				_, cleanupErr := testPool.Exec(context.Background(), fmt.Sprintf("DROP TRIGGER %s ON %s", trigger, table)) //nolint:gosec // fixed test identifiers
+				require.NoError(t, cleanupErr)
+				_, cleanupErr = testPool.Exec(context.Background(), `DROP FUNCTION fail_import_assignment_create()`)
+				require.NoError(t, cleanupErr)
+			})
+
+			err = importAggregateWithAssignment(repo, resource, consortium, first)
+
+			require.ErrorContains(t, err, "replace "+resource+" assignments: create assignment")
+			var pgErr *pgconn.PgError
+			require.ErrorAs(t, err, &pgErr)
+			require.Equal(t, "23514", pgErr.Code)
+		})
+	}
+}
+
+func importAggregateWithAssignment(repo *importdb.PgImportRepo, resource string, consortium, entry model.SymbolRef) error {
+	if resource == "tier" {
+		_, err := repo.ImportTier(context.Background(), model.TierAggregate{
+			Key:  model.TierKey{Consortium: consortium, Name: "Assignment failure"},
+			Data: model.TierData{Level: "standard", Type: "loan", Entries: []model.SymbolRef{entry}},
+		}, model.ConflictPolicyFail)
+		return err
+	}
+	_, err := repo.ImportNetwork(context.Background(), model.NetworkAggregate{
+		Key:  model.NetworkKey{Consortium: consortium, Name: "Assignment failure"},
+		Data: model.NetworkData{Entries: []model.NetworkAssignment{{SymbolRef: entry, Priority: 1}}},
+	}, model.ConflictPolicyFail)
+	return err
+}
+
+func TestAssignmentConsortiumLookupErrorsPreservePostgreSQLCause(t *testing.T) {
+	for _, resource := range []string{"tier", "network"} {
+		t.Run(resource, func(t *testing.T) {
+			repo, consortium, _, _ := importRepoFixture(t)
+			_, err := testPool.Exec(context.Background(), `ALTER TABLE symbols RENAME TO symbols_unavailable`)
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				_, restoreErr := testPool.Exec(context.Background(), `ALTER TABLE symbols_unavailable RENAME TO symbols`)
+				require.NoError(t, restoreErr)
+			})
+
+			if resource == "tier" {
+				_, err = repo.ImportTier(context.Background(), model.TierAggregate{
+					Key:  model.TierKey{Consortium: consortium, Name: "Lookup failure"},
+					Data: model.TierData{Level: "standard", Type: "loan", Entries: []model.SymbolRef{}},
+				}, model.ConflictPolicyFail)
+			} else {
+				_, err = repo.ImportNetwork(context.Background(), model.NetworkAggregate{
+					Key:  model.NetworkKey{Consortium: consortium, Name: "Lookup failure"},
+					Data: model.NetworkData{Entries: []model.NetworkAssignment{}},
+				}, model.ConflictPolicyFail)
+			}
+
+			require.ErrorContains(t, err, "resolve consortium "+consortium.String())
+			var pgErr *pgconn.PgError
+			require.ErrorAs(t, err, &pgErr)
+			require.Equal(t, "42P01", pgErr.Code)
+		})
+	}
+}
+
+func TestAssignmentEntryLookupErrorsPreservePostgreSQLCause(t *testing.T) {
+	for _, resource := range []string{"tier", "network"} {
+		t.Run(resource, func(t *testing.T) {
+			repo, consortium, first, _ := importRepoFixture(t)
+			_, err := testPool.Exec(context.Background(), `ALTER TABLE symbols RENAME TO symbols_available`)
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				_, cleanupErr := testPool.Exec(context.Background(), `DROP VIEW IF EXISTS symbols`)
+				require.NoError(t, cleanupErr)
+				_, cleanupErr = testPool.Exec(context.Background(), `ALTER TABLE symbols_available RENAME TO symbols`)
+				require.NoError(t, cleanupErr)
+				_, cleanupErr = testPool.Exec(context.Background(), `DROP FUNCTION fail_assignment_entry_lookup(text, uuid)`)
+				require.NoError(t, cleanupErr)
+			})
+			_, err = testPool.Exec(context.Background(), `
+				CREATE FUNCTION fail_assignment_entry_lookup(symbol_value text, owner_value uuid) RETURNS uuid AS $$
+				BEGIN
+					IF symbol_value = 'FIRST' THEN
+						RAISE EXCEPTION 'forced assignment entry lookup failure' USING ERRCODE = '42P01';
+					END IF;
+					RETURN owner_value;
+				END;
+				$$ LANGUAGE plpgsql`)
+			require.NoError(t, err)
+			_, err = testPool.Exec(context.Background(), `
+				CREATE VIEW symbols AS
+				SELECT fail_assignment_entry_lookup(symbol, owner) AS owner, authority, symbol
+				FROM symbols_available`)
+			require.NoError(t, err)
+
+			if resource == "tier" {
+				_, err = repo.ImportTier(context.Background(), model.TierAggregate{
+					Key:  model.TierKey{Consortium: consortium, Name: "Assignment lookup failure"},
+					Data: model.TierData{Level: "standard", Type: "loan", Entries: []model.SymbolRef{first}},
+				}, model.ConflictPolicyFail)
+			} else {
+				_, err = repo.ImportNetwork(context.Background(), model.NetworkAggregate{
+					Key:  model.NetworkKey{Consortium: consortium, Name: "Assignment lookup failure"},
+					Data: model.NetworkData{Entries: []model.NetworkAssignment{{SymbolRef: first, Priority: 1}}},
+				}, model.ConflictPolicyFail)
+			}
+
+			require.ErrorContains(t, err, "resolve entry "+first.String())
 			var pgErr *pgconn.PgError
 			require.ErrorAs(t, err, &pgErr)
 			require.Equal(t, "42P01", pgErr.Code)
@@ -1066,6 +1229,27 @@ func waitForDatabaseLockWaiters(t *testing.T, ctx context.Context, minimum int) 
 			WHERE datname=current_database() AND pid <> pg_backend_pid() AND wait_event_type='Lock'`).Scan(&count)
 		return err == nil && count >= minimum
 	}, 2*time.Second, 10*time.Millisecond)
+}
+
+func importRepoObservingLockUnavailable(t *testing.T, ctx context.Context) (*importdb.PgImportRepo, <-chan struct{}) {
+	t.Helper()
+	observed := make(chan struct{}, 1)
+	config, err := pgxpool.ParseConfig(app.ConnectionString)
+	require.NoError(t, err)
+	config.ConnConfig.Tracer = lockUnavailableTracer{observed: observed}
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+	return importdb.New(pool), observed
+}
+
+func waitForLockUnavailable(t *testing.T, ctx context.Context, observed <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-observed:
+	case <-ctx.Done():
+		require.FailNow(t, "import did not report a non-waiting row-lock conflict", ctx.Err())
+	}
 }
 
 func concurrentlyImportTier(repo *importdb.PgImportRepo, newAggregate func() model.TierAggregate, policy model.ConflictPolicy, count int) ([]model.RepoResult, []error) {

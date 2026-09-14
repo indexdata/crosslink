@@ -3,14 +3,42 @@ package test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/indexdata/crosslink/directory/app"
+	importdb "github.com/indexdata/crosslink/directory/import/db"
+	"github.com/indexdata/crosslink/directory/import/model"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
 )
 
 var consortiumPermissionHeaders = map[string]string{
 	"X-Okapi-Tenant":      "ANINST",
 	"X-Okapi-Permissions": `["directory.consortium.all"]`,
+}
+
+type lockUnavailableTracer struct {
+	observed chan struct{}
+}
+
+func (t lockUnavailableTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryStartData) context.Context {
+	return ctx
+}
+
+func (t lockUnavailableTracer) TraceQueryEnd(_ context.Context, _ *pgx.Conn, data pgx.TraceQueryEndData) {
+	var pgErr *pgconn.PgError
+	if errors.As(data.Err, &pgErr) && pgErr.Code == "55P03" {
+		select {
+		case t.observed <- struct{}{}:
+		default:
+		}
+	}
 }
 
 func TestConcurrency(t *testing.T) {
@@ -146,6 +174,82 @@ func TestConcurrency(t *testing.T) {
 
 		assertOneConsortiumWrite(t, statuses, http.StatusNoContent)
 	})
+}
+
+func TestConcurrentImportDoesNotDeadlockEntryPatch(t *testing.T) {
+	resetDb()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	parentID := "00000000-0000-0000-0000-000000000001"
+	childID := "00000000-0000-0000-0000-000000000002"
+	_, err := dbpool.Exec(ctx, `UPDATE entries SET parent=NULL, type='Institution' WHERE id=$1`, parentID)
+	require.NoError(t, err)
+	_, err = dbpool.Exec(ctx, `UPDATE entries SET parent=$1, type='Branch' WHERE id=$2`, parentID, childID)
+	require.NoError(t, err)
+	_, err = dbpool.Exec(ctx, `INSERT INTO symbols (owner, authority, symbol) VALUES ($1, 'TEST', 'PARENT')`, parentID)
+	require.NoError(t, err)
+
+	blocker, err := dbpool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = blocker.Rollback(ctx) }()
+	_, err = blocker.Exec(ctx, `SELECT id FROM entries WHERE id=$1 FOR UPDATE`, parentID)
+	require.NoError(t, err)
+	lockUnavailable := make(chan struct{}, 1)
+	importPoolConfig, err := pgxpool.ParseConfig(app.ConnectionString)
+	require.NoError(t, err)
+	importPoolConfig.ConnConfig.Tracer = lockUnavailableTracer{observed: lockUnavailable}
+	importPool, err := pgxpool.NewWithConfig(ctx, importPoolConfig)
+	require.NoError(t, err)
+	t.Cleanup(importPool.Close)
+
+	parent := model.SymbolRef{Authority: "TEST", Symbol: "PARENT"}
+	key := model.SymbolRef{Authority: "TEST", Symbol: "ANINST"}
+	aggregate := model.EntryAggregate{
+		Key: key,
+		Data: model.EntryData{
+			Name:      "Imported child",
+			Type:      "Branch",
+			Parent:    &parent,
+			Symbols:   []model.SymbolRef{key},
+			Endpoints: []model.ServiceEndpoint{},
+			Addresses: []model.Address{},
+			Closures:  []model.Closure{},
+		},
+	}
+	importDone := make(chan error, 1)
+	go func() {
+		_, importErr := importdb.New(importPool).ImportEntry(ctx, aggregate, model.ConflictPolicyUpdate)
+		importDone <- importErr
+	}()
+
+	select {
+	case <-lockUnavailable:
+	case <-ctx.Done():
+		require.FailNow(t, "import did not report a non-waiting row-lock conflict", ctx.Err())
+	}
+
+	patchDone := make(chan *http.Response, 1)
+	go func() {
+		response, _ := jsonReq(t, http.MethodPatch, "/entries/by-id/"+childID,
+			`{"parent":"`+parentID+`"}`, consortiumPermissionHeaders)
+		patchDone <- response
+	}()
+	require.Eventually(t, func() bool {
+		var waiting bool
+		queryErr := dbpool.QueryRow(ctx, `SELECT EXISTS (
+			SELECT 1 FROM pg_stat_activity
+			WHERE datname=current_database()
+				AND pid <> pg_backend_pid()
+				AND wait_event_type='Lock'
+				AND query LIKE '%EntryByIdForUpdate%'
+				AND query NOT LIKE '%EntryByIdForImportUpdate%'
+		)`).Scan(&waiting)
+		return queryErr == nil && waiting
+	}, 2*time.Second, 10*time.Millisecond)
+	require.NoError(t, blocker.Commit(ctx))
+
+	require.Equal(t, http.StatusNoContent, (<-patchDone).StatusCode)
+	require.NoError(t, <-importDone)
 }
 
 func assertOneConsortiumWrite(t *testing.T, statuses <-chan int, successStatus int) {
