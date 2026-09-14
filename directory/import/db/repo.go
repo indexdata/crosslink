@@ -43,5 +43,5 @@ func persistenceError(resource, key string, err error) error {
 	if err == nil {
 		return nil
 	}
-	return fmt.Errorf("persist %s %s aggregate", resource, key)
+	return fmt.Errorf("persist %s %s aggregate: %w", resource, key, err)
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/indexdata/crosslink/directory/domain"
 	"github.com/indexdata/crosslink/directory/import/model"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -25,16 +26,35 @@ func (r *PgImportRepo) ImportEntry(ctx context.Context, aggregate model.EntryAgg
 	if err := aggregate.NormalizeAndValidate(); err != nil {
 		return model.RepoResult{}, err
 	}
+	return runImportEntryAttempts(ctx, aggregate.Key.String(), func() (model.RepoResult, error) {
+		return r.importEntryAttempt(ctx, aggregate, policy)
+	})
+}
+
+func runImportEntryAttempts(ctx context.Context, key string, attempt func() (model.RepoResult, error)) (model.RepoResult, error) {
+	var lastErr error
 	for range maxImportLockAttempts {
-		result, err := r.importEntryAttempt(ctx, aggregate, policy)
-		if !errors.Is(err, errImportEntryMappingChanged) {
+		if err := ctx.Err(); err != nil {
+			return model.RepoResult{}, err
+		}
+		result, err := attempt()
+		if !retryableImportError(err) {
 			return result, err
 		}
+		lastErr = err
 		if err := ctx.Err(); err != nil {
 			return model.RepoResult{}, err
 		}
 	}
-	return model.RepoResult{}, fmt.Errorf("import entry %s: hierarchy changed repeatedly", aggregate.Key.String())
+	return model.RepoResult{}, fmt.Errorf("import entry %s: transaction conflicted repeatedly: %w", key, lastErr)
+}
+
+func retryableImportError(err error) bool {
+	if errors.Is(err, errImportEntryMappingChanged) {
+		return true
+	}
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && (pgErr.Code == "40P01" || pgErr.Code == "40001")
 }
 
 func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.EntryAggregate, policy model.ConflictPolicy) (model.RepoResult, error) {
@@ -54,7 +74,7 @@ func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.E
 	})
 	exists := lookupErr == nil
 	if lookupErr != nil && !errors.Is(lookupErr, pgx.ErrNoRows) {
-		return model.RepoResult{}, fmt.Errorf("resolve entry %s", key)
+		return model.RepoResult{}, fmt.Errorf("resolve entry %s: %w", key, lookupErr)
 	}
 	if exists && policy != model.ConflictPolicyUpdate {
 		if _, err := lockEntryRows(ctx, queries, existing.ID); err != nil {
@@ -120,7 +140,7 @@ func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.E
 
 	if aggregate.Data.Type == "Consortium" || (exists && existing.Type == "Consortium") {
 		if err := queries.LockConsortiumEntryChanges(ctx); err != nil {
-			return model.RepoResult{}, fmt.Errorf("lock consortium entry changes")
+			return model.RepoResult{}, fmt.Errorf("lock consortium entry changes: %w", err)
 		}
 	}
 	if aggregate.Data.Type == "Consortium" && (!exists || existing.Type != "Consortium") {
@@ -129,7 +149,7 @@ func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.E
 			return model.RepoResult{}, fmt.Errorf("consortium already exists")
 		}
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return model.RepoResult{}, fmt.Errorf("check existing consortium")
+			return model.RepoResult{}, fmt.Errorf("check existing consortium: %w", err)
 		}
 	}
 
@@ -147,7 +167,7 @@ func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.E
 		return model.RepoResult{}, persistenceError("entry", key, err)
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return model.RepoResult{}, fmt.Errorf("commit entry %s import", key)
+		return model.RepoResult{}, fmt.Errorf("commit entry %s import: %w", key, err)
 	}
 	return model.RepoResult{Outcome: model.OutcomeImported}, nil
 }
@@ -270,7 +290,7 @@ func resolveParent(ctx context.Context, queries *db.Queries, parent *model.Symbo
 		return nil, fmt.Errorf("parent %s does not exist", parent.String())
 	}
 	if err != nil {
-		return nil, fmt.Errorf("resolve parent %s", parent.String())
+		return nil, fmt.Errorf("resolve parent %s: %w", parent.String(), err)
 	}
 	return &entry, nil
 }
@@ -286,7 +306,7 @@ func resolveLenders(ctx context.Context, queries *db.Queries, config *model.ILLC
 			return nil, fmt.Errorf("lender of last resort %s does not exist", lender.String())
 		}
 		if err != nil {
-			return nil, fmt.Errorf("resolve lender of last resort %s", lender.String())
+			return nil, fmt.Errorf("resolve lender of last resort %s: %w", lender.String(), err)
 		}
 		lenders = append(lenders, entry)
 	}
@@ -342,7 +362,7 @@ func validateEntryUpdateHierarchy(ctx context.Context, queries *db.Queries, exis
 	if parentID != nil {
 		cycle, err := queries.WouldCreateEntryCycle(ctx, db.WouldCreateEntryCycleParams{Child: existing.ID, Parent: *parentID})
 		if err != nil {
-			return fmt.Errorf("validate entry hierarchy")
+			return fmt.Errorf("validate entry hierarchy: %w", err)
 		}
 		if cycle != nil && *cycle {
 			return fmt.Errorf("entry parent would create a cycle")
@@ -351,7 +371,7 @@ func validateEntryUpdateHierarchy(ctx context.Context, queries *db.Queries, exis
 	if resultingType != existing.Type {
 		children, err := queries.EntriesByParent(ctx, &existing.ID)
 		if err != nil {
-			return fmt.Errorf("validate entry children")
+			return fmt.Errorf("validate entry children: %w", err)
 		}
 		for _, child := range children {
 			if valid, reason := domain.ValidParentForType(child.Type, resultingType); !valid {
