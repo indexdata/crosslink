@@ -51,6 +51,7 @@ func TestImportPatronRequestNormalizesCompleteBundle(t *testing.T) {
 	assert.Equal(t, pr_db.PatronRequestSide("borrowing"), repo.patron.PatronRequest.Side)
 	assert.Equal(t, pr_db.PatronRequestState("SENT"), repo.patron.PatronRequest.State)
 	assert.True(t, repo.patron.PatronRequest.TerminalState)
+	assert.Nil(t, repo.patron.PatronRequest.Items)
 	assert.Equal(t, fixedTime("2026-08-01T10:00:00Z"), repo.patron.PatronRequest.CreatedAt.Time)
 	require.Len(t, repo.patron.Items, 1)
 	assert.Equal(t, "lms-1", repo.patron.Items[0].LmsRequestID.String)

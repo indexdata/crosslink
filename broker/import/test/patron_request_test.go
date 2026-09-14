@@ -92,6 +92,30 @@ func TestImportPatronRequestInsertsAndSynchronizesCompleteBundle(t *testing.T) {
 	assert.Equal(t, "updated-patron", patron)
 }
 
+func TestImportPatronRequestDoesNotWriteTriggerManagedItemsCache(t *testing.T) {
+	prefix := uuid.NewString()
+	bundle := testPatronBundle(prefix, prefix+"-request")
+	bundle.Items = nil
+	bundle.Notifications = nil
+	bundle.IllTransaction = nil
+	bundle.LocatedSuppliers = nil
+	bundle.PatronRequest.Items = []pr_db.PrItem{{ID: "cache-from-import"}}
+
+	require.NoError(t, importOnly(bundle))
+	assert.Equal(t, 0, queryCount(t, "SELECT jsonb_array_length(items) FROM patron_request WHERE id=$1", bundle.PatronRequest.ID))
+
+	_, err := importTestPool.Exec(context.Background(), `UPDATE patron_request SET items = '[{"id":"trigger-owned"}]'::jsonb WHERE id=$1`, bundle.PatronRequest.ID)
+	require.NoError(t, err)
+	bundle.PatronRequest.Items = []pr_db.PrItem{{ID: "cache-from-update"}}
+	updated, err := importTestRepo.ImportPatronRequest(importTestCtx, bundle, importdb.ConflictPolicyUpdate)
+	require.NoError(t, err)
+	assert.Equal(t, importdb.OutcomeImported, updated.Outcome)
+
+	var cachedItemID string
+	require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT items->0->>'id' FROM patron_request WHERE id=$1", bundle.PatronRequest.ID).Scan(&cachedItemID))
+	assert.Equal(t, "trigger-owned", cachedItemID)
+}
+
 func TestImportPatronRequestUpdateRejectsIdentityChanges(t *testing.T) {
 	tests := []struct {
 		name    string

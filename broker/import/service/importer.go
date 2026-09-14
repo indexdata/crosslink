@@ -421,7 +421,7 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 		SupplierSymbol: pgTextFromPtr(request.SupplierSymbol), Tenant: pgTextFromString(owner),
 		RequesterReqID: pgTextFromString(request.RequesterRequestId), NeedsAttention: request.NeedsAttention,
 		LastAction: pgTextFromPtr(request.LastAction), LastActionOutcome: pgTextFromPtr(request.LastActionOutcome),
-		LastActionResult: pgTextFromPtr(request.LastActionResult), Items: []pr_db.PrItem{}, Language: pr_db.LANGUAGE,
+		LastActionResult: pgTextFromPtr(request.LastActionResult), Language: pr_db.LANGUAGE,
 		TerminalState: terminal, InternalNote: pgTextFromPtr(request.InternalNote), NextReqID: pgTextFromPtr(request.NextReqId),
 		PrevReqID: pgTextFromPtr(request.PrevReqId), RetryBibInfo: request.RetryBibInfo, StateModel: request.StateModel,
 	}}

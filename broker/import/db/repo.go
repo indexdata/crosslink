@@ -99,11 +99,11 @@ func (r *PgImportRepo) ImportPatronRequest(ctx common.ExtendedContext, bundle Pa
 		}
 
 		if exists {
-			if err := r.queries.UpdateImportedPatronRequest(ctx, tx, importedPatronRequestParams(bundle.PatronRequest)); err != nil {
+			if err := r.queries.UpdateImportedPatronRequest(ctx, tx, updateImportedPatronRequestParams(bundle.PatronRequest)); err != nil {
 				return fmt.Errorf("update patron request %q: %w", bundle.PatronRequest.ID, err)
 			}
 		} else {
-			if _, err := r.prQueries.CreatePatronRequest(ctx, tx, bundle.PatronRequest); err != nil {
+			if err := r.queries.CreateImportedPatronRequest(ctx, tx, createImportedPatronRequestParams(bundle.PatronRequest)); err != nil {
 				return fmt.Errorf("insert patron request %q: %w", bundle.PatronRequest.ID, err)
 			}
 		}
@@ -151,7 +151,22 @@ func (r *PgImportRepo) ImportPatronRequest(ctx common.ExtendedContext, bundle Pa
 	return result, err
 }
 
-func importedPatronRequestParams(params pr_db.CreatePatronRequestParams) UpdateImportedPatronRequestParams {
+func createImportedPatronRequestParams(params pr_db.CreatePatronRequestParams) CreateImportedPatronRequestParams {
+	return CreateImportedPatronRequestParams{
+		ID: params.ID, CreatedAt: params.CreatedAt, IllRequest: params.IllRequest,
+		State: params.State, Side: params.Side, Patron: params.Patron,
+		RequesterSymbol: params.RequesterSymbol, SupplierSymbol: params.SupplierSymbol,
+		Tenant: params.Tenant, RequesterReqID: params.RequesterReqID,
+		NeedsAttention: params.NeedsAttention, LastAction: params.LastAction,
+		LastActionOutcome: params.LastActionOutcome, LastActionResult: params.LastActionResult,
+		Language: params.Language, TerminalState: params.TerminalState,
+		UpdatedAt: params.UpdatedAt, IllResponse: params.IllResponse, InternalNote: params.InternalNote,
+		NextReqID: params.NextReqID, PrevReqID: params.PrevReqID,
+		RetryBibInfo: params.RetryBibInfo, StateModel: params.StateModel,
+	}
+}
+
+func updateImportedPatronRequestParams(params pr_db.CreatePatronRequestParams) UpdateImportedPatronRequestParams {
 	return UpdateImportedPatronRequestParams{
 		ID: params.ID, CreatedAt: params.CreatedAt, IllRequest: params.IllRequest,
 		State: params.State, Side: params.Side, Patron: params.Patron,
@@ -159,7 +174,7 @@ func importedPatronRequestParams(params pr_db.CreatePatronRequestParams) UpdateI
 		Tenant: params.Tenant, RequesterReqID: params.RequesterReqID,
 		NeedsAttention: params.NeedsAttention, LastAction: params.LastAction,
 		LastActionOutcome: params.LastActionOutcome, LastActionResult: params.LastActionResult,
-		Items: params.Items, Language: params.Language, TerminalState: params.TerminalState,
+		Language: params.Language, TerminalState: params.TerminalState,
 		UpdatedAt: params.UpdatedAt, IllResponse: params.IllResponse, InternalNote: params.InternalNote,
 		NextReqID: params.NextReqID, PrevReqID: params.PrevReqID,
 		RetryBibInfo: params.RetryBibInfo, StateModel: params.StateModel,

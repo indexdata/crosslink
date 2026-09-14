@@ -276,7 +276,17 @@ BEGIN
         SELECT 'request ' || pr_id || ': missing canonical requester symbol'
         FROM crosslink_open_requests
         WHERE nullif(btrim(pr_req_inst_symbol), '') IS NULL
-           OR position(':' IN pr_req_inst_symbol) = 0
+           OR pr_req_inst_symbol <> btrim(pr_req_inst_symbol)
+           OR position(':' IN pr_req_inst_symbol) <= 1
+           OR split_part(pr_req_inst_symbol, ':', 1)
+                <> btrim(split_part(pr_req_inst_symbol, ':', 1))
+           OR nullif(btrim(regexp_replace(
+                pr_req_inst_symbol, '^[^:]+:', ''
+           )), '') IS NULL
+           OR regexp_replace(pr_req_inst_symbol, '^[^:]+:', '')
+                <> btrim(regexp_replace(
+                    pr_req_inst_symbol, '^[^:]+:', ''
+                ))
 
         UNION ALL
 
@@ -284,7 +294,17 @@ BEGIN
         FROM crosslink_open_requests
         WHERE import_side = 'lending'
           AND (nullif(btrim(pr_sup_inst_symbol), '') IS NULL
-               OR position(':' IN pr_sup_inst_symbol) = 0)
+               OR pr_sup_inst_symbol <> btrim(pr_sup_inst_symbol)
+               OR position(':' IN pr_sup_inst_symbol) <= 1
+               OR split_part(pr_sup_inst_symbol, ':', 1)
+                    <> btrim(split_part(pr_sup_inst_symbol, ':', 1))
+               OR nullif(btrim(regexp_replace(
+                    pr_sup_inst_symbol, '^[^:]+:', ''
+               )), '') IS NULL
+               OR regexp_replace(pr_sup_inst_symbol, '^[^:]+:', '')
+                    <> btrim(regexp_replace(
+                        pr_sup_inst_symbol, '^[^:]+:', ''
+                    )))
 
         UNION ALL
 
@@ -471,12 +491,13 @@ request_bundles AS (
                         jsonb_strip_nulls(jsonb_build_object(
                             'id', note.prn_id,
                             'fromSymbol', CASE
-                                WHEN note.prn_is_sender IS TRUE THEN :'owner'
+                                WHEN note.prn_is_sender IS TRUE
+                                    THEN counterpart.local_symbol
                                 ELSE coalesce(note.prn_sender_symbol, counterpart.symbol)
                             END,
                             'toSymbol', CASE
                                 WHEN note.prn_is_sender IS TRUE THEN counterpart.symbol
-                                ELSE :'owner'
+                                ELSE counterpart.local_symbol
                             END,
                             'direction', CASE
                                 WHEN note.prn_is_sender IS TRUE THEN 'sent'
@@ -513,7 +534,12 @@ request_bundles AS (
                             WHEN request.import_side = 'borrowing'
                                 THEN request.pr_sup_inst_symbol
                             ELSE request.pr_req_inst_symbol
-                        END AS symbol
+                        END AS symbol,
+                        CASE
+                            WHEN request.import_side = 'borrowing'
+                                THEN request.pr_req_inst_symbol
+                            ELSE request.pr_sup_inst_symbol
+                        END AS local_symbol
                     ) AS counterpart
                     WHERE note.prn_patron_request_fk = request.pr_id
                       AND coalesce(note.prn_timestamp, note.prn_date_created)
@@ -541,13 +567,9 @@ request_bundles AS (
                                         condition.prlc_sup_inst_symbol,
                                         request.pr_sup_inst_symbol
                                     )
-                                ELSE :'owner'
+                                ELSE request.pr_sup_inst_symbol
                             END,
-                            'toSymbol', CASE
-                                WHEN request.import_side = 'borrowing'
-                                    THEN :'owner'
-                                ELSE request.pr_req_inst_symbol
-                            END,
+                            'toSymbol', request.pr_req_inst_symbol,
                             'direction', CASE
                                 WHEN request.import_side = 'borrowing'
                                     THEN 'received'
@@ -574,7 +596,7 @@ request_bundles AS (
                                   condition.prlc_sup_inst_symbol,
                                   request.pr_sup_inst_symbol
                               )
-                          ELSE :'owner'
+                          ELSE request.pr_sup_inst_symbol
                       END), '') IS NOT NULL
                 ) AS notification
             ), '[]'::jsonb),
