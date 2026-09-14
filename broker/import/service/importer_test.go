@@ -40,14 +40,14 @@ func TestImportPatronRequestNormalizesCompleteBundle(t *testing.T) {
 	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "peer-requester"}, {ID: "peer-supplier"}}}
 	importer := newImporter(repo, cache, nil, validator, fixedClock)
 
-	id, result, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyUpdate, "ISIL:OWNER", validPatronBundleData())
+	id, result, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyUpdate, "ISIL:REQ", validPatronBundleData())
 
 	require.NoError(t, err)
 	assert.Equal(t, "pr-1", *id)
 	assert.Equal(t, importdb.OutcomeImported, result.Outcome)
 	assert.Equal(t, importdb.ConflictPolicyUpdate, repo.patronPolicy)
 	assert.Equal(t, "pr-1", repo.patron.PatronRequest.ID)
-	assert.Equal(t, pgText("ISIL:OWNER"), repo.patron.PatronRequest.Tenant)
+	assert.Equal(t, pgText("ISIL:REQ"), repo.patron.PatronRequest.Tenant)
 	assert.Equal(t, pr_db.PatronRequestSide("borrowing"), repo.patron.PatronRequest.Side)
 	assert.Equal(t, pr_db.PatronRequestState("SENT"), repo.patron.PatronRequest.State)
 	assert.True(t, repo.patron.PatronRequest.TerminalState)
@@ -71,17 +71,62 @@ func TestImportPatronRequestValidatesBeforeCachingPeers(t *testing.T) {
 	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "only-one"}}}
 	validator := &recordingStateValidator{err: errors.New("unsupported state")}
 	importer := newImporter(repo, cache, nil, validator, fixedClock)
-	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", validPatronBundleData())
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:REQ", validPatronBundleData())
 	require.ErrorContains(t, err, "unsupported state")
 	assert.Equal(t, 1, cache.calls)
 	assert.Zero(t, repo.patronCalls)
+}
+
+func TestImportPatronRequestRejectsBorrowingRequesterOutsideEnvelopeOwner(t *testing.T) {
+	repo := &recordingImportRepo{}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "requester-peer"}, {ID: "supplier-peer"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", validPatronBundleData())
+
+	require.ErrorContains(t, err, `borrowing requester symbol "ISIL:REQ" is not owned by envelope owner "ISIL:OWNER"`)
+	assert.Zero(t, repo.patronCalls)
+}
+
+func TestImportPatronRequestRejectsLendingSupplierOutsideEnvelopeOwner(t *testing.T) {
+	repo := &recordingImportRepo{}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		request := bundle["patronRequest"].(map[string]any)
+		request["side"] = "lending"
+		request["id"] = "local-lending-id"
+		request["supplierSymbol"] = "ISIL:SUP"
+		delete(bundle, "illTransaction")
+		bundle["locatedSuppliers"] = []any{}
+	})
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+
+	require.ErrorContains(t, err, `lending supplier symbol "ISIL:SUP" is not owned by envelope owner "ISIL:OWNER"`)
+	assert.Zero(t, repo.patronCalls)
+}
+
+func TestImportPatronRequestAcceptsRequesterBranchOwnedByEnvelopeOwner(t *testing.T) {
+	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	cache := &recordingPeerCache{
+		peers:         []ill_db.Peer{{ID: "requester-peer"}, {ID: "supplier-peer"}},
+		branchSymbols: []ill_db.BranchSymbol{{SymbolValue: "ISIL:REQ", PeerID: "requester-peer"}},
+	}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
+
+	_, result, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", validPatronBundleData())
+
+	require.NoError(t, err)
+	assert.Equal(t, importdb.OutcomeImported, result.Outcome)
+	assert.Equal(t, 1, repo.patronCalls)
 }
 
 func TestImportPatronRequestRejectsIncompletePeerResolution(t *testing.T) {
 	repo := &recordingImportRepo{}
 	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "only-one"}}}
 	importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
-	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", validPatronBundleData())
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:REQ", validPatronBundleData())
 	require.ErrorContains(t, err, "expected 2 peers, got 1")
 	assert.Zero(t, repo.patronCalls)
 }
@@ -95,7 +140,7 @@ func TestImportPatronRequestRejectsMissingNeedsAttention(t *testing.T) {
 		delete(bundle["patronRequest"].(map[string]any), "needsAttention")
 	})
 
-	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:REQ", data)
 
 	require.ErrorContains(t, err, "needsAttention")
 	assert.Zero(t, repo.patronCalls)
@@ -110,7 +155,7 @@ func TestImportPatronRequestRejectsUnknownProperty(t *testing.T) {
 		bundle["unexpected"] = true
 	})
 
-	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:REQ", data)
 
 	require.ErrorContains(t, err, "unexpected")
 	assert.Zero(t, repo.patronCalls)
@@ -145,7 +190,7 @@ func TestImportPatronRequestAllowsEmptyCollections(t *testing.T) {
 		delete(bundle, "illTransaction")
 	})
 
-	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:REQ", data)
 
 	require.NoError(t, err)
 	assert.Empty(t, repo.patron.Items)
@@ -169,7 +214,7 @@ func TestImportPatronRequestRejectsMultipleSelectedLocatedSuppliers(t *testing.T
 		})
 	})
 
-	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:REQ", data)
 
 	require.ErrorContains(t, err, "only one located supplier may have status selected")
 	assert.Equal(t, 1, cache.calls)
@@ -217,7 +262,7 @@ func TestImportPatronRequestRejectsMissingOrBlankSupplierSymbolForLending(t *tes
 				bundle["locatedSuppliers"] = []any{}
 			})
 
-			_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+			_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:SUP", data)
 
 			require.ErrorContains(t, err, "patronRequest.supplierSymbol is required for lending requests")
 			assert.Zero(t, repo.patronCalls)
@@ -237,7 +282,7 @@ func TestImportPatronRequestRejectsSupplierSymbolDifferentFromISOHeaderForLendin
 		bundle["locatedSuppliers"] = []any{}
 	})
 
-	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OTHER", data)
 
 	require.ErrorContains(t, err, "patronRequest.supplierSymbol must match illRequest.header.supplyingAgencyId for lending requests")
 	assert.Zero(t, repo.patronCalls)
@@ -252,7 +297,7 @@ func TestImportPatronRequestRejectsRequesterRequestIDDifferentFromISOHeader(t *t
 		request["illRequest"].(map[string]any)["header"].(map[string]any)["requestingAgencyRequestId"] = "other-request"
 	})
 
-	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:REQ", data)
 
 	require.ErrorContains(t, err, "requesterRequestId must match illRequest.header.requestingAgencyRequestId")
 	assert.Zero(t, repo.patronCalls)
@@ -287,7 +332,7 @@ func TestImportPatronRequestRejectsRequesterSymbolMismatches(t *testing.T) {
 			importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
 			data := mutatePatronBundleData(t, tt.mutate)
 
-			_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+			_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:REQ", data)
 
 			require.ErrorContains(t, err, tt.want)
 			assert.Zero(t, repo.patronCalls)
@@ -304,7 +349,7 @@ func TestImportPatronRequestRejectsBorrowingIDDifferentFromRequesterRequestID(t 
 		request["id"] = "other-request"
 	})
 
-	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:REQ", data)
 
 	require.ErrorContains(t, err, "borrowing patronRequest.id must match requesterRequestId")
 	assert.Zero(t, repo.patronCalls)
@@ -319,7 +364,7 @@ func TestImportPatronRequestRunsISORequestValidation(t *testing.T) {
 		delete(header, "timestamp")
 	})
 
-	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:REQ", data)
 
 	require.ErrorContains(t, err, "invalid illRequest")
 	require.ErrorContains(t, err, "Timestamp")
@@ -339,7 +384,7 @@ func TestImportPatronRequestAllowsLendingIDDifferentFromRequesterRequestID(t *te
 		bundle["locatedSuppliers"] = []any{}
 	})
 
-	id, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+	id, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:SUP", data)
 
 	require.NoError(t, err)
 	require.NotNil(t, id)
@@ -766,16 +811,21 @@ func (v *recordingStateValidator) ValidateImportState(model string, serviceType 
 }
 
 type recordingPeerCache struct {
-	symbols []string
-	peers   []ill_db.Peer
-	err     error
-	calls   int
+	symbols       []string
+	peers         []ill_db.Peer
+	branchSymbols []ill_db.BranchSymbol
+	err           error
+	calls         int
 }
 
 func (c *recordingPeerCache) GetCachedPeersBySymbols(_ common.ExtendedContext, symbols []string, _ adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string, error) {
 	c.calls++
 	c.symbols = append([]string(nil), symbols...)
 	return c.peers, "test", c.err
+}
+
+func (c *recordingPeerCache) GetBranchSymbolsByPeerId(_ common.ExtendedContext, _ string) ([]ill_db.BranchSymbol, error) {
+	return c.branchSymbols, c.err
 }
 
 func testCtx() common.ExtendedContext {

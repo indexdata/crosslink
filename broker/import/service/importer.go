@@ -46,6 +46,7 @@ type importStateValidator interface {
 
 type importPeerCache interface {
 	GetCachedPeersBySymbols(common.ExtendedContext, []string, adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string, error)
+	GetBranchSymbolsByPeerId(common.ExtendedContext, string) ([]ill_db.BranchSymbol, error)
 }
 
 type Importer struct {
@@ -251,7 +252,7 @@ func (i Importer) importPatronRequest(ctx common.ExtendedContext, policy importd
 	if i.repo == nil {
 		return nil, importdb.Result{}, errors.New("import repository is required")
 	}
-	err := i.validateOwner(ctx, owner)
+	ownerPeer, err := i.resolveOwner(ctx, owner)
 	if err != nil {
 		return nil, importdb.Result{}, fmt.Errorf("validate owner: %w", err)
 	}
@@ -266,6 +267,9 @@ func (i Importer) importPatronRequest(ctx common.ExtendedContext, policy importd
 	var apiBundle importoapi.ImportPatronRequestBundle
 	if err = json.Unmarshal(data, &apiBundle); err != nil {
 		return nil, importdb.Result{}, err
+	}
+	if err = i.validatePatronRequestOwner(ctx, owner, ownerPeer, apiBundle.PatronRequest); err != nil {
+		return identifier, importdb.Result{}, err
 	}
 	bundle, symbols, err := i.normalizePatronRequest(owner, apiBundle)
 	if err != nil {
@@ -296,6 +300,42 @@ func (i Importer) importPatronRequest(ctx common.ExtendedContext, policy importd
 	}
 	result, err := i.repo.ImportPatronRequest(ctx, bundle, policy)
 	return identifier, result, err
+}
+
+func (i Importer) validatePatronRequestOwner(ctx common.ExtendedContext, owner string, ownerPeer ill_db.Peer, request importoapi.ImportPatronRequest) error {
+	var symbol, role string
+	switch pr_db.PatronRequestSide(request.Side) {
+	case prservice.SideBorrowing:
+		symbol, role = request.RequesterSymbol, "borrowing requester"
+		requesterSymbol := request.IllRequest.Header.RequestingAgencyId.AgencyIdType.Text + ":" + request.IllRequest.Header.RequestingAgencyId.AgencyIdValue
+		if symbol != requesterSymbol {
+			return nil
+		}
+	case prservice.SideLending:
+		if request.SupplierSymbol == nil || strings.TrimSpace(*request.SupplierSymbol) == "" {
+			return nil
+		}
+		symbol, role = *request.SupplierSymbol, "lending supplier"
+		supplierSymbol := request.IllRequest.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + request.IllRequest.Header.SupplyingAgencyId.AgencyIdValue
+		if symbol != supplierSymbol {
+			return nil
+		}
+	default:
+		return nil
+	}
+	if symbol == owner {
+		return nil
+	}
+	branches, err := i.peerCache.GetBranchSymbolsByPeerId(ctx, ownerPeer.ID)
+	if err != nil {
+		return fmt.Errorf("resolve branches for envelope owner %q: %w", owner, err)
+	}
+	for _, branch := range branches {
+		if branch.SymbolValue == symbol {
+			return nil
+		}
+	}
+	return fmt.Errorf("%s symbol %q is not owned by envelope owner %q", role, symbol, owner)
 }
 
 func patronRequestIdentifier(value any) *string {
@@ -515,17 +555,22 @@ func (i Importer) importTemplate(ctx common.ExtendedContext, policy importdb.Con
 }
 
 func (i Importer) validateOwner(ctx common.ExtendedContext, owner string) error {
+	_, err := i.resolveOwner(ctx, owner)
+	return err
+}
+
+func (i Importer) resolveOwner(ctx common.ExtendedContext, owner string) (ill_db.Peer, error) {
 	if owner == "" {
-		return errors.New("owner is required")
+		return ill_db.Peer{}, errors.New("owner is required")
 	}
 	peers, _, err := i.peerCache.GetCachedPeersBySymbols(ctx, []string{owner}, i.directoryAdapter)
 	if err != nil {
-		return err
+		return ill_db.Peer{}, err
 	}
 	if len(peers) == 0 {
-		return errors.New("owner not found")
+		return ill_db.Peer{}, errors.New("owner not found")
 	}
-	return nil
+	return peers[0], nil
 }
 
 func pgTextFromPtr(value *string) pgtype.Text {
