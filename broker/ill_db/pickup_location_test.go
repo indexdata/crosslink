@@ -208,7 +208,7 @@ func TestDeduplicateDirectoryPeersMigration(t *testing.T) {
 	tx, err := illRepo.(*PgIllRepo).Pool.Begin(ctx)
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
-	_, err = tx.Exec(ctx, "DROP INDEX peer_directory_entry_id_idx; CREATE INDEX peer_directory_entry_id_idx ON peer ((custom_data ->> 'id'))")
+	_, err = tx.Exec(ctx, "DROP INDEX peer_directory_entry_id_idx")
 	require.NoError(t, err)
 	id := uuid.NewString()
 	// Equal timestamps exercise the deterministic local-ID tiebreaker.
@@ -223,7 +223,7 @@ func TestDeduplicateDirectoryPeersMigration(t *testing.T) {
         INSERT INTO located_supplier (id, ill_transaction_id, supplier_id, supplier_symbol)
         VALUES ('dedup-supplier', 'dedup-transaction', 'dedup-b', 'dedup-symbol')`)
 	require.NoError(t, err)
-	migration, err := os.ReadFile("../migrations/064_unique_peer_directory_entry_id.up.sql")
+	migration, err := os.ReadFile("../migrations/063_peer_directory_entry_id.up.sql")
 	require.NoError(t, err)
 	_, err = tx.Exec(ctx, string(migration))
 	require.NoError(t, err)
