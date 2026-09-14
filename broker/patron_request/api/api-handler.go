@@ -28,6 +28,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/oapi-codegen/nullable"
 )
 
 type PickupLocationValidator interface {
@@ -325,15 +326,8 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 	}
 
 	dbreq := buildDbPatronRequest(&newPr, params.XOkapiTenant, creationTime, requesterReqId, illRequest, borrowerInitialState, stateModelName)
-	if dbreq.RequesterPickupLocationID.Valid {
-		if a.pickupLocationValidator == nil {
-			api.AddInternalError(ctx, w, errors.New("pickup location validator is not configured"))
-			return
-		}
-		if err := a.pickupLocationValidator.ValidateRequesterPickupLocation(ctx, dbreq); err != nil {
-			api.AddBadRequestError(ctx, w, err)
-			return
-		}
+	if !a.validatePickupLocation(w, ctx, dbreq) {
+		return
 	}
 	pr, err := a.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(dbreq))
 	if err != nil {
@@ -552,8 +546,11 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 
 	existingPr.RequesterReqID = getDbText(&requesterReqId)
 	existingPr.IllRequest = illRequest
-	if newPr.RequesterPickupLocationId != nil {
+	if newPr.RequesterPickupLocationId.IsSpecified() {
 		existingPr.RequesterPickupLocationID = getPickupLocationID(newPr.RequesterPickupLocationId)
+		if !a.validatePickupLocation(w, ctx, existingPr) {
+			return
+		}
 	}
 	existingPr.StateModel = stateModelName
 	existingPr.Patron = getDbText(newPr.Patron)
@@ -1563,11 +1560,27 @@ func toDbNotification(create proapi.CreatePrNotification, pr pr_db.PatronRequest
 	}
 }
 
-func getPickupLocationID(id *uuid.UUID) pgtype.UUID {
-	if id == nil {
+// validatePickupLocation is shared by creation and explicit pickup updates.
+func (a *PatronRequestApiHandler) validatePickupLocation(w http.ResponseWriter, ctx common.ExtendedContext, pr pr_db.PatronRequest) bool {
+	if !pr.RequesterPickupLocationID.Valid {
+		return true
+	}
+	if a.pickupLocationValidator == nil {
+		api.AddInternalError(ctx, w, errors.New("pickup location validator is not configured"))
+		return false
+	}
+	if err := a.pickupLocationValidator.ValidateRequesterPickupLocation(ctx, pr); err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return false
+	}
+	return true
+}
+
+func getPickupLocationID(id nullable.Nullable[uuid.UUID]) pgtype.UUID {
+	if !id.IsSpecified() || id.IsNull() {
 		return pgtype.UUID{}
 	}
-	return pgtype.UUID{Bytes: *id, Valid: true}
+	return pgtype.UUID{Bytes: id.MustGet(), Valid: true}
 }
 
 func toPickupLocationID(id pgtype.UUID) *uuid.UUID {

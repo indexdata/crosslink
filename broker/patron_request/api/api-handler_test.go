@@ -27,6 +27,7 @@ import (
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/oapi-codegen/nullable"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -1710,37 +1711,54 @@ func TestPatronRequestPickupLocationIDValidation(t *testing.T) {
 		var request proapi.CreatePatronRequest
 		require.Error(t, json.Unmarshal([]byte(`{"requesterPickupLocationId":"`+value+`","illRequest":{}}`), &request))
 	}
-	var request proapi.CreatePatronRequest
-	require.NoError(t, json.Unmarshal([]byte(`{"illRequest":{}}`), &request))
-	pr := buildDbPatronRequest(&request, nil, pgtype.Timestamp{}, "request-1", request.IllRequest, "", "default")
-	require.False(t, pr.RequesterPickupLocationID.Valid)
-	require.Nil(t, toPickupLocationID(pr.RequesterPickupLocationID))
+	for _, body := range []string{`{"illRequest":{}}`, `{"illRequest":{},"requesterPickupLocationId":null}`} {
+		var request proapi.CreatePatronRequest
+		require.NoError(t, json.Unmarshal([]byte(body), &request))
+		pr := buildDbPatronRequest(&request, nil, pgtype.Timestamp{}, "request-1", request.IllRequest, "", "default")
+		require.False(t, pr.RequesterPickupLocationID.Valid)
+		require.Nil(t, toPickupLocationID(pr.RequesterPickupLocationID))
+	}
 }
 
 func TestPutPatronRequestsIdPickupLocationOptional(t *testing.T) {
 	original, replacement := uuid.New(), uuid.New()
 	for _, tc := range []struct {
-		name     string
-		supplied *uuid.UUID
-		expected uuid.UUID
+		name            string
+		supplied        nullable.Nullable[uuid.UUID]
+		expected        pgtype.UUID
+		validationError error
 	}{
-		{name: "omitted preserves selection", expected: original},
-		{name: "supplied replaces selection", supplied: &replacement, expected: replacement},
+		{name: "omitted preserves selection", expected: pgtype.UUID{Bytes: original, Valid: true}},
+		{name: "supplied replaces selection", supplied: nullable.NewNullableWithValue(replacement), expected: pgtype.UUID{Bytes: replacement, Valid: true}},
+		{name: "null clears selection", supplied: nullable.NewNullNullable[uuid.UUID]()},
+		{name: "invalid selection rejected", supplied: nullable.NewNullableWithValue(replacement), validationError: errors.New("pickup location is not a branch of requester institution")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &PrRepoUpdateCapture{pickupLocationID: pgtype.UUID{Bytes: original, Valid: true}}
 			handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+			validation := &pickupLocationValidatorStub{err: tc.validationError}
+			handler.SetPickupLocationValidator(validation)
 			id := "3"
-			body, err := json.Marshal(proapi.CreatePatronRequest{
-				Id: &id, RequesterSymbol: &symbol, IllRequest: validIllRequest(), RequesterPickupLocationId: tc.supplied,
-			})
+			body, err := json.Marshal(proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol, IllRequest: validIllRequest(), RequesterPickupLocationId: tc.supplied})
 			require.NoError(t, err)
-			req := httptest.NewRequest(http.MethodPut, "/", bytes.NewReader(body))
 			rr := httptest.NewRecorder()
-			handler.PutPatronRequestsId(rr, req, id, proapi.PutPatronRequestsIdParams{})
-			require.Equal(t, http.StatusOK, rr.Code)
-			require.NotNil(t, repo.lastUpdateParams)
-			require.Equal(t, pgtype.UUID{Bytes: tc.expected, Valid: true}, repo.lastUpdateParams.RequesterPickupLocationID)
+			handler.PutPatronRequestsId(rr, httptest.NewRequest(http.MethodPut, "/", bytes.NewReader(body)), id, proapi.PutPatronRequestsIdParams{})
+			if tc.validationError != nil {
+				require.Equal(t, http.StatusBadRequest, rr.Code, rr.Body.String())
+				require.Nil(t, repo.lastUpdateParams)
+				require.Contains(t, rr.Body.String(), tc.validationError.Error())
+			} else {
+				require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+				require.NotNil(t, repo.lastUpdateParams)
+				require.Equal(t, tc.expected, repo.lastUpdateParams.RequesterPickupLocationID)
+			}
+			if tc.supplied.IsSpecified() && !tc.supplied.IsNull() {
+				require.Len(t, validation.requests, 1)
+				require.Equal(t, replacement, uuid.UUID(validation.requests[0].RequesterPickupLocationID.Bytes))
+				require.Equal(t, symbol, validation.requests[0].RequesterSymbol.String)
+			} else {
+				require.Empty(t, validation.requests)
+			}
 		})
 	}
 }
@@ -1776,7 +1794,7 @@ func TestCreateValidatesPickupBeforePersistence(t *testing.T) {
 			body := proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol, IllRequest: validIllRequest()}
 			pickupID := uuid.New()
 			if tc.selected {
-				body.RequesterPickupLocationId = &pickupID
+				body.RequesterPickupLocationId.Set(pickupID)
 			}
 			encoded, err := json.Marshal(body)
 			require.NoError(t, err)
