@@ -2,7 +2,6 @@ package adapter
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/google/uuid"
@@ -94,7 +93,7 @@ func TestMockPickupInstitutionLookup(t *testing.T) {
 	for _, symbol := range []string{"ISIL:MOCK", "ISIL:REQUESTER"} {
 		t.Run(symbol, func(t *testing.T) {
 			ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-			os.Setenv("MOCK_PICKUP_INSTITUTION_SYMBOL", symbol)
+			t.Setenv("MOCK_PICKUP_INSTITUTION_SYMBOL", symbol)
 			adapter := &MockDirectoryLookupAdapter{}
 			locations, _, err := adapter.Lookup(ctx, DirectoryLookupParams{EntryID: uuid.NewString()})
 			require.NoError(t, err)
