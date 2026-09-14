@@ -537,9 +537,12 @@ components:
           type: string
           format: uuid
           description: >-
-            UUID of the directory entry providing the requester pickup location code
-            and shipping address. When omitted, AcceptItem uses the requester LMS
-            configuration.
+            UUID of the directory entry providing the shipping address and requester
+            pickup location code used by AcceptItem when receiving a remotely supplied
+            item and RequestItem during local fulfillment. When omitted, both operations
+            use the pickup location from the requester LMS configuration. The selected
+            entry requires an LMS pickup location code only when the configured operation
+            uses it.
         requesterSymbol:
           type: string
           description: Requester symbol
@@ -652,9 +655,12 @@ components:
           type: string
           format: uuid
           description: >-
-            UUID of the directory entry providing the requester pickup location code
-            and shipping address. When omitted, AcceptItem uses the requester LMS
-            configuration.
+            UUID of the directory entry providing the shipping address and requester
+            pickup location code used by AcceptItem when receiving a remotely supplied
+            item and RequestItem during local fulfillment. When omitted, both operations
+            use the pickup location from the requester LMS configuration. The selected
+            entry requires an LMS pickup location code only when the configured operation
+            uses it.
         requesterSymbol:
           type: string
           description: Requester symbol
