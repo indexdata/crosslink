@@ -297,12 +297,14 @@ func TestPostPatronRequests(t *testing.T) {
 }
 
 type createdPatronRequestRepo struct {
+	createCalls int
 	PrRepoError
 	created pr_db.PatronRequest
 	view    pr_db.PatronRequestSearchView
 }
 
 func (r *createdPatronRequestRepo) CreatePatronRequest(ctx common.ExtendedContext, params pr_db.CreatePatronRequestParams) (pr_db.PatronRequest, error) {
+	r.createCalls++
 	return r.created, nil
 }
 
@@ -1739,6 +1741,61 @@ func TestPutPatronRequestsIdPickupLocationOptional(t *testing.T) {
 			require.Equal(t, http.StatusOK, rr.Code)
 			require.NotNil(t, repo.lastUpdateParams)
 			require.Equal(t, pgtype.UUID{Bytes: tc.expected, Valid: true}, repo.lastUpdateParams.RequesterPickupLocationID)
+		})
+	}
+}
+
+type pickupLocationValidatorStub struct {
+	err      error
+	requests []pr_db.PatronRequest
+}
+
+func (v *pickupLocationValidatorStub) ValidateRequesterPickupLocation(ctx common.ExtendedContext, pr pr_db.PatronRequest) error {
+	v.requests = append(v.requests, pr)
+	return v.err
+}
+
+func TestCreateValidatesPickupBeforePersistence(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		selected        bool
+		validationError error
+		status          int
+	}{
+		{name: "valid selection", selected: true, status: http.StatusCreated},
+		{name: "missing entry", selected: true, validationError: errors.New("pickup location not found"), status: http.StatusBadRequest},
+		{name: "unrelated institution", selected: true, validationError: errors.New("pickup location is not a branch of requester institution"), status: http.StatusBadRequest},
+		{name: "no selection", status: http.StatusCreated},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			id := "new-request"
+			repo := &createdPatronRequestRepo{created: pr_db.PatronRequest{ID: id}, view: pr_db.PatronRequestSearchView{ID: id, IllRequest: validIllRequest()}}
+			validation := &pickupLocationValidatorStub{err: tc.validationError}
+			handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+			handler.SetPickupLocationValidator(validation)
+			body := proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol, IllRequest: validIllRequest()}
+			pickupID := uuid.New()
+			if tc.selected {
+				body.RequesterPickupLocationId = &pickupID
+			}
+			encoded, err := json.Marshal(body)
+			require.NoError(t, err)
+			rr := httptest.NewRecorder()
+			handler.PostPatronRequests(rr, httptest.NewRequest(http.MethodPost, "/patron_requests", bytes.NewReader(encoded)), proapi.PostPatronRequestsParams{})
+			require.Equal(t, tc.status, rr.Code, rr.Body.String())
+			if tc.selected {
+				require.Len(t, validation.requests, 1)
+				require.Equal(t, symbol, validation.requests[0].RequesterSymbol.String)
+				require.Equal(t, pickupID, uuid.UUID(validation.requests[0].RequesterPickupLocationID.Bytes))
+			} else {
+				require.Empty(t, validation.requests)
+			}
+			if tc.validationError != nil {
+				require.Zero(t, repo.createCalls)
+				require.Contains(t, rr.Body.String(), tc.validationError.Error())
+			} else {
+				require.Equal(t, 1, repo.createCalls)
+			}
 		})
 	}
 }

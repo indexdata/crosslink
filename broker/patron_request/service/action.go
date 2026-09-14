@@ -2055,6 +2055,16 @@ func (a *PatronRequestActionService) applyPickupLocationAddress(ctx common.Exten
 	return request, nil
 }
 
+// ValidateRequesterPickupLocation checks the selected entry's existence and ancestry
+// without requiring shipping or LMS data that a later operation may not consume.
+func (a *PatronRequestActionService) ValidateRequesterPickupLocation(ctx common.ExtendedContext, pr pr_db.PatronRequest) error {
+	if !pr.RequesterPickupLocationID.Valid {
+		return nil
+	}
+	_, err := a.pickupLocationEntry(ctx, pr)
+	return err
+}
+
 func (a *PatronRequestActionService) pickupLocationEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest) (dirapi.Entry, error) {
 	requesterSymbol := strings.TrimSpace(pr.RequesterSymbol.String)
 	if !pr.RequesterSymbol.Valid || requesterSymbol == "" {

@@ -30,6 +30,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type PickupLocationValidator interface {
+	ValidateRequesterPickupLocation(ctx common.ExtendedContext, pr pr_db.PatronRequest) error
+}
+
 type ActionTaskProcessor interface {
 	ProcessInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error)
 }
@@ -39,15 +43,16 @@ var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 var errInvalidPatronRequest = errors.New("invalid patron request")
 
 type PatronRequestApiHandler struct {
-	limitDefault         int32
-	prRepo               pr_db.PrRepo
-	eventBus             events.EventBus
-	eventRepo            events.EventRepo
-	actionMappingService prservice.ActionMappingService
-	autoActionRunner     prservice.AutoActionRunner
-	actionTaskProcessor  ActionTaskProcessor
-	tenantResolver       *tenant.TenantResolver
-	notificationSender   prservice.PatronRequestNotificationService
+	pickupLocationValidator PickupLocationValidator
+	limitDefault            int32
+	prRepo                  pr_db.PrRepo
+	eventBus                events.EventBus
+	eventRepo               events.EventRepo
+	actionMappingService    prservice.ActionMappingService
+	autoActionRunner        prservice.AutoActionRunner
+	actionTaskProcessor     ActionTaskProcessor
+	tenantResolver          *tenant.TenantResolver
+	notificationSender      prservice.PatronRequestNotificationService
 }
 
 func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
@@ -61,6 +66,10 @@ func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
 		tenantResolver:       tenantResolver,
 		notificationSender:   *prservice.CreatePatronRequestNotificationService(prRepo, eventBus, iso18626Handler),
 	}
+}
+
+func (a *PatronRequestApiHandler) SetPickupLocationValidator(validator PickupLocationValidator) {
+	a.pickupLocationValidator = validator
 }
 
 func (a *PatronRequestApiHandler) SetAutoActionRunner(autoActionRunner prservice.AutoActionRunner) {
@@ -316,6 +325,16 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 	}
 
 	dbreq := buildDbPatronRequest(&newPr, params.XOkapiTenant, creationTime, requesterReqId, illRequest, borrowerInitialState, stateModelName)
+	if dbreq.RequesterPickupLocationID.Valid {
+		if a.pickupLocationValidator == nil {
+			api.AddInternalError(ctx, w, errors.New("pickup location validator is not configured"))
+			return
+		}
+		if err := a.pickupLocationValidator.ValidateRequesterPickupLocation(ctx, dbreq); err != nil {
+			api.AddBadRequestError(ctx, w, err)
+			return
+		}
+	}
 	pr, err := a.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(dbreq))
 	if err != nil {
 		var pgErr *pgconn.PgError
