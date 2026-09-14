@@ -1180,6 +1180,9 @@ func TestHandleInvokeActionReceiveOK(t *testing.T) {
 			if tt.selected.Valid {
 				var entry dirapi.Entry
 				require.NoError(t, json.Unmarshal([]byte(`{"id":"11111111-1111-4111-8111-111111111111","name":"Branch","lmsConfig":{"requesterPickupLocation":"branch-1"}}`), &entry))
+				parentID := uuid.New()
+				entry.Parent = &parentID
+				pickupRepo.On("GetCachedPeerByDirectoryEntryID", parentID, mock.Anything).Return(ill_db.Peer{CustomData: dirapi.Entry{Symbols: pickupSymbols("REC1")}}, "<cached>", nil).Once()
 				pickupRepo.On("GetCachedPeerByDirectoryEntryID", uuid.UUID(tt.selected.Bytes), mock.Anything).Return(ill_db.Peer{CustomData: entry}, "<cached>", nil).Once()
 			}
 			prAction.illRepo = pickupRepo
@@ -4721,7 +4724,9 @@ func TestHandleInvokeBorrowerActionFillLocally(t *testing.T) {
 				pr.RequesterPickupLocationID = pgtype.UUID{Bytes: id, Valid: true}
 				pr.Tenant = getDbText("tenant-a")
 				expectedPickup = "selected-branch"
-				entry := dirapi.Entry{Id: &id, Tenant: new("tenant-a"), LmsConfig: &dirapi.LmsConfig{RequesterPickupLocation: &expectedPickup}}
+				parentID := uuid.New()
+				pickupRepo.On("GetCachedPeerByDirectoryEntryID", parentID, mock.Anything).Return(ill_db.Peer{CustomData: dirapi.Entry{Symbols: pickupSymbols("REQ1")}}, "<cached>", nil).Once()
+				entry := dirapi.Entry{Id: &id, Parent: &parentID, Tenant: new("tenant-a"), LmsConfig: &dirapi.LmsConfig{RequesterPickupLocation: &expectedPickup}}
 				pickupRepo.On("GetCachedPeerByDirectoryEntryID", id, mock.Anything).Return(ill_db.Peer{CustomData: entry}, "<cached>", nil).Once()
 			}
 			t.Cleanup(func() { pickupRepo.AssertExpectations(t) })

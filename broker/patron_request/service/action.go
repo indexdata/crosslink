@@ -2056,32 +2056,43 @@ func (a *PatronRequestActionService) applyPickupLocationAddress(ctx common.Exten
 }
 
 func (a *PatronRequestActionService) pickupLocationEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest) (dirapi.Entry, error) {
-	peer, _, err := a.illRepo.GetCachedPeerByDirectoryEntryID(ctx, uuid.UUID(pr.RequesterPickupLocationID.Bytes), a.directoryLookupAdapter)
+	requesterSymbol := strings.TrimSpace(pr.RequesterSymbol.String)
+	if !pr.RequesterSymbol.Valid || requesterSymbol == "" {
+		return dirapi.Entry{}, fmt.Errorf("pickup location requires a requester symbol")
+	}
+	id := uuid.UUID(pr.RequesterPickupLocationID.Bytes)
+	peer, _, err := a.illRepo.GetCachedPeerByDirectoryEntryID(ctx, id, a.directoryLookupAdapter)
 	if err != nil {
 		return dirapi.Entry{}, err
 	}
-	// The peer cache is shared across tenants, so validate ownership even on cache hits.
-	if requestTenant := strings.TrimSpace(pr.Tenant.String); requestTenant != "" {
-		owner := peer.CustomData
-		visited := map[uuid.UUID]bool{uuid.UUID(pr.RequesterPickupLocationID.Bytes): true}
-		// An explicit tenant takes precedence over inherited ownership.
-		for (owner.Tenant == nil || *owner.Tenant == "") && owner.Parent != nil {
-			parentID := *owner.Parent
-			if visited[parentID] {
-				return dirapi.Entry{}, fmt.Errorf("pickup location %s: cycle in directory parent chain", uuid.UUID(pr.RequesterPickupLocationID.Bytes))
-			}
-			visited[parentID] = true
-			parent, _, err := a.illRepo.GetCachedPeerByDirectoryEntryID(ctx, parentID, a.directoryLookupAdapter)
-			if err != nil {
-				return dirapi.Entry{}, fmt.Errorf("pickup location %s: cannot resolve parent tenant: %w", uuid.UUID(pr.RequesterPickupLocationID.Bytes), err)
-			}
-			owner = parent.CustomData
+	// UUID lookups use a shared cache. Require an ancestor with the requester
+	// symbol even on cache hits; tenant membership alone does not prove ancestry.
+	owner := peer.CustomData
+	visited := map[uuid.UUID]bool{id: true}
+	for owner.Parent != nil {
+		parentID := *owner.Parent
+		if visited[parentID] {
+			return dirapi.Entry{}, fmt.Errorf("pickup location %s: cycle in directory parent chain", id)
 		}
-		if owner.Tenant == nil || *owner.Tenant != requestTenant {
-			return dirapi.Entry{}, fmt.Errorf("pickup location %s does not belong to request tenant %q", uuid.UUID(pr.RequesterPickupLocationID.Bytes), requestTenant)
+		visited[parentID] = true
+		parent, _, err := a.illRepo.GetCachedPeerByDirectoryEntryID(ctx, parentID, a.directoryLookupAdapter)
+		if err != nil {
+			return dirapi.Entry{}, fmt.Errorf("pickup location %s: cannot resolve parent: %w", id, err)
+		}
+		owner = parent.CustomData
+		if owner.Symbols != nil {
+			for _, symbol := range *owner.Symbols {
+				authority := symbol.Authority
+				if authority == "" {
+					authority = "ISIL" // Match the directory adapter's default authority.
+				}
+				if authority+":"+symbol.Symbol == requesterSymbol {
+					return peer.CustomData, nil
+				}
+			}
 		}
 	}
-	return peer.CustomData, nil
+	return dirapi.Entry{}, fmt.Errorf("pickup location %s is not a branch of requester institution %q", id, requesterSymbol)
 }
 
 func (a *PatronRequestActionService) requesterPickupCode(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter) (string, error) {
