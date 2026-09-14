@@ -4691,8 +4691,8 @@ func TestHandleInvokeBorrowerActionFillLocally(t *testing.T) {
 		selected            bool
 		expectedStatus      iso18626.TypeStatus
 	}{
-		{name: "manual selected pickup without LMS code", selected: true, manualAdapter: true, serviceType: iso18626.TypeServiceTypeLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
-		{name: "disabled RequestItem selected pickup without LMS code", selected: true, disabledRequestItem: true, serviceType: iso18626.TypeServiceTypeLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
+		{name: "manual selected pickup without lookup", selected: true, manualAdapter: true, serviceType: iso18626.TypeServiceTypeLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
+		{name: "disabled RequestItem selected pickup without lookup", selected: true, disabledRequestItem: true, serviceType: iso18626.TypeServiceTypeLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
 		{name: "selected pickup", selected: true, serviceType: iso18626.TypeServiceTypeLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
 		{name: "loan", serviceType: iso18626.TypeServiceTypeLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
 		{name: "copy or loan", serviceType: iso18626.TypeServiceTypeCopyOrLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
@@ -4727,13 +4727,12 @@ func TestHandleInvokeBorrowerActionFillLocally(t *testing.T) {
 				pr.RequesterPickupLocationID = pgtype.UUID{Bytes: id, Valid: true}
 				pr.Tenant = getDbText("tenant-a")
 				expectedPickup = "selected-branch"
-				parentID := uuid.New()
-				pickupRepo.On("GetCachedPeerByDirectoryEntryID", parentID, mock.Anything).Return(ill_db.Peer{CustomData: dirapi.Entry{Symbols: pickupSymbols("REQ1")}}, "<cached>", nil).Once()
-				entry := dirapi.Entry{Id: &id, Parent: &parentID, Tenant: new("tenant-a"), LmsConfig: &dirapi.LmsConfig{RequesterPickupLocation: &expectedPickup}}
-				if tt.manualAdapter || tt.disabledRequestItem {
-					entry.LmsConfig = nil
+				if !tt.manualAdapter && !tt.disabledRequestItem {
+					parentID := uuid.New()
+					pickupRepo.On("GetCachedPeerByDirectoryEntryID", parentID, mock.Anything).Return(ill_db.Peer{CustomData: dirapi.Entry{Symbols: pickupSymbols("REQ1")}}, "<cached>", nil).Once()
+					entry := dirapi.Entry{Id: &id, Parent: &parentID, Tenant: new("tenant-a"), LmsConfig: &dirapi.LmsConfig{RequesterPickupLocation: &expectedPickup}}
+					pickupRepo.On("GetCachedPeerByDirectoryEntryID", id, mock.Anything).Return(ill_db.Peer{CustomData: entry}, "<cached>", nil).Once()
 				}
-				pickupRepo.On("GetCachedPeerByDirectoryEntryID", id, mock.Anything).Return(ill_db.Peer{CustomData: entry}, "<cached>", nil).Once()
 			}
 			t.Cleanup(func() { pickupRepo.AssertExpectations(t) })
 			var lmsAdapter lms.LmsAdapter

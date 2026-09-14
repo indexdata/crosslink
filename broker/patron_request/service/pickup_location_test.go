@@ -206,8 +206,15 @@ func TestPickupCodeRequirementPerOperation(t *testing.T) {
 			require.Equal(t, tc.acceptUsesCode, adapter.AcceptItemUsesPickupLocation())
 			id, parentID := uuid.New(), uuid.New()
 			repo := new(IllRepoMock)
-			repo.On("GetCachedPeerByDirectoryEntryID", id, mock.Anything).Return(ill_db.Peer{CustomData: dirapi.Entry{Id: &id, Parent: &parentID}}, "<cached>", nil).Twice()
-			repo.On("GetCachedPeerByDirectoryEntryID", parentID, mock.Anything).Return(ill_db.Peer{CustomData: dirapi.Entry{Symbols: pickupSymbols("MAIN")}}, "<cached>", nil).Twice()
+			lookups := 0
+			if tc.requestUsesCode {
+				lookups++
+			}
+			if tc.acceptUsesCode {
+				lookups++
+			}
+			repo.On("GetCachedPeerByDirectoryEntryID", id, mock.Anything).Return(ill_db.Peer{CustomData: dirapi.Entry{Id: &id, Parent: &parentID}}, "<cached>", nil).Times(lookups)
+			repo.On("GetCachedPeerByDirectoryEntryID", parentID, mock.Anything).Return(ill_db.Peer{CustomData: dirapi.Entry{Symbols: pickupSymbols("MAIN")}}, "<cached>", nil).Times(lookups)
 			service := PatronRequestActionService{illRepo: repo}
 			pr := pr_db.PatronRequest{RequesterSymbol: pgtype.Text{String: "ISIL:MAIN", Valid: true}, RequesterPickupLocationID: pgtype.UUID{Bytes: id, Valid: true}}
 			for _, usesCode := range []bool{adapter.RequestItemUsesPickupLocation(), adapter.AcceptItemUsesPickupLocation()} {
@@ -253,5 +260,18 @@ func TestPickupLocationWithMockDirectory(t *testing.T) {
 			require.ErrorContains(t, err, "is not a branch of requester institution")
 			repo.AssertExpectations(t)
 		})
+	}
+}
+
+func TestUnusedPickupCodeSkipsLookup(t *testing.T) {
+	for _, selected := range []bool{false, true} {
+		repo := new(IllRepoMock)
+		service := PatronRequestActionService{illRepo: repo}
+		pr := pr_db.PatronRequest{RequesterPickupLocationID: pgtype.UUID{Bytes: uuid.New(), Valid: selected}}
+		// No adapter or requester symbol is needed when pickup data is unused.
+		code, err := service.requesterPickupCode(appCtx, pr, nil, false)
+		require.NoError(t, err)
+		require.Empty(t, code)
+		repo.AssertNotCalled(t, "GetCachedPeerByDirectoryEntryID", mock.Anything, mock.Anything)
 	}
 }

@@ -2096,18 +2096,15 @@ func (a *PatronRequestActionService) pickupLocationEntry(ctx common.ExtendedCont
 }
 
 func (a *PatronRequestActionService) requesterPickupCode(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, usesPickupLocation bool) (string, error) {
+	if !usesPickupLocation {
+		return "", nil
+	}
 	if !pr.RequesterPickupLocationID.Valid {
-		if !usesPickupLocation {
-			return "", nil
-		}
 		return lmsAdapter.RequesterPickupLocation(), nil
 	}
 	entry, err := a.pickupLocationEntry(ctx, pr)
 	if err != nil {
 		return "", err
-	}
-	if !usesPickupLocation {
-		return "", nil
 	}
 	if entry.LmsConfig == nil || entry.LmsConfig.RequesterPickupLocation == nil || *entry.LmsConfig.RequesterPickupLocation == "" {
 		return "", fmt.Errorf("pickup location %s has no LMS pickup location code", uuid.UUID(pr.RequesterPickupLocationID.Bytes))
