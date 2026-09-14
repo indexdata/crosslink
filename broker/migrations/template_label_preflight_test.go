@@ -117,6 +117,43 @@ func TestBatchActionTitleUniquenessMigrationIgnoresOtherTaskTypes(t *testing.T) 
 	require.NoError(t, err)
 }
 
+func TestLendingRoutingIdentityMigrationRejectsExistingDuplicates(t *testing.T) {
+	ctx, migrator, pool := migrationAtVersion61(t)
+	_, err := pool.Exec(ctx, `
+		INSERT INTO patron_request (id, state, side, supplier_symbol, requester_req_id)
+		VALUES
+			('lending-duplicate-1', 'RECEIVED', 'lending', 'ISIL:SUPPLIER', 'request-1'),
+			('lending-duplicate-2', 'RECEIVED', 'lending', 'ISIL:SUPPLIER', 'request-1')`)
+	require.NoError(t, err)
+
+	err = migrator.Migrate(62)
+
+	require.Error(t, err)
+	require.ErrorContains(t, err, "ISIL:SUPPLIER")
+	require.ErrorContains(t, err, "request-1")
+}
+
+func TestLendingRoutingIdentityUniquenessIsScopedToLending(t *testing.T) {
+	ctx, migrator, pool := migrationAtVersion61(t)
+	require.NoError(t, migrator.Migrate(62))
+
+	_, err := pool.Exec(ctx, `
+		INSERT INTO patron_request (id, state, side, supplier_symbol, requester_req_id)
+		VALUES ('lending-1', 'RECEIVED', 'lending', 'ISIL:SUPPLIER', 'request-1')`)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `
+		INSERT INTO patron_request (id, state, side, supplier_symbol, requester_req_id)
+		VALUES ('lending-2', 'RECEIVED', 'lending', 'ISIL:SUPPLIER', 'request-1')`)
+	require.Error(t, err)
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO patron_request (id, state, side, supplier_symbol, requester_req_id)
+		VALUES
+			('borrowing-1', 'SENT', 'borrowing', 'ISIL:SUPPLIER', 'request-1'),
+			('borrowing-2', 'SENT', 'borrowing', 'ISIL:SUPPLIER', 'request-1')`)
+	require.NoError(t, err)
+}
+
 func migrationAtVersion61(t *testing.T) (context.Context, *migrate.Migrate, *pgxpool.Pool) {
 	t.Helper()
 	ctx := context.Background()

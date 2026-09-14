@@ -4,6 +4,18 @@ FROM patron_request
 WHERE id = $1
 FOR UPDATE;
 
+-- name: LockImportLendingPatronRequestMatches :many
+SELECT id
+FROM patron_request
+WHERE id = sqlc.arg(id)
+   OR (
+       side = 'lending'
+       AND supplier_symbol = sqlc.arg(supplier_symbol)
+       AND requester_req_id = sqlc.arg(requester_req_id)
+   )
+ORDER BY id
+FOR UPDATE;
+
 -- name: CreateImportedPatronRequest :exec
 INSERT INTO patron_request (
     id, created_at, ill_request, state, side, patron, requester_symbol,

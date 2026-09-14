@@ -1669,3 +1669,44 @@ func TestCRUDTemplate(t *testing.T) {
 	assert.Equal(t, int64(0), templates.About.Count)
 	assert.Len(t, templates.Items, 0)
 }
+
+func TestTemplateLabelConflictsReturn409(t *testing.T) {
+	symbol := "ISIL:TMPL" + uuid.NewString()
+	apptest.CreatePeerWithModeAndVendor(t, illRepo, symbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink, dirapi.Entry{}, symbol)
+	path := "/templates?symbol=" + url.QueryEscape(symbol)
+	audience := proapi.TemplateAudiencePatron
+	first := proapi.CreateTemplate{
+		Title:       "First",
+		Purpose:     proapi.Email,
+		ContentType: proapi.Text,
+		Audience:    &audience,
+		Labels:      []string{"shared-label"},
+		Body:        "First body",
+	}
+	firstBytes, err := json.Marshal(first)
+	require.NoError(t, err)
+	httpRequest(t, http.MethodPost, path, firstBytes, http.StatusCreated)
+
+	conflictBody := httpRequest(t, http.MethodPost, path, firstBytes, http.StatusConflict)
+	assert.Contains(t, string(conflictBody), "template labels already exist")
+
+	second := first
+	second.Title = "Second"
+	second.Labels = []string{"second-label"}
+	secondBytes, err := json.Marshal(second)
+	require.NoError(t, err)
+	createdBody := httpRequest(t, http.MethodPost, path, secondBytes, http.StatusCreated)
+	var created proapi.Template
+	require.NoError(t, json.Unmarshal(createdBody, &created))
+
+	updateBytes, err := json.Marshal(proapi.UpdateTemplate{
+		Title:       second.Title,
+		ContentType: second.ContentType,
+		Audience:    &audience,
+		Labels:      first.Labels,
+		Body:        second.Body,
+	})
+	require.NoError(t, err)
+	conflictBody = httpRequest(t, http.MethodPut, "/templates/"+created.Id+"?symbol="+url.QueryEscape(symbol), updateBytes, http.StatusConflict)
+	assert.Contains(t, string(conflictBody), "template labels already exist")
+}

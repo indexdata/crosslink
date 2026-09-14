@@ -175,6 +175,70 @@ func TestImportPatronRequestUpdateRejectsIdentityChanges(t *testing.T) {
 	}
 }
 
+func TestImportLendingPatronRequestAppliesPolicyToRoutingIdentity(t *testing.T) {
+	tests := []struct {
+		policy          importdb.ConflictPolicy
+		expectedOutcome importdb.Outcome
+		expectedPatron  string
+		expectConflict  bool
+	}{
+		{policy: importdb.ConflictPolicyFail, expectedPatron: "original", expectConflict: true},
+		{policy: importdb.ConflictPolicySkip, expectedOutcome: importdb.OutcomeSkipped, expectedPatron: "original"},
+		{policy: importdb.ConflictPolicyUpdate, expectedOutcome: importdb.OutcomeImported, expectedPatron: "updated"},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.policy), func(t *testing.T) {
+			prefix := uuid.NewString()
+			existing := testLendingPatronBundle(prefix+"-existing", prefix+"-request", prefix+"-SUP")
+			require.NoError(t, importOnly(existing))
+
+			incoming := testLendingPatronBundle(prefix+"-incoming", prefix+"-request", prefix+"-SUP")
+			incoming.PatronRequest.Patron = pgtype.Text{String: "updated", Valid: true}
+			result, err := importTestRepo.ImportPatronRequest(importTestCtx, incoming, tt.policy)
+			if tt.expectConflict {
+				var conflict *importdb.ConflictError
+				require.ErrorAs(t, err, &conflict)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expectedOutcome, result.Outcome)
+			}
+
+			assert.Equal(t, 0, queryCount(t, "SELECT count(*) FROM patron_request WHERE id=$1", incoming.PatronRequest.ID))
+			var patron string
+			require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT patron FROM patron_request WHERE id=$1", existing.PatronRequest.ID).Scan(&patron))
+			assert.Equal(t, tt.expectedPatron, patron)
+		})
+	}
+}
+
+func TestImportLendingPatronRequestRejectsDifferentIDAndRoutingIdentityMatches(t *testing.T) {
+	for _, policy := range []importdb.ConflictPolicy{
+		importdb.ConflictPolicyFail,
+		importdb.ConflictPolicySkip,
+		importdb.ConflictPolicyUpdate,
+	} {
+		t.Run(string(policy), func(t *testing.T) {
+			prefix := uuid.NewString()
+			byID := testLendingPatronBundle(prefix+"-id", prefix+"-request-id", prefix+"-SUP-ID")
+			byRoutingIdentity := testLendingPatronBundle(prefix+"-route", prefix+"-request-route", prefix+"-SUP-ROUTE")
+			require.NoError(t, importOnly(byID))
+			require.NoError(t, importOnly(byRoutingIdentity))
+
+			incoming := byID
+			incoming.PatronRequest.RequesterReqID = byRoutingIdentity.PatronRequest.RequesterReqID
+			incoming.PatronRequest.SupplierSymbol = byRoutingIdentity.PatronRequest.SupplierSymbol
+			result, err := importTestRepo.ImportPatronRequest(importTestCtx, incoming, policy)
+
+			var conflict *importdb.ConflictError
+			require.ErrorAs(t, err, &conflict)
+			assert.Empty(t, result.Outcome)
+			assert.Equal(t, "original", patronValue(t, byID.PatronRequest.ID))
+			assert.Equal(t, "original", patronValue(t, byRoutingIdentity.PatronRequest.ID))
+		})
+	}
+}
+
 func TestImportPatronRequestCollisionRollsBackRoot(t *testing.T) {
 	prefix := uuid.NewString()
 	first := testPatronBundle(prefix+"-first", prefix+"-request-first")
@@ -356,6 +420,24 @@ func testPatronBundle(prefix, requesterRequestID string) importdb.PatronRequestB
 		IllTransaction:   &ill_db.SaveIllTransactionParams{ID: prefix + "-ill", Timestamp: testTimestamp(0), RequesterSymbol: pgtype.Text{String: prefix + "-REQ", Valid: true}, RequesterID: pgtype.Text{String: requesterPeerID, Valid: true}, RequesterRequestID: pgtype.Text{String: requesterRequestID, Valid: true}, IllTransactionData: ill_db.IllTransactionData{}},
 		LocatedSuppliers: []ill_db.SaveLocatedSupplierParams{{ID: prefix + "-located", SupplierID: supplierPeerID, SupplierSymbol: prefix + "-SUP", Ordinal: 1}},
 	}
+}
+
+func testLendingPatronBundle(prefix, requesterRequestID, supplierSymbol string) importdb.PatronRequestBundle {
+	bundle := testPatronBundle(prefix, requesterRequestID)
+	bundle.PatronRequest.Side = "lending"
+	bundle.PatronRequest.SupplierSymbol = pgtype.Text{String: supplierSymbol, Valid: true}
+	bundle.Items = nil
+	bundle.Notifications = nil
+	bundle.IllTransaction = nil
+	bundle.LocatedSuppliers = nil
+	return bundle
+}
+
+func patronValue(t *testing.T, id string) string {
+	t.Helper()
+	var patron string
+	require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT patron FROM patron_request WHERE id=$1", id).Scan(&patron))
+	return patron
 }
 
 func insertPeer(symbol, id string) {

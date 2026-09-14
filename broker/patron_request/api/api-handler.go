@@ -41,6 +41,9 @@ type ActionTaskProcessor interface {
 
 var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 var errInvalidPatronRequest = errors.New("invalid patron request")
+var errDuplicateTemplateLabel = errors.New("one or more template labels already exist for this owner, purpose, and audience")
+
+const templateLabelUniqueConstraint = "template_owner_purpose_audience_labels_unique"
 
 type PatronRequestApiHandler struct {
 	pickupLocationValidator PickupLocationValidator
@@ -1162,7 +1165,7 @@ func (a *PatronRequestApiHandler) PostTemplates(w http.ResponseWriter, r *http.R
 		CreatedAt:   pgtype.Timestamp{Time: time.Now(), Valid: true},
 	})
 	if err != nil {
-		api.AddInternalError(ctx, w, err)
+		writeTemplateSaveError(ctx, w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -1212,10 +1215,19 @@ func (a *PatronRequestApiHandler) PutTemplatesId(w http.ResponseWriter, r *http.
 	tem.Subject = getDbText(updated.Subject)
 	template, err := a.prRepo.SaveTemplate(ctx, pr_db.SaveTemplateParams(*tem))
 	if err != nil {
-		api.AddInternalError(ctx, w, err)
+		writeTemplateSaveError(ctx, w, err)
 		return
 	}
 	api.WriteJsonResponse(w, toApiTemplate(template))
+}
+
+func writeTemplateSaveError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == templateLabelUniqueConstraint {
+		api.WriteJsonErrorResponse(w, errDuplicateTemplateLabel, http.StatusConflict)
+		return
+	}
+	api.AddInternalError(ctx, w, err)
 }
 
 func (a *PatronRequestApiHandler) getTemplateById(w http.ResponseWriter, r *http.Request, id string, symbolString *string, methodName string) (common.ExtendedContext, *pr_db.Template) {

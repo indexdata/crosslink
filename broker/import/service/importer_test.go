@@ -237,6 +237,56 @@ func TestImportPatronRequestRejectsIllTransactionForLendingRequest(t *testing.T)
 	assert.Zero(t, repo.patronCalls)
 }
 
+func TestImportPatronRequestRejectsMalformedBorrowingSupplierSymbol(t *testing.T) {
+	for _, supplierSymbol := range []string{"SUP", ":SUP", "ISIL:"} {
+		t.Run(supplierSymbol, func(t *testing.T) {
+			repo := &recordingImportRepo{}
+			cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "requester-peer"}, {ID: "supplier-peer"}}}
+			importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
+			data := mutatePatronBundleData(t, func(bundle map[string]any) {
+				bundle["patronRequest"].(map[string]any)["supplierSymbol"] = supplierSymbol
+			})
+
+			_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:REQ", data)
+
+			require.ErrorContains(t, err, "invalid patronRequest.supplierSymbol")
+			assert.Zero(t, repo.patronCalls)
+		})
+	}
+}
+
+func TestImportPatronRequestTreatsBlankBorrowingSupplierSymbolAsUnsourced(t *testing.T) {
+	tests := []struct {
+		name           string
+		supplierSymbol *string
+	}{
+		{name: "missing"},
+		{name: "empty", supplierSymbol: stringPointer("")},
+		{name: "whitespace", supplierSymbol: stringPointer(" \t ")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+			cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "requester-peer"}, {ID: "supplier-peer"}}}
+			importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
+			data := mutatePatronBundleData(t, func(bundle map[string]any) {
+				request := bundle["patronRequest"].(map[string]any)
+				if tt.supplierSymbol == nil {
+					delete(request, "supplierSymbol")
+				} else {
+					request["supplierSymbol"] = *tt.supplierSymbol
+				}
+			})
+
+			_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:REQ", data)
+
+			require.NoError(t, err)
+			assert.False(t, repo.patron.PatronRequest.SupplierSymbol.Valid)
+		})
+	}
+}
+
 func TestImportPatronRequestRejectsMissingOrBlankSupplierSymbolForLending(t *testing.T) {
 	tests := []struct {
 		name           string

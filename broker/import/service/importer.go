@@ -391,8 +391,16 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 	if side != prservice.SideBorrowing && apiBundle.IllTransaction != nil {
 		return importdb.PatronRequestBundle{}, nil, errors.New("illTransaction is only allowed for borrowing patron requests")
 	}
+	if request.SupplierSymbol != nil && strings.TrimSpace(*request.SupplierSymbol) == "" {
+		request.SupplierSymbol = nil
+	}
+	if request.SupplierSymbol != nil {
+		if _, _, err := common.SplitSymbol(*request.SupplierSymbol); err != nil {
+			return importdb.PatronRequestBundle{}, nil, fmt.Errorf("invalid patronRequest.supplierSymbol: %w", err)
+		}
+	}
 	if side == prservice.SideLending {
-		if request.SupplierSymbol == nil || strings.TrimSpace(*request.SupplierSymbol) == "" {
+		if request.SupplierSymbol == nil {
 			return importdb.PatronRequestBundle{}, nil, errors.New("patronRequest.supplierSymbol is required for lending requests")
 		}
 		supplierSymbol := request.IllRequest.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + request.IllRequest.Header.SupplyingAgencyId.AgencyIdValue

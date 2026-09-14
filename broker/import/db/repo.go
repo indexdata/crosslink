@@ -64,10 +64,52 @@ func (r *PgImportRepo) ImportPatronRequest(ctx common.ExtendedContext, bundle Pa
 	}
 	var result Result
 	err := r.withTxConn(ctx, func(tx DBTX) error {
-		existing, err := r.queries.LockImportPatronRequest(ctx, tx, bundle.PatronRequest.ID)
-		exists := err == nil
+		incomingID := bundle.PatronRequest.ID
+		targetID := incomingID
+		exists := false
+		if bundle.PatronRequest.Side == pr_db.PatronRequestSide("lending") {
+			matches, err := r.queries.LockImportLendingPatronRequestMatches(ctx, tx, LockImportLendingPatronRequestMatchesParams{
+				ID:             incomingID,
+				SupplierSymbol: bundle.PatronRequest.SupplierSymbol,
+				RequesterReqID: bundle.PatronRequest.RequesterReqID,
+			})
+			if err != nil {
+				return fmt.Errorf("lock lending patron request matches for %q: %w", incomingID, err)
+			}
+			idMatched := false
+			routingIdentityID := ""
+			for _, matchID := range matches {
+				if matchID == incomingID {
+					idMatched = true
+				} else {
+					routingIdentityID = matchID
+				}
+			}
+			if idMatched && routingIdentityID != "" {
+				return &ConflictError{
+					Resource:   "patron request",
+					Identifier: incomingID,
+					Reason:     fmt.Sprintf("local ID matches one aggregate but lending routing identity matches %q", routingIdentityID),
+				}
+			}
+			if routingIdentityID != "" {
+				targetID = routingIdentityID
+			}
+			exists = len(matches) != 0
+		}
+
+		existing, err := r.queries.LockImportPatronRequest(ctx, tx, targetID)
+		if bundle.PatronRequest.Side != pr_db.PatronRequestSide("lending") {
+			exists = err == nil
+		}
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("lock patron request %q: %w", bundle.PatronRequest.ID, err)
+			return fmt.Errorf("lock patron request %q: %w", targetID, err)
+		}
+		if exists && errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("locked patron request %q disappeared", targetID)
+		}
+		if targetID != incomingID {
+			bundle.PatronRequest.ID = targetID
 		}
 		if exists {
 			switch policy {

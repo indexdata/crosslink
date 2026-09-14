@@ -46,7 +46,9 @@ BEGIN
     ) THEN
         RAISE EXCEPTION
             'One or more labels already exist for owner %',
-            NEW.owner;
+            NEW.owner
+            USING ERRCODE = 'unique_violation',
+                  CONSTRAINT = 'template_owner_purpose_audience_labels_unique';
 END IF;
 RETURN NEW;
 END;
@@ -91,3 +93,40 @@ WHERE st.id = d.id
 CREATE UNIQUE INDEX IF NOT EXISTS idx_scheduled_task_owner_title
     ON scheduled_task (owner, title)
     WHERE event_name = 'invoke-batch-action';
+
+-- Lending requests are addressed by this pair when a subsequent ISO message
+-- does not contain a supplying-agency request ID. Refuse to install an
+-- ambiguous routing identity rather than allowing message lookup to choose an
+-- arbitrary aggregate.
+LOCK TABLE patron_request IN SHARE ROW EXCLUSIVE MODE;
+
+DO $$
+DECLARE
+    conflicts TEXT;
+BEGIN
+    WITH duplicate_identities AS (
+        SELECT supplier_symbol, requester_req_id, ARRAY_AGG(id ORDER BY id) AS ids
+        FROM patron_request
+        WHERE side = 'lending'
+          AND supplier_symbol IS NOT NULL
+          AND requester_req_id IS NOT NULL
+        GROUP BY supplier_symbol, requester_req_id
+        HAVING COUNT(*) > 1
+    )
+    SELECT STRING_AGG(
+        FORMAT('supplier_symbol=%L requester_req_id=%L ids=%s', supplier_symbol, requester_req_id, ids::TEXT),
+        '; ' ORDER BY supplier_symbol, requester_req_id
+    )
+    INTO conflicts
+    FROM duplicate_identities;
+
+    IF conflicts IS NOT NULL THEN
+        RAISE EXCEPTION 'Duplicate lending routing identities already exist: %', conflicts
+            USING ERRCODE = 'unique_violation';
+    END IF;
+END;
+$$;
+
+CREATE UNIQUE INDEX idx_patron_request_lending_routing_identity
+    ON patron_request (supplier_symbol, requester_req_id)
+    WHERE side = 'lending';
