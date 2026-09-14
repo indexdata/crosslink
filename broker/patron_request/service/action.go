@@ -2094,6 +2094,9 @@ func (a *PatronRequestActionService) pickupLocationEntry(ctx common.ExtendedCont
 		visited[parentID] = true
 		parent, _, err := a.illRepo.GetCachedPeerByDirectoryEntryID(ctx, parentID, a.directoryLookupAdapter)
 		if err != nil {
+			if errors.Is(err, ill_db.ErrDirectoryEntryNotFound) {
+				return dirapi.Entry{}, fmt.Errorf("%w: pickup location %s: cannot resolve parent: %w", ErrInvalidPickupLocation, id, err)
+			}
 			return dirapi.Entry{}, fmt.Errorf("pickup location %s: cannot resolve parent: %w", id, err)
 		}
 		owner = parent.CustomData

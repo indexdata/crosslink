@@ -301,7 +301,7 @@ func TestPickupLocationValidationErrorClassification(t *testing.T) {
 		{name: "directory failure", lookupError: errors.New("directory unavailable")},
 		{name: "database failure", lookupError: errors.New("database unavailable")},
 		{name: "replica conflict", lookupError: errors.New("conflicting responses from directory replicas")},
-		{name: "parent missing", parent: true, lookupError: ill_db.ErrDirectoryEntryNotFound},
+		{name: "parent missing", parent: true, lookupError: ill_db.ErrDirectoryEntryNotFound, invalid: true},
 		{name: "parent unavailable", parent: true, lookupError: errors.New("directory unavailable")},
 		{name: "unrelated institution", invalid: true},
 	} {
