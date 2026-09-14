@@ -120,6 +120,7 @@ Configuration is provided via environment variables:
 | `METAPROXY_URL`              | Metaproxy URL when `AVAILABILITY_ADAPTER` = `metaproxy`                                 | (empty value)                             |
 | `PEER_REFRESH_INTERVAL`      | Peer refresh interval (via Directory lookup)                                            | `5m`                                      |
 | `MOCK_PEER_URL`              | Mocked peer URLs value when `DIRECTORY_ADAPTER` is `mock`                               | `http://localhost:19083/iso18626`         |
+| `MOCK_PICKUP_INSTITUTION_SYMBOL` | Institution symbol owning synthetic pickup locations in mock directory mode; use this as the requester symbol for selected pickup locations | `ISIL:MOCK` |
 | `API_PAGE_SIZE`              | Default value for the `limit` query parameter when paging the API                       | `10`                                      |
 | `TENANT_TO_SYMBOL`           | Pattern to map tenant to `requesterSymbol` when accessing the API via Okapi,            | (empty value)                             |
 |                              | the `{tenant}` token is replaced by the `X-Okapi-Tenant` header value.                  |                                           |

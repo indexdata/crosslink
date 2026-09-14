@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/google/uuid"
@@ -87,4 +88,31 @@ func TestMockDirectoryLookupByEntryID(t *testing.T) {
 	}
 	_, _, err := adapter.Lookup(ctx, DirectoryLookupParams{EntryID: "invalid"})
 	require.ErrorContains(t, err, "invalid directory entry ID")
+}
+
+func TestMockPickupInstitutionLookup(t *testing.T) {
+	for _, symbol := range []string{"ISIL:MOCK", "ISIL:REQUESTER"} {
+		t.Run(symbol, func(t *testing.T) {
+			ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+			os.Setenv("MOCK_PICKUP_INSTITUTION_SYMBOL", symbol)
+			adapter := &MockDirectoryLookupAdapter{}
+			locations, _, err := adapter.Lookup(ctx, DirectoryLookupParams{EntryID: uuid.NewString()})
+			require.NoError(t, err)
+			require.NotNil(t, locations[0].CustomData.Parent)
+			parentID := *locations[0].CustomData.Parent
+			parents, _, err := adapter.Lookup(ctx, DirectoryLookupParams{EntryID: parentID.String()})
+			require.NoError(t, err)
+			require.Len(t, parents, 1)
+			require.Equal(t, parentID, *parents[0].CustomData.Id)
+			require.Nil(t, parents[0].CustomData.Parent)
+			require.Equal(t, []string{symbol}, parents[0].Symbols)
+			bySymbol, _, err := adapter.Lookup(ctx, DirectoryLookupParams{Symbols: []string{symbol}})
+			require.NoError(t, err)
+			require.Equal(t, parents, bySymbol)
+			// A fresh adapter resolves the same parent without prior symbol lookups.
+			again, _, err := (&MockDirectoryLookupAdapter{}).Lookup(ctx, DirectoryLookupParams{EntryID: parentID.String()})
+			require.NoError(t, err)
+			require.Equal(t, parents, again)
+		})
+	}
 }

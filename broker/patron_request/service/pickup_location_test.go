@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/lms"
@@ -218,6 +219,38 @@ func TestPickupCodeRequirementPerOperation(t *testing.T) {
 					require.Empty(t, code)
 				}
 			}
+			repo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestPickupLocationWithMockDirectory(t *testing.T) {
+	for _, configured := range []string{"", "ISIL:REQUESTER"} {
+		t.Run("institution="+configured, func(t *testing.T) {
+			t.Setenv("MOCK_PICKUP_INSTITUTION_SYMBOL", configured)
+			ownerSymbol := configured
+			if ownerSymbol == "" {
+				ownerSymbol = "ISIL:MOCK"
+			}
+			directory := &adapter.MockDirectoryLookupAdapter{}
+			id := uuid.New()
+			locations, _, err := directory.Lookup(appCtx, adapter.DirectoryLookupParams{EntryID: id.String()})
+			require.NoError(t, err)
+			entry := locations[0].CustomData
+			require.NotNil(t, entry.Parent)
+			parents, _, err := directory.Lookup(appCtx, adapter.DirectoryLookupParams{EntryID: entry.Parent.String()})
+			require.NoError(t, err)
+			repo := new(IllRepoMock)
+			repo.On("GetCachedPeerByDirectoryEntryID", id, mock.Anything).Return(ill_db.Peer{CustomData: entry}, "<cached>", nil).Twice()
+			repo.On("GetCachedPeerByDirectoryEntryID", *entry.Parent, mock.Anything).Return(ill_db.Peer{CustomData: parents[0].CustomData}, "<cached>", nil).Twice()
+			service := PatronRequestActionService{illRepo: repo, directoryLookupAdapter: directory}
+			pr := pr_db.PatronRequest{RequesterSymbol: pgtype.Text{String: ownerSymbol, Valid: true}, RequesterPickupLocationID: pgtype.UUID{Bytes: id, Valid: true}}
+			code, err := service.requesterPickupCode(appCtx, pr, &lms.LmsAdapterManual{}, true)
+			require.NoError(t, err)
+			require.Equal(t, id.String(), code)
+			pr.RequesterSymbol.String = "ISIL:UNRELATED"
+			_, err = service.pickupLocationEntry(appCtx, pr)
+			require.ErrorContains(t, err, "is not a branch of requester institution")
 			repo.AssertExpectations(t)
 		})
 	}
