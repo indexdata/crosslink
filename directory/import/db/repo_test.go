@@ -564,6 +564,20 @@ func TestImportEntryRollsBackAfterLateSymbolConflict(t *testing.T) {
 	assertEntryDoesNotExist(t, aggregate.Key)
 }
 
+func TestImportEntryRejectsAmbiguousLenderAuthorityBeforeWriting(t *testing.T) {
+	resetImportDatabase(t)
+	repo := importdb.New(testPool)
+	aggregate := minimalEntryAggregate("CON", "Consortium")
+	aggregate.Data.ILLConfig = &model.ILLConfig{
+		LendersOfLastResort: []model.SymbolRef{{Authority: "A:B", Symbol: "C"}},
+	}
+
+	_, err := repo.ImportEntry(context.Background(), aggregate, model.ConflictPolicyFail)
+
+	require.ErrorContains(t, err, "lender of last resort 1 authority must not contain ':'")
+	assertEntryDoesNotExist(t, aggregate.Key)
+}
+
 func TestImportEntryAllowsOnlyOneConsortium(t *testing.T) {
 	resetImportDatabase(t)
 	repo := importdb.New(testPool)

@@ -1,6 +1,9 @@
 package model
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type LMSConfig struct {
 	Address                          string           `json:"address"`
@@ -135,6 +138,9 @@ func validateConfigEnums(catalog *CatalogConfig, ill *ILLConfig) error {
 		for index := range ill.LendersOfLastResort {
 			if err := ill.LendersOfLastResort[index].NormalizeAndValidate(); err != nil {
 				return fmt.Errorf("lender of last resort %d: %w", index+1, err)
+			}
+			if strings.Contains(ill.LendersOfLastResort[index].Authority, ":") {
+				return fmt.Errorf("lender of last resort %d authority must not contain ':'", index+1)
 			}
 		}
 	}

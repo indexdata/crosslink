@@ -52,6 +52,27 @@ func TestEntryAggregateAcceptsDistinctSymbolsWithSameDisplayString(t *testing.T)
 	require.NoError(t, aggregate.NormalizeAndValidate())
 }
 
+func TestEntryAggregateRejectsColonInLenderAuthority(t *testing.T) {
+	aggregate := validEntryAggregate()
+	aggregate.Data.ILLConfig = &ILLConfig{
+		LendersOfLastResort: []SymbolRef{{Authority: " a:b ", Symbol: " c "}},
+	}
+
+	err := aggregate.NormalizeAndValidate()
+
+	require.EqualError(t, err, "lender of last resort 1 authority must not contain ':'")
+}
+
+func TestEntryAggregateAllowsColonInLenderSymbol(t *testing.T) {
+	aggregate := validEntryAggregate()
+	aggregate.Data.ILLConfig = &ILLConfig{
+		LendersOfLastResort: []SymbolRef{{Authority: " a ", Symbol: " b:c "}},
+	}
+
+	require.NoError(t, aggregate.NormalizeAndValidate())
+	assert.Equal(t, SymbolRef{Authority: "A", Symbol: "B:C"}, aggregate.Data.ILLConfig.LendersOfLastResort[0])
+}
+
 func TestTierAggregateRejectsInvalidEnum(t *testing.T) {
 	aggregate := TierAggregate{
 		Key:  TierKey{Consortium: SymbolRef{Authority: "isil", Symbol: "consortium"}, Name: "Loan"},

@@ -8,9 +8,93 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/directory/auth"
 	"github.com/stretchr/testify/require"
 )
+
+func TestOpenAPIRequestValidationStreamsImportBody(t *testing.T) {
+	spec, err := api.GetSpec()
+	require.NoError(t, err)
+	body := &countingBody{remaining: MaxImportBodyBytes}
+	request := httptest.NewRequest(http.MethodPost, BasePath+"/import", body)
+	request.ContentLength = MaxImportBodyBytes
+	request.Header.Set("Content-Type", "application/x-ndjson")
+	response := httptest.NewRecorder()
+	handler := openAPIRequestValidationMiddleware(spec)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	handler.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusNoContent, response.Code)
+	require.EqualValues(t, 1, body.bytesRead)
+}
+
+func TestOpenAPIRequestValidationReplaysCompleteImportBody(t *testing.T) {
+	spec, err := api.GetSpec()
+	require.NoError(t, err)
+	const payload = "first record\nsecond record\n"
+	var received string
+	handler := openAPIRequestValidationMiddleware(spec)(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		body, readErr := io.ReadAll(request.Body)
+		require.NoError(t, readErr)
+		received = string(body)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	request := httptest.NewRequest(http.MethodPost, BasePath+"/import", strings.NewReader(payload))
+	request.Header.Set("Content-Type", "application/x-ndjson; charset=utf-8")
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusNoContent, response.Code)
+	require.Equal(t, payload, received)
+}
+
+func TestOpenAPIRequestValidationRetainsImportBodyChecks(t *testing.T) {
+	spec, err := api.GetSpec()
+	require.NoError(t, err)
+	for name, testCase := range map[string]struct {
+		body        io.Reader
+		contentType string
+	}{
+		"missing body":       {body: http.NoBody, contentType: "application/x-ndjson"},
+		"wrong content type": {body: strings.NewReader("record"), contentType: "application/json"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			called := false
+			handler := openAPIRequestValidationMiddleware(spec)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+				called = true
+			}))
+			request := httptest.NewRequest(http.MethodPost, BasePath+"/import", testCase.body)
+			request.Header.Set("Content-Type", testCase.contentType)
+			response := httptest.NewRecorder()
+
+			handler.ServeHTTP(response, request)
+
+			require.Equal(t, http.StatusBadRequest, response.Code)
+			require.False(t, called)
+		})
+	}
+}
+
+func TestOpenAPIRequestValidationStillValidatesOtherRequestBodies(t *testing.T) {
+	spec, err := api.GetSpec()
+	require.NoError(t, err)
+	called := false
+	handler := openAPIRequestValidationMiddleware(spec)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		called = true
+	}))
+	request := httptest.NewRequest(http.MethodPost, BasePath+"/entries", http.NoBody)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.False(t, called)
+}
 
 func TestImportBodyLimitRejectsKnownAndChunkedOverflow(t *testing.T) {
 	for name, contentLength := range map[string]int64{"known": 129, "chunked": -1} {
@@ -90,3 +174,23 @@ func (r *trackingReadCloser) Read(data []byte) (int, error) {
 }
 
 func (r *trackingReadCloser) Close() error { return nil }
+
+type countingBody struct {
+	remaining int64
+	bytesRead int64
+}
+
+func (r *countingBody) Read(data []byte) (int, error) {
+	if r.remaining == 0 {
+		return 0, io.EOF
+	}
+	count := min(int64(len(data)), r.remaining)
+	for index := range int(count) {
+		data[index] = 'x'
+	}
+	r.remaining -= count
+	r.bytesRead += count
+	return int(count), nil
+}
+
+func (r *countingBody) Close() error { return nil }

@@ -14,7 +14,6 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	apiValidator "github.com/oapi-codegen/nethttp-middleware"
 	slogctx "github.com/veqryn/slog-context"
 	sloghttp "github.com/veqryn/slog-context/http"
 	pgxUUID "github.com/vgarvardt/pgx-google-uuid/v5"
@@ -81,7 +80,7 @@ func InitHandler(ctx context.Context, dbpool *pgxpool.Pool) http.Handler {
 		BaseURL:    BasePath,
 		BaseRouter: m,
 	})
-	handlerWithValidation := apiValidator.OapiRequestValidator(swagger)
+	handlerWithValidation := openAPIRequestValidationMiddleware(swagger)
 	handlerWithLogging := httpLoggingMiddleware(handlerWithValidation(h))
 	handlerWithHelper := enhancedcontext.EnhancedContextMiddleware(handlerWithLogging)
 	handlerWithLimit := ImportBodyLimitMiddleware(MaxImportBodyBytes, handlerWithHelper)
