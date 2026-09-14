@@ -573,7 +573,7 @@ func TestActionsToCompleteState(t *testing.T) {
 		assert.NoError(t, err, "failed to unmarshal patron request notifications")
 		return notifications.About.Count > 0
 	})
-	assert.Equal(t, "SENT", *notifications.Items[0].Receipt)
+	assert.Equal(t, proapi.SENT, *notifications.Items[0].Receipt)
 	assert.Equal(t, "Will ship", *notifications.Items[0].Note)
 
 	// Check notification requester side
@@ -598,7 +598,7 @@ func TestActionsToCompleteState(t *testing.T) {
 
 	// Set seen notification
 	receipt := proapi.UpdateNotificationReceipt{
-		Receipt: "SEEN",
+		Receipt: proapi.SEEN,
 	}
 	receiptBytes, err := json.Marshal(receipt)
 	assert.NoError(t, err, "failed to marshal patron request notification")
@@ -614,7 +614,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	})
 	willShipNotification = findNotificationByNote(notifications.Items, forwardedWillShipNote)
 	if assert.NotNil(t, willShipNotification) {
-		assert.Equal(t, "SEEN", *willShipNotification.Receipt)
+		assert.Equal(t, proapi.SEEN, *willShipNotification.Receipt)
 		assert.NotNil(t, willShipNotification.AcknowledgedAt)
 	}
 
@@ -753,7 +753,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	finalWillShipNotification := findNotificationByNote(prNotifications.Items, forwardedWillShipNote)
 	if assert.NotNil(t, finalWillShipNotification) {
 		assert.NotNil(t, finalWillShipNotification.Receipt)
-		assert.Equal(t, "SEEN", *finalWillShipNotification.Receipt)
+		assert.Equal(t, proapi.SEEN, *finalWillShipNotification.Receipt)
 	}
 
 	// Check supplier patron request done

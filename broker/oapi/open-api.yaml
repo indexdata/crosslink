@@ -126,6 +126,10 @@ components:
       description: Kind of patron request notification
       minLength: 1
       enum: [note, condition]
+    NotificationReceipt:
+      type: string
+      description: Receipt status of a patron request notification
+      enum: [ACCEPTED, REJECTED, SEEN, SENT, FAILED_TO_SEND]
     LocatedSupplierStatus:
       type: string
       description: Status of a located supplier
@@ -343,8 +347,7 @@ components:
           type: string
           description: Condition of notification
         receipt:
-          type: string
-          description: Receipt of notification
+          $ref: '#/components/schemas/NotificationReceipt'
         createdAt:
           type: string
           minLength: 1
@@ -1436,14 +1439,7 @@ components:
       description: Update notification receipt body
       properties:
         receipt:
-          type: string
-          description: Notification receipt status
-          enum:
-            - ACCEPTED
-            - REJECTED
-            - SEEN
-            - SENT
-            - FAILED_TO_SEND
+          $ref: '#/components/schemas/NotificationReceipt'
       required:
         - receipt
 
@@ -2956,6 +2952,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '409':
+          description: A batch action with the same owner and title already exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal Server Error
           content:
@@ -3038,6 +3040,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Batch action not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: A batch action with the same owner and title already exists.
           content:
             application/json:
               schema:

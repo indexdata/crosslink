@@ -56,6 +56,7 @@ func TestImportPatronRequestNormalizesCompleteBundle(t *testing.T) {
 	assert.Equal(t, "lms-1", repo.patron.Items[0].LmsRequestID.String)
 	assert.Equal(t, pgText("lms-item-1"), repo.patron.Items[0].LmsItemID)
 	require.Len(t, repo.patron.Notifications, 1)
+	assert.Equal(t, pr_db.NotificationSent, repo.patron.Notifications[0].Receipt)
 	assert.True(t, repo.patron.Notifications[0].AcknowledgedAt.Valid)
 	require.NotNil(t, repo.patron.IllTransaction)
 	assert.Equal(t, pgText("peer-requester"), repo.patron.IllTransaction.RequesterID)
@@ -426,6 +427,13 @@ func TestImportPatronRequestRejectsSchemaInvalidFields(t *testing.T) {
 			},
 		},
 		{
+			name: "invalid notification receipt",
+			path: "/notifications/0/receipt",
+			mutate: func(bundle map[string]any) {
+				bundle["notifications"].([]any)[0].(map[string]any)["receipt"] = "DELIVERED"
+			},
+		},
+		{
 			name: "null ILL transaction data",
 			path: "/illTransaction/illTransactionData",
 			mutate: func(bundle map[string]any) {
@@ -458,11 +466,11 @@ func TestImportPatronRequestRejectsSchemaInvalidFields(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &recordingImportRepo{}
-			cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+			cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "requester-peer"}, {ID: "supplier-peer"}}}
 			importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
 			data := mutatePatronBundleData(t, tt.mutate)
 
-			_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+			_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:REQ", data)
 
 			require.ErrorContains(t, err, "validate patron request")
 			require.ErrorContains(t, err, tt.path)
@@ -840,7 +848,7 @@ func validPatronBundleData() json.RawMessage {
 	return json.RawMessage(`{
       "patronRequest":{"id":"pr-1","createdAt":"2026-08-01T10:00:00Z","updatedAt":"2026-08-02T10:00:00Z","illRequest":{"header":{"requestingAgencyId":{"agencyIdType":{"#text":"ISIL"},"agencyIdValue":"REQ"},"supplyingAgencyId":{"agencyIdType":{"#text":"ISIL"},"agencyIdValue":"SUP"},"timestamp":"2026-08-01T10:00:00Z","requestingAgencyRequestId":"pr-1"},"bibliographicInfo":{"title":"Test title"},"serviceInfo":{"serviceType":"Loan"}},"state":"SENT","side":"borrowing","requesterSymbol":"ISIL:REQ","requesterRequestId":"pr-1","needsAttention":false,"stateModel":"default"},
       "items":[{"id":"item-1","barcode":"barcode-1","lmsRequestId":"lms-1","lmsItemId":"lms-item-1","createdAt":"2026-08-01T10:01:00Z"}],
-      "notifications":[{"id":"note-1","fromSymbol":"ISIL:REQ","toSymbol":"ISIL:SUP","direction":"sent","kind":"note","cost":1.25,"createdAt":"2026-08-01T10:02:00Z","acknowledgedAt":"2026-08-01T10:03:00Z"}],
+      "notifications":[{"id":"note-1","fromSymbol":"ISIL:REQ","toSymbol":"ISIL:SUP","direction":"sent","kind":"note","cost":1.25,"receipt":"SENT","createdAt":"2026-08-01T10:02:00Z","acknowledgedAt":"2026-08-01T10:03:00Z"}],
       "illTransaction":{"id":"ill-1","timestamp":"2026-08-01T10:00:00Z","requesterSymbol":"ISIL:REQ","requesterRequestID":"pr-1","supplierSymbol":"ISIL:SUP","illTransactionData":{"bibliographicInfo":{}}},
       "locatedSuppliers":[{"id":"located-1","supplierSymbol":"ISIL:SUP","ordinal":1,"supplierStatus":"selected","localSupplier":false}]
     }`)

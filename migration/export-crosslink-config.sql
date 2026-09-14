@@ -97,6 +97,7 @@ exportable_pull_slip_timers AS (
                  ) AS address(value)
                  WHERE jsonb_typeof(address.value)
                      IS DISTINCT FROM 'string'
+                    OR nullif(btrim(address.value #>> '{}'), '') IS NULL
              )
     END
 ),

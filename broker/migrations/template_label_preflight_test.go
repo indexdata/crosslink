@@ -43,6 +43,24 @@ func TestTemplateLabelUniquenessMigrationIgnoresNullArrayElements(t *testing.T) 
 	require.NoError(t, migrator.Migrate(62))
 }
 
+func TestTemplateLabelUniquenessMigrationScopesOverlapsByPurposeAndAudience(t *testing.T) {
+	ctx, migrator, pool := migrationAtVersion61(t)
+	_, err := pool.Exec(ctx, `
+		INSERT INTO template (id, owner, title, purpose, body, content_type, labels, audience)
+		VALUES
+			('generic-email', 'ISIL:SCOPED-OWNER', 'Generic email', 'email', 'body', 'text/plain', ARRAY['shared'], NULL),
+			('patron-email', 'ISIL:SCOPED-OWNER', 'Patron email', 'email', 'body', 'text/plain', ARRAY['shared'], 'patron'),
+			('generic-pullslip', 'ISIL:SCOPED-OWNER', 'Generic pullslip', 'pullslip', 'body', 'text/plain', ARRAY['shared'], NULL)`)
+	require.NoError(t, err)
+
+	require.NoError(t, migrator.Migrate(62))
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO template (id, owner, title, purpose, body, content_type, labels, audience)
+		VALUES ('second-generic-email', 'ISIL:SCOPED-OWNER', 'Duplicate', 'email', 'body', 'text/plain', ARRAY['shared'], NULL)`)
+	require.Error(t, err)
+}
+
 func TestBatchActionTitleUniquenessMigrationBackfillsAndRequiresTitles(t *testing.T) {
 	ctx, migrator, pool := migrationAtVersion61(t)
 	_, err := pool.Exec(ctx, `

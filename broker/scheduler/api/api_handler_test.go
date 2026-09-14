@@ -15,7 +15,9 @@ import (
 	schedoapi "github.com/indexdata/crosslink/broker/scheduler/oapi"
 	"github.com/indexdata/crosslink/broker/tenant"
 	testmocks "github.com/indexdata/crosslink/broker/test/mocks"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -569,6 +571,21 @@ func TestPostBatchActions_SaveScheduledTaskError(t *testing.T) {
 	repo.AssertExpectations(t)
 }
 
+func TestPostBatchActions_DuplicateOwnerTitleReturnsConflict(t *testing.T) {
+	repo := new(MockSchedRepo)
+	repo.On("SaveScheduledTask", mock.Anything).Return(sched_db.ScheduledTask{}, &pgconn.PgError{Code: pgerrcode.UniqueViolation})
+
+	h := newHandler(repo)
+	body := `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"` + validRrule + `","title":"Email pull slips"}`
+	req := newReq(http.MethodPost, body)
+	rr := httptest.NewRecorder()
+	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
+
+	assertErrorStatus(t, rr, http.StatusConflict)
+	assert.Contains(t, rr.Body.String(), "owner and title")
+	repo.AssertExpectations(t)
+}
+
 // ── GetBatchActionsId ─────────────────────────────────────────────────────────
 
 func TestGetBatchActionsId_OK(t *testing.T) {
@@ -727,6 +744,21 @@ func TestPutBatchActionsId_SaveError(t *testing.T) {
 	h.PutBatchActionsId(rr, req, "task-1", schedoapi.PutBatchActionsIdParams{Symbol: symPtr(testSymbol)})
 
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	repo.AssertExpectations(t)
+}
+
+func TestPutBatchActionsId_DuplicateOwnerTitleReturnsConflict(t *testing.T) {
+	repo := new(MockSchedRepo)
+	repo.On("GetScheduledTaskByIdForUpdate", "task-1", testOwnerScope).Return(scheduledTaskFixture("task-1"), nil)
+	repo.On("SaveScheduledTask", mock.Anything).Return(sched_db.ScheduledTask{}, &pgconn.PgError{Code: pgerrcode.UniqueViolation})
+
+	h := newHandler(repo)
+	req := newReq(http.MethodPut, `{"batchQuery":"title=test","schedule":"FREQ=DAILY","title":"Duplicate"}`)
+	rr := httptest.NewRecorder()
+	h.PutBatchActionsId(rr, req, "task-1", schedoapi.PutBatchActionsIdParams{Symbol: symPtr(testSymbol)})
+
+	assertErrorStatus(t, rr, http.StatusConflict)
+	assert.Contains(t, rr.Body.String(), "owner and title")
 	repo.AssertExpectations(t)
 }
 

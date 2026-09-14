@@ -41,6 +41,37 @@ func TestImportTemplatePolicies(t *testing.T) {
 	assert.Equal(t, "Updated", title)
 }
 
+func TestImportTemplateIdentityIncludesPurposeAndAudience(t *testing.T) {
+	tests := []struct {
+		name     string
+		purpose  string
+		audience pgtype.Text
+	}{
+		{name: "different purpose", purpose: "pullslip", audience: pgtype.Text{String: "patron", Valid: true}},
+		{name: "generic audience", purpose: "email"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			owner := uuid.NewString()
+			original := pr_db.SaveTemplateParams{ID: uuid.NewString(), Owner: owner, Title: "Original", Purpose: "email", Body: "body", ContentType: "text/plain", Labels: []string{"shared"}, Audience: pgtype.Text{String: "patron", Valid: true}, CreatedAt: testTimestamp(0), UpdatedAt: testTimestamp(1)}
+			_, err := importTestRepo.ImportTemplate(importTestCtx, original, importdb.ConflictPolicyFail)
+			require.NoError(t, err)
+
+			incoming := original
+			incoming.ID = uuid.NewString()
+			incoming.Title = "Distinct"
+			incoming.Purpose = tt.purpose
+			incoming.Audience = tt.audience
+			result, err := importTestRepo.ImportTemplate(importTestCtx, incoming, importdb.ConflictPolicyFail)
+
+			require.NoError(t, err)
+			assert.Equal(t, importdb.OutcomeImported, result.Outcome)
+			assert.Equal(t, 2, queryCount(t, "SELECT count(*) FROM template WHERE owner=$1", owner))
+		})
+	}
+}
+
 func TestImportTemplateUpdateRejectsAmbiguousLabelOverlap(t *testing.T) {
 	owner := uuid.NewString()
 	for _, label := range []string{"first", "second"} {

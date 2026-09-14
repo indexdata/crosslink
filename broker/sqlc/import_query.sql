@@ -61,6 +61,8 @@ WHERE requester_request_id = $1;
 SELECT id, created_at
 FROM template
 WHERE owner = sqlc.arg(owner)
+  AND purpose = sqlc.arg(purpose)
+  AND audience IS NOT DISTINCT FROM sqlc.narg(audience)::text
   AND labels && sqlc.arg(labels)::text[]
 ORDER BY id
 FOR UPDATE;

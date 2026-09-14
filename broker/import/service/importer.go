@@ -165,9 +165,6 @@ func (i Importer) Import(ctx common.ExtendedContext, policy importdb.ConflictPol
 	}
 	reader := bufio.NewReaderSize(input, maxRecordBytes+2)
 	for line := int32(1); ; {
-		if line%100 == 0 {
-			ctx.Logger().Info("import process in progress", "line", line, "errorCount", len(result.Errors))
-		}
 		raw, err := readImportRecord(reader, maxRecordBytes)
 		if errors.Is(err, io.EOF) {
 			break
@@ -454,7 +451,11 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 		if err != nil {
 			return importdb.PatronRequestBundle{}, nil, fmt.Errorf("notification %q cost: %w", notification.Id, err)
 		}
-		bundle.Notifications = append(bundle.Notifications, pr_db.SaveNotificationParams{ID: notification.Id, FromSymbol: notification.FromSymbol, ToSymbol: notification.ToSymbol, Direction: pr_db.NotificationDirection(notification.Direction), Kind: pr_db.NotificationKind(notification.Kind), Note: pgTextFromPtr(notification.Note), Cost: cost, Currency: pgTextFromPtr(notification.Currency), Condition: pgTextFromPtr(notification.Condition), Receipt: pr_db.NotificationReceipt(valueOrEmpty(notification.Receipt)), CreatedAt: pgTimestamp(notification.CreatedAt), AcknowledgedAt: pgTimestampFromPtr(notification.AcknowledgedAt)})
+		receipt := pr_db.NotificationReceipt("")
+		if notification.Receipt != nil {
+			receipt = pr_db.NotificationReceipt(*notification.Receipt)
+		}
+		bundle.Notifications = append(bundle.Notifications, pr_db.SaveNotificationParams{ID: notification.Id, FromSymbol: notification.FromSymbol, ToSymbol: notification.ToSymbol, Direction: pr_db.NotificationDirection(notification.Direction), Kind: pr_db.NotificationKind(notification.Kind), Note: pgTextFromPtr(notification.Note), Cost: cost, Currency: pgTextFromPtr(notification.Currency), Condition: pgTextFromPtr(notification.Condition), Receipt: receipt, CreatedAt: pgTimestamp(notification.CreatedAt), AcknowledgedAt: pgTimestampFromPtr(notification.AcknowledgedAt)})
 	}
 
 	if apiBundle.IllTransaction == nil {
@@ -591,13 +592,6 @@ func pgTimestampFromPtr(value *time.Time) pgtype.Timestamp {
 	}
 	return pgTimestamp(*value)
 }
-func valueOrEmpty(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
 func pgNumericFromFloat(value *float64) (pgtype.Numeric, error) {
 	if value == nil {
 		return pgtype.Numeric{}, nil

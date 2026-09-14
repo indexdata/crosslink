@@ -235,7 +235,12 @@ func (r *PgImportRepo) ImportTemplate(ctx common.ExtendedContext, params pr_db.S
 	}
 	var result Result
 	err := r.withTxConn(ctx, func(tx DBTX) error {
-		matches, err := r.queries.LockImportTemplatesByLabels(ctx, tx, LockImportTemplatesByLabelsParams{Owner: params.Owner, Labels: params.Labels})
+		matches, err := r.queries.LockImportTemplatesByLabels(ctx, tx, LockImportTemplatesByLabelsParams{
+			Owner:    params.Owner,
+			Purpose:  params.Purpose,
+			Audience: params.Audience,
+			Labels:   params.Labels,
+		})
 		if err != nil {
 			return fmt.Errorf("lock templates for owner %q: %w", params.Owner, err)
 		}

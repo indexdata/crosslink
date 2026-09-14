@@ -15,8 +15,10 @@ func TestImportModelsReuseDomainEnums(t *testing.T) {
 
 	direction := NotificationDirection("sent")
 	kind := NotificationKind("note")
-	_ = ImportPatronRequestNotification{Direction: direction, Kind: kind}
-	_ = PrNotification{Direction: direction, Kind: kind}
+	receipt := NotificationReceipt("SENT")
+	_ = ImportPatronRequestNotification{Direction: direction, Kind: kind, Receipt: &receipt}
+	_ = PrNotification{Direction: direction, Kind: kind, Receipt: &receipt}
+	_ = UpdateNotificationReceipt{Receipt: receipt}
 
 	status := LocatedSupplierStatus("new")
 	_ = ImportLocatedSupplier{SupplierStatus: status}
@@ -36,6 +38,11 @@ func TestImportModelsReuseDomainEnums(t *testing.T) {
 		require.True(t, value.Valid(), "kind %q should be valid", value)
 	}
 	require.False(t, NotificationKind("invalid").Valid())
+
+	for _, value := range []NotificationReceipt{"ACCEPTED", "REJECTED", "SEEN", "SENT", "FAILED_TO_SEND"} {
+		require.True(t, value.Valid(), "receipt %q should be valid", value)
+	}
+	require.False(t, NotificationReceipt("invalid").Valid())
 
 	for _, value := range []LocatedSupplierStatus{"new", "selected", "skipped"} {
 		require.True(t, value.Valid(), "supplier status %q should be valid", value)

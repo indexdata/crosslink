@@ -7,23 +7,23 @@ DECLARE
     conflicts TEXT;
 BEGIN
     WITH overlapping_labels AS (
-        SELECT t.owner, label_value.label
+        SELECT t.owner, t.purpose, t.audience, label_value.label
         FROM template t
         CROSS JOIN LATERAL unnest(t.labels) AS label_value(label)
         WHERE label_value.label IS NOT NULL
-        GROUP BY t.owner, label_value.label
+        GROUP BY t.owner, t.purpose, t.audience, label_value.label
         HAVING COUNT(DISTINCT t.id) > 1
-    ), overlaps_by_owner AS (
-        SELECT owner, ARRAY_AGG(label ORDER BY label) AS labels
+    ), overlaps_by_identity AS (
+        SELECT owner, purpose, audience, ARRAY_AGG(label ORDER BY label) AS labels
         FROM overlapping_labels
-        GROUP BY owner
+        GROUP BY owner, purpose, audience
     )
     SELECT STRING_AGG(
-        FORMAT('owner=%L labels=%s', owner, labels::TEXT),
-        '; ' ORDER BY owner
+        FORMAT('owner=%L purpose=%L audience=%L labels=%s', owner, purpose, audience, labels::TEXT),
+        '; ' ORDER BY owner, purpose, audience
     )
     INTO conflicts
-    FROM overlaps_by_owner;
+    FROM overlaps_by_identity;
 
     IF conflicts IS NOT NULL THEN
         RAISE EXCEPTION 'Template label overlaps already exist: %', conflicts
@@ -39,6 +39,8 @@ BEGIN
         SELECT 1
         FROM template t
         WHERE t.owner = NEW.owner
+          AND t.purpose = NEW.purpose
+          AND t.audience IS NOT DISTINCT FROM NEW.audience
           AND t.labels && NEW.labels
           AND t.id <> NEW.id
     ) THEN
@@ -50,8 +52,8 @@ RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER  trg_check_template_owner_labels_unique
-    BEFORE INSERT OR UPDATE OF owner, labels
+CREATE OR REPLACE TRIGGER trg_check_template_owner_labels_unique
+    BEFORE INSERT OR UPDATE OF owner, purpose, audience, labels
                      ON template
                          FOR EACH ROW
                          EXECUTE FUNCTION check_template_owner_labels_unique();

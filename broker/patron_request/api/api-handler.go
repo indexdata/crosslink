@@ -1503,9 +1503,9 @@ func toApiNotification(notification pr_db.Notification) (proapi.PrNotification, 
 		val := f.Float64
 		cost = &val
 	}
-	var receipt *string
+	var receipt *proapi.NotificationReceipt
 	if notification.Receipt != "" {
-		r := string(notification.Receipt)
+		r := proapi.NotificationReceipt(notification.Receipt)
 		receipt = &r
 	}
 	return proapi.PrNotification{
