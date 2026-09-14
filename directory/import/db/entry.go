@@ -20,6 +20,8 @@ import (
 
 const maxImportLockAttempts = 3
 
+const entrySymbolUniqueConstraint = "symbols_authority_symbol_key"
+
 var errImportEntryMappingChanged = errors.New("entry symbol mapping changed while acquiring import locks")
 
 func (r *PgImportRepo) ImportEntry(ctx context.Context, aggregate model.EntryAggregate, policy model.ConflictPolicy) (model.RepoResult, error) {
@@ -54,7 +56,12 @@ func retryableImportError(err error) bool {
 		return true
 	}
 	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && (pgErr.Code == "40P01" || pgErr.Code == "40001")
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+	return pgErr.Code == "40P01" ||
+		pgErr.Code == "40001" ||
+		(pgErr.Code == "23505" && pgErr.ConstraintName == entrySymbolUniqueConstraint)
 }
 
 func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.EntryAggregate, policy model.ConflictPolicy) (model.RepoResult, error) {
@@ -242,9 +249,9 @@ func lockEntryMappings(ctx context.Context, queries *db.Queries, mappings ...ent
 		}
 		return mappings[i].ref.Symbol < mappings[j].ref.Symbol
 	})
-	locked := make(map[string]*uuid.UUID, len(mappings))
+	locked := make(map[model.SymbolRef]*uuid.UUID, len(mappings))
 	for _, mapping := range mappings {
-		key := mapping.ref.String()
+		key := mapping.ref
 		if expectedOwner, exists := locked[key]; exists {
 			if !sameEntryID(expectedOwner, mapping.expectedOwner) {
 				return errImportEntryMappingChanged

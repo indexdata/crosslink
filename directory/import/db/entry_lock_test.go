@@ -84,7 +84,8 @@ func TestRetryableImportError(t *testing.T) {
 		{name: "entry mapping changed", err: errImportEntryMappingChanged, want: true},
 		{name: "deadlock", err: &pgconn.PgError{Code: "40P01"}, want: true},
 		{name: "wrapped serialization failure", err: fmt.Errorf("lock entry hierarchy: %w", &pgconn.PgError{Code: "40001"}), want: true},
-		{name: "non-retryable PostgreSQL error", err: &pgconn.PgError{Code: "23505"}, want: false},
+		{name: "symbol key created concurrently", err: &pgconn.PgError{Code: "23505", ConstraintName: "symbols_authority_symbol_key"}, want: true},
+		{name: "other unique violation", err: &pgconn.PgError{Code: "23505", ConstraintName: "entries_hrid_key"}, want: false},
 		{name: "ordinary error", err: errors.New("failed"), want: false},
 		{name: "nil", err: nil, want: false},
 	}

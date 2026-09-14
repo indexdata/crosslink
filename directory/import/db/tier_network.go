@@ -43,7 +43,7 @@ func (r *PgImportRepo) importTierAttempt(ctx context.Context, aggregate model.Ti
 	existing, lookupErr := queries.LockTierByBusinessKey(ctx, db.LockTierByBusinessKeyParams{Consortium: consortium.ID, Name: name})
 	exists := lookupErr == nil
 	if lookupErr != nil && !errors.Is(lookupErr, pgx.ErrNoRows) {
-		return model.RepoResult{}, fmt.Errorf("resolve tier %s", key)
+		return model.RepoResult{}, fmt.Errorf("resolve tier %s: %w", key, lookupErr)
 	}
 	if exists && policy != model.ConflictPolicyUpdate {
 		return conflictResult("tier", key, policy)
@@ -72,7 +72,7 @@ func (r *PgImportRepo) importTierAttempt(ctx context.Context, aggregate model.Ti
 		return model.RepoResult{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return model.RepoResult{}, fmt.Errorf("commit tier %s import", key)
+		return model.RepoResult{}, fmt.Errorf("commit tier %s import: %w", key, err)
 	}
 	return model.RepoResult{Outcome: model.OutcomeImported}, nil
 }
@@ -113,7 +113,7 @@ func (r *PgImportRepo) importNetworkAttempt(ctx context.Context, aggregate model
 	existing, lookupErr := queries.LockNetworkByBusinessKey(ctx, db.LockNetworkByBusinessKeyParams{Consortium: consortium.ID, Name: name})
 	exists := lookupErr == nil
 	if lookupErr != nil && !errors.Is(lookupErr, pgx.ErrNoRows) {
-		return model.RepoResult{}, fmt.Errorf("resolve network %s", key)
+		return model.RepoResult{}, fmt.Errorf("resolve network %s: %w", key, lookupErr)
 	}
 	if exists && policy != model.ConflictPolicyUpdate {
 		return conflictResult("network", key, policy)
@@ -142,7 +142,7 @@ func (r *PgImportRepo) importNetworkAttempt(ctx context.Context, aggregate model
 		return model.RepoResult{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return model.RepoResult{}, fmt.Errorf("commit network %s import", key)
+		return model.RepoResult{}, fmt.Errorf("commit network %s import: %w", key, err)
 	}
 	return model.RepoResult{Outcome: model.OutcomeImported}, nil
 }

@@ -42,6 +42,16 @@ func TestEntryAggregateRejectsDuplicateNormalizedSymbols(t *testing.T) {
 	require.EqualError(t, err, "duplicate entry symbol ISIL:LIB")
 }
 
+func TestEntryAggregateAcceptsDistinctSymbolsWithSameDisplayString(t *testing.T) {
+	first := SymbolRef{Authority: "A:B", Symbol: "C"}
+	second := SymbolRef{Authority: "A", Symbol: "B:C"}
+	aggregate := validEntryAggregate()
+	aggregate.Key = first
+	aggregate.Data.Symbols = []SymbolRef{first, second}
+
+	require.NoError(t, aggregate.NormalizeAndValidate())
+}
+
 func TestTierAggregateRejectsInvalidEnum(t *testing.T) {
 	aggregate := TierAggregate{
 		Key:  TierKey{Consortium: SymbolRef{Authority: "isil", Symbol: "consortium"}, Name: "Loan"},
@@ -51,6 +61,22 @@ func TestTierAggregateRejectsInvalidEnum(t *testing.T) {
 	err := aggregate.NormalizeAndValidate()
 
 	require.EqualError(t, err, "invalid tier level: instant")
+}
+
+func TestTierAggregateAcceptsDistinctEntriesWithSameDisplayString(t *testing.T) {
+	aggregate := TierAggregate{
+		Key: TierKey{Consortium: SymbolRef{Authority: "ISIL", Symbol: "CONSORTIUM"}, Name: "Loan"},
+		Data: TierData{
+			Level: "standard",
+			Type:  "loan",
+			Entries: []SymbolRef{
+				{Authority: "A:B", Symbol: "C"},
+				{Authority: "A", Symbol: "B:C"},
+			},
+		},
+	}
+
+	require.NoError(t, aggregate.NormalizeAndValidate())
 }
 
 func TestNetworkAggregateRejectsDuplicateEntries(t *testing.T) {
@@ -65,6 +91,18 @@ func TestNetworkAggregateRejectsDuplicateEntries(t *testing.T) {
 	err := aggregate.NormalizeAndValidate()
 
 	require.EqualError(t, err, "duplicate network entry ISIL:LIB")
+}
+
+func TestNetworkAggregateAcceptsDistinctEntriesWithSameDisplayString(t *testing.T) {
+	aggregate := NetworkAggregate{
+		Key: NetworkKey{Consortium: SymbolRef{Authority: "ISIL", Symbol: "CONSORTIUM"}, Name: "Main"},
+		Data: NetworkData{Entries: []NetworkAssignment{
+			{SymbolRef: SymbolRef{Authority: "A:B", Symbol: "C"}, Priority: 1},
+			{SymbolRef: SymbolRef{Authority: "A", Symbol: "B:C"}, Priority: 2},
+		}},
+	}
+
+	require.NoError(t, aggregate.NormalizeAndValidate())
 }
 
 func TestEntryAggregateRejectsInvalidClosureRange(t *testing.T) {

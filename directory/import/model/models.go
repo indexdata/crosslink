@@ -147,18 +147,18 @@ func (a *EntryAggregate) NormalizeAndValidate() error {
 			return fmt.Errorf("parent: %w", err)
 		}
 	}
-	seen := make(map[string]struct{}, len(a.Data.Symbols))
+	seen := make(map[SymbolRef]struct{}, len(a.Data.Symbols))
 	keyCount := 0
 	for index := range a.Data.Symbols {
 		if err := a.Data.Symbols[index].NormalizeAndValidate(); err != nil {
 			return fmt.Errorf("symbol %d: %w", index+1, err)
 		}
-		value := a.Data.Symbols[index].String()
+		value := a.Data.Symbols[index]
 		if _, exists := seen[value]; exists {
-			return fmt.Errorf("duplicate entry symbol %s", value)
+			return fmt.Errorf("duplicate entry symbol %s", value.String())
 		}
 		seen[value] = struct{}{}
-		if value == a.Key.String() {
+		if value == a.Key {
 			keyCount++
 		}
 	}
@@ -251,14 +251,14 @@ func (a *NetworkAggregate) NormalizeAndValidate() error {
 	if strings.TrimSpace(a.Key.Name) == "" {
 		return fmt.Errorf("network name is required")
 	}
-	seen := make(map[string]struct{}, len(a.Data.Entries))
+	seen := make(map[SymbolRef]struct{}, len(a.Data.Entries))
 	for index := range a.Data.Entries {
 		if err := a.Data.Entries[index].NormalizeAndValidate(); err != nil {
 			return fmt.Errorf("network entry %d: %w", index+1, err)
 		}
-		key := a.Data.Entries[index].String()
+		key := a.Data.Entries[index].SymbolRef
 		if _, exists := seen[key]; exists {
-			return fmt.Errorf("duplicate network entry %s", key)
+			return fmt.Errorf("duplicate network entry %s", key.String())
 		}
 		seen[key] = struct{}{}
 	}
@@ -266,14 +266,14 @@ func (a *NetworkAggregate) NormalizeAndValidate() error {
 }
 
 func normalizeUniqueRefs(refs []SymbolRef, resource string, assign func([]SymbolRef)) error {
-	seen := make(map[string]struct{}, len(refs))
+	seen := make(map[SymbolRef]struct{}, len(refs))
 	for index := range refs {
 		if err := refs[index].NormalizeAndValidate(); err != nil {
 			return fmt.Errorf("%s entry %d: %w", resource, index+1, err)
 		}
-		key := refs[index].String()
+		key := refs[index]
 		if _, exists := seen[key]; exists {
-			return fmt.Errorf("duplicate %s entry %s", resource, key)
+			return fmt.Errorf("duplicate %s entry %s", resource, key.String())
 		}
 		seen[key] = struct{}{}
 	}

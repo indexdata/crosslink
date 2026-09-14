@@ -448,6 +448,62 @@ func TestImportEntryRetriesWhenParentIsDeletedBeforeRowLock(t *testing.T) {
 	require.ErrorContains(t, <-importDone, "parent ISIL:PARENT does not exist")
 }
 
+func TestImportEntryRetriesSymbolCreatedByAPIAndReappliesPolicy(t *testing.T) {
+	for _, policy := range []model.ConflictPolicy{model.ConflictPolicySkip, model.ConflictPolicyUpdate} {
+		t.Run(string(policy), func(t *testing.T) {
+			resetImportDatabase(t)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			blocker, err := testPool.Begin(ctx)
+			require.NoError(t, err)
+			defer func() { _ = blocker.Rollback(ctx) }()
+			_, err = blocker.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('directoryish:consortium-entry', 0))`)
+			require.NoError(t, err)
+
+			aggregate := minimalEntryAggregate("RACE", "Consortium")
+			type importOutcome struct {
+				result model.RepoResult
+				err    error
+			}
+			importDone := make(chan importOutcome, 1)
+			go func() {
+				result, importErr := importdb.New(testPool).ImportEntry(ctx, aggregate, policy)
+				importDone <- importOutcome{result: result, err: importErr}
+			}()
+			waitForDatabaseLockWaiters(t, ctx, 1)
+
+			apiEntryID := uuid.New()
+			apiTx, err := testPool.Begin(ctx)
+			require.NoError(t, err)
+			defer func() { _ = apiTx.Rollback(ctx) }()
+			_, err = apiTx.Exec(ctx, `INSERT INTO entries (id, name, type) VALUES ($1, 'API entry', 'Institution')`, apiEntryID)
+			require.NoError(t, err)
+			_, err = apiTx.Exec(ctx, `INSERT INTO symbols (owner, authority, symbol) VALUES ($1, 'ISIL', 'RACE')`, apiEntryID)
+			require.NoError(t, err)
+			require.NoError(t, apiTx.Commit(ctx))
+			require.NoError(t, blocker.Commit(ctx))
+
+			outcome := <-importDone
+			require.NoError(t, outcome.err)
+			require.Equal(t, apiEntryID, entryIDBySymbol(t, aggregate.Key))
+			if policy == model.ConflictPolicySkip {
+				require.Equal(t, model.OutcomeSkipped, outcome.result.Outcome)
+				var name, entryType string
+				require.NoError(t, testPool.QueryRow(ctx, `SELECT name, type FROM entries WHERE id=$1`, apiEntryID).Scan(&name, &entryType))
+				require.Equal(t, "API entry", name)
+				require.Equal(t, "Institution", entryType)
+			} else {
+				require.Equal(t, model.OutcomeImported, outcome.result.Outcome)
+				var name, entryType string
+				require.NoError(t, testPool.QueryRow(ctx, `SELECT name, type FROM entries WHERE id=$1`, apiEntryID).Scan(&name, &entryType))
+				require.Equal(t, aggregate.Data.Name, name)
+				require.Equal(t, "Consortium", entryType)
+			}
+		})
+	}
+}
+
 func TestImportEntryRejectsInvalidHierarchy(t *testing.T) {
 	resetImportDatabase(t)
 	repo := importdb.New(testPool)
@@ -755,6 +811,85 @@ func TestImportNetworkRejectsNonConsortiumOwner(t *testing.T) {
 	_, err := repo.ImportNetwork(context.Background(), aggregate, model.ConflictPolicyFail)
 
 	require.ErrorContains(t, err, "is not a consortium")
+}
+
+func TestBusinessKeyLookupErrorsPreservePostgreSQLCause(t *testing.T) {
+	for _, resource := range []string{"tier", "network"} {
+		t.Run(resource, func(t *testing.T) {
+			repo, consortium, _, _ := importRepoFixture(t)
+			table := resource + "s"
+			unavailableTable := table + "_unavailable"
+			_, err := testPool.Exec(context.Background(), fmt.Sprintf("ALTER TABLE %s RENAME TO %s", table, unavailableTable)) //nolint:gosec // fixed test identifiers
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				_, restoreErr := testPool.Exec(context.Background(), fmt.Sprintf("ALTER TABLE %s RENAME TO %s", unavailableTable, table)) //nolint:gosec // fixed test identifiers
+				require.NoError(t, restoreErr)
+			})
+
+			if resource == "tier" {
+				_, err = repo.ImportTier(context.Background(), model.TierAggregate{
+					Key:  model.TierKey{Consortium: consortium, Name: "Missing table"},
+					Data: model.TierData{Level: "standard", Type: "loan", Entries: []model.SymbolRef{}},
+				}, model.ConflictPolicyFail)
+			} else {
+				_, err = repo.ImportNetwork(context.Background(), model.NetworkAggregate{
+					Key:  model.NetworkKey{Consortium: consortium, Name: "Missing table"},
+					Data: model.NetworkData{Entries: []model.NetworkAssignment{}},
+				}, model.ConflictPolicyFail)
+			}
+
+			require.ErrorContains(t, err, "resolve "+resource)
+			var pgErr *pgconn.PgError
+			require.ErrorAs(t, err, &pgErr)
+			require.Equal(t, "42P01", pgErr.Code)
+		})
+	}
+}
+
+func TestAggregateCommitErrorsPreservePostgreSQLCause(t *testing.T) {
+	for _, resource := range []string{"tier", "network"} {
+		t.Run(resource, func(t *testing.T) {
+			repo, consortium, _, _ := importRepoFixture(t)
+			table := resource + "s"
+			trigger := "fail_" + resource + "_import_commit"
+			_, err := testPool.Exec(context.Background(), `
+				CREATE OR REPLACE FUNCTION fail_import_aggregate_commit() RETURNS trigger AS $$
+				BEGIN
+					RAISE EXCEPTION 'forced commit failure' USING ERRCODE = '40001';
+				END;
+				$$ LANGUAGE plpgsql`)
+			require.NoError(t, err)
+			_, err = testPool.Exec(context.Background(), fmt.Sprintf(`
+				CREATE CONSTRAINT TRIGGER %s
+				AFTER INSERT ON %s
+				DEFERRABLE INITIALLY DEFERRED
+				FOR EACH ROW EXECUTE FUNCTION fail_import_aggregate_commit()`, trigger, table)) //nolint:gosec // fixed test identifiers
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				_, cleanupErr := testPool.Exec(context.Background(), fmt.Sprintf("DROP TRIGGER %s ON %s", trigger, table)) //nolint:gosec // fixed test identifiers
+				require.NoError(t, cleanupErr)
+				_, cleanupErr = testPool.Exec(context.Background(), `DROP FUNCTION fail_import_aggregate_commit()`)
+				require.NoError(t, cleanupErr)
+			})
+
+			if resource == "tier" {
+				_, err = repo.ImportTier(context.Background(), model.TierAggregate{
+					Key:  model.TierKey{Consortium: consortium, Name: "Commit failure"},
+					Data: model.TierData{Level: "standard", Type: "loan", Entries: []model.SymbolRef{}},
+				}, model.ConflictPolicyFail)
+			} else {
+				_, err = repo.ImportNetwork(context.Background(), model.NetworkAggregate{
+					Key:  model.NetworkKey{Consortium: consortium, Name: "Commit failure"},
+					Data: model.NetworkData{Entries: []model.NetworkAssignment{}},
+				}, model.ConflictPolicyFail)
+			}
+
+			require.ErrorContains(t, err, "commit "+resource)
+			var pgErr *pgconn.PgError
+			require.ErrorAs(t, err, &pgErr)
+			require.Equal(t, "40001", pgErr.Code)
+		})
+	}
 }
 
 func importRepoFixture(t *testing.T) (*importdb.PgImportRepo, model.SymbolRef, model.SymbolRef, model.SymbolRef) {
