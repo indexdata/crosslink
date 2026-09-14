@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -336,4 +337,87 @@ func TestDirectoryPeerInsertConflictSavesSymbols(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "<cached>", query)
 	require.Equal(t, []Peer{winner}, cached)
+}
+
+func TestSymbolRefreshPrefersConcurrentUUIDPeer(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	id := uuid.New()
+	symbol := "ISIL:" + id.String()
+	legacy, err := illRepo.SavePeer(ctx, SavePeerParams{ID: uuid.NewString(), Name: "Legacy symbol peer", RefreshPolicy: RefreshPolicyTransaction, RefreshTime: Get10MinsAgo()})
+	require.NoError(t, err)
+	_, err = illRepo.SaveSymbol(ctx, SaveSymbolParams{SymbolValue: symbol, PeerID: legacy.ID})
+	require.NoError(t, err)
+	var winner Peer
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The symbol lookup has observed the stale legacy peer. Commit a direct-ID
+		// cache entry before it processes the directory response.
+		var lookupErr error
+		winner, _, lookupErr = illRepo.GetCachedPeerByDirectoryEntryID(ctx, id, &adapter.MockDirectoryLookupAdapter{})
+		if lookupErr != nil {
+			http.Error(w, lookupErr.Error(), http.StatusInternalServerError)
+			return
+		}
+		entry := dirapi.Entry{Id: &id, Name: "Refreshed institution", Symbols: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: id.String()}}}
+		_ = json.NewEncoder(w).Encode(dirapi.EntriesResponse{Items: []dirapi.Entry{entry}})
+	}))
+	defer server.Close()
+	peers, _, err := illRepo.GetCachedPeersBySymbols(ctx, []string{symbol}, createDirectoryAdapter(server.URL))
+	require.NoError(t, err)
+	require.Len(t, peers, 1)
+	require.Equal(t, winner.ID, peers[0].ID)
+	stored, err := illRepo.GetPeerById(ctx, winner.ID)
+	require.NoError(t, err)
+	require.Equal(t, stored, peers[0])
+	require.Equal(t, "Refreshed institution", stored.Name)
+	associated, err := illRepo.GetPeerBySymbol(ctx, symbol)
+	require.NoError(t, err)
+	require.Equal(t, winner.ID, associated.ID)
+	// Preserve the old row for historical references; it must not claim the UUID.
+	old, err := illRepo.GetPeerById(ctx, legacy.ID)
+	require.NoError(t, err)
+	require.Nil(t, old.CustomData.Id)
+}
+
+func TestSymbolRefreshPropagatesPersistenceErrors(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	pool := illRepo.(*PgIllRepo).Pool
+	marker := uuid.NewString()
+	// Scope the injected write failure to these entries, leaving other tests intact.
+	_, err := pool.Exec(ctx, fmt.Sprintf(`CREATE FUNCTION reject_test_peer_write() RETURNS trigger LANGUAGE plpgsql AS $$
+	BEGIN
+		IF NEW.name = '%s' THEN RAISE EXCEPTION 'injected peer write failure'; END IF;
+		RETURN NEW;
+	END $$;
+	CREATE TRIGGER reject_test_peer_write BEFORE INSERT OR UPDATE ON peer
+	FOR EACH ROW EXECUTE FUNCTION reject_test_peer_write();`, marker))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, err := pool.Exec(ctx, "DROP TRIGGER reject_test_peer_write ON peer; DROP FUNCTION reject_test_peer_write();")
+		require.NoError(t, err)
+	})
+	for _, existing := range []bool{false, true} {
+		t.Run(fmt.Sprintf("existing=%t", existing), func(t *testing.T) {
+			id := uuid.New()
+			symbol := "ISIL:" + id.String()
+			var original Peer
+			if existing {
+				original, err = illRepo.SavePeer(ctx, SavePeerParams{ID: uuid.NewString(), Name: "Original", RefreshPolicy: RefreshPolicyTransaction, RefreshTime: Get10MinsAgo()})
+				require.NoError(t, err)
+				_, err = illRepo.SaveSymbol(ctx, SaveSymbolParams{SymbolValue: symbol, PeerID: original.ID})
+				require.NoError(t, err)
+			}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewEncoder(w).Encode(dirapi.EntriesResponse{Items: []dirapi.Entry{{Id: &id, Name: marker, Symbols: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: id.String()}}}}})
+			}))
+			defer server.Close()
+			peers, _, err := illRepo.GetCachedPeersBySymbols(ctx, []string{symbol}, createDirectoryAdapter(server.URL))
+			require.ErrorContains(t, err, "injected peer write failure")
+			require.Empty(t, peers)
+			if existing {
+				stored, err := illRepo.GetPeerBySymbol(ctx, symbol)
+				require.NoError(t, err)
+				require.Equal(t, original, stored)
+			}
+		})
+	}
 }

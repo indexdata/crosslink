@@ -404,23 +404,32 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx common.ExtendedContext, lookupSy
 				break
 			}
 		}
-		// A peer cached by UUID may not have had symbols when it was first fetched.
-		if errors.Is(err, pgx.ErrNoRows) && dirEntry.CustomData.Id != nil {
-			row, lookupErr := r.queries.GetPeerByDirectoryEntryId(ctx, r.GetConnOrTx(), dirEntry.CustomData.Id.String())
-			peer, err = row.Peer, lookupErr
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return getSliceFromMapInOrder(symbolToPeer, lookupSymbols), query, fmt.Errorf("read peer for symbols %v: %w", dirEntry.Symbols, err)
 		}
-		if err != nil {
-			if !errors.Is(err, pgx.ErrNoRows) { //unlikely DB error, skip the entry
-				ctx.Logger().Warn("failure when reading peer, symbols will be ignored", "symbols", dirEntry.Symbols, "error", err)
-				continue
+		// Prefer the UUID identity even if a legacy symbol peer was found. A
+		// direct-ID lookup may have cached the directory entry independently.
+		if dirEntry.CustomData.Id != nil {
+			row, lookupErr := r.queries.GetPeerByDirectoryEntryId(ctx, r.GetConnOrTx(), dirEntry.CustomData.Id.String())
+			if lookupErr == nil {
+				peer, err = row.Peer, nil
+			} else if !errors.Is(lookupErr, pgx.ErrNoRows) {
+				return getSliceFromMapInOrder(symbolToPeer, lookupSymbols), query, fmt.Errorf("read directory peer %s: %w", dirEntry.CustomData.Id, lookupErr)
 			}
 		}
 		if err == nil {
-			// peer found locally, must have been stale, update it
-			peer, _ = r.updateExistingPeer(ctx, peer, dirEntry)
+			// Save the peer and its symbol associations atomically. A concurrent
+			// UUID insert can still conflict after the recheck; report that error.
+			err = r.WithTxFunc(ctx, func(txRepo IllRepo) error {
+				var updateErr error
+				peer, updateErr = txRepo.(*PgIllRepo).updateExistingPeer(ctx, peer, dirEntry)
+				return updateErr
+			})
 		} else {
-			// no local peer found, create a new one
-			peer, _ = r.createNewPeer(ctx, dirEntry)
+			peer, err = r.createNewPeer(ctx, dirEntry)
+		}
+		if err != nil {
+			return getSliceFromMapInOrder(symbolToPeer, lookupSymbols), query, fmt.Errorf("cache peer for symbols %v: %w", dirEntry.Symbols, err)
 		}
 		// see if the peer was in the refresh list, if so add it to the result
 		for _, sym := range dirEntry.Symbols {
