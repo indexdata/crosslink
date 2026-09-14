@@ -443,12 +443,20 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx common.ExtendedContext, lookupSy
 	return getSliceFromMapInOrder(symbolToPeer, lookupSymbols), query, nil
 }
 
-// refreshExistingPeer retries a legacy symbol peer refresh against the UUID winner
-// if a direct-ID cache fill committed after the caller's UUID recheck.
+// refreshExistingPeer respects the peer's refresh policy while adding discovered
+// associations. It retries against the UUID winner if a direct-ID cache fill
+// committed after the caller's UUID recheck.
 func (r *PgIllRepo) refreshExistingPeer(ctx common.ExtendedContext, peer Peer, dirEntry adapter.DirectoryEntry) (Peer, error) {
 	update := func(target Peer) (Peer, error) {
 		var updated Peer
 		err := r.WithTxFunc(ctx, func(txRepo IllRepo) error {
+			if !peerNeedsRefresh(target) {
+				// A UUID lookup may select a never-refresh or still-fresh peer.
+				// Attach discovered symbols without replacing metadata or removing
+				// existing associations, including when retrying a UUID conflict.
+				updated = target
+				return txRepo.(*PgIllRepo).addPeerAssociations(ctx, target.ID, dirEntry)
+			}
 			var err error
 			updated, err = txRepo.(*PgIllRepo).updateExistingPeer(ctx, target, dirEntry)
 			return err
@@ -471,6 +479,20 @@ func (r *PgIllRepo) refreshExistingPeer(ctx common.ExtendedContext, peer Peer, d
 		return Peer{}, fmt.Errorf("resolve directory peer after cache conflict: %w", errors.Join(err, lookupErr))
 	}
 	return update(winner.Peer)
+}
+
+func (r *PgIllRepo) addPeerAssociations(ctx common.ExtendedContext, peerID string, dirEntry adapter.DirectoryEntry) error {
+	for _, symbol := range dirEntry.Symbols {
+		if _, err := r.SaveSymbol(ctx, SaveSymbolParams{SymbolValue: symbol, PeerID: peerID}); err != nil {
+			return fmt.Errorf("associate symbol %s with peer %s: %w", symbol, peerID, err)
+		}
+	}
+	for _, symbol := range dirEntry.BranchSymbols {
+		if _, err := r.SaveBranchSymbol(ctx, SaveBranchSymbolParams{SymbolValue: symbol, PeerID: peerID}); err != nil {
+			return fmt.Errorf("associate branch symbol %s with peer %s: %w", symbol, peerID, err)
+		}
+	}
+	return nil
 }
 
 func (r *PgIllRepo) createNewPeer(ctx common.ExtendedContext, dirEntry adapter.DirectoryEntry) (Peer, error) {

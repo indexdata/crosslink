@@ -92,7 +92,7 @@ func TestDirectoryEntryCacheMissAndSymbolReuse(t *testing.T) {
 	require.Equal(t, first.ID, second.ID)
 	require.Equal(t, "<cached>", query)
 	require.Equal(t, 1, calls)
-	// A symbol added later must refresh this same peer, rather than creating a duplicate.
+	// A symbol added later must associate with this same peer, rather than creating a duplicate.
 	symbol := "branch-" + uuid.NewString()
 	require.NoError(t, json.Unmarshal([]byte(`{"symbols":[{"authority":"ISIL","symbol":"`+symbol+`"}]}`), &entry))
 	peers, _, err := illRepo.GetCachedPeersBySymbols(ctx, []string{"ISIL:" + symbol}, createDirectoryAdapter(server.URL))
@@ -371,7 +371,7 @@ func TestSymbolRefreshPrefersConcurrentUUIDPeer(t *testing.T) {
 	stored, err := illRepo.GetPeerById(ctx, winner.ID)
 	require.NoError(t, err)
 	require.Equal(t, stored, peers[0])
-	require.Equal(t, "Refreshed institution", stored.Name)
+	require.Equal(t, winner, stored)
 	associated, err := illRepo.GetPeerBySymbol(ctx, symbol)
 	require.NoError(t, err)
 	require.Equal(t, winner.ID, associated.ID)
@@ -468,4 +468,69 @@ func TestSymbolRefreshRecoversUUIDConflict(t *testing.T) {
 	var count int
 	require.NoError(t, repo.Pool.QueryRow(ctx, "SELECT count(*) FROM peer WHERE custom_data ->> 'id' = $1", id.String()).Scan(&count))
 	require.Equal(t, 1, count)
+}
+
+func TestSymbolLookupRespectsUUIDPeerRefreshPolicy(t *testing.T) {
+	for _, retry := range []bool{false, true} {
+		for _, policy := range []RefreshPolicy{RefreshPolicyNever, RefreshPolicyTransaction} {
+			t.Run(fmt.Sprintf("retry=%t/policy=%s", retry, policy), func(t *testing.T) {
+				ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+				id := uuid.New()
+				symbol, branch := "ISIL:"+uuid.NewString(), "ISIL:"+uuid.NewString()
+				oldSymbol, oldBranch := "ISIL:"+uuid.NewString(), "ISIL:"+uuid.NewString()
+				legacy, err := illRepo.SavePeer(ctx, SavePeerParams{ID: uuid.NewString(), Name: "Legacy", RefreshPolicy: RefreshPolicyTransaction, RefreshTime: Get10MinsAgo()})
+				require.NoError(t, err)
+				_, err = illRepo.SaveSymbol(ctx, SaveSymbolParams{SymbolValue: symbol, PeerID: legacy.ID})
+				require.NoError(t, err)
+				refreshTime := GetPgNow()
+				if policy == RefreshPolicyNever {
+					refreshTime = Get10MinsAgo()
+				}
+				winner, err := illRepo.SavePeer(ctx, SavePeerParams{
+					ID: uuid.NewString(), Name: "Keep this name", Url: "https://keep.example.org",
+					RefreshPolicy: policy, RefreshTime: refreshTime, LoansCount: 9, BorrowsCount: 4,
+					CustomData: dirapi.Entry{Id: &id, Name: "Keep this config", Tenant: new("keep-tenant")},
+				})
+				require.NoError(t, err)
+				_, err = illRepo.SaveSymbol(ctx, SaveSymbolParams{SymbolValue: oldSymbol, PeerID: winner.ID})
+				require.NoError(t, err)
+				_, err = illRepo.SaveBranchSymbol(ctx, SaveBranchSymbolParams{SymbolValue: oldBranch, PeerID: winner.ID})
+				require.NoError(t, err)
+				entry := adapter.DirectoryEntry{Name: "Overwrite", URL: "https://overwrite.example.org",
+					CustomData: dirapi.Entry{Id: &id, Name: "Overwrite", Symbols: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: symbol[5:]}}},
+					Symbols:    []string{symbol}, BranchSymbols: []string{branch}}
+				var result Peer
+				if retry {
+					// Simulate a winner committed after the caller's UUID recheck.
+					result, err = illRepo.(*PgIllRepo).refreshExistingPeer(ctx, legacy, entry)
+				} else {
+					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						_ = json.NewEncoder(w).Encode(dirapi.EntriesResponse{Items: []dirapi.Entry{
+							entry.CustomData,
+							{Parent: &id, Symbols: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: branch[5:]}}},
+						}})
+					}))
+					defer server.Close()
+					var peers []Peer
+					peers, _, err = illRepo.GetCachedPeersBySymbols(ctx, []string{symbol}, createDirectoryAdapter(server.URL))
+					require.NoError(t, err)
+					require.Len(t, peers, 1)
+					result = peers[0]
+				}
+				require.NoError(t, err)
+				require.Equal(t, winner, result)
+				stored, err := illRepo.GetPeerById(ctx, winner.ID)
+				require.NoError(t, err)
+				require.Equal(t, winner, stored)
+				symbols, err := illRepo.GetSymbolsByPeerId(ctx, winner.ID)
+				require.NoError(t, err)
+				require.Contains(t, symbols, Symbol{SymbolValue: symbol, PeerID: winner.ID})
+				require.Contains(t, symbols, Symbol{SymbolValue: oldSymbol, PeerID: winner.ID})
+				branches, err := illRepo.GetBranchSymbolsByPeerId(ctx, winner.ID)
+				require.NoError(t, err)
+				require.Contains(t, branches, BranchSymbol{SymbolValue: branch, PeerID: winner.ID})
+				require.Contains(t, branches, BranchSymbol{SymbolValue: oldBranch, PeerID: winner.ID})
+			})
+		}
+	}
 }
