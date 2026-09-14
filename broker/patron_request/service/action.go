@@ -2055,6 +2055,10 @@ func (a *PatronRequestActionService) applyPickupLocationAddress(ctx common.Exten
 	return request, nil
 }
 
+// ErrInvalidPickupLocation identifies a selection the client can correct.
+// Directory availability, consistency, and database errors are not validation errors.
+var ErrInvalidPickupLocation = errors.New("invalid pickup location")
+
 // ValidateRequesterPickupLocation checks the selected entry's existence and ancestry
 // without requiring shipping or LMS data that a later operation may not consume.
 func (a *PatronRequestActionService) ValidateRequesterPickupLocation(ctx common.ExtendedContext, pr pr_db.PatronRequest) error {
@@ -2068,11 +2072,14 @@ func (a *PatronRequestActionService) ValidateRequesterPickupLocation(ctx common.
 func (a *PatronRequestActionService) pickupLocationEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest) (dirapi.Entry, error) {
 	requesterSymbol := strings.TrimSpace(pr.RequesterSymbol.String)
 	if !pr.RequesterSymbol.Valid || requesterSymbol == "" {
-		return dirapi.Entry{}, fmt.Errorf("pickup location requires a requester symbol")
+		return dirapi.Entry{}, fmt.Errorf("%w: pickup location requires a requester symbol", ErrInvalidPickupLocation)
 	}
 	id := uuid.UUID(pr.RequesterPickupLocationID.Bytes)
 	peer, _, err := a.illRepo.GetCachedPeerByDirectoryEntryID(ctx, id, a.directoryLookupAdapter)
 	if err != nil {
+		if errors.Is(err, ill_db.ErrDirectoryEntryNotFound) {
+			return dirapi.Entry{}, fmt.Errorf("%w: %w", ErrInvalidPickupLocation, err)
+		}
 		return dirapi.Entry{}, err
 	}
 	// UUID lookups use a shared cache. Require an ancestor with the requester
@@ -2102,7 +2109,7 @@ func (a *PatronRequestActionService) pickupLocationEntry(ctx common.ExtendedCont
 			}
 		}
 	}
-	return dirapi.Entry{}, fmt.Errorf("pickup location %s is not a branch of requester institution %q", id, requesterSymbol)
+	return dirapi.Entry{}, fmt.Errorf("%w: pickup location %s is not a branch of requester institution %q", ErrInvalidPickupLocation, id, requesterSymbol)
 }
 
 func (a *PatronRequestActionService) requesterPickupCode(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, usesPickupLocation bool) (string, error) {

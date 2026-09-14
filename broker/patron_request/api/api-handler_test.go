@@ -1731,7 +1731,9 @@ func TestPutPatronRequestsIdPickupLocationOptional(t *testing.T) {
 		{name: "omitted preserves selection", expected: pgtype.UUID{Bytes: original, Valid: true}},
 		{name: "supplied replaces selection", supplied: nullable.NewNullableWithValue(replacement), expected: pgtype.UUID{Bytes: replacement, Valid: true}},
 		{name: "null clears selection", supplied: nullable.NewNullNullable[uuid.UUID]()},
-		{name: "invalid selection rejected", supplied: nullable.NewNullableWithValue(replacement), validationError: errors.New("pickup location is not a branch of requester institution")},
+		{name: "backend failure rejected", supplied: nullable.NewNullableWithValue(replacement), validationError: errors.New("directory unavailable")},
+		{name: "replica conflict rejected", supplied: nullable.NewNullableWithValue(replacement), validationError: errors.New("conflicting responses from directory replicas")},
+		{name: "invalid selection rejected", supplied: nullable.NewNullableWithValue(replacement), validationError: fmt.Errorf("%w: pickup location is not a branch of requester institution", prservice.ErrInvalidPickupLocation)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &PrRepoUpdateCapture{pickupLocationID: pgtype.UUID{Bytes: original, Valid: true}}
@@ -1744,7 +1746,11 @@ func TestPutPatronRequestsIdPickupLocationOptional(t *testing.T) {
 			rr := httptest.NewRecorder()
 			handler.PutPatronRequestsId(rr, httptest.NewRequest(http.MethodPut, "/", bytes.NewReader(body)), id, proapi.PutPatronRequestsIdParams{})
 			if tc.validationError != nil {
-				require.Equal(t, http.StatusBadRequest, rr.Code, rr.Body.String())
+				status := http.StatusInternalServerError
+				if errors.Is(tc.validationError, prservice.ErrInvalidPickupLocation) {
+					status = http.StatusBadRequest
+				}
+				require.Equal(t, status, rr.Code, rr.Body.String())
 				require.Nil(t, repo.lastUpdateParams)
 				require.Contains(t, rr.Body.String(), tc.validationError.Error())
 			} else {
@@ -1781,8 +1787,11 @@ func TestCreateValidatesPickupBeforePersistence(t *testing.T) {
 		status          int
 	}{
 		{name: "valid selection", selected: true, status: http.StatusCreated},
-		{name: "missing entry", selected: true, validationError: errors.New("pickup location not found"), status: http.StatusBadRequest},
-		{name: "unrelated institution", selected: true, validationError: errors.New("pickup location is not a branch of requester institution"), status: http.StatusBadRequest},
+		{name: "missing entry", selected: true, validationError: fmt.Errorf("%w: pickup location not found", prservice.ErrInvalidPickupLocation), status: http.StatusBadRequest},
+		{name: "unrelated institution", selected: true, validationError: fmt.Errorf("%w: pickup location is not a branch of requester institution", prservice.ErrInvalidPickupLocation), status: http.StatusBadRequest},
+		{name: "directory unavailable", selected: true, validationError: errors.New("directory unavailable"), status: http.StatusInternalServerError},
+		{name: "database failure", selected: true, validationError: errors.New("database unavailable"), status: http.StatusInternalServerError},
+		{name: "replica conflict", selected: true, validationError: errors.New("conflicting responses from directory replicas"), status: http.StatusInternalServerError},
 		{name: "no selection", status: http.StatusCreated},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

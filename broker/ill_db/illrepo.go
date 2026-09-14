@@ -320,6 +320,9 @@ func getSelectedSupplierForIllTransactionForCommon(selSup []LocatedSupplier, ill
 	}
 }
 
+// ErrDirectoryEntryNotFound means a successful directory lookup found no matching entry.
+var ErrDirectoryEntryNotFound = errors.New("directory entry not found")
+
 // GetCachedPeerByDirectoryEntryID shares the peer cache and refresh policy with symbol lookups.
 // Directory UUIDs are stored in CustomData; they are distinct from local peer IDs.
 func (r *PgIllRepo) GetCachedPeerByDirectoryEntryID(ctx common.ExtendedContext, id uuid.UUID, directoryAdapter adapter.DirectoryLookupAdapter) (Peer, string, error) {
@@ -347,6 +350,9 @@ func (r *PgIllRepo) GetCachedPeerByDirectoryEntryID(ctx common.ExtendedContext, 
 			}
 			matches = append(matches, entry)
 		}
+	}
+	if len(entries) == 0 {
+		return Peer{}, query, fmt.Errorf("directory entry %s: %w", id, ErrDirectoryEntryNotFound)
 	}
 	if len(matches) != 1 {
 		return Peer{}, query, fmt.Errorf("directory entry %s: expected one entry, found %d", id, len(matches))

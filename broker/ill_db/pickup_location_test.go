@@ -117,6 +117,7 @@ func TestDirectoryEntryCacheRejectsInvalidResponses(t *testing.T) {
 			defer server.Close()
 			_, _, err := illRepo.GetCachedPeerByDirectoryEntryID(ctx, id, createDirectoryAdapter(server.URL))
 			require.Error(t, err)
+			require.Equal(t, status == http.StatusNotFound, errors.Is(err, ErrDirectoryEntryNotFound))
 		})
 	}
 }
@@ -287,6 +288,7 @@ func TestDirectoryEntryCacheWithReplicas(t *testing.T) {
 			require.Equal(t, 2, calls)
 			if tc.conflict {
 				require.ErrorContains(t, err, "conflicting responses")
+				require.NotErrorIs(t, err, ErrDirectoryEntryNotFound)
 				var count int
 				require.NoError(t, illRepo.(*PgIllRepo).Pool.QueryRow(ctx, "SELECT count(*) FROM peer WHERE custom_data ->> 'id' = $1", id.String()).Scan(&count))
 				require.Zero(t, count)

@@ -289,3 +289,39 @@ func TestValidateRequesterPickupLocationWithoutOperationData(t *testing.T) {
 	}))
 	repo.AssertExpectations(t)
 }
+
+func TestPickupLocationValidationErrorClassification(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		lookupError error
+		parent      bool
+		invalid     bool
+	}{
+		{name: "selected entry missing", lookupError: ill_db.ErrDirectoryEntryNotFound, invalid: true},
+		{name: "directory failure", lookupError: errors.New("directory unavailable")},
+		{name: "database failure", lookupError: errors.New("database unavailable")},
+		{name: "replica conflict", lookupError: errors.New("conflicting responses from directory replicas")},
+		{name: "parent missing", parent: true, lookupError: ill_db.ErrDirectoryEntryNotFound},
+		{name: "parent unavailable", parent: true, lookupError: errors.New("directory unavailable")},
+		{name: "unrelated institution", invalid: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			id, parentID := uuid.New(), uuid.New()
+			repo := new(IllRepoMock)
+			if tc.parent {
+				repo.On("GetCachedPeerByDirectoryEntryID", id, mock.Anything).Return(ill_db.Peer{CustomData: dirapi.Entry{Parent: &parentID}}, "<cached>", nil).Once()
+				repo.On("GetCachedPeerByDirectoryEntryID", parentID, mock.Anything).Return(ill_db.Peer{}, "", tc.lookupError).Once()
+			} else {
+				repo.On("GetCachedPeerByDirectoryEntryID", id, mock.Anything).Return(ill_db.Peer{}, "", tc.lookupError).Once()
+			}
+			service := PatronRequestActionService{illRepo: repo}
+			err := service.ValidateRequesterPickupLocation(appCtx, pr_db.PatronRequest{RequesterSymbol: pgtype.Text{String: "ISIL:MAIN", Valid: true}, RequesterPickupLocationID: pgtype.UUID{Bytes: id, Valid: true}})
+			require.Error(t, err)
+			require.Equal(t, tc.invalid, errors.Is(err, ErrInvalidPickupLocation))
+			if tc.lookupError != nil {
+				require.ErrorIs(t, err, tc.lookupError)
+			}
+			repo.AssertExpectations(t)
+		})
+	}
+}

@@ -1570,7 +1570,11 @@ func (a *PatronRequestApiHandler) validatePickupLocation(w http.ResponseWriter, 
 		return false
 	}
 	if err := a.pickupLocationValidator.ValidateRequesterPickupLocation(ctx, pr); err != nil {
-		api.AddBadRequestError(ctx, w, err)
+		if errors.Is(err, prservice.ErrInvalidPickupLocation) {
+			api.AddBadRequestError(ctx, w, err)
+		} else {
+			api.AddInternalError(ctx, w, err)
+		}
 		return false
 	}
 	return true
