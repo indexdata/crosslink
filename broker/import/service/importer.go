@@ -433,11 +433,18 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 	bundle.IllTransaction = &ill_db.SaveIllTransactionParams{ID: ill.Id, Timestamp: pgTimestamp(ill.Timestamp), RequesterSymbol: pgTextFromString(ill.RequesterSymbol), LastRequesterAction: pgTextFromPtr(ill.LastRequesterAction), PrevRequesterAction: pgTextFromPtr(ill.PrevRequesterAction), SupplierSymbol: pgTextFromPtr(ill.SupplierSymbol), RequesterRequestID: pgTextFromString(ill.RequesterRequestID), PrevRequesterRequestID: pgTextFromPtr(ill.PrevRequesterRequestID), SupplierRequestID: pgTextFromPtr(ill.SupplierRequestID), LastSupplierStatus: pgTextFromPtr(ill.LastSupplierStatus), PrevSupplierStatus: pgTextFromPtr(ill.PrevSupplierStatus), IllTransactionData: ill.IllTransactionData}
 	symbols := []string{ill.RequesterSymbol}
 	seenSuppliers := make(map[string]struct{}, len(apiBundle.LocatedSuppliers))
+	selectedSupplierSeen := false
 	for _, supplier := range apiBundle.LocatedSuppliers {
 		if _, duplicate := seenSuppliers[supplier.Id]; duplicate {
 			return importdb.PatronRequestBundle{}, nil, fmt.Errorf("duplicate located supplier id %q", supplier.Id)
 		}
 		seenSuppliers[supplier.Id] = struct{}{}
+		if supplier.SupplierStatus == importoapi.Selected {
+			if selectedSupplierSeen {
+				return importdb.PatronRequestBundle{}, nil, errors.New("only one located supplier may have status selected")
+			}
+			selectedSupplierSeen = true
+		}
 		bundle.LocatedSuppliers = append(bundle.LocatedSuppliers, ill_db.SaveLocatedSupplierParams{ID: supplier.Id, SupplierSymbol: supplier.SupplierSymbol, Ordinal: supplier.Ordinal, SupplierStatus: pgTextFromString(string(supplier.SupplierStatus)), PrevAction: pgTextFromPtr(supplier.PrevAction), PrevStatus: pgTextFromPtr(supplier.PrevStatus), LastAction: pgTextFromPtr(supplier.LastAction), LastStatus: pgTextFromPtr(supplier.LastStatus), LocalID: pgTextFromPtr(supplier.LocalID), PrevReason: pgTextFromPtr(supplier.PrevReason), LastReason: pgTextFromPtr(supplier.LastReason), SupplierRequestID: pgTextFromPtr(supplier.SupplierRequestID), LocalSupplier: supplier.LocalSupplier})
 		symbols = appendStableUnique(symbols, supplier.SupplierSymbol)
 	}

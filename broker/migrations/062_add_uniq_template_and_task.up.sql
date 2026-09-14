@@ -78,6 +78,7 @@ WITH duplicates AS (
             ORDER BY id
         ) AS rn
     FROM scheduled_task
+    WHERE event_name = 'invoke-batch-action'
 )
 UPDATE scheduled_task st
 SET title = st.title || '_' || d.rn
@@ -86,4 +87,5 @@ WHERE st.id = d.id
   AND d.rn > 1;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_scheduled_task_owner_title
-    ON scheduled_task (owner, title);
+    ON scheduled_task (owner, title)
+    WHERE event_name = 'invoke-batch-action';

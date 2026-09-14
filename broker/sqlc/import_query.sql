@@ -70,4 +70,5 @@ SELECT id, created_at
 FROM scheduled_task
 WHERE owner = sqlc.arg(owner)
   AND title = sqlc.arg(title)
+  AND event_name = 'invoke-batch-action'
 FOR UPDATE;

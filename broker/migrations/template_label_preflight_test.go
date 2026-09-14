@@ -76,6 +76,29 @@ func TestBatchActionTitleUniquenessMigrationBackfillsAndRequiresTitles(t *testin
 	require.NoError(t, err)
 }
 
+func TestBatchActionTitleUniquenessMigrationIgnoresOtherTaskTypes(t *testing.T) {
+	ctx, migrator, pool := migrationAtVersion61(t)
+	_, err := pool.Exec(ctx, `
+		INSERT INTO scheduled_task (id, event_name, schedule, title, owner)
+		VALUES
+			('a-background', 'invoke-background-action', 'FREQ=DAILY', 'Shared title', 'ISIL:OWNER'),
+			('z-batch', 'invoke-batch-action', 'FREQ=DAILY', 'Shared title', 'ISIL:OWNER')`)
+	require.NoError(t, err)
+
+	require.NoError(t, migrator.Migrate(62))
+
+	var backgroundTitle, batchTitle string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT title FROM scheduled_task WHERE id = 'a-background'`).Scan(&backgroundTitle))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT title FROM scheduled_task WHERE id = 'z-batch'`).Scan(&batchTitle))
+	require.Equal(t, "Shared title", backgroundTitle)
+	require.Equal(t, "Shared title", batchTitle)
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO scheduled_task (id, event_name, schedule, title, owner)
+		VALUES ('another-background', 'invoke-background-action', 'FREQ=DAILY', 'Shared title', 'ISIL:OWNER')`)
+	require.NoError(t, err)
+}
+
 func migrationAtVersion61(t *testing.T) (context.Context, *migrate.Migrate, *pgxpool.Pool) {
 	t.Helper()
 	ctx := context.Background()

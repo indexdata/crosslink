@@ -98,3 +98,56 @@ func TestImportBatchActionPolicies(t *testing.T) {
 	require.NotNil(t, actionData.BatchActionData)
 	assert.Equal(t, original.ID, actionData.BatchActionData.TaskId)
 }
+
+func TestImportBatchActionUpdateIgnoresNonBatchTaskWithSameTitle(t *testing.T) {
+	ctx := context.Background()
+	_, err := importTestPool.Exec(ctx, `
+		INSERT INTO event_config(event_name, event_type)
+		VALUES ($1, 'scheduled'), ($2, 'scheduled')
+		ON CONFLICT DO NOTHING`, events.EventNameInvokeBatchAction, events.EventNameInvokeBackgroundAction)
+	require.NoError(t, err)
+
+	owner := uuid.NewString()
+	title := "Shared title"
+	backgroundID := uuid.NewString()
+	_, err = importTestPool.Exec(ctx, `
+		INSERT INTO scheduled_task (id, event_name, schedule, title, status, owner)
+		VALUES ($1, $2, 'FREQ=DAILY', $3, 'pending', $4)`,
+		backgroundID, events.EventNameInvokeBackgroundAction, title, owner)
+	require.NoError(t, err)
+
+	incomingID := uuid.NewString()
+	incoming := sched_db.SaveScheduledTaskParams{
+		ID:        incomingID,
+		EventName: events.EventNameInvokeBatchAction,
+		Schedule:  "FREQ=WEEKLY",
+		ActionData: events.EventData{CommonEventData: events.CommonEventData{BatchActionData: &events.BatchActionData{
+			ActionName: "request-aging",
+			Selector:   "state = NEW",
+			TaskId:     incomingID,
+			Owner:      owner,
+		}}},
+		Title:     pgtype.Text{String: title, Valid: true},
+		Status:    sched_db.ScheduledTaskStatusPending,
+		Owner:     owner,
+		CreatedAt: pgtype.Timestamptz{Time: testTimestamp(0).Time, Valid: true},
+		UpdatedAt: pgtype.Timestamptz{Time: testTimestamp(1).Time, Valid: true},
+	}
+
+	result, err := importTestRepo.ImportBatchAction(importTestCtx, incoming, importdb.ConflictPolicyUpdate)
+	require.NoError(t, err)
+	require.Equal(t, importdb.OutcomeImported, result.Outcome)
+
+	var backgroundCount, importedCount int
+	require.NoError(t, importTestPool.QueryRow(ctx, `
+		SELECT
+			COUNT(*) FILTER (WHERE id = $1 AND event_name = $2),
+			COUNT(*) FILTER (WHERE id = $3 AND event_name = $4)
+		FROM scheduled_task
+		WHERE owner = $5 AND title = $6`,
+		backgroundID, events.EventNameInvokeBackgroundAction,
+		incomingID, events.EventNameInvokeBatchAction,
+		owner, title).Scan(&backgroundCount, &importedCount))
+	require.Equal(t, 1, backgroundCount)
+	require.Equal(t, 1, importedCount)
+}

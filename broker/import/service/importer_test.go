@@ -154,6 +154,28 @@ func TestImportPatronRequestAllowsEmptyCollections(t *testing.T) {
 	assert.Equal(t, 1, cache.calls)
 }
 
+func TestImportPatronRequestRejectsMultipleSelectedLocatedSuppliers(t *testing.T) {
+	repo := &recordingImportRepo{}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		suppliers := bundle["locatedSuppliers"].([]any)
+		bundle["locatedSuppliers"] = append(suppliers, map[string]any{
+			"id":             "located-2",
+			"supplierSymbol": "ISIL:OTHER",
+			"ordinal":        2,
+			"supplierStatus": "selected",
+			"localSupplier":  false,
+		})
+	})
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", data)
+
+	require.ErrorContains(t, err, "only one located supplier may have status selected")
+	assert.Equal(t, 1, cache.calls)
+	assert.Zero(t, repo.patronCalls)
+}
+
 func TestImportPatronRequestRejectsIllTransactionForLendingRequest(t *testing.T) {
 	repo := &recordingImportRepo{}
 	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
