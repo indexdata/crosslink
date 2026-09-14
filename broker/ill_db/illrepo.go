@@ -12,6 +12,7 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -424,13 +425,7 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx common.ExtendedContext, lookupSy
 			}
 		}
 		if err == nil {
-			// Save the peer and its symbol associations atomically. A concurrent
-			// UUID insert can still conflict after the recheck; report that error.
-			err = r.WithTxFunc(ctx, func(txRepo IllRepo) error {
-				var updateErr error
-				peer, updateErr = txRepo.(*PgIllRepo).updateExistingPeer(ctx, peer, dirEntry)
-				return updateErr
-			})
+			peer, err = r.refreshExistingPeer(ctx, peer, dirEntry)
 		} else {
 			peer, err = r.createNewPeer(ctx, dirEntry)
 		}
@@ -446,6 +441,36 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx common.ExtendedContext, lookupSy
 		}
 	}
 	return getSliceFromMapInOrder(symbolToPeer, lookupSymbols), query, nil
+}
+
+// refreshExistingPeer retries a legacy symbol peer refresh against the UUID winner
+// if a direct-ID cache fill committed after the caller's UUID recheck.
+func (r *PgIllRepo) refreshExistingPeer(ctx common.ExtendedContext, peer Peer, dirEntry adapter.DirectoryEntry) (Peer, error) {
+	update := func(target Peer) (Peer, error) {
+		var updated Peer
+		err := r.WithTxFunc(ctx, func(txRepo IllRepo) error {
+			var err error
+			updated, err = txRepo.(*PgIllRepo).updateExistingPeer(ctx, target, dirEntry)
+			return err
+		})
+		if err != nil {
+			return Peer{}, err
+		}
+		return updated, nil
+	}
+	updated, err := update(peer)
+	var pgErr *pgconn.PgError
+	if dirEntry.CustomData.Id == nil || !errors.As(err, &pgErr) ||
+		pgErr.Code != "23505" || pgErr.ConstraintName != "peer_directory_entry_id_idx" {
+		return updated, err
+	}
+	// The failed transaction has rolled back. Read the committed winner in a
+	// fresh statement, then retry once with its counters and local identity.
+	winner, lookupErr := r.queries.GetPeerByDirectoryEntryId(ctx, r.GetConnOrTx(), dirEntry.CustomData.Id.String())
+	if lookupErr != nil {
+		return Peer{}, fmt.Errorf("resolve directory peer after cache conflict: %w", errors.Join(err, lookupErr))
+	}
+	return update(winner.Peer)
 }
 
 func (r *PgIllRepo) createNewPeer(ctx common.ExtendedContext, dirEntry adapter.DirectoryEntry) (Peer, error) {

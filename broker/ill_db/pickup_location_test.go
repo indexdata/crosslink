@@ -16,6 +16,7 @@ import (
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	dirapi "github.com/indexdata/crosslink/directory/api"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 )
@@ -422,4 +423,49 @@ func TestSymbolRefreshPropagatesPersistenceErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSymbolRefreshRecoversUUIDConflict(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	repo := illRepo.(*PgIllRepo)
+	id := uuid.New()
+	symbol, branch := "ISIL:"+uuid.NewString(), "ISIL:"+uuid.NewString()
+	legacy, err := illRepo.SavePeer(ctx, SavePeerParams{ID: uuid.NewString(), Name: "Legacy", RefreshPolicy: RefreshPolicyTransaction, RefreshTime: Get10MinsAgo()})
+	require.NoError(t, err)
+	_, err = illRepo.SaveSymbol(ctx, SaveSymbolParams{SymbolValue: symbol, PeerID: legacy.ID})
+	require.NoError(t, err)
+	_, err = illRepo.SaveBranchSymbol(ctx, SaveBranchSymbolParams{SymbolValue: branch, PeerID: legacy.ID})
+	require.NoError(t, err)
+	// The caller has selected the legacy peer and rechecked the UUID cache.
+	_, err = repo.queries.GetPeerByDirectoryEntryId(ctx, repo.GetConnOrTx(), id.String())
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	// A direct-ID lookup now commits the winner before the legacy update starts.
+	winner, _, err := illRepo.GetCachedPeerByDirectoryEntryID(ctx, id, &adapter.MockDirectoryLookupAdapter{})
+	require.NoError(t, err)
+	winner.LoansCount, winner.BorrowsCount = 7, 3
+	winner, err = illRepo.SavePeer(ctx, SavePeerParams(winner))
+	require.NoError(t, err)
+	entry := adapter.DirectoryEntry{
+		Name: "Refreshed", CustomData: dirapi.Entry{Id: &id, Name: "Refreshed"},
+		Symbols: []string{symbol}, BranchSymbols: []string{branch},
+	}
+	// Updating the legacy row really violates the UUID index; recovery must
+	// happen after rollback, without retrying on the same local peer ID.
+	refreshed, err := repo.refreshExistingPeer(ctx, legacy, entry)
+	require.NoError(t, err)
+	require.Equal(t, winner.ID, refreshed.ID)
+	require.Equal(t, winner.LoansCount, refreshed.LoansCount)
+	require.Equal(t, winner.BorrowsCount, refreshed.BorrowsCount)
+	stored, err := illRepo.GetPeerBySymbol(ctx, symbol)
+	require.NoError(t, err)
+	require.Equal(t, refreshed, stored)
+	branches, err := illRepo.GetBranchSymbolsByPeerId(ctx, winner.ID)
+	require.NoError(t, err)
+	require.Equal(t, []BranchSymbol{{SymbolValue: branch, PeerID: winner.ID}}, branches)
+	old, err := illRepo.GetPeerById(ctx, legacy.ID)
+	require.NoError(t, err)
+	require.Equal(t, legacy, old)
+	var count int
+	require.NoError(t, repo.Pool.QueryRow(ctx, "SELECT count(*) FROM peer WHERE custom_data ->> 'id' = $1", id.String()).Scan(&count))
+	require.Equal(t, 1, count)
 }
