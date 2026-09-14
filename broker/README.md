@@ -75,68 +75,102 @@ Note that for all modes, the broker attaches Directory information about the sup
 
 Configuration is provided via environment variables:
 
-| Name                         | Description                                                                             | Default value                             |
-|------------------------------|-----------------------------------------------------------------------------------------|-------------------------------------------|
-| `HTTP_PORT`                  | Server port                                                                             | `8081`                                    |
-| `DB_TYPE`                    | Database type                                                                           | `postgres`                                |
-| `DB_USER`                    | Database user                                                                           | `crosslink`                               |
-| `DB_PASSWORD`                | Database password                                                                       | `crosslink`                               |
-| `DB_HOST`                    | Database host                                                                           | `localhost`                               |
-| `DB_DATABASE`                | Database name                                                                           | `crosslink`                               |
-| `DB_PORT`                    | Database port                                                                           | `25432`                                   |
-| `DB_SCHEMA`                  | Database schema to use                                                                  | `crosslink_broker`                        |
-| `DB_PROVISION`               | Should app create DB role/schema (`true`/`false`)                                       | `false`                                   |
-| `DB_MIGRATE`                 | Should app run DB migrations (`true`/`false`)                                           | `true`                                    |
-| `DB_EXPLAIN_ANALYZE`         | Whether to run `EXPLAIN ANALYZE` on patron requests limited by CQL                      | `false`                                   |
-| `LOG_LEVEL`                  | Log level: `ERROR`, `WARN`, `INFO`, `DEBUG`                                             | `INFO`                                    |
-| `ENABLE_JSON_LOG`            | Should JSON log format be enabled                                                       | `false`                                   |
-| `BROKER_MODE`                | Default broker mode if not configured for a peer: `opaque` or `transparent`             | `opaque`                                  |
-| `BROKER_SYMBOL`              | Symbol for the broker when in the `opaque` mode                                         | `ISIL:BROKER`                             |
-| `REQ_AGENCY_INFO`            | Should `request/requestingAgencyInfo` be populated from Directory                       | `true`                                    |
-|                              | Deprecated: use requester `illConfig.includeRequestingAgencyInfo`.                      |                                           |
-| `SUPPLIER_INFO`              | Should `request/supplierInfo` be populated from Directory                               | `true`                                    |
-|                              | Deprecated: use supplier `illConfig.includeSupplierInfo`.                               |                                           |
-| `RETURN_INFO`                | Should `returnInfo` be populated from Directory for supplier `Loaned` message           | `true`                                    |
-|                              | Deprecated: use supplier `illConfig.includeReturnInfo`.                                 |                                           |
-| `VENDOR_NOTE`                | Should `note` field be prepended with `Vendor: {vendor}` text                           | `true`                                    |
-|                              | Deprecated: use requester `illConfig.includeVendorNote`.                                |                                           |
-| `OFFERED_COSTS`              | Should `deliveryCosts` be transferred to `offeredCosts` for ReShare vendor requesters   | `false`                                   |
-|                              | Deprecated: use requester `illConfig.useOfferedCosts`.                                  |                                           |
-| `NOTE_FIELD_SEP`             | Separator for fields (e.g. Vendor) prepended to the note                                | `, `                                      |
-|                              | Deprecated: use recipient `illConfig.noteFieldSeparator`.                               |                                           |
-| `CLIENT_DELAY`               | Delay duration for outgoing ISO18626 messages                                           | `0ms`                                     |
-| `SHUTDOWN_DELAY`             | Delay duration for graceful shutdown (in-flight connections)                            | `15s`                                     |
-| `MAX_MESSAGE_SIZE`           | Max accepted ISO18626 message size                                                      | `100KB`                                   |
-| `HOLDINGS_ADAPTER`           | Holdings lookup method: `mock`, `sru` or `consortium`                                   | `mock`                                    |
-| `HOLDINGS_SRU_URL`           | Comma separated list of URLs when `HOLDINGS_ADAPTER` is `sru`                           | `http://localhost:8081/sru`               |
-| `HOLDINGS_ISXN_LOOKUP`       | Whether to use ISBN/ISSN lookup for `sru` method                                        | `false`                                   |
-| `HOLDINGS_FORMAT`            | Parser for SRU holdings: `reservoir`, `marc`, `opac` or `MARC-21plus-1`                 | `reservoir`                               |
-| `CONSORTIUM_SYMBOL`          | Designates peer for which configuration is used for consortium. At this time, it is     | (empty value)                             |
-|                              | used when `HOLDINGS_ADAPTER` = `consortium`.                                            |                                           |
-| `DIRECTORY_ADAPTER`          | Directory lookup method: `mock` or `api`                                                | `mock`                                    |
-| `DIRECTORY_API_URL`          | Comma separated list of URLs when `DIRECTORY_ADAPTER` is `api`                          | `http://localhost:8086/directory/entries`     |
-| `AVAILABILITY_ADAPTER`       | Availability adapter: `mock` , `zoom`, `metaproxy`.                                     | `zoom`                                    |
-|                              | see [Building with native extensions (CGO)](#building-with-native-extensions-cgo)       |                                           |
-| `METAPROXY_URL`              | Metaproxy URL when `AVAILABILITY_ADAPTER` = `metaproxy`                                 | (empty value)                             |
-| `PEER_REFRESH_INTERVAL`      | Peer refresh interval (via Directory lookup)                                            | `5m`                                      |
-| `MOCK_PEER_URL`              | Mocked peer URLs value when `DIRECTORY_ADAPTER` is `mock`                               | `http://localhost:19083/iso18626`         |
-| `MOCK_PICKUP_INSTITUTION_SYMBOL` | Institution symbol owning synthetic pickup locations in mock directory mode; use this as the requester symbol for selected pickup locations | `ISIL:MOCK` |
-| `API_PAGE_SIZE`              | Default value for the `limit` query parameter when paging the API                       | `10`                                      |
-| `TENANT_TO_SYMBOL`           | Pattern to map tenant to `requesterSymbol` when accessing the API via Okapi,            | (empty value)                             |
-|                              | the `{tenant}` token is replaced by the `X-Okapi-Tenant` header value.                  |                                           |
-|                              | If pattern is exactly `directory` the symbol will be obtained by directory lookup.      |                                           |
-| `SUPPLIER_PATRON_PATTERN`    | Pattern used to create patron ID when receiving Request on supplier side                | `%v_user`                                 |
-|                              | Deprecated: use supplier `illConfig.supplierPatronPattern`.                             |                                           |
-| `LANGUAGE`                   | Language parameter used for ts_vector search in DB                                      | `english`                                 |
-| `SCHEDULER_RETRY_DELAY`      | Delay for rescheduling failed scheduled tasks and fallback poll interval in `waitUntil` | `5m`                                      |
-| `SMTP_HOST`                  | SMTP server host for sending emails, if not configured all email tasks will fail        | (empty value)                             |
-| `SMTP_PORT`                  | SMTP server port                                                                        | `2525`                                    |
-| `SMTP_USERNAME`              | Username for SMTP authentication                                                        | (empty value)                             |
-| `SMTP_PASSWORD`              | Password for SMTP authentication                                                        | (empty value)                             |
-| `BATCH_PULLSLIP_MAX_COUNT`   | Max count of Patron request to include in pullslip batch                                | `100`                                     |
-| `BATCH_ACTION_RUN_RETENTION` | Number of batch action events to retain. Set to 0 to disable retention cleanup.         | `5`                                       |
+| Name                             | Description                                        | Default value                             |
+|----------------------------------|----------------------------------------------------|-------------------------------------------|
+| `HTTP_PORT`                      | Server port                                        | `8081`                                    |
+| `DB_TYPE`                        | Database type                                      | `postgres`                                |
+| `DB_USER`                        | Database user                                      | `crosslink`                               |
+| `DB_PASSWORD`                    | Database password                                  | `crosslink`                               |
+| `DB_HOST`                        | Database host                                      | `localhost`                               |
+| `DB_DATABASE`                    | Database name                                      | `crosslink`                               |
+| `DB_PORT`                        | Database port                                      | `25432`                                   |
+| `DB_SCHEMA`                      | Database schema to use                             | `crosslink_broker`                        |
+| `DB_PROVISION`                   | Should app create DB role/schema (`true`/`false`)  | `false`                                   |
+| `DB_MIGRATE`                     | Should app run DB migrations (`true`/`false`)      | `true`                                    |
+| `DB_EXPLAIN_ANALYZE`             | Whether to run `EXPLAIN ANALYZE` on patron         | `false`                                   |
+|                                  | requests limited by CQL                            |                                           |
+| `LOG_LEVEL`                      | Log level: `ERROR` , `WARN` , `INFO` , `DEBUG`     | `INFO`                                    |
+| `ENABLE_JSON_LOG`                | Should JSON log format be enabled                  | `false`                                   |
+| `BROKER_MODE`                    | Default broker mode if not configured for a peer:  | `opaque`                                  |
+|                                  | `opaque` or `transparent`                          |                                           |
+| `BROKER_SYMBOL`                  | Symbol for the broker when in the `opaque` mode    | `ISIL:BROKER`                             |
+| `REQ_AGENCY_INFO`                | Should `request/requestingAgencyInfo` be populated | `true`                                    |
+|                                  | from Directory Deprecated: use requester           |                                           |
+|                                  | `illConfig.includeRequestingAgencyInfo` .          |                                           |
+| `SUPPLIER_INFO`                  | Should `request/supplierInfo` be populated from    | `true`                                    |
+|                                  | Directory Deprecated: use supplier                 |                                           |
+|                                  | `illConfig.includeSupplierInfo` .                  |                                           |
+| `RETURN_INFO`                    | Should `returnInfo` be populated from Directory    | `true`                                    |
+|                                  | for supplier `Loaned` message Deprecated: use      |                                           |
+|                                  | supplier `illConfig.includeReturnInfo` .           |                                           |
+| `VENDOR_NOTE`                    | Should `note` field be prepended with              | `true`                                    |
+|                                  | `Vendor: {vendor}` text Deprecated: use requester  |                                           |
+|                                  | `illConfig.includeVendorNote` .                    |                                           |
+| `OFFERED_COSTS`                  | Should `deliveryCosts` be transferred to           | `false`                                   |
+|                                  | `offeredCosts` for ReShare vendor requesters       |                                           |
+|                                  | Deprecated: use requester                          |                                           |
+|                                  | `illConfig.useOfferedCosts` .                      |                                           |
+| `NOTE_FIELD_SEP`                 | Separator for fields (e.g. Vendor) prepended to    | `, `                                      |
+|                                  | the note Deprecated: use recipient                 |                                           |
+|                                  | `illConfig.noteFieldSeparator` .                   |                                           |
+| `CLIENT_DELAY`                   | Delay duration for outgoing ISO18626 messages      | `0ms`                                     |
+| `SHUTDOWN_DELAY`                 | Delay duration for graceful shutdown (in-flight    | `15s`                                     |
+|                                  | connections)                                       |                                           |
+| `MAX_MESSAGE_SIZE`               | Max accepted ISO18626 message size                 | `100KB`                                   |
+| `HOLDINGS_ADAPTER`               | Holdings lookup method: `mock` , `sru` or          | `mock`                                    |
+|                                  | `consortium`                                       |                                           |
+| `HOLDINGS_SRU_URL`               | Comma separated list of URLs when                  | `http://localhost:8081/sru`               |
+|                                  | `HOLDINGS_ADAPTER` is `sru`                        |                                           |
+| `HOLDINGS_ISXN_LOOKUP`           | Whether to use ISBN/ISSN lookup for `sru` method   | `false`                                   |
+| `HOLDINGS_FORMAT`                | Parser for SRU holdings: `reservoir` , `marc` ,    | `reservoir`                               |
+|                                  | `opac` or `MARC-21plus-1`                          |                                           |
+| `CONSORTIUM_SYMBOL`              | Designates peer for which configuration is used    | (empty value)                             |
+|                                  | for consortium. At this time, it is used when      |                                           |
+|                                  | `HOLDINGS_ADAPTER` = `consortium` .                |                                           |
+| `DIRECTORY_ADAPTER`              | Directory lookup method: `mock` or `api`           | `mock`                                    |
+| `DIRECTORY_API_URL`              | Comma separated list of URLs when                  | `http://localhost:8086/directory/entries` |
+|                                  | `DIRECTORY_ADAPTER` is `api`                       |                                           |
+| `AVAILABILITY_ADAPTER`           | Availability adapter: `mock` , `zoom` ,            | `zoom`                                    |
+|                                  | `metaproxy` . see                                  |                                           |
+|                                  | [Building with native extensions (CGO)][cgo]       |                                           |
+| `METAPROXY_URL`                  | Metaproxy URL when `AVAILABILITY_ADAPTER` =        | (empty value)                             |
+|                                  | `metaproxy`                                        |                                           |
+| `PEER_REFRESH_INTERVAL`          | Peer refresh interval (via Directory lookup)       | `5m`                                      |
+| `MOCK_PEER_URL`                  | Mocked peer URLs value when `DIRECTORY_ADAPTER` is | `http://localhost:19083/iso18626`         |
+|                                  | `mock`                                             |                                           |
+| `MOCK_PICKUP_INSTITUTION_SYMBOL` | Institution symbol owning synthetic pickup         | `ISIL:MOCK`                               |
+|                                  | locations in mock directory mode; use this as the  |                                           |
+|                                  | requester symbol for selected pickup locations     |                                           |
+| `API_PAGE_SIZE`                  | Default value for the `limit` query parameter when | `10`                                      |
+|                                  | paging the API                                     |                                           |
+| `TENANT_TO_SYMBOL`               | Pattern to map tenant to `requesterSymbol` when    | (empty value)                             |
+|                                  | accessing the API via Okapi, the `{tenant}` token  |                                           |
+|                                  | is replaced by the `X-Okapi-Tenant` header value.  |                                           |
+|                                  | If pattern is exactly `directory` the symbol will  |                                           |
+|                                  | be obtained by directory lookup.                   |                                           |
+| `SUPPLIER_PATRON_PATTERN`        | Pattern used to create patron ID when receiving    | `%v_user`                                 |
+|                                  | Request on supplier side Deprecated: use supplier  |                                           |
+|                                  | `illConfig.supplierPatronPattern` .                |                                           |
+| `LANGUAGE`                       | Language parameter used for ts_vector search in DB | `english`                                 |
+| `SCHEDULER_RETRY_DELAY`          | Delay for rescheduling failed scheduled tasks and  | `5m`                                      |
+|                                  | fallback poll interval in `waitUntil`              |                                           |
+| `SMTP_HOST`                      | SMTP server host for sending emails, if not        | (empty value)                             |
+|                                  | configured all email tasks will fail               |                                           |
+| `SMTP_PORT`                      | SMTP server port                                   | `2525`                                    |
+| `SMTP_USERNAME`                  | Username for SMTP authentication                   | (empty value)                             |
+| `SMTP_PASSWORD`                  | Password for SMTP authentication                   | (empty value)                             |
+| `BATCH_PULLSLIP_MAX_COUNT`       | Max count of Patron request to include in pullslip | `100`                                     |
+|                                  | batch                                              |                                           |
+| `BATCH_ACTION_RUN_RETENTION`     | Number of batch action events to retain. Set to 0  | `5`                                       |
+|                                  | to disable retention cleanup.                      |                                           |
 
-Availability checks are enabled per supplier by the presence of `catalogConfig.sru` or `catalogConfig.zoom` in its Directory entry. Other catalog settings, such as `metadataUpdateMode`, do not enable availability checks. A successful lookup with no holdings skips the supplier and advances the rota. Adapter, lookup, and result-processing failures are recorded as errors but fail open: the selected supplier still receives the request. This prevents a transient catalog failure from being treated as confirmed unavailability.
+[cgo]: #building-with-native-extensions-cgo
+
+Availability checks are enabled per supplier by the presence of `catalogConfig.sru` or `catalogConfig.zoom` in its Directory entry.
+Other catalog settings, such as `metadataUpdateMode`, do not enable availability checks. A successful lookup with no holdings skips
+the supplier and advances the rota.
+Adapter, lookup, and result-processing failures are recorded as errors but fail open: the selected supplier still receives the request.
+This prevents a transient catalog failure from being treated as confirmed unavailability.
 
 # Build
 
