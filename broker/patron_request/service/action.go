@@ -1027,7 +1027,7 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 			continue
 		}
 		if !pickupResolved {
-			pickupLocation, err = a.requesterPickupCode(ctx, pr, lmsAdapter)
+			pickupLocation, err = a.requesterPickupCode(ctx, pr, lmsAdapter, lmsAdapter.AcceptItemUsesPickupLocation())
 			if err != nil {
 				status, result := logActionErrorAndReturnResult(ctx, "Pickup location lookup failed", err)
 				return actionExecutionResult{status: status, result: result, pr: pr}
@@ -1274,7 +1274,7 @@ func (a *PatronRequestActionService) cannotSupplyLocallyBorrowingRequest(ctx com
 func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.ExtendedContext, parentEventID string, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
 	requestID := pr.ID
 	userID := pr.Patron.String
-	pickupLocation, err := a.requesterPickupCode(ctx, pr, lmsAdapter)
+	pickupLocation, err := a.requesterPickupCode(ctx, pr, lmsAdapter, lmsAdapter.RequestItemUsesPickupLocation())
 	if err != nil {
 		status, result := logActionErrorAndReturnResult(ctx, "Pickup location lookup failed", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -2095,13 +2095,19 @@ func (a *PatronRequestActionService) pickupLocationEntry(ctx common.ExtendedCont
 	return dirapi.Entry{}, fmt.Errorf("pickup location %s is not a branch of requester institution %q", id, requesterSymbol)
 }
 
-func (a *PatronRequestActionService) requesterPickupCode(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter) (string, error) {
+func (a *PatronRequestActionService) requesterPickupCode(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, usesPickupLocation bool) (string, error) {
 	if !pr.RequesterPickupLocationID.Valid {
+		if !usesPickupLocation {
+			return "", nil
+		}
 		return lmsAdapter.RequesterPickupLocation(), nil
 	}
 	entry, err := a.pickupLocationEntry(ctx, pr)
 	if err != nil {
 		return "", err
+	}
+	if !usesPickupLocation {
+		return "", nil
 	}
 	if entry.LmsConfig == nil || entry.LmsConfig.RequesterPickupLocation == nil || *entry.LmsConfig.RequesterPickupLocation == "" {
 		return "", fmt.Errorf("pickup location %s has no LMS pickup location code", uuid.UUID(pr.RequesterPickupLocationID.Bytes))

@@ -4684,12 +4684,15 @@ func TestHandleInvokeBorrowerActionCannotSupplyLocally(t *testing.T) {
 
 func TestHandleInvokeBorrowerActionFillLocally(t *testing.T) {
 	tests := []struct {
-		name           string
-		serviceType    iso18626.TypeServiceType
-		manualAdapter  bool
-		selected       bool
-		expectedStatus iso18626.TypeStatus
+		name                string
+		serviceType         iso18626.TypeServiceType
+		manualAdapter       bool
+		disabledRequestItem bool
+		selected            bool
+		expectedStatus      iso18626.TypeStatus
 	}{
+		{name: "manual selected pickup without LMS code", selected: true, manualAdapter: true, serviceType: iso18626.TypeServiceTypeLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
+		{name: "disabled RequestItem selected pickup without LMS code", selected: true, disabledRequestItem: true, serviceType: iso18626.TypeServiceTypeLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
 		{name: "selected pickup", selected: true, serviceType: iso18626.TypeServiceTypeLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
 		{name: "loan", serviceType: iso18626.TypeServiceTypeLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
 		{name: "copy or loan", serviceType: iso18626.TypeServiceTypeCopyOrLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
@@ -4727,11 +4730,18 @@ func TestHandleInvokeBorrowerActionFillLocally(t *testing.T) {
 				parentID := uuid.New()
 				pickupRepo.On("GetCachedPeerByDirectoryEntryID", parentID, mock.Anything).Return(ill_db.Peer{CustomData: dirapi.Entry{Symbols: pickupSymbols("REQ1")}}, "<cached>", nil).Once()
 				entry := dirapi.Entry{Id: &id, Parent: &parentID, Tenant: new("tenant-a"), LmsConfig: &dirapi.LmsConfig{RequesterPickupLocation: &expectedPickup}}
+				if tt.manualAdapter || tt.disabledRequestItem {
+					entry.LmsConfig = nil
+				}
 				pickupRepo.On("GetCachedPeerByDirectoryEntryID", id, mock.Anything).Return(ill_db.Peer{CustomData: entry}, "<cached>", nil).Once()
 			}
 			t.Cleanup(func() { pickupRepo.AssertExpectations(t) })
 			var lmsAdapter lms.LmsAdapter
-			if tt.manualAdapter {
+			if tt.disabledRequestItem {
+				var err error
+				lmsAdapter, err = lms.CreateLmsAdapterNcip(dirapi.LmsConfig{Address: "http://unused.invalid", FromAgency: "MAIN", RequestItemEnabled: new(false)})
+				require.NoError(t, err)
+			} else if tt.manualAdapter {
 				lmsAdapter = &lms.LmsAdapterManual{}
 			} else {
 				adapterMock := &mockLmsAdapter{
@@ -5742,3 +5752,12 @@ func TestHandleInvokeActionReceiveFullyAcceptedRetrySkipsPickupLookup(t *testing
 	pickupRepo.AssertNotCalled(t, "GetCachedPeerByDirectoryEntryID", mock.Anything, mock.Anything)
 	lmsAdapter.AssertExpectations(t)
 }
+
+func (m *MockLmsAdapterLog) RequestItemUsesPickupLocation() bool { return true }
+func (m *MockLmsAdapterLog) AcceptItemUsesPickupLocation() bool  { return true }
+
+func (m *MockLmsAdapterFail) RequestItemUsesPickupLocation() bool { return true }
+func (m *MockLmsAdapterFail) AcceptItemUsesPickupLocation() bool  { return true }
+
+func (m *mockLmsAdapter) RequestItemUsesPickupLocation() bool { return true }
+func (m *mockLmsAdapter) AcceptItemUsesPickupLocation() bool  { return true }

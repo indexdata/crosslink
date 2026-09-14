@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/lms"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
@@ -180,6 +181,44 @@ func TestFillLocallyRejectsInvalidPickupSelection(t *testing.T) {
 			require.Equal(t, events.EventStatusError, result.status)
 			lmsAdapter.AssertNotCalled(t, "RequestItem", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 			pickupRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestPickupCodeRequirementPerOperation(t *testing.T) {
+	for _, tc := range []struct {
+		name                            string
+		config                          dirapi.LmsConfig
+		requestUsesCode, acceptUsesCode bool
+	}{
+		{name: "default", requestUsesCode: true, acceptUsesCode: true},
+		{name: "RequestItem disabled", config: dirapi.LmsConfig{RequestItemEnabled: new(false)}, acceptUsesCode: true},
+		{name: "RequestItem pickup field disabled", config: dirapi.LmsConfig{RequestItemPickupLocationEnabled: new(false)}, acceptUsesCode: true},
+		{name: "AcceptItem disabled", config: dirapi.LmsConfig{AcceptItemEnabled: new(false)}, requestUsesCode: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.config.Address = "http://unused.invalid"
+			tc.config.FromAgency = "MAIN"
+			adapter, err := lms.CreateLmsAdapterNcip(tc.config)
+			require.NoError(t, err)
+			require.Equal(t, tc.requestUsesCode, adapter.RequestItemUsesPickupLocation())
+			require.Equal(t, tc.acceptUsesCode, adapter.AcceptItemUsesPickupLocation())
+			id, parentID := uuid.New(), uuid.New()
+			repo := new(IllRepoMock)
+			repo.On("GetCachedPeerByDirectoryEntryID", id, mock.Anything).Return(ill_db.Peer{CustomData: dirapi.Entry{Id: &id, Parent: &parentID}}, "<cached>", nil).Twice()
+			repo.On("GetCachedPeerByDirectoryEntryID", parentID, mock.Anything).Return(ill_db.Peer{CustomData: dirapi.Entry{Symbols: pickupSymbols("MAIN")}}, "<cached>", nil).Twice()
+			service := PatronRequestActionService{illRepo: repo}
+			pr := pr_db.PatronRequest{RequesterSymbol: pgtype.Text{String: "ISIL:MAIN", Valid: true}, RequesterPickupLocationID: pgtype.UUID{Bytes: id, Valid: true}}
+			for _, usesCode := range []bool{adapter.RequestItemUsesPickupLocation(), adapter.AcceptItemUsesPickupLocation()} {
+				code, err := service.requesterPickupCode(appCtx, pr, adapter, usesCode)
+				if usesCode {
+					require.ErrorContains(t, err, "has no LMS pickup location code")
+				} else {
+					require.NoError(t, err)
+					require.Empty(t, code)
+				}
+			}
+			repo.AssertExpectations(t)
 		})
 	}
 }
