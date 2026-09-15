@@ -1,8 +1,10 @@
 package catalog
 
 import (
+	"context"
 	"testing"
 
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/stretchr/testify/assert"
@@ -11,7 +13,7 @@ import (
 func TestGetAdapterEmpty(t *testing.T) {
 	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
 	peer := ill_db.Peer{}
-	aa, err := creator.GetAdapter(peer)
+	aa, err := creator.GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), peer)
 	assert.NoError(t, err)
 	assert.Nil(t, aa)
 }
@@ -19,7 +21,7 @@ func TestGetAdapterEmpty(t *testing.T) {
 func TestGetAdapterOtherNoConfig(t *testing.T) {
 	creator := NewLookupAdapterCreator("other", "")
 	peer := ill_db.Peer{}
-	aa, err := creator.GetAdapter(peer)
+	aa, err := creator.GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), peer)
 	assert.NoError(t, err)
 	assert.Nil(t, aa)
 }
@@ -67,7 +69,7 @@ func TestGetAdapterBadParser(t *testing.T) {
 			},
 		},
 	}
-	_, err := creator.GetAdapter(peer)
+	_, err := creator.GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), peer)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "must set marc")
 }
@@ -83,7 +85,7 @@ func TestGetAdapterOtherWithConfig(t *testing.T) {
 			},
 		},
 	}
-	_, err := creator.GetAdapter(peer)
+	_, err := creator.GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), peer)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported lookup adapter type: other")
 }
@@ -96,7 +98,7 @@ func TestGetAdapterMetadataOnly(t *testing.T) {
 			CatalogConfig: &dirapi.CatalogConfig{MetadataUpdateMode: &mode},
 		},
 	}
-	aa, err := creator.GetAdapter(peer)
+	aa, err := creator.GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), peer)
 	assert.NoError(t, err)
 	assert.Nil(t, aa)
 }
@@ -112,7 +114,7 @@ func TestGetAdapterMock(t *testing.T) {
 		},
 	}
 	creator := NewLookupAdapterCreator(LookupAdapterMock, "")
-	aa, err := creator.GetAdapter(peer)
+	aa, err := creator.GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), peer)
 	assert.NoError(t, err)
 	assert.IsType(t, &MockLookupAdapter{}, aa)
 }
@@ -128,7 +130,7 @@ func TestGetAdapterZoom(t *testing.T) {
 		},
 	}
 	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
-	aa, err := creator.GetAdapter(peer)
+	aa, err := creator.GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), peer)
 	if !cgoEnabled() {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "requires cgo")
@@ -150,7 +152,7 @@ func TestGetAdapterMetaproxy(t *testing.T) {
 		},
 	}
 	creator := NewLookupAdapterCreator(LookupAdapterMetaproxy, "http://metaproxy.indexdata.com")
-	aa, err := creator.GetAdapter(peer)
+	aa, err := creator.GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), peer)
 	assert.NoError(t, err)
 	assert.IsType(t, &MetaproxyLookupAdapter{}, aa)
 }
@@ -166,7 +168,7 @@ func TestGetAdapterMetaproxyMissingProxy(t *testing.T) {
 		},
 	}
 	creator := NewLookupAdapterCreator(LookupAdapterMetaproxy, "")
-	_, err := creator.GetAdapter(peer)
+	_, err := creator.GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), peer)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "METAPROXY_URL")
 }
@@ -182,7 +184,7 @@ func TestGetAdapterSRU(t *testing.T) {
 		},
 	}
 	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
-	aa, err := creator.GetAdapter(peer)
+	aa, err := creator.GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), peer)
 	assert.NoError(t, err)
 	assert.IsType(t, &SruLookupAdapter{}, aa)
 }
