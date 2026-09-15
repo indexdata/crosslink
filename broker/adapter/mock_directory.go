@@ -78,14 +78,25 @@ func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx common.ExtendedContext, e
 	var rotaInfo RotaInfo
 	rotaInfo.Request.Type = "mock"
 	rotaInfo.Suppliers = make([]SupplierMatch, 0, len(entries))
+	filtered := make([]Supplier, 0, len(entries))
 	for _, sup := range entries {
+		applyHoldingsPolicy(&sup)
+		match := holdingMatchesPolicy(sup)
+		if match {
+			filtered = append(filtered, sup)
+		}
 		rotaInfo.Suppliers = append(rotaInfo.Suppliers, SupplierMatch{
-			Symbol: sup.Symbol,
-			Match:  true,
+			Symbol:             sup.Symbol,
+			Location:           sup.Location,
+			ShelvingLocation:   sup.ShelvingLocation,
+			ItemLoanPolicy:     sup.ItemLoanPolicy,
+			LocationPreference: sup.LocationPreference,
+			ShelvingPreference: sup.ShelvingPreference,
+			Match:              match,
 		})
 	}
 
-	slices.SortFunc(entries, func(a, b Supplier) int {
+	slices.SortFunc(filtered, func(a, b Supplier) int {
 		if a.Local && !b.Local {
 			return -1
 		} else if !a.Local && b.Local {
@@ -93,5 +104,5 @@ func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx common.ExtendedContext, e
 		}
 		return cmp.Compare(a.Ratio, b.Ratio)
 	})
-	return entries, rotaInfo
+	return filtered, rotaInfo
 }

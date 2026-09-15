@@ -243,7 +243,6 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 							ShelvingLocation: holding.ShelvingLocation,
 							ItemLoanPolicy:   holding.ItemLoanPolicy,
 						}
-						applyHoldingsPolicy(&supplier)
 						potentialSuppliers = append(potentialSuppliers, supplier)
 					}
 				}
@@ -294,50 +293,6 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 
 	return events.EventStatusSuccess, &events.EventResult{
 		CustomData: map[string]any{"suppliers": locatedSuppliers, "holdings": holdingsLog, "directory": directoryLog, ROTA_INFO_KEY: rotaInfo},
-	}
-}
-
-func applyHoldingsPolicy(supplier *adapter.Supplier) {
-	policy := supplier.CustomData.HoldingsPolicy
-	if policy == nil {
-		return
-	}
-	if policy.Locations != nil {
-		for _, location := range *policy.Locations {
-			if location.Code == supplier.Location {
-				supplier.LocationPreference = location.SupplyPreference
-				break
-			}
-		}
-	}
-	if policy.ShelvingLocations != nil {
-		for _, shelvingLocation := range *policy.ShelvingLocations {
-			if shelvingLocation.Code == supplier.ShelvingLocation {
-				supplier.ShelvingPreference = shelvingLocation.SupplyPreference
-				break
-			}
-		}
-	}
-	var generalOverride *int
-	var exactOverride *int
-	if policy.LocationPolicies != nil {
-		for i := range *policy.LocationPolicies {
-			locationPolicy := &(*policy.LocationPolicies)[i]
-			if locationPolicy.ShelvingLocationCode != supplier.ShelvingLocation {
-				continue
-			}
-			if locationPolicy.LocationCode == nil {
-				generalOverride = &locationPolicy.SupplyPreference
-			} else if *locationPolicy.LocationCode == supplier.Location {
-				exactOverride = &locationPolicy.SupplyPreference
-			}
-		}
-	}
-	if exactOverride != nil {
-		// A location/shelving pair is more specific than an all-locations shelving override.
-		supplier.ShelvingPreference = *exactOverride
-	} else if generalOverride != nil {
-		supplier.ShelvingPreference = *generalOverride
 	}
 }
 
