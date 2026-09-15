@@ -96,12 +96,43 @@ func TestFallbackAndProfileOnly(t *testing.T) {
 	require.Nil(t, e.LMS)
 	require.Nil(t, e.Catalog.Zoom)
 }
+func TestLegacyParserPrecedence(t *testing.T) {
+	for _, profile := range []string{"Generic", "Koha", "Alma"} {
+		for _, tc := range []struct {
+			name, holdings, parser, syntax string
+		}{
+			{"marc first", `"marc":{},"opac":{"availabilityRule":"bad"},"reservoir":{},"marc21plus1":{}`, "marc", "xml"},
+			{"opac second", `"opac":{},"reservoir":{},"marc21plus1":{}`, "opac", "opac"},
+			{"reservoir third", `"reservoir":{},"marc21plus1":{}`, "reservoir", "xml"},
+			{"marc21plus1 last", `"marc21plus1":{}`, "marc21plus1", "xml"},
+		} {
+			t.Run(profile+"/"+tc.name, func(t *testing.T) {
+				raw := entry(t, `{"catalogConfig":{"profile":"`+profile+`","zoom":{"address":"catalog:210"},"holdingsFormat":{`+tc.holdings+`}}}`)
+				before, err := json.Marshal(raw)
+				require.NoError(t, err)
+				e, err := Resolve(raw)
+				require.NoError(t, err)
+				h := asObject(e.Catalog.HoldingsFormat)
+				require.Len(t, h, 1)
+				require.Contains(t, h, tc.parser)
+				if profile != "Generic" {
+					require.Equal(t, tc.syntax, (*e.Catalog.Zoom.Options)["preferredRecordSyntax"])
+				}
+				if profile == "Koha" && tc.parser == "marc" {
+					require.Equal(t, "952", *e.Catalog.HoldingsFormat.Marc.MainField)
+				}
+				after, err := json.Marshal(raw)
+				require.NoError(t, err)
+				require.JSONEq(t, string(before), string(after))
+			})
+		}
+	}
+}
 func TestValidation(t *testing.T) {
 	for _, data := range []string{
 		`{"lmsConfig":{"vendor":"WMS"}}`, `{"catalogConfig":{"profile":"Aleph"}}`, `{"lmsConfig":{"vendor":"bad"}}`,
 		`{"lmsConfig":{"vendor":"Sierra","address":"x"}}`,
 		`{"catalogConfig":{"profile":"Alma","zoom":{"address":""}}}`,
-		`{"catalogConfig":{"profile":"Alma","holdingsFormat":{"marc":{},"opac":{}}}}`,
 		`{"catalogConfig":{"profile":"Koha","holdingsFormat":{"marc":{"availability":[{"operator":"equals","subField":"7"}]}}}}`,
 		`{"catalogConfig":{"profile":"Alma","holdingsFormat":{"opac":{"availabilityRule":"bad"}}}}`,
 	} {

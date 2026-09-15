@@ -88,10 +88,14 @@ func Resolve(entry dirapi.Entry) (*Effective, error) {
 	merge(c, builtins[profile].Catalog, "catalogConfig", profile, e.Origins)
 	// Switching parser replaces the entire profile parser, including its rules.
 	if h, ok := rawC["holdingsFormat"].(object); ok && len(h) > 0 {
-		if len(h) != 1 {
-			return nil, fmt.Errorf("catalog profile %s: holdingsFormat must select exactly one parser", profile)
-		}
-		for parser := range h {
+		// Directory records may contain multiple parsers. Preserve legacy precedence
+		// and discard unused parsers before merging defaults or validating settings.
+		for _, parser := range []string{"marc", "opac", "reservoir", "marc21plus1"} {
+			config, present := h[parser]
+			if !present || config == nil {
+				continue
+			}
+			rawC["holdingsFormat"] = object{parser: config}
 			if defaults, ok := c["holdingsFormat"].(object); ok {
 				if _, same := defaults[parser]; !same {
 					delete(c, "holdingsFormat")
@@ -102,6 +106,7 @@ func Resolve(entry dirapi.Entry) (*Effective, error) {
 					}
 				}
 			}
+			break
 		}
 	}
 	// An empty legacy holdings object means the existing generic default.
