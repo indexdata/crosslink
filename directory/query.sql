@@ -26,7 +26,11 @@ SELECT * FROM entries WHERE parent = @parent;
 SELECT pg_advisory_xact_lock(hashtextextended('directoryish:consortium-entry', 0));
 
 -- name: LockEntryImportKey :exec
-SELECT pg_advisory_xact_lock(hashtextextended('directoryish:entry:' || @authority::text || ':' || @symbol::text, 0));
+SELECT pg_advisory_xact_lock(hashtextextended(
+  'directoryish:entry:' || octet_length(@authority::text)::text || ':' || @authority::text ||
+  ':' || octet_length(@symbol::text)::text || ':' || @symbol::text,
+  0
+));
 
 -- name: CreateEntry :one
 INSERT INTO entries (

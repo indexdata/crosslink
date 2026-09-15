@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/directory/app"
+	"github.com/indexdata/crosslink/directory/db"
 	importdb "github.com/indexdata/crosslink/directory/import/db"
 	"github.com/indexdata/crosslink/directory/import/model"
 	"github.com/jackc/pgx/v5"
@@ -98,6 +99,31 @@ func TestImportBusinessKeyConstraints(t *testing.T) {
 
 	_, err = testPool.Exec(ctx, `INSERT INTO networks (consortium, name) VALUES ($1, E'\t\n')`, consortiumID)
 	requirePgCode(t, err, "23514")
+}
+
+func TestEntryImportAdvisoryLockDistinguishesAmbiguousSymbolRefs(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	firstTx, err := testPool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = firstTx.Rollback(context.Background()) }()
+	require.NoError(t, db.New(firstTx).LockEntryImportKey(ctx, db.LockEntryImportKeyParams{
+		Authority: "A:B",
+		Symbol:    "C",
+	}))
+
+	secondTx, err := testPool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = secondTx.Rollback(context.Background()) }()
+	lockCtx, cancelLock := context.WithTimeout(ctx, time.Second)
+	defer cancelLock()
+
+	err = db.New(secondTx).LockEntryImportKey(lockCtx, db.LockEntryImportKeyParams{
+		Authority: "A",
+		Symbol:    "B:C",
+	})
+
+	require.NoError(t, err)
 }
 
 func TestImportEntryCreatesCompleteAggregateWithGeneratedIDs(t *testing.T) {
@@ -234,8 +260,10 @@ func TestImportEntryLocksAndRevalidatesSecondarySymbols(t *testing.T) {
 	blocker, err := testPool.Begin(ctx)
 	require.NoError(t, err)
 	defer func() { _ = blocker.Rollback(ctx) }()
-	_, err = blocker.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('directoryish:entry:ISIL:SHARED', 0))`)
-	require.NoError(t, err)
+	require.NoError(t, db.New(blocker).LockEntryImportKey(ctx, db.LockEntryImportKeyParams{
+		Authority: secondary.Authority,
+		Symbol:    secondary.Symbol,
+	}))
 
 	aggregate := minimalEntryAggregate("IMPORTED", "Institution")
 	aggregate.Data.Symbols = append(aggregate.Data.Symbols, secondary)
@@ -627,6 +655,32 @@ func TestImportTierConflictPoliciesAndUpdateReplacesAssignments(t *testing.T) {
 	require.Equal(t, []model.SymbolRef{second}, tierAssignments(t, id))
 }
 
+func TestExistingTierConflictPolicyPrecedesMissingAssignmentValidation(t *testing.T) {
+	for _, policy := range []model.ConflictPolicy{model.ConflictPolicySkip, model.ConflictPolicyFail} {
+		t.Run(string(policy), func(t *testing.T) {
+			repo, consortium, first, _ := importRepoFixture(t)
+			aggregate := model.TierAggregate{
+				Key:  model.TierKey{Consortium: consortium, Name: "Loan"},
+				Data: model.TierData{Level: "standard", Type: "loan", Entries: []model.SymbolRef{first}},
+			}
+			_, err := repo.ImportTier(context.Background(), aggregate, model.ConflictPolicyFail)
+			require.NoError(t, err)
+			aggregate.Data.Entries = []model.SymbolRef{{Authority: "ISIL", Symbol: "MISSING"}}
+
+			result, err := repo.ImportTier(context.Background(), aggregate, policy)
+
+			if policy == model.ConflictPolicySkip {
+				require.NoError(t, err)
+				require.Equal(t, model.OutcomeSkipped, result.Outcome)
+				require.Contains(t, result.Diagnostic, "already exists")
+				return
+			}
+			require.ErrorContains(t, err, "already exists")
+			require.NotContains(t, err.Error(), "does not exist")
+		})
+	}
+}
+
 func TestConcurrentEntryAndTierImportsUseSameEntryLockOrder(t *testing.T) {
 	resetImportDatabase(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -745,6 +799,38 @@ func TestImportNetworkConflictPoliciesAndUpdateReplacesAssignments(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, id, networkIDByKey(t, consortium, "Main"))
 	require.Equal(t, []model.NetworkAssignment{{SymbolRef: second, Priority: 2}}, networkAssignments(t, id))
+}
+
+func TestExistingNetworkConflictPolicyPrecedesMissingAssignmentValidation(t *testing.T) {
+	for _, policy := range []model.ConflictPolicy{model.ConflictPolicySkip, model.ConflictPolicyFail} {
+		t.Run(string(policy), func(t *testing.T) {
+			repo, consortium, first, _ := importRepoFixture(t)
+			aggregate := model.NetworkAggregate{
+				Key: model.NetworkKey{Consortium: consortium, Name: "Main"},
+				Data: model.NetworkData{Entries: []model.NetworkAssignment{{
+					SymbolRef: first,
+					Priority:  1,
+				}}},
+			}
+			_, err := repo.ImportNetwork(context.Background(), aggregate, model.ConflictPolicyFail)
+			require.NoError(t, err)
+			aggregate.Data.Entries = []model.NetworkAssignment{{
+				SymbolRef: model.SymbolRef{Authority: "ISIL", Symbol: "MISSING"},
+				Priority:  1,
+			}}
+
+			result, err := repo.ImportNetwork(context.Background(), aggregate, policy)
+
+			if policy == model.ConflictPolicySkip {
+				require.NoError(t, err)
+				require.Equal(t, model.OutcomeSkipped, result.Outcome)
+				require.Contains(t, result.Diagnostic, "already exists")
+				return
+			}
+			require.ErrorContains(t, err, "already exists")
+			require.NotContains(t, err.Error(), "does not exist")
+		})
+	}
 }
 
 func TestConcurrentEntryAndNetworkImportsUseSameEntryLockOrder(t *testing.T) {
