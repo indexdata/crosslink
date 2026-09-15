@@ -55,7 +55,7 @@ records. WMS and Aleph remain unsupported and have no built-in files.
 | Generic | Existing MARC parser (852: location b, shelving c, call number h, item p, restricted r); existing PQF or configured CQL queries | Existing NCIP 2 behavior: Page, Item scope, pickup enabled |
 | Alma | OPAC; nonempty local location and availableNow value 1; item ID and availableThru loan policy | NCIP 2 |
 | Sierra | OPAC; publicNote exactly AVAILABLE, CHECK SHELVES, or CHECK SHELF; localLocation supplies both location and shelving; no item ID or loan policy | NCIP 2; Hold, Title scope; Sierra bib-ID normalization |
-| Koha | MARCXML; one candidate per 952; b location, c shelving, o call number; 7 must equal 0 and q must be absent; no item ID | NCIP 2 with XML namespace disabled |
+| Koha | MARC holdings (ZOOM requests `usmarc`, converted to XML for parsing); one candidate per 952; b location, c shelving, o call number; 7 must equal 0 and q must be absent; no item ID | NCIP 2 with XML namespace disabled |
 | FOLIO | Alma OPAC mappings plus temporaryLocation as temporary shelving location | NCIP 2; Page; Item scope (Title can be configured); pickup enabled when a location is supplied |
 
 WMS and Aleph are reserved enum values for follow-up work. Selecting either
@@ -67,11 +67,20 @@ mappings (`rec.id`, `isbn`, `issn`, `title`). Each query template can be overrid
 an empty template disables that field. Metadata uses the existing MARC mappings
 and can extract the bibliographic MARC record embedded in OPAC.
 
-OPAC profiles request ZOOM `preferredRecordSyntax: opac`; Koha requests `xml`
-(MARCXML). SRU requests use `opac` or `marcxml`, respectively. Explicit record
-syntax/schema settings take precedence. The metaproxy adapter uses the OPAC schema
-when its ZOOM settings select OPAC. Changing the holdings parser changes the
-default syntax to match; explicit syntax options remain authoritative.
+Record defaults follow the effective holdings parser, including for Generic:
+
+| Holdings parser | Native ZOOM `preferredRecordSyntax` | SRU `recordSchema` |
+| --- | --- | --- |
+| `marc` (including Koha) | `usmarc` | `marcxml` |
+| `opac` | `opac` | `opac` |
+| `reservoir` | `usmarc` | `marcxml` |
+| `marc21plus1` | `xml` | `marcxml` |
+
+For Koha, native ZOOM requests USMARC over Z39.50 and converts the returned records
+to MARCXML before parsing the holdings. The metaproxy adapter requests SRU schema
+`opac` when its ZOOM settings select OPAC, and `marcxml` otherwise; backend syntax
+conversion is controlled by the proxy configuration. Changing the holdings parser
+changes the default syntax to match. Explicit syntax/schema settings take precedence.
 
 Every returned record within existing adapter limits is processed. Available
 holdings are concatenated across records. Lookup stops at the first query with
