@@ -346,3 +346,10 @@ func (r *MockIllRepositoryError) GetExclusiveBranchSymbolsByPeerId(ctx common.Ex
 func (r *MockIllRepositoryError) GetLocatedSupplierByIdForUpdate(ctx common.ExtendedContext, id string) (ill_db.LocatedSupplier, error) {
 	return ill_db.LocatedSupplier{}, errors.New("DB error")
 }
+
+func (r *MockIllRepositorySuccess) GetCachedPeerByDirectoryEntryID(ctx common.ExtendedContext, id uuid.UUID, directoryAdapter adapter.DirectoryLookupAdapter) (ill_db.Peer, string, error) {
+	return ill_db.Peer{}, "", nil
+}
+func (r *MockIllRepositoryError) GetCachedPeerByDirectoryEntryID(ctx common.ExtendedContext, id uuid.UUID, directoryAdapter adapter.DirectoryLookupAdapter) (ill_db.Peer, string, error) {
+	return ill_db.Peer{}, "", errors.New("DB error")
+}

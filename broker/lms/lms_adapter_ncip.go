@@ -310,7 +310,7 @@ func (l *LmsAdapterNcip) RequestItem(
 		return nil, fmt.Errorf("missing request ID for RequestItem")
 	}
 	var pickupLocationField *ncip.SchemeValuePair
-	if pickupLocation != "" && (l.config.RequestItemPickupLocationEnabled == nil || *l.config.RequestItemPickupLocationEnabled) {
+	if pickupLocation != "" && l.RequestItemUsesPickupLocation() {
 		pickupLocationField = &ncip.SchemeValuePair{Text: pickupLocation}
 	}
 	var userIdField *ncip.UserId
@@ -501,4 +501,13 @@ func (l *LmsAdapterNcip) RequesterPickupLocation() string {
 		return *l.config.RequesterPickupLocation
 	}
 	return "Main Library"
+}
+
+func (l *LmsAdapterNcip) RequestItemUsesPickupLocation() bool {
+	return (l.config.RequestItemEnabled == nil || *l.config.RequestItemEnabled) &&
+		(l.config.RequestItemPickupLocationEnabled == nil || *l.config.RequestItemPickupLocationEnabled)
+}
+
+func (l *LmsAdapterNcip) AcceptItemUsesPickupLocation() bool {
+	return l.config.AcceptItemEnabled == nil || *l.config.AcceptItemEnabled
 }

@@ -137,7 +137,7 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, *newPr.Id, foundPr.Id)
 	assert.True(t, foundPr.State != "")
 	assert.Equal(t, "default", foundPr.StateModel)
-	assert.Equal(t, string(prservice.SideBorrowing), foundPr.Side)
+	assert.Equal(t, proapi.PatronRequestSide(prservice.SideBorrowing), foundPr.Side)
 	if !assert.NotNil(t, foundPr.RequesterSymbol) {
 		t.FailNow()
 	}
@@ -573,7 +573,7 @@ func TestActionsToCompleteState(t *testing.T) {
 		assert.NoError(t, err, "failed to unmarshal patron request notifications")
 		return notifications.About.Count > 0
 	})
-	assert.Equal(t, "SENT", *notifications.Items[0].Receipt)
+	assert.Equal(t, proapi.SENT, *notifications.Items[0].Receipt)
 	assert.Equal(t, "Will ship", *notifications.Items[0].Note)
 
 	// Check notification requester side
@@ -598,7 +598,7 @@ func TestActionsToCompleteState(t *testing.T) {
 
 	// Set seen notification
 	receipt := proapi.UpdateNotificationReceipt{
-		Receipt: "SEEN",
+		Receipt: proapi.SEEN,
 	}
 	receiptBytes, err := json.Marshal(receipt)
 	assert.NoError(t, err, "failed to marshal patron request notification")
@@ -614,7 +614,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	})
 	willShipNotification = findNotificationByNote(notifications.Items, forwardedWillShipNote)
 	if assert.NotNil(t, willShipNotification) {
-		assert.Equal(t, "SEEN", *willShipNotification.Receipt)
+		assert.Equal(t, proapi.SEEN, *willShipNotification.Receipt)
 		assert.NotNil(t, willShipNotification.AcknowledgedAt)
 	}
 
@@ -753,7 +753,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	finalWillShipNotification := findNotificationByNote(prNotifications.Items, forwardedWillShipNote)
 	if assert.NotNil(t, finalWillShipNotification) {
 		assert.NotNil(t, finalWillShipNotification.Receipt)
-		assert.Equal(t, "SEEN", *finalWillShipNotification.Receipt)
+		assert.Equal(t, proapi.SEEN, *finalWillShipNotification.Receipt)
 	}
 
 	// Check supplier patron request done
@@ -900,7 +900,7 @@ func TestRejectRetry(t *testing.T) {
 
 	assert.Equal(t, *newPr.Id, foundPr.Id)
 	assert.True(t, foundPr.State != "")
-	assert.Equal(t, string(prservice.SideBorrowing), foundPr.Side)
+	assert.Equal(t, proapi.PatronRequestSide(prservice.SideBorrowing), foundPr.Side)
 	assert.Equal(t, *newPr.RequesterSymbol, *foundPr.RequesterSymbol)
 	assert.Nil(t, foundPr.SupplierSymbol)
 	assert.Equal(t, *newPr.Patron, *foundPr.Patron)
@@ -1024,7 +1024,7 @@ func TestAcceptRetry(t *testing.T) {
 
 	assert.Equal(t, id, foundPr.Id)
 	assert.True(t, foundPr.State != "")
-	assert.Equal(t, string(prservice.SideBorrowing), foundPr.Side)
+	assert.Equal(t, proapi.PatronRequestSide(prservice.SideBorrowing), foundPr.Side)
 	assert.Equal(t, *newPr.RequesterSymbol, *foundPr.RequesterSymbol)
 	assert.Nil(t, foundPr.SupplierSymbol)
 	assert.Equal(t, *newPr.Patron, *foundPr.Patron)
@@ -1668,4 +1668,45 @@ func TestCRUDTemplate(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, int64(0), templates.About.Count)
 	assert.Len(t, templates.Items, 0)
+}
+
+func TestTemplateLabelConflictsReturn409(t *testing.T) {
+	symbol := "ISIL:TMPL" + uuid.NewString()
+	apptest.CreatePeerWithModeAndVendor(t, illRepo, symbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink, dirapi.Entry{}, symbol)
+	path := "/templates?symbol=" + url.QueryEscape(symbol)
+	audience := proapi.TemplateAudiencePatron
+	first := proapi.CreateTemplate{
+		Title:       "First",
+		Purpose:     proapi.Email,
+		ContentType: proapi.Text,
+		Audience:    &audience,
+		Labels:      []string{"shared-label"},
+		Body:        "First body",
+	}
+	firstBytes, err := json.Marshal(first)
+	require.NoError(t, err)
+	httpRequest(t, http.MethodPost, path, firstBytes, http.StatusCreated)
+
+	conflictBody := httpRequest(t, http.MethodPost, path, firstBytes, http.StatusConflict)
+	assert.Contains(t, string(conflictBody), "template labels already exist")
+
+	second := first
+	second.Title = "Second"
+	second.Labels = []string{"second-label"}
+	secondBytes, err := json.Marshal(second)
+	require.NoError(t, err)
+	createdBody := httpRequest(t, http.MethodPost, path, secondBytes, http.StatusCreated)
+	var created proapi.Template
+	require.NoError(t, json.Unmarshal(createdBody, &created))
+
+	updateBytes, err := json.Marshal(proapi.UpdateTemplate{
+		Title:       second.Title,
+		ContentType: second.ContentType,
+		Audience:    &audience,
+		Labels:      first.Labels,
+		Body:        second.Body,
+	})
+	require.NoError(t, err)
+	conflictBody = httpRequest(t, http.MethodPut, "/templates/"+created.Id+"?symbol="+url.QueryEscape(symbol), updateBytes, http.StatusConflict)
+	assert.Contains(t, string(conflictBody), "template labels already exist")
 }

@@ -65,13 +65,14 @@ SET ill_request         = $3,
     next_req_id         = $21,
     prev_req_id         = $22,
     retry_bib_info       = $23,
-    state_model          = $24
+    state_model          = $24,
+    requester_pickup_location_id = $25
 WHERE id = $1 AND created_at = $2 AND (updated_at is null OR updated_at = $18)
 RETURNING sqlc.embed(patron_request);
 
 -- name: CreatePatronRequest :one
-INSERT INTO patron_request (id, created_at, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, items, language, terminal_state, updated_at, ill_response, internal_note, next_req_id, prev_req_id, retry_bib_info, state_model)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+INSERT INTO patron_request (id, created_at, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, items, language, terminal_state, updated_at, ill_response, internal_note, next_req_id, prev_req_id, retry_bib_info, state_model, requester_pickup_location_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
 RETURNING sqlc.embed(patron_request);
 
 -- name: UpdatePatronRequestInternalNote :exec
@@ -99,14 +100,14 @@ SELECT get_next_hrid($1)::TEXT AS hrid;
 INSERT INTO item (id, pr_id, barcode, call_number, title, item_id, lms_request_id, lms_item_id, created_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (id) DO UPDATE
-    SET pr_id       = EXCLUDED.pr_id,
-        barcode = EXCLUDED.barcode,
+    SET barcode = EXCLUDED.barcode,
         call_number = EXCLUDED.call_number,
         title = EXCLUDED.title,
         item_id = EXCLUDED.item_id,
         lms_request_id = EXCLUDED.lms_request_id,
         lms_item_id = EXCLUDED.lms_item_id,
         created_at = EXCLUDED.created_at
+    WHERE item.pr_id = EXCLUDED.pr_id
 RETURNING sqlc.embed(item);
 
 -- name: GetItemById :one
@@ -138,8 +139,7 @@ WHERE id = $1;
 INSERT INTO notification (id, pr_id, from_symbol, to_symbol, direction, kind, note, cost, currency, condition, receipt, created_at, acknowledged_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 ON CONFLICT (id) DO UPDATE
-    SET pr_id           = EXCLUDED.pr_id,
-        from_symbol     = EXCLUDED.from_symbol,
+    SET from_symbol     = EXCLUDED.from_symbol,
         to_symbol       = EXCLUDED.to_symbol,
         direction       = EXCLUDED.direction,
         kind            = EXCLUDED.kind,
@@ -150,6 +150,7 @@ ON CONFLICT (id) DO UPDATE
         receipt         = EXCLUDED.receipt,
         created_at      = EXCLUDED.created_at,
         acknowledged_at = EXCLUDED.acknowledged_at
+    WHERE notification.pr_id = EXCLUDED.pr_id
 RETURNING sqlc.embed(notification);
 
 -- name: GetNotificationById :one

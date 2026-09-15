@@ -3,6 +3,7 @@ package ill_db
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -42,6 +44,7 @@ type IllRepo interface {
 	GetSelectedSupplierForIllTransaction(ctx common.ExtendedContext, illTransId string) (LocatedSupplier, error)
 	GetLocatedSupplierByPeerId(ctx common.ExtendedContext, peerId string) ([]LocatedSupplier, error)
 	GetIllTransactionByRequesterId(ctx common.ExtendedContext, peerId pgtype.Text) ([]IllTransaction, error)
+	GetCachedPeerByDirectoryEntryID(ctx common.ExtendedContext, id uuid.UUID, directoryAdapter adapter.DirectoryLookupAdapter) (Peer, string, error)
 	GetCachedPeersBySymbols(ctx common.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]Peer, string, error)
 	SaveSymbol(ctx common.ExtendedContext, params SaveSymbolParams) (Symbol, error)
 	DeleteSymbolByPeerId(ctx common.ExtendedContext, peerId string) error
@@ -318,6 +321,67 @@ func getSelectedSupplierForIllTransactionForCommon(selSup []LocatedSupplier, ill
 	}
 }
 
+// ErrDirectoryEntryNotFound means a successful directory lookup found no matching entry.
+var ErrDirectoryEntryNotFound = errors.New("directory entry not found")
+
+// GetCachedPeerByDirectoryEntryID shares the peer cache and refresh policy with symbol lookups.
+// Directory UUIDs are stored in CustomData; they are distinct from local peer IDs.
+func (r *PgIllRepo) GetCachedPeerByDirectoryEntryID(ctx common.ExtendedContext, id uuid.UUID, directoryAdapter adapter.DirectoryLookupAdapter) (Peer, string, error) {
+	row, err := r.queries.GetPeerByDirectoryEntryId(ctx, r.GetConnOrTx(), id.String())
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return Peer{}, "<cached>", err
+	}
+	found := err == nil
+	peer := row.Peer
+	if found && !peerNeedsRefresh(peer) {
+		return peer, "<cached>", nil
+	}
+	entries, query, err := directoryAdapter.Lookup(ctx, adapter.DirectoryLookupParams{EntryID: id.String()})
+	if err != nil {
+		return Peer{}, query, err
+	}
+	var matches []adapter.DirectoryEntry
+	for _, entry := range entries {
+		if entry.CustomData.Id != nil && *entry.CustomData.Id == id {
+			if len(matches) > 0 {
+				if !reflect.DeepEqual(matches[0], entry) {
+					return Peer{}, query, fmt.Errorf("directory entry %s: conflicting responses from directory replicas", id)
+				}
+				continue
+			}
+			matches = append(matches, entry)
+		}
+	}
+	if len(entries) == 0 {
+		return Peer{}, query, fmt.Errorf("directory entry %s: %w", id, ErrDirectoryEntryNotFound)
+	}
+	if len(matches) != 1 {
+		return Peer{}, query, fmt.Errorf("directory entry %s: expected one entry, found %d", id, len(matches))
+	}
+	entry := matches[0]
+	if !found {
+		peer, err = r.createNewPeer(ctx, entry)
+	} else {
+		// Direct lookups omit child entries, so retain the cached branch relationships.
+		branches, branchErr := r.GetBranchSymbolsByPeerId(ctx, peer.ID)
+		if branchErr != nil {
+			return Peer{}, query, branchErr
+		}
+		for _, branch := range branches {
+			entry.BranchSymbols = append(entry.BranchSymbols, branch.SymbolValue)
+		}
+		err = r.WithTxFunc(ctx, func(txRepo IllRepo) error {
+			peer, err = txRepo.(*PgIllRepo).updateExistingPeer(ctx, peer, entry)
+			return err
+		})
+	}
+	return peer, query, err
+}
+
+func peerNeedsRefresh(peer Peer) bool {
+	return peer.RefreshPolicy == RefreshPolicyTransaction && time.Now().UTC().After(peer.RefreshTime.Time.Add(PeerRefreshInterval))
+}
+
 func (r *PgIllRepo) GetCachedPeersBySymbols(ctx common.ExtendedContext, lookupSymbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]Peer, string, error) {
 	symbolToPeer, symbolsToFetch := r.mapSymbolsAndFilterStale(ctx, lookupSymbols)
 	if len(symbolsToFetch) == 0 {
@@ -343,25 +407,30 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx common.ExtendedContext, lookupSy
 		var peer Peer
 		for _, sym := range dirEntry.Symbols {
 			peer, err = r.GetPeerBySymbol(ctx, sym)
-			if err == nil { //peer found by one of the dir symbols, we can stop searching
+			if err == nil || !errors.Is(err, pgx.ErrNoRows) {
 				break
 			}
-			if errors.Is(err, pgx.ErrNoRows) {
-				continue
-			}
 		}
-		if err != nil {
-			if !errors.Is(err, pgx.ErrNoRows) { //unlikely DB error, skip the entry
-				ctx.Logger().Warn("failure when reading peer, symbols will be ignored", "symbols", dirEntry.Symbols, "error", err)
-				continue
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return getSliceFromMapInOrder(symbolToPeer, lookupSymbols), query, fmt.Errorf("read peer for symbols %v: %w", dirEntry.Symbols, err)
+		}
+		// Prefer the UUID identity even if a legacy symbol peer was found. A
+		// direct-ID lookup may have cached the directory entry independently.
+		if dirEntry.CustomData.Id != nil {
+			row, lookupErr := r.queries.GetPeerByDirectoryEntryId(ctx, r.GetConnOrTx(), dirEntry.CustomData.Id.String())
+			if lookupErr == nil {
+				peer, err = row.Peer, nil
+			} else if !errors.Is(lookupErr, pgx.ErrNoRows) {
+				return getSliceFromMapInOrder(symbolToPeer, lookupSymbols), query, fmt.Errorf("read directory peer %s: %w", dirEntry.CustomData.Id, lookupErr)
 			}
 		}
 		if err == nil {
-			// peer found locally, must have been stale, update it
-			peer, _ = r.updateExistingPeer(ctx, peer, dirEntry)
+			peer, err = r.refreshExistingPeer(ctx, peer, dirEntry)
 		} else {
-			// no local peer found, create a new one
-			peer, _ = r.createNewPeer(ctx, dirEntry)
+			peer, err = r.createNewPeer(ctx, dirEntry)
+		}
+		if err != nil {
+			return getSliceFromMapInOrder(symbolToPeer, lookupSymbols), query, fmt.Errorf("cache peer for symbols %v: %w", dirEntry.Symbols, err)
 		}
 		// see if the peer was in the refresh list, if so add it to the result
 		for _, sym := range dirEntry.Symbols {
@@ -374,20 +443,90 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx common.ExtendedContext, lookupSy
 	return getSliceFromMapInOrder(symbolToPeer, lookupSymbols), query, nil
 }
 
+// refreshExistingPeer respects the peer's refresh policy while adding discovered
+// associations. It retries against the UUID winner if a direct-ID cache fill
+// committed after the caller's UUID recheck.
+func (r *PgIllRepo) refreshExistingPeer(ctx common.ExtendedContext, peer Peer, dirEntry adapter.DirectoryEntry) (Peer, error) {
+	update := func(target Peer) (Peer, error) {
+		var updated Peer
+		err := r.WithTxFunc(ctx, func(txRepo IllRepo) error {
+			if !peerNeedsRefresh(target) {
+				// A UUID lookup may select a never-refresh or still-fresh peer.
+				// Attach discovered symbols without replacing metadata or removing
+				// existing associations, including when retrying a UUID conflict.
+				updated = target
+				return txRepo.(*PgIllRepo).addPeerAssociations(ctx, target.ID, dirEntry)
+			}
+			var err error
+			updated, err = txRepo.(*PgIllRepo).updateExistingPeer(ctx, target, dirEntry)
+			return err
+		})
+		if err != nil {
+			return Peer{}, err
+		}
+		return updated, nil
+	}
+	updated, err := update(peer)
+	var pgErr *pgconn.PgError
+	if dirEntry.CustomData.Id == nil || !errors.As(err, &pgErr) ||
+		pgErr.Code != "23505" || pgErr.ConstraintName != "peer_directory_entry_id_idx" {
+		return updated, err
+	}
+	// The failed transaction has rolled back. Read the committed winner in a
+	// fresh statement, then retry once with its counters and local identity.
+	winner, lookupErr := r.queries.GetPeerByDirectoryEntryId(ctx, r.GetConnOrTx(), dirEntry.CustomData.Id.String())
+	if lookupErr != nil {
+		return Peer{}, fmt.Errorf("resolve directory peer after cache conflict: %w", errors.Join(err, lookupErr))
+	}
+	return update(winner.Peer)
+}
+
+func (r *PgIllRepo) addPeerAssociations(ctx common.ExtendedContext, peerID string, dirEntry adapter.DirectoryEntry) error {
+	for _, symbol := range dirEntry.Symbols {
+		if _, err := r.SaveSymbol(ctx, SaveSymbolParams{SymbolValue: symbol, PeerID: peerID}); err != nil {
+			return fmt.Errorf("associate symbol %s with peer %s: %w", symbol, peerID, err)
+		}
+	}
+	for _, symbol := range dirEntry.BranchSymbols {
+		if _, err := r.SaveBranchSymbol(ctx, SaveBranchSymbolParams{SymbolValue: symbol, PeerID: peerID}); err != nil {
+			return fmt.Errorf("associate branch symbol %s with peer %s: %w", symbol, peerID, err)
+		}
+	}
+	return nil
+}
+
 func (r *PgIllRepo) createNewPeer(ctx common.ExtendedContext, dirEntry adapter.DirectoryEntry) (Peer, error) {
 	var peer Peer
 	var err error
 	err = r.WithTxFunc(ctx, func(illRepo IllRepo) error {
-		peer, err = illRepo.SavePeer(ctx, SavePeerParams{
-			ID:            uuid.New().String(),
-			Url:           dirEntry.URL,
-			Name:          dirEntry.Name,
-			RefreshPolicy: RefreshPolicyTransaction,
-			RefreshTime:   GetPgNow(),
-			Vendor:        string(dirEntry.Vendor),
-			CustomData:    dirEntry.CustomData,
-			BrokerMode:    string(dirEntry.BrokerMode),
-		})
+		if dirEntry.CustomData.Id != nil {
+			txRepo := illRepo.(*PgIllRepo)
+			row, createErr := txRepo.queries.CreateDirectoryPeer(ctx, txRepo.GetConnOrTx(), CreateDirectoryPeerParams{
+				ID: uuid.NewString(), Name: dirEntry.Name, Url: dirEntry.URL,
+				RefreshPolicy: RefreshPolicyTransaction, RefreshTime: GetPgNow(),
+				Vendor: string(dirEntry.Vendor), BrokerMode: string(dirEntry.BrokerMode), CustomData: dirEntry.CustomData,
+			})
+			if errors.Is(createErr, pgx.ErrNoRows) {
+				// The conflicting insert has committed. A new statement sees that winner,
+				// including when it was created by a concurrent symbol lookup.
+				existing, lookupErr := txRepo.queries.GetPeerByDirectoryEntryId(ctx, txRepo.GetConnOrTx(), dirEntry.CustomData.Id.String())
+				peer, err = existing.Peer, lookupErr
+			} else {
+				peer, err = row.Peer, createErr
+			}
+		} else {
+			peer, err = illRepo.SavePeer(ctx, SavePeerParams{
+				ID:            uuid.New().String(),
+				Url:           dirEntry.URL,
+				Name:          dirEntry.Name,
+				RefreshPolicy: RefreshPolicyTransaction,
+				RefreshTime:   GetPgNow(),
+				Vendor:        string(dirEntry.Vendor),
+				CustomData:    dirEntry.CustomData,
+				BrokerMode:    string(dirEntry.BrokerMode),
+			})
+		}
+
 		if err != nil {
 			ctx.Logger().Warn("could not save peer", "peerId", peer.ID, "symbols", dirEntry.Symbols, "error", err)
 			return err
@@ -474,7 +613,7 @@ func (r *PgIllRepo) mapSymbolsAndFilterStale(ctx common.ExtendedContext, symbols
 				ctx.Logger().Error("failed to read peer", "symbol", sym, "error", err)
 			}
 		} else {
-			if peer.RefreshPolicy == RefreshPolicyTransaction && time.Now().UTC().After(peer.RefreshTime.Time.Add(PeerRefreshInterval)) {
+			if peerNeedsRefresh(peer) {
 				symbolsToFetch = append(symbolsToFetch, sym)
 			} else {
 				symbolToPeer[sym] = peer

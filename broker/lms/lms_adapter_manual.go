@@ -80,3 +80,6 @@ func (l *LmsAdapterManual) ItemLocation() string {
 func (l *LmsAdapterManual) RequesterPickupLocation() string {
 	return ""
 }
+
+func (l *LmsAdapterManual) RequestItemUsesPickupLocation() bool { return false }
+func (l *LmsAdapterManual) AcceptItemUsesPickupLocation() bool  { return false }

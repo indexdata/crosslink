@@ -14,9 +14,13 @@ import (
 	schedoapi "github.com/indexdata/crosslink/broker/scheduler/oapi"
 	sched_service "github.com/indexdata/crosslink/broker/scheduler/service"
 	"github.com/indexdata/crosslink/broker/tenant"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+var errDuplicateBatchActionTitle = errors.New("a batch action with this owner and title already exists")
 
 // SchedulerApiHandler implements schedoapi.ServerInterface.
 type SchedulerApiHandler struct {
@@ -110,6 +114,10 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 		brokerapi.AddBadRequestError(ctx, w, err)
 		return
 	}
+	if create.Title == "" {
+		brokerapi.AddBadRequestError(ctx, w, errors.New("title must not be empty"))
+		return
+	}
 	if !create.ActionName.Valid() {
 		brokerapi.AddBadRequestError(ctx, w, errors.New("unknown actionName: "+string(create.ActionName)))
 		return
@@ -156,12 +164,12 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 			},
 			CustomData: paramsMap,
 		},
-		Title:     toPgText(create.Title),
+		Title:     pgtype.Text{String: create.Title, Valid: true},
 		RunAt:     next,
 		CreatedAt: now,
 	})
 	if err != nil {
-		brokerapi.AddInternalError(ctx, w, err)
+		h.writeScheduledTaskSaveError(ctx, w, err)
 		return
 	}
 
@@ -277,6 +285,10 @@ func (h SchedulerApiHandler) PutBatchActionsId(w http.ResponseWriter, r *http.Re
 		brokerapi.AddBadRequestError(ctx, w, errors.New("batchQuery must not be empty"))
 		return
 	}
+	if update.Title != nil && *update.Title == "" {
+		brokerapi.AddBadRequestError(ctx, w, errors.New("title must not be empty"))
+		return
+	}
 	next, err := sched_service.NextScheduleTime(update.Schedule)
 	if err != nil {
 		brokerapi.AddBadRequestError(ctx, w, err)
@@ -286,7 +298,9 @@ func (h SchedulerApiHandler) PutBatchActionsId(w http.ResponseWriter, r *http.Re
 		task.Schedule = update.Schedule
 		task.RunAt = next
 		task.ActionData.BatchActionData.Selector = update.BatchQuery
-		task.Title = toPgText(update.Title)
+		if update.Title != nil {
+			task.Title = toPgText(update.Title)
+		}
 		if update.ActionParams != nil {
 			task.ActionData.CustomData = *update.ActionParams
 		}
@@ -368,6 +382,15 @@ func validateBatchActionTask(task sched_db.ScheduledTask) error {
 func (h SchedulerApiHandler) writeScheduledTaskMutationError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
 	if errors.Is(err, pgx.ErrNoRows) {
 		brokerapi.AddNotFoundError(w)
+		return
+	}
+	h.writeScheduledTaskSaveError(ctx, w, err)
+}
+
+func (h SchedulerApiHandler) writeScheduledTaskSaveError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+		brokerapi.WriteJsonErrorResponse(w, errDuplicateBatchActionTitle, http.StatusConflict)
 		return
 	}
 	brokerapi.AddInternalError(ctx, w, err)
