@@ -12,6 +12,11 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
+const (
+	tierBusinessKeyUniqueConstraint    = "tiers_consortium_name_unique"
+	networkBusinessKeyUniqueConstraint = "networks_consortium_name_unique"
+)
+
 func (r *PgImportRepo) ImportTier(ctx context.Context, aggregate model.TierAggregate, policy model.ConflictPolicy) (model.RepoResult, error) {
 	if err := aggregate.NormalizeAndValidate(); err != nil {
 		return model.RepoResult{}, err
@@ -222,7 +227,12 @@ func retryableAssignmentImportError(err error) bool {
 	if !errors.As(err, &pgErr) {
 		return false
 	}
-	return pgErr.Code == "40P01" || pgErr.Code == "40001" || pgErr.Code == "55P03"
+	return pgErr.Code == "40P01" ||
+		pgErr.Code == "40001" ||
+		pgErr.Code == "55P03" ||
+		(pgErr.Code == "23505" &&
+			(pgErr.ConstraintName == tierBusinessKeyUniqueConstraint ||
+				pgErr.ConstraintName == networkBusinessKeyUniqueConstraint))
 }
 
 func lockAssignmentEntryRows(ctx context.Context, queries *db.Queries, ids ...uuid.UUID) (map[uuid.UUID]db.Entry, error) {
