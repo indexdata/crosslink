@@ -32,11 +32,11 @@ func TestProfiles(t *testing.T) {
 			switch name {
 			case "Generic":
 				require.Equal(t, "852", *e.Catalog.HoldingsFormat.Marc.MainField)
-				require.Nil(t, e.Catalog.Zoom.Options)
+				require.Equal(t, "usmarc", (*e.Catalog.Zoom.Options)["preferredRecordSyntax"])
 			case "Koha":
 				require.False(t, *e.LMS.NcipNamespaceEnabled)
 				require.Equal(t, "952", *e.Catalog.HoldingsFormat.Marc.MainField)
-				require.Equal(t, "xml", (*e.Catalog.Zoom.Options)["preferredRecordSyntax"])
+				require.Equal(t, "usmarc", (*e.Catalog.Zoom.Options)["preferredRecordSyntax"])
 			case "Sierra":
 				require.Equal(t, "Hold", *e.LMS.RequestItemRequestType)
 				require.Equal(t, "Title", *e.LMS.RequestItemRequestScopeType)
@@ -101,9 +101,9 @@ func TestLegacyParserPrecedence(t *testing.T) {
 		for _, tc := range []struct {
 			name, holdings, parser, syntax string
 		}{
-			{"marc first", `"marc":{},"opac":{"availabilityRule":"bad"},"reservoir":{},"marc21plus1":{}`, "marc", "xml"},
+			{"marc first", `"marc":{},"opac":{"availabilityRule":"bad"},"reservoir":{},"marc21plus1":{}`, "marc", "usmarc"},
 			{"opac second", `"opac":{},"reservoir":{},"marc21plus1":{}`, "opac", "opac"},
-			{"reservoir third", `"reservoir":{},"marc21plus1":{}`, "reservoir", "xml"},
+			{"reservoir third", `"reservoir":{},"marc21plus1":{}`, "reservoir", "usmarc"},
 			{"marc21plus1 last", `"marc21plus1":{}`, "marc21plus1", "xml"},
 		} {
 			t.Run(profile+"/"+tc.name, func(t *testing.T) {
@@ -115,9 +115,7 @@ func TestLegacyParserPrecedence(t *testing.T) {
 				h := asObject(e.Catalog.HoldingsFormat)
 				require.Len(t, h, 1)
 				require.Contains(t, h, tc.parser)
-				if profile != "Generic" {
-					require.Equal(t, tc.syntax, (*e.Catalog.Zoom.Options)["preferredRecordSyntax"])
-				}
+				require.Equal(t, tc.syntax, (*e.Catalog.Zoom.Options)["preferredRecordSyntax"])
 				if profile == "Koha" && tc.parser == "marc" {
 					require.Equal(t, "952", *e.Catalog.HoldingsFormat.Marc.MainField)
 				}
@@ -128,6 +126,32 @@ func TestLegacyParserPrecedence(t *testing.T) {
 		}
 	}
 }
+func TestSruSchemaDefaults(t *testing.T) {
+	for _, profile := range []string{"Generic", "Koha", "Alma"} {
+		for _, tc := range []struct{ parser, schema string }{
+			{"marc", "marcxml"},
+			{"opac", "opac"},
+			{"reservoir", "marcxml"},
+			{"marc21plus1", "marcxml"},
+		} {
+			t.Run(profile+"/"+tc.parser, func(t *testing.T) {
+				for _, explicit := range []bool{false, true} {
+					raw := entry(t, `{"catalogConfig":{"profile":"`+profile+`","sru":{"address":"https://catalog/sru"},"holdingsFormat":{"`+tc.parser+`":{}}}}`)
+					want := tc.schema
+					if explicit {
+						want = "custom"
+						raw.CatalogConfig.Sru.RecordSchema = &want
+					}
+					e, err := Resolve(raw)
+					require.NoError(t, err)
+					require.Equal(t, want, *e.Catalog.Sru.RecordSchema)
+					require.Nil(t, e.Catalog.Zoom)
+				}
+			})
+		}
+	}
+}
+
 func TestValidation(t *testing.T) {
 	for _, data := range []string{
 		`{"lmsConfig":{"vendor":"WMS"}}`, `{"catalogConfig":{"profile":"Aleph"}}`, `{"lmsConfig":{"vendor":"bad"}}`,

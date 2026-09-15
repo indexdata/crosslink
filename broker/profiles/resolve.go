@@ -114,33 +114,38 @@ func Resolve(entry dirapi.Entry) (*Effective, error) {
 		delete(rawC, "holdingsFormat")
 	}
 	merge(c, rawC, "catalogConfig", "directory", e.Origins)
-	if profile != "Generic" {
-		syntax := "opac"
+	if z, ok := c["zoom"].(object); ok {
+		// MARC and reservoir use the adapter's legacy MARC wire syntax;
+		// ZOOM converts received records to XML before passing them to parsers.
+		syntax := "usmarc"
 		if h, ok := c["holdingsFormat"].(object); ok {
-			if _, ok := h["opac"]; !ok {
+			if _, ok := h["opac"]; ok {
+				syntax = "opac"
+			} else if _, ok := h["marc21plus1"]; ok {
 				syntax = "xml"
 			}
 		}
-		if z, ok := c["zoom"].(object); ok {
-			options, ok := z["options"].(object)
-			if !ok {
-				options = object{}
-				z["options"] = options
-			}
-			if _, ok := options["preferredRecordSyntax"]; !ok {
-				options["preferredRecordSyntax"] = syntax
-				e.Origins["catalogConfig.zoom.options.preferredRecordSyntax"] = profile
+		options, ok := z["options"].(object)
+		if !ok {
+			options = object{}
+			z["options"] = options
+		}
+		if _, ok := options["preferredRecordSyntax"]; !ok {
+			options["preferredRecordSyntax"] = syntax
+			e.Origins["catalogConfig.zoom.options.preferredRecordSyntax"] = profile
+		}
+	}
+	if s, ok := c["sru"].(object); ok {
+		// SRU delivers MARC-based formats as marcxml and OPAC as opac.
+		schema := "marcxml"
+		if h, ok := c["holdingsFormat"].(object); ok {
+			if _, ok := h["opac"]; ok {
+				schema = "opac"
 			}
 		}
-		if s, ok := c["sru"].(object); ok {
-			if _, ok := s["recordSchema"]; !ok {
-				schema := "opac"
-				if syntax == "xml" {
-					schema = "marcxml"
-				}
-				s["recordSchema"] = schema
-				e.Origins["catalogConfig.sru.recordSchema"] = profile
-			}
+		if _, ok := s["recordSchema"]; !ok {
+			s["recordSchema"] = schema
+			e.Origins["catalogConfig.sru.recordSchema"] = profile
 		}
 	}
 	materializeCatalogDefaults(c, e.Origins)
