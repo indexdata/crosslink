@@ -79,6 +79,20 @@ func TestOpenAPIRequestValidationRetainsImportBodyChecks(t *testing.T) {
 	}
 }
 
+func TestOpenAPIRequestValidationReportsExpectedImportContentType(t *testing.T) {
+	spec, err := api.GetSpec()
+	require.NoError(t, err)
+	handler := openAPIRequestValidationMiddleware(spec)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	request := httptest.NewRequest(http.MethodPost, BasePath+"/import", strings.NewReader("record"))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.Equal(t, "invalid Content-Type: expected application/x-ndjson\n", response.Body.String())
+}
+
 func TestOpenAPIRequestValidationStillValidatesOtherRequestBodies(t *testing.T) {
 	spec, err := api.GetSpec()
 	require.NoError(t, err)

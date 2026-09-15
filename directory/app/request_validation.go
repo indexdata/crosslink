@@ -31,7 +31,7 @@ func validateImportRequest(next http.Handler) http.Handler {
 
 		contentType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
 		if err != nil || contentType != importContentType {
-			http.Error(writer, "invalid Content-Type", http.StatusBadRequest)
+			http.Error(writer, "invalid Content-Type: expected "+importContentType, http.StatusBadRequest)
 			return
 		}
 		if request.Body == nil || request.Body == http.NoBody {
