@@ -80,28 +80,12 @@ func Resolve(entry dirapi.Entry) (*Effective, error) {
 	}
 	e := &Effective{LMSVendor: vendor, CatalogProfile: profile, Origins: map[string]string{}}
 	l, c := object{}, object{}
-	// These are the existing protocol defaults; no installation-specific values.
-	merge(l, object{"ncipNamespaceEnabled": true, "bibIdNormalization": "none", "requestItemRequestType": "Page", "requestItemRequestScopeType": "Item", "requestItemBibIdCode": "SYSNUMBER", "requestItemPickupLocationEnabled": true, "lookupUserEnabled": true, "acceptItemEnabled": true, "checkInItemEnabled": true, "checkOutItemEnabled": true, "requestItemEnabled": true}, "lmsConfig", "Generic", e.Origins)
-	if vendor == "Sierra" {
-		merge(l, object{"requestItemRequestType": "Hold", "requestItemRequestScopeType": "Title", "bibIdNormalization": "sierra"}, "lmsConfig", vendor, e.Origins)
-	}
-	if vendor == "Koha" {
-		merge(l, object{"ncipNamespaceEnabled": false}, "lmsConfig", vendor, e.Origins)
+	merge(l, builtins["Generic"].LMS, "lmsConfig", "Generic", e.Origins)
+	if vendor != "Generic" {
+		merge(l, builtins[vendor].LMS, "lmsConfig", vendor, e.Origins)
 	}
 	merge(l, rawL, "lmsConfig", "directory", e.Origins)
-	if profile != "Generic" {
-		h := object{"opac": object{"availabilityRule": "availableNow", "requireLocalLocation": true, "includeItemId": true, "includeItemLoanPolicy": true, "allCirculations": true}}
-		if profile == "Sierra" {
-			h = object{"opac": object{"availabilityRule": "publicNote", "availablePublicNotes": []any{"AVAILABLE", "CHECK SHELVES", "CHECK SHELF"}, "shelvingLocationSource": "localLocation", "includeItemId": false, "includeItemLoanPolicy": false}}
-		}
-		if profile == "FOLIO" {
-			h["opac"].(object)["includeTemporaryLocation"] = true
-		}
-		if profile == "Koha" {
-			h = object{"marc": object{"mainField": "952", "locationSubField": "b", "shelvingLocationSubField": "c", "callNumberSubField": "o", "availability": []any{object{"subField": "7", "operator": "equals", "value": "0"}, object{"subField": "q", "operator": "absent"}}}}
-		}
-		merge(c, object{"holdingsFormat": h}, "catalogConfig", profile, e.Origins)
-	}
+	merge(c, builtins[profile].Catalog, "catalogConfig", profile, e.Origins)
 	// Switching parser replaces the entire profile parser, including its rules.
 	if h, ok := rawC["holdingsFormat"].(object); ok && len(h) > 0 {
 		if len(h) != 1 {

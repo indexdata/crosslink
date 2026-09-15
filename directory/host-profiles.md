@@ -37,6 +37,19 @@ fallbacks remain unchanged.
 
 ## Built-in profiles
 
+The broker embeds one [YAML file per supported profile](../broker/profiles/builtin)
+using Go's `go:embed`. These files use the directory's `lmsConfig` and
+`catalogConfig` structure and are the source of vendor defaults. Vendor files
+contain overrides of Generic defaults; an empty section inherits those defaults.
+`illConfig` remains independent and is not part of a host profile.
+
+Conditional catalog defaults (query language, parser replacement, and record
+syntax based on the effective parser) remain in Go. The resolver checks YAML
+field names and types against the directory API, retains value origins, and
+applies explicit directory overrides without modifying the embedded defaults.
+Changing a built-in file requires rebuilding the broker, not migrating directory
+records. WMS and Aleph remain unsupported and have no built-in files.
+
 | Profile | Catalog defaults | Circulation defaults |
 | --- | --- | --- |
 | Generic | Existing MARC parser (852: location b, shelving c, call number h, item p, restricted r); existing PQF or configured CQL queries | Existing NCIP 2 behavior: Page, Item scope, pickup enabled |
