@@ -259,10 +259,15 @@ func lockAssignmentEntryRows(ctx context.Context, queries *db.Queries, ids ...uu
 
 func requireAssignmentEntries(assignments []resolvedAssignment) ([]db.Entry, error) {
 	entries := make([]db.Entry, 0, len(assignments))
+	seen := make(map[uuid.UUID]model.SymbolRef, len(assignments))
 	for _, assignment := range assignments {
 		if assignment.entry == nil {
 			return nil, fmt.Errorf("entry %s does not exist", assignment.ref.String())
 		}
+		if previous, exists := seen[assignment.entry.ID]; exists {
+			return nil, fmt.Errorf("duplicate assignment: symbols %s and %s identify the same entry", previous.String(), assignment.ref.String())
+		}
+		seen[assignment.entry.ID] = assignment.ref
 		entries = append(entries, *assignment.entry)
 	}
 	return entries, nil

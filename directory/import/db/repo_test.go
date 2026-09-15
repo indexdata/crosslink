@@ -655,6 +655,42 @@ func TestImportTierConflictPoliciesAndUpdateReplacesAssignments(t *testing.T) {
 	require.Equal(t, []model.SymbolRef{second}, tierAssignments(t, id))
 }
 
+func TestImportTierRejectsDuplicateEntryAliases(t *testing.T) {
+	repo, consortium, first, second := importRepoFixture(t)
+	alias := addImportSymbolAlias(t, first)
+	ctx := context.Background()
+	aggregate := model.TierAggregate{
+		Key:  model.TierKey{Consortium: consortium, Name: "Aliases"},
+		Data: model.TierData{Level: "standard", Type: "loan", Cost: 1.5, Entries: []model.SymbolRef{first, alias}},
+	}
+	_, err := repo.ImportTier(ctx, aggregate, model.ConflictPolicyFail)
+	require.ErrorContains(t, err, "duplicate assignment")
+	require.ErrorContains(t, err, first.String())
+	require.ErrorContains(t, err, alias.String())
+	assertTierDoesNotExist(t, consortium, aggregate.Key.Name)
+
+	aggregate.Data.Entries = []model.SymbolRef{second}
+	_, err = repo.ImportTier(ctx, aggregate, model.ConflictPolicyFail)
+	require.NoError(t, err)
+	id := tierIDByKey(t, consortium, aggregate.Key.Name)
+	aggregate.Data.Entries = []model.SymbolRef{first, alias}
+	aggregate.Data.Cost = 99
+	_, err = repo.ImportTier(ctx, aggregate, model.ConflictPolicyUpdate)
+	require.ErrorContains(t, err, "duplicate assignment")
+	require.Equal(t, []model.SymbolRef{second}, tierAssignments(t, id))
+	var cost float64
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT cost FROM tiers WHERE id=$1`, id).Scan(&cost))
+	require.Equal(t, 1.5, cost)
+}
+
+func addImportSymbolAlias(t *testing.T, ref model.SymbolRef) model.SymbolRef {
+	t.Helper()
+	alias := model.SymbolRef{Authority: "ALIAS", Symbol: strings.ToUpper(uuid.NewString())}
+	_, err := testPool.Exec(context.Background(), `INSERT INTO symbols(owner, authority, symbol) VALUES($1, $2, $3)`, entryIDBySymbol(t, ref), alias.Authority, alias.Symbol)
+	require.NoError(t, err)
+	return alias
+}
+
 func TestExistingTierConflictPolicyPrecedesMissingAssignmentValidation(t *testing.T) {
 	for _, policy := range []model.ConflictPolicy{model.ConflictPolicySkip, model.ConflictPolicyFail} {
 		t.Run(string(policy), func(t *testing.T) {
@@ -799,6 +835,39 @@ func TestImportNetworkConflictPoliciesAndUpdateReplacesAssignments(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, id, networkIDByKey(t, consortium, "Main"))
 	require.Equal(t, []model.NetworkAssignment{{SymbolRef: second, Priority: 2}}, networkAssignments(t, id))
+}
+
+func TestImportNetworkRejectsDuplicateEntryAliases(t *testing.T) {
+	repo, consortium, first, second := importRepoFixture(t)
+	alias := addImportSymbolAlias(t, first)
+	ctx := context.Background()
+	aggregate := model.NetworkAggregate{
+		Key: model.NetworkKey{Consortium: consortium, Name: "Aliases"},
+		Data: model.NetworkData{Entries: []model.NetworkAssignment{
+			{SymbolRef: first, Priority: 1}, {SymbolRef: alias, Priority: 99},
+		}},
+	}
+	_, err := repo.ImportNetwork(ctx, aggregate, model.ConflictPolicyFail)
+	require.ErrorContains(t, err, "duplicate assignment")
+	require.ErrorContains(t, err, first.String())
+	require.ErrorContains(t, err, alias.String())
+	var count int
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT count(*) FROM networks WHERE consortium=$1 AND name=$2`, entryIDBySymbol(t, consortium), aggregate.Key.Name).Scan(&count))
+	require.Zero(t, count)
+
+	aggregate.Data.Entries = []model.NetworkAssignment{{SymbolRef: second, Priority: 5}}
+	_, err = repo.ImportNetwork(ctx, aggregate, model.ConflictPolicyFail)
+	require.NoError(t, err)
+	id := networkIDByKey(t, consortium, aggregate.Key.Name)
+	aggregate.Data.Entries = []model.NetworkAssignment{{SymbolRef: first, Priority: 1}, {SymbolRef: alias, Priority: 99}}
+	reciprocal := true
+	aggregate.Data.Reciprocal = &reciprocal
+	_, err = repo.ImportNetwork(ctx, aggregate, model.ConflictPolicyUpdate)
+	require.ErrorContains(t, err, "duplicate assignment")
+	require.Equal(t, []model.NetworkAssignment{{SymbolRef: second, Priority: 5}}, networkAssignments(t, id))
+	var storedReciprocal *bool
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT reciprocal FROM networks WHERE id=$1`, id).Scan(&storedReciprocal))
+	require.Nil(t, storedReciprocal)
 }
 
 func TestExistingNetworkConflictPolicyPrecedesMissingAssignmentValidation(t *testing.T) {
