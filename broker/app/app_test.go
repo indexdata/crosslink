@@ -100,6 +100,27 @@ func TestOpenAPIRequestValidatorRejectsNullNonNullableString(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), `Error at \"/requesterSymbol\": Value is not nullable`)
 }
 
+func TestOpenAPIRequestValidatorRejectsBatchActionWithoutTitle(t *testing.T) {
+	validator, err := newOpenAPIRequestValidator()
+	assert.NoError(t, err)
+	handler := validator(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("handler should not be called for invalid request")
+	}))
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/broker/batch_actions",
+		bytes.NewReader([]byte(`{"actionName":"request-aging","batchQuery":"state==NEW","schedule":"FREQ=DAILY"}`)),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), `property \"title\" is missing`)
+}
+
 func TestConfigLogger(t *testing.T) {
 	ENABLE_JSON_LOG = "true"
 	handler := configLog()

@@ -15,7 +15,9 @@ import (
 	schedoapi "github.com/indexdata/crosslink/broker/scheduler/oapi"
 	"github.com/indexdata/crosslink/broker/tenant"
 	testmocks "github.com/indexdata/crosslink/broker/test/mocks"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -352,6 +354,7 @@ func TestPostBatchActions_OK(t *testing.T) {
 		return p.ID != "" &&
 			p.EventName == events.EventNameInvokeBatchAction &&
 			p.Schedule == validRrule &&
+			p.Title == (pgtype.Text{String: "Email pull slips", Valid: true}) &&
 			p.Status == sched_db.ScheduledTaskStatusPending &&
 			p.Owner == testSymbol &&
 			p.RunAt.Valid && p.RunAt.Time.After(before) &&
@@ -365,7 +368,7 @@ func TestPostBatchActions_OK(t *testing.T) {
 	})).Return(saveScheduledTaskReturn, nil)
 
 	h := newHandler(repo)
-	body := `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"` + validRrule + `"}`
+	body := `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"` + validRrule + `","title":"Email pull slips"}`
 	req := newReq(http.MethodPost, body)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
@@ -398,7 +401,7 @@ func TestPostBatchActions_ValidDailySchedule_ComputesMidnightRunAt(t *testing.T)
 	})).Return(saveScheduledTaskReturn, nil)
 
 	h := newHandler(repo)
-	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"FREQ=DAILY"}`)
+	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"FREQ=DAILY","title":"Email pull slips"}`)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
 
@@ -414,7 +417,7 @@ func TestPostBatchActions_ActionParamsPersisted(t *testing.T) {
 	})).Return(saveScheduledTaskReturn, nil)
 
 	h := newHandler(repo)
-	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"`+validRrule+`","actionParams":{"delivery":"email","max":3}}`)
+	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"`+validRrule+`","title":"Email pull slips","actionParams":{"delivery":"email","max":3}}`)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
 
@@ -435,7 +438,7 @@ func TestPostBatchActions_MasterWithoutSymbolCreatesUnrestrictedAction(t *testin
 	})).Return(saveScheduledTaskReturn, nil)
 
 	h := newHandler(repo)
-	req := newReq(http.MethodPost, `{"actionName":"request-aging","batchQuery":"title=test","schedule":"`+validRrule+`","actionParams":{"interval":"24h"}}`)
+	req := newReq(http.MethodPost, `{"actionName":"request-aging","batchQuery":"title=test","schedule":"`+validRrule+`","title":"Request aging","actionParams":{"interval":"24h"}}`)
 	rr := httptest.NewRecorder()
 
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{})
@@ -461,7 +464,7 @@ func TestPostBatchActions_OkapiWithoutSymbolUsesPrimaryMappedOwner(t *testing.T)
 		WithIllRepo(new(testmocks.MockIllRepositorySuccess))
 	h := NewSchedulerApiHandler(10, repo, nil, resolver)
 	req := httptest.NewRequest(http.MethodPost, "/broker/batch_actions",
-		strings.NewReader(`{"actionName":"request-aging","batchQuery":"title=test","schedule":"`+validRrule+`","actionParams":{"interval":"24h"}}`))
+		strings.NewReader(`{"actionName":"request-aging","batchQuery":"title=test","schedule":"`+validRrule+`","title":"Request aging","actionParams":{"interval":"24h"}}`))
 	req.Header.Set(tenant.OkapiTenantHeader, "diku")
 	rr := httptest.NewRecorder()
 
@@ -490,9 +493,22 @@ func TestPostBatchActions_InvalidJSON(t *testing.T) {
 	assertErrorStatus(t, rr, http.StatusBadRequest)
 }
 
+func TestPostBatchActions_MissingTitle(t *testing.T) {
+	repo := new(MockSchedRepo)
+	repo.On("SaveScheduledTask", mock.Anything).Return(saveScheduledTaskReturn, nil)
+	h := newHandler(repo)
+	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"`+validRrule+`"}`)
+	rr := httptest.NewRecorder()
+
+	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
+
+	assertErrorStatus(t, rr, http.StatusBadRequest)
+	repo.AssertNotCalled(t, "SaveScheduledTask", mock.Anything)
+}
+
 func TestPostBatchActions_InvalidActionName(t *testing.T) {
 	h := newHandler(new(MockSchedRepo))
-	req := newReq(http.MethodPost, `{"actionName":"unknown","batchQuery":"title=test","schedule":"`+validRrule+`"}`)
+	req := newReq(http.MethodPost, `{"actionName":"unknown","batchQuery":"title=test","schedule":"`+validRrule+`","title":"Unknown action"}`)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
 
@@ -501,7 +517,7 @@ func TestPostBatchActions_InvalidActionName(t *testing.T) {
 
 func TestPostBatchActions_EmptySchedule(t *testing.T) {
 	h := newHandler(new(MockSchedRepo))
-	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":""}`)
+	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"","title":"Email pull slips"}`)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
 
@@ -511,7 +527,7 @@ func TestPostBatchActions_EmptySchedule(t *testing.T) {
 func TestPostBatchActions_MissingBatchQuery(t *testing.T) {
 	repo := new(MockSchedRepo)
 	h := newHandler(repo)
-	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","schedule":"`+validRrule+`"}`)
+	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","schedule":"`+validRrule+`","title":"Email pull slips"}`)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
 
@@ -522,7 +538,7 @@ func TestPostBatchActions_MissingBatchQuery(t *testing.T) {
 func TestPostBatchActions_InvalidSchedule(t *testing.T) {
 	repo := new(MockSchedRepo)
 	h := newHandler(repo)
-	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"not-a-rrule"}`)
+	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"not-a-rrule","title":"Email pull slips"}`)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
 
@@ -533,7 +549,7 @@ func TestPostBatchActions_InvalidSchedule(t *testing.T) {
 func TestPostBatchActions_CountOneScheduleReturnsBadRequest(t *testing.T) {
 	repo := new(MockSchedRepo)
 	h := newHandler(repo)
-	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"FREQ=DAILY;COUNT=1"}`)
+	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"FREQ=DAILY;COUNT=1","title":"Email pull slips"}`)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
 
@@ -546,12 +562,27 @@ func TestPostBatchActions_SaveScheduledTaskError(t *testing.T) {
 	repo.On("SaveScheduledTask", mock.Anything).Return(sched_db.ScheduledTask{}, errors.New("db error"))
 
 	h := newHandler(repo)
-	body := `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"` + validRrule + `"}`
+	body := `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"` + validRrule + `","title":"Email pull slips"}`
 	req := newReq(http.MethodPost, body)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
 
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	repo.AssertExpectations(t)
+}
+
+func TestPostBatchActions_DuplicateOwnerTitleReturnsConflict(t *testing.T) {
+	repo := new(MockSchedRepo)
+	repo.On("SaveScheduledTask", mock.Anything).Return(sched_db.ScheduledTask{}, &pgconn.PgError{Code: pgerrcode.UniqueViolation})
+
+	h := newHandler(repo)
+	body := `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"` + validRrule + `","title":"Email pull slips"}`
+	req := newReq(http.MethodPost, body)
+	rr := httptest.NewRecorder()
+	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
+
+	assertErrorStatus(t, rr, http.StatusConflict)
+	assert.Contains(t, rr.Body.String(), "owner and title")
 	repo.AssertExpectations(t)
 }
 
@@ -640,6 +671,41 @@ func TestPutBatchActionsId_OK_RecomputesRunAtAndPersistsActionData(t *testing.T)
 	repo.AssertExpectations(t)
 }
 
+func TestPutBatchActionsId_OmittedTitlePreservesExistingTitle(t *testing.T) {
+	repo := new(MockSchedRepo)
+	task := scheduledTaskFixture("task-1")
+	task.Title = pgtype.Text{String: "Existing title", Valid: true}
+	var saved sched_db.SaveScheduledTaskParams
+	repo.On("GetScheduledTaskByIdForUpdate", "task-1", testOwnerScope).Return(task, nil)
+	repo.On("SaveScheduledTask", mock.Anything).
+		Run(func(args mock.Arguments) {
+			saved = args.Get(0).(sched_db.SaveScheduledTaskParams)
+		}).
+		Return(task, nil)
+
+	h := newHandler(repo)
+	req := newReq(http.MethodPut, `{"batchQuery":"author=doe","schedule":"FREQ=DAILY"}`)
+	rr := httptest.NewRecorder()
+	h.PutBatchActionsId(rr, req, "task-1", schedoapi.PutBatchActionsIdParams{Symbol: symPtr(testSymbol)})
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, pgtype.Text{String: "Existing title", Valid: true}, saved.Title)
+}
+
+func TestPutBatchActionsId_RejectsEmptyTitle(t *testing.T) {
+	repo := new(MockSchedRepo)
+	task := scheduledTaskFixture("task-1")
+	repo.On("GetScheduledTaskByIdForUpdate", "task-1", testOwnerScope).Maybe().Return(task, nil)
+	repo.On("SaveScheduledTask", mock.Anything).Maybe().Return(task, nil)
+
+	h := newHandler(repo)
+	req := newReq(http.MethodPut, `{"title":"","batchQuery":"author=doe","schedule":"FREQ=DAILY"}`)
+	rr := httptest.NewRecorder()
+	h.PutBatchActionsId(rr, req, "task-1", schedoapi.PutBatchActionsIdParams{Symbol: symPtr(testSymbol)})
+
+	assertErrorStatus(t, rr, http.StatusBadRequest)
+}
+
 func TestPutBatchActionsId_InvalidSchedule(t *testing.T) {
 	repo := new(MockSchedRepo)
 
@@ -678,6 +744,21 @@ func TestPutBatchActionsId_SaveError(t *testing.T) {
 	h.PutBatchActionsId(rr, req, "task-1", schedoapi.PutBatchActionsIdParams{Symbol: symPtr(testSymbol)})
 
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	repo.AssertExpectations(t)
+}
+
+func TestPutBatchActionsId_DuplicateOwnerTitleReturnsConflict(t *testing.T) {
+	repo := new(MockSchedRepo)
+	repo.On("GetScheduledTaskByIdForUpdate", "task-1", testOwnerScope).Return(scheduledTaskFixture("task-1"), nil)
+	repo.On("SaveScheduledTask", mock.Anything).Return(sched_db.ScheduledTask{}, &pgconn.PgError{Code: pgerrcode.UniqueViolation})
+
+	h := newHandler(repo)
+	req := newReq(http.MethodPut, `{"batchQuery":"title=test","schedule":"FREQ=DAILY","title":"Duplicate"}`)
+	rr := httptest.NewRecorder()
+	h.PutBatchActionsId(rr, req, "task-1", schedoapi.PutBatchActionsIdParams{Symbol: symPtr(testSymbol)})
+
+	assertErrorStatus(t, rr, http.StatusConflict)
+	assert.Contains(t, rr.Body.String(), "owner and title")
 	repo.AssertExpectations(t)
 }
 

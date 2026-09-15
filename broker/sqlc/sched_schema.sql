@@ -10,7 +10,10 @@ CREATE TABLE scheduled_task
     owner       TEXT        NOT NULL,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    FOREIGN KEY (event_name) REFERENCES event_config (event_name)
+    FOREIGN KEY (event_name) REFERENCES event_config (event_name),
+    CONSTRAINT chk_scheduled_task_batch_action_title
+        CHECK (event_name <> 'invoke-batch-action'
+            OR (title IS NOT NULL AND title <> ''))
 );
 
 CREATE INDEX idx_scheduled_task_run_at ON scheduled_task (run_at) WHERE status = 'pending' AND run_at IS NOT NULL;
