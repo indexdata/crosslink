@@ -4,7 +4,6 @@ package profiles
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	dirapi "github.com/indexdata/crosslink/directory/api"
@@ -171,9 +170,6 @@ func Resolve(entry dirapi.Entry) (*Effective, error) {
 	if err := e.validate(); err != nil {
 		return nil, err
 	}
-	// Only behavior settings are logged: endpoints, options, credentials, agencies,
-	// patron details, and local policies are deliberately excluded.
-	slog.Debug("resolved host profiles", "configuration", e.Diagnostics())
 	return e, nil
 }
 

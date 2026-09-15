@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/profiles"
 	dirapi "github.com/indexdata/crosslink/directory/api"
@@ -136,7 +138,7 @@ func TestProfileLookupAggregationAndFallback(t *testing.T) {
 			defer server.Close()
 			var entry dirapi.Entry
 			require.NoError(t, json.Unmarshal([]byte(`{"lmsConfig":{"vendor":"`+name+`"},"catalogConfig":{"sru":{"address":"`+server.URL+`"}}}`), &entry))
-			ad, err := NewLookupAdapterCreator(LookupAdapterZoom, "").GetAdapter(ill_db.Peer{CustomData: entry})
+			ad, err := NewLookupAdapterCreator(LookupAdapterZoom, "").GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.Peer{CustomData: entry})
 			require.NoError(t, err)
 			result, err := ad.Lookup(LookupParams{Identifier: "id", Isbn: "isbn", Issn: "issn", Title: "title"})
 			require.NoError(t, err)
@@ -150,7 +152,7 @@ func TestProfileLookupAggregationAndFallback(t *testing.T) {
 func TestProfileOnlyDoesNotEnableCatalog(t *testing.T) {
 	var entry dirapi.Entry
 	require.NoError(t, json.Unmarshal([]byte(`{"lmsConfig":{"vendor":"Sierra"},"catalogConfig":{"profile":"Koha"}}`), &entry))
-	a, err := NewLookupAdapterCreator(LookupAdapterZoom, "").GetAdapter(ill_db.Peer{CustomData: entry})
+	a, err := NewLookupAdapterCreator(LookupAdapterZoom, "").GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.Peer{CustomData: entry})
 	require.NoError(t, err)
 	require.Nil(t, a)
 }

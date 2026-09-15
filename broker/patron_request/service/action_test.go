@@ -5688,7 +5688,7 @@ type mockLookupCreator struct {
 	err     error
 }
 
-func (m *mockLookupCreator) GetAdapter(peer ill_db.Peer) (catalog.LookupAdapter, error) {
+func (m *mockLookupCreator) GetAdapter(ctx common.ExtendedContext, peer ill_db.Peer) (catalog.LookupAdapter, error) {
 	return m.adapter, m.err
 }
 

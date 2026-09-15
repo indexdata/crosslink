@@ -2,9 +2,10 @@ package catalog
 
 import (
 	"fmt"
-	"github.com/indexdata/crosslink/broker/profiles"
 
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/profiles"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 )
 
@@ -55,12 +56,14 @@ func getHoldingsParser(config *dirapi.HoldingsParserConfig) (HoldingsParser, err
 	return nil, fmt.Errorf("catalogConfig.holdingsFormat must set marc, opac, reservoir, or marc21plus1 properties")
 }
 
-func (c *LookupAdapterCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, error) {
+func (c *LookupAdapterCreatorImpl) GetAdapter(ctx common.ExtendedContext, peer ill_db.Peer) (LookupAdapter, error) {
 	entry := peer.CustomData
 	effective, err := profiles.Resolve(entry)
 	if err != nil {
 		return nil, err
 	}
+	// Diagnostics excludes endpoints, credentials, and other sensitive settings.
+	ctx.Logger().Debug("resolved host profiles", "configuration", effective.Diagnostics())
 	config := effective.Catalog
 	// CatalogConfig also contains settings unrelated to availability, such as
 	// metadataUpdateMode. Only an SRU or ZOOM definition enables the check.

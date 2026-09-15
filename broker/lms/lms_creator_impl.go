@@ -30,6 +30,8 @@ func (l *lmsCreatorImpl) GetAdapter(ctx common.ExtendedContext, symbol string) (
 		if err != nil {
 			return nil, err
 		}
+		// Diagnostics excludes endpoints, credentials, and other sensitive settings.
+		ctx.Logger().Debug("resolved host profiles", "configuration", effective.Diagnostics())
 		if effective.LMS != nil && effective.LMS.Address != "" {
 			return createResolvedLmsAdapterNcip(*effective.LMS)
 		}

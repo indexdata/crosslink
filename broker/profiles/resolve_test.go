@@ -1,10 +1,7 @@
 package profiles
 
 import (
-	"bytes"
 	"encoding/json"
-	"log/slog"
-	"strings"
 	"testing"
 
 	dirapi "github.com/indexdata/crosslink/directory/api"
@@ -166,12 +163,10 @@ func TestValidation(t *testing.T) {
 	}
 }
 func TestDiagnosticsProtectCredentials(t *testing.T) {
-	var buf bytes.Buffer
-	old := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	defer slog.SetDefault(old)
-	_, err := Resolve(entry(t, `{"lmsConfig":{"vendor":"Sierra","address":"https://secret-address","fromAgency":"secret-agency","fromAgencyAuthentication":"secret-password"},"catalogConfig":{"zoom":{"address":"secret-catalog","options":{"password":"secret-password"}}}}`))
+	effective, err := Resolve(entry(t, `{"lmsConfig":{"vendor":"Sierra","address":"https://secret-address","fromAgency":"secret-agency","fromAgencyAuthentication":"secret-password"},"catalogConfig":{"zoom":{"address":"secret-catalog","options":{"password":"secret-password"}}}}`))
 	require.NoError(t, err)
-	require.False(t, strings.Contains(buf.String(), "secret-"))
-	require.Contains(t, buf.String(), "Sierra")
+	diagnostics, err := json.Marshal(effective.Diagnostics())
+	require.NoError(t, err)
+	require.NotContains(t, string(diagnostics), "secret-")
+	require.Contains(t, string(diagnostics), "Sierra")
 }
