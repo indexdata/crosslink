@@ -514,31 +514,7 @@ func getPeerInfo(peer *ill_db.Peer, symbol string) (string, iso18626.TypeAgencyI
 		agencyId.AgencyIdType = iso18626.TypeSchemeValuePair{Text: agencyType}
 		agencyId.AgencyIdValue = agencyValue
 	}
-	address := iso18626.PhysicalAddress{}
-	if peer.CustomData.Addresses != nil {
-		for _, addr := range *peer.CustomData.Addresses {
-			if addr.AddressComponents != nil && addr.Type == "Shipping" {
-				for _, comp := range *addr.AddressComponents {
-					switch comp.Type {
-					case "Thoroughfare":
-						address.Line1 = comp.Value
-					case "Locality":
-						address.Locality = comp.Value
-					case "AdministrativeArea":
-						address.Region = &iso18626.TypeSchemeValuePair{
-							Text: comp.Value,
-						}
-					case "PostalCode":
-						address.PostalCode = comp.Value
-					case "CountryCode":
-						address.Country = &iso18626.TypeSchemeValuePair{
-							Text: comp.Value,
-						}
-					}
-				}
-			}
-		}
-	}
+	address := common.DirectoryShippingAddress(peer.CustomData)
 	email := iso18626.ElectronicAddress{}
 	if peer.CustomData.Email != nil {
 		email.ElectronicAddressData = *peer.CustomData.Email

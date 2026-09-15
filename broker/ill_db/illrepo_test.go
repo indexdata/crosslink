@@ -185,7 +185,13 @@ func TestUpdateCachedPeersNoRefresh(t *testing.T) {
 	defer server.Close()
 	da := createDirectoryAdapter(server.URL)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	peer, err := illRepo.SavePeer(ctx, SavePeerParams{ID: "1234", Name: "Old ISIL:NU peer", Vendor: "Alma", BrokerMode: "opaque", RefreshPolicy: "transaction", RefreshTime: GetPgNow()})
+	// Reuse the symbol's existing local peer instead of leaving an orphaned
+	// directory UUID from an earlier test in this shared database.
+	peerID := "1234"
+	if existing, err := illRepo.GetPeerBySymbol(ctx, "ISIL:AU-NU"); err == nil {
+		peerID = existing.ID
+	}
+	peer, err := illRepo.SavePeer(ctx, SavePeerParams{ID: peerID, Name: "Old ISIL:NU peer", Vendor: "Alma", BrokerMode: "opaque", RefreshPolicy: "transaction", RefreshTime: GetPgNow()})
 	assert.Equal(t, err, nil)
 	_, err = illRepo.SaveSymbol(ctx, SaveSymbolParams{SymbolValue: "ISIL:AU-NU", PeerID: peer.ID})
 	assert.NoError(t, err)
@@ -236,7 +242,13 @@ func TestUpdateCachedPeersWithRefresh(t *testing.T) {
 	defer server.Close()
 	da := createDirectoryAdapter(server.URL)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	peer, err := illRepo.SavePeer(ctx, SavePeerParams{ID: "1234", Name: "Old ISIL:NU peer", Vendor: "Alma", BrokerMode: "opaque", RefreshPolicy: "transaction", RefreshTime: Get10MinsAgo()})
+	// Reuse the symbol's existing local peer instead of leaving an orphaned
+	// directory UUID from an earlier test in this shared database.
+	peerID := "1234"
+	if existing, err := illRepo.GetPeerBySymbol(ctx, "ISIL:AU-NU"); err == nil {
+		peerID = existing.ID
+	}
+	peer, err := illRepo.SavePeer(ctx, SavePeerParams{ID: peerID, Name: "Old ISIL:NU peer", Vendor: "Alma", BrokerMode: "opaque", RefreshPolicy: "transaction", RefreshTime: Get10MinsAgo()})
 	assert.Equal(t, err, nil)
 	_, err = illRepo.SaveSymbol(ctx, SaveSymbolParams{SymbolValue: "ISIL:AU-NU", PeerID: peer.ID})
 	assert.NoError(t, err)

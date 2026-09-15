@@ -1128,6 +1128,10 @@ func TestEntryCQLParentSymbol(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to seed parent tenant: %v", err)
 	}
+	_, err = dbpool.Exec(ctx, "UPDATE lms_configs SET requester_pickup_location = 'Main Library' WHERE entry = $1", parentID)
+	if err != nil {
+		t.Fatalf("failed to seed requester pickup location: %v", err)
+	}
 	_, err = dbpool.Exec(ctx, `
 		INSERT INTO entries (id, parent, name, type, tenant) VALUES
 			('01000000-0000-0000-0000-000000000001', $1, 'A Branch', 'Branch', 'other-tenant'),
@@ -1183,6 +1187,13 @@ func TestEntryCQLParentSymbol(t *testing.T) {
 		if result.About.Count != 2 || len(result.Items) != 2 ||
 			result.Items[0].Name != "A Branch" || result.Items[1].Name != "Z Branch" {
 			t.Fatalf("unexpected parentSymbol result: %#v", result)
+		}
+	})
+
+	t.Run("requesterPickupLocation returns entries with a configured value", func(t *testing.T) {
+		result := getEntries(t, `requesterPickupLocation <> ""`, 10, 0)
+		if result.About.Count != 1 || len(result.Items) != 1 || result.Items[0].Name != "An Institution" {
+			t.Fatalf("unexpected requesterPickupLocation result: %#v", result)
 		}
 	})
 

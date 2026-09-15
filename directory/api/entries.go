@@ -234,6 +234,10 @@ func handleEntryCQL(cqlString string, noBaseArgs int) (pgcql.Query, error) {
 	f.SetColumn("e.tenant")
 	def.AddField("tenant", f)
 
+	f = pgcql.NewFieldString().WithLikeOps()
+	f.SetColumn("COALESCE((SELECT l.requester_pickup_location FROM lms_configs l WHERE l.entry = e.id), '')")
+	def.AddField("requesterPickupLocation", f)
+
 	def.AddField("symbol", &fieldEntrySymbol{index: "symbol", ownerColumn: "e.id"})
 	def.AddField("parentSymbol", &fieldEntrySymbol{index: "parentSymbol", ownerColumn: "e.parent"})
 
