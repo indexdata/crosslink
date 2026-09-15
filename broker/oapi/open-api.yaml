@@ -533,6 +533,16 @@ components:
         patron:
           type: string
           description: User who requested item
+        requesterPickupLocationId:
+          type: string
+          format: uuid
+          description: >-
+            UUID of the directory entry providing the shipping address and requester
+            pickup location code used by AcceptItem when receiving a remotely supplied
+            item and RequestItem during local fulfillment. When omitted, both operations
+            use the pickup location from the requester LMS configuration. The selected
+            entry requires an LMS pickup location code only when the configured operation
+            uses it.
         requesterSymbol:
           type: string
           description: Requester symbol
@@ -641,6 +651,20 @@ components:
         patron:
           type: string
           description: User who requested item
+        requesterPickupLocationId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            UUID of the directory entry providing the shipping address and requester
+            pickup location code used by AcceptItem when receiving a remotely supplied
+            item and RequestItem during local fulfillment. When omitted, both operations
+            use the pickup location from the requester LMS configuration. The selected
+            entry requires an LMS pickup location code only when the configured operation
+            uses it. On creation, omit or send null to use the configured default.
+            On update, omit to preserve the current selection, send null to clear it,
+            or supply a UUID to replace it. Supplied UUIDs are validated against the
+            requester institution before saving.
         requesterSymbol:
           type: string
           description: Requester symbol

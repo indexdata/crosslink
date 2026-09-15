@@ -199,6 +199,7 @@ func Init(ctx context.Context) (Context, error) {
 	tenantResolver := tenant.NewResolver().WithIllRepo(illRepo).WithLookupAdapter(dirAdapter).WithTenantToSymbol(TENANT_TO_SYMBOL)
 	apiHandler := api.NewApiHandler(eventRepo, illRepo, tenantResolver, API_PAGE_SIZE)
 	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, eventRepo, tenantResolver, &iso18626Handler, API_PAGE_SIZE)
+	prApiHandler.SetPickupLocationValidator(prActionService)
 	prApiHandler.SetAutoActionRunner(prActionService)
 	prApiHandler.SetActionTaskProcessor(prActionService)
 	sseBroker := api.NewSseBroker(appCtx, tenantResolver)

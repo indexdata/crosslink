@@ -27,8 +27,10 @@ import (
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/oapi-codegen/nullable"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 var mockEventBus = new(MockEventBus)
@@ -136,28 +138,29 @@ func TestToApiPatronRequestSurfacesInternalNote(t *testing.T) {
 
 func patronRequestSearchViewFromPatronRequest(pr pr_db.PatronRequest, hasCost bool) pr_db.PatronRequestSearchView {
 	return pr_db.PatronRequestSearchView{
-		ID:                pr.ID,
-		CreatedAt:         pr.CreatedAt,
-		IllRequest:        pr.IllRequest,
-		State:             pr.State,
-		Side:              pr.Side,
-		Patron:            pr.Patron,
-		RequesterSymbol:   pr.RequesterSymbol,
-		SupplierSymbol:    pr.SupplierSymbol,
-		Tenant:            pr.Tenant,
-		RequesterReqID:    pr.RequesterReqID,
-		NeedsAttention:    pr.NeedsAttention,
-		LastAction:        pr.LastAction,
-		LastActionOutcome: pr.LastActionOutcome,
-		LastActionResult:  pr.LastActionResult,
-		Items:             pr.Items,
-		Language:          pr.Language,
-		TerminalState:     pr.TerminalState,
-		UpdatedAt:         pr.UpdatedAt,
-		IllResponse:       pr.IllResponse,
-		InternalNote:      pr.InternalNote,
-		StateModel:        pr.StateModel,
-		HasCost:           hasCost,
+		ID:                        pr.ID,
+		CreatedAt:                 pr.CreatedAt,
+		IllRequest:                pr.IllRequest,
+		State:                     pr.State,
+		Side:                      pr.Side,
+		Patron:                    pr.Patron,
+		RequesterSymbol:           pr.RequesterSymbol,
+		SupplierSymbol:            pr.SupplierSymbol,
+		Tenant:                    pr.Tenant,
+		RequesterReqID:            pr.RequesterReqID,
+		NeedsAttention:            pr.NeedsAttention,
+		LastAction:                pr.LastAction,
+		LastActionOutcome:         pr.LastActionOutcome,
+		LastActionResult:          pr.LastActionResult,
+		Items:                     pr.Items,
+		Language:                  pr.Language,
+		TerminalState:             pr.TerminalState,
+		UpdatedAt:                 pr.UpdatedAt,
+		IllResponse:               pr.IllResponse,
+		InternalNote:              pr.InternalNote,
+		StateModel:                pr.StateModel,
+		RequesterPickupLocationID: pr.RequesterPickupLocationID,
+		HasCost:                   hasCost,
 	}
 }
 
@@ -295,12 +298,14 @@ func TestPostPatronRequests(t *testing.T) {
 }
 
 type createdPatronRequestRepo struct {
+	createCalls int
 	PrRepoError
 	created pr_db.PatronRequest
 	view    pr_db.PatronRequestSearchView
 }
 
 func (r *createdPatronRequestRepo) CreatePatronRequest(ctx common.ExtendedContext, params pr_db.CreatePatronRequestParams) (pr_db.PatronRequest, error) {
+	r.createCalls++
 	return r.created, nil
 }
 
@@ -1351,6 +1356,7 @@ type PrRepoUpdateCapture struct {
 	PrRepoError
 	lastUpdateParams *pr_db.UpdatePatronRequestParams
 	state            pr_db.PatronRequestState
+	pickupLocationID pgtype.UUID
 }
 
 func (r *PrRepoUpdateCapture) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
@@ -1359,7 +1365,7 @@ func (r *PrRepoUpdateCapture) GetPatronRequestById(ctx common.ExtendedContext, i
 		if state == "" {
 			state = prservice.BorrowerStateNeedsReview
 		}
-		return pr_db.PatronRequest{ID: id, State: state, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, InternalNote: pgtype.Text{String: "original note", Valid: true}, Patron: pgtype.Text{String: "original patron", Valid: true}}, nil
+		return pr_db.PatronRequest{ID: id, RequesterPickupLocationID: r.pickupLocationID, State: state, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, InternalNote: pgtype.Text{String: "original note", Valid: true}, Patron: pgtype.Text{String: "original patron", Valid: true}}, nil
 	}
 	return r.PrRepoError.GetPatronRequestById(ctx, id)
 }
@@ -1688,4 +1694,135 @@ func TestPutPatronRequestsIdInvalidBrokerSymbol(t *testing.T) {
 	handler.PutPatronRequestsId(rr, req, "5", proapi.PutPatronRequestsIdParams{})
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Contains(t, rr.Body.String(), "invalid BROKER_SYMBOL")
+}
+
+func TestPatronRequestPickupLocationRoundTrip(t *testing.T) {
+	var request proapi.CreatePatronRequest
+	require.NoError(t, json.Unmarshal([]byte(`{"requesterSymbol":"ISIL:MAIN","requesterPickupLocationId":"11111111-1111-4111-8111-111111111111","illRequest":{}}`), &request))
+	pr := buildDbPatronRequest(&request, nil, pgtype.Timestamp{}, "request-1", request.IllRequest, "", "default")
+	assert.Equal(t, pgtype.UUID{Bytes: uuid.MustParse("11111111-1111-4111-8111-111111111111"), Valid: true}, pr.RequesterPickupLocationID)
+	result := toApiPatronRequest(httptest.NewRequest(http.MethodGet, "/patron_requests/request-1", nil), patronRequestSearchViewFromPatronRequest(pr, false))
+	require.NotNil(t, result.RequesterPickupLocationId)
+	assert.Equal(t, uuid.MustParse("11111111-1111-4111-8111-111111111111"), *result.RequesterPickupLocationId)
+}
+
+func TestPatronRequestPickupLocationIDValidation(t *testing.T) {
+	for _, value := range []string{"branch-1", ""} {
+		var request proapi.CreatePatronRequest
+		require.Error(t, json.Unmarshal([]byte(`{"requesterPickupLocationId":"`+value+`","illRequest":{}}`), &request))
+	}
+	for _, body := range []string{`{"illRequest":{}}`, `{"illRequest":{},"requesterPickupLocationId":null}`} {
+		var request proapi.CreatePatronRequest
+		require.NoError(t, json.Unmarshal([]byte(body), &request))
+		pr := buildDbPatronRequest(&request, nil, pgtype.Timestamp{}, "request-1", request.IllRequest, "", "default")
+		require.False(t, pr.RequesterPickupLocationID.Valid)
+		require.Nil(t, toPickupLocationID(pr.RequesterPickupLocationID))
+	}
+}
+
+func TestPutPatronRequestsIdPickupLocationOptional(t *testing.T) {
+	original, replacement := uuid.New(), uuid.New()
+	for _, tc := range []struct {
+		name            string
+		supplied        nullable.Nullable[uuid.UUID]
+		expected        pgtype.UUID
+		validationError error
+	}{
+		{name: "omitted preserves selection", expected: pgtype.UUID{Bytes: original, Valid: true}},
+		{name: "supplied replaces selection", supplied: nullable.NewNullableWithValue(replacement), expected: pgtype.UUID{Bytes: replacement, Valid: true}},
+		{name: "null clears selection", supplied: nullable.NewNullNullable[uuid.UUID]()},
+		{name: "backend failure rejected", supplied: nullable.NewNullableWithValue(replacement), validationError: errors.New("directory unavailable")},
+		{name: "replica conflict rejected", supplied: nullable.NewNullableWithValue(replacement), validationError: errors.New("conflicting responses from directory replicas")},
+		{name: "invalid selection rejected", supplied: nullable.NewNullableWithValue(replacement), validationError: fmt.Errorf("%w: pickup location is not a branch of requester institution", prservice.ErrInvalidPickupLocation)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &PrRepoUpdateCapture{pickupLocationID: pgtype.UUID{Bytes: original, Valid: true}}
+			handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+			validation := &pickupLocationValidatorStub{err: tc.validationError}
+			handler.SetPickupLocationValidator(validation)
+			id := "3"
+			body, err := json.Marshal(proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol, IllRequest: validIllRequest(), RequesterPickupLocationId: tc.supplied})
+			require.NoError(t, err)
+			rr := httptest.NewRecorder()
+			handler.PutPatronRequestsId(rr, httptest.NewRequest(http.MethodPut, "/", bytes.NewReader(body)), id, proapi.PutPatronRequestsIdParams{})
+			if tc.validationError != nil {
+				status := http.StatusInternalServerError
+				if errors.Is(tc.validationError, prservice.ErrInvalidPickupLocation) {
+					status = http.StatusBadRequest
+				}
+				require.Equal(t, status, rr.Code, rr.Body.String())
+				require.Nil(t, repo.lastUpdateParams)
+				require.Contains(t, rr.Body.String(), tc.validationError.Error())
+			} else {
+				require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+				require.NotNil(t, repo.lastUpdateParams)
+				require.Equal(t, tc.expected, repo.lastUpdateParams.RequesterPickupLocationID)
+			}
+			if tc.supplied.IsSpecified() && !tc.supplied.IsNull() {
+				require.Len(t, validation.requests, 1)
+				require.Equal(t, replacement, uuid.UUID(validation.requests[0].RequesterPickupLocationID.Bytes))
+				require.Equal(t, symbol, validation.requests[0].RequesterSymbol.String)
+			} else {
+				require.Empty(t, validation.requests)
+			}
+		})
+	}
+}
+
+type pickupLocationValidatorStub struct {
+	err      error
+	requests []pr_db.PatronRequest
+}
+
+func (v *pickupLocationValidatorStub) ValidateRequesterPickupLocation(ctx common.ExtendedContext, pr pr_db.PatronRequest) error {
+	v.requests = append(v.requests, pr)
+	return v.err
+}
+
+func TestCreateValidatesPickupBeforePersistence(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		selected        bool
+		validationError error
+		status          int
+	}{
+		{name: "valid selection", selected: true, status: http.StatusCreated},
+		{name: "missing entry", selected: true, validationError: fmt.Errorf("%w: pickup location not found", prservice.ErrInvalidPickupLocation), status: http.StatusBadRequest},
+		{name: "unrelated institution", selected: true, validationError: fmt.Errorf("%w: pickup location is not a branch of requester institution", prservice.ErrInvalidPickupLocation), status: http.StatusBadRequest},
+		{name: "directory unavailable", selected: true, validationError: errors.New("directory unavailable"), status: http.StatusInternalServerError},
+		{name: "database failure", selected: true, validationError: errors.New("database unavailable"), status: http.StatusInternalServerError},
+		{name: "replica conflict", selected: true, validationError: errors.New("conflicting responses from directory replicas"), status: http.StatusInternalServerError},
+		{name: "no selection", status: http.StatusCreated},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			id := "new-request"
+			repo := &createdPatronRequestRepo{created: pr_db.PatronRequest{ID: id}, view: pr_db.PatronRequestSearchView{ID: id, IllRequest: validIllRequest()}}
+			validation := &pickupLocationValidatorStub{err: tc.validationError}
+			handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+			handler.SetPickupLocationValidator(validation)
+			body := proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol, IllRequest: validIllRequest()}
+			pickupID := uuid.New()
+			if tc.selected {
+				body.RequesterPickupLocationId.Set(pickupID)
+			}
+			encoded, err := json.Marshal(body)
+			require.NoError(t, err)
+			rr := httptest.NewRecorder()
+			handler.PostPatronRequests(rr, httptest.NewRequest(http.MethodPost, "/patron_requests", bytes.NewReader(encoded)), proapi.PostPatronRequestsParams{})
+			require.Equal(t, tc.status, rr.Code, rr.Body.String())
+			if tc.selected {
+				require.Len(t, validation.requests, 1)
+				require.Equal(t, symbol, validation.requests[0].RequesterSymbol.String)
+				require.Equal(t, pickupID, uuid.UUID(validation.requests[0].RequesterPickupLocationID.Bytes))
+			} else {
+				require.Empty(t, validation.requests)
+			}
+			if tc.validationError != nil {
+				require.Zero(t, repo.createCalls)
+				require.Contains(t, rr.Body.String(), tc.validationError.Error())
+			} else {
+				require.Equal(t, 1, repo.createCalls)
+			}
+		})
+	}
 }

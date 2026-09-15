@@ -75,5 +75,10 @@ type LmsAdapter interface {
 
 	ItemLocation() string
 
+	// These report whether the configured operation consumes a pickup location.
+	// False includes manual/disabled operations and disabled pickup fields.
+	RequestItemUsesPickupLocation() bool
+	AcceptItemUsesPickupLocation() bool
+
 	RequesterPickupLocation() string
 }

@@ -28,7 +28,12 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/oapi-codegen/nullable"
 )
+
+type PickupLocationValidator interface {
+	ValidateRequesterPickupLocation(ctx common.ExtendedContext, pr pr_db.PatronRequest) error
+}
 
 type ActionTaskProcessor interface {
 	ProcessInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error)
@@ -39,15 +44,16 @@ var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 var errInvalidPatronRequest = errors.New("invalid patron request")
 
 type PatronRequestApiHandler struct {
-	limitDefault         int32
-	prRepo               pr_db.PrRepo
-	eventBus             events.EventBus
-	eventRepo            events.EventRepo
-	actionMappingService prservice.ActionMappingService
-	autoActionRunner     prservice.AutoActionRunner
-	actionTaskProcessor  ActionTaskProcessor
-	tenantResolver       *tenant.TenantResolver
-	notificationSender   prservice.PatronRequestNotificationService
+	pickupLocationValidator PickupLocationValidator
+	limitDefault            int32
+	prRepo                  pr_db.PrRepo
+	eventBus                events.EventBus
+	eventRepo               events.EventRepo
+	actionMappingService    prservice.ActionMappingService
+	autoActionRunner        prservice.AutoActionRunner
+	actionTaskProcessor     ActionTaskProcessor
+	tenantResolver          *tenant.TenantResolver
+	notificationSender      prservice.PatronRequestNotificationService
 }
 
 func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
@@ -61,6 +67,10 @@ func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
 		tenantResolver:       tenantResolver,
 		notificationSender:   *prservice.CreatePatronRequestNotificationService(prRepo, eventBus, iso18626Handler),
 	}
+}
+
+func (a *PatronRequestApiHandler) SetPickupLocationValidator(validator PickupLocationValidator) {
+	a.pickupLocationValidator = validator
 }
 
 func (a *PatronRequestApiHandler) SetAutoActionRunner(autoActionRunner prservice.AutoActionRunner) {
@@ -316,6 +326,9 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 	}
 
 	dbreq := buildDbPatronRequest(&newPr, params.XOkapiTenant, creationTime, requesterReqId, illRequest, borrowerInitialState, stateModelName)
+	if !a.validatePickupLocation(w, ctx, dbreq) {
+		return
+	}
 	pr, err := a.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(dbreq))
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -533,6 +546,12 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 
 	existingPr.RequesterReqID = getDbText(&requesterReqId)
 	existingPr.IllRequest = illRequest
+	if newPr.RequesterPickupLocationId.IsSpecified() {
+		existingPr.RequesterPickupLocationID = getPickupLocationID(newPr.RequesterPickupLocationId)
+		if !a.validatePickupLocation(w, ctx, existingPr) {
+			return
+		}
+	}
 	existingPr.StateModel = stateModelName
 	existingPr.Patron = getDbText(newPr.Patron)
 	if newPr.InternalNote != nil {
@@ -1276,35 +1295,36 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequestSearchView) 
 	}
 
 	pr := proapi.PatronRequest{
-		Id:                       request.ID,
-		CreatedAt:                request.CreatedAt.Time,
-		State:                    string(request.State),
-		StateModel:               request.StateModel,
-		Side:                     string(request.Side),
-		Patron:                   toString(request.Patron),
-		RequesterSymbol:          toString(request.RequesterSymbol),
-		SupplierSymbol:           toString(request.SupplierSymbol),
-		IllRequest:               request.IllRequest,
-		RequesterRequestId:       toString(request.RequesterReqID),
-		NeedsAttention:           request.NeedsAttention,
-		HasCost:                  request.HasCost,
-		UnreadNotificationsCount: request.UnreadNotificationsCount,
-		LastAction:               toString(request.LastAction),
-		LastActionOutcome:        toString(request.LastActionOutcome),
-		LastActionResult:         toString(request.LastActionResult),
-		Items:                    &items,
-		NotificationsLink:        notificationsLink,
-		ItemsLink:                itemsLink,
-		AvailableActionsLink:     availableActionsLink,
-		IllTransactionLink:       illTransactionLink,
-		EventsLink:               eventsLink,
-		TerminalState:            request.TerminalState,
-		InternalNote:             toString(request.InternalNote),
-		RequesterName:            toString(request.RequesterName),
-		SupplierName:             toString(request.SupplierName),
-		NextReqId:                toString(request.NextReqID),
-		PrevReqId:                toString(request.PrevReqID),
-		RetryBibInfo:             request.RetryBibInfo,
+		Id:                        request.ID,
+		CreatedAt:                 request.CreatedAt.Time,
+		State:                     string(request.State),
+		StateModel:                request.StateModel,
+		Side:                      string(request.Side),
+		Patron:                    toString(request.Patron),
+		RequesterSymbol:           toString(request.RequesterSymbol),
+		RequesterPickupLocationId: toPickupLocationID(request.RequesterPickupLocationID),
+		SupplierSymbol:            toString(request.SupplierSymbol),
+		IllRequest:                request.IllRequest,
+		RequesterRequestId:        toString(request.RequesterReqID),
+		NeedsAttention:            request.NeedsAttention,
+		HasCost:                   request.HasCost,
+		UnreadNotificationsCount:  request.UnreadNotificationsCount,
+		LastAction:                toString(request.LastAction),
+		LastActionOutcome:         toString(request.LastActionOutcome),
+		LastActionResult:          toString(request.LastActionResult),
+		Items:                     &items,
+		NotificationsLink:         notificationsLink,
+		ItemsLink:                 itemsLink,
+		AvailableActionsLink:      availableActionsLink,
+		IllTransactionLink:        illTransactionLink,
+		EventsLink:                eventsLink,
+		TerminalState:             request.TerminalState,
+		InternalNote:              toString(request.InternalNote),
+		RequesterName:             toString(request.RequesterName),
+		SupplierName:              toString(request.SupplierName),
+		NextReqId:                 toString(request.NextReqID),
+		PrevReqId:                 toString(request.PrevReqID),
+		RetryBibInfo:              request.RetryBibInfo,
 	}
 	if request.UpdatedAt.Valid {
 		pr.UpdatedAt = &request.UpdatedAt.Time
@@ -1425,22 +1445,23 @@ func buildDbPatronRequest(
 	stateModel string,
 ) pr_db.PatronRequest {
 	return pr_db.PatronRequest{
-		ID:              requesterReqId,
-		CreatedAt:       creationTime,
-		State:           initialState,
-		Side:            prservice.SideBorrowing,
-		Patron:          getDbText(request.Patron),
-		RequesterSymbol: getDbText(request.RequesterSymbol),
-		SupplierSymbol:  getDbText(nil),
-		IllRequest:      illRequest,
-		Tenant:          getDbText(tenant),
-		RequesterReqID:  getDbText(&requesterReqId),
-		InternalNote:    getDbText(request.InternalNote),
-		Language:        pr_db.LANGUAGE,
-		Items:           []pr_db.PrItem{},
-		TerminalState:   false,
-		NeedsAttention:  true,
-		StateModel:      stateModel,
+		ID:                        requesterReqId,
+		CreatedAt:                 creationTime,
+		State:                     initialState,
+		Side:                      prservice.SideBorrowing,
+		Patron:                    getDbText(request.Patron),
+		RequesterSymbol:           getDbText(request.RequesterSymbol),
+		RequesterPickupLocationID: getPickupLocationID(request.RequesterPickupLocationId),
+		SupplierSymbol:            getDbText(nil),
+		IllRequest:                illRequest,
+		Tenant:                    getDbText(tenant),
+		RequesterReqID:            getDbText(&requesterReqId),
+		InternalNote:              getDbText(request.InternalNote),
+		Language:                  pr_db.LANGUAGE,
+		Items:                     []pr_db.PrItem{},
+		TerminalState:             false,
+		NeedsAttention:            true,
+		StateModel:                stateModel,
 		// LastAction, LastActionOutcome and LastActionResult are not set on creation
 		// they will be updated when the first action is executed.
 	}
@@ -1537,4 +1558,39 @@ func toDbNotification(create proapi.CreatePrNotification, pr pr_db.PatronRequest
 			Valid: true,
 		},
 	}
+}
+
+// validatePickupLocation is shared by creation and explicit pickup updates.
+func (a *PatronRequestApiHandler) validatePickupLocation(w http.ResponseWriter, ctx common.ExtendedContext, pr pr_db.PatronRequest) bool {
+	if !pr.RequesterPickupLocationID.Valid {
+		return true
+	}
+	if a.pickupLocationValidator == nil {
+		api.AddInternalError(ctx, w, errors.New("pickup location validator is not configured"))
+		return false
+	}
+	if err := a.pickupLocationValidator.ValidateRequesterPickupLocation(ctx, pr); err != nil {
+		if errors.Is(err, prservice.ErrInvalidPickupLocation) {
+			api.AddBadRequestError(ctx, w, err)
+		} else {
+			api.AddInternalError(ctx, w, err)
+		}
+		return false
+	}
+	return true
+}
+
+func getPickupLocationID(id nullable.Nullable[uuid.UUID]) pgtype.UUID {
+	if !id.IsSpecified() || id.IsNull() {
+		return pgtype.UUID{}
+	}
+	return pgtype.UUID{Bytes: id.MustGet(), Valid: true}
+}
+
+func toPickupLocationID(id pgtype.UUID) *uuid.UUID {
+	if !id.Valid {
+		return nil
+	}
+	value := uuid.UUID(id.Bytes)
+	return &value
 }

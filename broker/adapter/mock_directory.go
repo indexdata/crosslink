@@ -3,9 +3,12 @@ package adapter
 import (
 	"cmp"
 	"errors"
+	"fmt"
+	"os"
 	"slices"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/common"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
@@ -17,6 +20,49 @@ type MockDirectoryLookupAdapter struct {
 }
 
 func (m *MockDirectoryLookupAdapter) Lookup(ctx common.ExtendedContext, params DirectoryLookupParams) ([]DirectoryEntry, string, error) {
+	institutionSymbol := strings.TrimSpace(os.Getenv("MOCK_PICKUP_INSTITUTION_SYMBOL"))
+	if institutionSymbol == "" {
+		institutionSymbol = "ISIL:MOCK"
+	}
+	institutionID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("crosslink/mock/institution/"+institutionSymbol))
+	institutionEntry := func() DirectoryEntry {
+		authority, symbol := common.SplitSymbolLenient(institutionSymbol)
+		return DirectoryEntry{
+			Name:    "Mock institution " + institutionSymbol,
+			Symbols: []string{institutionSymbol}, URL: MOCK_PEER_URL,
+			Vendor: dirapi.Unknown, BrokerMode: DEFAULT_BROKER_MODE,
+			CustomData: dirapi.Entry{Id: &institutionID, Name: "Mock institution " + institutionSymbol,
+				Symbols: &[]dirapi.Symbol{{Authority: authority, Symbol: symbol}}},
+		}
+	}
+	if params.EntryID != "" {
+		id, err := uuid.Parse(params.EntryID)
+		if err != nil {
+			return nil, "", fmt.Errorf("invalid directory entry ID: %w", err)
+		}
+		if id == institutionID {
+			return []DirectoryEntry{institutionEntry()}, "/by-id/" + id.String(), nil
+		}
+		// Synthetic pickup locations belong to the configured mock institution.
+		pickupCode := id.String()
+		name := "Mock pickup location " + pickupCode
+		return []DirectoryEntry{{
+			Name:       name,
+			URL:        MOCK_PEER_URL,
+			Vendor:     dirapi.Unknown,
+			BrokerMode: DEFAULT_BROKER_MODE,
+			CustomData: dirapi.Entry{
+				Id:        &id,
+				Parent:    &institutionID,
+				Name:      name,
+				LmsConfig: &dirapi.LmsConfig{RequesterPickupLocation: &pickupCode},
+				Addresses: &[]dirapi.Address{{
+					Type:              "Shipping",
+					AddressComponents: &[]dirapi.AddressComponent{{Type: "Thoroughfare", Value: "1 Mock Library Street"}},
+				}},
+			},
+		}}, "/by-id/" + pickupCode, nil
+	}
 	if params.Tenant != "" {
 		if params.Tenant == "tenanterror" {
 			return []DirectoryEntry{}, "", errors.New("there is an error")
@@ -64,6 +110,10 @@ func (m *MockDirectoryLookupAdapter) Lookup(ctx common.ExtendedContext, params D
 
 	var dirs []DirectoryEntry
 	for _, value := range params.Symbols {
+		if value == institutionSymbol {
+			dirs = append(dirs, institutionEntry())
+			continue
+		}
 		dirs = append(dirs, DirectoryEntry{
 			Symbols:    []string{value},
 			URL:        MOCK_PEER_URL,
