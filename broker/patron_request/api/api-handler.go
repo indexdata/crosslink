@@ -1310,7 +1310,7 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequestSearchView) 
 		CreatedAt:                 request.CreatedAt.Time,
 		State:                     string(request.State),
 		StateModel:                request.StateModel,
-		Side:                     proapi.PatronRequestSide(request.Side),
+		Side:                      proapi.PatronRequestSide(request.Side),
 		Patron:                    toString(request.Patron),
 		RequesterSymbol:           toString(request.RequesterSymbol),
 		RequesterPickupLocationId: toPickupLocationID(request.RequesterPickupLocationID),
