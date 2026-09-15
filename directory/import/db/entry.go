@@ -20,7 +20,6 @@ import (
 
 const (
 	maxImportEntryLockAttempts = 5
-	maxImportMappingAttempts   = 3
 	importLockRetryBaseWait    = 10 * time.Millisecond
 )
 

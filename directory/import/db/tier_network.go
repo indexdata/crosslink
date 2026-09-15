@@ -9,6 +9,7 @@ import (
 	"github.com/indexdata/crosslink/directory/db"
 	"github.com/indexdata/crosslink/directory/import/model"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func (r *PgImportRepo) ImportTier(ctx context.Context, aggregate model.TierAggregate, policy model.ConflictPolicy) (model.RepoResult, error) {
@@ -16,16 +17,23 @@ func (r *PgImportRepo) ImportTier(ctx context.Context, aggregate model.TierAggre
 		return model.RepoResult{}, err
 	}
 	key := aggregate.Key.Consortium.String() + "/" + aggregate.Key.Name
-	for range maxImportMappingAttempts {
+	var lastErr error
+	for attemptIndex := 0; attemptIndex < maxImportEntryLockAttempts; attemptIndex++ {
 		result, err := r.importTierAttempt(ctx, aggregate, policy, key)
-		if !errors.Is(err, errImportEntryMappingChanged) {
+		if !retryableAssignmentImportError(err) {
 			return result, err
 		}
+		lastErr = err
 		if err := ctx.Err(); err != nil {
 			return model.RepoResult{}, err
 		}
+		if attemptIndex+1 < maxImportEntryLockAttempts {
+			if err := waitForImportRetry(ctx, attemptIndex); err != nil {
+				return model.RepoResult{}, err
+			}
+		}
 	}
-	return model.RepoResult{}, fmt.Errorf("import tier %s: entry mappings changed repeatedly", key)
+	return model.RepoResult{}, fmt.Errorf("import tier %s: transaction conflicted repeatedly: %w", key, lastErr)
 }
 
 func (r *PgImportRepo) importTierAttempt(ctx context.Context, aggregate model.TierAggregate, policy model.ConflictPolicy, key string) (model.RepoResult, error) {
@@ -82,16 +90,23 @@ func (r *PgImportRepo) ImportNetwork(ctx context.Context, aggregate model.Networ
 		return model.RepoResult{}, err
 	}
 	key := aggregate.Key.Consortium.String() + "/" + aggregate.Key.Name
-	for range maxImportMappingAttempts {
+	var lastErr error
+	for attemptIndex := 0; attemptIndex < maxImportEntryLockAttempts; attemptIndex++ {
 		result, err := r.importNetworkAttempt(ctx, aggregate, policy, key)
-		if !errors.Is(err, errImportEntryMappingChanged) {
+		if !retryableAssignmentImportError(err) {
 			return result, err
 		}
+		lastErr = err
 		if err := ctx.Err(); err != nil {
 			return model.RepoResult{}, err
 		}
+		if attemptIndex+1 < maxImportEntryLockAttempts {
+			if err := waitForImportRetry(ctx, attemptIndex); err != nil {
+				return model.RepoResult{}, err
+			}
+		}
 	}
-	return model.RepoResult{}, fmt.Errorf("import network %s: entry mappings changed repeatedly", key)
+	return model.RepoResult{}, fmt.Errorf("import network %s: transaction conflicted repeatedly: %w", key, lastErr)
 }
 
 func (r *PgImportRepo) importNetworkAttempt(ctx context.Context, aggregate model.NetworkAggregate, policy model.ConflictPolicy, key string) (model.RepoResult, error) {
@@ -179,7 +194,7 @@ func resolveAndLockAssignments(ctx context.Context, queries *db.Queries, consort
 		mappings = append(mappings, entryMapping{ref: ref, expectedOwner: &entry.ID})
 	}
 
-	lockedEntries, err := lockEntryRows(ctx, queries, entryIDs...)
+	lockedEntries, err := lockAssignmentEntryRows(ctx, queries, entryIDs...)
 	if err != nil {
 		return db.Entry{}, nil, fmt.Errorf("lock assignment entries: %w", err)
 	}
@@ -197,6 +212,39 @@ func resolveAndLockAssignments(ctx context.Context, queries *db.Queries, consort
 		}
 	}
 	return consortium, assignments, nil
+}
+
+func retryableAssignmentImportError(err error) bool {
+	if errors.Is(err, errImportEntryMappingChanged) {
+		return true
+	}
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+	return pgErr.Code == "40P01" || pgErr.Code == "40001" || pgErr.Code == "55P03"
+}
+
+func lockAssignmentEntryRows(ctx context.Context, queries *db.Queries, ids ...uuid.UUID) (map[uuid.UUID]db.Entry, error) {
+	ordered := orderedUniqueEntryIDs(ids...)
+	entries := make(map[uuid.UUID]db.Entry, len(ordered))
+	for index, id := range ordered {
+		var entry db.Entry
+		var err error
+		if index == 0 {
+			entry, err = queries.EntryByIdForUpdate(ctx, id)
+		} else {
+			entry, err = queries.EntryByIdForImportUpdate(ctx, id)
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errImportEntryMappingChanged
+		}
+		if err != nil {
+			return nil, err
+		}
+		entries[id] = entry
+	}
+	return entries, nil
 }
 
 func requireAssignmentEntries(assignments []resolvedAssignment) ([]db.Entry, error) {
