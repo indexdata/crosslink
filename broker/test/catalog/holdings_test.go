@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -256,7 +258,7 @@ func TestRequestRequestSruServerLoaned(t *testing.T) {
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n"
-	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+	compareLoanEvents(appCtx, t, illTrans.ID, exp)
 }
 
 // should locate three candidate suppliers via SRU; the second selected supplier fulfills the loan with scenario LOANED in note
@@ -313,5 +315,19 @@ func TestRequestRequestSruServerLoanedMultiple(t *testing.T) {
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n"
-	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+	compareLoanEvents(appCtx, t, illTrans.ID, exp)
+}
+
+func compareLoanEvents(appCtx common.ExtendedContext, t *testing.T, illId, expected string) {
+	t.Helper()
+	actual := apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illId, strings.Count(expected, "\n"), false, func(e events.Event) string {
+		return fmt.Sprintf(apptest.EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
+	})
+	// The requester's reply can arrive while the broker is still confirming the
+	// supplier message. Accept either order for this adjacent pair only; all
+	// event counts, statuses, and the rest of the sequence must still match.
+	const reply = "NOTICE, requester-msg-received = SUCCESS\n"
+	const confirmation = "TASK, confirm-supplier-msg = SUCCESS\n"
+	actual = strings.ReplaceAll(actual, reply+confirmation, confirmation+reply)
+	assert.Equal(t, expected, actual)
 }
