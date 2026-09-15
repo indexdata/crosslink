@@ -10,9 +10,56 @@ import (
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/directory/db"
 	"github.com/indexdata/crosslink/directory/import/model"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 )
+
+var errClosurePersisted = errors.New("closure reached persistence")
+
+type closurePersistenceStub struct{}
+
+func (closurePersistenceStub) Exec(context.Context, string, ...interface{}) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
+}
+
+func (closurePersistenceStub) Query(context.Context, string, ...interface{}) (pgx.Rows, error) {
+	return nil, errClosurePersisted
+}
+
+func (closurePersistenceStub) QueryRow(context.Context, string, ...interface{}) pgx.Row {
+	return closurePersistenceRow{}
+}
+
+type closurePersistenceRow struct{}
+
+func (closurePersistenceRow) Scan(...interface{}) error {
+	return errClosurePersisted
+}
+
+func TestReplaceEntryChildrenReturnsInvalidClosureStartDate(t *testing.T) {
+	queries := db.New(closurePersistenceStub{})
+	data := model.EntryData{Closures: []model.Closure{{StartDate: "invalid", EndDate: "2026-12-26"}}}
+
+	err := replaceEntryChildren(context.Background(), queries, uuid.New(), data)
+
+	var parseErr *time.ParseError
+	require.ErrorAs(t, err, &parseErr)
+	require.ErrorContains(t, err, "parse closure 1 startDate")
+	require.NotErrorIs(t, err, errClosurePersisted)
+}
+
+func TestReplaceEntryChildrenReturnsInvalidClosureEndDate(t *testing.T) {
+	queries := db.New(closurePersistenceStub{})
+	data := model.EntryData{Closures: []model.Closure{{StartDate: "2026-12-24", EndDate: "invalid"}}}
+
+	err := replaceEntryChildren(context.Background(), queries, uuid.New(), data)
+
+	var parseErr *time.ParseError
+	require.ErrorAs(t, err, &parseErr)
+	require.ErrorContains(t, err, "parse closure 1 endDate")
+	require.NotErrorIs(t, err, errClosurePersisted)
+}
 
 func TestRunImportEntryAttemptsRetriesTransactionConflicts(t *testing.T) {
 	attempts := 0

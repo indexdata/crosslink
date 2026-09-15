@@ -6,7 +6,7 @@ import (
 	"github.com/indexdata/crosslink/directory/auth"
 )
 
-const MaxImportBodyBytes int64 = 2 << 30
+const MaxImportBodyBytes int64 = 1 << 30
 
 func ImportBodyLimitMiddleware(maxBytes int64, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {

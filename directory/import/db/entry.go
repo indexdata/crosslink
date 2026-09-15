@@ -477,9 +477,15 @@ func replaceEntryChildren(ctx context.Context, queries *db.Queries, entryID uuid
 	if err := queries.DeleteClosuresByEntry(ctx, entryID); err != nil {
 		return err
 	}
-	for _, closure := range data.Closures {
-		start, _ := time.Parse(time.DateOnly, closure.StartDate)
-		end, _ := time.Parse(time.DateOnly, closure.EndDate)
+	for index, closure := range data.Closures {
+		start, err := time.Parse(time.DateOnly, closure.StartDate)
+		if err != nil {
+			return fmt.Errorf("parse closure %d startDate: %w", index+1, err)
+		}
+		end, err := time.Parse(time.DateOnly, closure.EndDate)
+		if err != nil {
+			return fmt.Errorf("parse closure %d endDate: %w", index+1, err)
+		}
 		if _, err := queries.CreateClosure(ctx, db.CreateClosureParams{
 			Entry: entryID, StartDate: pgtype.Timestamp{Time: start, Valid: true}, EndDate: pgtype.Timestamp{Time: end, Valid: true}, Reason: closure.Reason,
 		}); err != nil {
