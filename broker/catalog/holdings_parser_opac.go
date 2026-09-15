@@ -59,7 +59,10 @@ func (p *OpacHoldingsParser) Parse(record []byte, params LookupParams) ([]Holdin
 				h.ItemLoanPolicy = strings.TrimSpace(circ.AvailableThru)
 			}
 			if enabled(p.config.IncludeTemporaryLocation, false) {
-				h.TemporaryShelvingLocation = circ.TemporaryLocation
+				// Supplier policy and ordering consume the effective shelving location.
+				if temporaryLocation := strings.TrimSpace(circ.TemporaryLocation); temporaryLocation != "" {
+					h.ShelvingLocation = temporaryLocation
+				}
 			}
 			result = append(result, h)
 			if !enabled(p.config.AllCirculations, false) {

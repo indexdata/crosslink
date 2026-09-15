@@ -66,12 +66,12 @@ func TestOpacProfiles(t *testing.T) {
 		require.Len(t, h, 2)
 		require.Equal(t, "1", h[0].ItemId)
 		require.Equal(t, "LOAN", h[0].ItemLoanPolicy)
-		require.Equal(t, "STACKS", h[0].ShelvingLocation)
 		if name == "FOLIO" {
-			require.Equal(t, "TEMP", h[0].TemporaryShelvingLocation)
+			require.Equal(t, "TEMP", h[0].ShelvingLocation)
 		} else {
-			require.Empty(t, h[0].TemporaryShelvingLocation)
+			require.Equal(t, "STACKS", h[0].ShelvingLocation)
 		}
+		require.Equal(t, "STACKS", h[1].ShelvingLocation)
 	}
 	// An explicitly selected generic OPAC parser keeps the old first-circulation behavior.
 	h, err := NewOpacHoldingsParser(dirapi.OpacHoldingsParserConfig{}).Parse([]byte(record), LookupParams{})
@@ -79,6 +79,31 @@ func TestOpacProfiles(t *testing.T) {
 	require.Len(t, h, 2)
 	require.Empty(t, h[1].Location)
 }
+func TestFolioEffectiveShelvingLocation(t *testing.T) {
+	for _, tc := range []struct {
+		name, temporary, override, want string
+	}{
+		{name: "temporary", temporary: `<temporaryLocation> TEMP </temporaryLocation>`, want: "TEMP"},
+		{name: "missing", want: "STACKS"},
+		{name: "empty", temporary: `<temporaryLocation/>`, want: "STACKS"},
+		{name: "whitespace", temporary: `<temporaryLocation> </temporaryLocation>`, want: "STACKS"},
+		{name: "disabled", temporary: `<temporaryLocation>TEMP</temporaryLocation>`, override: `,"holdingsFormat":{"opac":{"includeTemporaryLocation":false}}`, want: "STACKS"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var entry dirapi.Entry
+			require.NoError(t, json.Unmarshal([]byte(`{"catalogConfig":{"profile":"FOLIO"`+tc.override+`}}`), &entry))
+			effective, err := profiles.Resolve(entry)
+			require.NoError(t, err)
+			parser, err := getHoldingsParser(effective.Catalog.HoldingsFormat)
+			require.NoError(t, err)
+			record := `<opacRecord><holdings><holding><localLocation>MAIN</localLocation><shelvingLocation>STACKS</shelvingLocation><circulations><circulation><availableNow value="1"/>` + tc.temporary + `</circulation></circulations></holding></holdings></opacRecord>`
+			holdings, err := parser.Parse([]byte(record), LookupParams{})
+			require.NoError(t, err)
+			require.Equal(t, []Holding{{Location: "MAIN", ShelvingLocation: tc.want}}, holdings)
+		})
+	}
+}
+
 func TestProfileLookupAggregationAndFallback(t *testing.T) {
 	for _, name := range []string{"Alma", "Sierra", "Koha", "FOLIO"} {
 		t.Run(name, func(t *testing.T) {

@@ -111,7 +111,8 @@ OPAC overrides include:
 - `availablePublicNotes`: exact accepted strings; required for `publicNote`.
 - `requireLocalLocation`: require a nonempty local location.
 - `shelvingLocationSource`: `shelvingLocation` or `localLocation`.
-- `includeItemId`, `includeItemLoanPolicy`, `includeTemporaryLocation`: circulation mappings.
+- `includeItemId`, `includeItemLoanPolicy`: circulation mappings.
+- `includeTemporaryLocation`: use a nonempty, trimmed circulation temporary location as the effective shelving location for holdings policy and supplier ordering; otherwise retain the permanent shelving location. Enabled by default for FOLIO.
 - `allCirculations`: emit every available circulation, instead of the first per holding.
 
 Generic OPAC retains its previous first-available-circulation behavior and does
