@@ -10,6 +10,10 @@ import (
 	dirapi "github.com/indexdata/crosslink/directory/api"
 )
 
+// Effective holds resolved LMS and catalog configurations and their setting origins.
+// Values returned by Resolve are validated and independent of the directory entry.
+// LMS and Catalog remain nil when the corresponding entry configuration is absent;
+// selecting a profile alone does not enable a catalog lookup endpoint.
 type Effective struct {
 	LMS            *dirapi.LmsConfig
 	Catalog        *dirapi.CatalogConfig
@@ -68,6 +72,8 @@ func supported(name, setting string) error {
 	}
 }
 
+// Resolve applies profile defaults and explicit directory overrides to produce
+// validated effective LMS and catalog configurations without mutating entry.
 func Resolve(entry dirapi.Entry) (*Effective, error) {
 	rawL, rawC := asObject(entry.LmsConfig), asObject(entry.CatalogConfig)
 	vendor := selected(rawL, "vendor", "Generic")
