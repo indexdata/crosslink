@@ -14,7 +14,6 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	apiValidator "github.com/oapi-codegen/nethttp-middleware"
 	slogctx "github.com/veqryn/slog-context"
 	sloghttp "github.com/veqryn/slog-context/http"
 	pgxUUID "github.com/vgarvardt/pgx-google-uuid/v5"
@@ -23,6 +22,8 @@ import (
 	"github.com/indexdata/crosslink/directory/auth"
 	"github.com/indexdata/crosslink/directory/db"
 	"github.com/indexdata/crosslink/directory/enhancedcontext"
+	importdb "github.com/indexdata/crosslink/directory/import/db"
+	importservice "github.com/indexdata/crosslink/directory/import/service"
 )
 
 var Host = cmp.Or(os.Getenv("HOST"), "localhost")
@@ -60,19 +61,30 @@ func InitHandler(ctx context.Context, dbpool *pgxpool.Pool) http.Handler {
 		slog.ErrorContext(ctx, "Error loading API spec", "error", err)
 		os.Exit(1)
 	}
+	if err := swagger.Validate(ctx); err != nil {
+		slog.ErrorContext(ctx, "Invalid API spec", "error", err)
+		os.Exit(1)
+	}
 
 	queries := db.New(dbpool)
-	impl := api.NewApiImpl(dbpool, queries)
+	importRepo := importdb.New(dbpool)
+	importer, err := importservice.New(importRepo, swagger)
+	if err != nil {
+		slog.ErrorContext(ctx, "Invalid import schemas", "error", err)
+		os.Exit(1)
+	}
+	impl := api.NewApiImpl(dbpool, queries, importer)
 	si := api.NewStrictHandler(impl, nil)
 	m := http.NewServeMux()
 	h := api.HandlerWithOptions(si, api.StdHTTPServerOptions{
 		BaseURL:    BasePath,
 		BaseRouter: m,
 	})
-	handlerWithValidation := apiValidator.OapiRequestValidator(swagger)
+	handlerWithValidation := openAPIRequestValidationMiddleware(swagger)
 	handlerWithLogging := httpLoggingMiddleware(handlerWithValidation(h))
 	handlerWithHelper := enhancedcontext.EnhancedContextMiddleware(handlerWithLogging)
-	handlerWithAuth := auth.FolioTokenAwareMiddleware(handlerWithHelper)
+	handlerWithLimit := ImportBodyLimitMiddleware(MaxImportBodyBytes, handlerWithHelper)
+	handlerWithAuth := auth.FolioTokenAwareMiddleware(handlerWithLimit)
 	return handlerWithAuth
 }
 

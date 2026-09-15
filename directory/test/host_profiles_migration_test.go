@@ -22,7 +22,7 @@ func TestHostProfilesMigrationPreservesLegacyHoldings(t *testing.T) {
 		_, err := tx.Exec(ctx, query, args...)
 		require.NoError(t, err)
 	}
-	// Build a real pre-008 schema without changing the integration suite's tables.
+	// Build a real pre-009 schema without changing the integration suite's tables.
 	exec("CREATE SCHEMA host_profiles_migration_test; SET LOCAL search_path TO host_profiles_migration_test")
 	apply := func(version int) {
 		t.Helper()
@@ -33,7 +33,7 @@ func TestHostProfilesMigrationPreservesLegacyHoldings(t *testing.T) {
 		require.NoError(t, err)
 		exec(string(data))
 	}
-	for version := 1; version <= 7; version++ {
+	for version := 1; version <= 8; version++ {
 		apply(version)
 	}
 
@@ -95,7 +95,7 @@ func TestHostProfilesMigrationPreservesLegacyHoldings(t *testing.T) {
 			c.opac, c.reservoir, c.marc21plus1)
 	}
 
-	apply(8)
+	apply(9)
 
 	for i, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
