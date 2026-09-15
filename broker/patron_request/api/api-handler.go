@@ -39,9 +39,11 @@ type ActionTaskProcessor interface {
 	ProcessInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error)
 }
 
-var illRequestValidator = validator.New(validator.WithRequiredStructEnabled())
 var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 var errInvalidPatronRequest = errors.New("invalid patron request")
+var errDuplicateTemplateLabel = errors.New("one or more template labels already exist for this owner, purpose, and audience")
+
+const templateLabelUniqueConstraint = "template_owner_purpose_audience_labels_unique"
 
 type PatronRequestApiHandler struct {
 	pickupLocationValidator PickupLocationValidator
@@ -133,7 +135,7 @@ func (a *PatronRequestApiHandler) GetStateModelTemplates(w http.ResponseWriter, 
 func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *http.Request, params proapi.GetPatronRequestsParams) {
 	logParams := map[string]string{"method": "GetPatronRequests"}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 	symbol, err := a.getRequestSymbol(ctx, r, params.Symbol)
@@ -166,7 +168,7 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 	var side pr_db.PatronRequestSide
 	if isSideParamValid(params.Side) {
 		side = pr_db.PatronRequestSide(*params.Side)
-		_, err = qb.And().Search("side").Term(*params.Side).Build()
+		_, err = qb.And().Search("side").Term(string(*params.Side)).Build()
 		if err != nil {
 			api.AddBadRequestError(ctx, w, err)
 			return
@@ -358,7 +360,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 func (a *PatronRequestApiHandler) DeletePatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.DeletePatronRequestsIdParams) {
 	logParams := map[string]string{"method": "DeletePatronRequestsId", "id": id}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 	if id == events.DEFAULT_PATRON_REQUEST_ID {
@@ -399,7 +401,7 @@ func getOwnerSymbol(side pr_db.PatronRequestSide, requesterSymbol pgtype.Text, s
 	return ""
 }
 
-func (a *PatronRequestApiHandler) getOwnedPatronRequest(w http.ResponseWriter, ctx common.ExtendedContext, id string, side *string, tenant tenant.Tenant) *pr_db.PatronRequest {
+func (a *PatronRequestApiHandler) getOwnedPatronRequest(w http.ResponseWriter, ctx common.ExtendedContext, id string, side *proapi.Side, tenant tenant.Tenant) *pr_db.PatronRequest {
 	pr, err := a.prRepo.GetPatronRequestById(ctx, id)
 	if err != nil {
 		handleDbError(w, ctx, err)
@@ -411,7 +413,7 @@ func (a *PatronRequestApiHandler) getOwnedPatronRequest(w http.ResponseWriter, c
 	return &pr
 }
 
-func (a *PatronRequestApiHandler) getOwnedPatronRequestSearchView(w http.ResponseWriter, ctx common.ExtendedContext, id string, side *string, tenant tenant.Tenant) *pr_db.PatronRequestSearchView {
+func (a *PatronRequestApiHandler) getOwnedPatronRequestSearchView(w http.ResponseWriter, ctx common.ExtendedContext, id string, side *proapi.Side, tenant tenant.Tenant) *pr_db.PatronRequestSearchView {
 	pr, err := a.prRepo.GetPatronRequestSearchView(ctx, id)
 	if err != nil {
 		handleDbError(w, ctx, err)
@@ -423,13 +425,13 @@ func (a *PatronRequestApiHandler) getOwnedPatronRequestSearchView(w http.Respons
 	return &pr
 }
 
-func (a *PatronRequestApiHandler) checkOwnership(w http.ResponseWriter, ctx common.ExtendedContext, prSide pr_db.PatronRequestSide, requesterSymbol pgtype.Text, supplierSymbol pgtype.Text, side *string, tenant tenant.Tenant) bool {
+func (a *PatronRequestApiHandler) checkOwnership(w http.ResponseWriter, ctx common.ExtendedContext, prSide pr_db.PatronRequestSide, requesterSymbol pgtype.Text, supplierSymbol pgtype.Text, side *proapi.Side, tenant tenant.Tenant) bool {
 	isOwner, err := tenant.IsOwnerOf(getOwnerSymbol(prSide, requesterSymbol, supplierSymbol))
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return false
 	}
-	if isOwner && (!isSideParamValid(side) || string(prSide) == *side) {
+	if isOwner && (!isSideParamValid(side) || string(prSide) == string(*side)) {
 		return true
 	}
 	api.AddNotFoundError(w)
@@ -444,8 +446,8 @@ func handleDbError(w http.ResponseWriter, ctx common.ExtendedContext, err error)
 	api.AddInternalError(ctx, w, err)
 }
 
-func isSideParamValid(side *string) bool {
-	return side != nil && (*side == string(prservice.SideBorrowing) || *side == string(prservice.SideLending))
+func isSideParamValid(side *proapi.Side) bool {
+	return side != nil && side.Valid()
 }
 
 func (a *PatronRequestApiHandler) checkEditable(w http.ResponseWriter, ctx common.ExtendedContext, pr pr_db.PatronRequest) bool {
@@ -578,7 +580,7 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdParams) {
 	logParams := map[string]string{"method": "GetPatronRequestsId", "id": id}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
@@ -603,7 +605,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *
 func (a *PatronRequestApiHandler) PutPatronRequestsIdInternalNote(w http.ResponseWriter, r *http.Request, id string, params proapi.PutPatronRequestsIdInternalNoteParams) {
 	logParams := map[string]string{"method": "PutPatronRequestsIdInternalNote", "id": id}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
@@ -649,7 +651,7 @@ func (a *PatronRequestApiHandler) PutPatronRequestsIdInternalNote(w http.Respons
 func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdActionsParams) {
 	logParams := map[string]string{"method": "GetPatronRequestsIdActions", "id": id}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
@@ -694,7 +696,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWrit
 func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWriter, r *http.Request, id string, params proapi.PostPatronRequestsIdActionParams) {
 	logParams := map[string]string{"method": "PostPatronRequestsIdAction", "id": id}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
@@ -742,7 +744,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 func (a *PatronRequestApiHandler) PostPatronRequestsIdTerminate(w http.ResponseWriter, r *http.Request, id string, params proapi.PostPatronRequestsIdTerminateParams) {
 	logParams := map[string]string{"method": "PostPatronRequestsIdTerminate", "id": id}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
@@ -834,7 +836,7 @@ func (a *PatronRequestApiHandler) invokeActionAndWriteResponse(w http.ResponseWr
 func (a *PatronRequestApiHandler) GetPatronRequestsIdEvents(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdEventsParams) {
 	logParams := map[string]string{"method": "GetPatronRequestsIdEvents", "id": id}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 	if events.IsSyntheticID(id) {
@@ -876,7 +878,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdEvents(w http.ResponseWrite
 func (a *PatronRequestApiHandler) GetPatronRequestsIdItems(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdItemsParams) {
 	logParams := map[string]string{"method": "GetPatronRequestsIdItems", "id": id}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
@@ -914,7 +916,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdItems(w http.ResponseWriter
 func (a *PatronRequestApiHandler) GetPatronRequestsIdNotifications(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdNotificationsParams) {
 	logParams := map[string]string{"method": "GetPatronRequestsIdNotifications", "id": id}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
@@ -970,7 +972,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdNotifications(w http.Respon
 func (a *PatronRequestApiHandler) PostPatronRequestsIdNotifications(w http.ResponseWriter, r *http.Request, id string, params proapi.PostPatronRequestsIdNotificationsParams) {
 	logParams := map[string]string{"method": "PostPatronRequestsIdNotifications", "id": id}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
@@ -1027,7 +1029,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdNotifications(w http.Respo
 func (a *PatronRequestApiHandler) PutPatronRequestsIdNotificationsNotificationIdReceipt(w http.ResponseWriter, r *http.Request, id string, notificationId string, params proapi.PutPatronRequestsIdNotificationsNotificationIdReceiptParams) {
 	logParams := map[string]string{"method": "PutPatronRequestsIdNotificationsNotificationIdReceipt", "id": id}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
@@ -1163,7 +1165,7 @@ func (a *PatronRequestApiHandler) PostTemplates(w http.ResponseWriter, r *http.R
 		CreatedAt:   pgtype.Timestamp{Time: time.Now(), Valid: true},
 	})
 	if err != nil {
-		api.AddInternalError(ctx, w, err)
+		writeTemplateSaveError(ctx, w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -1213,10 +1215,19 @@ func (a *PatronRequestApiHandler) PutTemplatesId(w http.ResponseWriter, r *http.
 	tem.Subject = getDbText(updated.Subject)
 	template, err := a.prRepo.SaveTemplate(ctx, pr_db.SaveTemplateParams(*tem))
 	if err != nil {
-		api.AddInternalError(ctx, w, err)
+		writeTemplateSaveError(ctx, w, err)
 		return
 	}
 	api.WriteJsonResponse(w, toApiTemplate(template))
+}
+
+func writeTemplateSaveError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == templateLabelUniqueConstraint {
+		api.WriteJsonErrorResponse(w, errDuplicateTemplateLabel, http.StatusConflict)
+		return
+	}
+	api.AddInternalError(ctx, w, err)
 }
 
 func (a *PatronRequestApiHandler) getTemplateById(w http.ResponseWriter, r *http.Request, id string, symbolString *string, methodName string) (common.ExtendedContext, *pr_db.Template) {
@@ -1299,7 +1310,7 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequestSearchView) 
 		CreatedAt:                 request.CreatedAt.Time,
 		State:                     string(request.State),
 		StateModel:                request.StateModel,
-		Side:                      string(request.Side),
+		Side:                      proapi.PatronRequestSide(request.Side),
 		Patron:                    toString(request.Patron),
 		RequesterSymbol:           toString(request.RequesterSymbol),
 		RequesterPickupLocationId: toPickupLocationID(request.RequesterPickupLocationID),
@@ -1423,7 +1434,7 @@ func prepareAndValidateIllRequest(
 	}
 	illRequest.Header.Timestamp = utils.XSDDateTime{Time: creationTime}
 	illRequest.Header.RequestingAgencyRequestId = requesterReqId
-	if err = validateIllRequest(illRequest); err != nil {
+	if err = prservice.ValidateIllRequest(illRequest); err != nil {
 		return iso18626.Request{}, fmt.Errorf("%w: invalid illRequest: %w", errInvalidPatronRequest, err)
 	}
 	if patron != nil {
@@ -1467,15 +1478,6 @@ func buildDbPatronRequest(
 	}
 }
 
-func validateIllRequest(request iso18626.Request) error {
-	requestForValidation := request
-	if requestForValidation.Header.MultipleItemRequestId == "" {
-		//schema workaround
-		requestForValidation.Header.MultipleItemRequestId = "#empty"
-	}
-	return illRequestValidator.Struct(requestForValidation)
-}
-
 func toApiItem(item pr_db.Item) proapi.PrItem {
 	return proapi.PrItem{
 		Id:         item.ID,
@@ -1513,17 +1515,17 @@ func toApiNotification(notification pr_db.Notification) (proapi.PrNotification, 
 		val := f.Float64
 		cost = &val
 	}
-	var receipt *string
+	var receipt *proapi.NotificationReceipt
 	if notification.Receipt != "" {
-		r := string(notification.Receipt)
+		r := proapi.NotificationReceipt(notification.Receipt)
 		receipt = &r
 	}
 	return proapi.PrNotification{
 		Id:             notification.ID,
 		FromSymbol:     notification.FromSymbol,
 		ToSymbol:       notification.ToSymbol,
-		Direction:      string(notification.Direction),
-		Kind:           proapi.PrNotificationKind(notification.Kind),
+		Direction:      proapi.NotificationDirection(notification.Direction),
+		Kind:           proapi.NotificationKind(notification.Kind),
 		Note:           toString(notification.Note),
 		Cost:           cost,
 		Currency:       toString(notification.Currency),
