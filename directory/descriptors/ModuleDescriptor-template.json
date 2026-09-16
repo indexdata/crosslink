@@ -175,6 +175,17 @@
           ]
         },
         {
+          "methods": ["PATCH"],
+          "pathPattern": "/directory/tiers/{id}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all"
+          ]
+        },
+        {
           "methods": ["DELETE"],
           "pathPattern": "/directory/tiers/{id}",
           "permissionsRequired" : [],
@@ -225,6 +236,17 @@
           ]
         },
         {
+          "methods": ["PATCH"],
+          "pathPattern": "/directory/networks/{id}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all"
+          ]
+        },
+        {
           "methods": ["DELETE"],
           "pathPattern": "/directory/networks/{id}",
           "permissionsRequired" : [],
@@ -272,6 +294,17 @@
             "directory.institution.all",
             "directory.system.all",
             "directory.public.all" 
+          ]
+        },
+        {
+          "methods": ["PATCH"],
+          "pathPattern": "/directory/entry-networks/{id}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all"
           ]
         },
         {
