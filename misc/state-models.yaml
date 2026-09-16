@@ -487,6 +487,12 @@ stateModels:
         desc: ISO18626 Cancel action is sent to supplier/broker
         side: REQUESTER
         events:
+          - name: new-expect-to-supply
+            desc: "A newly selected supplier indicates an intention to supply (ISO18626 ExpectToSupply)"
+            transition: SUPPLIER_LOCATED
+          - name: new-expect-to-supply-local
+            desc: "A newly selected local supplier indicates an intention to supply (ISO18626 ExpectToSupply)"
+            transition: LOCAL_SUPPLY
           - name: cancel-accepted
             desc: Supplier accepts cancellation
             transition: CANCELLED
@@ -501,8 +507,6 @@ stateModels:
           - name: unfilled
             desc: Supplier cannot supply the document
             transition: UNFILLED
-            appliesTo:
-              serviceTypes: [Copy, CopyOrLoan]
 
       - name: COMPLETED
         display: Completed

@@ -31,6 +31,29 @@ cd crosslink
 npx --yes @usebruno/cli@3.5.2 run --env LocalDev --env-var userPassword=dummy
 ```
 
+## Condition rejection regression
+
+The `PR Condition rejection` folder creates a Loan with two suppliers and detects
+which supplier is selected first. It adds a condition, rejects it on the borrowing
+side, and accepts cancellation on the lending side. It verifies that the requester
+continues with the other supplier and that a distinct lending request exists there.
+It then repeats condition rejection and cancellation with that second supplier,
+verifying that the exhausted rota leaves the requester terminal `UNFILLED`.
+Both rounds check requester `CANCEL_PENDING`, supplier `CANCEL_REQUESTED`, and
+supplier terminal `CANCELLED` states.
+
+Run it with the same stack and environment:
+
+```sh
+cd crosslink
+npx --yes @usebruno/cli@3.5.2 run "PR Condition rejection" --env LocalDev --env-var userPassword="dummy"
+```
+
+The existing CI collection run includes this folder automatically. Both environments
+provide `secondSupplierSymbol` and `OkapiTenantSup2` for RS2. The scenario uses
+separate request variables from the happy flow. Continuation must succeed before
+this scenario can verify exhaustion.
+
 ## Reservoir (incomplete)
 
 This is similar to the E2E test with the twist that it uses holdings SRU lookup.

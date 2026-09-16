@@ -625,6 +625,51 @@ paths:
             text/plain:
               schema:
                 type: string
+    patch:
+      summary: Update a Tier
+      operationId: updateTier
+      parameters:
+        - name: id
+          in: path
+          description: ID of Tier to update
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: Updated fields
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TierPatch'
+      responses:
+        '204':
+          description: Tier updated
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
     delete:
       summary: Delete Tier by ID
       operationId: deleteTier
@@ -775,6 +820,51 @@ paths:
                 type: string
         '401':
           description: Forbidden
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    patch:
+      summary: Update a Network
+      operationId: updateNetwork
+      parameters:
+        - name: id
+          in: path
+          description: ID of Network to update
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: Updated fields
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NetworkPatch'
+      responses:
+        '204':
+          description: Network updated
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
           content:
             text/plain:
               schema:
@@ -1079,6 +1169,51 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EntryNetwork'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    patch:
+      summary: Update an Entry Network
+      operationId: updateEntryNetwork
+      parameters:
+        - name: id
+          in: path
+          description: ID of Entry Network to update
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: Updated fields
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntryNetworkPatch'
+      responses:
+        '204':
+          description: Entry Network updated
         '400':
           description: Bad request
           content:
@@ -2809,6 +2944,14 @@ components:
         reciprocal:
           type: boolean
 
+    NetworkPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        reciprocal:
+          type: boolean
+          nullable: true
+
     EntryNetworkDetails:
       allOf:
         - $ref: '#/components/schemas/Network'
@@ -2854,25 +2997,45 @@ components:
           minLength: 1
           pattern: '.*\S.*'
         level:
-          type: string
-          enum:
-            - express
-            - normal
-            - rush
-            - secondarymail
-            - standard
-            - urgent
+          allOf:
+            - $ref: '#/components/schemas/TierLevel'
           default: standard
         type:
-          type: string
-          enum:
-            - loan
-            - copy
+          allOf:
+            - $ref: '#/components/schemas/TierType'
           default: loan
         cost:
           type: number
           format: double
           default: 0.0
+
+    TierPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        level:
+          $ref: '#/components/schemas/TierLevel'
+        type:
+          $ref: '#/components/schemas/TierType'
+        cost:
+          type: number
+          format: double
+
+    TierLevel:
+      type: string
+      enum:
+        - express
+        - normal
+        - rush
+        - secondarymail
+        - standard
+        - urgent
+
+    TierType:
+      type: string
+      enum:
+        - loan
+        - copy
     
     EntryNetwork:
       type: object
@@ -2899,6 +3062,17 @@ components:
           type: integer
           format: int32
           default: 0
+          description: Priority of this network for the associated entry
+
+    EntryNetworkPatch:
+      type: object
+      additionalProperties: false
+      required:
+        - priority
+      properties:
+        priority:
+          type: integer
+          format: int32
           description: Priority of this network for the associated entry
 
     CreateEntryNetwork:
@@ -2941,7 +3115,7 @@ components:
           type: string
           format: uuid
           description: ID of tier
-    
+
     AddEntryTier:
       type: object
       required:

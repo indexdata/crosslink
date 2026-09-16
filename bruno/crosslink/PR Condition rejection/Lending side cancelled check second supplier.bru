@@ -1,0 +1,45 @@
+meta {
+  name: Lending side cancelled check second supplier
+  type: http
+  seq: 19
+}
+
+get {
+  url: {{host}}/patron_requests/{{rejectionNextLendingPrId}}?side=lending
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: lending
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{rejectionNextTenant}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")))
+}
+
+script:post-response {
+  test("HTTP request succeeds", () => {
+    expect(res.getStatus()).to.be.within(200, 299);
+  });
+  test("supplier cancellation completes", function() {
+    const pr = res.getBody();
+    expect(pr.state).to.equal("CANCELLED");
+    expect(pr.terminalState).to.equal(true);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
