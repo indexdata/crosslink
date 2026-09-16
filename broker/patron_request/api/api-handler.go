@@ -1314,6 +1314,7 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequestSearchView) 
 		Patron:                    toString(request.Patron),
 		RequesterSymbol:           toString(request.RequesterSymbol),
 		RequesterPickupLocationId: toPickupLocationID(request.RequesterPickupLocationID),
+		DueDate:                   toLoanDate(request.DueAt),
 		SupplierSymbol:            toString(request.SupplierSymbol),
 		IllRequest:                request.IllRequest,
 		RequesterRequestId:        toString(request.RequesterReqID),
@@ -1480,6 +1481,8 @@ func buildDbPatronRequest(
 
 func toApiItem(item pr_db.Item) proapi.PrItem {
 	return proapi.PrItem{
+		LmsStatus:  apiLmsStatus(item.LmsStatus),
+		LmsDueDate: toLoanDate(item.LmsDueDate),
 		Id:         item.ID,
 		Barcode:    item.Barcode,
 		CallNumber: toString(item.CallNumber),
@@ -1491,6 +1494,8 @@ func toApiItem(item pr_db.Item) proapi.PrItem {
 
 func toApiPrItem(item pr_db.PrItem) proapi.PrItem {
 	return proapi.PrItem{
+		LmsStatus:  apiLmsStatus(item.LmsStatus),
+		LmsDueDate: item.LmsDueDate,
 		Id:         item.ID,
 		Barcode:    item.Barcode,
 		CallNumber: item.CallNumber,
@@ -1498,6 +1503,20 @@ func toApiPrItem(item pr_db.PrItem) proapi.PrItem {
 		Title:      item.Title,
 		CreatedAt:  time.Time(item.CreatedAt),
 	}
+}
+
+func apiLmsStatus(status pr_db.LmsStatus) proapi.PrItemLmsStatus {
+	if status == "" {
+		status = pr_db.LmsStatusUnknown
+	}
+	return proapi.PrItemLmsStatus(status)
+}
+
+func toLoanDate(date pgtype.Timestamptz) *time.Time {
+	if !date.Valid {
+		return nil
+	}
+	return &date.Time
 }
 
 func toApiNotification(notification pr_db.Notification) (proapi.PrNotification, error) {

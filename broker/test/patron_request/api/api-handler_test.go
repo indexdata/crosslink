@@ -620,7 +620,8 @@ func TestActionsToCompleteState(t *testing.T) {
 
 	// Ship
 	action := proapi.ExecuteAction{
-		Action: string(prservice.LenderActionShip),
+		Action:       string(prservice.LenderActionShip),
+		ActionParams: &map[string]any{"dueDate": "2020-01-01T23:59:59Z"},
 	}
 	actionBytes, err := json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
@@ -691,6 +692,35 @@ func TestActionsToCompleteState(t *testing.T) {
 		return strings.Contains(string(respBytes), "\"name\":\""+string(prservice.BorrowerActionShipReturn)+"\"")
 	})
 
+	// Circulation helpers leave the request state unchanged. Renew the overdue
+	// loan through the actual broker relay before returning it.
+	invokeLoanAction := func(path, query, name string, params map[string]any) {
+		if params == nil {
+			params = map[string]any{}
+		}
+		payload, marshalErr := json.Marshal(proapi.ExecuteAction{Action: name, ActionParams: &params})
+		require.NoError(t, marshalErr)
+		body := httpRequest(t, "POST", path+"/action"+query, payload, 200)
+		var result proapi.ActionResult
+		require.NoError(t, json.Unmarshal(body, &result))
+		require.Equal(t, "SUCCESS", result.Result, string(body))
+	}
+	waitLoanState := func(path, query, state string) {
+		require.Eventually(t, func() bool {
+			body := httpRequest(t, "GET", path+query, nil, 200)
+			var request proapi.PatronRequest
+			require.NoError(t, json.Unmarshal(body, &request))
+			return request.State == state
+		}, 5*time.Second, 20*time.Millisecond)
+	}
+	waitLoanState(requesterPrPath, queryParams, "RECEIVED")
+	waitLoanState(supplierPrPath, supQueryParams, "RECEIVED")
+	invokeLoanAction(supplierPrPath, supQueryParams, "overdue", nil)
+	waitLoanState(requesterPrPath, queryParams, "OVERDUE")
+	invokeLoanAction(requesterPrPath, queryParams, "renew", nil)
+	waitLoanState(supplierPrPath, supQueryParams, "RENEWAL_PENDING")
+	invokeLoanAction(supplierPrPath, supQueryParams, "accept-renewal", map[string]any{"dueDate": "2030-01-01T23:59:59Z"})
+	waitLoanState(requesterPrPath, queryParams, "RENEWED")
 	// Ship return
 	action = proapi.ExecuteAction{
 		Action: string(prservice.BorrowerActionShipReturn),

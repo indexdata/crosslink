@@ -238,6 +238,7 @@ func userPrivilegeStatus(privilege ncip.UserPrivilege) string {
 	return strings.TrimSpace(privilege.UserPrivilegeStatus.UserPrivilegeStatusType.Text)
 }
 
+// AcceptItem creates a requester LMS item, or reports skipped when disabled.
 func (l *LmsAdapterNcip) AcceptItem(
 	itemId string,
 	requestId string,
@@ -248,9 +249,9 @@ func (l *LmsAdapterNcip) AcceptItem(
 	callNumber string,
 	pickupLocation string,
 	requestedAction string,
-) error {
+) (bool, error) {
 	if l.config.AcceptItemEnabled != nil && !*l.config.AcceptItemEnabled {
-		return nil
+		return false, nil
 	}
 	var bibliographicItemId *ncip.BibliographicItemId
 	if isbn != "" {
@@ -288,12 +289,14 @@ func (l *LmsAdapterNcip) AcceptItem(
 		PickupLocation:      pickupLocationField,
 	}
 	_, err := l.ncipClient.AcceptItem(arg)
-	return err
+	return err == nil, err
 }
 
-func (l *LmsAdapterNcip) DeleteItem(itemId string) error {
+// DeleteItem confirms requester LMS item removal, including an already absent item.
+// It reports skipped when requester item integration is disabled.
+func (l *LmsAdapterNcip) DeleteItem(itemId string) (bool, error) {
 	if l.config.AcceptItemEnabled != nil && !*l.config.AcceptItemEnabled {
-		return nil
+		return false, nil
 	}
 	arg := ncip.DeleteItem{
 		ItemId: ncip.ItemId{ItemIdentifierValue: itemId},
@@ -301,9 +304,9 @@ func (l *LmsAdapterNcip) DeleteItem(itemId string) error {
 	_, err := l.ncipClient.DeleteItem(arg)
 	var ncipErr *ncipclient.NcipError
 	if errors.As(err, &ncipErr) && ncipErr.Problem.ProblemType.Text == string(ncip.UnknownItem) {
-		return nil
+		return true, nil
 	}
-	return err
+	return err == nil, err
 }
 
 func (l *LmsAdapterNcip) RequestItem(
@@ -420,9 +423,10 @@ func (l *LmsAdapterNcip) CancelRequestItem(requestId string, userId string) erro
 	return err
 }
 
-func (l *LmsAdapterNcip) CheckInItem(itemId string) error {
+// CheckInItem confirms an NCIP check-in, or reports skipped when disabled.
+func (l *LmsAdapterNcip) CheckInItem(itemId string) (bool, error) {
 	if l.config.CheckInItemEnabled != nil && !*l.config.CheckInItemEnabled {
-		return nil
+		return false, nil
 	}
 	itemElements := []ncip.SchemeValuePair{
 		{Text: string(NCIPBibliographicDescription)},
@@ -433,24 +437,25 @@ func (l *LmsAdapterNcip) CheckInItem(itemId string) error {
 	}
 	_, err := l.ncipClient.CheckInItem(arg)
 	// mod-rs does not seem to use the Bibliographic Description in response
-	return err
+	return err == nil, err
 }
 
+// CheckOutItem returns the checkout title and usable due date, or nil when disabled.
 func (l *LmsAdapterNcip) CheckOutItem(
 	requestId string,
 	itemBarcode string,
 	userId string,
 	externalReferenceValue string,
-) (string, error) {
+) (*CheckedOutItem, error) {
 	if l.config.CheckOutItemEnabled != nil && !*l.config.CheckOutItemEnabled {
-		return "", nil
+		return nil, nil
 	}
 	var ext *ncip.Ext
 	if externalReferenceValue != "" {
 		externalId := ncip.RequestId{RequestIdentifierValue: externalReferenceValue}
 		bytes, err := xml.Marshal(externalId)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		ext = &ncip.Ext{XMLContent: bytes}
 	}
@@ -470,16 +475,21 @@ func (l *LmsAdapterNcip) CheckOutItem(
 	}
 	response, err := l.ncipClient.CheckOutItem(arg)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if response == nil {
-		return "", fmt.Errorf("empty response from CheckOutItem")
+		return nil, fmt.Errorf("empty response from CheckOutItem")
 	}
 	title := ""
 	if response.ItemOptionalFields != nil && response.ItemOptionalFields.BibliographicDescription != nil {
 		title = response.ItemOptionalFields.BibliographicDescription.Title
 	}
-	return title, nil
+	result := &CheckedOutItem{Title: title}
+	if response.DateDue != nil && !response.DateDue.Time.IsZero() {
+		due := response.DateDue.Time
+		result.DueDate = &due
+	}
+	return result, nil
 }
 
 func (l *LmsAdapterNcip) CreateUserFiscalTransaction(userId string, itemId string) error {

@@ -59,12 +59,12 @@ func (ms *PatronRequestMessageSender) sendSupplyingAgencyMessage(ctx common.Exte
 		illMessage.SupplyingAgencyMessage.StatusInfo.LastChange = utils.XSDDateTime{Time: time.Now()}
 	}
 	deliveryStatus := illMessage.SupplyingAgencyMessage.StatusInfo.Status
-	if deliveryStatus == iso18626.TypeStatusLoaned {
+	if deliveryStatus == iso18626.TypeStatusLoaned && messageInfo.ReasonForMessage != iso18626.TypeReasonForMessageRenewResponse {
 		if illMessage.SupplyingAgencyMessage.DeliveryInfo == nil {
 			illMessage.SupplyingAgencyMessage.DeliveryInfo = &iso18626.DeliveryInfo{}
 		}
 	}
-	if (deliveryStatus == iso18626.TypeStatusLoaned || deliveryStatus == iso18626.TypeStatusCopyCompleted) &&
+	if messageInfo.ReasonForMessage != iso18626.TypeReasonForMessageRenewResponse && (deliveryStatus == iso18626.TypeStatusLoaned || deliveryStatus == iso18626.TypeStatusCopyCompleted) &&
 		illMessage.SupplyingAgencyMessage.DeliveryInfo != nil && illMessage.SupplyingAgencyMessage.DeliveryInfo.DateSent.IsZero() {
 		illMessage.SupplyingAgencyMessage.DeliveryInfo.DateSent = utils.XSDDateTime{Time: time.Now()}
 	}

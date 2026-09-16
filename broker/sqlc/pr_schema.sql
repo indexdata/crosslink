@@ -25,7 +25,8 @@ CREATE TABLE patron_request
     prev_req_id         VARCHAR,
     retry_bib_info       JSONB,
     state_model         VARCHAR NOT NULL DEFAULT 'default',
-    requester_pickup_location_id UUID
+    requester_pickup_location_id UUID,
+    due_at TIMESTAMPTZ
 );
 
 CREATE OR REPLACE FUNCTION get_next_hrid(prefix VARCHAR) RETURNS VARCHAR AS $$
@@ -45,7 +46,9 @@ CREATE TABLE item
     item_id        VARCHAR,
     lms_request_id VARCHAR,
     lms_item_id    VARCHAR,
-    created_at     TIMESTAMP NOT NULL DEFAULT now()
+    created_at     TIMESTAMP NOT NULL DEFAULT now(),
+    lms_status VARCHAR NOT NULL DEFAULT 'UNKNOWN' CHECK (lms_status IN ('UNKNOWN', 'REQUESTED', 'ACCEPTED', 'CHECKED_OUT', 'CHECKED_IN', 'DELETED')),
+    lms_due_date TIMESTAMPTZ
 );
 
 CREATE TABLE notification

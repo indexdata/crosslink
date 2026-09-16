@@ -72,6 +72,9 @@ sql:
         sql_package: "pgx/v5"
         emit_methods_with_db_argument: true
         overrides:
+          - column: "item.lms_status"
+            go_type:
+              type: "LmsStatus"
           - column: "patron_request.ill_request"
             go_type:
               import: "github.com/indexdata/crosslink/iso18626"

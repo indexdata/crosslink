@@ -107,21 +107,21 @@ SELECT
 FROM (VALUES
     ('REQ_SHIPPED',                       'borrowing', 'SHIPPED'),
     ('REQ_BORROWING_LIBRARY_RECEIVED',    'borrowing', 'RECEIVED'),
-    ('REQ_OVERDUE',                       'borrowing', 'CHECKED_OUT'),
-    ('REQ_RECALLED',                      'borrowing', 'CHECKED_OUT'),
-    ('REQ_AWAITING_RETURN_SHIPPING',      'borrowing', 'CHECKED_IN'),
-    ('REQ_CHECKED_IN',                    'borrowing', 'CHECKED_IN'),
+    ('REQ_OVERDUE',                       'borrowing', 'OVERDUE'),
+    ('REQ_RECALLED',                      'borrowing', 'RECEIVED'),
+    ('REQ_AWAITING_RETURN_SHIPPING',      'borrowing', 'RECEIVED'),
+    ('REQ_CHECKED_IN',                    'borrowing', 'RECEIVED'),
     ('REQ_SHIPPED_TO_SUPPLIER',           'borrowing', 'SHIPPED_RETURNED'),
     ('REQ_BORROWER_RETURNED',             'borrowing', 'SHIPPED_RETURNED'),
     ('SLNP_REQ_SHIPPED',                  'borrowing', 'SHIPPED'),
-    ('SLNP_REQ_CHECKED_IN',               'borrowing', 'CHECKED_IN'),
-    ('SLNP_REQ_AWAITING_RETURN_SHIPPING', 'borrowing', 'CHECKED_IN'),
+    ('SLNP_REQ_CHECKED_IN',               'borrowing', 'RECEIVED'),
+    ('SLNP_REQ_AWAITING_RETURN_SHIPPING', 'borrowing', 'RECEIVED'),
     ('RES_ITEM_SHIPPED',                  'lending',   'SHIPPED'),
     ('RES_ITEM_RETURNED',                 'lending',   'RECEIVED'),
     ('RES_CHECKED_IN_TO_RESHARE',         'lending',   'RECEIVED'),
     ('RES_AWAITING_RETURN_SHIPPING',      'lending',   'SHIPPED_RETURN'),
     ('RES_AWAIT_DESEQUESTRATION',         'lending',   'SHIPPED_RETURN'),
-    ('RES_OVERDUE',                       'lending',   'SHIPPED_RETURN'),
+    ('RES_OVERDUE',                       'lending',   'OVERDUE'),
     ('SLNP_RES_ITEM_SHIPPED',             'lending',   'SHIPPED')
 ) AS mapping(legacy_state, side, crosslink_state)
 CROSS JOIN (VALUES ('Loan'), ('CopyOrLoan')) AS service_types(service_type);
@@ -144,8 +144,8 @@ INSERT INTO crosslink_state_map
     (legacy_state, side, service_type, crosslink_state)
 VALUES
     ('REQ_LOANED_DIGITALLY',         'borrowing', 'Copy',       'COMPLETED'),
-    ('REQ_LOANED_DIGITALLY',         'borrowing', 'Loan',       'CHECKED_OUT'),
-    ('REQ_LOANED_DIGITALLY',         'borrowing', 'CopyOrLoan', 'CHECKED_OUT'),
+    ('REQ_LOANED_DIGITALLY',         'borrowing', 'Loan',       'RECEIVED'),
+    ('REQ_LOANED_DIGITALLY',         'borrowing', 'CopyOrLoan', 'RECEIVED'),
     ('SLNP_REQ_DOCUMENT_AVAILABLE',  'borrowing', 'Copy',       'COMPLETED'),
     ('SLNP_REQ_DOCUMENT_AVAILABLE',  'borrowing', 'Loan',       'RECEIVED'),
     ('SLNP_REQ_DOCUMENT_AVAILABLE',  'borrowing', 'CopyOrLoan', 'RECEIVED'),

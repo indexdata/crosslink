@@ -129,6 +129,7 @@ func (e *autoActionFailure) Error() string {
 }
 
 type actionParams struct {
+	DueDate          string                     `json:"dueDate"`
 	Note             string                     `json:"note,omitempty"`
 	Barcode          string                     `json:"barcode,omitempty"`
 	CallNumber       string                     `json:"callNumber,omitempty"`
@@ -227,9 +228,37 @@ func (a *PatronRequestActionService) executeAction(ctx common.ExtendedContext, e
 		execResult := actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
 		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execResult)
 	}
+	if action == LenderActionShip {
+		if supplied, ok := event.EventData.CustomData["dueDate"]; ok {
+			value, valid := supplied.(string)
+			if !valid || strings.TrimSpace(value) == "" {
+				execution := loanActionError(ctx, pr, fmt.Errorf("supplied dueDate must be a non-empty date or RFC3339 timestamp"))
+				return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execution)
+			}
+		}
+	}
 	if pr.Side == SideBorrowing && action == BorrowerActionCheckDuplicate {
 		execResult := a.checkDuplicateBorrowingRequest(ctx, pr)
 		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execResult)
+	}
+	// Loan protocol actions do not require a working LMS integration.
+	if action == BorrowerActionRenew || action == LenderActionOverdue || action == LenderActionAcceptRenewal || action == LenderActionRejectRenewal {
+		var params actionParams
+		var execution actionExecutionResult
+		if err := common.MapToStruct(event.EventData.CustomData, &params); err != nil {
+			execution = loanActionError(ctx, pr, err)
+		} else {
+			switch action {
+			case BorrowerActionRenew:
+				status, result, err := a.messageSender.sendRequestingAgencyMessage(ctx, event.ID, pr, iso18626.TypeActionRenew, params.Note)
+				execution = actionResultFromIllSend(ctx, status, result, err, pr)
+			case LenderActionOverdue:
+				execution = a.overdueLenderRequest(ctx, event.ID, pr)
+			default:
+				execution = a.renewalLenderRequest(ctx, event.ID, pr, params, action == LenderActionAcceptRenewal)
+			}
+		}
+		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execution)
 	}
 	if a.lmsCreator == nil {
 		return logActionErrorAndReturnResult(ctx, "LMS creator not configured", nil)
@@ -401,8 +430,16 @@ func (a *PatronRequestActionService) deleteRequesterItemsOnClose(ctx common.Exte
 	}
 	var cleanupErrors []error
 	for _, item := range items {
-		if err := lmsAdapter.DeleteItem(requesterLmsItemID(item)); err != nil {
+		performed, err := lmsAdapter.DeleteItem(requesterLmsItemID(item))
+		if err != nil {
 			cleanupErrors = append(cleanupErrors, fmt.Errorf("LMS DeleteItem failed for item %s: %w", item.Barcode, err))
+			continue
+		}
+		if err := a.recordItemLmsStatus(ctx, item, pr_db.LmsStatusDeleted, performed, nil); err != nil {
+			cleanupErrors = append(cleanupErrors, err)
+			continue
+		}
+		if !performed {
 			continue
 		}
 		if err := a.prRepo.SetItemLmsRequestID(ctx, pr_db.SetItemLmsRequestIDParams{
@@ -1048,19 +1085,28 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 		requestedAction := "Hold For Pickup"
 		// Persist the same identifier sent to the requester LMS after acceptance.
 		requestID := pr.ID
-		err = lmsAdapter.AcceptItem(itemId, requestID, patron, author, title, isbn, callNumber, pickupLocation, requestedAction)
+		performed, err := lmsAdapter.AcceptItem(itemId, requestID, patron, author, title, isbn, callNumber, pickupLocation, requestedAction)
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "LMS AcceptItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
-		err = a.prRepo.SetItemLmsRequestID(ctx, pr_db.SetItemLmsRequestIDParams{
-			ID:           item.ID,
-			LmsRequestID: getDbText(requestID),
-			LmsItemID:    getDbText(itemId),
+		if !performed {
+			continue
+		}
+		// Commit the acceptance and retry identifiers together, after the LMS call.
+		err = a.prRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
+			if err := repo.SetItemLmsStatus(ctx, pr_db.SetItemLmsStatusParams{ID: item.ID, LmsStatus: pr_db.LmsStatusAccepted, LmsDueDate: item.LmsDueDate}); err != nil {
+				return err
+			}
+			return repo.SetItemLmsRequestID(ctx, pr_db.SetItemLmsRequestIDParams{
+				ID: item.ID, LmsRequestID: getDbText(requestID), LmsItemID: getDbText(itemId),
+			})
 		})
 		if err != nil {
-			if deleteErr := lmsAdapter.DeleteItem(itemId); deleteErr != nil {
+			if deleted, deleteErr := lmsAdapter.DeleteItem(itemId); deleteErr != nil {
 				err = errors.Join(err, fmt.Errorf("LMS DeleteItem compensation failed: %w", deleteErr))
+			} else if statusErr := a.recordItemLmsStatus(ctx, item, pr_db.LmsStatusDeleted, deleted, nil); statusErr != nil {
+				err = errors.Join(err, fmt.Errorf("failed to record LMS DeleteItem compensation: %w", statusErr))
 			}
 			status, result := logActionErrorAndReturnResult(ctx, "failed to record LMS AcceptItem", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
@@ -1083,10 +1129,13 @@ func (a *PatronRequestActionService) checkoutBorrowingRequest(ctx common.Extende
 	for _, item := range items {
 		itemId := item.Barcode
 		borrowerBarcode := patron
-		_, err = lmsAdapter.CheckOutItem(pr.ID, itemId, borrowerBarcode, "externalReferenceValue")
+		checkedOutItem, err := lmsAdapter.CheckOutItem(pr.ID, itemId, borrowerBarcode, "externalReferenceValue")
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		if err = a.recordItemLmsStatus(ctx, item, pr_db.LmsStatusCheckedOut, checkedOutItem != nil, nil); err != nil {
+			return loanActionError(ctx, pr, err)
 		}
 	}
 	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
@@ -1100,10 +1149,13 @@ func (a *PatronRequestActionService) checkinBorrowingRequest(ctx common.Extended
 	}
 	for _, item := range items {
 		itemId := item.Barcode
-		err = lmsAdapter.CheckInItem(itemId)
+		performed, err := lmsAdapter.CheckInItem(itemId)
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "LMS CheckInItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		if err = a.recordItemLmsStatus(ctx, item, pr_db.LmsStatusCheckedIn, performed, nil); err != nil {
+			return loanActionError(ctx, pr, err)
 		}
 	}
 	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
@@ -1120,10 +1172,16 @@ func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.Exten
 			continue
 		}
 		itemId := requesterLmsItemID(item)
-		err = lmsAdapter.DeleteItem(itemId)
+		performed, err := lmsAdapter.DeleteItem(itemId)
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "LMS DeleteItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		if err = a.recordItemLmsStatus(ctx, item, pr_db.LmsStatusDeleted, performed, nil); err != nil {
+			return loanActionError(ctx, pr, err)
+		}
+		if !performed {
+			continue
 		}
 		err = a.prRepo.SetItemLmsRequestID(ctx, pr_db.SetItemLmsRequestIDParams{
 			ID:           item.ID,
@@ -1405,7 +1463,7 @@ func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.Extended
 		title = illRequest.BibliographicInfo.Title
 	}
 	callNumber := response.CallNumber
-	_, err = a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
+	savedItem, err := a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
 		ID:           uuid.NewString(),
 		CreatedAt:    pgtype.Timestamp{Valid: true, Time: time.Now()},
 		PrID:         pr.ID,
@@ -1420,6 +1478,9 @@ func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.Extended
 			err = errors.Join(err, fmt.Errorf("LMS CancelRequestItem compensation failed: %w", cancelErr))
 		}
 		return pr, "failed to save item", err
+	}
+	if err := a.recordItemLmsStatus(ctx, savedItem, pr_db.LmsStatusRequested, true, nil); err != nil {
+		return pr, "failed to save LMS status", err
 	}
 	return pr, "", nil
 }
@@ -1447,20 +1508,23 @@ func (a *PatronRequestActionService) addItemLenderRequest(ctx common.ExtendedCon
 	}
 	callNumber := strings.TrimSpace(params.CallNumber)
 	itemID := strings.TrimSpace(params.ItemID)
-	_, err = a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
-		ID:         uuid.NewString(),
-		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
-		PrID:       pr.ID,
-		ItemID:     getDbTextPtr(&itemID),
-		Title:      getDbTextPtr(&title),
-		CallNumber: getDbTextPtr(&callNumber),
-		Barcode:    barcode,
+	updatedPr, err := a.editSupplierItems(ctx, pr, func(repo pr_db.PrRepo) error {
+		_, err := repo.SaveItem(ctx, pr_db.SaveItemParams{
+			ID:         uuid.NewString(),
+			CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
+			PrID:       pr.ID,
+			ItemID:     getDbTextPtr(&itemID),
+			Title:      getDbTextPtr(&title),
+			CallNumber: getDbTextPtr(&callNumber),
+			Barcode:    barcode,
+		})
+		return err
 	})
 	if err != nil {
 		status, result := logActionErrorAndReturnResult(ctx, "failed to save item", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
+	return actionExecutionResult{status: events.EventStatusSuccess, pr: updatedPr}
 }
 
 func (a *PatronRequestActionService) removeItemLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams, lmsAdapter lms.LmsAdapter) actionExecutionResult {
@@ -1500,11 +1564,14 @@ func (a *PatronRequestActionService) removeItemLenderRequest(ctx common.Extended
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
 	}
-	if err := a.prRepo.DeleteItemById(ctx, item.ID); err != nil {
+	updatedPr, err := a.editSupplierItems(ctx, pr, func(repo pr_db.PrRepo) error {
+		return repo.DeleteItemById(ctx, item.ID)
+	})
+	if err != nil {
 		status, result := logActionErrorAndReturnResult(ctx, "failed to delete item", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
+	return actionExecutionResult{status: events.EventStatusSuccess, pr: updatedPr}
 }
 
 func (a *PatronRequestActionService) cancelLenderRequestItems(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter) error {
@@ -1608,6 +1675,14 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 }
 
 func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, parentEventID string, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
+	entry, err := a.supplierLoanEntry(ctx, pr)
+	if err != nil {
+		return loanActionError(ctx, pr, err)
+	}
+	manualDue, err := parseLoanDate(params.DueDate, entry)
+	if err != nil {
+		return loanActionError(ctx, pr, err)
+	}
 	if illRequest.ServiceInfo != nil && illRequest.ServiceInfo.ServiceType == iso18626.TypeServiceTypeCopyOrLoan {
 		var message string
 		var err error
@@ -1627,17 +1702,34 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 	}
 	for i := range items {
 		item := &items[i]
+		if item.LmsStatus == pr_db.LmsStatusCheckedOut {
+			continue
+		}
 		requestId := ""
 		if item.LmsRequestID.Valid {
 			requestId = item.LmsRequestID.String
 		}
-		title, err := lmsAdapter.CheckOutItem(requestId, item.Barcode, userId, externalReferenceValue)
+		checkedOutItem, err := lmsAdapter.CheckOutItem(requestId, item.Barcode, userId, externalReferenceValue)
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
-		if title != "" {
-			item.Title = getDbText(title)
+		var dueDate *time.Time
+		if checkedOutItem != nil {
+			dueDate = checkedOutItem.DueDate
+		}
+		if err = a.recordItemLmsStatus(ctx, *item, pr_db.LmsStatusCheckedOut, checkedOutItem != nil, dueDate); err != nil {
+			return loanActionError(ctx, pr, err)
+		}
+		if checkedOutItem == nil {
+			continue
+		}
+		item.LmsStatus = pr_db.LmsStatusCheckedOut
+		if checkedOutItem.DueDate != nil && !checkedOutItem.DueDate.IsZero() {
+			item.LmsDueDate = pgtype.Timestamptz{Time: *checkedOutItem.DueDate, Valid: true}
+		}
+		if checkedOutItem.Title != "" {
+			item.Title = getDbText(checkedOutItem.Title)
 			_, err = a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
 				ID:           item.ID,
 				CreatedAt:    item.CreatedAt,
@@ -1655,6 +1747,26 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 			}
 		}
 	}
+	var dueDateResolution map[string]any
+	if !pr.DueAt.Valid {
+		resolvedAt := time.Now().UTC()
+		due, source, err := resolveLoanDueDate(items, manualDue, entry, resolvedAt)
+		if err != nil {
+			return loanActionError(ctx, pr, err)
+		}
+		pr.DueAt = pgtype.Timestamptz{Time: due, Valid: true}
+		saved, saveErr := a.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(pr))
+		if saveErr != nil {
+			return loanActionError(ctx, pr, saveErr)
+		}
+		pr = saved
+		dueDateResolution = map[string]any{"dueDate": due, "source": source, "resolvedAt": resolvedAt, "timeZone": entry.TimeZone}
+		if entry.IllConfig != nil {
+			if days, err := entry.IllConfig.DefaultLoanPeriod.Get(); err == nil {
+				dueDateResolution["defaultLoanPeriod"] = days
+			}
+		}
+	}
 	var note string
 	if params.Note == "" {
 		note = encodeItemsNote(items)
@@ -1666,10 +1778,17 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
 			Note:             note,
 		},
-		iso18626.StatusInfo{Status: iso18626.TypeStatusLoaned},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusLoaned, DueDate: isoLoanDate(pr.DueAt)},
 		nil)
 	setSupplierMessageFromIllSend(sendResult, &pr)
-	return actionResultFromIllSend(ctx, sendStatus, sendResult, sendErr, pr)
+	execution := actionResultFromIllSend(ctx, sendStatus, sendResult, sendErr, pr)
+	if dueDateResolution != nil {
+		if execution.result.CustomData == nil {
+			execution.result.CustomData = make(map[string]any)
+		}
+		execution.result.CustomData["dueDateResolution"] = dueDateResolution
+	}
+	return execution
 }
 
 func (a *PatronRequestActionService) supplyDocumentRequest(ctx common.ExtendedContext, parentEventID string, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
@@ -1731,10 +1850,13 @@ func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.Extend
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	for _, item := range items {
-		err = lmsAdapter.CheckInItem(item.Barcode)
+		performed, err := lmsAdapter.CheckInItem(item.Barcode)
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "LMS CheckInItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		if err = a.recordItemLmsStatus(ctx, item, pr_db.LmsStatusCheckedIn, performed, nil); err != nil {
+			return loanActionError(ctx, pr, err)
 		}
 	}
 	sendStatus, sendResult, sendErr := a.messageSender.sendSupplyingAgencyMessage(ctx, parentEventID, pr,

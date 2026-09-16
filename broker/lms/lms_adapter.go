@@ -2,6 +2,7 @@ package lms
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/indexdata/crosslink/broker/ncipclient"
 )
@@ -27,6 +28,13 @@ type RequestedItem struct {
 	Title      string
 }
 
+// CheckedOutItem contains data returned by a confirmed checkout, including
+// explicit manual confirmation. A nil result with a nil error means skipped.
+type CheckedOutItem struct {
+	Title   string
+	DueDate *time.Time
+}
+
 // LmsAdapter is an interface defining methods for interacting with a Library Management System (LMS)
 // https://github.com/openlibraryenvironment/mod-rs/blob/master/service/src/main/groovy/org/olf/rs/lms/HostLMSActions.groovy
 type LmsAdapter interface {
@@ -34,6 +42,8 @@ type LmsAdapter interface {
 
 	LookupUser(patron string, validatePatronProfile bool) (userId string, err error)
 
+	// Operations without a response payload return performed=false when skipped.
+	// Errors never confirm progress; explicit manual confirmations do.
 	AcceptItem(
 		itemId string,
 		requestId string,
@@ -44,9 +54,9 @@ type LmsAdapter interface {
 		callNumber string,
 		pickupLocation string,
 		requestedAction string,
-	) error
+	) (performed bool, err error)
 
-	DeleteItem(itemId string) error
+	DeleteItem(itemId string) (performed bool, err error)
 
 	RequestItem(
 		requestId string,
@@ -58,14 +68,14 @@ type LmsAdapter interface {
 
 	CancelRequestItem(requestId string, userId string) error
 
-	CheckInItem(itemId string) error
+	CheckInItem(itemId string) (performed bool, err error)
 
 	CheckOutItem(
 		requestId string,
 		itemBarcode string,
 		userId string,
 		externalReferenceValue string,
-	) (title string, err error)
+	) (*CheckedOutItem, error)
 
 	CreateUserFiscalTransaction(userId string, itemId string) error
 

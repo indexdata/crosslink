@@ -263,7 +263,9 @@ func GetPullSlipData(pr pr_db.PatronRequest, notes []pr_db.Notification, conditi
 	if pr.IllRequest.PublicationInfo != nil && pr.IllRequest.PublicationInfo.Publisher != "" {
 		data.Publisher = pr.IllRequest.PublicationInfo.Publisher
 	}
-	if pr.IllResponse.StatusInfo.DueDate != nil {
+	if pr.DueAt.Valid {
+		data.DueDate = pr.DueAt.Time.Format(DATE_LAYOUT)
+	} else if pr.IllResponse.StatusInfo.DueDate != nil {
 		data.DueDate = pr.IllResponse.StatusInfo.DueDate.Format(DATE_LAYOUT)
 	}
 	if pr.IllResponse.ReturnInfo != nil && pr.IllResponse.ReturnInfo.PhysicalAddress != nil {

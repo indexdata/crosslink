@@ -32,6 +32,7 @@ type PrRepo interface {
 	GetItemById(ctx common.ExtendedContext, id string) (Item, error)
 	GetItemsByPrId(ctx common.ExtendedContext, prId string) ([]Item, error)
 	SetItemLmsRequestID(ctx common.ExtendedContext, params SetItemLmsRequestIDParams) error
+	SetItemLmsStatus(ctx common.ExtendedContext, params SetItemLmsStatusParams) error
 	SaveNotification(ctx common.ExtendedContext, params SaveNotificationParams) (Notification, error)
 	GetNotificationById(ctx common.ExtendedContext, id string) (Notification, error)
 	GetNotificationsByPrId(ctx common.ExtendedContext, params GetNotificationsByPrIdParams) ([]Notification, int64, error)
@@ -219,6 +220,7 @@ func patronRequestFromSearchView(v PatronRequestSearchView) PatronRequest {
 		InternalNote:              v.InternalNote,
 		StateModel:                v.StateModel,
 		RequesterPickupLocationID: v.RequesterPickupLocationID,
+		DueAt:                     v.DueAt,
 	}
 }
 
@@ -291,6 +293,16 @@ func (r *PgPrRepo) SetItemLmsRequestID(ctx common.ExtendedContext, params SetIte
 		return fmt.Errorf("expected to update one item, updated %d", rows)
 	}
 	return nil
+}
+
+// SetItemLmsStatus persists confirmed LMS progress without changing item metadata.
+// It returns pgx.ErrNoRows if the item no longer exists.
+func (r *PgPrRepo) SetItemLmsStatus(ctx common.ExtendedContext, params SetItemLmsStatusParams) error {
+	rows, err := r.queries.SetItemLmsStatus(ctx, r.GetConnOrTx(), params)
+	if err == nil && rows == 0 {
+		return pgx.ErrNoRows
+	}
+	return err
 }
 
 func (r *PgPrRepo) SaveNotification(ctx common.ExtendedContext, params SaveNotificationParams) (Notification, error) {

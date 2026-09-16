@@ -321,8 +321,9 @@ func TestAcceptItem(t *testing.T) {
 		config:     dirapi.LmsConfig{AcceptItemEnabled: &b},
 		ncipClient: mock,
 	}
-	err := ad.AcceptItem("item1", "req1", "testuser", "author", "title", "isbn", "callnum", "loc", "action")
+	performed, err := ad.AcceptItem("item1", "req1", "testuser", "author", "title", "isbn", "callnum", "loc", "action")
 	assert.NoError(t, err)
+	assert.True(t, performed)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.AcceptItem)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
 	assert.Equal(t, "item1", req.ItemId.ItemIdentifierValue)
@@ -335,7 +336,7 @@ func TestAcceptItem(t *testing.T) {
 	assert.Equal(t, "loc", req.PickupLocation.Text)
 	assert.Equal(t, "action", req.RequestedActionType.Text)
 
-	err = ad.AcceptItem("item1", "req1", "testuser", "author", "title", "", "", "", "")
+	_, err = ad.AcceptItem("item1", "req1", "testuser", "author", "title", "", "", "", "")
 	assert.NoError(t, err)
 	req = mock.(*ncipClientMock).lastRequest.(ncip.AcceptItem)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
@@ -350,8 +351,9 @@ func TestAcceptItem(t *testing.T) {
 
 	b = false
 	mock.(*ncipClientMock).lastRequest = nil
-	err = ad.AcceptItem("", "", "", "", "", "", "", "", "")
+	performed, err = ad.AcceptItem("", "", "", "", "", "", "", "", "")
 	assert.NoError(t, err)
+	assert.False(t, performed)
 	assert.Nil(t, mock.(*ncipClientMock).lastRequest)
 }
 
@@ -362,20 +364,24 @@ func TestDeleteItem(t *testing.T) {
 		config:     dirapi.LmsConfig{AcceptItemEnabled: &b},
 		ncipClient: mock,
 	}
-	err := ad.DeleteItem("item1")
+	performed, err := ad.DeleteItem("item1")
 	assert.NoError(t, err)
+	assert.True(t, performed)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.DeleteItem)
 	assert.Equal(t, "item1", req.ItemId.ItemIdentifierValue)
 
-	err = ad.DeleteItem("error")
+	performed, err = ad.DeleteItem("error")
 	assert.Error(t, err)
+	assert.False(t, performed)
 	assert.Equal(t, "deletion error", err.Error())
 
-	err = ad.DeleteItem("unknown-item")
+	performed, err = ad.DeleteItem("unknown-item")
 	assert.NoError(t, err)
+	assert.True(t, performed)
 
-	err = ad.DeleteItem("other-problem")
+	performed, err = ad.DeleteItem("other-problem")
 	assert.Error(t, err)
+	assert.False(t, performed)
 	var ncipErr *ncipclient.NcipError
 	if assert.ErrorAs(t, err, &ncipErr) {
 		assert.Equal(t, string(ncip.UnknownUser), ncipErr.Problem.ProblemType.Text)
@@ -383,8 +389,9 @@ func TestDeleteItem(t *testing.T) {
 
 	b = false
 	mock.(*ncipClientMock).lastRequest = nil
-	err = ad.DeleteItem("item1")
+	performed, err = ad.DeleteItem("item1")
 	assert.NoError(t, err)
+	assert.False(t, performed)
 	assert.Nil(t, mock.(*ncipClientMock).lastRequest)
 }
 
@@ -529,8 +536,9 @@ func TestCheckInItem(t *testing.T) {
 			CheckInItemEnabled: &b,
 		},
 	}
-	err := ad.CheckInItem("item1")
+	performed, err := ad.CheckInItem("item1")
 	assert.NoError(t, err)
+	assert.True(t, performed)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.CheckInItem)
 	assert.Equal(t, "item1", req.ItemId.ItemIdentifierValue)
 	assert.Equal(t, 1, len(req.ItemElementType))
@@ -538,8 +546,9 @@ func TestCheckInItem(t *testing.T) {
 
 	b = false
 	mock.(*ncipClientMock).lastRequest = nil
-	err = ad.CheckInItem("item1")
+	performed, err = ad.CheckInItem("item1")
 	assert.NoError(t, err)
+	assert.False(t, performed)
 	assert.Nil(t, mock.(*ncipClientMock).lastRequest)
 }
 
@@ -556,7 +565,7 @@ func TestCheckOutItem(t *testing.T) {
 	ref := "extref"
 	title, err := ad.CheckOutItem("req1", "item1", "barcodeid", ref)
 	assert.NoError(t, err)
-	assert.Equal(t, "fake title", title)
+	assert.Equal(t, "fake title", title.Title)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.CheckOutItem)
 	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
 	assert.Equal(t, "item1", req.ItemId.ItemIdentifierValue)
@@ -571,7 +580,7 @@ func TestCheckOutItem(t *testing.T) {
 	ref = "\x10" // will be replaced with replacement character
 	title, err = ad.CheckOutItem("req1", "item1", "barcodeid", ref)
 	assert.NoError(t, err)
-	assert.Equal(t, "", title)
+	assert.Equal(t, "", title.Title)
 	req = mock.(*ncipClientMock).lastRequest.(ncip.CheckOutItem)
 	bytes, err = xml.Marshal(ncip.RequestId{RequestIdentifierValue: ref})
 	assert.NoError(t, err)
@@ -579,21 +588,43 @@ func TestCheckOutItem(t *testing.T) {
 
 	title, err = ad.CheckOutItem("", "item1", "barcodeid", "")
 	assert.NoError(t, err)
-	assert.Equal(t, "", title)
+	assert.Equal(t, "", title.Title)
 	req = mock.(*ncipClientMock).lastRequest.(ncip.CheckOutItem)
 	assert.Nil(t, req.RequestId)
 
 	mock.(*ncipClientMock).nilResponse = true
-	_, err = ad.CheckOutItem("req1", "item1", "barcodeid", "extref")
+	title, err = ad.CheckOutItem("req1", "item1", "barcodeid", "extref")
 	assert.Error(t, err)
+	assert.Nil(t, title)
 	assert.Equal(t, "empty response from CheckOutItem", err.Error())
 
 	b = false
 	mock.(*ncipClientMock).lastRequest = nil
 	title, err = ad.CheckOutItem("req1", "item1", "barcodeid", "extref")
 	assert.NoError(t, err)
-	assert.Equal(t, "", title)
+	assert.Nil(t, title)
 	assert.Nil(t, mock.(*ncipClientMock).lastRequest)
+}
+
+func TestManualOperationOutcomes(t *testing.T) {
+	ad := &LmsAdapterManual{}
+	performed, err := ad.AcceptItem("item", "request", "patron", "", "", "", "", "", "")
+	assert.NoError(t, err)
+	assert.False(t, performed)
+	performed, err = ad.DeleteItem("item")
+	assert.NoError(t, err)
+	assert.False(t, performed)
+	requested, err := ad.RequestItem("request", "item", "patron", "", "")
+	assert.NoError(t, err)
+	assert.Nil(t, requested)
+
+	// Manual checkout and check-in are explicit confirmations, not skips.
+	checkout, err := ad.CheckOutItem("request", "item", "patron", "")
+	assert.NoError(t, err)
+	assert.Equal(t, &CheckedOutItem{}, checkout)
+	performed, err = ad.CheckInItem("item")
+	assert.NoError(t, err)
+	assert.True(t, performed)
 }
 
 func TestCreateUserFiscalTransaction(t *testing.T) {

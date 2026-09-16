@@ -824,6 +824,10 @@ components:
     PatronRequest:
       type: object
       properties:
+        dueDate:
+          type: string
+          format: date-time
+          description: Canonical supplier loan due date; absent for open-ended loans.
         id:
           type: string
           description: Unique identifier of the patron request
@@ -1367,6 +1371,15 @@ components:
       title: Item
       description: Patron request item
       properties:
+        lmsStatus:
+          type: string
+          enum: [UNKNOWN, REQUESTED, ACCEPTED, CHECKED_OUT, CHECKED_IN, DELETED]
+          x-enum-varnames: [LmsUnknown, LmsRequested, LmsAccepted, LmsCheckedOut, LmsCheckedIn, LmsDeleted]
+          default: UNKNOWN
+        lmsDueDate:
+          type: string
+          format: date-time
+          description: Due date confirmed by the initial supplier LMS checkout.
         id:
           type: string
           description: Item system id
@@ -1390,6 +1403,7 @@ components:
         - id
         - barcode
         - createdAt
+        - lmsStatus
 
     PrNotifications:
       type: object
@@ -1487,6 +1501,7 @@ components:
       enum:
         - email-pullslips
         - request-aging
+        - overdue
 
     BatchAction:
       type: object
