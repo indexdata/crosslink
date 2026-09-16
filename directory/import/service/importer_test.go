@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -233,7 +234,7 @@ func TestImportAcceptsNullLMSPatronProfiles(t *testing.T) {
 }
 
 func validLMSConfig() string {
-	return `"lmsConfig":{"address":"https://example.test/ncip","fromAgency":"FROM","fromAgencyAuthentication":null,"toAgency":null,"lookupUserEnabled":true,"acceptItemEnabled":true,"checkInItemEnabled":true,"checkOutItemEnabled":true,"itemLocation":null,"requestItemRequestType":null,"requestItemRequestScopeType":null,"requestItemBibIdCode":null,"requestItemEnabled":true,"requestItemPickupLocationEnabled":true,"requesterPickupLocation":null,"supplierPickupLocation":null,"requesterPatronPattern":null,"patronProfiles":[{"code":"STAFF","canCreateRequests":true}]}`
+	return `"lmsConfig":{"vendor":null,"ncipNamespaceEnabled":null,"bibIdNormalization":null,"address":"https://example.test/ncip","fromAgency":"FROM","fromAgencyAuthentication":null,"toAgency":null,"lookupUserEnabled":true,"acceptItemEnabled":true,"checkInItemEnabled":true,"checkOutItemEnabled":true,"itemLocation":null,"requestItemRequestType":null,"requestItemRequestScopeType":null,"requestItemBibIdCode":null,"requestItemEnabled":true,"requestItemPickupLocationEnabled":true,"requesterPickupLocation":null,"supplierPickupLocation":null,"requesterPatronPattern":null,"patronProfiles":[{"code":"STAFF","canCreateRequests":true}]}`
 }
 
 func validILLConfig() string {
@@ -383,4 +384,72 @@ func loadImportSpec(t *testing.T) *openapi3.T {
 	require.NoError(t, err)
 	require.NoError(t, spec.Validate(context.Background()))
 	return spec
+}
+
+func TestImportValidatesHostSettings(t *testing.T) {
+	const catalogJSON = `{"profile":"Koha","metadataUpdateMode":null,"sru":null,"zoom":null,"queryConfig":null,"metadataFormat":null,"holdingsFormat":{"marc":{"availability":[{"subField":"7","operator":"equals","value":"0"}],"mainField":null,"callNumberSubField":null,"itemIdSubField":null,"locationSubField":null,"restrictedSubField":null,"shelvingLocationSubField":null},"opac":null,"reservoir":null,"marc21plus1":null}}`
+	const opacJSON = `{"availabilityRule":"publicNote","availablePublicNotes":[],"requireLocalLocation":false,"shelvingLocationSource":"localLocation","includeItemId":false,"includeItemLoanPolicy":false,"includeTemporaryLocation":true,"allCirculations":true}`
+	for _, tc := range []struct {
+		name string
+		edit func(lms, catalog map[string]any)
+	}{
+		{"unknown vendor", func(l, c map[string]any) { l["vendor"] = "bad" }},
+		{"missing vendor", func(l, c map[string]any) { delete(l, "vendor") }},
+		{"unknown normalization", func(l, c map[string]any) { l["bibIdNormalization"] = "bad" }},
+		{"namespace type", func(l, c map[string]any) { l["ncipNamespaceEnabled"] = "false" }},
+		{"unknown profile", func(l, c map[string]any) { c["profile"] = "bad" }},
+		{"missing profile", func(l, c map[string]any) { delete(c, "profile") }},
+		{"two endpoints", func(l, c map[string]any) {
+			c["sru"] = map[string]any{"address": "https://example/sru", "recordSchema": nil}
+			c["zoom"] = map[string]any{"address": "example:210", "options": nil}
+		}},
+		{"two parsers", func(l, c map[string]any) { c["holdingsFormat"].(map[string]any)["reservoir"] = map[string]any{} }},
+		{"unknown parser option", func(l, c map[string]any) {
+			c["holdingsFormat"].(map[string]any)["marc"].(map[string]any)["unknown"] = true
+		}},
+		{"missing availability", func(l, c map[string]any) {
+			delete(c["holdingsFormat"].(map[string]any)["marc"].(map[string]any), "availability")
+		}},
+		{"equals without value", func(l, c map[string]any) {
+			c["holdingsFormat"].(map[string]any)["marc"].(map[string]any)["availability"].([]any)[0].(map[string]any)["value"] = nil
+		}},
+		{"invalid predicate operator", func(l, c map[string]any) {
+			c["holdingsFormat"].(map[string]any)["marc"].(map[string]any)["availability"].([]any)[0].(map[string]any)["operator"] = "bad"
+		}},
+		{"empty predicate subfield", func(l, c map[string]any) {
+			c["holdingsFormat"].(map[string]any)["marc"].(map[string]any)["availability"].([]any)[0].(map[string]any)["subField"] = ""
+		}},
+		{"invalid OPAC rule", func(l, c map[string]any) {
+			var opac map[string]any
+			require.NoError(t, json.Unmarshal([]byte(opacJSON), &opac))
+			opac["availabilityRule"] = "bad"
+			h := c["holdingsFormat"].(map[string]any)
+			h["marc"], h["opac"] = nil, opac
+		}},
+		{"invalid OPAC location", func(l, c map[string]any) {
+			var opac map[string]any
+			require.NoError(t, json.Unmarshal([]byte(opacJSON), &opac))
+			opac["shelvingLocationSource"] = "bad"
+			h := c["holdingsFormat"].(map[string]any)
+			h["marc"], h["opac"] = nil, opac
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
+			var record map[string]any
+			require.NoError(t, json.Unmarshal([]byte(strings.Replace(validEntryRecord(), `"lmsConfig":null`, validLMSConfig(), 1)), &record))
+			data := record["data"].(map[string]any)
+			var catalog map[string]any
+			require.NoError(t, json.Unmarshal([]byte(catalogJSON), &catalog))
+			data["catalogConfig"] = catalog
+			tc.edit(data["lmsConfig"].(map[string]any), catalog)
+			payload, err := json.Marshal(record)
+			require.NoError(t, err)
+			result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(string(payload)))
+			require.NoError(t, err)
+			require.Equal(t, int32(1), result.Entries.Failed)
+			require.Len(t, result.Errors, 1)
+			require.Zero(t, repo.entryCalls)
+		})
+	}
 }

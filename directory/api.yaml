@@ -1506,8 +1506,11 @@ components:
     ImportLmsConfig:
       type: object
       additionalProperties: false
-      required: [address, fromAgency, fromAgencyAuthentication, toAgency, lookupUserEnabled, acceptItemEnabled, checkInItemEnabled, checkOutItemEnabled, itemLocation, requestItemRequestType, requestItemRequestScopeType, requestItemBibIdCode, requestItemEnabled, requestItemPickupLocationEnabled, requesterPickupLocation, supplierPickupLocation, requesterPatronPattern, patronProfiles]
+      required: [vendor, ncipNamespaceEnabled, bibIdNormalization, address, fromAgency, fromAgencyAuthentication, toAgency, lookupUserEnabled, acceptItemEnabled, checkInItemEnabled, checkOutItemEnabled, itemLocation, requestItemRequestType, requestItemRequestScopeType, requestItemBibIdCode, requestItemEnabled, requestItemPickupLocationEnabled, requesterPickupLocation, supplierPickupLocation, requesterPatronPattern, patronProfiles]
       properties:
+        vendor: { type: string, nullable: true, enum: [Alma, Sierra, Koha, WMS, Aleph, FOLIO, Generic], x-go-type: string }
+        ncipNamespaceEnabled: { type: boolean, nullable: true }
+        bibIdNormalization: { type: string, nullable: true, enum: [none, sierra], x-go-type: string }
         address: { type: string }
         fromAgency: { type: string }
         fromAgencyAuthentication: { type: string, nullable: true }
@@ -1553,8 +1556,9 @@ components:
     ImportCatalogConfig:
       type: object
       additionalProperties: false
-      required: [metadataUpdateMode, sru, zoom, queryConfig, holdingsFormat, metadataFormat]
+      required: [profile, metadataUpdateMode, sru, zoom, queryConfig, holdingsFormat, metadataFormat]
       properties:
+        profile: { type: string, nullable: true, enum: [Alma, Sierra, Koha, WMS, Aleph, FOLIO, Generic], x-go-type: string }
         metadataUpdateMode:
           allOf: [{ $ref: '#/components/schemas/MetadataUpdateMode' }]
           nullable: true
@@ -1612,21 +1616,53 @@ components:
         marc:
           allOf: [{ $ref: '#/components/schemas/ImportMarcHoldingsParserConfig' }]
           nullable: true
-        marc21plus1: { type: object, nullable: true }
-        opac: { type: object, nullable: true }
-        reservoir: { type: object, nullable: true }
+        marc21plus1: { type: object, nullable: true, additionalProperties: false }
+        opac:
+          allOf: [{ $ref: '#/components/schemas/ImportOpacHoldingsParserConfig' }]
+          nullable: true
+        reservoir: { type: object, nullable: true, additionalProperties: false }
 
     ImportMarcHoldingsParserConfig:
       type: object
       additionalProperties: false
-      required: [callNumberSubField, itemIdSubField, locationSubField, mainField, restrictedSubField, shelvingLocationSubField]
+      required: [availability, callNumberSubField, itemIdSubField, locationSubField, mainField, restrictedSubField, shelvingLocationSubField]
       properties:
+        availability:
+          type: array
+          nullable: true
+          items: { $ref: '#/components/schemas/ImportMarcAvailabilityPredicate' }
         callNumberSubField: { type: string, nullable: true }
         itemIdSubField: { type: string, nullable: true }
         locationSubField: { type: string, nullable: true }
         mainField: { type: string, nullable: true }
         restrictedSubField: { type: string, nullable: true }
         shelvingLocationSubField: { type: string, nullable: true }
+
+    ImportMarcAvailabilityPredicate:
+      type: object
+      additionalProperties: false
+      required: [subField, operator, value]
+      properties:
+        subField: { type: string, minLength: 1 }
+        operator: { type: string, enum: [equals, absent], x-go-type: string }
+        value: { type: string, nullable: true }
+
+    ImportOpacHoldingsParserConfig:
+      type: object
+      additionalProperties: false
+      required: [availabilityRule, availablePublicNotes, requireLocalLocation, shelvingLocationSource, includeItemId, includeItemLoanPolicy, includeTemporaryLocation, allCirculations]
+      properties:
+        availabilityRule: { type: string, nullable: true, enum: [availableNow, publicNote], x-go-type: string }
+        availablePublicNotes:
+          type: array
+          nullable: true
+          items: { type: string }
+        requireLocalLocation: { type: boolean, nullable: true }
+        shelvingLocationSource: { type: string, nullable: true, enum: [shelvingLocation, localLocation], x-go-type: string }
+        includeItemId: { type: boolean, nullable: true }
+        includeItemLoanPolicy: { type: boolean, nullable: true }
+        includeTemporaryLocation: { type: boolean, nullable: true }
+        allCirculations: { type: boolean, nullable: true }
 
     ImportMetadataParserConfig:
       type: object

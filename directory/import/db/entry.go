@@ -506,6 +506,7 @@ func replaceEntryConfigs(ctx context.Context, queries *db.Queries, entryID uuid.
 			patronProfiles, _ = json.Marshal(cfg.PatronProfiles)
 		}
 		if _, err := queries.UpsertLMSConfig(ctx, db.UpsertLMSConfigParams{
+			Vendor: cfg.Vendor, NcipNamespaceEnabled: cfg.NcipNamespaceEnabled, BibIDNormalization: cfg.BibIDNormalization,
 			Entry: &entryID, Address: cfg.Address, FromAgency: cfg.FromAgency, FromAgencyAuthentication: cfg.FromAgencyAuthentication,
 			ToAgency: cfg.ToAgency, LookupUserEnabled: cfg.LookupUserEnabled, AcceptItemEnabled: cfg.AcceptItemEnabled,
 			CheckinItemEnabled: cfg.CheckInItemEnabled, CheckoutItemEnabled: cfg.CheckOutItemEnabled, ItemLocation: cfg.ItemLocation,
@@ -543,7 +544,7 @@ func replaceCatalogConfig(ctx context.Context, queries *db.Queries, entryID uuid
 	if err := queries.DeleteCatalogConfigByEntry(ctx, entryID); err != nil || config == nil {
 		return err
 	}
-	params := db.UpsertCatalogConfigParams{Entry: &entryID, MetadataUpdateMode: config.MetadataUpdateMode}
+	params := db.UpsertCatalogConfigParams{Entry: &entryID, Profile: config.Profile, MetadataUpdateMode: config.MetadataUpdateMode}
 	if config.SRU != nil {
 		params.SruAddress, params.SruRecordSchema = &config.SRU.Address, config.SRU.RecordSchema
 	}
@@ -557,6 +558,11 @@ func replaceCatalogConfig(ctx context.Context, queries *db.Queries, entryID uuid
 		params.QueryType, params.QueryIdentifier, params.QueryIsbn, params.QueryIssn, params.QueryTitle = config.Query.Type, config.Query.Identifier, config.Query.ISBN, config.Query.ISSN, config.Query.Title
 	}
 	if config.HoldingsFormat != nil {
+		var err error
+		params.HoldingsConfig, err = json.Marshal(config.HoldingsFormat)
+		if err != nil {
+			return err
+		}
 		if config.HoldingsFormat.Marc != nil {
 			marc := config.HoldingsFormat.Marc
 			params.HoldingsMarcCallNumberSubfield, params.HoldingsMarcItemIDSubfield = marc.CallNumberSubField, marc.ItemIDSubField
