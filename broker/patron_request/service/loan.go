@@ -152,6 +152,14 @@ func isoLoanDate(date pgtype.Timestamptz) *utils.XSDDateTime {
 	return &utils.XSDDateTime{Time: date.Time}
 }
 
+// Loan updates refresh status without discarding shipment and return details.
+// Only an accepted renewal changes the canonical date; other updates retain it.
+func setLoanStatus(status iso18626.StatusInfo, pr *pr_db.PatronRequest) {
+	pr.IllResponse.StatusInfo.Status = status.Status
+	pr.IllResponse.StatusInfo.LastChange = status.LastChange
+	pr.IllResponse.StatusInfo.DueDate = isoLoanDate(pr.DueAt)
+}
+
 func (a *PatronRequestActionService) overdueLenderRequest(ctx common.ExtendedContext, eventID string, pr pr_db.PatronRequest) actionExecutionResult {
 	// The action dispatcher enforces availability using the request's state model.
 	if pr.Side != SideLending ||
@@ -162,7 +170,11 @@ func (a *PatronRequestActionService) overdueLenderRequest(ctx common.ExtendedCon
 	status, result, err := a.messageSender.sendSupplyingAgencyMessage(ctx, eventID, pr,
 		iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange},
 		iso18626.StatusInfo{Status: iso18626.TypeStatusOverdue, DueDate: isoLoanDate(pr.DueAt)}, nil)
-	return actionResultFromIllSend(ctx, status, result, err, pr)
+	execution := actionResultFromIllSend(ctx, status, result, err, pr)
+	if execution.status == events.EventStatusSuccess {
+		setLoanStatus(result.OutgoingMessage.SupplyingAgencyMessage.StatusInfo, &execution.pr)
+	}
+	return execution
 }
 
 func (a *PatronRequestActionService) renewalLenderRequest(ctx common.ExtendedContext, eventID string, pr pr_db.PatronRequest, params actionParams, accept bool) actionExecutionResult {
@@ -187,9 +199,11 @@ func (a *PatronRequestActionService) renewalLenderRequest(ctx common.ExtendedCon
 		iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageRenewResponse, AnswerYesNo: &answer, Note: params.Note},
 		iso18626.StatusInfo{Status: status, DueDate: isoLoanDate(due)}, nil)
 	execution := actionResultFromIllSend(ctx, sendStatus, result, err, pr)
-	if execution.status == events.EventStatusSuccess && accept {
-		execution.pr.DueAt = due
-		execution.pr.IllResponse.StatusInfo.DueDate = isoLoanDate(due)
+	if execution.status == events.EventStatusSuccess {
+		if accept {
+			execution.pr.DueAt = due
+		}
+		setLoanStatus(result.OutgoingMessage.SupplyingAgencyMessage.StatusInfo, &execution.pr)
 	}
 	return execution
 }

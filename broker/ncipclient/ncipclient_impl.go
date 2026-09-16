@@ -418,7 +418,7 @@ func stripInvalidCheckoutDueDates(b []byte) ([]byte, error) {
 					return nil, err
 				}
 				due, err := time.Parse(time.RFC3339, strings.TrimSpace(value))
-				if err != nil || due.IsZero() {
+				if err != nil || due.IsZero() || due.Year() < 1 {
 					clean = append(clean, b[last:start]...)
 					last = decoder.InputOffset()
 				}

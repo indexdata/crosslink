@@ -64,6 +64,70 @@ func TestLoanTransactionReturnsCommitFailure(t *testing.T) {
 	require.ErrorContains(t, err, "duplicate key")
 }
 
+func TestLoanMigrationBackfillsValidDates(t *testing.T) {
+	down, err := os.ReadFile("../../../migrations/065_loan_due_dates.down.sql")
+	require.NoError(t, err)
+	up, err := os.ReadFile("../../../migrations/065_loan_due_dates.up.sql")
+	require.NoError(t, err)
+	wants := make(map[string]string)
+	now := pgtype.Timestamp{Time: time.Now().UTC(), Valid: true}
+	for _, tc := range []struct {
+		date string
+		want string
+	}{
+		{`"2026-10-01T23:59:59+02:00"`, "2026-10-01T21:59:59Z"},
+		{`"2020-01-01T00:00:00Z"`, "2020-01-01T00:00:00Z"},
+		{`null`, ""},
+		{`""`, ""},
+		{`"invalid"`, ""},
+		{`"2026-02-30T00:00:00Z"`, ""},
+		{`"0000-01-01T00:00:00Z"`, ""},
+		{`"0001-01-01T00:00:00Z"`, ""},
+		{`"2026-10-01"`, ""},
+		{`"2026-10-01T23:59:59"`, ""},
+		{`"infinity"`, ""},
+		{`{}`, ""},
+	} {
+		id := uuid.NewString()
+		_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+			ID: id, Side: prservice.SideLending, State: prservice.LenderStateReceived,
+			CreatedAt: now, UpdatedAt: now, Language: "english", Items: []pr_db.PrItem{},
+			IllRequest: iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}},
+		})
+		require.NoError(t, err)
+		t.Cleanup(func() { assert.NoError(t, prRepo.DeletePatronRequest(appCtx, id)) })
+		_, err = prRepo.(*pr_db.PgPrRepo).GetConnOrTx().Exec(appCtx,
+			`UPDATE patron_request SET ill_response = jsonb_build_object('statusInfo', jsonb_build_object('dueDate', $2::jsonb)) WHERE id = $1`, id, tc.date)
+		require.NoError(t, err)
+		wants[id] = tc.want
+	}
+	// Exercise the actual migration without changing the shared test schema.
+	restore := errors.New("restore current schema")
+	got := make(map[string]string)
+	err = prRepo.WithTxFunc(appCtx, func(repo pr_db.PrRepo) error {
+		conn := repo.(*pr_db.PgPrRepo).GetConnOrTx()
+		if _, err := conn.Exec(appCtx, string(down)); err != nil {
+			return err
+		}
+		if _, err := conn.Exec(appCtx, string(up)); err != nil {
+			return err
+		}
+		for id := range wants {
+			var due pgtype.Timestamptz
+			if err := conn.QueryRow(appCtx, `SELECT due_at FROM patron_request WHERE id = $1`, id).Scan(&due); err != nil {
+				return err
+			}
+			got[id] = ""
+			if due.Valid {
+				got[id] = due.Time.UTC().Format(time.RFC3339)
+			}
+		}
+		return restore
+	})
+	require.ErrorIs(t, err, restore)
+	assert.Equal(t, wants, got)
+}
+
 func TestLoanRollbackRestoresSupportedStates(t *testing.T) {
 	down, err := os.ReadFile("../../../migrations/065_loan_due_dates.down.sql")
 	require.NoError(t, err)

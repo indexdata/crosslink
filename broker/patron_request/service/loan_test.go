@@ -202,6 +202,7 @@ func TestShippingDateSourceStaysOnActionResult(t *testing.T) {
 func TestIncomingLoanAndRenewalDates(t *testing.T) {
 	old := time.Now().UTC().AddDate(0, 0, -30)
 	past := old.AddDate(0, 0, 1)
+	yearZero := &utils.XSDDateTime{Time: time.Date(0, 1, 1, 0, 0, 0, 0, time.UTC)}
 	for _, tc := range []struct {
 		name   string
 		state  pr_db.PatronRequestState
@@ -214,6 +215,8 @@ func TestIncomingLoanAndRenewalDates(t *testing.T) {
 		{name: "open-ended shipment", state: BorrowerStateWillSupply, reason: iso18626.TypeReasonForMessageStatusChange, want: BorrowerStateShipped},
 		{name: "accept past date without local overdue decision", state: BorrowerStateRenewalPending, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoY), date: &utils.XSDDateTime{Time: past}, want: BorrowerStateRenewed},
 		{name: "accept requires date", state: BorrowerStateRenewalPending, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoY), fail: true},
+		{name: "reject year-zero renewal", state: BorrowerStateRenewalPending, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoY), date: yearZero, fail: true},
+		{name: "reject year-zero shipment", state: BorrowerStateWillSupply, reason: iso18626.TypeReasonForMessageStatusChange, date: yearZero, fail: true},
 		{name: "reject preserves date", state: BorrowerStateRenewalPending, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoN), want: BorrowerStateOverdue},
 		{name: "unsolicited response", state: BorrowerStateReceived, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoY), date: &utils.XSDDateTime{Time: past}, fail: true},
 	} {
@@ -253,6 +256,56 @@ func TestIncomingLoanAndRenewalDates(t *testing.T) {
 
 func loanYesNo(value iso18626.TypeYesNo) *iso18626.TypeYesNo { return &value }
 
+func TestIncomingLoanStatusPreservesShipmentDetails(t *testing.T) {
+	old := time.Now().UTC().Add(-time.Hour)
+	updated := old.Add(48 * time.Hour)
+	for _, tc := range []struct {
+		name   string
+		reason iso18626.TypeReasonForMessage
+		answer *iso18626.TypeYesNo
+		status iso18626.TypeStatus
+	}{
+		{"overdue", iso18626.TypeReasonForMessageStatusChange, nil, iso18626.TypeStatusOverdue},
+		{"accepted", iso18626.TypeReasonForMessageRenewResponse, loanYesNo(iso18626.TypeYesNoY), iso18626.TypeStatusLoaned},
+		{"rejected", iso18626.TypeReasonForMessageRenewResponse, loanYesNo(iso18626.TypeYesNoN), iso18626.TypeStatusOverdue},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pr := testLoan()
+			pr.Side, pr.State = SideBorrowing, BorrowerStateRenewalPending
+			if tc.answer == nil {
+				pr.State = BorrowerStateReceived
+			}
+			pr.DueAt = pgtype.Timestamptz{Time: old, Valid: true}
+			pr.IllResponse.StatusInfo.ExpectedDeliveryDate = &utils.XSDDateTime{Time: old}
+			pr.IllResponse.DeliveryInfo = &iso18626.DeliveryInfo{ItemId: "shipment"}
+			pr.IllResponse.ReturnInfo = &iso18626.ReturnInfo{PhysicalAddress: &iso18626.PhysicalAddress{}}
+			sam := iso18626.SupplyingAgencyMessage{
+				MessageInfo: iso18626.MessageInfo{ReasonForMessage: tc.reason, AnswerYesNo: tc.answer},
+				StatusInfo:  iso18626.StatusInfo{Status: tc.status, LastChange: utils.XSDDateTime{Time: time.Now().UTC()}},
+			}
+			wantDue := old
+			if tc.answer != nil && *tc.answer == iso18626.TypeYesNoY {
+				sam.StatusInfo.DueDate = &utils.XSDDateTime{Time: updated}
+				wantDue = updated
+			}
+			repo := new(MockPrRepo)
+			handler := CreatePatronRequestMessageHandler(repo, nil, nil, nil)
+			status, _, err := handler.handleSupplyingAgencyMessage(appCtx, sam, pr)
+			require.NoError(t, err)
+			require.Equal(t, events.EventStatusSuccess, status)
+			assert.Equal(t, tc.status, repo.savedPr.IllResponse.StatusInfo.Status)
+			assert.Equal(t, sam.StatusInfo.LastChange, repo.savedPr.IllResponse.StatusInfo.LastChange)
+			assert.Equal(t, pr.IllResponse.StatusInfo.ExpectedDeliveryDate, repo.savedPr.IllResponse.StatusInfo.ExpectedDeliveryDate)
+			assert.Equal(t, wantDue, repo.savedPr.DueAt.Time)
+			require.NotNil(t, repo.savedPr.IllResponse.StatusInfo.DueDate)
+			assert.Equal(t, wantDue, repo.savedPr.IllResponse.StatusInfo.DueDate.Time)
+			assert.Equal(t, pr.IllResponse.DeliveryInfo, repo.savedPr.IllResponse.DeliveryInfo)
+			assert.Equal(t, pr.IllResponse.ReturnInfo, repo.savedPr.IllResponse.ReturnInfo)
+			assert.Empty(t, repo.savedItems)
+		})
+	}
+}
+
 func TestSupplierOverdueAndRenewalSendBeforeTransition(t *testing.T) {
 	for _, action := range []pr_db.PatronRequestAction{LenderActionOverdue, LenderActionAcceptRenewal, LenderActionRejectRenewal} {
 		t.Run(string(action), func(t *testing.T) {
@@ -263,6 +316,9 @@ func TestSupplierOverdueAndRenewalSendBeforeTransition(t *testing.T) {
 			}
 			old := time.Now().UTC().Add(-time.Hour)
 			pr.DueAt = pgtype.Timestamptz{Time: old, Valid: true}
+			pr.IllResponse.DeliveryInfo = &iso18626.DeliveryInfo{ItemId: "shipment"}
+			pr.IllResponse.ReturnInfo = &iso18626.ReturnInfo{PhysicalAddress: &iso18626.PhysicalAddress{}}
+			pr.IllResponse.StatusInfo.DueDate = isoLoanDate(pr.DueAt)
 			repo := &MockPrRepo{savedPr: pr}
 			sender := &MockIso18626Handler{failSupplyingAgencyMessage: true}
 			svc := CreatePatronRequestActionService(repo, new(IllRepoMock), new(MockEventBus), sender, nil, nil, nil, nil)
@@ -272,9 +328,13 @@ func TestSupplierOverdueAndRenewalSendBeforeTransition(t *testing.T) {
 			assert.Equal(t, pr.State, repo.savedPr.State)
 			assert.Equal(t, old, repo.savedPr.DueAt.Time)
 			assert.True(t, repo.savedPr.NeedsAttention)
+			assert.Equal(t, pr.IllResponse, repo.savedPr.IllResponse, "failed send must retain the prior supplier status")
 			sender.failSupplyingAgencyMessage = false
 			status, _ = svc.handleInvokeAction(appCtx, event)
 			require.Equal(t, events.EventStatusSuccess, status)
+			assert.Equal(t, sender.lastSupplyingAgencyMessage.StatusInfo, repo.savedPr.IllResponse.StatusInfo)
+			assert.Equal(t, pr.IllResponse.DeliveryInfo, repo.savedPr.IllResponse.DeliveryInfo)
+			assert.Equal(t, pr.IllResponse.ReturnInfo, repo.savedPr.IllResponse.ReturnInfo)
 			if action == LenderActionAcceptRenewal {
 				assert.Equal(t, LenderStateRenewed, repo.savedPr.State)
 				assert.True(t, repo.savedPr.DueAt.Time.After(old))

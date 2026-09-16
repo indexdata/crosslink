@@ -1,4 +1,12 @@
 ALTER TABLE patron_request ADD COLUMN due_at TIMESTAMPTZ;
+-- Retain valid legacy ISO dates; malformed, timezone-less and zero dates stay null.
+UPDATE patron_request
+SET due_at = CASE
+    WHEN ill_response #>> '{statusInfo,dueDate}' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$'
+        AND pg_input_is_valid(ill_response #>> '{statusInfo,dueDate}', 'timestamptz')
+    THEN NULLIF((ill_response #>> '{statusInfo,dueDate}')::timestamptz, TIMESTAMPTZ '0001-01-01 00:00:00+00')
+END
+WHERE ill_response #>> '{statusInfo,dueDate}' IS NOT NULL;
 ALTER TABLE item ADD COLUMN lms_status VARCHAR NOT NULL DEFAULT 'UNKNOWN' CHECK (lms_status IN ('UNKNOWN', 'REQUESTED', 'ACCEPTED', 'CHECKED_OUT', 'CHECKED_IN', 'DELETED'));
 ALTER TABLE item ADD COLUMN lms_due_date TIMESTAMPTZ;
 UPDATE patron_request SET state = 'RECEIVED' WHERE side = 'borrowing' AND state IN ('CHECKED_OUT', 'CHECKED_IN');

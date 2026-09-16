@@ -10,7 +10,7 @@ import (
 )
 
 func TestUnusableCheckoutDateDoesNotDiscardSuccessfulCheckout(t *testing.T) {
-	for _, date := range []string{"invalid", "0001-01-01T00:00:00Z", "2026-09-16", ""} {
+	for _, date := range []string{"invalid", "0000-01-01T00:00:00Z", "0001-01-01T00:00:00Z", "2026-09-16", ""} {
 		input := []byte(`<NCIPMessage xmlns="http://www.niso.org/2008/ncip"><CheckOutItemResponse><ItemId><ItemIdentifierValue>item</ItemIdentifierValue></ItemId><DateDue>` + date + `</DateDue></CheckOutItemResponse></NCIPMessage>`)
 		cleaned, err := stripInvalidCheckoutDueDates(input)
 		require.NoError(t, err)
