@@ -152,11 +152,12 @@ func isoLoanDate(date pgtype.Timestamptz) *utils.XSDDateTime {
 	return &utils.XSDDateTime{Time: date.Time}
 }
 
-// Loan updates refresh status without discarding shipment and return details.
+// Loan updates refresh message info and status without discarding shipment and return details.
 // Only an accepted renewal changes the canonical date; other updates retain it.
-func setLoanStatus(status iso18626.StatusInfo, pr *pr_db.PatronRequest) {
-	pr.IllResponse.StatusInfo.Status = status.Status
-	pr.IllResponse.StatusInfo.LastChange = status.LastChange
+func setLoanMessage(sam iso18626.SupplyingAgencyMessage, pr *pr_db.PatronRequest) {
+	pr.IllResponse.MessageInfo = sam.MessageInfo
+	pr.IllResponse.StatusInfo.Status = sam.StatusInfo.Status
+	pr.IllResponse.StatusInfo.LastChange = sam.StatusInfo.LastChange
 	pr.IllResponse.StatusInfo.DueDate = isoLoanDate(pr.DueAt)
 }
 
@@ -172,7 +173,7 @@ func (a *PatronRequestActionService) overdueLenderRequest(ctx common.ExtendedCon
 		iso18626.StatusInfo{Status: iso18626.TypeStatusOverdue, DueDate: isoLoanDate(pr.DueAt)}, nil)
 	execution := actionResultFromIllSend(ctx, status, result, err, pr)
 	if execution.status == events.EventStatusSuccess {
-		setLoanStatus(result.OutgoingMessage.SupplyingAgencyMessage.StatusInfo, &execution.pr)
+		setLoanMessage(*result.OutgoingMessage.SupplyingAgencyMessage, &execution.pr)
 	}
 	return execution
 }
@@ -203,7 +204,7 @@ func (a *PatronRequestActionService) renewalLenderRequest(ctx common.ExtendedCon
 		if accept {
 			execution.pr.DueAt = due
 		}
-		setLoanStatus(result.OutgoingMessage.SupplyingAgencyMessage.StatusInfo, &execution.pr)
+		setLoanMessage(*result.OutgoingMessage.SupplyingAgencyMessage, &execution.pr)
 	}
 	return execution
 }

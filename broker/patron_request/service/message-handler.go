@@ -256,7 +256,7 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 		default:
 			return statusChangeNotAllowed()
 		}
-		setLoanStatus(sam.StatusInfo, &pr)
+		setLoanMessage(sam, &pr)
 	} else {
 		switch sam.StatusInfo.Status {
 		case iso18626.TypeStatusExpectToSupply:
@@ -294,7 +294,7 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 			eventName = SupplierLoaned
 		case iso18626.TypeStatusOverdue:
 			eventName = SupplierOverdue
-			setLoanStatus(sam.StatusInfo, &pr)
+			setLoanMessage(sam, &pr)
 		case iso18626.TypeStatusLoanCompleted, iso18626.TypeStatusCopyCompleted:
 			if sam.StatusInfo.Status == iso18626.TypeStatusCopyCompleted {
 				setSupplierMessage(sam, &pr)

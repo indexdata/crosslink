@@ -277,10 +277,11 @@ func TestIncomingLoanStatusPreservesShipmentDetails(t *testing.T) {
 			}
 			pr.DueAt = pgtype.Timestamptz{Time: old, Valid: true}
 			pr.IllResponse.StatusInfo.ExpectedDeliveryDate = &utils.XSDDateTime{Time: old}
+			pr.IllResponse.MessageInfo = iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange, AnswerYesNo: loanYesNo(iso18626.TypeYesNoN), Note: "old note"}
 			pr.IllResponse.DeliveryInfo = &iso18626.DeliveryInfo{ItemId: "shipment"}
 			pr.IllResponse.ReturnInfo = &iso18626.ReturnInfo{PhysicalAddress: &iso18626.PhysicalAddress{}}
 			sam := iso18626.SupplyingAgencyMessage{
-				MessageInfo: iso18626.MessageInfo{ReasonForMessage: tc.reason, AnswerYesNo: tc.answer},
+				MessageInfo: iso18626.MessageInfo{ReasonForMessage: tc.reason, AnswerYesNo: tc.answer, Note: "updated loan note"},
 				StatusInfo:  iso18626.StatusInfo{Status: tc.status, LastChange: utils.XSDDateTime{Time: time.Now().UTC()}},
 			}
 			wantDue := old
@@ -294,6 +295,7 @@ func TestIncomingLoanStatusPreservesShipmentDetails(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, events.EventStatusSuccess, status)
 			assert.Equal(t, tc.status, repo.savedPr.IllResponse.StatusInfo.Status)
+			assert.Equal(t, sam.MessageInfo, repo.savedPr.IllResponse.MessageInfo)
 			assert.Equal(t, sam.StatusInfo.LastChange, repo.savedPr.IllResponse.StatusInfo.LastChange)
 			assert.Equal(t, pr.IllResponse.StatusInfo.ExpectedDeliveryDate, repo.savedPr.IllResponse.StatusInfo.ExpectedDeliveryDate)
 			assert.Equal(t, wantDue, repo.savedPr.DueAt.Time)
@@ -319,10 +321,11 @@ func TestSupplierOverdueAndRenewalSendBeforeTransition(t *testing.T) {
 			pr.IllResponse.DeliveryInfo = &iso18626.DeliveryInfo{ItemId: "shipment"}
 			pr.IllResponse.ReturnInfo = &iso18626.ReturnInfo{PhysicalAddress: &iso18626.PhysicalAddress{}}
 			pr.IllResponse.StatusInfo.DueDate = isoLoanDate(pr.DueAt)
+			pr.IllResponse.MessageInfo = iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange, AnswerYesNo: loanYesNo(iso18626.TypeYesNoN), Note: "old note"}
 			repo := &MockPrRepo{savedPr: pr}
 			sender := &MockIso18626Handler{failSupplyingAgencyMessage: true}
 			svc := CreatePatronRequestActionService(repo, new(IllRepoMock), new(MockEventBus), sender, nil, nil, nil, nil)
-			event := events.Event{ID: "event", PatronRequestID: pr.ID, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}, CustomData: map[string]any{"dueDate": "2030-01-01"}}}
+			event := events.Event{ID: "event", PatronRequestID: pr.ID, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}, CustomData: map[string]any{"dueDate": "2030-01-01", "note": "renewal decision"}}}
 			status, _ := svc.handleInvokeAction(appCtx, event)
 			require.NotEqual(t, events.EventStatusSuccess, status)
 			assert.Equal(t, pr.State, repo.savedPr.State)
@@ -333,6 +336,7 @@ func TestSupplierOverdueAndRenewalSendBeforeTransition(t *testing.T) {
 			status, _ = svc.handleInvokeAction(appCtx, event)
 			require.Equal(t, events.EventStatusSuccess, status)
 			assert.Equal(t, sender.lastSupplyingAgencyMessage.StatusInfo, repo.savedPr.IllResponse.StatusInfo)
+			assert.Equal(t, sender.lastSupplyingAgencyMessage.MessageInfo, repo.savedPr.IllResponse.MessageInfo)
 			assert.Equal(t, pr.IllResponse.DeliveryInfo, repo.savedPr.IllResponse.DeliveryInfo)
 			assert.Equal(t, pr.IllResponse.ReturnInfo, repo.savedPr.IllResponse.ReturnInfo)
 			if action == LenderActionAcceptRenewal {
