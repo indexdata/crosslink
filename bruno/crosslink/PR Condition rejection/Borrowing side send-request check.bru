@@ -1,0 +1,55 @@
+meta {
+  name: Borrowing side send-request check
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{host}}/patron_requests/{{rejectionPrId}}?side=borrowing
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: borrowing
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")))
+}
+
+script:post-response {
+  test("HTTP request succeeds", () => {
+    expect(res.getStatus()).to.be.within(200, 299);
+  });
+  test("for send-request", function() {
+    const pr = res.getBody();
+    expect(pr.lastAction).to.equal("send-request")
+    expect(pr.state).to.equal("WILL_SUPPLY");
+    const first = bru.getEnvVar("supplierSymbol");
+    const second = bru.getEnvVar("secondSupplierSymbol");
+    expect(first).not.to.equal(second);
+    expect(pr.supplierSymbol).to.be.oneOf([first, second]);
+    const selectedFirst = pr.supplierSymbol === first;
+    bru.setVar("rejectionFirstSymbol", pr.supplierSymbol);
+    bru.setVar("rejectionNextSymbol", selectedFirst ? second : first);
+    bru.setVar("rejectionFirstTenant", bru.getEnvVar(selectedFirst ? "OkapiTenantSup" : "OkapiTenantSup2"));
+    bru.setVar("rejectionNextTenant", bru.getEnvVar(selectedFirst ? "OkapiTenantSup2" : "OkapiTenantSup"));
+    expect(pr.lastActionResult).to.equal("SUCCESS")
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
