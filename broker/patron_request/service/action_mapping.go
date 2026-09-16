@@ -253,6 +253,9 @@ func (r *ActionMapping) GetAllowedActionsForPatronRequest(pr pr_db.PatronRequest
 		Actions: []proapi.AllowedAction{},
 	}
 	for _, action := range actionEntries {
+		if action.actionName == BorrowerActionRerequest && pr.NextReqID.Valid {
+			continue
+		}
 		name := string(action.actionName)
 		if pr.LastAction.String == name && prLastActionFailed {
 			hasFailed = true

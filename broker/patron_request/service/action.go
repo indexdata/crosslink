@@ -54,10 +54,10 @@ type PatronRequestActionService struct {
 }
 
 type actionExecutionResult struct {
-	status  events.EventStatus
-	result  *events.EventResult
-	pr      pr_db.PatronRequest
-	retryPr pr_db.PatronRequest
+	status      events.EventStatus
+	result      *events.EventResult
+	pr          pr_db.PatronRequest
+	successorPr pr_db.PatronRequest
 }
 
 const compensationResultKey = "compensation"
@@ -147,7 +147,7 @@ func CreatePatronRequestActionService(prRepo pr_db.PrRepo, illRepo ill_db.IllRep
 	iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator, emailService email.EmailService,
 	lookupAdapterFactory *service.LookupAdapterFactory, directoryLookupAdapter adapter.DirectoryLookupAdapter) *PatronRequestActionService {
 	return &PatronRequestActionService{
-		messageSender:          PatronRequestMessageSender{iso18626Handler: iso18626Handler, eventBus: eventBus},
+		messageSender:          PatronRequestMessageSender{iso18626Handler: iso18626Handler, eventBus: eventBus, prRepo: prRepo},
 		prRepo:                 prRepo,
 		illRepo:                illRepo,
 		eventBus:               eventBus,
@@ -510,13 +510,13 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 		updatedPr.NeedsAttention = true
 	}
 
-	var retryPr pr_db.PatronRequest
+	var successorPr pr_db.PatronRequest
 	err := a.prRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
 		var err error
-		if execResult.retryPr.ID != "" {
-			retryPr, err = repo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(execResult.retryPr))
+		if execResult.successorPr.ID != "" {
+			successorPr, err = repo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(execResult.successorPr))
 			if err != nil {
-				return fmt.Errorf("create retry patron request: %w", err)
+				return fmt.Errorf("create successor patron request: %w", err)
 			}
 		}
 		updatedPr, err = repo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(updatedPr))
@@ -528,8 +528,8 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 	if err != nil {
 		return logActionErrorAndReturnResult(ctx, "failed to persist patron request", err)
 	}
-	if retryPr.ID != "" {
-		err := a.RunAutoActionsOnStateEntry(ctx, retryPr, &event.ID, event.EventData.User)
+	if successorPr.ID != "" {
+		err := a.RunAutoActionsOnStateEntry(ctx, successorPr, &event.ID, event.EventData.User)
 		if err != nil {
 			failedAction := action
 			var autoErr *autoActionFailure
@@ -677,7 +677,9 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 	case BorrowerActionRejectCondition:
 		return a.rejectConditionBorrowingRequest(ctx, eventID, pr)
 	case BorrowerActionAcceptRetry:
-		return a.acceptRetryBorrowingRequest(ctx, pr)
+		return a.createSuccessorBorrowingRequest(ctx, pr, true)
+	case BorrowerActionRerequest:
+		return a.createSuccessorBorrowingRequest(ctx, pr, false)
 	case BorrowerActionSendNotification:
 		return a.sendNotificationBorrowingRequest(ctx, pr, params)
 	case BorrowerActionCancelLocalSupply:
@@ -1177,23 +1179,27 @@ func (a *PatronRequestActionService) rejectConditionBorrowingRequest(ctx common.
 	return execResult
 }
 
-func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
-	retryPr := pr_db.PatronRequest{}
-	retryPr.Side = pr.Side
-	retryPr.RequesterSymbol = pr.RequesterSymbol
-	retryPr.RequesterPickupLocationID = pr.RequesterPickupLocationID
-	retryPr.SupplierSymbol = pr.SupplierSymbol
-	retryPr.Patron = pr.Patron
-	retryPr.Tenant = pr.Tenant
-	var err error
-	retryPr.IllRequest, err = deepCopyISO18626Request(pr.IllRequest)
-	if err != nil {
-		status, result := logActionErrorAndReturnResult(ctx, "failed to clone IllRequest for retry", err)
+func (a *PatronRequestActionService) createSuccessorBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, retry bool) actionExecutionResult {
+	if pr.NextReqID.Valid {
+		status, result := logActionErrorAndReturnResult(ctx, "request already has a successor", nil)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	actionMapping, err := a.actionMappingService.GetActionMapping(retryPr.IllRequest)
+	successorPr := pr_db.PatronRequest{}
+	successorPr.Side = pr.Side
+	successorPr.RequesterSymbol = pr.RequesterSymbol
+	successorPr.RequesterPickupLocationID = pr.RequesterPickupLocationID
+	successorPr.SupplierSymbol = pr.SupplierSymbol
+	successorPr.Patron = pr.Patron
+	successorPr.Tenant = pr.Tenant
+	var err error
+	successorPr.IllRequest, err = deepCopyISO18626Request(pr.IllRequest)
 	if err != nil {
-		status, result := logActionErrorAndReturnResult(ctx, "failed to load state model for retry", err)
+		status, result := logActionErrorAndReturnResult(ctx, "failed to clone IllRequest for successor request", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	actionMapping, err := a.actionMappingService.GetActionMapping(successorPr.IllRequest)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to load state model for successor request", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	borrowerInitialState, ok := actionMapping.GetInitialState(SideBorrowing)
@@ -1201,41 +1207,50 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 		status, result := logActionErrorAndReturnResult(ctx, "no initial state defined for borrower side", errors.New("invalid state model"))
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	retryPr.State = borrowerInitialState
-	retryPr.TerminalState = actionMapping.IsTerminalState(retryPr)
+	successorPr.State = borrowerInitialState
+	successorPr.TerminalState = actionMapping.IsTerminalState(successorPr)
 	_, requesterSymbol, err := common.SplitSymbol(pr.RequesterSymbol.String)
 	if err != nil {
-		status, result := logActionErrorAndReturnResult(ctx, "invalid requester symbol for retry", err)
+		status, result := logActionErrorAndReturnResult(ctx, "invalid requester symbol for successor request", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	retryPr.ID, err = a.prRepo.GetNextHrid(ctx, requesterSymbol)
+	successorPr.ID, err = a.prRepo.GetNextHrid(ctx, requesterSymbol)
 	if err != nil {
-		status, result := logActionErrorAndReturnResult(ctx, "failed to generate requester HRID for retry", err)
+		status, result := logActionErrorAndReturnResult(ctx, "failed to generate requester HRID for successor request", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	retryPr.RequesterReqID = getDbTextPtr(&retryPr.ID)
-	retryPr.CreatedAt = pgtype.Timestamp{Valid: true, Time: time.Now()}
-	retryPr.IllRequest.Header.RequestingAgencyRequestId = retryPr.ID
-	retryPr.IllRequest.Header.Timestamp = utils.XSDDateTime{Time: retryPr.CreatedAt.Time}
-	retryPr.PrevReqID = getDbTextPtr(&pr.ID)
-	retryPr.Language = pr.Language
-	retryPr.Items = []pr_db.PrItem{}
-	retryPr.RetryBibInfo = nil
-	retryPr.StateModel = pr.StateModel
-	if pr.RetryBibInfo != nil {
+	successorPr.RequesterReqID = getDbTextPtr(&successorPr.ID)
+	successorPr.CreatedAt = pgtype.Timestamp{Valid: true, Time: time.Now()}
+	successorPr.IllRequest.Header.RequestingAgencyRequestId = successorPr.ID
+	if !retry {
+		successorPr.IllRequest.Header.SupplyingAgencyRequestId = ""
+		if successorPr.IllRequest.ServiceInfo == nil {
+			successorPr.IllRequest.ServiceInfo = &iso18626.ServiceInfo{}
+		}
+		requestType := iso18626.TypeRequestTypeNew
+		successorPr.IllRequest.ServiceInfo.RequestType = &requestType
+		successorPr.IllRequest.ServiceInfo.RequestingAgencyPreviousRequestId = ""
+	}
+	successorPr.IllRequest.Header.Timestamp = utils.XSDDateTime{Time: successorPr.CreatedAt.Time}
+	successorPr.PrevReqID = getDbTextPtr(&pr.ID)
+	successorPr.Language = pr.Language
+	successorPr.Items = []pr_db.PrItem{}
+	successorPr.RetryBibInfo = nil
+	successorPr.StateModel = pr.StateModel
+	if retry && pr.RetryBibInfo != nil {
 		// only take selected fields from retry bib info to allow for corrections without affecting other fields
 		if pr.RetryBibInfo.SupplierUniqueRecordId != "" {
-			retryPr.IllRequest.BibliographicInfo.SupplierUniqueRecordId = pr.RetryBibInfo.SupplierUniqueRecordId
+			successorPr.IllRequest.BibliographicInfo.SupplierUniqueRecordId = pr.RetryBibInfo.SupplierUniqueRecordId
 		}
 		if pr.RetryBibInfo.Title != "" {
-			retryPr.IllRequest.BibliographicInfo.Title = pr.RetryBibInfo.Title
+			successorPr.IllRequest.BibliographicInfo.Title = pr.RetryBibInfo.Title
 		}
 		if pr.RetryBibInfo.Author != "" {
-			retryPr.IllRequest.BibliographicInfo.Author = pr.RetryBibInfo.Author
+			successorPr.IllRequest.BibliographicInfo.Author = pr.RetryBibInfo.Author
 		}
 	}
-	pr.NextReqID = getDbTextPtr(&retryPr.ID)
-	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr, retryPr: retryPr}
+	pr.NextReqID = getDbTextPtr(&successorPr.ID)
+	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr, successorPr: successorPr}
 }
 
 func (a *PatronRequestActionService) sendNotificationBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
