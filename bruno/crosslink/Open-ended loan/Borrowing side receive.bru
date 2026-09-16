@@ -1,11 +1,11 @@
 meta {
-  name: Borrowing side check-in
+  name: Borrowing side receive
   type: http
-  seq: 39
+  seq: 6
 }
 
 post {
-  url: {{host}}/patron_requests/{{prId}}/action?side=borrowing
+  url: {{host}}/patron_requests/{{openEndedPrId}}/action?side=borrowing
   body: json
   auth: basic
 }
@@ -26,8 +26,12 @@ auth:basic {
 
 body:json {
   {
-      "action": "check-in"
+      "action": "receive"
   }
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
 }
 
 script:post-response {

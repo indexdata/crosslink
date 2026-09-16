@@ -1,11 +1,11 @@
 meta {
   name: Borrowing side check status
   type: http
-  seq: 45
+  seq: 10
 }
 
 get {
-  url: {{host}}/patron_requests/{{prId}}?side=borrowing
+  url: {{host}}/patron_requests/{{openEndedPrId}}?side=borrowing
   body: none
   auth: basic
 }
@@ -22,6 +22,10 @@ headers {
 auth:basic {
   username: {{userName}}
   password: {{userPassword}}
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
 }
 
 script:post-response {

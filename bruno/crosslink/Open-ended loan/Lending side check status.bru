@@ -1,22 +1,22 @@
 meta {
-  name: Borrowing side check status
+  name: Lending side check status
   type: http
-  seq: 45
+  seq: 9
 }
 
 get {
-  url: {{host}}/patron_requests/{{prId}}?side=borrowing
+  url: {{host}}/patron_requests/{{openEndedLendingPrId}}?side=lending
   body: none
   auth: basic
 }
 
 params:query {
-  side: borrowing
+  side: lending
 }
 
 headers {
   X-Okapi-User-Id: {{userName}}
-  X-Okapi-Tenant: {{OkapiTenantReq}}
+  X-Okapi-Tenant: {{OkapiTenantSup}}
 }
 
 auth:basic {
@@ -24,11 +24,15 @@ auth:basic {
   password: {{userPassword}}
 }
 
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
 script:post-response {
   test("Check if patron request is complete", () => {
       const pr = res.getBody();
       expect(pr.lastActionResult).to.eql("SUCCESS");
-      expect(pr.lastAction).to.eql("ship-return");
+      expect(pr.lastAction).to.eql("mark-received");
       expect(pr.state).to.eql("COMPLETED");
   });
 }

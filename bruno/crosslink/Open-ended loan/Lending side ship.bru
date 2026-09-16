@@ -1,22 +1,22 @@
 meta {
-  name: Borrowing side check-in
+  name: Lending side ship
   type: http
-  seq: 39
+  seq: 3
 }
 
 post {
-  url: {{host}}/patron_requests/{{prId}}/action?side=borrowing
+  url: {{host}}/patron_requests/{{openEndedLendingPrId}}/action?side=lending
   body: json
   auth: basic
 }
 
 params:query {
-  side: borrowing
+  side: lending
 }
 
 headers {
   X-Okapi-User-Id: {{userName}}
-  X-Okapi-Tenant: {{OkapiTenantReq}}
+  X-Okapi-Tenant: {{OkapiTenantSup}}
 }
 
 auth:basic {
@@ -26,8 +26,12 @@ auth:basic {
 
 body:json {
   {
-      "action": "check-in"
+      "action": "ship"
   }
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")))
 }
 
 script:post-response {

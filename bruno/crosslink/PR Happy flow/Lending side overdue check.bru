@@ -1,12 +1,12 @@
 meta {
-  name: Lending side ship check
+  name: Lending side overdue check
   type: http
-  seq: 21
+  seq: 25
 }
 
 get {
   url: {{host}}/patron_requests/{{lendingPrId}}?side=lending
-  body: json
+  body: none
   auth: basic
 }
 
@@ -24,13 +24,17 @@ auth:basic {
   password: {{userPassword}}
 }
 
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
 script:post-response {
-  test("for ship", function() {
+  test("State is OVERDUE with the expected due date", () => {
+    expect(res.getStatus()).to.equal(200);
     const pr = res.getBody();
-    expect(pr.lastAction).to.equal("ship")
-    expect(pr.lastActionResult).to.equal("SUCCESS")
-    expect(pr.state).to.equal("SHIPPED");
+    expect(pr.state).to.equal("OVERDUE");
     expect(Date.parse(pr.dueDate)).to.equal(Date.parse(bru.getVar("loanDueDate")));
+    expect(pr.needsAttention).to.equal(false);
   });
 }
 

@@ -1,12 +1,12 @@
 meta {
-  name: Borrowing side receive check
+  name: Borrowing side overdue check
   type: http
-  seq: 23
+  seq: 26
 }
 
 get {
   url: {{host}}/patron_requests/{{prId}}?side=borrowing
-  body: json
+  body: none
   auth: basic
 }
 
@@ -24,13 +24,17 @@ auth:basic {
   password: {{userPassword}}
 }
 
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
 script:post-response {
-  test("for receive", function() {
+  test("State is OVERDUE with the expected due date", () => {
+    expect(res.getStatus()).to.equal(200);
     const pr = res.getBody();
-    expect(pr.lastAction).to.equal("send-notification")
-    expect(pr.lastActionResult).to.equal("SUCCESS")
-    expect(pr.state).to.equal("RECEIVED");
+    expect(pr.state).to.equal("OVERDUE");
     expect(Date.parse(pr.dueDate)).to.equal(Date.parse(bru.getVar("loanDueDate")));
+    expect(pr.needsAttention).to.equal(false);
   });
 }
 

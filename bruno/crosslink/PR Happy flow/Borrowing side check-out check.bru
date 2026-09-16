@@ -1,7 +1,7 @@
 meta {
   name: Borrowing side check-out check
   type: http
-  seq: 28
+  seq: 37
 }
 
 get {
@@ -29,6 +29,8 @@ script:post-response {
     const pr = res.getBody();
     expect(pr.lastAction).to.equal("check-out")
     expect(pr.lastActionResult).to.equal("SUCCESS")
+    expect(pr.state).to.equal("RENEWED");
+    expect(Date.parse(pr.dueDate)).to.equal(Date.parse(bru.getVar("renewedDueDate")));
   });
 }
 

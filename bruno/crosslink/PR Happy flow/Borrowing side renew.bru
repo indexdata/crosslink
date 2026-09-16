@@ -1,7 +1,7 @@
 meta {
-  name: Borrowing side check-in
+  name: Borrowing side renew
   type: http
-  seq: 39
+  seq: 27
 }
 
 post {
@@ -26,14 +26,19 @@ auth:basic {
 
 body:json {
   {
-      "action": "check-in"
+    "action": "renew"
   }
 }
 
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
 script:post-response {
-  test("for success", function() {
+  test("Action succeeds", () => {
+    expect(res.getStatus()).to.equal(200);
     const pr = res.getBody();
-    expect(pr.result).to.equal("SUCCESS")
+    expect(pr.result).to.equal("SUCCESS");
   });
 }
 

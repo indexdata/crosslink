@@ -1,11 +1,11 @@
 meta {
-  name: Borrowing side check-in check
+  name: Borrowing side open-ended check
   type: http
-  seq: 40
+  seq: 5
 }
 
 get {
-  url: {{host}}/patron_requests/{{prId}}?side=borrowing
+  url: {{host}}/patron_requests/{{openEndedPrId}}?side=borrowing
   body: json
   auth: basic
 }
@@ -24,13 +24,17 @@ auth:basic {
   password: {{userPassword}}
 }
 
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
 script:post-response {
-  test("for check-in", function() {
+  test("for ship", function() {
     const pr = res.getBody();
-    expect(pr.lastAction).to.equal("check-in")
     expect(pr.lastActionResult).to.equal("SUCCESS")
-    expect(pr.state).to.equal("RENEWED");
-    expect(Date.parse(pr.dueDate)).to.equal(Date.parse(bru.getVar("renewedDueDate")));
+    expect(pr.state).to.equal("SHIPPED");
+    expect(pr.dueDate).to.not.exist;
+    expect(pr.illResponse.statusInfo.dueDate).to.not.exist;
   });
 }
 
