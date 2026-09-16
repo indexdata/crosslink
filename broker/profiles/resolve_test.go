@@ -162,6 +162,11 @@ func TestValidation(t *testing.T) {
 		require.Contains(t, err.Error(), "profile")
 	}
 }
+
+func TestRejectConflictingCatalogEndpoints(t *testing.T) {
+	_, err := Resolve(entry(t, `{"catalogConfig":{"sru":{"address":"https://catalog/sru"},"zoom":{"address":"catalog:210"}}}`))
+	require.ErrorContains(t, err, "simultaneous sru and zoom endpoints")
+}
 func TestDiagnosticsProtectCredentials(t *testing.T) {
 	effective, err := Resolve(entry(t, `{"lmsConfig":{"vendor":"Sierra","address":"https://secret-address","fromAgency":"secret-agency","fromAgencyAuthentication":"secret-password"},"catalogConfig":{"zoom":{"address":"secret-catalog","options":{"password":"secret-password"}}}}`))
 	require.NoError(t, err)

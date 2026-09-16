@@ -49,3 +49,29 @@ func TestEmptyHoldingsFormatPatchPreservesConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateMergedHoldingsParsers(t *testing.T) {
+	original := db.CatalogConfig{HoldingsConfig: []byte(`{"marc":{"mainField":"999"},"opac":{}}`)}
+	for _, tc := range []struct {
+		name, patch string
+		valid       bool
+	}{
+		{"omitted parsers", `{}`, false},
+		{"empty parsers", `{"holdingsFormat":{}}`, false},
+		{"select one parser", `{"holdingsFormat":{"marc":{}}}`, true},
+		{"replace parsers", `{"holdingsFormat":{"reservoir":{}}}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var patch CatalogConfigPatch
+			require.NoError(t, json.Unmarshal([]byte(tc.patch), &patch))
+			params, err := catalogConfigPatchToDBParams(uuid.New(), patch, original)
+			require.NoError(t, err)
+			err = validateCatalogConfigParams(params)
+			if tc.valid {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, "at most one")
+			}
+		})
+	}
+}

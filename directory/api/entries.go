@@ -797,7 +797,11 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 	}
 
 	if request.Body.CatalogConfig != nil {
-		_, err := qtx.UpsertCatalogConfig(ctx, catalogConfigToDBParams(insertedEntry.ID, *request.Body.CatalogConfig))
+		params := catalogConfigToDBParams(insertedEntry.ID, *request.Body.CatalogConfig)
+		if validationErr := validateCatalogConfigParams(params); validationErr != nil {
+			return AddEntry400TextResponse(validationErr.Error()), nil
+		}
+		_, err := qtx.UpsertCatalogConfig(ctx, params)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to create catalogConfig component", "error", err)
 			return AddEntry500TextResponse("Internal server error"), nil
@@ -1196,6 +1200,9 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 			if mergeErr != nil {
 				slog.ErrorContext(ctx, "unable to merge catalogConfig", "error", mergeErr)
 				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+			if validationErr := validateCatalogConfigParams(params); validationErr != nil {
+				return UpdateEntry400TextResponse(validationErr.Error()), nil
 			}
 			_, err = qtx.UpsertCatalogConfig(ctx, params)
 			if err != nil {

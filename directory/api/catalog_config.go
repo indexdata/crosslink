@@ -69,6 +69,28 @@ func catalogConfigToDBParams(entryID uuid.UUID, cfg CatalogConfig) db.UpsertCata
 	return params
 }
 
+func validateCatalogConfigParams(params db.UpsertCatalogConfigParams) error {
+	if params.SruAddress != nil && params.ZoomAddress != nil {
+		return errors.New("catalogConfig cannot configure both SRU and ZOOM endpoints")
+	}
+	if len(params.HoldingsConfig) > 0 {
+		var holdings HoldingsParserConfig
+		if err := json.Unmarshal(params.HoldingsConfig, &holdings); err != nil {
+			return err
+		}
+		count := 0
+		for _, present := range []bool{holdings.Marc != nil, holdings.Opac != nil, holdings.Reservoir != nil, holdings.Marc21plus1 != nil} {
+			if present {
+				count++
+			}
+		}
+		if count > 1 {
+			return errors.New("catalogConfig.holdingsFormat must set at most one of marc, opac, reservoir, or marc21plus1")
+		}
+	}
+	return nil
+}
+
 func validateCatalogConfigPatch(cfg CatalogConfigPatch, original db.CatalogConfig) error {
 	if cfg.Sru != nil && cfg.Sru.Address == nil && original.SruAddress == nil {
 		return errors.New("catalogConfig.sru.address is required when creating SRU configuration")
