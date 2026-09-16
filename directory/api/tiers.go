@@ -194,3 +194,67 @@ func (a ApiImpl) DeleteTier(ctx context.Context, request DeleteTierRequestObject
 	return DeleteTier204Response{}, nil
 
 }
+
+func (a ApiImpl) UpdateTier(ctx context.Context, request UpdateTierRequestObject) (UpdateTierResponseObject, error) {
+	authData := auth.GetAuthData(ctx)
+	if !authData.HasRole(auth.ConsortialAdminRole) {
+		slog.ErrorContext(ctx, "permission denied")
+		return UpdateTier401TextResponse("Access denied"), nil
+	}
+	if request.Body == nil {
+		return UpdateTier400TextResponse("You must provide fields to update"), nil
+	}
+
+	tx, err := a.pool.Begin(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to begin transaction", "error", err, "operation", "UpdateTier")
+		return UpdateTier500TextResponse("Internal server error"), nil
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	qtx := a.queries.WithTx(tx)
+	orig, err := qtx.GetTierByIdForUpdate(ctx, request.Id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return UpdateTier404TextResponse("Tier not found"), nil
+	} else if err != nil {
+		slog.ErrorContext(ctx, "failed to get tier for update", "error", err, "id", request.Id)
+		return UpdateTier500TextResponse("Internal server error"), nil
+	}
+
+	level := orig.Level
+	if request.Body.Level != nil {
+		level = string(*request.Body.Level)
+	}
+	tierType := orig.Type
+	if request.Body.Type != nil {
+		tierType = string(*request.Body.Type)
+	}
+	cost := derefOrDefault(request.Body.Cost, orig.Cost)
+
+	switch TierLevel(level) {
+	case Express, Normal, Rush, Secondarymail, Standard, Urgent:
+	default:
+		return UpdateTier400TextResponse("Invalid tier level"), nil
+	}
+	switch TierType(tierType) {
+	case Loan, Copy:
+	default:
+		return UpdateTier400TextResponse("Invalid tier type"), nil
+	}
+	err = qtx.UpdateTier(ctx, db.UpdateTierParams{
+		ID:    request.Id,
+		Level: level,
+		Type:  tierType,
+		Cost:  cost,
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to update tier", "error", err, "id", request.Id)
+		return UpdateTier500TextResponse("Internal server error"), nil
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		slog.ErrorContext(ctx, "failed to commit transaction", "error", err, "operation", "UpdateTier")
+		return UpdateTier500TextResponse("Internal server error"), nil
+	}
+	return UpdateTier204Response{}, nil
+}
