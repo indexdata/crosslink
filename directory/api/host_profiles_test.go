@@ -27,3 +27,25 @@ func TestPersistRawProfileOverrides(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, `{"marc":{"mainField":"999"}}`, string(next.HoldingsConfig))
 }
+
+func TestEmptyHoldingsFormatPatchPreservesConfig(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		profile  string
+		holdings []byte
+	}{
+		{"generic overrides", "Generic", []byte(`{"marc":{"mainField":"999","itemIdSubField":"i"}}`)},
+		{"vendor overrides", "Sierra", []byte(`{"opac":{"requireLocalLocation":false,"includeItemId":false}}`)},
+		{"vendor defaults", "Sierra", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var patch CatalogConfigPatch
+			require.NoError(t, json.Unmarshal([]byte(`{"holdingsFormat":{}}`), &patch))
+			original := db.CatalogConfig{Profile: &tc.profile, HoldingsConfig: tc.holdings}
+			params, err := catalogConfigPatchToDBParams(uuid.New(), patch, original)
+			require.NoError(t, err)
+			require.Equal(t, original.HoldingsConfig, params.HoldingsConfig)
+			require.Equal(t, original.Profile, params.Profile)
+		})
+	}
+}

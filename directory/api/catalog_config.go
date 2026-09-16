@@ -302,6 +302,9 @@ func mergeHoldingsConfig(original []byte, patch *HoldingsParserConfig) ([]byte, 
 	if err := json.Unmarshal(data, &next); err != nil {
 		return nil, err
 	}
+	if len(next) == 0 {
+		return original, nil
+	}
 	if len(next) == 1 {
 		for parser, fields := range next {
 			if prev, ok := old[parser]; ok {
