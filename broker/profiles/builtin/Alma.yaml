@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=./profile.schema.json
+---
+# Overrides of Generic defaults.
+lmsConfig: {}
+catalogConfig:
+  holdingsFormat:
+    opac:
+      availabilityRule: availableNow
+      requireLocalLocation: true
+      includeItemId: true
+      includeItemLoanPolicy: true
+      allCirculations: true

@@ -1,10 +1,12 @@
 package catalog
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/stretchr/testify/assert"
@@ -416,7 +418,7 @@ func TestGviHoldings(t *testing.T) {
 		},
 	}
 
-	aa, err := creator.GetAdapter(peer)
+	aa, err := creator.GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), peer)
 	if cgoEnabled() {
 		assert.NoError(t, err)
 		assert.NotNil(t, aa)

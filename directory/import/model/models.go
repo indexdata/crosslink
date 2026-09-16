@@ -188,7 +188,7 @@ func (a *EntryAggregate) NormalizeAndValidate() error {
 			return fmt.Errorf("closure %d endDate must not precede startDate", index+1)
 		}
 	}
-	return validateConfigEnums(a.Data.CatalogConfig, a.Data.ILLConfig)
+	return validateConfigEnums(a.Data.LMSConfig, a.Data.CatalogConfig, a.Data.ILLConfig)
 }
 
 type TierKey struct {

@@ -14,7 +14,7 @@ type MarcHoldingsParser struct {
 }
 
 func NewMarcHoldingsParser(config dirapi.MarcHoldingsParserConfig) HoldingsParser {
-	if config.MainField == nil && config.LocationSubField == nil && config.ShelvingLocationSubField == nil && config.CallNumberSubField == nil && config.ItemIdSubField == nil && config.RestrictedSubField == nil {
+	if config.MainField == nil && config.LocationSubField == nil && config.ShelvingLocationSubField == nil && config.CallNumberSubField == nil && config.ItemIdSubField == nil && config.RestrictedSubField == nil && config.Availability == nil {
 		config.MainField = NewString("852")
 		config.LocationSubField = NewString("b")
 		config.ShelvingLocationSubField = NewString("c")
@@ -64,6 +64,22 @@ func (p *MarcHoldingsParser) Parse(record []byte, params LookupParams) ([]Holdin
 				}
 				if p.config.RestrictedSubField != nil && subfield.Code == *p.config.RestrictedSubField {
 					restricted = true
+				}
+			}
+			if p.config.Availability != nil {
+				for _, rule := range *p.config.Availability {
+					found, matches := false, false
+					for _, sub := range field.Subfield {
+						if sub.Code == rule.SubField {
+							found = true
+							if rule.Value != nil && string(sub.Text) == *rule.Value {
+								matches = true
+							}
+						}
+					}
+					if (rule.Operator == "absent" && found) || (rule.Operator == "equals" && !matches) {
+						restricted = true
+					}
 				}
 			}
 			if !restricted && location != "" {

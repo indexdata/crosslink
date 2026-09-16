@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Crosslink host profile",
+  "description": "Built-in host defaults. Nested configuration fields are validated against the directory API by the Go profile loader.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "lmsConfig": {
+      "type": "object",
+      "description": "LMS circulation defaults, using directory lmsConfig fields. Empty inherits Generic defaults."
+    },
+    "catalogConfig": {
+      "type": "object",
+      "description": "Catalog defaults, using directory catalogConfig fields. Empty inherits Generic defaults."
+    }
+  }
+}

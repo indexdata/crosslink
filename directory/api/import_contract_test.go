@@ -43,3 +43,27 @@ func TestImportOpenAPIContract(t *testing.T) {
 	require.Contains(t, entryData.Required, "lmsConfig")
 	require.Contains(t, entryData.Required, "holdingsPolicy")
 }
+
+func TestImportHostSettingsMatchEntryContract(t *testing.T) {
+	spec, err := GetSpec()
+	require.NoError(t, err)
+	source, err := openapi3.NewLoader().LoadFromFile("../api.yaml")
+	require.NoError(t, err)
+	for _, name := range []string{"LmsConfig", "CatalogConfig", "HoldingsParserConfig", "MarcHoldingsParserConfig", "OpacHoldingsParserConfig", "MarcAvailabilityPredicate"} {
+		t.Run(name, func(t *testing.T) {
+			for _, contract := range []*openapi3.T{source, spec} {
+				entry := contract.Components.Schemas[name].Value
+				imported := contract.Components.Schemas["Import"+name].Value
+				fields := make([]string, 0, len(entry.Properties))
+				for field := range entry.Properties {
+					fields = append(fields, field)
+					require.Contains(t, imported.Properties, field)
+				}
+				require.Len(t, imported.Properties, len(fields))
+				require.ElementsMatch(t, fields, imported.Required)
+				require.NotNil(t, imported.AdditionalProperties.Has)
+				require.False(t, *imported.AdditionalProperties.Has)
+			}
+		})
+	}
+}

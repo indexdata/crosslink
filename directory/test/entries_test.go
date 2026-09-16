@@ -759,8 +759,7 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 					"callNumberSubField":"c",
 					"restrictedSubField":"r",
 					"shelvingLocationSubField":"s"
-				},
-				"opac":{}
+				}
 			},
 			"metadataFormat":{
 				"marc21":{
@@ -1027,7 +1026,6 @@ func TestPatchCatalogConfigRequiresAddressForCreation(t *testing.T) {
 
 	res, data := jsonReq(t, http.MethodPatch, "/entries/by-id/"+entryID, `{
 		"catalogConfig":{
-			"sru":{"address":"https://catalog.example/sru","recordSchema":"marcxml"},
 			"zoom":{"address":"catalog.example:210/db","options":{"count":"10"}}
 		}
 	}`, headers)
@@ -1037,7 +1035,6 @@ func TestPatchCatalogConfigRequiresAddressForCreation(t *testing.T) {
 
 	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+entryID, `{
 		"catalogConfig":{
-			"sru":{"recordSchema":"mods"},
 			"zoom":{"options":{"count":"20"}}
 		}
 	}`, headers)
@@ -1054,11 +1051,9 @@ func TestPatchCatalogConfigRequiresAddressForCreation(t *testing.T) {
 		t.Fatalf("failed to parse entry after catalogConfig updates: %v", err)
 	}
 	catalogConfig := entry["catalogConfig"].(map[string]any)
-	sru := catalogConfig["sru"].(map[string]any)
 	zoom := catalogConfig["zoom"].(map[string]any)
 	options := zoom["options"].(map[string]any)
-	if sru["address"] != "https://catalog.example/sru" || sru["recordSchema"] != "mods" ||
-		zoom["address"] != "catalog.example:210/db" || options["count"] != "20" {
+	if zoom["address"] != "catalog.example:210/db" || options["count"] != "20" {
 		t.Fatalf("catalogConfig creation or partial update did not round-trip: %#v", catalogConfig)
 	}
 

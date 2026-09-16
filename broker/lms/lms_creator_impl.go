@@ -4,6 +4,7 @@ import (
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/profiles"
 )
 
 type lmsCreatorImpl struct {
@@ -25,8 +26,14 @@ func (l *lmsCreatorImpl) GetAdapter(ctx common.ExtendedContext, symbol string) (
 	}
 	for _, peer := range peers {
 		entry := peer.CustomData
-		if entry.LmsConfig != nil {
-			return CreateLmsAdapterNcip(*entry.LmsConfig)
+		effective, err := profiles.Resolve(entry)
+		if err != nil {
+			return nil, err
+		}
+		// Diagnostics excludes endpoints, credentials, and other sensitive settings.
+		ctx.Logger().Debug("resolved host profiles", "configuration", effective.Diagnostics())
+		if effective.LMS != nil && effective.LMS.Address != "" {
+			return createResolvedLmsAdapterNcip(*effective.LMS)
 		}
 	}
 	return CreateLmsAdapterMockOK(), nil

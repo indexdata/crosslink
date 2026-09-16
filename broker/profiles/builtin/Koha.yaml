@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=./profile.schema.json
+---
+# Overrides of Generic defaults. MARC codes and values must remain strings.
+lmsConfig:
+  ncipNamespaceEnabled: false
+catalogConfig:
+  holdingsFormat:
+    marc:
+      mainField: "952"
+      locationSubField: b
+      shelvingLocationSubField: c
+      callNumberSubField: o
+      availability:
+        - subField: "7"
+          operator: equals
+          value: "0"
+        - subField: q
+          operator: absent

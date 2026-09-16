@@ -12,7 +12,8 @@ import (
 
 func catalogConfigToDBParams(entryID uuid.UUID, cfg CatalogConfig) db.UpsertCatalogConfigParams {
 	params := db.UpsertCatalogConfigParams{
-		Entry: &entryID,
+		Entry:   &entryID,
+		Profile: maybeUpdateCol[string](nil, cfg.Profile),
 	}
 
 	if cfg.MetadataUpdateMode != nil {
@@ -40,6 +41,7 @@ func catalogConfigToDBParams(entryID uuid.UUID, cfg CatalogConfig) db.UpsertCata
 		params.QueryTitle = cfg.QueryConfig.Title
 	}
 	if cfg.HoldingsFormat != nil {
+		params.HoldingsConfig, _ = json.Marshal(cfg.HoldingsFormat)
 		if cfg.HoldingsFormat.Marc != nil {
 			marc := cfg.HoldingsFormat.Marc
 			params.HoldingsMarcCallNumberSubfield = marc.CallNumberSubField
@@ -67,6 +69,28 @@ func catalogConfigToDBParams(entryID uuid.UUID, cfg CatalogConfig) db.UpsertCata
 	return params
 }
 
+func validateCatalogConfigParams(params db.UpsertCatalogConfigParams) error {
+	if params.SruAddress != nil && params.ZoomAddress != nil {
+		return errors.New("catalogConfig cannot configure both SRU and ZOOM endpoints")
+	}
+	if len(params.HoldingsConfig) > 0 {
+		var holdings HoldingsParserConfig
+		if err := json.Unmarshal(params.HoldingsConfig, &holdings); err != nil {
+			return err
+		}
+		count := 0
+		for _, present := range []bool{holdings.Marc != nil, holdings.Opac != nil, holdings.Reservoir != nil, holdings.Marc21plus1 != nil} {
+			if present {
+				count++
+			}
+		}
+		if count > 1 {
+			return errors.New("catalogConfig.holdingsFormat must set at most one of marc, opac, reservoir, or marc21plus1")
+		}
+	}
+	return nil
+}
+
 func validateCatalogConfigPatch(cfg CatalogConfigPatch, original db.CatalogConfig) error {
 	if cfg.Sru != nil && cfg.Sru.Address == nil && original.SruAddress == nil {
 		return errors.New("catalogConfig.sru.address is required when creating SRU configuration")
@@ -80,6 +104,8 @@ func validateCatalogConfigPatch(cfg CatalogConfigPatch, original db.CatalogConfi
 func catalogConfigPatchToDBParams(entryID uuid.UUID, cfg CatalogConfigPatch, original db.CatalogConfig) (db.UpsertCatalogConfigParams, error) {
 	params := db.UpsertCatalogConfigParams{
 		Entry:                                &entryID,
+		Profile:                              maybeUpdateCol(original.Profile, cfg.Profile),
+		HoldingsConfig:                       original.HoldingsConfig,
 		MetadataUpdateMode:                   original.MetadataUpdateMode,
 		SruAddress:                           original.SruAddress,
 		SruRecordSchema:                      original.SruRecordSchema,
@@ -153,6 +179,11 @@ func catalogConfigPatchToDBParams(entryID uuid.UUID, cfg CatalogConfigPatch, ori
 		params.QueryTitle = derefOrDefaultPtr(cfg.QueryConfig.Title, params.QueryTitle)
 	}
 	if cfg.HoldingsFormat != nil {
+		var mergeErr error
+		params.HoldingsConfig, mergeErr = mergeHoldingsConfig(original.HoldingsConfig, cfg.HoldingsFormat)
+		if mergeErr != nil {
+			return params, mergeErr
+		}
 		if cfg.HoldingsFormat.Marc != nil {
 			marc := cfg.HoldingsFormat.Marc
 			params.HoldingsMarcCallNumberSubfield = derefOrDefaultPtr(marc.CallNumberSubField, params.HoldingsMarcCallNumberSubfield)
@@ -275,4 +306,36 @@ func symbolsToFullSymbols(symbols *[]Symbol) []string {
 		values = append(values, strings.ToUpper(symbol.Authority)+":"+strings.ToUpper(symbol.Symbol))
 	}
 	return values
+}
+
+// mergeHoldingsConfig merges administrator overrides only. Defaults never enter persistence.
+func mergeHoldingsConfig(original []byte, patch *HoldingsParserConfig) ([]byte, error) {
+	var old map[string]map[string]json.RawMessage
+	if len(original) > 0 {
+		if err := json.Unmarshal(original, &old); err != nil {
+			return nil, err
+		}
+	}
+	data, err := json.Marshal(patch)
+	if err != nil {
+		return nil, err
+	}
+	var next map[string]map[string]json.RawMessage
+	if err := json.Unmarshal(data, &next); err != nil {
+		return nil, err
+	}
+	if len(next) == 0 {
+		return original, nil
+	}
+	if len(next) == 1 {
+		for parser, fields := range next {
+			if prev, ok := old[parser]; ok {
+				for key, val := range fields {
+					prev[key] = val
+				}
+				next[parser] = prev
+			}
+		}
+	}
+	return json.Marshal(next)
 }
