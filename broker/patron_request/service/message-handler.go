@@ -246,11 +246,15 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 		}
 		switch *sam.MessageInfo.AnswerYesNo {
 		case iso18626.TypeYesNoY:
-			if sam.StatusInfo.DueDate == nil || sam.StatusInfo.DueDate.IsZero() || sam.StatusInfo.DueDate.Year() < 1 {
-				return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{ErrorType: iso18626.TypeErrorTypeUnrecognisedDataValue, ErrorValue: "accepted renewal requires a valid due date"}, nil)
+			if sam.StatusInfo.DueDate != nil && (sam.StatusInfo.DueDate.IsZero() || sam.StatusInfo.DueDate.Year() < 1) {
+				return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{ErrorType: iso18626.TypeErrorTypeUnrecognisedDataValue, ErrorValue: "invalid renewal due date"}, nil)
 			}
 			eventName = SupplierRenewalAccepted
-			pr.DueAt = pgtype.Timestamptz{Time: sam.StatusInfo.DueDate.Time, Valid: true}
+			// An undated acceptance replaces the previous deadline with an open-ended loan.
+			pr.DueAt = pgtype.Timestamptz{}
+			if sam.StatusInfo.DueDate != nil {
+				pr.DueAt = pgtype.Timestamptz{Time: sam.StatusInfo.DueDate.Time, Valid: true}
+			}
 		case iso18626.TypeYesNoN:
 			eventName = SupplierRenewalRejected
 		default:

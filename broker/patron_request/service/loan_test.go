@@ -214,7 +214,8 @@ func TestIncomingLoanAndRenewalDates(t *testing.T) {
 	}{
 		{name: "open-ended shipment", state: BorrowerStateWillSupply, reason: iso18626.TypeReasonForMessageStatusChange, want: BorrowerStateShipped},
 		{name: "accept past date without local overdue decision", state: BorrowerStateRenewalPending, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoY), date: &utils.XSDDateTime{Time: past}, want: BorrowerStateRenewed},
-		{name: "accept requires date", state: BorrowerStateRenewalPending, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoY), fail: true},
+		{name: "undated acceptance clears previous date", state: BorrowerStateRenewalPending, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoY), want: BorrowerStateRenewed},
+		{name: "reject zero renewal date", state: BorrowerStateRenewalPending, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoY), date: &utils.XSDDateTime{}, fail: true},
 		{name: "reject year-zero renewal", state: BorrowerStateRenewalPending, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoY), date: yearZero, fail: true},
 		{name: "reject year-zero shipment", state: BorrowerStateWillSupply, reason: iso18626.TypeReasonForMessageStatusChange, date: yearZero, fail: true},
 		{name: "reject preserves date", state: BorrowerStateRenewalPending, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoN), want: BorrowerStateOverdue},
@@ -228,6 +229,7 @@ func TestIncomingLoanAndRenewalDates(t *testing.T) {
 			pr.State = tc.state
 			if tc.reason == iso18626.TypeReasonForMessageRenewResponse {
 				pr.DueAt = pgtype.Timestamptz{Time: old, Valid: true}
+				pr.IllResponse.StatusInfo.DueDate = isoLoanDate(pr.DueAt)
 			}
 			status, _, _ := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
 				MessageInfo: iso18626.MessageInfo{ReasonForMessage: tc.reason, AnswerYesNo: tc.answer},
@@ -243,9 +245,17 @@ func TestIncomingLoanAndRenewalDates(t *testing.T) {
 			if tc.reason == iso18626.TypeReasonForMessageRenewResponse {
 				assert.Empty(t, repo.savedItems, "renewal must not create shipment items")
 				if *tc.answer == iso18626.TypeYesNoY {
-					assert.Equal(t, past, repo.savedPr.DueAt.Time)
+					if tc.date == nil {
+						assert.Equal(t, pgtype.Timestamptz{}, repo.savedPr.DueAt)
+						assert.Nil(t, repo.savedPr.IllResponse.StatusInfo.DueDate)
+					} else {
+						assert.True(t, repo.savedPr.DueAt.Valid)
+						assert.Equal(t, tc.date.Time, repo.savedPr.DueAt.Time)
+					}
 				} else {
 					assert.Equal(t, old, repo.savedPr.DueAt.Time)
+					require.NotNil(t, repo.savedPr.IllResponse.StatusInfo.DueDate)
+					assert.Equal(t, old, repo.savedPr.IllResponse.StatusInfo.DueDate.Time)
 				}
 			} else {
 				assert.False(t, repo.savedPr.DueAt.Valid)
