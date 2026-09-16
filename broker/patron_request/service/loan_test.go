@@ -55,6 +55,8 @@ func TestResolveLoanDueDate(t *testing.T) {
 	entry := dirapi.Entry{TimeZone: &zone, IllConfig: &dirapi.IllConfig{}}
 	entry.IllConfig.DefaultLoanPeriod.Set(2)
 	invalidZone := "invalid/zone"
+	invalidDefault := dirapi.Entry{IllConfig: &dirapi.IllConfig{}}
+	invalidDefault.IllConfig.DefaultLoanPeriod.Set(0)
 	for _, tc := range []struct {
 		name   string
 		items  []pr_db.Item
@@ -73,7 +75,9 @@ func TestResolveLoanDueDate(t *testing.T) {
 			{LmsDueDate: pgtype.Timestamptz{Valid: true}},
 		}, manual: &manual, entry: entry, want: manual, source: "ship.dueDate"},
 		{name: "calendar default", entry: entry, want: time.Date(2026, 3, 30, 21, 59, 59, 0, time.UTC), source: "illConfig.defaultLoanPeriod"},
-		{name: "no date", err: "shipping requires a due date"},
+		{name: "no date"},
+		{name: "unset default", entry: dirapi.Entry{IllConfig: &dirapi.IllConfig{}}},
+		{name: "invalid default period", entry: invalidDefault, err: "defaultLoanPeriod must be a positive integer"},
 		{name: "invalid default timezone", entry: dirapi.Entry{TimeZone: &invalidZone, IllConfig: entry.IllConfig}, err: "unknown time zone"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -83,7 +87,12 @@ func TestResolveLoanDueDate(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			assert.True(t, tc.want.Equal(due), "want %v, got %v", tc.want, due)
+			if tc.want.IsZero() {
+				assert.Nil(t, due)
+			} else {
+				require.NotNil(t, due)
+				assert.True(t, tc.want.Equal(*due), "want %v, got %v", tc.want, due)
+			}
 			assert.Equal(t, tc.source, source)
 		})
 	}
@@ -137,12 +146,16 @@ func TestShippingWithoutDateRetainsCompletedCheckout(t *testing.T) {
 	sender := new(MockIso18626Handler)
 	svc := CreatePatronRequestActionService(repo, directory, new(MockEventBus), sender, nil, nil, nil, nil)
 	result := svc.shipLenderRequest(appCtx, "event", repo.savedPr, adapter, repo.savedPr.IllRequest, actionParams{})
-	require.Equal(t, events.EventStatusError, result.status)
-	require.Equal(t, pr_db.LmsStatusCheckedOut, repo.savedItems[0].LmsStatus)
-	require.Nil(t, sender.lastSupplyingAgencyMessage)
-	result = svc.shipLenderRequest(appCtx, "retry", result.pr, adapter, result.pr.IllRequest, actionParams{DueDate: "2030-01-01"})
 	require.Equal(t, events.EventStatusSuccess, result.status)
-	assert.Equal(t, "2030-01-01T23:59:59Z", result.pr.DueAt.Time.Format(time.RFC3339))
+	require.Equal(t, pr_db.LmsStatusCheckedOut, repo.savedItems[0].LmsStatus)
+	assert.False(t, result.pr.DueAt.Valid)
+	require.NotNil(t, sender.lastSupplyingAgencyMessage)
+	assert.Equal(t, iso18626.TypeStatusLoaned, sender.lastSupplyingAgencyMessage.StatusInfo.Status)
+	assert.Nil(t, sender.lastSupplyingAgencyMessage.StatusInfo.DueDate)
+	result = svc.shipLenderRequest(appCtx, "retry", result.pr, adapter, result.pr.IllRequest, actionParams{})
+	require.Equal(t, events.EventStatusSuccess, result.status)
+	assert.False(t, result.pr.DueAt.Valid)
+	assert.Nil(t, sender.lastSupplyingAgencyMessage.StatusInfo.DueDate)
 	adapter.AssertNumberOfCalls(t, "CheckOutItem", 1)
 }
 

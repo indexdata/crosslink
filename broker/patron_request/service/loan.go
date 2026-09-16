@@ -76,7 +76,8 @@ func defaultLoanDate(entry dirapi.Entry, now time.Time) (*time.Time, error) {
 
 // resolveLoanDueDate selects the earliest checkout date, then the manual date,
 // then the supplier's default. The source is returned for the shipment audit.
-func resolveLoanDueDate(items []pr_db.Item, manualDue *time.Time, entry dirapi.Entry, now time.Time) (time.Time, string, error) {
+// A nil date means an open-ended loan.
+func resolveLoanDueDate(items []pr_db.Item, manualDue *time.Time, entry dirapi.Entry, now time.Time) (*time.Time, string, error) {
 	var due *time.Time
 	for _, item := range items {
 		if item.LmsDueDate.Valid && !item.LmsDueDate.Time.IsZero() && (due == nil || item.LmsDueDate.Time.Before(*due)) {
@@ -85,19 +86,16 @@ func resolveLoanDueDate(items []pr_db.Item, manualDue *time.Time, entry dirapi.E
 		}
 	}
 	if due != nil {
-		return *due, "LMS checkout", nil
+		return due, "LMS checkout", nil
 	}
 	if manualDue != nil {
-		return *manualDue, "ship.dueDate", nil
+		return manualDue, "ship.dueDate", nil
 	}
 	due, err := defaultLoanDate(entry, now)
-	if err != nil {
-		return time.Time{}, "", err
+	if err != nil || due == nil {
+		return nil, "", err
 	}
-	if due == nil {
-		return time.Time{}, "", fmt.Errorf("shipping requires a due date from LMS checkout, dueDate, or defaultLoanPeriod")
-	}
-	return *due, "illConfig.defaultLoanPeriod", nil
+	return due, "illConfig.defaultLoanPeriod", nil
 }
 
 func (a *PatronRequestActionService) supplierLoanEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest) (dirapi.Entry, error) {
