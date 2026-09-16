@@ -485,7 +485,7 @@ func (l *LmsAdapterNcip) CheckOutItem(
 		title = response.ItemOptionalFields.BibliographicDescription.Title
 	}
 	result := &CheckedOutItem{Title: title}
-	if response.DateDue != nil && !response.DateDue.Time.IsZero() {
+	if response.DateDue != nil && !response.DateDue.IsZero() {
 		due := response.DateDue.Time
 		result.DueDate = &due
 	}

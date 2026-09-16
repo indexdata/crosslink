@@ -246,7 +246,7 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 		}
 		switch *sam.MessageInfo.AnswerYesNo {
 		case iso18626.TypeYesNoY:
-			if sam.StatusInfo.DueDate == nil || sam.StatusInfo.DueDate.Time.IsZero() {
+			if sam.StatusInfo.DueDate == nil || sam.StatusInfo.DueDate.IsZero() {
 				return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{ErrorType: iso18626.TypeErrorTypeUnrecognisedDataValue, ErrorValue: "accepted renewal requires a valid due date"}, nil)
 			}
 			eventName = SupplierRenewalAccepted
@@ -286,7 +286,7 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 		case iso18626.TypeStatusLoaned:
 			setSupplierMessage(sam, &pr)
 			if sam.StatusInfo.DueDate != nil {
-				if sam.StatusInfo.DueDate.Time.IsZero() {
+				if sam.StatusInfo.DueDate.IsZero() {
 					return statusChangeNotAllowed()
 				}
 				pr.DueAt = pgtype.Timestamptz{Time: sam.StatusInfo.DueDate.Time, Valid: true}
@@ -328,7 +328,6 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 				}
 			}
 		}
-
 	}
 	if eventName == "" {
 		return statusChangeNotAllowed()
