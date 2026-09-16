@@ -106,8 +106,9 @@ func Resolve(entry dirapi.Entry) (*Effective, error) {
 			}
 		}
 	}
-	// An empty legacy holdings object means the existing generic default.
-	if h, ok := rawC["holdingsFormat"].(object); ok && len(h) == 0 && profile != "Generic" {
+	// An empty holdings object inherits the selected profile's defaults,
+	// including the legacy MARC defaults for Generic.
+	if h, ok := rawC["holdingsFormat"].(object); ok && len(h) == 0 {
 		delete(rawC, "holdingsFormat")
 	}
 	merge(c, rawC, "catalogConfig", "directory", e.Origins)

@@ -46,6 +46,32 @@ func TestProfiles(t *testing.T) {
 		})
 	}
 }
+func TestEmptyHoldingsFormatUsesDefaults(t *testing.T) {
+	for _, profile := range []string{"", "Generic", "Alma", "Sierra", "Koha", "FOLIO"} {
+		t.Run("profile="+profile, func(t *testing.T) {
+			raw := entry(t, `{"catalogConfig":{"zoom":{"address":"catalog:210"},"holdingsFormat":{}}}`)
+			if profile != "" {
+				raw.CatalogConfig.Profile.Set(profile)
+			}
+			before, err := json.Marshal(raw)
+			require.NoError(t, err)
+			effective, err := Resolve(raw)
+			require.NoError(t, err)
+			after, err := json.Marshal(raw)
+			require.NoError(t, err)
+			require.JSONEq(t, string(before), string(after))
+			raw.CatalogConfig.HoldingsFormat = nil
+			defaults, err := Resolve(raw)
+			require.NoError(t, err)
+			require.Equal(t, defaults, effective)
+			if profile == "" || profile == "Generic" {
+				require.Equal(t, "852", *effective.Catalog.HoldingsFormat.Marc.MainField)
+				require.Equal(t, "usmarc", (*effective.Catalog.Zoom.Options)["preferredRecordSyntax"])
+			}
+		})
+	}
+}
+
 func TestIndependentOverrides(t *testing.T) {
 	raw := entry(t, `{"lmsConfig":{"vendor":"Sierra","requestItemPickupLocationEnabled":false,"requestItemRequestType":"","bibIdNormalization":"none"},"catalogConfig":{"profile":"Koha","zoom":{"address":"site","options":{"preferredRecordSyntax":"custom"}},"holdingsFormat":{"marc":{"callNumberSubField":"x","availability":[]}}}}`)
 	e, err := Resolve(raw)
