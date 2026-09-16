@@ -8,6 +8,7 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetAdapterEmpty(t *testing.T) {
@@ -65,13 +66,34 @@ func TestGetAdapterBadParser(t *testing.T) {
 				Zoom: &dirapi.ZoomConfig{
 					Address: "a",
 				},
+				HoldingsFormat: &dirapi.HoldingsParserConfig{
+					Marc: &dirapi.MarcHoldingsParserConfig{},
+					Opac: &dirapi.OpacHoldingsParserConfig{},
+				},
+			},
+		},
+	}
+	adapter, err := creator.GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), peer)
+	require.ErrorContains(t, err, "exactly one parser")
+	require.Nil(t, adapter)
+}
+
+func TestGetAdapterEmptyHoldingsUsesMarcDefaults(t *testing.T) {
+	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
+	peer := ill_db.Peer{
+		CustomData: dirapi.Entry{
+			CatalogConfig: &dirapi.CatalogConfig{
+				Sru:            &dirapi.SruConfig{Address: "https://catalog.example/sru"},
 				HoldingsFormat: &dirapi.HoldingsParserConfig{},
 			},
 		},
 	}
-	_, err := creator.GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), peer)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "must set marc")
+	adapter, err := creator.GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), peer)
+	require.NoError(t, err)
+	require.IsType(t, &SruLookupAdapter{}, adapter)
+	sru := adapter.(*SruLookupAdapter)
+	require.Equal(t, NewMarcHoldingsParser(dirapi.MarcHoldingsParserConfig{}), sru.holdingsParser)
+	require.Equal(t, "marcxml", sru.recordSchema)
 }
 
 func TestGetAdapterOtherWithConfig(t *testing.T) {
