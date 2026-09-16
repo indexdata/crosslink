@@ -1,0 +1,31 @@
+{
+  "baseUrl": "https://reshare-2-okapi.folio-dev-us-east-1-1.folio-dev.indexdata.com/directory",
+  "consortiumId": "0b15a971-95eb-464f-918b-eeba5e48d73b",
+  "created": {
+    "entries": [],
+    "entryNetworks": [],
+    "entryTiers": [],
+    "networks": [],
+    "tiers": []
+  },
+  "dryRun": true,
+  "finishedAt": "2026-09-12T17:09:06.308968Z",
+  "fixture": "/home/kurt/code/crosslink/illmock/dirmock/directories.json",
+  "maps": {
+    "entries": {},
+    "networks": {},
+    "tiers": {}
+  },
+  "phase": "preflight",
+  "planned": {
+    "entries": 42,
+    "networkMemberships": 94,
+    "networks": 23,
+    "tierMemberships": 104,
+    "tiers": 12
+  },
+  "schemaVersion": 1,
+  "startedAt": "2026-09-12T17:09:06.038750Z",
+  "status": "dry-run",
+  "tenant": "consortial"
+}

@@ -1,0 +1,343 @@
+{
+  "allowExisting": true,
+  "baseUrl": "https://reshare-2-okapi.folio-dev-us-east-1-1.folio-dev.indexdata.com/directory",
+  "consortiumId": "0b15a971-95eb-464f-918b-eeba5e48d73b",
+  "created": {
+    "entries": [
+      {
+        "id": "5a9e2571-cebd-4ad0-8f20-6dbca55f481d",
+        "name": "Albury City Libraries",
+        "sourceId": "30191a94-9588-5b53-808a-58d843706d1b",
+        "type": "Institution"
+      }
+    ],
+    "entryNetworks": [],
+    "entryTiers": [],
+    "networks": [],
+    "tiers": []
+  },
+  "dryRun": false,
+  "error": "PATCH https://reshare-2-okapi.folio-dev-us-east-1-1.folio-dev.indexdata.com/directory/entries/by-id/5a9e2571-cebd-4ad0-8f20-6dbca55f481d returned HTTP 403: <html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n</body>\r\n</html>\r\n\nResponse headers: {\"Connection\": \"close\", \"Content-Length\": \"118\", \"Content-Type\": \"text/html\", \"Date\": \"Mon, 14 Sep 2026 13:00:18 GMT\", \"Server\": \"awselb/2.0\"}\nAttempted request: PATCH https://reshare-2-okapi.folio-dev-us-east-1-1.folio-dev.indexdata.com/directory/entries/by-id/5a9e2571-cebd-4ad0-8f20-6dbca55f481d\nRequest headers: {\"Accept\": \"application/json\", \"Content-Type\": \"application/json\", \"X-Okapi-Tenant\": \"consortial\", \"X-Okapi-Token\": \"[REDACTED]\"}\nRequest content: {\"lmsConfig\": {\"address\": \"http://localhost:8083/ncip\", \"fromAgency\": \"NALB\", \"fromAgencyAuthentication\": \"password\", \"toAgency\": \"NALB\", \"lookupUserEnabled\": true, \"requestItemEnabled\": true, \"acceptItemEnabled\": true}}",
+  "finishedAt": "2026-09-14T13:00:18.734497Z",
+  "fixture": "/home/kurt/code/crosslink/illmock/dirmock/directories.json",
+  "maps": {
+    "entries": {
+      "30191a94-9588-5b53-808a-58d843706d1b": "5a9e2571-cebd-4ad0-8f20-6dbca55f481d"
+    },
+    "networks": {
+      "12e1ecd4-2177-52af-ae84-3161e4eceb46": "3f3e4d1d-b8e2-46b3-80b0-04362e3daba8",
+      "1c0346cd-f7e2-565a-9068-55fa6ab29ca6": "b4a36043-2e1a-4baa-bfc8-21295e4345c5",
+      "36801e6d-ed11-5203-99f5-4736107adceb": "945144ab-2999-4907-b7e9-77361591bcdd",
+      "39a8ee32-d038-5c8d-a1a4-a26246f3882f": "d2eddf41-6e8f-44b6-b026-162e57b640a2",
+      "50f29d43-fada-5afe-a185-510833e01af8": "b1b7b5b7-c2e6-4b31-a3ee-174e63daf063",
+      "5dcb365d-ee82-58b6-8b80-591bf891900c": "f2134161-a196-47a2-a3a2-f9c93377d1e8",
+      "5f63ba91-c7a4-5068-ada7-97e34a40f26a": "fc02090d-306b-45cc-bc48-30d6aab888dd",
+      "60612a26-68dc-5a93-a356-b4eee7d4567f": "b1d3927e-843e-4f22-b562-e325a44d832d",
+      "7a763dd2-53ed-580a-bfd4-6cdb8a91eebf": "c96eefec-c4d2-4ad2-8725-cf0ce1ec76ef",
+      "7d0f82de-905f-57de-b041-928fddd0f6b1": "b1b18ce2-b9f9-4301-82e1-534871c4fac3",
+      "84fcd0ff-da15-5285-a45a-5abcc6e1b023": "b633a917-d621-40a3-b7ae-7d682cbf5e0f",
+      "879f4ac5-9a2d-5e2d-94a6-0b72c9e18fff": "524b3554-9030-4d22-afb8-d139aa0e9216",
+      "94964646-3266-588d-90a9-408e40055216": "72e48795-a82f-4b2a-806c-c463deedd3f7",
+      "a6a1451d-c0d0-5416-bfce-bcefa310cc78": "3071aa81-9a82-4b6b-9699-5e77b9d27008",
+      "a9491882-b224-5bbe-a950-fe1b956130fc": "5607c644-b4b4-430a-99b1-f58fb568c1af",
+      "af2e044f-3b22-597e-bd10-20d949ede45c": "633eea56-19eb-4dec-a515-f63894c68c1e",
+      "b191dac1-f9f6-51c1-8599-f6c795d4f6f9": "ce8bee23-7f96-452b-8ffa-66721c029b38",
+      "cf3a39cf-4596-5c23-aa81-3b289c052c08": "f205170a-c1e7-42b8-bffe-c81abab15754",
+      "d4284915-859b-59b2-b6f2-2990340278c2": "bf045acb-9f7a-4f74-91be-974760b30584",
+      "d55f3cff-bf71-500e-85f9-b4a74199c1b1": "6457dfc9-937b-426c-a5b9-8ca9c4c2459d",
+      "dd9217f1-07b5-5545-8bb5-7c9f5fd571fd": "57e381db-b912-4afe-be7b-993bdb6ef952",
+      "de90f131-08e8-5df6-a069-c1c34131884f": "1c78c96e-0ae5-4239-a2c6-4b9dd5a9e0b4",
+      "e4680812-e622-5f8d-b420-36a6bc33e6c8": "d7488e0a-f9ff-444f-9f3b-2c23dd55d108"
+    },
+    "tiers": {
+      "010889d1-1caa-5b52-8fa1-3bcf9c3fa2a2": "c3db148b-31f3-486c-b8a0-9d7817a9cc1c",
+      "09c24f58-3827-5bed-8c5e-9c964dc4078a": "145467d3-c16c-4041-a5db-3e233fcfa29c",
+      "23e7ec42-affc-57db-b383-770f5668ffe5": "3c4bf17b-09e7-4981-90bb-81f49af46798",
+      "2ac07f70-009e-5525-9d77-598810d7ba54": "a9373c05-9595-463c-bbb2-f881905145b4",
+      "406f6876-3aef-596f-a4fa-fa5c35e22a17": "adb9e1a3-f37c-41a6-9193-0149fbf36718",
+      "53c416eb-0c78-5e30-8268-b3e9233e160a": "e0040edb-0405-4cd7-a163-ef5499eef7eb",
+      "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d": "93d46f41-389e-4bbd-8e26-631f7d8fc3d0",
+      "6bb0026f-8127-528f-bb39-30d8d90e47bd": "1ff3a1ec-0351-4b26-8046-889d195d9ec7",
+      "870badb7-fd8a-5a20-85ac-7e3cef2e6c4f": "f81e03e0-bc41-470c-a62b-864c65605970",
+      "940d6a2e-7e5d-5841-83ae-0152312cdfe7": "fb6a8a91-e09e-4161-9b5c-348134e1810c",
+      "a9505ca0-31b1-5bba-8772-c3f3ef536b48": "c0b80e7b-9677-405d-b633-d735389d76dd",
+      "e6aa9fc2-652d-56e9-a457-a8478b2b9412": "19106a28-5a5d-401e-a2fa-f8afacd9199d"
+    }
+  },
+  "patchedEntries": [
+    {
+      "entry": "5a9e2571-cebd-4ad0-8f20-6dbca55f481d",
+      "field": "symbols"
+    }
+  ],
+  "phase": "creating-institutions",
+  "piecemeal": true,
+  "planned": {
+    "entries": 42,
+    "networkMemberships": 94,
+    "networks": 23,
+    "reusedEntries": 0,
+    "reusedNetworks": 23,
+    "reusedTiers": 12,
+    "tierMemberships": 104,
+    "tiers": 12
+  },
+  "reused": {
+    "entries": [],
+    "entryNetworks": [],
+    "entryTiers": [],
+    "networks": [
+      {
+        "id": "5607c644-b4b4-430a-99b1-f58fb568c1af",
+        "name": "NSW & ACT",
+        "sourceIds": [
+          "a9491882-b224-5bbe-a950-fe1b956130fc"
+        ]
+      },
+      {
+        "id": "6457dfc9-937b-426c-a5b9-8ca9c4c2459d",
+        "name": "NSW & ACT Higher Education",
+        "sourceIds": [
+          "d55f3cff-bf71-500e-85f9-b4a74199c1b1"
+        ]
+      },
+      {
+        "id": "d7488e0a-f9ff-444f-9f3b-2c23dd55d108",
+        "name": "NSW & ACT Public",
+        "sourceIds": [
+          "e4680812-e622-5f8d-b420-36a6bc33e6c8"
+        ]
+      },
+      {
+        "id": "bf045acb-9f7a-4f74-91be-974760b30584",
+        "name": "National",
+        "sourceIds": [
+          "d4284915-859b-59b2-b6f2-2990340278c2"
+        ]
+      },
+      {
+        "id": "72e48795-a82f-4b2a-806c-c463deedd3f7",
+        "name": "National Academic and Research",
+        "sourceIds": [
+          "94964646-3266-588d-90a9-408e40055216"
+        ]
+      },
+      {
+        "id": "1c78c96e-0ae5-4239-a2c6-4b9dd5a9e0b4",
+        "name": "Northern Territory",
+        "sourceIds": [
+          "de90f131-08e8-5df6-a069-c1c34131884f"
+        ]
+      },
+      {
+        "id": "3071aa81-9a82-4b6b-9699-5e77b9d27008",
+        "name": "Queensland",
+        "sourceIds": [
+          "a6a1451d-c0d0-5416-bfce-bcefa310cc78"
+        ]
+      },
+      {
+        "id": "d2eddf41-6e8f-44b6-b026-162e57b640a2",
+        "name": "Queensland Health",
+        "sourceIds": [
+          "39a8ee32-d038-5c8d-a1a4-a26246f3882f"
+        ]
+      },
+      {
+        "id": "f2134161-a196-47a2-a3a2-f9c93377d1e8",
+        "name": "Queensland Higher Education",
+        "sourceIds": [
+          "5dcb365d-ee82-58b6-8b80-591bf891900c"
+        ]
+      },
+      {
+        "id": "f205170a-c1e7-42b8-bffe-c81abab15754",
+        "name": "Queensland Public",
+        "sourceIds": [
+          "cf3a39cf-4596-5c23-aa81-3b289c052c08"
+        ]
+      },
+      {
+        "id": "ce8bee23-7f96-452b-8ffa-66721c029b38",
+        "name": "South Australia",
+        "sourceIds": [
+          "b191dac1-f9f6-51c1-8599-f6c795d4f6f9"
+        ]
+      },
+      {
+        "id": "fc02090d-306b-45cc-bc48-30d6aab888dd",
+        "name": "South Australia Higher Education",
+        "sourceIds": [
+          "5f63ba91-c7a4-5068-ada7-97e34a40f26a"
+        ]
+      },
+      {
+        "id": "c96eefec-c4d2-4ad2-8725-cf0ce1ec76ef",
+        "name": "Sydney Metro",
+        "sourceIds": [
+          "7a763dd2-53ed-580a-bfd4-6cdb8a91eebf"
+        ]
+      },
+      {
+        "id": "b1b18ce2-b9f9-4301-82e1-534871c4fac3",
+        "name": "Tasmania",
+        "sourceIds": [
+          "7d0f82de-905f-57de-b041-928fddd0f6b1"
+        ]
+      },
+      {
+        "id": "57e381db-b912-4afe-be7b-993bdb6ef952",
+        "name": "Tasmania Health",
+        "sourceIds": [
+          "dd9217f1-07b5-5545-8bb5-7c9f5fd571fd"
+        ]
+      },
+      {
+        "id": "3f3e4d1d-b8e2-46b3-80b0-04362e3daba8",
+        "name": "Tasmania Public",
+        "sourceIds": [
+          "12e1ecd4-2177-52af-ae84-3161e4eceb46"
+        ]
+      },
+      {
+        "id": "b633a917-d621-40a3-b7ae-7d682cbf5e0f",
+        "name": "Victoria",
+        "sourceIds": [
+          "84fcd0ff-da15-5285-a45a-5abcc6e1b023"
+        ]
+      },
+      {
+        "id": "b1d3927e-843e-4f22-b562-e325a44d832d",
+        "name": "Victoria Govt & Arts",
+        "sourceIds": [
+          "60612a26-68dc-5a93-a356-b4eee7d4567f"
+        ]
+      },
+      {
+        "id": "633eea56-19eb-4dec-a515-f63894c68c1e",
+        "name": "Victoria Health",
+        "sourceIds": [
+          "af2e044f-3b22-597e-bd10-20d949ede45c"
+        ]
+      },
+      {
+        "id": "524b3554-9030-4d22-afb8-d139aa0e9216",
+        "name": "Victoria Higher Education",
+        "sourceIds": [
+          "879f4ac5-9a2d-5e2d-94a6-0b72c9e18fff"
+        ]
+      },
+      {
+        "id": "b1b7b5b7-c2e6-4b31-a3ee-174e63daf063",
+        "name": "Victoria Public",
+        "sourceIds": [
+          "50f29d43-fada-5afe-a185-510833e01af8"
+        ]
+      },
+      {
+        "id": "945144ab-2999-4907-b7e9-77361591bcdd",
+        "name": "Western Australia",
+        "sourceIds": [
+          "36801e6d-ed11-5203-99f5-4736107adceb"
+        ]
+      },
+      {
+        "id": "b4a36043-2e1a-4baa-bfc8-21295e4345c5",
+        "name": "Western Australia Higher Education",
+        "sourceIds": [
+          "1c0346cd-f7e2-565a-9068-55fa6ab29ca6"
+        ]
+      }
+    ],
+    "tiers": [
+      {
+        "id": "93d46f41-389e-4bbd-8e26-631f7d8fc3d0",
+        "name": "Premium Pay for Peer - Core Copy",
+        "sourceIds": [
+          "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d"
+        ]
+      },
+      {
+        "id": "145467d3-c16c-4041-a5db-3e233fcfa29c",
+        "name": "Premium Pay for Peer - Core Loan",
+        "sourceIds": [
+          "09c24f58-3827-5bed-8c5e-9c964dc4078a"
+        ]
+      },
+      {
+        "id": "c3db148b-31f3-486c-b8a0-9d7817a9cc1c",
+        "name": "Premium Pay for Peer - Express Copy",
+        "sourceIds": [
+          "010889d1-1caa-5b52-8fa1-3bcf9c3fa2a2"
+        ]
+      },
+      {
+        "id": "fb6a8a91-e09e-4161-9b5c-348134e1810c",
+        "name": "Premium Pay for Peer - Express Loan",
+        "sourceIds": [
+          "940d6a2e-7e5d-5841-83ae-0152312cdfe7"
+        ]
+      },
+      {
+        "id": "c0b80e7b-9677-405d-b633-d735389d76dd",
+        "name": "Premium Pay for Peer - Rush Copy",
+        "sourceIds": [
+          "a9505ca0-31b1-5bba-8772-c3f3ef536b48"
+        ]
+      },
+      {
+        "id": "e0040edb-0405-4cd7-a163-ef5499eef7eb",
+        "name": "Premium Pay for Peer - Rush Loan",
+        "sourceIds": [
+          "53c416eb-0c78-5e30-8268-b3e9233e160a"
+        ]
+      },
+      {
+        "id": "3c4bf17b-09e7-4981-90bb-81f49af46798",
+        "name": "Reciprocal Peer to Peer - Core Copy",
+        "sourceIds": [
+          "23e7ec42-affc-57db-b383-770f5668ffe5"
+        ]
+      },
+      {
+        "id": "1ff3a1ec-0351-4b26-8046-889d195d9ec7",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "sourceIds": [
+          "6bb0026f-8127-528f-bb39-30d8d90e47bd"
+        ]
+      },
+      {
+        "id": "f81e03e0-bc41-470c-a62b-864c65605970",
+        "name": "Reciprocal Peer to Peer - Express Copy",
+        "sourceIds": [
+          "870badb7-fd8a-5a20-85ac-7e3cef2e6c4f"
+        ]
+      },
+      {
+        "id": "adb9e1a3-f37c-41a6-9193-0149fbf36718",
+        "name": "Reciprocal Peer to Peer - Express Loan",
+        "sourceIds": [
+          "406f6876-3aef-596f-a4fa-fa5c35e22a17"
+        ]
+      },
+      {
+        "id": "a9373c05-9595-463c-bbb2-f881905145b4",
+        "name": "Reciprocal Peer to Peer - Rush Copy",
+        "sourceIds": [
+          "2ac07f70-009e-5525-9d77-598810d7ba54"
+        ]
+      },
+      {
+        "id": "19106a28-5a5d-401e-a2fa-f8afacd9199d",
+        "name": "Reciprocal Peer to Peer - Rush Loan",
+        "sourceIds": [
+          "e6aa9fc2-652d-56e9-a457-a8478b2b9412"
+        ]
+      }
+    ]
+  },
+  "schemaVersion": 1,
+  "startedAt": "2026-09-14T13:00:18.293559Z",
+  "status": "failed",
+  "tenant": "consortial"
+}

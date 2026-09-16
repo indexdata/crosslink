@@ -43,3 +43,59 @@ Start Bruno and load the `LocalDev` environment.
 
 Select the `Reservoir` folder in Bruno. Only the first parts of the Happy flow is currently in this holder. This
 is merely to test that SRU lookup is operational.
+
+## Running against the real Directory
+
+The same Bruno collection can run with the broker reading entries from the real
+Directory service. Illmock continues to provide the NCIP and ISO18626 endpoints.
+
+From the repository root, validate and start this variant with:
+
+```
+docker compose \
+  -f bruno/docker-compose.yml \
+  -f bruno/docker-compose-directory.yml \
+  config -q
+docker compose \
+  -f bruno/docker-compose.yml \
+  -f bruno/docker-compose-directory.yml \
+  up -d --build
+```
+
+The one-shot `directory-seed` service waits for Directory, loads
+`bruno/directory.json` through the public API, and verifies the resulting
+entries and relationships. Check its status and logs with:
+
+```
+docker compose \
+  -f bruno/docker-compose.yml \
+  -f bruno/docker-compose-directory.yml \
+  ps directory-seed
+docker compose \
+  -f bruno/docker-compose.yml \
+  -f bruno/docker-compose-directory.yml \
+  logs directory-seed directory broker illmock
+```
+
+After the broker is ready, run the collection headlessly:
+
+```
+cd bruno/crosslink
+npx --yes @usebruno/cli@3.5.2 run \
+  --env LocalDev \
+  --env-var userPassword="dummy"
+```
+
+The seeder deliberately requires an empty, disposable Directory database. Tear
+down the stack and its volumes before reseeding or after a partial seed failure:
+
+```
+docker compose \
+  -f bruno/docker-compose.yml \
+  -f bruno/docker-compose-directory.yml \
+  down -v --remove-orphans
+```
+
+Broker requests use symbol-based tenant mapping and
+`directory.system.all`. They intentionally do not forward `X-Okapi-Tenant` to
+Directory in this test variant.

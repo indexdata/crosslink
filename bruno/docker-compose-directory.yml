@@ -1,0 +1,59 @@
+services:
+  directory-postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: directory
+      POSTGRES_PASSWORD: directory
+      POSTGRES_DB: directory
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U directory -d directory"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    volumes:
+      - directory-postgres-data:/var/lib/postgresql/data
+
+  directory:
+    build:
+      context: ..
+      dockerfile: directory/Dockerfile
+    depends_on:
+      directory-postgres:
+        condition: service_healthy
+    environment:
+      HOST: 0.0.0.0
+      HTTP_PORT: 8086
+      DATABASE_URL: postgresql://directory:directory@directory-postgres:5432/directory
+
+  directory-seed:
+    image: python:3.13-alpine
+    depends_on:
+      directory:
+        condition: service_started
+    command: ["python", "-B", "/seed_directory.py"]
+    environment:
+      DIRECTORY_BASE_URL: http://directory:8086
+      DIRECTORY_FIXTURE: /data/directory.json
+      DIRECTORY_CONSORTIUM_NAME: Bruno Test Consortium
+      DIRECTORY_WAIT_ATTEMPTS: 60
+      DIRECTORY_WAIT_INTERVAL_SECONDS: 2
+    volumes:
+      - ./seed_directory.py:/seed_directory.py:ro
+      - ./directory.json:/data/directory.json:ro
+
+  broker:
+    depends_on:
+      directory-seed:
+        condition: service_completed_successfully
+    environment:
+      DIRECTORY_ADAPTER: api
+      DIRECTORY_API_URL: http://directory:8086/directory/entries
+      TENANT_TO_SYMBOL: "ISIL:US-{tenant}"
+
+  illmock:
+    environment:
+      MOCK_DIRECTORY_ENTRIES: "[]"
+
+volumes:
+  directory-postgres-data:

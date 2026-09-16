@@ -1,0 +1,39 @@
+{
+  "allowExisting": false,
+  "baseUrl": "https://reshare-2-okapi.folio-dev-us-east-1-1.folio-dev.indexdata.com/directory",
+  "consortiumId": "0b15a971-95eb-464f-918b-eeba5e48d73b",
+  "created": {
+    "entries": [],
+    "entryNetworks": [],
+    "entryTiers": [],
+    "networks": [],
+    "tiers": []
+  },
+  "deleteEntries": true,
+  "deletedEntries": [],
+  "dryRun": false,
+  "error": "target collisions detected: network name 'NSW & ACT Higher Education', network name 'NSW & ACT Public', network name 'NSW & ACT', network name 'National Academic and Research', network name 'National', network name 'Northern Territory', network name 'Queensland Health', network name 'Queensland Higher Education', network name 'Queensland Public', network name 'Queensland', network name 'South Australia Higher Education', network name 'South Australia', network name 'Sydney Metro', network name 'Tasmania Health', network name 'Tasmania Public', network name 'Tasmania', network name 'Victoria Govt & Arts', network name 'Victoria Health', network name 'Victoria Higher Education', network name 'Victoria Public', network name 'Victoria', network name 'Western Australia Higher Education', network name 'Western Australia', tier name 'Premium Pay for Peer - Core Copy', tier name 'Premium Pay for Peer - Core Loan', tier name 'Premium Pay for Peer - Express Copy', tier name 'Premium Pay for Peer - Express Loan', tier name 'Premium Pay for Peer - Rush Copy', tier name 'Premium Pay for Peer - Rush Loan', tier name 'Reciprocal Peer to Peer - Core Copy', tier name 'Reciprocal Peer to Peer - Core Loan', tier name 'Reciprocal Peer to Peer - Express Copy', tier name 'Reciprocal Peer to Peer - Express Loan', tier name 'Reciprocal Peer to Peer - Rush Copy', tier name 'Reciprocal Peer to Peer - Rush Loan'",
+  "finishedAt": "2026-09-14T14:11:29.466154Z",
+  "fixture": "/home/kurt/code/crosslink/illmock/dirmock/directories.json",
+  "localhostReplacement": "http://crosslink-illmock",
+  "localhostUrlsReplaced": 22,
+  "maps": {
+    "entries": {},
+    "networks": {},
+    "tiers": {}
+  },
+  "patchedEntries": [],
+  "phase": "preflight",
+  "piecemeal": true,
+  "reused": {
+    "entries": [],
+    "entryNetworks": [],
+    "entryTiers": [],
+    "networks": [],
+    "tiers": []
+  },
+  "schemaVersion": 1,
+  "startedAt": "2026-09-14T14:11:29.118319Z",
+  "status": "failed",
+  "tenant": "consortial"
+}

@@ -1,0 +1,2142 @@
+{
+  "allowExisting": true,
+  "baseUrl": "https://reshare-2-okapi.folio-dev-us-east-1-1.folio-dev.indexdata.com/directory",
+  "consortiumId": "0b15a971-95eb-464f-918b-eeba5e48d73b",
+  "created": {
+    "entries": [
+      {
+        "id": "24c4ae9e-597a-4a72-a2e4-c56faad99ed3",
+        "name": "Albury City Libraries",
+        "sourceId": "30191a94-9588-5b53-808a-58d843706d1b",
+        "type": "Institution"
+      },
+      {
+        "id": "ec14f636-8c6c-48d0-bc32-cf15fb3dcc05",
+        "name": "University of Sydney",
+        "sourceId": "8a1be802-4431-5a56-bb17-ea7d23d5a234",
+        "type": "Institution"
+      },
+      {
+        "id": "1654ad33-bd7c-46d7-90d5-990690c00e9c",
+        "name": "Upper Lachlan Shire Library Service",
+        "sourceId": "4d32b8cb-63a0-5033-94bd-77ddda1946e1",
+        "type": "Institution"
+      },
+      {
+        "id": "7b549bb1-d8de-45f8-94c4-3f7f87c99c37",
+        "name": "University of New England",
+        "sourceId": "b10ccbda-b4a5-59be-9560-cf990da11c5b",
+        "type": "Institution"
+      },
+      {
+        "id": "748d4a17-525c-40ba-95d2-35a0a20f8c01",
+        "name": "Woollahra Library and Information Service",
+        "sourceId": "d46ceb6f-166a-5d44-b60c-4a810bbb137d",
+        "type": "Institution"
+      },
+      {
+        "id": "344df680-d91c-49fd-a782-429d1acab65b",
+        "name": "Queensland Griffith University",
+        "sourceId": "375cb706-55d3-5735-9134-3b404ac1afe1",
+        "type": "Institution"
+      },
+      {
+        "id": "1cdbf584-e30d-4a00-9948-6537df117df5",
+        "name": "University of the Sunshine Coast Library",
+        "sourceId": "f6d16209-cc7b-5b75-91cc-6b660f8052a8",
+        "type": "Institution"
+      },
+      {
+        "id": "beef29a1-c5a0-47b6-9aba-ff26492a7b9d",
+        "name": "Toowoomba Regional Council",
+        "sourceId": "5944afd7-6086-58c8-94c2-d6cc89c96335",
+        "type": "Institution"
+      },
+      {
+        "id": "031514d5-f1a6-4167-b011-4c8d220cfb52",
+        "name": "University of Adelaide",
+        "sourceId": "4bf192de-0e92-52bb-a636-730cf9addf2b",
+        "type": "Institution"
+      },
+      {
+        "id": "48b75808-a503-46fe-a194-86cbb5b0dabe",
+        "name": "University of South Australia Library",
+        "sourceId": "1d6d72f8-31de-538f-bf3c-9efa80c6af82",
+        "type": "Institution"
+      },
+      {
+        "id": "3997f1ff-fafc-43b4-a402-fae42219d165",
+        "name": "Test TTTA",
+        "sourceId": "74eb1b77-c00e-560e-a1fd-9a9a848ade6c",
+        "type": "Institution"
+      },
+      {
+        "id": "46dd5e79-4328-4b31-9135-f51334c0c9da",
+        "name": "Test TTTB",
+        "sourceId": "ea1c40f0-907f-5c08-8601-fb319bae3a2d",
+        "type": "Institution"
+      },
+      {
+        "id": "d4b423a1-fc2c-4471-890f-d6a0ae393bba",
+        "name": "Test TTTC",
+        "sourceId": "56544812-dabe-5eab-93c2-6dc640d8f74e",
+        "type": "Institution"
+      },
+      {
+        "id": "15405bc2-57ec-40ee-8245-e2c8727f216f",
+        "name": "University of Tasmania Library",
+        "sourceId": "4acf0364-f054-533e-9d7d-b1e3be2df8f8",
+        "type": "Institution"
+      },
+      {
+        "id": "34c0f8e5-e580-46d8-96ac-03a97201f38f",
+        "name": "CARM Centre",
+        "sourceId": "6740f25e-cef5-5ba0-a1a8-e0a64bf0d29d",
+        "type": "Institution"
+      },
+      {
+        "id": "9a75ec27-ec33-47ab-b4c3-97cad0291d26",
+        "name": "Wellington Shire Library",
+        "sourceId": "c93376a2-49ff-5d92-9329-1a454a024315",
+        "type": "Institution"
+      },
+      {
+        "id": "2a1f66be-a83c-42a3-abe6-520a178b56b6",
+        "name": "Museums Victoria",
+        "sourceId": "b9a54a13-6c01-5079-a882-acf9d3b1fc6a",
+        "type": "Institution"
+      },
+      {
+        "id": "a70cdcb1-96db-4a97-9921-ae7a7d5ebe16",
+        "name": "WorkSafe Victoria",
+        "sourceId": "dba2b3ea-6eee-530b-95e2-9ce75b4a222b",
+        "type": "Institution"
+      },
+      {
+        "id": "a258e054-5e17-4564-b320-04ffefe87806",
+        "name": "Wyndham City Council Library Service",
+        "sourceId": "ebb4d6d4-af40-51c5-9744-f3dab9c3fc39",
+        "type": "Institution"
+      },
+      {
+        "id": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+        "name": "WA Dept of Biodiversity - Conservation and Attractions",
+        "sourceId": "19527a13-429d-5ba9-b6e1-5df3d3d9e6f0",
+        "type": "Institution"
+      },
+      {
+        "id": "05e2e572-7eb7-4b24-bb20-b9fb9aa4f93d",
+        "name": "University of Western Australia Library",
+        "sourceId": "7a877fa7-9055-5a34-a224-237e5a9d185f",
+        "type": "Institution"
+      },
+      {
+        "id": "96883e91-a386-4663-a658-d1e01fe6828f",
+        "name": "Albury City Libraries / Albury City Libraries",
+        "sourceId": "69b6f9c5-5c42-54b8-bb2f-75667457b55a",
+        "type": "Branch"
+      },
+      {
+        "id": "176defdf-1495-40c6-beec-f2ae8b1f8ffd",
+        "name": "University of Sydney / The University of Sydney Library",
+        "sourceId": "8733dd66-6554-5759-a127-2fe61fefdaf5",
+        "type": "Branch"
+      },
+      {
+        "id": "596332f3-d0a5-459e-bd28-e585fd119812",
+        "name": "Upper Lachlan Shire Library Service / Default branch",
+        "sourceId": "545c8bc3-ec72-5889-bb92-96893c6cfe7c",
+        "type": "Branch"
+      },
+      {
+        "id": "aa6f9cb6-1309-4e98-b750-bf3f6d150a5f",
+        "name": "University of New England / Dixson Library",
+        "sourceId": "fbfaf052-3953-5276-be45-0985e680a5e8",
+        "type": "Branch"
+      },
+      {
+        "id": "516d8192-2076-4ded-a457-ef0d1fa4571a",
+        "name": "Woollahra Library and Information Service / Double Bay Central Library",
+        "sourceId": "e1b30b08-4650-518a-bda1-e49687f5c447",
+        "type": "Branch"
+      },
+      {
+        "id": "e46ec532-05db-49dd-8dda-dd3008d517a3",
+        "name": "Queensland Griffith University / Library and Learning Services",
+        "sourceId": "352c2646-0b18-59b1-91e9-38a88cc46278",
+        "type": "Branch"
+      },
+      {
+        "id": "2c4d1658-c1c0-4ad4-b048-7c49179db2f8",
+        "name": "University of the Sunshine Coast Library / Default branch",
+        "sourceId": "f9a36051-9bfb-5ec7-bf83-1da646977af4",
+        "type": "Branch"
+      },
+      {
+        "id": "d9b5dea3-e4b4-4e97-a173-20b5993331dc",
+        "name": "Toowoomba Regional Council / Toowoomba City Library",
+        "sourceId": "23971837-c8da-5584-8978-40fc08829f08",
+        "type": "Branch"
+      },
+      {
+        "id": "a8f080e2-c7a0-4c79-8ea3-d272bac97782",
+        "name": "University of Adelaide / Barr Smith Library",
+        "sourceId": "e5858aa8-319a-5d84-91b3-f2a1f8bf360f",
+        "type": "Branch"
+      },
+      {
+        "id": "09c78a17-a27b-4799-9fdc-d50dbe12eaab",
+        "name": "University of South Australia Library / Default branch",
+        "sourceId": "89e1e4e4-d77e-5c68-b64b-96bafc830836",
+        "type": "Branch"
+      },
+      {
+        "id": "968aef96-f3fd-4109-a054-de98c0aeef27",
+        "name": "Test TTTA / Circulation Desk",
+        "sourceId": "b497b347-18c7-5d54-aca0-25f7ef216e8d",
+        "type": "Branch"
+      },
+      {
+        "id": "a06ea643-4d14-496d-bc7f-df841e1be08f",
+        "name": "Test TTTB / Circulation Desk",
+        "sourceId": "40526dca-c7c8-5991-8efc-4a48d535cc3a",
+        "type": "Branch"
+      },
+      {
+        "id": "3704f860-739d-4591-b717-ecb0c70fab31",
+        "name": "Test TTTC / Circulation Desk",
+        "sourceId": "d6759dbf-254b-5afb-b049-90308d890a88",
+        "type": "Branch"
+      },
+      {
+        "id": "fb85485d-12d6-4903-95e2-943b9bfdfeb0",
+        "name": "University of Tasmania Library / Default branch",
+        "sourceId": "edc7c1c9-08d4-501f-a47e-c87345739eba",
+        "type": "Branch"
+      },
+      {
+        "id": "5b2f7df5-420c-4835-b4b1-411e95b8feb2",
+        "name": "CARM Centre / Default branch",
+        "sourceId": "9e2c9dd8-f5ad-506a-b358-fb57094ae4a5",
+        "type": "Branch"
+      },
+      {
+        "id": "7223df1f-9de3-46c5-8d22-563b94c7e6ac",
+        "name": "Wellington Shire Library / Default branch",
+        "sourceId": "4d536248-0e7f-5b9b-b70b-dc6f8cc348a1",
+        "type": "Branch"
+      },
+      {
+        "id": "f99ca376-14db-4b97-b48c-fbe67706e83a",
+        "name": "Museums Victoria / Museums Victoria Library",
+        "sourceId": "9e953640-2e7f-5184-9f8e-e825a4049d10",
+        "type": "Branch"
+      },
+      {
+        "id": "6484405a-0b45-4073-b7bd-f8bc1c335cec",
+        "name": "WorkSafe Victoria / WorkSafe Victoria",
+        "sourceId": "253271d4-e754-5049-8db8-d03962820f07",
+        "type": "Branch"
+      },
+      {
+        "id": "f8026c79-d531-46e4-b512-74d0afb9409a",
+        "name": "Wyndham City Council Library Service / Wyndham Library Service",
+        "sourceId": "5cc2d931-e8cd-5ac5-9eae-8770f1ab7fa9",
+        "type": "Branch"
+      },
+      {
+        "id": "6886e63f-6c99-4908-9744-713e798cf9e3",
+        "name": "WA Dept of Biodiversity - Conservation and Attractions / Default branch",
+        "sourceId": "d6d5fc7c-063d-5687-842f-64f7d79ec6a8",
+        "type": "Branch"
+      },
+      {
+        "id": "a6a156d1-45d1-4bd1-a1be-29de134947ec",
+        "name": "University of Western Australia Library / Default branch",
+        "sourceId": "ba5b24f4-8f86-505e-8968-b481496b7979",
+        "type": "Branch"
+      }
+    ],
+    "entryNetworks": [
+      {
+        "entry": "24c4ae9e-597a-4a72-a2e4-c56faad99ed3",
+        "id": "54a9f519-2269-4273-9948-ea4090eff9fe",
+        "network": "5607c644-b4b4-430a-99b1-f58fb568c1af",
+        "priority": 7
+      },
+      {
+        "entry": "24c4ae9e-597a-4a72-a2e4-c56faad99ed3",
+        "id": "10d1780a-4792-430a-9ea2-323d21bbd5d4",
+        "network": "b633a917-d621-40a3-b7ae-7d682cbf5e0f",
+        "priority": 6
+      },
+      {
+        "entry": "24c4ae9e-597a-4a72-a2e4-c56faad99ed3",
+        "id": "092a401b-ea46-4a45-8df5-c1c75a732dfc",
+        "network": "3071aa81-9a82-4b6b-9699-5e77b9d27008",
+        "priority": 2
+      },
+      {
+        "entry": "ec14f636-8c6c-48d0-bc32-cf15fb3dcc05",
+        "id": "81a99337-65cd-4d4b-aabb-7e1ef2d61a1e",
+        "network": "5607c644-b4b4-430a-99b1-f58fb568c1af",
+        "priority": 7
+      },
+      {
+        "entry": "ec14f636-8c6c-48d0-bc32-cf15fb3dcc05",
+        "id": "d7d8d43e-fb7c-42d2-8636-a5a09d16ca4b",
+        "network": "b633a917-d621-40a3-b7ae-7d682cbf5e0f",
+        "priority": 6
+      },
+      {
+        "entry": "ec14f636-8c6c-48d0-bc32-cf15fb3dcc05",
+        "id": "1ff0a535-614d-41bd-8ba8-2d452c0a669a",
+        "network": "3071aa81-9a82-4b6b-9699-5e77b9d27008",
+        "priority": 2
+      },
+      {
+        "entry": "ec14f636-8c6c-48d0-bc32-cf15fb3dcc05",
+        "id": "e1f2c4d2-d3b2-4236-9711-85d764699400",
+        "network": "ce8bee23-7f96-452b-8ffa-66721c029b38",
+        "priority": 3
+      },
+      {
+        "entry": "ec14f636-8c6c-48d0-bc32-cf15fb3dcc05",
+        "id": "454ffc82-0b02-41c5-af00-33eca66ca24f",
+        "network": "945144ab-2999-4907-b7e9-77361591bcdd",
+        "priority": 2
+      },
+      {
+        "entry": "ec14f636-8c6c-48d0-bc32-cf15fb3dcc05",
+        "id": "cb1d0a9b-d8c2-43a1-90ce-68e593e5749a",
+        "network": "bf045acb-9f7a-4f74-91be-974760b30584",
+        "priority": 9
+      },
+      {
+        "entry": "1654ad33-bd7c-46d7-90d5-990690c00e9c",
+        "id": "4d8fa659-a4e2-47aa-954f-6883fc41161a",
+        "network": "5607c644-b4b4-430a-99b1-f58fb568c1af",
+        "priority": 7
+      },
+      {
+        "entry": "1654ad33-bd7c-46d7-90d5-990690c00e9c",
+        "id": "2b194d92-61bb-4c56-9cd8-83affca07a76",
+        "network": "d7488e0a-f9ff-444f-9f3b-2c23dd55d108",
+        "priority": 2
+      },
+      {
+        "entry": "1654ad33-bd7c-46d7-90d5-990690c00e9c",
+        "id": "5cbc6539-ec5b-44a5-9d48-fba3033ee693",
+        "network": "f205170a-c1e7-42b8-bffe-c81abab15754",
+        "priority": 3
+      },
+      {
+        "entry": "1654ad33-bd7c-46d7-90d5-990690c00e9c",
+        "id": "d739ea05-f70d-455b-9934-5f7dbc6232e8",
+        "network": "b1b7b5b7-c2e6-4b31-a3ee-174e63daf063",
+        "priority": 1
+      },
+      {
+        "entry": "1654ad33-bd7c-46d7-90d5-990690c00e9c",
+        "id": "33d911e3-207c-4c81-b6db-570050370dfc",
+        "network": "6457dfc9-937b-426c-a5b9-8ca9c4c2459d",
+        "priority": 5
+      },
+      {
+        "entry": "1654ad33-bd7c-46d7-90d5-990690c00e9c",
+        "id": "cef20896-390d-4fda-9a58-8634ed3b4a69",
+        "network": "bf045acb-9f7a-4f74-91be-974760b30584",
+        "priority": 9
+      },
+      {
+        "entry": "7b549bb1-d8de-45f8-94c4-3f7f87c99c37",
+        "id": "0fb3896d-3798-487d-9aae-b2893d079af1",
+        "network": "6457dfc9-937b-426c-a5b9-8ca9c4c2459d",
+        "priority": 5
+      },
+      {
+        "entry": "7b549bb1-d8de-45f8-94c4-3f7f87c99c37",
+        "id": "cc8d5ccf-b870-4da1-91f7-72537feca30a",
+        "network": "f2134161-a196-47a2-a3a2-f9c93377d1e8",
+        "priority": 3
+      },
+      {
+        "entry": "7b549bb1-d8de-45f8-94c4-3f7f87c99c37",
+        "id": "1525b185-e386-403f-8cac-442b58d29922",
+        "network": "524b3554-9030-4d22-afb8-d139aa0e9216",
+        "priority": 4
+      },
+      {
+        "entry": "7b549bb1-d8de-45f8-94c4-3f7f87c99c37",
+        "id": "1da9c9fe-f628-47e7-9e87-33a3ee53ec51",
+        "network": "b4a36043-2e1a-4baa-bfc8-21295e4345c5",
+        "priority": 1
+      },
+      {
+        "entry": "7b549bb1-d8de-45f8-94c4-3f7f87c99c37",
+        "id": "0ca4ccac-7f50-4ad5-aa67-e7dc0d314e42",
+        "network": "72e48795-a82f-4b2a-806c-c463deedd3f7",
+        "priority": 8
+      },
+      {
+        "entry": "7b549bb1-d8de-45f8-94c4-3f7f87c99c37",
+        "id": "1f40b7fd-e9f5-49e4-b4c5-c440c4aae7c7",
+        "network": "bf045acb-9f7a-4f74-91be-974760b30584",
+        "priority": 9
+      },
+      {
+        "entry": "748d4a17-525c-40ba-95d2-35a0a20f8c01",
+        "id": "23a81465-5c65-4d7d-96a0-9089b7538574",
+        "network": "d7488e0a-f9ff-444f-9f3b-2c23dd55d108",
+        "priority": 2
+      },
+      {
+        "entry": "748d4a17-525c-40ba-95d2-35a0a20f8c01",
+        "id": "d7e8abe8-abdc-46e8-a843-19c4fc1cacb7",
+        "network": "f205170a-c1e7-42b8-bffe-c81abab15754",
+        "priority": 3
+      },
+      {
+        "entry": "748d4a17-525c-40ba-95d2-35a0a20f8c01",
+        "id": "e91f612f-849a-4965-a087-ada2ae323cf0",
+        "network": "b1b7b5b7-c2e6-4b31-a3ee-174e63daf063",
+        "priority": 1
+      },
+      {
+        "entry": "748d4a17-525c-40ba-95d2-35a0a20f8c01",
+        "id": "0aa25ff3-6dd2-43d9-aa71-bbb9609b4b12",
+        "network": "6457dfc9-937b-426c-a5b9-8ca9c4c2459d",
+        "priority": 5
+      },
+      {
+        "entry": "748d4a17-525c-40ba-95d2-35a0a20f8c01",
+        "id": "2eae7a76-a572-40ac-8896-f9c68e7af427",
+        "network": "c96eefec-c4d2-4ad2-8725-cf0ce1ec76ef",
+        "priority": 5
+      },
+      {
+        "entry": "344df680-d91c-49fd-a782-429d1acab65b",
+        "id": "97653d35-b619-4b1a-aee9-0e7c9ab6e331",
+        "network": "f2134161-a196-47a2-a3a2-f9c93377d1e8",
+        "priority": 3
+      },
+      {
+        "entry": "344df680-d91c-49fd-a782-429d1acab65b",
+        "id": "77e8cdde-6a4c-45b7-b625-8f42e2537706",
+        "network": "3071aa81-9a82-4b6b-9699-5e77b9d27008",
+        "priority": 2
+      },
+      {
+        "entry": "344df680-d91c-49fd-a782-429d1acab65b",
+        "id": "ee64b479-ad55-4060-9b26-dd2a03786a47",
+        "network": "5607c644-b4b4-430a-99b1-f58fb568c1af",
+        "priority": 7
+      },
+      {
+        "entry": "344df680-d91c-49fd-a782-429d1acab65b",
+        "id": "a03359a0-76b4-4510-b75a-9d10e36128ab",
+        "network": "ce8bee23-7f96-452b-8ffa-66721c029b38",
+        "priority": 3
+      },
+      {
+        "entry": "344df680-d91c-49fd-a782-429d1acab65b",
+        "id": "637acd09-28b7-484f-bbea-5c5be64b0cfd",
+        "network": "945144ab-2999-4907-b7e9-77361591bcdd",
+        "priority": 2
+      },
+      {
+        "entry": "344df680-d91c-49fd-a782-429d1acab65b",
+        "id": "9a020035-4afe-45ed-9c81-79063f8279c3",
+        "network": "72e48795-a82f-4b2a-806c-c463deedd3f7",
+        "priority": 8
+      },
+      {
+        "entry": "344df680-d91c-49fd-a782-429d1acab65b",
+        "id": "c9817f3f-9250-4d78-a50d-cddb188404ba",
+        "network": "bf045acb-9f7a-4f74-91be-974760b30584",
+        "priority": 9
+      },
+      {
+        "entry": "1cdbf584-e30d-4a00-9948-6537df117df5",
+        "id": "472d440e-e5bc-4ae3-905a-ec54c786130a",
+        "network": "f2134161-a196-47a2-a3a2-f9c93377d1e8",
+        "priority": 3
+      },
+      {
+        "entry": "1cdbf584-e30d-4a00-9948-6537df117df5",
+        "id": "6ef29cc5-38dd-4dc1-be4f-76047fab5419",
+        "network": "6457dfc9-937b-426c-a5b9-8ca9c4c2459d",
+        "priority": 5
+      },
+      {
+        "entry": "1cdbf584-e30d-4a00-9948-6537df117df5",
+        "id": "c24a464a-448a-44b4-a417-0ef92f38889f",
+        "network": "d2eddf41-6e8f-44b6-b026-162e57b640a2",
+        "priority": 3
+      },
+      {
+        "entry": "1cdbf584-e30d-4a00-9948-6537df117df5",
+        "id": "ad2aa9d1-c56b-477e-9b6d-0d8fa67d66a9",
+        "network": "524b3554-9030-4d22-afb8-d139aa0e9216",
+        "priority": 4
+      },
+      {
+        "entry": "beef29a1-c5a0-47b6-9aba-ff26492a7b9d",
+        "id": "063b476a-92bf-4bf2-972e-914112b17ad1",
+        "network": "f205170a-c1e7-42b8-bffe-c81abab15754",
+        "priority": 3
+      },
+      {
+        "entry": "beef29a1-c5a0-47b6-9aba-ff26492a7b9d",
+        "id": "96670e51-6b3b-4562-a01f-57d9956fb58a",
+        "network": "d7488e0a-f9ff-444f-9f3b-2c23dd55d108",
+        "priority": 2
+      },
+      {
+        "entry": "beef29a1-c5a0-47b6-9aba-ff26492a7b9d",
+        "id": "918166b5-a78d-4fd9-8b33-c51ebbd39039",
+        "network": "b1b7b5b7-c2e6-4b31-a3ee-174e63daf063",
+        "priority": 1
+      },
+      {
+        "entry": "beef29a1-c5a0-47b6-9aba-ff26492a7b9d",
+        "id": "9881ff7f-1df1-4b05-9903-c3a89f3a2903",
+        "network": "3071aa81-9a82-4b6b-9699-5e77b9d27008",
+        "priority": 2
+      },
+      {
+        "entry": "beef29a1-c5a0-47b6-9aba-ff26492a7b9d",
+        "id": "40b7f9c0-631a-457c-b305-7b53ca49ca62",
+        "network": "5607c644-b4b4-430a-99b1-f58fb568c1af",
+        "priority": 7
+      },
+      {
+        "entry": "beef29a1-c5a0-47b6-9aba-ff26492a7b9d",
+        "id": "a55f4a7d-1fd1-4ae5-af66-5d484237dd56",
+        "network": "bf045acb-9f7a-4f74-91be-974760b30584",
+        "priority": 9
+      },
+      {
+        "entry": "031514d5-f1a6-4167-b011-4c8d220cfb52",
+        "id": "b296280b-cf97-4c46-8713-68c90b78b693",
+        "network": "fc02090d-306b-45cc-bc48-30d6aab888dd",
+        "priority": 1
+      },
+      {
+        "entry": "031514d5-f1a6-4167-b011-4c8d220cfb52",
+        "id": "b868e6e4-49f8-42c1-9302-1fb73a54139d",
+        "network": "524b3554-9030-4d22-afb8-d139aa0e9216",
+        "priority": 4
+      },
+      {
+        "entry": "031514d5-f1a6-4167-b011-4c8d220cfb52",
+        "id": "21c75aca-40cf-4897-9a99-02beadc6a85c",
+        "network": "6457dfc9-937b-426c-a5b9-8ca9c4c2459d",
+        "priority": 5
+      },
+      {
+        "entry": "031514d5-f1a6-4167-b011-4c8d220cfb52",
+        "id": "d2d9053c-a9a0-42e8-b213-6736110f31c7",
+        "network": "f2134161-a196-47a2-a3a2-f9c93377d1e8",
+        "priority": 3
+      },
+      {
+        "entry": "031514d5-f1a6-4167-b011-4c8d220cfb52",
+        "id": "b1a3fcdf-fe03-4060-947e-07b1ec955286",
+        "network": "b4a36043-2e1a-4baa-bfc8-21295e4345c5",
+        "priority": 1
+      },
+      {
+        "entry": "031514d5-f1a6-4167-b011-4c8d220cfb52",
+        "id": "78493350-dc4f-4ce2-b957-4af9c5be310b",
+        "network": "72e48795-a82f-4b2a-806c-c463deedd3f7",
+        "priority": 8
+      },
+      {
+        "entry": "031514d5-f1a6-4167-b011-4c8d220cfb52",
+        "id": "1b1f3a7d-4c62-4527-a6de-aa38b10a720d",
+        "network": "bf045acb-9f7a-4f74-91be-974760b30584",
+        "priority": 9
+      },
+      {
+        "entry": "48b75808-a503-46fe-a194-86cbb5b0dabe",
+        "id": "5b528faf-9baa-4341-afae-c77501e729e3",
+        "network": "fc02090d-306b-45cc-bc48-30d6aab888dd",
+        "priority": 1
+      },
+      {
+        "entry": "15405bc2-57ec-40ee-8245-e2c8727f216f",
+        "id": "a2301869-7aac-42e4-a273-bd1294a49fbe",
+        "network": "524b3554-9030-4d22-afb8-d139aa0e9216",
+        "priority": 4
+      },
+      {
+        "entry": "15405bc2-57ec-40ee-8245-e2c8727f216f",
+        "id": "03c4fbe7-f460-497b-be63-1b04791911c1",
+        "network": "6457dfc9-937b-426c-a5b9-8ca9c4c2459d",
+        "priority": 5
+      },
+      {
+        "entry": "15405bc2-57ec-40ee-8245-e2c8727f216f",
+        "id": "7119407f-3683-432e-bab2-142eabf94c21",
+        "network": "f2134161-a196-47a2-a3a2-f9c93377d1e8",
+        "priority": 3
+      },
+      {
+        "entry": "15405bc2-57ec-40ee-8245-e2c8727f216f",
+        "id": "e3b918c8-d170-4aa0-8105-f59c2d428f22",
+        "network": "b1b7b5b7-c2e6-4b31-a3ee-174e63daf063",
+        "priority": 1
+      },
+      {
+        "entry": "15405bc2-57ec-40ee-8245-e2c8727f216f",
+        "id": "c3375874-5566-4730-a66b-3e0a1fa1a7f9",
+        "network": "d7488e0a-f9ff-444f-9f3b-2c23dd55d108",
+        "priority": 2
+      },
+      {
+        "entry": "15405bc2-57ec-40ee-8245-e2c8727f216f",
+        "id": "61cc397d-10e0-4396-a07f-a1db7e9e406a",
+        "network": "3f3e4d1d-b8e2-46b3-80b0-04362e3daba8",
+        "priority": 6
+      },
+      {
+        "entry": "15405bc2-57ec-40ee-8245-e2c8727f216f",
+        "id": "ceabb896-fdf2-4baa-ac08-10c8130039c4",
+        "network": "57e381db-b912-4afe-be7b-993bdb6ef952",
+        "priority": 7
+      },
+      {
+        "entry": "15405bc2-57ec-40ee-8245-e2c8727f216f",
+        "id": "923a80a5-0327-4f1c-ab8a-0106012a9877",
+        "network": "72e48795-a82f-4b2a-806c-c463deedd3f7",
+        "priority": 8
+      },
+      {
+        "entry": "15405bc2-57ec-40ee-8245-e2c8727f216f",
+        "id": "042f87c2-3023-4797-b4e7-dc4ab8438011",
+        "network": "bf045acb-9f7a-4f74-91be-974760b30584",
+        "priority": 9
+      },
+      {
+        "entry": "34c0f8e5-e580-46d8-96ac-03a97201f38f",
+        "id": "7219809e-d16a-4af6-8270-585cce10e38c",
+        "network": "524b3554-9030-4d22-afb8-d139aa0e9216",
+        "priority": 4
+      },
+      {
+        "entry": "9a75ec27-ec33-47ab-b4c3-97cad0291d26",
+        "id": "14ab4bd6-e80e-409f-b6e5-494a51eeb029",
+        "network": "b633a917-d621-40a3-b7ae-7d682cbf5e0f",
+        "priority": 6
+      },
+      {
+        "entry": "9a75ec27-ec33-47ab-b4c3-97cad0291d26",
+        "id": "ca682a8a-e973-49ac-86a2-2004d40b74dd",
+        "network": "5607c644-b4b4-430a-99b1-f58fb568c1af",
+        "priority": 7
+      },
+      {
+        "entry": "9a75ec27-ec33-47ab-b4c3-97cad0291d26",
+        "id": "bc9f1f89-5176-46c4-8ed9-c939213a2b13",
+        "network": "3071aa81-9a82-4b6b-9699-5e77b9d27008",
+        "priority": 2
+      },
+      {
+        "entry": "9a75ec27-ec33-47ab-b4c3-97cad0291d26",
+        "id": "bdc292e7-6cce-4966-8f51-4312915162e5",
+        "network": "945144ab-2999-4907-b7e9-77361591bcdd",
+        "priority": 2
+      },
+      {
+        "entry": "9a75ec27-ec33-47ab-b4c3-97cad0291d26",
+        "id": "0cbe1d63-1de1-4942-9667-0ba555d9e81b",
+        "network": "ce8bee23-7f96-452b-8ffa-66721c029b38",
+        "priority": 3
+      },
+      {
+        "entry": "2a1f66be-a83c-42a3-abe6-520a178b56b6",
+        "id": "5c85261d-012d-4828-b75c-ea0ff5171b7e",
+        "network": "b633a917-d621-40a3-b7ae-7d682cbf5e0f",
+        "priority": 6
+      },
+      {
+        "entry": "2a1f66be-a83c-42a3-abe6-520a178b56b6",
+        "id": "5b3a950d-0117-4ca7-be32-76365af26f61",
+        "network": "b1d3927e-843e-4f22-b562-e325a44d832d",
+        "priority": 2
+      },
+      {
+        "entry": "2a1f66be-a83c-42a3-abe6-520a178b56b6",
+        "id": "737eb13e-37ea-4cda-a284-eb4212e357f1",
+        "network": "524b3554-9030-4d22-afb8-d139aa0e9216",
+        "priority": 4
+      },
+      {
+        "entry": "2a1f66be-a83c-42a3-abe6-520a178b56b6",
+        "id": "6508e1d8-94f8-4def-8025-1125d2d93b5e",
+        "network": "5607c644-b4b4-430a-99b1-f58fb568c1af",
+        "priority": 7
+      },
+      {
+        "entry": "2a1f66be-a83c-42a3-abe6-520a178b56b6",
+        "id": "7e7a59ac-a0df-48c5-9fc6-0050150f90ae",
+        "network": "3071aa81-9a82-4b6b-9699-5e77b9d27008",
+        "priority": 2
+      },
+      {
+        "entry": "2a1f66be-a83c-42a3-abe6-520a178b56b6",
+        "id": "1b298cac-519c-4de1-b5c2-4cbb974dfe64",
+        "network": "72e48795-a82f-4b2a-806c-c463deedd3f7",
+        "priority": 8
+      },
+      {
+        "entry": "2a1f66be-a83c-42a3-abe6-520a178b56b6",
+        "id": "6e75f0b9-2109-43a1-815c-3f0e9826cef5",
+        "network": "bf045acb-9f7a-4f74-91be-974760b30584",
+        "priority": 9
+      },
+      {
+        "entry": "a70cdcb1-96db-4a97-9921-ae7a7d5ebe16",
+        "id": "51b0cdb7-f86e-46a6-b0dd-e38bf1eda65f",
+        "network": "b633a917-d621-40a3-b7ae-7d682cbf5e0f",
+        "priority": 6
+      },
+      {
+        "entry": "a70cdcb1-96db-4a97-9921-ae7a7d5ebe16",
+        "id": "627e69d8-949a-44e4-8682-53b09351a493",
+        "network": "b1d3927e-843e-4f22-b562-e325a44d832d",
+        "priority": 2
+      },
+      {
+        "entry": "a70cdcb1-96db-4a97-9921-ae7a7d5ebe16",
+        "id": "1e00029b-11a8-43db-9e30-585a717592b3",
+        "network": "633eea56-19eb-4dec-a515-f63894c68c1e",
+        "priority": 3
+      },
+      {
+        "entry": "a70cdcb1-96db-4a97-9921-ae7a7d5ebe16",
+        "id": "27e9aaec-a4dc-43d4-9cdc-9599043b1342",
+        "network": "bf045acb-9f7a-4f74-91be-974760b30584",
+        "priority": 9
+      },
+      {
+        "entry": "a258e054-5e17-4564-b320-04ffefe87806",
+        "id": "78998d56-db42-4d6c-bc74-98fdc50a262b",
+        "network": "b1b7b5b7-c2e6-4b31-a3ee-174e63daf063",
+        "priority": 1
+      },
+      {
+        "entry": "a258e054-5e17-4564-b320-04ffefe87806",
+        "id": "d801032b-6be7-441c-964d-ce77114ce99a",
+        "network": "d7488e0a-f9ff-444f-9f3b-2c23dd55d108",
+        "priority": 2
+      },
+      {
+        "entry": "a258e054-5e17-4564-b320-04ffefe87806",
+        "id": "22c6e28f-56eb-44a9-a84f-960398fa3688",
+        "network": "f205170a-c1e7-42b8-bffe-c81abab15754",
+        "priority": 3
+      },
+      {
+        "entry": "a258e054-5e17-4564-b320-04ffefe87806",
+        "id": "9609ac65-4882-4765-8d40-f6841a9e43b3",
+        "network": "524b3554-9030-4d22-afb8-d139aa0e9216",
+        "priority": 4
+      },
+      {
+        "entry": "a258e054-5e17-4564-b320-04ffefe87806",
+        "id": "77b94194-0a8e-4857-92a6-0abb7f8eb244",
+        "network": "6457dfc9-937b-426c-a5b9-8ca9c4c2459d",
+        "priority": 5
+      },
+      {
+        "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+        "id": "75cee531-449c-40ad-8427-194fd4aa7fa2",
+        "network": "945144ab-2999-4907-b7e9-77361591bcdd",
+        "priority": 2
+      },
+      {
+        "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+        "id": "2c8ec862-fdbd-47e4-a0a2-07d2a7391fd6",
+        "network": "3071aa81-9a82-4b6b-9699-5e77b9d27008",
+        "priority": 2
+      },
+      {
+        "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+        "id": "cf5fe3e4-c778-4d1d-8f85-fc8f1bd23025",
+        "network": "ce8bee23-7f96-452b-8ffa-66721c029b38",
+        "priority": 3
+      },
+      {
+        "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+        "id": "2a22b1b1-68b7-4792-b876-e20bbb30d9fa",
+        "network": "b1b18ce2-b9f9-4301-82e1-534871c4fac3",
+        "priority": 4
+      },
+      {
+        "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+        "id": "b6cd4142-05bf-4d47-819c-af659bf7d78b",
+        "network": "1c78c96e-0ae5-4239-a2c6-4b9dd5a9e0b4",
+        "priority": 5
+      },
+      {
+        "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+        "id": "a0d71637-5424-422a-b18d-5ab721b7f8d3",
+        "network": "b633a917-d621-40a3-b7ae-7d682cbf5e0f",
+        "priority": 6
+      },
+      {
+        "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+        "id": "40057281-52dd-4591-a832-27a89ab81598",
+        "network": "5607c644-b4b4-430a-99b1-f58fb568c1af",
+        "priority": 7
+      },
+      {
+        "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+        "id": "7e16402e-5163-4aa3-a0e6-5499a33888fe",
+        "network": "bf045acb-9f7a-4f74-91be-974760b30584",
+        "priority": 9
+      },
+      {
+        "entry": "05e2e572-7eb7-4b24-bb20-b9fb9aa4f93d",
+        "id": "8d5db057-cbe9-4981-bb93-f9904651ec9e",
+        "network": "b4a36043-2e1a-4baa-bfc8-21295e4345c5",
+        "priority": 1
+      },
+      {
+        "entry": "05e2e572-7eb7-4b24-bb20-b9fb9aa4f93d",
+        "id": "0a8c9229-c639-4847-9403-e732f57947e6",
+        "network": "945144ab-2999-4907-b7e9-77361591bcdd",
+        "priority": 2
+      },
+      {
+        "entry": "05e2e572-7eb7-4b24-bb20-b9fb9aa4f93d",
+        "id": "3f659cd1-291e-420c-8dea-191a4f773761",
+        "network": "72e48795-a82f-4b2a-806c-c463deedd3f7",
+        "priority": 8
+      },
+      {
+        "entry": "05e2e572-7eb7-4b24-bb20-b9fb9aa4f93d",
+        "id": "d2ee53c6-0ec9-4866-95f7-98ce161b9e41",
+        "network": "bf045acb-9f7a-4f74-91be-974760b30584",
+        "priority": 9
+      }
+    ],
+    "entryTiers": [
+      {
+        "entry": "24c4ae9e-597a-4a72-a2e4-c56faad99ed3",
+        "id": "41be6e0a-3660-4b8d-bcb6-95fd48fd3ca5",
+        "tier": "1ff3a1ec-0351-4b26-8046-889d195d9ec7"
+      },
+      {
+        "entry": "24c4ae9e-597a-4a72-a2e4-c56faad99ed3",
+        "id": "7e5549a4-1557-44c6-b292-d93b7f6f05d5",
+        "tier": "3c4bf17b-09e7-4981-90bb-81f49af46798"
+      },
+      {
+        "entry": "24c4ae9e-597a-4a72-a2e4-c56faad99ed3",
+        "id": "eca61b64-e84b-4a52-9987-82e30f38bbf3",
+        "tier": "145467d3-c16c-4041-a5db-3e233fcfa29c"
+      },
+      {
+        "entry": "24c4ae9e-597a-4a72-a2e4-c56faad99ed3",
+        "id": "94b8ac79-08c7-4581-adc4-21a55985fd18",
+        "tier": "93d46f41-389e-4bbd-8e26-631f7d8fc3d0"
+      },
+      {
+        "entry": "ec14f636-8c6c-48d0-bc32-cf15fb3dcc05",
+        "id": "db67da0f-f000-4a2c-a3ff-5dd772b0c7a4",
+        "tier": "145467d3-c16c-4041-a5db-3e233fcfa29c"
+      },
+      {
+        "entry": "ec14f636-8c6c-48d0-bc32-cf15fb3dcc05",
+        "id": "ef8323a1-cb7f-4fd8-888a-cbaf5d69fc3c",
+        "tier": "93d46f41-389e-4bbd-8e26-631f7d8fc3d0"
+      },
+      {
+        "entry": "ec14f636-8c6c-48d0-bc32-cf15fb3dcc05",
+        "id": "7887220f-f3fb-433e-a432-904895478608",
+        "tier": "e0040edb-0405-4cd7-a163-ef5499eef7eb"
+      },
+      {
+        "entry": "ec14f636-8c6c-48d0-bc32-cf15fb3dcc05",
+        "id": "32628f29-056d-4683-b80d-4d461da9c594",
+        "tier": "c0b80e7b-9677-405d-b633-d735389d76dd"
+      },
+      {
+        "entry": "1654ad33-bd7c-46d7-90d5-990690c00e9c",
+        "id": "7656860f-4a4c-4b48-acac-2b10e05e5d0b",
+        "tier": "1ff3a1ec-0351-4b26-8046-889d195d9ec7"
+      },
+      {
+        "entry": "1654ad33-bd7c-46d7-90d5-990690c00e9c",
+        "id": "80834332-350c-452c-8791-cb1d630d0ca8",
+        "tier": "3c4bf17b-09e7-4981-90bb-81f49af46798"
+      },
+      {
+        "entry": "7b549bb1-d8de-45f8-94c4-3f7f87c99c37",
+        "id": "6379b84a-f10a-4b7d-9bd5-f762189e29de",
+        "tier": "1ff3a1ec-0351-4b26-8046-889d195d9ec7"
+      },
+      {
+        "entry": "7b549bb1-d8de-45f8-94c4-3f7f87c99c37",
+        "id": "f85ddf41-f389-4195-a06b-69b2476ebe8c",
+        "tier": "3c4bf17b-09e7-4981-90bb-81f49af46798"
+      },
+      {
+        "entry": "7b549bb1-d8de-45f8-94c4-3f7f87c99c37",
+        "id": "b8f9f102-aecd-4c39-8176-5be8bd91ec45",
+        "tier": "145467d3-c16c-4041-a5db-3e233fcfa29c"
+      },
+      {
+        "entry": "7b549bb1-d8de-45f8-94c4-3f7f87c99c37",
+        "id": "09e9cafd-e043-4ce7-b8e4-5977cd61724b",
+        "tier": "93d46f41-389e-4bbd-8e26-631f7d8fc3d0"
+      },
+      {
+        "entry": "748d4a17-525c-40ba-95d2-35a0a20f8c01",
+        "id": "8f98c193-81d1-4257-9dac-e9279fd0401b",
+        "tier": "1ff3a1ec-0351-4b26-8046-889d195d9ec7"
+      },
+      {
+        "entry": "748d4a17-525c-40ba-95d2-35a0a20f8c01",
+        "id": "1a9f551c-ad23-4c80-9987-5ec5a405913a",
+        "tier": "3c4bf17b-09e7-4981-90bb-81f49af46798"
+      },
+      {
+        "entry": "748d4a17-525c-40ba-95d2-35a0a20f8c01",
+        "id": "a22f3148-39bb-4133-92cf-7ceb20c76c6b",
+        "tier": "145467d3-c16c-4041-a5db-3e233fcfa29c"
+      },
+      {
+        "entry": "748d4a17-525c-40ba-95d2-35a0a20f8c01",
+        "id": "9056b6f2-db1f-4bb3-bdf2-49f9d319af02",
+        "tier": "93d46f41-389e-4bbd-8e26-631f7d8fc3d0"
+      },
+      {
+        "entry": "344df680-d91c-49fd-a782-429d1acab65b",
+        "id": "357bc348-5293-4e84-b9ad-2e669eb77a07",
+        "tier": "1ff3a1ec-0351-4b26-8046-889d195d9ec7"
+      },
+      {
+        "entry": "344df680-d91c-49fd-a782-429d1acab65b",
+        "id": "c41a3c8a-5c0d-4335-be64-ce3cd756156a",
+        "tier": "3c4bf17b-09e7-4981-90bb-81f49af46798"
+      },
+      {
+        "entry": "344df680-d91c-49fd-a782-429d1acab65b",
+        "id": "c53ba21d-bce8-4a9a-bd48-7e77a05073d5",
+        "tier": "19106a28-5a5d-401e-a2fa-f8afacd9199d"
+      },
+      {
+        "entry": "344df680-d91c-49fd-a782-429d1acab65b",
+        "id": "16e4644c-59ee-47b9-9fb1-ab3b34b67ae1",
+        "tier": "a9373c05-9595-463c-bbb2-f881905145b4"
+      },
+      {
+        "entry": "344df680-d91c-49fd-a782-429d1acab65b",
+        "id": "7f3e6778-4a28-4b07-bca5-4fbfe1779030",
+        "tier": "145467d3-c16c-4041-a5db-3e233fcfa29c"
+      },
+      {
+        "entry": "344df680-d91c-49fd-a782-429d1acab65b",
+        "id": "1122cf46-0226-449e-8d87-eba8a899233e",
+        "tier": "93d46f41-389e-4bbd-8e26-631f7d8fc3d0"
+      },
+      {
+        "entry": "344df680-d91c-49fd-a782-429d1acab65b",
+        "id": "54b43f5f-7577-4087-b570-771f665517e2",
+        "tier": "e0040edb-0405-4cd7-a163-ef5499eef7eb"
+      },
+      {
+        "entry": "344df680-d91c-49fd-a782-429d1acab65b",
+        "id": "0f3ab791-f745-4cc8-ae5a-151811c1d497",
+        "tier": "c0b80e7b-9677-405d-b633-d735389d76dd"
+      },
+      {
+        "entry": "1cdbf584-e30d-4a00-9948-6537df117df5",
+        "id": "54d021ba-d4f9-43a8-a752-83c95c6daf4c",
+        "tier": "1ff3a1ec-0351-4b26-8046-889d195d9ec7"
+      },
+      {
+        "entry": "1cdbf584-e30d-4a00-9948-6537df117df5",
+        "id": "97378b93-98ec-458b-8ad2-e36649c1ea55",
+        "tier": "3c4bf17b-09e7-4981-90bb-81f49af46798"
+      },
+      {
+        "entry": "beef29a1-c5a0-47b6-9aba-ff26492a7b9d",
+        "id": "067b2633-4032-4e7b-88ac-40ca2ee8a874",
+        "tier": "1ff3a1ec-0351-4b26-8046-889d195d9ec7"
+      },
+      {
+        "entry": "beef29a1-c5a0-47b6-9aba-ff26492a7b9d",
+        "id": "5ca3e8b7-0d4f-400f-bcfc-7d035375a68a",
+        "tier": "3c4bf17b-09e7-4981-90bb-81f49af46798"
+      },
+      {
+        "entry": "beef29a1-c5a0-47b6-9aba-ff26492a7b9d",
+        "id": "d2088435-3cb1-4335-9acf-b0ec04c06cbf",
+        "tier": "145467d3-c16c-4041-a5db-3e233fcfa29c"
+      },
+      {
+        "entry": "beef29a1-c5a0-47b6-9aba-ff26492a7b9d",
+        "id": "5b3684e4-b4e7-451a-9747-d338bdc150b3",
+        "tier": "93d46f41-389e-4bbd-8e26-631f7d8fc3d0"
+      },
+      {
+        "entry": "031514d5-f1a6-4167-b011-4c8d220cfb52",
+        "id": "a37df279-b5ba-4fd8-ab1b-4ff33f77d43b",
+        "tier": "1ff3a1ec-0351-4b26-8046-889d195d9ec7"
+      },
+      {
+        "entry": "031514d5-f1a6-4167-b011-4c8d220cfb52",
+        "id": "c23bec6f-c3d2-440d-b214-c47e3f0e2a64",
+        "tier": "3c4bf17b-09e7-4981-90bb-81f49af46798"
+      },
+      {
+        "entry": "031514d5-f1a6-4167-b011-4c8d220cfb52",
+        "id": "6c24887c-24ce-43b8-970c-41b00d8e31b0",
+        "tier": "19106a28-5a5d-401e-a2fa-f8afacd9199d"
+      },
+      {
+        "entry": "031514d5-f1a6-4167-b011-4c8d220cfb52",
+        "id": "404f9f35-7e81-4cb2-b9bc-bbcbb664bd68",
+        "tier": "a9373c05-9595-463c-bbb2-f881905145b4"
+      },
+      {
+        "entry": "031514d5-f1a6-4167-b011-4c8d220cfb52",
+        "id": "b0971372-9e1d-4f46-a49b-d71e8d042f48",
+        "tier": "145467d3-c16c-4041-a5db-3e233fcfa29c"
+      },
+      {
+        "entry": "031514d5-f1a6-4167-b011-4c8d220cfb52",
+        "id": "e73701ed-192f-4b76-b4cb-871d468062e8",
+        "tier": "93d46f41-389e-4bbd-8e26-631f7d8fc3d0"
+      },
+      {
+        "entry": "031514d5-f1a6-4167-b011-4c8d220cfb52",
+        "id": "88359d09-7daf-4f11-9d7b-615925a785a5",
+        "tier": "e0040edb-0405-4cd7-a163-ef5499eef7eb"
+      },
+      {
+        "entry": "031514d5-f1a6-4167-b011-4c8d220cfb52",
+        "id": "d8f3fcf7-de94-4f3a-a8d0-314814824810",
+        "tier": "c0b80e7b-9677-405d-b633-d735389d76dd"
+      },
+      {
+        "entry": "48b75808-a503-46fe-a194-86cbb5b0dabe",
+        "id": "807a7b2b-a463-4cee-b101-05de2e121a4e",
+        "tier": "1ff3a1ec-0351-4b26-8046-889d195d9ec7"
+      },
+      {
+        "entry": "48b75808-a503-46fe-a194-86cbb5b0dabe",
+        "id": "b6bdb577-2b25-44ca-b88d-b44dbae04895",
+        "tier": "3c4bf17b-09e7-4981-90bb-81f49af46798"
+      },
+      {
+        "entry": "48b75808-a503-46fe-a194-86cbb5b0dabe",
+        "id": "ac442377-36a9-4e94-b0c4-349fa17469d1",
+        "tier": "145467d3-c16c-4041-a5db-3e233fcfa29c"
+      },
+      {
+        "entry": "48b75808-a503-46fe-a194-86cbb5b0dabe",
+        "id": "03d59fc8-4fdb-4063-a5a2-bc6a627099c6",
+        "tier": "93d46f41-389e-4bbd-8e26-631f7d8fc3d0"
+      },
+      {
+        "entry": "15405bc2-57ec-40ee-8245-e2c8727f216f",
+        "id": "07bd9e88-dc44-4ad7-b090-4a86c422db41",
+        "tier": "1ff3a1ec-0351-4b26-8046-889d195d9ec7"
+      },
+      {
+        "entry": "15405bc2-57ec-40ee-8245-e2c8727f216f",
+        "id": "ae7bc91d-a529-4eaf-9f12-6149c9e0f5e4",
+        "tier": "3c4bf17b-09e7-4981-90bb-81f49af46798"
+      },
+      {
+        "entry": "15405bc2-57ec-40ee-8245-e2c8727f216f",
+        "id": "2f78c014-4f14-41d6-abea-78080adca6e0",
+        "tier": "19106a28-5a5d-401e-a2fa-f8afacd9199d"
+      },
+      {
+        "entry": "15405bc2-57ec-40ee-8245-e2c8727f216f",
+        "id": "1dd139b1-c2fa-4682-9576-3fb94e70ff0c",
+        "tier": "a9373c05-9595-463c-bbb2-f881905145b4"
+      },
+      {
+        "entry": "15405bc2-57ec-40ee-8245-e2c8727f216f",
+        "id": "917c8a83-ce52-4b1f-93d4-45a3647e7968",
+        "tier": "145467d3-c16c-4041-a5db-3e233fcfa29c"
+      },
+      {
+        "entry": "15405bc2-57ec-40ee-8245-e2c8727f216f",
+        "id": "f6ec64eb-54ad-4390-bcf1-feebe2e43af2",
+        "tier": "93d46f41-389e-4bbd-8e26-631f7d8fc3d0"
+      },
+      {
+        "entry": "15405bc2-57ec-40ee-8245-e2c8727f216f",
+        "id": "e40316ce-88b7-40e7-9b05-d75f58452875",
+        "tier": "e0040edb-0405-4cd7-a163-ef5499eef7eb"
+      },
+      {
+        "entry": "15405bc2-57ec-40ee-8245-e2c8727f216f",
+        "id": "7471c87f-971d-4a9a-81af-1a1a1c96378b",
+        "tier": "c0b80e7b-9677-405d-b633-d735389d76dd"
+      },
+      {
+        "entry": "34c0f8e5-e580-46d8-96ac-03a97201f38f",
+        "id": "2234c4c6-b91c-4cfc-af90-843a85d509dd",
+        "tier": "1ff3a1ec-0351-4b26-8046-889d195d9ec7"
+      },
+      {
+        "entry": "34c0f8e5-e580-46d8-96ac-03a97201f38f",
+        "id": "8a84060e-c9a6-49e2-86c7-84d5d4c80b1a",
+        "tier": "3c4bf17b-09e7-4981-90bb-81f49af46798"
+      },
+      {
+        "entry": "34c0f8e5-e580-46d8-96ac-03a97201f38f",
+        "id": "aa209e23-590a-493d-be86-5e9c5978dd99",
+        "tier": "19106a28-5a5d-401e-a2fa-f8afacd9199d"
+      },
+      {
+        "entry": "34c0f8e5-e580-46d8-96ac-03a97201f38f",
+        "id": "0d01e496-85cf-468a-afc1-6df02d922d7b",
+        "tier": "a9373c05-9595-463c-bbb2-f881905145b4"
+      },
+      {
+        "entry": "34c0f8e5-e580-46d8-96ac-03a97201f38f",
+        "id": "593a0c83-5b98-4ea4-8ec1-acc1fbcafba1",
+        "tier": "adb9e1a3-f37c-41a6-9193-0149fbf36718"
+      },
+      {
+        "entry": "34c0f8e5-e580-46d8-96ac-03a97201f38f",
+        "id": "88665327-56d4-443c-a9f4-f750c82438aa",
+        "tier": "f81e03e0-bc41-470c-a62b-864c65605970"
+      },
+      {
+        "entry": "34c0f8e5-e580-46d8-96ac-03a97201f38f",
+        "id": "c1dd9716-5031-45b1-b801-87c899da1446",
+        "tier": "145467d3-c16c-4041-a5db-3e233fcfa29c"
+      },
+      {
+        "entry": "34c0f8e5-e580-46d8-96ac-03a97201f38f",
+        "id": "b109d3b1-3d86-45bf-af6d-ba33445d198b",
+        "tier": "93d46f41-389e-4bbd-8e26-631f7d8fc3d0"
+      },
+      {
+        "entry": "34c0f8e5-e580-46d8-96ac-03a97201f38f",
+        "id": "2a6908dc-d8cc-41ce-aed9-f63a4ebe0153",
+        "tier": "e0040edb-0405-4cd7-a163-ef5499eef7eb"
+      },
+      {
+        "entry": "34c0f8e5-e580-46d8-96ac-03a97201f38f",
+        "id": "7fdfcc34-8931-4ea7-aaac-3e3b9bfb4613",
+        "tier": "c0b80e7b-9677-405d-b633-d735389d76dd"
+      },
+      {
+        "entry": "34c0f8e5-e580-46d8-96ac-03a97201f38f",
+        "id": "aa71f451-0c60-4533-8ed0-8a1ba4fdba13",
+        "tier": "fb6a8a91-e09e-4161-9b5c-348134e1810c"
+      },
+      {
+        "entry": "34c0f8e5-e580-46d8-96ac-03a97201f38f",
+        "id": "4021a9f0-8a61-4af0-9d2e-d35aa1061883",
+        "tier": "c3db148b-31f3-486c-b8a0-9d7817a9cc1c"
+      },
+      {
+        "entry": "9a75ec27-ec33-47ab-b4c3-97cad0291d26",
+        "id": "58c9e150-91c3-4276-a4c2-08695c1ca330",
+        "tier": "1ff3a1ec-0351-4b26-8046-889d195d9ec7"
+      },
+      {
+        "entry": "9a75ec27-ec33-47ab-b4c3-97cad0291d26",
+        "id": "f65568ed-9c0a-42e1-b8ab-1479fe1dd653",
+        "tier": "3c4bf17b-09e7-4981-90bb-81f49af46798"
+      },
+      {
+        "entry": "9a75ec27-ec33-47ab-b4c3-97cad0291d26",
+        "id": "aa825292-9086-40cf-80df-2766ee139cd6",
+        "tier": "145467d3-c16c-4041-a5db-3e233fcfa29c"
+      },
+      {
+        "entry": "9a75ec27-ec33-47ab-b4c3-97cad0291d26",
+        "id": "385a2515-dd32-4cde-b860-2756db92903e",
+        "tier": "93d46f41-389e-4bbd-8e26-631f7d8fc3d0"
+      },
+      {
+        "entry": "2a1f66be-a83c-42a3-abe6-520a178b56b6",
+        "id": "726f4ca3-b0b3-4281-9dfd-0a874a0dab94",
+        "tier": "1ff3a1ec-0351-4b26-8046-889d195d9ec7"
+      },
+      {
+        "entry": "2a1f66be-a83c-42a3-abe6-520a178b56b6",
+        "id": "8f862f88-463e-458d-8e84-862ab695d370",
+        "tier": "3c4bf17b-09e7-4981-90bb-81f49af46798"
+      },
+      {
+        "entry": "2a1f66be-a83c-42a3-abe6-520a178b56b6",
+        "id": "55e70926-6265-463f-b1d1-a9b6502dda8e",
+        "tier": "145467d3-c16c-4041-a5db-3e233fcfa29c"
+      },
+      {
+        "entry": "2a1f66be-a83c-42a3-abe6-520a178b56b6",
+        "id": "a2f22afc-c4d5-49b6-9917-2ea7250fb912",
+        "tier": "93d46f41-389e-4bbd-8e26-631f7d8fc3d0"
+      },
+      {
+        "entry": "a70cdcb1-96db-4a97-9921-ae7a7d5ebe16",
+        "id": "a660565e-191c-463c-9c3a-d86c71e28782",
+        "tier": "1ff3a1ec-0351-4b26-8046-889d195d9ec7"
+      },
+      {
+        "entry": "a70cdcb1-96db-4a97-9921-ae7a7d5ebe16",
+        "id": "91cadc82-bc7f-4aa4-8267-5b6f08dad51e",
+        "tier": "3c4bf17b-09e7-4981-90bb-81f49af46798"
+      },
+      {
+        "entry": "a70cdcb1-96db-4a97-9921-ae7a7d5ebe16",
+        "id": "5a4c288e-6aac-451b-a0dc-0e567bdfff98",
+        "tier": "19106a28-5a5d-401e-a2fa-f8afacd9199d"
+      },
+      {
+        "entry": "a70cdcb1-96db-4a97-9921-ae7a7d5ebe16",
+        "id": "bbc50705-828a-4dd2-8d73-a09c8ceee2ef",
+        "tier": "a9373c05-9595-463c-bbb2-f881905145b4"
+      },
+      {
+        "entry": "a70cdcb1-96db-4a97-9921-ae7a7d5ebe16",
+        "id": "1f1b5de2-66de-44a7-94e5-48fd93502c64",
+        "tier": "145467d3-c16c-4041-a5db-3e233fcfa29c"
+      },
+      {
+        "entry": "a70cdcb1-96db-4a97-9921-ae7a7d5ebe16",
+        "id": "4c201d5b-e236-45e5-8652-8a6626474b2b",
+        "tier": "93d46f41-389e-4bbd-8e26-631f7d8fc3d0"
+      },
+      {
+        "entry": "a70cdcb1-96db-4a97-9921-ae7a7d5ebe16",
+        "id": "31f0f127-ecc1-44fc-96b2-3c5e82eb90ce",
+        "tier": "e0040edb-0405-4cd7-a163-ef5499eef7eb"
+      },
+      {
+        "entry": "a70cdcb1-96db-4a97-9921-ae7a7d5ebe16",
+        "id": "3d510ae8-892a-4c9c-9939-f757734ae9cb",
+        "tier": "c0b80e7b-9677-405d-b633-d735389d76dd"
+      },
+      {
+        "entry": "a258e054-5e17-4564-b320-04ffefe87806",
+        "id": "c4e26d73-c657-4805-a62d-e5e175eeb44b",
+        "tier": "1ff3a1ec-0351-4b26-8046-889d195d9ec7"
+      },
+      {
+        "entry": "a258e054-5e17-4564-b320-04ffefe87806",
+        "id": "ce0f0ce1-d017-4e3c-b496-004b2acf2c16",
+        "tier": "3c4bf17b-09e7-4981-90bb-81f49af46798"
+      },
+      {
+        "entry": "a258e054-5e17-4564-b320-04ffefe87806",
+        "id": "bd706b3c-07e3-4a9f-8458-d4e2a1286da4",
+        "tier": "145467d3-c16c-4041-a5db-3e233fcfa29c"
+      },
+      {
+        "entry": "a258e054-5e17-4564-b320-04ffefe87806",
+        "id": "1e5c9ece-1910-4efd-acb4-4397c20cb60e",
+        "tier": "93d46f41-389e-4bbd-8e26-631f7d8fc3d0"
+      },
+      {
+        "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+        "id": "583cdeb5-36f1-4953-beed-bc67d9c9f581",
+        "tier": "1ff3a1ec-0351-4b26-8046-889d195d9ec7"
+      },
+      {
+        "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+        "id": "62aa3974-be15-41eb-85b3-e2316b122576",
+        "tier": "3c4bf17b-09e7-4981-90bb-81f49af46798"
+      },
+      {
+        "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+        "id": "42b6cf60-e0b4-49e2-86fb-f5a5e0900ebd",
+        "tier": "19106a28-5a5d-401e-a2fa-f8afacd9199d"
+      },
+      {
+        "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+        "id": "671fc86e-5b1a-4661-a4ff-5744dfb078d8",
+        "tier": "a9373c05-9595-463c-bbb2-f881905145b4"
+      },
+      {
+        "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+        "id": "f2c16b7e-8cda-4706-a631-5d0f93a39c5a",
+        "tier": "adb9e1a3-f37c-41a6-9193-0149fbf36718"
+      },
+      {
+        "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+        "id": "4997d115-8257-42e1-aba6-968dbe3c3b41",
+        "tier": "f81e03e0-bc41-470c-a62b-864c65605970"
+      },
+      {
+        "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+        "id": "2542ca6c-2429-4851-b305-87f846bc583f",
+        "tier": "145467d3-c16c-4041-a5db-3e233fcfa29c"
+      },
+      {
+        "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+        "id": "8f180d8e-21e6-44c0-b9ff-7e610e301026",
+        "tier": "93d46f41-389e-4bbd-8e26-631f7d8fc3d0"
+      },
+      {
+        "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+        "id": "50dffcc3-c2e4-42e2-a83a-bac1ac7fc93e",
+        "tier": "e0040edb-0405-4cd7-a163-ef5499eef7eb"
+      },
+      {
+        "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+        "id": "7ab394b5-6c79-4fed-b0bd-fd13f96c41bc",
+        "tier": "c0b80e7b-9677-405d-b633-d735389d76dd"
+      },
+      {
+        "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+        "id": "4fe9d88b-2c78-4ab4-b620-bfbead79e091",
+        "tier": "fb6a8a91-e09e-4161-9b5c-348134e1810c"
+      },
+      {
+        "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+        "id": "61951081-dcf8-47d9-a843-fab138f1cba6",
+        "tier": "c3db148b-31f3-486c-b8a0-9d7817a9cc1c"
+      },
+      {
+        "entry": "05e2e572-7eb7-4b24-bb20-b9fb9aa4f93d",
+        "id": "c746e7f4-3337-480f-8384-aa16d72f129d",
+        "tier": "1ff3a1ec-0351-4b26-8046-889d195d9ec7"
+      },
+      {
+        "entry": "05e2e572-7eb7-4b24-bb20-b9fb9aa4f93d",
+        "id": "2579a18b-156f-4210-a7c3-afddb617ee36",
+        "tier": "3c4bf17b-09e7-4981-90bb-81f49af46798"
+      },
+      {
+        "entry": "05e2e572-7eb7-4b24-bb20-b9fb9aa4f93d",
+        "id": "1e73cbb4-f144-41d2-b474-57d2568c157b",
+        "tier": "19106a28-5a5d-401e-a2fa-f8afacd9199d"
+      },
+      {
+        "entry": "05e2e572-7eb7-4b24-bb20-b9fb9aa4f93d",
+        "id": "39a6ed66-6c56-4978-acf1-a92cade62bb9",
+        "tier": "a9373c05-9595-463c-bbb2-f881905145b4"
+      },
+      {
+        "entry": "05e2e572-7eb7-4b24-bb20-b9fb9aa4f93d",
+        "id": "b2804e24-8053-4484-ab7b-b7004ff58d9b",
+        "tier": "145467d3-c16c-4041-a5db-3e233fcfa29c"
+      },
+      {
+        "entry": "05e2e572-7eb7-4b24-bb20-b9fb9aa4f93d",
+        "id": "1e9c06a8-5d95-43da-82ec-100d7f1b9eac",
+        "tier": "93d46f41-389e-4bbd-8e26-631f7d8fc3d0"
+      },
+      {
+        "entry": "05e2e572-7eb7-4b24-bb20-b9fb9aa4f93d",
+        "id": "cdb16771-7957-4220-9d12-717895bcbfa8",
+        "tier": "e0040edb-0405-4cd7-a163-ef5499eef7eb"
+      },
+      {
+        "entry": "05e2e572-7eb7-4b24-bb20-b9fb9aa4f93d",
+        "id": "da40299d-f426-48ae-9bda-f4bb975d0099",
+        "tier": "c0b80e7b-9677-405d-b633-d735389d76dd"
+      }
+    ],
+    "networks": [],
+    "tiers": []
+  },
+  "deleteEntries": true,
+  "deletedEntries": [
+    {
+      "id": "926783f2-f069-4416-b04a-cab72d8b667a",
+      "name": "Albury City Libraries / Albury City Libraries",
+      "sourceId": "69b6f9c5-5c42-54b8-bb2f-75667457b55a",
+      "type": "Branch"
+    },
+    {
+      "id": "1229cd0c-c40c-49a0-98ce-12846cd0046b",
+      "name": "University of Sydney / The University of Sydney Library",
+      "sourceId": "8733dd66-6554-5759-a127-2fe61fefdaf5",
+      "type": "Branch"
+    },
+    {
+      "id": "9335866d-a47d-48aa-a032-c4a8bc7983ba",
+      "name": "Upper Lachlan Shire Library Service / Default branch",
+      "sourceId": "545c8bc3-ec72-5889-bb92-96893c6cfe7c",
+      "type": "Branch"
+    },
+    {
+      "id": "41ced111-d119-4aa2-b681-6093c1a75d8f",
+      "name": "University of New England / Dixson Library",
+      "sourceId": "fbfaf052-3953-5276-be45-0985e680a5e8",
+      "type": "Branch"
+    },
+    {
+      "id": "d26d6976-ad08-49b1-b6e4-64839e3e5354",
+      "name": "Woollahra Library and Information Service / Double Bay Central Library",
+      "sourceId": "e1b30b08-4650-518a-bda1-e49687f5c447",
+      "type": "Branch"
+    },
+    {
+      "id": "bb834f8b-0661-4e00-88d3-8411ce9c0c33",
+      "name": "Queensland Griffith University / Library and Learning Services",
+      "sourceId": "352c2646-0b18-59b1-91e9-38a88cc46278",
+      "type": "Branch"
+    },
+    {
+      "id": "a5de6522-0e76-4fb0-a14c-5918760a4e7a",
+      "name": "University of the Sunshine Coast Library / Default branch",
+      "sourceId": "f9a36051-9bfb-5ec7-bf83-1da646977af4",
+      "type": "Branch"
+    },
+    {
+      "id": "14bd6285-b6bb-4674-9a26-53d0b1f87d37",
+      "name": "Toowoomba Regional Council / Toowoomba City Library",
+      "sourceId": "23971837-c8da-5584-8978-40fc08829f08",
+      "type": "Branch"
+    },
+    {
+      "id": "d69419f3-3fc5-45ed-a896-e37b42f0813e",
+      "name": "University of Adelaide / Barr Smith Library",
+      "sourceId": "e5858aa8-319a-5d84-91b3-f2a1f8bf360f",
+      "type": "Branch"
+    },
+    {
+      "id": "6fc0e166-46d7-40e4-9343-547594c83d08",
+      "name": "University of South Australia Library / Default branch",
+      "sourceId": "89e1e4e4-d77e-5c68-b64b-96bafc830836",
+      "type": "Branch"
+    },
+    {
+      "id": "256f7302-df91-4a5b-8a79-879d1beec00a",
+      "name": "Test TTTA / Circulation Desk",
+      "sourceId": "b497b347-18c7-5d54-aca0-25f7ef216e8d",
+      "type": "Branch"
+    },
+    {
+      "id": "e0849056-6aee-4dbd-bb43-9ba7e91235b9",
+      "name": "Test TTTB / Circulation Desk",
+      "sourceId": "40526dca-c7c8-5991-8efc-4a48d535cc3a",
+      "type": "Branch"
+    },
+    {
+      "id": "fc775090-5fc7-4c69-a9a1-5408da2eb514",
+      "name": "Test TTTC / Circulation Desk",
+      "sourceId": "d6759dbf-254b-5afb-b049-90308d890a88",
+      "type": "Branch"
+    },
+    {
+      "id": "cd92e752-0632-44c1-9a2b-749d1378a2eb",
+      "name": "University of Tasmania Library / Default branch",
+      "sourceId": "edc7c1c9-08d4-501f-a47e-c87345739eba",
+      "type": "Branch"
+    },
+    {
+      "id": "a0698002-1c37-4ff8-8aec-6689c24746b3",
+      "name": "CARM Centre / Default branch",
+      "sourceId": "9e2c9dd8-f5ad-506a-b358-fb57094ae4a5",
+      "type": "Branch"
+    },
+    {
+      "id": "2c3d79a5-ed4f-45a8-82b8-d2bb88b5894c",
+      "name": "Wellington Shire Library / Default branch",
+      "sourceId": "4d536248-0e7f-5b9b-b70b-dc6f8cc348a1",
+      "type": "Branch"
+    },
+    {
+      "id": "9add1a49-5bb7-4baf-ba63-03779a9e33a1",
+      "name": "Museums Victoria / Museums Victoria Library",
+      "sourceId": "9e953640-2e7f-5184-9f8e-e825a4049d10",
+      "type": "Branch"
+    },
+    {
+      "id": "95c7be52-8a0c-4e21-9f18-d668e6f34245",
+      "name": "WorkSafe Victoria / WorkSafe Victoria",
+      "sourceId": "253271d4-e754-5049-8db8-d03962820f07",
+      "type": "Branch"
+    },
+    {
+      "id": "3fa1c34e-5322-4e31-845c-ad33b79924ea",
+      "name": "Wyndham City Council Library Service / Wyndham Library Service",
+      "sourceId": "5cc2d931-e8cd-5ac5-9eae-8770f1ab7fa9",
+      "type": "Branch"
+    },
+    {
+      "id": "1b6822ea-a17c-4701-8a32-8e1123a01e54",
+      "name": "WA Dept of Biodiversity - Conservation and Attractions / Default branch",
+      "sourceId": "d6d5fc7c-063d-5687-842f-64f7d79ec6a8",
+      "type": "Branch"
+    },
+    {
+      "id": "97bd05a6-a74e-4fcb-a476-8ac8be49d3c6",
+      "name": "University of Western Australia Library / Default branch",
+      "sourceId": "ba5b24f4-8f86-505e-8968-b481496b7979",
+      "type": "Branch"
+    },
+    {
+      "id": "5a9e2571-cebd-4ad0-8f20-6dbca55f481d",
+      "name": "Albury City Libraries",
+      "sourceId": "30191a94-9588-5b53-808a-58d843706d1b",
+      "type": "Institution"
+    },
+    {
+      "id": "4debe756-4ffa-467a-b051-cdcd788237cd",
+      "name": "University of Sydney",
+      "sourceId": "8a1be802-4431-5a56-bb17-ea7d23d5a234",
+      "type": "Institution"
+    },
+    {
+      "id": "482337be-bc16-4f08-9146-aa5e3b57ecae",
+      "name": "Upper Lachlan Shire Library Service",
+      "sourceId": "4d32b8cb-63a0-5033-94bd-77ddda1946e1",
+      "type": "Institution"
+    },
+    {
+      "id": "077904b5-40cc-4bfe-adba-4efbe80bd43e",
+      "name": "University of New England",
+      "sourceId": "b10ccbda-b4a5-59be-9560-cf990da11c5b",
+      "type": "Institution"
+    },
+    {
+      "id": "a2c04d94-30b6-4780-977b-87c3ef0d073c",
+      "name": "Woollahra Library and Information Service",
+      "sourceId": "d46ceb6f-166a-5d44-b60c-4a810bbb137d",
+      "type": "Institution"
+    },
+    {
+      "id": "a6bbc69e-f7a9-49b0-963a-f28fc77110d3",
+      "name": "Queensland Griffith University",
+      "sourceId": "375cb706-55d3-5735-9134-3b404ac1afe1",
+      "type": "Institution"
+    },
+    {
+      "id": "04dc4429-c4dc-4e6a-98d7-1ebfc445b878",
+      "name": "University of the Sunshine Coast Library",
+      "sourceId": "f6d16209-cc7b-5b75-91cc-6b660f8052a8",
+      "type": "Institution"
+    },
+    {
+      "id": "98b1740b-3e68-4e99-a61a-217ce5e45dbe",
+      "name": "Toowoomba Regional Council",
+      "sourceId": "5944afd7-6086-58c8-94c2-d6cc89c96335",
+      "type": "Institution"
+    },
+    {
+      "id": "41df64a2-1203-4799-8bad-d4c038613aa8",
+      "name": "University of Adelaide",
+      "sourceId": "4bf192de-0e92-52bb-a636-730cf9addf2b",
+      "type": "Institution"
+    },
+    {
+      "id": "fab33838-59c6-41c8-949b-aa71f2264261",
+      "name": "University of South Australia Library",
+      "sourceId": "1d6d72f8-31de-538f-bf3c-9efa80c6af82",
+      "type": "Institution"
+    },
+    {
+      "id": "80d6fda3-d9b9-4af2-b2ff-43f5f8e28a69",
+      "name": "Test TTTA",
+      "sourceId": "74eb1b77-c00e-560e-a1fd-9a9a848ade6c",
+      "type": "Institution"
+    },
+    {
+      "id": "c03b7fc5-1c41-4c25-94dc-144ceaa1dcf8",
+      "name": "Test TTTB",
+      "sourceId": "ea1c40f0-907f-5c08-8601-fb319bae3a2d",
+      "type": "Institution"
+    },
+    {
+      "id": "813d22bd-195a-4966-bc13-6b597de56bbb",
+      "name": "Test TTTC",
+      "sourceId": "56544812-dabe-5eab-93c2-6dc640d8f74e",
+      "type": "Institution"
+    },
+    {
+      "id": "70cb05c0-c385-4405-b6a1-f8edc268ddb6",
+      "name": "University of Tasmania Library",
+      "sourceId": "4acf0364-f054-533e-9d7d-b1e3be2df8f8",
+      "type": "Institution"
+    },
+    {
+      "id": "1eac4cfd-b57f-47c3-8eb5-4f96f49d266a",
+      "name": "CARM Centre",
+      "sourceId": "6740f25e-cef5-5ba0-a1a8-e0a64bf0d29d",
+      "type": "Institution"
+    },
+    {
+      "id": "51dd24f1-d69e-4503-9703-dbbc278f6dbb",
+      "name": "Wellington Shire Library",
+      "sourceId": "c93376a2-49ff-5d92-9329-1a454a024315",
+      "type": "Institution"
+    },
+    {
+      "id": "e5421667-e2b3-4144-a5f8-191f01411354",
+      "name": "Museums Victoria",
+      "sourceId": "b9a54a13-6c01-5079-a882-acf9d3b1fc6a",
+      "type": "Institution"
+    },
+    {
+      "id": "04a47f75-651d-42e8-898c-d63b711016a5",
+      "name": "WorkSafe Victoria",
+      "sourceId": "dba2b3ea-6eee-530b-95e2-9ce75b4a222b",
+      "type": "Institution"
+    },
+    {
+      "id": "7a0cf574-47fe-4e7b-bdc1-20a9351e2375",
+      "name": "Wyndham City Council Library Service",
+      "sourceId": "ebb4d6d4-af40-51c5-9744-f3dab9c3fc39",
+      "type": "Institution"
+    },
+    {
+      "id": "8a550166-133a-4469-a003-37b3363bc06b",
+      "name": "WA Dept of Biodiversity - Conservation and Attractions",
+      "sourceId": "19527a13-429d-5ba9-b6e1-5df3d3d9e6f0",
+      "type": "Institution"
+    },
+    {
+      "id": "b8a39abc-6124-42ca-8c41-5a934c72b2c9",
+      "name": "University of Western Australia Library",
+      "sourceId": "7a877fa7-9055-5a34-a224-237e5a9d185f",
+      "type": "Institution"
+    }
+  ],
+  "dryRun": false,
+  "finishedAt": "2026-09-14T14:12:08.572839Z",
+  "fixture": "/home/kurt/code/crosslink/illmock/dirmock/directories.json",
+  "localhostReplacement": "http://crosslink-illmock",
+  "localhostUrlsReplaced": 22,
+  "maps": {
+    "entries": {
+      "19527a13-429d-5ba9-b6e1-5df3d3d9e6f0": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+      "1d6d72f8-31de-538f-bf3c-9efa80c6af82": "48b75808-a503-46fe-a194-86cbb5b0dabe",
+      "23971837-c8da-5584-8978-40fc08829f08": "d9b5dea3-e4b4-4e97-a173-20b5993331dc",
+      "253271d4-e754-5049-8db8-d03962820f07": "6484405a-0b45-4073-b7bd-f8bc1c335cec",
+      "30191a94-9588-5b53-808a-58d843706d1b": "24c4ae9e-597a-4a72-a2e4-c56faad99ed3",
+      "352c2646-0b18-59b1-91e9-38a88cc46278": "e46ec532-05db-49dd-8dda-dd3008d517a3",
+      "375cb706-55d3-5735-9134-3b404ac1afe1": "344df680-d91c-49fd-a782-429d1acab65b",
+      "40526dca-c7c8-5991-8efc-4a48d535cc3a": "a06ea643-4d14-496d-bc7f-df841e1be08f",
+      "4acf0364-f054-533e-9d7d-b1e3be2df8f8": "15405bc2-57ec-40ee-8245-e2c8727f216f",
+      "4bf192de-0e92-52bb-a636-730cf9addf2b": "031514d5-f1a6-4167-b011-4c8d220cfb52",
+      "4d32b8cb-63a0-5033-94bd-77ddda1946e1": "1654ad33-bd7c-46d7-90d5-990690c00e9c",
+      "4d536248-0e7f-5b9b-b70b-dc6f8cc348a1": "7223df1f-9de3-46c5-8d22-563b94c7e6ac",
+      "545c8bc3-ec72-5889-bb92-96893c6cfe7c": "596332f3-d0a5-459e-bd28-e585fd119812",
+      "56544812-dabe-5eab-93c2-6dc640d8f74e": "d4b423a1-fc2c-4471-890f-d6a0ae393bba",
+      "5944afd7-6086-58c8-94c2-d6cc89c96335": "beef29a1-c5a0-47b6-9aba-ff26492a7b9d",
+      "5cc2d931-e8cd-5ac5-9eae-8770f1ab7fa9": "f8026c79-d531-46e4-b512-74d0afb9409a",
+      "6740f25e-cef5-5ba0-a1a8-e0a64bf0d29d": "34c0f8e5-e580-46d8-96ac-03a97201f38f",
+      "69b6f9c5-5c42-54b8-bb2f-75667457b55a": "96883e91-a386-4663-a658-d1e01fe6828f",
+      "74eb1b77-c00e-560e-a1fd-9a9a848ade6c": "3997f1ff-fafc-43b4-a402-fae42219d165",
+      "7a877fa7-9055-5a34-a224-237e5a9d185f": "05e2e572-7eb7-4b24-bb20-b9fb9aa4f93d",
+      "8733dd66-6554-5759-a127-2fe61fefdaf5": "176defdf-1495-40c6-beec-f2ae8b1f8ffd",
+      "89e1e4e4-d77e-5c68-b64b-96bafc830836": "09c78a17-a27b-4799-9fdc-d50dbe12eaab",
+      "8a1be802-4431-5a56-bb17-ea7d23d5a234": "ec14f636-8c6c-48d0-bc32-cf15fb3dcc05",
+      "9e2c9dd8-f5ad-506a-b358-fb57094ae4a5": "5b2f7df5-420c-4835-b4b1-411e95b8feb2",
+      "9e953640-2e7f-5184-9f8e-e825a4049d10": "f99ca376-14db-4b97-b48c-fbe67706e83a",
+      "b10ccbda-b4a5-59be-9560-cf990da11c5b": "7b549bb1-d8de-45f8-94c4-3f7f87c99c37",
+      "b497b347-18c7-5d54-aca0-25f7ef216e8d": "968aef96-f3fd-4109-a054-de98c0aeef27",
+      "b9a54a13-6c01-5079-a882-acf9d3b1fc6a": "2a1f66be-a83c-42a3-abe6-520a178b56b6",
+      "ba5b24f4-8f86-505e-8968-b481496b7979": "a6a156d1-45d1-4bd1-a1be-29de134947ec",
+      "c93376a2-49ff-5d92-9329-1a454a024315": "9a75ec27-ec33-47ab-b4c3-97cad0291d26",
+      "d46ceb6f-166a-5d44-b60c-4a810bbb137d": "748d4a17-525c-40ba-95d2-35a0a20f8c01",
+      "d6759dbf-254b-5afb-b049-90308d890a88": "3704f860-739d-4591-b717-ecb0c70fab31",
+      "d6d5fc7c-063d-5687-842f-64f7d79ec6a8": "6886e63f-6c99-4908-9744-713e798cf9e3",
+      "dba2b3ea-6eee-530b-95e2-9ce75b4a222b": "a70cdcb1-96db-4a97-9921-ae7a7d5ebe16",
+      "e1b30b08-4650-518a-bda1-e49687f5c447": "516d8192-2076-4ded-a457-ef0d1fa4571a",
+      "e5858aa8-319a-5d84-91b3-f2a1f8bf360f": "a8f080e2-c7a0-4c79-8ea3-d272bac97782",
+      "ea1c40f0-907f-5c08-8601-fb319bae3a2d": "46dd5e79-4328-4b31-9135-f51334c0c9da",
+      "ebb4d6d4-af40-51c5-9744-f3dab9c3fc39": "a258e054-5e17-4564-b320-04ffefe87806",
+      "edc7c1c9-08d4-501f-a47e-c87345739eba": "fb85485d-12d6-4903-95e2-943b9bfdfeb0",
+      "f6d16209-cc7b-5b75-91cc-6b660f8052a8": "1cdbf584-e30d-4a00-9948-6537df117df5",
+      "f9a36051-9bfb-5ec7-bf83-1da646977af4": "2c4d1658-c1c0-4ad4-b048-7c49179db2f8",
+      "fbfaf052-3953-5276-be45-0985e680a5e8": "aa6f9cb6-1309-4e98-b750-bf3f6d150a5f"
+    },
+    "networks": {
+      "12e1ecd4-2177-52af-ae84-3161e4eceb46": "3f3e4d1d-b8e2-46b3-80b0-04362e3daba8",
+      "1c0346cd-f7e2-565a-9068-55fa6ab29ca6": "b4a36043-2e1a-4baa-bfc8-21295e4345c5",
+      "36801e6d-ed11-5203-99f5-4736107adceb": "945144ab-2999-4907-b7e9-77361591bcdd",
+      "39a8ee32-d038-5c8d-a1a4-a26246f3882f": "d2eddf41-6e8f-44b6-b026-162e57b640a2",
+      "50f29d43-fada-5afe-a185-510833e01af8": "b1b7b5b7-c2e6-4b31-a3ee-174e63daf063",
+      "5dcb365d-ee82-58b6-8b80-591bf891900c": "f2134161-a196-47a2-a3a2-f9c93377d1e8",
+      "5f63ba91-c7a4-5068-ada7-97e34a40f26a": "fc02090d-306b-45cc-bc48-30d6aab888dd",
+      "60612a26-68dc-5a93-a356-b4eee7d4567f": "b1d3927e-843e-4f22-b562-e325a44d832d",
+      "7a763dd2-53ed-580a-bfd4-6cdb8a91eebf": "c96eefec-c4d2-4ad2-8725-cf0ce1ec76ef",
+      "7d0f82de-905f-57de-b041-928fddd0f6b1": "b1b18ce2-b9f9-4301-82e1-534871c4fac3",
+      "84fcd0ff-da15-5285-a45a-5abcc6e1b023": "b633a917-d621-40a3-b7ae-7d682cbf5e0f",
+      "879f4ac5-9a2d-5e2d-94a6-0b72c9e18fff": "524b3554-9030-4d22-afb8-d139aa0e9216",
+      "94964646-3266-588d-90a9-408e40055216": "72e48795-a82f-4b2a-806c-c463deedd3f7",
+      "a6a1451d-c0d0-5416-bfce-bcefa310cc78": "3071aa81-9a82-4b6b-9699-5e77b9d27008",
+      "a9491882-b224-5bbe-a950-fe1b956130fc": "5607c644-b4b4-430a-99b1-f58fb568c1af",
+      "af2e044f-3b22-597e-bd10-20d949ede45c": "633eea56-19eb-4dec-a515-f63894c68c1e",
+      "b191dac1-f9f6-51c1-8599-f6c795d4f6f9": "ce8bee23-7f96-452b-8ffa-66721c029b38",
+      "cf3a39cf-4596-5c23-aa81-3b289c052c08": "f205170a-c1e7-42b8-bffe-c81abab15754",
+      "d4284915-859b-59b2-b6f2-2990340278c2": "bf045acb-9f7a-4f74-91be-974760b30584",
+      "d55f3cff-bf71-500e-85f9-b4a74199c1b1": "6457dfc9-937b-426c-a5b9-8ca9c4c2459d",
+      "dd9217f1-07b5-5545-8bb5-7c9f5fd571fd": "57e381db-b912-4afe-be7b-993bdb6ef952",
+      "de90f131-08e8-5df6-a069-c1c34131884f": "1c78c96e-0ae5-4239-a2c6-4b9dd5a9e0b4",
+      "e4680812-e622-5f8d-b420-36a6bc33e6c8": "d7488e0a-f9ff-444f-9f3b-2c23dd55d108"
+    },
+    "tiers": {
+      "010889d1-1caa-5b52-8fa1-3bcf9c3fa2a2": "c3db148b-31f3-486c-b8a0-9d7817a9cc1c",
+      "09c24f58-3827-5bed-8c5e-9c964dc4078a": "145467d3-c16c-4041-a5db-3e233fcfa29c",
+      "23e7ec42-affc-57db-b383-770f5668ffe5": "3c4bf17b-09e7-4981-90bb-81f49af46798",
+      "2ac07f70-009e-5525-9d77-598810d7ba54": "a9373c05-9595-463c-bbb2-f881905145b4",
+      "406f6876-3aef-596f-a4fa-fa5c35e22a17": "adb9e1a3-f37c-41a6-9193-0149fbf36718",
+      "53c416eb-0c78-5e30-8268-b3e9233e160a": "e0040edb-0405-4cd7-a163-ef5499eef7eb",
+      "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d": "93d46f41-389e-4bbd-8e26-631f7d8fc3d0",
+      "6bb0026f-8127-528f-bb39-30d8d90e47bd": "1ff3a1ec-0351-4b26-8046-889d195d9ec7",
+      "870badb7-fd8a-5a20-85ac-7e3cef2e6c4f": "f81e03e0-bc41-470c-a62b-864c65605970",
+      "940d6a2e-7e5d-5841-83ae-0152312cdfe7": "fb6a8a91-e09e-4161-9b5c-348134e1810c",
+      "a9505ca0-31b1-5bba-8772-c3f3ef536b48": "c0b80e7b-9677-405d-b633-d735389d76dd",
+      "e6aa9fc2-652d-56e9-a457-a8478b2b9412": "19106a28-5a5d-401e-a2fa-f8afacd9199d"
+    }
+  },
+  "patchedEntries": [
+    {
+      "entry": "24c4ae9e-597a-4a72-a2e4-c56faad99ed3",
+      "field": "symbols"
+    },
+    {
+      "entry": "24c4ae9e-597a-4a72-a2e4-c56faad99ed3",
+      "field": "lmsConfig"
+    },
+    {
+      "entry": "24c4ae9e-597a-4a72-a2e4-c56faad99ed3",
+      "field": "endpoints"
+    },
+    {
+      "entry": "ec14f636-8c6c-48d0-bc32-cf15fb3dcc05",
+      "field": "symbols"
+    },
+    {
+      "entry": "ec14f636-8c6c-48d0-bc32-cf15fb3dcc05",
+      "field": "endpoints"
+    },
+    {
+      "entry": "1654ad33-bd7c-46d7-90d5-990690c00e9c",
+      "field": "symbols"
+    },
+    {
+      "entry": "1654ad33-bd7c-46d7-90d5-990690c00e9c",
+      "field": "endpoints"
+    },
+    {
+      "entry": "7b549bb1-d8de-45f8-94c4-3f7f87c99c37",
+      "field": "symbols"
+    },
+    {
+      "entry": "7b549bb1-d8de-45f8-94c4-3f7f87c99c37",
+      "field": "endpoints"
+    },
+    {
+      "entry": "748d4a17-525c-40ba-95d2-35a0a20f8c01",
+      "field": "symbols"
+    },
+    {
+      "entry": "748d4a17-525c-40ba-95d2-35a0a20f8c01",
+      "field": "endpoints"
+    },
+    {
+      "entry": "344df680-d91c-49fd-a782-429d1acab65b",
+      "field": "symbols"
+    },
+    {
+      "entry": "344df680-d91c-49fd-a782-429d1acab65b",
+      "field": "endpoints"
+    },
+    {
+      "entry": "1cdbf584-e30d-4a00-9948-6537df117df5",
+      "field": "symbols"
+    },
+    {
+      "entry": "1cdbf584-e30d-4a00-9948-6537df117df5",
+      "field": "endpoints"
+    },
+    {
+      "entry": "beef29a1-c5a0-47b6-9aba-ff26492a7b9d",
+      "field": "symbols"
+    },
+    {
+      "entry": "beef29a1-c5a0-47b6-9aba-ff26492a7b9d",
+      "field": "endpoints"
+    },
+    {
+      "entry": "031514d5-f1a6-4167-b011-4c8d220cfb52",
+      "field": "symbols"
+    },
+    {
+      "entry": "031514d5-f1a6-4167-b011-4c8d220cfb52",
+      "field": "endpoints"
+    },
+    {
+      "entry": "48b75808-a503-46fe-a194-86cbb5b0dabe",
+      "field": "symbols"
+    },
+    {
+      "entry": "48b75808-a503-46fe-a194-86cbb5b0dabe",
+      "field": "endpoints"
+    },
+    {
+      "entry": "3997f1ff-fafc-43b4-a402-fae42219d165",
+      "field": "symbols"
+    },
+    {
+      "entry": "3997f1ff-fafc-43b4-a402-fae42219d165",
+      "field": "endpoints"
+    },
+    {
+      "entry": "46dd5e79-4328-4b31-9135-f51334c0c9da",
+      "field": "symbols"
+    },
+    {
+      "entry": "46dd5e79-4328-4b31-9135-f51334c0c9da",
+      "field": "endpoints"
+    },
+    {
+      "entry": "d4b423a1-fc2c-4471-890f-d6a0ae393bba",
+      "field": "symbols"
+    },
+    {
+      "entry": "d4b423a1-fc2c-4471-890f-d6a0ae393bba",
+      "field": "endpoints"
+    },
+    {
+      "entry": "15405bc2-57ec-40ee-8245-e2c8727f216f",
+      "field": "symbols"
+    },
+    {
+      "entry": "15405bc2-57ec-40ee-8245-e2c8727f216f",
+      "field": "endpoints"
+    },
+    {
+      "entry": "34c0f8e5-e580-46d8-96ac-03a97201f38f",
+      "field": "symbols"
+    },
+    {
+      "entry": "34c0f8e5-e580-46d8-96ac-03a97201f38f",
+      "field": "endpoints"
+    },
+    {
+      "entry": "9a75ec27-ec33-47ab-b4c3-97cad0291d26",
+      "field": "symbols"
+    },
+    {
+      "entry": "9a75ec27-ec33-47ab-b4c3-97cad0291d26",
+      "field": "endpoints"
+    },
+    {
+      "entry": "2a1f66be-a83c-42a3-abe6-520a178b56b6",
+      "field": "symbols"
+    },
+    {
+      "entry": "2a1f66be-a83c-42a3-abe6-520a178b56b6",
+      "field": "endpoints"
+    },
+    {
+      "entry": "a70cdcb1-96db-4a97-9921-ae7a7d5ebe16",
+      "field": "symbols"
+    },
+    {
+      "entry": "a70cdcb1-96db-4a97-9921-ae7a7d5ebe16",
+      "field": "endpoints"
+    },
+    {
+      "entry": "a258e054-5e17-4564-b320-04ffefe87806",
+      "field": "symbols"
+    },
+    {
+      "entry": "a258e054-5e17-4564-b320-04ffefe87806",
+      "field": "endpoints"
+    },
+    {
+      "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+      "field": "symbols"
+    },
+    {
+      "entry": "bc3b63cd-a9f5-4282-b2a6-7b46b12582c5",
+      "field": "endpoints"
+    },
+    {
+      "entry": "05e2e572-7eb7-4b24-bb20-b9fb9aa4f93d",
+      "field": "symbols"
+    },
+    {
+      "entry": "05e2e572-7eb7-4b24-bb20-b9fb9aa4f93d",
+      "field": "endpoints"
+    }
+  ],
+  "phase": "verifying",
+  "piecemeal": true,
+  "planned": {
+    "entries": 42,
+    "entriesToDelete": 42,
+    "localhostUrlsReplaced": 22,
+    "networkMemberships": 94,
+    "networks": 23,
+    "reusedEntries": 0,
+    "reusedNetworks": 23,
+    "reusedTiers": 12,
+    "tierMemberships": 104,
+    "tiers": 12
+  },
+  "reused": {
+    "entries": [],
+    "entryNetworks": [],
+    "entryTiers": [],
+    "networks": [
+      {
+        "id": "5607c644-b4b4-430a-99b1-f58fb568c1af",
+        "name": "NSW & ACT",
+        "sourceIds": [
+          "a9491882-b224-5bbe-a950-fe1b956130fc"
+        ]
+      },
+      {
+        "id": "6457dfc9-937b-426c-a5b9-8ca9c4c2459d",
+        "name": "NSW & ACT Higher Education",
+        "sourceIds": [
+          "d55f3cff-bf71-500e-85f9-b4a74199c1b1"
+        ]
+      },
+      {
+        "id": "d7488e0a-f9ff-444f-9f3b-2c23dd55d108",
+        "name": "NSW & ACT Public",
+        "sourceIds": [
+          "e4680812-e622-5f8d-b420-36a6bc33e6c8"
+        ]
+      },
+      {
+        "id": "bf045acb-9f7a-4f74-91be-974760b30584",
+        "name": "National",
+        "sourceIds": [
+          "d4284915-859b-59b2-b6f2-2990340278c2"
+        ]
+      },
+      {
+        "id": "72e48795-a82f-4b2a-806c-c463deedd3f7",
+        "name": "National Academic and Research",
+        "sourceIds": [
+          "94964646-3266-588d-90a9-408e40055216"
+        ]
+      },
+      {
+        "id": "1c78c96e-0ae5-4239-a2c6-4b9dd5a9e0b4",
+        "name": "Northern Territory",
+        "sourceIds": [
+          "de90f131-08e8-5df6-a069-c1c34131884f"
+        ]
+      },
+      {
+        "id": "3071aa81-9a82-4b6b-9699-5e77b9d27008",
+        "name": "Queensland",
+        "sourceIds": [
+          "a6a1451d-c0d0-5416-bfce-bcefa310cc78"
+        ]
+      },
+      {
+        "id": "d2eddf41-6e8f-44b6-b026-162e57b640a2",
+        "name": "Queensland Health",
+        "sourceIds": [
+          "39a8ee32-d038-5c8d-a1a4-a26246f3882f"
+        ]
+      },
+      {
+        "id": "f2134161-a196-47a2-a3a2-f9c93377d1e8",
+        "name": "Queensland Higher Education",
+        "sourceIds": [
+          "5dcb365d-ee82-58b6-8b80-591bf891900c"
+        ]
+      },
+      {
+        "id": "f205170a-c1e7-42b8-bffe-c81abab15754",
+        "name": "Queensland Public",
+        "sourceIds": [
+          "cf3a39cf-4596-5c23-aa81-3b289c052c08"
+        ]
+      },
+      {
+        "id": "ce8bee23-7f96-452b-8ffa-66721c029b38",
+        "name": "South Australia",
+        "sourceIds": [
+          "b191dac1-f9f6-51c1-8599-f6c795d4f6f9"
+        ]
+      },
+      {
+        "id": "fc02090d-306b-45cc-bc48-30d6aab888dd",
+        "name": "South Australia Higher Education",
+        "sourceIds": [
+          "5f63ba91-c7a4-5068-ada7-97e34a40f26a"
+        ]
+      },
+      {
+        "id": "c96eefec-c4d2-4ad2-8725-cf0ce1ec76ef",
+        "name": "Sydney Metro",
+        "sourceIds": [
+          "7a763dd2-53ed-580a-bfd4-6cdb8a91eebf"
+        ]
+      },
+      {
+        "id": "b1b18ce2-b9f9-4301-82e1-534871c4fac3",
+        "name": "Tasmania",
+        "sourceIds": [
+          "7d0f82de-905f-57de-b041-928fddd0f6b1"
+        ]
+      },
+      {
+        "id": "57e381db-b912-4afe-be7b-993bdb6ef952",
+        "name": "Tasmania Health",
+        "sourceIds": [
+          "dd9217f1-07b5-5545-8bb5-7c9f5fd571fd"
+        ]
+      },
+      {
+        "id": "3f3e4d1d-b8e2-46b3-80b0-04362e3daba8",
+        "name": "Tasmania Public",
+        "sourceIds": [
+          "12e1ecd4-2177-52af-ae84-3161e4eceb46"
+        ]
+      },
+      {
+        "id": "b633a917-d621-40a3-b7ae-7d682cbf5e0f",
+        "name": "Victoria",
+        "sourceIds": [
+          "84fcd0ff-da15-5285-a45a-5abcc6e1b023"
+        ]
+      },
+      {
+        "id": "b1d3927e-843e-4f22-b562-e325a44d832d",
+        "name": "Victoria Govt & Arts",
+        "sourceIds": [
+          "60612a26-68dc-5a93-a356-b4eee7d4567f"
+        ]
+      },
+      {
+        "id": "633eea56-19eb-4dec-a515-f63894c68c1e",
+        "name": "Victoria Health",
+        "sourceIds": [
+          "af2e044f-3b22-597e-bd10-20d949ede45c"
+        ]
+      },
+      {
+        "id": "524b3554-9030-4d22-afb8-d139aa0e9216",
+        "name": "Victoria Higher Education",
+        "sourceIds": [
+          "879f4ac5-9a2d-5e2d-94a6-0b72c9e18fff"
+        ]
+      },
+      {
+        "id": "b1b7b5b7-c2e6-4b31-a3ee-174e63daf063",
+        "name": "Victoria Public",
+        "sourceIds": [
+          "50f29d43-fada-5afe-a185-510833e01af8"
+        ]
+      },
+      {
+        "id": "945144ab-2999-4907-b7e9-77361591bcdd",
+        "name": "Western Australia",
+        "sourceIds": [
+          "36801e6d-ed11-5203-99f5-4736107adceb"
+        ]
+      },
+      {
+        "id": "b4a36043-2e1a-4baa-bfc8-21295e4345c5",
+        "name": "Western Australia Higher Education",
+        "sourceIds": [
+          "1c0346cd-f7e2-565a-9068-55fa6ab29ca6"
+        ]
+      }
+    ],
+    "tiers": [
+      {
+        "id": "93d46f41-389e-4bbd-8e26-631f7d8fc3d0",
+        "name": "Premium Pay for Peer - Core Copy",
+        "sourceIds": [
+          "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d"
+        ]
+      },
+      {
+        "id": "145467d3-c16c-4041-a5db-3e233fcfa29c",
+        "name": "Premium Pay for Peer - Core Loan",
+        "sourceIds": [
+          "09c24f58-3827-5bed-8c5e-9c964dc4078a"
+        ]
+      },
+      {
+        "id": "c3db148b-31f3-486c-b8a0-9d7817a9cc1c",
+        "name": "Premium Pay for Peer - Express Copy",
+        "sourceIds": [
+          "010889d1-1caa-5b52-8fa1-3bcf9c3fa2a2"
+        ]
+      },
+      {
+        "id": "fb6a8a91-e09e-4161-9b5c-348134e1810c",
+        "name": "Premium Pay for Peer - Express Loan",
+        "sourceIds": [
+          "940d6a2e-7e5d-5841-83ae-0152312cdfe7"
+        ]
+      },
+      {
+        "id": "c0b80e7b-9677-405d-b633-d735389d76dd",
+        "name": "Premium Pay for Peer - Rush Copy",
+        "sourceIds": [
+          "a9505ca0-31b1-5bba-8772-c3f3ef536b48"
+        ]
+      },
+      {
+        "id": "e0040edb-0405-4cd7-a163-ef5499eef7eb",
+        "name": "Premium Pay for Peer - Rush Loan",
+        "sourceIds": [
+          "53c416eb-0c78-5e30-8268-b3e9233e160a"
+        ]
+      },
+      {
+        "id": "3c4bf17b-09e7-4981-90bb-81f49af46798",
+        "name": "Reciprocal Peer to Peer - Core Copy",
+        "sourceIds": [
+          "23e7ec42-affc-57db-b383-770f5668ffe5"
+        ]
+      },
+      {
+        "id": "1ff3a1ec-0351-4b26-8046-889d195d9ec7",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "sourceIds": [
+          "6bb0026f-8127-528f-bb39-30d8d90e47bd"
+        ]
+      },
+      {
+        "id": "f81e03e0-bc41-470c-a62b-864c65605970",
+        "name": "Reciprocal Peer to Peer - Express Copy",
+        "sourceIds": [
+          "870badb7-fd8a-5a20-85ac-7e3cef2e6c4f"
+        ]
+      },
+      {
+        "id": "adb9e1a3-f37c-41a6-9193-0149fbf36718",
+        "name": "Reciprocal Peer to Peer - Express Loan",
+        "sourceIds": [
+          "406f6876-3aef-596f-a4fa-fa5c35e22a17"
+        ]
+      },
+      {
+        "id": "a9373c05-9595-463c-bbb2-f881905145b4",
+        "name": "Reciprocal Peer to Peer - Rush Copy",
+        "sourceIds": [
+          "2ac07f70-009e-5525-9d77-598810d7ba54"
+        ]
+      },
+      {
+        "id": "19106a28-5a5d-401e-a2fa-f8afacd9199d",
+        "name": "Reciprocal Peer to Peer - Rush Loan",
+        "sourceIds": [
+          "e6aa9fc2-652d-56e9-a457-a8478b2b9412"
+        ]
+      }
+    ]
+  },
+  "schemaVersion": 1,
+  "startedAt": "2026-09-14T14:11:46.585922Z",
+  "status": "succeeded",
+  "tenant": "consortial"
+}

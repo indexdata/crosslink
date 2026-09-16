@@ -10,9 +10,19 @@ on:
 
 jobs:
   bruno:
-    name: Bruno E2E
+    name: Bruno E2E (${{ matrix.directory }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - directory: mock
+            compose_files: -f bruno/docker-compose.yml
+          - directory: real
+            compose_files: -f bruno/docker-compose.yml -f bruno/docker-compose-directory.yml
+    env:
+      COMPOSE_FILE_ARGS: ${{ matrix.compose_files }}
     steps:
     - name: Checkout repository
       uses: actions/checkout@v7
@@ -32,6 +42,7 @@ jobs:
         cache-dependency-path: |
           go.work.sum
           broker/go.sum
+          directory/go.sum
           illmock/go.sum
 
     - name: Generate sources
@@ -42,8 +53,23 @@ jobs:
       with:
         node-version: 22
 
+    - name: Test Directory seeder
+      if: matrix.directory == 'real'
+      run: python3 -B -m unittest -v bruno/test_seed_directory.py
+
+    - name: Validate Compose configuration
+      run: docker compose $COMPOSE_FILE_ARGS config -q
+
     - name: Start Crosslink stack
-      run: docker compose -f bruno/docker-compose.yml up -d --build
+      run: docker compose $COMPOSE_FILE_ARGS up -d --build
+
+    - name: Check Directory seed result
+      if: matrix.directory == 'real'
+      run: |
+        seed_container=$(docker compose $COMPOSE_FILE_ARGS ps -aq directory-seed)
+        test -n "$seed_container"
+        test "$(docker inspect --format '{{.State.Status}}' "$seed_container")" = exited
+        test "$(docker inspect --format '{{.State.ExitCode}}' "$seed_container")" -eq 0
 
     - name: Wait for broker readiness
       run: |
@@ -54,8 +80,8 @@ jobs:
           sleep 2
         done
         echo "Broker did not become ready in time"
-        docker compose -f bruno/docker-compose.yml ps
-        docker compose -f bruno/docker-compose.yml logs --no-color broker postgres illmock
+        docker compose $COMPOSE_FILE_ARGS ps
+        docker compose $COMPOSE_FILE_ARGS logs --no-color
         exit 1
 
     - name: Run Bruno collection (headless)
@@ -67,8 +93,8 @@ jobs:
 
     - name: Print container logs on failure
       if: failure()
-      run: docker compose -f bruno/docker-compose.yml logs --no-color
+      run: docker compose $COMPOSE_FILE_ARGS logs --no-color
 
     - name: Stop Crosslink stack
       if: always()
-      run: docker compose -f bruno/docker-compose.yml down -v --remove-orphans
+      run: docker compose $COMPOSE_FILE_ARGS down -v --remove-orphans

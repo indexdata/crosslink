@@ -1,0 +1,32 @@
+{
+  "allowExisting": true,
+  "baseUrl": "https://reshare-2-okapi.folio-dev-us-east-1-1.folio-dev.indexdata.com/directory",
+  "consortiumId": "0b15a971-95eb-464f-918b-eeba5e48d73b",
+  "created": {
+    "entries": [],
+    "entryNetworks": [],
+    "entryTiers": [],
+    "networks": [],
+    "tiers": []
+  },
+  "dryRun": false,
+  "error": "target collisions detected: entry name 'Albury City Libraries', entry symbol ISIL:AU-NALB",
+  "finishedAt": "2026-09-12T18:06:56.852080Z",
+  "fixture": "/home/kurt/code/crosslink/illmock/dirmock/directories.json",
+  "maps": {
+    "entries": {},
+    "networks": {},
+    "tiers": {}
+  },
+  "patchedEntries": [],
+  "phase": "preflight",
+  "piecemeal": true,
+  "reused": {
+    "networks": [],
+    "tiers": []
+  },
+  "schemaVersion": 1,
+  "startedAt": "2026-09-12T18:06:56.554996Z",
+  "status": "failed",
+  "tenant": "consortial"
+}
