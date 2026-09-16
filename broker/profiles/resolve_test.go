@@ -93,15 +93,15 @@ func TestFallbackAndProfileOnly(t *testing.T) {
 	require.Nil(t, e.LMS)
 	require.Nil(t, e.Catalog.Zoom)
 }
-func TestLegacyParserPrecedence(t *testing.T) {
+func TestZoomParserSyntax(t *testing.T) {
 	for _, profile := range []string{"Generic", "Koha", "Alma"} {
 		for _, tc := range []struct {
 			name, holdings, parser, syntax string
 		}{
-			{"marc first", `"marc":{},"opac":{"availabilityRule":"bad"},"reservoir":{},"marc21plus1":{}`, "marc", "usmarc"},
-			{"opac second", `"opac":{},"reservoir":{},"marc21plus1":{}`, "opac", "opac"},
-			{"reservoir third", `"reservoir":{},"marc21plus1":{}`, "reservoir", "usmarc"},
-			{"marc21plus1 last", `"marc21plus1":{}`, "marc21plus1", "xml"},
+			{"marc", `"marc":{}`, "marc", "usmarc"},
+			{"opac", `"opac":{}`, "opac", "opac"},
+			{"reservoir", `"reservoir":{}`, "reservoir", "usmarc"},
+			{"marc21plus1", `"marc21plus1":{}`, "marc21plus1", "xml"},
 		} {
 			t.Run(profile+"/"+tc.name, func(t *testing.T) {
 				raw := entry(t, `{"catalogConfig":{"profile":"`+profile+`","zoom":{"address":"catalog:210"},"holdingsFormat":{`+tc.holdings+`}}}`)
@@ -123,6 +123,26 @@ func TestLegacyParserPrecedence(t *testing.T) {
 		}
 	}
 }
+func TestRejectConflictingHoldingsParsers(t *testing.T) {
+	parsers := []string{"marc", "opac", "reservoir", "marc21plus1"}
+	for _, profile := range []string{"Generic", "Alma", "Sierra", "Koha", "FOLIO"} {
+		for i, first := range parsers {
+			for _, second := range parsers[i+1:] {
+				t.Run(profile+"/"+first+"/"+second, func(t *testing.T) {
+					raw := entry(t, `{"catalogConfig":{"profile":"`+profile+`","holdingsFormat":{"`+first+`":{},"`+second+`":{}}}}`)
+					before, err := json.Marshal(raw)
+					require.NoError(t, err)
+					_, err = Resolve(raw)
+					require.ErrorContains(t, err, "exactly one parser")
+					after, err := json.Marshal(raw)
+					require.NoError(t, err)
+					require.JSONEq(t, string(before), string(after))
+				})
+			}
+		}
+	}
+}
+
 func TestSruSchemaDefaults(t *testing.T) {
 	for _, profile := range []string{"Generic", "Koha", "Alma"} {
 		for _, tc := range []struct{ parser, schema string }{
