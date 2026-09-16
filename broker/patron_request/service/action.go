@@ -228,7 +228,7 @@ func (a *PatronRequestActionService) executeAction(ctx common.ExtendedContext, e
 		execResult := actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
 		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execResult)
 	}
-	if action == LenderActionShip {
+	if action == LenderActionShip || action == LenderActionAcceptRenewal {
 		if supplied, ok := event.EventData.CustomData["dueDate"]; ok {
 			value, valid := supplied.(string)
 			if !valid || strings.TrimSpace(value) == "" {

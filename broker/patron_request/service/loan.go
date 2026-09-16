@@ -182,18 +182,21 @@ func (a *PatronRequestActionService) renewalLenderRequest(ctx common.ExtendedCon
 	answer, status := iso18626.TypeYesNoN, iso18626.TypeStatusOverdue
 	due := pr.DueAt
 	if accept {
-		entry, err := a.supplierLoanEntry(ctx, pr)
-		if err != nil {
-			return loanActionError(ctx, pr, err)
+		due = pgtype.Timestamptz{}
+		if params.DueDate != "" {
+			entry, err := a.supplierLoanEntry(ctx, pr)
+			if err != nil {
+				return loanActionError(ctx, pr, err)
+			}
+			date, err := parseLoanDate(params.DueDate, entry)
+			if err != nil {
+				return loanActionError(ctx, pr, err)
+			}
+			if date == nil || !date.After(time.Now()) {
+				return loanActionError(ctx, pr, fmt.Errorf("supplied renewal dueDate must be in the future"))
+			}
+			due = pgtype.Timestamptz{Time: *date, Valid: true}
 		}
-		date, err := parseLoanDate(params.DueDate, entry)
-		if err != nil {
-			return loanActionError(ctx, pr, err)
-		}
-		if date == nil || !date.After(time.Now()) {
-			return loanActionError(ctx, pr, fmt.Errorf("accept-renewal requires a future dueDate"))
-		}
-		due = pgtype.Timestamptz{Time: *date, Valid: true}
 		answer, status = iso18626.TypeYesNoY, iso18626.TypeStatusLoaned
 	}
 	sendStatus, result, err := a.messageSender.sendSupplyingAgencyMessage(ctx, eventID, pr,

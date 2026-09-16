@@ -884,7 +884,7 @@ stateModels:
           - name: renew
         actions:
           - name: accept-renewal
-            desc: Approve renewal with a new dueDate
+            desc: Approve renewal with an optional dueDate; omit for an open-ended loan
             transitions:
               success: RENEWED
           - name: reject-renewal

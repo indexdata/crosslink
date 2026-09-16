@@ -362,6 +362,58 @@ func TestSupplierOverdueAndRenewalSendBeforeTransition(t *testing.T) {
 	}
 }
 
+func TestSupplierRenewalOptionalDueDate(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		params     map[string]any
+		failedSend bool
+		fail       bool
+	}{
+		{name: "omitted date creates open-ended renewal"},
+		{name: "failed send retains previous date", failedSend: true, fail: true},
+		{name: "empty date", params: map[string]any{"dueDate": ""}, fail: true},
+		{name: "blank date", params: map[string]any{"dueDate": " "}, fail: true},
+		{name: "null date", params: map[string]any{"dueDate": nil}, fail: true},
+		{name: "wrong type", params: map[string]any{"dueDate": 42}, fail: true},
+		{name: "malformed date", params: map[string]any{"dueDate": "invalid"}, fail: true},
+		{name: "past date", params: map[string]any{"dueDate": "2000-01-01T00:00:00Z"}, fail: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pr := testLoan()
+			pr.State = LenderStateRenewalPending
+			pr.DueAt = pgtype.Timestamptz{Time: time.Now().UTC().Add(-time.Hour), Valid: true}
+			pr.IllResponse.StatusInfo.DueDate = isoLoanDate(pr.DueAt)
+			repo := &MockPrRepo{savedPr: pr}
+			sender := &MockIso18626Handler{failSupplyingAgencyMessage: tc.failedSend}
+			svc := CreatePatronRequestActionService(repo, new(IllRepoMock), new(MockEventBus), sender, nil, nil, nil, nil)
+			action := LenderActionAcceptRenewal
+			event := events.Event{ID: "event", PatronRequestID: pr.ID, EventData: events.EventData{
+				CommonEventData: events.CommonEventData{Action: &action}, CustomData: tc.params,
+			}}
+			status, _ := svc.handleInvokeAction(appCtx, event)
+			if tc.fail {
+				require.NotEqual(t, events.EventStatusSuccess, status)
+				assert.Equal(t, LenderStateRenewalPending, repo.savedPr.State)
+				assert.Equal(t, pr.DueAt, repo.savedPr.DueAt)
+				assert.Equal(t, pr.IllResponse, repo.savedPr.IllResponse)
+				if !tc.failedSend {
+					assert.Nil(t, sender.lastSupplyingAgencyMessage)
+				}
+				return
+			}
+			require.Equal(t, events.EventStatusSuccess, status)
+			assert.Equal(t, LenderStateRenewed, repo.savedPr.State)
+			assert.Equal(t, pgtype.Timestamptz{}, repo.savedPr.DueAt)
+			assert.Nil(t, repo.savedPr.IllResponse.StatusInfo.DueDate)
+			require.NotNil(t, sender.lastSupplyingAgencyMessage)
+			assert.Nil(t, sender.lastSupplyingAgencyMessage.StatusInfo.DueDate)
+			assert.Equal(t, iso18626.TypeStatusLoaned, sender.lastSupplyingAgencyMessage.StatusInfo.Status)
+			assert.Equal(t, iso18626.TypeReasonForMessageRenewResponse, sender.lastSupplyingAgencyMessage.MessageInfo.ReasonForMessage)
+			assert.Equal(t, loanYesNo(iso18626.TypeYesNoY), sender.lastSupplyingAgencyMessage.MessageInfo.AnswerYesNo)
+		})
+	}
+}
+
 func TestSupplierOverdueUsesConfiguredStateAndRechecksDueDate(t *testing.T) {
 	for _, tc := range []struct {
 		name string
