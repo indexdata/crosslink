@@ -1224,12 +1224,12 @@ func (a *PatronRequestActionService) createSuccessorBorrowingRequest(ctx common.
 	successorPr.IllRequest.Header.RequestingAgencyRequestId = successorPr.ID
 	if !retry {
 		successorPr.IllRequest.Header.SupplyingAgencyRequestId = ""
-		if successorPr.IllRequest.ServiceInfo == nil {
-			successorPr.IllRequest.ServiceInfo = &iso18626.ServiceInfo{}
+		// Preserve nil service info so legacy requests keep the default loan workflow.
+		if successorPr.IllRequest.ServiceInfo != nil {
+			requestType := iso18626.TypeRequestTypeNew
+			successorPr.IllRequest.ServiceInfo.RequestType = &requestType
+			successorPr.IllRequest.ServiceInfo.RequestingAgencyPreviousRequestId = ""
 		}
-		requestType := iso18626.TypeRequestTypeNew
-		successorPr.IllRequest.ServiceInfo.RequestType = &requestType
-		successorPr.IllRequest.ServiceInfo.RequestingAgencyPreviousRequestId = ""
 	}
 	successorPr.IllRequest.Header.Timestamp = utils.XSDDateTime{Time: successorPr.CreatedAt.Time}
 	successorPr.PrevReqID = getDbTextPtr(&pr.ID)

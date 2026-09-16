@@ -121,3 +121,36 @@ func TestSendLinkedRequestFailsWhenPreviousCannotBeLoaded(t *testing.T) {
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Nil(t, result)
 }
+
+func TestLegacyRerequestStartsInitialWorkflow(t *testing.T) {
+	for _, state := range []pr_db.PatronRequestState{BorrowerStateCancelled, BorrowerStateUnfilled} {
+		t.Run(string(state), func(t *testing.T) {
+			repo := new(MockPrRepo)
+			bus := new(MockEventBus)
+			bus.On("ProcessExclusiveTask", "REQ1-2-task-1").Return(events.Event{EventStatus: events.EventStatusSuccess}, nil).Once()
+			repo.On("GetPatronRequestById", "REQ1-2").Return(pr_db.PatronRequest{State: BorrowerStateValidated}, nil).Once()
+			original := pr_db.PatronRequest{
+				ID: "REQ1-1", Side: SideBorrowing, State: state, TerminalState: true,
+				RequesterSymbol: getDbText("ISIL:REQ1"),
+			}
+			service := CreatePatronRequestActionService(repo, nil, bus, new(MockIso18626Handler), nil, nil, nil, nil)
+			result := service.createSuccessorBorrowingRequest(appCtx, original, false)
+			require.Equal(t, events.EventStatusSuccess, result.status)
+			next := result.successorPr
+			assert.Nil(t, next.IllRequest.ServiceInfo)
+			require.NoError(t, service.RunAutoActionsOnStateEntry(appCtx, next, nil, ""))
+			require.Len(t, bus.createdTaskData, 1)
+			assert.Equal(t, BorrowerActionValidatePatron, *bus.createdTaskData[0].Action)
+			bus.AssertExpectations(t)
+			repo.AssertExpectations(t)
+
+			repo.On("GetPatronRequestById", original.ID).Return(original, nil).Once()
+			status, sent, err := service.messageSender.sendBorrowingRequest(appCtx, "send", next, next.IllRequest)
+			require.NoError(t, err)
+			require.Equal(t, events.EventStatusSuccess, status)
+			assert.Equal(t, iso18626.TypeRequestTypeNew, *sent.OutgoingMessage.Request.ServiceInfo.RequestType)
+			assert.Empty(t, sent.OutgoingMessage.Request.ServiceInfo.RequestingAgencyPreviousRequestId)
+			assert.Nil(t, next.IllRequest.ServiceInfo)
+		})
+	}
+}
