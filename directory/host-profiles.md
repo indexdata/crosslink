@@ -158,7 +158,7 @@ namespace and normalization overrides also support null to resume inheritance.
 Partial holdings PATCHes merge stored overrides for the same parser and replace
 them when switching parser.
 
-Migration `008_host_profiles` adds nullable profile/protocol columns and a JSON
+Migration `009_host_profiles` adds nullable profile/protocol columns and a JSON
 holdings configuration. It preserves existing explicit holdings settings. It does
 not select profiles or copy preset values into any row. Existing entries without
 host profiles continue to resolve as Generic. Values previously materialized by
