@@ -61,7 +61,7 @@ func (s *LookupAdapterFactory) GetAdapterRequester(ctx common.ExtendedContext, r
 	if s.lookupAdapterCreator == nil {
 		return nil, dirapi.Entry{}, fmt.Errorf("lookup adapter factory misconfigured: lookupAdapterCreator is nil")
 	}
-	lookupAdapter, err := s.lookupAdapterCreator.GetAdapter(peer)
+	lookupAdapter, err := s.lookupAdapterCreator.GetAdapter(ctx, peer)
 	if err != nil {
 		return nil, dirapi.Entry{}, fmt.Errorf("failed to get adapter for peer: %w", err)
 	}
@@ -72,5 +72,5 @@ func (s *LookupAdapterFactory) GetAdapterSupplier(ctx common.ExtendedContext, su
 	if s.lookupAdapterCreator == nil {
 		return nil, fmt.Errorf("lookup adapter factory misconfigured: lookupAdapterCreator is nil")
 	}
-	return s.lookupAdapterCreator.GetAdapter(supplier)
+	return s.lookupAdapterCreator.GetAdapter(ctx, supplier)
 }

@@ -6,6 +6,9 @@ import (
 )
 
 type LMSConfig struct {
+	Vendor                           *string          `json:"vendor"`
+	NcipNamespaceEnabled             *bool            `json:"ncipNamespaceEnabled"`
+	BibIDNormalization               *string          `json:"bibIdNormalization"`
 	Address                          string           `json:"address"`
 	FromAgency                       string           `json:"fromAgency"`
 	FromAgencyAuthentication         *string          `json:"fromAgencyAuthentication"`
@@ -47,6 +50,7 @@ type ILLConfig struct {
 }
 
 type CatalogConfig struct {
+	Profile            *string               `json:"profile"`
 	MetadataUpdateMode *string               `json:"metadataUpdateMode"`
 	SRU                *SRUConfig            `json:"sru"`
 	Zoom               *ZoomConfig           `json:"zoom"`
@@ -74,19 +78,37 @@ type QueryConfig struct {
 }
 
 type HoldingsParserConfig struct {
-	Marc        *MarcHoldingsParserConfig `json:"marc"`
-	Marc21Plus1 *map[string]any           `json:"marc21plus1"`
-	OPAC        *map[string]any           `json:"opac"`
-	Reservoir   *map[string]any           `json:"reservoir"`
+	Marc        *MarcHoldingsParserConfig `json:"marc,omitempty"`
+	Marc21Plus1 *map[string]any           `json:"marc21plus1,omitempty"`
+	OPAC        *OpacHoldingsParserConfig `json:"opac,omitempty"`
+	Reservoir   *map[string]any           `json:"reservoir,omitempty"`
 }
 
 type MarcHoldingsParserConfig struct {
-	CallNumberSubField       *string `json:"callNumberSubField"`
-	ItemIDSubField           *string `json:"itemIdSubField"`
-	LocationSubField         *string `json:"locationSubField"`
-	MainField                *string `json:"mainField"`
-	RestrictedSubField       *string `json:"restrictedSubField"`
-	ShelvingLocationSubField *string `json:"shelvingLocationSubField"`
+	Availability             *[]MarcAvailabilityPredicate `json:"availability,omitempty"`
+	CallNumberSubField       *string                      `json:"callNumberSubField,omitempty"`
+	ItemIDSubField           *string                      `json:"itemIdSubField,omitempty"`
+	LocationSubField         *string                      `json:"locationSubField,omitempty"`
+	MainField                *string                      `json:"mainField,omitempty"`
+	RestrictedSubField       *string                      `json:"restrictedSubField,omitempty"`
+	ShelvingLocationSubField *string                      `json:"shelvingLocationSubField,omitempty"`
+}
+
+type MarcAvailabilityPredicate struct {
+	SubField string  `json:"subField"`
+	Operator string  `json:"operator"`
+	Value    *string `json:"value,omitempty"`
+}
+
+type OpacHoldingsParserConfig struct {
+	AvailabilityRule         *string   `json:"availabilityRule,omitempty"`
+	AvailablePublicNotes     *[]string `json:"availablePublicNotes,omitempty"`
+	RequireLocalLocation     *bool     `json:"requireLocalLocation,omitempty"`
+	ShelvingLocationSource   *string   `json:"shelvingLocationSource,omitempty"`
+	IncludeItemID            *bool     `json:"includeItemId,omitempty"`
+	IncludeItemLoanPolicy    *bool     `json:"includeItemLoanPolicy,omitempty"`
+	IncludeTemporaryLocation *bool     `json:"includeTemporaryLocation,omitempty"`
+	AllCirculations          *bool     `json:"allCirculations,omitempty"`
 }
 
 type MetadataParserConfig struct {
@@ -130,7 +152,49 @@ type HoldingsItemLoanPolicy struct {
 	Lendable bool   `json:"lendable"`
 }
 
-func validateConfigEnums(catalog *CatalogConfig, ill *ILLConfig) error {
+func validateConfigEnums(lms *LMSConfig, catalog *CatalogConfig, ill *ILLConfig) error {
+	if lms != nil {
+		if lms.Vendor != nil && !oneOf(*lms.Vendor, "Generic", "Alma", "Sierra", "Koha", "FOLIO", "WMS", "Aleph") {
+			return fmt.Errorf("invalid lmsConfig.vendor")
+		}
+		if lms.BibIDNormalization != nil && !oneOf(*lms.BibIDNormalization, "none", "sierra") {
+			return fmt.Errorf("invalid lmsConfig.bibIdNormalization")
+		}
+	}
+	if catalog != nil {
+		if catalog.Profile != nil && !oneOf(*catalog.Profile, "Generic", "Alma", "Sierra", "Koha", "FOLIO", "WMS", "Aleph") {
+			return fmt.Errorf("invalid catalogConfig.profile")
+		}
+		if catalog.SRU != nil && catalog.Zoom != nil {
+			return fmt.Errorf("catalogConfig cannot configure both SRU and ZOOM endpoints")
+		}
+		if h := catalog.HoldingsFormat; h != nil {
+			count := 0
+			for _, present := range []bool{h.Marc != nil, h.OPAC != nil, h.Reservoir != nil, h.Marc21Plus1 != nil} {
+				if present {
+					count++
+				}
+			}
+			if count > 1 {
+				return fmt.Errorf("catalogConfig.holdingsFormat must set at most one of marc, opac, reservoir, or marc21plus1")
+			}
+			if h.Marc != nil && h.Marc.Availability != nil {
+				for _, predicate := range *h.Marc.Availability {
+					if predicate.SubField == "" || !oneOf(predicate.Operator, "equals", "absent") || (predicate.Operator == "equals" && predicate.Value == nil) {
+						return fmt.Errorf("invalid catalogConfig.holdingsFormat.marc.availability predicate")
+					}
+				}
+			}
+			if h.OPAC != nil {
+				if h.OPAC.AvailabilityRule != nil && !oneOf(*h.OPAC.AvailabilityRule, "availableNow", "publicNote") {
+					return fmt.Errorf("invalid catalogConfig.holdingsFormat.opac.availabilityRule")
+				}
+				if h.OPAC.ShelvingLocationSource != nil && !oneOf(*h.OPAC.ShelvingLocationSource, "shelvingLocation", "localLocation") {
+					return fmt.Errorf("invalid catalogConfig.holdingsFormat.opac.shelvingLocationSource")
+				}
+			}
+		}
+	}
 	if ill != nil && ill.ISO18626Vendor != nil && !oneOf(*ill.ISO18626Vendor, "Alma", "ReShare", "CrossLink", "ILLiad", "Unknown") {
 		return fmt.Errorf("invalid ILL vendor: %s", *ill.ISO18626Vendor)
 	}

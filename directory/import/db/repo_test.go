@@ -1327,7 +1327,6 @@ func completeEntryAggregate(symbol string) model.EntryAggregate {
 	aggregate.Data.LMSConfig = &model.LMSConfig{Address: "https://example.test/ncip", FromAgency: "FROM", FromAgencyAuthentication: stringPointer("credential-value")}
 	aggregate.Data.CatalogConfig = &model.CatalogConfig{
 		MetadataUpdateMode: &metadataMode,
-		SRU:                &model.SRUConfig{Address: "https://example.test/sru"},
 		Zoom:               &model.ZoomConfig{Address: "example.test:210", Options: &map[string]string{"user": "private"}},
 		Query:              &model.QueryConfig{Identifier: &text},
 		HoldingsFormat:     &model.HoldingsParserConfig{Marc: &model.MarcHoldingsParserConfig{MainField: &text}},

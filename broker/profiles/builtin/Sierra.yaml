@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=./profile.schema.json
+---
+# Overrides of Generic defaults.
+lmsConfig:
+  requestItemRequestType: Hold
+  requestItemRequestScopeType: Title
+  bibIdNormalization: sierra
+catalogConfig:
+  holdingsFormat:
+    opac:
+      availabilityRule: publicNote
+      availablePublicNotes:
+        - AVAILABLE
+        - CHECK SHELVES
+        - CHECK SHELF
+      shelvingLocationSource: localLocation
+      includeItemId: false
+      includeItemLoanPolicy: false

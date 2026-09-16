@@ -169,6 +169,7 @@ func entryImportRecord(key map[string]any, name string, parent map[string]any, e
 		data["addresses"] = []any{map[string]any{"type": "Default", "addressComponents": []any{map[string]any{"seq": 1, "type": "Locality", "value": "Riga"}}}}
 		data["closures"] = []any{map[string]any{"startDate": "2026-12-24", "endDate": "2026-12-26", "reason": "Holiday"}}
 		data["lmsConfig"] = map[string]any{
+			"vendor": nil, "ncipNamespaceEnabled": nil, "bibIdNormalization": nil,
 			"address": "https://example.test/ncip", "fromAgency": "FROM", "fromAgencyAuthentication": "credential-value",
 			"toAgency": nil, "lookupUserEnabled": nil, "acceptItemEnabled": nil, "checkInItemEnabled": nil,
 			"checkOutItemEnabled": nil, "itemLocation": nil, "requestItemRequestType": nil,
@@ -209,4 +210,78 @@ func mustJSON(t *testing.T, value string) string {
 	data, err := json.Marshal(value)
 	require.NoError(t, err)
 	return string(data)
+}
+
+func TestImportHostSettingsRoundTrip(t *testing.T) {
+	resetImportState(t)
+	record := entryImportRecord(symbolObject("ISIL", "HOST"), "Host settings", nil, "Consortium")
+	data := record["data"].(map[string]any)
+	lms := data["lmsConfig"].(map[string]any)
+	lms["vendor"], lms["ncipNamespaceEnabled"], lms["bibIdNormalization"] = "Sierra", false, "none"
+	// Selecting a profile without enabling NCIP is a valid complete import.
+	lms["address"], lms["fromAgency"] = "", ""
+	catalog := map[string]any{"profile": "Koha", "metadataUpdateMode": nil, "sru": nil, "zoom": nil, "queryConfig": nil, "metadataFormat": nil}
+	data["catalogConfig"] = catalog
+	for _, tc := range []struct {
+		name, holdings, expected string
+	}{
+		{"MARC predicates", `{"marc":{"mainField":"999","callNumberSubField":null,"itemIdSubField":null,"locationSubField":null,"restrictedSubField":null,"shelvingLocationSubField":null,"availability":[{"subField":"7","operator":"equals","value":"0"},{"subField":"q","operator":"absent","value":null}]},"opac":null,"reservoir":null,"marc21plus1":null}`, `{"marc":{"mainField":"999","availability":[{"subField":"7","operator":"equals","value":"0"},{"subField":"q","operator":"absent"}]}}`},
+		{"empty MARC predicates", `{"marc":{"mainField":null,"callNumberSubField":null,"itemIdSubField":null,"locationSubField":null,"restrictedSubField":null,"shelvingLocationSubField":null,"availability":[]},"opac":null,"reservoir":null,"marc21plus1":null}`, `{"marc":{"availability":[]}}`},
+		{"OPAC overrides", `{"marc":null,"opac":{"availabilityRule":"publicNote","availablePublicNotes":["AVAILABLE"],"requireLocalLocation":false,"shelvingLocationSource":"localLocation","includeItemId":false,"includeItemLoanPolicy":false,"includeTemporaryLocation":true,"allCirculations":true},"reservoir":null,"marc21plus1":null}`, `{"opac":{"availabilityRule":"publicNote","availablePublicNotes":["AVAILABLE"],"requireLocalLocation":false,"shelvingLocationSource":"localLocation","includeItemId":false,"includeItemLoanPolicy":false,"includeTemporaryLocation":true,"allCirculations":true}}`},
+		{"empty OPAC notes", `{"marc":null,"opac":{"availabilityRule":null,"availablePublicNotes":[],"requireLocalLocation":null,"shelvingLocationSource":null,"includeItemId":null,"includeItemLoanPolicy":null,"includeTemporaryLocation":null,"allCirculations":null},"reservoir":null,"marc21plus1":null}`, `{"opac":{"availablePublicNotes":[]}}`},
+		{"reservoir", `{"marc":null,"opac":null,"reservoir":{},"marc21plus1":null}`, `{"reservoir":{}}`},
+		{"marc21plus1", `{"marc":null,"opac":null,"reservoir":null,"marc21plus1":{}}`, `{"marc21plus1":{}}`},
+		{"profile defaults", `{"marc":null,"opac":null,"reservoir":null,"marc21plus1":null}`, `{}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var holdings map[string]any
+			require.NoError(t, json.Unmarshal([]byte(tc.holdings), &holdings))
+			catalog["holdingsFormat"] = holdings
+			response, result := importRequest(t, []any{record}, "update", standardHeaders)
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			require.Empty(t, result.Errors)
+			require.Equal(t, int32(1), result.Entries.Imported)
+			id := importedEntryID(t, "ISIL", "HOST")
+			var vendor, normalization, profile string
+			var namespace bool
+			var raw []byte
+			require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT vendor, ncip_namespace_enabled, bib_id_normalization FROM lms_configs WHERE entry=$1`, id).Scan(&vendor, &namespace, &normalization))
+			require.Equal(t, "Sierra", vendor)
+			require.False(t, namespace)
+			require.Equal(t, "none", normalization)
+			require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT profile, holdings_config FROM catalog_configs WHERE entry=$1`, id).Scan(&profile, &raw))
+			require.Equal(t, "Koha", profile)
+			require.JSONEq(t, tc.expected, string(raw))
+			res, body := jsonReq(t, http.MethodGet, "/entries/by-id/"+id.String(), "", standardHeaders)
+			require.Equal(t, http.StatusOK, res.StatusCode, body)
+			var saved struct {
+				LmsConfig struct {
+					Vendor               string
+					NcipNamespaceEnabled *bool
+					BibIdNormalization   string
+				}
+				CatalogConfig struct {
+					Profile        string
+					HoldingsFormat json.RawMessage
+				}
+			}
+			require.NoError(t, json.Unmarshal([]byte(body), &saved))
+			require.Equal(t, "Sierra", saved.LmsConfig.Vendor)
+			require.NotNil(t, saved.LmsConfig.NcipNamespaceEnabled)
+			require.False(t, *saved.LmsConfig.NcipNamespaceEnabled)
+			require.Equal(t, "none", saved.LmsConfig.BibIdNormalization)
+			require.Equal(t, "Koha", saved.CatalogConfig.Profile)
+			require.JSONEq(t, tc.expected, string(saved.CatalogConfig.HoldingsFormat))
+		})
+	}
+	lms["vendor"], lms["ncipNamespaceEnabled"], lms["bibIdNormalization"] = nil, nil, nil
+	catalog["profile"], catalog["holdingsFormat"] = nil, nil
+	_, result := importRequest(t, []any{record}, "update", standardHeaders)
+	require.Empty(t, result.Errors)
+	id := importedEntryID(t, "ISIL", "HOST")
+	var cleared bool
+	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT vendor IS NULL AND ncip_namespace_enabled IS NULL AND bib_id_normalization IS NULL FROM lms_configs WHERE entry=$1`, id).Scan(&cleared))
+	require.True(t, cleared)
+	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT profile IS NULL AND holdings_config IS NULL FROM catalog_configs WHERE entry=$1`, id).Scan(&cleared))
+	require.True(t, cleared)
 }
