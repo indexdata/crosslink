@@ -857,7 +857,7 @@ func updateLocatedSupplier(ctx common.ExtendedContext, repo ill_db.IllRepo, illT
 			ctx.Logger().Error("failed to update located supplier with id: "+locSup.ID, "error", err, "transactionId", illTrans.ID)
 			return err
 		}
-		if status == iso18626.TypeStatusLoaned {
+		if status == iso18626.TypeStatusLoaned && reason != iso18626.TypeReasonForMessageRenewResponse {
 			updatePeerLoanCount(ctx, repo, supPeerId, illTrans.ID)
 			updatePeerBorrowCount(ctx, repo, illTrans)
 		}

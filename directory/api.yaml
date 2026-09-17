@@ -1687,6 +1687,7 @@ components:
         noteFieldSeparator: { type: string, nullable: true }
         supplierPatronPattern: { type: string, nullable: true }
         duplicateCheckWindowHours: { type: integer, format: int32, minimum: 0, nullable: true }
+        defaultLoanPeriod: { type: integer, format: int32, minimum: 1, nullable: true }
 
     ImportCatalogConfig:
       type: object
@@ -2151,6 +2152,12 @@ components:
     IllConfig:
       type: object
       properties:
+        defaultLoanPeriod:
+          type: integer
+          format: int32
+          nullable: true
+          minimum: 1
+          description: Default supplier loan period in calendar days. Omitted or null disables the fallback.
         iso18626Url:
           type: string
           description: URL of the ISO18626 service. When set, used instead of an ISO18626 service from endpoints.

@@ -336,8 +336,9 @@ func createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedS
 
 // suppliers like Alma often send a wrong reason so we try to guess the correct reason based on the requester action and previous status
 func guessReason(reason iso18626.TypeReasonForMessage, requesterAction string, prevStatus string, targetStatus iso18626.TypeStatus) iso18626.TypeReasonForMessage {
-	// Notification and CancelResponse are a special cases where we don't try to guess the reason
-	if reason == iso18626.TypeReasonForMessageNotification || reason == iso18626.TypeReasonForMessageCancelResponse {
+	// Preserve explicit notifications, decision responses, and overdue status changes.
+	if reason == iso18626.TypeReasonForMessageNotification || reason == iso18626.TypeReasonForMessageCancelResponse || reason == iso18626.TypeReasonForMessageRenewResponse ||
+		(reason == iso18626.TypeReasonForMessageStatusChange && targetStatus == iso18626.TypeStatusOverdue) {
 		return reason
 	}
 	if reason != "" && targetStatus == iso18626.TypeStatusUnfilled { // For unfilled we want to send notification
@@ -647,14 +648,14 @@ func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarge
 	sam.MessageInfo.ReasonForMessage = guessReason(reason, trCtx.transaction.LastRequesterAction.String, trCtx.transaction.LastSupplierStatus.String, target.status)
 	sam.StatusInfo.Status = target.status
 	sam.StatusInfo.LastChange = utils.XSDDateTime{Time: time.Now()}
-	if sam.StatusInfo.Status == iso18626.TypeStatusLoaned &&
+	if sam.StatusInfo.Status == iso18626.TypeStatusLoaned && sam.MessageInfo.ReasonForMessage != iso18626.TypeReasonForMessageRenewResponse &&
 		sam.DeliveryInfo != nil &&
 		sam.DeliveryInfo.DateSent.IsZero() {
 		sam.DeliveryInfo.DateSent = utils.XSDDateTime{Time: time.Now()}
 	}
 
 	includeReturnInfo := target.peer != nil && common.IllConfigBool(target.peer.CustomData, appendReturnInfo, func(c dirapi.IllConfig) *bool { return c.IncludeReturnInfo })
-	if target.status == iso18626.TypeStatusLoaned && includeReturnInfo {
+	if target.status == iso18626.TypeStatusLoaned && sam.MessageInfo.ReasonForMessage != iso18626.TypeReasonForMessageRenewResponse && includeReturnInfo {
 		name, agencyId, address, _ := getPeerInfo(target.peer, target.supplier.SupplierSymbol)
 		populateReturnAddress(message, name, agencyId, address)
 	}

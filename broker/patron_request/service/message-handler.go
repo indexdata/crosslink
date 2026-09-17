@@ -223,6 +223,7 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 		return createSAMResponse(sam, iso18626.TypeMessageStatusOK, nil, nil)
 	case iso18626.TypeReasonForMessageStatusChange,
 		iso18626.TypeReasonForMessageRequestResponse,
+		iso18626.TypeReasonForMessageRenewResponse,
 		iso18626.TypeReasonForMessageCancelResponse:
 		// continue to status mapping
 	default:
@@ -239,69 +240,100 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	}
 	eventName := MessageEvent("")
 	var retryBibInfo *iso18626.BibliographicInfo
-	switch sam.StatusInfo.Status {
-	case iso18626.TypeStatusExpectToSupply:
-		switch {
-		case isNewSupplier && isLocalSupply(pr, supSymbol):
-			eventName = SupplierNewExpectToSupplyLocal
-		case isNewSupplier:
-			eventName = SupplierNewExpectToSupply
-		case isLocalSupply(pr, supSymbol):
-			eventName = SupplierExpectToSupplyLocal
+	if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageRenewResponse {
+		if sam.MessageInfo.AnswerYesNo == nil {
+			return statusChangeNotAllowed()
+		}
+		switch *sam.MessageInfo.AnswerYesNo {
+		case iso18626.TypeYesNoY:
+			if sam.StatusInfo.DueDate != nil && (sam.StatusInfo.DueDate.IsZero() || sam.StatusInfo.DueDate.Year() < 1) {
+				return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{ErrorType: iso18626.TypeErrorTypeUnrecognisedDataValue, ErrorValue: "invalid renewal due date"}, nil)
+			}
+			eventName = SupplierRenewalAccepted
+			// An undated acceptance replaces the previous deadline with an open-ended loan.
+			pr.DueAt = pgtype.Timestamptz{}
+			if sam.StatusInfo.DueDate != nil {
+				pr.DueAt = pgtype.Timestamptz{Time: sam.StatusInfo.DueDate.Time, Valid: true}
+			}
+		case iso18626.TypeYesNoN:
+			eventName = SupplierRenewalRejected
 		default:
-			eventName = SupplierExpectToSupply
+			return statusChangeNotAllowed()
 		}
-	case iso18626.TypeStatusWillSupply:
-		if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse {
-			if sam.MessageInfo.AnswerYesNo != nil && *sam.MessageInfo.AnswerYesNo == iso18626.TypeYesNoY {
-				return contradictoryCancelResponse()
+		setLoanMessage(sam, &pr)
+	} else {
+		switch sam.StatusInfo.Status {
+		case iso18626.TypeStatusExpectToSupply:
+			switch {
+			case isNewSupplier && isLocalSupply(pr, supSymbol):
+				eventName = SupplierNewExpectToSupplyLocal
+			case isNewSupplier:
+				eventName = SupplierNewExpectToSupply
+			case isLocalSupply(pr, supSymbol):
+				eventName = SupplierExpectToSupplyLocal
+			default:
+				eventName = SupplierExpectToSupply
 			}
-			eventName = SupplierCancelRejected
-		} else if strings.Contains(sam.MessageInfo.Note, shim.RESHARE_ADD_LOAN_CONDITION) {
-			eventName = SupplierWillSupplyCond
-			setSupplierMessage(sam, &pr)
-		} else {
-			eventName = SupplierWillSupply
-			setSupplierMessage(sam, &pr)
-		}
-	case iso18626.TypeStatusLoaned:
-		setSupplierMessage(sam, &pr)
-		eventName = SupplierLoaned
-	case iso18626.TypeStatusLoanCompleted, iso18626.TypeStatusCopyCompleted:
-		if sam.StatusInfo.Status == iso18626.TypeStatusCopyCompleted {
-			setSupplierMessage(sam, &pr)
-		}
-		eventName = SupplierCompleted
-		if isLocalSupply(pr, supSymbol) {
-			eventName = SupplierCompletedLocal
-		}
-	case iso18626.TypeStatusUnfilled:
-		eventName = SupplierUnfilled
-		if isLocalSupply(pr, supSymbol) {
-			eventName = SupplierUnfilledLocal
-		}
-	case iso18626.TypeStatusCancelled:
-		if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse {
-			if sam.MessageInfo.AnswerYesNo != nil && *sam.MessageInfo.AnswerYesNo == iso18626.TypeYesNoN {
-				return contradictoryCancelResponse()
+		case iso18626.TypeStatusWillSupply:
+			if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse {
+				if sam.MessageInfo.AnswerYesNo != nil && *sam.MessageInfo.AnswerYesNo == iso18626.TypeYesNoY {
+					return contradictoryCancelResponse()
+				}
+				eventName = SupplierCancelRejected
+			} else if strings.Contains(sam.MessageInfo.Note, shim.RESHARE_ADD_LOAN_CONDITION) {
+				eventName = SupplierWillSupplyCond
+				setSupplierMessage(sam, &pr)
+			} else {
+				eventName = SupplierWillSupply
+				setSupplierMessage(sam, &pr)
 			}
-			eventName = SupplierCancelAccepted
-		} else if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageStatusChange &&
-			isLocalSupply(pr, supSymbol) {
-			eventName = SupplierCancelledLocal
-		}
-	case iso18626.TypeStatusRetryPossible:
-		eventName = SupplierRetryConditional
-		setSupplierMessage(sam, &pr)
-		// later, we can use MessageInfo.Note to pass bibliographic hints for the retry request
-		if sam.MessageInfo.ReasonRetry != nil && (*sam.MessageInfo.ReasonRetry).Text == string(iso18626.ReasonRetryNotFoundAsCited) &&
-			sam.DeliveryInfo != nil && sam.DeliveryInfo.ItemId != "" {
-			retryBibInfo = &iso18626.BibliographicInfo{
-				SupplierUniqueRecordId: sam.DeliveryInfo.ItemId,
+		case iso18626.TypeStatusLoaned:
+			setSupplierMessage(sam, &pr)
+			if sam.StatusInfo.DueDate != nil {
+				if sam.StatusInfo.DueDate.IsZero() || sam.StatusInfo.DueDate.Year() < 1 {
+					return statusChangeNotAllowed()
+				}
+				pr.DueAt = pgtype.Timestamptz{Time: sam.StatusInfo.DueDate.Time, Valid: true}
+			}
+			eventName = SupplierLoaned
+		case iso18626.TypeStatusOverdue:
+			eventName = SupplierOverdue
+			setLoanMessage(sam, &pr)
+		case iso18626.TypeStatusLoanCompleted, iso18626.TypeStatusCopyCompleted:
+			if sam.StatusInfo.Status == iso18626.TypeStatusCopyCompleted {
+				setSupplierMessage(sam, &pr)
+			}
+			eventName = SupplierCompleted
+			if isLocalSupply(pr, supSymbol) {
+				eventName = SupplierCompletedLocal
+			}
+		case iso18626.TypeStatusUnfilled:
+			eventName = SupplierUnfilled
+			if isLocalSupply(pr, supSymbol) {
+				eventName = SupplierUnfilledLocal
+			}
+		case iso18626.TypeStatusCancelled:
+			if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse {
+				if sam.MessageInfo.AnswerYesNo != nil && *sam.MessageInfo.AnswerYesNo == iso18626.TypeYesNoN {
+					return contradictoryCancelResponse()
+				}
+				eventName = SupplierCancelAccepted
+			} else if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageStatusChange &&
+				isLocalSupply(pr, supSymbol) {
+				eventName = SupplierCancelledLocal
+			}
+		case iso18626.TypeStatusRetryPossible:
+			eventName = SupplierRetryConditional
+			setSupplierMessage(sam, &pr)
+			// later, we can use MessageInfo.Note to pass bibliographic hints for the retry request
+			if sam.MessageInfo.ReasonRetry != nil && (*sam.MessageInfo.ReasonRetry).Text == string(iso18626.ReasonRetryNotFoundAsCited) &&
+				sam.DeliveryInfo != nil && sam.DeliveryInfo.ItemId != "" {
+				retryBibInfo = &iso18626.BibliographicInfo{
+					SupplierUniqueRecordId: sam.DeliveryInfo.ItemId,
+				}
 			}
 		}
 	}
-
 	if eventName == "" {
 		return statusChangeNotAllowed()
 	}
@@ -561,6 +593,8 @@ func (m *PatronRequestMessageHandler) handleRequestingAgencyMessageWithParent(ct
 		}
 	case iso18626.TypeActionReceived:
 		eventName = RequesterReceived
+	case iso18626.TypeActionRenew:
+		eventName = RequesterRenew
 	case iso18626.TypeActionShippedReturn:
 		eventName = RequesterShippedReturn
 	default:

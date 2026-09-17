@@ -295,7 +295,8 @@ func buildEntrySQL(whereClause string) string {
 			'useOfferedCosts', i.use_offered_costs,
 			'noteFieldSeparator', i.note_field_separator,
 			'supplierPatronPattern', i.supplier_patron_pattern,
-			'duplicateCheckWindowHours', i.duplicate_check_window_hours
+			'duplicateCheckWindowHours', i.duplicate_check_window_hours,
+            'defaultLoanPeriod', i.default_loan_period
 		)) FROM ill_configs i WHERE i.entry = e.id) as ill_config,
 		(
 		SELECT 

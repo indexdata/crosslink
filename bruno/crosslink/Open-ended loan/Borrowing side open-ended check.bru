@@ -1,0 +1,44 @@
+meta {
+  name: Borrowing side open-ended check
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{host}}/patron_requests/{{openEndedPrId}}?side=borrowing
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: borrowing
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
+script:post-response {
+  test("for ship", function() {
+    const pr = res.getBody();
+    expect(pr.lastActionResult).to.equal("SUCCESS")
+    expect(pr.state).to.equal("SHIPPED");
+    expect(pr.dueDate).to.not.exist;
+    expect(pr.illResponse.statusInfo.dueDate).to.not.exist;
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

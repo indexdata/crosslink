@@ -13,7 +13,7 @@ import (
 )
 
 func TestBackfillSuccessorRequestType(t *testing.T) {
-	migration, err := os.ReadFile("../../../migrations/065_backfill_successor_request_type.up.sql")
+	migration, err := os.ReadFile("../../../migrations/066_backfill_successor_request_type.up.sql")
 	require.NoError(t, err)
 	conn, err := pgx.Connect(appCtx, app.ConnectionString)
 	require.NoError(t, err)

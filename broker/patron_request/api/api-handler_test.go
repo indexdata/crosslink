@@ -1085,7 +1085,7 @@ func TestGetStateModelBatchActions(t *testing.T) {
 	var actions []proapi.BatchActionDefault
 	err := json.Unmarshal(rr.Body.Bytes(), &actions)
 	assert.NoError(t, err)
-	assert.Len(t, actions, 4)
+	assert.Len(t, actions, 5)
 	// Clients key translated titles off titleKey, so each default needs a distinct one.
 	seen := map[string]bool{}
 	for _, action := range actions {

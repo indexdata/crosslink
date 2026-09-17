@@ -43,7 +43,7 @@ script:post-response {
     expect(res.getStatus()).to.be.within(200, 299);
   });
   const responseData = res.getBody();
-  
+
   test("Capture patron request id", () => {
       expect(responseData.id).to.be.a("string").and.not.empty;
       bru.setVar("rejectionPrId", responseData.id);

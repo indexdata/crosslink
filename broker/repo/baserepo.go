@@ -38,7 +38,9 @@ func (r *PgBaseRepo[T]) createWithPoolAndTx(pool *pgxpool.Pool, tx pgx.Tx) *PgBa
 	}
 }
 
-func (r *PgBaseRepo[T]) WithTxFunc(ctx common.ExtendedContext, repo PgDerivedRepo[T], fn func(T) error) error {
+// WithTxFunc runs fn with a transaction-backed repository and returns callback
+// or commit errors. A callback error or panic rolls the transaction back.
+func (r *PgBaseRepo[T]) WithTxFunc(ctx common.ExtendedContext, repo PgDerivedRepo[T], fn func(T) error) (err error) {
 	tx, err := r.Pool.Begin(ctx)
 	if err != nil {
 		return err
