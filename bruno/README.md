@@ -24,7 +24,9 @@ The happy path ships with a past due date, receives the item, explicitly invokes
 
 The separate `Open-ended loan` folder ships without a date and completes receipt and return, checking that neither side has a due date. This requires the local mock's undated checkout responses and absent `defaultLoanPeriod`.
 
-Run both scenarios (and the remaining collection) exactly as CI does:
+`Renewal rejection and open-ended acceptance` checks that rejection returns both sides to `OVERDUE` with the original date, then requests renewal again and accepts without a date. `Renewal null date` accepts with explicit `dueDate: null`. Both verify that acceptance clears the date on each side and complete the return workflow.
+
+Run all scenarios exactly as CI does:
 
 ```sh
 cd crosslink

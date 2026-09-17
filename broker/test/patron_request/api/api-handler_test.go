@@ -719,7 +719,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	waitLoanState(requesterPrPath, queryParams, "OVERDUE")
 	invokeLoanAction(requesterPrPath, queryParams, "renew", nil)
 	waitLoanState(supplierPrPath, supQueryParams, "RENEWAL_PENDING")
-	invokeLoanAction(supplierPrPath, supQueryParams, "accept-renewal", map[string]any{"dueDate": "2030-01-01T23:59:59Z"})
+	invokeLoanAction(supplierPrPath, supQueryParams, "accept-renewal", map[string]any{"dueDate": time.Now().UTC().AddDate(0, 0, 14).Format(time.RFC3339)})
 	waitLoanState(requesterPrPath, queryParams, "RENEWED")
 	// Ship return
 	action = proapi.ExecuteAction{

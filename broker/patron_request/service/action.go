@@ -1733,24 +1733,18 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 		}
 	}
 	var dueDateResolution map[string]any
-	if !pr.DueAt.Valid {
-		resolvedAt := time.Now().UTC()
-		due, source, err := resolveLoanDueDate(items, manualDue, entry, resolvedAt)
-		if err != nil {
-			return loanActionError(ctx, pr, err)
-		}
-		if due != nil {
-			pr.DueAt = pgtype.Timestamptz{Time: *due, Valid: true}
-			saved, saveErr := a.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(pr))
-			if saveErr != nil {
-				return loanActionError(ctx, pr, saveErr)
-			}
-			pr = saved
-			dueDateResolution = map[string]any{"dueDate": *due, "source": source, "resolvedAt": resolvedAt, "timeZone": entry.TimeZone}
-			if entry.IllConfig != nil {
-				if days, err := entry.IllConfig.DefaultLoanPeriod.Get(); err == nil {
-					dueDateResolution["defaultLoanPeriod"] = days
-				}
+	resolvedAt := time.Now().UTC()
+	due, source, err := resolveLoanDueDate(items, manualDue, entry, resolvedAt)
+	if err != nil {
+		return loanActionError(ctx, pr, err)
+	}
+	pr.DueAt = pgtype.Timestamptz{}
+	if due != nil {
+		pr.DueAt = pgtype.Timestamptz{Time: *due, Valid: true}
+		dueDateResolution = map[string]any{"dueDate": *due, "source": source, "resolvedAt": resolvedAt, "timeZone": entry.TimeZone}
+		if entry.IllConfig != nil {
+			if days, err := entry.IllConfig.DefaultLoanPeriod.Get(); err == nil {
+				dueDateResolution["defaultLoanPeriod"] = days
 			}
 		}
 	}

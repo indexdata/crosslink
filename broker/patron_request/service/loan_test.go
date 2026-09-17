@@ -130,7 +130,8 @@ func TestShipCheckpointAndDueDatePrecedence(t *testing.T) {
 	require.Equal(t, events.EventStatusSuccess, result.status)
 	assert.Equal(t, earliest, result.pr.DueAt.Time)
 	assert.Equal(t, earliest, sender.lastSupplyingAgencyMessage.StatusInfo.DueDate.Time)
-	// A delivery retry uses the saved date and does not repeat either checkout.
+	// A delivery retry recalculates from stored item dates, not the previous request date.
+	result.pr.DueAt = pgtype.Timestamptz{Time: first, Valid: true}
 	result = svc.shipLenderRequest(appCtx, "retry-delivery", result.pr, adapter, result.pr.IllRequest, actionParams{DueDate: ptr("2031-01-01")})
 	require.Equal(t, events.EventStatusSuccess, result.status)
 	assert.Equal(t, earliest, result.pr.DueAt.Time)
@@ -158,6 +159,76 @@ func TestShippingWithoutDateRetainsCompletedCheckout(t *testing.T) {
 	assert.False(t, result.pr.DueAt.Valid)
 	assert.Nil(t, sender.lastSupplyingAgencyMessage.StatusInfo.DueDate)
 	adapter.AssertNumberOfCalls(t, "CheckOutItem", 1)
+}
+
+func TestShippingRetryRecalculatesDueDate(t *testing.T) {
+	for _, tc := range []struct {
+		name                       string
+		initialDays, retryDays     int32
+		initialManual, retryManual *string
+	}{
+		{name: "new default", retryDays: 14},
+		{name: "changed default", initialDays: 14, retryDays: 28},
+		{name: "removed default", initialDays: 14},
+		{name: "changed manual date", initialManual: ptr("2030-01-01"), retryManual: ptr("2031-01-01")},
+		{name: "removed manual date", initialManual: ptr("2030-01-01")},
+		{name: "still open-ended"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pr := testLoan()
+			repo := &MockPrRepo{savedPr: pr, savedItems: []pr_db.Item{{ID: "item", PrID: pr.ID, Barcode: "item"}}}
+			directory := new(IllRepoMock)
+			entry := dirapi.Entry{IllConfig: &dirapi.IllConfig{}}
+			if tc.initialDays > 0 {
+				entry.IllConfig.DefaultLoanPeriod.Set(tc.initialDays)
+			}
+			initialLookup := directory.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything).Return([]ill_db.Peer{{CustomData: entry}}, "", nil)
+			sender := &MockIso18626Handler{failSupplyingAgencyMessage: true}
+			adapter := new(mockLmsAdapter)
+			adapter.On("CheckOutItem", "", "item", "", "").Return(&lms.CheckedOutItem{}, nil).Once()
+			creator := new(MockLmsCreator)
+			creator.On("GetAdapter", pr.SupplierSymbol.String).Return(adapter, nil)
+			svc := CreatePatronRequestActionService(repo, directory, new(MockEventBus), sender, creator, nil, nil, nil)
+			action := LenderActionShip
+			event := events.Event{ID: "ship", PatronRequestID: pr.ID, EventData: events.EventData{
+				CommonEventData: events.CommonEventData{Action: &action},
+				CustomData:      map[string]any{"dueDate": tc.initialManual},
+			}}
+			status, _ := svc.handleInvokeAction(appCtx, event)
+			require.NotEqual(t, events.EventStatusSuccess, status)
+			assert.Equal(t, tc.initialDays > 0 || tc.initialManual != nil, repo.savedPr.DueAt.Valid)
+			assert.Equal(t, pr.State, repo.savedPr.State)
+
+			initialLookup.Unset()
+			entry = dirapi.Entry{IllConfig: &dirapi.IllConfig{}}
+			if tc.retryDays > 0 {
+				entry.IllConfig.DefaultLoanPeriod.Set(tc.retryDays)
+			}
+			directory.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything).Return([]ill_db.Peer{{CustomData: entry}}, "", nil)
+			event.EventData.CustomData = map[string]any{"dueDate": tc.retryManual}
+			sender.failSupplyingAgencyMessage = false
+			status, _ = svc.handleInvokeAction(appCtx, event)
+			require.Equal(t, events.EventStatusSuccess, status)
+			var want *time.Time
+			var err error
+			if tc.retryManual != nil {
+				want, err = parseLoanDate(*tc.retryManual, entry)
+			} else {
+				want, err = defaultLoanDate(entry, time.Now())
+			}
+			require.NoError(t, err)
+			assert.Equal(t, want != nil, repo.savedPr.DueAt.Valid)
+			if want != nil {
+				require.NotNil(t, sender.lastSupplyingAgencyMessage.StatusInfo.DueDate)
+				assert.True(t, want.Equal(repo.savedPr.DueAt.Time))
+				assert.True(t, want.Equal(sender.lastSupplyingAgencyMessage.StatusInfo.DueDate.Time))
+			} else {
+				assert.Nil(t, sender.lastSupplyingAgencyMessage.StatusInfo.DueDate)
+				assert.Nil(t, repo.savedPr.IllResponse.StatusInfo.DueDate)
+			}
+			adapter.AssertExpectations(t)
+		})
+	}
 }
 
 func TestShippingDateSourceStaysOnActionResult(t *testing.T) {
@@ -189,13 +260,15 @@ func TestShippingDateSourceStaysOnActionResult(t *testing.T) {
 			assert.Equal(t, result.pr.DueAt.Time, resolution["dueDate"])
 			assert.EqualValues(t, 14, resolution["defaultLoanPeriod"])
 			assert.Equal(t, []events.EventName{events.EventNameIllSupplierMessage}, bus.createdNoticeNames)
-			// A later delivery retry retains the frozen date, without claiming it
-			// was recalculated from a newly supplied manual date.
+			// Each retry resolves and audits the date using its current inputs.
 			sender.failSupplyingAgencyMessage = false
 			retry := svc.shipLenderRequest(appCtx, "retry", result.pr, &lms.LmsAdapterManual{}, pr.IllRequest, actionParams{DueDate: ptr("2031-01-01")})
 			require.Equal(t, events.EventStatusSuccess, retry.status)
-			assert.Equal(t, result.pr.DueAt, retry.pr.DueAt)
-			assert.NotContains(t, retry.result.CustomData, "dueDateResolution")
+			want, err := parseLoanDate("2031-01-01", entry)
+			require.NoError(t, err)
+			assert.True(t, want.Equal(retry.pr.DueAt.Time))
+			retryResolution := retry.result.CustomData["dueDateResolution"].(map[string]any)
+			assert.Equal(t, "ship.dueDate", retryResolution["source"])
 		}
 	}
 }
@@ -358,7 +431,8 @@ func TestSupplierOverdueAndRenewalSendBeforeTransition(t *testing.T) {
 			creator := new(MockLmsCreator)
 			creator.On("GetAdapter", pr.SupplierSymbol.String).Return(&lms.LmsAdapterManual{}, nil)
 			svc := CreatePatronRequestActionService(repo, new(IllRepoMock), new(MockEventBus), sender, creator, nil, nil, nil)
-			event := events.Event{ID: "event", PatronRequestID: pr.ID, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}, CustomData: map[string]any{"dueDate": "2030-01-01", "note": "renewal decision"}}}
+			futureDue := time.Now().UTC().AddDate(0, 0, 14).Format(time.RFC3339)
+			event := events.Event{ID: "event", PatronRequestID: pr.ID, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}, CustomData: map[string]any{"dueDate": futureDue, "note": "renewal decision"}}}
 			status, _ := svc.handleInvokeAction(appCtx, event)
 			require.NotEqual(t, events.EventStatusSuccess, status)
 			assert.Equal(t, pr.State, repo.savedPr.State)

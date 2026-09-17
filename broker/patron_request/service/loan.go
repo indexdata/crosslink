@@ -129,8 +129,7 @@ func (a *PatronRequestActionService) recordItemLmsStatus(ctx common.ExtendedCont
 	return nil
 }
 
-// Item edits invalidate the resolved shipment date atomically. Delivery-only
-// retries never call this helper and keep the previously resolved date.
+// Item edits clear the displayed shipment date atomically; shipping recalculates it.
 func (a *PatronRequestActionService) editSupplierItems(ctx common.ExtendedContext, pr pr_db.PatronRequest, edit func(pr_db.PrRepo) error) (pr_db.PatronRequest, error) {
 	updated := pr
 	err := a.prRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
