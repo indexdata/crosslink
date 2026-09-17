@@ -12,7 +12,6 @@ import (
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/oapi-codegen/nullable"
 )
 
 func loanActionError(ctx common.ExtendedContext, pr pr_db.PatronRequest, err error) actionExecutionResult {
@@ -20,12 +19,9 @@ func loanActionError(ctx common.ExtendedContext, pr pr_db.PatronRequest, err err
 	return actionExecutionResult{status: status, result: result, pr: pr}
 }
 
-func validateLoanDueDateParam(date nullable.Nullable[string]) error {
-	if date.IsSpecified() {
-		value, err := date.Get()
-		if err != nil || strings.TrimSpace(value) == "" {
-			return fmt.Errorf("supplied dueDate must be a non-empty date or RFC3339 timestamp")
-		}
+func validateLoanDueDateParam(date *string) error {
+	if date != nil && strings.TrimSpace(*date) == "" {
+		return fmt.Errorf("supplied dueDate must be a non-empty date or RFC3339 timestamp")
 	}
 	return nil
 }
@@ -199,12 +195,12 @@ func (a *PatronRequestActionService) renewalLenderRequest(ctx common.ExtendedCon
 	due := pr.DueAt
 	if accept {
 		due = pgtype.Timestamptz{}
-		if params.DueDate.IsSpecified() {
+		if params.DueDate != nil {
 			entry, err := a.supplierLoanEntry(ctx, pr)
 			if err != nil {
 				return loanActionError(ctx, pr, err)
 			}
-			date, err := parseLoanDate(params.DueDate.GetOrEmpty(), entry)
+			date, err := parseLoanDate(*params.DueDate, entry)
 			if err != nil {
 				return loanActionError(ctx, pr, err)
 			}

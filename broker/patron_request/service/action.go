@@ -29,7 +29,6 @@ import (
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/oapi-codegen/nullable"
 )
 
 const COMP = "pr_action_service"
@@ -130,7 +129,7 @@ func (e *autoActionFailure) Error() string {
 }
 
 type actionParams struct {
-	DueDate          nullable.Nullable[string]  `json:"dueDate,omitempty"`
+	DueDate          *string                    `json:"dueDate,omitempty"`
 	Note             string                     `json:"note,omitempty"`
 	Barcode          string                     `json:"barcode,omitempty"`
 	CallNumber       string                     `json:"callNumber,omitempty"`
@@ -1662,9 +1661,12 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 	if err != nil {
 		return loanActionError(ctx, pr, err)
 	}
-	manualDue, err := parseLoanDate(params.DueDate.GetOrEmpty(), entry)
-	if err != nil {
-		return loanActionError(ctx, pr, err)
+	var manualDue *time.Time
+	if params.DueDate != nil {
+		manualDue, err = parseLoanDate(*params.DueDate, entry)
+		if err != nil {
+			return loanActionError(ctx, pr, err)
+		}
 	}
 	if illRequest.ServiceInfo != nil && illRequest.ServiceInfo.ServiceType == iso18626.TypeServiceTypeCopyOrLoan {
 		var message string

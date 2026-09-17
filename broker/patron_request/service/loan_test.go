@@ -14,7 +14,6 @@ import (
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/oapi-codegen/nullable"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -119,7 +118,7 @@ func TestShipCheckpointAndDueDatePrecedence(t *testing.T) {
 	failed := adapter.On("CheckOutItem", "", "b", "", "").Return(nil, errors.New("LMS unavailable")).Once()
 	sender := new(MockIso18626Handler)
 	svc := CreatePatronRequestActionService(repo, new(IllRepoMock), new(MockEventBus), sender, nil, nil, nil, nil)
-	result := svc.shipLenderRequest(appCtx, "event", repo.savedPr, adapter, repo.savedPr.IllRequest, actionParams{DueDate: nullable.NewNullableWithValue("2030-01-01")})
+	result := svc.shipLenderRequest(appCtx, "event", repo.savedPr, adapter, repo.savedPr.IllRequest, actionParams{DueDate: ptr("2030-01-01")})
 	assert.Equal(t, events.EventStatusError, result.status)
 	assert.False(t, result.pr.DueAt.Valid, "fallback must not finalize before all checkouts")
 	assert.Equal(t, pr_db.LmsStatusCheckedOut, repo.savedItems[0].LmsStatus)
@@ -127,12 +126,12 @@ func TestShipCheckpointAndDueDatePrecedence(t *testing.T) {
 	assert.Nil(t, sender.lastSupplyingAgencyMessage)
 	failed.Unset()
 	adapter.On("CheckOutItem", "", "b", "", "").Return(&lms.CheckedOutItem{DueDate: &earliest}, nil).Once()
-	result = svc.shipLenderRequest(appCtx, "retry", result.pr, adapter, result.pr.IllRequest, actionParams{DueDate: nullable.NewNullableWithValue("2030-01-01")})
+	result = svc.shipLenderRequest(appCtx, "retry", result.pr, adapter, result.pr.IllRequest, actionParams{DueDate: ptr("2030-01-01")})
 	require.Equal(t, events.EventStatusSuccess, result.status)
 	assert.Equal(t, earliest, result.pr.DueAt.Time)
 	assert.Equal(t, earliest, sender.lastSupplyingAgencyMessage.StatusInfo.DueDate.Time)
 	// A delivery retry uses the saved date and does not repeat either checkout.
-	result = svc.shipLenderRequest(appCtx, "retry-delivery", result.pr, adapter, result.pr.IllRequest, actionParams{DueDate: nullable.NewNullableWithValue("2031-01-01")})
+	result = svc.shipLenderRequest(appCtx, "retry-delivery", result.pr, adapter, result.pr.IllRequest, actionParams{DueDate: ptr("2031-01-01")})
 	require.Equal(t, events.EventStatusSuccess, result.status)
 	assert.Equal(t, earliest, result.pr.DueAt.Time)
 	adapter.AssertExpectations(t)
@@ -176,7 +175,7 @@ func TestShippingDateSourceStaysOnActionResult(t *testing.T) {
 			params := actionParams{}
 			source := "illConfig.defaultLoanPeriod"
 			if manual {
-				params.DueDate, source = nullable.NewNullableWithValue("2030-01-01"), "ship.dueDate"
+				params.DueDate, source = ptr("2030-01-01"), "ship.dueDate"
 			}
 			result := svc.shipLenderRequest(appCtx, "event", pr, &lms.LmsAdapterManual{}, pr.IllRequest, params)
 			if failedSend {
@@ -193,7 +192,7 @@ func TestShippingDateSourceStaysOnActionResult(t *testing.T) {
 			// A later delivery retry retains the frozen date, without claiming it
 			// was recalculated from a newly supplied manual date.
 			sender.failSupplyingAgencyMessage = false
-			retry := svc.shipLenderRequest(appCtx, "retry", result.pr, &lms.LmsAdapterManual{}, pr.IllRequest, actionParams{DueDate: nullable.NewNullableWithValue("2031-01-01")})
+			retry := svc.shipLenderRequest(appCtx, "retry", result.pr, &lms.LmsAdapterManual{}, pr.IllRequest, actionParams{DueDate: ptr("2031-01-01")})
 			require.Equal(t, events.EventStatusSuccess, retry.status)
 			assert.Equal(t, result.pr.DueAt, retry.pr.DueAt)
 			assert.NotContains(t, retry.result.CustomData, "dueDateResolution")
@@ -386,6 +385,25 @@ func TestSupplierOverdueAndRenewalSendBeforeTransition(t *testing.T) {
 	}
 }
 
+func TestActionDueDatePointer(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		data map[string]any
+		want *string
+	}{
+		{name: "omitted"},
+		{name: "null", data: map[string]any{"dueDate": nil}},
+		{name: "empty", data: map[string]any{"dueDate": ""}, want: ptr("")},
+		{name: "supplied", data: map[string]any{"dueDate": "2030-01-01"}, want: ptr("2030-01-01")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var params actionParams
+			require.NoError(t, common.MapToStruct(tc.data, &params))
+			assert.Equal(t, tc.want, params.DueDate)
+		})
+	}
+}
+
 func TestLoanHandlersRejectInvalidDueDateParams(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -393,7 +411,6 @@ func TestLoanHandlersRejectInvalidDueDateParams(t *testing.T) {
 	}{
 		{name: "empty", value: ""},
 		{name: "blank", value: " "},
-		{name: "null", value: nil},
 		{name: "wrong type", value: 42},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -431,7 +448,7 @@ func TestSupplierRenewalOptionalDueDate(t *testing.T) {
 		{name: "failed send retains previous date", failedSend: true, fail: true},
 		{name: "empty date", params: map[string]any{"dueDate": ""}, fail: true},
 		{name: "blank date", params: map[string]any{"dueDate": " "}, fail: true},
-		{name: "null date", params: map[string]any{"dueDate": nil}, fail: true},
+		{name: "null date creates open-ended renewal", params: map[string]any{"dueDate": nil}},
 		{name: "wrong type", params: map[string]any{"dueDate": 42}, fail: true},
 		{name: "malformed date", params: map[string]any{"dueDate": "invalid"}, fail: true},
 		{name: "past date", params: map[string]any{"dueDate": "2000-01-01T00:00:00Z"}, fail: true},
@@ -560,7 +577,7 @@ func TestSkippedCheckOutPreservesItemProgress(t *testing.T) {
 			svc := CreatePatronRequestActionService(repo, new(IllRepoMock), bus, sender, nil, nil, nil, nil)
 			var result actionExecutionResult
 			if side == SideLending {
-				result = svc.shipLenderRequest(appCtx, "event", pr, adapter, pr.IllRequest, actionParams{DueDate: nullable.NewNullableWithValue("2030-01-01")})
+				result = svc.shipLenderRequest(appCtx, "event", pr, adapter, pr.IllRequest, actionParams{DueDate: ptr("2030-01-01")})
 				require.True(t, result.pr.DueAt.Valid, "skipped checkout must still allow the manual due date")
 			} else {
 				result = svc.checkoutBorrowingRequest(appCtx, pr, adapter, pr.IllRequest)
