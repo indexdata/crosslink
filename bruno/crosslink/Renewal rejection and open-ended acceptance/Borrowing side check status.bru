@@ -1,0 +1,44 @@
+meta {
+  name: Borrowing side check status
+  type: http
+  seq: 19
+}
+
+get {
+  url: {{host}}/patron_requests/{{renewalOmittedPrId}}?side=borrowing
+  body: none
+  auth: basic
+}
+
+params:query {
+  side: borrowing
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
+script:post-response {
+  test("Check if patron request is complete", () => {
+      const pr = res.getBody();
+      expect(pr.lastActionResult).to.eql("SUCCESS");
+      expect(pr.lastAction).to.eql("ship-return");
+      expect(pr.state).to.eql("COMPLETED");
+      expect(pr.dueDate ?? null).to.equal(null);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
