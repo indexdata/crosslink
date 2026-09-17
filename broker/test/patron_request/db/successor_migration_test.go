@@ -17,10 +17,14 @@ func TestBackfillSuccessorRequestType(t *testing.T) {
 	require.NoError(t, err)
 	conn, err := pgx.Connect(appCtx, app.ConnectionString)
 	require.NoError(t, err)
-	defer conn.Close(appCtx)
+	defer func() {
+		assert.NoError(t, conn.Close(appCtx))
+	}()
 	tx, err := conn.Begin(appCtx)
 	require.NoError(t, err)
-	defer tx.Rollback(appCtx)
+	defer func() {
+		assert.NoError(t, tx.Rollback(appCtx))
+	}()
 	// Shadow the real table to exercise the migration without changing app data.
 	_, err = tx.Exec(appCtx, `CREATE TEMP TABLE patron_request
 		(LIKE public.patron_request INCLUDING DEFAULTS) ON COMMIT DROP`)
