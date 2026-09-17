@@ -147,7 +147,7 @@ func CreatePatronRequestActionService(prRepo pr_db.PrRepo, illRepo ill_db.IllRep
 	iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator, emailService email.EmailService,
 	lookupAdapterFactory *service.LookupAdapterFactory, directoryLookupAdapter adapter.DirectoryLookupAdapter) *PatronRequestActionService {
 	return &PatronRequestActionService{
-		messageSender:          PatronRequestMessageSender{iso18626Handler: iso18626Handler, eventBus: eventBus, prRepo: prRepo},
+		messageSender:          PatronRequestMessageSender{iso18626Handler: iso18626Handler, eventBus: eventBus},
 		prRepo:                 prRepo,
 		illRepo:                illRepo,
 		eventBus:               eventBus,
@@ -1222,15 +1222,19 @@ func (a *PatronRequestActionService) createSuccessorBorrowingRequest(ctx common.
 	successorPr.RequesterReqID = getDbTextPtr(&successorPr.ID)
 	successorPr.CreatedAt = pgtype.Timestamp{Valid: true, Time: time.Now()}
 	successorPr.IllRequest.Header.RequestingAgencyRequestId = successorPr.ID
-	if !retry {
-		successorPr.IllRequest.Header.SupplyingAgencyRequestId = ""
-		// Preserve nil service info so legacy requests keep the default loan workflow.
-		if successorPr.IllRequest.ServiceInfo != nil {
-			requestType := iso18626.TypeRequestTypeNew
-			successorPr.IllRequest.ServiceInfo.RequestType = &requestType
-			successorPr.IllRequest.ServiceInfo.RequestingAgencyPreviousRequestId = ""
-		}
+	if successorPr.IllRequest.ServiceInfo == nil {
+		// Legacy requests without service info use the loan workflow.
+		successorPr.IllRequest.ServiceInfo = &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}
 	}
+	requestType := iso18626.TypeRequestTypeNew
+	successorPr.IllRequest.ServiceInfo.RequestingAgencyPreviousRequestId = ""
+	if retry {
+		requestType = iso18626.TypeRequestTypeRetry
+		successorPr.IllRequest.ServiceInfo.RequestingAgencyPreviousRequestId = pr.ID
+	} else {
+		successorPr.IllRequest.Header.SupplyingAgencyRequestId = ""
+	}
+	successorPr.IllRequest.ServiceInfo.RequestType = &requestType
 	successorPr.IllRequest.Header.Timestamp = utils.XSDDateTime{Time: successorPr.CreatedAt.Time}
 	successorPr.PrevReqID = getDbTextPtr(&pr.ID)
 	successorPr.Language = pr.Language

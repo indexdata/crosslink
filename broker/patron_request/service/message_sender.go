@@ -17,7 +17,6 @@ import (
 )
 
 type PatronRequestMessageSender struct {
-	prRepo          pr_db.PrRepo
 	iso18626Handler handler.Iso18626HandlerInterface
 	eventBus        events.EventBus
 }
@@ -160,17 +159,9 @@ func (ms *PatronRequestMessageSender) sendBorrowingRequest(ctx common.ExtendedCo
 	}
 	requestType := iso18626.TypeRequestTypeNew
 	illRequest.ServiceInfo.RequestingAgencyPreviousRequestId = ""
-	if pr.PrevReqID.Valid {
-		previous, err := ms.prRepo.GetPatronRequestById(ctx, pr.PrevReqID.String)
-		if err != nil {
-			return events.EventStatusError, nil, fmt.Errorf("failed to load previous patron request: %w", err)
-		}
-		// Rerequests link to a terminal request locally, but start a new ISO18626
-		// transaction. Existing retries retain their original protocol behavior.
-		if previous.State != BorrowerStateCancelled && previous.State != BorrowerStateUnfilled {
-			illRequest.ServiceInfo.RequestingAgencyPreviousRequestId = pr.PrevReqID.String
-			requestType = iso18626.TypeRequestTypeRetry
-		}
+	if illRequest.ServiceInfo.RequestType != nil && *illRequest.ServiceInfo.RequestType == iso18626.TypeRequestTypeRetry {
+		requestType = iso18626.TypeRequestTypeRetry
+		illRequest.ServiceInfo.RequestingAgencyPreviousRequestId = pr.PrevReqID.String
 	}
 	illRequest.ServiceInfo.RequestType = &requestType
 

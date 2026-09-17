@@ -1,6 +1,8 @@
 package prservice
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/events"
@@ -85,11 +87,8 @@ func TestRerequestAvailability(t *testing.T) {
 }
 
 func TestSendLinkedRetryRequest(t *testing.T) {
-	repo := new(MockPrRepo)
-	repo.On("GetPatronRequestById", "previous").Return(pr_db.PatronRequest{State: BorrowerStateRetryAccepted}, nil)
-	sender := PatronRequestMessageSender{prRepo: repo, eventBus: new(MockEventBus), iso18626Handler: new(MockIso18626Handler)}
-	// Legacy retry requests may still store the original request's New type.
-	requestType := iso18626.TypeRequestTypeNew
+	sender := PatronRequestMessageSender{eventBus: new(MockEventBus), iso18626Handler: new(MockIso18626Handler)}
+	requestType := iso18626.TypeRequestTypeRetry
 	request := iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{RequestType: &requestType}}
 	status, result, err := sender.sendBorrowingRequest(appCtx, "send", pr_db.PatronRequest{
 		ID: "successor", RequesterSymbol: getDbText("ISIL:REQ1"), PrevReqID: getDbText("previous"),
@@ -98,7 +97,7 @@ func TestSendLinkedRetryRequest(t *testing.T) {
 	require.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, iso18626.TypeRequestTypeRetry, *result.OutgoingMessage.Request.ServiceInfo.RequestType)
 	assert.Equal(t, "previous", result.OutgoingMessage.Request.ServiceInfo.RequestingAgencyPreviousRequestId)
-	assert.Equal(t, iso18626.TypeRequestTypeNew, *request.ServiceInfo.RequestType)
+	assert.Equal(t, iso18626.TypeRequestTypeRetry, *request.ServiceInfo.RequestType)
 }
 
 func TestRerequestDoesNotReplaceSuccessor(t *testing.T) {
@@ -108,18 +107,6 @@ func TestRerequestDoesNotReplaceSuccessor(t *testing.T) {
 	assert.Equal(t, events.EventStatusError, result.status)
 	assert.Empty(t, result.successorPr.ID)
 	assert.Equal(t, "existing", result.pr.NextReqID.String)
-}
-
-func TestSendLinkedRequestFailsWhenPreviousCannotBeLoaded(t *testing.T) {
-	repo := new(MockPrRepo)
-	repo.On("GetPatronRequestById", "previous").Return(pr_db.PatronRequest{}, assert.AnError)
-	sender := PatronRequestMessageSender{prRepo: repo}
-	status, result, err := sender.sendBorrowingRequest(appCtx, "send", pr_db.PatronRequest{
-		ID: "successor", RequesterSymbol: getDbText("ISIL:REQ1"), PrevReqID: getDbText("previous"),
-	}, iso18626.Request{})
-	require.ErrorIs(t, err, assert.AnError)
-	assert.Equal(t, events.EventStatusError, status)
-	assert.Nil(t, result)
 }
 
 func TestLegacyRerequestStartsInitialWorkflow(t *testing.T) {
@@ -137,20 +124,63 @@ func TestLegacyRerequestStartsInitialWorkflow(t *testing.T) {
 			result := service.createSuccessorBorrowingRequest(appCtx, original, false)
 			require.Equal(t, events.EventStatusSuccess, result.status)
 			next := result.successorPr
-			assert.Nil(t, next.IllRequest.ServiceInfo)
+			assert.Equal(t, iso18626.TypeServiceTypeLoan, next.IllRequest.ServiceInfo.ServiceType)
 			require.NoError(t, service.RunAutoActionsOnStateEntry(appCtx, next, nil, ""))
 			require.Len(t, bus.createdTaskData, 1)
 			assert.Equal(t, BorrowerActionValidatePatron, *bus.createdTaskData[0].Action)
 			bus.AssertExpectations(t)
 			repo.AssertExpectations(t)
 
-			repo.On("GetPatronRequestById", original.ID).Return(original, nil).Once()
 			status, sent, err := service.messageSender.sendBorrowingRequest(appCtx, "send", next, next.IllRequest)
 			require.NoError(t, err)
 			require.Equal(t, events.EventStatusSuccess, status)
 			assert.Equal(t, iso18626.TypeRequestTypeNew, *sent.OutgoingMessage.Request.ServiceInfo.RequestType)
 			assert.Empty(t, sent.OutgoingMessage.Request.ServiceInfo.RequestingAgencyPreviousRequestId)
-			assert.Nil(t, next.IllRequest.ServiceInfo)
+			assert.Equal(t, iso18626.TypeServiceTypeLoan, next.IllRequest.ServiceInfo.ServiceType)
 		})
+	}
+}
+
+func TestSuccessorPersistsRequestType(t *testing.T) {
+	for _, retry := range []bool{false, true} {
+		for _, legacy := range []bool{false, true} {
+			t.Run(fmt.Sprintf("retry=%t/legacy=%t", retry, legacy), func(t *testing.T) {
+				repo := new(MockPrRepo)
+				service := CreatePatronRequestActionService(repo, nil, new(MockEventBus), new(MockIso18626Handler), nil, nil, nil, nil)
+				inheritedType := iso18626.TypeRequestTypeRetry
+				if retry {
+					inheritedType = iso18626.TypeRequestTypeNew
+				}
+				original := pr_db.PatronRequest{
+					ID: "REQ1-1", Side: SideBorrowing, State: "CUSTOM_STATE",
+					RequesterSymbol: getDbText("ISIL:REQ1"),
+				}
+				if !legacy {
+					original.IllRequest.ServiceInfo = &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan, RequestType: &inheritedType}
+				}
+				result := service.createSuccessorBorrowingRequest(appCtx, original, retry)
+				require.Equal(t, events.EventStatusSuccess, result.status)
+				next := result.successorPr
+				expectedType := iso18626.TypeRequestTypeNew
+				expectedPrevious := ""
+				if retry {
+					expectedType = iso18626.TypeRequestTypeRetry
+					expectedPrevious = original.ID
+				}
+				require.NotNil(t, next.IllRequest.ServiceInfo.RequestType)
+				assert.Equal(t, expectedType, *next.IllRequest.ServiceInfo.RequestType)
+				assert.Equal(t, expectedPrevious, next.IllRequest.ServiceInfo.RequestingAgencyPreviousRequestId)
+				// Round-trip the persisted ISO request before sending without a predecessor.
+				data, err := json.Marshal(next.IllRequest)
+				require.NoError(t, err)
+				require.NoError(t, json.Unmarshal(data, &next.IllRequest))
+				status, sent, err := service.messageSender.sendBorrowingRequest(appCtx, "send", next, next.IllRequest)
+				require.NoError(t, err)
+				require.Equal(t, events.EventStatusSuccess, status)
+				assert.Equal(t, expectedType, *sent.OutgoingMessage.Request.ServiceInfo.RequestType)
+				assert.Equal(t, expectedPrevious, sent.OutgoingMessage.Request.ServiceInfo.RequestingAgencyPreviousRequestId)
+				repo.AssertNotCalled(t, "GetPatronRequestById", original.ID)
+			})
+		}
 	}
 }
