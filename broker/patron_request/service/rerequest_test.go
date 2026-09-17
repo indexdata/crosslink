@@ -208,7 +208,14 @@ func TestSendRequestDuplicateCheckBypass(t *testing.T) {
 				require.Equal(t, events.EventStatusSuccess, status)
 				require.Len(t, isoHandler.requestOptions, 1)
 				assert.Equal(t, linked && requestType == iso18626.TypeRequestTypeNew, isoHandler.requestOptions[0].SkipDuplicateCheck)
-				assert.Equal(t, requestType, *result.OutgoingMessage.Request.ServiceInfo.RequestType)
+				expectedType := iso18626.TypeRequestTypeNew
+				expectedPrevious := ""
+				if linked && requestType == iso18626.TypeRequestTypeRetry {
+					expectedType = iso18626.TypeRequestTypeRetry
+					expectedPrevious = "previous"
+				}
+				assert.Equal(t, expectedType, *result.OutgoingMessage.Request.ServiceInfo.RequestType)
+				assert.Equal(t, expectedPrevious, result.OutgoingMessage.Request.ServiceInfo.RequestingAgencyPreviousRequestId)
 			})
 		}
 	}

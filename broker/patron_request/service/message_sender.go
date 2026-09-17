@@ -159,7 +159,7 @@ func (ms *PatronRequestMessageSender) sendBorrowingRequest(ctx common.ExtendedCo
 	}
 	requestType := iso18626.TypeRequestTypeNew
 	illRequest.ServiceInfo.RequestingAgencyPreviousRequestId = ""
-	if illRequest.ServiceInfo.RequestType != nil && *illRequest.ServiceInfo.RequestType == iso18626.TypeRequestTypeRetry {
+	if pr.PrevReqID.Valid && illRequest.ServiceInfo.RequestType != nil && *illRequest.ServiceInfo.RequestType == iso18626.TypeRequestTypeRetry {
 		requestType = iso18626.TypeRequestTypeRetry
 		illRequest.ServiceInfo.RequestingAgencyPreviousRequestId = pr.PrevReqID.String
 	}
