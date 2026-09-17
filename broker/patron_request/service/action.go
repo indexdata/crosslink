@@ -1442,24 +1442,28 @@ func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.Extended
 		title = illRequest.BibliographicInfo.Title
 	}
 	callNumber := response.CallNumber
-	savedItem, err := a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
-		ID:           uuid.NewString(),
-		CreatedAt:    pgtype.Timestamp{Valid: true, Time: time.Now()},
-		PrID:         pr.ID,
-		ItemID:       getDbText(itemID),
-		LmsRequestID: getDbText(lmsRequestID),
-		Title:        getDbTextPtr(&title),
-		CallNumber:   getDbTextPtr(&callNumber),
-		Barcode:      barcode,
+	// Commit the reservation identifier and LMS status together, after the LMS call.
+	err = a.prRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
+		savedItem, err := repo.SaveItem(ctx, pr_db.SaveItemParams{
+			ID:           uuid.NewString(),
+			CreatedAt:    pgtype.Timestamp{Valid: true, Time: time.Now()},
+			PrID:         pr.ID,
+			ItemID:       getDbText(itemID),
+			LmsRequestID: getDbText(lmsRequestID),
+			Title:        getDbTextPtr(&title),
+			CallNumber:   getDbTextPtr(&callNumber),
+			Barcode:      barcode,
+		})
+		if err != nil {
+			return err
+		}
+		return repo.SetItemLmsStatus(ctx, pr_db.SetItemLmsStatusParams{ID: savedItem.ID, LmsStatus: pr_db.LmsStatusRequested, LmsDueDate: savedItem.LmsDueDate})
 	})
 	if err != nil {
 		if cancelErr := lmsAdapter.CancelRequestItem(lmsRequestID, userID); cancelErr != nil {
 			err = errors.Join(err, fmt.Errorf("LMS CancelRequestItem compensation failed: %w", cancelErr))
 		}
 		return pr, "failed to save item", err
-	}
-	if err := a.recordItemLmsStatus(ctx, savedItem, pr_db.LmsStatusRequested, true, nil); err != nil {
-		return pr, "failed to save LMS status", err
 	}
 	return pr, "", nil
 }

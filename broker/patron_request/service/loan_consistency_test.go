@@ -94,6 +94,38 @@ func TestReceivePersistenceFailuresCompensateAndAllowRetry(t *testing.T) {
 	}
 }
 
+func TestSupplierRequestItemPersistenceIsAtomic(t *testing.T) {
+	for _, step := range []string{"item", "status", "commit"} {
+		t.Run(step, func(t *testing.T) {
+			pr := testLoan()
+			pr.IllRequest.Header.RequestingAgencyRequestId = "req-1"
+			repo := &loanTxRepo{MockPrRepo: &MockPrRepo{savedPr: pr, saveItemFail: step == "item"}, failStep: step}
+			adapter := new(mockLmsAdapter)
+			adapter.On("RequestItem", "req-1", "", "", "", "").Return(&lms.RequestedItem{RequestID: "lms-req-1", Barcode: "barcode"}, nil).Twice()
+			adapter.On("CancelRequestItem", "lms-req-1", "").Return(nil).Once()
+			svc := &PatronRequestActionService{prRepo: repo}
+
+			result := svc.requestItemLenderRequest(appCtx, pr, adapter, pr.IllRequest)
+			require.Equal(t, events.EventStatusError, result.status)
+			assert.Empty(t, repo.savedItems, "failed transaction must not leave a reservation identifier without its status")
+			assert.Equal(t, 1, repo.transactions)
+			adapter.AssertNumberOfCalls(t, "CancelRequestItem", 1)
+
+			repo.failStep, repo.saveItemFail = "", false
+			result = svc.requestItemLenderRequest(appCtx, pr, adapter, pr.IllRequest)
+			require.Equal(t, events.EventStatusSuccess, result.status)
+			require.Len(t, repo.savedItems, 1)
+			assert.Equal(t, getDbText("lms-req-1"), repo.savedItems[0].LmsRequestID)
+			assert.Equal(t, pr_db.LmsStatusRequested, repo.savedItems[0].LmsStatus)
+
+			result = svc.requestItemLenderRequest(appCtx, pr, adapter, pr.IllRequest)
+			require.Equal(t, events.EventStatusSuccess, result.status)
+			assert.Equal(t, 2, repo.transactions, "retry after success must not repeat the reservation")
+			adapter.AssertExpectations(t)
+		})
+	}
+}
+
 func TestSupplierItemEditsInvalidateDatesAtomically(t *testing.T) {
 	for _, remove := range []bool{false, true} {
 		for _, failure := range []string{"", "item", "date", "commit"} {
