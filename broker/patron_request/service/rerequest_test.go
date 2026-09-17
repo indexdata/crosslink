@@ -53,6 +53,8 @@ func TestRerequest(t *testing.T) {
 			assert.Equal(t, original.Patron, next.Patron)
 			assert.Equal(t, original.Tenant, next.Tenant)
 			assert.Equal(t, original.RequesterPickupLocationID, next.RequesterPickupLocationID)
+			assert.False(t, next.SupplierSymbol.Valid)
+			assert.Empty(t, next.SupplierSymbol.String)
 			assert.Equal(t, original.IllRequest.BibliographicInfo.Title, next.IllRequest.BibliographicInfo.Title)
 			assert.Empty(t, next.Items)
 			assert.Nil(t, next.RetryBibInfo)
@@ -154,6 +156,7 @@ func TestSuccessorPersistsRequestType(t *testing.T) {
 				original := pr_db.PatronRequest{
 					ID: "REQ1-1", Side: SideBorrowing, State: "CUSTOM_STATE",
 					RequesterSymbol: getDbText("ISIL:REQ1"),
+					SupplierSymbol:  getDbText("ISIL:SUP1"),
 				}
 				if !legacy {
 					original.IllRequest.ServiceInfo = &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan, RequestType: &inheritedType}
@@ -166,6 +169,10 @@ func TestSuccessorPersistsRequestType(t *testing.T) {
 				if retry {
 					expectedType = iso18626.TypeRequestTypeRetry
 					expectedPrevious = original.ID
+					assert.Equal(t, original.SupplierSymbol, next.SupplierSymbol)
+				} else {
+					assert.False(t, next.SupplierSymbol.Valid)
+					assert.Empty(t, next.SupplierSymbol.String)
 				}
 				require.NotNil(t, next.IllRequest.ServiceInfo.RequestType)
 				assert.Equal(t, expectedType, *next.IllRequest.ServiceInfo.RequestType)
