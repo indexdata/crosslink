@@ -276,22 +276,21 @@ func TestShippingDateSourceStaysOnActionResult(t *testing.T) {
 func TestIncomingLoanAndRenewalDates(t *testing.T) {
 	old := time.Now().UTC().AddDate(0, 0, -30)
 	past := old.AddDate(0, 0, 1)
-	yearZero := &utils.XSDDateTime{Time: time.Date(0, 1, 1, 0, 0, 0, 0, time.UTC)}
 	for _, tc := range []struct {
-		name   string
-		state  pr_db.PatronRequestState
-		reason iso18626.TypeReasonForMessage
-		answer *iso18626.TypeYesNo
-		date   *utils.XSDDateTime
-		want   pr_db.PatronRequestState
-		fail   bool
+		name         string
+		state        pr_db.PatronRequestState
+		reason       iso18626.TypeReasonForMessage
+		answer       *iso18626.TypeYesNo
+		date         *utils.XSDDateTime
+		want         pr_db.PatronRequestState
+		fail         bool
+		existingDate bool
 	}{
 		{name: "open-ended shipment", state: BorrowerStateWillSupply, reason: iso18626.TypeReasonForMessageStatusChange, want: BorrowerStateShipped},
 		{name: "accept past date without local overdue decision", state: BorrowerStateRenewalPending, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoY), date: &utils.XSDDateTime{Time: past}, want: BorrowerStateRenewed},
 		{name: "undated acceptance clears previous date", state: BorrowerStateRenewalPending, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoY), want: BorrowerStateRenewed},
-		{name: "reject zero renewal date", state: BorrowerStateRenewalPending, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoY), date: &utils.XSDDateTime{}, fail: true},
-		{name: "reject year-zero renewal", state: BorrowerStateRenewalPending, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoY), date: yearZero, fail: true},
-		{name: "reject year-zero shipment", state: BorrowerStateWillSupply, reason: iso18626.TypeReasonForMessageStatusChange, date: yearZero, fail: true},
+		{name: "zero renewal date clears previous date", state: BorrowerStateRenewalPending, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoY), date: &utils.XSDDateTime{}, want: BorrowerStateRenewed},
+		{name: "zero shipment date preserves previous date", state: BorrowerStateWillSupply, reason: iso18626.TypeReasonForMessageStatusChange, date: &utils.XSDDateTime{}, want: BorrowerStateShipped, existingDate: true},
 		{name: "reject preserves date", state: BorrowerStateRenewalPending, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoN), want: BorrowerStateOverdue},
 		{name: "unsolicited response", state: BorrowerStateReceived, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoY), date: &utils.XSDDateTime{Time: past}, fail: true},
 	} {
@@ -301,7 +300,7 @@ func TestIncomingLoanAndRenewalDates(t *testing.T) {
 			pr := testLoan()
 			pr.Side = SideBorrowing
 			pr.State = tc.state
-			if tc.reason == iso18626.TypeReasonForMessageRenewResponse {
+			if tc.reason == iso18626.TypeReasonForMessageRenewResponse || tc.existingDate {
 				pr.DueAt = pgtype.Timestamptz{Time: old, Valid: true}
 				pr.IllResponse.StatusInfo.DueDate = isoLoanDate(pr.DueAt)
 			}
@@ -319,7 +318,7 @@ func TestIncomingLoanAndRenewalDates(t *testing.T) {
 			if tc.reason == iso18626.TypeReasonForMessageRenewResponse {
 				assert.Empty(t, repo.savedItems, "renewal must not create shipment items")
 				if *tc.answer == iso18626.TypeYesNoY {
-					if tc.date == nil {
+					if tc.date == nil || tc.date.IsZero() {
 						assert.Equal(t, pgtype.Timestamptz{}, repo.savedPr.DueAt)
 						assert.Nil(t, repo.savedPr.IllResponse.StatusInfo.DueDate)
 					} else {
@@ -331,6 +330,9 @@ func TestIncomingLoanAndRenewalDates(t *testing.T) {
 					require.NotNil(t, repo.savedPr.IllResponse.StatusInfo.DueDate)
 					assert.Equal(t, old, repo.savedPr.IllResponse.StatusInfo.DueDate.Time)
 				}
+			} else if tc.existingDate {
+				assert.True(t, repo.savedPr.DueAt.Valid)
+				assert.Equal(t, old, repo.savedPr.DueAt.Time)
 			} else {
 				assert.False(t, repo.savedPr.DueAt.Valid)
 			}
@@ -576,7 +578,7 @@ func TestSupplierOverdueUsesConfiguredStateAndRechecksDueDate(t *testing.T) {
 	}{
 		{name: "past due", due: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true}, want: events.EventStatusSuccess},
 		{name: "future due", due: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}, want: events.EventStatusError},
-		{name: "no due date", want: events.EventStatusError},
+		{name: "no due date", want: events.EventStatusSuccess},
 		{name: "snapshot does not control eligibility", due: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true}, snapshot: iso18626.TypeStatusCopyCompleted, want: events.EventStatusSuccess},
 		{name: "completed copy or loan cannot become overdue", due: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true}, state: LenderStateCompleted, serviceType: iso18626.TypeServiceTypeCopyOrLoan, want: events.EventStatusError},
 		{name: "copy cannot become overdue", due: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true}, serviceType: iso18626.TypeServiceTypeCopy, want: events.EventStatusError},
@@ -614,6 +616,8 @@ func TestSupplierOverdueUsesConfiguredStateAndRechecksDueDate(t *testing.T) {
 				assert.Equal(t, LenderStateOverdue, repo.savedPr.State)
 				require.NotNil(t, sender.lastSupplyingAgencyMessage)
 				assert.Equal(t, iso18626.TypeStatusOverdue, sender.lastSupplyingAgencyMessage.StatusInfo.Status)
+				assert.Equal(t, tc.due, repo.savedPr.DueAt)
+				assert.Equal(t, isoLoanDate(tc.due), sender.lastSupplyingAgencyMessage.StatusInfo.DueDate)
 			} else {
 				assert.Equal(t, pr.State, repo.savedPr.State)
 				assert.Nil(t, sender.lastSupplyingAgencyMessage)
@@ -690,6 +694,44 @@ func TestSkippedLmsOperationPreservesKnownStatus(t *testing.T) {
 	require.NoError(t, svc.recordItemLmsStatus(appCtx, repo.savedItems[0], pr_db.LmsStatusCheckedIn, false, nil))
 	assert.Equal(t, pr_db.LmsStatusCheckedOut, repo.savedItems[0].LmsStatus)
 	assert.Empty(t, bus.createdNoticeData)
+}
+
+func TestIncomingOverdueDueDate(t *testing.T) {
+	past := time.Now().UTC().Add(-time.Hour)
+	future := past.Add(48 * time.Hour)
+	old := pgtype.Timestamptz{Time: past.Add(-time.Hour), Valid: true}
+	for _, tc := range []struct {
+		name    string
+		initial pgtype.Timestamptz
+		date    *utils.XSDDateTime
+		want    pgtype.Timestamptz
+	}{
+		{name: "provided date replaces existing", initial: old, date: &utils.XSDDateTime{Time: past}, want: pgtype.Timestamptz{Time: past, Valid: true}},
+		{name: "provided date dates open-ended loan", date: &utils.XSDDateTime{Time: past}, want: pgtype.Timestamptz{Time: past, Valid: true}},
+		{name: "future date trusts supplier", initial: old, date: &utils.XSDDateTime{Time: future}, want: pgtype.Timestamptz{Time: future, Valid: true}},
+		{name: "omitted date preserves existing", initial: old, want: old},
+		{name: "omitted date preserves open-ended loan"},
+		{name: "zero date preserves existing", initial: old, date: &utils.XSDDateTime{}, want: old},
+		{name: "zero date preserves open-ended loan", date: &utils.XSDDateTime{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pr := testLoan()
+			pr.Side, pr.State = SideBorrowing, BorrowerStateReceived
+			pr.DueAt = tc.initial
+			repo := &MockPrRepo{savedPr: pr}
+			handler := CreatePatronRequestMessageHandler(repo, nil, nil, nil)
+			sam := iso18626.SupplyingAgencyMessage{
+				MessageInfo: iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange},
+				StatusInfo:  iso18626.StatusInfo{Status: iso18626.TypeStatusOverdue, DueDate: tc.date},
+			}
+			status, _, err := handler.handleSupplyingAgencyMessage(appCtx, sam, pr)
+			require.NoError(t, err)
+			require.Equal(t, events.EventStatusSuccess, status)
+			assert.Equal(t, BorrowerStateOverdue, repo.savedPr.State)
+			assert.Equal(t, tc.want, repo.savedPr.DueAt)
+			assert.Equal(t, isoLoanDate(tc.want), repo.savedPr.IllResponse.StatusInfo.DueDate)
+		})
+	}
 }
 
 func TestOverdueEventsAndTransitionlessHelpers(t *testing.T) {
