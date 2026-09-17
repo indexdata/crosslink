@@ -67,3 +67,69 @@ func TestImportHostSettingsMatchEntryContract(t *testing.T) {
 		})
 	}
 }
+
+func TestImportContractReusesDirectoryCreationObjectsAndEnums(t *testing.T) {
+	contracts := loadImportContracts(t)
+
+	for _, contract := range contracts {
+		for _, redundantAlias := range []string{"ImportEntryKey", "ImportSymbolRef", "ImportServiceEndpoint", "ImportAddressComponent", "ImportClosure"} {
+			require.NotContains(t, contract.Components.Schemas, redundantAlias)
+		}
+		requirePropertySchemaRef(t, contract, "ImportEntryRecord", "key", "SymbolProperties")
+		requireArrayItemsSchemaRef(t, contract, "ImportEntryData", "symbols", "SymbolProperties")
+		requireArrayItemsSchemaRef(t, contract, "ImportEntryData", "endpoints", "ServiceEndpointProperties")
+		requireArrayItemsSchemaRef(t, contract, "ImportEntryData", "closures", "ClosureProperties")
+		requireArrayItemsSchemaRef(t, contract, "ImportAddress", "addressComponents", "AddressComponent")
+		requirePropertySchemaRef(t, contract, "Entry", "type", "EntryType")
+		requirePropertySchemaRef(t, contract, "ImportEntryData", "type", "EntryType")
+		requirePropertySchemaRef(t, contract, "Tier", "level", "TierLevel")
+		requirePropertySchemaRef(t, contract, "ImportTierData", "level", "TierLevel")
+		requirePropertySchemaRef(t, contract, "Tier", "type", "TierType")
+		requirePropertySchemaRef(t, contract, "ImportTierData", "type", "TierType")
+		requirePropertySchemaRef(t, contract, "QueryConfig", "type", "QueryConfigType")
+		requirePropertySchemaRef(t, contract, "ImportQueryConfig", "type", "QueryConfigType")
+		requirePropertySchemaRef(t, contract, "LmsConfig", "vendor", "HostLmsVendor")
+		requirePropertySchemaRef(t, contract, "ImportLmsConfig", "vendor", "HostLmsVendor")
+		requirePropertySchemaRef(t, contract, "LmsConfig", "bibIdNormalization", "BibIdNormalization")
+		requirePropertySchemaRef(t, contract, "ImportLmsConfig", "bibIdNormalization", "BibIdNormalization")
+		requirePropertySchemaRef(t, contract, "AddressProperties", "type", "AddressType")
+		requirePropertySchemaRef(t, contract, "ImportAddress", "type", "AddressType")
+		requirePropertySchemaRef(t, contract, "AddressComponent", "type", "AddressComponentType")
+		requirePropertySchemaRef(t, contract, "MarcAvailabilityPredicate", "operator", "MarcAvailabilityOperator")
+		requirePropertySchemaRef(t, contract, "ImportMarcAvailabilityPredicate", "operator", "MarcAvailabilityOperator")
+		requirePropertySchemaRef(t, contract, "OpacHoldingsParserConfig", "availabilityRule", "OpacAvailabilityRule")
+		requirePropertySchemaRef(t, contract, "ImportOpacHoldingsParserConfig", "availabilityRule", "OpacAvailabilityRule")
+		requirePropertySchemaRef(t, contract, "OpacHoldingsParserConfig", "shelvingLocationSource", "ShelvingLocationSource")
+		requirePropertySchemaRef(t, contract, "ImportOpacHoldingsParserConfig", "shelvingLocationSource", "ShelvingLocationSource")
+	}
+}
+
+func requireArrayItemsSchemaRef(t *testing.T, contract *openapi3.T, schemaName, propertyName, referencedSchemaName string) {
+	t.Helper()
+	items := contract.Components.Schemas[schemaName].Value.Properties[propertyName].Value.Items
+	require.Equal(t, "#/components/schemas/"+referencedSchemaName, items.Ref)
+}
+
+func loadImportContracts(t *testing.T) []*openapi3.T {
+	t.Helper()
+	embedded, err := GetSpec()
+	require.NoError(t, err)
+	source, err := openapi3.NewLoader().LoadFromFile("../api.yaml")
+	require.NoError(t, err)
+	return []*openapi3.T{source, embedded}
+}
+
+func requirePropertySchemaRef(t *testing.T, contract *openapi3.T, schemaName, propertyName, referencedSchemaName string) {
+	t.Helper()
+	property := contract.Components.Schemas[schemaName].Value.Properties[propertyName]
+	want := "#/components/schemas/" + referencedSchemaName
+	if property.Ref == want {
+		return
+	}
+	for _, schema := range property.Value.AllOf {
+		if schema.Ref == want {
+			return
+		}
+	}
+	require.Equal(t, want, property.Ref)
+}
