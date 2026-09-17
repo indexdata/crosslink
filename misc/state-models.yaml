@@ -527,6 +527,8 @@ stateModels:
               sendTo:
                 - patron
               templateLabel: cancelled-notification
+          - name: rerequest
+            desc: Create a new request based on this request
 
       - name: UNFILLED
         display: Unfilled
@@ -541,6 +543,8 @@ stateModels:
               sendTo:
                 - patron
               templateLabel: unfilled-notification
+          - name: rerequest
+            desc: Create a new request based on this request
 
       - name: RETRY_ACCEPTED
         display: Retry Accepted

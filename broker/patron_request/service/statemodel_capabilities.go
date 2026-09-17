@@ -84,6 +84,7 @@ const (
 	BorrowerActionRenew                pr_db.PatronRequestAction = "renew"
 	BorrowerActionShipReturn           pr_db.PatronRequestAction = "ship-return"
 	BorrowerActionAcceptRetry          pr_db.PatronRequestAction = "accept-retry"
+	BorrowerActionRerequest            pr_db.PatronRequestAction = "rerequest"
 	BorrowerActionRejectRetry          pr_db.PatronRequestAction = "reject-retry"
 	BorrowerActionSendNotification     pr_db.PatronRequestAction = "send-notification"
 	BorrowerActionFillLocally          pr_db.PatronRequestAction = "fill-locally"
@@ -243,6 +244,7 @@ func requesterBuiltInActions() []proapi.ActionCapability {
 			Name:       string(BorrowerActionAcceptRetry),
 			Parameters: []string{},
 		},
+		{Name: string(BorrowerActionRerequest), Parameters: []string{}},
 		transitionActionCapability(BorrowerActionRejectRetry),
 		{
 			Name:       string(BorrowerActionSendNotification),

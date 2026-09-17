@@ -548,8 +548,19 @@ func TestHandleNewRequestChecksDuplicatesOnlyForExternalRequester(t *testing.T) 
 		_, _, err := handleNewRequest(ctx, request, repo, createPgText("ISIL:REQ"), []ill_db.Peer{{
 			Vendor:     string(dirapi.CrossLink),
 			CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &windowHours}},
-		}})
+		}}, false)
 		assert.NoError(t, err)
+		assert.False(t, repo.called)
+	})
+
+	t.Run("intentional rerequest bypasses external requester duplicate check", func(t *testing.T) {
+		repo := &mockDuplicateCheckRepo{duplicate: true}
+		id, _, err := handleNewRequest(ctx, request, repo, createPgText("ISIL:REQ"), []ill_db.Peer{{
+			Vendor:     string(dirapi.Alma),
+			CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &windowHours}},
+		}}, true)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, id)
 		assert.False(t, repo.called)
 	})
 
@@ -558,7 +569,7 @@ func TestHandleNewRequestChecksDuplicatesOnlyForExternalRequester(t *testing.T) 
 		_, _, err := handleNewRequest(ctx, request, repo, createPgText("ISIL:REQ"), []ill_db.Peer{{
 			Vendor:     string(dirapi.Alma),
 			CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &windowHours}},
-		}})
+		}}, false)
 		assert.ErrorIs(t, err, ErrDuplicateRequest)
 		assert.True(t, repo.called)
 	})
