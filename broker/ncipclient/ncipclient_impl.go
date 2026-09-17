@@ -7,8 +7,6 @@ import (
 	"io"
 	"net/http"
 	"reflect"
-	"strings"
-	"time"
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/httpclient"
@@ -169,6 +167,10 @@ func (n *NcipClientImpl) CheckOutItem(request ncip.CheckOutItem) (response *ncip
 	response = ncipResponse.CheckOutItemResponse
 	if response == nil {
 		return nil, fmt.Errorf("invalid NCIP response: missing CheckOutItemResponse")
+	}
+	// The XSD decoder represents malformed dates as zero; they do not undo checkout.
+	if response.DateDue != nil && (response.DateDue.IsZero() || response.DateDue.Year() < 1) {
+		response.DateDue = nil
 	}
 	err = n.checkProblem("NCIP check out item", response.Problem)
 	return response, err
@@ -387,52 +389,5 @@ func (n *NcipClientImpl) unmarshal(b []byte, v any) error {
 			return err
 		}
 	}
-	clean, err := stripInvalidCheckoutDueDates(b)
-	if err != nil {
-		return err
-	}
-	return xml.Unmarshal(clean, v)
-}
-
-// A malformed optional DateDue does not invalidate a confirmed checkout. Only
-// the direct CheckOutItemResponse/DateDue is relaxed; all other XML is strict.
-func stripInvalidCheckoutDueDates(b []byte) ([]byte, error) {
-	decoder := xml.NewDecoder(bytes.NewReader(b))
-	var stack []string
-	var clean []byte
-	last := int64(0)
-	for {
-		start := decoder.InputOffset()
-		token, err := decoder.Token()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		switch element := token.(type) {
-		case xml.StartElement:
-			if element.Name.Local == "DateDue" && len(stack) > 0 && stack[len(stack)-1] == "CheckOutItemResponse" {
-				var value string
-				if err := decoder.DecodeElement(&value, &element); err != nil {
-					return nil, err
-				}
-				due, err := time.Parse(time.RFC3339, strings.TrimSpace(value))
-				if err != nil || due.IsZero() || due.Year() < 1 {
-					clean = append(clean, b[last:start]...)
-					last = decoder.InputOffset()
-				}
-			} else {
-				stack = append(stack, element.Name.Local)
-			}
-		case xml.EndElement:
-			if len(stack) > 0 {
-				stack = stack[:len(stack)-1]
-			}
-		}
-	}
-	if last == 0 {
-		return b, nil
-	}
-	return append(clean, b[last:]...), nil
+	return xml.Unmarshal(b, v)
 }

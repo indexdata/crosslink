@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/lms"
@@ -13,6 +14,7 @@ import (
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/oapi-codegen/nullable"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -117,7 +119,7 @@ func TestShipCheckpointAndDueDatePrecedence(t *testing.T) {
 	failed := adapter.On("CheckOutItem", "", "b", "", "").Return(nil, errors.New("LMS unavailable")).Once()
 	sender := new(MockIso18626Handler)
 	svc := CreatePatronRequestActionService(repo, new(IllRepoMock), new(MockEventBus), sender, nil, nil, nil, nil)
-	result := svc.shipLenderRequest(appCtx, "event", repo.savedPr, adapter, repo.savedPr.IllRequest, map[string]any{"dueDate": "2030-01-01"})
+	result := svc.shipLenderRequest(appCtx, "event", repo.savedPr, adapter, repo.savedPr.IllRequest, actionParams{DueDate: nullable.NewNullableWithValue("2030-01-01")})
 	assert.Equal(t, events.EventStatusError, result.status)
 	assert.False(t, result.pr.DueAt.Valid, "fallback must not finalize before all checkouts")
 	assert.Equal(t, pr_db.LmsStatusCheckedOut, repo.savedItems[0].LmsStatus)
@@ -125,12 +127,12 @@ func TestShipCheckpointAndDueDatePrecedence(t *testing.T) {
 	assert.Nil(t, sender.lastSupplyingAgencyMessage)
 	failed.Unset()
 	adapter.On("CheckOutItem", "", "b", "", "").Return(&lms.CheckedOutItem{DueDate: &earliest}, nil).Once()
-	result = svc.shipLenderRequest(appCtx, "retry", result.pr, adapter, result.pr.IllRequest, map[string]any{"dueDate": "2030-01-01"})
+	result = svc.shipLenderRequest(appCtx, "retry", result.pr, adapter, result.pr.IllRequest, actionParams{DueDate: nullable.NewNullableWithValue("2030-01-01")})
 	require.Equal(t, events.EventStatusSuccess, result.status)
 	assert.Equal(t, earliest, result.pr.DueAt.Time)
 	assert.Equal(t, earliest, sender.lastSupplyingAgencyMessage.StatusInfo.DueDate.Time)
 	// A delivery retry uses the saved date and does not repeat either checkout.
-	result = svc.shipLenderRequest(appCtx, "retry-delivery", result.pr, adapter, result.pr.IllRequest, map[string]any{"dueDate": "2031-01-01"})
+	result = svc.shipLenderRequest(appCtx, "retry-delivery", result.pr, adapter, result.pr.IllRequest, actionParams{DueDate: nullable.NewNullableWithValue("2031-01-01")})
 	require.Equal(t, events.EventStatusSuccess, result.status)
 	assert.Equal(t, earliest, result.pr.DueAt.Time)
 	adapter.AssertExpectations(t)
@@ -145,14 +147,14 @@ func TestShippingWithoutDateRetainsCompletedCheckout(t *testing.T) {
 	adapter.On("CheckOutItem", "", "a", "", "").Return(&lms.CheckedOutItem{}, nil).Once()
 	sender := new(MockIso18626Handler)
 	svc := CreatePatronRequestActionService(repo, directory, new(MockEventBus), sender, nil, nil, nil, nil)
-	result := svc.shipLenderRequest(appCtx, "event", repo.savedPr, adapter, repo.savedPr.IllRequest, nil)
+	result := svc.shipLenderRequest(appCtx, "event", repo.savedPr, adapter, repo.savedPr.IllRequest, actionParams{})
 	require.Equal(t, events.EventStatusSuccess, result.status)
 	require.Equal(t, pr_db.LmsStatusCheckedOut, repo.savedItems[0].LmsStatus)
 	assert.False(t, result.pr.DueAt.Valid)
 	require.NotNil(t, sender.lastSupplyingAgencyMessage)
 	assert.Equal(t, iso18626.TypeStatusLoaned, sender.lastSupplyingAgencyMessage.StatusInfo.Status)
 	assert.Nil(t, sender.lastSupplyingAgencyMessage.StatusInfo.DueDate)
-	result = svc.shipLenderRequest(appCtx, "retry", result.pr, adapter, result.pr.IllRequest, nil)
+	result = svc.shipLenderRequest(appCtx, "retry", result.pr, adapter, result.pr.IllRequest, actionParams{})
 	require.Equal(t, events.EventStatusSuccess, result.status)
 	assert.False(t, result.pr.DueAt.Valid)
 	assert.Nil(t, sender.lastSupplyingAgencyMessage.StatusInfo.DueDate)
@@ -171,10 +173,10 @@ func TestShippingDateSourceStaysOnActionResult(t *testing.T) {
 			bus := new(MockEventBus)
 			sender := &MockIso18626Handler{failSupplyingAgencyMessage: failedSend}
 			svc := CreatePatronRequestActionService(repo, directory, bus, sender, nil, nil, nil, nil)
-			params := map[string]any{}
+			params := actionParams{}
 			source := "illConfig.defaultLoanPeriod"
 			if manual {
-				params["dueDate"], source = "2030-01-01", "ship.dueDate"
+				params.DueDate, source = nullable.NewNullableWithValue("2030-01-01"), "ship.dueDate"
 			}
 			result := svc.shipLenderRequest(appCtx, "event", pr, &lms.LmsAdapterManual{}, pr.IllRequest, params)
 			if failedSend {
@@ -191,7 +193,7 @@ func TestShippingDateSourceStaysOnActionResult(t *testing.T) {
 			// A later delivery retry retains the frozen date, without claiming it
 			// was recalculated from a newly supplied manual date.
 			sender.failSupplyingAgencyMessage = false
-			retry := svc.shipLenderRequest(appCtx, "retry", result.pr, &lms.LmsAdapterManual{}, pr.IllRequest, map[string]any{"dueDate": "2031-01-01"})
+			retry := svc.shipLenderRequest(appCtx, "retry", result.pr, &lms.LmsAdapterManual{}, pr.IllRequest, actionParams{DueDate: nullable.NewNullableWithValue("2031-01-01")})
 			require.Equal(t, events.EventStatusSuccess, retry.status)
 			assert.Equal(t, result.pr.DueAt, retry.pr.DueAt)
 			assert.NotContains(t, retry.result.CustomData, "dueDateResolution")
@@ -397,7 +399,13 @@ func TestLoanHandlersRejectInvalidDueDateParams(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			pr := testLoan()
 			svc := &PatronRequestActionService{}
-			params := map[string]any{"dueDate": tc.value}
+			var params actionParams
+			err := common.MapToStruct(map[string]any{"dueDate": tc.value}, &params)
+			if tc.name == "wrong type" {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
 			// Validation must run before directory, LMS, or message-sending calls.
 			for _, result := range []actionExecutionResult{
 				svc.shipLenderRequest(appCtx, "event", pr, nil, pr.IllRequest, params),
@@ -552,7 +560,7 @@ func TestSkippedCheckOutPreservesItemProgress(t *testing.T) {
 			svc := CreatePatronRequestActionService(repo, new(IllRepoMock), bus, sender, nil, nil, nil, nil)
 			var result actionExecutionResult
 			if side == SideLending {
-				result = svc.shipLenderRequest(appCtx, "event", pr, adapter, pr.IllRequest, map[string]any{"dueDate": "2030-01-01"})
+				result = svc.shipLenderRequest(appCtx, "event", pr, adapter, pr.IllRequest, actionParams{DueDate: nullable.NewNullableWithValue("2030-01-01")})
 				require.True(t, result.pr.DueAt.Valid, "skipped checkout must still allow the manual due date")
 			} else {
 				result = svc.checkoutBorrowingRequest(appCtx, pr, adapter, pr.IllRequest)

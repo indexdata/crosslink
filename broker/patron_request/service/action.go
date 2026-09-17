@@ -29,6 +29,7 @@ import (
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/oapi-codegen/nullable"
 )
 
 const COMP = "pr_action_service"
@@ -129,7 +130,7 @@ func (e *autoActionFailure) Error() string {
 }
 
 type actionParams struct {
-	DueDate          string                     `json:"dueDate"`
+	DueDate          nullable.Nullable[string]  `json:"dueDate,omitempty"`
 	Note             string                     `json:"note,omitempty"`
 	Barcode          string                     `json:"barcode,omitempty"`
 	CallNumber       string                     `json:"callNumber,omitempty"`
@@ -759,9 +760,9 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 	case LenderActionOverdue:
 		return a.overdueLenderRequest(ctx, eventID, pr)
 	case LenderActionAcceptRenewal, LenderActionRejectRenewal:
-		return a.renewalLenderRequest(ctx, eventID, pr, actionCustomData, action == LenderActionAcceptRenewal)
+		return a.renewalLenderRequest(ctx, eventID, pr, params, action == LenderActionAcceptRenewal)
 	case LenderActionShip:
-		return a.shipLenderRequest(ctx, eventID, pr, lmsAdapter, illRequest, actionCustomData)
+		return a.shipLenderRequest(ctx, eventID, pr, lmsAdapter, illRequest, params)
 	case LenderActionValidatePatron:
 		return a.validatePatronLenderRequest(ctx, pr, lmsAdapter)
 	case LenderActionRequestItem:
@@ -1653,19 +1654,15 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 	return execResult
 }
 
-func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, parentEventID string, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, actionCustomData map[string]any) actionExecutionResult {
-	if err := validateLoanDueDateParam(actionCustomData); err != nil {
-		return loanActionError(ctx, pr, err)
-	}
-	var params actionParams
-	if err := common.MapToStruct(actionCustomData, &params); err != nil {
+func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, parentEventID string, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
+	if err := validateLoanDueDateParam(params.DueDate); err != nil {
 		return loanActionError(ctx, pr, err)
 	}
 	entry, err := a.supplierLoanEntry(ctx, pr)
 	if err != nil {
 		return loanActionError(ctx, pr, err)
 	}
-	manualDue, err := parseLoanDate(params.DueDate, entry)
+	manualDue, err := parseLoanDate(params.DueDate.GetOrEmpty(), entry)
 	if err != nil {
 		return loanActionError(ctx, pr, err)
 	}

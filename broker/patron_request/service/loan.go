@@ -12,6 +12,7 @@ import (
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/oapi-codegen/nullable"
 )
 
 func loanActionError(ctx common.ExtendedContext, pr pr_db.PatronRequest, err error) actionExecutionResult {
@@ -19,10 +20,10 @@ func loanActionError(ctx common.ExtendedContext, pr pr_db.PatronRequest, err err
 	return actionExecutionResult{status: status, result: result, pr: pr}
 }
 
-func validateLoanDueDateParam(data map[string]any) error {
-	if supplied, ok := data["dueDate"]; ok {
-		value, valid := supplied.(string)
-		if !valid || strings.TrimSpace(value) == "" {
+func validateLoanDueDateParam(date nullable.Nullable[string]) error {
+	if date.IsSpecified() {
+		value, err := date.Get()
+		if err != nil || strings.TrimSpace(value) == "" {
 			return fmt.Errorf("supplied dueDate must be a non-empty date or RFC3339 timestamp")
 		}
 	}
@@ -188,26 +189,22 @@ func (a *PatronRequestActionService) overdueLenderRequest(ctx common.ExtendedCon
 	return execution
 }
 
-func (a *PatronRequestActionService) renewalLenderRequest(ctx common.ExtendedContext, eventID string, pr pr_db.PatronRequest, actionCustomData map[string]any, accept bool) actionExecutionResult {
+func (a *PatronRequestActionService) renewalLenderRequest(ctx common.ExtendedContext, eventID string, pr pr_db.PatronRequest, params actionParams, accept bool) actionExecutionResult {
 	if accept {
-		if err := validateLoanDueDateParam(actionCustomData); err != nil {
+		if err := validateLoanDueDateParam(params.DueDate); err != nil {
 			return loanActionError(ctx, pr, err)
 		}
-	}
-	var params actionParams
-	if err := common.MapToStruct(actionCustomData, &params); err != nil {
-		return loanActionError(ctx, pr, err)
 	}
 	answer, status := iso18626.TypeYesNoN, iso18626.TypeStatusOverdue
 	due := pr.DueAt
 	if accept {
 		due = pgtype.Timestamptz{}
-		if params.DueDate != "" {
+		if params.DueDate.IsSpecified() {
 			entry, err := a.supplierLoanEntry(ctx, pr)
 			if err != nil {
 				return loanActionError(ctx, pr, err)
 			}
-			date, err := parseLoanDate(params.DueDate, entry)
+			date, err := parseLoanDate(params.DueDate.GetOrEmpty(), entry)
 			if err != nil {
 				return loanActionError(ctx, pr, err)
 			}
