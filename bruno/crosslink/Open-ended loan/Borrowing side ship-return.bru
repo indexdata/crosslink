@@ -1,0 +1,47 @@
+meta {
+  name: Borrowing side ship-return
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{host}}/patron_requests/{{openEndedPrId}}/action?side=borrowing
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: borrowing
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+body:json {
+  {
+      "action": "ship-return"
+  }
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
+script:post-response {
+  test("for success", function() {
+    const pr = res.getBody();
+    expect(pr.result).to.equal("SUCCESS")
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

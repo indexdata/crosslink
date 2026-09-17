@@ -35,8 +35,9 @@ const (
 	BorrowerStateWillSupply       pr_db.PatronRequestState = "WILL_SUPPLY"
 	BorrowerStateShipped          pr_db.PatronRequestState = "SHIPPED"
 	BorrowerStateReceived         pr_db.PatronRequestState = "RECEIVED"
-	BorrowerStateCheckedOut       pr_db.PatronRequestState = "CHECKED_OUT"
-	BorrowerStateCheckedIn        pr_db.PatronRequestState = "CHECKED_IN"
+	BorrowerStateOverdue          pr_db.PatronRequestState = "OVERDUE"
+	BorrowerStateRenewed          pr_db.PatronRequestState = "RENEWED"
+	BorrowerStateRenewalPending   pr_db.PatronRequestState = "RENEWAL_PENDING"
 	BorrowerStateShippedReturned  pr_db.PatronRequestState = "SHIPPED_RETURNED"
 	BorrowerStateCancelPending    pr_db.PatronRequestState = "CANCEL_PENDING"
 	BorrowerStateCompleted        pr_db.PatronRequestState = "COMPLETED"
@@ -57,6 +58,9 @@ const (
 	LenderStateConditionAccepted  pr_db.PatronRequestState = "CONDITION_ACCEPTED"
 	LenderStateShipped            pr_db.PatronRequestState = "SHIPPED"
 	LenderStateReceived           pr_db.PatronRequestState = "RECEIVED"
+	LenderStateOverdue            pr_db.PatronRequestState = "OVERDUE"
+	LenderStateRenewed            pr_db.PatronRequestState = "RENEWED"
+	LenderStateRenewalPending     pr_db.PatronRequestState = "RENEWAL_PENDING"
 	LenderStateShippedReturn      pr_db.PatronRequestState = "SHIPPED_RETURN"
 	LenderStateCancelRequested    pr_db.PatronRequestState = "CANCEL_REQUESTED"
 	LenderStateCompleted          pr_db.PatronRequestState = "COMPLETED"
@@ -77,6 +81,7 @@ const (
 	BorrowerActionReceive              pr_db.PatronRequestAction = "receive"
 	BorrowerActionCheckOut             pr_db.PatronRequestAction = "check-out"
 	BorrowerActionCheckIn              pr_db.PatronRequestAction = "check-in"
+	BorrowerActionRenew                pr_db.PatronRequestAction = "renew"
 	BorrowerActionShipReturn           pr_db.PatronRequestAction = "ship-return"
 	BorrowerActionAcceptRetry          pr_db.PatronRequestAction = "accept-retry"
 	BorrowerActionRejectRetry          pr_db.PatronRequestAction = "reject-retry"
@@ -96,6 +101,9 @@ const (
 	LenderActionAddCondition           pr_db.PatronRequestAction = "add-condition"
 	LenderActionAddItem                pr_db.PatronRequestAction = "add-item"
 	LenderActionRemoveItem             pr_db.PatronRequestAction = "remove-item"
+	LenderActionOverdue                pr_db.PatronRequestAction = "overdue"
+	LenderActionAcceptRenewal          pr_db.PatronRequestAction = "accept-renewal"
+	LenderActionRejectRenewal          pr_db.PatronRequestAction = "reject-renewal"
 	LenderActionShip                   pr_db.PatronRequestAction = "ship"
 	LenderActionSupplyDocument         pr_db.PatronRequestAction = "supply-document"
 	LenderActionMarkReceived           pr_db.PatronRequestAction = "mark-received"
@@ -113,6 +121,10 @@ const (
 	SupplierNewExpectToSupplyLocal MessageEvent = "new-expect-to-supply-local"
 	SupplierWillSupply             MessageEvent = "will-supply"
 	SupplierWillSupplyCond         MessageEvent = "will-supply-conditional"
+	SupplierOverdue                MessageEvent = "overdue"
+	SupplierRenewalAccepted        MessageEvent = "renewal-accepted"
+	SupplierRenewalRejected        MessageEvent = "renewal-rejected"
+	RequesterRenew                 MessageEvent = "renew"
 	SupplierLoaned                 MessageEvent = "loaned"
 	SupplierCompleted              MessageEvent = "completed"
 	SupplierCompletedLocal         MessageEvent = "completed-local"
@@ -144,8 +156,7 @@ func requesterBuiltInStates() []string {
 		string(BorrowerStateWillSupply),
 		string(BorrowerStateShipped),
 		string(BorrowerStateReceived),
-		string(BorrowerStateCheckedOut),
-		string(BorrowerStateCheckedIn),
+		string(BorrowerStateOverdue), string(BorrowerStateRenewed), string(BorrowerStateRenewalPending),
 		string(BorrowerStateShippedReturned),
 		string(BorrowerStateCancelPending),
 		string(BorrowerStateCompleted),
@@ -170,7 +181,7 @@ func supplierBuiltInStates() []string {
 		string(LenderStateConditionPending),
 		string(LenderStateConditionAccepted),
 		string(LenderStateShipped),
-		string(LenderStateReceived),
+		string(LenderStateReceived), string(LenderStateOverdue), string(LenderStateRenewed), string(LenderStateRenewalPending),
 		string(LenderStateShippedReturn),
 		string(LenderStateCancelRequested),
 		string(LenderStateCompleted),
@@ -183,6 +194,7 @@ func supplierBuiltInStates() []string {
 
 func requesterBuiltInActions() []proapi.ActionCapability {
 	actions := []proapi.ActionCapability{
+		{Name: string(BorrowerActionRenew), Parameters: []string{"note"}},
 		{
 			Name:       string(BorrowerActionValidatePatron),
 			Parameters: []string{},
@@ -299,6 +311,9 @@ func getActionCapability(side pr_db.PatronRequestSide, action pr_db.PatronReques
 
 func supplierBuiltInActions() []proapi.ActionCapability {
 	return []proapi.ActionCapability{
+		{Name: string(LenderActionOverdue), Parameters: []string{}},
+		{Name: string(LenderActionAcceptRenewal), Parameters: []string{"dueDate", "note"}},
+		{Name: string(LenderActionRejectRenewal), Parameters: []string{"note"}},
 		{
 			Name:       string(LenderActionValidatePatron),
 			Parameters: []string{},
@@ -351,6 +366,7 @@ func supplierBuiltInActions() []proapi.ActionCapability {
 		{
 			Name: string(LenderActionShip),
 			Parameters: []string{
+				"dueDate",
 				"note",
 			},
 		},
@@ -387,7 +403,7 @@ func supplierBuiltInActions() []proapi.ActionCapability {
 func requesterBuiltInMessageEvents() []string {
 	return uniqueSorted([]string{
 		string(RequesterCancelRequest),
-		string(RequesterReceived),
+		string(RequesterReceived), string(RequesterRenew),
 		string(RequesterShippedReturn),
 		string(RequesterCondAccepted),
 		string(RequesterCondRejected),
@@ -402,7 +418,7 @@ func supplierBuiltInMessageEvents() []string {
 		string(SupplierNewExpectToSupplyLocal),
 		string(SupplierWillSupply),
 		string(SupplierWillSupplyCond),
-		string(SupplierLoaned),
+		string(SupplierLoaned), string(SupplierOverdue), string(SupplierRenewalAccepted), string(SupplierRenewalRejected),
 		string(SupplierCompleted),
 		string(SupplierCompletedLocal),
 		string(SupplierUnfilled),

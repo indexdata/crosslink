@@ -3,7 +3,7 @@ stateModels:
     type: StateModel
     name: CrossLink State Model
     desc: "Requester/Supplier workflow for returnable loans and non-returnable copies over ISO18626."
-    version: 3.4.1
+    version: 3.5.0
     pullslipPdfTemplateLabel: pullslip-pdf
     selector:
       serviceType: [Copy, Loan, CopyOrLoan]
@@ -380,16 +380,23 @@ stateModels:
 
       - name: RECEIVED
         display: Received
-        desc: Item received and accepted into local ILS.
+        desc: Loan received
         side: REQUESTER
         appliesTo:
           serviceTypes: [Loan, CopyOrLoan]
-        primaryAction: check-out
+        primaryAction: ship-return
+        events:
+          - name: overdue
+            transition: OVERDUE
         actions:
           - name: check-out
-            desc: Check out item to patron (NCIP CheckOutItem)
+            desc: Check out all items
+          - name: check-in
+            desc: Check in all items
+          - name: ship-return
+            desc: Send ISO ShippedReturn and delete temporary LMS items
             transitions:
-              success: CHECKED_OUT
+              success: SHIPPED_RETURNED
           - name: send-notification
             desc: Send email notification when the item is received
             trigger: auto
@@ -398,29 +405,69 @@ stateModels:
                 - patron
               templateLabel: received-notification
 
-      - name: CHECKED_OUT
-        display: Checked Out
-        desc: Item is checked out to patron
-        side: REQUESTER
-        appliesTo:
-          serviceTypes: [Loan, CopyOrLoan]
-        primaryAction: check-in
-        actions:
-          - name: check-in
-            desc: Check the item back-in (NCIP CheckInItem)
-            transitions:
-              success: CHECKED_IN
-
-      - name: CHECKED_IN
-        display: Checked In
-        desc: Item is checked back in to the local ILS
+      - name: RENEWED
+        display: Renewed
+        desc: Loan renewed
         side: REQUESTER
         appliesTo:
           serviceTypes: [Loan, CopyOrLoan]
         primaryAction: ship-return
+        events:
+          - name: overdue
+            transition: OVERDUE
         actions:
+          - name: check-out
+            desc: Check out all items
+          - name: check-in
+            desc: Check in all items
           - name: ship-return
-            desc: "Send ISO18626 ShippedReturn and delete the temporary item (NCIP DeleteItem)"
+            desc: Send ISO ShippedReturn and delete temporary LMS items
+            transitions:
+              success: SHIPPED_RETURNED
+
+      - name: OVERDUE
+        display: Overdue
+        desc: Loan overdue
+        side: REQUESTER
+        appliesTo:
+          serviceTypes: [Loan, CopyOrLoan]
+        primaryAction: ship-return
+        events:
+          - name: overdue
+        actions:
+          - name: check-out
+            desc: Check out all items
+          - name: check-in
+            desc: Check in all items
+          - name: ship-return
+            desc: Send ISO ShippedReturn and delete temporary LMS items
+            transitions:
+              success: SHIPPED_RETURNED
+          - name: renew
+            desc: Request renewal from supplier
+            transitions:
+              success: RENEWAL_PENDING
+
+      - name: RENEWAL_PENDING
+        display: Renewal pending
+        desc: Loan renewal pending
+        side: REQUESTER
+        appliesTo:
+          serviceTypes: [Loan, CopyOrLoan]
+        primaryAction: ship-return
+        events:
+          - name: overdue
+          - name: renewal-accepted
+            transition: RENEWED
+          - name: renewal-rejected
+            transition: OVERDUE
+        actions:
+          - name: check-out
+            desc: Check out all items
+          - name: check-in
+            desc: Check in all items
+          - name: ship-return
+            desc: Send ISO ShippedReturn and delete temporary LMS items
             transitions:
               success: SHIPPED_RETURNED
 
@@ -783,14 +830,67 @@ stateModels:
 
       - name: RECEIVED
         display: Received
-        desc: Requester has received the shipped item
+        desc: Supplier loan received
         side: SUPPLIER
         appliesTo:
           serviceTypes: [Loan, CopyOrLoan]
         events:
           - name: shipped-return
-            desc: Requester sends ISO ShippedReturn
             transition: SHIPPED_RETURN
+        actions:
+          - name: overdue
+            desc: Notify requester that the loan is overdue
+            transitions:
+              success: OVERDUE
+
+      - name: RENEWED
+        display: Renewed
+        desc: Supplier loan renewed
+        side: SUPPLIER
+        appliesTo:
+          serviceTypes: [Loan, CopyOrLoan]
+        events:
+          - name: shipped-return
+            transition: SHIPPED_RETURN
+        actions:
+          - name: overdue
+            desc: Notify requester that the loan is overdue
+            transitions:
+              success: OVERDUE
+
+      - name: OVERDUE
+        display: Overdue
+        desc: Supplier loan overdue
+        side: SUPPLIER
+        appliesTo:
+          serviceTypes: [Loan, CopyOrLoan]
+        events:
+          - name: shipped-return
+            transition: SHIPPED_RETURN
+          - name: renew
+            transition: RENEWAL_PENDING
+
+      - name: RENEWAL_PENDING
+        display: Renewal pending
+        desc: Supplier loan renewal pending
+        side: SUPPLIER
+        appliesTo:
+          serviceTypes: [Loan, CopyOrLoan]
+        needsAttention: true
+        primaryAction: accept-renewal
+        events:
+          - name: shipped-return
+            transition: SHIPPED_RETURN
+          - name: renew
+        actions:
+          - name: accept-renewal
+            desc: Approve renewal with an optional dueDate; omit for an open-ended loan
+            transitions:
+              success: RENEWED
+          - name: reject-renewal
+            desc: Reject renewal
+            transitions:
+              success: OVERDUE
 
       - name: SHIPPED_RETURN
         display: Shipped Return
@@ -853,6 +953,12 @@ stateModels:
         manualClose: true
 
 batchActionDefaults:
+  - actionName: overdue
+    titleKey: overdue
+    title: Overdue loans
+    batchQuery: "side = lending and (state = RECEIVED or state = RENEWED)"
+    schedule: "FREQ=MINUTELY;INTERVAL=15"
+
   - actionName: email-pullslips
     titleKey: email-pullslips
     title: Email pull slips ready to ship

@@ -55,6 +55,8 @@ func (s *BatchActionService) batchAction(ctx common.ExtendedContext, event event
 		action = s.emailSenderService.EmailPullslip
 	case string(schedoapi.RequestAging):
 		action = s.RequestAging
+	case string(schedoapi.Overdue):
+		action = s.Overdue
 	default:
 		ctx.Logger().Error("unknown batch action",
 			"actionName", event.EventData.BatchActionData.ActionName,

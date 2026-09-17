@@ -121,6 +121,25 @@ func TestRenderPullSlipHTML_UsesProvidedTemplate(t *testing.T) {
 	assert.Equal(t, "<main>REQ-1</main>", html)
 }
 
+func TestGetPullSlipDataUsesCanonicalDueDate(t *testing.T) {
+	legacy := utils.XSDDateTime{Time: time.Date(2026, 8, 15, 9, 30, 0, 0, time.UTC)}
+	for _, tc := range []struct {
+		name string
+		due  pgtype.Timestamptz
+		want string
+	}{
+		{name: "canonical overrides snapshot", due: pgtype.Timestamptz{Time: legacy.AddDate(0, 0, 7), Valid: true}, want: "2026-08-22"},
+		{name: "open ended ignores snapshot", want: DEFAULT_FOR_NO_VALUE},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pr := pr_db.PatronRequest{DueAt: tc.due, IllResponse: iso18626.SupplyingAgencyMessage{
+				StatusInfo: iso18626.StatusInfo{DueDate: &legacy},
+			}}
+			assert.Equal(t, tc.want, GetPullSlipData(pr, nil, nil, "").DueDate)
+		})
+	}
+}
+
 func TestRenderPullSlipHTML_InvalidTemplate(t *testing.T) {
 	_, err := RenderHtmlTemplate(PullSlipData{ReqId: "X"}, "{{.Unclosed")
 	assert.Error(t, err)
@@ -141,6 +160,7 @@ func TestGetPullSlipData_PopulatesAllAvailableFields(t *testing.T) {
 	dueDate := utils.XSDDateTime{Time: time.Date(2026, 8, 15, 9, 30, 0, 0, time.UTC)}
 	pr := pr_db.PatronRequest{
 		RequesterReqID: pgtype.Text{String: "REQ-123", Valid: true},
+		DueAt:          pgtype.Timestamptz{Time: dueDate.Time, Valid: true},
 		Items:          []pr_db.PrItem{{ID: "item-1", CallNumber: &callNumber}},
 		IllRequest: iso18626.Request{
 			BibliographicInfo: iso18626.BibliographicInfo{

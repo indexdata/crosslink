@@ -22,7 +22,7 @@ INSERT INTO patron_request (
     supplier_symbol, tenant, requester_req_id, needs_attention, last_action,
     last_action_outcome, last_action_result, language, terminal_state,
     updated_at, ill_response, internal_note, next_req_id, prev_req_id,
-    retry_bib_info, state_model
+    retry_bib_info, state_model, due_at
 ) VALUES (
     sqlc.arg(id), sqlc.arg(created_at), sqlc.arg(ill_request), sqlc.arg(state),
     sqlc.arg(side), sqlc.arg(patron), sqlc.arg(requester_symbol),
@@ -31,7 +31,7 @@ INSERT INTO patron_request (
     sqlc.arg(last_action_outcome), sqlc.arg(last_action_result),
     sqlc.arg(language), sqlc.arg(terminal_state), sqlc.arg(updated_at),
     sqlc.arg(ill_response), sqlc.arg(internal_note), sqlc.arg(next_req_id),
-    sqlc.arg(prev_req_id), sqlc.arg(retry_bib_info), sqlc.arg(state_model)
+    sqlc.arg(prev_req_id), sqlc.arg(retry_bib_info), sqlc.arg(state_model), sqlc.arg(due_at)
 );
 
 -- name: UpdateImportedPatronRequest :exec
@@ -57,7 +57,8 @@ SET created_at = sqlc.arg(created_at),
     next_req_id = sqlc.arg(next_req_id),
     prev_req_id = sqlc.arg(prev_req_id),
     retry_bib_info = sqlc.arg(retry_bib_info),
-    state_model = sqlc.arg(state_model)
+    state_model = sqlc.arg(state_model),
+    due_at = sqlc.arg(due_at)
 WHERE id = sqlc.arg(id);
 
 -- name: DeleteImportedItemsNotPresent :exec

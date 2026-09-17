@@ -142,6 +142,7 @@ func ParsePatronRequestsCql(cqlString string) (pgcql.Query, error) {
 
 	nf = pgcql.NewFieldDate()
 	def.AddField("needed_at", nf)
+	def.AddField("due_at", pgcql.NewFieldDate())
 
 	f = pgcql.NewFieldString().WithFullText(LANGUAGE).WithColumn("ill_request->'bibliographicInfo'->>'title'")
 	def.AddField("title", f)
@@ -329,6 +330,7 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 			&i.PatronRequestSearchView.RetryBibInfo,
 			&i.PatronRequestSearchView.StateModel,
 			&i.PatronRequestSearchView.RequesterPickupLocationID,
+			&i.PatronRequestSearchView.DueAt,
 			&i.PatronRequestSearchView.HasNotification,
 			&i.PatronRequestSearchView.HasCost,
 			&i.PatronRequestSearchView.HasUnreadNotification,

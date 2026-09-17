@@ -421,9 +421,13 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 	if illResponse != nil {
 		responseValue = *illResponse
 	}
+	var dueAt pgtype.Timestamptz
+	if due := responseValue.StatusInfo.DueDate; due != nil && !due.IsZero() && due.Year() > 0 {
+		dueAt = pgtype.Timestamptz{Time: due.Time, Valid: true}
+	}
 	bundle := importdb.PatronRequestBundle{PatronRequest: pr_db.CreatePatronRequestParams{
 		ID: request.Id, CreatedAt: pgTimestamp(request.CreatedAt), UpdatedAt: pgTimestamp(request.UpdatedAt),
-		IllRequest: request.IllRequest, IllResponse: responseValue,
+		IllRequest: request.IllRequest, IllResponse: responseValue, DueAt: dueAt,
 		State: pr_db.PatronRequestState(request.State), Side: side,
 		Patron: pgTextFromPtr(request.Patron), RequesterSymbol: pgTextFromString(request.RequesterSymbol),
 		SupplierSymbol: pgTextFromPtr(request.SupplierSymbol), Tenant: pgTextFromString(owner),

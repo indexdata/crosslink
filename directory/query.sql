@@ -157,12 +157,12 @@ INSERT INTO ill_configs (
   entry, iso18626_url, iso18626_vendor, lenders_of_last_resort,
   include_requesting_agency_info, include_supplier_info, include_return_info,
   include_vendor_note, use_offered_costs, note_field_separator,
-  supplier_patron_pattern, duplicate_check_window_hours
+  supplier_patron_pattern, duplicate_check_window_hours, default_loan_period
 ) VALUES (
   @entry, @iso18626_url, @iso18626_vendor, @lenders_of_last_resort,
   @include_requesting_agency_info, @include_supplier_info, @include_return_info,
   @include_vendor_note, @use_offered_costs, @note_field_separator,
-  @supplier_patron_pattern, @duplicate_check_window_hours
+  @supplier_patron_pattern, @duplicate_check_window_hours, @default_loan_period
 )
 ON CONFLICT (entry) DO UPDATE SET
   iso18626_url = COALESCE(@iso18626_url, ill_configs.iso18626_url),
@@ -175,7 +175,8 @@ ON CONFLICT (entry) DO UPDATE SET
   use_offered_costs = COALESCE(@use_offered_costs, ill_configs.use_offered_costs),
   note_field_separator = COALESCE(@note_field_separator, ill_configs.note_field_separator),
   supplier_patron_pattern = COALESCE(@supplier_patron_pattern, ill_configs.supplier_patron_pattern),
-  duplicate_check_window_hours = COALESCE(@duplicate_check_window_hours, ill_configs.duplicate_check_window_hours)
+  duplicate_check_window_hours = COALESCE(@duplicate_check_window_hours, ill_configs.duplicate_check_window_hours),
+  default_loan_period = @default_loan_period
 RETURNING *;
 
 -- name: GetIllConfigByEntry :one

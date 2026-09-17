@@ -250,6 +250,7 @@ func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) db.UpsertIllConfigPar
 		NoteFieldSeparator:          cfg.NoteFieldSeparator,
 		SupplierPatronPattern:       cfg.SupplierPatronPattern,
 		DuplicateCheckWindowHours:   cfg.DuplicateCheckWindowHours,
+		DefaultLoanPeriod:           nullableLoanPeriod(cfg),
 	}
 	if cfg.Iso18626Vendor != nil {
 		vendor := string(*cfg.Iso18626Vendor)
@@ -272,6 +273,7 @@ func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllC
 		NoteFieldSeparator:          original.NoteFieldSeparator,
 		SupplierPatronPattern:       original.SupplierPatronPattern,
 		DuplicateCheckWindowHours:   original.DuplicateCheckWindowHours,
+		DefaultLoanPeriod:           original.DefaultLoanPeriod,
 	}
 
 	params.Iso18626Url = derefOrDefaultPtr(cfg.Iso18626Url, params.Iso18626Url)
@@ -290,7 +292,18 @@ func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllC
 	params.NoteFieldSeparator = derefOrDefaultPtr(cfg.NoteFieldSeparator, params.NoteFieldSeparator)
 	params.SupplierPatronPattern = derefOrDefaultPtr(cfg.SupplierPatronPattern, params.SupplierPatronPattern)
 	params.DuplicateCheckWindowHours = derefOrDefaultPtr(cfg.DuplicateCheckWindowHours, params.DuplicateCheckWindowHours)
+	if cfg.DefaultLoanPeriod.IsSpecified() {
+		params.DefaultLoanPeriod = nullableLoanPeriod(cfg)
+	}
 	return params
+}
+
+func nullableLoanPeriod(cfg IllConfig) *int32 {
+	days, err := cfg.DefaultLoanPeriod.Get()
+	if err != nil {
+		return nil
+	}
+	return &days
 }
 
 func boolPtr(value bool) *bool {

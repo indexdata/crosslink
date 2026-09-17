@@ -168,6 +168,10 @@ func (n *NcipClientImpl) CheckOutItem(request ncip.CheckOutItem) (response *ncip
 	if response == nil {
 		return nil, fmt.Errorf("invalid NCIP response: missing CheckOutItemResponse")
 	}
+	// The XSD decoder represents malformed dates as zero; they do not undo checkout.
+	if response.DateDue != nil && (response.DateDue.IsZero() || response.DateDue.Year() < 1) {
+		response.DateDue = nil
+	}
 	err = n.checkProblem("NCIP check out item", response.Problem)
 	return response, err
 }
