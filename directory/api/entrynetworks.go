@@ -288,6 +288,30 @@ func (a ApiImpl) GetEntryNetworks(ctx context.Context, request GetEntryNetworksR
 
 }
 
+func (a ApiImpl) UpdateEntryNetwork(ctx context.Context, request UpdateEntryNetworkRequestObject) (UpdateEntryNetworkResponseObject, error) {
+	authData := auth.GetAuthData(ctx)
+	if !authData.HasRole(auth.ConsortialAdminRole) {
+		slog.ErrorContext(ctx, "permission denied")
+		return UpdateEntryNetwork401TextResponse("Access denied"), nil
+	}
+	if request.Body == nil {
+		return UpdateEntryNetwork400TextResponse("You must provide a priority to update"), nil
+	}
+
+	rows, err := a.queries.UpdateEntryNetwork(ctx, db.UpdateEntryNetworkParams{
+		ID:       request.Id,
+		Priority: request.Body.Priority,
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to update entry network", "error", err, "id", request.Id)
+		return UpdateEntryNetwork500TextResponse("Internal server error"), nil
+	}
+	if rows == 0 {
+		return UpdateEntryNetwork404TextResponse("Entry Network not found"), nil
+	}
+	return UpdateEntryNetwork204Response{}, nil
+}
+
 func (a ApiImpl) DeleteNetworkForEntry(ctx context.Context, request DeleteNetworkForEntryRequestObject) (DeleteNetworkForEntryResponseObject, error) {
 	authData := auth.GetAuthData(ctx)
 

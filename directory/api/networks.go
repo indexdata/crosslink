@@ -169,3 +169,55 @@ func (a ApiImpl) DeleteNetwork(ctx context.Context, request DeleteNetworkRequest
 	return DeleteNetwork204Response{}, nil
 
 }
+
+func (a ApiImpl) UpdateNetwork(ctx context.Context, request UpdateNetworkRequestObject) (UpdateNetworkResponseObject, error) {
+	authData := auth.GetAuthData(ctx)
+	if !authData.HasRole(auth.ConsortialAdminRole) {
+		slog.ErrorContext(ctx, "permission denied")
+		return UpdateNetwork401TextResponse("Access denied"), nil
+	}
+	if request.Body == nil {
+		return UpdateNetwork400TextResponse("You must provide fields to update"), nil
+	}
+
+	tx, err := a.pool.Begin(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to begin transaction", "error", err, "operation", "UpdateNetwork")
+		return UpdateNetwork500TextResponse("Internal server error"), nil
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	qtx := a.queries.WithTx(tx)
+	orig, err := qtx.GetNetworkByIdForUpdate(ctx, request.Id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return UpdateNetwork404TextResponse("Network not found"), nil
+	} else if err != nil {
+		slog.ErrorContext(ctx, "failed to get network for update", "error", err, "id", request.Id)
+		return UpdateNetwork500TextResponse("Internal server error"), nil
+	}
+
+	reciprocal := orig.Reciprocal
+	if request.Body.Reciprocal.IsSpecified() {
+		if request.Body.Reciprocal.IsNull() {
+			reciprocal = nil
+		} else {
+			value := request.Body.Reciprocal.MustGet()
+			reciprocal = &value
+		}
+	}
+
+	err = qtx.UpdateNetwork(ctx, db.UpdateNetworkParams{
+		ID:         request.Id,
+		Reciprocal: reciprocal,
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to update network", "error", err, "id", request.Id)
+		return UpdateNetwork500TextResponse("Internal server error"), nil
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		slog.ErrorContext(ctx, "failed to commit transaction", "error", err, "operation", "UpdateNetwork")
+		return UpdateNetwork500TextResponse("Internal server error"), nil
+	}
+	return UpdateNetwork204Response{}, nil
+}

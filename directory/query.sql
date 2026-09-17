@@ -367,8 +367,14 @@ RETURNING *;
 -- name: GetNetworkById :one
 SELECT * FROM networks WHERE id = $1 LIMIT 1;
 
+-- name: GetNetworkByIdForUpdate :one
+SELECT * FROM networks WHERE id = $1 LIMIT 1 FOR UPDATE;
+
 -- name: GetTierById :one
 SELECT * FROM tiers WHERE id = $1 LIMIT 1;
+
+-- name: GetTierByIdForUpdate :one
+SELECT * FROM tiers WHERE id = $1 LIMIT 1 FOR UPDATE;
 
 -- name: GetEntryNetworkById :one
 SELECT * FROM entry_networks WHERE id = $1 LIMIT 1;
@@ -402,6 +408,23 @@ DELETE from entry_tiers WHERE id = @id;
 
 -- name: DeleteClosureById :exec
 DELETE from closures where id = @id;
+
+-- name: UpdateNetwork :exec
+UPDATE networks
+SET reciprocal = @reciprocal
+WHERE id = @id;
+
+-- name: UpdateTier :exec
+UPDATE tiers
+SET level = @level,
+    type = @type,
+    cost = @cost
+WHERE id = @id;
+
+-- name: UpdateEntryNetwork :execrows
+UPDATE entry_networks
+SET priority = @priority
+WHERE id = @id;
 
 -- name: UpdateClosure :exec
 UPDATE closures

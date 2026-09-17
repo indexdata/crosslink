@@ -1,0 +1,54 @@
+meta {
+  name: Lending side add-condition second supplier
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{host}}/patron_requests/{{rejectionNextLendingPrId}}/action?side=lending
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: lending
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{rejectionNextTenant}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+body:json {
+  {
+      "action": "add-condition",
+      "actionParams": {
+        "loanCondition": "NoReproduction",
+        "note": "please do not copy"
+      }
+  }
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")))
+}
+
+script:post-response {
+  test("HTTP request succeeds", () => {
+    expect(res.getStatus()).to.be.within(200, 299);
+  });
+  test("for success", function() {
+    const pr = res.getBody();
+    expect(pr.result).to.equal("SUCCESS")
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
