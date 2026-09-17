@@ -134,7 +134,7 @@ func TestSupplierItemEditsInvalidateDatesAtomically(t *testing.T) {
 					want = old.AddDate(0, 0, -2)
 					adapter.On("CheckOutItem", "", "added", "", "").Return(&lms.CheckedOutItem{DueDate: &want}, nil).Once()
 				}
-				shipped := svc.shipLenderRequest(appCtx, "retry", result.pr, adapter, pr.IllRequest, actionParams{})
+				shipped := svc.shipLenderRequest(appCtx, "retry", result.pr, adapter, pr.IllRequest, nil)
 				require.Equal(t, events.EventStatusSuccess, shipped.status)
 				assert.Equal(t, want, shipped.pr.DueAt.Time)
 				adapter.AssertExpectations(t)

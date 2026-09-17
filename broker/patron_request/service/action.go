@@ -228,37 +228,9 @@ func (a *PatronRequestActionService) executeAction(ctx common.ExtendedContext, e
 		execResult := actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
 		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execResult)
 	}
-	if action == LenderActionShip || action == LenderActionAcceptRenewal {
-		if supplied, ok := event.EventData.CustomData["dueDate"]; ok {
-			value, valid := supplied.(string)
-			if !valid || strings.TrimSpace(value) == "" {
-				execution := loanActionError(ctx, pr, fmt.Errorf("supplied dueDate must be a non-empty date or RFC3339 timestamp"))
-				return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execution)
-			}
-		}
-	}
 	if pr.Side == SideBorrowing && action == BorrowerActionCheckDuplicate {
 		execResult := a.checkDuplicateBorrowingRequest(ctx, pr)
 		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execResult)
-	}
-	// Loan protocol actions do not require a working LMS integration.
-	if action == BorrowerActionRenew || action == LenderActionOverdue || action == LenderActionAcceptRenewal || action == LenderActionRejectRenewal {
-		var params actionParams
-		var execution actionExecutionResult
-		if err := common.MapToStruct(event.EventData.CustomData, &params); err != nil {
-			execution = loanActionError(ctx, pr, err)
-		} else {
-			switch action {
-			case BorrowerActionRenew:
-				status, result, err := a.messageSender.sendRequestingAgencyMessage(ctx, event.ID, pr, iso18626.TypeActionRenew, params.Note)
-				execution = actionResultFromIllSend(ctx, status, result, err, pr)
-			case LenderActionOverdue:
-				execution = a.overdueLenderRequest(ctx, event.ID, pr)
-			default:
-				execution = a.renewalLenderRequest(ctx, event.ID, pr, params, action == LenderActionAcceptRenewal)
-			}
-		}
-		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execution)
 	}
 	if a.lmsCreator == nil {
 		return logActionErrorAndReturnResult(ctx, "LMS creator not configured", nil)
@@ -687,6 +659,9 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	switch action {
+	case BorrowerActionRenew:
+		status, result, err := a.messageSender.sendRequestingAgencyMessage(ctx, eventID, pr, iso18626.TypeActionRenew, params.Note)
+		return actionResultFromIllSend(ctx, status, result, err, pr)
 	case BorrowerActionValidatePatron:
 		return a.validatePatronBorrowingRequest(ctx, pr, lmsAdapter, illRequest)
 	case BorrowerActionUpdateMetadata:
@@ -781,6 +756,12 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 	}
 
 	switch action {
+	case LenderActionOverdue:
+		return a.overdueLenderRequest(ctx, eventID, pr)
+	case LenderActionAcceptRenewal, LenderActionRejectRenewal:
+		return a.renewalLenderRequest(ctx, eventID, pr, actionCustomData, action == LenderActionAcceptRenewal)
+	case LenderActionShip:
+		return a.shipLenderRequest(ctx, eventID, pr, lmsAdapter, illRequest, actionCustomData)
 	case LenderActionValidatePatron:
 		return a.validatePatronLenderRequest(ctx, pr, lmsAdapter)
 	case LenderActionRequestItem:
@@ -797,8 +778,6 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 		return a.addItemLenderRequest(ctx, pr, params)
 	case LenderActionRemoveItem:
 		return a.removeItemLenderRequest(ctx, pr, params, lmsAdapter)
-	case LenderActionShip:
-		return a.shipLenderRequest(ctx, eventID, pr, lmsAdapter, illRequest, params)
 	case LenderActionSupplyDocument:
 		return a.supplyDocumentRequest(ctx, eventID, pr, params)
 	case LenderActionMarkReceived:
@@ -1674,7 +1653,14 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 	return execResult
 }
 
-func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, parentEventID string, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
+func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, parentEventID string, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, actionCustomData map[string]any) actionExecutionResult {
+	if err := validateLoanDueDateParam(actionCustomData); err != nil {
+		return loanActionError(ctx, pr, err)
+	}
+	var params actionParams
+	if err := common.MapToStruct(actionCustomData, &params); err != nil {
+		return loanActionError(ctx, pr, err)
+	}
 	entry, err := a.supplierLoanEntry(ctx, pr)
 	if err != nil {
 		return loanActionError(ctx, pr, err)

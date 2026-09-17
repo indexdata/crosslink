@@ -19,6 +19,16 @@ func loanActionError(ctx common.ExtendedContext, pr pr_db.PatronRequest, err err
 	return actionExecutionResult{status: status, result: result, pr: pr}
 }
 
+func validateLoanDueDateParam(data map[string]any) error {
+	if supplied, ok := data["dueDate"]; ok {
+		value, valid := supplied.(string)
+		if !valid || strings.TrimSpace(value) == "" {
+			return fmt.Errorf("supplied dueDate must be a non-empty date or RFC3339 timestamp")
+		}
+	}
+	return nil
+}
+
 func supplierLocation(entry dirapi.Entry) (*time.Location, error) {
 	if entry.TimeZone == nil || *entry.TimeZone == "" {
 		return time.UTC, nil
@@ -178,7 +188,16 @@ func (a *PatronRequestActionService) overdueLenderRequest(ctx common.ExtendedCon
 	return execution
 }
 
-func (a *PatronRequestActionService) renewalLenderRequest(ctx common.ExtendedContext, eventID string, pr pr_db.PatronRequest, params actionParams, accept bool) actionExecutionResult {
+func (a *PatronRequestActionService) renewalLenderRequest(ctx common.ExtendedContext, eventID string, pr pr_db.PatronRequest, actionCustomData map[string]any, accept bool) actionExecutionResult {
+	if accept {
+		if err := validateLoanDueDateParam(actionCustomData); err != nil {
+			return loanActionError(ctx, pr, err)
+		}
+	}
+	var params actionParams
+	if err := common.MapToStruct(actionCustomData, &params); err != nil {
+		return loanActionError(ctx, pr, err)
+	}
 	answer, status := iso18626.TypeYesNoN, iso18626.TypeStatusOverdue
 	due := pr.DueAt
 	if accept {
