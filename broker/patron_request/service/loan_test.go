@@ -50,6 +50,7 @@ func TestLoanCalendarDates(t *testing.T) {
 func TestResolveLoanDueDate(t *testing.T) {
 	now := time.Date(2026, 3, 28, 12, 0, 0, 0, time.UTC)
 	manual := now.AddDate(0, 0, 20)
+	earlierManual := now.AddDate(0, 0, 1)
 	earliest := now.AddDate(0, 0, 5)
 	later := now.AddDate(0, 0, 10)
 	zone := "Europe/Copenhagen"
@@ -67,14 +68,22 @@ func TestResolveLoanDueDate(t *testing.T) {
 		source string
 		err    string
 	}{
-		{name: "earliest checkout wins", items: []pr_db.Item{
+		{name: "manual overrides checkout and default", items: []pr_db.Item{
 			{LmsDueDate: pgtype.Timestamptz{Time: later, Valid: true}},
 			{LmsDueDate: pgtype.Timestamptz{Time: earliest, Valid: true}},
-		}, manual: &manual, entry: entry, want: earliest, source: "LMS checkout"},
+		}, manual: &manual, entry: entry, want: manual, source: "ship.dueDate"},
+		{name: "earlier manual overrides checkout", items: []pr_db.Item{
+			{LmsDueDate: pgtype.Timestamptz{Time: earliest, Valid: true}},
+		}, manual: &earlierManual, entry: entry, want: earlierManual, source: "ship.dueDate"},
+		{name: "manual overrides default", manual: &manual, entry: entry, want: manual, source: "ship.dueDate"},
+		{name: "earliest checkout overrides default", items: []pr_db.Item{
+			{LmsDueDate: pgtype.Timestamptz{Time: later, Valid: true}},
+			{LmsDueDate: pgtype.Timestamptz{Time: earliest, Valid: true}},
+		}, entry: entry, want: earliest, source: "LMS checkout"},
 		{name: "invalid checkout dates ignored", items: []pr_db.Item{
 			{LmsDueDate: pgtype.Timestamptz{Time: earliest}},
 			{LmsDueDate: pgtype.Timestamptz{Valid: true}},
-		}, manual: &manual, entry: entry, want: manual, source: "ship.dueDate"},
+		}, entry: entry, want: time.Date(2026, 3, 30, 21, 59, 59, 0, time.UTC), source: "illConfig.defaultLoanPeriod"},
 		{name: "calendar default", entry: entry, want: time.Date(2026, 3, 30, 21, 59, 59, 0, time.UTC), source: "illConfig.defaultLoanPeriod"},
 		{name: "no date"},
 		{name: "unset default", entry: dirapi.Entry{IllConfig: &dirapi.IllConfig{}}},
@@ -128,13 +137,21 @@ func TestShipCheckpointAndDueDatePrecedence(t *testing.T) {
 	adapter.On("CheckOutItem", "", "b", "", "").Return(&lms.CheckedOutItem{DueDate: &earliest}, nil).Once()
 	result = svc.shipLenderRequest(appCtx, "retry", result.pr, adapter, result.pr.IllRequest, actionParams{DueDate: ptr("2030-01-01")})
 	require.Equal(t, events.EventStatusSuccess, result.status)
-	assert.Equal(t, earliest, result.pr.DueAt.Time)
-	assert.Equal(t, earliest, sender.lastSupplyingAgencyMessage.StatusInfo.DueDate.Time)
-	// A delivery retry recalculates from stored item dates, not the previous request date.
+	manual := time.Date(2030, 1, 1, 23, 59, 59, 0, time.UTC)
+	assert.Equal(t, manual, result.pr.DueAt.Time)
+	assert.Equal(t, manual, sender.lastSupplyingAgencyMessage.StatusInfo.DueDate.Time)
+	// A delivery retry uses the current manual date, not the previous request date.
 	result.pr.DueAt = pgtype.Timestamptz{Time: first, Valid: true}
 	result = svc.shipLenderRequest(appCtx, "retry-delivery", result.pr, adapter, result.pr.IllRequest, actionParams{DueDate: ptr("2031-01-01")})
 	require.Equal(t, events.EventStatusSuccess, result.status)
+	manual = time.Date(2031, 1, 1, 23, 59, 59, 0, time.UTC)
+	assert.Equal(t, manual, result.pr.DueAt.Time)
+	assert.Equal(t, manual, sender.lastSupplyingAgencyMessage.StatusInfo.DueDate.Time)
+	// Without a manual date, fall back to the stored checkout dates.
+	result = svc.shipLenderRequest(appCtx, "retry-without-manual", result.pr, adapter, result.pr.IllRequest, actionParams{})
+	require.Equal(t, events.EventStatusSuccess, result.status)
 	assert.Equal(t, earliest, result.pr.DueAt.Time)
+	assert.Equal(t, earliest, sender.lastSupplyingAgencyMessage.StatusInfo.DueDate.Time)
 	adapter.AssertExpectations(t)
 	adapter.AssertNumberOfCalls(t, "CheckOutItem", 3)
 }
