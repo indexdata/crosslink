@@ -170,7 +170,7 @@ func setLoanMessage(sam iso18626.SupplyingAgencyMessage, pr *pr_db.PatronRequest
 func (a *PatronRequestActionService) overdueLenderRequest(ctx common.ExtendedContext, eventID string, pr pr_db.PatronRequest) actionExecutionResult {
 	// The action dispatcher enforces availability using the request's state model.
 	if pr.Side != SideLending ||
-		!pr.DueAt.Valid || !pr.DueAt.Time.Before(time.Now()) || pr.IllResponse.StatusInfo.Status == iso18626.TypeStatusCopyCompleted ||
+		!pr.DueAt.Valid || !pr.DueAt.Time.Before(time.Now()) ||
 		(pr.IllRequest.ServiceInfo != nil && pr.IllRequest.ServiceInfo.ServiceType == iso18626.TypeServiceTypeCopy) {
 		return loanActionError(ctx, pr, fmt.Errorf("loan is not eligible for overdue"))
 	}

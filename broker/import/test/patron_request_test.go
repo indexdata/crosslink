@@ -92,6 +92,32 @@ func TestImportPatronRequestInsertsAndSynchronizesCompleteBundle(t *testing.T) {
 	assert.Equal(t, "updated-patron", patron)
 }
 
+func TestImportPatronRequestPersistsDueDate(t *testing.T) {
+	prefix := uuid.NewString()
+	bundle := testPatronBundle(prefix, prefix+"-request")
+	for _, tc := range []struct {
+		name   string
+		due    pgtype.Timestamptz
+		policy importdb.ConflictPolicy
+	}{
+		{name: "insert", due: pgtype.Timestamptz{Time: time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC), Valid: true}, policy: importdb.ConflictPolicyFail},
+		{name: "update", due: pgtype.Timestamptz{Time: time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC), Valid: true}, policy: importdb.ConflictPolicyUpdate},
+		{name: "clear", policy: importdb.ConflictPolicyUpdate},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			bundle.PatronRequest.DueAt = tc.due
+			_, err := importTestRepo.ImportPatronRequest(importTestCtx, bundle, tc.policy)
+			require.NoError(t, err)
+			var due pgtype.Timestamptz
+			require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT due_at FROM patron_request WHERE id=$1", bundle.PatronRequest.ID).Scan(&due))
+			assert.Equal(t, tc.due.Valid, due.Valid)
+			if tc.due.Valid {
+				assert.True(t, tc.due.Time.Equal(due.Time))
+			}
+		})
+	}
+}
+
 func TestImportPatronRequestDoesNotWriteTriggerManagedItemsCache(t *testing.T) {
 	prefix := uuid.NewString()
 	bundle := testPatronBundle(prefix, prefix+"-request")

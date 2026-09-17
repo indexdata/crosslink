@@ -68,6 +68,46 @@ func TestImportPatronRequestNormalizesCompleteBundle(t *testing.T) {
 	assert.Equal(t, proapi.Loan, validator.serviceType)
 }
 
+func TestImportPatronRequestCanonicalDueDate(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		date    any
+		want    string
+		wantErr string
+	}{
+		{name: "dated", date: "2026-08-15T12:30:00+02:00", want: "2026-08-15T10:30:00Z"},
+		{name: "no date"},
+		{name: "malformed", date: "not-a-date", wantErr: "parsing time"},
+		{name: "zero", date: "0001-01-01T00:00:00Z"},
+		{name: "year zero", date: "0000-01-01T00:00:00Z"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+			cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "peer-requester"}, {ID: "peer-supplier"}}}
+			importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
+			data := mutatePatronBundleData(t, func(bundle map[string]any) {
+				bundle["patronRequest"].(map[string]any)["illResponse"] = map[string]any{
+					"statusInfo": map[string]any{"status": "Loaned", "dueDate": tc.date},
+				}
+			})
+			_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:REQ", data)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				assert.Zero(t, repo.patronCalls)
+				return
+			}
+			require.NoError(t, err)
+			due := repo.patron.PatronRequest.DueAt
+			if tc.want == "" {
+				assert.False(t, due.Valid)
+			} else {
+				require.True(t, due.Valid)
+				assert.True(t, fixedTime(tc.want).Equal(due.Time))
+			}
+		})
+	}
+}
+
 func TestImportPatronRequestValidatesBeforeCachingPeers(t *testing.T) {
 	repo := &recordingImportRepo{}
 	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "only-one"}}}

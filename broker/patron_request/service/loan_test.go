@@ -567,18 +567,31 @@ func TestSupplierRenewalOptionalDueDate(t *testing.T) {
 
 func TestSupplierOverdueUsesConfiguredStateAndRechecksDueDate(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		due  pgtype.Timestamptz
-		want events.EventStatus
+		name        string
+		due         pgtype.Timestamptz
+		state       pr_db.PatronRequestState
+		serviceType iso18626.TypeServiceType
+		snapshot    iso18626.TypeStatus
+		want        events.EventStatus
 	}{
 		{name: "past due", due: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true}, want: events.EventStatusSuccess},
 		{name: "future due", due: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}, want: events.EventStatusError},
 		{name: "no due date", want: events.EventStatusError},
+		{name: "snapshot does not control eligibility", due: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true}, snapshot: iso18626.TypeStatusCopyCompleted, want: events.EventStatusSuccess},
+		{name: "completed copy or loan cannot become overdue", due: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true}, state: LenderStateCompleted, serviceType: iso18626.TypeServiceTypeCopyOrLoan, want: events.EventStatusError},
+		{name: "copy cannot become overdue", due: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true}, serviceType: iso18626.TypeServiceTypeCopy, want: events.EventStatusError},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pr := testLoan()
 			pr.State = "CUSTOM_RECEIVED"
 			pr.DueAt = tc.due
+			if tc.state != "" {
+				pr.State = tc.state
+			}
+			if tc.serviceType != "" {
+				pr.IllRequest.ServiceInfo.ServiceType = tc.serviceType
+			}
+			pr.IllResponse.StatusInfo.Status = tc.snapshot
 			repo := &MockPrRepo{savedPr: pr}
 			sender := new(MockIso18626Handler)
 			creator := new(MockLmsCreator)
@@ -588,7 +601,7 @@ func TestSupplierOverdueUsesConfiguredStateAndRechecksDueDate(t *testing.T) {
 			require.NoError(t, err)
 			for _, state := range model.States {
 				if state.Name == string(LenderStateReceived) && state.Side == "SUPPLIER" {
-					state.Name = string(pr.State)
+					state.Name = "CUSTOM_RECEIVED"
 					model.States = append(model.States, state)
 					break
 				}

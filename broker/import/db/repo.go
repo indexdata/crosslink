@@ -204,7 +204,7 @@ func createImportedPatronRequestParams(params pr_db.CreatePatronRequestParams) C
 		Language: params.Language, TerminalState: params.TerminalState,
 		UpdatedAt: params.UpdatedAt, IllResponse: params.IllResponse, InternalNote: params.InternalNote,
 		NextReqID: params.NextReqID, PrevReqID: params.PrevReqID,
-		RetryBibInfo: params.RetryBibInfo, StateModel: params.StateModel,
+		RetryBibInfo: params.RetryBibInfo, StateModel: params.StateModel, DueAt: params.DueAt,
 	}
 }
 
@@ -219,7 +219,7 @@ func updateImportedPatronRequestParams(params pr_db.CreatePatronRequestParams) U
 		Language: params.Language, TerminalState: params.TerminalState,
 		UpdatedAt: params.UpdatedAt, IllResponse: params.IllResponse, InternalNote: params.InternalNote,
 		NextReqID: params.NextReqID, PrevReqID: params.PrevReqID,
-		RetryBibInfo: params.RetryBibInfo, StateModel: params.StateModel,
+		RetryBibInfo: params.RetryBibInfo, StateModel: params.StateModel, DueAt: params.DueAt,
 	}
 }
 
