@@ -5339,9 +5339,11 @@ type MockIso18626Handler struct {
 	lastRequestingAgencyMessage *iso18626.RequestingAgencyMessage
 	lastSupplyingAgencyMessage  *iso18626.SupplyingAgencyMessage
 	failSupplyingAgencyMessage  bool
+	requestOptions              []handler.RequestOptions
 }
 
-func (h *MockIso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) map[string]any {
+func (h *MockIso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, options ...handler.RequestOptions) map[string]any {
+	h.requestOptions = options
 	status := iso18626.TypeMessageStatusOK
 	if illMessage.Request.Header.RequestingAgencyRequestId == "error" {
 		status = iso18626.TypeMessageStatusERROR

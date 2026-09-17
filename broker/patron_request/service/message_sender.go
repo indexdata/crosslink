@@ -168,7 +168,9 @@ func (ms *PatronRequestMessageSender) sendBorrowingRequest(ctx common.ExtendedCo
 	var illMessage = iso18626.NewISO18626Message()
 	illMessage.Request = &illRequest
 	w := NewResponseCaptureWriter()
-	resultMap := ms.iso18626Handler.HandleRequest(ctx, illMessage, w)
+	resultMap := ms.iso18626Handler.HandleRequest(ctx, illMessage, w, handler.RequestOptions{
+		SkipDuplicateCheck: pr.PrevReqID.Valid && requestType == iso18626.TypeRequestTypeNew,
+	})
 	var customData map[string]any
 	if len(resultMap) > 0 {
 		customData = make(map[string]any, len(resultMap))

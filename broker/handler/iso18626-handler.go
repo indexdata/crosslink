@@ -85,8 +85,14 @@ var ErrDuplicateRequest = errors.New(string(ReqIsDuplicate))
 
 var waitingReqs = map[string]RequestWait{}
 
+// RequestOptions controls local request processing and is never read from ISO messages.
+type RequestOptions struct {
+	// SkipDuplicateCheck permits an intentional rerequest of an existing transaction.
+	SkipDuplicateCheck bool
+}
+
 type Iso18626HandlerInterface interface {
-	HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) map[string]any
+	HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, options ...RequestOptions) map[string]any
 	HandleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter)
 	HandleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter)
 }
@@ -156,9 +162,9 @@ func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapt
 	}
 }
 
-func handleNewRequest(ctx common.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo, requesterSymbol pgtype.Text, peers []ill_db.Peer) (string, map[string]any, error) {
+func handleNewRequest(ctx common.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo, requesterSymbol pgtype.Text, peers []ill_db.Peer, skipDuplicateCheck bool) (string, map[string]any, error) {
 	resultMap := map[string]any{}
-	if !strings.EqualFold(peers[0].Vendor, string(dirapi.CrossLink)) {
+	if !skipDuplicateCheck && !strings.EqualFold(peers[0].Vendor, string(dirapi.CrossLink)) {
 		var err error
 		resultMap, err = checkDuplicateRequest(ctx, request, repo, requesterSymbol.String, peers[0])
 		if err != nil {
@@ -339,11 +345,11 @@ func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, r
 	return id, retryLookupChanged, err
 }
 
-func (h *Iso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) map[string]any {
-	return handleRequest(ctx, illMessage, w, h.illRepo, h.eventBus, h.dirAdapter)
+func (h *Iso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, options ...RequestOptions) map[string]any {
+	return handleRequest(ctx, illMessage, w, h.illRepo, h.eventBus, h.dirAdapter, options...)
 }
 
-func handleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter) map[string]any {
+func handleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter, options ...RequestOptions) map[string]any {
 	request := illMessage.Request
 	resultMap := map[string]any{}
 	if request.Header.RequestingAgencyRequestId == "" {
@@ -370,7 +376,11 @@ func handleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Mess
 	case iso18626.TypeRequestTypeRetry:
 		id, mustLocate, err = handleRetryRequest(ctx, request, repo)
 	case iso18626.TypeRequestTypeNew:
-		id, resultMap, err = handleNewRequest(ctx, request, repo, requesterSymbol, peers)
+		skipDuplicateCheck := false
+		for _, option := range options {
+			skipDuplicateCheck = skipDuplicateCheck || option.SkipDuplicateCheck
+		}
+		id, resultMap, err = handleNewRequest(ctx, request, repo, requesterSymbol, peers, skipDuplicateCheck)
 	default:
 		handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, UnsupportedRequestType)
 		return resultMap

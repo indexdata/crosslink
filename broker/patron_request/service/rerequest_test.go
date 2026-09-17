@@ -184,3 +184,25 @@ func TestSuccessorPersistsRequestType(t *testing.T) {
 		}
 	}
 }
+
+func TestSendRequestDuplicateCheckBypass(t *testing.T) {
+	for _, linked := range []bool{false, true} {
+		for _, requestType := range []iso18626.TypeRequestType{iso18626.TypeRequestTypeNew, iso18626.TypeRequestTypeRetry} {
+			t.Run(fmt.Sprintf("linked=%t/type=%s", linked, requestType), func(t *testing.T) {
+				isoHandler := new(MockIso18626Handler)
+				sender := PatronRequestMessageSender{eventBus: new(MockEventBus), iso18626Handler: isoHandler}
+				pr := pr_db.PatronRequest{ID: "successor", RequesterSymbol: getDbText("ISIL:REQ1")}
+				if linked {
+					pr.PrevReqID = getDbText("previous")
+				}
+				request := iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{RequestType: &requestType}}
+				status, result, err := sender.sendBorrowingRequest(appCtx, "send", pr, request)
+				require.NoError(t, err)
+				require.Equal(t, events.EventStatusSuccess, status)
+				require.Len(t, isoHandler.requestOptions, 1)
+				assert.Equal(t, linked && requestType == iso18626.TypeRequestTypeNew, isoHandler.requestOptions[0].SkipDuplicateCheck)
+				assert.Equal(t, requestType, *result.OutgoingMessage.Request.ServiceInfo.RequestType)
+			})
+		}
+	}
+}
