@@ -230,6 +230,10 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 		return unsupportedReason()
 	}
 
+	// Treat placeholder due dates as absent without rejecting the workflow message.
+	if sam.StatusInfo.DueDate != nil && sam.StatusInfo.DueDate.IsZero() {
+		sam.StatusInfo.DueDate = nil
+	}
 	supSymbol := sam.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + sam.Header.SupplyingAgencyId.AgencyIdValue
 	isNewSupplier := supSymbol != ":" && pr.SupplierSymbol.Valid && pr.SupplierSymbol.String != supSymbol
 	if supSymbol != ":" {
@@ -246,9 +250,6 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 		}
 		switch *sam.MessageInfo.AnswerYesNo {
 		case iso18626.TypeYesNoY:
-			if sam.StatusInfo.DueDate != nil && (sam.StatusInfo.DueDate.IsZero() || sam.StatusInfo.DueDate.Year() < 1) {
-				return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{ErrorType: iso18626.TypeErrorTypeUnrecognisedDataValue, ErrorValue: "invalid renewal due date"}, nil)
-			}
 			eventName = SupplierRenewalAccepted
 			// An undated acceptance replaces the previous deadline with an open-ended loan.
 			pr.DueAt = pgtype.Timestamptz{}
@@ -290,13 +291,13 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 		case iso18626.TypeStatusLoaned:
 			setSupplierMessage(sam, &pr)
 			if sam.StatusInfo.DueDate != nil {
-				if sam.StatusInfo.DueDate.IsZero() || sam.StatusInfo.DueDate.Year() < 1 {
-					return statusChangeNotAllowed()
-				}
 				pr.DueAt = pgtype.Timestamptz{Time: sam.StatusInfo.DueDate.Time, Valid: true}
 			}
 			eventName = SupplierLoaned
 		case iso18626.TypeStatusOverdue:
+			if sam.StatusInfo.DueDate != nil {
+				pr.DueAt = pgtype.Timestamptz{Time: sam.StatusInfo.DueDate.Time, Valid: true}
+			}
 			eventName = SupplierOverdue
 			setLoanMessage(sam, &pr)
 		case iso18626.TypeStatusLoanCompleted, iso18626.TypeStatusCopyCompleted:
