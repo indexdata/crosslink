@@ -12,12 +12,6 @@ ALTER TABLE item ADD COLUMN lms_due_date TIMESTAMPTZ;
 UPDATE patron_request SET state = 'RECEIVED' WHERE side = 'borrowing' AND state IN ('CHECKED_OUT', 'CHECKED_IN');
 UPDATE item SET lms_status = lms_status;
 CREATE INDEX patron_request_overdue_idx ON patron_request (due_at) WHERE side = 'lending';
--- A broker-wide task covers both existing and future tenants. Owner-scoped
--- overdue tasks can also be configured through the normal scheduling API.
-INSERT INTO scheduled_task (id, event_name, schedule, action_data, title, run_at, owner)
-VALUES ('loan-overdue', 'invoke-batch-action', 'FREQ=MINUTELY;INTERVAL=15',
-    '{"batchActionData":{"actionName":"overdue","selector":"side = lending and (state = RECEIVED or state = RENEWED)","taskId":"loan-overdue","owner":""}}',
-    'Overdue loans', now() + interval '15 minutes', '');
 DROP VIEW patron_request_search_view;
 CREATE VIEW patron_request_search_view AS
 SELECT

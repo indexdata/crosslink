@@ -1,4 +1,3 @@
-DELETE FROM scheduled_task WHERE id = 'loan-overdue';
 -- Restore states understood by the old broker; do not infer patron circulation.
 UPDATE patron_request SET state = 'RECEIVED'
 WHERE side IN ('borrowing', 'lending') AND state IN ('OVERDUE', 'RENEWED', 'RENEWAL_PENDING');
