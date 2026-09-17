@@ -159,7 +159,7 @@ func isoLoanDate(date pgtype.Timestamptz) *utils.XSDDateTime {
 }
 
 // Loan updates refresh message info and status without discarding shipment and return details.
-// Only an accepted renewal changes the canonical date; other updates retain it.
+// The caller updates the canonical date before refreshing the message.
 func setLoanMessage(sam iso18626.SupplyingAgencyMessage, pr *pr_db.PatronRequest) {
 	pr.IllResponse.MessageInfo = sam.MessageInfo
 	pr.IllResponse.StatusInfo.Status = sam.StatusInfo.Status
@@ -170,7 +170,7 @@ func setLoanMessage(sam iso18626.SupplyingAgencyMessage, pr *pr_db.PatronRequest
 func (a *PatronRequestActionService) overdueLenderRequest(ctx common.ExtendedContext, eventID string, pr pr_db.PatronRequest) actionExecutionResult {
 	// The action dispatcher enforces availability using the request's state model.
 	if pr.Side != SideLending ||
-		!pr.DueAt.Valid || !pr.DueAt.Time.Before(time.Now()) ||
+		(pr.DueAt.Valid && !pr.DueAt.Time.Before(time.Now())) ||
 		(pr.IllRequest.ServiceInfo != nil && pr.IllRequest.ServiceInfo.ServiceType == iso18626.TypeServiceTypeCopy) {
 		return loanActionError(ctx, pr, fmt.Errorf("loan is not eligible for overdue"))
 	}
