@@ -1,0 +1,2 @@
+-- Data backfill only. Keep the corrected protocol intent on rollback; the old
+-- sender also treats all linked borrowing requests as retries.
