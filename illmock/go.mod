@@ -15,7 +15,7 @@ replace (
 require (
 	github.com/getkin/kin-openapi v0.147.0
 	github.com/google/uuid v1.6.0
-	github.com/indexdata/cql-go v1.0.1
+	github.com/indexdata/cql-go v1.0.2-0.20260910122542-3df8746ff9ee
 	github.com/indexdata/crosslink/httpclient v0.0.0
 	github.com/indexdata/crosslink/iso18626 v0.0.0
 	github.com/indexdata/crosslink/marcxml v0.0.0

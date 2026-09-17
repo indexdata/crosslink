@@ -1,11 +1,29 @@
 package pr_db
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/indexdata/cql-go/cql"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestPatronRequestDateWithin(t *testing.T) {
+	for _, field := range []string{"created_at", "updated_at", "needed_at", "due_at"} {
+		t.Run(field, func(t *testing.T) {
+			query, err := ParsePatronRequestsCql(fmt.Sprintf(`%s within "2026-09-01 2026-09-17" and side = borrowing`, field))
+			require.NoError(t, err)
+			assert.Equal(t, fmt.Sprintf("(%s >= $3 AND %s <= $4) AND side = $5", field, field), query.GetWhereClause())
+			assert.Equal(t, []any{
+				time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC),
+				time.Date(2026, 9, 17, 0, 0, 0, 0, time.UTC),
+				"borrowing",
+			}, query.GetQueryArguments())
+		})
+	}
+}
 
 func TestHandlePatronRequestsQueryKeepsOwnerRestrictionGrouped(t *testing.T) {
 	cql := "cql.allRecords = 1 and (side = lending and supplier_symbol_exact = ISIL:REQ or (side = borrowing and requester_symbol_exact = ISIL:REQ))"
