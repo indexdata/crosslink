@@ -1427,3 +1427,128 @@ func TestPublicReadSanitizesProtectedLMSValues(t *testing.T) {
 		t.Fatalf("protected lmsConfig.fromAgencyAuthentication should be sanitized, got %#v", lmsConfig["fromAgencyAuthentication"])
 	}
 }
+
+func TestInstitutionalAdminCannotPatchTenant(t *testing.T) {
+	const entryID = "00000000-0000-0000-0000-000000000002"
+	headers := map[string]string{
+		"X-Okapi-Tenant":      "ANINST",
+		"X-Okapi-Permissions": `["directory.institution.all"]`,
+	}
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "unchanged", body: `{"tenant":"ANINST"}`},
+		{name: "changed", body: `{"tenant":"OTHER"}`},
+		{name: "cleared", body: `{"tenant":null}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetDb()
+			res, data := jsonReq(t, http.MethodPatch, "/entries/by-id/"+entryID, tt.body, headers)
+			if res.StatusCode != http.StatusUnauthorized {
+				t.Fatalf("expected tenant PATCH status %d, got %d and body %s", http.StatusUnauthorized, res.StatusCode, data)
+			}
+
+			var tenant *string
+			if err := dbpool.QueryRow(context.Background(), "SELECT tenant FROM entries WHERE id = $1", entryID).Scan(&tenant); err != nil {
+				t.Fatalf("failed to fetch tenant after rejected PATCH: %v", err)
+			}
+			if tenant == nil || *tenant != "ANINST" {
+				t.Fatalf("rejected PATCH changed tenant to %v", tenant)
+			}
+		})
+	}
+}
+
+func TestConsortialAdminCanTransferAndClearTenantOwnership(t *testing.T) {
+	resetDb()
+	const entryID = "00000000-0000-0000-0000-000000000002"
+	consortialHeaders := map[string]string{
+		"X-Okapi-Tenant":      "ANINST",
+		"X-Okapi-Permissions": `["directory.consortium.all"]`,
+	}
+	oldOwnerHeaders := map[string]string{
+		"X-Okapi-Tenant":      "ANINST",
+		"X-Okapi-Permissions": `["directory.institution.all"]`,
+	}
+	newOwnerHeaders := map[string]string{
+		"X-Okapi-Tenant":      "NEW-TENANT",
+		"X-Okapi-Permissions": `["directory.institution.all"]`,
+	}
+
+	res, data := jsonReq(t, http.MethodPatch, "/entries/by-id/"+entryID, `{"tenant":"NEW-TENANT"}`, consortialHeaders)
+	if res.StatusCode != http.StatusNoContent {
+		t.Fatalf("consortial tenant transfer failed: %d %s", res.StatusCode, data)
+	}
+	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+entryID, `{"name":"Old Owner"}`, oldOwnerHeaders)
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("old owner PATCH expected 401: %d %s", res.StatusCode, data)
+	}
+	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+entryID, `{"name":"New Owner"}`, newOwnerHeaders)
+	if res.StatusCode != http.StatusNoContent {
+		t.Fatalf("new owner PATCH failed: %d %s", res.StatusCode, data)
+	}
+
+	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+entryID, `{"tenant":null}`, consortialHeaders)
+	if res.StatusCode != http.StatusNoContent {
+		t.Fatalf("consortial tenant clear failed: %d %s", res.StatusCode, data)
+	}
+	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+entryID, `{"name":"Former Owner"}`, newOwnerHeaders)
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("cleared tenant still granted ownership: %d %s", res.StatusCode, data)
+	}
+}
+
+func TestTenantOwnershipMatchingRules(t *testing.T) {
+	const entryID = "00000000-0000-0000-0000-000000000002"
+
+	t.Run("case sensitive", func(t *testing.T) {
+		resetDb()
+		headers := map[string]string{
+			"X-Okapi-Tenant":      "aninst",
+			"X-Okapi-Permissions": `["directory.institution.all"]`,
+		}
+		res, data := jsonReq(t, http.MethodGet, "/entries/by-id/"+entryID, "", headers)
+		if res.StatusCode != http.StatusOK || strings.Contains(data, "pack_extra_lembas") {
+			t.Fatalf("case-mismatched tenant received protected data: %d %s", res.StatusCode, data)
+		}
+		res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+entryID, `{"name":"Wrong Case"}`, headers)
+		if res.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("case-mismatched tenant PATCH expected 401: %d %s", res.StatusCode, data)
+		}
+	})
+
+	t.Run("empty tenant", func(t *testing.T) {
+		resetDb()
+		if _, err := dbpool.Exec(context.Background(), "UPDATE entries SET tenant = '' WHERE id = $1", entryID); err != nil {
+			t.Fatalf("failed to seed empty tenant: %v", err)
+		}
+		headers := map[string]string{"X-Okapi-Permissions": `["directory.institution.all"]`}
+		res, data := jsonReq(t, http.MethodGet, "/entries/by-id/"+entryID, "", headers)
+		if res.StatusCode != http.StatusOK || strings.Contains(data, "pack_extra_lembas") {
+			t.Fatalf("empty tenant received protected data: %d %s", res.StatusCode, data)
+		}
+		res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+entryID, `{"name":"Empty Tenant"}`, headers)
+		if res.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("empty tenant PATCH expected 401: %d %s", res.StatusCode, data)
+		}
+	})
+
+	t.Run("duplicate tenant owns every matching entry", func(t *testing.T) {
+		resetDb()
+		const secondEntryID = "00000000-0000-0000-0000-000000000003"
+		if _, err := dbpool.Exec(context.Background(), "UPDATE entries SET tenant = 'ANINST' WHERE id = $1", secondEntryID); err != nil {
+			t.Fatalf("failed to seed duplicate tenant: %v", err)
+		}
+		headers := map[string]string{
+			"X-Okapi-Tenant":      "ANINST",
+			"X-Okapi-Permissions": `["directory.institution.all"]`,
+		}
+		res, data := jsonReq(t, http.MethodPatch, "/entries/by-id/"+secondEntryID, `{"name":"Also Owned"}`, headers)
+		if res.StatusCode != http.StatusNoContent {
+			t.Fatalf("duplicate tenant did not own matching entry: %d %s", res.StatusCode, data)
+		}
+	})
+}

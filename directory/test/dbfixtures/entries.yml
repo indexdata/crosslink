@@ -10,6 +10,7 @@
   parent: 00000000-0000-0000-0000-000000000004
   name: An Institution
   contact_name: Bob
+  tenant: ANINST
   type: Institution
 - id: 00000000-0000-0000-0000-000000000003
   parent: 00000000-0000-0000-0000-000000000004
