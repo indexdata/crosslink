@@ -35,6 +35,7 @@ const (
 	BorrowerStateWillSupply       pr_db.PatronRequestState = "WILL_SUPPLY"
 	BorrowerStateShipped          pr_db.PatronRequestState = "SHIPPED"
 	BorrowerStateReceived         pr_db.PatronRequestState = "RECEIVED"
+	BorrowerStateRecalled         pr_db.PatronRequestState = "RECALLED"
 	BorrowerStateOverdue          pr_db.PatronRequestState = "OVERDUE"
 	BorrowerStateRenewed          pr_db.PatronRequestState = "RENEWED"
 	BorrowerStateRenewalPending   pr_db.PatronRequestState = "RENEWAL_PENDING"
@@ -58,6 +59,7 @@ const (
 	LenderStateSearching          pr_db.PatronRequestState = "SEARCHING"
 	LenderStateShipped            pr_db.PatronRequestState = "SHIPPED"
 	LenderStateReceived           pr_db.PatronRequestState = "RECEIVED"
+	LenderStateRecalled           pr_db.PatronRequestState = "RECALLED"
 	LenderStateOverdue            pr_db.PatronRequestState = "OVERDUE"
 	LenderStateRenewed            pr_db.PatronRequestState = "RENEWED"
 	LenderStateRenewalPending     pr_db.PatronRequestState = "RENEWAL_PENDING"
@@ -102,6 +104,7 @@ const (
 	LenderActionAddCondition           pr_db.PatronRequestAction = "add-condition"
 	LenderActionAddItem                pr_db.PatronRequestAction = "add-item"
 	LenderActionRemoveItem             pr_db.PatronRequestAction = "remove-item"
+	LenderActionRecall                 pr_db.PatronRequestAction = "recall"
 	LenderActionOverdue                pr_db.PatronRequestAction = "overdue"
 	LenderActionAcceptRenewal          pr_db.PatronRequestAction = "accept-renewal"
 	LenderActionRejectRenewal          pr_db.PatronRequestAction = "reject-renewal"
@@ -123,6 +126,7 @@ const (
 	SupplierNewExpectToSupplyLocal MessageEvent = "new-expect-to-supply-local"
 	SupplierWillSupply             MessageEvent = "will-supply"
 	SupplierWillSupplyCond         MessageEvent = "will-supply-conditional"
+	SupplierRecalled               MessageEvent = "recalled"
 	SupplierOverdue                MessageEvent = "overdue"
 	SupplierRenewalAccepted        MessageEvent = "renewal-accepted"
 	SupplierRenewalRejected        MessageEvent = "renewal-rejected"
@@ -158,7 +162,7 @@ func requesterBuiltInStates() []string {
 		string(BorrowerStateWillSupply),
 		string(BorrowerStateShipped),
 		string(BorrowerStateReceived),
-		string(BorrowerStateOverdue), string(BorrowerStateRenewed), string(BorrowerStateRenewalPending),
+		string(BorrowerStateRecalled), string(BorrowerStateOverdue), string(BorrowerStateRenewed), string(BorrowerStateRenewalPending),
 		string(BorrowerStateShippedReturned),
 		string(BorrowerStateCancelPending),
 		string(BorrowerStateCompleted),
@@ -183,7 +187,7 @@ func supplierBuiltInStates() []string {
 		string(LenderStateConditionPending),
 		string(LenderStateSearching),
 		string(LenderStateShipped),
-		string(LenderStateReceived), string(LenderStateOverdue), string(LenderStateRenewed), string(LenderStateRenewalPending),
+		string(LenderStateReceived), string(LenderStateRecalled), string(LenderStateOverdue), string(LenderStateRenewed), string(LenderStateRenewalPending),
 		string(LenderStateShippedReturn),
 		string(LenderStateCancelRequested),
 		string(LenderStateCompleted),
@@ -315,6 +319,7 @@ func getActionCapability(side pr_db.PatronRequestSide, action pr_db.PatronReques
 func supplierBuiltInActions() []proapi.ActionCapability {
 	return []proapi.ActionCapability{
 		transitionActionCapability(LenderActionPullslipPrinted),
+		{Name: string(LenderActionRecall), Parameters: []string{"dueDate", "note"}},
 		{Name: string(LenderActionOverdue), Parameters: []string{}},
 		{Name: string(LenderActionAcceptRenewal), Parameters: []string{"dueDate", "note"}},
 		{Name: string(LenderActionRejectRenewal), Parameters: []string{"note"}},
@@ -422,7 +427,7 @@ func supplierBuiltInMessageEvents() []string {
 		string(SupplierNewExpectToSupplyLocal),
 		string(SupplierWillSupply),
 		string(SupplierWillSupplyCond),
-		string(SupplierLoaned), string(SupplierOverdue), string(SupplierRenewalAccepted), string(SupplierRenewalRejected),
+		string(SupplierLoaned), string(SupplierOverdue), string(SupplierRecalled), string(SupplierRenewalAccepted), string(SupplierRenewalRejected),
 		string(SupplierCompleted),
 		string(SupplierCompletedLocal),
 		string(SupplierUnfilled),

@@ -242,6 +242,7 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 			Valid:  true,
 		}
 	}
+	originalPr := pr
 	eventName := MessageEvent("")
 	var retryBibInfo *iso18626.BibliographicInfo
 	if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageRenewResponse {
@@ -294,11 +295,14 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 				pr.DueAt = pgtype.Timestamptz{Time: sam.StatusInfo.DueDate.Time, Valid: true}
 			}
 			eventName = SupplierLoaned
-		case iso18626.TypeStatusOverdue:
+		case iso18626.TypeStatusRecalled, iso18626.TypeStatusOverdue:
 			if sam.StatusInfo.DueDate != nil {
 				pr.DueAt = pgtype.Timestamptz{Time: sam.StatusInfo.DueDate.Time, Valid: true}
 			}
 			eventName = SupplierOverdue
+			if sam.StatusInfo.Status == iso18626.TypeStatusRecalled {
+				eventName = SupplierRecalled
+			}
 			setLoanMessage(sam, &pr)
 		case iso18626.TypeStatusLoanCompleted, iso18626.TypeStatusCopyCompleted:
 			if sam.StatusInfo.Status == iso18626.TypeStatusCopyCompleted {
@@ -348,6 +352,13 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	}
 	if !eventDefined {
 		return statusChangeNotAllowed()
+	}
+	// Transitionless recall events acknowledge duplicates and late messages without
+	// replacing the recall deadline/status or reopening a returned loan.
+	if !stateChanged && (eventName == SupplierRecalled ||
+		(originalPr.State == BorrowerStateRecalled && (eventName == SupplierOverdue ||
+			eventName == SupplierRenewalAccepted || eventName == SupplierRenewalRejected))) {
+		updatedPr = originalPr
 	}
 	if eventName == SupplierLoaned {
 		err = m.saveItems(ctx, pr, sam)

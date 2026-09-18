@@ -265,3 +265,22 @@ docker compose up
 For Loan and CopyOrLoan requests, generating a pull-slip PDF queues the `pullslip-printed` action for the included eligible supplier requests. Accepted conditions return the supplier to `WILL_SUPPLY`. Printing moves `WILL_SUPPLY` to `SEARCHING` (picking and awaiting shipment). Reprinting in `SEARCHING` leaves the state unchanged. The `ship` action is available only in `SEARCHING`. Copy delivery remains available without this loan workflow.
 
 The `email-pullslips` batch queues the same action after SMTP successfully accepts an email containing a PDF. Emails without PDFs and failed generation or sending do not advance requests. Actions run asynchronously and recheck the current state. If queuing fails after output, the operation reports an error; retrying may reproduce the PDF or email, while repeated `pullslip-printed` actions in `SEARCHING` are harmless. Existing saved batch queries are not rewritten; use `WILL_SUPPLY` for pull-slip queries and include `SEARCHING` in aging queries as needed.
+
+## Loan recall
+
+Lenders can invoke `recall` from `RECEIVED`, `RENEWED`, `OVERDUE`, or
+`RENEWAL_PENDING` for `Loan` and `CopyOrLoan`. Optional action parameters are
+`note` and `dueDate` (a date or RFC3339 timestamp). An omitted or null date
+preserves the current deadline, including an open-ended loan; a date without
+a time means the end of the supplier's calendar day. Blank or invalid dates
+are rejected. A recall date may be in the past, allowing an immediate return
+request for an already overdue loan.
+
+The action sends ISO18626 `StatusChange` / `Recalled` and moves the lender to
+`RECALLED` only after successful sending. The borrower enters `RECALLED` with
+staff attention required. Its primary action is `ship-return`; `check-in`
+remains available, while checkout and renewal are unavailable. Recall
+supersedes pending renewal. Duplicate recall and late renewal/overdue messages
+preserve the recall status and deadline; recall after return shipment does
+not reopen the loan. The existing return and completion steps still apply.
+Recall during outbound shipment is not supported.
