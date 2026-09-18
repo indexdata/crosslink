@@ -1,6 +1,7 @@
 {
   "id":"00000000-0000-0000-0000-000000000002",
   "name":"An Institution",
+  "tenant":"ANINST",
   "fromEmail":"what@ever.tk",
   "illConfig":{"lendersOfLastResort":[{"authority":"ISIL","symbol":"PATCHED-LOR"}]},
   "type": "Institution",
@@ -16,7 +17,7 @@
   "lmsConfig": {
     "address":"https://also.not.real",
     "fromAgency":"rivendell",
-    "fromAgencyAuthentication":"",
+    "fromAgencyAuthentication":"pack_extra_lembas",
     "acceptItemEnabled": true
   },
   "closures": [

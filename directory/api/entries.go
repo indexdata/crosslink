@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 
 	"github.com/google/uuid"
@@ -20,15 +19,13 @@ import (
 	"github.com/indexdata/crosslink/directory/domain"
 )
 
-const defaultSymbolAuthority string = "TEST"
-const tenantSymbolAuthorityEnv string = "TENANT_SYMBOL_AUTHORITY"
-
-func getSymbolAuthority() string {
-	symbolAuthority := os.Getenv(tenantSymbolAuthorityEnv)
-	if symbolAuthority == "" {
-		return defaultSymbolAuthority
+func isOwnedEntry(authData *auth.AuthData, tenant *string) bool {
+	if authData == nil || tenant == nil || *tenant == "" {
+		return false
 	}
-	return symbolAuthority
+
+	authTenant := authData.GetInstitution()
+	return authTenant != "" && authTenant == *tenant
 }
 
 func maybeUpdateEntryVendor(cur *string, patch nullable.Nullable[EntryVendor]) *string {
@@ -462,9 +459,6 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 		return GetEntries401TextResponse("Access denied"), nil
 	}
 
-	ourEntry, _ := a.queries.EntryBySymbol(ctx,
-		db.EntryBySymbolParams{Authority: getSymbolAuthority(), Symbol: authData.GetInstitution()})
-
 	if request.Params.Cql != nil && *request.Params.Cql != "" {
 		// Use CQL query
 		noBaseArgs := 0
@@ -514,12 +508,11 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 	for rows.Next() {
 
 		entry, count, err := scanEntryRow(rows)
-		seeSensitive := (ourEntry.ID.String() == entry.Id.String()) || authData.HasRoleFromList(seeSensitiveRoles)
-
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to scan entry row", "error", err)
 			return GetEntries500TextResponse("Internal server error"), nil
 		}
+		seeSensitive := isOwnedEntry(authData, entry.Tenant) || authData.HasRoleFromList(seeSensitiveRoles)
 		if !seeSensitive {
 			err = sanitizeEntry(&entry)
 			if err != nil {
@@ -562,16 +555,6 @@ func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (G
 		return GetEntry401TextResponse("Access denied"), nil
 	}
 
-	ownSymbolInstitution := authData.GetInstitution()
-	ownSymbolAuthority := getSymbolAuthority()
-
-	ownedEntry, err := a.queries.EntryBySymbol(ctx,
-		db.EntryBySymbolParams{Authority: ownSymbolAuthority, Symbol: ownSymbolInstitution})
-
-	if err != nil {
-		slog.ErrorContext(ctx, "Unable to get entry by symbol", "authority", ownSymbolAuthority, "institution", ownSymbolInstitution, "error", err)
-	}
-
 	switch request.Key {
 	case GetEntryParamsKeyById:
 		parsedId, perr := uuid.Parse(request.Value)
@@ -610,7 +593,7 @@ func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (G
 		return GetEntry500TextResponse("Internal server error"), nil
 	}
 
-	if ownedEntry.ID.String() == entry.Id.String() || authData.HasRoleFromList(seeSensitiveRoles) {
+	if isOwnedEntry(authData, entry.Tenant) || authData.HasRoleFromList(seeSensitiveRoles) {
 		seeSensitive = true
 	}
 
@@ -851,9 +834,6 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		return UpdateEntry401TextResponse("Access denied"), nil
 	}
 
-	ownedEntry, _ := a.queries.EntryBySymbol(ctx,
-		db.EntryBySymbolParams{Authority: getSymbolAuthority(), Symbol: authData.GetInstitution()})
-
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to begin transaction", "error", err)
@@ -884,7 +864,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		return UpdateEntry500TextResponse("Internal server error"), nil
 	}
 
-	if !authData.HasRoleFromList(writeRoles) && ownedEntry.ID.String() != orig.ID.String() {
+	if !authData.HasRoleFromList(writeRoles) && (!isOwnedEntry(authData, orig.Tenant) || request.Body.Tenant.IsSpecified()) {
 		slog.ErrorContext(ctx, "permission denied")
 		return UpdateEntry401TextResponse("Access denied"), nil
 	}

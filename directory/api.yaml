@@ -2133,6 +2133,7 @@ components:
           type: string
         tenant:
           type: string
+          description: Tenant that owns the entry; only consortial administrators may set this field.
         vendor:
           $ref: '#/components/schemas/EntryVendor'
         phoneNumber:
@@ -2445,6 +2446,7 @@ components:
         tenant:
           type: string
           nullable: true
+          description: Tenant that owns the entry; only consortial administrators may modify this field.
         vendor:
           allOf:
             - $ref: '#/components/schemas/EntryVendor'

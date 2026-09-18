@@ -2,13 +2,11 @@ package test
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 )
 
-func TestEntryEnvironment(t *testing.T) {
-
-	const symbolAuthorityEnv string = "TENANT_SYMBOL_AUTHORITY"
-
+func TestEntryOwnershipUsesTenantRatherThanSymbol(t *testing.T) {
 	shooInstitutionHeaders := map[string]string{
 		"X-Okapi-Tenant":      "SHOO",
 		"X-Okapi-Permissions": `["directory.institution.all"]`,
@@ -19,74 +17,39 @@ func TestEntryEnvironment(t *testing.T) {
 		"X-Okapi-Permissions": `["directory.institution.all"]`,
 	}
 
-	t.Setenv(symbolAuthorityEnv, "GRONK")
-	t.Run("CreateAndRetrieveEntry", func(t *testing.T) {
-		resetDb()
-		postRes, postData := jsonReq(t, http.MethodPost, "/entries",
-			`{
-				"name":"New Authority Institution",
-				"symbols": [
-					{"authority": "GRONK", "symbol": "SHOO"}
-				],
-				"endpoints": [
-					{
-						"name": "Primary",
-						"type": "ISO18626",
-						"address" : "https://inside.you.is/twowolves"
-					}
-				]
-			}`,
-			consortiumPermissionHeaders)
-
-		if postRes.StatusCode != http.StatusCreated {
-			t.Errorf("POST failed: %d %s", postRes.StatusCode, postData)
+	resetDb()
+	postRes, postData := jsonReq(t, http.MethodPost, "/entries", `{
+		"name":"Tenant-Owned Institution",
+		"tenant":"SHOO",
+		"symbols":[{"authority":"GRONK","symbol":"NOT-SHOO"}],
+		"lmsConfig":{
+			"address":"https://lms.example.org",
+			"fromAgency":"shoo",
+			"fromAgencyAuthentication":"secret"
 		}
+	}`, consortiumPermissionHeaders)
+	if postRes.StatusCode != http.StatusCreated {
+		t.Fatalf("POST failed: %d %s", postRes.StatusCode, postData)
+	}
 
-		getRes, getData := jsonReq(t, http.MethodGet, "/entries/by-symbol/GRONK:SHOO", "", shooInstitutionHeaders)
+	const endpoint = "/entries/by-symbol/GRONK:NOT-SHOO"
+	getRes, getData := jsonReq(t, http.MethodGet, endpoint, "", shooInstitutionHeaders)
+	if getRes.StatusCode != http.StatusOK || !strings.Contains(getData, `"fromAgencyAuthentication":"secret"`) {
+		t.Fatalf("tenant owner did not receive protected data: %d %s", getRes.StatusCode, getData)
+	}
 
-		if getRes.StatusCode != http.StatusOK {
-			t.Errorf("GET failed: %d %s", getRes.StatusCode, getData)
-		}
+	nonOwnerGetRes, nonOwnerGetData := jsonReq(t, http.MethodGet, endpoint, "", testInstitutionHeaders)
+	if nonOwnerGetRes.StatusCode != http.StatusOK || strings.Contains(nonOwnerGetData, `"fromAgencyAuthentication":"secret"`) {
+		t.Fatalf("non-owner received protected data: %d %s", nonOwnerGetRes.StatusCode, nonOwnerGetData)
+	}
 
-		patchRes, patchData := jsonReq(t, http.MethodPatch, "/entries/by-symbol/GRONK:SHOO",
-			`{
-				"name":"New Authority Institution",
-				"symbols": [
-					{"authority": "GRONK", "symbol": "SHOO"}
-				],
-				"endpoints": [
-					{
-						"name": "Primary",
-						"type": "ISO18626",
-						"address" : "https://inside.you.is/twowolves"
-					}
-				]
-			}`,
-			shooInstitutionHeaders)
+	patchRes, patchData := jsonReq(t, http.MethodPatch, endpoint, `{"name":"Tenant Owner Updated"}`, shooInstitutionHeaders)
+	if patchRes.StatusCode != http.StatusNoContent {
+		t.Fatalf("tenant-owner PATCH failed: %d %s", patchRes.StatusCode, patchData)
+	}
 
-		if patchRes.StatusCode != http.StatusNoContent {
-			t.Errorf("PATCH failed: %d %s", patchRes.StatusCode, patchData)
-		}
-
-		patch2Res, patch2Data := jsonReq(t, http.MethodPatch, "/entries/by-symbol/GRONK:SHOO",
-			`{
-				"name":"New Authority Institution",
-				"symbols": [
-					{"authority": "GRONK", "symbol": "SHOO"}
-				],
-				"endpoints": [
-					{
-						"name": "Primary",
-						"type": "ISO18626",
-						"address" : "https://inside.you.is/twowolves"
-					}
-				]
-			}`,
-			testInstitutionHeaders)
-
-		if patch2Res.StatusCode != http.StatusUnauthorized {
-			t.Errorf("PATCH2 expected 401: %d %s", patch2Res.StatusCode, patch2Data)
-		}
-
-	})
+	patchRes, patchData = jsonReq(t, http.MethodPatch, endpoint, `{"name":"Non-owner Updated"}`, testInstitutionHeaders)
+	if patchRes.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("non-owner PATCH expected 401: %d %s", patchRes.StatusCode, patchData)
+	}
 }
