@@ -719,7 +719,7 @@ func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId 
 func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) error {
 	supSymbol, reqSymbol := getSymbolsFromHeader(sam.Header)
 	var note pgtype.Text
-	noteText := stripReShareConditionMarkers(stripItemsNotePayload(sam.MessageInfo.Note))
+	noteText := shim.StripReShareConditionMarkers(common.StripItemsNotePayload(sam.MessageInfo.Note))
 	if noteText != "" {
 		note = getDbText(noteText)
 	}
@@ -769,32 +769,8 @@ func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.Extende
 	return err
 }
 
-func stripItemsNotePayload(note string) string {
-	if note == "" {
-		return ""
-	}
-	_, startIdx, endIdx := common.UnpackItemsNote(note)
-	if startIdx < 0 || endIdx < 0 {
-		return strings.TrimSpace(note)
-	}
-	before := strings.TrimSpace(note[:startIdx])
-	afterStart := endIdx + len(common.MULTIPLE_ITEMS_END)
-	after := ""
-	if afterStart < len(note) {
-		after = strings.TrimSpace(note[afterStart:])
-	}
-	switch {
-	case before != "" && after != "":
-		return before + "\n" + after
-	case before != "":
-		return before
-	default:
-		return after
-	}
-}
-
 func (m *PatronRequestMessageHandler) extractRamNotifications(ctx common.ExtendedContext, pr pr_db.PatronRequest, ram iso18626.RequestingAgencyMessage) error {
-	noteText := stripReShareConditionMarkers(ram.Note)
+	noteText := shim.StripReShareConditionMarkers(ram.Note)
 	if noteText == "" {
 		return nil
 	}
@@ -813,14 +789,6 @@ func (m *PatronRequestMessageHandler) extractRamNotifications(ctx common.Extende
 		},
 	})
 	return err
-}
-
-func stripReShareConditionMarkers(note string) string {
-	cleaned := note
-	cleaned = strings.ReplaceAll(cleaned, shim.RESHARE_ADD_LOAN_CONDITION, "")
-	cleaned = strings.ReplaceAll(cleaned, shim.RESHARE_LOAN_CONDITION_AGREE, "")
-	cleaned = strings.ReplaceAll(cleaned, shim.RESHARE_LOAN_CONDITION_REJECT, "")
-	return strings.TrimSpace(cleaned)
 }
 
 func hasNonZeroCost(value *iso18626.TypeCosts) bool {

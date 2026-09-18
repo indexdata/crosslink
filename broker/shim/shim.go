@@ -246,6 +246,14 @@ func stripReShareReqSeqNote(request *iso18626.Request) {
 	request.ServiceInfo.Note = rsNoteRegexp.ReplaceAllString(request.ServiceInfo.Note, "")
 }
 
+func StripReShareConditionMarkers(note string) string {
+	cleaned := note
+	cleaned = strings.ReplaceAll(cleaned, RESHARE_ADD_LOAN_CONDITION, "")
+	cleaned = strings.ReplaceAll(cleaned, RESHARE_LOAN_CONDITION_AGREE, "")
+	cleaned = strings.ReplaceAll(cleaned, RESHARE_LOAN_CONDITION_REJECT, "")
+	return strings.TrimSpace(cleaned)
+}
+
 func (i *Iso18626AlmaShim) appendReturnAddressToSuppMsgNote(suppMsg *iso18626.SupplyingAgencyMessage) {
 	if strings.Contains(suppMsg.MessageInfo.Note, RETURN_ADDRESS_BEGIN) {
 		return

@@ -327,6 +327,8 @@ func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, r
 			selSup.LastStatus = pgtype.Text{}
 			selSup.PrevReason = pgtype.Text{}
 			selSup.LastReason = pgtype.Text{}
+			selSup.ReasonUnfilled = pgtype.Text{}
+			selSup.Note = pgtype.Text{}
 			selSup.SupplierRequestID = pgtype.Text{}
 			if _, err = repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(selSup)); err != nil {
 				return err
@@ -785,7 +787,7 @@ func handleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso186
 			return
 		}
 	}
-	err = updateLocatedSupplier(ctx, repo, illTrans, status, reason, supReqId, supplierPeer.ID, supplier.ID)
+	err = updateLocatedSupplier(ctx, repo, illTrans, status, reason, afterShim.SupplyingAgencyMessage.MessageInfo, supReqId, supplierPeer.ID, supplier.ID)
 	if err != nil {
 		ctx.Logger().Error("failed to update located supplier status to: "+string(status), "error", err, "transactionId", illTrans.ID)
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
@@ -826,7 +828,7 @@ func validateStatusAndReasonForMessage(ctx common.ExtendedContext, illMessage *i
 }
 
 func updateLocatedSupplier(ctx common.ExtendedContext, repo ill_db.IllRepo, illTrans ill_db.IllTransaction,
-	status iso18626.TypeStatus, reason iso18626.TypeReasonForMessage, supReqId string, supPeerId string, supId string) error {
+	status iso18626.TypeStatus, reason iso18626.TypeReasonForMessage, messageInfo iso18626.MessageInfo, supReqId string, supPeerId string, supId string) error {
 	return repo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
 		locSup, err := repo.GetLocatedSupplierByIdForUpdate(ctx, supId)
 		if err != nil {
@@ -838,6 +840,15 @@ func updateLocatedSupplier(ctx common.ExtendedContext, repo ill_db.IllRepo, illT
 			if locSup.LastStatus.String != string(status) {
 				locSup.PrevStatus = locSup.LastStatus
 				locSup.LastStatus = createPgText(string(status))
+			}
+			if status == iso18626.TypeStatusUnfilled {
+				reasonUnfilled := ""
+				if messageInfo.ReasonUnfilled != nil {
+					reasonUnfilled = messageInfo.ReasonUnfilled.Text
+				}
+				note := shim.StripReShareConditionMarkers(common.StripItemsNotePayload(messageInfo.Note))
+				locSup.ReasonUnfilled = pgtype.Text{String: reasonUnfilled, Valid: reasonUnfilled != ""}
+				locSup.Note = pgtype.Text{String: note, Valid: note != ""}
 			}
 		} else {
 			level := slog.LevelWarn

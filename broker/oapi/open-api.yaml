@@ -428,6 +428,10 @@ components:
           type: string
         localSupplier:
           type: boolean
+        reasonUnfilled:
+          type: string
+        note:
+          type: string
       required: [id, supplierSymbol, ordinal, supplierStatus, localSupplier]
     Index:
       type: object
@@ -804,13 +808,25 @@ components:
           description: Item local ID
         prevReason:
           type: string
-          description: Previous requester reason
+          description: ISO 18626 reasonForMessage from the previously processed supplying-agency message
         lastReason:
           type: string
-          description: Latest requester reason
+          description: ISO 18626 reasonForMessage from the most recently processed supplying-agency message
         supplierRequestID:
           type: string
           description: Supplier request ID
+        supplierName:
+          type: string
+          description: Name of the supplier peer
+        directoryEntryId:
+          type: string
+          description: Directory entry ID of the supplier, absent for peers not from the directory
+        reasonUnfilled:
+          type: string
+          description: Reason unfilled as sent by the supplier
+        note:
+          type: string
+          description: Note from the supplier message that carried the reason
         supplierPeerLink:
           type: string
           description: Link to supplier Peer

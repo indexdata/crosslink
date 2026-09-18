@@ -138,6 +138,16 @@ FROM located_supplier
 WHERE ill_transaction_id = $1
 ORDER BY ordinal;
 
+-- name: GetLocatedSuppliersWithPeerByIllTransaction :many
+SELECT sqlc.embed(located_supplier),
+       peer.name AS supplier_name,
+       COALESCE(peer.custom_data ->> 'id', '')::text AS directory_entry_id,
+       COUNT(*) OVER () as full_count
+FROM located_supplier
+         JOIN peer ON peer.id = located_supplier.supplier_id
+WHERE ill_transaction_id = $1
+ORDER BY ordinal;
+
 -- name: GetLocatedSuppliersByIllTransactionAndStatus :many
 SELECT sqlc.embed(located_supplier)
 FROM located_supplier
@@ -191,8 +201,9 @@ WHERE ill_transaction_id = $1
 -- name: SaveLocatedSupplier :one
 INSERT INTO located_supplier (id, ill_transaction_id, supplier_id, supplier_symbol, ordinal, supplier_status,
                               prev_action, prev_status,
-                              last_action, last_status, local_id, prev_reason, last_reason, supplier_request_id, local_supplier)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                              last_action, last_status, local_id, prev_reason, last_reason, supplier_request_id, local_supplier,
+                              reason_unfilled, note)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 ON CONFLICT (id) DO UPDATE
     SET supplier_id         = EXCLUDED.supplier_id,
         supplier_symbol     = EXCLUDED.supplier_symbol,
@@ -206,7 +217,9 @@ ON CONFLICT (id) DO UPDATE
         prev_reason         = EXCLUDED.prev_reason,
         last_reason         = EXCLUDED.last_reason,
         supplier_request_id = EXCLUDED.supplier_request_id,
-        local_supplier      = EXCLUDED.local_supplier
+        local_supplier      = EXCLUDED.local_supplier,
+        reason_unfilled     = EXCLUDED.reason_unfilled,
+        note                = EXCLUDED.note
     WHERE located_supplier.ill_transaction_id = EXCLUDED.ill_transaction_id
 RETURNING sqlc.embed(located_supplier);
 
