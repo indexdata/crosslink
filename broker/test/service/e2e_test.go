@@ -145,6 +145,12 @@ func TestRequestUNFILLED(t *testing.T) {
 		"TASK, select-supplier = PROBLEM, problem=no-suppliers\n" +
 		"TASK, message-requester = SUCCESS\n"
 	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+	suppliers, _, err := illRepo.GetLocatedSuppliersByIllTransaction(appCtx, illTrans.ID)
+	assert.NoError(t, err)
+	if assert.Len(t, suppliers, 1) {
+		assert.Equal(t, string(iso18626.ReasonUnfilledNotOnShelf), suppliers[0].ReasonUnfilled.String)
+		assert.Equal(t, "Searched the shelf, item is missing", suppliers[0].Note.String)
+	}
 
 	data, err = os.ReadFile("../testdata/request-retry-after-unfilled.xml")
 	assert.Nil(t, err)

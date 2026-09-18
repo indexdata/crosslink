@@ -596,9 +596,9 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 		WriteJsonResponse(w, resp)
 		return
 	}
-	var supList []ill_db.LocatedSupplier
+	var supList []ill_db.GetLocatedSuppliersWithPeerByIllTransactionRow
 	var count int64
-	supList, count, err = a.illRepo.GetLocatedSuppliersByIllTransaction(ctx, tran.ID)
+	supList, count, err = a.illRepo.GetLocatedSuppliersWithPeerByIllTransaction(ctx, tran.ID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) { //DB error
 		AddInternalError(ctx, w, err)
 		return
@@ -642,7 +642,12 @@ func ToApiEvent(event events.Event, illId string, prId *string) oapi.Event {
 	return api
 }
 
-func toApiLocatedSupplier(r *http.Request, sup ill_db.LocatedSupplier) oapi.LocatedSupplier {
+func toApiLocatedSupplier(r *http.Request, row ill_db.GetLocatedSuppliersWithPeerByIllTransactionRow) oapi.LocatedSupplier {
+	sup := row.LocatedSupplier
+	var directoryEntryId *string
+	if row.DirectoryEntryID != "" {
+		directoryEntryId = &row.DirectoryEntryID
+	}
 	return oapi.LocatedSupplier{
 		Id:                sup.ID,
 		IllTransactionID:  sup.IllTransactionID,
@@ -658,6 +663,10 @@ func toApiLocatedSupplier(r *http.Request, sup ill_db.LocatedSupplier) oapi.Loca
 		PrevReason:        toString(sup.PrevReason),
 		LastReason:        toString(sup.LastReason),
 		SupplierRequestID: toString(sup.SupplierRequestID),
+		SupplierName:      &row.SupplierName,
+		DirectoryEntryId:  directoryEntryId,
+		ReasonUnfilled:    toString(sup.ReasonUnfilled),
+		Note:              toString(sup.Note),
 		SupplierPeerLink:  Link(r, Path(PEERS_PATH, sup.SupplierID), nil),
 	}
 }

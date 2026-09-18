@@ -20,11 +20,18 @@ docker compose up
 
 4. Run all steps in the Bruno runner in the `PR Happy Flow` folder. All HTTP response codes and validations should be green.
 
+The loan scenarios generate a supplier pull slip before shipping; this queues `pullslip-printed` and moves the supplier to `SEARCHING`.
+
 The happy path ships with a past due date, receives the item, explicitly invokes supplier `overdue`, requests renewal, and accepts it with a future date before completing checkout/check-in and return. It checks `OVERDUE`, `RENEWAL_PENDING`, `RENEWED`, and due dates on both sides without waiting for the scheduler. Dates are calculated relative to the run time.
 
 The separate `Open-ended loan` folder ships without a date and completes receipt and return, checking that neither side has a due date. This requires the local mock's undated checkout responses and absent `defaultLoanPeriod`.
 
 `Renewal rejection and open-ended acceptance` checks that rejection returns both sides to `OVERDUE` with the original date, then requests renewal again and accepts without a date. It verifies that acceptance clears the date on each side and completes the return workflow. Go tests cover explicit `dueDate: null` versus omission.
+
+`Recall` prints a pull slip, checks `SEARCHING`, ships and receives an
+open-ended loan, recalls it with a due date, verifies
+`RECALLED` and the deadline on both sides, then completes return and checks
+both requests are `COMPLETED`.
 
 Run all scenarios exactly as CI does:
 
