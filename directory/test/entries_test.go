@@ -1234,6 +1234,116 @@ func TestEntryCQLParentSymbol(t *testing.T) {
 	})
 }
 
+func TestGetOwnedEntries(t *testing.T) {
+	resetDb()
+
+	ctx := context.Background()
+	_, err := dbpool.Exec(ctx, `
+		UPDATE entries
+		SET tenant = CASE id
+			WHEN '00000000-0000-0000-0000-000000000001' THEN 'ANINST'
+			WHEN '00000000-0000-0000-0000-000000000003' THEN 'OTHER'
+		END
+		WHERE id IN (
+			'00000000-0000-0000-0000-000000000001',
+			'00000000-0000-0000-0000-000000000003'
+		)
+	`)
+	if err != nil {
+		t.Fatalf("failed to seed owned entries: %v", err)
+	}
+
+	headers := map[string]string{
+		"X-Okapi-Tenant":      "ANINST",
+		"X-Okapi-Permissions": `["directory.institution.all"]`,
+	}
+
+	type ownedEntriesResult struct {
+		About struct {
+			Count int64 `json:"count"`
+		} `json:"about"`
+		Items []map[string]any `json:"items"`
+	}
+	getOwned := func(t *testing.T, endpoint string, requestHeaders map[string]string) ownedEntriesResult {
+		t.Helper()
+		res, data := jsonReq(t, http.MethodGet, endpoint, "", requestHeaders)
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("expected owned entries status %d, got %d and body %s", http.StatusOK, res.StatusCode, data)
+		}
+		var result ownedEntriesResult
+		if err := json.Unmarshal([]byte(data), &result); err != nil {
+			t.Fatalf("failed to parse owned entries response: %v", err)
+		}
+		return result
+	}
+
+	t.Run("returns only owned entries with sensitive fields", func(t *testing.T) {
+		result := getOwned(t, "/entries/owned", headers)
+		if result.About.Count != 2 || len(result.Items) != 2 {
+			t.Fatalf("expected two owned entries, got %#v", result)
+		}
+		if result.Items[0]["id"] != "00000000-0000-0000-0000-000000000002" ||
+			result.Items[1]["id"] != "00000000-0000-0000-0000-000000000001" {
+			t.Fatalf("unexpected owned entries or ordering: %#v", result.Items)
+		}
+		lmsConfig, ok := result.Items[0]["lmsConfig"].(map[string]any)
+		if !ok || lmsConfig["fromAgencyAuthentication"] != "pack_extra_lembas" {
+			t.Fatalf("owned entry did not include its sensitive LMS credential: %#v", result.Items[0])
+		}
+	})
+
+	t.Run("CQL OR cannot escape tenant scope", func(t *testing.T) {
+		query := url.QueryEscape(`name="No Symbol" OR tenant="OTHER"`)
+		result := getOwned(t, "/entries/owned?cql="+query, headers)
+		if result.About.Count != 1 || len(result.Items) != 1 ||
+			result.Items[0]["id"] != "00000000-0000-0000-0000-000000000001" {
+			t.Fatalf("CQL escaped or did not correctly narrow tenant scope: %#v", result)
+		}
+	})
+
+	t.Run("paginates owned results", func(t *testing.T) {
+		result := getOwned(t, "/entries/owned?limit=1&offset=1", headers)
+		if result.About.Count != 2 || len(result.Items) != 1 ||
+			result.Items[0]["id"] != "00000000-0000-0000-0000-000000000001" {
+			t.Fatalf("unexpected owned entries page: %#v", result)
+		}
+	})
+
+	t.Run("tenant matching is exact", func(t *testing.T) {
+		lowercaseHeaders := map[string]string{
+			"X-Okapi-Tenant":      "aninst",
+			"X-Okapi-Permissions": `["directory.institution.all"]`,
+		}
+		result := getOwned(t, "/entries/owned", lowercaseHeaders)
+		if result.About.Count != 0 || len(result.Items) != 0 {
+			t.Fatalf("expected no entries for differently cased tenant, got %#v", result)
+		}
+	})
+
+	t.Run("requires tenant", func(t *testing.T) {
+		res, data := jsonReq(t, http.MethodGet, "/entries/owned", "", map[string]string{
+			"X-Okapi-Permissions": `["directory.institution.all"]`,
+		})
+		if res.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected missing tenant status %d, got %d and body %s", http.StatusBadRequest, res.StatusCode, data)
+		}
+	})
+
+	t.Run("authorizes before validating tenant", func(t *testing.T) {
+		res, data := jsonReq(t, http.MethodGet, "/entries/owned", "", nil)
+		if res.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("expected unauthorized status %d, got %d and body %s", http.StatusUnauthorized, res.StatusCode, data)
+		}
+	})
+
+	t.Run("rejects invalid CQL", func(t *testing.T) {
+		res, data := jsonReq(t, http.MethodGet, "/entries/owned?cql=invalid%28%28%28", "", headers)
+		if res.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected invalid CQL status %d, got %d and body %s", http.StatusBadRequest, res.StatusCode, data)
+		}
+	})
+}
+
 func TestPublicReadSanitizesProtectedLMSValues(t *testing.T) {
 	resetDb()
 
