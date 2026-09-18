@@ -396,7 +396,7 @@ func TestGviHoldings(t *testing.T) {
 
 	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
 
-	qtype := dirapi.Cql
+	qtype := dirapi.QueryConfigTypeCql
 	peer := ill_db.Peer{
 		CustomData: dirapi.Entry{
 			CatalogConfig: &dirapi.CatalogConfig{

@@ -24,7 +24,7 @@ func NewQueryBuilderGen(queryConfig *dirapi.QueryConfig) (LookupQueryBuilder, er
 	if queryConfig != nil {
 		config = *queryConfig
 	}
-	if config.Type == nil || *config.Type == dirapi.Pqf {
+	if config.Type == nil || *config.Type == dirapi.QueryConfigTypePqf {
 		if config.Identifier == nil {
 			config.Identifier = NewString("@attr 1=12 {term}")
 		}
@@ -39,7 +39,7 @@ func NewQueryBuilderGen(queryConfig *dirapi.QueryConfig) (LookupQueryBuilder, er
 		}
 		return &QueryBuilderGen{config: config}, nil
 	}
-	if *config.Type == dirapi.Cql {
+	if *config.Type == dirapi.QueryConfigTypeCql {
 		if config.Identifier == nil {
 			config.Identifier = NewString("rec.id = {term}")
 		}
@@ -91,7 +91,7 @@ func (s *QueryBuilderGen) Build(params LookupParams) (cql []string, pqf []string
 	var cqlList []string
 	for _, pm := range paramMappings {
 		if pm.value != "" && pm.mapping != nil && *pm.mapping != "" {
-			if s.config.Type != nil && *s.config.Type == dirapi.Cql {
+			if s.config.Type != nil && *s.config.Type == dirapi.QueryConfigTypeCql {
 				cql := strings.ReplaceAll(*pm.mapping, "{term}", cqlEncode(pm.value))
 				cqlList = append(cqlList, cql)
 			} else {
