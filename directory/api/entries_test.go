@@ -1,6 +1,7 @@
 package api
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -109,5 +110,32 @@ func TestHandleEntryCQL(t *testing.T) {
 	_, err = handleEntryCQL("invalid cql query (((", 0)
 	if err == nil {
 		t.Error("Expected error for invalid CQL, got nil")
+	}
+}
+
+func TestBuildOwnedEntryListQueryScopesCQL(t *testing.T) {
+	cqlQuery := `name="Owned" OR tenant="OTHER"`
+	limit := Limit(5)
+	offset := Offset(2)
+	query, args, err := buildEntryListQuery(
+		&cqlQuery,
+		&limit,
+		&offset,
+		"e.tenant = $1",
+		[]any{"ANINST"},
+	)
+	if err != nil {
+		t.Fatalf("building owned entry query: %v", err)
+	}
+
+	if !strings.Contains(query, "WHERE e.tenant = $1 AND (") {
+		t.Fatalf("CQL predicate is not grouped within tenant scope: %s", query)
+	}
+	if !strings.Contains(query, "LIMIT $4") || !strings.Contains(query, "OFFSET $5") {
+		t.Fatalf("query arguments were not numbered after tenant and CQL arguments: %s", query)
+	}
+	wantArgs := []any{"ANINST", "Owned", "OTHER", 5, Offset(2)}
+	if !reflect.DeepEqual(args, wantArgs) {
+		t.Fatalf("unexpected query arguments: got %#v, want %#v", args, wantArgs)
 	}
 }

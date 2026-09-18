@@ -123,6 +123,7 @@ var standardHeaders = map[string]string{
 func TestEmptyGet(t *testing.T) {
 	endpoints := map[string]string{
 		"/entries":        `{"about":{"count":0},"items":[]}`,
+		"/entries/owned":  `{"about":{"count":0},"items":[]}`,
 		"/tiers":          `{"about":{"count":0},"items":[]}`,
 		"/closures":       `{"about":{"count":0},"items":[]}`,
 		"/networks":       `{"about":{"count":0},"items":[]}`,

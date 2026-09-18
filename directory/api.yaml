@@ -139,6 +139,46 @@ paths:
             text/plain:
               schema:
                 type: string
+  /entries/owned:
+    get:
+      summary: Returns entries owned by the current tenant
+      description: Returns entries whose tenant matches the tenant in the authentication data.
+      operationId: getOwnedEntries
+      parameters:
+        - name: cql
+          in: query
+          description: CQL query filter applied within the current tenant's owned entries. The parentSymbol index matches entries by their immediate parent's symbols.
+          required: false
+          style: form
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Owned entry list response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntriesResponse'
+        '400':
+          description: Missing tenant or invalid request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
   /entries/{key}/{value}:
     get:
       summary: Returns a directory entry by ID or symbol

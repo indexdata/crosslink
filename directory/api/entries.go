@@ -447,9 +447,86 @@ func buildEntrySQL(whereClause string) string {
 	return baseQuery
 }
 
+func buildEntryListQuery(cqlString *string, limit *Limit, offset *Offset, baseWhere string, baseArgs []any) (string, []any, error) {
+	whereClause := baseWhere
+	args := baseArgs
+
+	if cqlString != nil && *cqlString != "" {
+		res, err := handleEntryCQL(*cqlString, len(args))
+		if err != nil {
+			return "", nil, err
+		}
+
+		if cqlWhere := res.GetWhereClause(); cqlWhere != "" {
+			if whereClause == "" {
+				whereClause = cqlWhere
+			} else {
+				// Parenthesize the complete CQL predicate so an OR expression cannot
+				// broaden a caller-supplied base scope such as tenant ownership.
+				whereClause += " AND (" + cqlWhere + ")"
+			}
+		}
+		args = append(args, res.GetQueryArguments()...)
+	}
+
+	if whereClause != "" {
+		whereClause = "WHERE " + whereClause + "\n"
+	}
+	query := buildEntrySQL(whereClause + defaultEntryOrder)
+
+	entryLimit := defaultEntryLimit
+	if limit != nil {
+		entryLimit = int(*limit)
+	}
+	args = append(args, entryLimit)
+	query += fmt.Sprintf("\nLIMIT $%d", len(args))
+
+	if offset != nil {
+		args = append(args, *offset)
+		query += fmt.Sprintf("\nOFFSET $%d", len(args))
+	}
+
+	return query, args, nil
+}
+
+func (a ApiImpl) queryEntryList(ctx context.Context, query string, args []any, transform func(*Entry) error) (EntriesResponse, error) {
+	rows, err := a.pool.Query(ctx, query, args...)
+	if err != nil {
+		return EntriesResponse{}, fmt.Errorf("querying entries: %w", err)
+	}
+	defer rows.Close()
+
+	// Initialise items as explicitly zero length because a nil slice is
+	// JSON-encoded as null rather than [].
+	items := make([]Entry, 0)
+	var totalCount int
+
+	for rows.Next() {
+		entry, count, err := scanEntryRow(rows)
+		if err != nil {
+			return EntriesResponse{}, fmt.Errorf("scanning entry row: %w", err)
+		}
+		if transform != nil {
+			if err := transform(&entry); err != nil {
+				return EntriesResponse{}, fmt.Errorf("transforming entry: %w", err)
+			}
+		}
+
+		items = append(items, entry)
+		totalCount = count
+	}
+
+	if err := rows.Err(); err != nil {
+		return EntriesResponse{}, fmt.Errorf("iterating entry rows: %w", err)
+	}
+
+	return EntriesResponse{
+		Items: items,
+		About: About{Count: int64(totalCount)},
+	}, nil
+}
+
 func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject) (GetEntriesResponseObject, error) {
-	var query string
-	var args []interface{}
 
 	authData := auth.GetAuthData(ctx)
 	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole, auth.PublicUserRole}
@@ -459,86 +536,59 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 		return GetEntries401TextResponse("Access denied"), nil
 	}
 
-	if request.Params.Cql != nil && *request.Params.Cql != "" {
-		// Use CQL query
-		noBaseArgs := 0
-		res, err := handleEntryCQL(*request.Params.Cql, noBaseArgs)
-		if err != nil {
-			return GetEntries400TextResponse(fmt.Sprintf("CQL parse error: %v", err)), nil
-		}
-
-		if res.GetWhereClause() != "" {
-			query = buildEntrySQL("WHERE " + res.GetWhereClause() + "\n" + defaultEntryOrder)
-		} else {
-			query = buildEntrySQL(defaultEntryOrder)
-		}
-		args = res.GetQueryArguments()
-	} else {
-		query = buildEntrySQL(defaultEntryOrder)
-		args = []interface{}{}
-	}
-
-	// Add LIMIT clause
-	limit := defaultEntryLimit
-	if request.Params.Limit != nil {
-		limit = int(*request.Params.Limit)
-	}
-	args = append(args, limit)
-	query += fmt.Sprintf("\nLIMIT $%d", len(args))
-
-	// Add OFFSET clause if provided
-	if request.Params.Offset != nil {
-		args = append(args, *request.Params.Offset)
-		query += fmt.Sprintf("\nOFFSET $%d", len(args))
-	}
-
-	rows, err := a.pool.Query(ctx, query, args...)
+	query, args, err := buildEntryListQuery(request.Params.Cql, request.Params.Limit, request.Params.Offset, "", nil)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to query entries", "error", err)
-		return GetEntries500TextResponse("Internal server error"), nil
+		return GetEntries400TextResponse(fmt.Sprintf("CQL parse error: %v", err)), nil
 	}
-	defer rows.Close()
 
-	// Need to initialise items as explicitly zero length because a simple
-	// var items []Entry will be JSON-encoded as null rather than [].
-	// See https://github.com/golang/go/issues/27589
-	items := make([]Entry, 0)
-	var totalCount int
-
-	for rows.Next() {
-
-		entry, count, err := scanEntryRow(rows)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to scan entry row", "error", err)
-			return GetEntries500TextResponse("Internal server error"), nil
-		}
+	response, err := a.queryEntryList(ctx, query, args, func(entry *Entry) error {
 		seeSensitive := isOwnedEntry(authData, entry.Tenant) || authData.HasRoleFromList(seeSensitiveRoles)
 		if !seeSensitive {
-			err = sanitizeEntry(&entry)
-			if err != nil {
-				slog.ErrorContext(ctx, "error sanitizing entry", "error", err)
-				return GetEntries500TextResponse("Internal server error"), nil
-			}
+			return sanitizeEntry(entry)
 		}
-
-		items = append(items, entry)
-		totalCount = count
-	}
-
-	if err := rows.Err(); err != nil {
-		slog.ErrorContext(ctx, "error iterating entry rows", "error", err)
+		return nil
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to read entries", "error", err)
 		return GetEntries500TextResponse("Internal server error"), nil
-	}
-
-	// Build response with pagination info
-	response := EntriesResponse{
-		Items: items,
-		About: About{
-			Count: int64(totalCount),
-		},
 	}
 
 	return GetEntries200JSONResponse(response), nil
+}
+
+func (a ApiImpl) GetOwnedEntries(ctx context.Context, request GetOwnedEntriesRequestObject) (GetOwnedEntriesResponseObject, error) {
+	authData := auth.GetAuthData(ctx)
+	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole, auth.PublicUserRole}
+	if !authData.HasRoleFromList(validRoles) {
+		slog.ErrorContext(ctx, "permission denied")
+		return GetOwnedEntries401TextResponse("Access denied"), nil
+	}
+
+	tenant := authData.GetInstitution()
+	if tenant == "" {
+		return GetOwnedEntries400TextResponse("Tenant is required"), nil
+	}
+
+	query, args, err := buildEntryListQuery(
+		request.Params.Cql,
+		request.Params.Limit,
+		request.Params.Offset,
+		"e.tenant = $1",
+		[]any{tenant},
+	)
+	if err != nil {
+		return GetOwnedEntries400TextResponse(fmt.Sprintf("CQL parse error: %v", err)), nil
+	}
+
+	// Every row is constrained to the authenticated tenant in SQL, so owned
+	// entries are returned without sanitizing their protected fields.
+	response, err := a.queryEntryList(ctx, query, args, nil)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to read owned entries", "error", err)
+		return GetOwnedEntries500TextResponse("Internal server error"), nil
+	}
+
+	return GetOwnedEntries200JSONResponse(response), nil
 }
 
 func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (GetEntryResponseObject, error) {

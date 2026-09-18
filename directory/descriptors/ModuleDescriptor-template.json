@@ -26,6 +26,17 @@
           ]
         },
         {
+          "methods": ["GET"],
+          "pathPattern": "/directory/entries/owned",
+          "permissionsRequired" : [],
+          "permissionsDesired": [
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all"
+          ]
+        },
+        {
           "methods": ["POST"],
           "pathPattern": "/directory/entries",
           "permissionsRequired" : [],
