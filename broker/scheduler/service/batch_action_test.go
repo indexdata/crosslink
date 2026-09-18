@@ -115,7 +115,7 @@ func requestAgingEvent(selector string, customData map[string]any) events.Event 
 
 func TestNewBatchActionService_WiresDependencies(t *testing.T) {
 	eventBus := &mockBatchActionEventBus{}
-	emailSender := EmailSenderServiceWithClient(nil, nil, nil, nil)
+	emailSender := EmailSenderServiceWithClient(nil, nil, nil, nil, nil)
 
 	svc := NewBatchActionService(eventBus, &mockEmailPrRepo{}, &mockBatchActionCleanupRepo{}, emailSender)
 
@@ -126,7 +126,7 @@ func TestNewBatchActionService_WiresDependencies(t *testing.T) {
 
 func TestBatchAction_CallsProcessTaskWithSignalConsumers(t *testing.T) {
 	eventBus := &mockBatchActionEventBus{}
-	emailSender := EmailSenderServiceWithClient(nil, nil, nil, nil)
+	emailSender := EmailSenderServiceWithClient(nil, nil, nil, nil, nil)
 	svc := NewBatchActionService(eventBus, &mockEmailPrRepo{}, &mockBatchActionCleanupRepo{}, emailSender)
 
 	event := events.Event{}
@@ -146,7 +146,7 @@ func TestBatchAction_ProcessTaskErrorIgnored(t *testing.T) {
 	eventBus := &mockBatchActionEventBus{
 		processErr: errors.New("event bus unavailable"),
 	}
-	emailSender := EmailSenderServiceWithClient(nil, nil, nil, nil)
+	emailSender := EmailSenderServiceWithClient(nil, nil, nil, nil, nil)
 	svc := NewBatchActionService(eventBus, &mockEmailPrRepo{}, &mockBatchActionCleanupRepo{}, emailSender)
 
 	assert.NotPanics(t, func() {
@@ -231,7 +231,7 @@ func TestBatchAction_UnknownActionReturnsError(t *testing.T) {
 }
 
 func TestBatchAction_EmailPullslipsDispatchesToEmailSender(t *testing.T) {
-	emailSender := EmailSenderServiceWithClient(nil, nil, &mockEmailService{ready: false}, nil)
+	emailSender := EmailSenderServiceWithClient(nil, nil, &mockEmailService{ready: false}, nil, nil)
 	svc := NewBatchActionService(nil, &mockEmailPrRepo{}, &mockBatchActionCleanupRepo{}, emailSender)
 
 	event := batchActionEvent(string(schedoapi.EmailPullslips))

@@ -12,6 +12,7 @@ import (
 	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/broker/api"
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/events"
 	prapi "github.com/indexdata/crosslink/broker/patron_request/api"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	ps_db "github.com/indexdata/crosslink/broker/pullslip/db"
@@ -25,14 +26,16 @@ import (
 const MAX_RECORDS_PER_PDF = 100
 
 type PullSlipApiHandler struct {
+	eventBus       events.EventBus
 	psRepo         ps_db.PsRepo
 	prRepo         pr_db.PrRepo
 	pdfService     psservice.PdfService
 	tenantResolver *tenant.TenantResolver
 }
 
-func NewPsApiHandler(psRepo ps_db.PsRepo, prRepo pr_db.PrRepo, tenantResolver *tenant.TenantResolver) PullSlipApiHandler {
+func NewPsApiHandler(psRepo ps_db.PsRepo, prRepo pr_db.PrRepo, tenantResolver *tenant.TenantResolver, eventBus events.EventBus) PullSlipApiHandler {
 	return PullSlipApiHandler{
+		eventBus:       eventBus,
 		psRepo:         psRepo,
 		prRepo:         prRepo,
 		tenantResolver: tenantResolver,
@@ -133,7 +136,7 @@ func (p PullSlipApiHandler) PostPullslips(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	pdf, err := p.getPdfByte(ctx, w, cqlQuery.String())
+	pdf, prs, err := p.getPdfByte(ctx, w, cqlQuery.String())
 	if err != nil {
 		return // http response already added
 	}
@@ -158,6 +161,10 @@ func (p PullSlipApiHandler) PostPullslips(w http.ResponseWriter, r *http.Request
 		api.AddInternalError(ctx, w, err)
 		return
 	}
+	if err := psservice.QueuePullslipPrinted(p.eventBus, prs, nil, nil); err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
 	w.Header().Set("Location", api.LinkAbs(r, api.Path("pullslips", psId, "pdf"), nil))
 	writePdf(w, pdf)
 }
@@ -170,7 +177,7 @@ func (p PullSlipApiHandler) PostPullslipsIdRegenerate(w http.ResponseWriter, r *
 		return
 	}
 
-	pdf, err := p.getPdfByte(ctx, w, ps.SearchCriteria)
+	pdf, prs, err := p.getPdfByte(ctx, w, ps.SearchCriteria)
 	if err != nil {
 		return // http response already added
 	}
@@ -182,6 +189,10 @@ func (p PullSlipApiHandler) PostPullslipsIdRegenerate(w http.ResponseWriter, r *
 	}
 	_, err = p.psRepo.SavePullSlip(ctx, ps_db.SavePullSlipParams(*ps))
 	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	if err := psservice.QueuePullslipPrinted(p.eventBus, prs, nil, nil); err != nil {
 		api.AddInternalError(ctx, w, err)
 		return
 	}
@@ -215,35 +226,35 @@ func (p PullSlipApiHandler) getPullSlip(ctx common.ExtendedContext, w http.Respo
 	return &ps
 }
 
-func (p PullSlipApiHandler) getPdfByte(ctx common.ExtendedContext, w http.ResponseWriter, cql string) ([]byte, error) {
+func (p PullSlipApiHandler) getPdfByte(ctx common.ExtendedContext, w http.ResponseWriter, cql string) ([]byte, []pr_db.PatronRequest, error) {
 	pgcql, err := pr_db.ParsePatronRequestsCql(cql)
 	if err != nil {
 		wrappedErr := fmt.Errorf("invalid CQL query: %w", err)
 		api.AddBadRequestError(ctx, w, wrappedErr)
-		return []byte{}, wrappedErr
+		return []byte{}, nil, wrappedErr
 	}
 
 	prs, _, err := p.prRepo.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: MAX_RECORDS_PER_PDF, Offset: 0}, pgcql)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			api.AddNotFoundError(w)
-			return []byte{}, err
+			return []byte{}, nil, err
 		}
 		api.AddInternalError(ctx, w, err)
-		return []byte{}, err
+		return []byte{}, nil, err
 	}
 
 	if len(prs) == 0 {
 		api.AddBadRequestError(ctx, w, errors.New("no patron requests found"))
-		return []byte{}, errors.New("no patron requests found")
+		return []byte{}, nil, errors.New("no patron requests found")
 	}
 
 	pdf, err := p.pdfService.GeneratePdfPullSlipForPrs(ctx, prs)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
-		return []byte{}, err
+		return []byte{}, nil, err
 	}
-	return pdf, nil
+	return pdf, prs, nil
 }
 
 func writePdf(w http.ResponseWriter, bytes []byte) {

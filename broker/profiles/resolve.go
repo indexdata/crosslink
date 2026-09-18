@@ -191,7 +191,7 @@ func (e *Effective) validate() error {
 		if c.MetadataFormat != nil && c.MetadataFormat.Marc21 == nil {
 			return bad("metadataFormat.marc21")
 		}
-		if c.QueryConfig != nil && c.QueryConfig.Type != nil && *c.QueryConfig.Type != dirapi.Pqf && *c.QueryConfig.Type != dirapi.Cql {
+		if c.QueryConfig != nil && c.QueryConfig.Type != nil && *c.QueryConfig.Type != dirapi.QueryConfigTypePqf && *c.QueryConfig.Type != dirapi.QueryConfigTypeCql {
 			return bad("queryConfig.type")
 		}
 		if h := c.HoldingsFormat; h != nil {

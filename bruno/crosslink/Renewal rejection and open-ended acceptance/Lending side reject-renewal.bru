@@ -1,0 +1,51 @@
+meta {
+  name: Lending side reject-renewal
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{host}}/patron_requests/{{renewalOmittedLendingPrId}}/action?side=lending
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: lending
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+body:json {
+  {
+    "action": "reject-renewal",
+    "actionParams": {
+      "note": "Renewal declined for regression test"
+    }
+  }
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
+script:post-response {
+  test("Action succeeds", () => {
+    expect(res.getStatus()).to.equal(200);
+    const pr = res.getBody();
+    expect(pr.result).to.equal("SUCCESS");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

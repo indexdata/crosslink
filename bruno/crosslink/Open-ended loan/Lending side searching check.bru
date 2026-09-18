@@ -1,0 +1,35 @@
+meta {
+  name: Lending side searching check
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{host}}/patron_requests/{{openEndedLendingPrId}}?side=lending
+  body: none
+  auth: basic
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")))
+}
+
+script:post-response {
+  test("Pull slip output moves supplier to SEARCHING", function() {
+    expect(res.getStatus()).to.equal(200);
+    const pr = res.getBody();
+    expect(pr.state).to.equal("SEARCHING");
+    expect(pr.lastAction).to.equal("pullslip-printed");
+    expect(pr.lastActionResult).to.equal("SUCCESS");
+  });
+}

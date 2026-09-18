@@ -43,7 +43,7 @@ const ORIGINAL_INCOMING_MESSAGE = "originalIncomingMessage"
 
 var lookupQueryBuilder = utils.Must(catalog.NewQueryBuilderGen(&dirapi.QueryConfig{
 	Identifier: new("supplier_unique_record_id = {term}"),
-	Type:       new(dirapi.Cql),
+	Type:       new(dirapi.QueryConfigTypeCql),
 }))
 
 const queryTimeFormat = "2006-01-02 15:04:05"

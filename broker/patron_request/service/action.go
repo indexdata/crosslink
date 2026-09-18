@@ -38,7 +38,7 @@ const duplicateCheckKey = "duplicateCheck"
 var duplicateLookupQueryBuilder = utils.Must(catalog.NewQueryBuilderGen(&dirapi.QueryConfig{
 	Identifier: new("supplier_unique_record_id = {term}"),
 	Title:      new("title_exact = {term}"),
-	Type:       new(dirapi.Cql),
+	Type:       new(dirapi.QueryConfigTypeCql),
 }))
 
 type PatronRequestActionService struct {
