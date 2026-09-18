@@ -39,7 +39,7 @@ func TestLookupFoundMarc(t *testing.T) {
 		MainField:        NewString("010"),
 		LocationSubField: NewString("a"),
 	}
-	pqfType := dirapi.Pqf
+	pqfType := dirapi.QueryConfigTypePqf
 	queryBuilder, err := NewQueryBuilderGen(&dirapi.QueryConfig{
 		Title: NewString("@attr 1=1016 {term}"),
 		Type:  &pqfType,
@@ -85,7 +85,7 @@ func TestLookupFoundMarc(t *testing.T) {
 }
 
 func TestLookupFoundOpac(t *testing.T) {
-	cqlType := dirapi.Cql
+	cqlType := dirapi.QueryConfigTypeCql
 	queryBuilder, err := NewQueryBuilderGen(&dirapi.QueryConfig{
 		Type: &cqlType,
 	})
@@ -155,7 +155,7 @@ func TestLookupDiagnosticPQF(t *testing.T) {
 }
 
 func TestLookupDiagnosticCql(t *testing.T) {
-	cqlType := dirapi.Cql
+	cqlType := dirapi.QueryConfigTypeCql
 	queryBuilder, err := NewQueryBuilderGen(&dirapi.QueryConfig{
 		Type: &cqlType,
 	})
