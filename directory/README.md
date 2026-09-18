@@ -175,7 +175,6 @@ Run `make generate` before invoking `go build` or `go test` directly.
 | `HOST`                    | Address on which the HTTP server listens                                       | `localhost`                                                 |
 | `HTTP_PORT`               | Port on which the HTTP server listens                                          | `8086`                                                      |
 | `DATABASE_URL`            | PostgreSQL connection string used by the service and database migrations       | `postgresql://postgres:directory@localhost:54322/directory` |
-| `TENANT_SYMBOL_AUTHORITY` | Authority paired with an incoming institution/tenant to form a complete symbol | `TEST`                                                      |
 | `LOG_LEVEL`               | Log level: `debug`, `info`, `warn`, or `error`                                 | `info`                                                      |
 | `LOG_FORMAT`              | Log output format; set to `json` for structured JSON logs                      | `text`                                                      |
 
