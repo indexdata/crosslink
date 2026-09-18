@@ -11,6 +11,7 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/shim"
 	"github.com/indexdata/crosslink/broker/test/mocks"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 
@@ -42,6 +43,10 @@ func (r *retryRequestRepo) GetSelectedSupplierForIllTransaction(ctx common.Exten
 	return r.selectedSupplier, nil
 }
 
+func (r *retryRequestRepo) GetLocatedSupplierByIdForUpdate(ctx common.ExtendedContext, id string) (ill_db.LocatedSupplier, error) {
+	return r.selectedSupplier, nil
+}
+
 func (r *retryRequestRepo) SaveLocatedSupplier(ctx common.ExtendedContext, params ill_db.SaveLocatedSupplierParams) (ill_db.LocatedSupplier, error) {
 	r.savedSupplier = ill_db.LocatedSupplier(params)
 	r.savedSupplierPresent = true
@@ -69,6 +74,8 @@ func TestHandleRetryRequestResetsReusedSelectedSupplierAttempt(t *testing.T) {
 			PrevStatus:        pgtype.Text{String: string(iso18626.TypeStatusWillSupply), Valid: true},
 			LastReason:        pgtype.Text{String: string(iso18626.TypeReasonForMessageStatusChange), Valid: true},
 			PrevReason:        pgtype.Text{String: string(iso18626.TypeReasonForMessageRequestResponse), Valid: true},
+			ReasonUnfilled:    pgtype.Text{String: "NotOnShelf", Valid: true},
+			Note:              pgtype.Text{String: "old note", Valid: true},
 			SupplierRequestID: pgtype.Text{String: "old-supplier-request-id", Valid: true},
 		},
 	}
@@ -96,6 +103,71 @@ func TestHandleRetryRequestResetsReusedSelectedSupplierAttempt(t *testing.T) {
 		assert.False(t, repo.savedSupplier.SupplierRequestID.Valid)
 		assert.False(t, repo.savedSupplier.PrevStatus.Valid)
 		assert.False(t, repo.savedSupplier.PrevReason.Valid)
+		assert.False(t, repo.savedSupplier.ReasonUnfilled.Valid)
+		assert.False(t, repo.savedSupplier.Note.Valid)
+	}
+}
+
+func TestUpdateLocatedSupplierUnfilledReasonAndNote(t *testing.T) {
+	text := func(value string) pgtype.Text { return pgtype.Text{String: value, Valid: true} }
+	stored := ill_db.LocatedSupplier{ID: "supplier-id", ReasonUnfilled: text("PolicyProblem"), Note: text("stored note")}
+	tests := []struct {
+		name        string
+		supplier    ill_db.LocatedSupplier
+		status      iso18626.TypeStatus
+		messageInfo iso18626.MessageInfo
+		wantReason  pgtype.Text
+		wantNote    pgtype.Text
+	}{
+		{
+			name:     "unfilled stores reason and cleaned note",
+			supplier: ill_db.LocatedSupplier{ID: "supplier-id", LastStatus: text(string(iso18626.TypeStatusWillSupply))},
+			status:   iso18626.TypeStatusUnfilled,
+			messageInfo: iso18626.MessageInfo{
+				ReasonUnfilled: &iso18626.TypeSchemeValuePair{Text: "NotOnShelf"},
+				Note:           "Missing " + common.PackItemsNote([][]string{{"item-1", "call-1"}}) + shim.RESHARE_ADD_LOAN_CONDITION,
+			},
+			wantReason: text("NotOnShelf"),
+			wantNote:   text("Missing"),
+		},
+		{
+			name:     "unfilled without reason or note stores nulls",
+			supplier: stored,
+			status:   iso18626.TypeStatusUnfilled,
+		},
+		{
+			name:        "other status leaves stored values",
+			supplier:    stored,
+			status:      iso18626.TypeStatusWillSupply,
+			messageInfo: iso18626.MessageInfo{Note: "on its way"},
+			wantReason:  stored.ReasonUnfilled,
+			wantNote:    stored.Note,
+		},
+		{
+			name: "invalid transition to unfilled leaves stored values",
+			supplier: ill_db.LocatedSupplier{ID: "supplier-id", LastStatus: text(string(iso18626.TypeStatusLoanCompleted)),
+				ReasonUnfilled: stored.ReasonUnfilled, Note: stored.Note},
+			status: iso18626.TypeStatusUnfilled,
+			messageInfo: iso18626.MessageInfo{
+				ReasonUnfilled: &iso18626.TypeSchemeValuePair{Text: "NotOnShelf"},
+				Note:           "too late",
+			},
+			wantReason: stored.ReasonUnfilled,
+			wantNote:   stored.Note,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &retryRequestRepo{selectedSupplier: tt.supplier}
+			ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+			err := updateLocatedSupplier(ctx, repo, ill_db.IllTransaction{ID: "transaction-id"}, tt.status,
+				iso18626.TypeReasonForMessageStatusChange, tt.messageInfo, "", "peer-id", tt.supplier.ID)
+			assert.NoError(t, err)
+			if assert.True(t, repo.savedSupplierPresent) {
+				assert.Equal(t, tt.wantReason, repo.savedSupplier.ReasonUnfilled)
+				assert.Equal(t, tt.wantNote, repo.savedSupplier.Note)
+			}
+		})
 	}
 }
 

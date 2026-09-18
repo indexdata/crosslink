@@ -341,6 +341,10 @@ func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header, statusList
 		iso18626.TypeStatusCopyCompleted:
 		supplier.delete(header)
 	}
+	if status == iso18626.TypeStatusUnfilled {
+		msg.SupplyingAgencyMessage.MessageInfo.ReasonUnfilled = &iso18626.TypeSchemeValuePair{Text: string(iso18626.ReasonUnfilledNotOnShelf)}
+		msg.SupplyingAgencyMessage.MessageInfo.Note = "Searched the shelf, item is missing"
+	}
 	if app.sendSupplyingAgencyMessage(header, state, msg) {
 		if len(statusList) > 1 {
 			go app.sendSupplyingAgencyLater(header, statusList[1:])

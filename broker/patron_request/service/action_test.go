@@ -3441,7 +3441,7 @@ func TestHandleInvokeLenderActionShipOK(t *testing.T) {
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{}
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateSearching, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{
 		{
 			ID:        "item1",
@@ -3494,7 +3494,7 @@ func TestHandleInvokeLenderActionShipCopyOrLoanCreatesDeferredLmsItem(t *testing
 		BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "item-1"},
 		ServiceInfo:       &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopyOrLoan},
 	}
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateSearching, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, nil).Once()
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{PrID: patronRequestId, Barcode: "barcode-1", LmsRequestID: getDbText("request-1")}}, nil).Once()
 	action := LenderActionShip
@@ -3526,7 +3526,7 @@ func TestHandleInvokeLenderActionShipCopyOrLoanCreatesDeferredLmsItemAlongsideMa
 	}
 	manualItem := pr_db.Item{ID: "manual-item", PrID: patronRequestId, Barcode: "manual-barcode"}
 	requestedItem := pr_db.Item{ID: "requested-item", PrID: patronRequestId, Barcode: "requested-barcode", LmsRequestID: getDbText("request-1")}
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateSearching, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{manualItem}, nil).Once()
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{manualItem, requestedItem}, nil).Once()
 	action := LenderActionShip
@@ -3604,7 +3604,7 @@ func TestHandleInvokeLenderActionShipNewTitleOK(t *testing.T) {
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{}
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateSearching, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{
 		{
 			ID:        "item1",
@@ -3653,7 +3653,7 @@ func TestHandleInvokeLenderActionShipNewTitleFail(t *testing.T) {
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{}
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateSearching, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}}, nil)
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(pr_db.PatronRequest{RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}, IllRequest: illRequest}, nil)
 	mockPrRepo.saveItemFail = true
@@ -3675,7 +3675,7 @@ func TestHandleInvokeLenderActionShipGetItemsByIdFail(t *testing.T) {
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{}
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateSearching, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, assert.AnError)
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(pr_db.PatronRequest{RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}, IllRequest: illRequest}, nil)
 
@@ -3695,7 +3695,7 @@ func TestHandleInvokeLenderActionShipGetItemsByIdEmpty(t *testing.T) {
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{}
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateSearching, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, nil)
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(pr_db.PatronRequest{RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}, IllRequest: illRequest}, nil)
 
@@ -3715,7 +3715,7 @@ func TestHandleInvokeLenderActionShipLmsFailed(t *testing.T) {
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{}
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateSearching, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}}, nil)
 	action := LenderActionShip
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(pr_db.PatronRequest{RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}, IllRequest: illRequest}, nil)
@@ -5781,3 +5781,25 @@ func (m *MockLmsAdapterFail) AcceptItemUsesPickupLocation() bool  { return true 
 
 func (m *mockLmsAdapter) RequestItemUsesPickupLocation() bool { return true }
 func (m *mockLmsAdapter) AcceptItemUsesPickupLocation() bool  { return true }
+
+func TestPullslipPrintedAndShippingGate(t *testing.T) {
+	for _, state := range []pr_db.PatronRequestState{LenderStateWillSupply, LenderStateSearching, LenderStateShipped} {
+		t.Run(string(state), func(t *testing.T) {
+			repo := new(MockPrRepo)
+			pr := pr_db.PatronRequest{ID: patronRequestId, Side: SideLending, State: state}
+			repo.On("GetPatronRequestById", patronRequestId).Return(pr, nil)
+			svc := CreatePatronRequestActionService(repo, nil, new(MockEventBus), nil, nil, nil, nil, nil)
+			action := LenderActionPullslipPrinted
+			status, _ := svc.handleInvokeAction(appCtx, events.Event{PatronRequestID: pr.ID, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+			if state == LenderStateShipped {
+				assert.NotEqual(t, events.EventStatusSuccess, status)
+			} else {
+				assert.Equal(t, events.EventStatusSuccess, status)
+				assert.Equal(t, LenderStateSearching, repo.savedPr.State)
+				assert.Equal(t, string(action), repo.savedPr.LastAction.String)
+			}
+			mapping := mustActionMapping(t)
+			assert.Equal(t, state == LenderStateSearching, mapping.IsActionSupported(pr, LenderActionShip))
+		})
+	}
+}

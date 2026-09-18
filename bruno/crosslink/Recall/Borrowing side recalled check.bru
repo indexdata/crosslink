@@ -1,0 +1,44 @@
+meta {
+  name: Borrowing side recalled check
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{host}}/patron_requests/{{recallPrId}}?side=borrowing
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: borrowing
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
+script:post-response {
+  test("Recall preserves the return deadline", function() {
+    const pr = res.getBody();
+    expect(pr.lastActionResult).to.equal("SUCCESS")
+    expect(pr.state).to.equal("RECALLED");
+    expect(new Date(pr.dueDate).getTime()).to.equal(new Date(bru.getVar("recallDueDate")).getTime());
+    expect(pr.illResponse.statusInfo.status).to.equal("Recalled");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -1,7 +1,7 @@
 meta {
   name: Sup Patron Events
   type: http
-  seq: 51
+  seq: 53
 }
 
 get {
@@ -44,7 +44,7 @@ script:post-response {
     expect(events[0].eventStatus).to.equal("SUCCESS");
   };
   
-  ["validate-patron", "will-supply", "add-condition", "ship", "overdue", "accept-renewal", "mark-received"].forEach(action => {
+  ["validate-patron", "will-supply", "add-condition", "pullslip-printed", "ship", "overdue", "accept-renewal", "mark-received"].forEach(action => {
     test(`Check ${action}`, () => {
       expectActionWithFirstSuccess(action);
     });
