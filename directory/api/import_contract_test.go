@@ -104,6 +104,109 @@ func TestImportContractReusesDirectoryCreationObjectsAndEnums(t *testing.T) {
 	}
 }
 
+func TestSharedCreationObjectsPreserveImportValidation(t *testing.T) {
+	contracts := loadImportContracts(t)
+	tests := []struct {
+		name       string
+		schemaName string
+		value      any
+	}{
+		{
+			name:       "symbol must be an object",
+			schemaName: "SymbolProperties",
+			value:      "ISIL:ABC",
+		},
+		{
+			name:       "symbol authority must not be empty",
+			schemaName: "SymbolProperties",
+			value:      map[string]any{"authority": "", "symbol": "ABC"},
+		},
+		{
+			name:       "symbol must not be empty",
+			schemaName: "SymbolProperties",
+			value:      map[string]any{"authority": "ISIL", "symbol": ""},
+		},
+		{
+			name:       "symbol rejects unknown fields",
+			schemaName: "SymbolProperties",
+			value:      map[string]any{"authority": "ISIL", "symbol": "ABC", "unknown": true},
+		},
+		{
+			name:       "service endpoint rejects unknown fields",
+			schemaName: "ServiceEndpointProperties",
+			value:      map[string]any{"name": "ISO", "type": "ISO18626", "address": "https://example.test", "unknown": true},
+		},
+		{
+			name:       "address component rejects unknown fields",
+			schemaName: "AddressComponent",
+			value:      map[string]any{"seq": float64(1), "type": "Locality", "value": "Copenhagen", "unknown": true},
+		},
+		{
+			name:       "closure rejects unknown fields",
+			schemaName: "ClosureProperties",
+			value:      map[string]any{"startDate": "2026-01-01", "endDate": "2026-01-02", "reason": "Holiday", "unknown": true},
+		},
+	}
+
+	for _, contract := range contracts {
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				schema := contract.Components.Schemas[test.schemaName].Value
+				require.Error(t, schema.VisitJSON(test.value))
+			})
+		}
+	}
+}
+
+func TestStrictSharedCreationObjectsDoNotRejectComposedModels(t *testing.T) {
+	contracts := loadImportContracts(t)
+	tests := []struct {
+		name       string
+		schemaName string
+		value      any
+	}{
+		{
+			name:       "symbol",
+			schemaName: "Symbol",
+			value:      map[string]any{"id": "40b853dd-d1de-4d30-838b-f16c938f80c0", "authority": "ISIL", "symbol": "ABC"},
+		},
+		{
+			name:       "symbol patch",
+			schemaName: "SymbolPatch",
+			value:      map[string]any{"id": "40b853dd-d1de-4d30-838b-f16c938f80c0", "authority": "ISIL", "symbol": "ABC"},
+		},
+		{
+			name:       "service endpoint",
+			schemaName: "ServiceEndpoint",
+			value:      map[string]any{"id": "40b853dd-d1de-4d30-838b-f16c938f80c0", "name": "ISO", "type": "ISO18626", "address": "https://example.test"},
+		},
+		{
+			name:       "service endpoint patch",
+			schemaName: "ServiceEndpointPatch",
+			value:      map[string]any{"id": "40b853dd-d1de-4d30-838b-f16c938f80c0", "name": "ISO", "type": "ISO18626", "address": "https://example.test"},
+		},
+		{
+			name:       "closure",
+			schemaName: "Closure",
+			value:      map[string]any{"id": "40b853dd-d1de-4d30-838b-f16c938f80c0", "entry": "d6ed641d-4f2e-43f2-b78d-1e24818c884b", "startDate": "2026-01-01", "endDate": "2026-01-02", "reason": "Holiday"},
+		},
+		{
+			name:       "network assignment",
+			schemaName: "ImportNetworkAssignment",
+			value:      map[string]any{"authority": "ISIL", "symbol": "ABC", "priority": float64(1)},
+		},
+	}
+
+	for _, contract := range contracts {
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				schema := contract.Components.Schemas[test.schemaName].Value
+				require.NoError(t, schema.VisitJSON(test.value, openapi3.EnableFormatValidation()))
+			})
+		}
+	}
+}
+
 func requireArrayItemsSchemaRef(t *testing.T, contract *openapi3.T, schemaName, propertyName, referencedSchemaName string) {
 	t.Helper()
 	items := contract.Components.Schemas[schemaName].Value.Properties[propertyName].Value.Items

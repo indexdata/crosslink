@@ -1627,12 +1627,13 @@ components:
           description: Number of additional error details omitted from the response.
 
     ImportNetworkAssignment:
-      allOf:
-        - $ref: '#/components/schemas/SymbolProperties'
-        - type: object
-          required: [priority]
-          properties:
-            priority: { type: integer, format: int32 }
+      type: object
+      additionalProperties: false
+      required: [authority, symbol, priority]
+      properties:
+        authority: { type: string, minLength: 1 }
+        symbol: { type: string, minLength: 1 }
+        priority: { type: integer, format: int32 }
 
     ImportTierKey:
       type: object
@@ -2764,38 +2765,64 @@ components:
           nullable: true
 
     SymbolProperties:
+      type: object
+      additionalProperties: false
       required:
         - symbol
         - authority
       properties:
         symbol:
           type: string
+          minLength: 1
           description: Uppercase string
         authority:
           type: string
+          minLength: 1
           description: Uppercase string
     Symbol:
-      allOf:
-        - required:
-          - id
-          properties:
-            id:
-              readOnly: true
-              type: string
-              format: uuid
-              description: Unique id
-        - $ref: '#/components/schemas/SymbolProperties'
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - symbol
+        - authority
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique id
+        symbol:
+          type: string
+          minLength: 1
+          description: Uppercase string
+        authority:
+          type: string
+          minLength: 1
+          description: Uppercase string
     SymbolPatch:
-      allOf:
-        - properties:
-            id:
-              type: string
-              format: uuid
-              description: Unique id
-        - $ref: '#/components/schemas/SymbolProperties'
+      type: object
+      additionalProperties: false
+      required:
+        - symbol
+        - authority
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique id
+        symbol:
+          type: string
+          minLength: 1
+          description: Uppercase string
+        authority:
+          type: string
+          minLength: 1
+          description: Uppercase string
 
     ServiceEndpointProperties:
       type: object
+      additionalProperties: false
       required:
         - name
         - type
@@ -2808,27 +2835,47 @@ components:
         address:
           type: string
     ServiceEndpoint:
-      allOf:
-        - required:
-          - id
-          properties:
-            id:
-              readOnly: true
-              type: string
-              format: uuid
-              description: Unique id
-        - $ref: '#/components/schemas/ServiceEndpointProperties'
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - type
+        - address
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique id
+        name:
+          type: string
+        type:
+          type: string
+        address:
+          type: string
     ServiceEndpointPatch:
-      allOf:
-        - properties:
-            id:
-              type: string
-              format: uuid
-              description: Unique id
-        - $ref: '#/components/schemas/ServiceEndpointProperties'
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - type
+        - address
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique id
+        name:
+          type: string
+        type:
+          type: string
+        address:
+          type: string
 
     AddressComponent:
       type: object
+      additionalProperties: false
       required:
         - seq
         - type
@@ -2881,6 +2928,7 @@ components:
 
     ClosureProperties:
       type: object
+      additionalProperties: false
       required:
         - startDate
         - endDate
@@ -2898,21 +2946,33 @@ components:
           type: string
 
     Closure:
-      allOf:
-        - type: object
-          required:
-            - id
-            - entry
-          properties:
-            id:
-              readOnly: true
-              type: string
-              format: uuid
-              description: Unique identifier
-            entry:
-              type: string
-              format: uuid
-        - $ref: '#/components/schemas/ClosureProperties'
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - entry
+        - startDate
+        - endDate
+        - reason
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique identifier
+        entry:
+          type: string
+          format: uuid
+        startDate:
+          type: string
+          format: date
+          description: ISO8601 date
+        endDate:
+          type: string
+          format: date
+          description: ISO8601 date
+        reason:
+          type: string
     ClosurePatch:
       type: object
       properties:
