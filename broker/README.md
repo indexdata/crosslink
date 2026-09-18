@@ -259,3 +259,7 @@ Start the default stack (DB + broker; broker runs provision and migrations on st
 ```
 docker compose up
 ```
+
+# Data import
+
+For information about importing patron requests, batch actions, and templates, see the [Import API documentation](import/README.md).

@@ -27,6 +27,9 @@ from a newline-delimited JSON (NDJSON) stream. It requires the
 it processes each record in its own transaction and supports `fail`, `skip`,
 and `update` conflict policies.
 
+The [`export-crosslink-directory.sql`](../migration/export-crosslink-directory.sql)
+script exports a mod-rs tenant's directory as NDJSON accepted by this endpoint.
+
 ### Request format and sample data
 
 Each record has `type`, `key`, and `data` fields. Put one complete JSON object
