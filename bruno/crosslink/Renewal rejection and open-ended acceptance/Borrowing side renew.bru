@@ -1,0 +1,48 @@
+meta {
+  name: Borrowing side renew
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{host}}/patron_requests/{{renewalOmittedPrId}}/action?side=borrowing
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: borrowing
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+body:json {
+  {
+    "action": "renew"
+  }
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
+script:post-response {
+  test("Action succeeds", () => {
+    expect(res.getStatus()).to.equal(200);
+    const pr = res.getBody();
+    expect(pr.result).to.equal("SUCCESS");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

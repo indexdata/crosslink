@@ -380,7 +380,7 @@ func TestLookupDeserializesDirectoryConfigurationFields(t *testing.T) {
 			assert.Equal(t, "usmarc", (*catalogConfig.Zoom.Options)["preferredRecordSyntax"])
 			assert.Equal(t, "20", (*catalogConfig.Zoom.Options)["count"])
 			assert.Equal(t, "STACKS", (*catalogConfig.Zoom.Options)["location"])
-			assert.Equal(t, dirapi.Cql, *catalogConfig.QueryConfig.Type)
+			assert.Equal(t, dirapi.QueryConfigTypeCql, *catalogConfig.QueryConfig.Type)
 			assert.Equal(t, "rec.id = {term}", *catalogConfig.QueryConfig.Identifier)
 			assert.Equal(t, "999", *catalogConfig.HoldingsFormat.Marc.MainField)
 			assert.NotNil(t, catalogConfig.HoldingsFormat.Opac)

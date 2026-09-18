@@ -109,7 +109,7 @@ func TestResolveLoanDueDate(t *testing.T) {
 }
 
 func testLoan() pr_db.PatronRequest {
-	return pr_db.PatronRequest{ID: "loan", State: LenderStateWillSupply, Side: SideLending,
+	return pr_db.PatronRequest{ID: "loan", State: LenderStateSearching, Side: SideLending,
 		SupplierSymbol: getDbText("ISIL:SUP"), RequesterSymbol: getDbText("ISIL:REQ"),
 		IllRequest:  iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}},
 		IllResponse: iso18626.SupplyingAgencyMessage{StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusLoaned}}}

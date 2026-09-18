@@ -55,7 +55,7 @@ const (
 	LenderStateWillSupplyPending  pr_db.PatronRequestState = "WILL_SUPPLY_PENDING"
 	LenderStateWillSupply         pr_db.PatronRequestState = "WILL_SUPPLY"
 	LenderStateConditionPending   pr_db.PatronRequestState = "CONDITION_PENDING"
-	LenderStateConditionAccepted  pr_db.PatronRequestState = "CONDITION_ACCEPTED"
+	LenderStateSearching          pr_db.PatronRequestState = "SEARCHING"
 	LenderStateShipped            pr_db.PatronRequestState = "SHIPPED"
 	LenderStateReceived           pr_db.PatronRequestState = "RECEIVED"
 	LenderStateOverdue            pr_db.PatronRequestState = "OVERDUE"
@@ -105,6 +105,7 @@ const (
 	LenderActionOverdue                pr_db.PatronRequestAction = "overdue"
 	LenderActionAcceptRenewal          pr_db.PatronRequestAction = "accept-renewal"
 	LenderActionRejectRenewal          pr_db.PatronRequestAction = "reject-renewal"
+	LenderActionPullslipPrinted        pr_db.PatronRequestAction = "pullslip-printed"
 	LenderActionShip                   pr_db.PatronRequestAction = "ship"
 	LenderActionSupplyDocument         pr_db.PatronRequestAction = "supply-document"
 	LenderActionMarkReceived           pr_db.PatronRequestAction = "mark-received"
@@ -180,7 +181,7 @@ func supplierBuiltInStates() []string {
 		string(LenderStateWillSupplyPending),
 		string(LenderStateWillSupply),
 		string(LenderStateConditionPending),
-		string(LenderStateConditionAccepted),
+		string(LenderStateSearching),
 		string(LenderStateShipped),
 		string(LenderStateReceived), string(LenderStateOverdue), string(LenderStateRenewed), string(LenderStateRenewalPending),
 		string(LenderStateShippedReturn),
@@ -313,6 +314,7 @@ func getActionCapability(side pr_db.PatronRequestSide, action pr_db.PatronReques
 
 func supplierBuiltInActions() []proapi.ActionCapability {
 	return []proapi.ActionCapability{
+		transitionActionCapability(LenderActionPullslipPrinted),
 		{Name: string(LenderActionOverdue), Parameters: []string{}},
 		{Name: string(LenderActionAcceptRenewal), Parameters: []string{"dueDate", "note"}},
 		{Name: string(LenderActionRejectRenewal), Parameters: []string{"note"}},
