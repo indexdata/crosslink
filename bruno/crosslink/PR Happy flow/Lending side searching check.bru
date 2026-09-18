@@ -1,17 +1,13 @@
 meta {
-  name: Lending side condition-accepted check
+  name: Lending side searching check
   type: http
-  seq: 11
+  seq: 21
 }
 
 get {
   url: {{host}}/patron_requests/{{lendingPrId}}?side=lending
-  body: json
+  body: none
   auth: basic
-}
-
-params:query {
-  side: lending
 }
 
 headers {
@@ -29,13 +25,11 @@ script:pre-request {
 }
 
 script:post-response {
-  test("for condition accepted", function() {
+  test("Pull slip output moves supplier to SEARCHING", function() {
+    expect(res.getStatus()).to.equal(200);
     const pr = res.getBody();
-    expect(pr.state).to.equal("WILL_SUPPLY")
+    expect(pr.state).to.equal("SEARCHING");
+    expect(pr.lastAction).to.equal("pullslip-printed");
+    expect(pr.lastActionResult).to.equal("SUCCESS");
   });
-}
-
-settings {
-  encodeUrl: true
-  timeout: 0
 }

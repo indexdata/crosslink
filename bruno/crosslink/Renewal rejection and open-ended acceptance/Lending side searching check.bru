@@ -1,17 +1,13 @@
 meta {
-  name: Lending side renewed check
+  name: Lending side searching check
   type: http
-  seq: 16
+  seq: 4
 }
 
 get {
   url: {{host}}/patron_requests/{{renewalOmittedLendingPrId}}?side=lending
   body: none
   auth: basic
-}
-
-params:query {
-  side: lending
 }
 
 headers {
@@ -25,20 +21,15 @@ auth:basic {
 }
 
 script:pre-request {
-  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")))
 }
 
 script:post-response {
-  test("State is RENEWED with no due date", () => {
+  test("Pull slip output moves supplier to SEARCHING", function() {
     expect(res.getStatus()).to.equal(200);
     const pr = res.getBody();
-    expect(pr.state).to.equal("RENEWED");
-    expect(pr.dueDate ?? null).to.equal(null);
-    expect(pr.needsAttention).to.equal(false);
+    expect(pr.state).to.equal("SEARCHING");
+    expect(pr.lastAction).to.equal("pullslip-printed");
+    expect(pr.lastActionResult).to.equal("SUCCESS");
   });
-}
-
-settings {
-  encodeUrl: true
-  timeout: 0
 }

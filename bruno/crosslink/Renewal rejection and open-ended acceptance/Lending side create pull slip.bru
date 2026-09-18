@@ -1,7 +1,7 @@
 meta {
-  name: Borrowing side create pull slip
+  name: Lending side create pull slip
   type: http
-  seq: 36
+  seq: 3
 }
 
 post {
@@ -12,7 +12,7 @@ post {
 
 headers {
   X-Okapi-User-Id: {{userName}}
-  X-Okapi-Tenant: {{OkapiTenantReq}}
+  X-Okapi-Tenant: {{OkapiTenantSup}}
 }
 
 auth:basic {
@@ -22,7 +22,7 @@ auth:basic {
 
 body:json {
   {
-    "illTransactionIds": ["{{prId}}"]
+    "illTransactionIds": ["{{renewalOmittedLendingPrId}}"]
   }
 }
 
@@ -37,7 +37,7 @@ script:post-response {
       expect(body).to.not.be.undefined;
       const location = res.getHeader("location");
       const pullSlipId = location.split("/pullslips/")[1].split("/")[0];
-      bru.setVar("borrowingPullSlipId", pullSlipId);
+      bru.setVar("pullSlipId", pullSlipId);
   });
 }
 

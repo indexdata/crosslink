@@ -28,19 +28,21 @@ type pullslipEmailData struct {
 }
 
 type EmailSenderService struct {
+	eventBus     events.EventBus
 	prRepo       pr_db.PrRepo
 	illRepo      ill_db.IllRepo
 	pdf          psservice.PdfService
 	emailService email.EmailService
 }
 
-func NewEmailSenderService(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo) (*EmailSenderService, error) {
+func NewEmailSenderService(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, eventBus events.EventBus) (*EmailSenderService, error) {
 	emailService := email.NewEmailService()
 	var err error
 	if !emailService.IsReadyToSend() {
 		err = errors.New("email: SMTP_HOST environment variable is required")
 	}
 	return &EmailSenderService{
+		eventBus:     eventBus,
 		prRepo:       prRepo,
 		illRepo:      illRepo,
 		pdf:          psservice.NewPdfService(prRepo),
@@ -50,8 +52,8 @@ func NewEmailSenderService(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo) (*EmailS
 
 // EmailSenderServiceWithClient constructs an EmailSenderService with injected
 // dependencies, intended for use in tests.
-func EmailSenderServiceWithClient(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, emailService email.EmailService, pdf psservice.PdfService) *EmailSenderService {
-	return &EmailSenderService{prRepo: prRepo, illRepo: illRepo, pdf: pdf, emailService: emailService}
+func EmailSenderServiceWithClient(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, emailService email.EmailService, pdf psservice.PdfService, eventBus events.EventBus) *EmailSenderService {
+	return &EmailSenderService{eventBus: eventBus, prRepo: prRepo, illRepo: illRepo, pdf: pdf, emailService: emailService}
 }
 
 func (s *EmailSenderService) EmailPullslip(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
@@ -168,6 +170,11 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 	err = s.emailService.SendEmail(*owner.CustomData.FromEmail, messageData.To, raw)
 	if err != nil {
 		return events.NewErrorResult("failed to send email via SMTP", err.Error())
+	}
+	if includePdf {
+		if err := psservice.QueuePullslipPrinted(s.eventBus, prs, &event.ID, event.EventData.BatchActionData); err != nil {
+			return events.NewErrorResult("email sent but failed to queue pullslip-printed actions", err.Error())
+		}
 	}
 	return events.EventStatusSuccess, nil
 }
