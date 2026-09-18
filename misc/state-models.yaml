@@ -386,6 +386,8 @@ stateModels:
           serviceTypes: [Loan, CopyOrLoan]
         primaryAction: ship-return
         events:
+          - name: recalled
+            transition: RECALLED
           - name: overdue
             transition: OVERDUE
         actions:
@@ -413,6 +415,8 @@ stateModels:
           serviceTypes: [Loan, CopyOrLoan]
         primaryAction: ship-return
         events:
+          - name: recalled
+            transition: RECALLED
           - name: overdue
             transition: OVERDUE
         actions:
@@ -433,6 +437,8 @@ stateModels:
           serviceTypes: [Loan, CopyOrLoan]
         primaryAction: ship-return
         events:
+          - name: recalled
+            transition: RECALLED
           - name: overdue
         actions:
           - name: check-out
@@ -456,6 +462,8 @@ stateModels:
           serviceTypes: [Loan, CopyOrLoan]
         primaryAction: ship-return
         events:
+          - name: recalled
+            transition: RECALLED
           - name: overdue
           - name: renewal-accepted
             transition: RENEWED
@@ -471,6 +479,27 @@ stateModels:
             transitions:
               success: SHIPPED_RETURNED
 
+      - name: RECALLED
+        display: Recalled
+        desc: Supplier recalled the loan; return the item
+        side: REQUESTER
+        appliesTo:
+          serviceTypes: [Loan, CopyOrLoan]
+        needsAttention: true
+        primaryAction: ship-return
+        events:
+          - name: recalled
+          - name: overdue
+          - name: renewal-accepted
+          - name: renewal-rejected
+        actions:
+          - name: check-in
+            desc: Check in all items
+          - name: ship-return
+            desc: Send ISO ShippedReturn and delete temporary LMS items
+            transitions:
+              success: SHIPPED_RETURNED
+
       - name: SHIPPED_RETURNED
         display: Shipped Returned
         desc: Item is in return shipment
@@ -478,6 +507,7 @@ stateModels:
         appliesTo:
           serviceTypes: [Loan, CopyOrLoan]
         events:
+          - name: recalled
           - name: completed
             desc: Supplier/broker signals loan/copy completion
             transition: COMPLETED
@@ -850,6 +880,10 @@ stateModels:
           - name: shipped-return
             transition: SHIPPED_RETURN
         actions:
+          - name: recall
+            desc: Recall the loan with an optional dueDate and note
+            transitions:
+              success: RECALLED
           - name: overdue
             desc: Notify requester that the loan is overdue
             transitions:
@@ -865,6 +899,10 @@ stateModels:
           - name: shipped-return
             transition: SHIPPED_RETURN
         actions:
+          - name: recall
+            desc: Recall the loan with an optional dueDate and note
+            transitions:
+              success: RECALLED
           - name: overdue
             desc: Notify requester that the loan is overdue
             transitions:
@@ -881,6 +919,11 @@ stateModels:
             transition: SHIPPED_RETURN
           - name: renew
             transition: RENEWAL_PENDING
+        actions:
+          - name: recall
+            desc: Recall the loan with an optional dueDate and note
+            transitions:
+              success: RECALLED
 
       - name: RENEWAL_PENDING
         display: Renewal pending
@@ -895,6 +938,10 @@ stateModels:
             transition: SHIPPED_RETURN
           - name: renew
         actions:
+          - name: recall
+            desc: Recall the loan with an optional dueDate and note
+            transitions:
+              success: RECALLED
           - name: accept-renewal
             desc: Approve renewal with an optional dueDate; omit for an open-ended loan
             transitions:
@@ -903,6 +950,16 @@ stateModels:
             desc: Reject renewal
             transitions:
               success: OVERDUE
+
+      - name: RECALLED
+        display: Recalled
+        desc: Loan recalled; awaiting return shipment
+        side: SUPPLIER
+        appliesTo:
+          serviceTypes: [Loan, CopyOrLoan]
+        events:
+          - name: shipped-return
+            transition: SHIPPED_RETURN
 
       - name: SHIPPED_RETURN
         display: Shipped Return

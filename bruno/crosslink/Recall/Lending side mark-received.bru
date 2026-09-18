@@ -1,0 +1,47 @@
+meta {
+  name: Lending side mark-received
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{host}}/patron_requests/{{recallLendingPrId}}/action?side=lending
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: lending
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+body:json {
+  {
+      "action": "mark-received"
+  }
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
+script:post-response {
+  test("for success", function() {
+    const pr = res.getBody();
+    expect(pr.result).to.equal("SUCCESS")
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

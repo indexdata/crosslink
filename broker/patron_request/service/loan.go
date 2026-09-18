@@ -167,6 +167,33 @@ func setLoanMessage(sam iso18626.SupplyingAgencyMessage, pr *pr_db.PatronRequest
 	pr.IllResponse.StatusInfo.DueDate = isoLoanDate(pr.DueAt)
 }
 
+func (a *PatronRequestActionService) recallLenderRequest(ctx common.ExtendedContext, eventID string, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
+	if err := validateLoanDueDateParam(params.DueDate); err != nil {
+		return loanActionError(ctx, pr, err)
+	}
+	due := pr.DueAt
+	if params.DueDate != nil {
+		entry, err := a.supplierLoanEntry(ctx, pr)
+		if err != nil {
+			return loanActionError(ctx, pr, err)
+		}
+		date, err := parseLoanDate(*params.DueDate, entry)
+		if err != nil {
+			return loanActionError(ctx, pr, err)
+		}
+		due = pgtype.Timestamptz{Time: *date, Valid: true}
+	}
+	status, result, err := a.messageSender.sendSupplyingAgencyMessage(ctx, eventID, pr,
+		iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange, Note: params.Note},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusRecalled, DueDate: isoLoanDate(due)}, nil)
+	execution := actionResultFromIllSend(ctx, status, result, err, pr)
+	if execution.status == events.EventStatusSuccess {
+		execution.pr.DueAt = due
+		setLoanMessage(*result.OutgoingMessage.SupplyingAgencyMessage, &execution.pr)
+	}
+	return execution
+}
+
 func (a *PatronRequestActionService) overdueLenderRequest(ctx common.ExtendedContext, eventID string, pr pr_db.PatronRequest) actionExecutionResult {
 	// The action dispatcher enforces availability using the request's state model.
 	if pr.Side != SideLending ||
