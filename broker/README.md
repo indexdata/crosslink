@@ -260,6 +260,10 @@ Start the default stack (DB + broker; broker runs provision and migrations on st
 docker compose up
 ```
 
+# Data import
+
+For information about importing patron requests, batch actions, and templates, see the [Import API documentation](import/README.md).
+
 ### Supplier pull slips and shipment
 
 For Loan and CopyOrLoan requests, generating a pull-slip PDF queues the `pullslip-printed` action for the included eligible supplier requests. Accepted conditions return the supplier to `WILL_SUPPLY`. Printing moves `WILL_SUPPLY` to `SEARCHING` (picking and awaiting shipment). Reprinting in `SEARCHING` leaves the state unchanged. The `ship` action is available only in `SEARCHING`. Copy delivery remains available without this loan workflow.
