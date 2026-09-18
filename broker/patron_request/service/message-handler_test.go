@@ -1313,7 +1313,7 @@ func TestHandleRequestingAgencyMessageConditionsAcceptedNotification(t *testing.
 	}, pr_db.PatronRequest{ID: patronRequestId, State: LenderStateConditionPending, Side: SideLending})
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
-	assert.Equal(t, LenderStateConditionAccepted, mockPrRepo.savedPr.State)
+	assert.Equal(t, LenderStateWillSupply, mockPrRepo.savedPr.State)
 	assert.NoError(t, err)
 }
 
