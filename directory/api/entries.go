@@ -893,7 +893,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		slog.ErrorContext(ctx, "type cannot be null")
 		return UpdateEntry400TextResponse("'type' cannot be set to null"), nil
 	}
-	origTypeEntryPatch := EntryPatchType(orig.Type)
+	origTypeEntryPatch := EntryType(orig.Type)
 	resultingType := string(*maybeUpdateCol(&origTypeEntryPatch, request.Body.Type))
 	var parentEntry db.Entry
 	parent := maybeUpdateCol(orig.Parent, request.Body.Parent)
