@@ -546,6 +546,178 @@ func TestEntryCases(t *testing.T) {
 	testCases(t, cases)
 }
 
+func TestEntryLendersOfLastResortValidation(t *testing.T) {
+	headers := map[string]string{
+		"X-Okapi-Tenant":      "ANINST",
+		"X-Okapi-Permissions": `["directory.consortium.all"]`,
+	}
+	t.Cleanup(func() {
+		if _, err := dbpool.Exec(context.Background(), "DELETE FROM ill_configs"); err != nil {
+			t.Errorf("failed to clean up ILL configurations: %v", err)
+		}
+	})
+
+	t.Run("post rejects missing lender and rolls back", func(t *testing.T) {
+		resetDb()
+		body := `{
+			"name":"Invalid lender entry",
+			"illConfig":{"lendersOfLastResort":[{"authority":"ISIL","symbol":"MISSING"}]}
+		}`
+		res, data := jsonReq(t, http.MethodPost, "/entries", body, headers)
+		if res.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected POST status %d, got %d and body %s", http.StatusBadRequest, res.StatusCode, data)
+		}
+		if !strings.Contains(data, "Lender of last resort does not exist: ISIL:MISSING") {
+			t.Fatalf("unexpected validation response: %s", data)
+		}
+
+		var count int
+		if err := dbpool.QueryRow(context.Background(), "SELECT count(*) FROM entries WHERE name = $1", "Invalid lender entry").Scan(&count); err != nil {
+			t.Fatalf("failed to count rolled-back entry: %v", err)
+		}
+		if count != 0 {
+			t.Fatalf("expected invalid POST to roll back, found %d entries", count)
+		}
+	})
+
+	t.Run("post rejects normalized duplicate lender", func(t *testing.T) {
+		resetDb()
+		body := `{
+			"name":"Duplicate lender entry",
+			"illConfig":{"lendersOfLastResort":[
+				{"authority":"test","symbol":"aninst"},
+				{"authority":"TEST","symbol":"ANINST"}
+			]}
+		}`
+		res, data := jsonReq(t, http.MethodPost, "/entries", body, headers)
+		if res.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected POST status %d, got %d and body %s", http.StatusBadRequest, res.StatusCode, data)
+		}
+		if !strings.Contains(data, "Duplicate lender of last resort: TEST:ANINST") {
+			t.Fatalf("unexpected validation response: %s", data)
+		}
+	})
+
+	t.Run("post rejects colon in lender authority and rolls back", func(t *testing.T) {
+		resetDb()
+		body := `{
+			"name":"Ambiguous lender entry",
+			"symbols":[{"authority":"A:B","symbol":"C"}],
+			"illConfig":{"lendersOfLastResort":[{"authority":"A:B","symbol":"C"}]}
+		}`
+		res, data := jsonReq(t, http.MethodPost, "/entries", body, headers)
+		if res.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected POST status %d, got %d and body %s", http.StatusBadRequest, res.StatusCode, data)
+		}
+		if !strings.Contains(data, "Lender of last resort authority must not contain ':'") {
+			t.Fatalf("unexpected validation response: %s", data)
+		}
+
+		var count int
+		if err := dbpool.QueryRow(context.Background(), "SELECT count(*) FROM entries WHERE name = $1", "Ambiguous lender entry").Scan(&count); err != nil {
+			t.Fatalf("failed to count rolled-back entry: %v", err)
+		}
+		if count != 0 {
+			t.Fatalf("expected invalid POST to roll back, found %d entries", count)
+		}
+	})
+
+	t.Run("patch accepts lender symbol added in same transaction", func(t *testing.T) {
+		resetDb()
+		body := `{
+			"symbols":[
+				{"id":"60000000-0000-0000-0000-000000000001","authority":"TEST","symbol":"ANINST"},
+				{"authority":"isil","symbol":"new-lender"}
+			],
+			"illConfig":{"lendersOfLastResort":[{"authority":"ISIL","symbol":"NEW-LENDER"}]}
+		}`
+		res, data := jsonReq(t, http.MethodPatch, "/entries/by-id/00000000-0000-0000-0000-000000000002", body, headers)
+		if res.StatusCode != http.StatusNoContent {
+			t.Fatalf("expected PATCH status %d, got %d and body %s", http.StatusNoContent, res.StatusCode, data)
+		}
+
+		var lenders []string
+		if err := dbpool.QueryRow(context.Background(), "SELECT lenders_of_last_resort FROM ill_configs WHERE entry = $1", "00000000-0000-0000-0000-000000000002").Scan(&lenders); err != nil {
+			t.Fatalf("failed to fetch lenders after PATCH: %v", err)
+		}
+		if !reflect.DeepEqual(lenders, []string{"ISIL:NEW-LENDER"}) {
+			t.Fatalf("unexpected stored lenders: %#v", lenders)
+		}
+	})
+
+	t.Run("patch rejects lender symbol removed in same transaction and rolls back", func(t *testing.T) {
+		resetDb()
+		body := `{
+			"symbols":[{"id":"60000000-0000-0000-0000-000000000001","authority":"TEST","symbol":"RENAMED"}],
+			"illConfig":{"lendersOfLastResort":[{"authority":"TEST","symbol":"ANINST"}]}
+		}`
+		res, data := jsonReq(t, http.MethodPatch, "/entries/by-id/00000000-0000-0000-0000-000000000002", body, headers)
+		if res.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected PATCH status %d, got %d and body %s", http.StatusBadRequest, res.StatusCode, data)
+		}
+		if !strings.Contains(data, "Lender of last resort does not exist: TEST:ANINST") {
+			t.Fatalf("unexpected validation response: %s", data)
+		}
+
+		var symbol string
+		if err := dbpool.QueryRow(context.Background(), "SELECT symbol FROM symbols WHERE id = $1", "60000000-0000-0000-0000-000000000001").Scan(&symbol); err != nil {
+			t.Fatalf("failed to fetch symbol after rejected PATCH: %v", err)
+		}
+		if symbol != "ANINST" {
+			t.Fatalf("expected rejected PATCH to roll back symbol change, got %s", symbol)
+		}
+	})
+
+	t.Run("patch by symbol rejects duplicate lender and rolls back", func(t *testing.T) {
+		resetDb()
+		body := `{
+			"name":"Should roll back",
+			"illConfig":{"lendersOfLastResort":[
+				{"authority":"TEST","symbol":"ANCONS"},
+				{"authority":"test","symbol":"ancons"}
+			]}
+		}`
+		res, data := jsonReq(t, http.MethodPatch, "/entries/by-symbol/TEST:ANINST", body, headers)
+		if res.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected PATCH status %d, got %d and body %s", http.StatusBadRequest, res.StatusCode, data)
+		}
+		if !strings.Contains(data, "Duplicate lender of last resort: TEST:ANCONS") {
+			t.Fatalf("unexpected validation response: %s", data)
+		}
+
+		var name string
+		if err := dbpool.QueryRow(context.Background(), "SELECT name FROM entries WHERE id = $1", "00000000-0000-0000-0000-000000000002").Scan(&name); err != nil {
+			t.Fatalf("failed to fetch entry after rejected PATCH: %v", err)
+		}
+		if name == "Should roll back" {
+			t.Fatal("expected rejected PATCH to roll back entry changes")
+		}
+	})
+
+	t.Run("patch rejects colon in lender authority and rolls back", func(t *testing.T) {
+		resetDb()
+		body := `{
+			"name":"Should roll back",
+			"illConfig":{"lendersOfLastResort":[{"authority":"A:B","symbol":"C"}]}
+		}`
+		res, data := jsonReq(t, http.MethodPatch, "/entries/by-id/00000000-0000-0000-0000-000000000002", body, headers)
+		if res.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected PATCH status %d, got %d and body %s", http.StatusBadRequest, res.StatusCode, data)
+		}
+		if !strings.Contains(data, "Lender of last resort authority must not contain ':'") {
+			t.Fatalf("unexpected validation response: %s", data)
+		}
+
+		var name string
+		if err := dbpool.QueryRow(context.Background(), "SELECT name FROM entries WHERE id = $1", "00000000-0000-0000-0000-000000000002").Scan(&name); err != nil {
+			t.Fatalf("failed to fetch entry after rejected PATCH: %v", err)
+		}
+		if name == "Should roll back" {
+			t.Fatal("expected rejected PATCH to roll back entry changes")
+		}
+	})
+}
+
 func TestPatchEntryLenderOfLastResortToNull(t *testing.T) {
 	resetDb()
 
@@ -722,7 +894,7 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 		"illConfig":{
 			"iso18626Url":"https://iso.example.org/iso18626",
 			"iso18626Vendor":"ReShare",
-			"lendersOfLastResort":[{"authority":"ISIL","symbol":"CONTRACT-LOR"}],
+			"lendersOfLastResort":[{"authority":"ISIL","symbol":"CONTRACT"}],
 			"includeRequestingAgencyInfo":true,
 			"includeSupplierInfo":false,
 			"includeReturnInfo":true,
@@ -807,7 +979,7 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 	}
 	illConfig := entry["illConfig"].(map[string]any)
 	lender := illConfig["lendersOfLastResort"].([]any)[0].(map[string]any)
-	if lender["authority"] != "ISIL" || lender["symbol"] != "CONTRACT-LOR" {
+	if lender["authority"] != "ISIL" || lender["symbol"] != "CONTRACT" {
 		t.Fatalf("illConfig.lendersOfLastResort did not round-trip as Symbol array: %#v", lender)
 	}
 	if illConfig["iso18626Url"] != "https://iso.example.org/iso18626" ||
