@@ -2,6 +2,14 @@
 
 Applies throughout this repository.
 
+## Working approach
+
+- Treat questions, investigations, and requests for advice as discussion, not permission to edit files.
+- Before non-trivial code changes, inspect the relevant code and outline the proposed approach, affected areas, and validation. Ask follow-up questions when requirements, scope, or tradeoffs are unclear.
+- Wait for agreement on the approach before editing. An explicit request to implement an already-discussed plan counts as agreement.
+- For small, clearly specified edits, proceed directly. Keep planning proportional to the task.
+- Treat follow-up requests as revisions to the whole change. When behavior, terminology, or design changes, update all affected code, tests, names, comments, and documentation—including earlier work in the session. Remove superseded code and expectations; keep cleanup within the task's scope.
+
 ## Scope and code quality
 
 - Keep PRs to one behavior/fix plus tests/docs. Avoid unrelated refactors, formatting, dependency upgrades, and generated-file churn. Preserve user changes.
