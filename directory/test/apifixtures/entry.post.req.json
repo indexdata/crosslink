@@ -1,7 +1,7 @@
 {
   "name":"New Institution",
   "type":"Institution",
-  "illConfig":{"lendersOfLastResort":[{"authority":"ISIL","symbol":"NEW-LOR"}]},
+  "illConfig":{"lendersOfLastResort":[{"authority":"TEST","symbol":"ANINST"}]},
   "symbols": [
     {"authority":"TEST", "symbol":"NWINST"},
     {"authority":"TEST", "symbol":"NWINSTTOO"}

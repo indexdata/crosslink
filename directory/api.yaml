@@ -2200,7 +2200,7 @@ components:
             - $ref: '#/components/schemas/EntryVendor'
         lendersOfLastResort:
           type: array
-          description: Suppliers appended to the end of the rota when no regular supplier can fill the request.
+          description: Suppliers appended to the end of the rota when no regular supplier can fill the request. Each normalized authority and symbol pair must be unique and exist in the directory; authorities must not contain colons.
           items:
             $ref: '#/components/schemas/Symbol'
         includeRequestingAgencyInfo:
