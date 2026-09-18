@@ -1,0 +1,44 @@
+meta {
+  name: Lending side check status
+  type: http
+  seq: 18
+}
+
+get {
+  url: {{host}}/patron_requests/{{renewalOmittedLendingPrId}}?side=lending
+  body: none
+  auth: basic
+}
+
+params:query {
+  side: lending
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
+script:post-response {
+  test("Check if patron request is complete", () => {
+      const pr = res.getBody();
+      expect(pr.lastActionResult).to.eql("SUCCESS");
+      expect(pr.lastAction).to.eql("mark-received");
+      expect(pr.state).to.eql("COMPLETED");
+      expect(pr.dueDate ?? null).to.equal(null);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
