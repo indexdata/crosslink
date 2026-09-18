@@ -758,6 +758,8 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 	}
 
 	switch action {
+	case LenderActionRecall:
+		return a.recallLenderRequest(ctx, eventID, pr, params)
 	case LenderActionOverdue:
 		return a.overdueLenderRequest(ctx, eventID, pr)
 	case LenderActionAcceptRenewal, LenderActionRejectRenewal:
