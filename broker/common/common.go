@@ -81,6 +81,31 @@ func PackItemsNote(items [][]string) string {
 	return current.String()
 }
 
+// StripItemsNotePayload removes the packed items payload from a note, keeping the text around it.
+func StripItemsNotePayload(note string) string {
+	if note == "" {
+		return ""
+	}
+	_, startIdx, endIdx := UnpackItemsNote(note)
+	if startIdx < 0 || endIdx < 0 {
+		return strings.TrimSpace(note)
+	}
+	before := strings.TrimSpace(note[:startIdx])
+	afterStart := endIdx + len(MULTIPLE_ITEMS_END)
+	after := ""
+	if afterStart < len(note) {
+		after = strings.TrimSpace(note[afterStart:])
+	}
+	switch {
+	case before != "" && after != "":
+		return before + "\n" + after
+	case before != "":
+		return before
+	default:
+		return after
+	}
+}
+
 func PackItemNote(fields []string) string {
 	escaped := make([]string, len(fields))
 	for i, f := range fields {

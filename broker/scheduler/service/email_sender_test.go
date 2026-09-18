@@ -11,6 +11,7 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	psservice "github.com/indexdata/crosslink/broker/pullslip/service"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -139,7 +140,7 @@ func validEmailEvent() events.Event {
 
 // newEmailSvc creates an EmailSenderService wired to the supplied mocks.
 func newEmailSvc(prRepo pr_db.PrRepo, emailService email.EmailService, pdf psservice.PdfService) *EmailSenderService {
-	return EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, emailService, pdf)
+	return EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, emailService, pdf, nil)
 }
 
 // ---------------------------------------------------------------------------
@@ -537,7 +538,7 @@ func TestGenerateAndEmailPullslip_WithPDF_GenerateError(t *testing.T) {
 func TestEmailPullslip_WhenReadyToSend_SendsEmail(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{{ID: "pr-1"}}}
 	mailer := &mockEmailService{ready: true}
-	svc := EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, nil)
+	svc := EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, nil, nil)
 
 	status, _ := svc.EmailPullslip(testCtx, validEmailEvent())
 
@@ -548,14 +549,14 @@ func TestEmailPullslip_WhenReadyToSend_SendsEmail(t *testing.T) {
 func TestEmailPullslip_DoesNotPanic(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
 	mailer := &mockEmailService{ready: false}
-	svc := EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, nil)
+	svc := EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, nil, nil)
 
 	// EmailPullslip ignores the ProcessTask error (_, _ = ...); verify no panic.
 	svc.EmailPullslip(testCtx, validEmailEvent())
 }
 
 func TestEmailPullslip_InvalidEvent_ErrorStatus(t *testing.T) {
-	svc := EmailSenderServiceWithClient(nil, &mockEmailIllRepo{fromEmail: "from@example.com"}, &mockEmailService{}, nil)
+	svc := EmailSenderServiceWithClient(nil, &mockEmailIllRepo{fromEmail: "from@example.com"}, &mockEmailService{}, nil, nil)
 
 	// Event with no BatchActionData → handler returns error status.
 	status, _ := svc.EmailPullslip(testCtx, events.Event{})
@@ -566,10 +567,50 @@ func TestEmailPullslip_InvalidEvent_ErrorStatus(t *testing.T) {
 func TestEmailPullslip_SetEventToFailed(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
 	mailer := &mockEmailService{}
-	svc := EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, nil)
+	svc := EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, nil, nil)
 
 	status, _ := svc.EmailPullslip(testCtx, validEmailEvent())
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.False(t, mailer.called)
+}
+
+func TestEmailPullslipQueuesPrintedOnlyAfterPDFEmail(t *testing.T) {
+	for _, tc := range []struct {
+		name                      string
+		pdf                       bool
+		sendErr, pdfErr, queueErr error
+		wantQueued                int
+		wantStatus                events.EventStatus
+	}{
+		{name: "PDF sent", pdf: true, wantQueued: 1, wantStatus: events.EventStatusSuccess},
+		{name: "no PDF", wantStatus: events.EventStatusSuccess},
+		{name: "SMTP failed", pdf: true, sendErr: errors.New("SMTP failed"), wantStatus: events.EventStatusError},
+		{name: "PDF failed", pdf: true, pdfErr: errors.New("PDF failed"), wantStatus: events.EventStatusError},
+		{name: "queue failed", pdf: true, queueErr: errors.New("queue failed"), wantQueued: 1, wantStatus: events.EventStatusError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			prs := []pr_db.PatronRequest{
+				{ID: "included", Side: prservice.SideLending, State: prservice.LenderStateWillSupply},
+				{ID: "shipped", Side: prservice.SideLending, State: prservice.LenderStateShipped},
+				{ID: "borrower", Side: prservice.SideBorrowing, State: prservice.BorrowerStateWillSupply},
+			}
+			repo := &mockEmailPrRepo{listResult: prs, fullCount: 200}
+			bus := &mockBatchActionEventBus{createTaskErr: tc.queueErr}
+			svc := EmailSenderServiceWithClient(repo, &mockEmailIllRepo{fromEmail: "from@example.com"}, &mockEmailService{ready: true, err: tc.sendErr}, &mockPdfGen{data: []byte("pdf"), err: tc.pdfErr}, bus)
+			event := validEmailEvent()
+			event.ID = "batch-parent"
+			event.EventData.CustomData["includePdf"] = tc.pdf
+			status, _ := svc.EmailPullslip(testCtx, event)
+			assert.Equal(t, tc.wantStatus, status)
+			if assert.Len(t, bus.createTaskCalls, tc.wantQueued) && tc.wantQueued > 0 {
+				call := bus.createTaskCalls[0]
+				assert.Equal(t, "included", call.id)
+				assert.Equal(t, prservice.LenderActionPullslipPrinted, *call.data.Action)
+				assert.Equal(t, events.EventNameInvokeBackgroundAction, call.eventName)
+				assert.Equal(t, event.ID, *call.parentID)
+				assert.Equal(t, event.EventData.BatchActionData, call.data.BatchActionData)
+			}
+		})
+	}
 }

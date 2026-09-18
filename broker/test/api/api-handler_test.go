@@ -339,6 +339,34 @@ func TestGetLocatedSuppliers(t *testing.T) {
 	assert.GreaterOrEqual(t, len(resp.Items), 1)
 	assert.Equal(t, resp.Items[0].Id, locSup.ID)
 	assert.GreaterOrEqual(t, resp.About.Count, int64(len(resp.Items)))
+	assert.Equal(t, peer.Name, *resp.Items[0].SupplierName)
+	assert.Nil(t, resp.Items[0].DirectoryEntryId)
+	assert.Nil(t, resp.Items[0].ReasonUnfilled)
+	assert.Nil(t, resp.Items[0].Note)
+
+	entryId := uuid.New()
+	dirPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:LOC_SUP_DIR", "", app.BROKER_MODE, dirapi.ReShare, dirapi.Entry{Id: &entryId}, "Directory Library")
+	_, err = illRepo.SaveLocatedSupplier(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveLocatedSupplierParams{
+		ID:               uuid.NewString(),
+		IllTransactionID: illId,
+		SupplierID:       dirPeer.ID,
+		SupplierSymbol:   "ISIL:LOC_SUP_DIR",
+		Ordinal:          1,
+		SupplierStatus:   ill_db.SupplierStateSkippedPg,
+		ReasonUnfilled:   pgtype.Text{String: "NotOnShelf", Valid: true},
+		Note:             pgtype.Text{String: "Searched the shelf", Valid: true},
+	})
+	assert.NoError(t, err)
+	body = getResponseBody(t, "/located_suppliers?ill_transaction_id="+illId)
+	err = json.Unmarshal(body, &resp)
+	assert.NoError(t, err)
+	if assert.Len(t, resp.Items, 2) {
+		assert.Equal(t, int64(2), resp.About.Count)
+		assert.Equal(t, "Directory Library", *resp.Items[1].SupplierName)
+		assert.Equal(t, entryId.String(), *resp.Items[1].DirectoryEntryId)
+		assert.Equal(t, "NotOnShelf", *resp.Items[1].ReasonUnfilled)
+		assert.Equal(t, "Searched the shelf", *resp.Items[1].Note)
+	}
 
 	body = getResponseBody(t, "/located_suppliers?ill_transaction_id=not-exists")
 	err = json.Unmarshal(body, &resp)

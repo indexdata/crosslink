@@ -11,6 +11,7 @@ import (
 
 	"github.com/indexdata/cql-go/pgcql"
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
@@ -82,7 +83,7 @@ func withOwnerRestriction() interface{} {
 }
 
 func newHandler(psRepo ps_db.PsRepo, prRepo pr_db.PrRepo) PullSlipApiHandler {
-	return NewPsApiHandler(psRepo, prRepo, tenant.NewResolver())
+	return NewPsApiHandler(psRepo, prRepo, tenant.NewResolver(), nil)
 }
 
 func newRequest(method, body string) *http.Request {
@@ -476,4 +477,67 @@ func TestWritePdf(t *testing.T) {
 	assert.Equal(t, "application/pdf", rr.Header().Get("Content-Type"))
 	assert.Contains(t, rr.Header().Get("Content-Disposition"), "pull-slips")
 	assert.Equal(t, []byte("%PDF-direct"), rr.Body.Bytes())
+}
+
+type printedEventBus struct {
+	events.EventBus
+	ids []string
+	err error
+}
+
+func (b *printedEventBus) CreateTask(id string, name events.EventName, data events.EventData, domain events.EventDomain, parent *string, target events.SignalTarget) (string, error) {
+	b.ids = append(b.ids, id)
+	return "task", b.err
+}
+
+type printedPDF struct{ err error }
+
+func (p printedPDF) GeneratePdfPullSlipForPrs(common.ExtendedContext, []pr_db.PatronRequest) ([]byte, error) {
+	return []byte("PDF"), p.err
+}
+
+func TestPullslipOutputQueuesOnlySavedPDFRequests(t *testing.T) {
+	for _, tc := range []struct {
+		name                      string
+		regenerate                bool
+		pdfErr, saveErr, queueErr error
+		wantStatus, wantQueued    int
+	}{
+		{name: "create", wantStatus: 200, wantQueued: 1},
+		{name: "regenerate", regenerate: true, wantStatus: 200, wantQueued: 1},
+		{name: "generation failure", pdfErr: errors.New("PDF failed"), wantStatus: 500},
+		{name: "save failure", saveErr: errors.New("save failed"), wantStatus: 500},
+		{name: "queue failure", queueErr: errors.New("queue failed"), wantStatus: 500, wantQueued: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pr := patronRequest("included", sym)
+			pr.Side = prservice.SideLending
+			pr.State = prservice.LenderStateWillSupply
+			repo := new(MockPrRepo)
+			repo.On("ListPatronRequests", mock.Anything).Return([]pr_db.PatronRequest{pr}, int64(200), nil).Once()
+			psRepo := new(MockPsRepo)
+			if tc.regenerate {
+				psRepo.On("GetPullSlipByIdAndOwner", "slip", sym).Return(pullSlipFixture("slip"), nil)
+			}
+			if tc.pdfErr == nil {
+				psRepo.On("SavePullSlip", mock.Anything).Return(ps_db.PullSlip{}, tc.saveErr).Once()
+			}
+			bus := &printedEventBus{err: tc.queueErr}
+			h := NewPsApiHandler(psRepo, repo, tenant.NewResolver(), bus)
+			h.pdfService = printedPDF{err: tc.pdfErr}
+			rr := httptest.NewRecorder()
+			req := newRequest(http.MethodPost, postBody(pr.ID))
+			if tc.regenerate {
+				h.PostPullslipsIdRegenerate(rr, req, "slip", psoapi.PostPullslipsIdRegenerateParams{Symbol: &sym})
+			} else {
+				h.PostPullslips(rr, req, psoapi.PostPullslipsParams{Symbol: &sym})
+			}
+			assert.Equal(t, tc.wantStatus, rr.Code)
+			if assert.Len(t, bus.ids, tc.wantQueued) && tc.wantQueued > 0 {
+				assert.Equal(t, "included", bus.ids[0])
+			}
+			repo.AssertExpectations(t)
+			psRepo.AssertExpectations(t)
+		})
+	}
 }

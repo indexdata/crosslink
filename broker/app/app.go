@@ -188,7 +188,7 @@ func Init(ctx context.Context) (Context, error) {
 	schedRepo := sched_db.CreateSchedRepo(pool)
 
 	var emailSenderService *sched_service.EmailSenderService
-	emailSenderService, err = sched_service.NewEmailSenderService(prRepo, illRepo)
+	emailSenderService, err = sched_service.NewEmailSenderService(prRepo, illRepo, eventBus)
 
 	prMessageHandler := prservice.CreatePatronRequestMessageHandler(prRepo, eventRepo, illRepo, eventBus)
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo, illRepo, dirAdapter)
@@ -207,7 +207,7 @@ func Init(ctx context.Context) (Context, error) {
 	prApiHandler.SetAutoActionRunner(prActionService)
 	prApiHandler.SetActionTaskProcessor(prActionService)
 	sseBroker := api.NewSseBroker(appCtx, tenantResolver)
-	psApiHandler := psapi.NewPsApiHandler(psRepo, prRepo, tenantResolver)
+	psApiHandler := psapi.NewPsApiHandler(psRepo, prRepo, tenantResolver, eventBus)
 
 	batchActionService := sched_service.NewBatchActionService(eventBus, prRepo, schedRepo, emailSenderService)
 
