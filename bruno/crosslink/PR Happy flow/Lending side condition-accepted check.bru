@@ -31,7 +31,7 @@ script:pre-request {
 script:post-response {
   test("for condition accepted", function() {
     const pr = res.getBody();
-    expect(pr.state).to.equal("CONDITION_ACCEPTED")
+    expect(pr.state).to.equal("WILL_SUPPLY")
   });
 }
 

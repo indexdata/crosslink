@@ -15,7 +15,8 @@ const (
 type ReasonUnfilled string
 
 const (
-	ReasonUnfilledDuplicate ReasonUnfilled = "Duplicate"
+	ReasonUnfilledDuplicate  ReasonUnfilled = "Duplicate"
+	ReasonUnfilledNotOnShelf ReasonUnfilled = "NotOnShelf"
 )
 
 type SentVia string

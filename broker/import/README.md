@@ -2,6 +2,16 @@
 
 The import API loads patron-request aggregates, batch actions, and templates from a newline-delimited JSON (NDJSON) stream.
 
+## Migration export scripts
+
+The [`migration`](../../migration) folder contains SQL scripts that export a mod-rs tenant as NDJSON accepted by the CrossLink import APIs:
+
+1. [`export-crosslink-directory.sql`](../../migration/export-crosslink-directory.sql) exports directory entries, tiers, and networks for [`POST /directory/import`](../../directory/README.md#import-api).
+2. [`export-crosslink-config.sql`](../../migration/export-crosslink-config.sql) exports templates and compatible scheduled actions for `POST /import`.
+3. [`export-crosslink-open-patron-requests.sql`](../../migration/export-crosslink-open-patron-requests.sql) exports open borrowing and lending requests for `POST /import`.
+
+Run the scripts in this order so directory peers exist before configuration and patron requests are imported. Each script documents its required `psql` variables, export command, validation, and migration limitations.
+
 ## Request
 
 ```http

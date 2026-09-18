@@ -148,6 +148,16 @@ func TestUnpackItemsNote(t *testing.T) {
 	assert.Nil(t, result)
 }
 
+func TestStripItemsNotePayload(t *testing.T) {
+	payload := PackItemsNote([][]string{{"item-1", "call-1"}})
+	assert.Equal(t, "", StripItemsNotePayload(""))
+	assert.Equal(t, "plain note", StripItemsNotePayload(" plain note "))
+	assert.Equal(t, "", StripItemsNotePayload(payload))
+	assert.Equal(t, "before", StripItemsNotePayload("before "+payload))
+	assert.Equal(t, "after", StripItemsNotePayload(payload+" after"))
+	assert.Equal(t, "before\nafter", StripItemsNotePayload("before "+payload+" after"))
+}
+
 func TestPackItemsNote(t *testing.T) {
 	items := [][]string{
 		{"T1", "CallNumber1", "Barcode1"},

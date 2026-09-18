@@ -663,6 +663,46 @@ func sanitizeEntry(entry *Entry) error {
 
 }
 
+func validateLendersOfLastResort(ctx context.Context, queries *db.Queries, lenders *[]Symbol) (string, error) {
+	if lenders == nil {
+		return "", nil
+	}
+
+	type symbolKey struct {
+		authority string
+		symbol    string
+	}
+
+	seen := make(map[symbolKey]struct{}, len(*lenders))
+	keys := make([]symbolKey, 0, len(*lenders))
+	for _, lender := range *lenders {
+		key := symbolKey{
+			authority: strings.ToUpper(lender.Authority),
+			symbol:    strings.ToUpper(lender.Symbol),
+		}
+		if strings.Contains(key.authority, ":") {
+			return "Lender of last resort authority must not contain ':'", nil
+		}
+		if _, exists := seen[key]; exists {
+			return fmt.Sprintf("Duplicate lender of last resort: %s:%s", key.authority, key.symbol), nil
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+
+	for _, key := range keys {
+		_, err := queries.EntryBySymbol(ctx, db.EntryBySymbolParams{Authority: key.authority, Symbol: key.symbol})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Sprintf("Lender of last resort does not exist: %s:%s", key.authority, key.symbol), nil
+		}
+		if err != nil {
+			return "", fmt.Errorf("lookup lender of last resort %s:%s: %w", key.authority, key.symbol, err)
+		}
+	}
+
+	return "", nil
+}
+
 func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (AddEntryResponseObject, error) {
 
 	authData := auth.GetAuthData(ctx)
@@ -843,6 +883,14 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 	}
 
 	if request.Body.IllConfig != nil {
+		validationMessage, validationErr := validateLendersOfLastResort(ctx, qtx, request.Body.IllConfig.LendersOfLastResort)
+		if validationErr != nil {
+			slog.ErrorContext(ctx, "failed to validate lenders of last resort", "error", validationErr)
+			return AddEntry500TextResponse("Internal server error"), nil
+		}
+		if validationMessage != "" {
+			return AddEntry400TextResponse(validationMessage), nil
+		}
 		_, err := qtx.UpsertIllConfig(ctx, illConfigToDBParams(insertedEntry.ID, *request.Body.IllConfig))
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to create illConfig component", "error", err)
@@ -1252,6 +1300,14 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 			}
 		} else {
 			illConfig := request.Body.IllConfig.MustGet()
+			validationMessage, validationErr := validateLendersOfLastResort(ctx, qtx, illConfig.LendersOfLastResort)
+			if validationErr != nil {
+				slog.ErrorContext(ctx, "failed to validate lenders of last resort", "error", validationErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+			if validationMessage != "" {
+				return UpdateEntry400TextResponse(validationMessage), nil
+			}
 			originalIllConfig, queryErr := qtx.GetIllConfigByEntry(ctx, orig.ID)
 			if queryErr != nil && !errors.Is(queryErr, pgx.ErrNoRows) {
 				slog.ErrorContext(ctx, "unable to query original illConfig", "error", queryErr)

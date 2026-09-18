@@ -549,12 +549,12 @@ func TestActionsToCompleteState(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, supPr.ID)
 
-	// Wait for action Ship
+	// Wait for pull-slip printing
 	supplierPrPath := basePath + "/" + supPr.ID
 	supQueryParams := "?side=lending&symbol=" + supplierSymbol
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", supplierPrPath+"/actions"+supQueryParams, []byte{}, 200)
-		return strings.Contains(string(respBytes), "\"name\":\""+string(prservice.LenderActionShip)+"\"")
+		return strings.Contains(string(respBytes), "\"name\":\""+string(prservice.LenderActionPullslipPrinted)+"\"")
 	})
 
 	// Send notification
@@ -617,6 +617,9 @@ func TestActionsToCompleteState(t *testing.T) {
 		assert.Equal(t, proapi.SEEN, *willShipNotification.Receipt)
 		assert.NotNil(t, willShipNotification.AcknowledgedAt)
 	}
+
+	// Record pull-slip printing before shipping.
+	httpRequest(t, "POST", supplierPrPath+"/action"+supQueryParams, []byte(`{"action":"pullslip-printed"}`), 200)
 
 	// Ship
 	action := proapi.ExecuteAction{

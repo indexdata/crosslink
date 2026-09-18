@@ -68,6 +68,25 @@ func TestImportPatronRequestNormalizesCompleteBundle(t *testing.T) {
 	assert.Equal(t, proapi.Loan, validator.serviceType)
 }
 
+func TestImportPatronRequestLocatedSupplierUnfilledReasonAndNote(t *testing.T) {
+	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "peer-requester"}, {ID: "peer-supplier"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{terminal: true}, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		supplier := bundle["locatedSuppliers"].([]any)[0].(map[string]any)
+		supplier["reasonUnfilled"] = "NotOnShelf"
+		supplier["note"] = "Searched the shelf"
+	})
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyUpdate, "ISIL:REQ", data)
+
+	require.NoError(t, err)
+	require.Len(t, repo.patron.LocatedSuppliers, 1)
+	supplier := repo.patron.LocatedSuppliers[0]
+	assert.Equal(t, pgText("NotOnShelf"), supplier.ReasonUnfilled)
+	assert.Equal(t, pgText("Searched the shelf"), supplier.Note)
+}
+
 func TestImportPatronRequestCanonicalDueDate(t *testing.T) {
 	for _, tc := range []struct {
 		name    string

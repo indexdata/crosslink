@@ -37,6 +37,7 @@ type IllRepo interface {
 	SkipLocatedSuppliersByIllTransactionAndStatus(ctx common.ExtendedContext, id string, status pgtype.Text) error
 	GetLocatedSuppliersByIllTransactionAndStatus(ctx common.ExtendedContext, params GetLocatedSuppliersByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
 	GetLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) ([]LocatedSupplier, int64, error)
+	GetLocatedSuppliersWithPeerByIllTransaction(ctx common.ExtendedContext, id string) ([]GetLocatedSuppliersWithPeerByIllTransactionRow, int64, error)
 	GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx common.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error)
 	GetLocatedSupplierByIdForUpdate(ctx common.ExtendedContext, id string) (LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndSymbol(ctx common.ExtendedContext, id, symbol string) (LocatedSupplier, error)
@@ -236,6 +237,15 @@ func (r *PgIllRepo) GetLocatedSuppliersByIllTransaction(ctx common.ExtendedConte
 		}
 	}
 	return suppliers, fullCount, err
+}
+
+func (r *PgIllRepo) GetLocatedSuppliersWithPeerByIllTransaction(ctx common.ExtendedContext, id string) ([]GetLocatedSuppliersWithPeerByIllTransactionRow, int64, error) {
+	rows, err := r.queries.GetLocatedSuppliersWithPeerByIllTransaction(ctx, r.GetConnOrTx(), id)
+	var fullCount int64
+	if len(rows) > 0 {
+		fullCount = rows[0].FullCount
+	}
+	return rows, fullCount, err
 }
 
 func (r *PgIllRepo) GetSelectedSupplierForIllTransaction(ctx common.ExtendedContext, illTransId string) (LocatedSupplier, error) {

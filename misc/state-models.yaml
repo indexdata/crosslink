@@ -3,7 +3,7 @@ stateModels:
     type: StateModel
     name: CrossLink State Model
     desc: "Requester/Supplier workflow for returnable loans and non-returnable copies over ISO18626."
-    version: 3.5.0
+    version: 3.6.0
     pullslipPdfTemplateLabel: pullslip-pdf
     selector:
       serviceType: [Copy, Loan, CopyOrLoan]
@@ -386,6 +386,8 @@ stateModels:
           serviceTypes: [Loan, CopyOrLoan]
         primaryAction: ship-return
         events:
+          - name: recalled
+            transition: RECALLED
           - name: overdue
             transition: OVERDUE
         actions:
@@ -413,6 +415,8 @@ stateModels:
           serviceTypes: [Loan, CopyOrLoan]
         primaryAction: ship-return
         events:
+          - name: recalled
+            transition: RECALLED
           - name: overdue
             transition: OVERDUE
         actions:
@@ -433,6 +437,8 @@ stateModels:
           serviceTypes: [Loan, CopyOrLoan]
         primaryAction: ship-return
         events:
+          - name: recalled
+            transition: RECALLED
           - name: overdue
         actions:
           - name: check-out
@@ -456,6 +462,8 @@ stateModels:
           serviceTypes: [Loan, CopyOrLoan]
         primaryAction: ship-return
         events:
+          - name: recalled
+            transition: RECALLED
           - name: overdue
           - name: renewal-accepted
             transition: RENEWED
@@ -471,6 +479,27 @@ stateModels:
             transitions:
               success: SHIPPED_RETURNED
 
+      - name: RECALLED
+        display: Recalled
+        desc: Supplier recalled the loan; return the item
+        side: REQUESTER
+        appliesTo:
+          serviceTypes: [Loan, CopyOrLoan]
+        needsAttention: true
+        primaryAction: ship-return
+        events:
+          - name: recalled
+          - name: overdue
+          - name: renewal-accepted
+          - name: renewal-rejected
+        actions:
+          - name: check-in
+            desc: Check in all items
+          - name: ship-return
+            desc: Send ISO ShippedReturn and delete temporary LMS items
+            transitions:
+              success: SHIPPED_RETURNED
+
       - name: SHIPPED_RETURNED
         display: Shipped Returned
         desc: Item is in return shipment
@@ -478,6 +507,7 @@ stateModels:
         appliesTo:
           serviceTypes: [Loan, CopyOrLoan]
         events:
+          - name: recalled
           - name: completed
             desc: Supplier/broker signals loan/copy completion
             transition: COMPLETED
@@ -723,14 +753,14 @@ stateModels:
             desc: Add conditions and notify requester
             transitions:
               success: CONDITION_PENDING
-          - name: ship
-            desc: "Mark shipped; send ISO Loaned; NCIP CheckOutItem"
+          - name: pullslip-printed
+            desc: Record that the pull slip was printed
             appliesTo:
               serviceTypes: [Loan, CopyOrLoan]
             primaryFor:
               serviceTypes: [Loan, CopyOrLoan]
             transitions:
-              success: SHIPPED
+              success: SEARCHING
           - name: supply-document
             desc: Attach the document URL and send ISO18626 CopyCompleted
             appliesTo:
@@ -770,7 +800,7 @@ stateModels:
         events:
           - name: conditions-accepted
             desc: Requester accepts conditions
-            transition: CONDITION_ACCEPTED
+            transition: WILL_SUPPLY
           - name: condition-rejected
             desc: Requester rejects conditions
             transition: CANCEL_REQUESTED
@@ -778,12 +808,18 @@ stateModels:
             desc: Requester sends ISO Cancel
             transition: CANCEL_REQUESTED
 
-      - name: CONDITION_ACCEPTED
-        display: Condition Accepted
-        desc: After receiving conditions accepted notification
+      - name: SEARCHING
+        display: Searching
+        desc: Pull slip printed; item awaiting picking and shipment
         side: SUPPLIER
+        appliesTo:
+          serviceTypes: [Loan, CopyOrLoan]
         closingAction: cannot-supply
         actions:
+          - name: pullslip-printed
+            desc: Record a reprinted pull slip
+            transitions:
+              success: SEARCHING
           - name: add-item
             desc: Manually attach an item to the lending request
             appliesTo:
@@ -793,7 +829,7 @@ stateModels:
             appliesTo:
               serviceTypes: [Loan, CopyOrLoan]
           - name: add-condition
-            desc: Add additional conditions and notify requester
+            desc: Add conditions and notify requester
             transitions:
               success: CONDITION_PENDING
           - name: ship
@@ -807,15 +843,17 @@ stateModels:
           - name: supply-document
             desc: Attach the document URL and send ISO18626 CopyCompleted
             appliesTo:
-              serviceTypes: [Copy, CopyOrLoan]
-            primaryFor:
-              serviceTypes: [Copy]
+              serviceTypes: [CopyOrLoan]
             transitions:
               success: COMPLETED
           - name: cannot-supply
             desc: Indicate cannot supply
             transitions:
               success: UNFILLED
+          - name: ask-retry
+            desc: Ask requester to retry with new ISO18626 metadata
+            transitions:
+              success: COMPLETED_WITH_RETRY
         events:
           - name: cancel-request
             desc: Requester sends ISO Cancel
@@ -842,6 +880,10 @@ stateModels:
           - name: shipped-return
             transition: SHIPPED_RETURN
         actions:
+          - name: recall
+            desc: Recall the loan with an optional dueDate and note
+            transitions:
+              success: RECALLED
           - name: overdue
             desc: Notify requester that the loan is overdue
             transitions:
@@ -857,6 +899,10 @@ stateModels:
           - name: shipped-return
             transition: SHIPPED_RETURN
         actions:
+          - name: recall
+            desc: Recall the loan with an optional dueDate and note
+            transitions:
+              success: RECALLED
           - name: overdue
             desc: Notify requester that the loan is overdue
             transitions:
@@ -873,6 +919,11 @@ stateModels:
             transition: SHIPPED_RETURN
           - name: renew
             transition: RENEWAL_PENDING
+        actions:
+          - name: recall
+            desc: Recall the loan with an optional dueDate and note
+            transitions:
+              success: RECALLED
 
       - name: RENEWAL_PENDING
         display: Renewal pending
@@ -887,6 +938,10 @@ stateModels:
             transition: SHIPPED_RETURN
           - name: renew
         actions:
+          - name: recall
+            desc: Recall the loan with an optional dueDate and note
+            transitions:
+              success: RECALLED
           - name: accept-renewal
             desc: Approve renewal with an optional dueDate; omit for an open-ended loan
             transitions:
@@ -895,6 +950,16 @@ stateModels:
             desc: Reject renewal
             transitions:
               success: OVERDUE
+
+      - name: RECALLED
+        display: Recalled
+        desc: Loan recalled; awaiting return shipment
+        side: SUPPLIER
+        appliesTo:
+          serviceTypes: [Loan, CopyOrLoan]
+        events:
+          - name: shipped-return
+            transition: SHIPPED_RETURN
 
       - name: SHIPPED_RETURN
         display: Shipped Return
@@ -977,7 +1042,7 @@ batchActionDefaults:
   - actionName: request-aging
     titleKey: request-aging-express
     title: Request aging of express requests
-    batchQuery: "side = lending and (state = VALIDATED or state = ITEM_PENDING or state = WILL_SUPPLY_PENDING or state = WILL_SUPPLY or state = CONDITION_PENDING or state = CONDITION_ACCEPTED) and service_level = Express"
+    batchQuery: "side = lending and (state = VALIDATED or state = ITEM_PENDING or state = WILL_SUPPLY_PENDING or state = WILL_SUPPLY or state = CONDITION_PENDING or state = SEARCHING) and service_level = Express"
     schedule: "FREQ=MINUTELY;INTERVAL=15"
     actionParams:
       interval: 2h
@@ -985,7 +1050,7 @@ batchActionDefaults:
   - actionName: request-aging
     titleKey: request-aging-rush
     title: Request aging of rush requests
-    batchQuery: "side = lending and (state = VALIDATED or state = ITEM_PENDING or state = WILL_SUPPLY_PENDING or state = WILL_SUPPLY or state = CONDITION_PENDING or state = CONDITION_ACCEPTED) and service_level = Rush"
+    batchQuery: "side = lending and (state = VALIDATED or state = ITEM_PENDING or state = WILL_SUPPLY_PENDING or state = WILL_SUPPLY or state = CONDITION_PENDING or state = SEARCHING) and service_level = Rush"
     schedule: "FREQ=HOURLY;BYMINUTE=0"
     actionParams:
       interval: 24h
@@ -993,7 +1058,7 @@ batchActionDefaults:
   - actionName: request-aging
     titleKey: request-aging-all
     title: Request aging of all requests
-    batchQuery: "side = lending and (state = VALIDATED or state = ITEM_PENDING or state = WILL_SUPPLY_PENDING or state = WILL_SUPPLY or state = CONDITION_PENDING or state = CONDITION_ACCEPTED)"
+    batchQuery: "side = lending and (state = VALIDATED or state = ITEM_PENDING or state = WILL_SUPPLY_PENDING or state = WILL_SUPPLY or state = CONDITION_PENDING or state = SEARCHING)"
     schedule: "FREQ=DAILY;BYHOUR=5;BYMINUTE=0"
     actionParams:
       interval: 72h
