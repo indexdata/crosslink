@@ -30,7 +30,7 @@ func TestNewQueryBuilderGen(t *testing.T) {
 	assert.Equal(t, "@attr 1=4 {term}", *gg.config.Title)
 
 	// Test with CQL type and no mappings (should use default CQL mappings)
-	cqlType := dirapi.Cql
+	cqlType := dirapi.QueryConfigTypeCql
 	qb, err = NewQueryBuilderGen(&dirapi.QueryConfig{Type: &cqlType})
 	assert.NoError(t, err)
 	assert.NotNil(t, qb)
