@@ -21,9 +21,7 @@ okapi-hooks:
 
 containerPort: 8080
 # envvars passed to the container
-env:
-  # Comma-separated tenant globs, e.g. "dk-*", or "*" for all; empty disables edits.
-  MANUAL_ROTA_TENANTS: ""
+env: {}
 
 # envvars passed to the container as secretKeyRef, format
 # VARIABLE:

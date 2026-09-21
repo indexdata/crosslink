@@ -49,8 +49,6 @@ services:
         condition: service_healthy
     environment:
       HTTP_PORT: 8081
-      # Tenant globs, e.g. "dk-*", or "*" for all; empty disables edits.
-      MANUAL_ROTA_TENANTS: ""
       DB_TYPE: postgres
       DB_USER: crosslink
       DB_PASSWORD: crosslink

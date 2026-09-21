@@ -5,45 +5,17 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	pathmatch "path"
 	"strings"
 
-	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/oapi"
 	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/tenant"
 )
 
-// ConfigureManualRota enables edits for Okapi tenants matching any configured glob.
-// Patterns use path.Match syntax; malformed patterns never match.
-// Unprefixed administrative routes cannot bypass the tenant gate.
-func (a *ApiHandler) ConfigureManualRota(directory adapter.DirectoryLookupAdapter, patterns []string) {
-	a.rotaService = service.NewRotaService(a.illRepo, directory)
-	a.manualRotaTenantPatterns = nil
-	for _, pattern := range patterns {
-		if pattern = strings.TrimSpace(pattern); pattern != "" {
-			a.manualRotaTenantPatterns = append(a.manualRotaTenantPatterns, pattern)
-		}
-	}
-}
-
-func (a *ApiHandler) manualRotaEnabled(tenantName string) bool {
-	if tenantName == "" {
-		return false
-	}
-	for _, pattern := range a.manualRotaTenantPatterns {
-		if matched, err := pathmatch.Match(pattern, tenantName); err == nil && matched {
-			return true
-		}
-	}
-	return false
-}
-
 func (a *ApiHandler) rotaTenant(ctx common.ExtendedContext, w http.ResponseWriter, r *http.Request) tenant.Tenant {
-	tenantName := strings.TrimSpace(r.Header.Get(tenant.OkapiTenantHeader))
-	if !tenant.IsOkapiRequest(r) || !a.manualRotaEnabled(tenantName) || a.rotaService == nil {
-		WriteJsonErrorResponse(w, errors.New("manual rota editing is disabled for this tenant"), http.StatusForbidden)
+	if !tenant.IsOkapiRequest(r) {
+		WriteJsonErrorResponse(w, errors.New("manual rota editing requires a tenant-scoped request"), http.StatusForbidden)
 		return nil
 	}
 	owner, err := a.tenantResolver.Resolve(ctx, r, nil)

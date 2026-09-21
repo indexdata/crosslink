@@ -408,7 +408,7 @@
   "requires": [],
   "permissionSets": [
     {
-      "description": "Add and reorder untried suppliers for enabled requesting tenants",
+      "description": "Add and reorder untried suppliers for requesting tenants",
       "displayName": "Broker - edit supplier rota",
       "permissionName": "broker.located_suppliers.write",
       "visible": true

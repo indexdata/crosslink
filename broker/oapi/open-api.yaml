@@ -2212,7 +2212,7 @@ paths:
     post:
       operationId: AddLocatedSupplier
       summary: AddLocatedSupplier
-      description: Add a new supplier first among untried suppliers without selecting or sending. Bypasses holdings discovery and ranking; downstream checks still apply. Requires requester ownership and tenant enablement. Completed transactions are rejected; archived transactions are not found.
+      description: Add a new supplier first among untried suppliers without selecting or sending. Bypasses holdings discovery and ranking; downstream checks still apply. Requires requester ownership and the broker.located_suppliers.write Okapi permission. Completed transactions are rejected; archived transactions are not found.
       parameters:
         - name: id
           in: path
@@ -2239,7 +2239,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: Manual rota editing disabled for this tenant
+          description: Required Okapi permission is missing or request is not tenant-scoped
           content:
             application/json:
               schema:
@@ -2272,7 +2272,7 @@ paths:
     post:
       operationId: MoveLocatedSupplier
       summary: MoveLocatedSupplier
-      description: Move an untried supplier by an offset among new suppliers only. Selected and skipped entries remain untouched. Zero and boundary moves succeed without changes. Do not automatically retry after an uncertain outcome. Requires requester ownership and tenant enablement. Completed transactions are rejected; archived transactions are not found.
+      description: Move an untried supplier by an offset among new suppliers only. Selected and skipped entries remain untouched. Zero and boundary moves succeed without changes. Do not automatically retry after an uncertain outcome. Requires requester ownership and the broker.located_suppliers.write Okapi permission. Completed transactions are rejected; archived transactions are not found.
       parameters:
         - name: id
           in: path
@@ -2305,7 +2305,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: Manual rota editing disabled for this tenant
+          description: Required Okapi permission is missing or request is not tenant-scoped
           content:
             application/json:
               schema:

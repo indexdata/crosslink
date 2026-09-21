@@ -143,9 +143,6 @@ Configuration is provided via environment variables:
 |                                  | requester symbol for selected pickup locations     |                                           |
 | `API_PAGE_SIZE`                  | Default value for the `limit` query parameter when | `10`                                      |
 |                                  | paging the API                                     |                                           |
-| `MANUAL_ROTA_TENANTS`            | Comma-separated Okapi tenant globs allowed to      | (empty value)                             |
-|                                  | add/reorder untried suppliers. `*` enables         |                                           |
-|                                  | all tenants; empty disables all tenants.           |                                           |
 | `TENANT_TO_SYMBOL`               | Pattern to map tenant to `requesterSymbol` when    | (empty value)                             |
 |                                  | accessing the API via Okapi, the `{tenant}` token  |                                           |
 |                                  | is replaced by the `X-Okapi-Tenant` header value.  |                                           |
@@ -294,25 +291,10 @@ Recall during outbound shipment is not supported.
 
 ### Manual supplier rota editing
 
-Set `MANUAL_ROTA_TENANTS=diku,ruc` to enable manual additions and moves for those
-requesting tenants, `MANUAL_ROTA_TENANTS="dk-*"` to enable `dk-this` and `dk-that`
-but not `us-this`, or `MANUAL_ROTA_TENANTS="*"` to enable all tenants.
-Comma-separated patterns use case-sensitive Go `path.Match` glob syntax:
-`*` matches any sequence, `?` matches one character, and `[abc]`/`[a-z]` match
-character classes. Matching covers the whole tenant ID; wildcards do not match `/`.
-Literal tenant names still match exactly. Empty entries and malformed patterns
-never match; an empty setting disables every tenant. Keep this broker setting
-identical across replicas and restart after changing it.
-Enable it only after every broker replica has the updated selection locking.
-For Helm use `env.MANUAL_ROTA_TENANTS`; for Compose add
-`MANUAL_ROTA_TENANTS: "diku,ruc"` to the broker service environment. Tenants that
-must enforce automatic ordering (for example Trove) should remain excluded by
-using patterns that do not match those tenants. Quote glob patterns in shell and
-YAML configuration.
-Okapi must grant staff `broker.located_suppliers.write`. The broker resolves and
-checks requester ownership independently of that permission. These mutations
-are enabled only on the tenant-scoped `/broker` routes; administrative routes
-cannot bypass the tenant gate.
+Okapi must grant staff `broker.located_suppliers.write` to add or reorder suppliers.
+No broker environment setting is required. Tenants that enforce automatic ordering
+should withhold this permission. The broker independently checks requester
+ownership, and these mutations require the tenant-scoped `/broker` routes.
 
 * `POST /broker/ill_transactions/{id}/located_suppliers/{supplierId}/move`
   with `{"offset":-3}` moves the **located supplier ID** among `new` entries.
@@ -334,8 +316,8 @@ borrowing requests return `409`; archived/missing transactions return `404`.
 A supplier absent from the specified transaction returns `404`, a target no longer
 `new` returns `409`, and an existing symbol in any rota status returns `409`.
 Unknown/ambiguous symbols or suppliers without a usable HTTP(S) endpoint return
-`422`; Directory transport failures return `500`. Disabled tenants return `403`,
-and transactions belonging to another requester return `404`.
+`422`; Directory transport failures return `500`. Transactions belonging to
+another requester return `404`.
 
 Edits, ordinal updates, and `supplier-added`/`supplier-moved` audit notices commit
 atomically. Notices include the staff user and edit details and notify observers.

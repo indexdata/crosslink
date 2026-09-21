@@ -82,12 +82,8 @@ func newRotaFixture(t *testing.T, statuses ...string) rotaFixture {
 	return f
 }
 func rotaHandler(repo ill_db.IllRepo, directory rotaDirectory) http.Handler {
-	return rotaHandlerForTenants(repo, directory, []string{"diku", "ruc"})
-}
-func rotaHandlerForTenants(repo ill_db.IllRepo, directory rotaDirectory, tenants []string) http.Handler {
 	resolver := tenant.NewResolver().WithIllRepo(repo).WithTenantToSymbol("ISIL:DK-{tenant}").WithLookupAdapter(directory)
-	handler := brokerapi.NewApiHandler(eventRepo, repo, resolver, 10)
-	handler.ConfigureManualRota(directory, tenants)
+	handler := brokerapi.NewApiHandler(eventRepo, repo, resolver, directory, 10)
 	return oapi.HandlerFromMuxWithBaseURL(&handler, http.NewServeMux(), "/broker")
 }
 func (f rotaFixture) post(path, body, tenantName string) *httptest.ResponseRecorder {
@@ -199,8 +195,7 @@ func TestManualRotaValidationAndPermissions(t *testing.T) {
 	for _, body := range []string{`{}`, `{"supplierSymbol":"ISIL:X"}`, `{"supplierSymbol":"X","localId":"1"}`, `{"supplierSymbol":"ISIL:X","localId":" "}`} {
 		require.Equal(t, 400, f.post("", body, "diku").Code, body)
 	}
-	require.Equal(t, 403, f.post(path, `{"offset":1}`, "disabled").Code)
-	require.Equal(t, 403, f.post(path, `{"offset":1}`, "").Code)
+	require.Equal(t, 400, f.post(path, `{"offset":1}`, "").Code)
 	require.Equal(t, 404, f.post(path, `{"offset":1}`, "ruc").Code)
 	require.Equal(t, 404, f.post("", fmt.Sprintf(`{"supplierSymbol":%q,"localId":"1"}`, f.newSymbol), "ruc").Code)
 	require.Equal(t, 422, f.add("ISIL:UNKNOWN").Code)
@@ -458,34 +453,35 @@ func TestManualRotaAdditionStillChecksClosures(t *testing.T) {
 	require.Equal(t, ill_db.SupplierStateSkippedPg, manual.SupplierStatus)
 }
 
-func TestManualRotaWildcard(t *testing.T) {
-	for _, allowed := range [][]string{{"*"}, {"other", " * "}} {
-		t.Run(strings.Join(allowed, ","), func(t *testing.T) {
+func TestManualRotaRequesterTenants(t *testing.T) {
+	for _, tenantName := range []string{"diku", "ruc"} {
+		t.Run(tenantName, func(t *testing.T) {
 			f := newRotaFixture(t, "new", "new")
-			f.handler = rotaHandlerForTenants(illRepo, f.directory, allowed)
-			require.Equal(t, http.StatusOK, f.move(1, -1).Code)
-			require.Equal(t, http.StatusCreated, f.add(f.newSymbol).Code)
-			// Global feature enablement must not grant ownership of another tenant's request.
-			path := "/" + f.suppliers[0].ID + "/move"
-			require.Equal(t, http.StatusNotFound, f.post(path, `{"offset":1}`, "ruc").Code)
-			require.Equal(t, http.StatusNotFound, f.post("", `{"supplierSymbol":"ISIL:OTHER","localId":"1"}`, "ruc").Code)
-			require.Equal(t, http.StatusForbidden, f.post(path, `{"offset":1}`, "").Code)
-			require.Equal(t, http.StatusForbidden, f.post(path, `{"offset":1}`, "  ").Code)
+			trans, err := illRepo.GetIllTransactionById(f.ctx, f.id)
+			require.NoError(t, err)
+			symbol := "ISIL:DK-" + strings.ToUpper(tenantName)
+			peer, err := illRepo.GetPeerBySymbol(f.ctx, symbol)
+			require.NoError(t, err)
+			trans.RequesterID = pgtype.Text{String: peer.ID, Valid: true}
+			trans.RequesterSymbol = pgtype.Text{String: symbol, Valid: true}
+			_, err = illRepo.SaveIllTransaction(f.ctx, ill_db.SaveIllTransactionParams(trans))
+			require.NoError(t, err)
+			path := "/" + f.suppliers[1].ID + "/move"
+			require.Equal(t, http.StatusOK, f.post(path, `{"offset":-1}`, tenantName).Code)
+			body := fmt.Sprintf(`{"supplierSymbol":%q,"localId":"record-123"}`, f.newSymbol)
+			require.Equal(t, http.StatusCreated, f.post("", body, tenantName).Code)
+			other := "ruc"
+			if tenantName == other {
+				other = "diku"
+			}
+			require.Equal(t, http.StatusNotFound, f.post(path, `{"offset":1}`, other).Code)
+			require.Equal(t, http.StatusNotFound, f.post("", body, other).Code)
+			for _, missing := range []string{"", "  "} {
+				require.Equal(t, http.StatusBadRequest, f.post(path, `{"offset":1}`, missing).Code)
+				require.Equal(t, http.StatusBadRequest, f.post("", body, missing).Code)
+			}
 		})
 	}
-}
-
-func TestManualRotaGlobPermissions(t *testing.T) {
-	f := newRotaFixture(t, "new", "new")
-	f.handler = rotaHandlerForTenants(illRepo, f.directory, []string{"di*"})
-	require.Equal(t, http.StatusOK, f.move(1, -1).Code)
-	require.Equal(t, http.StatusCreated, f.add(f.newSymbol).Code)
-	path := "/" + f.suppliers[0].ID + "/move"
-	require.Equal(t, http.StatusForbidden, f.post(path, `{"offset":1}`, "ruc").Code)
-	f.handler = rotaHandlerForTenants(illRepo, f.directory, []string{"di*", "r*"})
-	// Matching the feature glob still does not grant requester ownership.
-	require.Equal(t, http.StatusNotFound, f.post(path, `{"offset":1}`, "ruc").Code)
-	require.Equal(t, http.StatusNotFound, f.post("", `{"supplierSymbol":"ISIL:OTHER","localId":"1"}`, "ruc").Code)
 }
 
 // Pause only the transactional check: the request's preflight has already run.
