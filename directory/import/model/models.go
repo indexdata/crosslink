@@ -218,7 +218,7 @@ func (a *TierAggregate) NormalizeAndValidate() error {
 	if !oneOf(a.Data.Level, "express", "normal", "rush", "secondarymail", "standard", "urgent") {
 		return fmt.Errorf("invalid tier level: %s", a.Data.Level)
 	}
-	if !oneOf(a.Data.Type, "loan", "copy") {
+	if !oneOf(a.Data.Type, "loan", "copy", "copyorloan") {
 		return fmt.Errorf("invalid tier type: %s", a.Data.Type)
 	}
 	return normalizeUniqueRefs(a.Data.Entries, "tier", func(refs []SymbolRef) { a.Data.Entries = refs })

@@ -1583,7 +1583,7 @@ components:
 
     TierType:
       type: string
-      enum: [loan, copy]
+      enum: [loan, copy, copyorloan]
       default: loan
 
     QueryConfigType:

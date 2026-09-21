@@ -17,6 +17,10 @@ func TestAddTierRejectsWhitespaceOnlyName(t *testing.T) {
 	require.IsType(t, AddTier400TextResponse(""), response)
 }
 
+func TestTierTypeAcceptsCopyOrLoan(t *testing.T) {
+	require.True(t, Copyorloan.Valid())
+}
+
 func TestAddNetworkRejectsWhitespaceOnlyName(t *testing.T) {
 	impl := NewApiImpl(nil, nil, nil)
 	response, err := impl.AddNetwork(consortialAdminContext(t), AddNetworkRequestObject{

@@ -630,7 +630,7 @@ func TestImportTierConflictPoliciesAndUpdateReplacesAssignments(t *testing.T) {
 	repo, consortium, first, second := importRepoFixture(t)
 	aggregate := model.TierAggregate{
 		Key:  model.TierKey{Consortium: consortium, Name: "Loan"},
-		Data: model.TierData{Level: "standard", Type: "loan", Cost: 1.5, Entries: []model.SymbolRef{first}},
+		Data: model.TierData{Level: "standard", Type: "copyorloan", Cost: 1.5, Entries: []model.SymbolRef{first}},
 	}
 
 	result, err := repo.ImportTier(context.Background(), aggregate, model.ConflictPolicyFail)
@@ -639,6 +639,9 @@ func TestImportTierConflictPoliciesAndUpdateReplacesAssignments(t *testing.T) {
 	id := tierIDByKey(t, consortium, "Loan")
 	require.NotEqual(t, uuid.Nil, id)
 	require.Equal(t, []model.SymbolRef{first}, tierAssignments(t, id))
+	var tierType string
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT type FROM tiers WHERE id=$1`, id).Scan(&tierType))
+	require.Equal(t, "copyorloan", tierType)
 
 	_, err = repo.ImportTier(context.Background(), aggregate, model.ConflictPolicyFail)
 	require.ErrorContains(t, err, "already exists")

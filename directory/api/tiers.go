@@ -67,7 +67,7 @@ func (a ApiImpl) AddTier(ctx context.Context, request AddTierRequestObject) (Add
 		tierType = Loan
 	}
 	switch tierType {
-	case Loan, Copy:
+	case Loan, Copy, Copyorloan:
 	default:
 		return AddTier400TextResponse("Invalid tier type"), nil
 	}
@@ -237,7 +237,7 @@ func (a ApiImpl) UpdateTier(ctx context.Context, request UpdateTierRequestObject
 		return UpdateTier400TextResponse("Invalid tier level"), nil
 	}
 	switch TierType(tierType) {
-	case Loan, Copy:
+	case Loan, Copy, Copyorloan:
 	default:
 		return UpdateTier400TextResponse("Invalid tier type"), nil
 	}

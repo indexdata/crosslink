@@ -84,6 +84,15 @@ func TestTierAggregateRejectsInvalidEnum(t *testing.T) {
 	require.EqualError(t, err, "invalid tier level: instant")
 }
 
+func TestTierAggregateAcceptsCopyOrLoanType(t *testing.T) {
+	aggregate := TierAggregate{
+		Key:  TierKey{Consortium: SymbolRef{Authority: "isil", Symbol: "consortium"}, Name: "Copy or loan"},
+		Data: TierData{Level: "standard", Type: "copyorloan", Entries: []SymbolRef{}},
+	}
+
+	require.NoError(t, aggregate.NormalizeAndValidate())
+}
+
 func TestTierAggregateAcceptsDistinctEntriesWithSameDisplayString(t *testing.T) {
 	aggregate := TierAggregate{
 		Key: TierKey{Consortium: SymbolRef{Authority: "ISIL", Symbol: "CONSORTIUM"}, Name: "Loan"},
