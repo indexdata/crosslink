@@ -339,7 +339,10 @@ and transactions belonging to another requester return `404`.
 
 Edits, ordinal updates, and `supplier-added`/`supplier-moved` audit notices commit
 atomically. Notices include the staff user and edit details and notify observers.
-Automatic selection and rota persistence share the same transaction lock. Manual
+Automatic selection and rota persistence share the same transaction lock.
+Rota edits also lock the linked borrowing request until commit, so it cannot
+become terminal between the edit's eligibility check and commit. Locks are
+acquired in patron-request then ILL-transaction order, matching imports. Manual
 additions during discovery retain their identifier and priority. An explicit retry
 that rebuilds the rota still retires the old rota using the existing retry behavior.
 

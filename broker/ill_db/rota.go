@@ -31,7 +31,9 @@ func (r *PgIllRepo) SaveRotaAudit(ctx common.ExtendedContext, transactionID, nam
 	return r.queries.NotifyRotaAudit(ctx, r.GetConnOrTx(), string(notice))
 }
 
-// RotaRequestClosed checks a linked borrowing request without depending on its state model names.
+// RotaRequestClosed locks linked borrowing requests and checks their terminal flags.
+// Within WithTxFunc these locks remain held until commit/rollback. Call this before
+// locking the ILL transaction to follow the patron-request -> ILL lock order.
 func (r *PgIllRepo) RotaRequestClosed(ctx common.ExtendedContext, transactionID string) (bool, error) {
 	return (&prdb.Queries{}).RotaRequestClosed(ctx, r.GetConnOrTx(), transactionID)
 }

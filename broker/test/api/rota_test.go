@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -403,8 +404,8 @@ func TestManualRotaArchived(t *testing.T) {
 	require.Equal(t, 404, f.add(f.newSymbol).Code)
 }
 
-func TestManualRotaTerminalBorrowingRequest(t *testing.T) {
-	f := newRotaFixture(t, "new", "new")
+func (f rotaFixture) borrowingRequest(t *testing.T) (prdb.PrRepo, prdb.PatronRequest) {
+	t.Helper()
 	trans, err := illRepo.GetIllTransactionById(f.ctx, f.id)
 	require.NoError(t, err)
 	trans.RequesterRequestID = pgtype.Text{String: uuid.NewString(), Valid: true}
@@ -412,6 +413,14 @@ func TestManualRotaTerminalBorrowingRequest(t *testing.T) {
 	require.NoError(t, err)
 	repo := prdb.CreatePrRepo(illRepo.(*ill_db.PgIllRepo).Pool, false)
 	pr, err := repo.CreatePatronRequest(f.ctx, prdb.CreatePatronRequestParams{ID: uuid.NewString(), State: "SENT", StateModel: "default", Items: []prdb.PrItem{}, Language: "english", Side: prdb.PatronRequestSide("borrowing"), RequesterSymbol: trans.RequesterSymbol, RequesterReqID: trans.RequesterRequestID, CreatedAt: apptest.GetNow(), UpdatedAt: apptest.GetNow()})
+	require.NoError(t, err)
+	return repo, pr
+}
+
+func TestManualRotaTerminalBorrowingRequest(t *testing.T) {
+	f := newRotaFixture(t, "new", "new")
+	repo, pr := f.borrowingRequest(t)
+	trans, err := illRepo.GetIllTransactionById(f.ctx, f.id)
 	require.NoError(t, err)
 	// Cancelling one supplier (for example after rejecting a condition) does
 	// not complete the borrowing request. Remaining new suppliers stay editable.
@@ -477,4 +486,202 @@ func TestManualRotaGlobPermissions(t *testing.T) {
 	// Matching the feature glob still does not grant requester ownership.
 	require.Equal(t, http.StatusNotFound, f.post(path, `{"offset":1}`, "ruc").Code)
 	require.Equal(t, http.StatusNotFound, f.post("", `{"supplierSymbol":"ISIL:OTHER","localId":"1"}`, "ruc").Code)
+}
+
+// Pause only the transactional check: the request's preflight has already run.
+// This exposes the exact interval where a concurrent completion used to slip in.
+type rotaClosureBarrier struct {
+	ill_db.IllRepo
+	inTx, beforeCheck bool
+	paused            chan int
+	resume            <-chan struct{}
+}
+
+func (r rotaClosureBarrier) WithTxFunc(ctx common.ExtendedContext, fn func(ill_db.IllRepo) error) error {
+	return r.IllRepo.WithTxFunc(ctx, func(tx ill_db.IllRepo) error {
+		r.IllRepo = tx
+		r.inTx = true
+		return fn(r)
+	})
+}
+
+func (r rotaClosureBarrier) pause(ctx common.ExtendedContext) error {
+	r.paused <- int(r.IllRepo.(*ill_db.PgIllRepo).Tx.Conn().PgConn().PID())
+	select {
+	case <-r.resume:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (r rotaClosureBarrier) RotaRequestClosed(ctx common.ExtendedContext, id string) (bool, error) {
+	if r.inTx && r.beforeCheck {
+		if err := r.pause(ctx); err != nil {
+			return false, err
+		}
+	}
+	closed, err := r.IllRepo.RotaRequestClosed(ctx, id)
+	if err == nil && r.inTx && !r.beforeCheck {
+		err = r.pause(ctx)
+	}
+	return closed, err
+}
+
+func awaitRotaPID(t *testing.T, ctx context.Context, pids <-chan int) int {
+	t.Helper()
+	select {
+	case pid := <-pids:
+		return pid
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+		return 0
+	}
+}
+
+func requireRotaBlockedBy(t *testing.T, ctx context.Context, blocked, blocker int) {
+	t.Helper()
+	// Observe the actual database wait, not an assumption based on a sleep.
+	require.Eventually(t, func() bool {
+		var waiting bool
+		err := illRepo.(*ill_db.PgIllRepo).Pool.QueryRow(ctx, "SELECT $1::int = ANY(pg_blocking_pids($2::int))", blocker, blocked).Scan(&waiting)
+		return err == nil && waiting
+	}, 5*time.Second, 10*time.Millisecond, "backend %d should wait for backend %d", blocked, blocker)
+}
+
+func TestManualRotaConcurrentCompletion(t *testing.T) {
+	for _, operation := range []string{"move", "add"} {
+		for _, first := range []string{"completion", "edit"} {
+			t.Run(operation+"/"+first, func(t *testing.T) {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				f := newRotaFixture(t, "new", "new")
+				f.ctx = common.CreateExtCtxWithArgs(ctx, nil)
+				prRepo, pr := f.borrowingRequest(t)
+				editResume, completionResume := make(chan struct{}), make(chan struct{})
+				releaseEdit := sync.OnceFunc(func() { close(editResume) })
+				releaseCompletion := sync.OnceFunc(func() { close(completionResume) })
+				defer releaseEdit()
+				defer releaseCompletion()
+				barrier := rotaClosureBarrier{IllRepo: illRepo, beforeCheck: first == "completion", paused: make(chan int, 1), resume: editResume}
+				handler := rotaHandler(barrier, f.directory)
+				f.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handler.ServeHTTP(w, r.WithContext(ctx)) })
+				editDone := make(chan *httptest.ResponseRecorder, 1)
+				go func() {
+					if operation == "move" {
+						editDone <- f.move(1, -1)
+					} else {
+						editDone <- f.add(f.newSymbol)
+					}
+				}()
+				editPID := awaitRotaPID(t, ctx, barrier.paused)
+				completionPIDs := make(chan int, 1)
+				completionDone := make(chan error, 1)
+				go func() {
+					completionDone <- prRepo.WithTxFunc(f.ctx, func(repo prdb.PrRepo) error {
+						pid := int(repo.(*prdb.PgPrRepo).Tx.Conn().PgConn().PID())
+						if first == "edit" {
+							completionPIDs <- pid
+						}
+						pr.TerminalState = true
+						if _, err := repo.UpdatePatronRequest(f.ctx, prdb.UpdatePatronRequestParams(pr)); err != nil {
+							return err
+						}
+						if first == "completion" {
+							completionPIDs <- pid
+							select {
+							case <-completionResume:
+							case <-ctx.Done():
+								return ctx.Err()
+							}
+						}
+						// Import updates use patron-request -> ILL order. Acquiring the ILL lock
+						// here proves the rota does not hold it while waiting for the patron row.
+						_, err := (&ill_db.Queries{}).GetIllTransactionByIdForUpdate(f.ctx, repo.(*prdb.PgPrRepo).GetConnOrTx(), f.id)
+						return err
+					})
+				}()
+				completionPID := awaitRotaPID(t, ctx, completionPIDs)
+				if first == "completion" {
+					releaseEdit()
+					requireRotaBlockedBy(t, ctx, editPID, completionPID)
+					releaseCompletion()
+				} else {
+					requireRotaBlockedBy(t, ctx, completionPID, editPID)
+					releaseEdit()
+				}
+				var response *httptest.ResponseRecorder
+				select {
+				case response = <-editDone:
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				}
+				select {
+				case err := <-completionDone:
+					require.NoError(t, err)
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				}
+				audit, _, err := eventRepo.GetIllTransactionEvents(f.ctx, f.id)
+				require.NoError(t, err)
+				if first == "completion" {
+					require.Equal(t, http.StatusConflict, response.Code, response.Body.String())
+					require.Equal(t, f.suppliers, f.rows(t))
+					require.Empty(t, audit)
+				} else {
+					status := http.StatusOK
+					if operation == "add" {
+						status = http.StatusCreated
+					}
+					require.Equal(t, status, response.Code, response.Body.String())
+					require.Len(t, audit, 1)
+				}
+				closed, err := prRepo.GetPatronRequestById(f.ctx, pr.ID)
+				require.NoError(t, err)
+				require.True(t, closed.TerminalState)
+				require.Equal(t, http.StatusConflict, f.move(0, 0).Code)
+			})
+		}
+	}
+}
+
+func TestManualRotaRequesterChangesWhileLocking(t *testing.T) {
+	for _, field := range []string{"request ID", "requester symbol"} {
+		t.Run(field, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			f := newRotaFixture(t, "new", "new")
+			f.ctx = common.CreateExtCtxWithArgs(ctx, nil)
+			f.borrowingRequest(t)
+			resume := make(chan struct{})
+			release := sync.OnceFunc(func() { close(resume) })
+			defer release()
+			barrier := rotaClosureBarrier{IllRepo: illRepo, paused: make(chan int, 1), resume: resume}
+			handler := rotaHandler(barrier, f.directory)
+			f.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handler.ServeHTTP(w, r.WithContext(ctx)) })
+			done := make(chan *httptest.ResponseRecorder, 1)
+			go func() { done <- f.move(1, -1) }()
+			awaitRotaPID(t, ctx, barrier.paused)
+			trans, err := illRepo.GetIllTransactionById(f.ctx, f.id)
+			require.NoError(t, err)
+			if field == "request ID" {
+				trans.RequesterRequestID.String = uuid.NewString()
+			} else {
+				trans.RequesterSymbol.String = "ISIL:DK-RUC"
+			}
+			_, err = illRepo.SaveIllTransaction(f.ctx, ill_db.SaveIllTransactionParams(trans))
+			require.NoError(t, err)
+			release()
+			select {
+			case response := <-done:
+				require.Equal(t, http.StatusConflict, response.Code, response.Body.String())
+			case <-ctx.Done():
+				t.Fatal(ctx.Err())
+			}
+			require.Equal(t, f.suppliers, f.rows(t))
+			audit, _, err := eventRepo.GetIllTransactionEvents(f.ctx, f.id)
+			require.NoError(t, err)
+			require.Empty(t, audit)
+		})
+	}
 }

@@ -37,13 +37,7 @@ func NewRotaService(repo ill_db.IllRepo, directory adapter.DirectoryLookupAdapte
 }
 
 func (s *RotaService) editable(ctx common.ExtendedContext, repo ill_db.IllRepo, id string, owner tenant.Tenant, lock bool) (ill_db.IllTransaction, error) {
-	var trans ill_db.IllTransaction
-	var err error
-	if lock {
-		trans, err = repo.GetIllTransactionByIdForUpdate(ctx, id)
-	} else {
-		trans, err = repo.GetIllTransactionById(ctx, id)
-	}
+	trans, err := repo.GetIllTransactionById(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return trans, ErrRotaNotFound
 	}
@@ -57,13 +51,31 @@ func (s *RotaService) editable(ctx common.ExtendedContext, repo ill_db.IllRepo, 
 	if !owned {
 		return trans, ErrRotaNotFound
 	}
-	switch iso18626.TypeStatus(trans.LastSupplierStatus.String) {
-	case iso18626.TypeStatusLoanCompleted, iso18626.TypeStatusCopyCompleted, iso18626.TypeStatusCompletedWithoutReturn:
-		return trans, fmt.Errorf("%w: transaction is completed", ErrRotaConflict)
-	}
+	// Lock the borrowing request before the ILL row, matching import lock order.
+	// The preflight call outside WithTxFunc releases its locks after this query;
+	// the transactional call holds them until the rota and audit commit together.
 	closed, err := repo.RotaRequestClosed(ctx, id)
 	if err != nil {
 		return trans, err
+	}
+	if lock {
+		locked, err := repo.GetIllTransactionByIdForUpdate(ctx, id)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return trans, ErrRotaNotFound
+		}
+		if err != nil {
+			return trans, err
+		}
+		// Retry can replace the requester request ID while we wait. Do not acquire
+		// another patron-request lock after the ILL lock; reject this stale edit.
+		if locked.RequesterRequestID != trans.RequesterRequestID || locked.RequesterSymbol != trans.RequesterSymbol {
+			return locked, fmt.Errorf("%w: transaction requester changed", ErrRotaConflict)
+		}
+		trans = locked
+	}
+	switch iso18626.TypeStatus(trans.LastSupplierStatus.String) {
+	case iso18626.TypeStatusLoanCompleted, iso18626.TypeStatusCopyCompleted, iso18626.TypeStatusCompletedWithoutReturn:
+		return trans, fmt.Errorf("%w: transaction is completed", ErrRotaConflict)
 	}
 	if closed {
 		return trans, fmt.Errorf("%w: borrowing request is completed", ErrRotaConflict)
