@@ -824,6 +824,46 @@ func TestHandleSupplyingAgencyMessageLoanedFromSupplierLocated(t *testing.T) {
 	assert.Len(t, mockPrRepo.savedItems, 1)
 }
 
+func TestHandleSupplyingAgencyMessageLoanedWhilePending(t *testing.T) {
+	for _, state := range []pr_db.PatronRequestState{BorrowerStateCancelPending, BorrowerStateConditionPending} {
+		for _, serviceType := range []iso18626.TypeServiceType{iso18626.TypeServiceTypeLoan, iso18626.TypeServiceTypeCopyOrLoan, iso18626.TypeServiceTypeCopy} {
+			t.Run(string(state)+"/"+string(serviceType), func(t *testing.T) {
+				repo := new(MockPrRepo)
+				handler := CreatePatronRequestMessageHandler(repo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+				due := utils.XSDDateTime{Time: time.Now().UTC().Add(24 * time.Hour)}
+				pr := pr_db.PatronRequest{
+					ID: patronRequestId, State: state, Side: SideBorrowing,
+					NeedsAttention: state == BorrowerStateConditionPending,
+					IllRequest:     iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{ServiceType: serviceType}},
+				}
+				status, response, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+					Header:     iso18626.Header{RequestingAgencyRequestId: patronRequestId},
+					StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusLoaned, DueDate: &due},
+					MessageInfo: iso18626.MessageInfo{
+						ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+						Note:             "#MultipleItems#\n1|2|3\n#MultipleItemsEnd#",
+					},
+				}, pr)
+				if serviceType == iso18626.TypeServiceTypeCopy {
+					require.Error(t, err)
+					assert.Equal(t, events.EventStatusProblem, status)
+					assert.Equal(t, iso18626.TypeMessageStatusERROR, response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+					assert.Empty(t, repo.savedPr.ID)
+					assert.Empty(t, repo.savedItems)
+					return
+				}
+				require.NoError(t, err)
+				assert.Equal(t, events.EventStatusSuccess, status)
+				assert.Equal(t, iso18626.TypeMessageStatusOK, response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+				assert.Equal(t, BorrowerStateShipped, repo.savedPr.State)
+				assert.False(t, repo.savedPr.NeedsAttention)
+				assert.Equal(t, due.Time, repo.savedPr.DueAt.Time)
+				assert.Len(t, repo.savedItems, 1)
+			})
+		}
+	}
+}
+
 func TestHandleSupplyingAgencyMessageLoanedRetryDoesNotSaveItems(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
