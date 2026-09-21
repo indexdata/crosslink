@@ -16,7 +16,9 @@ func TestNewDefaultLoanActionMapping(t *testing.T) {
 	borrowerStateActionMapping := map[pr_db.PatronRequestState][]PatronRequestAction{
 		BorrowerStateNew:              {{actionName: BorrowerActionValidatePatron, auto: true}, {actionName: BorrowerActionSkipPatronValidation}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateInvalidPatron:    {{actionName: BorrowerActionValidatePatron}, {actionName: BorrowerActionSkipPatronValidation}, {actionName: BorrowerActionCloseRequest}},
-		BorrowerStateValidated:        {{actionName: BorrowerActionUpdateMetadata, auto: true}, {actionName: BorrowerActionSkipMetadataUpdate}, {actionName: BorrowerActionCloseRequest}},
+		BorrowerStateValidated:        {{actionName: BorrowerActionCheckLimit, auto: true}, {actionName: BorrowerActionCloseRequest}},
+		BorrowerStateOverLimit:        {{actionName: BorrowerActionCheckLimit}, {actionName: BorrowerActionOverrideLimit}, {actionName: BorrowerActionCloseRequest}},
+		BorrowerStateLimitChecked:     {{actionName: BorrowerActionUpdateMetadata, auto: true}, {actionName: BorrowerActionSkipMetadataUpdate}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateMetadataUpdated:  {{actionName: BorrowerActionCheckDuplicate, auto: true}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateNeedsReview:      {{actionName: BorrowerActionCheckDuplicate}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateReadyToSend:      {{actionName: BorrowerActionSendRequest, auto: true}, {actionName: BorrowerActionCloseRequest}},
@@ -254,7 +256,15 @@ func TestGetActionsForPatronRequest(t *testing.T) {
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionCheckDuplicate, BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNeedsReview}))
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionSendRequest, BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateDuplicate}))
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionValidatePatron, BorrowerActionSkipPatronValidation, BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateInvalidPatron}))
-	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionSkipMetadataUpdate, BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}))
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}))
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionCheckLimit, BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{
+		Side:             SideBorrowing,
+		State:            BorrowerStateValidated,
+		LastAction:       pgtype.Text{String: string(BorrowerActionCheckLimit), Valid: true},
+		LastActionResult: pgtype.Text{String: string(events.EventStatusError), Valid: true},
+	}))
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionCheckLimit, BorrowerActionOverrideLimit, BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateOverLimit}))
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionSkipMetadataUpdate, BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateLimitChecked}))
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateMetadataUpdated}))
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateReadyToSend}))
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionCancelRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateSupplierLocated}))
@@ -311,7 +321,7 @@ func TestGetAllowedActionsForPatronRequest1(t *testing.T) {
 		{Name: string(BorrowerActionSkipMetadataUpdate), Parameters: []string{}, Available: false},
 		{Name: string(BorrowerActionCloseRequest), Parameters: []string{}, Available: false},
 	}},
-		mapping.GetAllowedActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}, false))
+		mapping.GetAllowedActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateLimitChecked}, false))
 
 	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{
 		{Name: string(LenderActionAddItem), Parameters: []string{"barcode", "callNumber", "title", "itemId"}, Available: true},
@@ -424,7 +434,7 @@ func TestStateModelTransitionActions(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, BorrowerStateManuallyClosed, state)
 
-	pr = pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}
+	pr = pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateLimitChecked}
 	assert.True(t, mapping.IsTransitionAction(pr, BorrowerActionSkipMetadataUpdate))
 	state, ok = mapping.GetActionTransition(pr, BorrowerActionSkipMetadataUpdate, ActionOutcomeSuccess)
 	assert.True(t, ok)
@@ -434,6 +444,12 @@ func TestStateModelTransitionActions(t *testing.T) {
 	state, ok = mapping.GetActionTransition(pr, BorrowerActionCloseRequest, ActionOutcomeSuccess)
 	assert.True(t, ok)
 	assert.Equal(t, BorrowerStateManuallyClosed, state)
+
+	pr = pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateOverLimit}
+	assert.True(t, mapping.IsTransitionAction(pr, BorrowerActionOverrideLimit))
+	state, ok = mapping.GetActionTransition(pr, BorrowerActionOverrideLimit, ActionOutcomeSuccess)
+	assert.True(t, ok)
+	assert.Equal(t, BorrowerStateLimitChecked, state)
 
 	pr = pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateMetadataUpdated}
 	assert.True(t, mapping.IsTransitionAction(pr, BorrowerActionCloseRequest))

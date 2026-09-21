@@ -18,7 +18,7 @@ func TestDefaultLoanPeriodPatch(t *testing.T) {
 	}{
 		{`{}`, &original},
 		{`{"defaultLoanPeriod":null}`, nil},
-		{`{"defaultLoanPeriod":30}`, loanPeriodPointer(30)},
+		{`{"defaultLoanPeriod":30}`, int32Pointer(30)},
 	} {
 		var config IllConfig
 		require.NoError(t, json.Unmarshal([]byte(tc.body), &config))
@@ -31,4 +31,25 @@ func TestDefaultLoanPeriodPatch(t *testing.T) {
 	assert.Error(t, json.Unmarshal([]byte(`{"defaultLoanPeriod":1.5}`), &config))
 }
 
-func loanPeriodPointer(days int32) *int32 { return &days }
+func TestMaxRequestsPerPatronPatch(t *testing.T) {
+	original := int32(12)
+	for _, tc := range []struct {
+		body string
+		want *int32
+	}{
+		{`{}`, &original},
+		{`{"maxRequestsPerPatron":null}`, nil},
+		{`{"maxRequestsPerPatron":0}`, int32Pointer(0)},
+		{`{"maxRequestsPerPatron":25}`, int32Pointer(25)},
+	} {
+		var config IllConfig
+		require.NoError(t, json.Unmarshal([]byte(tc.body), &config))
+		result := illConfigPatchToDBParams(uuid.New(), config, db.IllConfig{MaxRequestsPerPatron: &original})
+		assert.Equal(t, tc.want, result.MaxRequestsPerPatron)
+	}
+
+	result := illConfigToDBParams(uuid.New(), IllConfig{})
+	assert.Nil(t, result.MaxRequestsPerPatron, "no implicit default")
+}
+
+func int32Pointer(value int32) *int32 { return &value }

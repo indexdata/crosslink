@@ -37,6 +37,7 @@ type PatronProfile struct {
 
 type ILLConfig struct {
 	DefaultLoanPeriod           *int32      `json:"defaultLoanPeriod"`
+	MaxRequestsPerPatron        *int32      `json:"maxRequestsPerPatron"`
 	ISO18626URL                 *string     `json:"iso18626Url"`
 	ISO18626Vendor              *string     `json:"iso18626Vendor"`
 	LendersOfLastResort         []SymbolRef `json:"lendersOfLastResort"`

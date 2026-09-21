@@ -555,7 +555,8 @@ entry_records AS (
             'useOfferedCosts', NULL,
             'noteFieldSeparator', NULL,
             'supplierPatronPattern', NULL,
-            'duplicateCheckWindowHours', NULL
+            'duplicateCheckWindowHours', NULL,
+            'maxRequestsPerPatron', NULL
         ) AS item
         FROM (
             SELECT service.se_address AS address

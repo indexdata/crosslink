@@ -14,6 +14,8 @@ import (
 func TestBuiltInStateModelCapabilities(t *testing.T) {
 	c := BuiltInStateModelCapabilities()
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateValidated)))
+	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateOverLimit)))
+	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateLimitChecked)))
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateInvalidPatron)))
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateLocalSupply)))
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateDuplicate)))
@@ -27,6 +29,9 @@ func TestBuiltInStateModelCapabilities(t *testing.T) {
 		return a.Name == string(BorrowerActionValidatePatron) && !isTransitionCapability(a)
 	}))
 	assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
+		return a.Name == string(BorrowerActionCheckLimit) && !isTransitionCapability(a)
+	}))
+	assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
 		return a.Name == string(BorrowerActionReceive)
 	}))
 	assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
@@ -35,6 +40,7 @@ func TestBuiltInStateModelCapabilities(t *testing.T) {
 	for _, transitionAction := range []pr_db.PatronRequestAction{
 		BorrowerActionSkipPatronValidation,
 		BorrowerActionSkipMetadataUpdate,
+		BorrowerActionOverrideLimit,
 		BorrowerActionCloseRequest,
 		BorrowerActionRejectRetry,
 	} {
