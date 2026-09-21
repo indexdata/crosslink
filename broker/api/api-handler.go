@@ -35,10 +35,12 @@ var LIMIT_DEFAULT int32 = 10
 var ARCHIVE_PROCESS_STARTED = "Archive process started"
 
 type ApiHandler struct {
-	limitDefault   int32
-	eventRepo      events.EventRepo
-	illRepo        ill_db.IllRepo
-	tenantResolver *tenant.TenantResolver
+	rotaService              *service.RotaService
+	manualRotaTenantPatterns []string
+	limitDefault             int32
+	eventRepo                events.EventRepo
+	illRepo                  ill_db.IllRepo
+	tenantResolver           *tenant.TenantResolver
 }
 
 func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenantResolver *tenant.TenantResolver, limitDefault int32) ApiHandler {

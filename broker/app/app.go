@@ -89,6 +89,7 @@ var MAX_MESSAGE_SIZE, _ = utils.GetEnvAny("MAX_MESSAGE_SIZE", int(100*1024), fun
 })
 var BROKER_MODE = utils.GetEnv("BROKER_MODE", "opaque")
 var TENANT_TO_SYMBOL = os.Getenv("TENANT_TO_SYMBOL")
+var MANUAL_ROTA_TENANTS = os.Getenv("MANUAL_ROTA_TENANTS")
 var CLIENT_DELAY = utils.GetEnv("CLIENT_DELAY", "0ms")
 var SHUTDOWN_DELAY, _ = utils.GetEnvAny("SHUTDOWN_DELAY", time.Duration(15*float64(time.Second)), func(val string) (time.Duration, error) {
 	d, err := time.ParseDuration(val)
@@ -202,6 +203,7 @@ func Init(ctx context.Context) (Context, error) {
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
 	tenantResolver := tenant.NewResolver().WithIllRepo(illRepo).WithLookupAdapter(dirAdapter).WithTenantToSymbol(TENANT_TO_SYMBOL)
 	apiHandler := api.NewApiHandler(eventRepo, illRepo, tenantResolver, API_PAGE_SIZE)
+	apiHandler.ConfigureManualRota(dirAdapter, strings.Split(MANUAL_ROTA_TENANTS, ","))
 	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, eventRepo, tenantResolver, &iso18626Handler, API_PAGE_SIZE)
 	prApiHandler.SetPickupLocationValidator(prActionService)
 	prApiHandler.SetAutoActionRunner(prActionService)

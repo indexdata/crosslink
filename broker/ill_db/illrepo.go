@@ -18,6 +18,8 @@ import (
 )
 
 type IllRepo interface {
+	SaveRotaAudit(ctx common.ExtendedContext, transactionID string, name, user string, data map[string]any) error
+	RotaRequestClosed(ctx common.ExtendedContext, transactionID string) (bool, error)
 	repo.Transactional[IllRepo]
 	SaveIllTransaction(ctx common.ExtendedContext, params SaveIllTransactionParams) (IllTransaction, error)
 	GetIllTransactionByRequesterRequestId(ctx common.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error)

@@ -628,3 +628,7 @@ func (r *MockIllRepositoryRequester) SkipLocatedSuppliersByIllTransactionAndStat
 	})
 	return nil
 }
+
+func (r *MockIllRepositoryRequester) WithTxFunc(ctx common.ExtendedContext, fn func(ill_db.IllRepo) error) error {
+	return fn(r)
+}

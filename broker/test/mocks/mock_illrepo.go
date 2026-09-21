@@ -361,3 +361,16 @@ func (r *MockIllRepositorySuccess) GetCachedPeerByDirectoryEntryID(ctx common.Ex
 func (r *MockIllRepositoryError) GetCachedPeerByDirectoryEntryID(ctx common.ExtendedContext, id uuid.UUID, directoryAdapter adapter.DirectoryLookupAdapter) (ill_db.Peer, string, error) {
 	return ill_db.Peer{}, "", errors.New("DB error")
 }
+
+func (r *MockIllRepositorySuccess) SaveRotaAudit(ctx common.ExtendedContext, id string, name, user string, data map[string]any) error {
+	return nil
+}
+func (r *MockIllRepositoryError) SaveRotaAudit(ctx common.ExtendedContext, id string, name, user string, data map[string]any) error {
+	return errors.New("DB error")
+}
+func (r *MockIllRepositorySuccess) RotaRequestClosed(ctx common.ExtendedContext, id string) (bool, error) {
+	return false, nil
+}
+func (r *MockIllRepositoryError) RotaRequestClosed(ctx common.ExtendedContext, id string) (bool, error) {
+	return false, errors.New("DB error")
+}

@@ -936,3 +936,33 @@ func TestLocateSuppliersMetadataSaveTransactionError(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusError, status)
 }
+
+func (r *MockIllRepoRequester) WithTxFunc(ctx common.ExtendedContext, fn func(ill_db.IllRepo) error) error {
+	return fn(r)
+}
+
+func (r *MockIllRepoLocateSuppliers) WithTxFunc(ctx common.ExtendedContext, fn func(ill_db.IllRepo) error) error {
+	return fn(r)
+}
+
+func TestLocateSuppliersPreservesManualAdditionDuringDiscovery(t *testing.T) {
+	// These rows are returned when discovery finishes, after the initial retirement.
+	manual := ill_db.LocatedSupplier{ID: "manual", SupplierSymbol: "ISIL:SUP1", SupplierStatus: ill_db.SupplierStateNewPg, Ordinal: 8, LocalID: pgtype.Text{String: "manual-record", Valid: true}}
+	mockRepo := &MockIllRepoLocateSuppliers{
+		illTransaction:    ill_db.IllTransaction{ID: "ill-1", RequesterID: pgtype.Text{String: "requester-1", Valid: true}, IllTransactionData: ill_db.IllTransactionData{BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "return-ISIL:SUP1::automatic-record;return-ISIL:SUP2::second-record"}}},
+		requester:         ill_db.Peer{ID: "requester-1"},
+		peers:             []ill_db.Peer{{ID: "peer-1", BorrowsCount: 1}, {ID: "peer-2", BorrowsCount: 1}},
+		peerSymbols:       map[string][]ill_db.Symbol{"peer-1": {{SymbolValue: "ISIL:SUP1", PeerID: "peer-1"}}, "peer-2": {{SymbolValue: "ISIL:SUP2", PeerID: "peer-2"}}},
+		existingSuppliers: []ill_db.LocatedSupplier{manual},
+	}
+	directory := new(adapter.MockDirectoryLookupAdapter)
+	factory := NewLookupAdapterFactory(mockRepo, directory, "", new(catalog.MockLookupShared), new(catalog.LookupAdapterCreatorImpl))
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, directory, factory)
+	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+	assert.Equal(t, events.EventStatusSuccess, status)
+	if assert.Len(t, mockRepo.savedLocatedSuppliers, 1) {
+		assert.Equal(t, "ISIL:SUP2", mockRepo.savedLocatedSuppliers[0].SupplierSymbol)
+		assert.Equal(t, int32(9), mockRepo.savedLocatedSuppliers[0].Ordinal)
+	}
+	assert.Equal(t, manual, mockRepo.existingSuppliers[0])
+}

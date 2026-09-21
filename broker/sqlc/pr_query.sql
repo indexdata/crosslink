@@ -233,3 +233,10 @@ ORDER BY
     CASE WHEN audience IS NOT NULL THEN 0 ELSE 1 END,
     created_at
 LIMIT 1;
+
+-- name: RotaRequestClosed :one
+SELECT EXISTS (
+    SELECT 1 FROM patron_request p JOIN ill_transaction i
+      ON p.requester_req_id = i.requester_request_id AND p.requester_symbol = i.requester_symbol
+    WHERE i.id = $1 AND p.side = 'borrowing' AND p.terminal_state
+);

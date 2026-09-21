@@ -265,3 +265,10 @@ INSERT INTO peer (id, name, refresh_policy, refresh_time, url, vendor, broker_mo
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT ((custom_data ->> 'id')) DO NOTHING
 RETURNING sqlc.embed(peer);
+
+-- name: SaveRotaAudit :exec
+INSERT INTO event (id, timestamp, ill_transaction_id, patron_request_id, event_type, event_name, event_status, event_data, result_data, last_signal)
+VALUES ($1, now(), $2, '00000000-0000-0000-0000-000000000002', 'NOTICE', $3, 'SUCCESS', $4, '{}'::jsonb, 'notice_created');
+
+-- name: NotifyRotaAudit :exec
+SELECT pg_notify('crosslink_channel', $1::text);

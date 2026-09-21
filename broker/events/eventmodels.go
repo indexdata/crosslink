@@ -39,6 +39,8 @@ func IsSyntheticID(id string) bool {
 type EventName string
 
 const (
+	EventNameSupplierAdded          EventName = "supplier-added"
+	EventNameSupplierMoved          EventName = "supplier-moved"
 	EventNameRequestTerminated      EventName = "request-terminated"
 	EventNameRequestReceived        EventName = "request-received"
 	EventNameLocateSuppliers        EventName = "locate-suppliers"

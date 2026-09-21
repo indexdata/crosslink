@@ -2,7 +2,9 @@ version: "2"
 sql:
   - engine: "postgresql"
     queries: "ill_query.sql"
-    schema: "ill_schema.sql"
+    schema:
+      - "ill_schema.sql"
+      - "event_schema.sql"
     gen:
       go:
         package: "ill_db"
