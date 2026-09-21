@@ -2237,7 +2237,7 @@ components:
           format: int32
           nullable: true
           minimum: 0
-          description: Maximum number of requests allowed per patron. Omitted or null leaves the limit unconfigured.
+          description: Maximum number of active requests allowed per patron. 0, omitted, or null disables the limit.
         iso18626Url:
           type: string
           description: URL of the ISO18626 service. When set, used instead of an ISO18626 service from endpoints.
