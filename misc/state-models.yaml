@@ -303,6 +303,11 @@ stateModels:
           - name: will-supply-conditional
             desc: Supplier updates/extends conditions while still pending
             transition: CONDITION_PENDING
+          - name: loaned
+            desc: Supplier shipped the item while the response was pending (ISO18626 Loaned)
+            transition: SHIPPED
+            appliesTo:
+              serviceTypes: [Loan, CopyOrLoan]
           - name: completed
             desc: "Supplier delivered the document (ISO18626 CopyCompleted)"
             transition: COMPLETED
@@ -529,6 +534,11 @@ stateModels:
           - name: cancel-rejected
             desc: Supplier rejects cancellation
             transition: WILL_SUPPLY
+          - name: loaned
+            desc: Supplier shipped the item while the response was pending (ISO18626 Loaned)
+            transition: SHIPPED
+            appliesTo:
+              serviceTypes: [Loan, CopyOrLoan]
           - name: completed
             desc: Supplier completes document delivery before cancellation takes effect
             transition: COMPLETED

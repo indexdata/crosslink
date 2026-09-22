@@ -10,3 +10,4 @@ coverage.out.tmp
 go.work
 go.work.sum
 .worktrees/
+.venv/
