@@ -488,6 +488,17 @@ func (s *SupplierLocator) getNextSupplier(ctx common.ExtendedContext, suppliers 
 	skippedSuppliers := []SkippedSupplier{}
 	for _, sup := range suppliers {
 		if sup.ID != "" {
+			// The caller holds the ILL lock, but protocol handlers lock only the
+			// supplier. Re-read under that lock before either selecting or skipping
+			// so full-row saves preserve the latest protocol fields.
+			var err error
+			sup, err = s.illRepo.GetLocatedSupplierByIdForUpdate(ctx, sup.ID)
+			if err != nil {
+				return ill_db.LocatedSupplier{}, skippedSuppliers, fmt.Errorf("lock supplier candidate: %w", err)
+			}
+			if sup.SupplierStatus != ill_db.SupplierStateNewPg {
+				continue
+			}
 			peer, err := s.illRepo.GetPeerById(ctx, sup.SupplierID)
 			if err != nil {
 				return ill_db.LocatedSupplier{}, skippedSuppliers, err

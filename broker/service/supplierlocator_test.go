@@ -654,6 +654,10 @@ type MockIllRepoRequester struct {
 	refreshErr     error
 }
 
+func (r *MockIllRepoRequester) GetLocatedSupplierByIdForUpdate(ctx common.ExtendedContext, id string) (ill_db.LocatedSupplier, error) {
+	return ill_db.LocatedSupplier{ID: id, SupplierID: "p1", SupplierSymbol: "ISIL:SUP", SupplierStatus: ill_db.SupplierStateNewPg}, nil
+}
+
 func (r *MockIllRepoRequester) GetPeerById(ctx common.ExtendedContext, peerId string) (ill_db.Peer, error) {
 	args := r.Called(peerId)
 	return args.Get(0).(ill_db.Peer), args.Error(1)
