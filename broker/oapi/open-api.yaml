@@ -2251,7 +2251,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: Completed transaction, duplicate symbol, or target supplier no longer new
+          description: Duplicate supplier symbol, completed transaction, or borrowing request in a terminal state
           content:
             application/json:
               schema:
@@ -2317,7 +2317,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: Completed transaction, duplicate symbol, or target supplier no longer new
+          description: Target supplier no longer new, completed transaction, or borrowing request in a terminal state
           content:
             application/json:
               schema:
