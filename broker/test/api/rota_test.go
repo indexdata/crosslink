@@ -25,6 +25,7 @@ import (
 	"github.com/indexdata/crosslink/broker/tenant"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	dirapi "github.com/indexdata/crosslink/directory/api"
+	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
@@ -936,6 +937,199 @@ func TestManualRotaAddRequester(t *testing.T) {
 				} else {
 					require.Equal(t, added.ID, selected.ID)
 				}
+			})
+		}
+	}
+}
+
+func (f rotaFixture) cancelEventParams(t *testing.T, target string, status events.EventStatus) events.SaveEventParams {
+	t.Helper()
+	trans, err := illRepo.GetIllTransactionById(f.ctx, f.id)
+	require.NoError(t, err)
+	authority, value, ok := strings.Cut(target, ":")
+	require.True(t, ok)
+	message := iso18626.NewISO18626Message()
+	message.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
+		Action: iso18626.TypeActionCancel,
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: trans.RequesterRequestID.String,
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType: iso18626.TypeSchemeValuePair{Text: authority}, AgencyIdValue: value,
+			},
+		},
+	}
+	return events.SaveEventParams{
+		ID: uuid.NewString(), Timestamp: apptest.GetNow(), IllTransactionID: f.id,
+		EventType: events.EventTypeNotice, EventName: events.EventNameRequesterMsgReceived, EventStatus: status,
+		EventData:       events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: message}},
+		PatronRequestID: events.DEFAULT_PATRON_REQUEST_ID,
+	}
+}
+
+func (f rotaFixture) recordCancel(t *testing.T, target string, status events.EventStatus) events.Event {
+	t.Helper()
+	event, err := eventRepo.SaveEvent(f.ctx, f.cancelEventParams(t, target, status))
+	require.NoError(t, err)
+	return event
+}
+
+func TestManualRotaCancellation(t *testing.T) {
+	for _, scenario := range []string{"broker", "supplier", "failed", "retry", "later message"} {
+		t.Run(scenario, func(t *testing.T) {
+			f := newRotaFixture(t, "new", "new")
+			f.borrowingRequest(t)
+			target, status := "ISIL:BROKER", events.EventStatusSuccess
+			switch scenario {
+			case "supplier":
+				target = f.suppliers[0].SupplierSymbol
+			case "failed":
+				status = events.EventStatusError
+			}
+			f.recordCancel(t, target, status)
+			trans, err := illRepo.GetIllTransactionById(f.ctx, f.id)
+			require.NoError(t, err)
+			trans.LastRequesterAction = pgtype.Text{String: "Cancel", Valid: true}
+			switch scenario {
+			case "retry":
+				trans.PrevRequesterRequestID = trans.RequesterRequestID
+				trans.RequesterRequestID = pgtype.Text{String: uuid.NewString(), Valid: true}
+				trans.LastRequesterAction.String = "Request"
+			case "later message":
+				trans.LastRequesterAction.String = "StatusRequest"
+			}
+			_, err = illRepo.SaveIllTransaction(f.ctx, ill_db.SaveIllTransactionParams(trans))
+			require.NoError(t, err)
+			blocked := scenario == "broker" || scenario == "later message"
+			moveStatus, addStatus := http.StatusOK, http.StatusCreated
+			if blocked {
+				moveStatus, addStatus = http.StatusConflict, http.StatusConflict
+			}
+			require.Equal(t, moveStatus, f.move(1, -1).Code)
+			require.Equal(t, addStatus, f.add(f.newSymbol).Code)
+			if blocked {
+				require.Equal(t, f.suppliers, f.rows(t))
+				audit, _, err := eventRepo.GetIllTransactionEvents(f.ctx, f.id)
+				require.NoError(t, err)
+				require.Len(t, audit, 1) // Only the recorded cancellation, no edits.
+			}
+		})
+	}
+}
+
+type rotaCancelBarrier struct{ rotaClosureBarrier }
+
+func (r rotaCancelBarrier) WithTxFunc(ctx common.ExtendedContext, fn func(ill_db.IllRepo) error) error {
+	return r.IllRepo.WithTxFunc(ctx, func(tx ill_db.IllRepo) error {
+		r.IllRepo, r.inTx = tx, true
+		return fn(r)
+	})
+}
+
+func (r rotaCancelBarrier) GetIllTransactionByIdForUpdate(ctx common.ExtendedContext, id string) (ill_db.IllTransaction, error) {
+	if r.beforeCheck {
+		if err := r.pause(ctx); err != nil {
+			return ill_db.IllTransaction{}, err
+		}
+	}
+	return r.IllRepo.GetIllTransactionByIdForUpdate(ctx, id)
+}
+
+func (r rotaCancelBarrier) RotaRequestClosed(ctx common.ExtendedContext, id string) (bool, error) {
+	return r.IllRepo.RotaRequestClosed(ctx, id)
+}
+
+func (r rotaCancelBarrier) RotaRequestCancelled(ctx common.ExtendedContext, id, brokerSymbol string) (bool, error) {
+	cancelled, err := r.IllRepo.RotaRequestCancelled(ctx, id, brokerSymbol)
+	if err == nil && r.inTx && !r.beforeCheck {
+		err = r.pause(ctx)
+	}
+	return cancelled, err
+}
+
+// Exercise cancellation retirement without dispatching downstream protocol tasks.
+type rotaCancelBus struct{ events.EventBus }
+
+func (rotaCancelBus) CreateTask(string, events.EventName, events.EventData, events.EventDomain, *string, events.SignalTarget) (string, error) {
+	return uuid.NewString(), nil
+}
+
+func TestManualRotaConcurrentCancellation(t *testing.T) {
+	for _, operation := range []string{"move", "add"} {
+		for _, first := range []string{"cancel", "edit"} {
+			t.Run(operation+"/"+first, func(t *testing.T) {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				f := newRotaFixture(t, "new", "new")
+				f.ctx = common.CreateExtCtxWithArgs(ctx, nil)
+				f.borrowingRequest(t)
+				resume := make(chan struct{})
+				release := sync.OnceFunc(func() { close(resume) })
+				defer release()
+				barrier := rotaCancelBarrier{rotaClosureBarrier{IllRepo: illRepo, beforeCheck: first == "cancel", paused: make(chan int, 1), resume: resume}}
+				handler := rotaHandler(barrier, f.directory)
+				f.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handler.ServeHTTP(w, r.WithContext(ctx)) })
+				editDone := make(chan *httptest.ResponseRecorder, 1)
+				go func() {
+					if operation == "move" {
+						editDone <- f.move(1, -1)
+					} else {
+						editDone <- f.add(f.newSymbol)
+					}
+				}()
+				editPID := awaitRotaPID(t, ctx, barrier.paused)
+				// The handler commits the notice before workflow takes the parent lock.
+				params := f.cancelEventParams(t, "ISIL:BROKER", events.EventStatusSuccess)
+				manager := service.CreateWorkflowManager(rotaCancelBus{}, illRepo, service.WorkflowConfig{})
+				cancelDone := make(chan struct{})
+				cancelStarted := make(chan int, 1)
+				cancelErrors := make(chan error, 1)
+				go func() {
+					defer close(cancelDone)
+					var event events.Event
+					err := eventRepo.WithTxFunc(f.ctx, func(repo events.EventRepo) error {
+						cancelStarted <- int(repo.(*events.PgEventRepo).Tx.Conn().PgConn().PID())
+						var err error
+						event, err = repo.SaveEvent(f.ctx, params)
+						return err
+					})
+					cancelErrors <- err
+					if err == nil {
+						manager.RequesterMessageReceived(f.ctx, event)
+					}
+				}()
+				cancelPID := awaitRotaPID(t, ctx, cancelStarted)
+				if first == "cancel" {
+					awaitRota(t, cancelDone)
+				} else {
+					requireRotaBlockedBy(t, ctx, cancelPID, editPID)
+				}
+				release()
+				select {
+				case response := <-editDone:
+					status := http.StatusConflict
+					if first == "edit" {
+						status = http.StatusOK
+						if operation == "add" {
+							status = http.StatusCreated
+						}
+					}
+					require.Equal(t, status, response.Code, response.Body.String())
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				}
+				awaitRota(t, cancelDone)
+				require.NoError(t, <-cancelErrors)
+				rows := f.rows(t)
+				count := 2
+				if first == "edit" && operation == "add" {
+					count++
+				}
+				require.Len(t, rows, count)
+				for _, row := range rows {
+					require.Equal(t, ill_db.SupplierStateSkippedPg, row.SupplierStatus)
+				}
+				// Retirement has committed; a later edit cannot reopen the rota.
+				require.Equal(t, http.StatusConflict, f.add("ISIL:LATER").Code)
 			})
 		}
 	}

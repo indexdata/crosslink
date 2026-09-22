@@ -279,3 +279,19 @@ VALUES ($1, now(), $2, '00000000-0000-0000-0000-000000000002', 'NOTICE', $3, 'SU
 
 -- name: NotifyRotaAudit :exec
 SELECT pg_notify('crosslink_channel', $1::text);
+
+-- name: RotaRequestCancelled :one
+-- A broker-targeted cancellation retires this request's rota even if the
+-- supplier refuses it. Retry changes requester_request_id and starts a new scope.
+SELECT EXISTS (
+    SELECT 1
+    FROM event e
+    JOIN ill_transaction t ON t.id = e.ill_transaction_id
+    WHERE t.id = sqlc.arg(transaction_id)
+      AND e.event_name = 'requester-msg-received'
+      AND e.event_status = 'SUCCESS'
+      AND e.event_data #>> '{incomingMessage,requestingAgencyMessage,action}' = 'Cancel'
+      AND e.event_data #>> '{incomingMessage,requestingAgencyMessage,header,requestingAgencyRequestId}' = t.requester_request_id
+      AND (e.event_data #>> '{incomingMessage,requestingAgencyMessage,header,supplyingAgencyId,agencyIdType,#text}') || ':' ||
+          (e.event_data #>> '{incomingMessage,requestingAgencyMessage,header,supplyingAgencyId,agencyIdValue}') = sqlc.arg(broker_symbol)::text
+) AS cancelled;

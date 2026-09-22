@@ -80,6 +80,16 @@ func (s *RotaService) editable(ctx common.ExtendedContext, repo ill_db.IllRepo, 
 	if closed {
 		return trans, fmt.Errorf("%w: borrowing request is completed", ErrRotaConflict)
 	}
+	// Cancellation is recorded before workflow retirement takes the same ILL
+	// lock. If it arrives after this check, retirement waits and includes this
+	// edit; if retirement already committed, its recorded Cancel rejects us.
+	cancelled, err := repo.RotaRequestCancelled(ctx, id, brokerSymbol)
+	if err != nil {
+		return trans, fmt.Errorf("check rota cancellation: %w", err)
+	}
+	if cancelled {
+		return trans, fmt.Errorf("%w: requester cancelled through broker", ErrRotaConflict)
+	}
 	return trans, nil
 }
 

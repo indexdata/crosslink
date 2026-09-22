@@ -384,3 +384,11 @@ func (r *MockIllRepositorySuccess) RotaRequestClosed(ctx common.ExtendedContext,
 func (r *MockIllRepositoryError) RotaRequestClosed(ctx common.ExtendedContext, id string) (bool, error) {
 	return false, errors.New("DB error")
 }
+
+func (r *MockIllRepositorySuccess) RotaRequestCancelled(ctx common.ExtendedContext, transactionID, brokerSymbol string) (bool, error) {
+	return false, nil
+}
+
+func (r *MockIllRepositoryError) RotaRequestCancelled(ctx common.ExtendedContext, transactionID, brokerSymbol string) (bool, error) {
+	return false, errors.New("DB error")
+}

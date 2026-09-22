@@ -316,6 +316,9 @@ ownership, and these mutations require the tenant-scoped `/broker` routes.
 Requests may originate from patrons or staff, and remaining candidates may be
 edited while another supplier is selected. Completed transactions and terminal
 borrowing requests return `409`; archived/missing transactions return `404`.
+A recorded requester Cancel addressed to the broker also blocks edits with `409`,
+even if the supplier refuses cancellation. Supplier-targeted cancellations do not
+block edits. A retry with a new requester request ID starts a fresh cancellation scope.
 A supplier absent from the specified transaction returns `404`, a target no longer
 `new` returns `409`, and an existing symbol in any rota status returns `409`.
 Unknown/ambiguous symbols or suppliers without a usable HTTP(S) endpoint return

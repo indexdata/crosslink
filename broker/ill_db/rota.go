@@ -37,3 +37,9 @@ func (r *PgIllRepo) SaveRotaAudit(ctx common.ExtendedContext, transactionID, nam
 func (r *PgIllRepo) RotaRequestClosed(ctx common.ExtendedContext, transactionID string) (bool, error) {
 	return (&prdb.Queries{}).RotaRequestClosed(ctx, r.GetConnOrTx(), transactionID)
 }
+
+// RotaRequestCancelled checks for a recorded broker-targeted Cancel for the
+// current requester request ID. Recheck under the ILL lock before editing.
+func (r *PgIllRepo) RotaRequestCancelled(ctx common.ExtendedContext, transactionID, brokerSymbol string) (bool, error) {
+	return r.queries.RotaRequestCancelled(ctx, r.GetConnOrTx(), RotaRequestCancelledParams{TransactionID: transactionID, BrokerSymbol: brokerSymbol})
+}
