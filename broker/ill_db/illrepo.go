@@ -3,7 +3,6 @@ package ill_db
 import (
 	"errors"
 	"fmt"
-	"reflect"
 	"slices"
 	"time"
 
@@ -362,17 +361,15 @@ func (r *PgIllRepo) GetCachedPeerByDirectoryEntryID(ctx common.ExtendedContext, 
 	var matches []adapter.DirectoryEntry
 	for _, entry := range entries {
 		if entry.CustomData.Id != nil && *entry.CustomData.Id == id {
-			if len(matches) > 0 {
-				if !reflect.DeepEqual(matches[0], entry) {
-					return Peer{}, query, fmt.Errorf("directory entry %s: conflicting responses from directory replicas", id)
-				}
-				continue
-			}
 			matches = append(matches, entry)
 		}
 	}
 	if len(entries) == 0 {
 		return Peer{}, query, fmt.Errorf("directory entry %s: %w", id, ErrDirectoryEntryNotFound)
+	}
+	matches, err = adapter.DeduplicateDirectoryEntries(matches)
+	if err != nil {
+		return Peer{}, query, err
 	}
 	if len(matches) != 1 {
 		return Peer{}, query, fmt.Errorf("directory entry %s: expected one entry, found %d", id, len(matches))

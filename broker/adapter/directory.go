@@ -1,8 +1,11 @@
 package adapter
 
 import (
+	"fmt"
+	"reflect"
 	"strconv"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/indexdata/crosslink/broker/common"
@@ -31,6 +34,27 @@ type DirectoryEntry struct {
 	Vendor        dirapi.EntryVendor
 	BrokerMode    common.BrokerMode
 	CustomData    dirapi.Entry
+}
+
+// DeduplicateDirectoryEntries collapses identical replica responses with the same
+// Directory UUID, preserving first-seen order. Conflicting responses for a UUID
+// are rejected. Entries without a UUID remain distinct.
+func DeduplicateDirectoryEntries(entries []DirectoryEntry) ([]DirectoryEntry, error) {
+	seen := make(map[uuid.UUID]DirectoryEntry)
+	var result []DirectoryEntry
+	for _, entry := range entries {
+		if id := entry.CustomData.Id; id != nil {
+			if previous, ok := seen[*id]; ok {
+				if !reflect.DeepEqual(previous, entry) {
+					return nil, fmt.Errorf("directory entry %s: conflicting responses from directory replicas", id)
+				}
+				continue
+			}
+			seen[*id] = entry
+		}
+		result = append(result, entry)
+	}
+	return result, nil
 }
 
 type SupplierOrdering interface {

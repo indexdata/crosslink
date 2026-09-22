@@ -24,6 +24,7 @@ import (
 	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/tenant"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
@@ -81,7 +82,7 @@ func newRotaFixture(t *testing.T, statuses ...string) rotaFixture {
 	f.handler = rotaHandler(illRepo, f.directory)
 	return f
 }
-func rotaHandler(repo ill_db.IllRepo, directory rotaDirectory) http.Handler {
+func rotaHandler(repo ill_db.IllRepo, directory adapter.DirectoryLookupAdapter) http.Handler {
 	resolver := tenant.NewResolver().WithIllRepo(repo).WithTenantToSymbol("ISIL:DK-{tenant}").WithLookupAdapter(directory)
 	handler := brokerapi.NewApiHandler(eventRepo, repo, resolver, directory, 10)
 	return oapi.HandlerFromMuxWithBaseURL(&handler, http.NewServeMux(), "/broker")
@@ -812,5 +813,72 @@ func TestManualRotaConcurrentSupplierUpdate(t *testing.T) {
 				require.Equal(t, expected, actual)
 			})
 		}
+	}
+}
+
+func TestManualRotaAddDirectoryReplicas(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		change func(*dirapi.Entry)
+		status int
+	}{
+		{name: "identical replicas", status: http.StatusCreated},
+		{name: "conflicting endpoints", status: http.StatusUnprocessableEntity, change: func(e *dirapi.Entry) {
+			url := "https://different.example/iso18626"
+			e.IllConfig = &dirapi.IllConfig{Iso18626Url: &url}
+		}},
+		{name: "conflicting metadata", status: http.StatusUnprocessableEntity, change: func(e *dirapi.Entry) {
+			code := "different-pickup"
+			e.LmsConfig = &dirapi.LmsConfig{RequesterPickupLocation: &code}
+		}},
+		{name: "distinct identities", status: http.StatusUnprocessableEntity, change: func(e *dirapi.Entry) {
+			id := uuid.New()
+			e.Id = &id
+		}},
+		{name: "missing identities", status: http.StatusUnprocessableEntity},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newRotaFixture(t)
+			id := uuid.New()
+			url := "https://manual.example/iso18626"
+			entry := dirapi.Entry{
+				Id: &id, Name: "Manual supplier",
+				Symbols:   &[]dirapi.Symbol{{Authority: "ISIL", Symbol: strings.TrimPrefix(f.newSymbol, "ISIL:")}},
+				IllConfig: &dirapi.IllConfig{Iso18626Url: &url},
+			}
+			if tc.name == "missing identities" {
+				entry.Id = nil
+			}
+			replica := func(data dirapi.Entry) *httptest.Server {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					require.NoError(t, json.NewEncoder(w).Encode(dirapi.EntriesResponse{Items: []dirapi.Entry{data}}))
+				}))
+				t.Cleanup(server.Close)
+				return server
+			}
+			first := replica(entry)
+			if tc.change != nil {
+				tc.change(&entry)
+			}
+			second := replica(entry)
+			directory := adapter.CreateApiDirectory(http.DefaultClient, []string{first.URL, second.URL})
+			f.handler = rotaHandler(illRepo, directory)
+			response := f.add(f.newSymbol)
+			require.Equal(t, tc.status, response.Code, response.Body.String())
+			rows := f.rows(t)
+			audit, _, err := eventRepo.GetIllTransactionEvents(f.ctx, f.id)
+			require.NoError(t, err)
+			if tc.status == http.StatusCreated {
+				require.Len(t, rows, 1)
+				require.Equal(t, f.newSymbol, rows[0].SupplierSymbol)
+				require.Len(t, audit, 1)
+				peer, err := illRepo.GetPeerBySymbol(f.ctx, f.newSymbol)
+				require.NoError(t, err)
+				require.Equal(t, id, *peer.CustomData.Id)
+			} else {
+				require.Empty(t, rows)
+				require.Empty(t, audit)
+			}
+		})
 	}
 }

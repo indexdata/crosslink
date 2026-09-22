@@ -212,13 +212,17 @@ func (s *RotaService) resolve(ctx common.ExtendedContext, symbol string) (ill_db
 	if err != nil {
 		return ill_db.Peer{}, fmt.Errorf("resolve supplier: %w", err)
 	}
-	matches := 0
+	var matches []adapter.DirectoryEntry
 	for _, entry := range entries {
 		if slices.Contains(entry.Symbols, symbol) {
-			matches++
+			matches = append(matches, entry)
 		}
 	}
-	if matches != 1 {
+	matches, err = adapter.DeduplicateDirectoryEntries(matches)
+	if err != nil {
+		return ill_db.Peer{}, fmt.Errorf("%w: %w", ErrRotaSymbol, err)
+	}
+	if len(matches) != 1 {
 		return ill_db.Peer{}, ErrRotaSymbol
 	}
 	peers, _, err := s.repo.GetCachedPeersBySymbols(ctx, []string{symbol}, s.directory)
