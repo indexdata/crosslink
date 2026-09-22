@@ -171,17 +171,31 @@ func (s *RotaService) Add(ctx common.ExtendedContext, id, symbol, localID string
 		if err != nil {
 			return err
 		}
+		status, local := ill_db.SupplierStateNewPg, false
+		// Match discovery's exact-symbol rule; aliases on the requester peer
+		// remain external candidates. Opaque requesters must not supply themselves.
+		if trans.RequesterSymbol.Valid && symbol == trans.RequesterSymbol.String {
+			requester, err := repo.GetRequesterByIllTransactionId(ctx, id)
+			if err != nil {
+				return fmt.Errorf("read requester for manual supplier: %w", err)
+			}
+			if requester.BrokerMode == string(common.BrokerModeOpaque) {
+				status = ill_db.SupplierStateSkippedPg
+			} else {
+				local = true
+			}
+		}
 		added, err := repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams{
 			ID: uuid.NewString(), IllTransactionID: id, SupplierID: peer.ID, SupplierSymbol: symbol, Ordinal: ordinal,
-			SupplierStatus: ill_db.SupplierStateNewPg, LocalID: pgtype.Text{String: localID, Valid: true}, LocalSupplier: peer.ID == trans.RequesterID.String,
+			SupplierStatus: status, LocalID: pgtype.Text{String: localID, Valid: true}, LocalSupplier: local,
 		})
 		if err != nil {
 			return err
 		}
 		// The new slot is after the rota. Rotate new entries through their existing
 		// slots, preserving every selected/skipped ordinal and all relative ordering.
-		news := append(newRotaSuppliers(suppliers), added)
-		if len(news) > 1 {
+		news := newRotaSuppliers(append(suppliers, added))
+		if added.SupplierStatus == ill_db.SupplierStateNewPg && len(news) > 1 {
 			if err = moveNewSupplier(ctx, repo, append(suppliers, added), news, len(news)-1, 0); err != nil {
 				return err
 			}

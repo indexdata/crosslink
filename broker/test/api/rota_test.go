@@ -882,3 +882,61 @@ func TestManualRotaAddDirectoryReplicas(t *testing.T) {
 		})
 	}
 }
+
+func TestManualRotaAddRequester(t *testing.T) {
+	for _, mode := range []common.BrokerMode{common.BrokerModeOpaque, common.BrokerModeTransparent} {
+		for _, kind := range []string{"exact", "alias", "other peer"} {
+			t.Run(string(mode)+"/"+kind, func(t *testing.T) {
+				f := newRotaFixture(t, "skipped", "new", "new")
+				tenantName := "REQ-" + strings.ToUpper(uuid.NewString())
+				requesterSymbol := "ISIL:DK-" + tenantName
+				requester := apptest.CreatePeerWithMode(t, illRepo, requesterSymbol, "https://requester.example/iso18626", string(mode))
+				trans, err := illRepo.GetIllTransactionById(f.ctx, f.id)
+				require.NoError(t, err)
+				trans.RequesterID = pgtype.Text{String: requester.ID, Valid: true}
+				trans.RequesterSymbol = pgtype.Text{String: requesterSymbol, Valid: true}
+				_, err = illRepo.SaveIllTransaction(f.ctx, ill_db.SaveIllTransactionParams(trans))
+				require.NoError(t, err)
+				symbol := requesterSymbol
+				switch kind {
+				case "alias":
+					symbol = "ISIL:ALIAS-" + uuid.NewString()
+					_, err = illRepo.SaveSymbol(f.ctx, ill_db.SaveSymbolParams{SymbolValue: symbol, PeerID: requester.ID})
+					require.NoError(t, err)
+				case "other peer":
+					symbol = f.newSymbol
+				}
+				f.directory.entries = []adapter.DirectoryEntry{{Symbols: []string{symbol}, URL: "https://supplier.example/iso18626"}}
+				f.handler = rotaHandler(illRepo, f.directory)
+				response := f.post("", fmt.Sprintf(`{"supplierSymbol":%q,"localId":"record-123"}`, symbol), tenantName)
+				require.Equal(t, http.StatusCreated, response.Code, response.Body.String())
+				added, err := illRepo.GetLocatedSupplierByIllTransactionAndSymbol(f.ctx, f.id, symbol)
+				require.NoError(t, err)
+				require.Equal(t, kind == "exact" && mode == common.BrokerModeTransparent, added.LocalSupplier)
+				rows := f.rows(t)
+				require.Len(t, rows, 4)
+				require.Equal(t, f.suppliers[0], rows[0])
+				skipped := kind == "exact" && mode == common.BrokerModeOpaque
+				if skipped {
+					require.Equal(t, ill_db.SupplierStateSkippedPg, added.SupplierStatus)
+					require.Equal(t, f.suppliers, rows[:3])
+					require.Equal(t, added, rows[3])
+				} else {
+					require.Equal(t, ill_db.SupplierStateNewPg, added.SupplierStatus)
+					require.Equal(t, added, rows[1])
+				}
+				bus := &rotaSelectionBus{}
+				locator := service.CreateSupplierLocator(bus, illRepo, f.directory, nil)
+				locator.SelectSupplier(f.ctx, events.Event{IllTransactionID: f.id})
+				require.Equal(t, events.EventStatusSuccess, bus.status)
+				selected, err := illRepo.GetSelectedSupplierForIllTransaction(f.ctx, f.id)
+				require.NoError(t, err)
+				if skipped {
+					require.Equal(t, f.suppliers[1].ID, selected.ID)
+				} else {
+					require.Equal(t, added.ID, selected.ID)
+				}
+			})
+		}
+	}
+}

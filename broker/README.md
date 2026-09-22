@@ -305,8 +305,11 @@ ownership, and these mutations require the tenant-scoped `/broker` routes.
 * `POST /broker/ill_transactions/{id}/located_suppliers` with
   `{"supplierSymbol":"ISIL:EXAMPLE","localId":"record-123"}` returns `201` with
   the created supplier. Both fields are required. It inserts a `new` supplier
-  first among new entries, storing `localId` as `localID`. Manual addition
-  bypasses holdings discovery and ranking. Normal downstream checks, including
+  first among new entries, storing `localId` as `localID`. The exact requester
+  symbol is instead appended as `skipped` in opaque mode, preserving existing
+  ordinals; in transparent mode it is `new` and marked as a local supplier.
+  Other symbols, including aliases on the requester peer, are non-local.
+  Manual addition bypasses holdings discovery and ranking. Normal downstream checks, including
   closures and availability, still apply. It neither selects/sends immediately
   nor restarts a stalled workflow.
 

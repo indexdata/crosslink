@@ -2212,7 +2212,7 @@ paths:
     post:
       operationId: AddLocatedSupplier
       summary: AddLocatedSupplier
-      description: Add a new supplier first among untried suppliers without selecting or sending. Bypasses holdings discovery and ranking; downstream checks still apply. Requires requester ownership and the broker.located_suppliers.write Okapi permission. Completed transactions are rejected; archived transactions are not found.
+      description: Add a supplier without selecting or sending. New suppliers are placed first among untried suppliers. The exact requester symbol is added as skipped in opaque mode and as a new local supplier in transparent mode; other symbols, including aliases on the requester peer, are non-local. Bypasses holdings discovery and ranking; downstream checks still apply. Requires requester ownership and the broker.located_suppliers.write Okapi permission. Completed transactions are rejected; archived transactions are not found.
       parameters:
         - name: id
           in: path
