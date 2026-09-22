@@ -949,24 +949,45 @@ func (r *MockIllRepoLocateSuppliers) WithTxFunc(ctx common.ExtendedContext, fn f
 	return fn(r)
 }
 
-func TestLocateSuppliersPreservesManualAdditionDuringDiscovery(t *testing.T) {
-	// These rows are returned when discovery finishes, after the initial retirement.
-	manual := ill_db.LocatedSupplier{ID: "manual", SupplierSymbol: "ISIL:SUP1", SupplierStatus: ill_db.SupplierStateNewPg, Ordinal: 8, LocalID: pgtype.Text{String: "manual-record", Valid: true}}
-	mockRepo := &MockIllRepoLocateSuppliers{
-		illTransaction:    ill_db.IllTransaction{ID: "ill-1", RequesterID: pgtype.Text{String: "requester-1", Valid: true}, IllTransactionData: ill_db.IllTransactionData{BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "return-ISIL:SUP1::automatic-record;return-ISIL:SUP2::second-record"}}},
-		requester:         ill_db.Peer{ID: "requester-1"},
-		peers:             []ill_db.Peer{{ID: "peer-1", BorrowsCount: 1}, {ID: "peer-2", BorrowsCount: 1}},
-		peerSymbols:       map[string][]ill_db.Symbol{"peer-1": {{SymbolValue: "ISIL:SUP1", PeerID: "peer-1"}}, "peer-2": {{SymbolValue: "ISIL:SUP2", PeerID: "peer-2"}}},
-		existingSuppliers: []ill_db.LocatedSupplier{manual},
+func TestLocateSuppliersPreservesAdditionsDuringDiscovery(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		requesterSymbol string
+		existingStatus  pgtype.Text
+		wantSymbols     []string
+	}{
+		{name: "manual new supplier", requesterSymbol: "ISIL:REQ", existingStatus: ill_db.SupplierStateNewPg, wantSymbols: []string{"ISIL:SUP2"}},
+		{name: "manual skipped opaque requester", requesterSymbol: "ISIL:SUP1", existingStatus: ill_db.SupplierStateSkippedPg, wantSymbols: []string{"ISIL:SUP2"}},
+		{name: "retired external supplier is rediscovered", requesterSymbol: "ISIL:REQ", existingStatus: ill_db.SupplierStateSkippedPg, wantSymbols: []string{"ISIL:SUP1", "ISIL:SUP2"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// These rows are returned when discovery finishes, after the initial retirement.
+			existing := ill_db.LocatedSupplier{ID: "existing", SupplierSymbol: "ISIL:SUP1", SupplierStatus: tc.existingStatus, Ordinal: 8, LocalID: pgtype.Text{String: "manual-record", Valid: true}}
+			mockRepo := &MockIllRepoLocateSuppliers{
+				illTransaction: ill_db.IllTransaction{
+					ID: "ill-1", RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+					RequesterSymbol:    pgtype.Text{String: tc.requesterSymbol, Valid: true},
+					IllTransactionData: ill_db.IllTransactionData{BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "return-ISIL:SUP1::automatic-record;return-ISIL:SUP2::second-record"}},
+				},
+				requester:         ill_db.Peer{ID: "requester-1", BrokerMode: string(common.BrokerModeOpaque)},
+				peers:             []ill_db.Peer{{ID: "peer-1", BorrowsCount: 1}, {ID: "peer-2", BorrowsCount: 1}},
+				peerSymbols:       map[string][]ill_db.Symbol{"peer-1": {{SymbolValue: "ISIL:SUP1", PeerID: "peer-1"}}, "peer-2": {{SymbolValue: "ISIL:SUP2", PeerID: "peer-2"}}},
+				existingSuppliers: []ill_db.LocatedSupplier{existing},
+			}
+			directory := new(adapter.MockDirectoryLookupAdapter)
+			factory := NewLookupAdapterFactory(mockRepo, directory, "", new(catalog.MockLookupShared), new(catalog.LookupAdapterCreatorImpl))
+			locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, directory, factory)
+			status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+			assert.Equal(t, events.EventStatusSuccess, status)
+			// Inspect the result too: this mock's savedLocatedSuppliers excludes skipped rows.
+			added, ok := result.CustomData["suppliers"].([]*ill_db.LocatedSupplier)
+			if assert.True(t, ok) && assert.Len(t, added, len(tc.wantSymbols)) {
+				for i, symbol := range tc.wantSymbols {
+					assert.Equal(t, symbol, added[i].SupplierSymbol)
+					assert.Equal(t, int32(9+i), added[i].Ordinal)
+				}
+			}
+			assert.Equal(t, existing, mockRepo.existingSuppliers[0])
+		})
 	}
-	directory := new(adapter.MockDirectoryLookupAdapter)
-	factory := NewLookupAdapterFactory(mockRepo, directory, "", new(catalog.MockLookupShared), new(catalog.LookupAdapterCreatorImpl))
-	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, directory, factory)
-	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
-	assert.Equal(t, events.EventStatusSuccess, status)
-	if assert.Len(t, mockRepo.savedLocatedSuppliers, 1) {
-		assert.Equal(t, "ISIL:SUP2", mockRepo.savedLocatedSuppliers[0].SupplierSymbol)
-		assert.Equal(t, int32(9), mockRepo.savedLocatedSuppliers[0].Ordinal)
-	}
-	assert.Equal(t, manual, mockRepo.existingSuppliers[0])
 }

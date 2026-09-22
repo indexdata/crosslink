@@ -297,8 +297,10 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 					continue
 				}
 				// A manual addition made during discovery keeps its priority and identifier.
+				// Opaque requester-symbol additions are skipped rather than new.
 				if slices.ContainsFunc(existing, func(row ill_db.LocatedSupplier) bool {
-					return row.SupplierSymbol == sup.Symbol && row.SupplierStatus == ill_db.SupplierStateNewPg
+					return row.SupplierSymbol == sup.Symbol && (row.SupplierStatus == ill_db.SupplierStateNewPg ||
+						(row.SupplierStatus == ill_db.SupplierStateSkippedPg && sup.SupplierStatus == ill_db.SupplierStateSkippedPg))
 				}) {
 					continue
 				}
