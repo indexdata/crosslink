@@ -84,7 +84,7 @@ func (s *RotaService) editable(ctx common.ExtendedContext, repo ill_db.IllRepo, 
 }
 
 // Move changes only new suppliers' ordinal assignments. The parent lock is also
-// held by automatic selection; the status is checked after acquiring that lock.
+// held by automatic selection; supplier locks also serialize protocol updates.
 func (s *RotaService) Move(ctx common.ExtendedContext, id, supplierID string, offset int64, owner tenant.Tenant) ([]ill_db.GetLocatedSuppliersWithPeerByIllTransactionRow, error) {
 	owner, err := snapshotRotaOwner(owner)
 	if err != nil {
@@ -99,7 +99,9 @@ func (s *RotaService) Move(ctx common.ExtendedContext, id, supplierID string, of
 		if _, err := s.editable(ctx, repo, id, owner, true); err != nil {
 			return err
 		}
-		suppliers, _, err := repo.GetLocatedSuppliersByIllTransaction(ctx, id)
+		// Protocol handlers lock supplier rows independently of the parent ILL row.
+		// Lock before reading statuses and retaining snapshots for ordinal rewrites.
+		suppliers, err := repo.GetLocatedSuppliersByIllTransactionForUpdate(ctx, id)
 		if err != nil {
 			return err
 		}
@@ -154,7 +156,9 @@ func (s *RotaService) Add(ctx common.ExtendedContext, id, symbol, localID string
 		if err != nil {
 			return err
 		}
-		suppliers, _, err := repo.GetLocatedSuppliersByIllTransaction(ctx, id)
+		// Protocol handlers lock supplier rows independently of the parent ILL row.
+		// Lock before reading statuses and retaining snapshots for ordinal rewrites.
+		suppliers, err := repo.GetLocatedSuppliersByIllTransactionForUpdate(ctx, id)
 		if err != nil {
 			return err
 		}

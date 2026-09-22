@@ -138,6 +138,13 @@ FROM located_supplier
 WHERE ill_transaction_id = $1
 ORDER BY ordinal;
 
+-- name: GetLocatedSuppliersByIllTransactionForUpdate :many
+SELECT *
+FROM located_supplier
+WHERE ill_transaction_id = $1
+ORDER BY ordinal
+FOR UPDATE;
+
 -- name: GetLocatedSuppliersWithPeerByIllTransaction :many
 SELECT sqlc.embed(located_supplier),
        peer.name AS supplier_name,

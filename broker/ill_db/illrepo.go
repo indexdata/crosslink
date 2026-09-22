@@ -39,6 +39,7 @@ type IllRepo interface {
 	SkipLocatedSuppliersByIllTransactionAndStatus(ctx common.ExtendedContext, id string, status pgtype.Text) error
 	GetLocatedSuppliersByIllTransactionAndStatus(ctx common.ExtendedContext, params GetLocatedSuppliersByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
 	GetLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) ([]LocatedSupplier, int64, error)
+	GetLocatedSuppliersByIllTransactionForUpdate(ctx common.ExtendedContext, id string) ([]LocatedSupplier, error)
 	GetLocatedSuppliersWithPeerByIllTransaction(ctx common.ExtendedContext, id string) ([]GetLocatedSuppliersWithPeerByIllTransactionRow, int64, error)
 	GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx common.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error)
 	GetLocatedSupplierByIdForUpdate(ctx common.ExtendedContext, id string) (LocatedSupplier, error)
@@ -226,6 +227,12 @@ func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSymbolForUpdate(ctx com
 		SupplierSymbol:   symbol,
 	})
 	return row.LocatedSupplier, err
+}
+
+// GetLocatedSuppliersByIllTransactionForUpdate locks supplier rows until the
+// enclosing transaction ends. Call it through a transaction-backed repository.
+func (r *PgIllRepo) GetLocatedSuppliersByIllTransactionForUpdate(ctx common.ExtendedContext, id string) ([]LocatedSupplier, error) {
+	return r.queries.GetLocatedSuppliersByIllTransactionForUpdate(ctx, r.GetConnOrTx(), id)
 }
 
 func (r *PgIllRepo) GetLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) ([]LocatedSupplier, int64, error) {

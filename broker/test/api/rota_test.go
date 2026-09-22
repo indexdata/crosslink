@@ -681,3 +681,136 @@ func TestManualRotaRequesterChangesWhileLocking(t *testing.T) {
 		})
 	}
 }
+
+// Pause immediately before or after the supplier snapshot, while retaining the
+// transaction's locks. Protocol updates take only the supplier lock.
+type rotaSupplierBarrier struct {
+	rotaClosureBarrier
+}
+
+func (r rotaSupplierBarrier) WithTxFunc(ctx common.ExtendedContext, fn func(ill_db.IllRepo) error) error {
+	return r.IllRepo.WithTxFunc(ctx, func(tx ill_db.IllRepo) error {
+		r.IllRepo = tx
+		return fn(r)
+	})
+}
+
+func (r rotaSupplierBarrier) GetLocatedSuppliersByIllTransactionForUpdate(ctx common.ExtendedContext, id string) ([]ill_db.LocatedSupplier, error) {
+	if r.beforeCheck {
+		if err := r.pause(ctx); err != nil {
+			return nil, err
+		}
+	}
+	rows, err := r.IllRepo.GetLocatedSuppliersByIllTransactionForUpdate(ctx, id)
+	if err == nil && !r.beforeCheck {
+		err = r.pause(ctx)
+	}
+	return rows, err
+}
+
+func TestManualRotaConcurrentSupplierUpdate(t *testing.T) {
+	for _, operation := range []string{"move", "add"} {
+		for _, first := range []string{"protocol", "edit"} {
+			t.Run(operation+"/"+first, func(t *testing.T) {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				f := newRotaFixture(t, "new", "new")
+				f.ctx = common.CreateExtCtxWithArgs(ctx, nil)
+				editResume, protocolResume := make(chan struct{}), make(chan struct{})
+				releaseEdit := sync.OnceFunc(func() { close(editResume) })
+				releaseProtocol := sync.OnceFunc(func() { close(protocolResume) })
+				defer releaseEdit()
+				defer releaseProtocol()
+				barrier := rotaSupplierBarrier{rotaClosureBarrier{IllRepo: illRepo, beforeCheck: first == "protocol", paused: make(chan int, 1), resume: editResume}}
+				handler := rotaHandler(barrier, f.directory)
+				f.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handler.ServeHTTP(w, r.WithContext(ctx)) })
+				editDone := make(chan *httptest.ResponseRecorder, 1)
+				go func() {
+					if operation == "move" {
+						editDone <- f.move(1, -1)
+					} else {
+						editDone <- f.add(f.newSymbol)
+					}
+				}()
+				editPID := awaitRotaPID(t, ctx, barrier.paused)
+				protocolPIDs := make(chan int, 1)
+				protocolDone := make(chan error, 1)
+				expected := f.suppliers[1]
+				expected.SupplierStatus = ill_db.SupplierStateSelectedPg
+				if operation == "add" {
+					expected.SupplierStatus = ill_db.SupplierStateSkippedPg
+				}
+				expected.PrevStatus = pgtype.Text{String: "ExpectToSupply", Valid: true}
+				expected.LastStatus = pgtype.Text{String: "Loaned", Valid: true}
+				expected.LastAction = pgtype.Text{String: "Request", Valid: true}
+				expected.SupplierRequestID = pgtype.Text{String: "protocol-request", Valid: true}
+				go func() {
+					protocolDone <- illRepo.WithTxFunc(f.ctx, func(repo ill_db.IllRepo) error {
+						pid := int(repo.(*ill_db.PgIllRepo).Tx.Conn().PgConn().PID())
+						if first == "edit" {
+							protocolPIDs <- pid
+						}
+						supplier, err := repo.GetLocatedSupplierByIdForUpdate(f.ctx, expected.ID)
+						if err != nil {
+							return err
+						}
+						supplier.SupplierStatus = expected.SupplierStatus
+						supplier.PrevStatus = expected.PrevStatus
+						supplier.LastStatus = expected.LastStatus
+						supplier.LastAction = expected.LastAction
+						supplier.SupplierRequestID = expected.SupplierRequestID
+						if _, err := repo.SaveLocatedSupplier(f.ctx, ill_db.SaveLocatedSupplierParams(supplier)); err != nil {
+							return err
+						}
+						if first == "protocol" {
+							protocolPIDs <- pid
+							select {
+							case <-protocolResume:
+							case <-ctx.Done():
+								return ctx.Err()
+							}
+						}
+						return nil
+					})
+				}()
+				protocolPID := awaitRotaPID(t, ctx, protocolPIDs)
+				if first == "protocol" {
+					releaseEdit()
+					requireRotaBlockedBy(t, ctx, editPID, protocolPID)
+					releaseProtocol()
+				} else {
+					requireRotaBlockedBy(t, ctx, protocolPID, editPID)
+					releaseEdit()
+				}
+				select {
+				case err := <-protocolDone:
+					require.NoError(t, err)
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				}
+				select {
+				case response := <-editDone:
+					status := http.StatusOK
+					if operation == "add" {
+						status = http.StatusCreated
+					} else if first == "protocol" {
+						status = http.StatusConflict
+					}
+					require.Equal(t, status, response.Code, response.Body.String())
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				}
+				if first == "edit" {
+					if operation == "move" {
+						expected.Ordinal = 0
+					} else {
+						expected.Ordinal = 3
+					}
+				}
+				actual, err := illRepo.GetLocatedSupplierByIllTransactionAndSymbol(f.ctx, f.id, expected.SupplierSymbol)
+				require.NoError(t, err)
+				require.Equal(t, expected, actual)
+			})
+		}
+	}
+}
