@@ -134,6 +134,8 @@ func TestSelectionConcurrentProtocolUpdate(t *testing.T) {
 					t.Fatal(ctx.Err())
 				}
 				require.Equal(t, events.EventStatusSuccess, bus.status)
+				// The protocol-first barrier pauses after previously selected suppliers
+				// were skipped, so a later protocol selection remains selected.
 				expected.SupplierStatus = ill_db.SupplierStateSelectedPg
 				if scenario == "closed" || scenario == "already skipped" {
 					expected.SupplierStatus = ill_db.SupplierStateSkippedPg
