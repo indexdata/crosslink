@@ -158,7 +158,9 @@ SELECT
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
         FILTER (WHERE st_key = 'ncip_request_item_pickup_location') AS requester_pickup_location,
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-        FILTER (WHERE st_key = 'z3950_server_address') AS z3950_server_address
+        FILTER (WHERE st_key = 'z3950_server_address') AS z3950_server_address,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'max_requests') AS max_requests_per_patron
 FROM app_setting;
 
 CREATE TEMP TABLE crosslink_local_entry ON COMMIT DROP AS
@@ -179,6 +181,7 @@ DECLARE
     ncip_server_text text;
     ncip_from_agency_text text;
     ncip_dependent_config boolean;
+    max_requests_text text;
 BEGIN
     SELECT count(*) INTO consortium_count
     FROM crosslink_entry_base
@@ -269,7 +272,8 @@ BEGIN
             'host_lms_integration', 'ncip_server_address', 'ncip_from_agency',
             'ncip_from_agency_authentication', 'ncip_to_agency', 'borrower_check',
             'accept_item', 'check_in_item', 'check_out_item', 'use_request_item',
-            'ncip_request_item_pickup_location', 'z3950_server_address'
+            'ncip_request_item_pickup_location', 'z3950_server_address',
+            'max_requests'
         )
         GROUP BY st_key
         HAVING count(*) > 1
@@ -286,6 +290,18 @@ BEGIN
     END IF;
     IF minimum_cost_text !~ '^(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)$' THEN
         RAISE EXCEPTION 'minimum_cost must be a nonnegative number for CrossLink tier export: %', minimum_cost_text;
+    END IF;
+
+    SELECT max_requests_per_patron
+    INTO max_requests_text
+    FROM crosslink_tenant_settings;
+    IF max_requests_text IS NOT NULL THEN
+        IF max_requests_text !~ '^[0-9]+$' THEN
+            RAISE EXCEPTION 'max_requests must be an integer from 0 through 2147483647: %', max_requests_text;
+    END IF;
+        IF max_requests_text::numeric > 2147483647 THEN
+            RAISE EXCEPTION 'max_requests must be an integer from 0 through 2147483647: %', max_requests_text;
+    END IF;
     END IF;
 
     SELECT string_agg(source || ':' || record_id || '=' || supply_preference, ', ' ORDER BY source, record_id)
@@ -556,7 +572,7 @@ entry_records AS (
             'noteFieldSeparator', NULL,
             'supplierPatronPattern', NULL,
             'duplicateCheckWindowHours', NULL,
-            'maxRequestsPerPatron', NULL
+            'maxRequestsPerPatron', tenant_settings.max_requests_per_patron::integer
         ) AS item
         FROM (
             SELECT service.se_address AS address
