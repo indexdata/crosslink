@@ -1606,10 +1606,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AddEntryAddress'
-        closures:
-          type: array
-          items:
-            $ref: '#/components/schemas/AddEntryClosure'
         endpoints:
           type: array
           items:
@@ -1676,26 +1672,6 @@ components:
         entry:
           type: string
           format: uuid
-        startDate:
-          type: string
-          format: date
-          description: ISO8601 date
-        endDate:
-          type: string
-          format: date
-          description: ISO8601 date
-        reason:
-          type: string
-
-    AddEntryClosure:
-      type: object
-      additionalProperties: false
-      x-go-type: Closure
-      required:
-        - startDate
-        - endDate
-        - reason
-      properties:
         startDate:
           type: string
           format: date
