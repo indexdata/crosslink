@@ -1758,8 +1758,16 @@ func TestHandleInvokeActionCancelRequest(t *testing.T) {
 	t.Cleanup(func() { configuredBrokerSymbol = previousBrokerSymbol })
 
 	for _, state := range []pr_db.PatronRequestState{BorrowerStateSupplierLocated, BorrowerStateWillSupply, BorrowerStateConditionPending} {
-		for _, serviceType := range []iso18626.TypeServiceType{iso18626.TypeServiceTypeLoan, iso18626.TypeServiceTypeCopy, iso18626.TypeServiceTypeCopyOrLoan} {
-			t.Run(string(state)+"/"+string(serviceType), func(t *testing.T) {
+		for _, tc := range []struct {
+			name        string
+			serviceInfo *iso18626.ServiceInfo
+		}{
+			{name: "nil ServiceInfo"},
+			{name: "Loan", serviceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}},
+			{name: "Copy", serviceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopy}},
+			{name: "CopyOrLoan", serviceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopyOrLoan}},
+		} {
+			t.Run(string(state)+"/"+tc.name, func(t *testing.T) {
 				mockPrRepo := new(MockPrRepo)
 				lmsCreator := new(MockLmsCreator)
 				lmsCreator.On("GetAdapter", "ISIL:REC1").Return(createLmsAdapterMockFail(), nil)
@@ -1767,7 +1775,7 @@ func TestHandleInvokeActionCancelRequest(t *testing.T) {
 				prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 				// Leave the original request target empty to cover requests created before
 				// broker-target normalization was introduced.
-				illRequest := iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{ServiceType: serviceType}}
+				illRequest := iso18626.Request{ServiceInfo: tc.serviceInfo}
 				mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: state, NeedsAttention: state == BorrowerStateConditionPending, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 				action := BorrowerActionCancelRequest
 				status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
