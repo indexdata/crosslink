@@ -334,6 +334,10 @@ stateModels:
             desc: "Reject supplier conditions (ISO18626 Cancel)"
             transitions:
               success: CANCEL_PENDING
+          - name: cancel-request
+            desc: Cancel the whole request through the broker without trying further suppliers
+            transitions:
+              success: CANCEL_PENDING
         events:
           - name: new-expect-to-supply
             desc: "A newly selected supplier indicates an intention to supply (ISO18626 ExpectToSupply)"

@@ -24,7 +24,7 @@ func TestNewDefaultLoanActionMapping(t *testing.T) {
 		BorrowerStateReadyToSend:      {{actionName: BorrowerActionSendRequest, auto: true}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateDuplicate:        {{actionName: BorrowerActionSendRequest}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateSupplierLocated:  {{actionName: BorrowerActionCancelRequest}},
-		BorrowerStateConditionPending: {{actionName: BorrowerActionAcceptCondition}, {actionName: BorrowerActionRejectCondition}},
+		BorrowerStateConditionPending: {{actionName: BorrowerActionAcceptCondition}, {actionName: BorrowerActionRejectCondition}, {actionName: BorrowerActionCancelRequest}},
 		BorrowerStateWillSupply:       {{actionName: BorrowerActionCancelRequest}},
 		BorrowerStateShipped:          {{actionName: BorrowerActionReceive}},
 		BorrowerStateReceived:         {{actionName: BorrowerActionCheckOut}, {actionName: BorrowerActionCheckIn}, {actionName: BorrowerActionShipReturn}, {actionName: BorrowerActionSendNotification, auto: true}},
@@ -268,7 +268,7 @@ func TestGetActionsForPatronRequest(t *testing.T) {
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateMetadataUpdated}))
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateReadyToSend}))
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionCancelRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateSupplierLocated}))
-	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionAcceptCondition, BorrowerActionRejectCondition}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateConditionPending}))
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionAcceptCondition, BorrowerActionRejectCondition, BorrowerActionCancelRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateConditionPending}))
 
 	// Lender
 	listCompare(t, []pr_db.PatronRequestAction{LenderActionAddItem, LenderActionRemoveItem, LenderActionAddCondition, LenderActionCannotSupply, LenderActionPullslipPrinted, LenderActionAskRetry}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}))

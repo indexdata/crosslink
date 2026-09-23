@@ -266,6 +266,8 @@ For information about importing patron requests, batch actions, and templates, s
 
 ### Supplier pull slips and shipment
 
+While requester conditions are pending, `accept-condition` agrees to the supplier's terms, `reject-condition` cancels with that supplier and allows the broker to try another, and `cancel-request` cancels through the broker to stop further sourcing. Both cancellation actions enter `CANCEL_PENDING` while awaiting the response; the current supplier can still refuse cancellation.
+
 For Loan and CopyOrLoan requests, generating a pull-slip PDF queues the `pullslip-printed` action for the included eligible supplier requests. Accepted conditions return the supplier to `WILL_SUPPLY`. Printing moves `WILL_SUPPLY` to `SEARCHING` (picking and awaiting shipment). Reprinting in `SEARCHING` leaves the state unchanged. The `ship` action is available only in `SEARCHING`. Copy delivery remains available without this loan workflow.
 
 The `email-pullslips` batch queues the same action after SMTP successfully accepts an email containing a PDF. Emails without PDFs and failed generation or sending do not advance requests. Actions run asynchronously and recheck the current state. If queuing fails after output, the operation reports an error; retrying may reproduce the PDF or email, while repeated `pullslip-printed` actions in `SEARCHING` are harmless. Existing saved batch queries are not rewritten; use `WILL_SUPPLY` for pull-slip queries and include `SEARCHING` in aging queries as needed.
