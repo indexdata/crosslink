@@ -2722,7 +2722,7 @@ components:
 
     PatronProfiles:
       type: array
-      description: Patron profile eligibility rules, inspected in order until both configured profile components match.
+      description: Patron profile eligibility rules, inspected in order until the configured code matches. A rule without a code matches any profile, including when the LMS returns no profile. If no rule matches, requests are allowed.
       items:
         $ref: '#/components/schemas/PatronProfile'
 
@@ -2738,7 +2738,7 @@ components:
         name:
           type: string
           minLength: 1
-          description: Profile name returned by the LMS (for example, "Staff"). When omitted, any name matches.
+          description: Display label for the profile (for example, "Staff"). Not used for matching.
         canCreateRequests:
           type: boolean
           description: Whether patrons with this profile may create ILL requests.
