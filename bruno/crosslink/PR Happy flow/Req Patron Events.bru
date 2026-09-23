@@ -43,7 +43,7 @@ script:post-response {
     expect(events[0].eventStatus).to.equal("SUCCESS");
   };
   
-  ["validate-patron", "send-request", "accept-condition", "receive", "renew", "check-out", "check-in", "ship-return"].forEach(action => {
+  ["validate-patron", "check-limit", "update-metadata", "check-duplicate", "send-request", "accept-condition", "receive", "send-notification", "renew", "check-out", "check-in", "ship-return"].forEach(action => {
     test(`Check ${action}`, () => {
       expectActionWithFirstSuccess(action);
     });
