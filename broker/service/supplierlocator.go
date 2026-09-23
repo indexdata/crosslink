@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"slices"
@@ -72,7 +73,12 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	// Every locate run builds a replacement rota. Retire any existing rota before
 	// lookup so all failure paths observe no selected supplier, while a new request
 	// simply performs a no-op update.
-	if err = s.illRepo.SkipLocatedSuppliersByIllTransaction(ctx, illTrans.ID); err != nil {
+	if err = s.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		if _, err := repo.GetIllTransactionByIdForUpdate(ctx, illTrans.ID); err != nil {
+			return err
+		}
+		return repo.SkipLocatedSuppliersByIllTransaction(ctx, illTrans.ID)
+	}); err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to update existing located supplier status", err)
 	}
 	lookupParams := catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo)
@@ -263,32 +269,56 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no located suppliers match",
 			map[string]any{"holdings": holdingsLog, "directory": directoryLog, ROTA_INFO_KEY: rotaInfo})
 	}
-	// Start ordinal after all previous rota entries to avoid conflicts with the
-	// unique constraint on (ill_transaction_id, ordinal) when re-locating on retry.
-	existingSuppliers, _, err := s.illRepo.GetLocatedSuppliersByIllTransaction(ctx, illTrans.ID)
-	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "failed to count existing located suppliers", err)
-	}
+
+	// Appending an automatically discovered rota must serialize with manual edits
+	// too. Network discovery/ranking above runs outside this short transaction.
 	var locatedSuppliers []*ill_db.LocatedSupplier
-	i := len(existingSuppliers)
-	for pass := 1; pass <= 2; pass++ {
-		for _, sup := range potentialSuppliers {
-			matchPass := 1
-			// only if symbol was not part of holdings lookup results it must come exclusively from last resort
-			if !slices.Contains(lookupSymbols, sup.Symbol) {
-				matchPass = 2
-			}
-			if pass != matchPass {
-				continue
-			}
-			added, loopErr := s.addLocatedSupplier(ctx, illTrans.ID, common.ToInt32(i), &sup)
-			i++
-			if loopErr == nil {
+	err = s.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		if _, err := repo.GetIllTransactionByIdForUpdate(ctx, illTrans.ID); err != nil {
+			return err
+		}
+		existing, _, err := repo.GetLocatedSuppliersByIllTransaction(ctx, illTrans.ID)
+		if err != nil {
+			return err
+		}
+		ordinal, err := freeRotaOrdinal(existing)
+		if err != nil {
+			return err
+		}
+		locator := *s
+		locator.illRepo = repo
+		for pass := 1; pass <= 2; pass++ {
+			for _, sup := range potentialSuppliers {
+				matchPass := 1
+				if !slices.Contains(lookupSymbols, sup.Symbol) {
+					matchPass = 2
+				}
+				if pass != matchPass {
+					continue
+				}
+				// A manual addition made during discovery keeps its priority and identifier.
+				// Opaque requester-symbol additions are skipped rather than new.
+				if slices.ContainsFunc(existing, func(row ill_db.LocatedSupplier) bool {
+					return row.SupplierSymbol == sup.Symbol && (row.SupplierStatus == ill_db.SupplierStateNewPg ||
+						(row.SupplierStatus == ill_db.SupplierStateSkippedPg && sup.SupplierStatus == ill_db.SupplierStateSkippedPg))
+				}) {
+					continue
+				}
+				added, err := locator.addLocatedSupplier(ctx, illTrans.ID, ordinal, &sup)
+				if err != nil {
+					return err
+				}
 				locatedSuppliers = append(locatedSuppliers, added)
-			} else {
-				ctx.Logger().Error("failed to add supplier", "error", loopErr)
+				if ordinal == math.MaxInt32 {
+					return fmt.Errorf("rota ordinal space exhausted")
+				}
+				ordinal++
 			}
 		}
+		return nil
+	})
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to save located suppliers", err)
 	}
 
 	return events.EventStatusSuccess, &events.EventResult{
@@ -389,6 +419,38 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 }
 
 func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+	// Refresh outside the lock, then re-read the current rota inside the transaction.
+	suppliers, err := s.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{IllTransactionID: event.IllTransactionID, SupplierStatus: ill_db.SupplierStateNewPg})
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "could not read supplier rota", err)
+	}
+	supplierSymbols := make([]string, 0, len(suppliers))
+	for _, supplier := range suppliers {
+		supplierSymbols = append(supplierSymbols, supplier.SupplierSymbol)
+	}
+	_, _, _ = s.illRepo.GetCachedPeersBySymbols(ctx, supplierSymbols, s.dirAdapter)
+
+	var status events.EventStatus
+	var result *events.EventResult
+	err = s.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		if _, err := repo.GetIllTransactionByIdForUpdate(ctx, event.IllTransactionID); err != nil {
+			return err
+		}
+		locator := *s
+		locator.illRepo = repo
+		status, result = locator.selectSupplierLocked(ctx, event)
+		if status == events.EventStatusError {
+			return errors.New("supplier selection failed")
+		}
+		return nil
+	})
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "could not commit supplier selection", err)
+	}
+	return status, result
+}
+
+func (s *SupplierLocator) selectSupplierLocked(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	err := s.illRepo.SkipLocatedSuppliersByIllTransactionAndStatus(ctx, event.IllTransactionID, ill_db.SupplierStateSelectedPg)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not update previous selected supplier", err)
@@ -404,11 +466,6 @@ func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event event
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no suppliers with new status", nil)
 	}
 	eventData := map[string]any{}
-	supplierSymbols := make([]string, 0, len(suppliers))
-	for _, supplier := range suppliers {
-		supplierSymbols = append(supplierSymbols, supplier.SupplierSymbol)
-	}
-	_, _, _ = s.illRepo.GetCachedPeersBySymbols(ctx, supplierSymbols, s.dirAdapter)
 	locSup, skippedSuppliers, err := s.getNextSupplier(ctx, suppliers)
 	if len(skippedSuppliers) > 0 {
 		eventData["skippedSuppliers"] = skippedSuppliers
@@ -433,6 +490,17 @@ func (s *SupplierLocator) getNextSupplier(ctx common.ExtendedContext, suppliers 
 	skippedSuppliers := []SkippedSupplier{}
 	for _, sup := range suppliers {
 		if sup.ID != "" {
+			// The caller holds the ILL lock, but protocol handlers lock only the
+			// supplier. Re-read under that lock before either selecting or skipping
+			// so full-row saves preserve the latest protocol fields.
+			var err error
+			sup, err = s.illRepo.GetLocatedSupplierByIdForUpdate(ctx, sup.ID)
+			if err != nil {
+				return ill_db.LocatedSupplier{}, skippedSuppliers, fmt.Errorf("lock supplier candidate: %w", err)
+			}
+			if sup.SupplierStatus != ill_db.SupplierStateNewPg {
+				continue
+			}
 			peer, err := s.illRepo.GetPeerById(ctx, sup.SupplierID)
 			if err != nil {
 				return ill_db.LocatedSupplier{}, skippedSuppliers, err

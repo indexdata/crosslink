@@ -289,7 +289,12 @@ func (w *WorkflowManager) shouldForwardMessage(ctx common.ExtendedContext, event
 }
 
 func (w *WorkflowManager) skipAllSuppliersByStatus(ctx common.ExtendedContext, illTransId string, supplierStatus pgtype.Text) {
-	if err := w.illRepo.SkipLocatedSuppliersByIllTransactionAndStatus(ctx, illTransId, supplierStatus); err != nil {
+	if err := w.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		if _, err := repo.GetIllTransactionByIdForUpdate(ctx, illTransId); err != nil {
+			return err
+		}
+		return repo.SkipLocatedSuppliersByIllTransactionAndStatus(ctx, illTransId, supplierStatus)
+	}); err != nil {
 		ctx.Logger().Error("could not update supplier status", "error", err)
 	}
 }

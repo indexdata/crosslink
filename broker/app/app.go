@@ -201,7 +201,7 @@ func Init(ctx context.Context) (Context, error) {
 	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, lookupAdapterFactory)
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
 	tenantResolver := tenant.NewResolver().WithIllRepo(illRepo).WithLookupAdapter(dirAdapter).WithTenantToSymbol(TENANT_TO_SYMBOL)
-	apiHandler := api.NewApiHandler(eventRepo, illRepo, tenantResolver, API_PAGE_SIZE)
+	apiHandler := api.NewApiHandler(eventRepo, illRepo, tenantResolver, dirAdapter, API_PAGE_SIZE)
 	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, eventRepo, tenantResolver, &iso18626Handler, API_PAGE_SIZE)
 	prApiHandler.SetPickupLocationValidator(prActionService)
 	prApiHandler.SetAutoActionRunner(prActionService)
