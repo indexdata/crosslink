@@ -248,9 +248,10 @@ func TestPatronProfile(t *testing.T) {
 func TestValidatePatronProfileRules(t *testing.T) {
 	response := lookupUserResponseWithProfile("user-id", "PROFILE", "STAFF", "Staff")
 
-	nameOnly := dirapi.PatronProfiles{{Name: strPtr("Staff"), CanCreateRequests: false}}
-	adapter := LmsAdapterNcip{config: dirapi.LmsConfig{PatronProfiles: &nameOnly}}
+	labeledDefault := dirapi.PatronProfiles{{Name: strPtr("Default policy"), CanCreateRequests: false}}
+	adapter := LmsAdapterNcip{config: dirapi.LmsConfig{PatronProfiles: &labeledDefault}}
 	assert.Error(t, adapter.validatePatronProfile(response))
+	assert.Error(t, adapter.validatePatronProfile(nil))
 
 	codeOnly := dirapi.PatronProfiles{{Code: strPtr("staff"), CanCreateRequests: true}}
 	adapter.config.PatronProfiles = &codeOnly
@@ -263,11 +264,14 @@ func TestValidatePatronProfileRules(t *testing.T) {
 	adapter.config.PatronProfiles = &firstMatchWins
 	assert.NoError(t, adapter.validatePatronProfile(response))
 
-	bothComponentsMustMatch := dirapi.PatronProfiles{
+	labelDoesNotAffectMatching := dirapi.PatronProfiles{
 		{Code: strPtr("STAFF"), Name: strPtr("Student"), CanCreateRequests: false},
 		{CanCreateRequests: true},
 	}
-	adapter.config.PatronProfiles = &bothComponentsMustMatch
+	adapter.config.PatronProfiles = &labelDoesNotAffectMatching
+	assert.EqualError(t, adapter.validatePatronProfile(response), `patron profile with code "STAFF" and name "Student" is not eligible to create ILL requests`)
+	labelDoesNotAffectMatching[0].CanCreateRequests = true
+	labelDoesNotAffectMatching[1].CanCreateRequests = false
 	assert.NoError(t, adapter.validatePatronProfile(response))
 
 	defaultDenied := dirapi.PatronProfiles{
@@ -278,7 +282,7 @@ func TestValidatePatronProfileRules(t *testing.T) {
 	assert.Error(t, adapter.validatePatronProfile(response))
 	assert.Error(t, adapter.validatePatronProfile(nil))
 
-	noMatch := dirapi.PatronProfiles{{Code: strPtr("OTHER"), CanCreateRequests: false}}
+	noMatch := dirapi.PatronProfiles{{Code: strPtr("OTHER"), Name: strPtr("Staff"), CanCreateRequests: false}}
 	adapter.config.PatronProfiles = &noMatch
 	assert.NoError(t, adapter.validatePatronProfile(response))
 
@@ -298,6 +302,17 @@ func TestValidatePatronProfileRules(t *testing.T) {
 	if assert.ErrorAs(t, err, &ineligibleErr) {
 		assert.Equal(t, "STAFF", ineligibleErr.ProfileCode)
 		assert.Equal(t, "Staff", ineligibleErr.ProfileName)
+	}
+}
+
+func TestValidatePatronProfileLabel(t *testing.T) {
+	profiles := dirapi.PatronProfiles{{Code: strPtr("undergrad"), Name: strPtr("Undergraduate"), CanCreateRequests: false}}
+	adapter := LmsAdapterNcip{config: dirapi.LmsConfig{PatronProfiles: &profiles}}
+	for _, description := range []string{"User Profile", ""} {
+		t.Run("description="+description, func(t *testing.T) {
+			response := lookupUserResponseWithProfile("user-id", "PROFILE", "undergrad", description)
+			assert.EqualError(t, adapter.validatePatronProfile(response), `patron profile with code "undergrad" and name "Undergraduate" is not eligible to create ILL requests`)
+		})
 	}
 }
 
