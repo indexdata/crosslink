@@ -597,6 +597,7 @@ func replaceILLConfig(ctx context.Context, queries *db.Queries, entryID uuid.UUI
 		NoteFieldSeparator: config.NoteFieldSeparator, SupplierPatronPattern: config.SupplierPatronPattern,
 		DuplicateCheckWindowHours: config.DuplicateCheckWindowHours,
 		DefaultLoanPeriod:         config.DefaultLoanPeriod,
+		MaxRequestsPerPatron:      config.MaxRequestsPerPatron,
 	})
 	return err
 }

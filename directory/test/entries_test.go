@@ -902,7 +902,8 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 			"useOfferedCosts":true,
 			"noteFieldSeparator":" | ",
 			"supplierPatronPattern":"PATRON-{requesterSymbol}",
-			"duplicateCheckWindowHours":24
+			"duplicateCheckWindowHours":24,
+			"maxRequestsPerPatron":0
 		},
 		"symbols":[{"authority":"ISIL","symbol":"CONTRACT"}],
 		"catalogConfig":{
@@ -991,11 +992,12 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 		illConfig["useOfferedCosts"] != true ||
 		illConfig["noteFieldSeparator"] != " | " ||
 		illConfig["supplierPatronPattern"] != "PATRON-{requesterSymbol}" ||
-		illConfig["duplicateCheckWindowHours"] != float64(24) {
+		illConfig["duplicateCheckWindowHours"] != float64(24) ||
+		illConfig["maxRequestsPerPatron"] != float64(0) {
 		t.Fatalf("illConfig fields did not round-trip: %#v", illConfig)
 	}
 
-	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+created.Id, `{"illConfig":{"noteFieldSeparator":" / ","useOfferedCosts":false,"lendersOfLastResort":[]}}`, headers)
+	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+created.Id, `{"illConfig":{"noteFieldSeparator":" / ","useOfferedCosts":false,"lendersOfLastResort":[],"maxRequestsPerPatron":25}}`, headers)
 	if res.StatusCode != http.StatusNoContent {
 		t.Fatalf("expected partial illConfig PATCH status %d, got %d and body %s", http.StatusNoContent, res.StatusCode, data)
 	}
@@ -1008,7 +1010,7 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 		t.Fatalf("failed to parse entry after illConfig PATCH: %v", err)
 	}
 	illConfig = entry["illConfig"].(map[string]any)
-	if illConfig["noteFieldSeparator"] != " / " || illConfig["useOfferedCosts"] != false || illConfig["iso18626Url"] != "https://iso.example.org/iso18626" {
+	if illConfig["noteFieldSeparator"] != " / " || illConfig["useOfferedCosts"] != false || illConfig["iso18626Url"] != "https://iso.example.org/iso18626" || illConfig["maxRequestsPerPatron"] != float64(25) {
 		t.Fatalf("partial illConfig PATCH did not merge fields: %#v", illConfig)
 	}
 	if _, ok := illConfig["lendersOfLastResort"]; ok {

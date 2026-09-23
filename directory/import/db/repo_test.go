@@ -149,6 +149,9 @@ func TestImportEntryCreatesCompleteAggregateWithGeneratedIDs(t *testing.T) {
 	var zoomOptions map[string]string
 	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT zoom_options FROM catalog_configs WHERE entry=$1`, entryID).Scan(&zoomOptions))
 	require.Equal(t, map[string]string{"user": "private"}, zoomOptions)
+	var maxRequestsPerPatron int32
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT max_requests_per_patron FROM ill_configs WHERE entry=$1`, entryID).Scan(&maxRequestsPerPatron))
+	require.Zero(t, maxRequestsPerPatron)
 }
 
 func TestImportEntryConflictPoliciesAndUpdateFullSynchronization(t *testing.T) {
@@ -1321,6 +1324,7 @@ func completeEntryAggregate(symbol string) model.EntryAggregate {
 	text := "value"
 	metadataMode := "replace"
 	truth := true
+	zero := int32(0)
 	aggregate.Data.Endpoints = []model.ServiceEndpoint{{Name: "ISO", Type: "ISO18626", Address: "https://example.test/ill"}}
 	aggregate.Data.Addresses = []model.Address{{Type: "Default", Components: []model.AddressComponent{{Seq: 1, Type: "Locality", Value: "Riga"}}}}
 	aggregate.Data.Closures = []model.Closure{{StartDate: "2026-12-24", EndDate: "2026-12-26", Reason: "Holiday"}}
@@ -1332,7 +1336,7 @@ func completeEntryAggregate(symbol string) model.EntryAggregate {
 		HoldingsFormat:     &model.HoldingsParserConfig{Marc: &model.MarcHoldingsParserConfig{MainField: &text}},
 		MetadataFormat:     &model.MetadataParserConfig{Marc21: &model.MarcMetadataParserConfig{Title: &text}},
 	}
-	aggregate.Data.ILLConfig = &model.ILLConfig{ISO18626URL: &text, LendersOfLastResort: []model.SymbolRef{}, IncludeSupplierInfo: &truth}
+	aggregate.Data.ILLConfig = &model.ILLConfig{ISO18626URL: &text, LendersOfLastResort: []model.SymbolRef{}, IncludeSupplierInfo: &truth, MaxRequestsPerPatron: &zero}
 	aggregate.Data.HoldingsPolicy = &model.HoldingsPolicy{
 		Locations:         []model.HoldingsLocation{{Code: "MAIN", Name: "Main", SupplyPreference: 1}},
 		ShelvingLocations: []model.HoldingsShelvingLocation{},

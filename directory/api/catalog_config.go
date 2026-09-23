@@ -251,6 +251,7 @@ func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) db.UpsertIllConfigPar
 		SupplierPatronPattern:       cfg.SupplierPatronPattern,
 		DuplicateCheckWindowHours:   cfg.DuplicateCheckWindowHours,
 		DefaultLoanPeriod:           nullableLoanPeriod(cfg),
+		MaxRequestsPerPatron:        nullableMaxRequestsPerPatron(cfg),
 	}
 	if cfg.Iso18626Vendor != nil {
 		vendor := string(*cfg.Iso18626Vendor)
@@ -274,6 +275,7 @@ func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllC
 		SupplierPatronPattern:       original.SupplierPatronPattern,
 		DuplicateCheckWindowHours:   original.DuplicateCheckWindowHours,
 		DefaultLoanPeriod:           original.DefaultLoanPeriod,
+		MaxRequestsPerPatron:        original.MaxRequestsPerPatron,
 	}
 
 	params.Iso18626Url = derefOrDefaultPtr(cfg.Iso18626Url, params.Iso18626Url)
@@ -295,6 +297,9 @@ func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllC
 	if cfg.DefaultLoanPeriod.IsSpecified() {
 		params.DefaultLoanPeriod = nullableLoanPeriod(cfg)
 	}
+	if cfg.MaxRequestsPerPatron.IsSpecified() {
+		params.MaxRequestsPerPatron = nullableMaxRequestsPerPatron(cfg)
+	}
 	return params
 }
 
@@ -304,6 +309,14 @@ func nullableLoanPeriod(cfg IllConfig) *int32 {
 		return nil
 	}
 	return &days
+}
+
+func nullableMaxRequestsPerPatron(cfg IllConfig) *int32 {
+	value, err := cfg.MaxRequestsPerPatron.Get()
+	if err != nil {
+		return nil
+	}
+	return &value
 }
 
 func boolPtr(value bool) *bool {

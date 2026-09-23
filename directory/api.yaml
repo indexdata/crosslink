@@ -1756,6 +1756,7 @@ components:
         supplierPatronPattern: { type: string, nullable: true }
         duplicateCheckWindowHours: { type: integer, format: int32, minimum: 0, nullable: true }
         defaultLoanPeriod: { type: integer, format: int32, minimum: 1, nullable: true }
+        maxRequestsPerPatron: { type: integer, format: int32, minimum: 0, nullable: true }
 
     ImportCatalogConfig:
       type: object
@@ -2231,6 +2232,12 @@ components:
           nullable: true
           minimum: 1
           description: Default supplier loan period in calendar days. Omitted or null disables the fallback.
+        maxRequestsPerPatron:
+          type: integer
+          format: int32
+          nullable: true
+          minimum: 0
+          description: Maximum number of active requests allowed per patron. 0, omitted, or null disables the limit.
         iso18626Url:
           type: string
           description: URL of the ISO18626 service. When set, used instead of an ISO18626 service from endpoints.

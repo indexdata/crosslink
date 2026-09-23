@@ -25,6 +25,8 @@ const (
 	BorrowerStateNew              pr_db.PatronRequestState = "NEW"
 	BorrowerStateInvalidPatron    pr_db.PatronRequestState = "INVALID_PATRON"
 	BorrowerStateValidated        pr_db.PatronRequestState = "VALIDATED"
+	BorrowerStateOverLimit        pr_db.PatronRequestState = "OVER_LIMIT"
+	BorrowerStateLimitChecked     pr_db.PatronRequestState = "LIMIT_CHECKED"
 	BorrowerStateMetadataUpdated  pr_db.PatronRequestState = "METADATA_UPDATED"
 	BorrowerStateNeedsReview      pr_db.PatronRequestState = "NEEDS_REVIEW"
 	BorrowerStateReadyToSend      pr_db.PatronRequestState = "READY_TO_SEND"
@@ -74,6 +76,8 @@ const (
 
 const (
 	BorrowerActionValidatePatron       pr_db.PatronRequestAction = "validate-patron"
+	BorrowerActionCheckLimit           pr_db.PatronRequestAction = "check-limit"
+	BorrowerActionOverrideLimit        pr_db.PatronRequestAction = "override-limit"
 	BorrowerActionUpdateMetadata       pr_db.PatronRequestAction = "update-metadata"
 	BorrowerActionCheckDuplicate       pr_db.PatronRequestAction = "check-duplicate"
 	BorrowerActionSendRequest          pr_db.PatronRequestAction = "send-request"
@@ -152,6 +156,8 @@ func requesterBuiltInStates() []string {
 		string(BorrowerStateNew),
 		string(BorrowerStateInvalidPatron),
 		string(BorrowerStateValidated),
+		string(BorrowerStateOverLimit),
+		string(BorrowerStateLimitChecked),
 		string(BorrowerStateMetadataUpdated),
 		string(BorrowerStateNeedsReview),
 		string(BorrowerStateReadyToSend),
@@ -203,6 +209,10 @@ func requesterBuiltInActions() []proapi.ActionCapability {
 		{Name: string(BorrowerActionRenew), Parameters: []string{"note"}},
 		{
 			Name:       string(BorrowerActionValidatePatron),
+			Parameters: []string{},
+		},
+		{
+			Name:       string(BorrowerActionCheckLimit),
 			Parameters: []string{},
 		},
 		{
@@ -275,6 +285,7 @@ func requesterBuiltInActions() []proapi.ActionCapability {
 			Parameters: []string{},
 		},
 		transitionActionCapability(BorrowerActionSkipPatronValidation),
+		transitionActionCapability(BorrowerActionOverrideLimit),
 		transitionActionCapability(BorrowerActionSkipMetadataUpdate),
 		transitionActionCapability(BorrowerActionCloseRequest),
 	}
