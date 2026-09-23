@@ -155,17 +155,20 @@ func (l *LmsAdapterNcip) validatePatronProfile(response *ncip.LookupUserResponse
 	}
 	candidates := patronProfileCandidates(response)
 	if len(candidates) == 0 {
-		// Keep an empty candidate so a rule with neither code nor name can
+		// Keep an empty candidate so a rule without a code can
 		// provide the configured default when no profile was returned.
 		candidates = []patronProfileCandidate{{}}
 	}
 	for _, profile := range *l.config.PatronProfiles {
 		for _, candidate := range candidates {
 			codeMatches := profile.Code == nil || strings.EqualFold(strings.TrimSpace(*profile.Code), candidate.code)
-			nameMatches := profile.Name == nil || strings.EqualFold(strings.TrimSpace(*profile.Name), candidate.name)
-			if codeMatches && nameMatches {
+			if codeMatches {
 				if !profile.CanCreateRequests {
-					return &PatronProfileIneligibleError{ProfileCode: candidate.code, ProfileName: candidate.name}
+					name := candidate.name
+					if profile.Name != nil {
+						name = *profile.Name
+					}
+					return &PatronProfileIneligibleError{ProfileCode: candidate.code, ProfileName: name}
 				}
 				return nil
 			}
