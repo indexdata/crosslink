@@ -8,6 +8,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestOpenAPI31PreservesNullableSchemas(t *testing.T) {
+	for _, spec := range loadImportContracts(t) {
+		require.Equal(t, "3.1.0", spec.OpenAPI)
+		require.NoError(t, spec.Validate(context.Background()))
+
+		require.NoError(t, spec.Components.Schemas["ZoomConfigPatch"].Value.Properties["options"].Value.AdditionalProperties.Schema.Value.VisitJSON(nil))
+		require.NoError(t, spec.Components.Schemas["CatalogConfigPatch"].Value.Properties["profile"].Value.VisitJSON(nil))
+		require.Contains(t, spec.Components.Schemas["CreateClosure"].Value.Required, "entry")
+		require.NotContains(t, spec.Components.Schemas["AddEntry"].Value.Properties, "closures")
+	}
+}
+
 func TestImportOpenAPIContract(t *testing.T) {
 	spec, err := GetSpec()
 	require.NoError(t, err)
@@ -229,9 +241,11 @@ func requirePropertySchemaRef(t *testing.T, contract *openapi3.T, schemaName, pr
 	if property.Ref == want {
 		return
 	}
-	for _, schema := range property.Value.AllOf {
-		if schema.Ref == want {
-			return
+	for _, schemas := range [][]*openapi3.SchemaRef{property.Value.AllOf, property.Value.AnyOf} {
+		for _, schema := range schemas {
+			if schema.Ref == want {
+				return
+			}
 		}
 	}
 	require.Equal(t, want, property.Ref)

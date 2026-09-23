@@ -1,4 +1,4 @@
-openapi: "3.0.0"
+openapi: "3.1.0"
 info:
   version: 1.0.0
   title: Directory API
@@ -102,7 +102,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Entry'
+              $ref: '#/components/schemas/AddEntry'
       responses:
         '201':
           description: Entry response
@@ -581,7 +581,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Tier'
+              $ref: '#/components/schemas/AddTier'
       responses:
         '201':
           description: Tier response
@@ -792,7 +792,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Network'
+              $ref: '#/components/schemas/AddNetwork'
       responses:
         '201':
           description: Network response
@@ -1003,7 +1003,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EntryTier'
+              $ref: '#/components/schemas/CreateEntryTier'
       responses:
         '201':
           description: Entry Tier response
@@ -1361,7 +1361,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Closure'
+              $ref: '#/components/schemas/CreateClosure'
       responses:
         '201':
           description: Closure response
@@ -1559,6 +1559,237 @@ components:
       enum: [fail, skip, update]
       default: fail
 
+    AddEntry:
+      type: object
+      x-go-type: Entry
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+        type:
+          $ref: '#/components/schemas/EntryType'
+        parent:
+          type: string
+          format: uuid
+        description:
+          type: string
+        organizationId:
+          type: string
+        contactName:
+          type: string
+        email:
+          type: string
+        fromEmail:
+          type: string
+        tenant:
+          type: string
+          description: Tenant that owns the entry; only consortial administrators may set this field.
+        vendor:
+          $ref: '#/components/schemas/EntryVendor'
+        phoneNumber:
+          type: string
+        lmsLocationCode:
+          type: string
+        illConfig:
+          $ref: '#/components/schemas/AddEntryIllConfig'
+        hrid:
+          type: string
+        timeZone:
+          type: string
+        symbols:
+          type: array
+          items:
+            $ref: '#/components/schemas/AddEntrySymbol'
+        addresses:
+          type: array
+          items:
+            $ref: '#/components/schemas/AddEntryAddress'
+        endpoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/AddEntryServiceEndpoint'
+        lmsConfig:
+          description: Configuration for LMS (Library Management System) integration via NCIP protocol
+          allOf:
+            - $ref: '#/components/schemas/LmsConfig'
+        catalogConfig:
+          $ref: '#/components/schemas/CatalogConfig'
+        holdingsPolicy:
+          description: Policy that determines whether and in which order holdings may supply an item.
+          allOf:
+            - $ref: '#/components/schemas/HoldingsPolicy'
+
+    AddEntrySymbol:
+      type: object
+      additionalProperties: false
+      x-go-type: Symbol
+      required:
+        - symbol
+        - authority
+      properties:
+        symbol:
+          type: string
+          minLength: 1
+          description: Uppercase string
+        authority:
+          type: string
+          minLength: 1
+          description: Uppercase string
+
+    AddEntryServiceEndpoint:
+      type: object
+      additionalProperties: false
+      x-go-type: ServiceEndpoint
+      required:
+        - name
+        - type
+        - address
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        address:
+          type: string
+
+    AddEntryAddress:
+      x-go-type: Address
+      allOf:
+        - $ref: '#/components/schemas/AddressProperties'
+
+    CreateClosure:
+      type: object
+      additionalProperties: false
+      x-go-type: Closure
+      required:
+        - entry
+        - startDate
+        - endDate
+        - reason
+      properties:
+        entry:
+          type: string
+          format: uuid
+        startDate:
+          type: string
+          format: date
+          description: ISO8601 date
+        endDate:
+          type: string
+          format: date
+          description: ISO8601 date
+        reason:
+          type: string
+
+    AddEntryIllConfig:
+      type: object
+      x-go-type: IllConfig
+      properties:
+        defaultLoanPeriod:
+          type: [integer, "null"]
+          format: int32
+          minimum: 1
+          description: Default supplier loan period in calendar days. Omitted or null disables the fallback.
+        iso18626Url:
+          type: string
+          description: URL of the ISO18626 service. When set, used instead of an ISO18626 service from endpoints.
+        iso18626Vendor:
+          description: ISO18626 service vendor. Used only when iso18626Url is non-empty.
+          allOf:
+            - $ref: '#/components/schemas/EntryVendor'
+        lendersOfLastResort:
+          type: array
+          description: Suppliers appended to the end of the rota when no regular supplier can fill the request. Each normalized authority and symbol pair must be unique and exist in the directory; authorities must not contain colons.
+          items:
+            $ref: '#/components/schemas/AddEntrySymbol'
+        includeRequestingAgencyInfo:
+          type: boolean
+          description: Whether outgoing requests include requestingAgencyInfo populated from the requester directory entry.
+        includeSupplierInfo:
+          type: boolean
+          description: Whether outgoing requests include supplierInfo populated from the supplier directory entry.
+        includeReturnInfo:
+          type: boolean
+          description: Whether Loaned messages include returnInfo populated from the supplier directory entry.
+        includeVendorNote:
+          type: boolean
+          description: Whether broker-generated supplying-agency messages include the supplier vendor in the note.
+        useOfferedCosts:
+          type: boolean
+          description: Whether deliveryCosts are transferred to offeredCosts for messages sent to this requester.
+        noteFieldSeparator:
+          type: string
+          description: Separator used between fields added to notes in messages sent to this entry.
+        supplierPatronPattern:
+          type: string
+          description: Format pattern used to create a patron ID for requests received by this supplier.
+        duplicateCheckWindowHours:
+          type: integer
+          format: int32
+          description: The number of hours to check for duplicate requests. If a request is submitted within this window, it will be considered a duplicate.
+          minimum: 0
+
+    AddTier:
+      type: object
+      x-go-type: Tier
+      required:
+        - consortium
+        - name
+        - level
+        - type
+        - cost
+      properties:
+        consortium:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          pattern: '.*\S.*'
+        level:
+          $ref: '#/components/schemas/TierLevel'
+        type:
+          $ref: '#/components/schemas/TierType'
+        cost:
+          type: number
+          format: double
+          default: 0.0
+
+    AddNetwork:
+      type: object
+      x-go-type: Network
+      required:
+        - consortium
+        - name
+      properties:
+        consortium:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          pattern: '.*\S.*'
+        reciprocal:
+          type: boolean
+
+    CreateEntryTier:
+      type: object
+      x-go-type: EntryTier
+      required:
+        - entry
+        - tier
+      properties:
+        entry:
+          type: string
+          format: uuid
+          description: ID of entry
+        tier:
+          type: string
+          format: uuid
+          description: ID of tier
+
     EntryType:
       type: string
       enum: [Institution, Consortium, Branch]
@@ -1708,54 +1939,49 @@ components:
       required: [vendor, ncipNamespaceEnabled, bibIdNormalization, address, fromAgency, fromAgencyAuthentication, toAgency, lookupUserEnabled, acceptItemEnabled, checkInItemEnabled, checkOutItemEnabled, itemLocation, requestItemRequestType, requestItemRequestScopeType, requestItemBibIdCode, requestItemEnabled, requestItemPickupLocationEnabled, requesterPickupLocation, supplierPickupLocation, requesterPatronPattern, patronProfiles]
       properties:
         vendor:
-          allOf: [{ $ref: '#/components/schemas/HostLmsVendor' }]
-          nullable: true
-        ncipNamespaceEnabled: { type: boolean, nullable: true }
+          anyOf: [{ $ref: '#/components/schemas/HostLmsVendor' }, { type: "null" }]
+        ncipNamespaceEnabled: { type: [boolean, "null"] }
         bibIdNormalization:
-          allOf: [{ $ref: '#/components/schemas/BibIdNormalization' }]
-          nullable: true
+          anyOf: [{ $ref: '#/components/schemas/BibIdNormalization' }, { type: "null" }]
         address: { type: string }
         fromAgency: { type: string }
-        fromAgencyAuthentication: { type: string, nullable: true }
-        toAgency: { type: string, nullable: true }
-        lookupUserEnabled: { type: boolean, nullable: true }
-        acceptItemEnabled: { type: boolean, nullable: true }
-        checkInItemEnabled: { type: boolean, nullable: true }
-        checkOutItemEnabled: { type: boolean, nullable: true }
-        itemLocation: { type: string, nullable: true }
-        requestItemRequestType: { type: string, nullable: true }
-        requestItemRequestScopeType: { type: string, nullable: true }
-        requestItemBibIdCode: { type: string, nullable: true }
-        requestItemEnabled: { type: boolean, nullable: true }
-        requestItemPickupLocationEnabled: { type: boolean, nullable: true }
-        requesterPickupLocation: { type: string, nullable: true }
-        supplierPickupLocation: { type: string, nullable: true }
-        requesterPatronPattern: { type: string, nullable: true }
+        fromAgencyAuthentication: { type: [string, "null"] }
+        toAgency: { type: [string, "null"] }
+        lookupUserEnabled: { type: [boolean, "null"] }
+        acceptItemEnabled: { type: [boolean, "null"] }
+        checkInItemEnabled: { type: [boolean, "null"] }
+        checkOutItemEnabled: { type: [boolean, "null"] }
+        itemLocation: { type: [string, "null"] }
+        requestItemRequestType: { type: [string, "null"] }
+        requestItemRequestScopeType: { type: [string, "null"] }
+        requestItemBibIdCode: { type: [string, "null"] }
+        requestItemEnabled: { type: [boolean, "null"] }
+        requestItemPickupLocationEnabled: { type: [boolean, "null"] }
+        requesterPickupLocation: { type: [string, "null"] }
+        supplierPickupLocation: { type: [string, "null"] }
+        requesterPatronPattern: { type: [string, "null"] }
         patronProfiles:
-          allOf: [{ $ref: '#/components/schemas/PatronProfiles' }]
-          nullable: true
-
+          anyOf: [{ $ref: '#/components/schemas/PatronProfiles' }, { type: "null" }]
     ImportIllConfig:
       type: object
       additionalProperties: false
       required: [iso18626Url, iso18626Vendor, lendersOfLastResort, includeRequestingAgencyInfo, includeSupplierInfo, includeReturnInfo, includeVendorNote, useOfferedCosts, noteFieldSeparator, supplierPatronPattern, duplicateCheckWindowHours]
       properties:
-        iso18626Url: { type: string, nullable: true }
+        iso18626Url: { type: [string, "null"] }
         iso18626Vendor:
-          allOf: [{ $ref: '#/components/schemas/EntryVendor' }]
-          nullable: true
+          anyOf: [{ $ref: '#/components/schemas/EntryVendor' }, { type: "null" }]
         lendersOfLastResort:
           type: array
           items: { $ref: '#/components/schemas/SymbolProperties' }
-        includeRequestingAgencyInfo: { type: boolean, nullable: true }
-        includeSupplierInfo: { type: boolean, nullable: true }
-        includeReturnInfo: { type: boolean, nullable: true }
-        includeVendorNote: { type: boolean, nullable: true }
-        useOfferedCosts: { type: boolean, nullable: true }
-        noteFieldSeparator: { type: string, nullable: true }
-        supplierPatronPattern: { type: string, nullable: true }
-        duplicateCheckWindowHours: { type: integer, format: int32, minimum: 0, nullable: true }
-        defaultLoanPeriod: { type: integer, format: int32, minimum: 1, nullable: true }
+        includeRequestingAgencyInfo: { type: [boolean, "null"] }
+        includeSupplierInfo: { type: [boolean, "null"] }
+        includeReturnInfo: { type: [boolean, "null"] }
+        includeVendorNote: { type: [boolean, "null"] }
+        useOfferedCosts: { type: [boolean, "null"] }
+        noteFieldSeparator: { type: [string, "null"] }
+        supplierPatronPattern: { type: [string, "null"] }
+        duplicateCheckWindowHours: { type: [integer, "null"], format: int32, minimum: 0 }
+        defaultLoanPeriod: { type: [integer, "null"], format: int32, minimum: 1 }
 
     ImportCatalogConfig:
       type: object
@@ -1763,34 +1989,26 @@ components:
       required: [profile, metadataUpdateMode, sru, zoom, queryConfig, holdingsFormat, metadataFormat]
       properties:
         profile:
-          allOf: [{ $ref: '#/components/schemas/HostLmsVendor' }]
-          nullable: true
+          anyOf: [{ $ref: '#/components/schemas/HostLmsVendor' }, { type: "null" }]
         metadataUpdateMode:
-          allOf: [{ $ref: '#/components/schemas/MetadataUpdateMode' }]
-          nullable: true
+          anyOf: [{ $ref: '#/components/schemas/MetadataUpdateMode' }, { type: "null" }]
         sru:
-          allOf: [{ $ref: '#/components/schemas/ImportSruConfig' }]
-          nullable: true
+          anyOf: [{ $ref: '#/components/schemas/ImportSruConfig' }, { type: "null" }]
         zoom:
-          allOf: [{ $ref: '#/components/schemas/ImportZoomConfig' }]
-          nullable: true
+          anyOf: [{ $ref: '#/components/schemas/ImportZoomConfig' }, { type: "null" }]
         queryConfig:
-          allOf: [{ $ref: '#/components/schemas/ImportQueryConfig' }]
-          nullable: true
+          anyOf: [{ $ref: '#/components/schemas/ImportQueryConfig' }, { type: "null" }]
         holdingsFormat:
-          allOf: [{ $ref: '#/components/schemas/ImportHoldingsParserConfig' }]
-          nullable: true
+          anyOf: [{ $ref: '#/components/schemas/ImportHoldingsParserConfig' }, { type: "null" }]
         metadataFormat:
-          allOf: [{ $ref: '#/components/schemas/ImportMetadataParserConfig' }]
-          nullable: true
-
+          anyOf: [{ $ref: '#/components/schemas/ImportMetadataParserConfig' }, { type: "null" }]
     ImportSruConfig:
       type: object
       additionalProperties: false
       required: [address, recordSchema]
       properties:
         address: { type: string }
-        recordSchema: { type: string, nullable: true }
+        recordSchema: { type: [string, "null"] }
 
     ImportZoomConfig:
       type: object
@@ -1799,8 +2017,7 @@ components:
       properties:
         address: { type: string }
         options:
-          type: object
-          nullable: true
+          type: [object, "null"]
           additionalProperties: { type: string }
 
     ImportQueryConfig:
@@ -1809,12 +2026,11 @@ components:
       required: [type, identifier, isbn, issn, title]
       properties:
         type:
-          allOf: [{ $ref: '#/components/schemas/QueryConfigType' }]
-          nullable: true
-        identifier: { type: string, nullable: true }
-        isbn: { type: string, nullable: true }
-        issn: { type: string, nullable: true }
-        title: { type: string, nullable: true }
+          anyOf: [{ $ref: '#/components/schemas/QueryConfigType' }, { type: "null" }]
+        identifier: { type: [string, "null"] }
+        isbn: { type: [string, "null"] }
+        issn: { type: [string, "null"] }
+        title: { type: [string, "null"] }
 
     ImportHoldingsParserConfig:
       type: object
@@ -1822,13 +2038,11 @@ components:
       required: [marc, marc21plus1, opac, reservoir]
       properties:
         marc:
-          allOf: [{ $ref: '#/components/schemas/ImportMarcHoldingsParserConfig' }]
-          nullable: true
-        marc21plus1: { type: object, nullable: true, additionalProperties: false }
+          anyOf: [{ $ref: '#/components/schemas/ImportMarcHoldingsParserConfig' }, { type: "null" }]
+        marc21plus1: { type: [object, "null"], additionalProperties: false }
         opac:
-          allOf: [{ $ref: '#/components/schemas/ImportOpacHoldingsParserConfig' }]
-          nullable: true
-        reservoir: { type: object, nullable: true, additionalProperties: false }
+          anyOf: [{ $ref: '#/components/schemas/ImportOpacHoldingsParserConfig' }, { type: "null" }]
+        reservoir: { type: [object, "null"], additionalProperties: false }
 
     ImportMarcHoldingsParserConfig:
       type: object
@@ -1836,15 +2050,14 @@ components:
       required: [availability, callNumberSubField, itemIdSubField, locationSubField, mainField, restrictedSubField, shelvingLocationSubField]
       properties:
         availability:
-          type: array
-          nullable: true
+          type: [array, "null"]
           items: { $ref: '#/components/schemas/ImportMarcAvailabilityPredicate' }
-        callNumberSubField: { type: string, nullable: true }
-        itemIdSubField: { type: string, nullable: true }
-        locationSubField: { type: string, nullable: true }
-        mainField: { type: string, nullable: true }
-        restrictedSubField: { type: string, nullable: true }
-        shelvingLocationSubField: { type: string, nullable: true }
+        callNumberSubField: { type: [string, "null"] }
+        itemIdSubField: { type: [string, "null"] }
+        locationSubField: { type: [string, "null"] }
+        mainField: { type: [string, "null"] }
+        restrictedSubField: { type: [string, "null"] }
+        shelvingLocationSubField: { type: [string, "null"] }
 
     ImportMarcAvailabilityPredicate:
       type: object
@@ -1853,7 +2066,7 @@ components:
       properties:
         subField: { type: string, minLength: 1 }
         operator: { $ref: '#/components/schemas/MarcAvailabilityOperator' }
-        value: { type: string, nullable: true }
+        value: { type: [string, "null"] }
 
     ImportOpacHoldingsParserConfig:
       type: object
@@ -1861,20 +2074,17 @@ components:
       required: [availabilityRule, availablePublicNotes, requireLocalLocation, shelvingLocationSource, includeItemId, includeItemLoanPolicy, includeTemporaryLocation, allCirculations]
       properties:
         availabilityRule:
-          allOf: [{ $ref: '#/components/schemas/OpacAvailabilityRule' }]
-          nullable: true
+          anyOf: [{ $ref: '#/components/schemas/OpacAvailabilityRule' }, { type: "null" }]
         availablePublicNotes:
-          type: array
-          nullable: true
+          type: [array, "null"]
           items: { type: string }
-        requireLocalLocation: { type: boolean, nullable: true }
+        requireLocalLocation: { type: [boolean, "null"] }
         shelvingLocationSource:
-          allOf: [{ $ref: '#/components/schemas/ShelvingLocationSource' }]
-          nullable: true
-        includeItemId: { type: boolean, nullable: true }
-        includeItemLoanPolicy: { type: boolean, nullable: true }
-        includeTemporaryLocation: { type: boolean, nullable: true }
-        allCirculations: { type: boolean, nullable: true }
+          anyOf: [{ $ref: '#/components/schemas/ShelvingLocationSource' }, { type: "null" }]
+        includeItemId: { type: [boolean, "null"] }
+        includeItemLoanPolicy: { type: [boolean, "null"] }
+        includeTemporaryLocation: { type: [boolean, "null"] }
+        allCirculations: { type: [boolean, "null"] }
 
     ImportMetadataParserConfig:
       type: object
@@ -1882,21 +2092,19 @@ components:
       required: [marc21]
       properties:
         marc21:
-          allOf: [{ $ref: '#/components/schemas/ImportMarcMetadataParserConfig' }]
-          nullable: true
-
+          anyOf: [{ $ref: '#/components/schemas/ImportMarcMetadataParserConfig' }, { type: "null" }]
     ImportMarcMetadataParserConfig:
       type: object
       additionalProperties: false
       required: [author, edition, identifier, isbn, issn, subtitle, title]
       properties:
-        author: { type: string, nullable: true }
-        edition: { type: string, nullable: true }
-        identifier: { type: string, nullable: true }
-        isbn: { type: string, nullable: true }
-        issn: { type: string, nullable: true }
-        subtitle: { type: string, nullable: true }
-        title: { type: string, nullable: true }
+        author: { type: [string, "null"] }
+        edition: { type: [string, "null"] }
+        identifier: { type: [string, "null"] }
+        isbn: { type: [string, "null"] }
+        issn: { type: [string, "null"] }
+        subtitle: { type: [string, "null"] }
+        title: { type: [string, "null"] }
 
     ImportHoldingsPolicy:
       type: object
@@ -1921,7 +2129,7 @@ components:
       additionalProperties: false
       required: [locationCode, shelvingLocationCode, supplyPreference]
       properties:
-        locationCode: { type: string, nullable: true }
+        locationCode: { type: [string, "null"] }
         shelvingLocationCode: { type: string }
         supplyPreference: { $ref: '#/components/schemas/HoldingsSupplyPreference' }
 
@@ -1933,21 +2141,19 @@ components:
         name: { type: string, minLength: 1 }
         type: { $ref: '#/components/schemas/EntryType' }
         parent:
-          allOf: [{ $ref: '#/components/schemas/SymbolProperties' }]
-          nullable: true
-        description: { type: string, nullable: true }
-        organizationId: { type: string, nullable: true }
-        contactName: { type: string, nullable: true }
-        email: { type: string, nullable: true }
-        fromEmail: { type: string, nullable: true }
-        tenant: { type: string, nullable: true }
+          anyOf: [{ $ref: '#/components/schemas/SymbolProperties' }, { type: "null" }]
+        description: { type: [string, "null"] }
+        organizationId: { type: [string, "null"] }
+        contactName: { type: [string, "null"] }
+        email: { type: [string, "null"] }
+        fromEmail: { type: [string, "null"] }
+        tenant: { type: [string, "null"] }
         vendor:
-          allOf: [{ $ref: '#/components/schemas/EntryVendor' }]
-          nullable: true
-        phoneNumber: { type: string, nullable: true }
-        lmsLocationCode: { type: string, nullable: true }
-        hrid: { type: string, nullable: true }
-        timeZone: { type: string, nullable: true }
+          anyOf: [{ $ref: '#/components/schemas/EntryVendor' }, { type: "null" }]
+        phoneNumber: { type: [string, "null"] }
+        lmsLocationCode: { type: [string, "null"] }
+        hrid: { type: [string, "null"] }
+        timeZone: { type: [string, "null"] }
         symbols:
           type: array
           items: { $ref: '#/components/schemas/SymbolProperties' }
@@ -1961,18 +2167,13 @@ components:
           type: array
           items: { $ref: '#/components/schemas/ClosureProperties' }
         lmsConfig:
-          allOf: [{ $ref: '#/components/schemas/ImportLmsConfig' }]
-          nullable: true
+          anyOf: [{ $ref: '#/components/schemas/ImportLmsConfig' }, { type: "null" }]
         catalogConfig:
-          allOf: [{ $ref: '#/components/schemas/ImportCatalogConfig' }]
-          nullable: true
+          anyOf: [{ $ref: '#/components/schemas/ImportCatalogConfig' }, { type: "null" }]
         illConfig:
-          allOf: [{ $ref: '#/components/schemas/ImportIllConfig' }]
-          nullable: true
+          anyOf: [{ $ref: '#/components/schemas/ImportIllConfig' }, { type: "null" }]
         holdingsPolicy:
-          allOf: [{ $ref: '#/components/schemas/ImportHoldingsPolicy' }]
-          nullable: true
-
+          anyOf: [{ $ref: '#/components/schemas/ImportHoldingsPolicy' }, { type: "null" }]
     ImportTierData:
       type: object
       additionalProperties: false
@@ -1990,7 +2191,7 @@ components:
       additionalProperties: false
       required: [reciprocal, entries]
       properties:
-        reciprocal: { type: boolean, nullable: true }
+        reciprocal: { type: [boolean, "null"] }
         entries:
           type: array
           items: { $ref: '#/components/schemas/ImportNetworkAssignment' }
@@ -2226,9 +2427,8 @@ components:
       type: object
       properties:
         defaultLoanPeriod:
-          type: integer
+          type: [integer, "null"]
           format: int32
-          nullable: true
           minimum: 1
           description: Default supplier loan period in calendar days. Omitted or null disables the fallback.
         iso18626Url:
@@ -2288,9 +2488,9 @@ components:
       type: object
       properties:
         profile:
-          allOf:
+          anyOf:
             - $ref: '#/components/schemas/HostLmsVendor'
-          nullable: true
+            - type: "null"
           description: Host integration profile, independent of the ILL vendor. WMS and Aleph are reserved and currently unsupported.
         sru:
           $ref: '#/components/schemas/SruConfig'
@@ -2309,9 +2509,9 @@ components:
       type: object
       properties:
         profile:
-          allOf:
+          anyOf:
             - $ref: '#/components/schemas/HostLmsVendor'
-          nullable: true
+            - type: "null"
           description: Host integration profile, independent of the ILL vendor. WMS and Aleph are reserved and currently unsupported.
         sru:
           $ref: '#/components/schemas/SruConfigPatch'
@@ -2366,8 +2566,7 @@ components:
         options:
           type: object
           additionalProperties:
-            type: string
-            nullable: true
+            type: [string, "null"]
       additionalProperties: false
     QueryConfig:
       type: object
@@ -2461,82 +2660,67 @@ components:
           type: string
           minLength: 1
         type:
-          allOf:
+          anyOf:
             - $ref: '#/components/schemas/EntryType'
-          nullable: true
+            - type: "null"
         parent:
-          type: string
+          type: [string, "null"]
           format: uuid
-          nullable: true
         description:
-          type: string
-          nullable: true
+          type: [string, "null"]
         organizationId:
-          type: string
-          nullable: true
+          type: [string, "null"]
         contactName:
-          type: string
-          nullable: true
+          type: [string, "null"]
         email:
-          type: string
-          nullable: true
+          type: [string, "null"]
         fromEmail:
-          type: string
-          nullable: true
+          type: [string, "null"]
         tenant:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: Tenant that owns the entry; only consortial administrators may modify this field.
         vendor:
-          allOf:
+          anyOf:
             - $ref: '#/components/schemas/EntryVendor'
-          nullable: true
+            - type: "null"
         phoneNumber:
-          type: string
-          nullable: true
+          type: [string, "null"]
         lmsLocationCode:
-          type: string
-          nullable: true
+          type: [string, "null"]
         illConfig:
-          allOf:
-            - $ref: '#/components/schemas/IllConfig'
-          nullable: true
+          anyOf:
+            - $ref: '#/components/schemas/AddEntryIllConfig'
+            - type: "null"
         hrid:
-          type: string
-          nullable: true
+          type: [string, "null"]
         timeZone:
-          type: string
-          nullable: true
+          type: [string, "null"]
         lmsConfig:
-          allOf:
+          anyOf:
             - $ref: '#/components/schemas/LmsConfigPatch'
-          nullable: true
+            - type: "null"
         catalogConfig:
-          allOf:
+          anyOf:
             - $ref: '#/components/schemas/CatalogConfigPatch'
-          nullable: true
+            - type: "null"
         holdingsPolicy:
-          allOf:
+          anyOf:
             - $ref: '#/components/schemas/HoldingsPolicy'
-          nullable: true
+            - type: "null"
         symbols:
-          type: array
-          nullable: true
+          type: [array, "null"]
           items:
             $ref: '#/components/schemas/SymbolPatch'
         endpoints:
-          type: array
-          nullable: true
+          type: [array, "null"]
           items:
             $ref: '#/components/schemas/ServiceEndpointPatch'
         addresses:
-          type: array
-          nullable: true
+          type: [array, "null"]
           items:
             $ref: '#/components/schemas/AddressPatch'
         closures:
-          type: array
-          nullable: true
+          type: [array, "null"]
           items:
             $ref: '#/components/schemas/ClosurePatch'
 
@@ -2649,9 +2833,9 @@ components:
         bibIdNormalization:
           $ref: '#/components/schemas/BibIdNormalization'
         vendor:
-          allOf:
+          anyOf:
             - $ref: '#/components/schemas/HostLmsVendor'
-          nullable: true
+            - type: "null"
           description: Host integration profile, independent of the ILL vendor. WMS and Aleph are reserved and currently unsupported.
         address:
           type: string
@@ -2741,70 +2925,54 @@ components:
       type: object
       properties:
         ncipNamespaceEnabled:
-          type: boolean
-          nullable: true
+          type: [boolean, "null"]
         bibIdNormalization:
-          allOf:
+          anyOf:
             - $ref: '#/components/schemas/BibIdNormalization'
-          nullable: true
+            - type: "null"
         vendor:
-          allOf:
+          anyOf:
             - $ref: '#/components/schemas/HostLmsVendor'
-          nullable: true
+            - type: "null"
           description: Host integration profile, independent of the ILL vendor. WMS and Aleph are reserved and currently unsupported.
         address:
           type: string
         fromAgency:
           type: string
         fromAgencyAuthentication:
-          type: string
-          nullable: true
+          type: [string, "null"]
         toAgency:
-          type: string
-          nullable: true
+          type: [string, "null"]
         lookupUserEnabled:
-          type: boolean
-          nullable: true
+          type: [boolean, "null"]
         acceptItemEnabled:
-          type: boolean
-          nullable: true
+          type: [boolean, "null"]
         checkInItemEnabled:
-          type: boolean
-          nullable: true
+          type: [boolean, "null"]
         checkOutItemEnabled:
-          type: boolean
-          nullable: true
+          type: [boolean, "null"]
         requestItemEnabled:
-          type: boolean
-          nullable: true
+          type: [boolean, "null"]
         itemLocation:
-          type: string
-          nullable: true
+          type: [string, "null"]
         requestItemRequestType:
-          type: string
-          nullable: true
+          type: [string, "null"]
         requestItemRequestScopeType:
-          type: string
-          nullable: true
+          type: [string, "null"]
         requestItemBibIdCode:
-          type: string
-          nullable: true
+          type: [string, "null"]
         requestItemPickupLocationEnabled:
-          type: boolean
-          nullable: true
+          type: [boolean, "null"]
         requesterPickupLocation:
-          type: string
-          nullable: true
+          type: [string, "null"]
         supplierPickupLocation:
-          type: string
-          nullable: true
+          type: [string, "null"]
         requesterPatronPattern:
-          type: string
-          nullable: true
+          type: [string, "null"]
         patronProfiles:
-          allOf:
+          anyOf:
             - $ref: '#/components/schemas/PatronProfiles'
-          nullable: true
+            - type: "null"
 
     SymbolProperties:
       type: object
@@ -3060,8 +3228,7 @@ components:
       additionalProperties: false
       properties:
         reciprocal:
-          type: boolean
-          nullable: true
+          type: [boolean, "null"]
 
     EntryNetworkDetails:
       allOf:
