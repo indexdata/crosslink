@@ -76,6 +76,8 @@ jobs:
       working-directory: ${{ matrix.modules }}
 
     - name: Test
+      env:
+        RYUK_VERBOSE: "true"
       run: make check
       working-directory: ${{ matrix.modules }}
 

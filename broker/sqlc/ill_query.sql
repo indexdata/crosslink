@@ -138,6 +138,13 @@ FROM located_supplier
 WHERE ill_transaction_id = $1
 ORDER BY ordinal;
 
+-- name: GetLocatedSuppliersByIllTransactionForUpdate :many
+SELECT *
+FROM located_supplier
+WHERE ill_transaction_id = $1
+ORDER BY ordinal
+FOR UPDATE;
+
 -- name: GetLocatedSuppliersWithPeerByIllTransaction :many
 SELECT sqlc.embed(located_supplier),
        peer.name AS supplier_name,
@@ -265,3 +272,26 @@ INSERT INTO peer (id, name, refresh_policy, refresh_time, url, vendor, broker_mo
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT ((custom_data ->> 'id')) DO NOTHING
 RETURNING sqlc.embed(peer);
+
+-- name: SaveRotaAudit :exec
+INSERT INTO event (id, timestamp, ill_transaction_id, patron_request_id, event_type, event_name, event_status, event_data, result_data, last_signal)
+VALUES ($1, now(), $2, '00000000-0000-0000-0000-000000000002', 'NOTICE', $3, 'SUCCESS', $4, '{}'::jsonb, 'notice_created');
+
+-- name: NotifyRotaAudit :exec
+SELECT pg_notify('crosslink_channel', $1::text);
+
+-- name: RotaRequestCancelled :one
+-- A broker-targeted cancellation retires this request's rota even if the
+-- supplier refuses it. Retry changes requester_request_id and starts a new scope.
+SELECT EXISTS (
+    SELECT 1
+    FROM event e
+    JOIN ill_transaction t ON t.id = e.ill_transaction_id
+    WHERE t.id = sqlc.arg(transaction_id)
+      AND e.event_name = 'requester-msg-received'
+      AND e.event_status = 'SUCCESS'
+      AND e.event_data #>> '{incomingMessage,requestingAgencyMessage,action}' = 'Cancel'
+      AND e.event_data #>> '{incomingMessage,requestingAgencyMessage,header,requestingAgencyRequestId}' = t.requester_request_id
+      AND (e.event_data #>> '{incomingMessage,requestingAgencyMessage,header,supplyingAgencyId,agencyIdType,#text}') || ':' ||
+          (e.event_data #>> '{incomingMessage,requestingAgencyMessage,header,supplyingAgencyId,agencyIdValue}') = sqlc.arg(broker_symbol)::text
+) AS cancelled;

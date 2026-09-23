@@ -233,3 +233,15 @@ ORDER BY
     CASE WHEN audience IS NOT NULL THEN 0 ELSE 1 END,
     created_at
 LIMIT 1;
+
+-- name: RotaRequestClosed :one
+-- Lock active rows as well as terminal ones. Aggregate outside the locking
+-- subquery so every match is locked, even when an earlier row is terminal.
+SELECT COALESCE(bool_or(terminal_state), false)::boolean AS closed
+FROM (
+    SELECT p.terminal_state FROM patron_request p JOIN ill_transaction i
+      ON p.requester_req_id = i.requester_request_id AND p.requester_symbol = i.requester_symbol
+    WHERE i.id = $1 AND p.side = 'borrowing'
+    ORDER BY p.id
+    FOR UPDATE OF p
+) AS borrowing_requests;

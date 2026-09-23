@@ -3,7 +3,7 @@ stateModels:
     type: StateModel
     name: CrossLink State Model
     desc: "Requester/Supplier workflow for returnable loans and non-returnable copies over ISO18626."
-    version: 3.6.0
+    version: 3.7.0
     pullslipPdfTemplateLabel: pullslip-pdf
     selector:
       serviceType: [Copy, Loan, CopyOrLoan]
@@ -59,6 +59,47 @@ stateModels:
       - name: VALIDATED
         display: Patron Validated
         desc: Patron validation has completed or been skipped
+        side: REQUESTER
+        primaryAction: check-limit
+        closingAction: close-request
+        actions:
+          - name: check-limit
+            desc: Check the patron's active-request limit
+            trigger: auto
+            transitions:
+              success: LIMIT_CHECKED
+              review: OVER_LIMIT
+          - name: close-request
+            desc: Close the request locally
+            transitions:
+              success: MANUALLY_CLOSED
+
+      - name: OVER_LIMIT
+        display: Over Limit
+        desc: Patron has reached the active-request limit
+        side: REQUESTER
+        terminal: false
+        needsAttention: true
+        primaryAction: check-limit
+        closingAction: close-request
+        actions:
+          - name: check-limit
+            desc: Recheck whether the patron now has capacity
+            transitions:
+              success: LIMIT_CHECKED
+              review: OVER_LIMIT
+          - name: override-limit
+            desc: Record a staff override and continue request preparation
+            transitions:
+              success: LIMIT_CHECKED
+          - name: close-request
+            desc: Close the request locally
+            transitions:
+              success: MANUALLY_CLOSED
+
+      - name: LIMIT_CHECKED
+        display: Limit Checked
+        desc: Patron limit check passed or was overridden by staff
         side: REQUESTER
         primaryAction: update-metadata
         closingAction: close-request

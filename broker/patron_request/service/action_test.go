@@ -45,6 +45,153 @@ func TestLmsNoticeStatus(t *testing.T) {
 	assert.Equal(t, events.EventStatusError, lmsNoticeStatus(errors.New("transport failed")))
 }
 
+func TestCheckLimitBorrowingRequestUsesActiveRequestCount(t *testing.T) {
+	limit := int32(2)
+	for _, tc := range []struct {
+		name    string
+		count   int64
+		outcome string
+	}{
+		{name: "at limit", count: 2},
+		{name: "over limit", count: 3, outcome: ActionOutcomeReview},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			config := &dirapi.IllConfig{}
+			config.MaxRequestsPerPatron.Set(limit)
+			illRepo := new(IllRepoMock)
+			illRepo.On("GetCachedPeersBySymbols", []string{"ISIL:REQ"}, mock.Anything).Return([]ill_db.Peer{{
+				CustomData: dirapi.Entry{IllConfig: config},
+			}}, "", nil)
+			prRepo := new(MockPrRepo)
+			prRepo.On("ListPatronRequests", pr_db.ListPatronRequestsParams{Limit: 1, Offset: 0}, mock.Anything).
+				Return([]pr_db.PatronRequest{{ID: "current-pr"}}, tc.count, nil)
+			actionService := CreatePatronRequestActionService(prRepo, illRepo, new(MockEventBus), new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
+			pr := pr_db.PatronRequest{
+				ID:              "current-pr",
+				Side:            SideBorrowing,
+				RequesterSymbol: getDbText("ISIL:REQ"),
+				Patron:          getDbText("patron-1"),
+			}
+
+			got := actionService.checkLimitBorrowingRequest(appCtx, pr)
+
+			assert.Equal(t, events.EventStatusSuccess, got.status)
+			if tc.outcome == "" {
+				assert.Nil(t, got.result.ActionResult)
+			} else if assert.NotNil(t, got.result.ActionResult) {
+				assert.Equal(t, tc.outcome, got.result.ActionResult.Outcome)
+			}
+			where := prRepo.lastListQuery.GetWhereClause()
+			assert.Contains(t, where, "side")
+			assert.Contains(t, where, "requester_symbol")
+			assert.Contains(t, where, "patron")
+			assert.Contains(t, where, "terminal_state")
+			args := prRepo.lastListQuery.GetQueryArguments()
+			assert.Contains(t, args, "borrowing")
+			assert.Contains(t, args, "ISIL:REQ")
+			assert.Contains(t, args, "patron-1")
+			assert.Contains(t, args, false)
+			prRepo.AssertExpectations(t)
+			illRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestCheckLimitBorrowingRequestTreatsZeroAsUnlimited(t *testing.T) {
+	limit := int32(0)
+	config := &dirapi.IllConfig{}
+	config.MaxRequestsPerPatron.Set(limit)
+	illRepo := new(IllRepoMock)
+	illRepo.On("GetCachedPeersBySymbols", []string{"ISIL:REQ"}, mock.Anything).Return([]ill_db.Peer{{
+		CustomData: dirapi.Entry{IllConfig: config},
+	}}, "", nil)
+	prRepo := new(MockPrRepo)
+	actionService := CreatePatronRequestActionService(prRepo, illRepo, new(MockEventBus), new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
+
+	got := actionService.checkLimitBorrowingRequest(appCtx, pr_db.PatronRequest{
+		RequesterSymbol: getDbText("ISIL:REQ"),
+	})
+
+	assert.Equal(t, events.EventStatusSuccess, got.status)
+	assert.Nil(t, got.result.ActionResult)
+	prRepo.AssertNotCalled(t, "ListPatronRequests", mock.Anything, mock.Anything)
+	illRepo.AssertExpectations(t)
+}
+
+func TestHandleInvokeCheckLimitTransitionsToOverLimit(t *testing.T) {
+	limit := int32(1)
+	config := &dirapi.IllConfig{}
+	config.MaxRequestsPerPatron.Set(limit)
+	illRepo := new(IllRepoMock)
+	illRepo.On("GetCachedPeersBySymbols", []string{"ISIL:REQ"}, mock.Anything).Return([]ill_db.Peer{{
+		CustomData: dirapi.Entry{IllConfig: config},
+	}}, "", nil)
+	prRepo := new(MockPrRepo)
+	pr := pr_db.PatronRequest{
+		ID:              "current-pr",
+		State:           BorrowerStateValidated,
+		Side:            SideBorrowing,
+		RequesterSymbol: getDbText("ISIL:REQ"),
+		Patron:          getDbText("patron-1"),
+		IllRequest: iso18626.Request{
+			ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
+		},
+	}
+	prRepo.On("GetPatronRequestById", pr.ID).Return(pr, nil)
+	prRepo.On("ListPatronRequests", pr_db.ListPatronRequestsParams{Limit: 1, Offset: 0}, mock.Anything).
+		Return([]pr_db.PatronRequest{{ID: pr.ID}}, int64(2), nil)
+	actionService := CreatePatronRequestActionService(prRepo, illRepo, new(MockEventBus), new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
+	action := BorrowerActionCheckLimit
+
+	status, result := actionService.handleInvokeAction(appCtx, events.Event{PatronRequestID: pr.ID, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, ActionOutcomeReview, result.ActionResult.Outcome)
+	assert.Equal(t, string(BorrowerStateOverLimit), *result.ActionResult.ToState)
+	assert.Equal(t, BorrowerStateOverLimit, prRepo.savedPr.State)
+	assert.True(t, prRepo.savedPr.NeedsAttention)
+	assert.Equal(t, string(BorrowerActionCheckLimit), prRepo.savedPr.LastAction.String)
+	prRepo.AssertExpectations(t)
+	illRepo.AssertExpectations(t)
+}
+
+func TestHandleInvokeCheckLimitFailureStaysValidated(t *testing.T) {
+	limit := int32(1)
+	config := &dirapi.IllConfig{}
+	config.MaxRequestsPerPatron.Set(limit)
+	illRepo := new(IllRepoMock)
+	illRepo.On("GetCachedPeersBySymbols", []string{"ISIL:REQ"}, mock.Anything).Return([]ill_db.Peer{{
+		CustomData: dirapi.Entry{IllConfig: config},
+	}}, "", nil)
+	prRepo := new(MockPrRepo)
+	pr := pr_db.PatronRequest{
+		ID:              "current-pr",
+		State:           BorrowerStateValidated,
+		Side:            SideBorrowing,
+		RequesterSymbol: getDbText("ISIL:REQ"),
+		IllRequest: iso18626.Request{
+			ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
+		},
+	}
+	prRepo.On("GetPatronRequestById", pr.ID).Return(pr, nil)
+	actionService := CreatePatronRequestActionService(prRepo, illRepo, new(MockEventBus), new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
+	action := BorrowerActionCheckLimit
+
+	status, result := actionService.handleInvokeAction(appCtx, events.Event{PatronRequestID: pr.ID, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "missing patron for patron limit check", result.EventError.Message)
+	assert.Equal(t, ActionOutcomeFailure, result.ActionResult.Outcome)
+	assert.Nil(t, result.ActionResult.ToState)
+	assert.Equal(t, BorrowerStateValidated, prRepo.savedPr.State)
+	assert.Equal(t, string(BorrowerActionCheckLimit), prRepo.savedPr.LastAction.String)
+	assert.Equal(t, ActionOutcomeFailure, prRepo.savedPr.LastActionOutcome.String)
+	mapping := mustActionMapping(t)
+	assert.True(t, mapping.IsActionAvailable(prRepo.savedPr, BorrowerActionCheckLimit))
+	prRepo.AssertExpectations(t)
+	illRepo.AssertExpectations(t)
+}
+
 func TestCheckDuplicateBorrowingRequestUsesPatronRequests(t *testing.T) {
 	windowHours := int32(24)
 	createdAt := time.Date(2026, time.August, 25, 12, 30, 0, 123456000, time.UTC)
@@ -535,7 +682,7 @@ func TestHandleInvokeActionUpdateMetadataNeedReview(t *testing.T) {
 	prAction := CreatePatronRequestActionService(mockPrRepo, illRepo, mockEventBus, new(handler.Iso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{}
 	fakeEventID := "1234"
-	pr := pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateValidated, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}}
+	pr := pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateLimitChecked, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil)
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(pr, nil)
 
@@ -574,7 +721,7 @@ func TestHandleInvokeActionUpdateMetadataMissingLookupParamsNeedsReview(t *testi
 	prAction := CreatePatronRequestActionService(mockPrRepo, illRepo, mockEventBus, new(handler.Iso18626Handler), lmsCreator, new(EmailSenderMock), lookupAdapterFactory, nil)
 	illRequest := iso18626.Request{}
 	fakeEventID := "1234"
-	pr := pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateValidated, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}}
+	pr := pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateLimitChecked, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil)
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(pr, nil)
 
@@ -610,6 +757,8 @@ func TestHandleInvokeActionValidateSendRequest(t *testing.T) {
 	initialPR := pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}}
 	validatedPR := initialPR
 	validatedPR.State = BorrowerStateValidated
+	limitCheckedPR := initialPR
+	limitCheckedPR.State = BorrowerStateLimitChecked
 	updatePr := initialPR
 	updatePr.State = BorrowerStateMetadataUpdated
 	readyPr := updatePr
@@ -619,6 +768,7 @@ func TestHandleInvokeActionValidateSendRequest(t *testing.T) {
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(sentPR, nil)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(initialPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(limitCheckedPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(updatePr, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(readyPr, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(sentPR, nil)
@@ -735,10 +885,17 @@ func TestHandleInvokeActionTransitionActions(t *testing.T) {
 		},
 		{
 			name:             "skip metadata update",
-			initialState:     BorrowerStateValidated,
+			initialState:     BorrowerStateLimitChecked,
 			action:           BorrowerActionSkipMetadataUpdate,
 			expectedState:    BorrowerStateMetadataUpdated,
 			disableAutoState: BorrowerStateMetadataUpdated,
+		},
+		{
+			name:             "override patron limit",
+			initialState:     BorrowerStateOverLimit,
+			action:           BorrowerActionOverrideLimit,
+			expectedState:    BorrowerStateLimitChecked,
+			disableAutoState: BorrowerStateLimitChecked,
 		},
 		{
 			name:          "close patron validated request locally",
@@ -836,7 +993,9 @@ func TestHandleInvokeActionSkipPatronValidationRunsConfiguredAutoActions(t *test
 	validatedPR := initialPR
 	validatedPR.State = BorrowerStateValidated
 	validatedPR.NeedsAttention = false
-	metadataUpdatedPR := validatedPR
+	limitCheckedPR := validatedPR
+	limitCheckedPR.State = BorrowerStateLimitChecked
+	metadataUpdatedPR := limitCheckedPR
 	metadataUpdatedPR.State = BorrowerStateMetadataUpdated
 	readyPR := metadataUpdatedPR
 	readyPR.State = BorrowerStateReadyToSend
@@ -845,6 +1004,7 @@ func TestHandleInvokeActionSkipPatronValidationRunsConfiguredAutoActions(t *test
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(sentPR, nil)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(initialPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(limitCheckedPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(metadataUpdatedPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(readyPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(sentPR, nil)

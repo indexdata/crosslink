@@ -233,12 +233,27 @@ func TestImportAcceptsNullLMSPatronProfiles(t *testing.T) {
 	require.Nil(t, repo.entry.Data.LMSConfig.PatronProfiles)
 }
 
+func TestImportAcceptsMaxRequestsPerPatron(t *testing.T) {
+	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
+	record := strings.Replace(validEntryRecord(), `"illConfig":null`, validILLConfig(), 1)
+
+	result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(record))
+
+	require.NoError(t, err)
+	assert.Equal(t, model.ImportSectionResult{Imported: 1}, result.Entries)
+	assert.Empty(t, result.Errors)
+	require.NotNil(t, repo.entry)
+	require.NotNil(t, repo.entry.Data.ILLConfig)
+	require.NotNil(t, repo.entry.Data.ILLConfig.MaxRequestsPerPatron)
+	assert.Equal(t, int32(0), *repo.entry.Data.ILLConfig.MaxRequestsPerPatron)
+}
+
 func validLMSConfig() string {
 	return `"lmsConfig":{"vendor":null,"ncipNamespaceEnabled":null,"bibIdNormalization":null,"address":"https://example.test/ncip","fromAgency":"FROM","fromAgencyAuthentication":null,"toAgency":null,"lookupUserEnabled":true,"acceptItemEnabled":true,"checkInItemEnabled":true,"checkOutItemEnabled":true,"itemLocation":null,"requestItemRequestType":null,"requestItemRequestScopeType":null,"requestItemBibIdCode":null,"requestItemEnabled":true,"requestItemPickupLocationEnabled":true,"requesterPickupLocation":null,"supplierPickupLocation":null,"requesterPatronPattern":null,"patronProfiles":[{"code":"STAFF","canCreateRequests":true}]}`
 }
 
 func validILLConfig() string {
-	return `"illConfig":{"iso18626Url":null,"iso18626Vendor":null,"lendersOfLastResort":[],"includeRequestingAgencyInfo":null,"includeSupplierInfo":null,"includeReturnInfo":null,"includeVendorNote":null,"useOfferedCosts":null,"noteFieldSeparator":null,"supplierPatronPattern":null,"duplicateCheckWindowHours":null}`
+	return `"illConfig":{"iso18626Url":null,"iso18626Vendor":null,"lendersOfLastResort":[],"includeRequestingAgencyInfo":null,"includeSupplierInfo":null,"includeReturnInfo":null,"includeVendorNote":null,"useOfferedCosts":null,"noteFieldSeparator":null,"supplierPatronPattern":null,"duplicateCheckWindowHours":null,"maxRequestsPerPatron":0}`
 }
 
 func TestImportAccountsForSkippedAndRepositoryFailures(t *testing.T) {

@@ -33,3 +33,29 @@ func TestDefaultLoanPeriodPersistenceAndValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestMaxRequestsPerPatronPersistenceAndValidation(t *testing.T) {
+	resetDb()
+	headers := map[string]string{"X-Okapi-Tenant": "ANINST", "X-Okapi-Permissions": `["directory.consortium.all"]`}
+	path := "/entries/by-id/00000000-0000-0000-0000-000000000002"
+	for _, tc := range []struct {
+		value  string
+		status int
+		want   any
+	}{
+		{"0", http.StatusNoContent, float64(0)},
+		{"25", http.StatusNoContent, float64(25)},
+		{"-1", http.StatusBadRequest, float64(25)},
+		{"1.5", http.StatusBadRequest, float64(25)},
+		{"null", http.StatusNoContent, nil},
+	} {
+		response, body := jsonReq(t, http.MethodPatch, path, `{"illConfig":{"maxRequestsPerPatron":`+tc.value+`}}`, headers)
+		require.Equal(t, tc.status, response.StatusCode, body)
+		response, body = jsonReq(t, http.MethodGet, path, "", headers)
+		require.Equal(t, http.StatusOK, response.StatusCode, body)
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal([]byte(body), &entry))
+		config := entry["illConfig"].(map[string]any)
+		assert.Equal(t, tc.want, config["maxRequestsPerPatron"])
+	}
+}

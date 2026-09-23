@@ -8,6 +8,24 @@
       "handlers": [
         {
           "methods": [
+            "POST"
+          ],
+          "pathPattern": "/broker/ill_transactions/{id}/located_suppliers",
+          "permissionsRequired": [
+            "broker.located_suppliers.write"
+          ]
+        },
+        {
+          "methods": [
+            "POST"
+          ],
+          "pathPattern": "/broker/ill_transactions/{id}/located_suppliers/{supplierId}/move",
+          "permissionsRequired": [
+            "broker.located_suppliers.write"
+          ]
+        },
+        {
+          "methods": [
             "GET"
           ],
           "pathPattern": "/broker/ill_transactions/{id}",
@@ -390,6 +408,12 @@
   "requires": [],
   "permissionSets": [
     {
+      "description": "Add and reorder untried suppliers for requesting tenants",
+      "displayName": "Broker - edit supplier rota",
+      "permissionName": "broker.located_suppliers.write",
+      "visible": true
+    },
+    {
       "description": "Read ILL transaction",
       "displayName": "ILL Broker - view all",
       "permissionName": "broker.all.read",
@@ -738,6 +762,7 @@
         "broker.ill_transactions.item.events.get",
         "broker.ill_transactions.get",
         "broker.located_suppliers.get",
+        "broker.located_suppliers.write",
         "broker.events.get",
         "broker.peers.item.get",
         "broker.peers.get",

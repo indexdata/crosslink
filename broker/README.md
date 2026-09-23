@@ -290,3 +290,52 @@ supersedes pending renewal. Duplicate recall and late renewal/overdue messages
 preserve the recall status and deadline; recall after return shipment does
 not reopen the loan. The existing return and completion steps still apply.
 Recall during outbound shipment is not supported.
+
+### Manual supplier rota editing
+
+Okapi must grant staff `broker.located_suppliers.write` to add or reorder suppliers.
+No broker environment setting is required. Tenants that enforce automatic ordering
+should withhold this permission. The broker independently checks requester
+ownership, and these mutations require the tenant-scoped `/broker` routes.
+
+* `POST /broker/ill_transactions/{id}/located_suppliers/{supplierId}/move`
+  with `{"offset":-3}` moves the **located supplier ID** among `new` entries.
+  Negative moves up, positive moves down, and destinations are clamped. Zero
+  and already-reached boundaries return `200` without changes or an audit event.
+  The response is the updated `LocatedSuppliers` list. Selected/skipped suppliers
+  retain their status and ordinal; other new suppliers retain relative order.
+* `POST /broker/ill_transactions/{id}/located_suppliers` with
+  `{"supplierSymbol":"ISIL:EXAMPLE","localId":"record-123"}` returns `201` with
+  the created supplier. Both fields are required. It inserts a `new` supplier
+  first among new entries, storing `localId` as `localID`. The exact requester
+  symbol is instead appended as `skipped` in opaque mode, preserving existing
+  ordinals; in transparent mode it is `new` and marked as a local supplier.
+  Other symbols, including aliases on the requester peer, are non-local.
+  Manual addition bypasses holdings discovery and ranking. Normal downstream checks, including
+  closures and availability, still apply. It neither selects/sends immediately
+  nor restarts a stalled workflow.
+
+Requests may originate from patrons or staff, and remaining candidates may be
+edited while another supplier is selected. Completed transactions and terminal
+borrowing requests return `409`; archived/missing transactions return `404`.
+A recorded requester Cancel addressed to the broker also blocks edits with `409`,
+even if the supplier refuses cancellation. Supplier-targeted cancellations do not
+block edits. A retry with a new requester request ID starts a fresh cancellation scope.
+A supplier absent from the specified transaction returns `404`, a target no longer
+`new` returns `409`, and an existing symbol in any rota status returns `409`.
+Unknown/ambiguous symbols or suppliers without a usable HTTP(S) endpoint return
+`422`; Directory transport failures return `500`. Transactions belonging to
+another requester return `404`.
+
+Edits, ordinal updates, and `supplier-added`/`supplier-moved` audit notices commit
+atomically. Notices include the staff user and edit details and notify observers.
+Automatic selection and rota persistence share the same transaction lock.
+Rota edits also lock the linked borrowing request until commit, so it cannot
+become terminal between the edit's eligibility check and commit. Locks are
+acquired in patron-request then ILL-transaction order, matching imports. Manual
+additions during discovery retain their identifier and priority. An explicit retry
+that rebuilds the rota still retires the old rota using the existing retry behavior.
+
+Clients should serialize mutations and refresh after conflicts. After an uncertain
+outcome (for example a lost response), refresh before offering another edit; do not
+automatically retry relative moves. This backend change adds no UI controls.

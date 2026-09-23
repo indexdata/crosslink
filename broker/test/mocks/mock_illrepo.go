@@ -138,6 +138,11 @@ func (r *MockIllRepositorySuccess) GetLocatedSuppliersByIllTransaction(ctx commo
 	return []ill_db.LocatedSupplier{{ID: uuid.NewString(), IllTransactionID: id}}, 0, nil
 }
 
+func (r *MockIllRepositorySuccess) GetLocatedSuppliersByIllTransactionForUpdate(ctx common.ExtendedContext, id string) ([]ill_db.LocatedSupplier, error) {
+	rows, _, err := r.GetLocatedSuppliersByIllTransaction(ctx, id)
+	return rows, err
+}
+
 func (r *MockIllRepositorySuccess) GetLocatedSuppliersWithPeerByIllTransaction(ctx common.ExtendedContext, id string) ([]ill_db.GetLocatedSuppliersWithPeerByIllTransactionRow, int64, error) {
 	return []ill_db.GetLocatedSuppliersWithPeerByIllTransactionRow{{LocatedSupplier: ill_db.LocatedSupplier{ID: uuid.NewString(), IllTransactionID: id}}}, 0, nil
 }
@@ -297,6 +302,11 @@ func (r *MockIllRepositoryError) GetLocatedSuppliersByIllTransaction(ctx common.
 	return []ill_db.LocatedSupplier{}, 0, errors.New("DB error")
 }
 
+func (r *MockIllRepositoryError) GetLocatedSuppliersByIllTransactionForUpdate(ctx common.ExtendedContext, id string) ([]ill_db.LocatedSupplier, error) {
+	rows, _, err := r.GetLocatedSuppliersByIllTransaction(ctx, id)
+	return rows, err
+}
+
 func (r *MockIllRepositoryError) GetLocatedSuppliersWithPeerByIllTransaction(ctx common.ExtendedContext, id string) ([]ill_db.GetLocatedSuppliersWithPeerByIllTransactionRow, int64, error) {
 	return []ill_db.GetLocatedSuppliersWithPeerByIllTransactionRow{}, 0, errors.New("DB error")
 }
@@ -360,4 +370,25 @@ func (r *MockIllRepositorySuccess) GetCachedPeerByDirectoryEntryID(ctx common.Ex
 }
 func (r *MockIllRepositoryError) GetCachedPeerByDirectoryEntryID(ctx common.ExtendedContext, id uuid.UUID, directoryAdapter adapter.DirectoryLookupAdapter) (ill_db.Peer, string, error) {
 	return ill_db.Peer{}, "", errors.New("DB error")
+}
+
+func (r *MockIllRepositorySuccess) SaveRotaAudit(ctx common.ExtendedContext, id string, name, user string, data map[string]any) error {
+	return nil
+}
+func (r *MockIllRepositoryError) SaveRotaAudit(ctx common.ExtendedContext, id string, name, user string, data map[string]any) error {
+	return errors.New("DB error")
+}
+func (r *MockIllRepositorySuccess) RotaRequestClosed(ctx common.ExtendedContext, id string) (bool, error) {
+	return false, nil
+}
+func (r *MockIllRepositoryError) RotaRequestClosed(ctx common.ExtendedContext, id string) (bool, error) {
+	return false, errors.New("DB error")
+}
+
+func (r *MockIllRepositorySuccess) RotaRequestCancelled(ctx common.ExtendedContext, transactionID, brokerSymbol string) (bool, error) {
+	return false, nil
+}
+
+func (r *MockIllRepositoryError) RotaRequestCancelled(ctx common.ExtendedContext, transactionID, brokerSymbol string) (bool, error) {
+	return false, errors.New("DB error")
 }

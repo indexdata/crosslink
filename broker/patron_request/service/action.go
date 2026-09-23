@@ -232,6 +232,10 @@ func (a *PatronRequestActionService) executeAction(ctx common.ExtendedContext, e
 		execResult := a.checkDuplicateBorrowingRequest(ctx, pr)
 		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execResult)
 	}
+	if pr.Side == SideBorrowing && action == BorrowerActionCheckLimit {
+		execResult := a.checkLimitBorrowingRequest(ctx, pr)
+		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execResult)
+	}
 	if a.lmsCreator == nil {
 		return logActionErrorAndReturnResult(ctx, "LMS creator not configured", nil)
 	}
@@ -246,6 +250,68 @@ func (a *PatronRequestActionService) executeAction(ctx common.ExtendedContext, e
 	default:
 		return logActionErrorAndReturnResult(ctx, "side "+string(pr.Side)+" is not supported", errors.New("invalid side"))
 	}
+}
+
+func (a *PatronRequestActionService) checkLimitBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
+	success := func() actionExecutionResult {
+		return actionExecutionResult{status: events.EventStatusSuccess, result: &events.EventResult{}, pr: pr}
+	}
+	failure := func(message string, err error) actionExecutionResult {
+		status, result := logActionErrorAndReturnResult(ctx, message, err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+
+	if !pr.RequesterSymbol.Valid || pr.RequesterSymbol.String == "" {
+		return failure("missing requester symbol for patron limit check", nil)
+	}
+	peers, _, err := a.illRepo.GetCachedPeersBySymbols(ctx, []string{pr.RequesterSymbol.String}, a.directoryLookupAdapter)
+	if err != nil {
+		return failure("failed to get requester peer for patron limit check", err)
+	}
+	if len(peers) == 0 {
+		return failure("failed to get requester peer for patron limit check", fmt.Errorf("no peer found for requester symbol %q", pr.RequesterSymbol.String))
+	}
+	if len(peers) > 1 {
+		ctx.Logger().Warn("multiple requester peers found for patron limit check, using first", "requesterSymbol", pr.RequesterSymbol.String, "peerCount", len(peers))
+	}
+
+	var limit int32
+	if peers[0].CustomData.IllConfig != nil {
+		configured, getErr := peers[0].CustomData.IllConfig.MaxRequestsPerPatron.Get()
+		if getErr == nil {
+			limit = configured
+		}
+	}
+	if limit <= 0 {
+		return success()
+	}
+	if !pr.Patron.Valid || pr.Patron.String == "" {
+		return failure("missing patron for patron limit check", nil)
+	}
+
+	query, err := cqlbuilder.NewQuery().
+		Search("side").Term(string(SideBorrowing)).
+		And().Search("requester_symbol_exact").Term(pr.RequesterSymbol.String).
+		And().Search("patron_exact").Term(pr.Patron.String).
+		And().Search("terminal_state").Term("false").
+		Build()
+	if err != nil {
+		return failure("failed to build patron limit query", err)
+	}
+	pgQuery, err := pr_db.ParsePatronRequestsCql(query.String())
+	if err != nil {
+		return failure("failed to parse patron limit query", err)
+	}
+	_, activeCount, err := a.prRepo.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: 1, Offset: 0}, pgQuery)
+	if err != nil {
+		return failure("failed to count active patron requests", err)
+	}
+
+	result := success()
+	if activeCount > int64(limit) {
+		result.result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeReview}
+	}
+	return result
 }
 
 func (a *PatronRequestActionService) checkDuplicateBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {

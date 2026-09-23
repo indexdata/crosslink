@@ -654,6 +654,10 @@ type MockIllRepoRequester struct {
 	refreshErr     error
 }
 
+func (r *MockIllRepoRequester) GetLocatedSupplierByIdForUpdate(ctx common.ExtendedContext, id string) (ill_db.LocatedSupplier, error) {
+	return ill_db.LocatedSupplier{ID: id, SupplierID: "p1", SupplierSymbol: "ISIL:SUP", SupplierStatus: ill_db.SupplierStateNewPg}, nil
+}
+
 func (r *MockIllRepoRequester) GetPeerById(ctx common.ExtendedContext, peerId string) (ill_db.Peer, error) {
 	args := r.Called(peerId)
 	return args.Get(0).(ill_db.Peer), args.Error(1)
@@ -935,4 +939,55 @@ func TestLocateSuppliersMetadataSaveTransactionError(t *testing.T) {
 	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
 
 	assert.Equal(t, events.EventStatusError, status)
+}
+
+func (r *MockIllRepoRequester) WithTxFunc(ctx common.ExtendedContext, fn func(ill_db.IllRepo) error) error {
+	return fn(r)
+}
+
+func (r *MockIllRepoLocateSuppliers) WithTxFunc(ctx common.ExtendedContext, fn func(ill_db.IllRepo) error) error {
+	return fn(r)
+}
+
+func TestLocateSuppliersPreservesAdditionsDuringDiscovery(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		requesterSymbol string
+		existingStatus  pgtype.Text
+		wantSymbols     []string
+	}{
+		{name: "manual new supplier", requesterSymbol: "ISIL:REQ", existingStatus: ill_db.SupplierStateNewPg, wantSymbols: []string{"ISIL:SUP2"}},
+		{name: "manual skipped opaque requester", requesterSymbol: "ISIL:SUP1", existingStatus: ill_db.SupplierStateSkippedPg, wantSymbols: []string{"ISIL:SUP2"}},
+		{name: "retired external supplier is rediscovered", requesterSymbol: "ISIL:REQ", existingStatus: ill_db.SupplierStateSkippedPg, wantSymbols: []string{"ISIL:SUP1", "ISIL:SUP2"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// These rows are returned when discovery finishes, after the initial retirement.
+			existing := ill_db.LocatedSupplier{ID: "existing", SupplierSymbol: "ISIL:SUP1", SupplierStatus: tc.existingStatus, Ordinal: 8, LocalID: pgtype.Text{String: "manual-record", Valid: true}}
+			mockRepo := &MockIllRepoLocateSuppliers{
+				illTransaction: ill_db.IllTransaction{
+					ID: "ill-1", RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+					RequesterSymbol:    pgtype.Text{String: tc.requesterSymbol, Valid: true},
+					IllTransactionData: ill_db.IllTransactionData{BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "return-ISIL:SUP1::automatic-record;return-ISIL:SUP2::second-record"}},
+				},
+				requester:         ill_db.Peer{ID: "requester-1", BrokerMode: string(common.BrokerModeOpaque)},
+				peers:             []ill_db.Peer{{ID: "peer-1", BorrowsCount: 1}, {ID: "peer-2", BorrowsCount: 1}},
+				peerSymbols:       map[string][]ill_db.Symbol{"peer-1": {{SymbolValue: "ISIL:SUP1", PeerID: "peer-1"}}, "peer-2": {{SymbolValue: "ISIL:SUP2", PeerID: "peer-2"}}},
+				existingSuppliers: []ill_db.LocatedSupplier{existing},
+			}
+			directory := new(adapter.MockDirectoryLookupAdapter)
+			factory := NewLookupAdapterFactory(mockRepo, directory, "", new(catalog.MockLookupShared), new(catalog.LookupAdapterCreatorImpl))
+			locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, directory, factory)
+			status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+			assert.Equal(t, events.EventStatusSuccess, status)
+			// Inspect the result too: this mock's savedLocatedSuppliers excludes skipped rows.
+			added, ok := result.CustomData["suppliers"].([]*ill_db.LocatedSupplier)
+			if assert.True(t, ok) && assert.Len(t, added, len(tc.wantSymbols)) {
+				for i, symbol := range tc.wantSymbols {
+					assert.Equal(t, symbol, added[i].SupplierSymbol)
+					assert.Equal(t, int32(9+i), added[i].Ordinal)
+				}
+			}
+			assert.Equal(t, existing, mockRepo.existingSuppliers[0])
+		})
+	}
 }

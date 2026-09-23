@@ -3,7 +3,6 @@ package ill_db
 import (
 	"errors"
 	"fmt"
-	"reflect"
 	"slices"
 	"time"
 
@@ -18,6 +17,9 @@ import (
 )
 
 type IllRepo interface {
+	SaveRotaAudit(ctx common.ExtendedContext, transactionID string, name, user string, data map[string]any) error
+	RotaRequestClosed(ctx common.ExtendedContext, transactionID string) (bool, error)
+	RotaRequestCancelled(ctx common.ExtendedContext, transactionID, brokerSymbol string) (bool, error)
 	repo.Transactional[IllRepo]
 	SaveIllTransaction(ctx common.ExtendedContext, params SaveIllTransactionParams) (IllTransaction, error)
 	GetIllTransactionByRequesterRequestId(ctx common.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error)
@@ -37,6 +39,7 @@ type IllRepo interface {
 	SkipLocatedSuppliersByIllTransactionAndStatus(ctx common.ExtendedContext, id string, status pgtype.Text) error
 	GetLocatedSuppliersByIllTransactionAndStatus(ctx common.ExtendedContext, params GetLocatedSuppliersByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
 	GetLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) ([]LocatedSupplier, int64, error)
+	GetLocatedSuppliersByIllTransactionForUpdate(ctx common.ExtendedContext, id string) ([]LocatedSupplier, error)
 	GetLocatedSuppliersWithPeerByIllTransaction(ctx common.ExtendedContext, id string) ([]GetLocatedSuppliersWithPeerByIllTransactionRow, int64, error)
 	GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx common.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error)
 	GetLocatedSupplierByIdForUpdate(ctx common.ExtendedContext, id string) (LocatedSupplier, error)
@@ -226,6 +229,12 @@ func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSymbolForUpdate(ctx com
 	return row.LocatedSupplier, err
 }
 
+// GetLocatedSuppliersByIllTransactionForUpdate locks supplier rows until the
+// enclosing transaction ends. Call it through a transaction-backed repository.
+func (r *PgIllRepo) GetLocatedSuppliersByIllTransactionForUpdate(ctx common.ExtendedContext, id string) ([]LocatedSupplier, error) {
+	return r.queries.GetLocatedSuppliersByIllTransactionForUpdate(ctx, r.GetConnOrTx(), id)
+}
+
 func (r *PgIllRepo) GetLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) ([]LocatedSupplier, int64, error) {
 	rows, err := r.queries.GetLocatedSuppliersByIllTransaction(ctx, r.GetConnOrTx(), id)
 	var suppliers []LocatedSupplier
@@ -353,17 +362,15 @@ func (r *PgIllRepo) GetCachedPeerByDirectoryEntryID(ctx common.ExtendedContext, 
 	var matches []adapter.DirectoryEntry
 	for _, entry := range entries {
 		if entry.CustomData.Id != nil && *entry.CustomData.Id == id {
-			if len(matches) > 0 {
-				if !reflect.DeepEqual(matches[0], entry) {
-					return Peer{}, query, fmt.Errorf("directory entry %s: conflicting responses from directory replicas", id)
-				}
-				continue
-			}
 			matches = append(matches, entry)
 		}
 	}
 	if len(entries) == 0 {
 		return Peer{}, query, fmt.Errorf("directory entry %s: %w", id, ErrDirectoryEntryNotFound)
+	}
+	matches, err = adapter.DeduplicateDirectoryEntries(matches)
+	if err != nil {
+		return Peer{}, query, err
 	}
 	if len(matches) != 1 {
 		return Peer{}, query, fmt.Errorf("directory entry %s: expected one entry, found %d", id, len(matches))
