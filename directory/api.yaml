@@ -1554,10 +1554,48 @@ components:
         type: string
 
   schemas:
-    ConflictPolicy:
+    # Shared
+    Id:
+      required:
+        - id
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique id
+
+    About:
+      type: object
+      required:
+        - count
+      properties:
+        count:
+          type: integer
+          format: int64
+          description: Total number of items in the result
+        nextLink:
+          type: string
+          description: Link to the next page of results
+        prevLink:
+          type: string
+          description: Link to the previous page of results
+
+    # Entry
+    EntryType:
       type: string
-      enum: [fail, skip, update]
-      default: fail
+      enum: [Institution, Consortium, Branch]
+      x-enum-varnames: [EntryTypeInstitution, EntryTypeConsortium, EntryTypeBranch]
+
+    EntryVendor:
+      type: string
+      description: ISO18626 vendor type
+      enum:
+        - Alma
+        - ReShare
+        - CrossLink
+        - ILLiad
+        - Unknown
 
     AddEntry:
       type: object
@@ -1621,6 +1659,171 @@ components:
           allOf:
             - $ref: '#/components/schemas/HoldingsPolicy'
 
+    Entry:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique id
+        name:
+          type: string
+          minLength: 1
+        type:
+          $ref: '#/components/schemas/EntryType'
+        parent:
+          type: string
+          format: uuid
+        description:
+          type: string
+        organizationId:
+          type: string
+        contactName:
+          type: string
+        email:
+          type: string
+        fromEmail:
+          type: string
+        tenant:
+          type: string
+          description: Tenant that owns the entry; only consortial administrators may set this field.
+        vendor:
+          $ref: '#/components/schemas/EntryVendor'
+        phoneNumber:
+          type: string
+        lmsLocationCode:
+          type: string
+        illConfig:
+          $ref: '#/components/schemas/IllConfig'
+        hrid:
+          type: string
+        timeZone:
+          type: string
+        symbols:
+          type: array
+          items:
+            $ref: '#/components/schemas/Symbol'
+        addresses:
+          type: array
+          items:
+            $ref: '#/components/schemas/Address'
+        closures:
+          type: array
+          items:
+            $ref: '#/components/schemas/Closure'
+        endpoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceEndpoint'
+        networks:
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/EntryNetworkDetails'
+        tiers:
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/Tier'
+        lmsConfig:
+          description: Configuration for LMS (Library Management System) integration via NCIP protocol
+          allOf:
+            - $ref: '#/components/schemas/LmsConfig'
+        catalogConfig:
+          $ref: '#/components/schemas/CatalogConfig'
+        holdingsPolicy:
+          description: Policy that determines whether and in which order holdings may supply an item.
+          allOf:
+            - $ref: '#/components/schemas/HoldingsPolicy'
+
+    EntryPatch:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        type:
+          anyOf:
+            - $ref: '#/components/schemas/EntryType'
+            - type: "null"
+        parent:
+          type: [string, "null"]
+          format: uuid
+        description:
+          type: [string, "null"]
+        organizationId:
+          type: [string, "null"]
+        contactName:
+          type: [string, "null"]
+        email:
+          type: [string, "null"]
+        fromEmail:
+          type: [string, "null"]
+        tenant:
+          type: [string, "null"]
+          description: Tenant that owns the entry; only consortial administrators may modify this field.
+        vendor:
+          anyOf:
+            - $ref: '#/components/schemas/EntryVendor'
+            - type: "null"
+        phoneNumber:
+          type: [string, "null"]
+        lmsLocationCode:
+          type: [string, "null"]
+        illConfig:
+          anyOf:
+            - $ref: '#/components/schemas/AddEntryIllConfig'
+            - type: "null"
+        hrid:
+          type: [string, "null"]
+        timeZone:
+          type: [string, "null"]
+        lmsConfig:
+          anyOf:
+            - $ref: '#/components/schemas/LmsConfigPatch'
+            - type: "null"
+        catalogConfig:
+          anyOf:
+            - $ref: '#/components/schemas/CatalogConfigPatch'
+            - type: "null"
+        holdingsPolicy:
+          anyOf:
+            - $ref: '#/components/schemas/HoldingsPolicy'
+            - type: "null"
+        symbols:
+          type: [array, "null"]
+          items:
+            $ref: '#/components/schemas/SymbolPatch'
+        endpoints:
+          type: [array, "null"]
+          items:
+            $ref: '#/components/schemas/ServiceEndpointPatch'
+        addresses:
+          type: [array, "null"]
+          items:
+            $ref: '#/components/schemas/AddressPatch'
+        closures:
+          type: [array, "null"]
+          items:
+            $ref: '#/components/schemas/ClosurePatch'
+
+    EntriesResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Entry'
+
     AddEntrySymbol:
       type: object
       additionalProperties: false
@@ -1658,30 +1861,6 @@ components:
       x-go-type: Address
       allOf:
         - $ref: '#/components/schemas/AddressProperties'
-
-    CreateClosure:
-      type: object
-      additionalProperties: false
-      x-go-type: Closure
-      required:
-        - entry
-        - startDate
-        - endDate
-        - reason
-      properties:
-        entry:
-          type: string
-          format: uuid
-        startDate:
-          type: string
-          format: date
-          description: ISO8601 date
-        endDate:
-          type: string
-          format: date
-          description: ISO8601 date
-        reason:
-          type: string
 
     AddEntryIllConfig:
       type: object
@@ -1731,6 +1910,716 @@ components:
           description: The number of hours to check for duplicate requests. If a request is submitted within this window, it will be considered a duplicate.
           minimum: 0
 
+    # Symbol
+    SymbolProperties:
+      type: object
+      additionalProperties: false
+      required:
+        - symbol
+        - authority
+      properties:
+        symbol:
+          type: string
+          minLength: 1
+          description: Uppercase string
+        authority:
+          type: string
+          minLength: 1
+          description: Uppercase string
+
+    Symbol:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - symbol
+        - authority
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique id
+        symbol:
+          type: string
+          minLength: 1
+          description: Uppercase string
+        authority:
+          type: string
+          minLength: 1
+          description: Uppercase string
+
+    SymbolPatch:
+      type: object
+      additionalProperties: false
+      required:
+        - symbol
+        - authority
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique id
+        symbol:
+          type: string
+          minLength: 1
+          description: Uppercase string
+        authority:
+          type: string
+          minLength: 1
+          description: Uppercase string
+
+    # Service endpoint
+    ServiceEndpointProperties:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - type
+        - address
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        address:
+          type: string
+
+    ServiceEndpoint:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - type
+        - address
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique id
+        name:
+          type: string
+        type:
+          type: string
+        address:
+          type: string
+
+    ServiceEndpointPatch:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - type
+        - address
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique id
+        name:
+          type: string
+        type:
+          type: string
+        address:
+          type: string
+
+    # Address
+    AddressType:
+      type: string
+      enum: [Default, Shipping, Billing, Other]
+
+    AddressComponentType:
+      type: string
+      enum: [Thoroughfare, Locality, AdministrativeArea, PostalCode, CountryCode, Other]
+
+    AddressComponent:
+      type: object
+      additionalProperties: false
+      required:
+        - seq
+        - type
+        - value
+      properties:
+        seq:
+          type: integer
+          format: int32
+          description: Sequence number for ordering components
+        type:
+          $ref: '#/components/schemas/AddressComponentType'
+        value:
+          type: string
+
+    AddressProperties:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          $ref: '#/components/schemas/AddressType'
+        addressComponents:
+          type: array
+          items:
+            $ref: '#/components/schemas/AddressComponent'
+
+    Address:
+      allOf:
+        - required:
+          - id
+          - entry
+          properties:
+            id:
+              readOnly: true
+              type: string
+              format: uuid
+              description: Unique id
+            entry:
+              readOnly: true
+              type: string
+              format: uuid
+        - $ref: '#/components/schemas/AddressProperties'
+
+    AddressPatch:
+      allOf:
+        - properties:
+            id:
+              type: string
+              format: uuid
+              description: Unique id
+        - $ref: '#/components/schemas/AddressProperties'
+
+    # ILL configuration
+    IllConfig:
+      type: object
+      properties:
+        defaultLoanPeriod:
+          type: [integer, "null"]
+          format: int32
+          minimum: 1
+          description: Default supplier loan period in calendar days. Omitted or null disables the fallback.
+        iso18626Url:
+          type: string
+          description: URL of the ISO18626 service. When set, used instead of an ISO18626 service from endpoints.
+        iso18626Vendor:
+          description: ISO18626 service vendor. Used only when iso18626Url is non-empty.
+          allOf:
+            - $ref: '#/components/schemas/EntryVendor'
+        lendersOfLastResort:
+          type: array
+          description: Suppliers appended to the end of the rota when no regular supplier can fill the request. Each normalized authority and symbol pair must be unique and exist in the directory; authorities must not contain colons.
+          items:
+            $ref: '#/components/schemas/Symbol'
+        includeRequestingAgencyInfo:
+          type: boolean
+          description: Whether outgoing requests include requestingAgencyInfo populated from the requester directory entry.
+        includeSupplierInfo:
+          type: boolean
+          description: Whether outgoing requests include supplierInfo populated from the supplier directory entry.
+        includeReturnInfo:
+          type: boolean
+          description: Whether Loaned messages include returnInfo populated from the supplier directory entry.
+        includeVendorNote:
+          type: boolean
+          description: Whether broker-generated supplying-agency messages include the supplier vendor in the note.
+        useOfferedCosts:
+          type: boolean
+          description: Whether deliveryCosts are transferred to offeredCosts for messages sent to this requester.
+        noteFieldSeparator:
+          type: string
+          description: Separator used between fields added to notes in messages sent to this entry.
+        supplierPatronPattern:
+          type: string
+          description: Format pattern used to create a patron ID for requests received by this supplier.
+        duplicateCheckWindowHours:
+          type: integer
+          format: int32
+          description: The number of hours to check for duplicate requests. If a request is submitted within this window, it will be considered a duplicate.
+          minimum: 0
+
+    # LMS (NCIP) configuration
+    HostLmsVendor:
+      type: string
+      enum: [Alma, Sierra, Koha, WMS, Aleph, FOLIO, Generic]
+      x-go-type: string
+
+    BibIdNormalization:
+      type: string
+      enum: [none, sierra]
+      x-go-type: string
+
+    LmsConfig:
+      description: >-
+        Raw circulation overrides, independent of illConfig.iso18626Vendor and
+        the deprecated top-level vendor. Generic defaults are followed by the
+        selected host vendor and explicit values. Defaults are never persisted.
+        A vendor alone does not enable NCIP; address and fromAgency must both
+        be configured to create a circulation adapter.
+      type: object
+      properties:
+        ncipNamespaceEnabled:
+          type: boolean
+        bibIdNormalization:
+          $ref: '#/components/schemas/BibIdNormalization'
+        vendor:
+          anyOf:
+            - $ref: '#/components/schemas/HostLmsVendor'
+            - type: "null"
+          description: Host integration profile, independent of the ILL vendor. WMS and Aleph are reserved and currently unsupported.
+        address:
+          type: string
+          x-go-type-skip-optional-pointer: true
+          description: Base URL of the LMS API
+        fromAgency:
+          type: string
+          x-go-type-skip-optional-pointer: true
+          description: Agency code used when the entry is acting as the supplying agency
+        fromAgencyAuthentication:
+          type: string
+          x-oapi-codegen-extra-tags:
+            protected: "true"
+          description: Authentication token or credentials for the fromAgency
+        toAgency:
+          type: string
+          description: Agency code used when the entry is acting as the requesting agency
+        lookupUserEnabled:
+          type: boolean
+          description: Whether user lookup is enabled
+        acceptItemEnabled:
+          type: boolean
+          description: Whether item acceptance is enabled
+        checkInItemEnabled:
+          type: boolean
+          description: Whether item check-in is enabled
+        checkOutItemEnabled:
+          type: boolean
+          description: Whether item check-out is enabled
+        requestItemEnabled:
+          type: boolean
+          description: Whether item requesting is enabled
+        itemLocation:
+          type: string
+          description: Location code to include in NCIP RequestItem messages
+        requestItemRequestType:
+          type: string
+          description: For Request Item requests, the type of request to create
+        requestItemRequestScopeType:
+          type: string
+          description: For Request Item requests, the scope type of request to create
+        requestItemBibIdCode:
+          type: string
+          description: For Request Item requests, the code indicating how to interpret the bib id
+        requestItemPickupLocationEnabled:
+          type: boolean
+          description: Whether to include a pickup location when making Request Item requests
+        requesterPickupLocation:
+          type: string
+          description: Pickup location code used when acting as requesting agency
+        supplierPickupLocation:
+          type: string
+          description: Pickup location code used when acting as supplying agency
+        requesterPatronPattern:
+          type: string
+          description: "'{requesterSymbol}' occurrences are replaced with requesting agency ISIL"
+        patronProfiles:
+          description: Patron profiles used to determine whether a user returned by NCIP LookupUser is eligible to create ILL requests.
+          allOf:
+            - $ref: '#/components/schemas/PatronProfiles'
+
+    LmsConfigPatch:
+      type: object
+      properties:
+        ncipNamespaceEnabled:
+          type: [boolean, "null"]
+        bibIdNormalization:
+          anyOf:
+            - $ref: '#/components/schemas/BibIdNormalization'
+            - type: "null"
+        vendor:
+          anyOf:
+            - $ref: '#/components/schemas/HostLmsVendor'
+            - type: "null"
+          description: Host integration profile, independent of the ILL vendor. WMS and Aleph are reserved and currently unsupported.
+        address:
+          type: string
+        fromAgency:
+          type: string
+        fromAgencyAuthentication:
+          type: [string, "null"]
+        toAgency:
+          type: [string, "null"]
+        lookupUserEnabled:
+          type: [boolean, "null"]
+        acceptItemEnabled:
+          type: [boolean, "null"]
+        checkInItemEnabled:
+          type: [boolean, "null"]
+        checkOutItemEnabled:
+          type: [boolean, "null"]
+        requestItemEnabled:
+          type: [boolean, "null"]
+        itemLocation:
+          type: [string, "null"]
+        requestItemRequestType:
+          type: [string, "null"]
+        requestItemRequestScopeType:
+          type: [string, "null"]
+        requestItemBibIdCode:
+          type: [string, "null"]
+        requestItemPickupLocationEnabled:
+          type: [boolean, "null"]
+        requesterPickupLocation:
+          type: [string, "null"]
+        supplierPickupLocation:
+          type: [string, "null"]
+        requesterPatronPattern:
+          type: [string, "null"]
+        patronProfiles:
+          anyOf:
+            - $ref: '#/components/schemas/PatronProfiles'
+            - type: "null"
+
+    PatronProfiles:
+      type: array
+      description: Patron profile eligibility rules, inspected in order until both configured profile components match.
+      items:
+        $ref: '#/components/schemas/PatronProfile'
+
+    PatronProfile:
+      type: object
+      required:
+        - canCreateRequests
+      properties:
+        code:
+          type: string
+          minLength: 1
+          description: Profile code returned by the LMS (for example, "STAFF"). When omitted, any code matches.
+        name:
+          type: string
+          minLength: 1
+          description: Profile name returned by the LMS (for example, "Staff"). When omitted, any name matches.
+        canCreateRequests:
+          type: boolean
+          description: Whether patrons with this profile may create ILL requests.
+      additionalProperties: false
+
+    # Catalog configuration
+    CatalogConfig:
+      description: >-
+        Raw catalog overrides. Defaults resolve as Generic, then profile (or
+        lmsConfig.vendor when profile is unset), then explicit values. False,
+        empty values where valid, and explicit parser choices take precedence.
+        Same-parser holdings fields merge; a different parser replaces its defaults.
+        Selecting a profile does not enable lookup without an SRU or ZOOM address.
+      type: object
+      properties:
+        profile:
+          anyOf:
+            - $ref: '#/components/schemas/HostLmsVendor'
+            - type: "null"
+          description: Host integration profile, independent of the ILL vendor. WMS and Aleph are reserved and currently unsupported.
+        sru:
+          $ref: '#/components/schemas/SruConfig'
+        zoom:
+          $ref: '#/components/schemas/ZoomConfig'
+        queryConfig:
+          $ref: '#/components/schemas/QueryConfig'
+        holdingsFormat:
+          $ref: '#/components/schemas/HoldingsParserConfig'
+        metadataUpdateMode:
+          $ref: '#/components/schemas/MetadataUpdateMode'
+        metadataFormat:
+          $ref: '#/components/schemas/MetadataParserConfig'
+      additionalProperties: false
+
+    CatalogConfigPatch:
+      type: object
+      properties:
+        profile:
+          anyOf:
+            - $ref: '#/components/schemas/HostLmsVendor'
+            - type: "null"
+          description: Host integration profile, independent of the ILL vendor. WMS and Aleph are reserved and currently unsupported.
+        sru:
+          $ref: '#/components/schemas/SruConfigPatch'
+        zoom:
+          $ref: '#/components/schemas/ZoomConfigPatch'
+        queryConfig:
+          $ref: '#/components/schemas/QueryConfig'
+        holdingsFormat:
+          $ref: '#/components/schemas/HoldingsParserConfig'
+        metadataUpdateMode:
+          $ref: '#/components/schemas/MetadataUpdateMode'
+        metadataFormat:
+          $ref: '#/components/schemas/MetadataParserConfig'
+      additionalProperties: false
+
+    MetadataUpdateMode:
+      type: string
+      description: Determines how lookup metadata updates the outgoing ILL request metadata.
+      enum: [replace, merge, none, auto]
+
+    SruConfig:
+      type: object
+      required: [address]
+      properties:
+        address:
+          type: string
+        recordSchema:
+          type: string
+      additionalProperties: false
+
+    SruConfigPatch:
+      type: object
+      properties:
+        address:
+          type: string
+        recordSchema:
+          type: string
+      additionalProperties: false
+
+    ZoomConfig:
+      type: object
+      required: [address]
+      properties:
+        address:
+          type: string
+        options:
+          type: object
+          additionalProperties:
+            type: string
+      additionalProperties: false
+
+    ZoomConfigPatch:
+      type: object
+      properties:
+        address:
+          type: string
+        options:
+          type: object
+          additionalProperties:
+            type: [string, "null"]
+      additionalProperties: false
+
+    QueryConfigType:
+      type: string
+      enum: [cql, pqf]
+      x-enum-varnames: [QueryConfigTypeCql, QueryConfigTypePqf]
+
+    QueryConfig:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/QueryConfigType'
+        title:
+          type: string
+        isbn:
+          type: string
+        issn:
+          type: string
+        identifier:
+          type: string
+      additionalProperties: false
+
+    MetadataParserConfig:
+      type: object
+      properties:
+        marc21:
+          $ref: '#/components/schemas/MarcMetadataParserConfig'
+      additionalProperties: false
+
+    MarcMetadataParserConfig:
+      type: object
+      properties:
+        identifier: { type: string }
+        isbn: { type: string }
+        issn: { type: string }
+        title: { type: string }
+        subtitle: { type: string }
+        author: { type: string }
+        edition: { type: string }
+      additionalProperties: false
+
+    HoldingsParserConfig:
+      type: object
+      properties:
+        marc:
+          $ref: '#/components/schemas/MarcHoldingsParserConfig'
+        opac:
+          $ref: '#/components/schemas/OpacHoldingsParserConfig'
+        reservoir:
+          type: object
+          additionalProperties: false
+        marc21plus1:
+          type: object
+          additionalProperties: false
+      additionalProperties: false
+
+    MarcHoldingsParserConfig:
+      type: object
+      properties:
+        availability:
+          type: array
+          description: All predicates must match a candidate item. Equals requires a present matching subfield; absent rejects any occurrence.
+          items:
+            $ref: '#/components/schemas/MarcAvailabilityPredicate'
+        mainField: { type: string }
+        locationSubField: { type: string }
+        shelvingLocationSubField: { type: string }
+        itemIdSubField: { type: string }
+        restrictedSubField: { type: string }
+        callNumberSubField: { type: string }
+      additionalProperties: false
+
+    MarcAvailabilityOperator:
+      type: string
+      enum: [equals, absent]
+      x-go-type: string
+
+    MarcAvailabilityPredicate:
+      type: object
+      required: [subField, operator]
+      properties:
+        subField: { type: string, minLength: 1 }
+        operator:
+          $ref: '#/components/schemas/MarcAvailabilityOperator'
+        value: { type: string }
+      additionalProperties: false
+
+    OpacAvailabilityRule:
+      type: string
+      enum: [availableNow, publicNote]
+      x-go-type: string
+
+    ShelvingLocationSource:
+      type: string
+      enum: [shelvingLocation, localLocation]
+      x-go-type: string
+
+    OpacHoldingsParserConfig:
+      type: object
+      properties:
+        availabilityRule:
+          $ref: '#/components/schemas/OpacAvailabilityRule'
+        availablePublicNotes:
+          type: array
+          items: { type: string }
+        requireLocalLocation: { type: boolean }
+        shelvingLocationSource:
+          $ref: '#/components/schemas/ShelvingLocationSource'
+        includeItemId: { type: boolean }
+        includeItemLoanPolicy: { type: boolean }
+        includeTemporaryLocation: { type: boolean }
+        allCirculations: { type: boolean }
+      additionalProperties: false
+
+    # Holdings policy
+    HoldingsSupplyPreference:
+      type: integer
+      minimum: -1
+      maximum: 10000
+      description: Supply preference where -1 disables supply, 0 means no preference, and 10000 is the highest preference.
+
+    HoldingsPolicy:
+      type: object
+      properties:
+        locations:
+          type: array
+          items:
+            $ref: '#/components/schemas/HoldingsLocation'
+        shelvingLocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/HoldingsShelvingLocation'
+        locationPolicies:
+          type: array
+          items:
+            $ref: '#/components/schemas/HoldingsLocationPolicy'
+        itemLoanPolicies:
+          type: array
+          items:
+            $ref: '#/components/schemas/HoldingsItemLoanPolicy'
+      additionalProperties: false
+
+    HoldingsLocation:
+      type: object
+      required:
+        - code
+        - name
+        - supplyPreference
+      properties:
+        code:
+          type: string
+          description: Location code (for example, "MAIN").
+        name:
+          type: string
+          description: Human-readable location name (for example, "Main Library").
+        supplyPreference:
+          $ref: '#/components/schemas/HoldingsSupplyPreference'
+      additionalProperties: false
+
+    HoldingsShelvingLocation:
+      type: object
+      required:
+        - code
+        - name
+        - supplyPreference
+      properties:
+        code:
+          type: string
+          description: Shelving location code (for example, "STACKS").
+        name:
+          type: string
+          description: Human-readable shelving location name (for example, "Stacks").
+        supplyPreference:
+          $ref: '#/components/schemas/HoldingsSupplyPreference'
+      additionalProperties: false
+
+    HoldingsLocationPolicy:
+      type: object
+      required:
+        - shelvingLocationCode
+        - supplyPreference
+      properties:
+        locationCode:
+          type: string
+          description: Location code. When omitted, the override applies across all locations.
+        shelvingLocationCode:
+          type: string
+          description: Shelving location code to which the override applies.
+        supplyPreference:
+          $ref: '#/components/schemas/HoldingsSupplyPreference'
+      additionalProperties: false
+
+    HoldingsItemLoanPolicy:
+      type: object
+      required:
+        - code
+        - name
+        - lendable
+      properties:
+        code:
+          type: string
+          description: Item loan policy code (for example, "NORMAL").
+        name:
+          type: string
+          description: Human-readable item loan policy name (for example, "Normal loan").
+        lendable:
+          type: boolean
+          description: Whether items governed by this loan policy may be supplied.
+      additionalProperties: false
+
+    # Tier
+    TierLevel:
+      type: string
+      enum: [express, normal, rush, secondarymail, standard, urgent]
+      default: standard
+
+    TierType:
+      type: string
+      enum: [loan, copy]
+      default: loan
+
     AddTier:
       type: object
       x-go-type: Tier
@@ -1757,6 +2646,63 @@ components:
           format: double
           default: 0.0
 
+    Tier:
+      type: object
+      required:
+        - id
+        - consortium
+        - name
+        - level
+        - type
+        - cost
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique identifier
+        consortium:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          pattern: '.*\S.*'
+        level:
+          $ref: '#/components/schemas/TierLevel'
+        type:
+          $ref: '#/components/schemas/TierType'
+        cost:
+          type: number
+          format: double
+          default: 0.0
+
+    TierPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        level:
+          $ref: '#/components/schemas/TierLevel'
+        type:
+          $ref: '#/components/schemas/TierType'
+        cost:
+          type: number
+          format: double
+
+    TiersResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tier'
+
+    # Network
     AddNetwork:
       type: object
       x-go-type: Network
@@ -1774,6 +2720,84 @@ components:
         reciprocal:
           type: boolean
 
+    Network:
+      type: object
+      required:
+        - id
+        - consortium
+        - name
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique identifier
+        consortium:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          pattern: '.*\S.*'
+        reciprocal:
+          type: boolean
+
+    NetworkPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        reciprocal:
+          type: [boolean, "null"]
+
+    NetworksResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Network'
+
+    EntryNetworkDetails:
+      allOf:
+        - $ref: '#/components/schemas/Network'
+        - type: object
+          required:
+            - priority
+          properties:
+            priority:
+              type: integer
+              format: int32
+              description: Priority of this network for the associated entry
+
+    NetworkForEntryDetails:
+      allOf:
+        - $ref: '#/components/schemas/Network'
+        - type: object
+          properties:
+            priority:
+              type: integer
+              format: int32
+              description: Priority of this network for the associated entry; omitted for consortium-owned network listings
+
+    NetworksForEntryResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NetworkForEntryDetails'
+
+    # Entry tier
     CreateEntryTier:
       type: object
       x-go-type: EntryTier
@@ -1790,70 +2814,246 @@ components:
           format: uuid
           description: ID of tier
 
-    EntryType:
-      type: string
-      enum: [Institution, Consortium, Branch]
-      x-enum-varnames: [EntryTypeInstitution, EntryTypeConsortium, EntryTypeBranch]
+    EntryTier:
+      type: object
+      required:
+        - id
+        - entry
+        - tier
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique identifier
+        entry:
+          type: string
+          format: uuid
+          description: ID of entry
+        tier:
+          type: string
+          format: uuid
+          description: ID of tier
 
-    TierPatch:
+    AddEntryTier:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier
+
+    EntryTiersResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntryTier'
+
+    # Entry network
+    CreateEntryNetwork:
+      type: object
+      required:
+        - entry
+        - network
+      properties:
+        entry:
+          type: string
+          format: uuid
+          description: ID of entry
+        network:
+          type: string
+          format: uuid
+          description: ID of network
+        priority:
+          type: integer
+          format: int32
+          default: 0
+          description: Priority of this network for the associated entry
+
+    EntryNetwork:
+      type: object
+      required:
+        - id
+        - entry
+        - network
+        - priority
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique identifier
+        entry:
+          type: string
+          format: uuid
+          description: ID of entry
+        network:
+          type: string
+          format: uuid
+          description: ID of network
+        priority:
+          type: integer
+          format: int32
+          default: 0
+          description: Priority of this network for the associated entry
+
+    EntryNetworkPatch:
       type: object
       additionalProperties: false
+      required:
+        - priority
       properties:
-        level:
-          $ref: '#/components/schemas/TierLevel'
-        type:
-          $ref: '#/components/schemas/TierType'
-        cost:
-          type: number
-          format: double
+        priority:
+          type: integer
+          format: int32
+          description: Priority of this network for the associated entry
 
-    TierLevel:
-      type: string
-      enum: [express, normal, rush, secondarymail, standard, urgent]
-      default: standard
+    AddEntryNetwork:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier
+        priority:
+          type: integer
+          format: int32
+          default: 0
+          description: Priority of this network for the associated entry
 
-    TierType:
-      type: string
-      enum: [loan, copy]
-      default: loan
+    EntryNetworksResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntryNetwork'
 
-    QueryConfigType:
-      type: string
-      enum: [cql, pqf]
-      x-enum-varnames: [QueryConfigTypeCql, QueryConfigTypePqf]
+    # Closure
+    CreateClosure:
+      type: object
+      additionalProperties: false
+      x-go-type: Closure
+      required:
+        - entry
+        - startDate
+        - endDate
+        - reason
+      properties:
+        entry:
+          type: string
+          format: uuid
+        startDate:
+          type: string
+          format: date
+          description: ISO8601 date
+        endDate:
+          type: string
+          format: date
+          description: ISO8601 date
+        reason:
+          type: string
 
-    HostLmsVendor:
-      type: string
-      enum: [Alma, Sierra, Koha, WMS, Aleph, FOLIO, Generic]
-      x-go-type: string
+    ClosureProperties:
+      type: object
+      additionalProperties: false
+      required:
+        - startDate
+        - endDate
+        - reason
+      properties:
+        startDate:
+          type: string
+          format: date
+          description: ISO8601 date
+        endDate:
+          type: string
+          format: date
+          description: ISO8601 date
+        reason:
+          type: string
 
-    BibIdNormalization:
-      type: string
-      enum: [none, sierra]
-      x-go-type: string
+    Closure:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - entry
+        - startDate
+        - endDate
+        - reason
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique identifier
+        entry:
+          type: string
+          format: uuid
+        startDate:
+          type: string
+          format: date
+          description: ISO8601 date
+        endDate:
+          type: string
+          format: date
+          description: ISO8601 date
+        reason:
+          type: string
 
-    AddressType:
-      type: string
-      enum: [Default, Shipping, Billing, Other]
+    ClosurePatch:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier
+        startDate:
+          type: string
+          format: date
+          description: ISO8601 date
+        endDate:
+          type: string
+          format: date
+          description: ISO8601 date
+        reason:
+          type: string
 
-    AddressComponentType:
-      type: string
-      enum: [Thoroughfare, Locality, AdministrativeArea, PostalCode, CountryCode, Other]
+    ClosuresResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Closure'
 
-    MarcAvailabilityOperator:
+    # Import
+    ConflictPolicy:
       type: string
-      enum: [equals, absent]
-      x-go-type: string
-
-    OpacAvailabilityRule:
-      type: string
-      enum: [availableNow, publicNote]
-      x-go-type: string
-
-    ShelvingLocationSource:
-      type: string
-      enum: [shelvingLocation, localLocation]
-      x-go-type: string
+      enum: [fail, skip, update]
+      default: fail
 
     ImportItemType:
       type: string
@@ -1962,6 +3162,7 @@ components:
         requesterPatronPattern: { type: [string, "null"] }
         patronProfiles:
           anyOf: [{ $ref: '#/components/schemas/PatronProfiles' }, { type: "null" }]
+
     ImportIllConfig:
       type: object
       additionalProperties: false
@@ -2002,6 +3203,7 @@ components:
           anyOf: [{ $ref: '#/components/schemas/ImportHoldingsParserConfig' }, { type: "null" }]
         metadataFormat:
           anyOf: [{ $ref: '#/components/schemas/ImportMetadataParserConfig' }, { type: "null" }]
+
     ImportSruConfig:
       type: object
       additionalProperties: false
@@ -2093,6 +3295,7 @@ components:
       properties:
         marc21:
           anyOf: [{ $ref: '#/components/schemas/ImportMarcMetadataParserConfig' }, { type: "null" }]
+
     ImportMarcMetadataParserConfig:
       type: object
       additionalProperties: false
@@ -2174,6 +3377,7 @@ components:
           anyOf: [{ $ref: '#/components/schemas/ImportIllConfig' }, { type: "null" }]
         holdingsPolicy:
           anyOf: [{ $ref: '#/components/schemas/ImportHoldingsPolicy' }, { type: "null" }]
+
     ImportTierData:
       type: object
       additionalProperties: false
@@ -2234,1155 +3438,3 @@ components:
           entry: '#/components/schemas/ImportEntryRecord'
           tier: '#/components/schemas/ImportTierRecord'
           network: '#/components/schemas/ImportNetworkRecord'
-
-    NetworksResponse:
-      type: object
-      required:
-        - about
-        - items
-      properties:
-        about:
-          $ref: '#/components/schemas/About'
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Network'
-    NetworksForEntryResponse:
-      type: object
-      required:
-        - about
-        - items
-      properties:
-        about:
-          $ref: '#/components/schemas/About'
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/NetworkForEntryDetails'
-    TiersResponse:
-      type: object
-      required:
-        - about
-        - items
-      properties:
-        about:
-          $ref: '#/components/schemas/About'
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Tier'
-    EntriesResponse:
-      type: object
-      required:
-        - about
-        - items
-      properties:
-        about:
-          $ref: '#/components/schemas/About'
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Entry'
-    ClosuresResponse:
-      type: object
-      required:
-        - about
-        - items
-      properties:
-        about:
-          $ref: '#/components/schemas/About'
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Closure'
-    EntryNetworksResponse:
-      type: object
-      required:
-        - about
-        - items
-      properties:
-        about:
-          $ref: '#/components/schemas/About'
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/EntryNetwork'
-    EntryTiersResponse:
-      type: object
-      required:
-        - about
-        - items
-      properties:
-        about:
-          $ref: '#/components/schemas/About'
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/EntryTier'
-    About:
-      type: object
-      required:
-        - count
-      properties:
-        count:
-          type: integer
-          format: int64
-          description: Total number of items in the result
-        nextLink:
-          type: string
-          description: Link to the next page of results
-        prevLink:
-          type: string
-          description: Link to the previous page of results
-    Id:
-      required:
-        - id
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-          description: Unique id
-    Entry:
-      type: object
-      required:
-        - id
-        - name
-      properties:
-        id:
-          readOnly: true
-          type: string
-          format: uuid
-          description: Unique id
-        name:
-          type: string
-          minLength: 1
-        type:
-          $ref: '#/components/schemas/EntryType'
-        parent:
-          type: string
-          format: uuid
-        description:
-          type: string
-        organizationId:
-          type: string
-        contactName:
-          type: string
-        email:
-          type: string
-        fromEmail:
-          type: string
-        tenant:
-          type: string
-          description: Tenant that owns the entry; only consortial administrators may set this field.
-        vendor:
-          $ref: '#/components/schemas/EntryVendor'
-        phoneNumber:
-          type: string
-        lmsLocationCode:
-          type: string
-        illConfig:
-          $ref: '#/components/schemas/IllConfig'
-        hrid:
-          type: string
-        timeZone:
-          type: string
-        symbols:
-          type: array
-          items:
-            $ref: '#/components/schemas/Symbol'
-        addresses:
-          type: array
-          items:
-            $ref: '#/components/schemas/Address'
-        closures:
-          type: array
-          items:
-            $ref: '#/components/schemas/Closure'
-        endpoints:
-          type: array
-          items:
-            $ref: '#/components/schemas/ServiceEndpoint'
-        networks:
-          readOnly: true
-          type: array
-          items:
-            $ref: '#/components/schemas/EntryNetworkDetails'
-        tiers:
-          readOnly: true
-          type: array
-          items:
-            $ref: '#/components/schemas/Tier'
-        lmsConfig:
-          description: Configuration for LMS (Library Management System) integration via NCIP protocol
-          allOf:
-            - $ref: '#/components/schemas/LmsConfig'
-        catalogConfig:
-          $ref: '#/components/schemas/CatalogConfig'
-        holdingsPolicy:
-          description: Policy that determines whether and in which order holdings may supply an item.
-          allOf:
-            - $ref: '#/components/schemas/HoldingsPolicy'
-    IllConfig:
-      type: object
-      properties:
-        defaultLoanPeriod:
-          type: [integer, "null"]
-          format: int32
-          minimum: 1
-          description: Default supplier loan period in calendar days. Omitted or null disables the fallback.
-        iso18626Url:
-          type: string
-          description: URL of the ISO18626 service. When set, used instead of an ISO18626 service from endpoints.
-        iso18626Vendor:
-          description: ISO18626 service vendor. Used only when iso18626Url is non-empty.
-          allOf:
-            - $ref: '#/components/schemas/EntryVendor'
-        lendersOfLastResort:
-          type: array
-          description: Suppliers appended to the end of the rota when no regular supplier can fill the request. Each normalized authority and symbol pair must be unique and exist in the directory; authorities must not contain colons.
-          items:
-            $ref: '#/components/schemas/Symbol'
-        includeRequestingAgencyInfo:
-          type: boolean
-          description: Whether outgoing requests include requestingAgencyInfo populated from the requester directory entry.
-        includeSupplierInfo:
-          type: boolean
-          description: Whether outgoing requests include supplierInfo populated from the supplier directory entry.
-        includeReturnInfo:
-          type: boolean
-          description: Whether Loaned messages include returnInfo populated from the supplier directory entry.
-        includeVendorNote:
-          type: boolean
-          description: Whether broker-generated supplying-agency messages include the supplier vendor in the note.
-        useOfferedCosts:
-          type: boolean
-          description: Whether deliveryCosts are transferred to offeredCosts for messages sent to this requester.
-        noteFieldSeparator:
-          type: string
-          description: Separator used between fields added to notes in messages sent to this entry.
-        supplierPatronPattern:
-          type: string
-          description: Format pattern used to create a patron ID for requests received by this supplier.
-        duplicateCheckWindowHours:
-          type: integer
-          format: int32
-          description: The number of hours to check for duplicate requests. If a request is submitted within this window, it will be considered a duplicate.
-          minimum: 0
-    EntryVendor:
-      type: string
-      description: ISO18626 vendor type
-      enum:
-        - Alma
-        - ReShare
-        - CrossLink
-        - ILLiad
-        - Unknown
-    CatalogConfig:
-      description: >-
-        Raw catalog overrides. Defaults resolve as Generic, then profile (or
-        lmsConfig.vendor when profile is unset), then explicit values. False,
-        empty values where valid, and explicit parser choices take precedence.
-        Same-parser holdings fields merge; a different parser replaces its defaults.
-        Selecting a profile does not enable lookup without an SRU or ZOOM address.
-      type: object
-      properties:
-        profile:
-          anyOf:
-            - $ref: '#/components/schemas/HostLmsVendor'
-            - type: "null"
-          description: Host integration profile, independent of the ILL vendor. WMS and Aleph are reserved and currently unsupported.
-        sru:
-          $ref: '#/components/schemas/SruConfig'
-        zoom:
-          $ref: '#/components/schemas/ZoomConfig'
-        queryConfig:
-          $ref: '#/components/schemas/QueryConfig'
-        holdingsFormat:
-          $ref: '#/components/schemas/HoldingsParserConfig'
-        metadataUpdateMode:
-          $ref: '#/components/schemas/MetadataUpdateMode'
-        metadataFormat:
-          $ref: '#/components/schemas/MetadataParserConfig'
-      additionalProperties: false
-    CatalogConfigPatch:
-      type: object
-      properties:
-        profile:
-          anyOf:
-            - $ref: '#/components/schemas/HostLmsVendor'
-            - type: "null"
-          description: Host integration profile, independent of the ILL vendor. WMS and Aleph are reserved and currently unsupported.
-        sru:
-          $ref: '#/components/schemas/SruConfigPatch'
-        zoom:
-          $ref: '#/components/schemas/ZoomConfigPatch'
-        queryConfig:
-          $ref: '#/components/schemas/QueryConfig'
-        holdingsFormat:
-          $ref: '#/components/schemas/HoldingsParserConfig'
-        metadataUpdateMode:
-          $ref: '#/components/schemas/MetadataUpdateMode'
-        metadataFormat:
-          $ref: '#/components/schemas/MetadataParserConfig'
-      additionalProperties: false
-    MetadataUpdateMode:
-      type: string
-      description: Determines how lookup metadata updates the outgoing ILL request metadata.
-      enum: [replace, merge, none, auto]
-    SruConfig:
-      type: object
-      required: [address]
-      properties:
-        address:
-          type: string
-        recordSchema:
-          type: string
-      additionalProperties: false
-    SruConfigPatch:
-      type: object
-      properties:
-        address:
-          type: string
-        recordSchema:
-          type: string
-      additionalProperties: false
-    ZoomConfig:
-      type: object
-      required: [address]
-      properties:
-        address:
-          type: string
-        options:
-          type: object
-          additionalProperties:
-            type: string
-      additionalProperties: false
-    ZoomConfigPatch:
-      type: object
-      properties:
-        address:
-          type: string
-        options:
-          type: object
-          additionalProperties:
-            type: [string, "null"]
-      additionalProperties: false
-    QueryConfig:
-      type: object
-      properties:
-        type:
-          $ref: '#/components/schemas/QueryConfigType'
-        title:
-          type: string
-        isbn:
-          type: string
-        issn:
-          type: string
-        identifier:
-          type: string
-      additionalProperties: false
-    MetadataParserConfig:
-      type: object
-      properties:
-        marc21:
-          $ref: '#/components/schemas/MarcMetadataParserConfig'
-      additionalProperties: false
-    MarcMetadataParserConfig:
-      type: object
-      properties:
-        identifier: { type: string }
-        isbn: { type: string }
-        issn: { type: string }
-        title: { type: string }
-        subtitle: { type: string }
-        author: { type: string }
-        edition: { type: string }
-      additionalProperties: false
-    HoldingsParserConfig:
-      type: object
-      properties:
-        marc:
-          $ref: '#/components/schemas/MarcHoldingsParserConfig'
-        opac:
-          $ref: '#/components/schemas/OpacHoldingsParserConfig'
-        reservoir:
-          type: object
-          additionalProperties: false
-        marc21plus1:
-          type: object
-          additionalProperties: false
-      additionalProperties: false
-    MarcHoldingsParserConfig:
-      type: object
-      properties:
-        availability:
-          type: array
-          description: All predicates must match a candidate item. Equals requires a present matching subfield; absent rejects any occurrence.
-          items:
-            $ref: '#/components/schemas/MarcAvailabilityPredicate'
-        mainField: { type: string }
-        locationSubField: { type: string }
-        shelvingLocationSubField: { type: string }
-        itemIdSubField: { type: string }
-        restrictedSubField: { type: string }
-        callNumberSubField: { type: string }
-      additionalProperties: false
-    MarcAvailabilityPredicate:
-      type: object
-      required: [subField, operator]
-      properties:
-        subField: { type: string, minLength: 1 }
-        operator:
-          $ref: '#/components/schemas/MarcAvailabilityOperator'
-        value: { type: string }
-      additionalProperties: false
-    OpacHoldingsParserConfig:
-      type: object
-      properties:
-        availabilityRule:
-          $ref: '#/components/schemas/OpacAvailabilityRule'
-        availablePublicNotes:
-          type: array
-          items: { type: string }
-        requireLocalLocation: { type: boolean }
-        shelvingLocationSource:
-          $ref: '#/components/schemas/ShelvingLocationSource'
-        includeItemId: { type: boolean }
-        includeItemLoanPolicy: { type: boolean }
-        includeTemporaryLocation: { type: boolean }
-        allCirculations: { type: boolean }
-      additionalProperties: false
-    EntryPatch:
-      type: object
-      properties:
-        name:
-          type: string
-          minLength: 1
-        type:
-          anyOf:
-            - $ref: '#/components/schemas/EntryType'
-            - type: "null"
-        parent:
-          type: [string, "null"]
-          format: uuid
-        description:
-          type: [string, "null"]
-        organizationId:
-          type: [string, "null"]
-        contactName:
-          type: [string, "null"]
-        email:
-          type: [string, "null"]
-        fromEmail:
-          type: [string, "null"]
-        tenant:
-          type: [string, "null"]
-          description: Tenant that owns the entry; only consortial administrators may modify this field.
-        vendor:
-          anyOf:
-            - $ref: '#/components/schemas/EntryVendor'
-            - type: "null"
-        phoneNumber:
-          type: [string, "null"]
-        lmsLocationCode:
-          type: [string, "null"]
-        illConfig:
-          anyOf:
-            - $ref: '#/components/schemas/AddEntryIllConfig'
-            - type: "null"
-        hrid:
-          type: [string, "null"]
-        timeZone:
-          type: [string, "null"]
-        lmsConfig:
-          anyOf:
-            - $ref: '#/components/schemas/LmsConfigPatch'
-            - type: "null"
-        catalogConfig:
-          anyOf:
-            - $ref: '#/components/schemas/CatalogConfigPatch'
-            - type: "null"
-        holdingsPolicy:
-          anyOf:
-            - $ref: '#/components/schemas/HoldingsPolicy'
-            - type: "null"
-        symbols:
-          type: [array, "null"]
-          items:
-            $ref: '#/components/schemas/SymbolPatch'
-        endpoints:
-          type: [array, "null"]
-          items:
-            $ref: '#/components/schemas/ServiceEndpointPatch'
-        addresses:
-          type: [array, "null"]
-          items:
-            $ref: '#/components/schemas/AddressPatch'
-        closures:
-          type: [array, "null"]
-          items:
-            $ref: '#/components/schemas/ClosurePatch'
-
-    HoldingsPolicy:
-      type: object
-      properties:
-        locations:
-          type: array
-          items:
-            $ref: '#/components/schemas/HoldingsLocation'
-        shelvingLocations:
-          type: array
-          items:
-            $ref: '#/components/schemas/HoldingsShelvingLocation'
-        locationPolicies:
-          type: array
-          items:
-            $ref: '#/components/schemas/HoldingsLocationPolicy'
-        itemLoanPolicies:
-          type: array
-          items:
-            $ref: '#/components/schemas/HoldingsItemLoanPolicy'
-      additionalProperties: false
-
-    HoldingsLocation:
-      type: object
-      required:
-        - code
-        - name
-        - supplyPreference
-      properties:
-        code:
-          type: string
-          description: Location code (for example, "MAIN").
-        name:
-          type: string
-          description: Human-readable location name (for example, "Main Library").
-        supplyPreference:
-          $ref: '#/components/schemas/HoldingsSupplyPreference'
-      additionalProperties: false
-
-    HoldingsShelvingLocation:
-      type: object
-      required:
-        - code
-        - name
-        - supplyPreference
-      properties:
-        code:
-          type: string
-          description: Shelving location code (for example, "STACKS").
-        name:
-          type: string
-          description: Human-readable shelving location name (for example, "Stacks").
-        supplyPreference:
-          $ref: '#/components/schemas/HoldingsSupplyPreference'
-      additionalProperties: false
-
-    HoldingsLocationPolicy:
-      type: object
-      required:
-        - shelvingLocationCode
-        - supplyPreference
-      properties:
-        locationCode:
-          type: string
-          description: Location code. When omitted, the override applies across all locations.
-        shelvingLocationCode:
-          type: string
-          description: Shelving location code to which the override applies.
-        supplyPreference:
-          $ref: '#/components/schemas/HoldingsSupplyPreference'
-      additionalProperties: false
-
-    HoldingsItemLoanPolicy:
-      type: object
-      required:
-        - code
-        - name
-        - lendable
-      properties:
-        code:
-          type: string
-          description: Item loan policy code (for example, "NORMAL").
-        name:
-          type: string
-          description: Human-readable item loan policy name (for example, "Normal loan").
-        lendable:
-          type: boolean
-          description: Whether items governed by this loan policy may be supplied.
-      additionalProperties: false
-
-    HoldingsSupplyPreference:
-      type: integer
-      minimum: -1
-      maximum: 10000
-      description: Supply preference where -1 disables supply, 0 means no preference, and 10000 is the highest preference.
-
-    LmsConfig:
-      description: >-
-        Raw circulation overrides, independent of illConfig.iso18626Vendor and
-        the deprecated top-level vendor. Generic defaults are followed by the
-        selected host vendor and explicit values. Defaults are never persisted.
-        A vendor alone does not enable NCIP; address and fromAgency must both
-        be configured to create a circulation adapter.
-      type: object
-      properties:
-        ncipNamespaceEnabled:
-          type: boolean
-        bibIdNormalization:
-          $ref: '#/components/schemas/BibIdNormalization'
-        vendor:
-          anyOf:
-            - $ref: '#/components/schemas/HostLmsVendor'
-            - type: "null"
-          description: Host integration profile, independent of the ILL vendor. WMS and Aleph are reserved and currently unsupported.
-        address:
-          type: string
-          x-go-type-skip-optional-pointer: true
-          description: Base URL of the LMS API
-        fromAgency:
-          type: string
-          x-go-type-skip-optional-pointer: true
-          description: Agency code used when the entry is acting as the supplying agency
-        fromAgencyAuthentication:
-          type: string
-          x-oapi-codegen-extra-tags:
-            protected: "true"
-          description: Authentication token or credentials for the fromAgency
-        toAgency:
-          type: string
-          description: Agency code used when the entry is acting as the requesting agency
-        lookupUserEnabled:
-          type: boolean
-          description: Whether user lookup is enabled
-        acceptItemEnabled:
-          type: boolean
-          description: Whether item acceptance is enabled
-        checkInItemEnabled:
-          type: boolean
-          description: Whether item check-in is enabled
-        checkOutItemEnabled:
-          type: boolean
-          description: Whether item check-out is enabled
-        requestItemEnabled:
-          type: boolean
-          description: Whether item requesting is enabled
-        itemLocation:
-          type: string
-          description: Location code to include in NCIP RequestItem messages
-        requestItemRequestType:
-          type: string
-          description: For Request Item requests, the type of request to create
-        requestItemRequestScopeType:
-          type: string
-          description: For Request Item requests, the scope type of request to create
-        requestItemBibIdCode:
-          type: string
-          description: For Request Item requests, the code indicating how to interpret the bib id
-        requestItemPickupLocationEnabled:
-          type: boolean
-          description: Whether to include a pickup location when making Request Item requests
-        requesterPickupLocation:
-          type: string
-          description: Pickup location code used when acting as requesting agency
-        supplierPickupLocation:
-          type: string
-          description: Pickup location code used when acting as supplying agency
-        requesterPatronPattern:
-          type: string
-          description: "'{requesterSymbol}' occurrences are replaced with requesting agency ISIL"
-        patronProfiles:
-          description: Patron profiles used to determine whether a user returned by NCIP LookupUser is eligible to create ILL requests.
-          allOf:
-            - $ref: '#/components/schemas/PatronProfiles'
-
-    PatronProfiles:
-      type: array
-      description: Patron profile eligibility rules, inspected in order until both configured profile components match.
-      items:
-        $ref: '#/components/schemas/PatronProfile'
-
-    PatronProfile:
-      type: object
-      required:
-        - canCreateRequests
-      properties:
-        code:
-          type: string
-          minLength: 1
-          description: Profile code returned by the LMS (for example, "STAFF"). When omitted, any code matches.
-        name:
-          type: string
-          minLength: 1
-          description: Profile name returned by the LMS (for example, "Staff"). When omitted, any name matches.
-        canCreateRequests:
-          type: boolean
-          description: Whether patrons with this profile may create ILL requests.
-      additionalProperties: false
-
-    LmsConfigPatch:
-      type: object
-      properties:
-        ncipNamespaceEnabled:
-          type: [boolean, "null"]
-        bibIdNormalization:
-          anyOf:
-            - $ref: '#/components/schemas/BibIdNormalization'
-            - type: "null"
-        vendor:
-          anyOf:
-            - $ref: '#/components/schemas/HostLmsVendor'
-            - type: "null"
-          description: Host integration profile, independent of the ILL vendor. WMS and Aleph are reserved and currently unsupported.
-        address:
-          type: string
-        fromAgency:
-          type: string
-        fromAgencyAuthentication:
-          type: [string, "null"]
-        toAgency:
-          type: [string, "null"]
-        lookupUserEnabled:
-          type: [boolean, "null"]
-        acceptItemEnabled:
-          type: [boolean, "null"]
-        checkInItemEnabled:
-          type: [boolean, "null"]
-        checkOutItemEnabled:
-          type: [boolean, "null"]
-        requestItemEnabled:
-          type: [boolean, "null"]
-        itemLocation:
-          type: [string, "null"]
-        requestItemRequestType:
-          type: [string, "null"]
-        requestItemRequestScopeType:
-          type: [string, "null"]
-        requestItemBibIdCode:
-          type: [string, "null"]
-        requestItemPickupLocationEnabled:
-          type: [boolean, "null"]
-        requesterPickupLocation:
-          type: [string, "null"]
-        supplierPickupLocation:
-          type: [string, "null"]
-        requesterPatronPattern:
-          type: [string, "null"]
-        patronProfiles:
-          anyOf:
-            - $ref: '#/components/schemas/PatronProfiles'
-            - type: "null"
-
-    SymbolProperties:
-      type: object
-      additionalProperties: false
-      required:
-        - symbol
-        - authority
-      properties:
-        symbol:
-          type: string
-          minLength: 1
-          description: Uppercase string
-        authority:
-          type: string
-          minLength: 1
-          description: Uppercase string
-    Symbol:
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - symbol
-        - authority
-      properties:
-        id:
-          readOnly: true
-          type: string
-          format: uuid
-          description: Unique id
-        symbol:
-          type: string
-          minLength: 1
-          description: Uppercase string
-        authority:
-          type: string
-          minLength: 1
-          description: Uppercase string
-    SymbolPatch:
-      type: object
-      additionalProperties: false
-      required:
-        - symbol
-        - authority
-      properties:
-        id:
-          type: string
-          format: uuid
-          description: Unique id
-        symbol:
-          type: string
-          minLength: 1
-          description: Uppercase string
-        authority:
-          type: string
-          minLength: 1
-          description: Uppercase string
-
-    ServiceEndpointProperties:
-      type: object
-      additionalProperties: false
-      required:
-        - name
-        - type
-        - address
-      properties:
-        name:
-          type: string
-        type:
-          type: string
-        address:
-          type: string
-    ServiceEndpoint:
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - name
-        - type
-        - address
-      properties:
-        id:
-          readOnly: true
-          type: string
-          format: uuid
-          description: Unique id
-        name:
-          type: string
-        type:
-          type: string
-        address:
-          type: string
-    ServiceEndpointPatch:
-      type: object
-      additionalProperties: false
-      required:
-        - name
-        - type
-        - address
-      properties:
-        id:
-          type: string
-          format: uuid
-          description: Unique id
-        name:
-          type: string
-        type:
-          type: string
-        address:
-          type: string
-
-    AddressComponent:
-      type: object
-      additionalProperties: false
-      required:
-        - seq
-        - type
-        - value
-      properties:
-        seq:
-          type: integer
-          format: int32
-          description: Sequence number for ordering components
-        type:
-          $ref: '#/components/schemas/AddressComponentType'
-        value:
-          type: string
-
-    AddressProperties:
-      type: object
-      required:
-        - type
-      properties:
-        type:
-          $ref: '#/components/schemas/AddressType'
-        addressComponents:
-          type: array
-          items:
-            $ref: '#/components/schemas/AddressComponent'
-    Address:
-      allOf:
-        - required:
-          - id
-          - entry
-          properties:
-            id:
-              readOnly: true
-              type: string
-              format: uuid
-              description: Unique id
-            entry:
-              readOnly: true
-              type: string
-              format: uuid
-        - $ref: '#/components/schemas/AddressProperties'
-    AddressPatch:
-      allOf:
-        - properties:
-            id:
-              type: string
-              format: uuid
-              description: Unique id
-        - $ref: '#/components/schemas/AddressProperties'
-
-    ClosureProperties:
-      type: object
-      additionalProperties: false
-      required:
-        - startDate
-        - endDate
-        - reason
-      properties:
-        startDate:
-          type: string
-          format: date
-          description: ISO8601 date
-        endDate:
-          type: string
-          format: date
-          description: ISO8601 date
-        reason:
-          type: string
-
-    Closure:
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - entry
-        - startDate
-        - endDate
-        - reason
-      properties:
-        id:
-          readOnly: true
-          type: string
-          format: uuid
-          description: Unique identifier
-        entry:
-          type: string
-          format: uuid
-        startDate:
-          type: string
-          format: date
-          description: ISO8601 date
-        endDate:
-          type: string
-          format: date
-          description: ISO8601 date
-        reason:
-          type: string
-    ClosurePatch:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-          description: Unique identifier
-        startDate:
-          type: string
-          format: date
-          description: ISO8601 date
-        endDate:
-          type: string
-          format: date
-          description: ISO8601 date
-        reason:
-          type: string
-
-    Network:
-      type: object
-      required:
-        - id
-        - consortium
-        - name
-      properties:
-        id:
-          readOnly: true
-          type: string
-          format: uuid
-          description: Unique identifier
-        consortium:
-          type: string
-          format: uuid
-        name:
-          type: string
-          minLength: 1
-          pattern: '.*\S.*'
-        reciprocal:
-          type: boolean
-
-    NetworkPatch:
-      type: object
-      additionalProperties: false
-      properties:
-        reciprocal:
-          type: [boolean, "null"]
-
-    EntryNetworkDetails:
-      allOf:
-        - $ref: '#/components/schemas/Network'
-        - type: object
-          required:
-            - priority
-          properties:
-            priority:
-              type: integer
-              format: int32
-              description: Priority of this network for the associated entry
-
-    NetworkForEntryDetails:
-      allOf:
-        - $ref: '#/components/schemas/Network'
-        - type: object
-          properties:
-            priority:
-              type: integer
-              format: int32
-              description: Priority of this network for the associated entry; omitted for consortium-owned network listings
-
-    Tier:
-      type: object
-      required:
-        - id
-        - consortium
-        - name
-        - level
-        - type
-        - cost
-      properties:
-        id:
-          readOnly: true
-          type: string
-          format: uuid
-          description: Unique identifier
-        consortium:
-          type: string
-          format: uuid
-        name:
-          type: string
-          minLength: 1
-          pattern: '.*\S.*'
-        level:
-          $ref: '#/components/schemas/TierLevel'
-        type:
-          $ref: '#/components/schemas/TierType'
-        cost:
-          type: number
-          format: double
-          default: 0.0
-    
-    EntryNetwork:
-      type: object
-      required:
-        - id
-        - entry
-        - network
-        - priority
-      properties:
-        id:
-          readOnly: true
-          type: string
-          format: uuid
-          description: Unique identifier
-        entry:
-          type: string
-          format: uuid
-          description: ID of entry
-        network:
-          type: string
-          format: uuid
-          description: ID of network
-        priority:
-          type: integer
-          format: int32
-          default: 0
-          description: Priority of this network for the associated entry
-
-    EntryNetworkPatch:
-      type: object
-      additionalProperties: false
-      required:
-        - priority
-      properties:
-        priority:
-          type: integer
-          format: int32
-          description: Priority of this network for the associated entry
-
-    CreateEntryNetwork:
-      type: object
-      required:
-        - entry
-        - network
-      properties:
-        entry:
-          type: string
-          format: uuid
-          description: ID of entry
-        network:
-          type: string
-          format: uuid
-          description: ID of network
-        priority:
-          type: integer
-          format: int32
-          default: 0
-          description: Priority of this network for the associated entry
-
-    EntryTier:
-      type: object
-      required:
-        - id
-        - entry
-        - tier
-      properties:
-        id:
-          readOnly: true
-          type: string
-          format: uuid
-          description: Unique identifier
-        entry:
-          type: string
-          format: uuid
-          description: ID of entry
-        tier:
-          type: string
-          format: uuid
-          description: ID of tier
-
-    AddEntryTier:
-      type: object
-      required:
-        - id
-      properties:
-        id:
-          type: string
-          format: uuid
-          description: Unique identifier
-
-    AddEntryNetwork:
-      type: object
-      required:
-        - id
-      properties:
-        id:
-          type: string
-          format: uuid
-          description: Unique identifier
-        priority:
-          type: integer
-          format: int32
-          default: 0
-          description: Priority of this network for the associated entry
