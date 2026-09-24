@@ -15,7 +15,7 @@ func TestOpenAPI31PreservesNullableSchemas(t *testing.T) {
 
 		require.NoError(t, spec.Components.Schemas["ZoomConfigPatch"].Value.Properties["options"].Value.AdditionalProperties.Schema.Value.VisitJSON(nil))
 		require.NoError(t, spec.Components.Schemas["CatalogConfigPatch"].Value.Properties["profile"].Value.VisitJSON(nil))
-		require.Contains(t, spec.Components.Schemas["CreateClosure"].Value.Required, "entry")
+		require.Contains(t, spec.Components.Schemas["AddClosure"].Value.Required, "entry")
 		require.Nil(t, composedProperty(spec.Components.Schemas["AddEntry"].Value, "closures"))
 	}
 }

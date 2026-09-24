@@ -14,12 +14,12 @@ func TestEntryNetworkPriorityContract(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	createSchema := spec.Components.Schemas["CreateEntryNetwork"].Value
+	createSchema := spec.Components.Schemas["AddEntryNetwork"].Value
 	if slices.Contains(createSchema.Required, "priority") {
-		t.Error("CreateEntryNetwork priority must be optional")
+		t.Error("AddEntryNetwork priority must be optional")
 	}
 	if createSchema.Properties["priority"].Value.Default != float64(0) {
-		t.Errorf("CreateEntryNetwork priority default = %v, want 0", createSchema.Properties["priority"].Value.Default)
+		t.Errorf("AddEntryNetwork priority default = %v, want 0", createSchema.Properties["priority"].Value.Default)
 	}
 
 	responseSchema := spec.Components.Schemas["EntryNetwork"].Value

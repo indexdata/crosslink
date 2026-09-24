@@ -335,7 +335,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AddEntryTier'
+              $ref: '#/components/schemas/EntryTierAssignment'
       responses:
         '201':
           description: Entry Tier response
@@ -458,7 +458,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AddEntryNetwork'
+              $ref: '#/components/schemas/EntryNetworkAssignment'
       responses:
         '201':
           description: Entry Network response
@@ -1003,7 +1003,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateEntryTier'
+              $ref: '#/components/schemas/AddEntryTier'
       responses:
         '201':
           description: Entry Tier response
@@ -1159,7 +1159,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateEntryNetwork'
+              $ref: '#/components/schemas/AddEntryNetwork'
       responses:
         '201':
           description: Entry Network response
@@ -1361,7 +1361,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateClosure'
+              $ref: '#/components/schemas/AddClosure'
       responses:
         '201':
           description: Closure response
@@ -2669,7 +2669,7 @@ components:
           format: uuid
           description: ID of tier
 
-    CreateEntryTier:
+    AddEntryTier:
       x-go-type: EntryTier
       allOf:
         - $ref: '#/components/schemas/EntryTierProperties'
@@ -2686,7 +2686,7 @@ components:
               type: string
               format: uuid
               description: Unique identifier
-    AddEntryTier:
+    EntryTierAssignment:
       type: object
       required:
         - id
@@ -2710,7 +2710,7 @@ components:
             $ref: '#/components/schemas/EntryTier'
 
     # Entry network
-    CreateEntryNetwork:
+    AddEntryNetwork:
       type: object
       required:
         - entry
@@ -2768,7 +2768,7 @@ components:
           format: int32
           description: Priority of this network for the associated entry
 
-    AddEntryNetwork:
+    EntryNetworkAssignment:
       type: object
       required:
         - id
@@ -2797,7 +2797,7 @@ components:
             $ref: '#/components/schemas/EntryNetwork'
 
     # Closure
-    CreateClosure:
+    AddClosure:
       type: object
       additionalProperties: false
       x-go-type: Closure
