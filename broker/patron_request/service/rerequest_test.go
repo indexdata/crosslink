@@ -36,10 +36,14 @@ func TestRerequest(t *testing.T) {
 			}
 			repo.On("GetPatronRequestById", original.ID).Return(original, nil)
 			repo.On("GetPatronRequestByIdForUpdate", original.ID).Return(original, nil)
+			var params map[string]any
+			if state == BorrowerStateUnfilled {
+				params = map[string]any{"noop": false}
+			}
 			action := BorrowerActionRerequest
 			status, result := service.handleInvokeAction(appCtx, events.Event{
 				ID: "rerequest-event", PatronRequestID: original.ID,
-				EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}},
+				EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}, CustomData: params},
 			})
 			require.Equal(t, events.EventStatusSuccess, status, "%+v", result)
 			next := repo.createdPr
@@ -218,5 +222,39 @@ func TestSendRequestDuplicateCheckBypass(t *testing.T) {
 				assert.Equal(t, expectedPrevious, result.OutgoingMessage.Request.ServiceInfo.RequestingAgencyPreviousRequestId)
 			})
 		}
+	}
+}
+
+func TestRerequestNoop(t *testing.T) {
+	for _, state := range []pr_db.PatronRequestState{BorrowerStateCancelled, BorrowerStateUnfilled} {
+		t.Run(string(state), func(t *testing.T) {
+			repo := new(MockPrRepo)
+			bus := new(MockEventBus)
+			// No LMS adapter should be needed for a transition-only action.
+			service := CreatePatronRequestActionService(repo, nil, bus, nil, new(MockLmsCreator), nil, nil, nil)
+			original := pr_db.PatronRequest{
+				ID: "original", Side: SideBorrowing, State: state, TerminalState: true,
+				RequesterSymbol: getDbText("ISIL:REQ1"), StateModel: "default",
+				IllRequest: iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}},
+			}
+			repo.On("GetPatronRequestById", original.ID).Return(original, nil)
+			repo.On("GetPatronRequestByIdForUpdate", original.ID).Return(original, nil)
+			action := BorrowerActionRerequest
+			status, result := service.handleInvokeAction(appCtx, events.Event{
+				ID: "noop-event", PatronRequestID: original.ID,
+				EventData: events.EventData{
+					CommonEventData: events.CommonEventData{Action: &action},
+					CustomData:      map[string]any{"noop": true},
+				},
+			})
+			require.Equal(t, events.EventStatusSuccess, status, "%+v", result)
+			assert.Empty(t, repo.createdPr.ID)
+			assert.False(t, repo.savedPr.NextReqID.Valid)
+			assert.Equal(t, state, repo.savedPr.State)
+			assert.True(t, repo.savedPr.TerminalState)
+			assert.Equal(t, string(action), repo.savedPr.LastAction.String)
+			assert.Equal(t, ActionOutcomeSuccess, repo.savedPr.LastActionOutcome.String)
+			assert.Empty(t, bus.createdTaskData)
+		})
 	}
 }

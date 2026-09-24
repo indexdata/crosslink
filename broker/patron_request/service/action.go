@@ -129,6 +129,7 @@ func (e *autoActionFailure) Error() string {
 }
 
 type actionParams struct {
+	Noop             bool                       `json:"noop,omitempty"`
 	DueDate          *string                    `json:"dueDate,omitempty"`
 	Note             string                     `json:"note,omitempty"`
 	Barcode          string                     `json:"barcode,omitempty"`
@@ -713,15 +714,18 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		status, result := logActionErrorAndReturnResult(ctx, "missing requester symbol", nil)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
+	var params actionParams
+	err := common.MapToStruct(actionCustomData, &params)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to unmarshal action parameters", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	if action == BorrowerActionRerequest && params.Noop {
+		return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
+	}
 	lmsAdapter, err := a.createRequesterLmsAdapter(ctx, eventID, pr)
 	if err != nil {
 		status, result := logActionErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
-		return actionExecutionResult{status: status, result: result, pr: pr}
-	}
-	var params actionParams
-	err = common.MapToStruct(actionCustomData, &params)
-	if err != nil {
-		status, result := logActionErrorAndReturnResult(ctx, "failed to unmarshal action parameters", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	switch action {

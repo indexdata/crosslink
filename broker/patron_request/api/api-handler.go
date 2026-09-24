@@ -331,8 +331,17 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 	if !a.validatePickupLocation(w, ctx, dbreq) {
 		return
 	}
-	pr, err := a.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(dbreq))
+	dbreq.PrevReqID = getDbText(newPr.PrevReqId)
+	pr, err := prservice.CreateBorrowingRequest(ctx, a.prRepo, dbreq)
 	if err != nil {
+		if errors.Is(err, prservice.ErrInvalidPredecessor) {
+			api.AddBadRequestError(ctx, w, err)
+			return
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			api.AddNotFoundError(w)
+			return
+		}
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgerrcode.IsIntegrityConstraintViolation(pgErr.Code) {
 			api.AddBadRequestError(ctx, w, errors.New("a patron request with this ID already exists"))

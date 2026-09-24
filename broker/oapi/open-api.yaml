@@ -1006,6 +1006,13 @@ components:
         id:
           type: string
           description: Unique identifier of the patron request
+        prevReqId:
+          type: string
+          minLength: 1
+          description: >-
+            On creation, ID of the previous borrowing request belonging to the same
+            requester. The previous request must not already have a successor.
+            Both requests are linked atomically. Not supported on update.
         illRequest:
           type: object
           description: JSON of ISO18626 request
@@ -1050,7 +1057,7 @@ components:
           description: Action to execute
         actionParams:
           type: object
-          description: Action parameters
+          description: Action parameters. For rerequest, noop (boolean, default false) applies only the transition without creating a successor.
       required:
         - action
 
