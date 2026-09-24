@@ -663,7 +663,7 @@ func sanitizeEntry(entry *Entry) error {
 
 }
 
-func validateLendersOfLastResort(ctx context.Context, queries *db.Queries, lenders *[]Symbol) (string, error) {
+func validateLendersOfLastResort(ctx context.Context, queries *db.Queries, lenders *[]SymbolProperties) (string, error) {
 	if lenders == nil {
 		return "", nil
 	}

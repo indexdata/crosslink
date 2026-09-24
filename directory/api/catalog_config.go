@@ -310,7 +310,7 @@ func boolPtr(value bool) *bool {
 	return &value
 }
 
-func symbolsToFullSymbols(symbols *[]Symbol) []string {
+func symbolsToFullSymbols(symbols *[]SymbolProperties) []string {
 	if symbols == nil {
 		return nil
 	}

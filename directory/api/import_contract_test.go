@@ -16,7 +16,7 @@ func TestOpenAPI31PreservesNullableSchemas(t *testing.T) {
 		require.NoError(t, spec.Components.Schemas["ZoomConfigPatch"].Value.Properties["options"].Value.AdditionalProperties.Schema.Value.VisitJSON(nil))
 		require.NoError(t, spec.Components.Schemas["CatalogConfigPatch"].Value.Properties["profile"].Value.VisitJSON(nil))
 		require.Contains(t, spec.Components.Schemas["CreateClosure"].Value.Required, "entry")
-		require.NotContains(t, spec.Components.Schemas["AddEntry"].Value.Properties, "closures")
+		require.Nil(t, composedProperty(spec.Components.Schemas["AddEntry"].Value, "closures"))
 	}
 }
 
@@ -234,9 +234,23 @@ func loadImportContracts(t *testing.T) []*openapi3.T {
 	return []*openapi3.T{source, embedded}
 }
 
+// composedProperty finds a property declared directly on the schema or on any allOf member.
+func composedProperty(schema *openapi3.Schema, propertyName string) *openapi3.SchemaRef {
+	if property, ok := schema.Properties[propertyName]; ok {
+		return property
+	}
+	for _, member := range schema.AllOf {
+		if property := composedProperty(member.Value, propertyName); property != nil {
+			return property
+		}
+	}
+	return nil
+}
+
 func requirePropertySchemaRef(t *testing.T, contract *openapi3.T, schemaName, propertyName, referencedSchemaName string) {
 	t.Helper()
-	property := contract.Components.Schemas[schemaName].Value.Properties[propertyName]
+	property := composedProperty(contract.Components.Schemas[schemaName].Value, propertyName)
+	require.NotNil(t, property, "%s.%s", schemaName, propertyName)
 	want := "#/components/schemas/" + referencedSchemaName
 	if property.Ref == want {
 		return

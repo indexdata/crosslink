@@ -1597,79 +1597,11 @@ components:
         - ILLiad
         - Unknown
 
-    AddEntry:
+    EntryProperties:
       type: object
-      x-go-type: Entry
       required:
         - name
       properties:
-        name:
-          type: string
-          minLength: 1
-        type:
-          $ref: '#/components/schemas/EntryType'
-        parent:
-          type: string
-          format: uuid
-        description:
-          type: string
-        organizationId:
-          type: string
-        contactName:
-          type: string
-        email:
-          type: string
-        fromEmail:
-          type: string
-        tenant:
-          type: string
-          description: Tenant that owns the entry; only consortial administrators may set this field.
-        vendor:
-          $ref: '#/components/schemas/EntryVendor'
-        phoneNumber:
-          type: string
-        lmsLocationCode:
-          type: string
-        illConfig:
-          $ref: '#/components/schemas/AddEntryIllConfig'
-        hrid:
-          type: string
-        timeZone:
-          type: string
-        symbols:
-          type: array
-          items:
-            $ref: '#/components/schemas/AddEntrySymbol'
-        addresses:
-          type: array
-          items:
-            $ref: '#/components/schemas/AddEntryAddress'
-        endpoints:
-          type: array
-          items:
-            $ref: '#/components/schemas/AddEntryServiceEndpoint'
-        lmsConfig:
-          description: Configuration for LMS (Library Management System) integration via NCIP protocol
-          allOf:
-            - $ref: '#/components/schemas/LmsConfig'
-        catalogConfig:
-          $ref: '#/components/schemas/CatalogConfig'
-        holdingsPolicy:
-          description: Policy that determines whether and in which order holdings may supply an item.
-          allOf:
-            - $ref: '#/components/schemas/HoldingsPolicy'
-
-    Entry:
-      type: object
-      required:
-        - id
-        - name
-      properties:
-        id:
-          readOnly: true
-          type: string
-          format: uuid
-          description: Unique id
         name:
           type: string
           minLength: 1
@@ -1703,32 +1635,6 @@ components:
           type: string
         timeZone:
           type: string
-        symbols:
-          type: array
-          items:
-            $ref: '#/components/schemas/Symbol'
-        addresses:
-          type: array
-          items:
-            $ref: '#/components/schemas/Address'
-        closures:
-          type: array
-          items:
-            $ref: '#/components/schemas/Closure'
-        endpoints:
-          type: array
-          items:
-            $ref: '#/components/schemas/ServiceEndpoint'
-        networks:
-          readOnly: true
-          type: array
-          items:
-            $ref: '#/components/schemas/EntryNetworkDetails'
-        tiers:
-          readOnly: true
-          type: array
-          items:
-            $ref: '#/components/schemas/Tier'
         lmsConfig:
           description: Configuration for LMS (Library Management System) integration via NCIP protocol
           allOf:
@@ -1740,6 +1646,63 @@ components:
           allOf:
             - $ref: '#/components/schemas/HoldingsPolicy'
 
+    AddEntry:
+      x-go-type: Entry
+      allOf:
+        - $ref: '#/components/schemas/EntryProperties'
+        - type: object
+          properties:
+            symbols:
+              type: array
+              items:
+                $ref: '#/components/schemas/SymbolProperties'
+            addresses:
+              type: array
+              items:
+                $ref: '#/components/schemas/AddressProperties'
+            endpoints:
+              type: array
+              items:
+                $ref: '#/components/schemas/ServiceEndpointProperties'
+
+    Entry:
+      allOf:
+        - $ref: '#/components/schemas/EntryProperties'
+        - type: object
+          required:
+            - id
+          properties:
+            id:
+              readOnly: true
+              type: string
+              format: uuid
+              description: Unique id
+            symbols:
+              type: array
+              items:
+                $ref: '#/components/schemas/Symbol'
+            addresses:
+              type: array
+              items:
+                $ref: '#/components/schemas/Address'
+            endpoints:
+              type: array
+              items:
+                $ref: '#/components/schemas/ServiceEndpoint'
+            closures:
+              type: array
+              items:
+                $ref: '#/components/schemas/Closure'
+            networks:
+              readOnly: true
+              type: array
+              items:
+                $ref: '#/components/schemas/EntryNetworkDetails'
+            tiers:
+              readOnly: true
+              type: array
+              items:
+                $ref: '#/components/schemas/Tier'
     EntryPatch:
       type: object
       properties:
@@ -1776,7 +1739,7 @@ components:
           type: [string, "null"]
         illConfig:
           anyOf:
-            - $ref: '#/components/schemas/AddEntryIllConfig'
+            - $ref: '#/components/schemas/IllConfig'
             - type: "null"
         hrid:
           type: [string, "null"]
@@ -1823,92 +1786,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Entry'
-
-    AddEntrySymbol:
-      type: object
-      additionalProperties: false
-      x-go-type: Symbol
-      required:
-        - symbol
-        - authority
-      properties:
-        symbol:
-          type: string
-          minLength: 1
-          description: Uppercase string
-        authority:
-          type: string
-          minLength: 1
-          description: Uppercase string
-
-    AddEntryServiceEndpoint:
-      type: object
-      additionalProperties: false
-      x-go-type: ServiceEndpoint
-      required:
-        - name
-        - type
-        - address
-      properties:
-        name:
-          type: string
-        type:
-          type: string
-        address:
-          type: string
-
-    AddEntryAddress:
-      x-go-type: Address
-      allOf:
-        - $ref: '#/components/schemas/AddressProperties'
-
-    AddEntryIllConfig:
-      type: object
-      x-go-type: IllConfig
-      properties:
-        defaultLoanPeriod:
-          type: [integer, "null"]
-          format: int32
-          minimum: 1
-          description: Default supplier loan period in calendar days. Omitted or null disables the fallback.
-        iso18626Url:
-          type: string
-          description: URL of the ISO18626 service. When set, used instead of an ISO18626 service from endpoints.
-        iso18626Vendor:
-          description: ISO18626 service vendor. Used only when iso18626Url is non-empty.
-          allOf:
-            - $ref: '#/components/schemas/EntryVendor'
-        lendersOfLastResort:
-          type: array
-          description: Suppliers appended to the end of the rota when no regular supplier can fill the request. Each normalized authority and symbol pair must be unique and exist in the directory; authorities must not contain colons.
-          items:
-            $ref: '#/components/schemas/AddEntrySymbol'
-        includeRequestingAgencyInfo:
-          type: boolean
-          description: Whether outgoing requests include requestingAgencyInfo populated from the requester directory entry.
-        includeSupplierInfo:
-          type: boolean
-          description: Whether outgoing requests include supplierInfo populated from the supplier directory entry.
-        includeReturnInfo:
-          type: boolean
-          description: Whether Loaned messages include returnInfo populated from the supplier directory entry.
-        includeVendorNote:
-          type: boolean
-          description: Whether broker-generated supplying-agency messages include the supplier vendor in the note.
-        useOfferedCosts:
-          type: boolean
-          description: Whether deliveryCosts are transferred to offeredCosts for messages sent to this requester.
-        noteFieldSeparator:
-          type: string
-          description: Separator used between fields added to notes in messages sent to this entry.
-        supplierPatronPattern:
-          type: string
-          description: Format pattern used to create a patron ID for requests received by this supplier.
-        duplicateCheckWindowHours:
-          type: integer
-          format: int32
-          description: The number of hours to check for duplicate requests. If a request is submitted within this window, it will be considered a duplicate.
-          minimum: 0
 
     # Symbol
     SymbolProperties:
@@ -2109,7 +1986,7 @@ components:
           type: array
           description: Suppliers appended to the end of the rota when no regular supplier can fill the request. Each normalized authority and symbol pair must be unique and exist in the directory; authorities must not contain colons.
           items:
-            $ref: '#/components/schemas/Symbol'
+            $ref: '#/components/schemas/SymbolProperties'
         includeRequestingAgencyInfo:
           type: boolean
           description: Whether outgoing requests include requestingAgencyInfo populated from the requester directory entry.
@@ -2620,9 +2497,8 @@ components:
       enum: [loan, copy]
       default: loan
 
-    AddTier:
+    TierProperties:
       type: object
-      x-go-type: Tier
       required:
         - consortium
         - name
@@ -2645,38 +2521,24 @@ components:
           type: number
           format: double
           default: 0.0
+
+    AddTier:
+      x-go-type: Tier
+      allOf:
+        - $ref: '#/components/schemas/TierProperties'
 
     Tier:
-      type: object
-      required:
-        - id
-        - consortium
-        - name
-        - level
-        - type
-        - cost
-      properties:
-        id:
-          readOnly: true
-          type: string
-          format: uuid
-          description: Unique identifier
-        consortium:
-          type: string
-          format: uuid
-        name:
-          type: string
-          minLength: 1
-          pattern: '.*\S.*'
-        level:
-          $ref: '#/components/schemas/TierLevel'
-        type:
-          $ref: '#/components/schemas/TierType'
-        cost:
-          type: number
-          format: double
-          default: 0.0
-
+      allOf:
+        - $ref: '#/components/schemas/TierProperties'
+        - type: object
+          required:
+            - id
+          properties:
+            id:
+              readOnly: true
+              type: string
+              format: uuid
+              description: Unique identifier
     TierPatch:
       type: object
       additionalProperties: false
@@ -2703,9 +2565,8 @@ components:
             $ref: '#/components/schemas/Tier'
 
     # Network
-    AddNetwork:
+    NetworkProperties:
       type: object
-      x-go-type: Network
       required:
         - consortium
         - name
@@ -2719,29 +2580,24 @@ components:
           pattern: '.*\S.*'
         reciprocal:
           type: boolean
+
+    AddNetwork:
+      x-go-type: Network
+      allOf:
+        - $ref: '#/components/schemas/NetworkProperties'
 
     Network:
-      type: object
-      required:
-        - id
-        - consortium
-        - name
-      properties:
-        id:
-          readOnly: true
-          type: string
-          format: uuid
-          description: Unique identifier
-        consortium:
-          type: string
-          format: uuid
-        name:
-          type: string
-          minLength: 1
-          pattern: '.*\S.*'
-        reciprocal:
-          type: boolean
-
+      allOf:
+        - $ref: '#/components/schemas/NetworkProperties'
+        - type: object
+          required:
+            - id
+          properties:
+            id:
+              readOnly: true
+              type: string
+              format: uuid
+              description: Unique identifier
     NetworkPatch:
       type: object
       additionalProperties: false
@@ -2798,9 +2654,8 @@ components:
             $ref: '#/components/schemas/NetworkForEntryDetails'
 
     # Entry tier
-    CreateEntryTier:
+    EntryTierProperties:
       type: object
-      x-go-type: EntryTier
       required:
         - entry
         - tier
@@ -2813,28 +2668,24 @@ components:
           type: string
           format: uuid
           description: ID of tier
+
+    CreateEntryTier:
+      x-go-type: EntryTier
+      allOf:
+        - $ref: '#/components/schemas/EntryTierProperties'
 
     EntryTier:
-      type: object
-      required:
-        - id
-        - entry
-        - tier
-      properties:
-        id:
-          readOnly: true
-          type: string
-          format: uuid
-          description: Unique identifier
-        entry:
-          type: string
-          format: uuid
-          description: ID of entry
-        tier:
-          type: string
-          format: uuid
-          description: ID of tier
-
+      allOf:
+        - $ref: '#/components/schemas/EntryTierProperties'
+        - type: object
+          required:
+            - id
+          properties:
+            id:
+              readOnly: true
+              type: string
+              format: uuid
+              description: Unique identifier
     AddEntryTier:
       type: object
       required:
