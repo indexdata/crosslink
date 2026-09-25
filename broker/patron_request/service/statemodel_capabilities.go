@@ -259,7 +259,7 @@ func requesterBuiltInActions() []proapi.ActionCapability {
 			Name:       string(BorrowerActionAcceptRetry),
 			Parameters: []string{},
 		},
-		{Name: string(BorrowerActionRerequest), Parameters: []string{}},
+		{Name: string(BorrowerActionRerequest), Parameters: []string{"noop"}},
 		transitionActionCapability(BorrowerActionRejectRetry),
 		{
 			Name:       string(BorrowerActionSendNotification),
