@@ -15,8 +15,10 @@
 --
 -- Mapping notes:
 --   * The first symbol by legacy priority, authority, and value is the stable
---     CrossLink import key for an entry. Deleted entry tombstones and residual
---     DELETED-* symbols created by mod-rs anonymization are omitted.
+--     CrossLink import key for an entry. Entries without a symbol use their
+--     uppercased, hyphenated name under the ISIL authority. Deleted entry
+--     tombstones and residual DELETED-* symbols created by mod-rs
+--     anonymization are omitted.
 --   * service/service_account rows become entry endpoints.
 --   * address/address_line rows become entry addresses. addr_country_code is
 --     appended as a CountryCode component when one is not already present.
@@ -70,25 +72,47 @@ WHERE NOT EXISTS (
 );
 
 CREATE TEMP TABLE crosslink_symbols ON COMMIT DROP AS
+WITH existing_symbols AS (
+    SELECT
+        symbol.sym_owner_fk AS entry_id,
+        upper(btrim(naming_authority.na_symbol)) AS authority,
+        upper(btrim(symbol.sym_symbol)) AS symbol,
+        row_number() OVER (
+            PARTITION BY symbol.sym_owner_fk
+            ORDER BY symbol.sym_priority NULLS LAST,
+                     upper(btrim(naming_authority.na_symbol)),
+                     upper(btrim(symbol.sym_symbol)),
+                     symbol.sym_id
+        ) AS key_order
+    FROM symbol
+    JOIN naming_authority
+      ON naming_authority.na_id = symbol.sym_authority_fk
+    JOIN crosslink_entry_base
+      ON crosslink_entry_base.entry_id = symbol.sym_owner_fk
+    WHERE nullif(btrim(naming_authority.na_symbol), '') IS NOT NULL
+      AND nullif(btrim(symbol.sym_symbol), '') IS NOT NULL
+      AND upper(btrim(symbol.sym_symbol)) NOT LIKE 'DELETED-%'
+)
 SELECT
-    symbol.sym_owner_fk AS entry_id,
-    upper(btrim(naming_authority.na_symbol)) AS authority,
-    upper(btrim(symbol.sym_symbol)) AS symbol,
-    row_number() OVER (
-        PARTITION BY symbol.sym_owner_fk
-        ORDER BY symbol.sym_priority NULLS LAST,
-                 upper(btrim(naming_authority.na_symbol)),
-                 upper(btrim(symbol.sym_symbol)),
-                 symbol.sym_id
-    ) AS key_order
-FROM symbol
-JOIN naming_authority
-  ON naming_authority.na_id = symbol.sym_authority_fk
-JOIN crosslink_entry_base
-  ON crosslink_entry_base.entry_id = symbol.sym_owner_fk
-WHERE nullif(btrim(naming_authority.na_symbol), '') IS NOT NULL
-  AND nullif(btrim(symbol.sym_symbol), '') IS NOT NULL
-  AND upper(btrim(symbol.sym_symbol)) NOT LIKE 'DELETED-%';
+    entry_id,
+    authority,
+    symbol,
+    key_order
+FROM existing_symbols
+
+UNION ALL
+
+SELECT
+    entry.entry_id,
+    'ISIL' AS authority,
+    upper(replace(btrim(entry.name), ' ', '-')) AS symbol,
+    1::bigint AS key_order
+FROM crosslink_entry_base AS entry
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM existing_symbols
+    WHERE existing_symbols.entry_id = entry.entry_id
+);
 
 CREATE TEMP TABLE crosslink_entry_keys ON COMMIT DROP AS
 SELECT entry_id, authority, symbol
@@ -355,8 +379,8 @@ BEGIN
     END IF;
 
     SELECT count(*) INTO local_entry_count FROM crosslink_local_entry;
-    IF local_entry_count <> 1 THEN
-        RAISE EXCEPTION 'default_request_symbol must identify exactly one exported directory entry; found %', local_entry_count;
+    IF local_entry_count > 1 THEN
+        RAISE EXCEPTION 'default_request_symbol must identify not more than one exported directory entry; found %', local_entry_count;
     END IF;
 
 END
