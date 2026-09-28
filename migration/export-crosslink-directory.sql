@@ -59,10 +59,22 @@ SELECT
     directory_entry.de_contact_name AS contact_name,
     directory_entry.de_email_address AS email,
     directory_entry.de_phone_number AS phone_number,
-    directory_entry.de_lms_location_code AS lms_location_code
+    directory_entry.de_lms_location_code AS lms_location_code,
+    folio_location.item_location
 FROM directory_entry
 LEFT JOIN refdata_value AS entry_type
   ON entry_type.rdv_id = directory_entry.de_type_rv_fk
+LEFT JOIN LATERAL (
+    SELECT nullif(btrim(custom_property_text.value), '') AS item_location
+    FROM custom_property
+    JOIN custom_property_definition
+      ON custom_property_definition.pd_id = custom_property.definition_id
+    JOIN custom_property_text ON custom_property_text.id = custom_property.id
+    WHERE custom_property.parent_id = directory_entry.custom_properties_id
+      AND custom_property_definition.pd_name = 'folio_location_filter'
+    ORDER BY custom_property.id
+    LIMIT 1
+) AS folio_location ON true
 WHERE NOT EXISTS (
     SELECT 1
     FROM directory_entry_tag
@@ -182,11 +194,17 @@ SELECT
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
         FILTER (WHERE st_key = 'use_request_item') AS use_request_item,
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-        FILTER (WHERE st_key = 'ncip_request_item_pickup_location') AS requester_pickup_location,
+        FILTER (WHERE st_key = 'ncip_request_item_pickup_location') AS supplier_pickup_location,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'ncip_use_title_request_type') AS ncip_use_title_request_type,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'default_institutional_patron_id') AS default_institutional_patron_id,
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
         FILTER (WHERE st_key = 'z3950_server_address') AS z3950_server_address,
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-        FILTER (WHERE st_key = 'max_requests') AS max_requests_per_patron
+        FILTER (WHERE st_key = 'max_requests') AS max_requests_per_patron,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'check_duplicate_time') AS duplicate_check_window_hours
 FROM app_setting;
 
 CREATE TEMP TABLE crosslink_local_entry ON COMMIT DROP AS
@@ -208,6 +226,7 @@ DECLARE
     ncip_from_agency_text text;
     ncip_dependent_config boolean;
     max_requests_text text;
+    duplicate_check_window_text text;
 BEGIN
     SELECT count(*) INTO consortium_count
     FROM crosslink_entry_base
@@ -298,8 +317,9 @@ BEGIN
             'host_lms_integration', 'ncip_server_address', 'ncip_from_agency',
             'ncip_from_agency_authentication', 'ncip_to_agency', 'borrower_check',
             'accept_item', 'check_in_item', 'check_out_item', 'use_request_item',
-            'ncip_request_item_pickup_location', 'z3950_server_address',
-            'max_requests'
+            'ncip_request_item_pickup_location', 'ncip_use_title_request_type',
+            'default_institutional_patron_id', 'z3950_server_address',
+            'max_requests', 'check_duplicate_time'
         )
         GROUP BY st_key
         HAVING count(*) > 1
@@ -324,10 +344,20 @@ BEGIN
     IF max_requests_text IS NOT NULL THEN
         IF max_requests_text !~ '^[0-9]+$' THEN
             RAISE EXCEPTION 'max_requests must be an integer from 0 through 2147483647: %', max_requests_text;
-    END IF;
+        END IF;
         IF max_requests_text::numeric > 2147483647 THEN
             RAISE EXCEPTION 'max_requests must be an integer from 0 through 2147483647: %', max_requests_text;
+        END IF;
     END IF;
+
+    SELECT duplicate_check_window_hours
+    INTO duplicate_check_window_text
+    FROM crosslink_tenant_settings;
+    IF duplicate_check_window_text IS NOT NULL THEN
+        IF duplicate_check_window_text !~ '^[0-9]+$'
+           OR duplicate_check_window_text::numeric > 2147483647 THEN
+            RAISE EXCEPTION 'check_duplicate_time must be an integer from 0 through 2147483647: %', duplicate_check_window_text;
+        END IF;
     END IF;
 
     SELECT string_agg(source || ':' || record_id || '=' || supply_preference, ', ' ORDER BY source, record_id)
@@ -370,7 +400,7 @@ BEGIN
             OR lower(check_in_item) = 'ncip'
             OR lower(check_out_item) = 'ncip'
             OR lower(use_request_item) = 'ncip'
-            OR requester_pickup_location IS NOT NULL
+            OR supplier_pickup_location IS NOT NULL
     INTO ncip_server_text, ncip_from_agency_text, ncip_dependent_config
     FROM crosslink_tenant_settings;
     IF (ncip_server_text IS NULL) <> (ncip_from_agency_text IS NULL)
@@ -545,19 +575,40 @@ entry_records AS (
             'acceptItemEnabled', lower(tenant_settings.accept_item) = 'ncip'IS TRUE,
             'checkInItemEnabled', lower(tenant_settings.check_in_item) = 'ncip'IS TRUE,
             'checkOutItemEnabled', lower(tenant_settings.check_out_item) = 'ncip'IS TRUE,
-            'itemLocation', NULL,
-            'requestItemRequestType', NULL,
-            'requestItemRequestScopeType', NULL,
-            'requestItemBibIdCode', NULL,
+            'itemLocation', entry.item_location,
+            'requestItemRequestType', CASE lower(tenant_settings.host_lms_integration)
+                WHEN 'sierra' THEN 'Hold'
+                WHEN 'folio' THEN 'Page'
+                ELSE 'Loan'
+            END,
+            'requestItemRequestScopeType', CASE lower(tenant_settings.host_lms_integration)
+                WHEN 'sierra' THEN 'Title'
+                WHEN 'folio' THEN CASE
+                    WHEN lower(tenant_settings.ncip_use_title_request_type) = 'yes' THEN 'Title'
+                    ELSE 'Item'
+                END
+                ELSE 'Bibliographic Item'
+            END,
+            'requestItemBibIdCode', CASE lower(tenant_settings.host_lms_integration)
+                WHEN 'evergreen' THEN 'BibID'
+                ELSE 'SYSNUMBER'
+            END,
             'requestItemEnabled', lower(tenant_settings.use_request_item) = 'ncip'IS TRUE,
             'requestItemPickupLocationEnabled', entry.lms_location_code IS NOT NULL,
             'requesterPickupLocation', entry.lms_location_code,
-            'supplierPickupLocation', tenant_settings.requester_pickup_location,
-            'requesterPatronPattern', NULL,
-            'patronProfiles', NULL
+            'supplierPickupLocation', tenant_settings.supplier_pickup_location,
+            'requesterPatronPattern', tenant_settings.default_institutional_patron_id,
+            'patronProfiles', coalesce((
+                SELECT jsonb_agg(jsonb_build_object(
+                    'code', profile.hlpp_code,
+                    'name', profile.hlpp_name,
+                    'canCreateRequests', coalesce(profile.hlpp_can_create_requests, true)
+                ) ORDER BY profile.hlpp_code, profile.hlpp_id)
+                FROM host_lms_patron_profile AS profile
+                WHERE coalesce(profile.hlpp_hidden, false) IS FALSE
+            ), '[]'::jsonb)
         ) AS item
-        WHERE local_entry.entry_id IS NOT NULL
-          AND tenant_settings.ncip_server_address IS NOT NULL
+        WHERE tenant_settings.ncip_server_address IS NOT NULL
           AND tenant_settings.ncip_from_agency IS NOT NULL
     ) AS lms_config ON true
     LEFT JOIN LATERAL (
@@ -591,16 +642,15 @@ entry_records AS (
             'iso18626Url', iso_endpoint.address,
             'iso18626Vendor', CASE WHEN iso_endpoint.address IS NULL THEN NULL ELSE 'ReShare' END,
             'lendersOfLastResort', '[]'::jsonb,
-            'includeRequestingAgencyInfo', NULL,
-            'includeSupplierInfo', NULL,
-            'includeReturnInfo', NULL,
-            'includeVendorNote', NULL,
+            'includeRequestingAgencyInfo', false,
+            'includeSupplierInfo', false,
+            'includeReturnInfo', false,
+            'includeVendorNote', false,
             'useOfferedCosts', NULL,
             'noteFieldSeparator', NULL,
             'supplierPatronPattern', NULL,
-            'duplicateCheckWindowHours', NULL,
-            'maxRequestsPerPatron', CASE WHEN local_entry.entry_id IS NOT NULL
-                THEN tenant_settings.max_requests_per_patron::integer ELSE NULL END
+            'duplicateCheckWindowHours', tenant_settings.duplicate_check_window_hours::integer,
+            'maxRequestsPerPatron', tenant_settings.max_requests_per_patron::integer
         ) AS item
         FROM (
             SELECT EXISTS (
