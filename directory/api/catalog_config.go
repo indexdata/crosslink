@@ -252,6 +252,7 @@ func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) db.UpsertIllConfigPar
 		DuplicateCheckWindowHours:   cfg.DuplicateCheckWindowHours,
 		DefaultLoanPeriod:           nullableLoanPeriod(cfg),
 		MaxRequestsPerPatron:        nullableMaxRequestsPerPatron(cfg),
+		MinimumCost:                 nullableMinimumCost(cfg),
 	}
 	if cfg.Iso18626Vendor != nil {
 		vendor := string(*cfg.Iso18626Vendor)
@@ -276,6 +277,7 @@ func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllC
 		DuplicateCheckWindowHours:   original.DuplicateCheckWindowHours,
 		DefaultLoanPeriod:           original.DefaultLoanPeriod,
 		MaxRequestsPerPatron:        original.MaxRequestsPerPatron,
+		MinimumCost:                 original.MinimumCost,
 	}
 
 	params.Iso18626Url = derefOrDefaultPtr(cfg.Iso18626Url, params.Iso18626Url)
@@ -300,6 +302,9 @@ func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllC
 	if cfg.MaxRequestsPerPatron.IsSpecified() {
 		params.MaxRequestsPerPatron = nullableMaxRequestsPerPatron(cfg)
 	}
+	if cfg.MinimumCost.IsSpecified() {
+		params.MinimumCost = nullableMinimumCost(cfg)
+	}
 	return params
 }
 
@@ -313,6 +318,14 @@ func nullableLoanPeriod(cfg IllConfig) *int32 {
 
 func nullableMaxRequestsPerPatron(cfg IllConfig) *int32 {
 	value, err := cfg.MaxRequestsPerPatron.Get()
+	if err != nil {
+		return nil
+	}
+	return &value
+}
+
+func nullableMinimumCost(cfg IllConfig) *float64 {
+	value, err := cfg.MinimumCost.Get()
 	if err != nil {
 		return nil
 	}

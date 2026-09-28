@@ -152,6 +152,9 @@ func TestImportEntryCreatesCompleteAggregateWithGeneratedIDs(t *testing.T) {
 	var maxRequestsPerPatron int32
 	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT max_requests_per_patron FROM ill_configs WHERE entry=$1`, entryID).Scan(&maxRequestsPerPatron))
 	require.Zero(t, maxRequestsPerPatron)
+	var minimumCost float64
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT minimum_cost FROM ill_configs WHERE entry=$1`, entryID).Scan(&minimumCost))
+	require.Equal(t, 1.25, minimumCost)
 }
 
 func TestImportEntryConflictPoliciesAndUpdateFullSynchronization(t *testing.T) {
@@ -1325,6 +1328,7 @@ func completeEntryAggregate(symbol string) model.EntryAggregate {
 	metadataMode := "replace"
 	truth := true
 	zero := int32(0)
+	minimumCost := 1.25
 	aggregate.Data.Endpoints = []model.ServiceEndpoint{{Name: "ISO", Type: "ISO18626", Address: "https://example.test/ill"}}
 	aggregate.Data.Addresses = []model.Address{{Type: "Default", Components: []model.AddressComponent{{Seq: 1, Type: "Locality", Value: "Riga"}}}}
 	aggregate.Data.Closures = []model.Closure{{StartDate: "2026-12-24", EndDate: "2026-12-26", Reason: "Holiday"}}
@@ -1336,7 +1340,7 @@ func completeEntryAggregate(symbol string) model.EntryAggregate {
 		HoldingsFormat:     &model.HoldingsParserConfig{Marc: &model.MarcHoldingsParserConfig{MainField: &text}},
 		MetadataFormat:     &model.MetadataParserConfig{Marc21: &model.MarcMetadataParserConfig{Title: &text}},
 	}
-	aggregate.Data.ILLConfig = &model.ILLConfig{ISO18626URL: &text, LendersOfLastResort: []model.SymbolRef{}, IncludeSupplierInfo: &truth, MaxRequestsPerPatron: &zero}
+	aggregate.Data.ILLConfig = &model.ILLConfig{ISO18626URL: &text, LendersOfLastResort: []model.SymbolRef{}, IncludeSupplierInfo: &truth, MaxRequestsPerPatron: &zero, MinimumCost: &minimumCost}
 	aggregate.Data.HoldingsPolicy = &model.HoldingsPolicy{
 		Locations:         []model.HoldingsLocation{{Code: "MAIN", Name: "Main", SupplyPreference: 1}},
 		ShelvingLocations: []model.HoldingsShelvingLocation{},

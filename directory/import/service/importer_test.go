@@ -233,7 +233,7 @@ func TestImportAcceptsNullLMSPatronProfiles(t *testing.T) {
 	require.Nil(t, repo.entry.Data.LMSConfig.PatronProfiles)
 }
 
-func TestImportAcceptsMaxRequestsPerPatron(t *testing.T) {
+func TestImportAcceptsIllConfigLimits(t *testing.T) {
 	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
 	record := strings.Replace(validEntryRecord(), `"illConfig":null`, validILLConfig(), 1)
 
@@ -246,6 +246,8 @@ func TestImportAcceptsMaxRequestsPerPatron(t *testing.T) {
 	require.NotNil(t, repo.entry.Data.ILLConfig)
 	require.NotNil(t, repo.entry.Data.ILLConfig.MaxRequestsPerPatron)
 	assert.Equal(t, int32(0), *repo.entry.Data.ILLConfig.MaxRequestsPerPatron)
+	require.NotNil(t, repo.entry.Data.ILLConfig.MinimumCost)
+	assert.Equal(t, 1.25, *repo.entry.Data.ILLConfig.MinimumCost)
 }
 
 func validLMSConfig() string {
@@ -253,7 +255,7 @@ func validLMSConfig() string {
 }
 
 func validILLConfig() string {
-	return `"illConfig":{"iso18626Url":null,"iso18626Vendor":null,"lendersOfLastResort":[],"includeRequestingAgencyInfo":null,"includeSupplierInfo":null,"includeReturnInfo":null,"includeVendorNote":null,"useOfferedCosts":null,"noteFieldSeparator":null,"supplierPatronPattern":null,"duplicateCheckWindowHours":null,"maxRequestsPerPatron":0}`
+	return `"illConfig":{"iso18626Url":null,"iso18626Vendor":null,"lendersOfLastResort":[],"includeRequestingAgencyInfo":null,"includeSupplierInfo":null,"includeReturnInfo":null,"includeVendorNote":null,"useOfferedCosts":null,"noteFieldSeparator":null,"supplierPatronPattern":null,"duplicateCheckWindowHours":null,"maxRequestsPerPatron":0,"minimumCost":1.25}`
 }
 
 func TestImportAccountsForSkippedAndRepositoryFailures(t *testing.T) {
