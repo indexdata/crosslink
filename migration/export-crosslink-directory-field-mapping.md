@@ -65,15 +65,17 @@ all be nonblank.
 
 ## Local entry selection
 
-Tenant-local LMS, catalog, ILL, and holdings settings are attached only to the
-entry selected by `app_setting.default_request_symbol`. The setting is trimmed
-and uppercased, then matched to the normalized string
-`<authority>:<symbol>`. The exporter allows no more than one matching entry.
+Tenant-local catalog and holdings settings are attached only to the entry
+selected by `app_setting.default_request_symbol`. The setting is trimmed and
+uppercased, then matched to the normalized string `<authority>:<symbol>`. The
+exporter allows no more than one matching entry. LMS and ILL configuration are
+exported independently for entries when their respective configuration data is
+present.
 
 ## LMS and NCIP configuration
 
-`data.lmsConfig` is emitted only for the selected local entry and only when
-both `ncip_server_address` and `ncip_from_agency` are present.
+`data.lmsConfig` is emitted for every entry when both `ncip_server_address` and
+`ncip_from_agency` are present.
 
 | mod-rs source | CrossLink field | Mapping |
 | --- | --- | --- |
@@ -90,6 +92,12 @@ both `ncip_server_address` and `ncip_from_agency` are present.
 | `directory_entry.de_lms_location_code` | `data.lmsConfig.requestItemPickupLocationEnabled` | `true` when the value is not `null`; otherwise `false`. |
 | `directory_entry.de_lms_location_code` | `data.lmsConfig.requesterPickupLocation` | Copied directly. |
 | `app_setting.ncip_request_item_pickup_location` | `data.lmsConfig.supplierPickupLocation` | Copied directly. |
+| Local entry custom property `folio_location_filter` | `data.lmsConfig.itemLocation` | Copied when present; otherwise `null`. mod-rs passes this value as the item location in NCIP RequestItem messages. |
+| `app_setting.host_lms_integration` and host-LMS adapter behavior | `data.lmsConfig.requestItemRequestType` | `sierra` becomes `Hold`; `folio` becomes `Page`; all other values become `Loan`. |
+| `app_setting.host_lms_integration` and `app_setting.ncip_use_title_request_type` | `data.lmsConfig.requestItemRequestScopeType` | `sierra` becomes `Title`; `folio` becomes `Title` when the setting is `yes` and `Item` otherwise; all other values become `Bibliographic Item`. |
+| `app_setting.host_lms_integration` and host-LMS adapter behavior | `data.lmsConfig.requestItemBibIdCode` | `evergreen` becomes `BibID`; all other values become `SYSNUMBER`. |
+| `app_setting.default_institutional_patron_id` | `data.lmsConfig.requesterPatronPattern` | Copied as a literal fallback patron identifier. Per-requester `local_institutionalPatronId` directory overrides cannot be represented by a single CrossLink pattern and are not exported. |
+| Visible `host_lms_patron_profile` rows | `data.lmsConfig.patronProfiles[]` | Exports `hlpp_code`, `hlpp_name`, and `hlpp_can_create_requests`. A null `hlpp_can_create_requests` becomes `true`, matching mod-rs behavior; hidden rows are excluded. |
 
 The presence of dependent NCIP settings without both
 `ncip_server_address` and `ncip_from_agency` causes the export to fail.
@@ -109,18 +117,25 @@ is not exported.
 
 ## ILL configuration
 
-`data.illConfig` is emitted only for the selected local entry and only when an
-ISO18626 endpoint is found.
+`data.illConfig` is emitted for every entry with an ISO18626 endpoint.
 
 | mod-rs source | CrossLink field | Mapping |
 | --- | --- | --- |
 | First `service.se_address` whose normalized service type is `ISO18626` | `data.illConfig.iso18626Url` | The first matching endpoint ordered by `service.se_id` is used. |
 | Presence of the ISO18626 endpoint | `data.illConfig.iso18626Vendor` | Set to `ReShare`. |
 | `app_setting.max_requests` | `data.illConfig.maxRequestsPerPatron` | Cast to an integer. Values must be from 0 through 2147483647. |
+| `app_setting.check_duplicate_time` | `data.illConfig.duplicateCheckWindowHours` | Cast to an integer number of hours. Values must be from 0 through 2147483647. |
+| Unsupported mod-rs agency-information behavior | `data.illConfig.includeRequestingAgencyInfo` | Set to `false`; mod-rs does not populate requesting-agency information. |
+| Unsupported mod-rs agency-information behavior | `data.illConfig.includeSupplierInfo` | Set to `false`; mod-rs does not populate supplier information. |
+| Unsupported mod-rs directory-derived return information | `data.illConfig.includeReturnInfo` | Set to `false`; mod-rs does not automatically populate return information from the supplier directory entry. |
+| Unsupported mod-rs vendor-note behavior | `data.illConfig.includeVendorNote` | Set to `false`; mod-rs does not prepend the supplier vendor to generated notes. |
 
-`data.illConfig.lendersOfLastResort` is exported as an empty array. These
-references must be configured after import because child entries do not yet
-exist while their parent is being imported.
+`app_setting.last_resort_lenders` is the mod-rs source for
+`data.illConfig.lendersOfLastResort`, but the primary export emits an empty
+array. CrossLink imports NDJSON records sequentially, so a local parent entry
+cannot reference child entries that have not yet been imported. Parse and
+configure the setting in a second import or post-import update after all
+directory entries exist.
 
 ## Holdings policy
 
@@ -175,10 +190,11 @@ The exporter creates one reciprocal network.
 | Every non-consortium entry's stable key | `data.entries[].authority`, `data.entries[].symbol` | Adds each institution and branch to the network. |
 | Entry export order | `data.entries[].priority` | Sequential integer priority based on hierarchy depth, entry name, and entry ID. |
 
-## Fields without a mod-rs equivalent
+## Fixed and profile-resolved fields
 
-The CrossLink import contract requires fields that have no mod-rs equivalent.
-The exporter supplies the following fixed values.
+The CrossLink import contract also requires fields with no safe mod-rs source,
+or fields whose effective value is supplied by CrossLink's selected host-LMS
+profile. The exporter supplies the following fixed values.
 
 | CrossLink field | Exported value |
 | --- | --- |
@@ -188,29 +204,17 @@ The exporter supplies the following fixed values.
 | `data.hrid` | `null` |
 | `data.timeZone` | `null` |
 | `data.closures` | `[]` |
-| `data.lmsConfig.ncipNamespaceEnabled` | `null` |
-| `data.lmsConfig.bibIdNormalization` | `null` |
-| `data.lmsConfig.itemLocation` | `null` |
-| `data.lmsConfig.requestItemRequestType` | `null` |
-| `data.lmsConfig.requestItemRequestScopeType` | `null` |
-| `data.lmsConfig.requestItemBibIdCode` | `null` |
-| `data.lmsConfig.requesterPatronPattern` | `null` |
-| `data.lmsConfig.patronProfiles` | `null` |
-| `data.catalogConfig.metadataUpdateMode` | `null` |
+| `data.lmsConfig.ncipNamespaceEnabled` | `null`; resolved by the CrossLink host-LMS profile. |
+| `data.lmsConfig.bibIdNormalization` | `null`; resolved by the CrossLink host-LMS profile. |
+| `data.catalogConfig.metadataUpdateMode` | `null`; CrossLink consequently does not update request metadata from catalog records. |
 | `data.catalogConfig.sru` | `null` |
-| `data.catalogConfig.zoom.options` | `null` |
-| `data.catalogConfig.queryConfig` | `null` |
-| `data.catalogConfig.holdingsFormat` | `null` |
-| `data.catalogConfig.metadataFormat` | `null` |
-| `data.illConfig.lendersOfLastResort` | `[]` |
-| `data.illConfig.includeRequestingAgencyInfo` | `null` |
-| `data.illConfig.includeSupplierInfo` | `null` |
-| `data.illConfig.includeReturnInfo` | `null` |
-| `data.illConfig.includeVendorNote` | `null` |
+| `data.catalogConfig.zoom.options` | `null`; resolved from the holdings format by the CrossLink host-LMS profile. |
+| `data.catalogConfig.queryConfig` | `null`; resolved by the CrossLink host-LMS profile. |
+| `data.catalogConfig.holdingsFormat` | `null`; resolved by the CrossLink host-LMS profile. |
+| `data.catalogConfig.metadataFormat` | `null`; resolved by the CrossLink host-LMS profile. |
 | `data.illConfig.useOfferedCosts` | `null` |
 | `data.illConfig.noteFieldSeparator` | `null` |
 | `data.illConfig.supplierPatronPattern` | `null` |
-| `data.illConfig.duplicateCheckWindowHours` | `null` |
 
 Missing symbols, endpoints, addresses, and holdings-policy collections are
 exported as empty arrays. Missing optional configuration objects are exported
@@ -229,6 +233,8 @@ The exporter validates the data before producing NDJSON:
 - relevant application settings may have at most one row per key;
 - NCIP-dependent configuration requires both the NCIP server address and the
   from-agency value;
+- `max_requests` and `check_duplicate_time`, when present, must be integers
+  from 0 through 2147483647;
 - visible holdings supply preferences must not exceed 10000; and
 - each serialized record must not exceed 1 MiB.
 

@@ -603,7 +603,7 @@ request_bundles AS (
             'illTransaction', CASE
                 WHEN request.import_side <> 'borrowing' THEN NULL
                 ELSE jsonb_strip_nulls(jsonb_build_object(
-                    'id', request.pr_id || ':ill',
+                    'id', request.pr_id,
                     'timestamp', to_char(
                         request.pr_date_created,
                         'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
