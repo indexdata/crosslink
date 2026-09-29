@@ -1,7 +1,7 @@
 meta {
-  name: Lending side mark-received
+  name: Lending side accept-renewal
   type: http
-  seq: 22
+  seq: 15
 }
 
 post {
@@ -26,18 +26,23 @@ auth:basic {
 
 body:json {
   {
-      "action": "mark-received"
+    "action": "accept-renewal",
+    "actionParams": {
+      "dueDate": "{{recallRenewedDueDate}}"
+    }
   }
 }
 
 script:pre-request {
+  bru.setVar("recallRenewedDueDate", new Date(Date.now() + 14 * 86400000).toISOString());
   bru.sleep(Number(bru.getEnvVar("sleepDelay")));
 }
 
 script:post-response {
-  test("for success", function() {
+  test("Action succeeds", () => {
+    expect(res.getStatus()).to.equal(200);
     const pr = res.getBody();
-    expect(pr.result).to.equal("SUCCESS")
+    expect(pr.result).to.equal("SUCCESS");
   });
 }
 

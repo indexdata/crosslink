@@ -1732,7 +1732,7 @@ func TestPutPatronRequestsIdPickupLocationOptional(t *testing.T) {
 		{name: "null clears selection", supplied: nullable.NewNullNullable[uuid.UUID]()},
 		{name: "backend failure rejected", supplied: nullable.NewNullableWithValue(replacement), validationError: errors.New("directory unavailable")},
 		{name: "replica conflict rejected", supplied: nullable.NewNullableWithValue(replacement), validationError: errors.New("conflicting responses from directory replicas")},
-		{name: "invalid selection rejected", supplied: nullable.NewNullableWithValue(replacement), validationError: fmt.Errorf("%w: pickup location is not a branch of requester institution", prservice.ErrInvalidPickupLocation)},
+		{name: "invalid selection rejected", supplied: nullable.NewNullableWithValue(replacement), validationError: fmt.Errorf("%w: pickup location is not requester institution", prservice.ErrInvalidPickupLocation)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &PrRepoUpdateCapture{pickupLocationID: pgtype.UUID{Bytes: original, Valid: true}}
@@ -1787,7 +1787,7 @@ func TestCreateValidatesPickupBeforePersistence(t *testing.T) {
 	}{
 		{name: "valid selection", selected: true, status: http.StatusCreated},
 		{name: "missing entry", selected: true, validationError: fmt.Errorf("%w: pickup location not found", prservice.ErrInvalidPickupLocation), status: http.StatusBadRequest},
-		{name: "unrelated institution", selected: true, validationError: fmt.Errorf("%w: pickup location is not a branch of requester institution", prservice.ErrInvalidPickupLocation), status: http.StatusBadRequest},
+		{name: "unrelated institution", selected: true, validationError: fmt.Errorf("%w: pickup location is not requester institution", prservice.ErrInvalidPickupLocation), status: http.StatusBadRequest},
 		{name: "directory unavailable", selected: true, validationError: errors.New("directory unavailable"), status: http.StatusInternalServerError},
 		{name: "database failure", selected: true, validationError: errors.New("database unavailable"), status: http.StatusInternalServerError},
 		{name: "replica conflict", selected: true, validationError: errors.New("conflicting responses from directory replicas"), status: http.StatusInternalServerError},

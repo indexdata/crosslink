@@ -149,6 +149,9 @@ func TestImportEntryCreatesCompleteAggregateWithGeneratedIDs(t *testing.T) {
 	var zoomOptions map[string]string
 	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT zoom_options FROM catalog_configs WHERE entry=$1`, entryID).Scan(&zoomOptions))
 	require.Equal(t, map[string]string{"user": "private"}, zoomOptions)
+	var isPickupLocation bool
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT is_pickup_location FROM ill_configs WHERE entry=$1`, entryID).Scan(&isPickupLocation))
+	require.True(t, isPickupLocation)
 	var maxRequestsPerPatron int32
 	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT max_requests_per_patron FROM ill_configs WHERE entry=$1`, entryID).Scan(&maxRequestsPerPatron))
 	require.Zero(t, maxRequestsPerPatron)
@@ -1340,7 +1343,8 @@ func completeEntryAggregate(symbol string) model.EntryAggregate {
 		HoldingsFormat:     &model.HoldingsParserConfig{Marc: &model.MarcHoldingsParserConfig{MainField: &text}},
 		MetadataFormat:     &model.MetadataParserConfig{Marc21: &model.MarcMetadataParserConfig{Title: &text}},
 	}
-	aggregate.Data.ILLConfig = &model.ILLConfig{ISO18626URL: &text, LendersOfLastResort: []model.SymbolRef{}, IncludeSupplierInfo: &truth, MaxRequestsPerPatron: &zero, MinimumCost: &minimumCost}
+
+	aggregate.Data.ILLConfig = &model.ILLConfig{IsPickupLocation: &truth, ISO18626URL: &text, LendersOfLastResort: []model.SymbolRef{}, IncludeSupplierInfo: &truth, MaxRequestsPerPatron: &zero, MinimumCost: &minimumCost}
 	aggregate.Data.HoldingsPolicy = &model.HoldingsPolicy{
 		Locations:         []model.HoldingsLocation{{Code: "MAIN", Name: "Main", SupplyPreference: 1}},
 		ShelvingLocations: []model.HoldingsShelvingLocation{},

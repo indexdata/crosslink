@@ -1,12 +1,12 @@
 meta {
-  name: Borrowing side check status
+  name: Borrowing side renew
   type: http
-  seq: 24
+  seq: 12
 }
 
-get {
-  url: {{host}}/patron_requests/{{recallPrId}}?side=borrowing
-  body: none
+post {
+  url: {{host}}/patron_requests/{{recallPrId}}/action?side=borrowing
+  body: json
   auth: basic
 }
 
@@ -24,16 +24,21 @@ auth:basic {
   password: {{userPassword}}
 }
 
+body:json {
+  {
+    "action": "renew"
+  }
+}
+
 script:pre-request {
   bru.sleep(Number(bru.getEnvVar("sleepDelay")));
 }
 
 script:post-response {
-  test("Check if patron request is complete", () => {
-      const pr = res.getBody();
-      expect(pr.lastActionResult).to.eql("SUCCESS");
-      expect(pr.lastAction).to.eql("ship-return");
-      expect(pr.state).to.eql("COMPLETED");
+  test("Action succeeds", () => {
+    expect(res.getStatus()).to.equal(200);
+    const pr = res.getBody();
+    expect(pr.result).to.equal("SUCCESS");
   });
 }
 

@@ -29,7 +29,7 @@ The separate `Open-ended loan` folder ships without a date and completes receipt
 `Renewal rejection and open-ended acceptance` checks that rejection returns both sides to `OVERDUE` with the original date, then requests renewal again and accepts without a date. It verifies that acceptance clears the date on each side and completes the return workflow. Go tests cover explicit `dueDate: null` versus omission.
 
 `Recall` prints a pull slip, checks `SEARCHING`, ships and receives an
-open-ended loan, recalls it with a due date, verifies
+open-ended loan, marks it overdue, requests and accepts renewal, recalls it with a due date, verifies
 `RECALLED` and the deadline on both sides, then completes return and checks
 both requests are `COMPLETED`.
 

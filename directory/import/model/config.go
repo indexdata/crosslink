@@ -36,6 +36,7 @@ type PatronProfile struct {
 }
 
 type ILLConfig struct {
+	IsPickupLocation            *bool       `json:"isPickupLocation"`
 	DefaultLoanPeriod           *int32      `json:"defaultLoanPeriod"`
 	MaxRequestsPerPatron        *int32      `json:"maxRequestsPerPatron"`
 	MinimumCost                 *float64    `json:"minimumCost"`

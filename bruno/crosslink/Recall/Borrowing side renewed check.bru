@@ -1,7 +1,7 @@
 meta {
-  name: Borrowing side check status
+  name: Borrowing side renewed check
   type: http
-  seq: 24
+  seq: 17
 }
 
 get {
@@ -29,11 +29,12 @@ script:pre-request {
 }
 
 script:post-response {
-  test("Check if patron request is complete", () => {
-      const pr = res.getBody();
-      expect(pr.lastActionResult).to.eql("SUCCESS");
-      expect(pr.lastAction).to.eql("ship-return");
-      expect(pr.state).to.eql("COMPLETED");
+  test("State is RENEWED with the expected due date", () => {
+    expect(res.getStatus()).to.equal(200);
+    const pr = res.getBody();
+    expect(pr.state).to.equal("RENEWED");
+    expect(Date.parse(pr.dueDate)).to.equal(Date.parse(bru.getVar("recallRenewedDueDate")));
+    expect(pr.needsAttention).to.equal(false);
   });
 }
 

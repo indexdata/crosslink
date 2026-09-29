@@ -1,7 +1,7 @@
 meta {
-  name: Lending side mark-received
+  name: Lending side overdue
   type: http
-  seq: 22
+  seq: 9
 }
 
 post {
@@ -26,7 +26,7 @@ auth:basic {
 
 body:json {
   {
-      "action": "mark-received"
+    "action": "overdue"
   }
 }
 
@@ -35,9 +35,10 @@ script:pre-request {
 }
 
 script:post-response {
-  test("for success", function() {
+  test("Action succeeds", () => {
+    expect(res.getStatus()).to.equal(200);
     const pr = res.getBody();
-    expect(pr.result).to.equal("SUCCESS")
+    expect(pr.result).to.equal("SUCCESS");
   });
 }
 

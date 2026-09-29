@@ -90,20 +90,11 @@ func TestHandleEntryCQL(t *testing.T) {
 		t.Errorf("Expected 1 parentSymbol argument, got %d", len(args))
 	}
 
-	// Test pickup location presence search
-	res, err = handleEntryCQL(`requesterPickupLocation <> ""`, 0)
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
-	}
-	if !strings.Contains(res.GetWhereClause(), "requester_pickup_location") {
-		t.Errorf("Expected requesterPickupLocation to query the LMS config: %s", res.GetWhereClause())
-	}
-	if !strings.Contains(res.GetWhereClause(), "COALESCE") {
-		t.Errorf("Expected missing pickup locations to be treated as empty: %s", res.GetWhereClause())
-	}
-	args = res.GetQueryArguments()
-	if len(args) != 1 || args[0] != "" {
-		t.Errorf("Expected one empty pickup location argument, got %#v", args)
+	// Reject the removed LMS-code filter and invalid boolean terms.
+	for _, query := range []string{`requesterPickupLocation <> ""`, `isPickupLocation=invalid`} {
+		if _, err := handleEntryCQL(query, 0); err == nil {
+			t.Errorf("Expected error for %s", query)
+		}
 	}
 
 	// Test invalid CQL
