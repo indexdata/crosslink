@@ -2282,11 +2282,25 @@ func (a *PatronRequestActionService) pickupLocationEntry(ctx common.ExtendedCont
 		}
 		return dirapi.Entry{}, err
 	}
-	// UUID lookups use a shared cache. Require an ancestor with the requester
-	// symbol even on cache hits; tenant membership alone does not prove ancestry.
+	// UUID lookups use a shared cache. Require the requester
+	// symbol on the entry or an ancestor even on cache hits; tenant membership alone does not prove ownership.
 	owner := peer.CustomData
 	visited := map[uuid.UUID]bool{id: true}
-	for owner.Parent != nil {
+	for {
+		if owner.Symbols != nil {
+			for _, symbol := range *owner.Symbols {
+				authority := symbol.Authority
+				if authority == "" {
+					authority = "ISIL" // Match the directory adapter's default authority.
+				}
+				if authority+":"+symbol.Symbol == requesterSymbol {
+					return peer.CustomData, nil
+				}
+			}
+		}
+		if owner.Parent == nil {
+			break
+		}
 		parentID := *owner.Parent
 		if visited[parentID] {
 			return dirapi.Entry{}, fmt.Errorf("pickup location %s: cycle in directory parent chain", id)
@@ -2300,19 +2314,8 @@ func (a *PatronRequestActionService) pickupLocationEntry(ctx common.ExtendedCont
 			return dirapi.Entry{}, fmt.Errorf("pickup location %s: cannot resolve parent: %w", id, err)
 		}
 		owner = parent.CustomData
-		if owner.Symbols != nil {
-			for _, symbol := range *owner.Symbols {
-				authority := symbol.Authority
-				if authority == "" {
-					authority = "ISIL" // Match the directory adapter's default authority.
-				}
-				if authority+":"+symbol.Symbol == requesterSymbol {
-					return peer.CustomData, nil
-				}
-			}
-		}
 	}
-	return dirapi.Entry{}, fmt.Errorf("%w: pickup location %s is not a branch of requester institution %q", ErrInvalidPickupLocation, id, requesterSymbol)
+	return dirapi.Entry{}, fmt.Errorf("%w: pickup location %s is not requester institution %q or one of its branches", ErrInvalidPickupLocation, id, requesterSymbol)
 }
 
 func (a *PatronRequestActionService) requesterPickupCode(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, usesPickupLocation bool) (string, error) {

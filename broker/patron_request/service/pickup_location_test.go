@@ -91,6 +91,27 @@ func pickupSymbols(symbol string) *[]dirapi.Symbol {
 	return &[]dirapi.Symbol{{Authority: "ISIL", Symbol: symbol}}
 }
 
+func TestSelectedInstitutionPickupLocation(t *testing.T) {
+	for _, symbol := range []string{"MAIN", "OTHER"} {
+		t.Run(symbol, func(t *testing.T) {
+			id := uuid.New()
+			repo := new(IllRepoMock)
+			repo.On("GetCachedPeerByDirectoryEntryID", id, mock.Anything).Return(ill_db.Peer{CustomData: dirapi.Entry{Id: &id, Symbols: pickupSymbols(symbol)}}, "<cached>", nil).Once()
+			service := PatronRequestActionService{illRepo: repo}
+			err := service.ValidateRequesterPickupLocation(appCtx, pr_db.PatronRequest{
+				RequesterSymbol:           pgtype.Text{String: "ISIL:MAIN", Valid: true},
+				RequesterPickupLocationID: pgtype.UUID{Bytes: id, Valid: true},
+			})
+			if symbol == "MAIN" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, ErrInvalidPickupLocation)
+			}
+			repo.AssertExpectations(t)
+		})
+	}
+}
+
 func TestPickupLocationInstitutionValidation(t *testing.T) {
 	childID, parentID, grandparentID := uuid.New(), uuid.New(), uuid.New()
 	for _, query := range []string{"<cached>", "/by-id/entry"} {
@@ -257,7 +278,7 @@ func TestPickupLocationWithMockDirectory(t *testing.T) {
 			require.Equal(t, id.String(), code)
 			pr.RequesterSymbol.String = "ISIL:UNRELATED"
 			_, err = service.pickupLocationEntry(appCtx, pr)
-			require.ErrorContains(t, err, "is not a branch of requester institution")
+			require.ErrorContains(t, err, "is not requester institution")
 			repo.AssertExpectations(t)
 		})
 	}
