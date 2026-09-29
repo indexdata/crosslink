@@ -21,7 +21,7 @@ the trimmed `st_default_value` when necessary.
 | `directory_entry.de_email_address` | `data.email` | Copied directly. |
 | `directory_entry.de_phone_number` | `data.phoneNumber` | Copied directly. |
 | `directory_entry.de_lms_location_code` | `data.lmsLocationCode` | Copied directly. |
-| Entry matched by `app_setting.default_request_symbol` | `data.vendor` | Set to `ReShare` for the matched local entry; otherwise `null`. |
+| Entry matched by the psql `owner` variable | `data.vendor` | Set to `ReShare` for the matched local entry; otherwise `null`. |
 | `directory_entry_tag` joined to `tag.norm_value` | Record inclusion | Entries tagged `deleted`, case-insensitively, are excluded. |
 
 The record discriminator is always `type: entry`. Parent records are emitted
@@ -66,11 +66,11 @@ all be nonblank.
 ## Local entry selection
 
 Tenant-local catalog and holdings settings are attached only to the entry
-selected by `app_setting.default_request_symbol`. The setting is trimmed and
-uppercased, then matched to the normalized string `<authority>:<symbol>`. The
-exporter allows no more than one matching entry. LMS and ILL configuration are
-exported independently for entries when their respective configuration data is
-present.
+selected by the psql `owner` variable. Pass it as
+`--set=owner=AUTHORITY:SYMBOL`; the value is matched to the normalized
+`<authority>:<symbol>` form. The exporter requires exactly one matching entry.
+LMS, catalog, ILL, and holdings configuration are attached only to that
+selected local entry when their respective configuration data is present.
 
 The `include_consortium` psql parameter controls generated consortium-level
 records. It defaults to `true`. When set to `false`, the consortium entry,
@@ -79,8 +79,8 @@ omitted from the remaining entry records.
 
 ## LMS and NCIP configuration
 
-`data.lmsConfig` is emitted for every entry when both `ncip_server_address` and
-`ncip_from_agency` are present.
+`data.lmsConfig` is emitted only for the selected local entry when both
+`ncip_server_address` and `ncip_from_agency` are present.
 
 | mod-rs source | CrossLink field | Mapping |
 | --- | --- | --- |
@@ -122,7 +122,8 @@ is not exported.
 
 ## ILL configuration
 
-`data.illConfig` is emitted for every entry with an ISO18626 endpoint.
+`data.illConfig` is emitted only for the selected local entry when an ISO18626
+endpoint is found.
 
 | mod-rs source | CrossLink field | Mapping |
 | --- | --- | --- |

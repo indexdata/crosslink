@@ -6,6 +6,7 @@
 -- Example:
 --   psql "$DATABASE_URL" \
 --     --set=ON_ERROR_STOP=1 \
+--     --set=owner=ISIL:OWNER \
 --     --set=include_consortium=true \
 --     --file=other-scripts/export-crosslink-directory.sql \
 --     --quiet --tuples-only --no-align \
