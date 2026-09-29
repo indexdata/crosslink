@@ -1758,6 +1758,7 @@ components:
         duplicateCheckWindowHours: { type: integer, format: int32, minimum: 0, nullable: true }
         defaultLoanPeriod: { type: integer, format: int32, minimum: 1, nullable: true }
         maxRequestsPerPatron: { type: integer, format: int32, minimum: 0, nullable: true }
+        minimumCost: { type: number, format: double, minimum: 0, nullable: true }
 
     ImportCatalogConfig:
       type: object
@@ -2242,6 +2243,12 @@ components:
           nullable: true
           minimum: 0
           description: Maximum number of active requests allowed per patron. 0, omitted, or null disables the limit.
+        minimumCost:
+          type: number
+          format: double
+          nullable: true
+          minimum: 0
+          description: Minimum cost configured for ILL requests. Omitted or null means no minimum cost is configured.
         iso18626Url:
           type: string
           description: URL of the ISO18626 service. When set, used instead of an ISO18626 service from endpoints.

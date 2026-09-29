@@ -52,4 +52,26 @@ func TestMaxRequestsPerPatronPatch(t *testing.T) {
 	assert.Nil(t, result.MaxRequestsPerPatron, "no implicit default")
 }
 
-func int32Pointer(value int32) *int32 { return &value }
+func TestMinimumCostPatch(t *testing.T) {
+	original := 1.5
+	for _, tc := range []struct {
+		body string
+		want *float64
+	}{
+		{`{}`, &original},
+		{`{"minimumCost":null}`, nil},
+		{`{"minimumCost":0}`, float64Pointer(0)},
+		{`{"minimumCost":2.75}`, float64Pointer(2.75)},
+	} {
+		var config IllConfig
+		require.NoError(t, json.Unmarshal([]byte(tc.body), &config))
+		result := illConfigPatchToDBParams(uuid.New(), config, db.IllConfig{MinimumCost: &original})
+		assert.Equal(t, tc.want, result.MinimumCost)
+	}
+
+	result := illConfigToDBParams(uuid.New(), IllConfig{})
+	assert.Nil(t, result.MinimumCost, "no implicit default")
+}
+
+func int32Pointer(value int32) *int32       { return &value }
+func float64Pointer(value float64) *float64 { return &value }
