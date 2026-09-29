@@ -1747,6 +1747,7 @@ components:
         lendersOfLastResort:
           type: array
           items: { $ref: '#/components/schemas/SymbolProperties' }
+        isPickupLocation: { type: boolean, nullable: true }
         includeRequestingAgencyInfo: { type: boolean, nullable: true }
         includeSupplierInfo: { type: boolean, nullable: true }
         includeReturnInfo: { type: boolean, nullable: true }
@@ -2226,6 +2227,9 @@ components:
     IllConfig:
       type: object
       properties:
+        isPickupLocation:
+          type: boolean
+          description: Whether this entry is offered as a pickup location. Applies to institutions and branches, independently of LMS pickup codes. Omitted means false.
         defaultLoanPeriod:
           type: integer
           format: int32

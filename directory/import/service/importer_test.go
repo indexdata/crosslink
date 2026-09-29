@@ -233,6 +233,18 @@ func TestImportAcceptsNullLMSPatronProfiles(t *testing.T) {
 	require.Nil(t, repo.entry.Data.LMSConfig.PatronProfiles)
 }
 
+func TestImportAcceptsPickupLocationFlag(t *testing.T) {
+	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
+	config := strings.Replace(validILLConfig(), `"illConfig":{`, `"illConfig":{"isPickupLocation":true,`, 1)
+	record := strings.Replace(validEntryRecord(), `"illConfig":null`, config, 1)
+	result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(record))
+	require.NoError(t, err)
+	assert.Empty(t, result.Errors)
+	require.NotNil(t, repo.entry)
+	require.NotNil(t, repo.entry.Data.ILLConfig.IsPickupLocation)
+	assert.True(t, *repo.entry.Data.ILLConfig.IsPickupLocation)
+}
+
 func TestImportAcceptsMaxRequestsPerPatron(t *testing.T) {
 	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
 	record := strings.Replace(validEntryRecord(), `"illConfig":null`, validILLConfig(), 1)

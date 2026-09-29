@@ -29,6 +29,9 @@ and `update` conflict policies.
 
 The [`export-crosslink-directory.sql`](../migration/export-crosslink-directory.sql)
 script exports a mod-rs tenant's directory as NDJSON accepted by this endpoint.
+It sets `illConfig.isPickupLocation` for entries with a non-null legacy LMS
+location code (including an empty string), even without NCIP or ISO18626
+configuration. Entries without a code are not designated as pickup locations.
 
 ### Request format and sample data
 
@@ -185,3 +188,11 @@ Run `make generate` before invoking `go build` or `go test` directly.
 
 See [Host LMS and catalog profiles](host-profiles.md) for `lmsConfig.vendor`,
 `catalogConfig.profile`, precedence, parser overrides, diagnostics and migration.
+
+### Pickup locations
+
+Set `illConfig.isPickupLocation` to `true` to offer an institution or branch in the request form's pickup-location selector. This flag is independent of `lmsConfig.requesterPickupLocation`: manual workflows can offer locations without an LMS code. Migration 012 enables the flag for existing entries whose requester pickup code is non-null (including empty strings), preserving other ILL settings. Other entries remain unselected unless explicitly enabled. Imports can set the flag in `illConfig`.
+
+The broker accepts the requesting institution's UUID or a descendant's UUID. An explicit selection supplies that entry's shipping address and, when needed, its LMS pickup code. Omitting the selection retains existing defaults. LMS operations that consume a pickup code still require one for explicit selections.
+
+Filter Directory entries with CQL `isPickupLocation=true` or `isPickupLocation=false`. Missing flags (including entries without ILL configuration) match `false`. The former `requesterPickupLocation` CQL filter is no longer supported.
