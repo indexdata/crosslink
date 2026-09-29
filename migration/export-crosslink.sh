@@ -33,6 +33,12 @@ for file in "$directory_prefix"-*.ndjson "$PATRON_REQUEST_PREFIX"-*.ndjson; do
     fi
 done
 
+total_entries=$(awk '
+    /^[[:space:]]*($|#)/ { next }
+    { count++ }
+    END { print count + 0 }
+' "$PROPERTIES_FILE")
+
 index=0
 
 while IFS= read -r line || [ -n "$line" ]; do
@@ -78,7 +84,7 @@ while IFS= read -r line || [ -n "$line" ]; do
 
     index=$((index + 1))
     include_consortium=false
-    if [ "$index" -eq 1 ]; then
+    if [ "$index" -eq "$total_entries" ]; then
         include_consortium=true
     fi
 
