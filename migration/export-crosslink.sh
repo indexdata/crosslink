@@ -26,6 +26,13 @@ if [ ! -f "$PATRON_REQUEST_EXPORT" ]; then
     exit 1
 fi
 
+directory_prefix=${DIRECTORY_OUTPUT%.ndjson}
+for file in "$directory_prefix"-*.ndjson "$PATRON_REQUEST_PREFIX"-*.ndjson; do
+    if [ -f "$file" ]; then
+        rm "$file"
+    fi
+done
+
 index=0
 
 while IFS= read -r line || [ -n "$line" ]; do
