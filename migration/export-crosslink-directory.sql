@@ -25,8 +25,8 @@
 --     Z39.50 proxy is deployment-level CrossLink configuration and is omitted.
 --     Configure last-resort lenders after import because references to child
 --     entries cannot be resolved while their parent entry is being imported.
---   * A non-null directory LMS location code marks an entry as a pickup
---     location, including empty codes, independently of NCIP or ISO endpoints.
+--   * The directory pickup tag marks an entry as a pickup location,
+--     independently of its LMS location code or NCIP/ISO endpoints.
 --   * default_service_level and minimum_cost seed loan and copy default tiers.
 --     Missing settings become standard and 0. The automatic-fee
 --     request_service_type setting does not describe routing capabilities.
@@ -563,7 +563,7 @@ entry_records AS (
     ) AS catalog_config ON true
     LEFT JOIN LATERAL (
         SELECT jsonb_build_object(
-            'isPickupLocation', entry.lms_location_code IS NOT NULL,
+            'isPickupLocation', pickup.is_pickup_location,
             'iso18626Url', iso_endpoint.address,
             'iso18626Vendor', CASE WHEN iso_endpoint.address IS NULL THEN NULL ELSE 'ReShare' END,
             'lendersOfLastResort', '[]'::jsonb,
@@ -578,7 +578,15 @@ entry_records AS (
             'maxRequestsPerPatron', CASE WHEN local_entry.entry_id IS NOT NULL
                 THEN tenant_settings.max_requests_per_patron::integer ELSE NULL END
         ) AS item
-        FROM (VALUES (1)) AS seed(n)
+        FROM (
+            SELECT EXISTS (
+                SELECT 1
+                FROM directory_entry_tag
+                JOIN tag ON tag.id = directory_entry_tag.tag_id
+                WHERE directory_entry_tag.directory_entry_tags_id = entry.entry_id
+                  AND lower(btrim(tag.norm_value)) = 'pickup'
+            ) AS is_pickup_location
+        ) AS pickup
         LEFT JOIN LATERAL (
             SELECT service.se_address AS address
             FROM service_account
@@ -590,7 +598,7 @@ entry_records AS (
             ORDER BY service.se_id
             LIMIT 1
         ) AS iso_endpoint ON true
-        WHERE local_entry.entry_id IS NOT NULL OR entry.lms_location_code IS NOT NULL
+        WHERE local_entry.entry_id IS NOT NULL OR pickup.is_pickup_location
     ) AS ill_config ON true
     LEFT JOIN LATERAL (
         SELECT jsonb_build_object(

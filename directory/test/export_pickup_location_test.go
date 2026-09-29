@@ -28,7 +28,9 @@ func TestDirectoryExportPickupLocations(t *testing.T) {
 		tenant_settings AS (SELECT '5'::text AS max_requests_per_patron),
 		service AS (SELECT 1 AS se_id, 1 AS se_type_fk, $4::text AS se_address WHERE $4::text IS NOT NULL),
 		service_account AS (SELECT 1 AS sa_service, $1::uuid AS sa_account_holder),
-		refdata_value AS (SELECT 1 AS rdv_id, 'ISO18626'::text AS rdv_value)
+		refdata_value AS (SELECT 1 AS rdv_id, 'ISO18626'::text AS rdv_value),
+		tag AS (SELECT * FROM unnest($5::text[]) WITH ORDINALITY AS tags(norm_value, id)),
+		directory_entry_tag AS (SELECT id AS tag_id, $1::uuid AS directory_entry_tags_id FROM tag)
 		SELECT ill_config.item FROM entry CROSS JOIN local_entry CROSS JOIN tenant_settings
 	` + projection + ") AS ill_config ON true"
 
@@ -47,22 +49,29 @@ func TestDirectoryExportPickupLocations(t *testing.T) {
 		code     *string
 		local    bool
 		endpoint *string
+		tags     []string
+		enabled  bool
 	}{
-		{"local with endpoint", &code, true, &endpoint},
-		{"local without endpoint", &code, true, nil},
-		{"branch without endpoint", &code, false, nil},
-		{"branch with endpoint", &code, false, &endpoint},
-		{"empty code", &empty, false, nil},
-		{"local without code", nil, true, &endpoint},
-		{"branch without code", nil, false, nil},
+		{"tagged local with endpoint", &code, true, &endpoint, []string{"pickup"}, true},
+		{"tagged local without endpoint or code", nil, true, nil, []string{"pickup"}, true},
+		{"tagged branch without endpoint or code", nil, false, nil, []string{"pickup"}, true},
+		{"tagged branch with endpoint", &code, false, &endpoint, []string{"pickup"}, true},
+		{"tagged empty code", &empty, false, nil, []string{"pickup"}, true},
+		{"untagged local with code", &code, true, &endpoint, nil, false},
+		{"untagged branch with code", &code, false, nil, nil, false},
+		{"untagged branch with empty code", &empty, false, nil, nil, false},
+		{"untagged branch without code", nil, false, nil, nil, false},
+		{"unrelated tag with code", &code, false, nil, []string{"other"}, false},
+		{"normalized pickup tag", nil, false, nil, []string{"other", " PICKUP "}, true},
+		{"duplicate pickup tags", nil, false, nil, []string{"pickup", "pickup"}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var exported []byte
-			require.NoError(t, dbpool.QueryRow(context.Background(), query, uuid.New(), tc.code, tc.local, tc.endpoint).Scan(&exported))
+			require.NoError(t, dbpool.QueryRow(context.Background(), query, uuid.New(), tc.code, tc.local, tc.endpoint, tc.tags).Scan(&exported))
 			var config map[string]any
 			if exported != nil {
 				require.NoError(t, json.Unmarshal(exported, &config))
-				require.Equal(t, tc.code != nil, config["isPickupLocation"])
+				require.Equal(t, tc.enabled, config["isPickupLocation"])
 				if tc.local {
 					require.Equal(t, float64(5), config["maxRequestsPerPatron"])
 					if tc.endpoint != nil {
@@ -76,7 +85,7 @@ func TestDirectoryExportPickupLocations(t *testing.T) {
 				}
 			} else {
 				require.False(t, tc.local)
-				require.Nil(t, tc.code)
+				require.False(t, tc.enabled)
 			}
 			key := symbolObject("ISIL", fmt.Sprintf("PICKUP%d", i))
 			entryType := "Institution"
@@ -94,7 +103,7 @@ func TestDirectoryExportPickupLocations(t *testing.T) {
 				id := importedEntryID(t, "ISIL", key["symbol"].(string))
 				var enabled bool
 				require.NoError(t, dbpool.QueryRow(context.Background(), "SELECT EXISTS (SELECT 1 FROM ill_configs WHERE entry=$1 AND is_pickup_location)", id).Scan(&enabled))
-				require.Equal(t, tc.code != nil, enabled)
+				require.Equal(t, tc.enabled, enabled)
 			}
 		})
 	}

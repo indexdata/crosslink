@@ -29,9 +29,9 @@ and `update` conflict policies.
 
 The [`export-crosslink-directory.sql`](../migration/export-crosslink-directory.sql)
 script exports a mod-rs tenant's directory as NDJSON accepted by this endpoint.
-It sets `illConfig.isPickupLocation` for entries with a non-null legacy LMS
-location code (including an empty string), even without NCIP or ISO18626
-configuration. Entries without a code are not designated as pickup locations.
+It sets `illConfig.isPickupLocation` for entries with the legacy `pickup` tag,
+independently of their LMS location code or NCIP/ISO18626 configuration.
+Untagged entries are not designated as pickup locations.
 
 ### Request format and sample data
 
