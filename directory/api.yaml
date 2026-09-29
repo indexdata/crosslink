@@ -2229,7 +2229,7 @@ components:
       properties:
         isPickupLocation:
           type: boolean
-          description: Whether this entry is offered as a pickup location. Applies to institutions and branches, independently of LMS pickup codes. Omitted means false.
+          description: Whether this entry is offered as a pickup location. Applies to institutions and branches, independently of LMS pickup codes. Defaults to false.
         defaultLoanPeriod:
           type: integer
           format: int32
