@@ -1210,6 +1210,52 @@ func TestHandleInvokeActionValidateLookupFailed(t *testing.T) {
 	assert.Equal(t, string(events.EventStatusError), mockPrRepo.savedPr.LastActionResult.String)
 }
 
+func TestValidatePatronBorrowingRequestEnrichesMissingPatronInfo(t *testing.T) {
+	adapter := &MockLmsAdapterLog{lookupResult: lms.LookupUserResult{
+		UserID:         "canonical-user-id",
+		GivenName:      "NCIP given name",
+		Surname:        "NCIP surname",
+		EmailAddresses: []string{"first@example.org", "second@example.org"},
+	}}
+	illRequest := iso18626.Request{PatronInfo: &iso18626.PatronInfo{
+		GivenName: "Existing given name",
+		Surname:   " ",
+		Address:   []iso18626.Address{makePhysicalAddress()},
+	}}
+	pr := pr_db.PatronRequest{Patron: getDbText("submitted-user-id"), IllRequest: illRequest}
+
+	result := (&PatronRequestActionService{}).validatePatronBorrowingRequest(appCtx, pr, adapter, illRequest)
+
+	require.Equal(t, events.EventStatusSuccess, result.status)
+	assert.True(t, adapter.validatePatronProfile)
+	assert.True(t, adapter.includePatronInfo)
+	assert.Equal(t, "canonical-user-id", result.pr.Patron.String)
+	require.NotNil(t, result.pr.IllRequest.PatronInfo)
+	assert.Equal(t, "Existing given name", result.pr.IllRequest.PatronInfo.GivenName)
+	assert.Equal(t, "NCIP surname", result.pr.IllRequest.PatronInfo.Surname)
+	assert.Equal(t, []string{"first@example.org", "second@example.org"}, patronEmail(result.pr))
+	assert.Len(t, result.pr.IllRequest.PatronInfo.Address, 3)
+}
+
+func TestEnrichPatronInfoKeepsExistingEmailAndNames(t *testing.T) {
+	illRequest := iso18626.Request{PatronInfo: &iso18626.PatronInfo{
+		GivenName: "Existing given name",
+		Surname:   "Existing surname",
+		Address:   []iso18626.Address{makeAddress(string(iso18626.ElectronicAddressTypeEmail), "existing@example.org")},
+	}}
+
+	result := enrichPatronInfo(illRequest, lms.LookupUserResult{
+		GivenName:      "NCIP given name",
+		Surname:        "NCIP surname",
+		EmailAddresses: []string{"ncip@example.org"},
+	})
+
+	require.NotNil(t, result.PatronInfo)
+	assert.Equal(t, "Existing given name", result.PatronInfo.GivenName)
+	assert.Equal(t, "Existing surname", result.PatronInfo.Surname)
+	assert.Equal(t, []string{"existing@example.org"}, patronEmail(pr_db.PatronRequest{IllRequest: result}))
+}
+
 func TestHandleInvokeActionValidatePatronProblem(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
@@ -5624,18 +5670,24 @@ type MockLmsAdapterLog struct {
 	logFunc               ncipclient.NcipLogFunc
 	requestItemErr        error
 	validatePatronProfile bool
+	includePatronInfo     bool
+	lookupResult          lms.LookupUserResult
 }
 
 func (l *MockLmsAdapterLog) SetLogFunc(logFunc ncipclient.NcipLogFunc) {
 	l.logFunc = logFunc
 }
 
-func (l *MockLmsAdapterLog) LookupUser(patron string, validatePatronProfile bool) (string, error) {
-	l.validatePatronProfile = validatePatronProfile
+func (l *MockLmsAdapterLog) LookupUser(patron string, options lms.LookupUserOptions) (lms.LookupUserResult, error) {
+	l.validatePatronProfile = options.ValidatePatronProfile
+	l.includePatronInfo = options.IncludePatronInfo
 	if l.logFunc != nil {
 		l.logFunc(map[string]any{"patron": patron}, map[string]any{"patron": patron}, nil)
 	}
-	return patron, nil
+	if l.lookupResult.UserID == "" {
+		l.lookupResult.UserID = patron
+	}
+	return l.lookupResult, nil
 }
 
 func (l *MockLmsAdapterLog) RequestItem(
@@ -5679,8 +5731,8 @@ type MockLmsAdapterPatronProfileIneligible struct {
 	validatePatronProfile bool
 }
 
-func (l *MockLmsAdapterPatronProblem) LookupUser(patron string, validatePatronProfile bool) (string, error) {
-	return "", &ncipclient.NcipError{
+func (l *MockLmsAdapterPatronProblem) LookupUser(patron string, options lms.LookupUserOptions) (lms.LookupUserResult, error) {
+	return lms.LookupUserResult{}, &ncipclient.NcipError{
 		Message: "NCIP user lookup failed",
 		Problem: ncip.Problem{
 			ProblemType:   ncip.SchemeValuePair{Text: string(ncip.UnknownUser)},
@@ -5689,9 +5741,9 @@ func (l *MockLmsAdapterPatronProblem) LookupUser(patron string, validatePatronPr
 	}
 }
 
-func (l *MockLmsAdapterPatronProfileIneligible) LookupUser(patron string, validatePatronProfile bool) (string, error) {
-	l.validatePatronProfile = validatePatronProfile
-	return "", &lms.PatronProfileIneligibleError{
+func (l *MockLmsAdapterPatronProfileIneligible) LookupUser(patron string, options lms.LookupUserOptions) (lms.LookupUserResult, error) {
+	l.validatePatronProfile = options.ValidatePatronProfile
+	return lms.LookupUserResult{}, &lms.PatronProfileIneligibleError{
 		ProfileCode: "BLOCKED",
 		ProfileName: "Blocked patrons",
 	}
@@ -5700,8 +5752,8 @@ func (l *MockLmsAdapterPatronProfileIneligible) LookupUser(patron string, valida
 func (l *MockLmsAdapterFail) SetLogFunc(logFunc ncipclient.NcipLogFunc) {
 }
 
-func (l *MockLmsAdapterFail) LookupUser(patron string, validatePatronProfile bool) (string, error) {
-	return "", errors.New("LookupUser failed")
+func (l *MockLmsAdapterFail) LookupUser(patron string, options lms.LookupUserOptions) (lms.LookupUserResult, error) {
+	return lms.LookupUserResult{}, errors.New("LookupUser failed")
 }
 
 func (l *MockLmsAdapterFail) AcceptItem(

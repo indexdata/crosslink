@@ -873,7 +873,10 @@ func (a *PatronRequestActionService) validatePatronBorrowingRequest(ctx common.E
 	if pr.Patron.Valid {
 		patron = pr.Patron.String
 	}
-	userId, err := lmsAdapter.LookupUser(patron, true)
+	lookupResult, err := lmsAdapter.LookupUser(patron, lms.LookupUserOptions{
+		ValidatePatronProfile: true,
+		IncludePatronInfo:     true,
+	})
 	if err != nil {
 		var ncipErr *ncipclient.NcipError
 		if errors.As(err, &ncipErr) {
@@ -900,9 +903,53 @@ func (a *PatronRequestActionService) validatePatronBorrowingRequest(ctx common.E
 	}
 	// change patron to canonical user id
 	// perhaps it would be better to have both original and canonical id stored?
-	pr.Patron = pgtype.Text{String: userId, Valid: true}
+	pr.Patron = pgtype.Text{String: lookupResult.UserID, Valid: true}
+	pr.IllRequest = enrichPatronInfo(illRequest, lookupResult)
 
 	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
+}
+
+func enrichPatronInfo(illRequest iso18626.Request, lookupResult lms.LookupUserResult) iso18626.Request {
+	givenName := strings.TrimSpace(lookupResult.GivenName)
+	surname := strings.TrimSpace(lookupResult.Surname)
+	hasEmail := false
+	for _, emailAddress := range lookupResult.EmailAddresses {
+		if strings.TrimSpace(emailAddress) != "" {
+			hasEmail = true
+			break
+		}
+	}
+	if givenName == "" && surname == "" && !hasEmail {
+		return illRequest
+	}
+	if illRequest.PatronInfo == nil {
+		illRequest.PatronInfo = &iso18626.PatronInfo{}
+	}
+	if strings.TrimSpace(illRequest.PatronInfo.GivenName) == "" {
+		illRequest.PatronInfo.GivenName = givenName
+	}
+	if strings.TrimSpace(illRequest.PatronInfo.Surname) == "" {
+		illRequest.PatronInfo.Surname = surname
+	}
+
+	for _, address := range illRequest.PatronInfo.Address {
+		if address.ElectronicAddress != nil &&
+			address.ElectronicAddress.ElectronicAddressType.Text == string(iso18626.ElectronicAddressTypeEmail) &&
+			strings.TrimSpace(address.ElectronicAddress.ElectronicAddressData) != "" {
+			return illRequest
+		}
+	}
+	for _, emailAddress := range lookupResult.EmailAddresses {
+		if emailAddress = strings.TrimSpace(emailAddress); emailAddress != "" {
+			illRequest.PatronInfo.Address = append(illRequest.PatronInfo.Address, iso18626.Address{
+				ElectronicAddress: &iso18626.ElectronicAddress{
+					ElectronicAddressType: iso18626.TypeSchemeValuePair{Text: string(iso18626.ElectronicAddressTypeEmail)},
+					ElectronicAddressData: emailAddress,
+				},
+			})
+		}
+	}
+	return illRequest
 }
 
 func (a *PatronRequestActionService) updateMetadataBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, illRequest iso18626.Request) actionExecutionResult {
@@ -1444,9 +1491,9 @@ func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.Exte
 	return actionResultFromIllSend(ctx, sendStatus, sendResult, sendErr, pr)
 }
 
-func (a *PatronRequestActionService) validatePatronLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) actionExecutionResult {
-	institutionalPatron := lms.InstitutionalPatron(pr.RequesterSymbol.String)
-	_, err := lms.LookupUser(institutionalPatron, false)
+func (a *PatronRequestActionService) validatePatronLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter) actionExecutionResult {
+	institutionalPatron := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
+	_, err := lmsAdapter.LookupUser(institutionalPatron, lms.LookupUserOptions{})
 	if err != nil {
 		status, result := logActionErrorAndReturnResult(ctx, "LMS LookupUser failed", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}

@@ -8,8 +8,8 @@ type LmsAdapterManual struct {
 func (l *LmsAdapterManual) SetLogFunc(logFunc ncipclient.NcipLogFunc) {
 }
 
-func (l *LmsAdapterManual) LookupUser(patron string, validatePatronProfile bool) (string, error) {
-	return patron, nil
+func (l *LmsAdapterManual) LookupUser(patron string, options LookupUserOptions) (LookupUserResult, error) {
+	return LookupUserResult{UserID: patron}, nil
 }
 
 // AcceptItem skips requester LMS item creation in manual workflows.

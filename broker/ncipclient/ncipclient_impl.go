@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"reflect"
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/httpclient"
@@ -247,14 +246,14 @@ func (n *NcipClientImpl) logOperation(outgoingMessage *ncip.NCIPMessage, incomin
 		return
 	}
 
-	hideSensitive(outgoingMessage)
 	outgoing, outgoingErr := common.StructToMap(outgoingMessage)
+	hideSensitive(outgoing)
 
 	var incoming map[string]any
 	var incomingErr error
 	if incomingMessage != nil {
-		hideSensitive(incomingMessage)
 		incoming, incomingErr = common.StructToMap(incomingMessage)
+		hideSensitive(incoming)
 	}
 
 	logErr := operationErr
@@ -267,56 +266,38 @@ func (n *NcipClientImpl) logOperation(outgoingMessage *ncip.NCIPMessage, incomin
 	n.logFunc(outgoing, incoming, logErr)
 }
 
-func hideSensitive(message *ncip.NCIPMessage) {
-	traverse(reflect.ValueOf(message), 0)
+func hideSensitive(message map[string]any) {
+	traverse(message, 0)
 }
 
 // removes values from the FromAgencyAuthentication and FromSystemAuthentication fields
-// as well as AuthenticationInput fields except if type is "username"
-func traverse(v reflect.Value, level int) {
+// as well as user name/address information and AuthenticationInput fields except
+// if type is "username"
+func traverse(value any, level int) {
 	if level > 20 {
 		return
 	}
-	level = level + 1
-	if !v.IsValid() {
-		return
-	}
-	if v.Kind() == reflect.Pointer {
-		if v.IsNil() {
-			return
+	level++
+	switch v := value.(type) {
+	case map[string]any:
+		if authenticationType, ok := v["AuthenticationInputType"].(map[string]any); ok {
+			if authenticationType["#text"] != "username" {
+				if _, exists := v["AuthenticationInputData"]; exists {
+					v["AuthenticationInputData"] = "***"
+				}
+			}
 		}
-		traverse(v.Elem(), level)
-		return
-	}
-	if v.Kind() == reflect.Slice {
-		if v.IsNil() {
-			return
+		for key, field := range v {
+			if key == "FromAgencyAuthentication" || key == "FromSystemAuthentication" ||
+				key == "NameInformation" || key == "UserAddressInformation" {
+				v[key] = "***"
+				continue
+			}
+			traverse(field, level)
 		}
-		for i := 0; i < v.Len(); i++ {
-			traverse(v.Index(i), level)
-		}
-		return
-	}
-	if v.Kind() != reflect.Struct {
-		return
-	}
-	t := v.Type()
-	if t == reflect.TypeOf(ncip.AuthenticationInput{}) {
-		ncipAuthenticationInput := v.Interface().(ncip.AuthenticationInput)
-		exclude := ncipAuthenticationInput.AuthenticationInputType.Text != "username"
-		if exclude {
-			ncipAuthenticationInput.AuthenticationInputData = "***"
-			v.Set(reflect.ValueOf(ncipAuthenticationInput))
-		}
-		return
-	}
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-		if field.Type.Kind() == reflect.String &&
-			(field.Name == "FromAgencyAuthentication" || field.Name == "FromSystemAuthentication") {
-			v.Field(i).SetString("***")
-		} else {
-			traverse(v.Field(i), level)
+	case []any:
+		for _, item := range v {
+			traverse(item, level)
 		}
 	}
 }
