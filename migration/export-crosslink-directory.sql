@@ -6,12 +6,14 @@
 -- Example:
 --   psql "$DATABASE_URL" \
 --     --set=ON_ERROR_STOP=1 \
+--     --set=include_consortium=true \
 --     --file=other-scripts/export-crosslink-directory.sql \
 --     --quiet --tuples-only --no-align \
 --     > crosslink-directory.ndjson
 --
 -- The output order is significant: parent entries precede their children,
--- followed by default tiers and then the default network.
+-- followed by default tiers and then the default network when
+-- include_consortium is true.
 --
 -- Mapping notes:
 --   * The first symbol by legacy priority, authority, and value is the stable
@@ -22,9 +24,11 @@
 --   * service/service_account rows become entry endpoints.
 --   * address/address_line rows become entry addresses. addr_country_code is
 --     appended as a CountryCode component when one is not already present.
---   * Tenant-local NCIP, Z39.50 target, ILL, and holdings settings are attached
---     to the entry identified by default_request_symbol. The legacy HTTP
---     Z39.50 proxy is deployment-level CrossLink configuration and is omitted.
+--   * The consortium, the owner identified by the psql `owner` variable, and
+--     the owner's direct children are exported. Tenant-local NCIP, Z39.50
+--     target, ILL, and holdings settings are attached to the selected owner.
+--     The legacy HTTP Z39.50 proxy is deployment-level CrossLink configuration
+--     and is omitted.
 --     Configure last-resort lenders after import because references to child
 --     entries cannot be resolved while their parent entry is being imported.
 --   * The directory pickup tag marks an entry as a pickup location,
@@ -34,6 +38,9 @@
 --     request_service_type setting does not describe routing capabilities.
 --   * Every non-consortium entry belongs to each generated tier and to one
 --     reciprocal network named Default.
+--   * Set include_consortium=false to omit the consortium entry, tiers, and
+--     network. In that mode, the owner's parent consortium reference is also
+--     omitted so the remaining entries form a valid hierarchy.
 --   * Fields with no mod-rs equivalent are emitted as explicit nulls or empty
 --     arrays because the CrossLink import contract requires every field.
 --
@@ -42,7 +49,25 @@
 
 \set ON_ERROR_STOP on
 
+\if :{?include_consortium}
+\else
+\set include_consortium 'true'
+\endif
+
+SELECT lower(btrim(:'include_consortium')) IN ('true', 'false')
+    AS crosslink_include_consortium_valid
+\gset
+
+\if :crosslink_include_consortium_valid
+\else
+\warn Invalid include_consortium value. Use true or false.
+SELECT 1 / 0;
+\endif
+
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+
+CREATE TEMP TABLE crosslink_export_options ON COMMIT DROP AS
+SELECT :'include_consortium'::boolean AS include_consortium;
 
 CREATE TEMP TABLE crosslink_entry_base ON COMMIT DROP AS
 SELECT
@@ -126,35 +151,6 @@ WHERE NOT EXISTS (
     WHERE existing_symbols.entry_id = entry.entry_id
 );
 
-CREATE TEMP TABLE crosslink_entry_keys ON COMMIT DROP AS
-SELECT entry_id, authority, symbol
-FROM crosslink_symbols
-WHERE key_order = 1;
-
-CREATE TEMP TABLE crosslink_hierarchy ON COMMIT DROP AS
-WITH RECURSIVE hierarchy AS (
-    SELECT
-        entry.entry_id,
-        entry.parent_id,
-        0 AS depth,
-        ARRAY[entry.entry_id]::text[] AS entry_path
-    FROM crosslink_entry_base AS entry
-    WHERE entry.parent_id IS NULL
-
-    UNION ALL
-
-    SELECT
-        child.entry_id,
-        child.parent_id,
-        parent.depth + 1,
-        parent.entry_path || child.entry_id
-    FROM hierarchy AS parent
-    JOIN crosslink_entry_base AS child
-      ON child.parent_id = parent.entry_id
-    WHERE NOT child.entry_id = ANY(parent.entry_path)
-)
-SELECT * FROM hierarchy;
-
 CREATE TEMP TABLE crosslink_tier_settings ON COMMIT DROP AS
 WITH settings AS (
     SELECT
@@ -211,7 +207,71 @@ CREATE TEMP TABLE crosslink_local_entry ON COMMIT DROP AS
 SELECT DISTINCT symbol.entry_id
 FROM crosslink_symbols AS symbol
 CROSS JOIN crosslink_tenant_settings AS settings
-WHERE symbol.authority || ':' || symbol.symbol = upper(btrim(settings.default_request_symbol));
+WHERE symbol.authority || ':' || symbol.symbol = :'owner';
+
+CREATE TEMP TABLE crosslink_export_entry_ids ON COMMIT DROP AS
+WITH selected_entries AS (
+    SELECT entry.entry_id
+    FROM crosslink_entry_base AS entry
+    WHERE entry.entry_type = 'Consortium'
+
+    UNION
+
+    SELECT local_entry.entry_id
+    FROM crosslink_local_entry AS local_entry
+
+    UNION
+
+    SELECT child.entry_id
+    FROM crosslink_entry_base AS child
+    JOIN crosslink_local_entry AS local_entry
+      ON local_entry.entry_id = child.parent_id
+)
+SELECT entry_id
+FROM selected_entries;
+
+DELETE FROM crosslink_symbols AS symbol
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM crosslink_export_entry_ids AS exported
+    WHERE exported.entry_id = symbol.entry_id
+);
+
+DELETE FROM crosslink_entry_base AS entry
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM crosslink_export_entry_ids AS exported
+    WHERE exported.entry_id = entry.entry_id
+);
+
+CREATE TEMP TABLE crosslink_entry_keys ON COMMIT DROP AS
+SELECT entry_id, authority, symbol
+FROM crosslink_symbols
+WHERE key_order = 1;
+
+CREATE TEMP TABLE crosslink_hierarchy ON COMMIT DROP AS
+WITH RECURSIVE hierarchy AS (
+    SELECT
+        entry.entry_id,
+        entry.parent_id,
+        0 AS depth,
+        ARRAY[entry.entry_id]::text[] AS entry_path
+    FROM crosslink_entry_base AS entry
+    WHERE entry.parent_id IS NULL
+
+    UNION ALL
+
+    SELECT
+        child.entry_id,
+        child.parent_id,
+        parent.depth + 1,
+        parent.entry_path || child.entry_id
+    FROM hierarchy AS parent
+    JOIN crosslink_entry_base AS child
+      ON child.parent_id = parent.entry_id
+    WHERE NOT child.entry_id = ANY(parent.entry_path)
+)
+SELECT * FROM hierarchy;
 
 DO $$
 DECLARE
@@ -219,6 +279,7 @@ DECLARE
     consortium_count integer;
     entry_count integer;
     hierarchy_count integer;
+    hierarchy_duplicates text;
     minimum_cost_text text;
     service_level_text text;
     local_entry_count integer;
@@ -280,7 +341,22 @@ BEGIN
         FROM crosslink_entry_base AS entry
         LEFT JOIN crosslink_hierarchy AS hierarchy USING (entry_id)
         WHERE hierarchy.entry_id IS NULL;
-        RAISE EXCEPTION 'Directory hierarchy contains a cycle or an unreachable parent: %', problem;
+
+        SELECT string_agg(entry_id || ' (' || row_count || ' rows)', ', ' ORDER BY entry_id)
+        INTO hierarchy_duplicates
+        FROM (
+            SELECT entry_id, count(*) AS row_count
+            FROM crosslink_hierarchy
+            GROUP BY entry_id
+            HAVING count(*) > 1
+        ) AS duplicates;
+
+        RAISE EXCEPTION
+            'Directory hierarchy mismatch: % base entries, % hierarchy rows; missing entries: %; duplicate hierarchy entries: %',
+            entry_count,
+            hierarchy_count,
+            coalesce(problem, '<none>'),
+            coalesce(hierarchy_duplicates, '<none>');
     END IF;
 
     SELECT string_agg(child.entry_id || ' (' || child.name || ')', ', ' ORDER BY child.entry_id)
@@ -409,8 +485,8 @@ BEGIN
     END IF;
 
     SELECT count(*) INTO local_entry_count FROM crosslink_local_entry;
-    IF local_entry_count > 1 THEN
-        RAISE EXCEPTION 'default_request_symbol must identify not more than one exported directory entry; found %', local_entry_count;
+    IF local_entry_count <> 1 THEN
+        RAISE EXCEPTION 'owner must identify exactly one exported directory entry; found %', local_entry_count;
     END IF;
 
 END
@@ -469,7 +545,14 @@ entry_records AS (
             )
         ) AS record
     FROM ordered_entries AS entry
-    LEFT JOIN crosslink_entry_keys AS parent_key ON parent_key.entry_id = entry.parent_id
+    CROSS JOIN crosslink_export_options AS export_options
+    LEFT JOIN crosslink_entry_keys AS parent_key
+      ON parent_key.entry_id = entry.parent_id
+     AND (export_options.include_consortium OR entry.parent_id NOT IN (
+         SELECT consortium.entry_id
+         FROM ordered_entries AS consortium
+         WHERE consortium.entry_type = 'Consortium'
+     ))
     LEFT JOIN LATERAL (
         SELECT jsonb_agg(
             jsonb_build_object('authority', authority, 'symbol', symbol)
@@ -608,7 +691,8 @@ entry_records AS (
                 WHERE coalesce(profile.hlpp_hidden, false) IS FALSE
             ), '[]'::jsonb)
         ) AS item
-        WHERE tenant_settings.ncip_server_address IS NOT NULL
+        WHERE local_entry.entry_id IS NOT NULL
+           AND tenant_settings.ncip_server_address IS NOT NULL
           AND tenant_settings.ncip_from_agency IS NOT NULL
     ) AS lms_config ON true
     LEFT JOIN LATERAL (
@@ -727,6 +811,7 @@ entry_records AS (
         ) AS item
         WHERE local_entry.entry_id IS NOT NULL
     ) AS holdings_policy ON true
+    WHERE export_options.include_consortium OR entry.entry_type <> 'Consortium'
 ),
 consortium AS (
     SELECT key.authority, key.symbol
@@ -779,6 +864,8 @@ tier_records AS (
     FROM crosslink_tier_settings AS settings
     CROSS JOIN tier_types AS tier_type
     CROSS JOIN consortium
+    CROSS JOIN crosslink_export_options AS export_options
+    WHERE export_options.include_consortium
 ),
 network_record AS (
     SELECT
@@ -809,6 +896,8 @@ network_record AS (
             )
         ) AS record
     FROM consortium
+    CROSS JOIN crosslink_export_options AS export_options
+    WHERE export_options.include_consortium
 ),
 export_records AS (
     SELECT record_type_order, record_order, record FROM entry_records
