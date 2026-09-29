@@ -72,10 +72,15 @@ selected by the psql `owner` variable. Pass it as
 LMS, catalog, ILL, and holdings configuration are attached only to that
 selected local entry when their respective configuration data is present.
 
-The `include_consortium` psql parameter controls generated consortium-level
-records. It defaults to `true`. When set to `false`, the consortium entry,
-tiers, and network are omitted; the owner's parent consortium reference is also
-omitted from the remaining entry records.
+The `include_consortium` psql parameter controls whether the consortium entry
+is emitted and defaults to `true`. When set to `false`, the owner's parent
+consortium reference is omitted from the remaining entry records.
+
+The `include_tiers_network` psql parameter controls whether generated tiers
+and the network are emitted and defaults to `true`. For multi-schema exports,
+the wrapper emits the consortium entry in the first shard and tier/network
+templates in the final shard. The join script consolidates all shard entry
+keys into those final tier and network records.
 
 ## LMS and NCIP configuration
 
@@ -170,7 +175,8 @@ fail.
 
 ## Generated tiers
 
-The exporter creates one default loan tier and one default copy tier.
+When `include_tiers_network` is `true`, the exporter creates one default loan
+tier and one default copy tier.
 
 | mod-rs source | CrossLink field | Mapping |
 | --- | --- | --- |
@@ -186,7 +192,8 @@ does not describe routing capabilities.
 
 ## Generated network
 
-The exporter creates one reciprocal network.
+When `include_tiers_network` is `true`, the exporter creates one reciprocal
+network.
 
 | mod-rs source | CrossLink field | Mapping |
 | --- | --- | --- |
