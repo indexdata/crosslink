@@ -8,13 +8,14 @@
 --     --set=ON_ERROR_STOP=1 \
 --     --set=owner=ISIL:OWNER \
 --     --set=include_consortium=true \
+--     --set=include_tiers_network=true \
 --     --file=other-scripts/export-crosslink-directory.sql \
 --     --quiet --tuples-only --no-align \
 --     > crosslink-directory.ndjson
 --
 -- The output order is significant: parent entries precede their children,
 -- followed by default tiers and then the default network when
--- include_consortium is true.
+-- include_tiers_network is true.
 --
 -- Mapping notes:
 --   * The first symbol by legacy priority, authority, and value is the stable
@@ -39,9 +40,10 @@
 --     request_service_type setting does not describe routing capabilities.
 --   * Every non-consortium entry belongs to each generated tier and to one
 --     reciprocal network named Default.
---   * Set include_consortium=false to omit the consortium entry, tiers, and
---     network. In that mode, the owner's parent consortium reference is also
---     omitted so the remaining entries form a valid hierarchy.
+--   * Set include_consortium=false to omit the consortium entry. In that mode,
+--     the owner's parent consortium reference is also omitted so the remaining
+--     entries form a valid hierarchy. Set include_tiers_network independently
+--     when exporting generated tiers and the network for later consolidation.
 --   * Fields with no mod-rs equivalent are emitted as explicit nulls or empty
 --     arrays because the CrossLink import contract requires every field.
 --
@@ -55,8 +57,16 @@
 \set include_consortium 'true'
 \endif
 
-SELECT lower(btrim(:'include_consortium')) IN ('true', 'false')
-    AS crosslink_include_consortium_valid
+\if :{?include_tiers_network}
+\else
+\set include_tiers_network 'true'
+\endif
+
+SELECT
+    lower(btrim(:'include_consortium')) IN ('true', 'false')
+        AS crosslink_include_consortium_valid,
+    lower(btrim(:'include_tiers_network')) IN ('true', 'false')
+        AS crosslink_include_tiers_network_valid
 \gset
 
 \if :crosslink_include_consortium_valid
@@ -65,10 +75,18 @@ SELECT lower(btrim(:'include_consortium')) IN ('true', 'false')
 SELECT 1 / 0;
 \endif
 
+\if :crosslink_include_tiers_network_valid
+\else
+\warn Invalid include_tiers_network value. Use true or false.
+SELECT 1 / 0;
+\endif
+
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 
 CREATE TEMP TABLE crosslink_export_options ON COMMIT DROP AS
-SELECT :'include_consortium'::boolean AS include_consortium;
+SELECT
+    :'include_consortium'::boolean AS include_consortium,
+    :'include_tiers_network'::boolean AS include_tiers_network;
 
 CREATE TEMP TABLE crosslink_entry_base ON COMMIT DROP AS
 SELECT
@@ -866,7 +884,7 @@ tier_records AS (
     CROSS JOIN tier_types AS tier_type
     CROSS JOIN consortium
     CROSS JOIN crosslink_export_options AS export_options
-    WHERE export_options.include_consortium
+    WHERE export_options.include_tiers_network
 ),
 network_record AS (
     SELECT
@@ -898,7 +916,7 @@ network_record AS (
         ) AS record
     FROM consortium
     CROSS JOIN crosslink_export_options AS export_options
-    WHERE export_options.include_consortium
+    WHERE export_options.include_tiers_network
 ),
 export_records AS (
     SELECT record_type_order, record_order, record FROM entry_records

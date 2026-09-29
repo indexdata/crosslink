@@ -84,8 +84,12 @@ while IFS= read -r line || [ -n "$line" ]; do
 
     index=$((index + 1))
     include_consortium=false
-    if [ "$index" -eq "$total_entries" ]; then
+    include_tiers_network=false
+    if [ "$index" -eq 1 ]; then
         include_consortium=true
+    fi
+    if [ "$index" -eq "$total_entries" ]; then
+        include_tiers_network=true
     fi
 
     directory_output=${DIRECTORY_OUTPUT%.ndjson}-${schema}-${index}.ndjson
@@ -94,6 +98,7 @@ while IFS= read -r line || [ -n "$line" ]; do
         --command="SET search_path TO \"$schema\";" \
         --set="owner=$owner_symbol" \
         --set="include_consortium=$include_consortium" \
+        --set="include_tiers_network=$include_tiers_network" \
         --set=ON_ERROR_STOP=1 \
         --file="$DIRECTORY_EXPORT" \
         --quiet --tuples-only --no-align \
