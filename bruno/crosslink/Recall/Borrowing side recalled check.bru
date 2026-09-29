@@ -1,7 +1,7 @@
 meta {
   name: Borrowing side recalled check
   type: http
-  seq: 10
+  seq: 19
 }
 
 get {
@@ -34,6 +34,7 @@ script:post-response {
     expect(pr.lastActionResult).to.equal("SUCCESS")
     expect(pr.state).to.equal("RECALLED");
     expect(new Date(pr.dueDate).getTime()).to.equal(new Date(bru.getVar("recallDueDate")).getTime());
+    expect(pr.illResponse.messageInfo.reasonForMessage).to.equal("StatusChange");
     expect(pr.illResponse.statusInfo.status).to.equal("Recalled");
   });
 }

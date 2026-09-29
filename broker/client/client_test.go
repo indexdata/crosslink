@@ -370,19 +370,45 @@ func TestValidateReason(t *testing.T) {
 	reason = guessReason("", string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionRenew), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
-	assert.Equal(t, iso18626.TypeReasonForMessageRenewResponse, reason)
+	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
-	assert.Equal(t, iso18626.TypeReasonForMessageStatusRequestResponse, reason)
+	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionRenew), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
-	assert.Equal(t, iso18626.TypeReasonForMessageRenewResponse, reason)
+	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
-	assert.Equal(t, iso18626.TypeReasonForMessageStatusRequestResponse, reason)
+	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusUnfilled)
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, reason)
 	reason = guessReason("", string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusUnfilled)
-	assert.Equal(t, iso18626.TypeReasonForMessageStatusRequestResponse, reason)
+	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
+}
+
+func TestGuessReasonPreservesExplicitResponsesAfterRequesterAction(t *testing.T) {
+	for _, reason := range []iso18626.TypeReasonForMessage{
+		iso18626.TypeReasonForMessageCancelResponse,
+		iso18626.TypeReasonForMessageRenewResponse,
+		iso18626.TypeReasonForMessageStatusRequestResponse,
+	} {
+		for _, action := range []iso18626.TypeAction{iso18626.TypeActionRenew, iso18626.TypeActionStatusRequest, iso18626.TypeActionShippedReturn} {
+			t.Run(string(reason)+"/"+string(action), func(t *testing.T) {
+				assert.Equal(t, reason, guessReason(reason, string(action), string(iso18626.TypeStatusLoaned), iso18626.TypeStatusLoaned))
+			})
+		}
+	}
+}
+
+func TestGuessReasonDoesNotInferResponsesFromLastAction(t *testing.T) {
+	for _, action := range []iso18626.TypeAction{iso18626.TypeActionRenew, iso18626.TypeActionStatusRequest} {
+		for _, reason := range []iso18626.TypeReasonForMessage{"", iso18626.TypeReasonForMessageStatusChange} {
+			for _, status := range []iso18626.TypeStatus{iso18626.TypeStatusLoaned, iso18626.TypeStatusLoanCompleted} {
+				t.Run(string(action)+"/"+string(reason)+"/"+string(status), func(t *testing.T) {
+					assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, guessReason(reason, string(action), string(iso18626.TypeStatusLoaned), status))
+				})
+			}
+		}
+	}
 }
 
 func TestPrependVendorInNote(t *testing.T) {
@@ -667,6 +693,29 @@ func TestBuildSupplyingAgencyMessage(t *testing.T) {
 	assert.Equal(t, "Vendor: Alma", message.MessageInfo.Note)
 	assert.Equal(t, iso18626.TypeStatusLoaned, message.StatusInfo.Status)
 	assert.Equal(t, "isil:sup1 (isil:sup1)", message.ReturnInfo.Name)
+}
+
+// The last requester action remains Renew even after the renewal is answered.
+func TestBuildSupplyingAgencyMessageLoanStatusAfterRenew(t *testing.T) {
+	for _, mode := range []common.BrokerMode{common.BrokerModeTransparent, common.BrokerModeOpaque} {
+		for _, status := range []iso18626.TypeStatus{iso18626.TypeStatusRecalled, iso18626.TypeStatusOverdue} {
+			t.Run(string(mode)+"/"+string(status), func(t *testing.T) {
+				event := createSupplyingAgencyMessageEvent(true)
+				sam := event.EventData.IncomingMessage.SupplyingAgencyMessage
+				sam.MessageInfo = iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange}
+				sam.StatusInfo.Status = status
+				sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
+				peer := &ill_db.Peer{Vendor: string(dirapi.Alma)}
+				trCtx := createTransactionContext(event, sup, peer, mode)
+				trCtx.transaction.LastRequesterAction = getPgText(string(iso18626.TypeActionRenew))
+				trCtx.transaction.LastSupplierStatus = getPgText(string(iso18626.TypeStatusLoaned))
+				message := createSupplyingAgencyMessage(trCtx, &messageTarget{status: status, supplier: sup, peer: peer}).SupplyingAgencyMessage
+				assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, message.MessageInfo.ReasonForMessage)
+				assert.Equal(t, status, message.StatusInfo.Status)
+				assert.Nil(t, message.MessageInfo.AnswerYesNo)
+			})
+		}
+	}
 }
 
 func TestBuildSupplyingAgencyMessageDateSentOnlyForLoaned(t *testing.T) {

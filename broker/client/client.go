@@ -334,32 +334,29 @@ func createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedS
 	}
 }
 
-// suppliers like Alma often send a wrong reason so we try to guess the correct reason based on the requester action and previous status
+// guessReason preserves explicit responses and normalizes request and status messages.
 func guessReason(reason iso18626.TypeReasonForMessage, requesterAction string, prevStatus string, targetStatus iso18626.TypeStatus) iso18626.TypeReasonForMessage {
-	// Preserve explicit notifications, decision responses, and overdue status changes.
-	if reason == iso18626.TypeReasonForMessageNotification || reason == iso18626.TypeReasonForMessageCancelResponse || reason == iso18626.TypeReasonForMessageRenewResponse ||
-		(reason == iso18626.TypeReasonForMessageStatusChange && targetStatus == iso18626.TypeStatusOverdue) {
+	// Preserve explicit notifications, decision responses, and unsolicited loan status changes.
+	switch reason {
+	case iso18626.TypeReasonForMessageNotification,
+		iso18626.TypeReasonForMessageCancelResponse,
+		iso18626.TypeReasonForMessageRenewResponse,
+		iso18626.TypeReasonForMessageStatusRequestResponse:
 		return reason
+	case iso18626.TypeReasonForMessageStatusChange:
+		if targetStatus == iso18626.TypeStatusOverdue || targetStatus == iso18626.TypeStatusRecalled {
+			return reason
+		}
 	}
 	if reason != "" && targetStatus == iso18626.TypeStatusUnfilled { // For unfilled we want to send notification
 		return iso18626.TypeReasonForMessageNotification
 	}
-	var expectedReason iso18626.TypeReasonForMessage
-	switch requesterAction {
-	case string(ill_db.RequestAction):
+	if requesterAction == string(ill_db.RequestAction) {
 		if prevStatus == "" || prevStatus == string(iso18626.TypeStatusRetryPossible) {
-			expectedReason = iso18626.TypeReasonForMessageRequestResponse
-		} else {
-			expectedReason = iso18626.TypeReasonForMessageStatusChange
+			return iso18626.TypeReasonForMessageRequestResponse
 		}
-	case string(iso18626.TypeActionStatusRequest):
-		expectedReason = iso18626.TypeReasonForMessageStatusRequestResponse
-	case string(iso18626.TypeActionRenew):
-		expectedReason = iso18626.TypeReasonForMessageRenewResponse
-	default:
-		expectedReason = iso18626.TypeReasonForMessageStatusChange
 	}
-	return expectedReason
+	return iso18626.TypeReasonForMessageStatusChange
 }
 
 func (c *Iso18626Client) checkConfirmationError(ctx common.ExtendedContext, response *iso18626.ISO18626Message, defaultStatus events.EventStatus, result *events.EventResult) events.EventStatus {
