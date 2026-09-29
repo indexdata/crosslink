@@ -1,12 +1,12 @@
 meta {
-  name: Lending side mark-received
+  name: Lending side overdue check
   type: http
-  seq: 22
+  seq: 10
 }
 
-post {
-  url: {{host}}/patron_requests/{{recallLendingPrId}}/action?side=lending
-  body: json
+get {
+  url: {{host}}/patron_requests/{{recallLendingPrId}}?side=lending
+  body: none
   auth: basic
 }
 
@@ -24,20 +24,17 @@ auth:basic {
   password: {{userPassword}}
 }
 
-body:json {
-  {
-      "action": "mark-received"
-  }
-}
-
 script:pre-request {
   bru.sleep(Number(bru.getEnvVar("sleepDelay")));
 }
 
 script:post-response {
-  test("for success", function() {
+  test("State is OVERDUE without a due date", () => {
+    expect(res.getStatus()).to.equal(200);
     const pr = res.getBody();
-    expect(pr.result).to.equal("SUCCESS")
+    expect(pr.state).to.equal("OVERDUE");
+    expect(pr.dueDate == null).to.equal(true);
+    expect(pr.needsAttention).to.equal(false);
   });
 }
 

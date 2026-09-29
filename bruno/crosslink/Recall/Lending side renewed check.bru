@@ -1,12 +1,12 @@
 meta {
-  name: Lending side recalled check
+  name: Lending side renewed check
   type: http
-  seq: 20
+  seq: 16
 }
 
 get {
   url: {{host}}/patron_requests/{{recallLendingPrId}}?side=lending
-  body: json
+  body: none
   auth: basic
 }
 
@@ -29,12 +29,12 @@ script:pre-request {
 }
 
 script:post-response {
-  test("Recall preserves the return deadline", function() {
+  test("State is RENEWED with the expected due date", () => {
+    expect(res.getStatus()).to.equal(200);
     const pr = res.getBody();
-    expect(pr.lastActionResult).to.equal("SUCCESS")
-    expect(pr.state).to.equal("RECALLED");
-    expect(new Date(pr.dueDate).getTime()).to.equal(new Date(bru.getVar("recallDueDate")).getTime());
-    expect(pr.illResponse.statusInfo.status).to.equal("Recalled");
+    expect(pr.state).to.equal("RENEWED");
+    expect(Date.parse(pr.dueDate)).to.equal(Date.parse(bru.getVar("recallRenewedDueDate")));
+    expect(pr.needsAttention).to.equal(false);
   });
 }
 
