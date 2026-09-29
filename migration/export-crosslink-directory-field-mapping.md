@@ -72,6 +72,11 @@ exporter allows no more than one matching entry. LMS and ILL configuration are
 exported independently for entries when their respective configuration data is
 present.
 
+The `include_consortium` psql parameter controls generated consortium-level
+records. It defaults to `true`. When set to `false`, the consortium entry,
+tiers, and network are omitted; the owner's parent consortium reference is also
+omitted from the remaining entry records.
+
 ## LMS and NCIP configuration
 
 `data.lmsConfig` is emitted for every entry when both `ncip_server_address` and

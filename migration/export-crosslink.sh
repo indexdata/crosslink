@@ -26,7 +26,6 @@ if [ ! -f "$PATRON_REQUEST_EXPORT" ]; then
     exit 1
 fi
 
-first_schema=
 index=0
 
 while IFS= read -r line || [ -n "$line" ]; do
@@ -70,22 +69,27 @@ while IFS= read -r line || [ -n "$line" ]; do
         exit 1
     fi
 
-    if [ -z "$first_schema" ]; then
-        first_schema=$schema
-        printf '%s\n' "Exporting directory for schema $schema to $DIRECTORY_OUTPUT"
-        psql "$DATABASE_URL" \
-            --command="SET search_path TO $schema;" \
-            --set=ON_ERROR_STOP=1 \
-            --file="$DIRECTORY_EXPORT" \
-            --quiet --tuples-only --no-align \
-            >"$DIRECTORY_OUTPUT"
+    index=$((index + 1))
+    include_consortium=false
+    if [ "$index" -eq 1 ]; then
+        include_consortium=true
     fi
 
-    index=$((index + 1))
+    directory_output=${DIRECTORY_OUTPUT%.ndjson}-${schema}-${index}.ndjson
+    printf '%s\n' "Exporting directory for schema $schema to $directory_output"
+    psql "$DATABASE_URL" \
+        --command="SET search_path TO \"$schema\";" \
+        --set="owner=$owner_symbol" \
+        --set="include_consortium=$include_consortium" \
+        --set=ON_ERROR_STOP=1 \
+        --file="$DIRECTORY_EXPORT" \
+        --quiet --tuples-only --no-align \
+        >"$directory_output"
+
     patron_output=${PATRON_REQUEST_PREFIX}-${schema}-${index}.ndjson
     printf '%s\n' "Exporting patron requests for schema $schema to $patron_output"
     psql "$DATABASE_URL" \
-        --command="SET search_path TO $schema;" \
+        --command="SET search_path TO \"$schema\";" \
         --set=ON_ERROR_STOP=1 \
         --set="owner=$owner_symbol" \
         --set=broker=ISIL:BROKER \
@@ -94,7 +98,7 @@ while IFS= read -r line || [ -n "$line" ]; do
         >"$patron_output"
 done <"$PROPERTIES_FILE"
 
-if [ -z "$first_schema" ]; then
+if [ "$index" -eq 0 ]; then
     echo "No schema entries found in $PROPERTIES_FILE" >&2
     exit 1
 fi
