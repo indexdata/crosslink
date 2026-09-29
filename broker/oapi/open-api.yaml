@@ -898,7 +898,7 @@ components:
           type: string
           format: uuid
           description: >-
-            UUID of the directory entry providing the shipping address and requester
+            UUID of the requesting institution or one of its descendant entries providing the shipping address and requester
             pickup location code used by AcceptItem when receiving a remotely supplied
             item and RequestItem during local fulfillment. When omitted, both operations
             use the pickup location from the requester LMS configuration. The selected
@@ -1024,7 +1024,7 @@ components:
           format: uuid
           nullable: true
           description: >-
-            UUID of the directory entry providing the shipping address and requester
+            UUID of the requesting institution or one of its descendant entries providing the shipping address and requester
             pickup location code used by AcceptItem when receiving a remotely supplied
             item and RequestItem during local fulfillment. When omitted, both operations
             use the pickup location from the requester LMS configuration. The selected

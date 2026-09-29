@@ -215,9 +215,9 @@ func handleEntryCQL(cqlString string, noBaseArgs int) (pgcql.Query, error) {
 	f.SetColumn("e.tenant")
 	def.AddField("tenant", f)
 
-	f = pgcql.NewFieldString().WithLikeOps()
-	f.SetColumn("COALESCE((SELECT l.requester_pickup_location FROM lms_configs l WHERE l.entry = e.id), '')")
-	def.AddField("requesterPickupLocation", f)
+	fb := pgcql.NewFieldBool()
+	fb.SetColumn("COALESCE((SELECT i.is_pickup_location FROM ill_configs i WHERE i.entry = e.id), FALSE)")
+	def.AddField("isPickupLocation", fb)
 
 	def.AddField("symbol", &fieldEntrySymbol{index: "symbol", ownerColumn: "e.id"})
 	def.AddField("parentSymbol", &fieldEntrySymbol{index: "parentSymbol", ownerColumn: "e.parent"})
@@ -276,6 +276,7 @@ func buildEntrySQL(whereClause string) string {
 		e.lms_location_code,
 		(
 		SELECT json_strip_nulls(json_build_object(
+			'isPickupLocation', i.is_pickup_location,
 			'iso18626Url', i.iso18626_url,
 			'iso18626Vendor', i.iso18626_vendor,
 			'lendersOfLastResort', CASE WHEN i.lenders_of_last_resort IS NULL THEN NULL ELSE (

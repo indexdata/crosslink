@@ -240,6 +240,7 @@ func mergeHoldingsPolicy(original []byte, patch HoldingsPolicy) (HoldingsPolicy,
 func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) db.UpsertIllConfigParams {
 	params := db.UpsertIllConfigParams{
 		Entry:                       entryID,
+		IsPickupLocation:            cfg.IsPickupLocation,
 		Iso18626Url:                 cfg.Iso18626Url,
 		LendersOfLastResort:         symbolsToFullSymbols(cfg.LendersOfLastResort),
 		IncludeRequestingAgencyInfo: cfg.IncludeRequestingAgencyInfo,
@@ -263,6 +264,7 @@ func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) db.UpsertIllConfigPar
 func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllConfig) db.UpsertIllConfigParams {
 	params := db.UpsertIllConfigParams{
 		Entry:                       entryID,
+		IsPickupLocation:            original.IsPickupLocation,
 		Iso18626Url:                 original.Iso18626Url,
 		Iso18626Vendor:              original.Iso18626Vendor,
 		LendersOfLastResort:         original.LendersOfLastResort,
@@ -278,6 +280,7 @@ func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllC
 		MaxRequestsPerPatron:        original.MaxRequestsPerPatron,
 	}
 
+	params.IsPickupLocation = derefOrDefaultPtr(cfg.IsPickupLocation, params.IsPickupLocation)
 	params.Iso18626Url = derefOrDefaultPtr(cfg.Iso18626Url, params.Iso18626Url)
 	if cfg.Iso18626Vendor != nil {
 		vendor := string(*cfg.Iso18626Vendor)

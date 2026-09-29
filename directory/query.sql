@@ -154,19 +154,20 @@ DELETE FROM address_components WHERE address = @address;
 
 -- name: UpsertIllConfig :one
 INSERT INTO ill_configs (
-  entry, iso18626_url, iso18626_vendor, lenders_of_last_resort,
+  entry, is_pickup_location, iso18626_url, iso18626_vendor, lenders_of_last_resort,
   include_requesting_agency_info, include_supplier_info, include_return_info,
   include_vendor_note, use_offered_costs, note_field_separator,
   supplier_patron_pattern, duplicate_check_window_hours, default_loan_period,
   max_requests_per_patron
 ) VALUES (
-  @entry, @iso18626_url, @iso18626_vendor, @lenders_of_last_resort,
+  @entry, @is_pickup_location, @iso18626_url, @iso18626_vendor, @lenders_of_last_resort,
   @include_requesting_agency_info, @include_supplier_info, @include_return_info,
   @include_vendor_note, @use_offered_costs, @note_field_separator,
   @supplier_patron_pattern, @duplicate_check_window_hours, @default_loan_period,
   @max_requests_per_patron
 )
 ON CONFLICT (entry) DO UPDATE SET
+  is_pickup_location = COALESCE(@is_pickup_location, ill_configs.is_pickup_location),
   iso18626_url = COALESCE(@iso18626_url, ill_configs.iso18626_url),
   iso18626_vendor = COALESCE(@iso18626_vendor, ill_configs.iso18626_vendor),
   lenders_of_last_resort = COALESCE(@lenders_of_last_resort, ill_configs.lenders_of_last_resort),
