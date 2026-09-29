@@ -1,0 +1,52 @@
+meta {
+  name: Lending side accept-renewal
+  type: http
+  seq: 15
+}
+
+post {
+  url: {{host}}/patron_requests/{{recallLendingPrId}}/action?side=lending
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: lending
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+body:json {
+  {
+    "action": "accept-renewal",
+    "actionParams": {
+      "dueDate": "{{recallRenewedDueDate}}"
+    }
+  }
+}
+
+script:pre-request {
+  bru.setVar("recallRenewedDueDate", new Date(Date.now() + 14 * 86400000).toISOString());
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
+script:post-response {
+  test("Action succeeds", () => {
+    expect(res.getStatus()).to.equal(200);
+    const pr = res.getBody();
+    expect(pr.result).to.equal("SUCCESS");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
