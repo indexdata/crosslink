@@ -4,11 +4,11 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"github.com/indexdata/crosslink/broker/profiles"
 	"net/http"
 	"strings"
 
 	"github.com/indexdata/crosslink/broker/ncipclient"
+	"github.com/indexdata/crosslink/broker/profiles"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/ncip"
 )
@@ -16,9 +16,11 @@ import (
 type NcipUserElement string
 
 const (
-	NCIPUserId        string = "User Id"
-	NCIPUserPrivilege string = "User Privilege"
-	NCIPItemBarcode   string = "Item Barcode"
+	NCIPUserId                 string = "User Id"
+	NCIPUserPrivilege          string = "User Privilege"
+	NCIPNameInformation        string = "Name Information"
+	NCIPUserAddressInformation string = "User Address Information"
+	NCIPItemBarcode            string = "Item Barcode"
 )
 
 type NcipItemElement string
@@ -83,26 +85,26 @@ func (l *LmsAdapterNcip) SetLogFunc(logFunc ncipclient.NcipLogFunc) {
 	l.ncipClient.SetLogFunc(logFunc)
 }
 
-func (l *LmsAdapterNcip) LookupUser(patron string, validatePatronProfile bool) (string, error) {
+func (l *LmsAdapterNcip) LookupUser(patron string, options LookupUserOptions) (LookupUserResult, error) {
 	if l.config.LookupUserEnabled != nil && !*l.config.LookupUserEnabled {
-		return patron, nil // could even be empty
+		return LookupUserResult{UserID: patron}, nil // could even be empty
 	}
 	if patron == "" {
-		return "", fmt.Errorf("empty patron identifier")
+		return LookupUserResult{}, fmt.Errorf("empty patron identifier")
 	}
 	// first try to check if patron is actually user Id
 	arg := ncip.LookupUser{
 		UserId:          &ncip.UserId{UserIdentifierValue: patron},
-		UserElementType: l.getUserElements(false, validatePatronProfile),
+		UserElementType: l.getUserElements(false, options),
 	}
 	response, err := l.ncipClient.LookupUser(arg)
 	if err == nil {
-		if validatePatronProfile {
+		if options.ValidatePatronProfile {
 			if err = l.validatePatronProfile(response); err != nil {
-				return "", err
+				return LookupUserResult{}, err
 			}
 		}
-		return patron, nil
+		return lookupUserResult(patron, response, options.IncludePatronInfo), nil
 	}
 	// then try by user username
 	// a better solution would be that the LookupUser had type argument (eg barcode or PIN)
@@ -114,39 +116,91 @@ func (l *LmsAdapterNcip) LookupUser(patron string, validatePatronProfile bool) (
 	})
 	arg = ncip.LookupUser{
 		AuthenticationInput: authenticationInput,
-		UserElementType:     l.getUserElements(true, validatePatronProfile),
+		UserElementType:     l.getUserElements(true, options),
 	}
 	response, err = l.ncipClient.LookupUser(arg)
 	if err != nil {
-		return "", err
+		return LookupUserResult{}, err
 	}
-	if validatePatronProfile {
+	if options.ValidatePatronProfile {
 		if err = l.validatePatronProfile(response); err != nil {
-			return "", err
+			return LookupUserResult{}, err
 		}
 	}
+	userID := ""
 	if response != nil && response.UserOptionalFields != nil && len(response.UserOptionalFields.UserId) != 0 {
-		return response.UserOptionalFields.UserId[0].UserIdentifierValue, nil
+		userID = response.UserOptionalFields.UserId[0].UserIdentifierValue
+	} else if response != nil && response.UserId != nil {
+		userID = response.UserId.UserIdentifierValue
 	}
-	if response != nil && response.UserId != nil {
-		return response.UserId.UserIdentifierValue, nil
+	if userID == "" {
+		return LookupUserResult{}, fmt.Errorf("missing User ID in LookupUser response")
 	}
-	return "", fmt.Errorf("missing User ID in LookupUser response")
+	return lookupUserResult(userID, response, options.IncludePatronInfo), nil
 }
 
-func (l *LmsAdapterNcip) getUserElements(userId bool, validatePatronProfile bool) []ncip.SchemeValuePair {
-	if validatePatronProfile && l.config.PatronProfiles != nil && len(*l.config.PatronProfiles) > 0 {
-		return []ncip.SchemeValuePair{
-			{Text: NCIPUserId},
-			{Text: NCIPUserPrivilege},
+func (l *LmsAdapterNcip) getUserElements(userID bool, options LookupUserOptions) []ncip.SchemeValuePair {
+	var elements []ncip.SchemeValuePair
+	if userID || (options.ValidatePatronProfile && l.config.PatronProfiles != nil && len(*l.config.PatronProfiles) > 0) {
+		elements = append(elements, ncip.SchemeValuePair{Text: NCIPUserId})
+	}
+	if options.ValidatePatronProfile && l.config.PatronProfiles != nil && len(*l.config.PatronProfiles) > 0 {
+		elements = append(elements, ncip.SchemeValuePair{Text: NCIPUserPrivilege})
+	}
+	if options.IncludePatronInfo {
+		elements = append(elements,
+			ncip.SchemeValuePair{Text: NCIPNameInformation},
+			ncip.SchemeValuePair{Text: NCIPUserAddressInformation},
+		)
+	}
+	return elements
+}
+
+func lookupUserResult(userID string, response *ncip.LookupUserResponse, includePatronInfo bool) LookupUserResult {
+	result := LookupUserResult{UserID: userID}
+	if !includePatronInfo || response == nil || response.UserOptionalFields == nil {
+		return result
+	}
+
+	optional := response.UserOptionalFields
+	if optional.NameInformation != nil && optional.NameInformation.PersonalNameInformation != nil {
+		name := optional.NameInformation.PersonalNameInformation.StructuredPersonalUserName
+		if name != nil {
+			result.GivenName = strings.TrimSpace(name.GivenName)
+			result.Surname = strings.TrimSpace(name.Surname)
 		}
 	}
-	if userId {
-		return []ncip.SchemeValuePair{
-			{Text: NCIPUserId},
+
+	seen := make(map[string]struct{})
+	for _, address := range optional.UserAddressInformation {
+		email := ncipEmailAddress(address.ElectronicAddress)
+		if email == "" {
+			continue
 		}
+		key := strings.ToLower(email)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result.EmailAddresses = append(result.EmailAddresses, email)
 	}
-	return nil
+	return result
+}
+
+func ncipEmailAddress(address *ncip.ElectronicAddress) string {
+	if address == nil {
+		return ""
+	}
+	data := strings.TrimSpace(address.ElectronicAddressData)
+	if data == "" {
+		return ""
+	}
+	addressType := strings.ToLower(strings.TrimSpace(address.ElectronicAddressType.Text))
+	// Match common NCIP/FOLIO email type variants such as "mailto", "Email", and "electronic mail address".
+	if strings.Contains(addressType, "mail") {
+		return data
+	}
+	return ""
 }
 
 func (l *LmsAdapterNcip) validatePatronProfile(response *ncip.LookupUserResponse) error {
