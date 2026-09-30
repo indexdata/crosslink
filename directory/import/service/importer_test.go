@@ -218,6 +218,31 @@ func TestImportAcceptsLMSPatronProfiles(t *testing.T) {
 	require.True(t, profiles[0].CanCreateRequests)
 }
 
+func TestImportAcceptsLendToBorrowRatio(t *testing.T) {
+	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
+	record := strings.Replace(validEntryRecord(), `"lmsLocationCode":null`, `"lmsLocationCode":null,"lendToBorrowRatio":"5.5:1"`, 1)
+
+	result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(record))
+
+	require.NoError(t, err)
+	assert.Equal(t, model.ImportSectionResult{Imported: 1}, result.Entries)
+	assert.Empty(t, result.Errors)
+	require.NotNil(t, repo.entry)
+	require.NotNil(t, repo.entry.Data.LendToBorrowRatio)
+	assert.Equal(t, "5.5:1", *repo.entry.Data.LendToBorrowRatio)
+}
+
+func TestImportRejectsInvalidLendToBorrowRatio(t *testing.T) {
+	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
+	record := strings.Replace(validEntryRecord(), `"lmsLocationCode":null`, `"lmsLocationCode":null,"lendToBorrowRatio":"0:1"`, 1)
+
+	result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(record))
+
+	require.NoError(t, err)
+	require.Len(t, result.Errors, 1)
+	assert.Zero(t, repo.entryCalls)
+}
+
 func TestImportAcceptsNullLMSPatronProfiles(t *testing.T) {
 	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
 	lmsConfig := strings.Replace(validLMSConfig(), `"patronProfiles":[{"code":"STAFF","canCreateRequests":true}]`, `"patronProfiles":null`, 1)

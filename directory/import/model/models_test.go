@@ -135,6 +135,29 @@ func TestEntryAggregateRejectsInvalidClosureRange(t *testing.T) {
 	require.EqualError(t, err, "closure 1 endDate must not precede startDate")
 }
 
+func TestEntryAggregateValidatesLendToBorrowRatio(t *testing.T) {
+	valid := []string{"50:2", "5.5:1", "0.5:2", "005.50:01"}
+	for _, ratio := range valid {
+		t.Run("valid "+ratio, func(t *testing.T) {
+			aggregate := validEntryAggregate()
+			aggregate.Data.LendToBorrowRatio = &ratio
+			require.NoError(t, aggregate.NormalizeAndValidate())
+		})
+	}
+
+	invalid := []string{"0:1", "1:0", "0.0:2", "-1:2", "+1:2", "1e2:1", "1 :2", ".5:1", "5.:1", "1", "1:2:3"}
+	for _, ratio := range invalid {
+		t.Run("invalid "+ratio, func(t *testing.T) {
+			aggregate := validEntryAggregate()
+			aggregate.Data.LendToBorrowRatio = &ratio
+
+			err := aggregate.NormalizeAndValidate()
+
+			require.EqualError(t, err, "invalid lendToBorrowRatio: must contain two positive unsigned decimals separated by a colon")
+		})
+	}
+}
+
 func validEntryAggregate() EntryAggregate {
 	return EntryAggregate{
 		Key: SymbolRef{Authority: "isil", Symbol: "lib"},

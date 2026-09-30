@@ -9,6 +9,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEntryCases(t *testing.T) {
@@ -1529,6 +1532,60 @@ func TestPublicReadSanitizesProtectedLMSValues(t *testing.T) {
 	if lmsConfig["fromAgencyAuthentication"] != "" {
 		t.Fatalf("protected lmsConfig.fromAgencyAuthentication should be sanitized, got %#v", lmsConfig["fromAgencyAuthentication"])
 	}
+}
+
+func TestEntryLendToBorrowRatio(t *testing.T) {
+	resetDb()
+	headers := map[string]string{
+		"X-Okapi-Tenant":      "ANINST",
+		"X-Okapi-Permissions": `["directory.consortium.all"]`,
+	}
+
+	res, data := jsonReq(t, http.MethodPost, "/entries", `{"name":"Ratio entry","lendToBorrowRatio":"05.50:1"}`, headers)
+	require.Equal(t, http.StatusCreated, res.StatusCode, data)
+	var created struct {
+		Id string `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(data), &created))
+
+	assertRatio := func(expected *string) {
+		t.Helper()
+		res, data := jsonReq(t, http.MethodGet, "/entries/by-id/"+created.Id, "", headers)
+		require.Equal(t, http.StatusOK, res.StatusCode, data)
+		var entry struct {
+			LendToBorrowRatio *string `json:"lendToBorrowRatio"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(data), &entry))
+		assert.Equal(t, expected, entry.LendToBorrowRatio)
+	}
+	original := "05.50:1"
+	assertRatio(&original)
+
+	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+created.Id, `{"lendToBorrowRatio":"0.5:2"}`, headers)
+	require.Equal(t, http.StatusNoContent, res.StatusCode, data)
+	updated := "0.5:2"
+	assertRatio(&updated)
+
+	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+created.Id, `{"description":"ratio unchanged"}`, headers)
+	require.Equal(t, http.StatusNoContent, res.StatusCode, data)
+	assertRatio(&updated)
+
+	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+created.Id, `{"lendToBorrowRatio":null}`, headers)
+	require.Equal(t, http.StatusNoContent, res.StatusCode, data)
+	assertRatio(nil)
+
+	invalid := []string{"0:1", "1:0", "0.0:2", "-1:2", "+1:2", "1e2:1", "1 :2", ".5:1", "5.:1", "1", "1:2:3"}
+	for _, ratio := range invalid {
+		t.Run(ratio, func(t *testing.T) {
+			body, err := json.Marshal(map[string]string{"lendToBorrowRatio": ratio})
+			require.NoError(t, err)
+			res, data := jsonReq(t, http.MethodPatch, "/entries/by-id/"+created.Id, string(body), headers)
+			require.Equal(t, http.StatusBadRequest, res.StatusCode, data)
+		})
+	}
+
+	_, err := dbpool.Exec(context.Background(), `UPDATE entries SET lend_to_borrow_ratio = '0:1' WHERE id = $1`, created.Id)
+	require.Error(t, err)
 }
 
 func TestInstitutionalAdminCannotPatchTenant(t *testing.T) {

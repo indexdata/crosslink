@@ -212,6 +212,29 @@ func mustJSON(t *testing.T, value string) string {
 	return string(data)
 }
 
+func TestImportLendToBorrowRatio(t *testing.T) {
+	resetImportState(t)
+	record := entryImportRecord(symbolObject("ISIL", "RATIO"), "Ratio entry", nil, "Institution")
+	data := record["data"].(map[string]any)
+	data["lendToBorrowRatio"] = "05.50:1"
+
+	response, result := importRequest(t, []any{record}, "update", standardHeaders)
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	require.Empty(t, result.Errors)
+	id := importedEntryID(t, "ISIL", "RATIO")
+	var ratio *string
+	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT lend_to_borrow_ratio FROM entries WHERE id=$1`, id).Scan(&ratio))
+	require.NotNil(t, ratio)
+	require.Equal(t, "05.50:1", *ratio)
+
+	delete(data, "lendToBorrowRatio")
+	response, result = importRequest(t, []any{record}, "update", standardHeaders)
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	require.Empty(t, result.Errors)
+	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT lend_to_borrow_ratio FROM entries WHERE id=$1`, id).Scan(&ratio))
+	require.Nil(t, ratio)
+}
+
 func TestImportHostSettingsRoundTrip(t *testing.T) {
 	resetImportState(t)
 	record := entryImportRecord(symbolObject("ISIL", "HOST"), "Host settings", nil, "Consortium")

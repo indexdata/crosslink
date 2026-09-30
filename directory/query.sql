@@ -34,9 +34,9 @@ SELECT pg_advisory_xact_lock(hashtextextended(
 
 -- name: CreateEntry :one
 INSERT INTO entries (
-  name, description, contact_name, email, from_email, tenant, vendor, phone_number, time_zone, organization_id, type, parent, lms_location_code, hrid
+  name, description, contact_name, email, from_email, tenant, vendor, phone_number, time_zone, organization_id, type, parent, lms_location_code, lend_to_borrow_ratio, hrid
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
 )
 RETURNING *;
 
@@ -56,6 +56,7 @@ SET
   type = @type,
   parent = @parent,
   lms_location_code = @lms_location_code,
+  lend_to_borrow_ratio = @lend_to_borrow_ratio,
   hrid = @hrid
 
 WHERE id = @id;

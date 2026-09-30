@@ -1949,6 +1949,11 @@ components:
           nullable: true
         phoneNumber: { type: string, nullable: true }
         lmsLocationCode: { type: string, nullable: true }
+        lendToBorrowRatio:
+          type: string
+          nullable: true
+          pattern: '^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*):(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$'
+          description: Desired borrowing-to-lending ratio, expressed as desired_borrows:desired_loans. Both values must be positive unsigned decimals.
         hrid: { type: string, nullable: true }
         timeZone: { type: string, nullable: true }
         symbols:
@@ -2183,6 +2188,11 @@ components:
           type: string
         lmsLocationCode:
           type: string
+        lendToBorrowRatio:
+          type: string
+          pattern: '^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*):(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$'
+          description: Desired borrowing-to-lending ratio, expressed as desired_borrows:desired_loans. Both values must be positive unsigned decimals.
+          example: '50:2'
         illConfig:
           $ref: '#/components/schemas/IllConfig'
         hrid:
@@ -2515,6 +2525,11 @@ components:
         lmsLocationCode:
           type: string
           nullable: true
+        lendToBorrowRatio:
+          type: string
+          nullable: true
+          pattern: '^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*):(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$'
+          description: Desired borrowing-to-lending ratio, expressed as desired_borrows:desired_loans. Both values must be positive unsigned decimals.
         illConfig:
           allOf:
             - $ref: '#/components/schemas/IllConfig'
