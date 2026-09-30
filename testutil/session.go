@@ -1,6 +1,8 @@
 package testutil
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"sync"
@@ -17,7 +19,12 @@ var (
 // are still in use by another package.
 func IsolateTestcontainersSession() error {
 	isolateSessionOnce.Do(func() {
-		isolateSessionErr = os.Setenv("TESTCONTAINERS_SESSION_ID", fmt.Sprintf("crosslink-%d", os.Getpid()))
+		token := make([]byte, 16)
+		if _, err := rand.Read(token); err != nil {
+			isolateSessionErr = fmt.Errorf("generate Testcontainers session ID: %w", err)
+			return
+		}
+		isolateSessionErr = os.Setenv("TESTCONTAINERS_SESSION_ID", "crosslink-"+hex.EncodeToString(token))
 	})
 	return isolateSessionErr
 }
