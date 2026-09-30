@@ -130,16 +130,17 @@ is not exported.
 `data.illConfig` is emitted for the entry selected by the `owner` variable even
 when no ISO18626 endpoint is configured. It is also emitted for non-local
 entries tagged as pickup locations so that `isPickupLocation` is preserved.
-For those non-local pickup entries, the ISO18626 endpoint, vendor, and local
-tenant policy values are `null`; the remaining fields retain their exported
-defaults.
+The owner's direct branches inherit the tenant policy values when they are
+exported as pickup locations. Other non-local pickup entries have `null` for
+the ISO18626 endpoint, vendor, and tenant policy values; the remaining fields
+retain their exported defaults.
 
 | mod-rs source | CrossLink field | Mapping |
 | --- | --- | --- |
 | First `service.se_address` whose normalized service type is `ISO18626` | `data.illConfig.iso18626Url` | The first matching endpoint ordered by `service.se_id` is used. |
 | Presence of the ISO18626 endpoint | `data.illConfig.iso18626Vendor` | Set to `ReShare`. |
-| `app_setting.max_requests` | `data.illConfig.maxRequestsPerPatron` | Cast to an integer for the selected local entry. Values must be from 0 through 2147483647; the value is `null` for non-local pickup entries. |
-| `app_setting.check_duplicate_time` | `data.illConfig.duplicateCheckWindowHours` | Cast to an integer number of hours for the selected local entry. Values must be from 0 through 2147483647; the value is `null` for non-local pickup entries. |
+| `app_setting.max_requests` | `data.illConfig.maxRequestsPerPatron` | Cast to an integer for the selected local entry and its direct branches. Values must be from 0 through 2147483647; the value is `null` for other non-local pickup entries. |
+| `app_setting.check_duplicate_time` | `data.illConfig.duplicateCheckWindowHours` | Cast to an integer number of hours for the selected local entry and its direct branches. Values must be from 0 through 2147483647; the value is `null` for other non-local pickup entries. |
 | Unsupported mod-rs agency-information behavior | `data.illConfig.includeRequestingAgencyInfo` | Set to `false`; mod-rs does not populate requesting-agency information. |
 | Unsupported mod-rs agency-information behavior | `data.illConfig.includeSupplierInfo` | Set to `false`; mod-rs does not populate supplier information. |
 | Unsupported mod-rs directory-derived return information | `data.illConfig.includeReturnInfo` | Set to `false`; mod-rs does not automatically populate return information from the supplier directory entry. |
