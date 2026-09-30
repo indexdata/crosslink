@@ -1,9 +1,12 @@
 #!/bin/sh
 
 set -eu
+umask 077
 
 SOURCE_DIR=${1:-.}
 DIRECTORY_OUTPUT=${DIRECTORY_OUTPUT:-"$SOURCE_DIR/directories.ndjson"}
+DIRECTORY_PREFIX=${DIRECTORY_PREFIX:-directories}
+PATRON_REQUEST_PREFIX=${PATRON_REQUEST_PREFIX:-patron-request}
 PATRON_REQUEST_OUTPUT=${PATRON_REQUEST_OUTPUT:-"$SOURCE_DIR/patron-requests.ndjson"}
 
 if [ ! -d "$SOURCE_DIR" ]; then
@@ -53,7 +56,7 @@ join_exports() {
 
     sort -n -k1,1 "$list_file" >"$sorted_list_file"
 
-    if [ "$prefix" = directories ]; then
+    if [ "$prefix" = "$DIRECTORY_PREFIX" ]; then
         all_records="$TEMP_DIR/$prefix.all.ndjson"
         entry_records="$TEMP_DIR/$prefix.entries.ndjson"
         metadata_records="$TEMP_DIR/$prefix.metadata.ndjson"
@@ -97,5 +100,5 @@ join_exports() {
     printf '%s\n' "Joined $prefix exports into $output"
 }
 
-join_exports directories "$DIRECTORY_OUTPUT"
-join_exports patron-request "$PATRON_REQUEST_OUTPUT"
+join_exports "$DIRECTORY_PREFIX" "$DIRECTORY_OUTPUT"
+join_exports "$PATRON_REQUEST_PREFIX" "$PATRON_REQUEST_OUTPUT"

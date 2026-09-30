@@ -1,12 +1,14 @@
 #!/bin/sh
 
 set -eu
+umask 077
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROPERTIES_FILE=${PROPERTIES_FILE:-"$SCRIPT_DIR/schema.properties"}
 DIRECTORY_EXPORT=${DIRECTORY_EXPORT:-"$SCRIPT_DIR/export-crosslink-directory.sql"}
 PATRON_REQUEST_EXPORT=${PATRON_REQUEST_EXPORT:-"$SCRIPT_DIR/export-crosslink-open-patron-requests.sql"}
 DIRECTORY_OUTPUT=${DIRECTORY_OUTPUT:-directories.ndjson}
+DIRECTORY_PREFIX=${DIRECTORY_PREFIX:-directories}
 PATRON_REQUEST_PREFIX=${PATRON_REQUEST_PREFIX:-patron-request}
 
 : "${DATABASE_URL:?DATABASE_URL must be set}"
@@ -26,8 +28,7 @@ if [ ! -f "$PATRON_REQUEST_EXPORT" ]; then
     exit 1
 fi
 
-directory_prefix=${DIRECTORY_OUTPUT%.ndjson}
-for file in "$directory_prefix"-*.ndjson "$PATRON_REQUEST_PREFIX"-*.ndjson; do
+for file in "$DIRECTORY_PREFIX"-*.ndjson "$PATRON_REQUEST_PREFIX"-*.ndjson; do
     if [ -f "$file" ]; then
         rm "$file"
     fi
@@ -92,7 +93,7 @@ while IFS= read -r line || [ -n "$line" ]; do
         include_tiers_network=true
     fi
 
-    directory_output=${DIRECTORY_OUTPUT%.ndjson}-${schema}-${index}.ndjson
+    directory_output=${DIRECTORY_PREFIX}-${schema}-${index}.ndjson
     printf '%s\n' "Exporting directory for schema $schema to $directory_output"
     psql "$DATABASE_URL" \
         --command="SET search_path TO \"$schema\";" \

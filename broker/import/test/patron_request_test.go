@@ -265,6 +265,22 @@ func TestImportLendingPatronRequestRejectsDifferentIDAndRoutingIdentityMatches(t
 	}
 }
 
+func TestImportLendingPatronRequestAllowsRequesterRequestIDAssociatedWithBorrowingAggregate(t *testing.T) {
+	prefix := uuid.NewString()
+	requesterRequestID := prefix + "-request"
+	borrowing := testPatronBundle(prefix+"-borrowing", requesterRequestID)
+	require.NoError(t, importOnly(borrowing))
+
+	lending := testLendingPatronBundle(prefix+"-lending", requesterRequestID, prefix+"-lending-SUP")
+	result, err := importTestRepo.ImportPatronRequest(importTestCtx, lending, importdb.ConflictPolicyFail)
+
+	require.NoError(t, err)
+	assert.Equal(t, importdb.OutcomeImported, result.Outcome)
+	assert.Equal(t, 1, queryCount(t, "SELECT count(*) FROM patron_request WHERE id=$1", borrowing.PatronRequest.ID))
+	assert.Equal(t, 1, queryCount(t, "SELECT count(*) FROM patron_request WHERE id=$1", lending.PatronRequest.ID))
+	assert.Equal(t, 1, queryCount(t, "SELECT count(*) FROM ill_transaction WHERE requester_request_id=$1", requesterRequestID))
+}
+
 func TestImportPatronRequestCollisionRollsBackRoot(t *testing.T) {
 	prefix := uuid.NewString()
 	first := testPatronBundle(prefix+"-first", prefix+"-request-first")
