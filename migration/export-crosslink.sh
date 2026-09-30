@@ -43,7 +43,8 @@ total_entries=$(awk '
 index=0
 
 while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in
+    trimmed_line=${line#"${line%%[![:space:]]*}"}
+    case "$trimmed_line" in
         ''|'#'*)
             continue
             ;;

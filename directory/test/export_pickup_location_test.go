@@ -23,9 +23,10 @@ func TestDirectoryExportPickupLocations(t *testing.T) {
 	projection, _, found = strings.Cut(projection, ") AS ill_config ON true")
 	require.True(t, found)
 	query := `WITH
-		entry AS (SELECT $1::uuid AS entry_id, $2::text AS lms_location_code),
-		local_entry AS (SELECT CASE WHEN $3::boolean THEN $1::uuid END AS entry_id),
-		tenant_settings AS (SELECT '5'::text AS max_requests_per_patron),
+		entry AS (SELECT $1::uuid AS entry_id, NULL::uuid AS parent_id, $2::text AS lms_location_code),
+		crosslink_local_entry AS (SELECT CASE WHEN $3::boolean THEN $1::uuid END AS entry_id),
+		local_entry AS (SELECT entry_id FROM crosslink_local_entry),
+		tenant_settings AS (SELECT '5'::text AS max_requests_per_patron, NULL::text AS duplicate_check_window_hours),
 		service AS (SELECT 1 AS se_id, 1 AS se_type_fk, $4::text AS se_address WHERE $4::text IS NOT NULL),
 		service_account AS (SELECT 1 AS sa_service, $1::uuid AS sa_account_holder),
 		refdata_value AS (SELECT 1 AS rdv_id, 'ISO18626'::text AS rdv_value),
