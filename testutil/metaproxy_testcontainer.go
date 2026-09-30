@@ -22,6 +22,9 @@ type MetaproxyContainer struct {
 }
 
 func MetaproxyContainerStart(ctx context.Context) (*MetaproxyContainer, error) {
+	if err := IsolateTestcontainersSession(); err != nil {
+		return nil, fmt.Errorf("isolate Testcontainers session: %w", err)
+	}
 	c := &MetaproxyContainer{}
 
 	req := testcontainers.ContainerRequest{

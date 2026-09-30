@@ -29,7 +29,7 @@ var illRepo ill_db.IllRepo
 var eventRepo events.EventRepo
 
 func TestMain(m *testing.M) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 	app.DB_PROVISION = true
 
 	pgContainer, err := testutil.RunPostgres(ctx)
@@ -55,6 +55,8 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 
+	cancel()
+	dbPool.Close()
 	test.Expect(test.TerminatePGContainer(ctx, pgContainer), "failed to stop db container")
 	os.Exit(code)
 }

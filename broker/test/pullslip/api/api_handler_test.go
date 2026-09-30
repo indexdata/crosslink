@@ -57,9 +57,9 @@ func TestMain(m *testing.M) {
 	_, _, _, prRepo = apptest.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
-	defer cancel()
 	code := m.Run()
 
+	cancel()
 	test.Expect(test.TerminatePGContainer(ctx, pgContainer), "failed to stop db container")
 	os.Exit(code)
 }

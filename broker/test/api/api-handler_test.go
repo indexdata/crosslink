@@ -67,9 +67,9 @@ func TestMain(m *testing.M) {
 	sseBroker = appContext.SseBroker
 	test.WaitForServiceUp(app.HTTP_PORT)
 
-	defer cancel()
 	code := m.Run()
 
+	cancel()
 	test.Expect(test.TerminatePGContainer(ctx, pgContainer), "failed to stop db container")
 	os.Exit(code)
 }

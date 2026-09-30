@@ -116,7 +116,9 @@ archive:  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) 
 	$(GO) build -v -o archive ./cmd/archive
 
 check: generate
-	$(GO) test -v -cover -coverpkg=./... -coverprofile=$(COVERAGE) ./...
+	# Several packages own independent Testcontainers lifecycles; keep those
+	# package processes sequential so one package cannot disrupt another.
+	$(GO) test -p 1 -v -cover -coverpkg=./... -coverprofile=$(COVERAGE) ./...
 
 run: $(BINARY)
 	$(GO) run -buildvcs=true ./$(MAIN_PACKAGE)

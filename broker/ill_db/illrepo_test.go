@@ -38,7 +38,6 @@ func TestMain(m *testing.M) {
 	pgIllRepo := new(PgIllRepo)
 	pgIllRepo.Pool, err = dbutil.InitDbPool(connStr)
 	test.Expect(err, "failed to create ill repo")
-	defer pgIllRepo.Pool.Close()
 	err = dbutil.RunDbProvision(connStr, "crosslink_broker")
 	test.Expect(err, "failed to provision db schema")
 	_, _, _, err = dbutil.RunDbMigrations("file://../migrations", connStr)
@@ -49,6 +48,7 @@ func TestMain(m *testing.M) {
 	err = json.Unmarshal(respBody, &dirEntries)
 	test.Expect(err, "failed to parse directory entries")
 	ret := m.Run()
+	pgIllRepo.Pool.Close()
 	test.Expect(test.TerminatePGContainer(ctx, pgc), "failed to stop db container")
 	os.Exit(ret)
 }

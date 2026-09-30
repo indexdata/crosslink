@@ -70,7 +70,6 @@ func TestMain(m *testing.M) {
 		}
 	})
 	sruServer := httptest.NewServer(sruHandler)
-	defer sruServer.Close()
 
 	directoryBytes, err := os.ReadFile("gvi_directory.json")
 	test.Expect(err, "failed to read directory file")
@@ -112,12 +111,13 @@ func TestMain(m *testing.M) {
 	app.MigrationsFolder = "file://../../migrations"
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	eventBus, illRepo, eventRepo, _ = apptest.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	code := m.Run()
 
+	cancel()
+	sruServer.Close()
 	test.Expect(test.TerminatePGContainer(ctx, pgContainer), "failed to stop db container")
 	os.Exit(code)
 }

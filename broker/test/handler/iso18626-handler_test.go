@@ -63,12 +63,12 @@ func TestMain(m *testing.M) {
 	adapter.MOCK_PEER_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	_, illRepo, _, _ = apptest.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	code := m.Run()
 
+	cancel()
 	test.Expect(test.TerminatePGContainer(ctx, pgContainer), "failed to stop db container")
 	os.Exit(code)
 }
