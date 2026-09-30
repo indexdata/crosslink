@@ -1953,7 +1953,7 @@ components:
           type: string
           nullable: true
           pattern: '^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*):(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$'
-          description: Desired borrowing-to-lending ratio, expressed as desired_borrows:desired_loans. Both values must be positive unsigned decimals.
+          description: Desired lending-to-borrowing ratio, expressed as desired_loans:desired_borrows. Both values must be positive unsigned decimals.
         hrid: { type: string, nullable: true }
         timeZone: { type: string, nullable: true }
         symbols:
@@ -2191,7 +2191,7 @@ components:
         lendToBorrowRatio:
           type: string
           pattern: '^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*):(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$'
-          description: Desired borrowing-to-lending ratio, expressed as desired_borrows:desired_loans. Both values must be positive unsigned decimals.
+          description: Desired lending-to-borrowing ratio, expressed as desired_loans:desired_borrows. Both values must be positive unsigned decimals.
           example: '50:2'
         illConfig:
           $ref: '#/components/schemas/IllConfig'
@@ -2529,7 +2529,7 @@ components:
           type: string
           nullable: true
           pattern: '^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*):(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$'
-          description: Desired borrowing-to-lending ratio, expressed as desired_borrows:desired_loans. Both values must be positive unsigned decimals.
+          description: Desired lending-to-borrowing ratio, expressed as desired_loans:desired_borrows. Both values must be positive unsigned decimals.
         illConfig:
           allOf:
             - $ref: '#/components/schemas/IllConfig'

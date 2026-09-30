@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"strconv"
 	"strings"
 	"testing"
@@ -19,6 +20,7 @@ import (
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var appCtx = common.CreateExtCtxWithArgs(context.Background(), nil)
@@ -32,9 +34,13 @@ func TestGetLoadBalancingScore(t *testing.T) {
 		want    float64
 	}{
 		{name: "default ratio", borrows: 20, loans: 6, want: 14},
-		{name: "more lending desired", ratio: stringPointer("1:2"), borrows: 20, loans: 6, want: 4},
-		{name: "more borrowing desired", ratio: stringPointer("3:1"), borrows: 4, loans: 24, want: -12},
+		{name: "more borrowing desired", ratio: stringPointer("1:2"), borrows: 20, loans: 6, want: 4},
+		{name: "more lending desired", ratio: stringPointer("3:1"), borrows: 4, loans: 24, want: -12},
 		{name: "decimal ratio", ratio: stringPointer("5.5:1"), borrows: 2, loans: 4, want: 7},
+		{name: "fractional ratio", ratio: stringPointer("0.5:2"), borrows: 20, loans: 6, want: -1},
+		{name: "leading zeros", ratio: stringPointer("009:01"), borrows: 2, loans: 4, want: 14},
+		{name: "decimal leading zeros", ratio: stringPointer("005.50:01"), borrows: 2, loans: 4, want: 7},
+		{name: "loans to borrows contract", ratio: stringPointer("50:2"), borrows: 10, loans: 0, want: 250},
 	}
 
 	for _, tt := range tests {
@@ -62,20 +68,36 @@ func TestGetLoadBalancingScoreRejectsInvalidRatio(t *testing.T) {
 	}
 }
 
-func TestGetLoadBalancingScoreRejectsNonFiniteScore(t *testing.T) {
-	largeValue := "1" + strings.Repeat("0", 308)
-	smallValue := "0." + strings.Repeat("0", 307) + "1"
-	ratio := largeValue + ":" + smallValue
-
-	for _, borrows := range []int32{0, 1} {
-		t.Run("borrows_"+strconv.Itoa(int(borrows)), func(t *testing.T) {
+func TestGetLoadBalancingScoreHandlesExtremeRatios(t *testing.T) {
+	largeValue := "1" + strings.Repeat("0", 400)
+	smallValue := "0." + strings.Repeat("0", 399) + "1"
+	for _, tt := range []struct {
+		name    string
+		ratio   string
+		borrows int32
+		loans   int32
+		want    float64
+	}{
+		{name: "overflow", ratio: largeValue + ":" + smallValue, borrows: 1, want: math.MaxFloat64},
+		{name: "negative overflow", ratio: largeValue + ":1", borrows: -1, want: -math.MaxFloat64},
+		{name: "zero borrows", ratio: largeValue + ":" + smallValue, loans: 6, want: -6},
+		{name: "tiny numerator", ratio: smallValue + ":1", borrows: 1, loans: 6, want: -6},
+		{name: "tiny components", ratio: smallValue + ":" + smallValue, borrows: 20, loans: 6, want: 14},
+		{name: "huge components", ratio: largeValue + ":" + largeValue, borrows: 20, loans: 6, want: 14},
+		{name: "counter multiplication overflow", ratio: "1" + strings.Repeat("0", 308) + ":1", borrows: 2, want: math.MaxFloat64},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
 			peer := ill_db.Peer{
 				ID:           "peer-1",
-				BorrowsCount: borrows,
-				CustomData:   dirapi.Entry{Name: "Supplier", LendToBorrowRatio: &ratio},
+				BorrowsCount: tt.borrows,
+				LoansCount:   tt.loans,
+				CustomData:   dirapi.Entry{Name: "Supplier", LendToBorrowRatio: &tt.ratio},
 			}
-			_, err := getLoadBalancingScore(peer)
-			assert.EqualError(t, err, "peer peer-1 has lendToBorrowRatio "+strconv.Quote(ratio)+" that produces a non-finite load balancing score")
+			score, err := getLoadBalancingScore(peer)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, score)
+			_, err = json.Marshal(adapter.RotaInfo{Suppliers: []adapter.SupplierMatch{{LoadBalancingScore: score}}})
+			require.NoError(t, err)
 		})
 	}
 }
@@ -465,51 +487,64 @@ func TestLocateSuppliersDeduplicatesHoldingSymbolsForDirectoryLookup(t *testing.
 }
 
 func TestLocateSuppliersOrdersHigherLoadBalancingScoreFirst(t *testing.T) {
-	mockIllRepo := &MockIllRepoLocateSuppliers{
-		illTransaction: ill_db.IllTransaction{
-			ID:          "ill-1",
-			RequesterID: pgtype.Text{String: "requester-1", Valid: true},
-			IllTransactionData: ill_db.IllTransactionData{
-				BibliographicInfo: iso18626.BibliographicInfo{
-					SupplierUniqueRecordId: "return-ISIL:SUP1::L1;return-ISIL:SUP2::L2",
+	for _, tt := range []struct {
+		name  string
+		ratio string
+		score float64
+	}{
+		{name: "ordinary ratio", ratio: "1:2", score: 4},
+		{name: "extreme ratio", ratio: "1" + strings.Repeat("0", 400) + ":0." + strings.Repeat("0", 399) + "1", score: math.MaxFloat64},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			mockIllRepo := &MockIllRepoLocateSuppliers{
+				illTransaction: ill_db.IllTransaction{
+					ID:          "ill-1",
+					RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+					IllTransactionData: ill_db.IllTransactionData{
+						BibliographicInfo: iso18626.BibliographicInfo{
+							SupplierUniqueRecordId: "return-ISIL:SUP1::L1;return-ISIL:SUP2::L2",
+						},
+					},
 				},
-			},
-		},
-		requester: ill_db.Peer{ID: "requester-1"},
-		peers: []ill_db.Peer{
-			{
-				ID:           "peer-2",
-				BorrowsCount: 4,
-				LoansCount:   24,
-				CustomData:   dirapi.Entry{Name: "Supplier 2", LendToBorrowRatio: stringPointer("3:1")},
-			},
-			{
-				ID:           "peer-1",
-				BorrowsCount: 20,
-				LoansCount:   6,
-				CustomData:   dirapi.Entry{Name: "Supplier 1", LendToBorrowRatio: stringPointer("1:2")},
-			},
-		},
-		peerSymbols: map[string][]ill_db.Symbol{
-			"peer-1": {{SymbolValue: "ISIL:SUP1", PeerID: "peer-1"}},
-			"peer-2": {{SymbolValue: "ISIL:SUP2", PeerID: "peer-2"}},
-		},
-	}
+				requester: ill_db.Peer{ID: "requester-1"},
+				peers: []ill_db.Peer{
+					{
+						ID:           "peer-2",
+						BorrowsCount: 4,
+						LoansCount:   24,
+						CustomData:   dirapi.Entry{Name: "Supplier 2", LendToBorrowRatio: stringPointer("3:1")},
+					},
+					{
+						ID:           "peer-1",
+						BorrowsCount: 20,
+						LoansCount:   6,
+						CustomData:   dirapi.Entry{Name: "Supplier 1", LendToBorrowRatio: stringPointer(tt.ratio)},
+					},
+				},
+				peerSymbols: map[string][]ill_db.Symbol{
+					"peer-1": {{SymbolValue: "ISIL:SUP1", PeerID: "peer-1"}},
+					"peer-2": {{SymbolValue: "ISIL:SUP2", PeerID: "peer-2"}},
+				},
+			}
 
-	directory := new(adapter.MockDirectoryLookupAdapter)
-	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, directory, "", new(catalog.MockLookupShared), new(catalog.LookupAdapterCreatorImpl))
-	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, directory, lookupAdapterFactory)
-	status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+			directory := new(adapter.MockDirectoryLookupAdapter)
+			lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, directory, "", new(catalog.MockLookupShared), new(catalog.LookupAdapterCreatorImpl))
+			locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, directory, lookupAdapterFactory)
+			status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
 
-	assert.Equal(t, events.EventStatusSuccess, status)
-	if assert.Len(t, mockIllRepo.savedLocatedSuppliers, 2) {
-		assert.Equal(t, "ISIL:SUP1", mockIllRepo.savedLocatedSuppliers[0].SupplierSymbol)
-		assert.Equal(t, "ISIL:SUP2", mockIllRepo.savedLocatedSuppliers[1].SupplierSymbol)
-	}
-	rotaInfo, ok := result.CustomData[ROTA_INFO_KEY].(adapter.RotaInfo)
-	if assert.True(t, ok) && assert.Len(t, rotaInfo.Suppliers, 2) {
-		assert.Equal(t, 4.0, rotaInfo.Suppliers[0].LoadBalancingScore)
-		assert.Equal(t, -12.0, rotaInfo.Suppliers[1].LoadBalancingScore)
+			require.Equal(t, events.EventStatusSuccess, status)
+			_, err := json.Marshal(result.CustomData[ROTA_INFO_KEY])
+			require.NoError(t, err)
+			if assert.Len(t, mockIllRepo.savedLocatedSuppliers, 2) {
+				assert.Equal(t, "ISIL:SUP1", mockIllRepo.savedLocatedSuppliers[0].SupplierSymbol)
+				assert.Equal(t, "ISIL:SUP2", mockIllRepo.savedLocatedSuppliers[1].SupplierSymbol)
+			}
+			rotaInfo, ok := result.CustomData[ROTA_INFO_KEY].(adapter.RotaInfo)
+			if assert.True(t, ok) && assert.Len(t, rotaInfo.Suppliers, 2) {
+				assert.Equal(t, tt.score, rotaInfo.Suppliers[0].LoadBalancingScore)
+				assert.Equal(t, -12.0, rotaInfo.Suppliers[1].LoadBalancingScore)
+			}
+		})
 	}
 }
 

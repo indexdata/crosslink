@@ -115,3 +115,18 @@ func TestMockPickupInstitutionLookup(t *testing.T) {
 		})
 	}
 }
+
+func TestMockFilterAndSortPreservesLocalPreference(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	filtered, rota := (&MockDirectoryLookupAdapter{}).FilterAndSort(ctx, []Supplier{
+		{Symbol: "REMOTE", LoadBalancingScore: 100},
+		{Symbol: "LOCAL", Local: true, LoadBalancingScore: -10},
+	}, dirapi.Entry{}, nil, nil)
+	require.Len(t, filtered, 2)
+	require.Len(t, rota.Suppliers, 2)
+	assert.Equal(t, "LOCAL", filtered[0].Symbol)
+	assert.Equal(t, "LOCAL", rota.Suppliers[0].Symbol)
+	assert.True(t, rota.Suppliers[0].Local)
+	assert.False(t, rota.Suppliers[1].Local)
+	assert.Equal(t, -10.0, rota.Suppliers[0].LoadBalancingScore)
+}

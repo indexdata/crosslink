@@ -142,6 +142,7 @@ func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx common.ExtendedContext, e
 			ItemLoanPolicy:     sup.ItemLoanPolicy,
 			LocationPreference: sup.LocationPreference,
 			ShelvingPreference: sup.ShelvingPreference,
+			Local:              sup.Local,
 			LoadBalancingScore: sup.LoadBalancingScore,
 			Match:              match,
 		})

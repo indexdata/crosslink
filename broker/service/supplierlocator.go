@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -585,29 +585,32 @@ func getDateWithTimezone(date string, loc *time.Location, endOfDay bool) (time.T
 	return returnDate, nil
 }
 
+// getLoadBalancingScore interprets lendToBorrowRatio as desired loans:borrows.
+// Calculate exactly before conversion so valid decimals cannot overflow or
+// underflow intermediate values. Scores outside float64 range saturate at its
+// finite limits; saturated scores may tie despite different exact values.
 func getLoadBalancingScore(peer ill_db.Peer) (float64, error) {
-	desiredBorrows := 1.0
-	desiredLoans := 1.0
+	desiredLoans := big.NewRat(1, 1)
+	desiredBorrows := big.NewRat(1, 1)
 	if peer.CustomData.LendToBorrowRatio != nil {
 		ratio := *peer.CustomData.LendToBorrowRatio
 		if !lendToBorrowRatioPattern.MatchString(ratio) {
-			return 0, fmt.Errorf("peer %s has invalid lendToBorrowRatio %q", peer.ID, *peer.CustomData.LendToBorrowRatio)
+			return 0, fmt.Errorf("peer %s has invalid lendToBorrowRatio %q", peer.ID, ratio)
 		}
 		parts := strings.Split(ratio, ":")
-		var parseErr error
-		desiredBorrows, parseErr = strconv.ParseFloat(parts[0], 64)
-		if parseErr != nil {
-			return 0, fmt.Errorf("peer %s has invalid lendToBorrowRatio %q: %w", peer.ID, ratio, parseErr)
+		if _, ok := desiredLoans.SetString(parts[0]); !ok {
+			return 0, fmt.Errorf("peer %s has invalid lendToBorrowRatio %q", peer.ID, ratio)
 		}
-		desiredLoans, parseErr = strconv.ParseFloat(parts[1], 64)
-		if parseErr != nil {
-			return 0, fmt.Errorf("peer %s has invalid lendToBorrowRatio %q: %w", peer.ID, ratio, parseErr)
+		if _, ok := desiredBorrows.SetString(parts[1]); !ok {
+			return 0, fmt.Errorf("peer %s has invalid lendToBorrowRatio %q", peer.ID, ratio)
 		}
 	}
-	targetLending := float64(peer.BorrowsCount) * (desiredBorrows / desiredLoans)
-	loadBalancingScore := targetLending - float64(peer.LoansCount)
-	if math.IsInf(loadBalancingScore, 0) || math.IsNaN(loadBalancingScore) {
-		return 0, fmt.Errorf("peer %s has lendToBorrowRatio %q that produces a non-finite load balancing score", peer.ID, *peer.CustomData.LendToBorrowRatio)
+	targetLending := new(big.Rat).Quo(desiredLoans, desiredBorrows)
+	targetLending.Mul(targetLending, big.NewRat(int64(peer.BorrowsCount), 1))
+	score := targetLending.Sub(targetLending, big.NewRat(int64(peer.LoansCount), 1))
+	loadBalancingScore, _ := score.Float64()
+	if math.IsInf(loadBalancingScore, 0) {
+		loadBalancingScore = math.Copysign(math.MaxFloat64, loadBalancingScore)
 	}
 	return loadBalancingScore, nil
 }
