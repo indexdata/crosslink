@@ -205,6 +205,7 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 		supMatch.Location = sup.Location
 		supMatch.ShelvingLocation = sup.ShelvingLocation
 		supMatch.ItemLoanPolicy = sup.ItemLoanPolicy
+		supMatch.LoadBalancingScore = sup.LoadBalancingScore
 		supNetworks := getPeerNetworks(sup.CustomData)
 		supMatch.Networks = make([]NetworkMatch, 0, len(supNetworks))
 		for name := range supNetworks {
@@ -304,7 +305,6 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 			}
 			supMatch.Priority = sup.Priority
 			supMatch.Local = sup.Local
-			supMatch.Ratio = sup.Ratio
 		}
 		supMatch.LocationPreference = sup.LocationPreference
 		supMatch.ShelvingPreference = sup.ShelvingPreference
@@ -382,7 +382,7 @@ func CompareSuppliers(a, b SupplierOrdering) int {
 	if sort != 0 {
 		return sort
 	}
-	sort = cmp.Compare(a.GetRatio(), b.GetRatio())
+	sort = cmp.Compare(b.GetLoadBalancingScore(), a.GetLoadBalancingScore())
 	if sort != 0 {
 		return sort
 	}

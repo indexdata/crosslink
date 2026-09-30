@@ -142,6 +142,7 @@ func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx common.ExtendedContext, e
 			ItemLoanPolicy:     sup.ItemLoanPolicy,
 			LocationPreference: sup.LocationPreference,
 			ShelvingPreference: sup.ShelvingPreference,
+			LoadBalancingScore: sup.LoadBalancingScore,
 			Match:              match,
 		})
 	}
@@ -152,7 +153,15 @@ func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx common.ExtendedContext, e
 		} else if !a.Local && b.Local {
 			return 1
 		}
-		return cmp.Compare(a.Ratio, b.Ratio)
+		return cmp.Compare(b.LoadBalancingScore, a.LoadBalancingScore)
+	})
+	slices.SortFunc(rotaInfo.Suppliers, func(a, b SupplierMatch) int {
+		if a.Match && !b.Match {
+			return -1
+		} else if !a.Match && b.Match {
+			return 1
+		}
+		return CompareSuppliers(a, b)
 	})
 	return filtered, rotaInfo
 }
