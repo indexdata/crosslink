@@ -78,9 +78,20 @@ join_exports() {
             --slurpfile entries "$entry_records" \
             --slurpfile metadata "$metadata_records" \
             '
-                ($entries | map(select(.data.type != "Consortium") | .key)) as $member_keys |
+                ($entries | map(select(.data.type == "Consortium") | .key) | first) as $consortium_key |
+                ($entries | map(
+                    if $consortium_key != null
+                       and .data.type == "Institution"
+                       and .data.parent == null
+                    then
+                        .data.parent = $consortium_key
+                    else
+                        .
+                    end
+                )) as $entries_with_parents |
+                ($entries_with_parents | map(select(.data.type != "Consortium") | .key)) as $member_keys |
                 ($member_keys | to_entries | map(.value + {priority: (.key + 1)})) as $network_members |
-                (($entries) + ($metadata | map(
+                (($entries_with_parents) + ($metadata | map(
                     if .type == "tier" then
                         .data.entries = $member_keys
                     elif .type == "network" then

@@ -23,10 +23,10 @@ func TestDirectoryExportPickupLocations(t *testing.T) {
 	projection, _, found = strings.Cut(projection, ") AS ill_config ON true")
 	require.True(t, found)
 	query := `WITH
-		entry AS (SELECT $1::uuid AS entry_id, NULL::uuid AS parent_id, $2::text AS lms_location_code),
-		crosslink_local_entry AS (SELECT CASE WHEN $3::boolean THEN $1::uuid END AS entry_id),
+		entry AS (SELECT $1::uuid AS entry_id, $6::uuid AS parent_id, $2::text AS lms_location_code),
+		crosslink_local_entry AS (SELECT CASE WHEN $3::boolean THEN $1::uuid ELSE $6::uuid END AS entry_id),
 		local_entry AS (SELECT entry_id FROM crosslink_local_entry),
-		tenant_settings AS (SELECT '5'::text AS max_requests_per_patron, NULL::text AS duplicate_check_window_hours),
+		tenant_settings AS (SELECT '5'::text AS max_requests_per_patron, '7'::text AS duplicate_check_window_hours),
 		service AS (SELECT 1 AS se_id, 1 AS se_type_fk, $4::text AS se_address WHERE $4::text IS NOT NULL),
 		service_account AS (SELECT 1 AS sa_service, $1::uuid AS sa_account_holder),
 		refdata_value AS (SELECT 1 AS rdv_id, 'ISO18626'::text AS rdv_value),
@@ -46,35 +46,44 @@ func TestDirectoryExportPickupLocations(t *testing.T) {
 	require.Empty(t, result.Errors)
 	code, empty, endpoint := "main", "", "https://example.test/iso18626"
 	for i, tc := range []struct {
-		name     string
-		code     *string
-		local    bool
-		endpoint *string
-		tags     []string
-		enabled  bool
+		name        string
+		code        *string
+		local       bool
+		directChild bool
+		endpoint    *string
+		tags        []string
+		enabled     bool
 	}{
-		{"tagged local with endpoint", &code, true, &endpoint, []string{"pickup"}, true},
-		{"tagged local without endpoint or code", nil, true, nil, []string{"pickup"}, true},
-		{"tagged branch without endpoint or code", nil, false, nil, []string{"pickup"}, true},
-		{"tagged branch with endpoint", &code, false, &endpoint, []string{"pickup"}, true},
-		{"tagged empty code", &empty, false, nil, []string{"pickup"}, true},
-		{"untagged local with code", &code, true, &endpoint, nil, false},
-		{"untagged branch with code", &code, false, nil, nil, false},
-		{"untagged branch with empty code", &empty, false, nil, nil, false},
-		{"untagged branch without code", nil, false, nil, nil, false},
-		{"unrelated tag with code", &code, false, nil, []string{"other"}, false},
-		{"normalized pickup tag", nil, false, nil, []string{"other", " PICKUP "}, true},
-		{"duplicate pickup tags", nil, false, nil, []string{"pickup", "pickup"}, true},
+		{"tagged local with endpoint", &code, true, false, &endpoint, []string{"pickup"}, true},
+		{"tagged local without endpoint or code", nil, true, false, nil, []string{"pickup"}, true},
+		{"tagged direct child without endpoint or code", nil, false, true, nil, []string{"pickup"}, true},
+		{"tagged branch without endpoint or code", nil, false, false, nil, []string{"pickup"}, true},
+		{"tagged branch with endpoint", &code, false, false, &endpoint, []string{"pickup"}, true},
+		{"tagged empty code", &empty, false, false, nil, []string{"pickup"}, true},
+		{"untagged local with code", &code, true, false, &endpoint, nil, false},
+		{"untagged branch with code", &code, false, false, nil, nil, false},
+		{"untagged branch with empty code", &empty, false, false, nil, nil, false},
+		{"untagged branch without code", nil, false, false, nil, nil, false},
+		{"unrelated tag with code", &code, false, false, nil, []string{"other"}, false},
+		{"normalized pickup tag", nil, false, false, nil, []string{"other", " PICKUP "}, true},
+		{"duplicate pickup tags", nil, false, false, nil, []string{"pickup", "pickup"}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			entryID := uuid.New()
+			var parentID *uuid.UUID
+			if tc.directChild {
+				parentID = new(uuid.UUID)
+				*parentID = uuid.New()
+			}
 			var exported []byte
-			require.NoError(t, dbpool.QueryRow(context.Background(), query, uuid.New(), tc.code, tc.local, tc.endpoint, tc.tags).Scan(&exported))
+			require.NoError(t, dbpool.QueryRow(context.Background(), query, entryID, tc.code, tc.local, tc.endpoint, tc.tags, parentID).Scan(&exported))
 			var config map[string]any
 			if exported != nil {
 				require.NoError(t, json.Unmarshal(exported, &config))
 				require.Equal(t, tc.enabled, config["isPickupLocation"])
-				if tc.local {
+				if tc.local || tc.directChild {
 					require.Equal(t, float64(5), config["maxRequestsPerPatron"])
+					require.Equal(t, float64(7), config["duplicateCheckWindowHours"])
 					if tc.endpoint != nil {
 						require.Equal(t, *tc.endpoint, config["iso18626Url"])
 					} else {
