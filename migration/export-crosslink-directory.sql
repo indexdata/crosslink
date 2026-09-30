@@ -752,8 +752,18 @@ entry_records AS (
             'useOfferedCosts', NULL,
             'noteFieldSeparator', NULL,
             'supplierPatronPattern', NULL,
-            'duplicateCheckWindowHours', tenant_settings.duplicate_check_window_hours::integer,
-            'maxRequestsPerPatron', tenant_settings.max_requests_per_patron::integer
+            'duplicateCheckWindowHours', CASE
+                WHEN local_entry.entry_id IS NOT NULL
+                  OR entry.parent_id IN (SELECT entry_id FROM crosslink_local_entry)
+                THEN tenant_settings.duplicate_check_window_hours::integer
+                ELSE NULL
+            END,
+            'maxRequestsPerPatron', CASE
+                WHEN local_entry.entry_id IS NOT NULL
+                  OR entry.parent_id IN (SELECT entry_id FROM crosslink_local_entry)
+                THEN tenant_settings.max_requests_per_patron::integer
+                ELSE NULL
+            END
         ) AS item
         FROM (
             SELECT EXISTS (
