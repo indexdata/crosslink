@@ -6031,3 +6031,8 @@ func TestPullslipPrintedAndShippingGate(t *testing.T) {
 		})
 	}
 }
+
+func (r *MockPrRepo) GetLendingPredecessorForUpdate(ctx common.ExtendedContext, params pr_db.GetLendingPredecessorForUpdateParams) (pr_db.PatronRequest, error) {
+	args := r.Called(params)
+	return args.Get(0).(pr_db.PatronRequest), args.Error(1)
+}
