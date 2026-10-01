@@ -90,7 +90,7 @@ join_exports() {
                     end
                 )) as $entries_with_parents |
                 ($entries_with_parents | map(select(.data.type != "Consortium") | .key)) as $member_keys |
-                ($member_keys | to_entries | map(.value + {priority: (.key + 1)})) as $network_members |
+                ($member_keys | to_entries | map({entry: .value, priority: (.key + 1)})) as $network_members |
                 (($entries_with_parents) + ($metadata | map(
                     if .type == "tier" then
                         .data.entries = $member_keys

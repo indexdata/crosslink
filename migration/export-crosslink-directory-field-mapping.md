@@ -15,7 +15,7 @@ the trimmed `st_default_value` when necessary.
 | --- | --- | --- |
 | `directory_entry.de_name` | `data.name` | Copied directly. |
 | `refdata_value.rdv_value` through `directory_entry.de_type_rv_fk` | `data.type` | `consortium` becomes `Consortium`; `institution` becomes `Institution`; `branch` becomes `Branch`. Other values are rejected. |
-| `directory_entry.de_parent` | `data.parent` | The parent database ID is replaced by the parent entry's `{authority, symbol}` key. Root entries receive `null`. |
+| `directory_entry.de_parent` | `data.parent` | The parent database ID is emitted as the parent entry UUID. Root entries receive `null`. |
 | `directory_entry.de_desc` | `data.description` | Copied directly. |
 | `directory_entry.de_contact_name` | `data.contactName` | Copied directly. |
 | `directory_entry.de_email_address` | `data.email` | Copied directly. |
@@ -33,11 +33,10 @@ before their children.
 | --- | --- | --- |
 | `naming_authority.na_symbol` | `data.symbols[].authority` | Trimmed and converted to uppercase. Blank values are excluded. |
 | `symbol.sym_symbol` | `data.symbols[].symbol` | Trimmed and converted to uppercase. Blank values and values beginning with `DELETED-` are excluded. |
-| First symbol ordered by `symbol.sym_priority`, authority, symbol, and `symbol.sym_id` | `key.authority`, `key.symbol` | Used as the stable CrossLink import key. |
-| Entry with no usable symbol | `key` and `data.symbols[0]` | Authority is `ISIL`; symbol is the trimmed, uppercased entry name with spaces replaced by hyphens. |
+| `directory_entry.de_id` | `key` | Preserved as the stable UUID import key. |
 | `symbol.sym_owner_fk` | Symbol ownership | Associates each exported symbol with its directory entry. |
 
-The exporter rejects duplicate normalized `{authority, symbol}` combinations.
+The exporter rejects duplicate normalized `{authority, symbol}` combinations because symbols remain globally unique metadata in the target directory.
 
 ## Endpoints
 
@@ -185,12 +184,12 @@ tier and one default copy tier.
 
 | mod-rs source | CrossLink field | Mapping |
 | --- | --- | --- |
-| Consortium entry's stable key | `key.consortium` | Uses the consortium's `{authority, symbol}` key. Exactly one consortium entry is required. |
+| Consortium entry UUID | `key.consortium` | Uses the consortium entry UUID. Exactly one consortium entry is required. |
 | `app_setting.default_service_level` | `key.name` | Produces `Default <level> loan` and `Default <level> copy`. Missing values default to `standard`. |
 | `app_setting.default_service_level` | `data.level` | Trimmed and lowercased; missing values default to `standard`. Supported values are `express`, `normal`, `rush`, `secondarymail`, `standard`, and `urgent`. |
 | Generated tier kind | `data.type` | One record uses `loan`; the other uses `copy`. |
 | `app_setting.minimum_cost` | `data.cost` | Cast to a number; missing values default to `0`. The value must be nonnegative. |
-| Every non-consortium entry's stable key | `data.entries[]` | Each institution and branch is added as `{authority, symbol}`. |
+| Every non-consortium entry UUID | `data.entries[]` | Each institution and branch is added by UUID. |
 
 The mod-rs automatic-fee `request_service_type` setting is not used because it
 does not describe routing capabilities.
@@ -202,10 +201,10 @@ network.
 
 | mod-rs source | CrossLink field | Mapping |
 | --- | --- | --- |
-| Consortium entry's stable key | `key.consortium` | Uses the consortium's `{authority, symbol}` key. |
+| Consortium entry UUID | `key.consortium` | Uses the consortium entry UUID. |
 | Generated constant | `key.name` | Set to `Default`. |
 | Generated constant | `data.reciprocal` | Set to `true`. |
-| Every non-consortium entry's stable key | `data.entries[].authority`, `data.entries[].symbol` | Adds each institution and branch to the network. |
+| Every non-consortium entry UUID | `data.entries[].entry` | Adds each institution and branch to the network by UUID. |
 | Entry export order | `data.entries[].priority` | Sequential integer priority based on hierarchy depth, entry name, and entry ID. |
 
 ## Fixed and profile-resolved fields

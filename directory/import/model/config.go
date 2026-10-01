@@ -2,7 +2,8 @@ package model
 
 import (
 	"fmt"
-	"strings"
+
+	"github.com/google/uuid"
 )
 
 type LMSConfig struct {
@@ -42,7 +43,7 @@ type ILLConfig struct {
 	MinimumCost                 *float64    `json:"minimumCost"`
 	ISO18626URL                 *string     `json:"iso18626Url"`
 	ISO18626Vendor              *string     `json:"iso18626Vendor"`
-	LendersOfLastResort         []SymbolRef `json:"lendersOfLastResort"`
+	LendersOfLastResort         []uuid.UUID `json:"lendersOfLastResort"`
 	IncludeRequestingAgencyInfo *bool       `json:"includeRequestingAgencyInfo"`
 	IncludeSupplierInfo         *bool       `json:"includeSupplierInfo"`
 	IncludeReturnInfo           *bool       `json:"includeReturnInfo"`
@@ -203,12 +204,9 @@ func validateConfigEnums(lms *LMSConfig, catalog *CatalogConfig, ill *ILLConfig)
 		return fmt.Errorf("invalid ILL vendor: %s", *ill.ISO18626Vendor)
 	}
 	if ill != nil {
-		for index := range ill.LendersOfLastResort {
-			if err := ill.LendersOfLastResort[index].NormalizeAndValidate(); err != nil {
-				return fmt.Errorf("lender of last resort %d: %w", index+1, err)
-			}
-			if strings.Contains(ill.LendersOfLastResort[index].Authority, ":") {
-				return fmt.Errorf("lender of last resort %d authority must not contain ':'", index+1)
+		for index, lender := range ill.LendersOfLastResort {
+			if lender == uuid.Nil {
+				return fmt.Errorf("lender of last resort %d must be a valid UUID", index+1)
 			}
 		}
 	}

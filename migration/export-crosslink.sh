@@ -28,6 +28,11 @@ if [ ! -f "$PATRON_REQUEST_EXPORT" ]; then
     exit 1
 fi
 
+if ! command -v jq >/dev/null 2>&1; then
+    echo "jq is required to reuse the consortium UUID across directory exports" >&2
+    exit 1
+fi
+
 for file in "$DIRECTORY_PREFIX"-*.ndjson "$PATRON_REQUEST_PREFIX"-*.ndjson; do
     if [ -f "$file" ]; then
         rm "$file"
@@ -41,6 +46,7 @@ total_entries=$(awk '
 ' "$PROPERTIES_FILE")
 
 index=0
+consortium_uuid=
 
 while IFS= read -r line || [ -n "$line" ]; do
     trimmed_line=${line#"${line%%[![:space:]]*}"}
@@ -101,10 +107,20 @@ while IFS= read -r line || [ -n "$line" ]; do
         --set="owner=$owner_symbol" \
         --set="include_consortium=$include_consortium" \
         --set="include_tiers_network=$include_tiers_network" \
+        --set="consortium=$consortium_uuid" \
         --set=ON_ERROR_STOP=1 \
         --file="$DIRECTORY_EXPORT" \
         --quiet --tuples-only --no-align \
         >"$directory_output"
+
+    if [ "$index" -eq 1 ]; then
+        consortium_uuid=$(jq -s -er '
+            [.[] | select(.type == "entry" and .data.type == "Consortium")]
+            | if length == 1 then .[0].key
+              else error("first directory export must contain exactly one consortium entry")
+              end
+        ' "$directory_output")
+    fi
 
     patron_output=${PATRON_REQUEST_PREFIX}-${schema}-${index}.ndjson
     printf '%s\n' "Exporting patron requests for schema $schema to $patron_output"

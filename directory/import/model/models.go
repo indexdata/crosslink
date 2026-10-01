@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type ConflictPolicy string
@@ -77,14 +79,14 @@ func (s *SymbolRef) NormalizeAndValidate() error {
 func (s SymbolRef) String() string { return s.Authority + ":" + s.Symbol }
 
 type EntryAggregate struct {
-	Key  SymbolRef
+	Key  uuid.UUID
 	Data EntryData
 }
 
 type EntryData struct {
 	Name            string            `json:"name"`
 	Type            string            `json:"type"`
-	Parent          *SymbolRef        `json:"parent"`
+	Parent          *uuid.UUID        `json:"parent"`
 	Description     *string           `json:"description"`
 	OrganizationID  *string           `json:"organizationId"`
 	ContactName     *string           `json:"contactName"`
@@ -130,8 +132,8 @@ type Closure struct {
 }
 
 func (a *EntryAggregate) NormalizeAndValidate() error {
-	if err := a.Key.NormalizeAndValidate(); err != nil {
-		return fmt.Errorf("entry key: %w", err)
+	if a.Key == uuid.Nil {
+		return fmt.Errorf("entry key must be a valid UUID")
 	}
 	if strings.TrimSpace(a.Data.Name) == "" {
 		return fmt.Errorf("entry name is required")
@@ -143,12 +145,11 @@ func (a *EntryAggregate) NormalizeAndValidate() error {
 		return fmt.Errorf("invalid entry vendor: %s", *a.Data.Vendor)
 	}
 	if a.Data.Parent != nil {
-		if err := a.Data.Parent.NormalizeAndValidate(); err != nil {
-			return fmt.Errorf("parent: %w", err)
+		if *a.Data.Parent == uuid.Nil {
+			return fmt.Errorf("parent must be a valid UUID")
 		}
 	}
 	seen := make(map[SymbolRef]struct{}, len(a.Data.Symbols))
-	keyCount := 0
 	for index := range a.Data.Symbols {
 		if err := a.Data.Symbols[index].NormalizeAndValidate(); err != nil {
 			return fmt.Errorf("symbol %d: %w", index+1, err)
@@ -158,12 +159,6 @@ func (a *EntryAggregate) NormalizeAndValidate() error {
 			return fmt.Errorf("duplicate entry symbol %s", value.String())
 		}
 		seen[value] = struct{}{}
-		if value == a.Key {
-			keyCount++
-		}
-	}
-	if keyCount != 1 {
-		return fmt.Errorf("entry key %s must appear exactly once in symbols", a.Key.String())
 	}
 	for _, address := range a.Data.Addresses {
 		if !oneOf(address.Type, "Default", "Shipping", "Billing", "Other") {
@@ -192,7 +187,7 @@ func (a *EntryAggregate) NormalizeAndValidate() error {
 }
 
 type TierKey struct {
-	Consortium SymbolRef `json:"consortium"`
+	Consortium uuid.UUID `json:"consortium"`
 	Name       string    `json:"name"`
 }
 
@@ -200,7 +195,7 @@ type TierData struct {
 	Level   string      `json:"level"`
 	Type    string      `json:"type"`
 	Cost    float64     `json:"cost"`
-	Entries []SymbolRef `json:"entries"`
+	Entries []uuid.UUID `json:"entries"`
 }
 
 type TierAggregate struct {
@@ -209,8 +204,8 @@ type TierAggregate struct {
 }
 
 func (a *TierAggregate) NormalizeAndValidate() error {
-	if err := a.Key.Consortium.NormalizeAndValidate(); err != nil {
-		return fmt.Errorf("tier consortium: %w", err)
+	if a.Key.Consortium == uuid.Nil {
+		return fmt.Errorf("tier consortium must be a valid UUID")
 	}
 	if strings.TrimSpace(a.Key.Name) == "" {
 		return fmt.Errorf("tier name is required")
@@ -221,17 +216,17 @@ func (a *TierAggregate) NormalizeAndValidate() error {
 	if !oneOf(a.Data.Type, "loan", "copy") {
 		return fmt.Errorf("invalid tier type: %s", a.Data.Type)
 	}
-	return normalizeUniqueRefs(a.Data.Entries, "tier", func(refs []SymbolRef) { a.Data.Entries = refs })
+	return normalizeUniqueUUIDs(a.Data.Entries, "tier")
 }
 
 type NetworkKey struct {
-	Consortium SymbolRef `json:"consortium"`
+	Consortium uuid.UUID `json:"consortium"`
 	Name       string    `json:"name"`
 }
 
 type NetworkAssignment struct {
-	SymbolRef
-	Priority int32 `json:"priority"`
+	Entry    uuid.UUID `json:"entry"`
+	Priority int32     `json:"priority"`
 }
 
 type NetworkData struct {
@@ -245,39 +240,37 @@ type NetworkAggregate struct {
 }
 
 func (a *NetworkAggregate) NormalizeAndValidate() error {
-	if err := a.Key.Consortium.NormalizeAndValidate(); err != nil {
-		return fmt.Errorf("network consortium: %w", err)
+	if a.Key.Consortium == uuid.Nil {
+		return fmt.Errorf("network consortium must be a valid UUID")
 	}
 	if strings.TrimSpace(a.Key.Name) == "" {
 		return fmt.Errorf("network name is required")
 	}
-	seen := make(map[SymbolRef]struct{}, len(a.Data.Entries))
+	seen := make(map[uuid.UUID]struct{}, len(a.Data.Entries))
 	for index := range a.Data.Entries {
-		if err := a.Data.Entries[index].NormalizeAndValidate(); err != nil {
-			return fmt.Errorf("network entry %d: %w", index+1, err)
+		key := a.Data.Entries[index].Entry
+		if key == uuid.Nil {
+			return fmt.Errorf("network entry %d must be a valid UUID", index+1)
 		}
-		key := a.Data.Entries[index].SymbolRef
 		if _, exists := seen[key]; exists {
-			return fmt.Errorf("duplicate network entry %s", key.String())
+			return fmt.Errorf("duplicate network entry %s", key)
 		}
 		seen[key] = struct{}{}
 	}
 	return nil
 }
 
-func normalizeUniqueRefs(refs []SymbolRef, resource string, assign func([]SymbolRef)) error {
-	seen := make(map[SymbolRef]struct{}, len(refs))
-	for index := range refs {
-		if err := refs[index].NormalizeAndValidate(); err != nil {
-			return fmt.Errorf("%s entry %d: %w", resource, index+1, err)
+func normalizeUniqueUUIDs(refs []uuid.UUID, resource string) error {
+	seen := make(map[uuid.UUID]struct{}, len(refs))
+	for index, key := range refs {
+		if key == uuid.Nil {
+			return fmt.Errorf("%s entry %d must be a valid UUID", resource, index+1)
 		}
-		key := refs[index]
 		if _, exists := seen[key]; exists {
-			return fmt.Errorf("duplicate %s entry %s", resource, key.String())
+			return fmt.Errorf("duplicate %s entry %s", resource, key)
 		}
 		seen[key] = struct{}{}
 	}
-	assign(refs)
 	return nil
 }
 

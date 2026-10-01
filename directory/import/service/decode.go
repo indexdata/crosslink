@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/directory/import/model"
 )
 
@@ -56,9 +57,7 @@ func decodeRecord(data []byte, schemas map[string]*openapi3.Schema) (decodedReco
 		}
 		record.entry = &aggregate
 		validationErr := aggregate.NormalizeAndValidate()
-		if aggregate.Key.Authority != "" && aggregate.Key.Symbol != "" {
-			record.key = aggregate.Key.String()
-		}
+		record.key = aggregate.Key.String()
 		if validationErr != nil {
 			return record, validationErr
 		}
@@ -69,7 +68,7 @@ func decodeRecord(data []byte, schemas map[string]*openapi3.Schema) (decodedReco
 		}
 		record.tier = &aggregate
 		validationErr := aggregate.NormalizeAndValidate()
-		if aggregate.Key.Consortium.Authority != "" && aggregate.Key.Consortium.Symbol != "" && aggregate.Key.Name != "" {
+		if aggregate.Key.Consortium != uuid.Nil && aggregate.Key.Name != "" {
 			record.key = aggregate.Key.Consortium.String() + "/" + aggregate.Key.Name
 		}
 		if validationErr != nil {
@@ -82,7 +81,7 @@ func decodeRecord(data []byte, schemas map[string]*openapi3.Schema) (decodedReco
 		}
 		record.network = &aggregate
 		validationErr := aggregate.NormalizeAndValidate()
-		if aggregate.Key.Consortium.Authority != "" && aggregate.Key.Consortium.Symbol != "" && aggregate.Key.Name != "" {
+		if aggregate.Key.Consortium != uuid.Nil && aggregate.Key.Name != "" {
 			record.key = aggregate.Key.Consortium.String() + "/" + aggregate.Key.Name
 		}
 		if validationErr != nil {

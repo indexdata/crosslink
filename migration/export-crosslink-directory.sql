@@ -18,9 +18,8 @@
 -- include_tiers_network is true.
 --
 -- Mapping notes:
---   * The first symbol by legacy priority, authority, and value is the stable
---     CrossLink import key for an entry. Entries without a symbol use their
---     uppercased, hyphenated name under the ISIL authority. Deleted entry
+--   * The mod-rs directory_entry.de_id is preserved as the CrossLink import
+--     key. Symbols are exported as entry metadata only. Deleted entry
 --     tombstones and residual DELETED-* symbols created by mod-rs
 --     anonymization are omitted.
 --   * service/service_account rows become entry endpoints.
@@ -41,9 +40,10 @@
 --   * Every non-consortium entry belongs to each generated tier and to one
 --     reciprocal network named Default.
 --   * Set include_consortium=false to omit the consortium entry. In that mode,
---     the owner's parent consortium reference is also omitted so the remaining
---     entries form a valid hierarchy. Set include_tiers_network independently
---     when exporting generated tiers and the network for later consolidation.
+--     pass consortium=<UUID> to reuse the consortium UUID from the first
+--     shard. Parent references and generated tier/network keys continue to use
+--     that canonical UUID. Set include_tiers_network independently when
+--     exporting generated tiers and the network for later consolidation.
 --   * Fields with no mod-rs equivalent are emitted as explicit nulls or empty
 --     arrays because the CrossLink import contract requires every field.
 --
@@ -60,6 +60,11 @@
 \if :{?include_tiers_network}
 \else
 \set include_tiers_network 'true'
+\endif
+
+\if :{?consortium}
+\else
+\set consortium ''
 \endif
 
 SELECT
@@ -87,6 +92,19 @@ CREATE TEMP TABLE crosslink_export_options ON COMMIT DROP AS
 SELECT
     :'include_consortium'::boolean AS include_consortium,
     :'include_tiers_network'::boolean AS include_tiers_network;
+
+SELECT coalesce(
+    nullif(btrim(:'consortium'), '')::uuid,
+    '00000000-0000-0000-0000-000000000000'::uuid
+) IS NOT NULL
+    AS crosslink_consortium_valid
+\gset
+
+\if :crosslink_consortium_valid
+\else
+\warn Invalid consortium value. Use a UUID from the first directory export.
+SELECT 1 / 0;
+\endif
 
 CREATE TEMP TABLE crosslink_entry_base ON COMMIT DROP AS
 SELECT
@@ -127,6 +145,11 @@ WHERE NOT EXISTS (
       AND lower(btrim(tag.norm_value)) = 'deleted'
 );
 
+CREATE TEMP TABLE crosslink_consortium ON COMMIT DROP AS
+SELECT coalesce(nullif(btrim(:'consortium'), ''), entry.entry_id) AS entry_id
+FROM crosslink_entry_base AS entry
+WHERE entry.entry_type = 'Consortium';
+
 CREATE TEMP TABLE crosslink_symbols ON COMMIT DROP AS
 WITH existing_symbols AS (
     SELECT
@@ -155,20 +178,7 @@ SELECT
     symbol,
     key_order
 FROM existing_symbols
-
-UNION ALL
-
-SELECT
-    entry.entry_id,
-    'ISIL' AS authority,
-    upper(replace(btrim(entry.name), ' ', '-')) AS symbol,
-    1::bigint AS key_order
-FROM crosslink_entry_base AS entry
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM existing_symbols
-    WHERE existing_symbols.entry_id = entry.entry_id
-);
+;
 
 CREATE TEMP TABLE crosslink_tier_settings ON COMMIT DROP AS
 WITH settings AS (
@@ -263,11 +273,6 @@ WHERE NOT EXISTS (
     WHERE exported.entry_id = entry.entry_id
 );
 
-CREATE TEMP TABLE crosslink_entry_keys ON COMMIT DROP AS
-SELECT entry_id, authority, symbol
-FROM crosslink_symbols
-WHERE key_order = 1;
-
 CREATE TEMP TABLE crosslink_hierarchy ON COMMIT DROP AS
 WITH RECURSIVE hierarchy AS (
     SELECT
@@ -329,15 +334,6 @@ BEGIN
     WHERE entry_type IS NULL;
     IF problem IS NOT NULL THEN
         RAISE EXCEPTION 'Directory entries have unsupported or missing types: %', problem;
-    END IF;
-
-    SELECT string_agg(entry.entry_id || ' (' || entry.name || ')', ', ' ORDER BY entry.entry_id)
-    INTO problem
-    FROM crosslink_entry_base AS entry
-    LEFT JOIN crosslink_entry_keys AS key ON key.entry_id = entry.entry_id
-    WHERE key.entry_id IS NULL;
-    IF problem IS NOT NULL THEN
-        RAISE EXCEPTION 'Every directory entry needs a nonblank symbol: %', problem;
     END IF;
 
     SELECT string_agg(authority || ':' || symbol, ', ' ORDER BY authority, symbol)
@@ -516,14 +512,14 @@ WITH ordered_entries AS (
     SELECT
         entry.*,
         hierarchy.depth,
-        key.authority AS key_authority,
-        key.symbol AS key_symbol,
         row_number() OVER (
-            ORDER BY hierarchy.depth, entry.name, entry.entry_id
+            ORDER BY hierarchy.depth,
+                     CASE WHEN entry.entry_type = 'Consortium' THEN 0 ELSE 1 END,
+                     entry.name,
+                     entry.entry_id
         ) AS entry_order
     FROM crosslink_entry_base AS entry
     JOIN crosslink_hierarchy AS hierarchy USING (entry_id)
-    JOIN crosslink_entry_keys AS key USING (entry_id)
 ),
 entry_records AS (
     SELECT
@@ -531,17 +527,19 @@ entry_records AS (
         entry.entry_order AS record_order,
         jsonb_build_object(
             'type', 'entry',
-            'key', jsonb_build_object(
-                'authority', entry.key_authority,
-                'symbol', entry.key_symbol
-            ),
+            'key', CASE
+                WHEN entry.entry_type = 'Consortium'
+                    THEN (SELECT entry_id FROM crosslink_consortium)
+                ELSE entry.entry_id
+            END,
             'data', jsonb_build_object(
                 'name', entry.name,
                 'type', entry.entry_type,
-                'parent', CASE WHEN parent_key.entry_id IS NULL THEN NULL ELSE jsonb_build_object(
-                    'authority', parent_key.authority,
-                    'symbol', parent_key.symbol
-                ) END,
+                'parent', CASE
+                    WHEN parent_key.entry_type = 'Consortium'
+                        THEN (SELECT entry_id FROM crosslink_consortium)
+                    ELSE parent_key.entry_id
+                END,
                 'description', entry.description,
                 'organizationId', NULL,
                 'contactName', entry.contact_name,
@@ -565,13 +563,8 @@ entry_records AS (
         ) AS record
     FROM ordered_entries AS entry
     CROSS JOIN crosslink_export_options AS export_options
-    LEFT JOIN crosslink_entry_keys AS parent_key
+    LEFT JOIN crosslink_entry_base AS parent_key
       ON parent_key.entry_id = entry.parent_id
-     AND (export_options.include_consortium OR entry.parent_id NOT IN (
-         SELECT consortium.entry_id
-         FROM ordered_entries AS consortium
-         WHERE consortium.entry_type = 'Consortium'
-     ))
     LEFT JOIN LATERAL (
         SELECT jsonb_agg(
             jsonb_build_object('authority', authority, 'symbol', symbol)
@@ -843,16 +836,13 @@ entry_records AS (
     WHERE export_options.include_consortium OR entry.entry_type <> 'Consortium'
 ),
 consortium AS (
-    SELECT key.authority, key.symbol
-    FROM ordered_entries AS entry
-    JOIN crosslink_entry_keys AS key USING (entry_id)
-    WHERE entry.entry_type = 'Consortium'
+    SELECT entry_id
+    FROM crosslink_consortium
 ),
 members AS (
     SELECT
         entry.entry_order,
-        entry.key_authority AS authority,
-        entry.key_symbol AS symbol,
+        entry.entry_id,
         row_number() OVER (ORDER BY entry.entry_order)::integer AS priority
     FROM ordered_entries AS entry
     WHERE entry.entry_type <> 'Consortium'
@@ -871,10 +861,7 @@ tier_records AS (
         jsonb_build_object(
             'type', 'tier',
             'key', jsonb_build_object(
-                'consortium', jsonb_build_object(
-                    'authority', consortium.authority,
-                    'symbol', consortium.symbol
-                ),
+                'consortium', consortium.entry_id,
                 'name', 'Default ' || settings.service_level || ' ' || tier_type.tier_type
             ),
             'data', jsonb_build_object(
@@ -883,7 +870,7 @@ tier_records AS (
                 'cost', settings.minimum_cost::double precision,
                 'entries', coalesce((
                     SELECT jsonb_agg(
-                        jsonb_build_object('authority', member.authority, 'symbol', member.symbol)
+                        member.entry_id
                         ORDER BY member.entry_order
                     )
                     FROM members AS member
@@ -903,10 +890,7 @@ network_record AS (
         jsonb_build_object(
             'type', 'network',
             'key', jsonb_build_object(
-                'consortium', jsonb_build_object(
-                    'authority', consortium.authority,
-                    'symbol', consortium.symbol
-                ),
+                'consortium', consortium.entry_id,
                 'name', 'Default'
             ),
             'data', jsonb_build_object(
@@ -914,8 +898,7 @@ network_record AS (
                 'entries', coalesce((
                     SELECT jsonb_agg(
                         jsonb_build_object(
-                            'authority', member.authority,
-                            'symbol', member.symbol,
+                            'entry', member.entry_id,
                             'priority', member.priority
                         )
                         ORDER BY member.entry_order
