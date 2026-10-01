@@ -14,6 +14,7 @@ import (
 )
 
 type PrRepo interface {
+	GetLendingPredecessorForUpdate(ctx common.ExtendedContext, params GetLendingPredecessorForUpdateParams) (PatronRequest, error)
 	repo.Transactional[PrRepo]
 	GetPatronRequestById(ctx common.ExtendedContext, id string) (PatronRequest, error)
 	GetPatronRequestSearchView(ctx common.ExtendedContext, id string) (PatronRequestSearchView, error)
@@ -386,4 +387,11 @@ func (r *PgPrRepo) DeleteTemplateByIdAndOwner(ctx common.ExtendedContext, id str
 		ID:    id,
 		Owner: owner,
 	})
+}
+
+// GetLendingPredecessorForUpdate locks a predecessor within the same agency pair
+// and tenant. Call it inside WithTxFunc to hold the lock while linking requests.
+func (r *PgPrRepo) GetLendingPredecessorForUpdate(ctx common.ExtendedContext, params GetLendingPredecessorForUpdateParams) (PatronRequest, error) {
+	row, err := r.queries.GetLendingPredecessorForUpdate(ctx, r.GetConnOrTx(), params)
+	return row.PatronRequest, err
 }
