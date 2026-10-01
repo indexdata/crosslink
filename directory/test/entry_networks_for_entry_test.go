@@ -44,6 +44,71 @@ func TestNetworksForEntry(t *testing.T) {
 	testCases(t, cases)
 }
 
+func TestNetworksForEntryIncludesReciprocal(t *testing.T) {
+	resetDb()
+
+	headers := map[string]string{
+		"X-Okapi-Tenant":      "ANINST",
+		"X-Okapi-Permissions": `["directory.consortium.all"]`,
+	}
+	const networkID = "20000000-0000-0000-0000-000000000001"
+	endpoints := []string{
+		"/entries/by-id/00000000-0000-0000-0000-000000000001/networks",
+		"/entries/by-id/00000000-0000-0000-0000-000000000004/networks",
+	}
+	tests := []struct {
+		name      string
+		body      string
+		want      bool
+		wantField bool
+	}{
+		{name: "true", body: `{"reciprocal":true}`, want: true, wantField: true},
+		{name: "false", body: `{"reciprocal":false}`, want: false, wantField: true},
+		{name: "null", body: `{"reciprocal":null}`, wantField: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res, data := jsonReq(t, http.MethodPatch, "/networks/"+networkID, tt.body, headers)
+			if res.StatusCode != http.StatusNoContent {
+				t.Fatalf("patch network: expected status %d, got %d and body %s", http.StatusNoContent, res.StatusCode, data)
+			}
+
+			for _, endpoint := range endpoints {
+				res, data = jsonReq(t, http.MethodGet, endpoint, "", headers)
+				if res.StatusCode != http.StatusOK {
+					t.Fatalf("get %s: expected status %d, got %d and body %s", endpoint, http.StatusOK, res.StatusCode, data)
+				}
+
+				var result struct {
+					Items []map[string]any `json:"items"`
+				}
+				if err := json.Unmarshal([]byte(data), &result); err != nil {
+					t.Fatalf("parse response from %s: %v", endpoint, err)
+				}
+
+				found := false
+				for _, item := range result.Items {
+					if item["id"] != networkID {
+						continue
+					}
+					found = true
+					got, present := item["reciprocal"]
+					if present != tt.wantField {
+						t.Fatalf("%s: reciprocal presence = %t, want %t: %s", endpoint, present, tt.wantField, data)
+					}
+					if present && got != tt.want {
+						t.Fatalf("%s: reciprocal = %v, want %t: %s", endpoint, got, tt.want, data)
+					}
+				}
+				if !found {
+					t.Fatalf("%s: network %s not found: %s", endpoint, networkID, data)
+				}
+			}
+		})
+	}
+}
+
 func TestAddNetworkForEntryByID(t *testing.T) {
 	resetDb()
 	ja := jsonassert.New(t)

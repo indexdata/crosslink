@@ -506,7 +506,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessageWithPeer(ctx common.Ex
 	if recipientPeer != nil {
 		supplierPatronPattern = common.IllConfigString(recipientPeer.CustomData, supplierPatronPattern, func(c dirapi.IllConfig) *string { return c.SupplierPatronPattern })
 	}
-	pr, err := m.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams{
+	pr, err := CreateLendingRequest(ctx, m.prRepo, pr_db.PatronRequest{
 		ID:              uuid.NewString(),
 		CreatedAt:       pgtype.Timestamp{Valid: true, Time: time.Now()},
 		State:           lenderInitialState,
