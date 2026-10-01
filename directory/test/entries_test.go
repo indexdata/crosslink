@@ -1574,18 +1574,36 @@ func TestEntryLendToBorrowRatio(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, res.StatusCode, data)
 	assertRatio(nil)
 
-	invalid := []string{"0:1", "1:0", "0.0:2", "-1:2", "+1:2", "1e2:1", "1 :2", ".5:1", "5.:1", "1", "1:2:3"}
+	invalid := []string{"0:1", "1:0", "0.0:2", "-1:2", "+1:2", "1e2:1", "1 :2", ".5:1", "5.:1", "1", "1:2:3", "10000:1", "1:10000", "00001:1", "1:00001", "1.001:1", "1:1.001", "0.001:1", "1:0.001", "0.00:1", "1:0.00", "9999.99:9999.999"}
 	for _, ratio := range invalid {
 		t.Run(ratio, func(t *testing.T) {
 			body, err := json.Marshal(map[string]string{"lendToBorrowRatio": ratio})
 			require.NoError(t, err)
 			res, data := jsonReq(t, http.MethodPatch, "/entries/by-id/"+created.Id, string(body), headers)
 			require.Equal(t, http.StatusBadRequest, res.StatusCode, data)
+			body, err = json.Marshal(map[string]string{"name": "Invalid ratio", "lendToBorrowRatio": ratio})
+			require.NoError(t, err)
+			res, data = jsonReq(t, http.MethodPost, "/entries", string(body), headers)
+			require.Equal(t, http.StatusBadRequest, res.StatusCode, data)
 		})
 	}
 
-	_, err := dbpool.Exec(context.Background(), `UPDATE entries SET lend_to_borrow_ratio = '0:1' WHERE id = $1`, created.Id)
-	require.Error(t, err)
+	for _, ratio := range invalid {
+		_, err := dbpool.Exec(context.Background(), `UPDATE entries SET lend_to_borrow_ratio = $1 WHERE id = $2`, ratio, created.Id)
+		require.Error(t, err, ratio)
+	}
+
+	for _, ratio := range []string{"9999.99:9999.99", "0.01:9999.99", "9999.99:0.01", "0000.01:0001.00", "1000:1", "0100:1", "0010:1", "0001:1"} {
+		body, err := json.Marshal(map[string]string{"lendToBorrowRatio": ratio})
+		require.NoError(t, err)
+		res, data := jsonReq(t, http.MethodPatch, "/entries/by-id/"+created.Id, string(body), headers)
+		require.Equal(t, http.StatusNoContent, res.StatusCode, data)
+		assertRatio(&ratio)
+		body, err = json.Marshal(map[string]string{"name": "Boundary ratio", "lendToBorrowRatio": ratio})
+		require.NoError(t, err)
+		res, data = jsonReq(t, http.MethodPost, "/entries", string(body), headers)
+		require.Equal(t, http.StatusCreated, res.StatusCode, data)
+	}
 }
 
 func TestInstitutionalAdminCannotPatchTenant(t *testing.T) {

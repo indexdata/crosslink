@@ -227,6 +227,25 @@ func TestImportLendToBorrowRatio(t *testing.T) {
 	require.NotNil(t, ratio)
 	require.Equal(t, "05.50:1", *ratio)
 
+	for _, boundary := range []string{"9999.99:9999.99", "0.01:9999.99", "9999.99:0.01", "0000.01:0001.00"} {
+		data["lendToBorrowRatio"] = boundary
+		response, result = importRequest(t, []any{record}, "update", standardHeaders)
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		require.Empty(t, result.Errors)
+		require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT lend_to_borrow_ratio FROM entries WHERE id=$1`, id).Scan(&ratio))
+		require.NotNil(t, ratio)
+		require.Equal(t, boundary, *ratio)
+	}
+	for _, invalid := range []string{"10000:1", "1:10000", "1.001:1", "1:1.001", "9999.99:9999.999"} {
+		data["lendToBorrowRatio"] = invalid
+		response, result = importRequest(t, []any{record}, "update", standardHeaders)
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		require.Len(t, result.Errors, 1)
+		require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT lend_to_borrow_ratio FROM entries WHERE id=$1`, id).Scan(&ratio))
+		require.NotNil(t, ratio)
+		require.Equal(t, "0000.01:0001.00", *ratio)
+	}
+
 	delete(data, "lendToBorrowRatio")
 	response, result = importRequest(t, []any{record}, "update", standardHeaders)
 	require.Equal(t, http.StatusOK, response.StatusCode)

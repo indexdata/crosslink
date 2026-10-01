@@ -29,7 +29,10 @@ const DATE_LAYOUT = "2006-01-02"
 
 const AvailabilityKey = "availability"
 
-var lendToBorrowRatioPattern = regexp.MustCompile(`^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*):(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$`)
+// Leading zeros count toward the four integer digits; zero components are invalid.
+const lendToBorrowRatioMaxLength = 15
+
+var lendToBorrowRatioPattern = regexp.MustCompile(`^((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9])):((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9]))$`)
 
 type Availability string
 
@@ -586,14 +589,16 @@ func getDateWithTimezone(date string, loc *time.Location, endOfDay bool) (time.T
 }
 
 // getLoadBalancingScore interprets lendToBorrowRatio as desired loans:borrows.
-// Calculate exactly before conversion so valid decimals cannot overflow or
-// underflow intermediate values. Scores outside float64 range saturate at its
-// finite limits; saturated scores may tie despite different exact values.
+// Calculate exactly before conversion to avoid rounding intermediate values.
+// The bounded ratio and int32 counters keep scores within float64 range.
 func getLoadBalancingScore(peer ill_db.Peer) (float64, error) {
 	desiredLoans := big.NewRat(1, 1)
 	desiredBorrows := big.NewRat(1, 1)
 	if peer.CustomData.LendToBorrowRatio != nil {
 		ratio := *peer.CustomData.LendToBorrowRatio
+		if len(ratio) > lendToBorrowRatioMaxLength {
+			return 0, fmt.Errorf("peer %s has lendToBorrowRatio exceeding %d characters", peer.ID, lendToBorrowRatioMaxLength)
+		}
 		if !lendToBorrowRatioPattern.MatchString(ratio) {
 			return 0, fmt.Errorf("peer %s has invalid lendToBorrowRatio %q", peer.ID, ratio)
 		}
@@ -609,9 +614,6 @@ func getLoadBalancingScore(peer ill_db.Peer) (float64, error) {
 	targetLending.Mul(targetLending, big.NewRat(int64(peer.BorrowsCount), 1))
 	score := targetLending.Sub(targetLending, big.NewRat(int64(peer.LoansCount), 1))
 	loadBalancingScore, _ := score.Float64()
-	if math.IsInf(loadBalancingScore, 0) {
-		loadBalancingScore = math.Copysign(math.MaxFloat64, loadBalancingScore)
-	}
 	return loadBalancingScore, nil
 }
 

@@ -136,7 +136,7 @@ func TestEntryAggregateRejectsInvalidClosureRange(t *testing.T) {
 }
 
 func TestEntryAggregateValidatesLendToBorrowRatio(t *testing.T) {
-	valid := []string{"50:2", "5.5:1", "0.5:2", "005.50:01"}
+	valid := []string{"50:2", "5.5:1", "0.5:2", "005.50:01", "9999.99:9999.99", "0.01:9999.99", "9999.99:0.01", "0000.01:0001.00", "1000:1", "0100:1", "0010:1", "0001:1"}
 	for _, ratio := range valid {
 		t.Run("valid "+ratio, func(t *testing.T) {
 			aggregate := validEntryAggregate()
@@ -145,7 +145,7 @@ func TestEntryAggregateValidatesLendToBorrowRatio(t *testing.T) {
 		})
 	}
 
-	invalid := []string{"0:1", "1:0", "0.0:2", "-1:2", "+1:2", "1e2:1", "1 :2", ".5:1", "5.:1", "1", "1:2:3"}
+	invalid := []string{"0:1", "1:0", "0.0:2", "-1:2", "+1:2", "1e2:1", "1 :2", ".5:1", "5.:1", "1", "1:2:3", "10000:1", "1:10000", "00001:1", "1:00001", "1.001:1", "1:1.001", "0.001:1", "1:0.001", "0.00:1", "1:0.00", "9999.99:9999.999"}
 	for _, ratio := range invalid {
 		t.Run("invalid "+ratio, func(t *testing.T) {
 			aggregate := validEntryAggregate()
@@ -153,7 +153,7 @@ func TestEntryAggregateValidatesLendToBorrowRatio(t *testing.T) {
 
 			err := aggregate.NormalizeAndValidate()
 
-			require.EqualError(t, err, "invalid lendToBorrowRatio: must contain two positive unsigned decimals separated by a colon")
+			require.EqualError(t, err, "invalid lendToBorrowRatio: must contain two positive unsigned decimals separated by a colon, each with at most four integer digits and two decimal places")
 		})
 	}
 }

@@ -33,6 +33,14 @@ It sets `illConfig.isPickupLocation` for entries with the legacy `pickup` tag,
 independently of their LMS location code or NCIP/ISO18626 configuration.
 Untagged entries are not designated as pickup locations.
 
+The optional `lendToBorrowRatio` field expresses desired loans:borrows (for
+example, `50:2`). Each component must be positive, with one to four integer
+digits and at most two decimal places (`0.01` through `9999.99`). Leading zeros
+count toward the four integer digits; the whole string is at most 15 characters.
+These limits apply to entry creation, updates, and imports. Existing ratios
+outside these limits must be corrected before applying migration 015; the
+migration validates existing entries without changing their ratios.
+
 ### Request format and sample data
 
 Each record has `type`, `key`, and `data` fields. Put one complete JSON object

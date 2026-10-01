@@ -59,7 +59,7 @@ func TestGetLoadBalancingScore(t *testing.T) {
 }
 
 func TestGetLoadBalancingScoreRejectsInvalidRatio(t *testing.T) {
-	for _, ratio := range []string{"", "0:1", "1:0", "-1:2", "+1:2", ".5:1", "1e2:1", "1:2:3"} {
+	for _, ratio := range []string{"", "0:1", "1:0", "-1:2", "+1:2", ".5:1", "1e2:1", "1:2:3", "10000:1", "1:10000", "00001:1", "1:00001", "1.001:1", "1:1.001", "0.001:1", "1:0.001", "0.00:1", "1:0.00"} {
 		t.Run(ratio, func(t *testing.T) {
 			peer := ill_db.Peer{ID: "peer-1", CustomData: dirapi.Entry{Name: "Supplier", LendToBorrowRatio: &ratio}}
 			_, err := getLoadBalancingScore(peer)
@@ -68,9 +68,14 @@ func TestGetLoadBalancingScoreRejectsInvalidRatio(t *testing.T) {
 	}
 }
 
-func TestGetLoadBalancingScoreHandlesExtremeRatios(t *testing.T) {
-	largeValue := "1" + strings.Repeat("0", 400)
-	smallValue := "0." + strings.Repeat("0", 399) + "1"
+func TestGetLoadBalancingScoreRejectsOversizedRatio(t *testing.T) {
+	ratio := "1" + strings.Repeat("0", 100000) + ":1"
+	peer := ill_db.Peer{ID: "peer-1", CustomData: dirapi.Entry{LendToBorrowRatio: &ratio}}
+	_, err := getLoadBalancingScore(peer)
+	require.EqualError(t, err, "peer peer-1 has lendToBorrowRatio exceeding 15 characters")
+}
+
+func TestGetLoadBalancingScoreHandlesBoundaryRatios(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
 		ratio   string
@@ -78,21 +83,15 @@ func TestGetLoadBalancingScoreHandlesExtremeRatios(t *testing.T) {
 		loans   int32
 		want    float64
 	}{
-		{name: "overflow", ratio: largeValue + ":" + smallValue, borrows: 1, want: math.MaxFloat64},
-		{name: "negative overflow", ratio: largeValue + ":1", borrows: -1, want: -math.MaxFloat64},
-		{name: "zero borrows", ratio: largeValue + ":" + smallValue, loans: 6, want: -6},
-		{name: "tiny numerator", ratio: smallValue + ":1", borrows: 1, loans: 6, want: -6},
-		{name: "tiny components", ratio: smallValue + ":" + smallValue, borrows: 20, loans: 6, want: 14},
-		{name: "huge components", ratio: largeValue + ":" + largeValue, borrows: 20, loans: 6, want: 14},
-		{name: "counter multiplication overflow", ratio: "1" + strings.Repeat("0", 308) + ":1", borrows: 2, want: math.MaxFloat64},
+		{name: "maximum length", ratio: "9999.99:9999.99", borrows: 20, loans: 6, want: 14},
+		{name: "maximum quotient", ratio: "9999.99:0.01", borrows: 1, want: 999999},
+		{name: "minimum quotient", ratio: "0.01:9999.99", borrows: 999999, want: 1},
+		{name: "zero borrows", ratio: "9999.99:0.01", loans: 6, want: -6},
+		{name: "maximum counters", ratio: "9999.99:0.01", borrows: math.MaxInt32, loans: math.MaxInt32, want: float64(math.MaxInt32) * 999998},
+		{name: "leading zeros", ratio: "0000.01:0001.00", borrows: 100, want: 1},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			peer := ill_db.Peer{
-				ID:           "peer-1",
-				BorrowsCount: tt.borrows,
-				LoansCount:   tt.loans,
-				CustomData:   dirapi.Entry{Name: "Supplier", LendToBorrowRatio: &tt.ratio},
-			}
+			peer := ill_db.Peer{ID: "peer-1", BorrowsCount: tt.borrows, LoansCount: tt.loans, CustomData: dirapi.Entry{LendToBorrowRatio: &tt.ratio}}
 			score, err := getLoadBalancingScore(peer)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, score)
@@ -493,7 +492,7 @@ func TestLocateSuppliersOrdersHigherLoadBalancingScoreFirst(t *testing.T) {
 		score float64
 	}{
 		{name: "ordinary ratio", ratio: "1:2", score: 4},
-		{name: "extreme ratio", ratio: "1" + strings.Repeat("0", 400) + ":0." + strings.Repeat("0", 399) + "1", score: math.MaxFloat64},
+		{name: "maximum quotient", ratio: "9999.99:0.01", score: 19999974},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			mockIllRepo := &MockIllRepoLocateSuppliers{
