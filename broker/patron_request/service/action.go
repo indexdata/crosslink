@@ -1760,6 +1760,25 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 			status, result := logActionErrorAndReturnResult(ctx, "failed to parse cost", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
+		if !pr.SupplierSymbol.Valid || pr.SupplierSymbol.String == "" {
+			status, result := logActionErrorAndReturnResult(ctx, "missing supplier symbol for minimum cost check", nil)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		peers, _, err := a.illRepo.GetCachedPeersBySymbols(ctx, []string{pr.SupplierSymbol.String}, a.directoryLookupAdapter)
+		if err != nil {
+			status, result := logActionErrorAndReturnResult(ctx, "failed to look up lender for minimum cost check", err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		if len(peers) == 0 {
+			status, result := logActionErrorAndReturnResult(ctx, "no lender found for minimum cost check", nil)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		if config := peers[0].CustomData.IllConfig; config != nil {
+			if minimumCost, err := config.MinimumCost.Get(); err == nil && *params.Cost < minimumCost {
+				status, result := logActionErrorAndReturnResult(ctx, fmt.Sprintf("offered cost %g is below lender minimum cost %g", *params.Cost, minimumCost), nil)
+				return actionExecutionResult{status: status, result: result, pr: pr}
+			}
+		}
 		offeredCosts = &iso18626.TypeCosts{
 			CurrencyCode:  iso18626.TypeSchemeValuePair{Text: params.Currency},
 			MonetaryValue: monetaryValue,

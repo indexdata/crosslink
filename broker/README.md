@@ -266,6 +266,8 @@ For information about importing patron requests, batch actions, and templates, s
 
 ### Supplier pull slips and shipment
 
+When a supplier uses `add-condition` with a cost, the offered cost must be at least the lender's Directory `illConfig.minimumCost`. An omitted or null minimum imposes no limit; a configured zero still applies. The action fails before sending conditions if the cost is too low or the lender's settings cannot be resolved. Conditions without a cost do not require this check. Amounts are compared directly without currency conversion.
+
 While requester conditions are pending, `accept-condition` agrees to the supplier's terms, `reject-condition` cancels with that supplier and allows the broker to try another, and `cancel-request` cancels through the broker to stop further sourcing. Both cancellation actions enter `CANCEL_PENDING` while awaiting the response; the current supplier can still refuse cancellation.
 
 For Loan and CopyOrLoan requests, generating a pull-slip PDF queues the `pullslip-printed` action for the included eligible supplier requests. Accepted conditions return the supplier to `WILL_SUPPLY`. Printing moves `WILL_SUPPLY` to `SEARCHING` (picking and awaiting shipment). Reprinting in `SEARCHING` leaves the state unchanged. The `ship` action is available only in `SEARCHING`. Copy delivery remains available without this loan workflow.
