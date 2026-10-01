@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	"github.com/indexdata/mod-dms/app"
+	"github.com/indexdata/crosslink/supply/app"
 )
 
 func main() {

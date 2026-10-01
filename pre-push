@@ -1,5 +1,5 @@
 #!/bin/sh
-# pre-commit: check lint and docker build
+# pre-push: check lint and docker build
 
 set -e
 make lint
@@ -10,3 +10,5 @@ make docker
 cd ../directory
 make docker
 
+cd ../supply
+make docker

@@ -1,10 +1,11 @@
-module github.com/indexdata/mod-dms
+module github.com/indexdata/crosslink/supply
 
 go 1.24.1
 
 require (
 	github.com/google/uuid v1.6.0
 	github.com/minio/minio-go/v7 v7.0.90
+	github.com/testcontainers/testcontainers-go v0.36.0
 	github.com/testcontainers/testcontainers-go/modules/minio v0.36.0
 )
 
@@ -55,7 +56,6 @@ require (
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
-	github.com/testcontainers/testcontainers-go v0.36.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.15 // indirect
 	github.com/tklauser/numcpus v0.10.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect

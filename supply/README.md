@@ -1,14 +1,16 @@
-# Introduction and API
+# CrossLink Supply
 
-mod-dms is a simple webservice exposing two operations against an S3 bucket:
+## API
 
-- `POST` to `/upload` a body encoded as `multipart/form-data` with a file to be uploaded in the field named `file` will store the file as an object in the configured S3 bucket with the content type specified on that field and return a JSON object body containing a `key` property with the stored object name and `url` property with the full URL to that object.
+Supply is a simple webservice exposing two operations against an S3 bucket:
 
-- `DELETE` to `/upload/<object name>` will remove the object
+- `POST` to `/dms/upload` a body encoded as `multipart/form-data` with a file to be uploaded in the field named `file` will store the file as an object in the configured S3 bucket with the content type specified on that field and return a JSON object body containing a `key` property with the stored object name and `url` property with the full URL to that object.
+
+- `DELETE` to `/dms/upload/<object name>` will remove the object
 
 Objects are named with a UUID and optionally prefixed with the contents of the `X-Okapi-Tenant` header.
 
-# Configuration
+## Configuration
 
 Configuration is through the following environment variables:
 
@@ -25,3 +27,50 @@ Configuration is through the following environment variables:
 - `MOD_DMS_TYPES` optionally provides a comma-delimited list of content-types to accept
 
 - `MOD_DMS_INSECURE`, if present and set to `true`, indicates to use `http` rather than `https` to access the configured endpoint
+
+## Building and testing
+
+Supply is a separate Go module at `github.com/indexdata/crosslink/supply`. From the CrossLink repository root:
+
+```bash
+make -C supply all
+make -C supply check
+make -C supply lint
+make -C supply docker
+```
+
+Tests use a MinIO container and require Docker. The fixture in `test/minio/Dockerfile` builds from the official `RELEASE.2025-03-12T18-04-18Z` GitHub binary with a pinned SHA-256 checksum for amd64 or arm64. Its first build requires access to Docker Hub, Alpine package repositories, and GitHub release downloads. `make -C supply all` produces the `supply` executable and `ModuleDescriptor.json`. The descriptor defaults to development version `99.99.99`; override it with `VERSION=<version>`. The source template is [descriptors/ModuleDescriptor-template.json](descriptors/ModuleDescriptor-template.json).
+
+Configure the environment variables above and start the service with `./supply/supply` from the repository root. `GET /healthz` is the health endpoint.
+
+## Deployment
+
+The shared CrossLink pipeline tests Supply, publishes images for `linux/amd64` and `linux/arm64`, and then publishes its Helm chart. Image tags include `main` and `sha-<short-sha>`. Published charts use the corresponding SHA image tag.
+
+Run the published image with a local environment file containing the configuration above:
+
+```bash
+docker run --rm -p 8086:8086 --env-file supply.env ghcr.io/indexdata/crosslink-supply:main
+```
+
+Keep environment files containing credentials out of source control.
+
+Install the chart, with bucket credentials provided through an existing Kubernetes Secret:
+
+```bash
+helm install crosslink-supply oci://ghcr.io/indexdata/charts/crosslink-supply --devel \
+  --set envSecrets.MOD_DMS_BUCKET.name=supply-config \
+  --set envSecrets.MOD_DMS_BUCKET.key=bucket
+```
+
+The `bucket` secret key must contain the five comma-delimited components documented above. Configure other environment variables through `env`, `envSecrets`, or `envConfigMaps`. The chart defaults to a LoadBalancer service on port 80, forwarding to container port 8086. Its readiness and liveness probes use `/healthz`. Private registries can use `imagePullSecrets`.
+
+Okapi registration hooks are enabled by default, using module ID `crosslink-supply-<version>` and module URL `http://crosslink-supply:80`. Set `okapi-hooks.moduleUrl` to the actual Service URL when using a different release name, namespace, or fullname override. Disable registration with `--set okapi-hooks.enabled=false` when running without Okapi.
+
+## Migrating from mod-dms
+
+Supply replaces the standalone mod-dms service. Update image references to `ghcr.io/indexdata/crosslink-supply`, chart references to `oci://ghcr.io/indexdata/charts/crosslink-supply`, and Okapi module/discovery registrations to `crosslink-supply-<version>`. Replace the old tenant module registration with the new module registration as part of deployment; update Service URLs where needed.
+
+Existing clients continue to use `/dms/upload`, the `dms` interface and `dms.upload.*` permissions. All `MOD_DMS_*` environment variables, uploaded object keys, and S3 configuration remain compatible. No bucket or object migration is required.
+
+The scripts under `devscripts/` register the development version `99.99.99`; run them from that directory after configuring their tenant, Okapi URL, and discovery URL for the local environment.

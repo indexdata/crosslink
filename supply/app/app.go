@@ -40,7 +40,7 @@ func Start(ctx context.Context) {
 
 	handler := Handler(ctx)
 	addr := fmt.Sprintf("%s:%s", Host, Port)
-	log.Printf("Starting mod-dms at %s...", addr)
+	slog.Info("Starting Supply", "address", addr)
 	s := &http.Server{
 		Handler: handler,
 		Addr:    addr,
@@ -145,7 +145,11 @@ func handleUpload(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "Error receiving file", http.StatusBadRequest)
 		return
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			slog.Warn("Error closing uploaded file", "error", err)
+		}
+	}()
 
 	slog.Debug("Received file")
 
@@ -162,7 +166,7 @@ func handleUpload(w http.ResponseWriter, req *http.Request) {
 		h.Set("X-Content-Type-Options", "nosniff")
 
 		w.WriteHeader(http.StatusUnsupportedMediaType)
-		fmt.Fprintln(w, "Unsupported file type")
+		_, _ = fmt.Fprintln(w, "Unsupported file type")
 		// h.Set("Accept-Post", strings.Join(validTypes, ", "))
 		return
 	}

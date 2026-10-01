@@ -15,9 +15,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/indexdata/mod-dms/app"
+	"github.com/indexdata/crosslink/supply/app"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/testcontainers/testcontainers-go"
 	minioContainer "github.com/testcontainers/testcontainers-go/modules/minio"
 )
 
@@ -25,7 +26,14 @@ func TestMain(m *testing.M) {
 	app.InitLogger()
 	ctx := context.Background()
 
-	con, err := minioContainer.Run(ctx, "minio/minio:RELEASE.2025-03-12T18-04-18Z")
+	con, err := minioContainer.Run(ctx, "", testcontainers.CustomizeRequest(testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			FromDockerfile: testcontainers.FromDockerfile{
+				Context:        "minio",
+				BuildLogWriter: os.Stderr,
+			},
+		},
+	}))
 	if err != nil {
 		panic(fmt.Sprintf("failed to start minio: %s", err))
 	}
@@ -62,8 +70,12 @@ func TestMain(m *testing.M) {
 		log.Fatalln(err)
 	}
 
-	os.Setenv("MOD_DMS_BUCKET", fmt.Sprintf("%s,%s,%s,%s,%s", bucket, region, conStr, access, secret))
-	os.Setenv("MOD_DMS_INSECURE", "true")
+	if err := os.Setenv("MOD_DMS_BUCKET", fmt.Sprintf("%s,%s,%s,%s,%s", bucket, region, conStr, access, secret)); err != nil {
+		log.Fatal(err)
+	}
+	if err := os.Setenv("MOD_DMS_INSECURE", "true"); err != nil {
+		log.Fatal(err)
+	}
 
 	code := m.Run()
 	os.Exit(code)
@@ -74,19 +86,25 @@ func uploadFile(t *testing.T, contents string, tenant string, contentType string
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tempFile.Name())
+	defer func() {
+		if err := os.Remove(tempFile.Name()); err != nil {
+			t.Error(err)
+		}
+	}()
 	_, err = tempFile.Write([]byte(contents))
 	if err != nil {
 		t.Fatal(err)
 	}
-	tempFile.Close()
+	if err := tempFile.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	// buffer to hold multipart
 	var b bytes.Buffer
 	writer := multipart.NewWriter(&b)
 
 	h := make(textproto.MIMEHeader)
-	// mod-dms expects the uploaded file in the "file" field
+	// Supply expects the uploaded file in the "file" field
 	h.Set("Content-Disposition",
 		fmt.Sprintf(`form-data; name="file"; filename="%s"`, tempFile.Name()))
 	h.Set("Content-Type", contentType)
@@ -103,7 +121,9 @@ func uploadFile(t *testing.T, contents string, tenant string, contentType string
 	if err != nil {
 		t.Fatal(err)
 	}
-	writer.Close()
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	req := httptest.NewRequest("POST", "/dms/upload", &b)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
@@ -229,7 +249,7 @@ func TestDeleteErr(t *testing.T) {
 func TestRestrictContentType(t *testing.T) {
 	content := "String for testing"
 	validTypeString := "image/png,application/pdf"
-	os.Setenv("MOD_DMS_TYPES", validTypeString)
+	t.Setenv("MOD_DMS_TYPES", validTypeString)
 
 	res := uploadFile(t, content, "", "application/pdf")
 	if status := res.Code; status != http.StatusOK {
