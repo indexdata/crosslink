@@ -1,0 +1,68 @@
+# This workflow will build a golang project
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
+
+name: build-test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  release:
+    types: [published]
+
+env:
+  GO_VERSION: stable
+  GOLANGCI_LINT_VERSION: v1.64
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Lint module
+      uses: golangci/golangci-lint-action@v6
+      with:
+        version: ${{ env.GOLANGCI_LINT_VERSION }}
+
+    - name: Build
+      run: make all
+
+    - name: Test
+      run: make check
+
+    - name: Check test coverage
+      uses: vladopajic/go-test-coverage@v2
+      continue-on-error: true
+      with:
+        config: .testcoverage.yaml
+        profile: coverage.out
+
+    - name: Check vulnerabilities'
+      uses: golang/govulncheck-action@v1
+      with:
+        go-version-input: ${{ env.GO_VERSION }}
+        repo-checkout: false
+        go-package: ./...
+
+  build-all:
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    name: Check all builds succeeded
+    needs: [build]
+    steps:
+      - run: |
+          result="${{ needs.build.result }}"
+          if [[ $result == "success" || $result == "skipped" ]]; then
+            exit 0
+          else
+            exit 1
+          fi
