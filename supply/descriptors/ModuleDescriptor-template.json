@@ -1,6 +1,6 @@
 {
-  "id" : "mod-dms-@version@",
-  "name" : "document management system",
+  "id" : "crosslink-supply-@version@",
+  "name" : "CrossLink Supply",
   "provides" : [ {
     "id" : "dms",
     "version" : "0.0",

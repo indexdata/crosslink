@@ -81,6 +81,24 @@ jobs:
             os: linux
             arch: arm64
             runner: ubuntu-24.04-arm
+          - module: supply
+            dockerfile: ./supply/Dockerfile
+            image: ghcr.io/${{ github.repository }}-supply
+            title: CrossLink Supply
+            description: Document storage service for CrossLink
+            licenses: AGPL-3.0-only
+            os: linux
+            arch: amd64
+            runner: ubuntu-24.04
+          - module: supply
+            dockerfile: ./supply/Dockerfile
+            image: ghcr.io/${{ github.repository }}-supply
+            title: CrossLink Supply
+            description: Document storage service for CrossLink
+            licenses: AGPL-3.0-only
+            os: linux
+            arch: arm64
+            runner: ubuntu-24.04-arm
     permissions:
       contents: read
       packages: write
@@ -196,6 +214,10 @@ jobs:
           - module: illmock
             image: ghcr.io/${{ github.repository }}-illmock
             description: ISO18626 and SRU mocking service for CrossLink
+            licenses: AGPL-3.0-only
+          - module: supply
+            image: ghcr.io/${{ github.repository }}-supply
+            description: Document storage service for CrossLink
             licenses: AGPL-3.0-only
     permissions:
       contents: read

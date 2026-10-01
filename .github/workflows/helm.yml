@@ -37,6 +37,10 @@ jobs:
             chart_base_version: "0.1.0-main.${{ github.run_number }}"
             chart_path: ./illmock/chart
             md_path: ./illmock/descriptors/ModuleDescriptor-template.json
+          - chart_name: crosslink-supply
+            chart_base_version: "0.1.0-main.${{ github.run_number }}"
+            chart_path: ./supply/chart
+            md_path: ./supply/descriptors/ModuleDescriptor-template.json
     steps:
       - uses: actions/checkout@v7
         with:
@@ -62,17 +66,20 @@ jobs:
             d
           }' ${{ matrix.chart_path }}/values.yaml
 
-      - name: helm lint
-        run: |
-            helm lint ${{ matrix.chart_path }}
-
       - name: helm login
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USERNAME: ${{ github.actor }}
         run: |
-          echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ghcr.io -u $ --password-stdin
+          printf '%s' "$GHCR_TOKEN" | helm registry login ghcr.io -u "$GHCR_USERNAME" --password-stdin
 
       - name: helm dependency
         run: |
           helm dependency build ${{ matrix.chart_path }}
+
+      - name: helm lint
+        run: |
+            helm lint ${{ matrix.chart_path }}
 
       - name: helm package
         run: |
