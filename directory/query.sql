@@ -20,7 +20,7 @@ SELECT e.* FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = @aut
 SELECT * FROM symbols WHERE authority = @authority AND symbol = @symbol LIMIT 1 FOR UPDATE;
 
 -- name: FirstSymbolByOwner :one
-SELECT * FROM symbols WHERE owner = @owner ORDER BY authority, symbol LIMIT 1;
+SELECT * FROM symbols WHERE owner = @owner AND position(':' in authority) = 0 ORDER BY authority, symbol LIMIT 1;
 
 -- name: GetConsortialEntry :one
 SELECT * FROM entries WHERE type = 'Consortium' LIMIT 1;

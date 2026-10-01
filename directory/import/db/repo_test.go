@@ -257,6 +257,22 @@ func TestImportEntryRejectsLenderWithoutSymbol(t *testing.T) {
 	assertEntryDoesNotExist(t, requester.Key)
 }
 
+func TestImportEntryRejectsLenderWithoutSerializableSymbol(t *testing.T) {
+	resetImportDatabase(t)
+	repo := importdb.New(testPool)
+	lender := minimalEntryAggregate("LENDER", "Institution")
+	lender.Data.Symbols = []model.SymbolRef{{Authority: "A:B", Symbol: "C"}}
+	_, err := repo.ImportEntry(context.Background(), lender, model.ConflictPolicyFail)
+	require.NoError(t, err)
+
+	requester := minimalEntryAggregate("REQUESTER", "Institution")
+	requester.Data.ILLConfig = &model.ILLConfig{LendersOfLastResort: []uuid.UUID{lender.Key}}
+	_, err = repo.ImportEntry(context.Background(), requester, model.ConflictPolicyFail)
+
+	require.ErrorContains(t, err, "lender of last resort "+lender.Key.String()+" has no symbol")
+	assertEntryDoesNotExist(t, requester.Key)
+}
+
 func TestConcurrentImportEntrySkipHonorsConflictPolicyForMissingKey(t *testing.T) {
 	resetImportDatabase(t)
 	entryID := uuid.New()

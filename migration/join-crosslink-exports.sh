@@ -56,6 +56,9 @@ join_exports() {
 
     sort -n -k1,1 "$list_file" >"$sorted_list_file"
 
+    : >"$output"
+    chmod 600 "$output"
+
     if [ "$prefix" = "$DIRECTORY_PREFIX" ]; then
         all_records="$TEMP_DIR/$prefix.all.ndjson"
         entry_records="$TEMP_DIR/$prefix.entries.ndjson"
@@ -102,7 +105,6 @@ join_exports() {
                 )))[]
             ' >"$output"
     else
-        : >"$output"
         while IFS='	' read -r _ file; do
             cat "$file" >>"$output"
         done <"$sorted_list_file"
