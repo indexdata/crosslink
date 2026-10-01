@@ -72,8 +72,11 @@ LMS, catalog, ILL, and holdings configuration are attached only to that
 selected local entry when their respective configuration data is present.
 
 The `include_consortium` psql parameter controls whether the consortium entry
-is emitted and defaults to `true`. When set to `false`, the owner's parent
-consortium reference is omitted from the remaining entry records.
+is emitted and defaults to `true`. When set to `false`, the consortium entry
+is omitted, but the owner's parent reference is rewritten to the canonical
+consortium UUID supplied through `consortium=<UUID>`. This preserves the
+reference required for later shards to attach their entries to the consortium
+imported from the first shard.
 
 The `include_tiers_network` psql parameter controls whether generated tiers
 and the network are emitted and defaults to `true`. For multi-schema exports,

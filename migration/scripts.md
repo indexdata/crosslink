@@ -120,7 +120,10 @@ CONFLICT_POLICY=fail \
 ./migration/import-crosslink-directory.sh
 ```
 
-The request includes the `directory.consortium.all` permission header.
+The request includes the `directory.consortium.all` permission header. The
+script prints the API response and exits nonzero if any of
+`.entries.failed`, `.tiers.failed`, or `.networks.failed` is nonzero. Invalid
+JSON responses also cause a failure.
 
 ## `import-crosslink-patron-requests.sh`
 
@@ -142,6 +145,10 @@ PATRON_REQUEST_FILE=patron-requests.ndjson \
 CONFLICT_POLICY=fail \
 ./migration/import-crosslink-patron-requests.sh
 ```
+
+The script prints the API response and exits nonzero if any of
+`.patronRequests.failed`, `.batchActions.failed`, or `.templates.failed` is
+nonzero. Invalid JSON responses also cause a failure.
 
 All import scripts use `curl --fail-with-body`, so HTTP failures return a
 nonzero exit status while preserving the server response body in the output.
