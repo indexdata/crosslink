@@ -32,7 +32,7 @@ func TestMain(m *testing.M) {
 	ctx := context.Background()
 	pgc, err := testutil.RunPostgres(ctx)
 	test.Expect(err, "failed to start db container")
-	connStr, err := pgc.ConnectionString(ctx, "sslmode=disable")
+	connStr, err := testutil.PostgresConnectionString(ctx, pgc, "sslmode=disable")
 	test.Expect(err, "failed to get conn string")
 	connStr = connStr + dbutil.SearchPath("crosslink_broker")
 	pgIllRepo := new(PgIllRepo)

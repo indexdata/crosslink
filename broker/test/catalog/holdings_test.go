@@ -43,7 +43,7 @@ func TestMain(m *testing.M) {
 	pgContainer, err := testutil.RunPostgres(ctx)
 	test.Expect(err, "failed to start db container")
 
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+	connStr, err := testutil.PostgresConnectionString(ctx, pgContainer, "sslmode=disable")
 	test.Expect(err, "failed to get conn string")
 
 	gviSruResponse, err := os.ReadFile("gvi_sru_response.xml")

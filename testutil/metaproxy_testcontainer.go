@@ -22,8 +22,8 @@ type MetaproxyContainer struct {
 }
 
 func MetaproxyContainerStart(ctx context.Context) (*MetaproxyContainer, error) {
-	if err := IsolateTestcontainersSession(); err != nil {
-		return nil, fmt.Errorf("isolate Testcontainers session: %w", err)
+	if err := PrepareTestcontainers(ctx); err != nil {
+		return nil, fmt.Errorf("prepare Testcontainers: %w", err)
 	}
 	c := &MetaproxyContainer{}
 
@@ -60,8 +60,14 @@ func MetaproxyContainerStart(ctx context.Context) (*MetaproxyContainer, error) {
 		_ = c.container.Terminate(ctx)
 		return nil, err
 	}
+	client := &http.Client{Timeout: time.Second}
 	for i := 0; i < 10; i++ { // retry a few times to allow metaproxy to start up and load filters
-		res, err := http.Get("http://" + c.containerHost + ":" + c.mappedPort)
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+c.containerHost+":"+c.mappedPort, nil)
+		if err != nil {
+			_ = c.container.Terminate(ctx)
+			return nil, fmt.Errorf("create metaproxy readiness request: %w", err)
+		}
+		res, err := client.Do(request)
 		if err != nil {
 			time.Sleep(500 * time.Millisecond)
 			continue

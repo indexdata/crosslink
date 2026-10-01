@@ -69,11 +69,13 @@ func GetFreePort() (int, error) {
 }
 
 func WaitForServiceUp(port int) {
+	client := &http.Client{Timeout: time.Second}
 	if !WaitForPredicateToBeTrue(func() bool {
-		resp, err := http.Get("http://localhost:" + strconv.Itoa(port) + "/healthz")
+		resp, err := client.Get("http://localhost:" + strconv.Itoa(port) + "/healthz")
 		if err != nil {
 			return false
 		}
+		defer resp.Body.Close()
 		return resp.StatusCode == http.StatusOK
 	}) {
 		panic("failed to start broker")
