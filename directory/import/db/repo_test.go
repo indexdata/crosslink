@@ -15,6 +15,7 @@ import (
 	"github.com/indexdata/crosslink/directory/db"
 	importdb "github.com/indexdata/crosslink/directory/import/db"
 	"github.com/indexdata/crosslink/directory/import/model"
+	"github.com/indexdata/crosslink/testutil"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -46,6 +47,9 @@ func (t lockUnavailableTracer) TraceQueryEnd(_ context.Context, _ *pgx.Conn, dat
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
+	if err := testutil.PrepareTestcontainers(ctx); err != nil {
+		panic(fmt.Sprintf("prepare Testcontainers: %v", err))
+	}
 	container, err := postgres.Run(ctx, "postgres",
 		postgres.WithDatabase("directory_import_test"),
 		postgres.WithUsername("directory"),
@@ -55,7 +59,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(fmt.Sprintf("start postgres: %v", err))
 	}
-	connectionString, err := container.ConnectionString(ctx, "sslmode=disable")
+	connectionString, err := testutil.PostgresConnectionString(ctx, container, "sslmode=disable")
 	if err != nil {
 		panic(fmt.Sprintf("get postgres connection string: %v", err))
 	}

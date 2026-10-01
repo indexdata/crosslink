@@ -161,28 +161,38 @@ func eventsToCompareString(appCtx common.ExtendedContext, eventRepo events.Event
 }
 
 func EventsToCompareStringFunc(appCtx common.ExtendedContext, eventRepo events.EventRepo, t *testing.T, illId string, messageCount int, ignoreState bool, eventFmt func(events.Event) string) string {
+	t.Helper()
 	var eventList []events.Event
 	var err error
 
-	utils.WaitForPredicateToBeTrue(func() bool {
+	ready := utils.WaitForPredicateToBeTrue(func() bool {
 		eventList, _, err = eventRepo.GetIllTransactionEvents(appCtx, illId)
 		if err != nil {
-			t.Errorf("failed to find events for ill transaction id %v", illId)
+			return false
 		}
 		if len(eventList) != messageCount {
-			appCtx.Logger().Info("Check events count " + strconv.Itoa(len(eventList)))
 			return false
 		}
 		if !ignoreState {
 			for _, e := range eventList {
 				if e.EventStatus == events.EventStatusProcessing || e.EventStatus == events.EventStatusNew {
-					appCtx.Logger().Info("Check events processing state")
 					return false
 				}
 			}
 		}
 		return true
 	})
+	if !ready {
+		var outstanding []string
+		var observed []string
+		for _, event := range eventList {
+			observed = append(observed, fmt.Sprintf("%s: %s, %s = %s", event.ID, event.EventType, event.EventName, event.EventStatus))
+			if event.EventStatus == events.EventStatusNew || event.EventStatus == events.EventStatusProcessing {
+				outstanding = append(outstanding, fmt.Sprintf("%s: %s = %s", event.ID, event.EventName, event.EventStatus))
+			}
+		}
+		t.Fatalf("timed out waiting for transaction %s events: expected %d, got %d; outstanding: %v; last query error: %v; observed events:\n%s", illId, messageCount, len(eventList), outstanding, err, strings.Join(observed, "\n"))
+	}
 
 	value := ""
 	for _, e := range eventList {

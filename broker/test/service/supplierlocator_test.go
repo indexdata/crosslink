@@ -234,71 +234,64 @@ func TestLocateSuppliersOrder(t *testing.T) {
 
 func TestLocateSupplierUnreachable(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	illTrId := createIllTransaction(t, illRepo, "ERROR;LOANED")
-	illTr, err := illRepo.GetIllTransactionById(appCtx, illTrId)
-	if err != nil {
-		t.Error("failed to get ill transaction by id: " + err.Error())
+	suffix := uuid.NewString()
+	requesterSymbol := "ISIL:UNREACHABLE-REQ-" + suffix
+	requester := apptest.CreatePeer(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL)
+	var suppliers []ill_db.Peer
+	var supplierSymbols []string
+	for i, loans := range []int{1, 9} {
+		symbol := "ISIL:UNREACHABLE-SUP-" + string(rune('A'+i)) + "-" + suffix
+		peer := apptest.CreatePeer(t, illRepo, symbol, adapter.MOCK_PEER_URL)
+		// Keep fixture ratios distinct so the error supplier is always selected first.
+		peer.LoansCount = common.ToInt32(loans)
+		peer.BorrowsCount = 10
+		peer, err := illRepo.SavePeer(appCtx, ill_db.SavePeerParams(peer))
+		require.NoError(t, err)
+		suppliers = append(suppliers, peer)
+		supplierSymbols = append(supplierSymbols, symbol)
 	}
-	illTr.LastRequesterAction = pgtype.Text{
-		String: "Request",
-		Valid:  true,
-	}
-	illTr, err = illRepo.SaveIllTransaction(appCtx, ill_db.SaveIllTransactionParams(illTr))
-	if err != nil {
-		t.Error("failed to update ill transaction: " + err.Error())
-	}
-	var completedLocateSuppliers []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			completedLocateSuppliers = append(completedLocateSuppliers, event)
-		}
+	illTrId := uuid.NewString()
+	_, err := illRepo.SaveIllTransaction(appCtx, ill_db.SaveIllTransactionParams{
+		ID:                  illTrId,
+		Timestamp:           test.GetNow(),
+		RequesterID:         getPgText(requester.ID),
+		RequesterSymbol:     getPgText(requesterSymbol),
+		RequesterRequestID:  getPgText(uuid.NewString()),
+		LastRequesterAction: getPgText(string(ill_db.RequestAction)),
+		IllTransactionData: ill_db.IllTransactionData{
+			BibliographicInfo: iso18626.BibliographicInfo{
+				SupplierUniqueRecordId: "return-" + supplierSymbols[0] + "::ERROR;return-" + supplierSymbols[1] + "::LOANED",
+			},
+		},
 	})
-	var completedMessageSupplier []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			completedMessageSupplier = append(completedMessageSupplier, event)
-		}
-	})
-	var completedSelectSupplier []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			completedSelectSupplier = append(completedSelectSupplier, event)
-		}
-	})
-
+	require.NoError(t, err)
 	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
-	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
-	if err != nil {
-		t.Error("Failed to notify with error " + err.Error())
-	}
-	var event events.Event
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		if len(completedLocateSuppliers) == 1 {
-			event, _ = eventRepo.GetEvent(appCtx, completedLocateSuppliers[0].ID)
-			return event.EventStatus == events.EventStatusSuccess
+	require.NoError(t, eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers))
+
+	located := waitForTransactionEvent(t, illTrId, events.EventNameLocateSuppliers, events.EventStatusSuccess)
+	require.Equal(t, suppliers[0].ID, getSupplierId(0, located.ResultData.CustomData), "failing supplier must be first in the rota")
+	require.Equal(t, suppliers[1].ID, getSupplierId(1, located.ResultData.CustomData), "successful supplier must be second in the rota")
+
+	failed := waitForTransactionEvent(t, illTrId, events.EventNameMessageSupplier, events.EventStatusProblem)
+	succeeded := waitForTransactionEvent(t, illTrId, events.EventNameMessageSupplier, events.EventStatusSuccess)
+	require.NotNil(t, succeeded.ResultData.OutgoingMessage)
+	require.NotNil(t, succeeded.ResultData.OutgoingMessage.Request)
+	require.Equal(t, "LOANED", succeeded.ResultData.OutgoingMessage.Request.BibliographicInfo.SupplierUniqueRecordId)
+
+	transactionEvents, _, err := eventRepo.GetIllTransactionEvents(appCtx, illTrId)
+	require.NoError(t, err)
+	var selections []events.Event
+	for _, event := range transactionEvents {
+		if event.EventName == events.EventNameSelectSupplier {
+			selections = append(selections, event)
 		}
-		return false
-	}) {
-		t.Error("expected to have locate-suppliers event received and successfully processed")
 	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		if len(completedSelectSupplier) >= 2 {
-			event, _ = eventRepo.GetEvent(appCtx, completedSelectSupplier[0].ID)
-			return event.EventStatus == events.EventStatusSuccess
-		}
-		return false
-	}) {
-		t.Error("expected to have select-supplier supplier event twice and successful")
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		if len(completedMessageSupplier) > 0 {
-			event, _ = eventRepo.GetEvent(appCtx, completedMessageSupplier[0].ID)
-			return event.EventStatus == events.EventStatusProblem
-		}
-		return false
-	}) {
-		t.Error("expected to have message-supplier failed")
-	}
+	require.Len(t, selections, 2, "failure must trigger exactly one fallback selection")
+	require.Equal(t, events.EventStatusSuccess, selections[0].EventStatus)
+	require.Equal(t, suppliers[0].ID, selections[0].ResultData.CustomData["supplierId"])
+	require.Equal(t, events.EventStatusSuccess, selections[1].EventStatus)
+	require.Equal(t, suppliers[1].ID, selections[1].ResultData.CustomData["supplierId"])
+	require.Equal(t, failed.ID, selections[1].ParentID.String, "fallback must be caused by the failed supplier message")
 }
 
 func TestLocateSuppliersTaskAlreadyInProgress(t *testing.T) {

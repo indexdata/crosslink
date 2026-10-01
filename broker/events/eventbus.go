@@ -25,6 +25,9 @@ type EventBus interface {
 	Start(ctx common.ExtendedContext) error
 	CreateTask(id string, eventName EventName, data EventData, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error)
 	CreateNotice(id string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, target SignalTarget) (string, error)
+	// CreateNoticeWithID persists and publishes a notice using a fresh caller-assigned UUID.
+	// This lets callers register local response state before the notice can be consumed.
+	CreateNoticeWithID(eventID, classID string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, target SignalTarget) error
 	// CreateNoticeWithParent creates a notice linked to a parent event.
 	CreateNoticeWithParent(id string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error)
 	// BeginTask marks a task as processing and emits SignalTaskBegin to the selected target.
@@ -224,15 +227,23 @@ func (p *PostgresEventBus) CreateTask(classId string, eventName EventName, data 
 }
 
 func (p *PostgresEventBus) CreateNotice(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, target SignalTarget) (string, error) {
-	return p.createNotice(classId, eventName, data, status, eventDomain, nil, target)
+	return p.createNotice(uuid.NewString(), classId, eventName, data, status, eventDomain, nil, target)
+}
+
+// CreateNoticeWithID persists and publishes a notice using a fresh caller-assigned UUID.
+func (p *PostgresEventBus) CreateNoticeWithID(eventID, classID string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, target SignalTarget) error {
+	if _, err := uuid.Parse(eventID); err != nil {
+		return fmt.Errorf("invalid notice ID: %w", err)
+	}
+	_, err := p.createNotice(eventID, classID, eventName, data, status, eventDomain, nil, target)
+	return err
 }
 
 func (p *PostgresEventBus) CreateNoticeWithParent(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error) {
-	return p.createNotice(classId, eventName, data, status, eventDomain, parentId, target)
+	return p.createNotice(uuid.NewString(), classId, eventName, data, status, eventDomain, parentId, target)
 }
 
-func (p *PostgresEventBus) createNotice(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error) {
-	id := uuid.New().String()
+func (p *PostgresEventBus) createNotice(id, classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error) {
 	illTransactionID, patronRequestID := getIllTransactionAndPatronRequestId(classId, eventDomain)
 	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
 		event, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{

@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/app"
@@ -29,13 +31,13 @@ var illRepo ill_db.IllRepo
 var eventRepo events.EventRepo
 
 func TestMain(m *testing.M) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 	app.DB_PROVISION = true
 
 	pgContainer, err := testutil.RunPostgres(ctx)
 	test.Expect(err, "failed to start db container")
 
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+	connStr, err := testutil.PostgresConnectionString(ctx, pgContainer, "sslmode=disable")
 	test.Expect(err, "failed to get conn string")
 	app.ConnectionString = connStr
 
@@ -55,6 +57,8 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 
+	cancel()
+	dbPool.Close()
 	test.Expect(test.TerminatePGContainer(ctx, pgContainer), "failed to stop db container")
 	os.Exit(code)
 }
@@ -431,6 +435,62 @@ func TestCreateNotice(t *testing.T) {
 	if eventReceived[0].EventStatus != events.EventStatusSuccess {
 		t.Errorf("Event status does not match, expected %s, got %s", events.EventStatusSuccess, eventReceived[0].EventStatus)
 	}
+}
+
+func TestCreateNoticeWithID(t *testing.T) {
+	illID := apptest.GetIllTransId(t, illRepo)
+	noticeID := uuid.NewString()
+	received := make(chan events.Event, 1)
+	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, events.HandlerRoleObserver, func(_ common.ExtendedContext, event events.Event) {
+		if event.ID == noticeID {
+			received <- event
+		}
+	})
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	err := eventBus.CreateNoticeWithID(noticeID, illID, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventDomainIllTransaction, events.SignalObservers)
+	require.NoError(t, err)
+	select {
+	case event := <-received:
+		require.Equal(t, noticeID, event.ID)
+		require.Equal(t, illID, event.IllTransactionID)
+		require.Equal(t, events.EventStatusSuccess, event.EventStatus)
+	case <-time.After(2 * time.Second):
+		t.Fatal("notice with caller-assigned ID was not delivered")
+	}
+	saved, err := eventRepo.GetEvent(ctx, noticeID)
+	require.NoError(t, err)
+	require.Equal(t, string(events.SignalNoticeCreated), saved.LastSignal)
+	require.Error(t, eventBus.CreateNoticeWithID("", illID, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventDomainIllTransaction, events.SignalAll))
+}
+
+type failedNoticeNotificationRepo struct {
+	events.EventRepo
+	notifyErr error
+}
+
+func (r failedNoticeNotificationRepo) WithTxFunc(ctx common.ExtendedContext, fn func(events.EventRepo) error) error {
+	return r.EventRepo.WithTxFunc(ctx, func(tx events.EventRepo) error {
+		return fn(failedNoticeNotificationRepo{EventRepo: tx, notifyErr: r.notifyErr})
+	})
+}
+
+func (r failedNoticeNotificationRepo) Notify(common.ExtendedContext, string, events.Signal, events.SignalTarget) error {
+	return r.notifyErr
+}
+
+func TestCreateNoticeWithIDRollsBackOnNotificationFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	extCtx := common.CreateExtCtxWithArgs(ctx, nil)
+	wantErr := errors.New("notification failed")
+	bus := app.CreateEventBus(failedNoticeNotificationRepo{EventRepo: eventRepo, notifyErr: wantErr})
+	require.NoError(t, bus.Start(extCtx))
+	illID := apptest.GetIllTransId(t, illRepo)
+	noticeID := uuid.NewString()
+	err := bus.CreateNoticeWithID(noticeID, illID, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventDomainIllTransaction, events.SignalObservers)
+	require.ErrorIs(t, err, wantErr)
+	_, err = eventRepo.GetEvent(extCtx, noticeID)
+	require.ErrorIs(t, err, pgx.ErrNoRows, "failed publication must roll back the notice")
 }
 
 func TestBeginAndCompleteTask(t *testing.T) {
