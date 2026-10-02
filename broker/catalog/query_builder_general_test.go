@@ -5,6 +5,7 @@ import (
 
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewQueryBuilderGen(t *testing.T) {
@@ -91,4 +92,103 @@ func TestCqlEncode(t *testing.T) {
 	assert.Equal(t, "\"comp\\\"uter\"", cqlEncode("comp\"uter"))
 	assert.Equal(t, "\"comp\\\\uter\"", cqlEncode("comp\\uter"))
 	assert.Equal(t, "\"comp\\\\\\\"uter\"", cqlEncode("comp\\\"uter"))
+}
+
+func TestQueryBuilderYear(t *testing.T) {
+	for _, queryType := range []dirapi.QueryConfigType{dirapi.QueryConfigTypeCql, dirapi.QueryConfigTypePqf} {
+		t.Run(string(queryType), func(t *testing.T) {
+			template := "dc.date = {term}"
+			if queryType == dirapi.QueryConfigTypePqf {
+				template = "@attr 1=30 {term}"
+			}
+			qb, err := NewQueryBuilderGen(&dirapi.QueryConfig{Type: &queryType, Year: &template})
+			require.NoError(t, err)
+			params := LookupParams{Identifier: "id", Isbn: "isbn", Issn: "issn", Title: "title", Year: "2021"}
+			cql, pqf, err := qb.Build(params)
+			require.NoError(t, err)
+			if queryType == dirapi.QueryConfigTypeCql {
+				assert.Empty(t, pqf)
+				assert.Equal(t, []string{
+					`rec.id = id and dc.date = 2021`,
+					`isbn = isbn and dc.date = 2021`,
+					`issn = issn and dc.date = 2021`,
+					`title = title and dc.date = 2021`,
+				}, cql)
+			} else {
+				assert.Empty(t, cql)
+				assert.Equal(t, []string{
+					`@and @attr 1=12 "id" @attr 1=30 "2021"`,
+					`@and @attr 1=7 "isbn" @attr 1=30 "2021"`,
+					`@and @attr 1=8 "issn" @attr 1=30 "2021"`,
+					`@and @attr 1=4 "title" @attr 1=30 "2021"`,
+				}, pqf)
+			}
+			for _, year := range []string{"2021-05-01", "2012/13", "202", "20211", " 2021", "2021 ", "abcd", "２０２１", "20\"1"} {
+				params.Year = year
+				cql, pqf, err := qb.Build(params)
+				assert.ErrorContains(t, err, "YYYY", year)
+				assert.Nil(t, cql)
+				assert.Nil(t, pqf)
+			}
+			_, _, err = qb.Build(LookupParams{Year: "2021"})
+			assert.ErrorIs(t, err, ErrMissingLookupParameters)
+
+			params.Year = ""
+			withoutYear, err := NewQueryBuilderGen(&dirapi.QueryConfig{Type: &queryType})
+			require.NoError(t, err)
+			wantCql, wantPqf, err := withoutYear.Build(params)
+			require.NoError(t, err)
+			cql, pqf, err = qb.Build(params)
+			require.NoError(t, err)
+			assert.Equal(t, wantCql, cql)
+			assert.Equal(t, wantPqf, pqf)
+			for _, yearConfig := range []*string{nil, new(string)} {
+				qb, err := NewQueryBuilderGen(&dirapi.QueryConfig{Type: &queryType, Year: yearConfig})
+				require.NoError(t, err)
+				for _, year := range []string{"2021", "invalid date"} {
+					params.Year = year
+					cql, pqf, err = qb.Build(params)
+					require.NoError(t, err)
+					assert.Equal(t, wantCql, cql)
+					assert.Equal(t, wantPqf, pqf)
+				}
+			}
+		})
+	}
+}
+
+func TestQueryBuilderYearCompoundTemplates(t *testing.T) {
+	cqlType := dirapi.QueryConfigTypeCql
+	qb, err := NewQueryBuilderGen(&dirapi.QueryConfig{
+		Type:       &cqlType,
+		Identifier: NewString("rec.id = {term} or other.id = {term}"),
+		Year:       NewString("dc.date = {term} or local.year = {term}"),
+	})
+	require.NoError(t, err)
+	cql, _, err := qb.Build(LookupParams{Identifier: "123", Year: "2021"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{`rec.id = 123 or other.id = 123 and (dc.date = 2021 or local.year = 2021)`}, cql)
+
+	// Omitted type selects PQF and must still apply the configured year.
+	qb, err = NewQueryBuilderGen(&dirapi.QueryConfig{
+		Identifier: NewString("@or @attr 1=12 {term} @attr 1=4 {term}"),
+		Year:       NewString("@attr 1=30 {term}"),
+	})
+	require.NoError(t, err)
+	_, pqf, err := qb.Build(LookupParams{Identifier: "123", Year: "2021"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{`@and @or @attr 1=12 "123" @attr 1=4 "123" @attr 1=30 "2021"`}, pqf)
+}
+
+func TestQueryBuilderYearInvalidCql(t *testing.T) {
+	cqlType := dirapi.QueryConfigTypeCql
+	for _, config := range []dirapi.QueryConfig{
+		{Type: &cqlType, Identifier: NewString("rec.id = {term} and"), Year: NewString("dc.date = {term}")},
+		{Type: &cqlType, Year: NewString("dc.date =")},
+	} {
+		qb, err := NewQueryBuilderGen(&config)
+		require.NoError(t, err)
+		_, _, err = qb.Build(LookupParams{Identifier: "record", Year: "2021"})
+		assert.ErrorContains(t, err, "combining identifier lookup with year")
+	}
 }

@@ -79,6 +79,7 @@ type QueryConfig struct {
 	ISBN       *string `json:"isbn"`
 	ISSN       *string `json:"issn"`
 	Title      *string `json:"title"`
+	Year       *string `json:"year,omitempty"`
 }
 
 type HoldingsParserConfig struct {
