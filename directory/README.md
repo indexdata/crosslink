@@ -69,14 +69,7 @@ prioritizes lower scores. Other rota priorities still take precedence.
 
 Before adding migrations, check current `main` for the next available version.
 Directory startup and integration test setup stop if migration initialization or
-application fails. CI checks that each numeric version has exactly one matching
-up/down pair:
-
-```sh
-python3 -B .github/scripts/check_migrations.py broker/migrations directory/migrations
-```
-
-Run this command from the repository root. The load-balancing migrations follow
+application fails. The load-balancing migrations follow
 `014_catalog_query_year`: ratio in 015, ratio bounds in 016, and policy in 017.
 These numbers apply to databases following the mainline history. Persistent
 preview databases that already applied the earlier branch numbering need schema

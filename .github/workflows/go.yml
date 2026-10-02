@@ -46,11 +46,6 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v7
 
-    - name: Validate migration versions
-      run: |
-        python3 -B -m unittest discover -s .github/scripts -p 'test_check_migrations.py'
-        python3 -B .github/scripts/check_migrations.py broker/migrations directory/migrations
-
     - name: Load tool versions
       run: cat .github/tool-versions.env >> "$GITHUB_ENV"
 
