@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +14,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/indexdata/crosslink/supply/app"
 	"github.com/minio/minio-go/v7"
@@ -22,7 +23,9 @@ import (
 	minioContainer "github.com/testcontainers/testcontainers-go/modules/minio"
 )
 
-func TestMain(m *testing.M) {
+func TestMain(m *testing.M) { os.Exit(runTests(m)) }
+
+func runTests(m *testing.M) (code int) {
 	app.InitLogger()
 	ctx := context.Background()
 
@@ -35,13 +38,24 @@ func TestMain(m *testing.M) {
 		},
 	}))
 	if err != nil {
-		panic(fmt.Sprintf("failed to start minio: %s", err))
+		slog.Error("Start MinIO", "error", err)
+		return 1
 	}
-	defer func() { _ = con.Terminate(ctx) }()
+	defer func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		if err := con.Terminate(cleanupCtx); err != nil {
+			slog.Error("Terminate MinIO", "error", err)
+			if code == 0 {
+				code = 1
+			}
+		}
+	}()
 
 	conStr, err := con.ConnectionString(ctx)
 	if err != nil {
-		panic(fmt.Sprintf("failed to get minio connection string: %s", err))
+		slog.Error("Get MinIO connection string", "error", err)
+		return 1
 	}
 
 	bucket := "dmstest"
@@ -55,30 +69,34 @@ func TestMain(m *testing.M) {
 		Secure: false,
 	})
 	if err != nil {
-		log.Fatalln(err)
+		slog.Error("MinIO setup failed", "error", err)
+		return 1
 	}
 
 	err = minioClient.MakeBucket(ctx, bucket, minio.MakeBucketOptions{Region: region})
 	if err != nil {
-		log.Fatalln(err)
+		slog.Error("MinIO setup failed", "error", err)
+		return 1
 	}
 
 	// configure the bucket as sufficiently public that we can follow the URL we get back
 	policy := fmt.Sprintf(`{"Version": "2012-10-17","Statement": [{"Action": ["s3:GetObject"],"Effect": "Allow","Principal": {"AWS": ["*"]},"Resource": ["arn:aws:s3:::%s/*"],"Sid": ""}]}`, bucket)
 	err = minioClient.SetBucketPolicy(context.Background(), bucket, policy)
 	if err != nil {
-		log.Fatalln(err)
+		slog.Error("MinIO setup failed", "error", err)
+		return 1
 	}
 
 	if err := os.Setenv("MOD_DMS_BUCKET", fmt.Sprintf("%s,%s,%s,%s,%s", bucket, region, conStr, access, secret)); err != nil {
-		log.Fatal(err)
+		slog.Error("MinIO setup failed", "error", err)
+		return 1
 	}
 	if err := os.Setenv("MOD_DMS_INSECURE", "true"); err != nil {
-		log.Fatal(err)
+		slog.Error("MinIO setup failed", "error", err)
+		return 1
 	}
 
-	code := m.Run()
-	os.Exit(code)
+	return m.Run()
 }
 
 func uploadFile(t *testing.T, contents string, tenant string, contentType string) *httptest.ResponseRecorder {
@@ -140,13 +158,13 @@ func uploadFileAndParse(t *testing.T, contents string, tenant string, contentTyp
 	res := uploadFile(t, contents, tenant, contentType)
 
 	if status := res.Code; status != http.StatusOK {
-		t.Errorf("Upload handler returned non-OK status: %v", status)
+		t.Fatalf("Upload handler returned non-OK status: %v", status)
 	}
 
 	var data app.Uploaded
 	err := json.Unmarshal(res.Body.Bytes(), &data)
 	if err != nil {
-		t.Errorf("Error parsing response from POST to upload endpoint: %s", err)
+		t.Fatalf("Error parsing response from POST to upload endpoint: %s", err)
 	}
 
 	return data
@@ -158,15 +176,16 @@ func TestUpload(t *testing.T) {
 	contentType := "image/png"
 	uploadResponse := uploadFileAndParse(t, expected, tenant, contentType)
 
-	res, err := http.Get(uploadResponse.Url)
+	res, err := (&http.Client{Timeout: 10 * time.Second}).Get(uploadResponse.Url)
 	if err != nil {
-		t.Errorf("Error attempting to request returned link: %s", err)
+		t.Fatalf("Error attempting to request returned link: %s", err)
 	}
 
 	if !strings.HasPrefix(uploadResponse.Key, tenant+"/") {
 		t.Errorf("Key not prefixed with tenant: %s", uploadResponse.Key)
 	}
 
+	defer func() { _ = res.Body.Close() }()
 	if status := res.StatusCode; status != http.StatusOK {
 		t.Errorf("Accessing returned link returned non-OK status: %v", status)
 	}
@@ -199,11 +218,12 @@ func TestDelete(t *testing.T) {
 		t.Errorf("Delete handler returned non-OK status: %v", status)
 	}
 
-	res, err := http.Get(uploadResponse.Url)
+	res, err := (&http.Client{Timeout: 10 * time.Second}).Get(uploadResponse.Url)
 	if err != nil {
-		t.Errorf("Error attempting to request returned link: %s\n", err)
+		t.Fatalf("Error attempting to request returned link: %s\n", err)
 	}
 
+	defer func() { _ = res.Body.Close() }()
 	if status := res.StatusCode; status != http.StatusNotFound {
 		t.Errorf("Accessing link after delete returned non-404 status: %v", status)
 	}
@@ -241,8 +261,8 @@ func TestDeleteErr(t *testing.T) {
 	req = httptest.NewRequest("DELETE", "/dms/upload/sometenant/d8290e68-bfbb-3bc8-b621-5a9590aa29fd", nil)
 	handler.ServeHTTP(w, req)
 
-	if status := w.Code; status != http.StatusOK {
-		t.Errorf("Delete handler returned non-OK status attempting to delete (with tenant) validly named (but non-existing) object: %v", status)
+	if status := w.Code; status != http.StatusBadRequest {
+		t.Errorf("Delete handler should reject a tenant key without a tenant header: %v", status)
 	}
 }
 
@@ -253,7 +273,7 @@ func TestRestrictContentType(t *testing.T) {
 
 	res := uploadFile(t, content, "", "application/pdf")
 	if status := res.Code; status != http.StatusOK {
-		t.Errorf("Upload handler returned non-OK status for content type expected to be accepted: %v", status)
+		t.Fatalf("Upload handler returned non-OK status for content type expected to be accepted: %v", status)
 	}
 
 	res = uploadFile(t, content, "", "application/javascript")
@@ -268,5 +288,33 @@ func TestRestrictContentType(t *testing.T) {
 	handler.ServeHTTP(w, req)
 	if status := w.Code; status != http.StatusUnsupportedMediaType {
 		t.Errorf("Upload handler returned non-415 status for invalid request content type: %v", status)
+	}
+}
+
+func TestTenantDelete(t *testing.T) {
+	uploaded := uploadFileAndParse(t, "tenant document", "sometenant", "application/pdf")
+	handler := app.Handler(context.Background())
+	for _, tenant := range []string{"", "other", "sometenant", "sometenant"} {
+		req := httptest.NewRequest(http.MethodDelete, "/dms/upload/"+uploaded.Key, nil)
+		req.Header.Set("X-Okapi-Tenant", tenant)
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		want := http.StatusBadRequest
+		if tenant == "sometenant" {
+			want = http.StatusOK
+		}
+		if res.Code != want {
+			t.Fatalf("tenant %q: status %d, want %d", tenant, res.Code, want)
+		}
+		if tenant != "sometenant" {
+			download, err := (&http.Client{Timeout: 10 * time.Second}).Get(uploaded.Url)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = download.Body.Close()
+			if download.StatusCode != http.StatusOK {
+				t.Fatal("rejected deletion removed the object")
+			}
+		}
 	}
 }
