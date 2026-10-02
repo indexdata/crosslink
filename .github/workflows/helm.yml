@@ -66,6 +66,13 @@ jobs:
             d
           }' ${{ matrix.chart_path }}/values.yaml
 
+      - name: helm login
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USERNAME: ${{ github.actor }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" | helm registry login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+
       - name: helm dependency
         run: |
           helm dependency build ${{ matrix.chart_path }}
@@ -73,10 +80,6 @@ jobs:
       - name: helm lint
         run: |
             helm lint ${{ matrix.chart_path }}
-
-      - name: helm login
-        run: |
-          echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ghcr.io -u $ --password-stdin
 
       - name: helm package
         run: |

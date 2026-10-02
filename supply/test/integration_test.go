@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -316,5 +317,44 @@ func TestTenantDelete(t *testing.T) {
 				t.Fatal("rejected deletion removed the object")
 			}
 		}
+	}
+}
+
+func TestReservedTenantRoundTrip(t *testing.T) {
+	tenant := "dept?archive#100%+&%2F"
+	contents := "reserved tenant document"
+	contentType := "application/pdf"
+	uploaded := uploadFileAndParse(t, contents, tenant, contentType)
+	client := &http.Client{Timeout: 10 * time.Second}
+	res, err := client.Get(uploaded.Url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != http.StatusOK || res.Header.Get("Content-Type") != contentType {
+		t.Fatalf("download: status %d, content type %q", res.StatusCode, res.Header.Get("Content-Type"))
+	}
+	data, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != contents {
+		t.Fatalf("downloaded content differs")
+	}
+	target := url.URL{Path: "/dms/upload/" + uploaded.Key}
+	req := httptest.NewRequest(http.MethodDelete, target.String(), nil)
+	req.Header.Set("X-Okapi-Tenant", tenant)
+	result := httptest.NewRecorder()
+	app.Handler(context.Background()).ServeHTTP(result, req)
+	if result.Code != http.StatusOK {
+		t.Fatalf("delete: %d %s", result.Code, result.Body.String())
+	}
+	deleted, err := client.Get(uploaded.Url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = deleted.Body.Close() }()
+	if deleted.StatusCode != http.StatusNotFound {
+		t.Fatalf("deleted object: status %d", deleted.StatusCode)
 	}
 }

@@ -10,6 +10,8 @@ Supply is a simple webservice exposing two operations against an S3 bucket:
 
 Objects are named with a UUID and optionally prefixed with the contents of the `X-Okapi-Tenant` header. Without that header, deletion accepts only a bare UUID. With it, deletion requires exactly `<matching tenant>/<uuid>`. Tenants must be single path components without whitespace, control characters, slashes, or backslashes, and cannot be `.` or `..`.
 
+Use the returned URL directly. When constructing a DELETE URL, encode each object-key path component so reserved characters such as `?`, `#`, and `%` remain part of the key.
+
 Successful uploads return HTTP 200 with `Content-Type: application/json`; successful deletions return HTTP 200, including when the object is already absent. Uploads exceeding the total request limit return 413, malformed multipart requests or invalid keys/tenants return 400, unsupported content types return 415, and storage failures return 503 without an upload key or URL.
 
 ## Configuration
@@ -24,7 +26,7 @@ Configuration is through the following environment variables:
 
 - `LOG_LEVEL` (default `info`), sets log level to one of `debug, info, warn, error`
 
-- `MOD_DMS_BUCKET` is required and consists of five comma-delimited components: bucket,region,endpoint,access,secret
+- `MOD_DMS_BUCKET` is required and consists of exactly five comma-delimited components: bucket,region,endpoint,access,secret. Commas inside a component cannot be represented in this format; any other component count prevents startup
 
 - `MOD_DMS_TYPES` optionally provides a comma-delimited list of content-types to accept
 

@@ -182,8 +182,8 @@ func handleHealthz(w http.ResponseWriter, r *http.Request) {
 
 func Creds() (BucketCreds, error) {
 	splitEnv := strings.Split(os.Getenv("MOD_DMS_BUCKET"), ",")
-	if len(splitEnv) < 5 {
-		return BucketCreds{}, errors.New("environment not configured")
+	if len(splitEnv) != 5 {
+		return BucketCreds{}, errors.New("MOD_DMS_BUCKET must contain exactly five comma-delimited components")
 	}
 
 	return BucketCreds{
@@ -309,8 +309,11 @@ func handleUpload(w http.ResponseWriter, req *http.Request, limit int64) {
 
 	slog.DebugContext(req.Context(), "Uploaded file")
 
+	objectURL := *minioClient.EndpointURL()
+	objectURL.Path = "/" + bucket + "/" + filename
+	objectURL.RawPath = ""
 	response := Uploaded{
-		Url: minioClient.EndpointURL().String() + "/" + bucket + "/" + filename,
+		Url: objectURL.String(),
 		Key: filename,
 	}
 	w.Header().Set("Content-Type", "application/json")

@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -427,6 +428,81 @@ func TestTemporaryCleanupOnRejection(t *testing.T) {
 				t.Fatalf("status %d, want %d", res.Code, want)
 			}
 			assertEmptyDir(t, temp)
+		})
+	}
+}
+
+func TestCredsComponentCount(t *testing.T) {
+	for _, tc := range []struct {
+		name, value string
+		valid       bool
+	}{
+		{"missing", "", false},
+		{"four", "bucket,region,endpoint,access", false},
+		{"five", "bucket,region,endpoint,access,secret", true},
+		{"empty region", "bucket,,endpoint,access,secret", true},
+		{"six", "bucket,region,endpoint,access,secret,extra", false},
+		{"comma in secret", "bucket,region,endpoint,access,secret,with,commas", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("MOD_DMS_BUCKET", tc.value)
+			creds, err := Creds()
+			if !tc.valid {
+				if err == nil {
+					t.Fatal("accepted invalid component count")
+				}
+				if !strings.Contains(err.Error(), "exactly five") || strings.Contains(err.Error(), "secret") || strings.Contains(err.Error(), "access") {
+					t.Fatalf("unexpected configuration error: %v", err)
+				}
+				if creds != (BucketCreds{}) {
+					t.Fatal("returned partial credentials")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			fields := strings.Split(tc.value, ",")
+			if creds.Bucket != fields[0] || creds.Region != fields[1] || creds.Endpoint != fields[2] || creds.Access != fields[3] || creds.Secret != fields[4] {
+				t.Fatalf("fields were not preserved")
+			}
+		})
+	}
+}
+
+func TestUploadedURLReservedCharacters(t *testing.T) {
+	storageServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("ETag", `"abc"`)
+	})
+	for _, tenant := range []string{"", "tenant", "dept?archive", "dept#archive", "dept%archive", "dept+archive", "dept&archive", "dept%2Farchive", "dept?archive#100%+&"} {
+		t.Run(tenant, func(t *testing.T) {
+			body, ct := multipartBody(t, 1, false)
+			req := httptest.NewRequest(http.MethodPost, "/dms/upload", bytes.NewReader(body))
+			req.Header.Set("Content-Type", ct)
+			req.Header.Set("X-Okapi-Tenant", tenant)
+			res := httptest.NewRecorder()
+			Handler(context.Background()).ServeHTTP(res, req)
+			if res.Code != http.StatusOK {
+				t.Fatalf("upload: %d %s", res.Code, res.Body.String())
+			}
+			var uploaded Uploaded
+			if err := json.Unmarshal(res.Body.Bytes(), &uploaded); err != nil {
+				t.Fatal(err)
+			}
+			parsed, err := url.Parse(uploaded.Url)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if parsed.Path != "/documents/"+uploaded.Key || parsed.RawQuery != "" || parsed.Fragment != "" {
+				t.Fatalf("URL changed key semantics: %s", uploaded.Url)
+			}
+			if !validKey(uploaded.Key, tenant) {
+				t.Fatalf("unexpected key %q", uploaded.Key)
+			}
+			if tenant != "" && !strings.HasPrefix(uploaded.Key, tenant+"/") {
+				t.Fatalf("tenant changed: %q", uploaded.Key)
+			}
 		})
 	}
 }
