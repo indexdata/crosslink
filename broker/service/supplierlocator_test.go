@@ -472,7 +472,7 @@ func TestLocateSuppliersLastResortRequester(t *testing.T) {
 				},
 			},
 		},
-		requester: ill_db.Peer{ID: "requester-1", CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{LendersOfLastResort: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUP2"}, {Symbol: "SUP3"}}}}},
+		requester: ill_db.Peer{ID: "requester-1", CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{LendersOfLastResort: &[]dirapi.SymbolProperties{{Authority: "ISIL", Symbol: "SUP2"}, {Symbol: "SUP3"}}}}},
 		peers: []ill_db.Peer{
 			{ID: "peer-1", BorrowsCount: 1},
 			{ID: "peer-2", BorrowsCount: 1},
@@ -518,7 +518,7 @@ func TestLocateSuppliersLastResortLookupEmpty(t *testing.T) {
 				},
 			},
 		},
-		requester: ill_db.Peer{ID: "requester-1", CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{LendersOfLastResort: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUP2"}, {Symbol: "SUP3"}}}}},
+		requester: ill_db.Peer{ID: "requester-1", CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{LendersOfLastResort: &[]dirapi.SymbolProperties{{Authority: "ISIL", Symbol: "SUP2"}, {Symbol: "SUP3"}}}}},
 		peers: []ill_db.Peer{
 			{ID: "peer-2", BorrowsCount: 1},
 			{ID: "peer-3", BorrowsCount: 1},
@@ -568,7 +568,7 @@ func TestLocateSuppliersLastResortConsortium(t *testing.T) {
 			"peer-2": {{SymbolValue: "ISIL:SUP2", PeerID: "peer-2"}},
 		},
 		consortiumPeers: []ill_db.Peer{
-			{ID: "consortium-peer-1", CustomData: dirapi.Entry{Symbols: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUPC"}}, IllConfig: &dirapi.IllConfig{LendersOfLastResort: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUP2"}}}}},
+			{ID: "consortium-peer-1", CustomData: dirapi.Entry{Symbols: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUPC"}}, IllConfig: &dirapi.IllConfig{LendersOfLastResort: &[]dirapi.SymbolProperties{{Authority: "ISIL", Symbol: "SUP2"}}}}},
 		},
 	}
 

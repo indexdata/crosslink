@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -15,7 +16,7 @@ func TestOpenAPI31PreservesNullableSchemas(t *testing.T) {
 
 		require.NoError(t, spec.Components.Schemas["ZoomConfigPatch"].Value.Properties["options"].Value.AdditionalProperties.Schema.Value.VisitJSON(nil))
 		require.NoError(t, spec.Components.Schemas["CatalogConfigPatch"].Value.Properties["profile"].Value.VisitJSON(nil))
-		require.Contains(t, spec.Components.Schemas["CreateClosure"].Value.Required, "entry")
+		require.True(t, composedRequired(spec.Components.Schemas["CreateClosure"].Value, "entry"))
 		require.NotContains(t, spec.Components.Schemas["AddEntry"].Value.Properties, "closures")
 	}
 }
@@ -47,13 +48,13 @@ func TestImportOpenAPIContract(t *testing.T) {
 
 	for _, name := range []string{"ImportEntryRecord", "ImportTierRecord", "ImportNetworkRecord"} {
 		schema := spec.Components.Schemas[name].Value
-		require.False(t, schema.AdditionalProperties.Has != nil && *schema.AdditionalProperties.Has, name)
-		require.ElementsMatch(t, []string{"type", "key", "data"}, schema.Required, name)
+		require.True(t, schemaHasAdditionalPropertiesFalse(schema), name)
+		require.ElementsMatch(t, []string{"type", "key", "data"}, composedRequiredNames(schema), name)
 	}
 	entryData := spec.Components.Schemas["ImportEntryData"].Value
-	require.Contains(t, entryData.Required, "parent")
-	require.Contains(t, entryData.Required, "lmsConfig")
-	require.Contains(t, entryData.Required, "holdingsPolicy")
+	require.True(t, composedRequired(entryData, "parent"))
+	require.True(t, composedRequired(entryData, "lmsConfig"))
+	require.True(t, composedRequired(entryData, "holdingsPolicy"))
 }
 
 func TestImportHostSettingsMatchEntryContract(t *testing.T) {
@@ -87,10 +88,10 @@ func TestImportContractReusesDirectoryCreationObjectsAndEnums(t *testing.T) {
 		for _, redundantAlias := range []string{"ImportEntryKey", "ImportSymbolRef", "ImportServiceEndpoint", "ImportAddressComponent", "ImportClosure"} {
 			require.NotContains(t, contract.Components.Schemas, redundantAlias)
 		}
-		requirePropertySchemaRef(t, contract, "ImportEntryRecord", "key", "SymbolProperties")
-		requireArrayItemsSchemaRef(t, contract, "ImportEntryData", "symbols", "SymbolProperties")
-		requireArrayItemsSchemaRef(t, contract, "ImportEntryData", "endpoints", "ServiceEndpointProperties")
-		requireArrayItemsSchemaRef(t, contract, "ImportEntryData", "closures", "ClosureProperties")
+		requirePropertySchemaRef(t, contract, "ImportEntryRecord", "key", "ImportSymbolProperties")
+		requireArrayItemsSchemaRef(t, contract, "ImportEntryData", "symbols", "ImportSymbolProperties")
+		requireArrayItemsSchemaRef(t, contract, "ImportEntryData", "endpoints", "ImportServiceEndpointProperties")
+		requireArrayItemsSchemaRef(t, contract, "ImportEntryData", "closures", "ImportClosureProperties")
 		requireArrayItemsSchemaRef(t, contract, "ImportAddress", "addressComponents", "AddressComponent")
 		requirePropertySchemaRef(t, contract, "Entry", "type", "EntryType")
 		requirePropertySchemaRef(t, contract, "ImportEntryData", "type", "EntryType")
@@ -116,6 +117,33 @@ func TestImportContractReusesDirectoryCreationObjectsAndEnums(t *testing.T) {
 	}
 }
 
+func TestCreationAndResponseSchemasShareProperties(t *testing.T) {
+	for _, contract := range loadImportContracts(t) {
+		tests := []struct {
+			name     string
+			base     string
+			creation string
+			response string
+		}{
+			{"entry", "EntryProperties", "AddEntry", "Entry"},
+			{"symbol", "SymbolProperties", "AddEntrySymbol", "Symbol"},
+			{"service endpoint", "ServiceEndpointProperties", "AddEntryServiceEndpoint", "ServiceEndpoint"},
+			{"closure", "ClosureProperties", "CreateClosure", "Closure"},
+			{"network", "NetworkProperties", "AddNetwork", "Network"},
+			{"tier", "TierProperties", "AddTier", "Tier"},
+		}
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				for _, schemaName := range []string{test.creation, test.response} {
+					schema := contract.Components.Schemas[schemaName]
+					require.NotNil(t, schema, schemaName)
+					require.True(t, hasSchemaRef(schema, test.base), "%s must compose %s", schemaName, test.base)
+				}
+			})
+		}
+	}
+}
+
 func TestSharedCreationObjectsPreserveImportValidation(t *testing.T) {
 	contracts := loadImportContracts(t)
 	tests := []struct {
@@ -125,28 +153,38 @@ func TestSharedCreationObjectsPreserveImportValidation(t *testing.T) {
 	}{
 		{
 			name:       "symbol must be an object",
-			schemaName: "SymbolProperties",
+			schemaName: "AddEntrySymbol",
 			value:      "ISIL:ABC",
 		},
 		{
 			name:       "symbol authority must not be empty",
-			schemaName: "SymbolProperties",
+			schemaName: "AddEntrySymbol",
 			value:      map[string]any{"authority": "", "symbol": "ABC"},
 		},
 		{
 			name:       "symbol must not be empty",
-			schemaName: "SymbolProperties",
+			schemaName: "AddEntrySymbol",
 			value:      map[string]any{"authority": "ISIL", "symbol": ""},
 		},
 		{
 			name:       "symbol rejects unknown fields",
-			schemaName: "SymbolProperties",
+			schemaName: "AddEntrySymbol",
 			value:      map[string]any{"authority": "ISIL", "symbol": "ABC", "unknown": true},
 		},
 		{
+			name:       "import symbol rejects response id",
+			schemaName: "ImportSymbolProperties",
+			value:      map[string]any{"authority": "ISIL", "symbol": "ABC", "id": "40b853dd-d1de-4d30-838b-f16c938f80c0"},
+		},
+		{
 			name:       "service endpoint rejects unknown fields",
-			schemaName: "ServiceEndpointProperties",
+			schemaName: "AddEntryServiceEndpoint",
 			value:      map[string]any{"name": "ISO", "type": "ISO18626", "address": "https://example.test", "unknown": true},
+		},
+		{
+			name:       "import service endpoint rejects response id",
+			schemaName: "ImportServiceEndpointProperties",
+			value:      map[string]any{"name": "ISO", "type": "ISO18626", "address": "https://example.test", "id": "40b853dd-d1de-4d30-838b-f16c938f80c0"},
 		},
 		{
 			name:       "address component rejects unknown fields",
@@ -155,8 +193,13 @@ func TestSharedCreationObjectsPreserveImportValidation(t *testing.T) {
 		},
 		{
 			name:       "closure rejects unknown fields",
-			schemaName: "ClosureProperties",
-			value:      map[string]any{"startDate": "2026-01-01", "endDate": "2026-01-02", "reason": "Holiday", "unknown": true},
+			schemaName: "CreateClosure",
+			value:      map[string]any{"entry": "d6ed641d-4f2e-43f2-b78d-1e24818c884b", "startDate": "2026-01-01", "endDate": "2026-01-02", "reason": "Holiday", "unknown": true},
+		},
+		{
+			name:       "import closure rejects response fields",
+			schemaName: "ImportClosureProperties",
+			value:      map[string]any{"startDate": "2026-01-01", "endDate": "2026-01-02", "reason": "Holiday", "id": "40b853dd-d1de-4d30-838b-f16c938f80c0", "entry": "d6ed641d-4f2e-43f2-b78d-1e24818c884b"},
 		},
 	}
 
@@ -221,7 +264,9 @@ func TestStrictSharedCreationObjectsDoNotRejectComposedModels(t *testing.T) {
 
 func requireArrayItemsSchemaRef(t *testing.T, contract *openapi3.T, schemaName, propertyName, referencedSchemaName string) {
 	t.Helper()
-	items := contract.Components.Schemas[schemaName].Value.Properties[propertyName].Value.Items
+	property := composedProperty(contract.Components.Schemas[schemaName].Value, propertyName)
+	require.NotNil(t, property, "%s.%s", schemaName, propertyName)
+	items := property.Value.Items
 	require.Equal(t, "#/components/schemas/"+referencedSchemaName, items.Ref)
 }
 
@@ -236,7 +281,8 @@ func loadImportContracts(t *testing.T) []*openapi3.T {
 
 func requirePropertySchemaRef(t *testing.T, contract *openapi3.T, schemaName, propertyName, referencedSchemaName string) {
 	t.Helper()
-	property := contract.Components.Schemas[schemaName].Value.Properties[propertyName]
+	property := composedProperty(contract.Components.Schemas[schemaName].Value, propertyName)
+	require.NotNil(t, property, "%s.%s", schemaName, propertyName)
 	want := "#/components/schemas/" + referencedSchemaName
 	if property.Ref == want {
 		return
@@ -249,4 +295,60 @@ func requirePropertySchemaRef(t *testing.T, contract *openapi3.T, schemaName, pr
 		}
 	}
 	require.Equal(t, want, property.Ref)
+}
+
+func composedProperty(schema *openapi3.Schema, propertyName string) *openapi3.SchemaRef {
+	if property, ok := schema.Properties[propertyName]; ok {
+		return property
+	}
+	for _, member := range schema.AllOf {
+		if property := composedProperty(member.Value, propertyName); property != nil {
+			return property
+		}
+	}
+	return nil
+}
+
+func composedRequired(schema *openapi3.Schema, propertyName string) bool {
+	if slices.Contains(schema.Required, propertyName) {
+		return true
+	}
+	for _, member := range schema.AllOf {
+		if composedRequired(member.Value, propertyName) {
+			return true
+		}
+	}
+	return false
+}
+
+func composedRequiredNames(schema *openapi3.Schema) []string {
+	result := append([]string(nil), schema.Required...)
+	for _, member := range schema.AllOf {
+		result = append(result, composedRequiredNames(member.Value)...)
+	}
+	return result
+}
+
+func schemaHasAdditionalPropertiesFalse(schema *openapi3.Schema) bool {
+	if schema.AdditionalProperties.Has != nil && *schema.AdditionalProperties.Has == false {
+		return true
+	}
+	for _, member := range schema.AllOf {
+		if schemaHasAdditionalPropertiesFalse(member.Value) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasSchemaRef(schema *openapi3.SchemaRef, schemaName string) bool {
+	if schema.Ref == "#/components/schemas/"+schemaName {
+		return true
+	}
+	for _, member := range schema.Value.AllOf {
+		if hasSchemaRef(member, schemaName) {
+			return true
+		}
+	}
+	return false
 }
