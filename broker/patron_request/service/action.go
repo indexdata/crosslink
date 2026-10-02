@@ -360,7 +360,7 @@ func (a *PatronRequestActionService) checkDuplicateBorrowingRequest(ctx common.E
 		return failure("patron request creation time missing for duplicate check", errors.New("invalid patron request creation time"))
 	}
 
-	lookupParams := catalog.LookupParamsFromBibliographicInfo(pr.IllRequest.BibliographicInfo, pr.IllRequest.ServiceInfo)
+	lookupParams := catalog.LookupParamsFromBibliographicInfo(pr.IllRequest.BibliographicInfo, pr.IllRequest.ServiceInfo, pr.IllRequest.PublicationInfo)
 	duplicateCheck.LookupParams = &lookupParams
 	if lookupParams.ServiceType == "" {
 		return success()
@@ -407,7 +407,7 @@ func (a *PatronRequestActionService) checkDuplicateBorrowingRequest(ctx common.E
 
 	duplicateCheck.Duplicate = true
 	duplicateCheck.MatchedPatronRequestId = &matches[0].ID
-	matchedValues := catalog.LookupParamsFromBibliographicInfo(matches[0].IllRequest.BibliographicInfo, matches[0].IllRequest.ServiceInfo)
+	matchedValues := catalog.LookupParamsFromBibliographicInfo(matches[0].IllRequest.BibliographicInfo, matches[0].IllRequest.ServiceInfo, matches[0].IllRequest.PublicationInfo)
 	duplicateCheck.MatchedValues = &matchedValues
 	result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeReview}
 	return success()
@@ -1017,7 +1017,7 @@ func (a *PatronRequestActionService) metadataUpdateWithDetails(ctx common.Extend
 	if mode == dirapi.None {
 		return nil, nil
 	}
-	lookupParams := catalog.LookupParamsFromBibliographicInfo(illRequest.BibliographicInfo, illRequest.ServiceInfo)
+	lookupParams := catalog.LookupParamsFromBibliographicInfo(illRequest.BibliographicInfo, illRequest.ServiceInfo, illRequest.PublicationInfo)
 	detail := &actionDecisionDetailMetadataUpdate{
 		Type:          "metadata-update",
 		Mode:          string(mode),
@@ -1759,6 +1759,25 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "failed to parse cost", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		if !pr.SupplierSymbol.Valid || pr.SupplierSymbol.String == "" {
+			status, result := logActionErrorAndReturnResult(ctx, "missing supplier symbol for minimum cost check", nil)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		peers, _, err := a.illRepo.GetCachedPeersBySymbols(ctx, []string{pr.SupplierSymbol.String}, a.directoryLookupAdapter)
+		if err != nil {
+			status, result := logActionErrorAndReturnResult(ctx, "failed to look up lender for minimum cost check", err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		if len(peers) == 0 {
+			status, result := logActionErrorAndReturnResult(ctx, "no lender found for minimum cost check", nil)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		if config := peers[0].CustomData.IllConfig; config != nil {
+			if minimumCost, err := config.MinimumCost.Get(); err == nil && *params.Cost < minimumCost {
+				status, result := logActionErrorAndReturnResult(ctx, fmt.Sprintf("offered cost %g is below lender minimum cost %g", *params.Cost, minimumCost), nil)
+				return actionExecutionResult{status: status, result: result, pr: pr}
+			}
 		}
 		offeredCosts = &iso18626.TypeCosts{
 			CurrencyCode:  iso18626.TypeSchemeValuePair{Text: params.Currency},
