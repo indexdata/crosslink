@@ -61,7 +61,13 @@ func TestMain(m *testing.M) {
 	}
 	app.ConnectionString = connectionString
 	app.MigrationsFolder = "file://../../migrations"
-	app.RunMigrateScripts()
+	if err := app.RunMigrateScripts(); err != nil {
+		fmt.Fprintf(os.Stderr, "database migration setup failed: %v\n", err)
+		if cleanupErr := container.Terminate(ctx); cleanupErr != nil {
+			fmt.Fprintf(os.Stderr, "failed to stop database container: %v\n", cleanupErr)
+		}
+		os.Exit(1)
+	}
 	testPool = app.InitDbPool()
 
 	code := m.Run()
@@ -1558,7 +1564,7 @@ func TestLoadBalancingPolicyMigrationRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, tx.Rollback(ctx)) }()
 	for _, direction := range []string{"down", "up"} {
-		sql, err := os.ReadFile("../../migrations/016_load_balancing_policy." + direction + ".sql")
+		sql, err := os.ReadFile("../../migrations/017_load_balancing_policy." + direction + ".sql")
 		require.NoError(t, err)
 		_, err = tx.Exec(ctx, string(sql))
 		require.NoError(t, err)

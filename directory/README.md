@@ -52,7 +52,7 @@ example, `50:2`). Each component must be positive, with one to four integer
 digits and at most two decimal places (`0.01` through `9999.99`). Leading zeros
 count toward the four integer digits; the whole string is at most 15 characters.
 These limits apply to entry creation, updates, and imports. Existing ratios
-outside these limits must be corrected before applying migration 015; the
+outside these limits must be corrected before applying migration 016; the
 migration validates existing entries without changing their ratios.
 
 The optional `illConfig.loadBalancingPolicy` accepts `deficit` or `proportional`.
@@ -66,6 +66,22 @@ With a lender's desired loans:borrows ratio, `deficit` scores
 higher scores. `proportional` scores
 `(actualLoans / max(actualBorrows, 1)) / (desiredLoans / desiredBorrows)` and
 prioritizes lower scores. Other rota priorities still take precedence.
+
+Before adding migrations, check current `main` for the next available version.
+Directory startup and integration test setup stop if migration initialization or
+application fails. CI checks that each numeric version has exactly one matching
+up/down pair:
+
+```sh
+python3 -B .github/scripts/check_migrations.py broker/migrations directory/migrations
+```
+
+Run this command from the repository root. The load-balancing migrations follow
+`014_catalog_query_year`: ratio in 015, ratio bounds in 016, and policy in 017.
+These numbers apply to databases following the mainline history. Persistent
+preview databases that already applied the earlier branch numbering need schema
+and migration-history reconciliation before upgrading; disposable test databases
+can be recreated.
 
 ### Request format and sample data
 

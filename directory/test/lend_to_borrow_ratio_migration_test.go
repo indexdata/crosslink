@@ -33,7 +33,7 @@ func TestLendToBorrowRatioBoundsMigration(t *testing.T) {
 		return string(data)
 	}
 	exec("CREATE SCHEMA ratio_bounds_migration_test; SET LOCAL search_path TO ratio_bounds_migration_test")
-	for version := 1; version <= 14; version++ {
+	for version := 1; version <= 15; version++ {
 		exec(readMigration(version, "up"))
 	}
 	id := uuid.New()
@@ -41,13 +41,13 @@ func TestLendToBorrowRatioBoundsMigration(t *testing.T) {
 
 	// Existing out-of-range values must be corrected, rather than silently altered.
 	exec("SAVEPOINT before_bounds")
-	_, err = tx.Exec(ctx, readMigration(15, "up"))
+	_, err = tx.Exec(ctx, readMigration(16, "up"))
 	var pgErr *pgconn.PgError
 	require.ErrorAs(t, err, &pgErr)
 	require.Equal(t, "23514", pgErr.Code)
 	exec("ROLLBACK TO SAVEPOINT before_bounds")
 	exec("UPDATE entries SET lend_to_borrow_ratio = '9999.99:9999.99' WHERE id = $1", id)
-	exec(readMigration(15, "up"))
+	exec(readMigration(16, "up"))
 	var ratio string
 	require.NoError(t, tx.QueryRow(ctx, "SELECT lend_to_borrow_ratio FROM entries WHERE id = $1", id).Scan(&ratio))
 	require.Equal(t, "9999.99:9999.99", ratio)
@@ -61,7 +61,7 @@ func TestLendToBorrowRatioBoundsMigration(t *testing.T) {
 		exec("ROLLBACK TO SAVEPOINT before_invalid")
 	}
 	exec("UPDATE entries SET lend_to_borrow_ratio = NULL WHERE id = $1", id)
-	exec(readMigration(15, "down"))
+	exec(readMigration(16, "down"))
 	exec("UPDATE entries SET lend_to_borrow_ratio = '10000:1' WHERE id = $1", id)
 	exec("UPDATE entries SET lend_to_borrow_ratio = '1:0.001' WHERE id = $1", id)
 }
