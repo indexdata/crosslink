@@ -430,7 +430,7 @@ func writeEntry(ctx context.Context, queries *db.Queries, existing db.Entry, exi
 			Name: data.Name, Description: data.Description, ContactName: data.ContactName, Email: data.Email, FromEmail: data.FromEmail,
 			Tenant: data.Tenant, Vendor: data.Vendor, PhoneNumber: data.PhoneNumber, TimeZone: data.TimeZone,
 			OrganizationID: data.OrganizationID, Type: data.Type, Parent: parentID, LmsLocationCode: data.LMSLocationCode,
-			Hrid: data.HRID, ID: existing.ID,
+			LendToBorrowRatio: data.LendToBorrowRatio, Hrid: data.HRID, ID: existing.ID,
 		})
 		return existing.ID, err
 	}
@@ -438,7 +438,7 @@ func writeEntry(ctx context.Context, queries *db.Queries, existing db.Entry, exi
 		Name: data.Name, Description: data.Description, ContactName: data.ContactName, Email: data.Email, FromEmail: data.FromEmail,
 		Tenant: data.Tenant, Vendor: data.Vendor, PhoneNumber: data.PhoneNumber, TimeZone: data.TimeZone,
 		OrganizationID: data.OrganizationID, Type: data.Type, Parent: parentID, LmsLocationCode: data.LMSLocationCode,
-		Hrid: data.HRID,
+		LendToBorrowRatio: data.LendToBorrowRatio, Hrid: data.HRID,
 	})
 	return created.ID, err
 }
@@ -601,6 +601,7 @@ func replaceILLConfig(ctx context.Context, queries *db.Queries, entryID uuid.UUI
 		DefaultLoanPeriod:         config.DefaultLoanPeriod,
 		MaxRequestsPerPatron:      config.MaxRequestsPerPatron,
 		MinimumCost:               config.MinimumCost,
+		LoadBalancingPolicy:       config.LoadBalancingPolicy,
 	})
 	return err
 }

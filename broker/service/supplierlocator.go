@@ -4,7 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
+	"regexp"
 	"slices"
+	"strings"
 	"time"
 
 	_ "time/tzdata"
@@ -25,6 +28,11 @@ const ROTA_INFO_KEY = "rotaInfo"
 const DATE_LAYOUT = "2006-01-02"
 
 const AvailabilityKey = "availability"
+
+// Leading zeros count toward the four integer digits; zero components are invalid.
+const lendToBorrowRatioMaxLength = 15
+
+var lendToBorrowRatioPattern = regexp.MustCompile(`^((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9])):((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9]))$`)
 
 type Availability string
 
@@ -98,6 +106,11 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	}
 	if lookupAdapter == nil {
 		return events.LogErrorAndReturnResult(ctx, "no lookup adapter available for locating suppliers", fmt.Errorf("no adapter found"))
+	}
+
+	policy, err := s.lookupAdapterFactory.loadBalancingPolicy(configPeer)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to determine load balancing policy", err)
 	}
 
 	metadataUpdateMode := dirapi.None
@@ -199,6 +212,10 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if len(peers) > 0 { //even with lookup error we may have locally cached peers
 		var dirEntriesLog = []any{}
 		for _, peer := range peers {
+			loadBalancingScore, err := getLoadBalancingScore(peer, policy)
+			if err != nil {
+				return events.LogErrorAndReturnResult(ctx, "failed to calculate supplier load balancing score", err)
+			}
 			peerSymbols, err := s.illRepo.GetSymbolsByPeerId(ctx, peer.ID)
 			if err != nil {
 				return events.LogErrorAndReturnResult(ctx, "failed to read symbols", err)
@@ -238,16 +255,16 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 					}
 					for _, holding := range holdings {
 						supplier := adapter.Supplier{
-							PeerId:           peer.ID,
-							CustomData:       peer.CustomData,
-							LocalIdentifier:  holding.LocalIdentifier,
-							Ratio:            getPeerRatio(peer),
-							Symbol:           sym,
-							Local:            local,
-							SupplierStatus:   supplierStatus,
-							Location:         holding.Location,
-							ShelvingLocation: holding.ShelvingLocation,
-							ItemLoanPolicy:   holding.ItemLoanPolicy,
+							PeerId:             peer.ID,
+							CustomData:         peer.CustomData,
+							LocalIdentifier:    holding.LocalIdentifier,
+							LoadBalancingScore: loadBalancingScore,
+							Symbol:             sym,
+							Local:              local,
+							SupplierStatus:     supplierStatus,
+							Location:           holding.Location,
+							ShelvingLocation:   holding.ShelvingLocation,
+							ItemLoanPolicy:     holding.ItemLoanPolicy,
 						}
 						potentialSuppliers = append(potentialSuppliers, supplier)
 					}
@@ -262,7 +279,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	}
 	var rotaInfo adapter.RotaInfo
 	potentialSuppliers, rotaInfo = s.dirAdapter.FilterAndSort(ctx, potentialSuppliers, requester.CustomData,
-		illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.BillingInfo)
+		illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.BillingInfo, policy)
 	// A located supplier is symbol-level, so keep the best eligible holding for each symbol after sorting.
 	potentialSuppliers = firstSupplierPerSymbol(potentialSuppliers)
 	if len(potentialSuppliers) == 0 {
@@ -576,12 +593,42 @@ func getDateWithTimezone(date string, loc *time.Location, endOfDay bool) (time.T
 	return returnDate, nil
 }
 
-func getPeerRatio(peer ill_db.Peer) float32 {
-	if peer.BorrowsCount != 0 {
-		return float32(peer.LoansCount) / float32(peer.BorrowsCount)
-	} else {
-		return math.MaxFloat32
+// getLoadBalancingScore interprets lendToBorrowRatio as desired loans:borrows.
+// Calculate exactly before conversion to avoid rounding intermediate values.
+// The bounded ratio and int32 counters keep scores within float64 range.
+func getLoadBalancingScore(peer ill_db.Peer, policy dirapi.LoadBalancingPolicy) (float64, error) {
+	if !policy.Valid() {
+		return 0, fmt.Errorf("invalid loadBalancingPolicy %q", policy)
 	}
+	desiredLoans := big.NewRat(1, 1)
+	desiredBorrows := big.NewRat(1, 1)
+	if peer.CustomData.LendToBorrowRatio != nil {
+		ratio := *peer.CustomData.LendToBorrowRatio
+		if len(ratio) > lendToBorrowRatioMaxLength {
+			return 0, fmt.Errorf("peer %s has lendToBorrowRatio exceeding %d characters", peer.ID, lendToBorrowRatioMaxLength)
+		}
+		if !lendToBorrowRatioPattern.MatchString(ratio) {
+			return 0, fmt.Errorf("peer %s has invalid lendToBorrowRatio %q", peer.ID, ratio)
+		}
+		parts := strings.Split(ratio, ":")
+		if _, ok := desiredLoans.SetString(parts[0]); !ok {
+			return 0, fmt.Errorf("peer %s has invalid lendToBorrowRatio %q", peer.ID, ratio)
+		}
+		if _, ok := desiredBorrows.SetString(parts[1]); !ok {
+			return 0, fmt.Errorf("peer %s has invalid lendToBorrowRatio %q", peer.ID, ratio)
+		}
+	}
+	targetLending := new(big.Rat).Quo(desiredLoans, desiredBorrows)
+	if policy == dirapi.LoadBalancingPolicyProportional {
+		borrows := max(int64(peer.BorrowsCount), 1)
+		actualRatio := big.NewRat(int64(peer.LoansCount), borrows)
+		score, _ := new(big.Rat).Quo(actualRatio, targetLending).Float64()
+		return score, nil
+	}
+	targetLending.Mul(targetLending, big.NewRat(int64(peer.BorrowsCount), 1))
+	score := targetLending.Sub(targetLending, big.NewRat(int64(peer.LoansCount), 1))
+	loadBalancingScore, _ := score.Float64()
+	return loadBalancingScore, nil
 }
 
 type SkippedSupplier struct {

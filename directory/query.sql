@@ -34,9 +34,9 @@ SELECT pg_advisory_xact_lock(hashtextextended(
 
 -- name: CreateEntry :one
 INSERT INTO entries (
-  name, description, contact_name, email, from_email, tenant, vendor, phone_number, time_zone, organization_id, type, parent, lms_location_code, hrid
+  name, description, contact_name, email, from_email, tenant, vendor, phone_number, time_zone, organization_id, type, parent, lms_location_code, lend_to_borrow_ratio, hrid
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
 )
 RETURNING *;
 
@@ -56,6 +56,7 @@ SET
   type = @type,
   parent = @parent,
   lms_location_code = @lms_location_code,
+  lend_to_borrow_ratio = @lend_to_borrow_ratio,
   hrid = @hrid
 
 WHERE id = @id;
@@ -158,13 +159,13 @@ INSERT INTO ill_configs (
   include_requesting_agency_info, include_supplier_info, include_return_info,
   include_vendor_note, use_offered_costs, note_field_separator,
   supplier_patron_pattern, duplicate_check_window_hours, default_loan_period,
-  max_requests_per_patron, minimum_cost
+  max_requests_per_patron, minimum_cost, load_balancing_policy
 ) VALUES (
   @entry, @is_pickup_location, @iso18626_url, @iso18626_vendor, @lenders_of_last_resort,
   @include_requesting_agency_info, @include_supplier_info, @include_return_info,
   @include_vendor_note, @use_offered_costs, @note_field_separator,
   @supplier_patron_pattern, @duplicate_check_window_hours, @default_loan_period,
-  @max_requests_per_patron, @minimum_cost
+  @max_requests_per_patron, @minimum_cost, @load_balancing_policy
 )
 ON CONFLICT (entry) DO UPDATE SET
   is_pickup_location = COALESCE(@is_pickup_location, ill_configs.is_pickup_location),
@@ -181,7 +182,8 @@ ON CONFLICT (entry) DO UPDATE SET
   duplicate_check_window_hours = COALESCE(@duplicate_check_window_hours, ill_configs.duplicate_check_window_hours),
   default_loan_period = @default_loan_period,
   max_requests_per_patron = @max_requests_per_patron,
-  minimum_cost = @minimum_cost
+  minimum_cost = @minimum_cost,
+  load_balancing_policy = @load_balancing_policy
 RETURNING *;
 
 -- name: GetIllConfigByEntry :one

@@ -47,6 +47,35 @@ It sets `illConfig.isPickupLocation` for entries with the legacy `pickup` tag,
 independently of their LMS location code or NCIP/ISO18626 configuration.
 Untagged entries are not designated as pickup locations.
 
+The optional `lendToBorrowRatio` field expresses desired loans:borrows (for
+example, `50:2`). Each component must be positive, with one to four integer
+digits and at most two decimal places (`0.01` through `9999.99`). Leading zeros
+count toward the four integer digits; the whole string is at most 15 characters.
+These limits apply to entry creation, updates, and imports. Existing ratios
+outside these limits must be corrected before applying migration 016; the
+migration validates existing entries without changing their ratios.
+
+The optional `illConfig.loadBalancingPolicy` accepts `deficit` or `proportional`.
+The broker reads this setting from the entry identified by `CONSORTIUM_SYMBOL`.
+An omitted or null policy, or an unset consortium symbol, uses `deficit`.
+Requester settings do not select the policy. PATCH omission preserves the current
+value; explicit null clears it. Imports also accept this optional field.
+
+With a lender's desired loans:borrows ratio, `deficit` scores
+`actualBorrows * (desiredLoans / desiredBorrows) - actualLoans` and prioritizes
+higher scores. `proportional` scores
+`(actualLoans / max(actualBorrows, 1)) / (desiredLoans / desiredBorrows)` and
+prioritizes lower scores. Other rota priorities still take precedence.
+
+Before adding migrations, check current `main` for the next available version.
+Directory startup and integration test setup stop if migration initialization or
+application fails. The load-balancing migrations follow
+`014_catalog_query_year`: ratio in 015, ratio bounds in 016, and policy in 017.
+These numbers apply to databases following the mainline history. Persistent
+preview databases that already applied the earlier branch numbering need schema
+and migration-history reconciliation before upgrading; disposable test databases
+can be recreated.
+
 ### Request format and sample data
 
 Each record has `type`, `key`, and `data` fields. Put one complete JSON object

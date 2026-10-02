@@ -2,9 +2,15 @@ package model
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
+
+// Leading zeros count toward the four integer digits; zero components are invalid.
+const lendToBorrowRatioMaxLength = 15
+
+var lendToBorrowRatioPattern = regexp.MustCompile(`^((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9])):((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9]))$`)
 
 type ConflictPolicy string
 
@@ -82,28 +88,29 @@ type EntryAggregate struct {
 }
 
 type EntryData struct {
-	Name            string            `json:"name"`
-	Type            string            `json:"type"`
-	Parent          *SymbolRef        `json:"parent"`
-	Description     *string           `json:"description"`
-	OrganizationID  *string           `json:"organizationId"`
-	ContactName     *string           `json:"contactName"`
-	Email           *string           `json:"email"`
-	FromEmail       *string           `json:"fromEmail"`
-	Tenant          *string           `json:"tenant"`
-	Vendor          *string           `json:"vendor"`
-	PhoneNumber     *string           `json:"phoneNumber"`
-	LMSLocationCode *string           `json:"lmsLocationCode"`
-	HRID            *string           `json:"hrid"`
-	TimeZone        *string           `json:"timeZone"`
-	Symbols         []SymbolRef       `json:"symbols"`
-	Endpoints       []ServiceEndpoint `json:"endpoints"`
-	Addresses       []Address         `json:"addresses"`
-	Closures        []Closure         `json:"closures"`
-	LMSConfig       *LMSConfig        `json:"lmsConfig"`
-	CatalogConfig   *CatalogConfig    `json:"catalogConfig"`
-	ILLConfig       *ILLConfig        `json:"illConfig"`
-	HoldingsPolicy  *HoldingsPolicy   `json:"holdingsPolicy"`
+	Name              string            `json:"name"`
+	Type              string            `json:"type"`
+	Parent            *SymbolRef        `json:"parent"`
+	Description       *string           `json:"description"`
+	OrganizationID    *string           `json:"organizationId"`
+	ContactName       *string           `json:"contactName"`
+	Email             *string           `json:"email"`
+	FromEmail         *string           `json:"fromEmail"`
+	Tenant            *string           `json:"tenant"`
+	Vendor            *string           `json:"vendor"`
+	PhoneNumber       *string           `json:"phoneNumber"`
+	LMSLocationCode   *string           `json:"lmsLocationCode"`
+	LendToBorrowRatio *string           `json:"lendToBorrowRatio"`
+	HRID              *string           `json:"hrid"`
+	TimeZone          *string           `json:"timeZone"`
+	Symbols           []SymbolRef       `json:"symbols"`
+	Endpoints         []ServiceEndpoint `json:"endpoints"`
+	Addresses         []Address         `json:"addresses"`
+	Closures          []Closure         `json:"closures"`
+	LMSConfig         *LMSConfig        `json:"lmsConfig"`
+	CatalogConfig     *CatalogConfig    `json:"catalogConfig"`
+	ILLConfig         *ILLConfig        `json:"illConfig"`
+	HoldingsPolicy    *HoldingsPolicy   `json:"holdingsPolicy"`
 }
 
 type ServiceEndpoint struct {
@@ -141,6 +148,9 @@ func (a *EntryAggregate) NormalizeAndValidate() error {
 	}
 	if a.Data.Vendor != nil && !oneOf(*a.Data.Vendor, "Alma", "ReShare", "CrossLink", "ILLiad", "Unknown") {
 		return fmt.Errorf("invalid entry vendor: %s", *a.Data.Vendor)
+	}
+	if a.Data.LendToBorrowRatio != nil && (len(*a.Data.LendToBorrowRatio) > lendToBorrowRatioMaxLength || !lendToBorrowRatioPattern.MatchString(*a.Data.LendToBorrowRatio)) {
+		return fmt.Errorf("invalid lendToBorrowRatio: must contain two positive unsigned decimals separated by a colon, each with at most four integer digits and two decimal places")
 	}
 	if a.Data.Parent != nil {
 		if err := a.Data.Parent.NormalizeAndValidate(); err != nil {
