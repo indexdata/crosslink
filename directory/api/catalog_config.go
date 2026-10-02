@@ -39,6 +39,7 @@ func catalogConfigToDBParams(entryID uuid.UUID, cfg CatalogConfig) db.UpsertCata
 		params.QueryIsbn = cfg.QueryConfig.Isbn
 		params.QueryIssn = cfg.QueryConfig.Issn
 		params.QueryTitle = cfg.QueryConfig.Title
+		params.QueryYear = cfg.QueryConfig.Year
 	}
 	if cfg.HoldingsFormat != nil {
 		params.HoldingsConfig, _ = json.Marshal(cfg.HoldingsFormat)
@@ -116,6 +117,7 @@ func catalogConfigPatchToDBParams(entryID uuid.UUID, cfg CatalogConfigPatch, ori
 		QueryIsbn:                            original.QueryIsbn,
 		QueryIssn:                            original.QueryIssn,
 		QueryTitle:                           original.QueryTitle,
+		QueryYear:                            original.QueryYear,
 		HoldingsMarcCallNumberSubfield:       original.HoldingsMarcCallNumberSubfield,
 		HoldingsMarcItemIDSubfield:           original.HoldingsMarcItemIDSubfield,
 		HoldingsMarcLocationSubfield:         original.HoldingsMarcLocationSubfield,
@@ -177,6 +179,7 @@ func catalogConfigPatchToDBParams(entryID uuid.UUID, cfg CatalogConfigPatch, ori
 		params.QueryIsbn = derefOrDefaultPtr(cfg.QueryConfig.Isbn, params.QueryIsbn)
 		params.QueryIssn = derefOrDefaultPtr(cfg.QueryConfig.Issn, params.QueryIssn)
 		params.QueryTitle = derefOrDefaultPtr(cfg.QueryConfig.Title, params.QueryTitle)
+		params.QueryYear = derefOrDefaultPtr(cfg.QueryConfig.Year, params.QueryYear)
 	}
 	if cfg.HoldingsFormat != nil {
 		var mergeErr error

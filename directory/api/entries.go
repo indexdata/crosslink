@@ -337,12 +337,13 @@ func buildEntrySQL(whereClause string) string {
 					'address', h.zoom_address,
 					'options', h.zoom_options
 				)) END,
-				'queryConfig', CASE WHEN h.query_type IS NULL AND h.query_identifier IS NULL AND h.query_isbn IS NULL AND h.query_issn IS NULL AND h.query_title IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
+				'queryConfig', CASE WHEN h.query_type IS NULL AND h.query_identifier IS NULL AND h.query_isbn IS NULL AND h.query_issn IS NULL AND h.query_title IS NULL AND h.query_year IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
 					'type', h.query_type,
 					'identifier', h.query_identifier,
 					'isbn', h.query_isbn,
 					'issn', h.query_issn,
-					'title', h.query_title
+					'title', h.query_title,
+					'year', h.query_year
 				)) END,
 				'holdingsFormat', COALESCE(h.holdings_config, NULLIF(jsonb_strip_nulls(jsonb_build_object(
 					'marc', CASE WHEN h.holdings_marc_call_number_subfield IS NULL
