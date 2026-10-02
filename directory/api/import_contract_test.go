@@ -131,6 +131,8 @@ func TestCreationAndResponseSchemasShareProperties(t *testing.T) {
 			{"closure", "ClosureProperties", "CreateClosure", "Closure"},
 			{"network", "NetworkProperties", "AddNetwork", "Network"},
 			{"tier", "TierProperties", "AddTier", "Tier"},
+			{"entry tier", "EntryTierProperties", "AddEntryTier", "EntryTier"},
+			{"entry network", "EntryNetworkProperties", "AddEntryNetwork", "EntryNetwork"},
 		}
 		for _, test := range tests {
 			t.Run(test.name, func(t *testing.T) {

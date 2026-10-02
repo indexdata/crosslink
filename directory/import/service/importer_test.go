@@ -262,6 +262,23 @@ func TestImportAcceptsMaxRequestsPerPatron(t *testing.T) {
 	assert.Equal(t, 1.25, *repo.entry.Data.ILLConfig.MinimumCost)
 }
 
+func TestImportAcceptsNullRequestLimitAndMinimumCost(t *testing.T) {
+	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
+	config := strings.Replace(validILLConfig(), `"maxRequestsPerPatron":0`, `"maxRequestsPerPatron":null`, 1)
+	config = strings.Replace(config, `"minimumCost":1.25`, `"minimumCost":null`, 1)
+	record := strings.Replace(validEntryRecord(), `"illConfig":null`, config, 1)
+
+	result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(record))
+
+	require.NoError(t, err)
+	assert.Equal(t, model.ImportSectionResult{Imported: 1}, result.Entries)
+	assert.Empty(t, result.Errors)
+	require.NotNil(t, repo.entry)
+	require.NotNil(t, repo.entry.Data.ILLConfig)
+	assert.Nil(t, repo.entry.Data.ILLConfig.MaxRequestsPerPatron)
+	assert.Nil(t, repo.entry.Data.ILLConfig.MinimumCost)
+}
+
 func validLMSConfig() string {
 	return `"lmsConfig":{"vendor":null,"ncipNamespaceEnabled":null,"bibIdNormalization":null,"address":"https://example.test/ncip","fromAgency":"FROM","fromAgencyAuthentication":null,"toAgency":null,"lookupUserEnabled":true,"acceptItemEnabled":true,"checkInItemEnabled":true,"checkOutItemEnabled":true,"itemLocation":null,"requestItemRequestType":null,"requestItemRequestScopeType":null,"requestItemBibIdCode":null,"requestItemEnabled":true,"requestItemPickupLocationEnabled":true,"requesterPickupLocation":null,"supplierPickupLocation":null,"requesterPatronPattern":null,"patronProfiles":[{"code":"STAFF","canCreateRequests":true}]}`
 }
