@@ -79,7 +79,7 @@ func TestOpenAPIRequestValidatorRejectsMissingIllRequest(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
-	assert.Contains(t, rr.Body.String(), `property \"illRequest\" is missing`)
+	assert.Contains(t, rr.Body.String(), `missing property 'illRequest'`)
 }
 
 func TestOpenAPIRequestValidatorRejectsNullNonNullableString(t *testing.T) {
@@ -97,7 +97,7 @@ func TestOpenAPIRequestValidatorRejectsNullNonNullableString(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
-	assert.Contains(t, rr.Body.String(), `Error at \"/requesterSymbol\": Value is not nullable`)
+	assert.Contains(t, rr.Body.String(), `got null, want string`)
 }
 
 func TestOpenAPIRequestValidatorRejectsBatchActionWithoutTitle(t *testing.T) {
