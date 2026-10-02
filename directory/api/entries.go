@@ -28,6 +28,11 @@ func isOwnedEntry(authData *auth.AuthData, tenant *string) bool {
 	return authTenant != "" && authTenant == *tenant
 }
 
+func canSeeSensitiveEntry(authData *auth.AuthData, tenant *string) bool {
+	return authData.HasRole(auth.ConsortialAdminRole) || authData.HasRole(auth.SystemUserRole) ||
+		(authData.HasRole(auth.InstitutionalAdminRole) && isOwnedEntry(authData, tenant))
+}
+
 func maybeUpdateEntryVendor(cur *string, patch nullable.Nullable[EntryVendor]) *string {
 	if !patch.IsSpecified() {
 		return cur
@@ -534,7 +539,6 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 
 	authData := auth.GetAuthData(ctx)
 	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole, auth.PublicUserRole}
-	seeSensitiveRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.SystemUserRole}
 	if !authData.HasRoleFromList(validRoles) {
 		slog.ErrorContext(ctx, "permission denied")
 		return GetEntries401TextResponse("Access denied"), nil
@@ -546,8 +550,7 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 	}
 
 	response, err := a.queryEntryList(ctx, query, args, func(entry *Entry) error {
-		seeSensitive := isOwnedEntry(authData, entry.Tenant) || authData.HasRoleFromList(seeSensitiveRoles)
-		if !seeSensitive {
+		if !canSeeSensitiveEntry(authData, entry.Tenant) {
 			return sanitizeEntry(entry)
 		}
 		return nil
@@ -584,9 +587,12 @@ func (a ApiImpl) GetOwnedEntries(ctx context.Context, request GetOwnedEntriesReq
 		return GetOwnedEntries400TextResponse(fmt.Sprintf("CQL parse error: %v", err)), nil
 	}
 
-	// Every row is constrained to the authenticated tenant in SQL, so owned
-	// entries are returned without sanitizing their protected fields.
-	response, err := a.queryEntryList(ctx, query, args, nil)
+	response, err := a.queryEntryList(ctx, query, args, func(entry *Entry) error {
+		if !canSeeSensitiveEntry(authData, entry.Tenant) {
+			return sanitizeEntry(entry)
+		}
+		return nil
+	})
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to read owned entries", "error", err)
 		return GetOwnedEntries500TextResponse("Internal server error"), nil
@@ -598,12 +604,10 @@ func (a ApiImpl) GetOwnedEntries(ctx context.Context, request GetOwnedEntriesReq
 func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (GetEntryResponseObject, error) {
 	var query string
 	var args []interface{}
-	var seeSensitive bool
 
 	authData := auth.GetAuthData(ctx)
 
 	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole, auth.PublicUserRole}
-	seeSensitiveRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.SystemUserRole}
 	if !authData.HasRoleFromList(validRoles) {
 		slog.ErrorContext(ctx, "permission denied")
 		return GetEntry401TextResponse("Access denied"), nil
@@ -647,11 +651,7 @@ func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (G
 		return GetEntry500TextResponse("Internal server error"), nil
 	}
 
-	if isOwnedEntry(authData, entry.Tenant) || authData.HasRoleFromList(seeSensitiveRoles) {
-		seeSensitive = true
-	}
-
-	if !seeSensitive {
+	if !canSeeSensitiveEntry(authData, entry.Tenant) {
 		err := sanitizeEntry(&entry)
 		if err != nil {
 			slog.ErrorContext(ctx, "error sanitizing protected fields", "error", err)
