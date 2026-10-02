@@ -121,9 +121,9 @@ func (r *PgImportRepo) importNetworkAttempt(ctx context.Context, aggregate model
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	refs := make([]model.SymbolRef, len(aggregate.Data.Entries))
+	refs := make([]uuid.UUID, len(aggregate.Data.Entries))
 	for index, assignment := range aggregate.Data.Entries {
-		refs[index] = assignment.SymbolRef
+		refs[index] = assignment.Entry
 	}
 	consortium, assignments, err := resolveAndLockAssignments(ctx, queries, aggregate.Key.Consortium, refs)
 	if err != nil {
@@ -168,47 +168,41 @@ func (r *PgImportRepo) importNetworkAttempt(ctx context.Context, aggregate model
 }
 
 type resolvedAssignment struct {
-	ref   model.SymbolRef
+	ref   uuid.UUID
 	entry *db.Entry
 }
 
-func resolveAndLockAssignments(ctx context.Context, queries *db.Queries, consortiumRef model.SymbolRef, refs []model.SymbolRef) (db.Entry, []resolvedAssignment, error) {
-	consortium, err := queries.EntryBySymbol(ctx, db.EntryBySymbolParams{Authority: consortiumRef.Authority, Symbol: consortiumRef.Symbol})
+func resolveAndLockAssignments(ctx context.Context, queries *db.Queries, consortiumRef uuid.UUID, refs []uuid.UUID) (db.Entry, []resolvedAssignment, error) {
+	consortium, err := queries.EntryById(ctx, consortiumRef)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return db.Entry{}, nil, fmt.Errorf("consortium %s does not exist", consortiumRef.String())
+		return db.Entry{}, nil, fmt.Errorf("consortium %s does not exist", consortiumRef)
 	}
 	if err != nil {
-		return db.Entry{}, nil, fmt.Errorf("resolve consortium %s: %w", consortiumRef.String(), err)
+		return db.Entry{}, nil, fmt.Errorf("resolve consortium %s: %w", consortiumRef, err)
 	}
 
 	assignments := make([]resolvedAssignment, 0, len(refs))
 	entryIDs := []uuid.UUID{consortium.ID}
-	mappings := []entryMapping{{ref: consortiumRef, expectedOwner: &consortium.ID}}
 	for _, ref := range refs {
-		entry, err := queries.EntryBySymbol(ctx, db.EntryBySymbolParams{Authority: ref.Authority, Symbol: ref.Symbol})
+		entry, err := queries.EntryById(ctx, ref)
 		if errors.Is(err, pgx.ErrNoRows) {
 			assignments = append(assignments, resolvedAssignment{ref: ref})
-			mappings = append(mappings, entryMapping{ref: ref})
 			continue
 		}
 		if err != nil {
-			return db.Entry{}, nil, fmt.Errorf("resolve entry %s: %w", ref.String(), err)
+			return db.Entry{}, nil, fmt.Errorf("resolve entry %s: %w", ref, err)
 		}
 		assignments = append(assignments, resolvedAssignment{ref: ref, entry: &entry})
 		entryIDs = append(entryIDs, entry.ID)
-		mappings = append(mappings, entryMapping{ref: ref, expectedOwner: &entry.ID})
 	}
 
 	lockedEntries, err := lockAssignmentEntryRows(ctx, queries, entryIDs...)
 	if err != nil {
 		return db.Entry{}, nil, fmt.Errorf("lock assignment entries: %w", err)
 	}
-	if err := lockEntryMappings(ctx, queries, mappings...); err != nil {
-		return db.Entry{}, nil, fmt.Errorf("revalidate assignment entries: %w", err)
-	}
 	consortium = lockedEntries[consortium.ID]
 	if consortium.Type != "Consortium" {
-		return db.Entry{}, nil, fmt.Errorf("entry %s is not a consortium", consortiumRef.String())
+		return db.Entry{}, nil, fmt.Errorf("entry %s is not a consortium", consortiumRef)
 	}
 	for index := range assignments {
 		if assignments[index].entry != nil {
@@ -259,13 +253,13 @@ func lockAssignmentEntryRows(ctx context.Context, queries *db.Queries, ids ...uu
 
 func requireAssignmentEntries(assignments []resolvedAssignment) ([]db.Entry, error) {
 	entries := make([]db.Entry, 0, len(assignments))
-	seen := make(map[uuid.UUID]model.SymbolRef, len(assignments))
+	seen := make(map[uuid.UUID]uuid.UUID, len(assignments))
 	for _, assignment := range assignments {
 		if assignment.entry == nil {
-			return nil, fmt.Errorf("entry %s does not exist", assignment.ref.String())
+			return nil, fmt.Errorf("entry %s does not exist", assignment.ref)
 		}
 		if previous, exists := seen[assignment.entry.ID]; exists {
-			return nil, fmt.Errorf("duplicate assignment: symbols %s and %s identify the same entry", previous.String(), assignment.ref.String())
+			return nil, fmt.Errorf("duplicate assignment: entries %s and %s identify the same entry", previous, assignment.ref)
 		}
 		seen[assignment.entry.ID] = assignment.ref
 		entries = append(entries, *assignment.entry)

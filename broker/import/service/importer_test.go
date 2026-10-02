@@ -14,6 +14,7 @@ import (
 	importdb "github.com/indexdata/crosslink/broker/import/db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
+	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	sched_db "github.com/indexdata/crosslink/broker/scheduler/db"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
@@ -48,7 +49,7 @@ func TestImportPatronRequestNormalizesCompleteBundle(t *testing.T) {
 	assert.Equal(t, importdb.ConflictPolicyUpdate, repo.patronPolicy)
 	assert.Equal(t, "pr-1", repo.patron.PatronRequest.ID)
 	assert.Equal(t, pgText("ISIL:REQ"), repo.patron.PatronRequest.Tenant)
-	assert.Equal(t, pr_db.PatronRequestSide("borrowing"), repo.patron.PatronRequest.Side)
+	assert.Equal(t, prservice.SideBorrowing, repo.patron.PatronRequest.Side)
 	assert.Equal(t, pr_db.PatronRequestState("SENT"), repo.patron.PatronRequest.State)
 	assert.True(t, repo.patron.PatronRequest.TerminalState)
 	assert.Nil(t, repo.patron.PatronRequest.Items)
