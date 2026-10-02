@@ -3528,6 +3528,92 @@ func TestHandleInvokeBorrowerActionAcceptRetryAutoActionCreateTaskError(t *testi
 	assert.Equal(t, "REQ1-2", mockPrRepo.createdPr.IllRequest.Header.RequestingAgencyRequestId)
 }
 
+func TestHandleInvokeLenderActionAddConditionMinimumCost(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		config     string
+		cost       any
+		supplier   pgtype.Text
+		noPeer     bool
+		lookupErr  error
+		wantError  string
+		wantLookup bool
+	}{
+		{name: "below minimum", config: `{"minimumCost":2.75}`, cost: 2.74, supplier: getDbText("ISIL:SUP1"), wantLookup: true, wantError: "offered cost 2.74 is below lender minimum cost 2.75"},
+		{name: "equal to minimum", config: `{"minimumCost":2.75}`, cost: 2.75, supplier: getDbText("ISIL:SUP1"), wantLookup: true},
+		{name: "above minimum", config: `{"minimumCost":2.75}`, cost: 2.76, supplier: getDbText("ISIL:SUP1"), wantLookup: true},
+		{name: "zero minimum", config: `{"minimumCost":0}`, cost: 0.0, supplier: getDbText("ISIL:SUP1"), wantLookup: true},
+		{name: "below zero minimum", config: `{"minimumCost":0}`, cost: -0.01, supplier: getDbText("ISIL:SUP1"), wantLookup: true, wantError: "offered cost -0.01 is below lender minimum cost 0"},
+		{name: "omitted minimum", config: `{}`, cost: 1.0, supplier: getDbText("ISIL:SUP1"), wantLookup: true},
+		{name: "null minimum", config: `{"minimumCost":null}`, cost: 1.0, supplier: getDbText("ISIL:SUP1"), wantLookup: true},
+		{name: "no ill config", cost: 1.0, supplier: getDbText("ISIL:SUP1"), wantLookup: true},
+		{name: "no cost", config: `{"minimumCost":2.75}`, supplier: getDbText("ISIL:SUP1")},
+		{name: "null cost", config: `{"minimumCost":2.75}`, cost: nil, supplier: getDbText("ISIL:SUP1")},
+		{name: "lookup failure", cost: 1.0, supplier: getDbText("ISIL:SUP1"), lookupErr: errors.New("directory unavailable"), wantLookup: true, wantError: "failed to look up lender for minimum cost check"},
+		{name: "no lender", cost: 1.0, supplier: getDbText("ISIL:SUP1"), noPeer: true, wantLookup: true, wantError: "no lender found for minimum cost check"},
+		{name: "missing supplier", cost: 1.0, wantError: "missing supplier symbol"},
+		{name: "empty supplier", cost: 1.0, supplier: getDbText(""), wantError: "missing supplier symbol for minimum cost check"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var config *dirapi.IllConfig
+			if tc.config != "" {
+				require.NoError(t, json.Unmarshal([]byte(tc.config), &config))
+			}
+			peers := []ill_db.Peer{{CustomData: dirapi.Entry{IllConfig: config}}}
+			if tc.noPeer {
+				peers = nil
+			}
+			illRepo := new(IllRepoMock)
+			illRepo.On("GetCachedPeersBySymbols", []string{tc.supplier.String}, mock.Anything).Return(peers, "", tc.lookupErr).Once()
+			prRepo := new(MockPrRepo)
+			lmsCreator := new(MockLmsCreator)
+			if tc.supplier.Valid {
+				lmsCreator.On("GetAdapter", tc.supplier.String).Return(lms.CreateLmsAdapterMockOK(), nil).Once()
+			}
+			isoHandler := new(MockIso18626Handler)
+			actionService := CreatePatronRequestActionService(prRepo, illRepo, *new(events.EventBus), isoHandler, lmsCreator, new(EmailSenderMock), nil, nil)
+			prRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{
+				ID: patronRequestId, Side: SideLending, State: LenderStateWillSupplyPending,
+				SupplierSymbol: tc.supplier, RequesterSymbol: getDbText("ISIL:REQ1"),
+				IllRequest: iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}},
+			}, nil)
+			params := map[string]any{"loanCondition": "Reading room use only", "currency": "DKK"}
+			if tc.cost != nil || tc.name == "null cost" {
+				params["cost"] = tc.cost
+			}
+			action := LenderActionAddCondition
+			status, result := actionService.handleInvokeAction(appCtx, events.Event{
+				PatronRequestID: patronRequestId,
+				EventData:       events.EventData{CommonEventData: events.CommonEventData{Action: &action}, CustomData: params},
+			})
+
+			if tc.wantError != "" {
+				assert.Equal(t, events.EventStatusError, status)
+				require.NotNil(t, result.EventError)
+				assert.Equal(t, tc.wantError, result.EventError.Message)
+				if tc.lookupErr != nil {
+					assert.Contains(t, result.EventError.Cause, tc.lookupErr.Error())
+				}
+				assert.Equal(t, LenderStateWillSupplyPending, prRepo.savedPr.State)
+				assert.True(t, prRepo.savedPr.NeedsAttention)
+				assert.Nil(t, isoHandler.lastSupplyingAgencyMessage)
+				assert.Empty(t, prRepo.savedNotifications)
+			} else {
+				assert.Equal(t, events.EventStatusSuccess, status)
+				assert.Equal(t, LenderStateConditionPending, prRepo.savedPr.State)
+				require.NotNil(t, isoHandler.lastSupplyingAgencyMessage)
+				assert.Len(t, prRepo.savedNotifications, 1)
+			}
+			if tc.wantLookup {
+				illRepo.AssertExpectations(t)
+			} else {
+				illRepo.AssertNotCalled(t, "GetCachedPeersBySymbols", mock.Anything, mock.Anything)
+			}
+			lmsCreator.AssertExpectations(t)
+		})
+	}
+}
+
 func TestHandleInvokeLenderActionAddConditionMissingConditionAndCost(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
