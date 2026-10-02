@@ -1554,46 +1554,34 @@ components:
       type: object
       title: Batch Action
       description: A scheduled batch action
-      properties:
-        id:
-          type: string
-          description: Unique identifier of the batch action
-        owner:
-          type: string
-          description: Symbol of the institution that owns the batch action. Empty for unrestricted actions created with master access.
-        schedule:
-          type: string
-          description: RRULE schedule expression, e.g. "FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0" (every Monday at 06:00)
-        actionName:
-          $ref: '#/components/schemas/BatchActionName'
-        title:
-          type: string
-          description: Title of the batch action, for display purposes
-        batchQuery:
-          type: string
-          description: Batch action selection query in CQL format
-        actionParams:
-          type: object
-          description: Parameters for the batch action. For request-aging, interval is required and must be a Go duration string such as "24h" or "168h". Additional parameters are passed to the generated patron-request background action.
-          additionalProperties: true
-        nextRun:
-          type: string
-          format: date-time
-          description: Next execution time according to the schedule
-        createdAt:
-          type: string
-          format: date-time
-          description: Creation timestamp
-        updatedAt:
-          type: string
-          format: date-time
-          description: Last update timestamp
-        active:
-          type: boolean
-          description: Indicates if the batch action is active
-        eventsLink:
-          type: string
-          description: Link to execution events for this batch action
+      allOf:
+        - $ref: '#/components/schemas/BatchActionProperties'
+        - type: object
+          properties:
+            id:
+              type: string
+              description: Unique identifier of the batch action
+            owner:
+              type: string
+              description: Symbol of the institution that owns the batch action. Empty for unrestricted actions created with master access.
+            nextRun:
+              type: string
+              format: date-time
+              description: Next execution time according to the schedule
+            createdAt:
+              type: string
+              format: date-time
+              description: Creation timestamp
+            updatedAt:
+              type: string
+              format: date-time
+              description: Last update timestamp
+            active:
+              type: boolean
+              description: Indicates if the batch action is active
+            eventsLink:
+              type: string
+              description: Link to execution events for this batch action
       required:
         - id
         - owner
@@ -1603,6 +1591,34 @@ components:
         - batchQuery
         - active
         - eventsLink
+
+    BatchActionProperties:
+      type: object
+      title: Batch Action Properties
+      description: Common fields for creating and returning a scheduled batch action
+      properties:
+        schedule:
+          type: string
+          minLength: 1
+          description: RRULE schedule expression, e.g. "FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0" (every Monday at 06:00)
+        actionName:
+          $ref: '#/components/schemas/BatchActionName'
+        title:
+          type: string
+          minLength: 1
+          description: Title of the batch action, for display purposes
+        batchQuery:
+          type: string
+          minLength: 1
+          description: Batch action selection query in CQL format
+        actionParams:
+          type: object
+          description: Parameters for the batch action. For request-aging, interval is required and must be a Go duration string such as "24h" or "168h". Additional parameters are passed to the generated patron-request background action.
+          additionalProperties: true
+      required:
+        - schedule
+        - actionName
+        - batchQuery
 
     BatchActions:
       type: object
@@ -1622,30 +1638,11 @@ components:
       type: object
       title: Create Batch Action
       description: Request body for creating a batch action
-      properties:
-        schedule:
-          type: string
-          minLength: 1
-          description: RRULE schedule expression, e.g. "FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0" (every Monday at 06:00)
-        actionName:
-          $ref: '#/components/schemas/BatchActionName'
-        title:
-          type: string
-          minLength: 1
-          description: Title of the batch action, for display purposes
-        batchQuery:
-          type: string
-          minLength: 1
-          description: Batch action selection query in CQL format
-        actionParams:
-          type: object
-          description: Parameters for the batch action. For request-aging, interval is required and must be a Go duration string such as "24h" or "168h". Additional parameters are passed to the generated patron-request background action.
-          additionalProperties: true
-      required:
-        - schedule
-        - actionName
-        - title
-        - batchQuery
+      allOf:
+        - $ref: '#/components/schemas/BatchActionProperties'
+        - type: object
+          required:
+            - title
 
     BatchActionDefault:
       title: Batch Action Default
@@ -1725,12 +1722,41 @@ components:
       type: object
       title: Template
       description: An email or pull slip template with optional placeholder support
+      allOf:
+        - $ref: '#/components/schemas/TemplateProperties'
+        - type: object
+          properties:
+            id:
+              type: string
+              description: Unique identifier of the template
+            createdAt:
+              type: string
+              format: date-time
+              description: Timestamp when the template was created
+            updatedAt:
+              type: string
+              format: date-time
+              description: Timestamp when the template was last updated
+          required:
+            - id
+            - createdAt
+      required:
+        - id
+        - title
+        - purpose
+        - body
+        - contentType
+        - labels
+        - createdAt
+
+    TemplateProperties:
+      type: object
+      title: Template Properties
+      description: Common fields for creating and returning a template
       properties:
-        id:
-          type: string
-          description: Unique identifier of the template
         title:
           type: string
+          minLength: 1
           description: Human-readable title for the template
         purpose:
           $ref: '#/components/schemas/TemplatePurpose'
@@ -1739,6 +1765,7 @@ components:
           description: Subject line template, supports {{.X}} placeholders. Not used for pullslip templates. Supports same placeholders as template body.
         body:
           type: string
+          minLength: 1
           description: >-
             Body of the email or pull slip template. Supports {{.X}} placeholders.
             Supported placeholders for patron request templates include
@@ -1753,27 +1780,19 @@ components:
           $ref: '#/components/schemas/TemplateContentType'
         labels:
           type: array
+          minItems: 1
           description: Predefined labels identifying the template's usage context. Values correspond to templateLabel parameters used in state model send-email actions.
           items:
             type: string
+            minLength: 1
         audience:
           $ref: '#/components/schemas/TemplateAudience'
-        createdAt:
-          type: string
-          format: date-time
-          description: Timestamp when the template was created
-        updatedAt:
-          type: string
-          format: date-time
-          description: Timestamp when the template was last updated
       required:
-        - id
         - title
         - purpose
         - body
         - contentType
         - labels
-        - createdAt
 
     Templates:
       type: object
@@ -1790,40 +1809,12 @@ components:
             $ref: '#/components/schemas/Template'
 
     CreateTemplate:
+      x-go-type: Template
       type: object
       title: Create Template
       description: Request body for creating a template
-      properties:
-        title:
-          type: string
-          minLength: 1
-          description: Human-readable title for the template
-        purpose:
-          $ref: '#/components/schemas/TemplatePurpose'
-        subject:
-          type: string
-          description: Subject line template, supports {{.X}} placeholders. Not used for pullslip templates. For full list of supported placeholders, see the Template object.
-        body:
-          type: string
-          minLength: 1
-          description: Body of the email or pull slip template. Supports {{.X}} placeholders. For full list of supported placeholders, see the Template object.
-        contentType:
-          $ref: '#/components/schemas/TemplateContentType'
-        labels:
-          type: array
-          minItems: 1
-          description: Labels identifying the template's usage context
-          items:
-            type: string
-            minLength: 1
-        audience:
-          $ref: '#/components/schemas/TemplateAudience'
-      required:
-        - title
-        - purpose
-        - body
-        - contentType
-        - labels
+      allOf:
+        - $ref: '#/components/schemas/TemplateProperties'
 
     UpdateTemplate:
       type: object
@@ -3066,7 +3057,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/CreateTemplate'
+                  $ref: '#/components/schemas/TemplateProperties'
         '500':
           description: Internal Server Error
           content:

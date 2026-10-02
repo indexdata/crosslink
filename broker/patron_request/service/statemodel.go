@@ -42,7 +42,7 @@ type actionMappingKey struct {
 type StateModelsConfig struct {
 	StateModels         map[string]proapi.StateModel `json:"stateModels"`
 	BatchActionDefaults []proapi.BatchActionDefault  `json:"batchActionDefaults"`
-	TemplateDefaults    []proapi.CreateTemplate      `json:"templateDefaults"`
+	TemplateDefaults    []proapi.TemplateProperties  `json:"templateDefaults"`
 }
 
 func (s *StateModelService) GetStateModel(modelName string) (*proapi.StateModel, error) {
@@ -529,13 +529,13 @@ func GetStateModelBatchActionDefaults() []proapi.BatchActionDefault {
 	return out
 }
 
-func GetStateModelTemplateDefaults() []proapi.CreateTemplate {
+func GetStateModelTemplateDefaults() []proapi.TemplateProperties {
 	// Return a deep copy so callers can't mutate embedded defaults.
 	data, err := json.Marshal(stateModelsConfig.TemplateDefaults)
 	if err != nil {
 		return slices.Clone(stateModelsConfig.TemplateDefaults)
 	}
-	var out []proapi.CreateTemplate
+	var out []proapi.TemplateProperties
 	if err := json.Unmarshal(data, &out); err != nil {
 		return slices.Clone(stateModelsConfig.TemplateDefaults)
 	}

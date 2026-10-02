@@ -114,7 +114,7 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 		brokerapi.AddBadRequestError(ctx, w, err)
 		return
 	}
-	if create.Title == "" {
+	if create.Title == nil || *create.Title == "" {
 		brokerapi.AddBadRequestError(ctx, w, errors.New("title must not be empty"))
 		return
 	}
@@ -164,7 +164,7 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 			},
 			CustomData: paramsMap,
 		},
-		Title:     pgtype.Text{String: create.Title, Valid: true},
+		Title:     pgtype.Text{String: *create.Title, Valid: true},
 		RunAt:     next,
 		CreatedAt: now,
 	})
