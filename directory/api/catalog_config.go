@@ -254,6 +254,7 @@ func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) db.UpsertIllConfigPar
 		DefaultLoanPeriod:           nullableLoanPeriod(cfg),
 		MaxRequestsPerPatron:        nullableMaxRequestsPerPatron(cfg),
 		MinimumCost:                 nullableMinimumCost(cfg),
+		LoadBalancingPolicy:         nullableLoadBalancingPolicy(cfg),
 	}
 	if cfg.Iso18626Vendor != nil {
 		vendor := string(*cfg.Iso18626Vendor)
@@ -280,6 +281,7 @@ func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllC
 		DefaultLoanPeriod:           original.DefaultLoanPeriod,
 		MaxRequestsPerPatron:        original.MaxRequestsPerPatron,
 		MinimumCost:                 original.MinimumCost,
+		LoadBalancingPolicy:         original.LoadBalancingPolicy,
 	}
 
 	params.IsPickupLocation = derefOrDefaultPtr(cfg.IsPickupLocation, params.IsPickupLocation)
@@ -304,6 +306,9 @@ func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllC
 	}
 	if cfg.MaxRequestsPerPatron.IsSpecified() {
 		params.MaxRequestsPerPatron = nullableMaxRequestsPerPatron(cfg)
+	}
+	if cfg.LoadBalancingPolicy.IsSpecified() {
+		params.LoadBalancingPolicy = nullableLoadBalancingPolicy(cfg)
 	}
 	if cfg.MinimumCost.IsSpecified() {
 		params.MinimumCost = nullableMinimumCost(cfg)
@@ -380,4 +385,13 @@ func mergeHoldingsConfig(original []byte, patch *HoldingsParserConfig) ([]byte, 
 		}
 	}
 	return json.Marshal(next)
+}
+
+func nullableLoadBalancingPolicy(cfg IllConfig) *string {
+	value, err := cfg.LoadBalancingPolicy.Get()
+	if err != nil {
+		return nil
+	}
+	policy := string(value)
+	return &policy
 }

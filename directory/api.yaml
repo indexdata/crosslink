@@ -1759,6 +1759,10 @@ components:
         defaultLoanPeriod: { type: integer, format: int32, minimum: 1, nullable: true }
         maxRequestsPerPatron: { type: integer, format: int32, minimum: 0, nullable: true }
         minimumCost: { type: number, format: double, minimum: 0, nullable: true }
+        loadBalancingPolicy:
+          allOf: [{ $ref: '#/components/schemas/LoadBalancingPolicy' }]
+          nullable: true
+          description: Consortium lender scoring policy. Omitted or null defaults to deficit.
 
     ImportCatalogConfig:
       type: object
@@ -2237,9 +2241,18 @@ components:
           description: Policy that determines whether and in which order holdings may supply an item.
           allOf:
             - $ref: '#/components/schemas/HoldingsPolicy'
+    LoadBalancingPolicy:
+      type: string
+      enum: [deficit, proportional]
+      x-enum-varnames: [LoadBalancingPolicyDeficit, LoadBalancingPolicyProportional]
+      description: Algorithm for lender scoring. Deficit prioritizes the largest lending shortfall; proportional prioritizes the lowest actual-to-desired lending ratio.
     IllConfig:
       type: object
       properties:
+        loadBalancingPolicy:
+          allOf: [{ $ref: '#/components/schemas/LoadBalancingPolicy' }]
+          nullable: true
+          description: Consortium lender scoring policy. Omitted or null defaults to deficit.
         isPickupLocation:
           type: boolean
           description: Whether this entry is offered as a pickup location. Applies to institutions and branches, independently of LMS pickup codes. Defaults to false.

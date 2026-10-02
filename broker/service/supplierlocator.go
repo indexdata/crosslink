@@ -108,6 +108,11 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		return events.LogErrorAndReturnResult(ctx, "no lookup adapter available for locating suppliers", fmt.Errorf("no adapter found"))
 	}
 
+	policy, err := s.lookupAdapterFactory.loadBalancingPolicy(configPeer)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to determine load balancing policy", err)
+	}
+
 	metadataUpdateMode := dirapi.None
 	if configPeer.CatalogConfig != nil && configPeer.CatalogConfig.MetadataUpdateMode != nil {
 		metadataUpdateMode = *configPeer.CatalogConfig.MetadataUpdateMode
@@ -207,7 +212,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if len(peers) > 0 { //even with lookup error we may have locally cached peers
 		var dirEntriesLog = []any{}
 		for _, peer := range peers {
-			loadBalancingScore, err := getLoadBalancingScore(peer)
+			loadBalancingScore, err := getLoadBalancingScore(peer, policy)
 			if err != nil {
 				return events.LogErrorAndReturnResult(ctx, "failed to calculate supplier load balancing score", err)
 			}
@@ -274,7 +279,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	}
 	var rotaInfo adapter.RotaInfo
 	potentialSuppliers, rotaInfo = s.dirAdapter.FilterAndSort(ctx, potentialSuppliers, requester.CustomData,
-		illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.BillingInfo)
+		illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.BillingInfo, policy)
 	// A located supplier is symbol-level, so keep the best eligible holding for each symbol after sorting.
 	potentialSuppliers = firstSupplierPerSymbol(potentialSuppliers)
 	if len(potentialSuppliers) == 0 {
@@ -591,7 +596,10 @@ func getDateWithTimezone(date string, loc *time.Location, endOfDay bool) (time.T
 // getLoadBalancingScore interprets lendToBorrowRatio as desired loans:borrows.
 // Calculate exactly before conversion to avoid rounding intermediate values.
 // The bounded ratio and int32 counters keep scores within float64 range.
-func getLoadBalancingScore(peer ill_db.Peer) (float64, error) {
+func getLoadBalancingScore(peer ill_db.Peer, policy dirapi.LoadBalancingPolicy) (float64, error) {
+	if !policy.Valid() {
+		return 0, fmt.Errorf("invalid loadBalancingPolicy %q", policy)
+	}
 	desiredLoans := big.NewRat(1, 1)
 	desiredBorrows := big.NewRat(1, 1)
 	if peer.CustomData.LendToBorrowRatio != nil {
@@ -611,6 +619,12 @@ func getLoadBalancingScore(peer ill_db.Peer) (float64, error) {
 		}
 	}
 	targetLending := new(big.Rat).Quo(desiredLoans, desiredBorrows)
+	if policy == dirapi.LoadBalancingPolicyProportional {
+		borrows := max(int64(peer.BorrowsCount), 1)
+		actualRatio := big.NewRat(int64(peer.LoansCount), borrows)
+		score, _ := new(big.Rat).Quo(actualRatio, targetLending).Float64()
+		return score, nil
+	}
 	targetLending.Mul(targetLending, big.NewRat(int64(peer.BorrowsCount), 1))
 	score := targetLending.Sub(targetLending, big.NewRat(int64(peer.LoansCount), 1))
 	loadBalancingScore, _ := score.Float64()

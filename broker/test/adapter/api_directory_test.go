@@ -470,7 +470,7 @@ func TestFilterAndSort(t *testing.T) {
 		},
 	}
 	var rotaInfo adapter.RotaInfo
-	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
 	assert.Len(t, entries, 2)
 	assert.Equal(t, "2", entries[0].PeerId)
 	assert.Equal(t, "3", entries[1].PeerId)
@@ -557,7 +557,7 @@ func TestFilterAndSortFilterByCost(t *testing.T) {
 		},
 	}
 	var rotaInfo adapter.RotaInfo
-	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
 	assert.Len(t, entries, 1)
 	assert.Equal(t, "1", entries[0].PeerId)
 	assert.Equal(t, "loan", rotaInfo.Request.Type)
@@ -583,7 +583,7 @@ func TestFilterAndSortFilterByCost0(t *testing.T) {
 		},
 	}
 	var rotaInfo adapter.RotaInfo
-	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
 	assert.Len(t, entries, 1)
 	assert.Equal(t, "1", entries[0].PeerId)
 	assert.Equal(t, "loan", rotaInfo.Request.Type)
@@ -612,7 +612,7 @@ func TestFilterAndSortByType(t *testing.T) {
 		},
 	}
 	var rotaInfo adapter.RotaInfo
-	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
 	assert.Len(t, entries, 2)
 	assert.Equal(t, "2", entries[0].PeerId)
 	assert.Equal(t, "1", entries[1].PeerId)
@@ -642,7 +642,7 @@ func TestFilterAndSortByLevel(t *testing.T) {
 		},
 	}
 	var rotaInfo adapter.RotaInfo
-	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
 	assert.Len(t, entries, 2)
 	assert.Equal(t, "2", entries[0].PeerId)
 	assert.Equal(t, "3", entries[1].PeerId)
@@ -672,7 +672,7 @@ func TestFilterAndSortReciprocal(t *testing.T) {
 		},
 	}
 	var rotaInfo adapter.RotaInfo
-	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
 	assert.Len(t, entries, 1)
 	assert.Equal(t, "3", entries[0].PeerId)
 	assert.Equal(t, "copy", rotaInfo.Request.Type)
@@ -700,7 +700,7 @@ func TestFilterAndSortReciprocalNetworkExcludesPaidTiers(t *testing.T) {
 		},
 	}
 
-	entries, rotaInfo := ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	entries, rotaInfo := ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
 
 	assert.Empty(t, entries)
 	assert.Len(t, rotaInfo.Suppliers, 1)
@@ -729,7 +729,7 @@ func TestFilterAndSortPaidNetworkExcludesFreeTiers(t *testing.T) {
 		},
 	}
 
-	entries, rotaInfo := ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	entries, rotaInfo := ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
 
 	assert.Empty(t, entries)
 	assert.Len(t, rotaInfo.Suppliers, 1)
@@ -758,7 +758,7 @@ func TestFilterAndSortPaidNetworkAllowsPaidTiers(t *testing.T) {
 		},
 	}
 
-	entries, rotaInfo := ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	entries, rotaInfo := ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
 
 	assert.Len(t, entries, 1)
 	assert.Equal(t, "2", entries[0].PeerId)
@@ -806,7 +806,7 @@ func TestFilterAndSortUsesCompatibleNetworkPriority(t *testing.T) {
 		},
 	}
 
-	entries, rota := ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	entries, rota := ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
 
 	if !assert.Len(t, entries, 2) {
 		return
@@ -819,7 +819,7 @@ func TestFilterAndSortUsesCompatibleNetworkPriority(t *testing.T) {
 
 	(*requesterData.Networks)[1].Priority = -2
 	(*requesterData.Networks)[2].Priority = 0
-	entries, _ = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	entries, _ = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
 	if !assert.Len(t, entries, 2) {
 		return
 	}
@@ -837,7 +837,7 @@ func TestFilterAndSortNoFilters(t *testing.T) {
 		{PeerId: "2", LoadBalancingScore: 0.7, CustomData: dirEntries.Items[2]},
 		{PeerId: "3", LoadBalancingScore: 0.8, CustomData: dirEntries.Items[4]}}
 	var rotaInfo adapter.RotaInfo
-	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, nil, nil)
+	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, nil, nil, dirapi.LoadBalancingPolicyDeficit)
 	assert.Len(t, entries, 2)
 	assert.Equal(t, "1", entries[0].PeerId)
 	assert.Equal(t, "3", entries[1].PeerId)
@@ -845,70 +845,70 @@ func TestFilterAndSortNoFilters(t *testing.T) {
 }
 
 func TestCompareSuppliers(t *testing.T) {
-	assert.True(t, adapter.CompareSuppliers(adapter.Supplier{}, adapter.Supplier{}) == 0)
+	assert.True(t, adapter.CompareSuppliers(adapter.Supplier{}, adapter.Supplier{}, dirapi.LoadBalancingPolicyDeficit) == 0)
 	assert.True(t, adapter.CompareSuppliers(
 		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1},
-		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1}) == 0)
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1}, dirapi.LoadBalancingPolicyDeficit) == 0)
 
 	assert.True(t, adapter.CompareSuppliers(
 		adapter.Supplier{Cost: 0, Priority: 1, LoadBalancingScore: 1},
-		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1}) < 0)
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1}, dirapi.LoadBalancingPolicyDeficit) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
 		adapter.Supplier{Cost: 0, Priority: 1, LoadBalancingScore: 1},
-		adapter.Supplier{Cost: 1, Priority: 0, LoadBalancingScore: 0}) < 0)
+		adapter.Supplier{Cost: 1, Priority: 0, LoadBalancingScore: 0}, dirapi.LoadBalancingPolicyDeficit) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
 		adapter.Supplier{Cost: 1, Priority: 0, LoadBalancingScore: 1},
-		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1}) < 0)
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1}, dirapi.LoadBalancingPolicyDeficit) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
 		adapter.Supplier{Cost: 1, Priority: 0, LoadBalancingScore: 1},
-		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 0}) < 0)
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 0}, dirapi.LoadBalancingPolicyDeficit) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
 		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 0},
-		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1}) > 0)
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1}, dirapi.LoadBalancingPolicyDeficit) > 0)
 
 	assert.True(t, adapter.CompareSuppliers(
 		adapter.Supplier{Cost: 2, Priority: 1, LoadBalancingScore: 1},
-		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1}) > 0)
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1}, dirapi.LoadBalancingPolicyDeficit) > 0)
 
 	assert.True(t, adapter.CompareSuppliers(
 		adapter.Supplier{Cost: 1, Priority: 2, LoadBalancingScore: 1},
-		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1}) > 0)
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1}, dirapi.LoadBalancingPolicyDeficit) > 0)
 
 	assert.True(t, adapter.CompareSuppliers(
 		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 2},
-		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1}) < 0)
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1}, dirapi.LoadBalancingPolicyDeficit) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
 		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 2, LoadBalancingScore: 2},
-		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 1, LoadBalancingScore: 1}) < 0)
+		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 1, LoadBalancingScore: 1}, dirapi.LoadBalancingPolicyDeficit) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
 		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 1, ShelvingPreference: 2, LoadBalancingScore: 2},
-		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 1, ShelvingPreference: 1, LoadBalancingScore: 1}) < 0)
+		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 1, ShelvingPreference: 1, LoadBalancingScore: 1}, dirapi.LoadBalancingPolicyDeficit) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
 		adapter.Supplier{Cost: 2, Priority: 1, LocationPreference: 100},
-		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 0}) > 0)
+		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 0}, dirapi.LoadBalancingPolicyDeficit) > 0)
 
 	assert.True(t, adapter.CompareSuppliers(
 		adapter.Supplier{Cost: 1, Priority: 2, LocationPreference: 100},
-		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 0}) > 0)
+		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 0}, dirapi.LoadBalancingPolicyDeficit) > 0)
 
 	assert.True(t, adapter.CompareSuppliers(
 		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1, Local: true},
-		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1, Local: false}) < 0)
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1, Local: false}, dirapi.LoadBalancingPolicyDeficit) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
 		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1, Local: false},
-		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1, Local: true}) > 0)
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1, Local: true}, dirapi.LoadBalancingPolicyDeficit) > 0)
 
 	suppliers := []adapter.Supplier{{Cost: 1, Priority: 1, LoadBalancingScore: 1, Local: false}, {Cost: 1, Priority: 1, LoadBalancingScore: 1, Local: true}}
 	slices.SortFunc(suppliers, func(a, b adapter.Supplier) int {
-		return adapter.CompareSuppliers(a, b)
+		return adapter.CompareSuppliers(a, b, dirapi.LoadBalancingPolicyDeficit)
 	})
 	assert.True(t, suppliers[0].Local) // Local sorted as first
 	assert.False(t, suppliers[1].Local)
@@ -955,7 +955,7 @@ func TestFilterAndSortAppliesHoldingsPolicy(t *testing.T) {
 	}
 	serviceInfo := iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}
 
-	filtered, rotaInfo := ad.FilterAndSort(appCtx, entries, customData, &serviceInfo, nil)
+	filtered, rotaInfo := ad.FilterAndSort(appCtx, entries, customData, &serviceInfo, nil, dirapi.LoadBalancingPolicyDeficit)
 
 	var ids []string
 	for _, supplier := range filtered {
@@ -1000,7 +1000,7 @@ func TestFilterAndSortResolvesHoldingsPolicyForNonMatchingSuppliers(t *testing.T
 				},
 			}
 			serviceInfo := iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}
-			filtered, rotaInfo := createDirectoryAdapter("").FilterAndSort(createLookupCtx(), []adapter.Supplier{supplier}, requester, &serviceInfo, nil)
+			filtered, rotaInfo := createDirectoryAdapter("").FilterAndSort(createLookupCtx(), []adapter.Supplier{supplier}, requester, &serviceInfo, nil, dirapi.LoadBalancingPolicyDeficit)
 			assert.Empty(t, filtered)
 			if assert.Len(t, rotaInfo.Suppliers, 1) {
 				match := rotaInfo.Suppliers[0]
@@ -1014,4 +1014,41 @@ func TestFilterAndSortResolvesHoldingsPolicyForNonMatchingSuppliers(t *testing.T
 
 func strPtr(s string) *string {
 	return &s
+}
+
+func TestFilterAndSortProportional(t *testing.T) {
+	networks := []dirapi.EntryNetworkDetails{{Name: "Reciprocal", Priority: 1}}
+	tiers := []dirapi.Tier{{Name: "Core Loan", Level: "Core", Type: "Loan", Cost: 0}}
+	requester := dirapi.Entry{Networks: &networks, Tiers: &tiers}
+	serviceInfo := iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}
+	entries := []adapter.Supplier{
+		{Symbol: "A", LoadBalancingScore: 0.1, CustomData: requester},
+		{Symbol: "B", LoadBalancingScore: 0.5, CustomData: requester},
+	}
+	for _, policy := range []dirapi.LoadBalancingPolicy{dirapi.LoadBalancingPolicyDeficit, dirapi.LoadBalancingPolicyProportional} {
+		filtered, rota := createDirectoryAdapter("").FilterAndSort(createLookupCtx(), entries, requester, &serviceInfo, nil, policy)
+		assert.Equal(t, policy, rota.LoadBalancingPolicy)
+		if assert.Len(t, filtered, 2) && assert.Len(t, rota.Suppliers, 2) {
+			want := "B"
+			score := 0.5
+			if policy == dirapi.LoadBalancingPolicyProportional {
+				want = "A"
+				score = 0.1
+			}
+			assert.Equal(t, want, filtered[0].Symbol)
+			assert.Equal(t, want, rota.Suppliers[0].Symbol)
+			assert.Equal(t, score, rota.Suppliers[0].LoadBalancingScore)
+		}
+	}
+	// Earlier priorities take precedence over the proportional score.
+	for _, preferred := range []adapter.Supplier{
+		{Local: true, LoadBalancingScore: 10},
+		{Cost: 0, Priority: 2, LoadBalancingScore: 10},
+		{Cost: 1, Priority: 0, LoadBalancingScore: 10},
+		{Cost: 1, Priority: 1, LocationPreference: 1, LoadBalancingScore: 10},
+		{Cost: 1, Priority: 1, ShelvingPreference: 1, LoadBalancingScore: 10},
+	} {
+		assert.Less(t, adapter.CompareSuppliers(preferred, adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 0.1}, dirapi.LoadBalancingPolicyProportional), 0)
+	}
+	assert.Less(t, adapter.CompareSuppliers(adapter.Supplier{Symbol: "A", LoadBalancingScore: 1}, adapter.Supplier{Symbol: "B", LoadBalancingScore: 1}, dirapi.LoadBalancingPolicyProportional), 0)
 }

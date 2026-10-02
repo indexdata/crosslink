@@ -36,6 +36,7 @@ type PatronProfile struct {
 }
 
 type ILLConfig struct {
+	LoadBalancingPolicy         *string     `json:"loadBalancingPolicy"`
 	IsPickupLocation            *bool       `json:"isPickupLocation"`
 	DefaultLoanPeriod           *int32      `json:"defaultLoanPeriod"`
 	MaxRequestsPerPatron        *int32      `json:"maxRequestsPerPatron"`
@@ -203,6 +204,9 @@ func validateConfigEnums(lms *LMSConfig, catalog *CatalogConfig, ill *ILLConfig)
 		return fmt.Errorf("invalid ILL vendor: %s", *ill.ISO18626Vendor)
 	}
 	if ill != nil {
+		if ill.LoadBalancingPolicy != nil && !oneOf(*ill.LoadBalancingPolicy, "deficit", "proportional") {
+			return fmt.Errorf("invalid loadBalancingPolicy %q", *ill.LoadBalancingPolicy)
+		}
 		for index := range ill.LendersOfLastResort {
 			if err := ill.LendersOfLastResort[index].NormalizeAndValidate(); err != nil {
 				return fmt.Errorf("lender of last resort %d: %w", index+1, err)

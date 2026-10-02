@@ -600,6 +600,7 @@ func replaceILLConfig(ctx context.Context, queries *db.Queries, entryID uuid.UUI
 		DefaultLoanPeriod:         config.DefaultLoanPeriod,
 		MaxRequestsPerPatron:      config.MaxRequestsPerPatron,
 		MinimumCost:               config.MinimumCost,
+		LoadBalancingPolicy:       config.LoadBalancingPolicy,
 	})
 	return err
 }

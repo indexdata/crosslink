@@ -17,7 +17,7 @@ var DEFAULT_BROKER_MODE common.BrokerMode
 
 type DirectoryLookupAdapter interface {
 	Lookup(ctx common.ExtendedContext, params DirectoryLookupParams) ([]DirectoryEntry, string, error)
-	FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData dirapi.Entry, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo)
+	FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData dirapi.Entry, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo, policy dirapi.LoadBalancingPolicy) ([]Supplier, RotaInfo)
 }
 
 type DirectoryLookupParams struct {
@@ -157,7 +157,8 @@ func (s SupplierMatch) GetLocationPreference() int     { return s.LocationPrefer
 func (s SupplierMatch) GetShelvingPreference() int     { return s.ShelvingPreference }
 
 type RotaInfo struct {
-	Request   Request         `json:"request"`
-	Requester Requester       `json:"requester"`
-	Suppliers []SupplierMatch `json:"suppliers"`
+	LoadBalancingPolicy dirapi.LoadBalancingPolicy `json:"loadBalancingPolicy"`
+	Request             Request                    `json:"request"`
+	Requester           Requester                  `json:"requester"`
+	Suppliers           []SupplierMatch            `json:"suppliers"`
 }

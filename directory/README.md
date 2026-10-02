@@ -41,6 +41,18 @@ These limits apply to entry creation, updates, and imports. Existing ratios
 outside these limits must be corrected before applying migration 015; the
 migration validates existing entries without changing their ratios.
 
+The optional `illConfig.loadBalancingPolicy` accepts `deficit` or `proportional`.
+The broker reads this setting from the entry identified by `CONSORTIUM_SYMBOL`.
+An omitted or null policy, or an unset consortium symbol, uses `deficit`.
+Requester settings do not select the policy. PATCH omission preserves the current
+value; explicit null clears it. Imports also accept this optional field.
+
+With a lender's desired loans:borrows ratio, `deficit` scores
+`actualBorrows * (desiredLoans / desiredBorrows) - actualLoans` and prioritizes
+higher scores. `proportional` scores
+`(actualLoans / max(actualBorrows, 1)) / (desiredLoans / desiredBorrows)` and
+prioritizes lower scores. Other rota priorities still take precedence.
+
 ### Request format and sample data
 
 Each record has `type`, `key`, and `data` fields. Put one complete JSON object

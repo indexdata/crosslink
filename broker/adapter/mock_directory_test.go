@@ -47,7 +47,7 @@ func TestMockFilterAndSortAppliesHoldingsPolicy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.supplier.Symbol = "A"
 			ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-			filtered, rota := (&MockDirectoryLookupAdapter{}).FilterAndSort(ctx, []Supplier{tc.supplier}, dirapi.Entry{}, nil, nil)
+			filtered, rota := (&MockDirectoryLookupAdapter{}).FilterAndSort(ctx, []Supplier{tc.supplier}, dirapi.Entry{}, nil, nil, dirapi.LoadBalancingPolicyDeficit)
 			require.Len(t, rota.Suppliers, 1)
 			assert.Equal(t, tc.match, rota.Suppliers[0].Match)
 			assert.Equal(t, tc.location, rota.Suppliers[0].LocationPreference)
@@ -121,7 +121,7 @@ func TestMockFilterAndSortPreservesLocalPreference(t *testing.T) {
 	filtered, rota := (&MockDirectoryLookupAdapter{}).FilterAndSort(ctx, []Supplier{
 		{Symbol: "REMOTE", LoadBalancingScore: 100},
 		{Symbol: "LOCAL", Local: true, LoadBalancingScore: -10},
-	}, dirapi.Entry{}, nil, nil)
+	}, dirapi.Entry{}, nil, nil, dirapi.LoadBalancingPolicyDeficit)
 	require.Len(t, filtered, 2)
 	require.Len(t, rota.Suppliers, 2)
 	assert.Equal(t, "LOCAL", filtered[0].Symbol)

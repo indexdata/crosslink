@@ -1528,3 +1528,41 @@ func requirePgCode(t *testing.T, err error, code string) {
 	require.True(t, ok, "expected PostgreSQL error, got %T: %v", err, err)
 	require.Equal(t, code, pgErr.Code)
 }
+
+func TestImportLoadBalancingPolicyPersistence(t *testing.T) {
+	resetImportDatabase(t)
+	repo := importdb.New(testPool)
+	aggregate := completeEntryAggregate("POLICY")
+	for _, value := range []*string{policyStringPointer("proportional"), policyStringPointer("deficit"), nil} {
+		aggregate.Data.ILLConfig.LoadBalancingPolicy = value
+		_, err := repo.ImportEntry(context.Background(), aggregate, model.ConflictPolicyUpdate)
+		require.NoError(t, err)
+		var stored *string
+		require.NoError(t, testPool.QueryRow(context.Background(), `SELECT load_balancing_policy FROM ill_configs WHERE entry=$1`, entryIDBySymbol(t, aggregate.Key)).Scan(&stored))
+		require.Equal(t, value, stored)
+	}
+}
+
+func policyStringPointer(value string) *string { return &value }
+
+func TestLoadBalancingPolicyMigrationRoundTrip(t *testing.T) {
+	resetImportDatabase(t)
+	aggregate := completeEntryAggregate("MIGRATION")
+	_, err := importdb.New(testPool).ImportEntry(context.Background(), aggregate, model.ConflictPolicyFail)
+	require.NoError(t, err)
+	ctx := context.Background()
+	tx, err := testPool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, tx.Rollback(ctx)) }()
+	for _, direction := range []string{"down", "up"} {
+		sql, err := os.ReadFile("../../migrations/016_load_balancing_policy." + direction + ".sql")
+		require.NoError(t, err)
+		_, err = tx.Exec(ctx, string(sql))
+		require.NoError(t, err)
+	}
+	var policy *string
+	require.NoError(t, tx.QueryRow(ctx, `SELECT load_balancing_policy FROM ill_configs WHERE entry=$1`, entryIDBySymbol(t, aggregate.Key)).Scan(&policy))
+	require.Nil(t, policy, "existing entries remain unset")
+	_, err = tx.Exec(ctx, `UPDATE ill_configs SET load_balancing_policy='proportional' WHERE entry=$1`, entryIDBySymbol(t, aggregate.Key))
+	require.NoError(t, err)
+}

@@ -168,8 +168,9 @@ func (a *ApiDirectory) Lookup(ctx common.ExtendedContext, params DirectoryLookup
 	return directoryList, query, nil
 }
 
-func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData dirapi.Entry, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo) {
+func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData dirapi.Entry, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo, policy dirapi.LoadBalancingPolicy) ([]Supplier, RotaInfo) {
 	var rotaInfo RotaInfo
+	rotaInfo.LoadBalancingPolicy = policy
 
 	filtered := []Supplier{}
 	reqNetworks := getPeerNetworks(requesterData)
@@ -316,10 +317,10 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 		} else if !a.Match && b.Match {
 			return 1
 		}
-		return CompareSuppliers(a, b)
+		return CompareSuppliers(a, b, policy)
 	})
 	slices.SortStableFunc(filtered, func(a, b Supplier) int {
-		return CompareSuppliers(a, b)
+		return CompareSuppliers(a, b, policy)
 	})
 	return filtered, rotaInfo
 }
@@ -360,7 +361,8 @@ func networkAllowsCost(network Network, cost float64) bool {
 	return cost > 0
 }
 
-func CompareSuppliers(a, b SupplierOrdering) int {
+// CompareSuppliers orders eligible suppliers using the selected consortium policy.
+func CompareSuppliers(a, b SupplierOrdering, policy dirapi.LoadBalancingPolicy) int {
 	if a.IsLocal() && !b.IsLocal() {
 		return -1
 	} else if !a.IsLocal() && b.IsLocal() {
@@ -382,7 +384,7 @@ func CompareSuppliers(a, b SupplierOrdering) int {
 	if sort != 0 {
 		return sort
 	}
-	sort = cmp.Compare(b.GetLoadBalancingScore(), a.GetLoadBalancingScore())
+	sort = compareLoadBalancingScores(a.GetLoadBalancingScore(), b.GetLoadBalancingScore(), policy)
 	if sort != 0 {
 		return sort
 	}
@@ -507,4 +509,11 @@ func GetBrokerMode(vendor dirapi.EntryVendor) common.BrokerMode {
 	default:
 		return DEFAULT_BROKER_MODE
 	}
+}
+
+func compareLoadBalancingScores(a, b float64, policy dirapi.LoadBalancingPolicy) int {
+	if policy == dirapi.LoadBalancingPolicyProportional {
+		return cmp.Compare(a, b)
+	}
+	return cmp.Compare(b, a)
 }

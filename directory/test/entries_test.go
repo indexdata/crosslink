@@ -907,7 +907,8 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 			"supplierPatronPattern":"PATRON-{requesterSymbol}",
 			"duplicateCheckWindowHours":24,
 			"maxRequestsPerPatron":0,
-			"minimumCost":1.5
+			"minimumCost":1.5,
+			"loadBalancingPolicy":"proportional"
 		},
 		"symbols":[{"authority":"ISIL","symbol":"CONTRACT"}],
 		"catalogConfig":{
@@ -998,7 +999,7 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 		illConfig["supplierPatronPattern"] != "PATRON-{requesterSymbol}" ||
 		illConfig["duplicateCheckWindowHours"] != float64(24) ||
 		illConfig["maxRequestsPerPatron"] != float64(0) ||
-		illConfig["minimumCost"] != 1.5 {
+		illConfig["minimumCost"] != 1.5 || illConfig["loadBalancingPolicy"] != "proportional" {
 		t.Fatalf("illConfig fields did not round-trip: %#v", illConfig)
 	}
 
@@ -1015,7 +1016,7 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 		t.Fatalf("failed to parse entry after illConfig PATCH: %v", err)
 	}
 	illConfig = entry["illConfig"].(map[string]any)
-	if illConfig["noteFieldSeparator"] != " / " || illConfig["useOfferedCosts"] != false || illConfig["iso18626Url"] != "https://iso.example.org/iso18626" || illConfig["maxRequestsPerPatron"] != float64(25) || illConfig["minimumCost"] != 1.5 {
+	if illConfig["noteFieldSeparator"] != " / " || illConfig["useOfferedCosts"] != false || illConfig["iso18626Url"] != "https://iso.example.org/iso18626" || illConfig["maxRequestsPerPatron"] != float64(25) || illConfig["minimumCost"] != 1.5 || illConfig["loadBalancingPolicy"] != "proportional" {
 		t.Fatalf("partial illConfig PATCH did not merge fields: %#v", illConfig)
 	}
 	if _, ok := illConfig["lendersOfLastResort"]; ok {

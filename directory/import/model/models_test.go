@@ -168,3 +168,16 @@ func validEntryAggregate() EntryAggregate {
 		},
 	}
 }
+
+func TestEntryAggregateLoadBalancingPolicy(t *testing.T) {
+	for _, policy := range []string{"deficit", "proportional", "invalid", ""} {
+		aggregate := validEntryAggregate()
+		aggregate.Data.ILLConfig = &ILLConfig{LoadBalancingPolicy: &policy}
+		err := aggregate.NormalizeAndValidate()
+		if policy == "invalid" || policy == "" {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err)
+		}
+	}
+}

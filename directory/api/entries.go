@@ -299,7 +299,8 @@ func buildEntrySQL(whereClause string) string {
 			'duplicateCheckWindowHours', i.duplicate_check_window_hours,
 			'defaultLoanPeriod', i.default_loan_period,
 			'maxRequestsPerPatron', i.max_requests_per_patron,
-			'minimumCost', i.minimum_cost
+			'minimumCost', i.minimum_cost,
+			'loadBalancingPolicy', i.load_balancing_policy
 		)) FROM ill_configs i WHERE i.entry = e.id) as ill_config,
 		(
 		SELECT 

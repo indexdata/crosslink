@@ -509,3 +509,28 @@ func TestImportValidatesHostSettings(t *testing.T) {
 		})
 	}
 }
+
+func TestImportLoadBalancingPolicy(t *testing.T) {
+	for _, value := range []string{`"proportional"`, `"deficit"`, `null`, `"invalid"`, `""`} {
+		t.Run(value, func(t *testing.T) {
+			repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
+			config := strings.Replace(validILLConfig(), `"illConfig":{`, `"illConfig":{"loadBalancingPolicy":`+value+`,`, 1)
+			record := strings.Replace(validEntryRecord(), `"illConfig":null`, config, 1)
+			result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(record))
+			require.NoError(t, err)
+			if value == `"invalid"` || value == `""` {
+				require.Len(t, result.Errors, 1)
+				assert.Zero(t, repo.entryCalls)
+				return
+			}
+			require.Empty(t, result.Errors)
+			require.NotNil(t, repo.entry.Data.ILLConfig)
+			if value == `null` {
+				assert.Nil(t, repo.entry.Data.ILLConfig.LoadBalancingPolicy)
+			} else {
+				require.NotNil(t, repo.entry.Data.ILLConfig.LoadBalancingPolicy)
+				assert.Equal(t, strings.Trim(value, `"`), *repo.entry.Data.ILLConfig.LoadBalancingPolicy)
+			}
+		})
+	}
+}
