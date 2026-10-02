@@ -7,10 +7,12 @@ import (
 	"testing"
 
 	dirapi "github.com/indexdata/crosslink/directory/api"
+	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/crosslink/marcxml"
 	"github.com/indexdata/crosslink/sru"
 	"github.com/indexdata/crosslink/sru/diag"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func createSruAdapter(t *testing.T, isxn bool, url ...string) LookupAdapter {
@@ -757,4 +759,54 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, "missing SRU lookup parameters. Provide at least one of: identifier (supplierUniqueRecordId), isbn, issn", err.Error())
 	assert.ErrorIs(t, err, ErrMissingLookupParameters)
+}
+
+func TestSruYearFilteredHoldingsFallback(t *testing.T) {
+	for _, queryType := range []dirapi.QueryConfigType{dirapi.QueryConfigTypeCql, dirapi.QueryConfigTypePqf} {
+		t.Run(string(queryType), func(t *testing.T) {
+			template, queryParam := "dc.date = {term}", "query"
+			wantQueries := []string{`rec.id = record and dc.date = 2021`, `isbn = isbn and dc.date = 2021`}
+			if queryType == dirapi.QueryConfigTypePqf {
+				template, queryParam = "@attr 1=30 {term}", "x-pquery"
+				wantQueries = []string{`@and @attr 1=12 "record" @attr 1=30 "2021"`, `@and @attr 1=7 "isbn" @attr 1=30 "2021"`}
+			}
+			var queries []string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				queries = append(queries, r.URL.Query().Get(queryParam))
+				// A matched bibliographic record without a matching 924 must allow fallback.
+				record := marcxml.Record{}
+				if len(queries) == 2 {
+					record.Datafield = []marcxml.DataFieldType{{Tag: "924", Ind1: "0", Ind2: " ", Subfield: []marcxml.SubfieldatafieldType{
+						{Code: "a", Text: "holding"}, {Code: "b", Text: "DE-929"}, {Code: "d", Text: "c"},
+						{Code: "q", Text: "1994"}, {Code: "x", Text: "-"},
+					}}}
+				}
+				data, err := xml.Marshal(record)
+				assert.NoError(t, err)
+				response := sru.SearchRetrieveResponse{SearchRetrieveResponseDefinition: sru.SearchRetrieveResponseDefinition{
+					NumberOfRecords: 1,
+					Records:         &sru.RecordsDefinition{Record: []sru.RecordDefinition{{RecordSchema: "marcxml", RecordData: sru.StringOrXmlFragmentDefinition{XMLContent: data}}}},
+				}}
+				w.Header().Set("Content-Type", "application/xml")
+				assert.NoError(t, xml.NewEncoder(w).Encode(response))
+			}))
+			defer server.Close()
+			builder, err := NewQueryBuilderGen(&dirapi.QueryConfig{Type: &queryType, Year: &template})
+			require.NoError(t, err)
+			adapter := CreateSruLookupAdapter(server.Client(), []string{server.URL}, "", builder, NewMarc21Plus1HoldingsParser(), nil, "marcxml")
+			params := LookupParamsFromBibliographicInfo(iso18626.BibliographicInfo{SupplierUniqueRecordId: "record"}, nil, &iso18626.PublicationInfo{PublicationDate: "2021"})
+			params.Isbn = "isbn"
+			result, err := adapter.Lookup(params)
+			require.NoError(t, err)
+			holdings, err := result.GetHoldings()
+			require.NoError(t, err)
+			assert.Equal(t, []Holding{{Symbol: "ISIL:DE-929", LocalIdentifier: "holding"}}, holdings)
+			assert.Equal(t, wantQueries, queries)
+
+			params.Year = "2021-05-01"
+			_, err = adapter.Lookup(params)
+			assert.ErrorContains(t, err, "YYYY")
+			assert.Equal(t, wantQueries, queries, "invalid dates must fail before contacting SRU")
+		})
+	}
 }
