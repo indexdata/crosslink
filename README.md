@@ -7,6 +7,7 @@ See individual components docs for details:
 * [broker](broker/README.md): ISO18626 transaction broker
 * [directory](directory/README.md): CrossLink directory service
 * [illmock](illmock/README.md): ISO18626 and SRU mocking service
+* [supply](supply/README.md): S3-backed document storage service
 
 # Project goals and architecture
 
@@ -48,10 +49,8 @@ Run the container for a given application in this repository with (replace `{app
 docker run ghcr.io/indexdata/{appName}:main
 ```
 
-Only `main` tag is available.
-
-If you're running on a platform that is not `linux/amd64`, make sure to pass the `--platform linux/amd64` flag to `docker pull/run`.
-Only `amd64` images are published from this repository.
+Images are published with `main` and `sha-<short-sha>` tags for `linux/amd64` and `linux/arm64`.
+Supply is published as `ghcr.io/indexdata/crosslink-supply`; see its [deployment instructions](supply/README.md#deployment).
 
 # Deploying on Kubernetes
 

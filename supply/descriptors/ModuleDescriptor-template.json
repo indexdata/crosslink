@@ -1,0 +1,33 @@
+{
+  "id" : "crosslink-supply-@version@",
+  "name" : "CrossLink Supply",
+  "provides" : [ {
+    "id" : "dms",
+    "version" : "0.0",
+    "handlers": [
+      {
+        "methods": [ "POST" ],
+        "pathPattern" : "/dms/upload",
+        "permissionsRequired": [ "dms.upload.post" ]
+      },
+      {
+        "methods": [ "DELETE" ],
+        "pathPattern" : "/dms/upload/*",
+        "permissionsRequired": [ "dms.upload.delete" ]
+      }
+    ]
+  } ],
+  "requires": [],
+  "permissionSets": [
+    {
+      "description": "Store file",
+      "displayName": "DMS -- Store file",
+      "permissionName": "dms.upload.post"
+    },
+    {
+      "description": "Delete file",
+      "displayName": "DMS -- Delete file",
+      "permissionName": "dms.upload.delete"
+    }
+  ]
+}
