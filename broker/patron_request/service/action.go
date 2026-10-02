@@ -360,7 +360,7 @@ func (a *PatronRequestActionService) checkDuplicateBorrowingRequest(ctx common.E
 		return failure("patron request creation time missing for duplicate check", errors.New("invalid patron request creation time"))
 	}
 
-	lookupParams := catalog.LookupParamsFromBibliographicInfo(pr.IllRequest.BibliographicInfo, pr.IllRequest.ServiceInfo)
+	lookupParams := catalog.LookupParamsFromBibliographicInfo(pr.IllRequest.BibliographicInfo, pr.IllRequest.ServiceInfo, pr.IllRequest.PublicationInfo)
 	duplicateCheck.LookupParams = &lookupParams
 	if lookupParams.ServiceType == "" {
 		return success()
@@ -407,7 +407,7 @@ func (a *PatronRequestActionService) checkDuplicateBorrowingRequest(ctx common.E
 
 	duplicateCheck.Duplicate = true
 	duplicateCheck.MatchedPatronRequestId = &matches[0].ID
-	matchedValues := catalog.LookupParamsFromBibliographicInfo(matches[0].IllRequest.BibliographicInfo, matches[0].IllRequest.ServiceInfo)
+	matchedValues := catalog.LookupParamsFromBibliographicInfo(matches[0].IllRequest.BibliographicInfo, matches[0].IllRequest.ServiceInfo, matches[0].IllRequest.PublicationInfo)
 	duplicateCheck.MatchedValues = &matchedValues
 	result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeReview}
 	return success()
@@ -1017,7 +1017,7 @@ func (a *PatronRequestActionService) metadataUpdateWithDetails(ctx common.Extend
 	if mode == dirapi.None {
 		return nil, nil
 	}
-	lookupParams := catalog.LookupParamsFromBibliographicInfo(illRequest.BibliographicInfo, illRequest.ServiceInfo)
+	lookupParams := catalog.LookupParamsFromBibliographicInfo(illRequest.BibliographicInfo, illRequest.ServiceInfo, illRequest.PublicationInfo)
 	detail := &actionDecisionDetailMetadataUpdate{
 		Type:          "metadata-update",
 		Mode:          string(mode),

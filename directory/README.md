@@ -1,5 +1,19 @@
 # Directory service
 
+## Catalog coverage year filtering
+
+Set `catalogConfig.queryConfig.year` to `dc.date = {term}` for CQL or
+`@attr 1=30 {term}` for PQF to enable publication year filtering. There is no
+default: an omitted or empty template disables both filtering and validation.
+When enabled, a supplied ISO18626 `publicationInfo.publicationDate` must be
+exactly four ASCII digits (`YYYY`); other formats return a lookup error. An
+absent date leaves queries unchanged. The year clause is ANDed with each
+identifier, ISBN, ISSN, or title lookup, never searched by itself.
+
+For the GVI `marc21plus1` service, the server filters individual MARC 924
+holdings. CrossLink does not additionally interpret holdings date ranges.
+The template can also be used with other catalogs supporting coverage queries.
+
 ## Local database
 
 Start a temporary PostgreSQL server and create the Directory database:

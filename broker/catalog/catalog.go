@@ -38,6 +38,8 @@ type LookupParams struct {
 	Issn        string
 	Title       string
 	ServiceType string
+	// Year carries publicationDate unchanged; configured year queries require YYYY.
+	Year string
 }
 
 type Holding struct {

@@ -923,7 +923,8 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 				"identifier":"rec.id = {term}",
 				"isbn":"isbn = {term}",
 				"issn":"issn = {term}",
-				"title":"title = {term}"
+				"title":"title = {term}",
+				"year":"dc.date = {term}"
 			},
 			"holdingsFormat":{
 				"marc":{
@@ -1036,7 +1037,7 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 		t.Fatalf("holdingsPolicy did not round-trip: %#v", policy)
 	}
 	queryConfig := holdings["queryConfig"].(map[string]any)
-	if queryConfig["type"] != "cql" || queryConfig["identifier"] != "rec.id = {term}" {
+	if queryConfig["type"] != "cql" || queryConfig["identifier"] != "rec.id = {term}" || queryConfig["year"] != "dc.date = {term}" {
 		t.Fatalf("catalogConfig queryConfig did not round-trip: %#v", queryConfig)
 	}
 	metadataMarc := holdings["metadataFormat"].(map[string]any)["marc21"].(map[string]any)
@@ -1071,7 +1072,7 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 	metadataMarc = holdings["metadataFormat"].(map[string]any)["marc21"].(map[string]any)
 	if holdings["metadataUpdateMode"] != "merge" || zoom["address"] != "z3950.example.org:210/catalog" ||
 		options["count"] != "50" || options["preferredRecordSyntax"] != "usmarc" || options["emptyValue"] != "" ||
-		queryConfig["title"] != "new title query" || queryConfig["identifier"] != "rec.id = {term}" ||
+		queryConfig["title"] != "new title query" || queryConfig["identifier"] != "rec.id = {term}" || queryConfig["year"] != "dc.date = {term}" ||
 		marcHoldings["mainField"] != "998" || marcHoldings["locationSubField"] != "l" ||
 		metadataMarc["title"] != "246$a" || metadataMarc["author"] != "100$a" {
 		t.Fatalf("partial catalogConfig PATCH did not recursively merge fields: %#v", holdings)

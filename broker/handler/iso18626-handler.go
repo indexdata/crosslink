@@ -230,7 +230,7 @@ func checkDuplicateRequest(ctx common.ExtendedContext, request *iso18626.Request
 		return resultMap, nil
 	}
 
-	lookupParams := catalog.LookupParamsFromBibliographicInfo(request.BibliographicInfo, request.ServiceInfo)
+	lookupParams := catalog.LookupParamsFromBibliographicInfo(request.BibliographicInfo, request.ServiceInfo, request.PublicationInfo)
 	duplicateCheck.LookupParams = &lookupParams
 	if lookupParams.ServiceType == "" {
 		return resultMap, nil
@@ -273,6 +273,7 @@ func checkDuplicateRequest(ctx common.ExtendedContext, request *iso18626.Request
 	matchedValues := catalog.LookupParamsFromBibliographicInfo(
 		trans[0].IllTransactionData.BibliographicInfo,
 		trans[0].IllTransactionData.ServiceInfo,
+		trans[0].IllTransactionData.PublicationInfo,
 	)
 	duplicateCheck.MatchedValues = &matchedValues
 	return resultMap, ErrDuplicateRequest
@@ -303,7 +304,7 @@ func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, r
 
 		illTrans.LastRequesterAction = createPgText("Request")
 
-		oldParams := catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo)
+		oldParams := catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.PublicationInfo)
 
 		illTransactionData := ill_db.IllTransactionData{
 			BibliographicInfo:     request.BibliographicInfo,
@@ -317,7 +318,7 @@ func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, r
 		}
 		illTrans.IllTransactionData = illTransactionData
 
-		newParams := catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo)
+		newParams := catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.PublicationInfo)
 		retryLookupChanged = oldParams != newParams
 		if !retryLookupChanged {
 			// RetryPossible terminates the previous supplier request. When the
