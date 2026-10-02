@@ -109,6 +109,7 @@ func TestUploadLimit(t *testing.T) {
 }
 
 func TestUploadConfigurationAndMultipartErrors(t *testing.T) {
+	storageServer(t, func(w http.ResponseWriter, r *http.Request) { t.Error("invalid request contacted storage") })
 	for _, value := range []string{"", "0", "-1", "abc", "9223372036854775808"} {
 		t.Run(value, func(t *testing.T) {
 			t.Setenv("MOD_DMS_MAX_UPLOAD_BYTES", value)
@@ -122,17 +123,24 @@ func TestUploadConfigurationAndMultipartErrors(t *testing.T) {
 			}
 		})
 	}
-	for _, contentType := range []string{"multipart/form-data", "multipart/form-data; boundary=missing", "text/plain"} {
+	for _, tc := range []struct {
+		contentType string
+		status      int
+	}{
+		{"multipart/form-data", 400},
+		{"multipart/form-data; boundary=missing", 400},
+		{"Multipart/Form-Data; boundary=missing", 400},
+		{"text/plain", 415},
+		{"", 415},
+		{"multipart/form-dataevil; boundary=missing", 415},
+		{"multipart/form-data; boundary=\"unterminated", 415},
+	} {
 		req := httptest.NewRequest(http.MethodPost, "/dms/upload", strings.NewReader("bad"))
-		req.Header.Set("Content-Type", contentType)
+		req.Header.Set("Content-Type", tc.contentType)
 		res := httptest.NewRecorder()
 		Handler(context.Background()).ServeHTTP(res, req)
-		want := 400
-		if contentType == "text/plain" {
-			want = 415
-		}
-		if res.Code != want {
-			t.Fatalf("status %d, want %d", res.Code, want)
+		if res.Code != tc.status {
+			t.Fatalf("content type %q: status %d, want %d", tc.contentType, res.Code, tc.status)
 		}
 	}
 	var body bytes.Buffer
@@ -221,6 +229,53 @@ func TestStorageFailuresAndTemporaryCleanup(t *testing.T) {
 	Handler(context.Background()).ServeHTTP(res, req)
 	if res.Code != 503 {
 		t.Fatalf("failed delete: %d", res.Code)
+	}
+}
+
+func TestHandlerReusesStorageClient(t *testing.T) {
+	var connections, calls atomic.Int32
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		_, _ = io.Copy(io.Discard, r.Body)
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusNoContent)
+		} else {
+			w.Header().Set("ETag", `"abc"`)
+		}
+	}))
+	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			connections.Add(1)
+		}
+	}
+	server.Start()
+	t.Cleanup(server.Close)
+	t.Setenv("MOD_DMS_BUCKET", "documents,us-east-1,"+strings.TrimPrefix(server.URL, "http://")+",access,secret")
+	t.Setenv("MOD_DMS_INSECURE", "true")
+	handler := Handler(context.Background())
+	// Routes keep their startup configuration, even if the environment changes.
+	t.Setenv("MOD_DMS_BUCKET", "invalid")
+	for range 2 {
+		body, contentType := multipartBody(t, 1, false)
+		req := httptest.NewRequest(http.MethodPost, "/dms/upload", bytes.NewReader(body))
+		req.Header.Set("Content-Type", strings.Replace(contentType, "multipart/form-data", "Multipart/Form-Data", 1))
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != http.StatusOK {
+			t.Fatalf("upload: %d %s", res.Code, res.Body.String())
+		}
+		var uploaded Uploaded
+		if err := json.Unmarshal(res.Body.Bytes(), &uploaded); err != nil {
+			t.Fatal(err)
+		}
+		res = httptest.NewRecorder()
+		handler.ServeHTTP(res, httptest.NewRequest(http.MethodDelete, "/dms/upload/"+uploaded.Key, nil))
+		if res.Code != http.StatusOK {
+			t.Fatalf("delete: %d %s", res.Code, res.Body.String())
+		}
+	}
+	if calls.Load() != 4 || connections.Load() != 1 {
+		t.Fatalf("storage calls %d, connections %d; want four calls sharing one connection", calls.Load(), connections.Load())
 	}
 }
 
@@ -385,6 +440,15 @@ func TestStartConfiguration(t *testing.T) {
 	if err := Start(context.Background()); err == nil {
 		t.Fatal("invalid bucket accepted")
 	}
+	t.Setenv("MOD_DMS_BUCKET", "bucket,us-east-1,https://localhost:9000/path,access,secret")
+	if err := Start(context.Background()); err == nil || !strings.Contains(err.Error(), "configure bucket") {
+		t.Fatalf("invalid endpoint: %v", err)
+	}
+	res := httptest.NewRecorder()
+	Handler(context.Background()).ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("invalid endpoint health status: %d", res.Code)
+	}
 	t.Setenv("MOD_DMS_BUCKET", "bucket,us-east-1,localhost:9000,access,secret")
 	t.Setenv("MOD_DMS_MAX_UPLOAD_BYTES", "0")
 	if err := Start(context.Background()); err == nil {
@@ -409,6 +473,7 @@ func TestUploadEpilogueLimit(t *testing.T) {
 }
 
 func TestTemporaryCleanupOnRejection(t *testing.T) {
+	storageServer(t, func(w http.ResponseWriter, r *http.Request) { t.Error("rejected request contacted storage") })
 	body, ct := multipartBody(t, 33<<20, false)
 	for _, oversized := range []bool{false, true} {
 		t.Run(strconv.FormatBool(oversized), func(t *testing.T) {

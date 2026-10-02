@@ -26,13 +26,15 @@ Configuration is through the following environment variables:
 
 - `LOG_LEVEL` (default `info`), sets log level to one of `debug, info, warn, error`
 
-- `MOD_DMS_BUCKET` is required and consists of exactly five comma-delimited components: bucket,region,endpoint,access,secret. Commas inside a component cannot be represented in this format; any other component count prevents startup
+- `MOD_DMS_BUCKET` is required and consists of exactly five comma-delimited components: bucket,region,endpoint,access,secret. Commas inside a component cannot be represented in this format; any other component count or an invalid endpoint prevents startup
 
 - `MOD_DMS_TYPES` optionally provides a comma-delimited list of content-types to accept
 
 - `MOD_DMS_MAX_UPLOAD_BYTES` (default `104857600`, 100 MiB) caps the complete upload request, including multipart overhead and additional fields. Configure a positive decimal byte count; invalid values prevent startup. The file itself must fit within this limit together with multipart overhead.
 
 - `MOD_DMS_INSECURE`, if present and set to `true`, indicates to use `http` rather than `https` to access the configured endpoint
+
+Returned object URLs are unsigned and use the configured storage endpoint. Consumers must be able to reach that endpoint and read the uploaded objects anonymously (for example, through a bucket policy granting `s3:GetObject`). Upload credentials alone do not grant access to these URLs; a private bucket can accept uploads while returned URLs remain inaccessible. Supply does not proxy or presign downloads.
 
 ## Building and testing
 

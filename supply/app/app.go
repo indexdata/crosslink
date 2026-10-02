@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"mime"
 	"net"
 	"net/http"
 	"os"
@@ -42,13 +43,11 @@ func Start(ctx context.Context) error {
 		return fmt.Errorf("configure logger: %w", err)
 	}
 	slog.SetDefault(logger)
-	if _, err := Creds(); err != nil {
-		return fmt.Errorf("configure bucket: %w", err)
-	}
-	if _, err := uploadLimit(); err != nil {
+	handler, err := configuredHandler()
+	if err != nil {
 		return err
 	}
-	server := &http.Server{Handler: Handler(ctx), Addr: fmt.Sprintf("%s:%s", Host, Port), ReadHeaderTimeout: 10 * time.Second}
+	server := &http.Server{Handler: handler, Addr: fmt.Sprintf("%s:%s", Host, Port), ReadHeaderTimeout: 10 * time.Second}
 	slog.InfoContext(ctx, "Starting Supply", "address", server.Addr)
 	return serve(ctx, server, 20*time.Second)
 }
@@ -152,20 +151,36 @@ func Logger() (*slog.Logger, error) {
 	return logger, nil
 }
 
-// Handler builds the HTTP routes using the current upload-limit configuration.
+// Handler builds the HTTP routes with a shared storage client and the current configuration.
+// Invalid configuration produces a handler that returns HTTP 503, including for health checks.
 func Handler(ctx context.Context) http.Handler {
+	handler, err := configuredHandler()
+	if err != nil {
+		slog.ErrorContext(ctx, "Invalid Supply configuration", "error", err)
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
+		})
+	}
+	return handler
+}
+
+func configuredHandler() (http.Handler, error) {
+	bucket, client, err := getBucketClient()
+	if err != nil {
+		return nil, fmt.Errorf("configure bucket: %w", err)
+	}
+	limit, err := uploadLimit()
+	if err != nil {
+		return nil, err
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealthz)
-	limit, limitErr := uploadLimit()
 	mux.HandleFunc("POST /dms/upload", func(w http.ResponseWriter, req *http.Request) {
-		if limitErr != nil {
-			slog.ErrorContext(req.Context(), "Invalid upload configuration", "error", limitErr)
-			http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
-			return
-		}
-		handleUpload(w, req, limit)
+		handleUpload(w, req, limit, bucket, client)
 	})
-	mux.HandleFunc("DELETE /dms/upload/{key...}", handleDelete)
+	mux.HandleFunc("DELETE /dms/upload/{key...}", func(w http.ResponseWriter, req *http.Request) {
+		handleDelete(w, req, bucket, client)
+	})
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		// Reject malformed keys before ServeMux can redirect a cleaned path.
 		if req.Method == http.MethodDelete && strings.HasPrefix(req.URL.Path, "/dms/upload/") && !validKey(strings.TrimPrefix(req.URL.Path, "/dms/upload/"), req.Header.Get("X-Okapi-Tenant")) {
@@ -173,7 +188,7 @@ func Handler(ctx context.Context) http.Handler {
 			return
 		}
 		mux.ServeHTTP(w, req)
-	})
+	}), nil
 }
 
 func handleHealthz(w http.ResponseWriter, r *http.Request) {
@@ -202,7 +217,6 @@ func getBucketClient() (string, *minio.Client, error) {
 		return "", nil, err
 	}
 
-	// Can we pool these?
 	minioClient, err := minio.New(b.Endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(b.Access, b.Secret, ""),
 		Region: b.Region,
@@ -217,14 +231,15 @@ type Uploaded struct {
 	Key string `json:"key"`
 }
 
-func handleUpload(w http.ResponseWriter, req *http.Request, limit int64) {
+func handleUpload(w http.ResponseWriter, req *http.Request, limit int64, bucket string, minioClient *minio.Client) {
 	tenant := req.Header.Get("X-Okapi-Tenant")
 	if !validTenant(tenant) {
 		http.Error(w, "Invalid tenant", http.StatusBadRequest)
 		return
 	}
-	if contentType := req.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "multipart/form-data") {
-		slog.WarnContext(req.Context(), "Unexpected content type", "contentType", contentType)
+	mediaType, _, err := mime.ParseMediaType(req.Header.Get("Content-Type"))
+	if err != nil || mediaType != "multipart/form-data" {
+		slog.WarnContext(req.Context(), "Unexpected content type", "contentType", req.Header.Get("Content-Type"))
 		http.Error(w, "Expected multipart/form-data", http.StatusUnsupportedMediaType)
 		return
 	}
@@ -237,7 +252,7 @@ func handleUpload(w http.ResponseWriter, req *http.Request, limit int64) {
 			}
 		}
 	}()
-	err := req.ParseMultipartForm(32 << 20)
+	err = req.ParseMultipartForm(32 << 20)
 	if err == nil {
 		// Include any multipart epilogue in the total request-size limit.
 		_, err = io.Copy(io.Discard, req.Body)
@@ -283,13 +298,6 @@ func handleUpload(w http.ResponseWriter, req *http.Request, limit int64) {
 		return
 	}
 
-	bucket, minioClient, err := getBucketClient()
-	if err != nil {
-		slog.ErrorContext(req.Context(), "Error obtaining client for S3 bucket", "error", err, "bucket", bucket)
-		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
-		return
-	}
-
 	slog.DebugContext(req.Context(), "Got client for bucket", "bucket", bucket)
 
 	filename := uuid.NewString()
@@ -323,7 +331,7 @@ func handleUpload(w http.ResponseWriter, req *http.Request, limit int64) {
 	}
 }
 
-func handleDelete(w http.ResponseWriter, req *http.Request) {
+func handleDelete(w http.ResponseWriter, req *http.Request, bucket string, minioClient *minio.Client) {
 	key := req.PathValue("key")
 	tenant := req.Header.Get("X-Okapi-Tenant")
 
@@ -333,16 +341,9 @@ func handleDelete(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	bucket, minioClient, err := getBucketClient()
-	if err != nil {
-		slog.ErrorContext(req.Context(), "Error obtaining client for S3 bucket", "error", err, "bucket", bucket)
-		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
-		return
-	}
-
 	// NB this does not error when the object does not exist, just silently is fine with it,
 	// perhaps to prevent using it for discovery?
-	err = minioClient.RemoveObject(req.Context(), bucket, key, minio.RemoveObjectOptions{})
+	err := minioClient.RemoveObject(req.Context(), bucket, key, minio.RemoveObjectOptions{})
 	if err != nil {
 		slog.ErrorContext(req.Context(), "Error removing object", "error", err, "bucket", bucket)
 		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
