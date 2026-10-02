@@ -412,7 +412,9 @@ func TestNewRejectsMissingImportRecordSchema(t *testing.T) {
 func TestImportUsesInjectedOpenAPIRecordSchema(t *testing.T) {
 	spec := loadImportSpec(t)
 	minimumCost := 1.0
-	spec.Components.Schemas["ImportTierData"].Value.Properties["cost"].Value.Min = &minimumCost
+	schema := composedSchemaProperty(spec.Components.Schemas["ImportTierData"].Value, "cost")
+	require.NotNil(t, schema)
+	schema.Value.Min = &minimumCost
 	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
 	importer, err := New(repo, spec)
 	require.NoError(t, err)
@@ -440,6 +442,18 @@ func loadImportSpec(t *testing.T) *openapi3.T {
 	require.NoError(t, err)
 	require.NoError(t, spec.Validate(context.Background()))
 	return spec
+}
+
+func composedSchemaProperty(schema *openapi3.Schema, propertyName string) *openapi3.SchemaRef {
+	if property, ok := schema.Properties[propertyName]; ok {
+		return property
+	}
+	for _, member := range schema.AllOf {
+		if property := composedSchemaProperty(member.Value, propertyName); property != nil {
+			return property
+		}
+	}
+	return nil
 }
 
 func TestImportValidatesHostSettings(t *testing.T) {
