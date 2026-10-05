@@ -224,6 +224,8 @@ func TestConcurrentImportDoesNotDeadlockEntryPatch(t *testing.T) {
 	defer cancel()
 	parentID := "00000000-0000-0000-0000-000000000001"
 	childID := "00000000-0000-0000-0000-000000000002"
+	parentUUID := uuid.MustParse(parentID)
+	childUUID := uuid.MustParse(childID)
 	_, err := dbpool.Exec(ctx, `UPDATE entries SET parent=NULL, type='Institution' WHERE id=$1`, parentID)
 	require.NoError(t, err)
 	_, err = dbpool.Exec(ctx, `UPDATE entries SET parent=$1, type='Branch' WHERE id=$2`, parentID, childID)
@@ -244,15 +246,13 @@ func TestConcurrentImportDoesNotDeadlockEntryPatch(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(importPool.Close)
 
-	parent := model.SymbolRef{Authority: "TEST", Symbol: "PARENT"}
-	key := model.SymbolRef{Authority: "TEST", Symbol: "ANINST"}
 	aggregate := model.EntryAggregate{
-		Key: key,
+		Key: childUUID,
 		Data: model.EntryData{
 			Name:      "Imported child",
 			Type:      "Branch",
-			Parent:    &parent,
-			Symbols:   []model.SymbolRef{key},
+			Parent:    &parentUUID,
+			Symbols:   []model.SymbolRef{{Authority: "TEST", Symbol: "ANINST"}},
 			Endpoints: []model.ServiceEndpoint{},
 			Addresses: []model.Address{},
 			Closures:  []model.Closure{},
@@ -297,26 +297,26 @@ func TestConcurrentImportDoesNotDeadlockEntryPatch(t *testing.T) {
 func TestConcurrentAssignmentImportsDoNotDeadlockEntryPatch(t *testing.T) {
 	for _, testCase := range []struct {
 		name      string
-		importRun func(context.Context, *importdb.PgImportRepo, model.SymbolRef, model.SymbolRef) error
+		importRun func(context.Context, *importdb.PgImportRepo, uuid.UUID, uuid.UUID) error
 	}{
 		{
 			name: "tier",
-			importRun: func(ctx context.Context, repo *importdb.PgImportRepo, consortium, member model.SymbolRef) error {
+			importRun: func(ctx context.Context, repo *importdb.PgImportRepo, consortium, member uuid.UUID) error {
 				_, err := repo.ImportTier(ctx, model.TierAggregate{
 					Key:  model.TierKey{Consortium: consortium, Name: "Concurrent lock"},
-					Data: model.TierData{Level: "standard", Type: "loan", Entries: []model.SymbolRef{member}},
+					Data: model.TierData{Level: "standard", Type: "loan", Entries: []uuid.UUID{member}},
 				}, model.ConflictPolicyUpdate)
 				return err
 			},
 		},
 		{
 			name: "network",
-			importRun: func(ctx context.Context, repo *importdb.PgImportRepo, consortium, member model.SymbolRef) error {
+			importRun: func(ctx context.Context, repo *importdb.PgImportRepo, consortium, member uuid.UUID) error {
 				_, err := repo.ImportNetwork(ctx, model.NetworkAggregate{
 					Key: model.NetworkKey{Consortium: consortium, Name: "Concurrent lock"},
 					Data: model.NetworkData{Entries: []model.NetworkAssignment{{
-						SymbolRef: member,
-						Priority:  1,
+						Entry:    member,
+						Priority: 1,
 					}}},
 				}, model.ConflictPolicyUpdate)
 				return err
@@ -353,11 +353,9 @@ func TestConcurrentAssignmentImportsDoNotDeadlockEntryPatch(t *testing.T) {
 			t.Cleanup(importPool.Close)
 			t.Cleanup(func() { resumeOnce.Do(func() { close(resumeImport) }) })
 
-			consortium := model.SymbolRef{Authority: "TEST", Symbol: "LOCK-CON"}
-			member := model.SymbolRef{Authority: "TEST", Symbol: "ANINST"}
 			importDone := make(chan error, 1)
 			go func() {
-				importDone <- testCase.importRun(ctx, importdb.New(importPool), consortium, member)
+				importDone <- testCase.importRun(ctx, importdb.New(importPool), consortiumID, memberID)
 			}()
 
 			select {
