@@ -1,20 +1,14 @@
 package model
 
 import (
-	"testing"
-
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"testing"
 )
 
 func TestParseConflictPolicy(t *testing.T) {
-	tests := map[string]ConflictPolicy{
-		"":       ConflictPolicyFail,
-		"fail":   ConflictPolicyFail,
-		"skip":   ConflictPolicySkip,
-		"update": ConflictPolicyUpdate,
-	}
-	for input, expected := range tests {
+	for input, expected := range map[string]ConflictPolicy{"": ConflictPolicyFail, "fail": ConflictPolicyFail, "skip": ConflictPolicySkip, "update": ConflictPolicyUpdate} {
 		actual, err := ParseConflictPolicy(input)
 		require.NoError(t, err)
 		assert.Equal(t, expected, actual)
@@ -23,116 +17,55 @@ func TestParseConflictPolicy(t *testing.T) {
 	require.EqualError(t, err, "unknown conflict policy: replace")
 }
 
-func TestEntryAggregateNormalizesAndRequiresKeySymbol(t *testing.T) {
+func TestEntryAggregateRequiresUUID(t *testing.T) {
 	aggregate := validEntryAggregate()
-	aggregate.Key = SymbolRef{Authority: "isil", Symbol: "missing"}
-
-	err := aggregate.NormalizeAndValidate()
-
-	require.EqualError(t, err, "entry key ISIL:MISSING must appear exactly once in symbols")
-	assert.Equal(t, SymbolRef{Authority: "ISIL", Symbol: "MISSING"}, aggregate.Key)
+	aggregate.Key = uuid.Nil
+	require.EqualError(t, aggregate.NormalizeAndValidate(), "entry key must be a valid UUID")
 }
 
 func TestEntryAggregateRejectsDuplicateNormalizedSymbols(t *testing.T) {
 	aggregate := validEntryAggregate()
 	aggregate.Data.Symbols = append(aggregate.Data.Symbols, SymbolRef{Authority: "isil", Symbol: "lib"})
-
-	err := aggregate.NormalizeAndValidate()
-
-	require.EqualError(t, err, "duplicate entry symbol ISIL:LIB")
+	require.EqualError(t, aggregate.NormalizeAndValidate(), "duplicate entry symbol ISIL:LIB")
 }
 
-func TestEntryAggregateAcceptsDistinctSymbolsWithSameDisplayString(t *testing.T) {
-	first := SymbolRef{Authority: "A:B", Symbol: "C"}
-	second := SymbolRef{Authority: "A", Symbol: "B:C"}
+func TestEntryAggregateAcceptsUUIDIndependentOfSymbols(t *testing.T) {
 	aggregate := validEntryAggregate()
-	aggregate.Key = first
-	aggregate.Data.Symbols = []SymbolRef{first, second}
-
+	aggregate.Data.Symbols = []SymbolRef{{Authority: "ISIL", Symbol: "OTHER"}}
 	require.NoError(t, aggregate.NormalizeAndValidate())
 }
 
-func TestEntryAggregateRejectsColonInLenderAuthority(t *testing.T) {
+func TestEntryAggregateRejectsNilLender(t *testing.T) {
 	aggregate := validEntryAggregate()
-	aggregate.Data.ILLConfig = &ILLConfig{
-		LendersOfLastResort: []SymbolRef{{Authority: " a:b ", Symbol: " c "}},
-	}
-
-	err := aggregate.NormalizeAndValidate()
-
-	require.EqualError(t, err, "lender of last resort 1 authority must not contain ':'")
-}
-
-func TestEntryAggregateAllowsColonInLenderSymbol(t *testing.T) {
-	aggregate := validEntryAggregate()
-	aggregate.Data.ILLConfig = &ILLConfig{
-		LendersOfLastResort: []SymbolRef{{Authority: " a ", Symbol: " b:c "}},
-	}
-
-	require.NoError(t, aggregate.NormalizeAndValidate())
-	assert.Equal(t, SymbolRef{Authority: "A", Symbol: "B:C"}, aggregate.Data.ILLConfig.LendersOfLastResort[0])
+	aggregate.Data.ILLConfig = &ILLConfig{LendersOfLastResort: []uuid.UUID{uuid.Nil}}
+	require.EqualError(t, aggregate.NormalizeAndValidate(), "lender of last resort 1 must be a valid UUID")
 }
 
 func TestTierAggregateRejectsInvalidEnum(t *testing.T) {
-	aggregate := TierAggregate{
-		Key:  TierKey{Consortium: SymbolRef{Authority: "isil", Symbol: "consortium"}, Name: "Loan"},
-		Data: TierData{Level: "instant", Type: "loan", Entries: []SymbolRef{}},
-	}
-
-	err := aggregate.NormalizeAndValidate()
-
-	require.EqualError(t, err, "invalid tier level: instant")
+	aggregate := TierAggregate{Key: TierKey{Consortium: uuid.New(), Name: "Loan"}, Data: TierData{Level: "instant", Type: "loan", Entries: []uuid.UUID{}}}
+	require.EqualError(t, aggregate.NormalizeAndValidate(), "invalid tier level: instant")
 }
 
-func TestTierAggregateAcceptsDistinctEntriesWithSameDisplayString(t *testing.T) {
-	aggregate := TierAggregate{
-		Key: TierKey{Consortium: SymbolRef{Authority: "ISIL", Symbol: "CONSORTIUM"}, Name: "Loan"},
-		Data: TierData{
-			Level: "standard",
-			Type:  "loan",
-			Entries: []SymbolRef{
-				{Authority: "A:B", Symbol: "C"},
-				{Authority: "A", Symbol: "B:C"},
-			},
-		},
-	}
-
-	require.NoError(t, aggregate.NormalizeAndValidate())
+func TestTierAggregateRejectsNilEntry(t *testing.T) {
+	aggregate := TierAggregate{Key: TierKey{Consortium: uuid.New(), Name: "Loan"}, Data: TierData{Level: "standard", Type: "loan", Entries: []uuid.UUID{uuid.Nil}}}
+	require.EqualError(t, aggregate.NormalizeAndValidate(), "tier entry 1 must be a valid UUID")
 }
 
 func TestNetworkAggregateRejectsDuplicateEntries(t *testing.T) {
-	aggregate := NetworkAggregate{
-		Key: NetworkKey{Consortium: SymbolRef{Authority: "isil", Symbol: "consortium"}, Name: "Main"},
-		Data: NetworkData{Entries: []NetworkAssignment{
-			{SymbolRef: SymbolRef{Authority: "isil", Symbol: "lib"}, Priority: 1},
-			{SymbolRef: SymbolRef{Authority: "ISIL", Symbol: "LIB"}, Priority: 2},
-		}},
-	}
-
-	err := aggregate.NormalizeAndValidate()
-
-	require.EqualError(t, err, "duplicate network entry ISIL:LIB")
+	id := uuid.New()
+	aggregate := NetworkAggregate{Key: NetworkKey{Consortium: uuid.New(), Name: "Main"}, Data: NetworkData{Entries: []NetworkAssignment{{Entry: id, Priority: 1}, {Entry: id, Priority: 2}}}}
+	require.EqualError(t, aggregate.NormalizeAndValidate(), "duplicate network entry "+id.String())
 }
 
-func TestNetworkAggregateAcceptsDistinctEntriesWithSameDisplayString(t *testing.T) {
-	aggregate := NetworkAggregate{
-		Key: NetworkKey{Consortium: SymbolRef{Authority: "ISIL", Symbol: "CONSORTIUM"}, Name: "Main"},
-		Data: NetworkData{Entries: []NetworkAssignment{
-			{SymbolRef: SymbolRef{Authority: "A:B", Symbol: "C"}, Priority: 1},
-			{SymbolRef: SymbolRef{Authority: "A", Symbol: "B:C"}, Priority: 2},
-		}},
-	}
-
-	require.NoError(t, aggregate.NormalizeAndValidate())
+func TestNetworkAggregateRejectsNilEntry(t *testing.T) {
+	aggregate := NetworkAggregate{Key: NetworkKey{Consortium: uuid.New(), Name: "Main"}, Data: NetworkData{Entries: []NetworkAssignment{{Entry: uuid.Nil, Priority: 1}}}}
+	require.EqualError(t, aggregate.NormalizeAndValidate(), "network entry 1 must be a valid UUID")
 }
 
 func TestEntryAggregateRejectsInvalidClosureRange(t *testing.T) {
 	aggregate := validEntryAggregate()
 	aggregate.Data.Closures = []Closure{{StartDate: "2026-09-03", EndDate: "2026-09-02", Reason: "maintenance"}}
-
-	err := aggregate.NormalizeAndValidate()
-
-	require.EqualError(t, err, "closure 1 endDate must not precede startDate")
+	require.EqualError(t, aggregate.NormalizeAndValidate(), "closure 1 endDate must not precede startDate")
 }
 
 func TestEntryAggregateValidatesLendToBorrowRatio(t *testing.T) {
@@ -159,14 +92,7 @@ func TestEntryAggregateValidatesLendToBorrowRatio(t *testing.T) {
 }
 
 func validEntryAggregate() EntryAggregate {
-	return EntryAggregate{
-		Key: SymbolRef{Authority: "isil", Symbol: "lib"},
-		Data: EntryData{
-			Name:    "Library",
-			Type:    "Institution",
-			Symbols: []SymbolRef{{Authority: "isil", Symbol: "lib"}},
-		},
-	}
+	return EntryAggregate{Key: uuid.New(), Data: EntryData{Name: "Library", Type: "Institution", Symbols: []SymbolRef{{Authority: "isil", Symbol: "lib"}}}}
 }
 
 func TestEntryAggregateLoadBalancingPolicy(t *testing.T) {

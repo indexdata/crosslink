@@ -19,9 +19,14 @@ func TestDirectoryExportLendToBorrowRatio(t *testing.T) {
 	require.NoError(t, err)
 	_, ratioSQL, found := strings.Cut(string(source), "CREATE TEMP TABLE crosslink_entry_ratios")
 	require.True(t, found)
-	ratioSQL, _, found = strings.Cut(ratioSQL, "CREATE TEMP TABLE crosslink_symbols")
+	ratioSQL, _, found = strings.Cut(ratioSQL, "CREATE TEMP TABLE crosslink_hierarchy")
 	require.True(t, found)
 	ratioSQL = "CREATE TEMP TABLE crosslink_entry_ratios" + ratioSQL
+	_, filterSQL, found := strings.Cut(string(source), "DELETE FROM crosslink_entry_base AS entry")
+	require.True(t, found)
+	filterSQL, _, found = strings.Cut(filterSQL, "CREATE TEMP TABLE crosslink_entry_ratios")
+	require.True(t, found)
+	ratioSQL = "DELETE FROM crosslink_entry_base AS entry" + filterSQL + ratioSQL
 	_, orderedSQL, found := strings.Cut(string(source), "WITH ordered_entries AS (")
 	require.True(t, found)
 	orderedSQL, _, found = strings.Cut(orderedSQL, "),\nentry_records AS (")
@@ -67,18 +72,18 @@ func TestDirectoryExportLendToBorrowRatio(t *testing.T) {
 			require.NoError(t, err)
 			t.Cleanup(func() { require.NoError(t, tx.Rollback(ctx)) })
 			_, err = tx.Exec(ctx, `
-				CREATE TEMP TABLE crosslink_entry_base (entry_id text, name text, custom_properties_id bigint) ON COMMIT DROP;
-				INSERT INTO crosslink_entry_base VALUES ('institution', 'Institution', 1), ('branch', 'Branch', 2), ('consortium', 'Consortium', NULL);
+				CREATE TEMP TABLE crosslink_entry_base (entry_id text, name text, custom_properties_id bigint, entry_type text) ON COMMIT DROP;
+				INSERT INTO crosslink_entry_base VALUES ('institution', 'Institution', 1, 'Institution'), ('branch', 'Branch', 2, 'Branch'), ('consortium', 'Consortium', NULL, 'Consortium');
+				CREATE TEMP TABLE crosslink_export_entry_ids ON COMMIT DROP AS SELECT entry_id FROM crosslink_entry_base;
+				INSERT INTO crosslink_entry_base VALUES ('excluded', 'Excluded institution', 3, 'Institution');
 				CREATE TEMP TABLE crosslink_hierarchy (entry_id text, depth integer) ON COMMIT DROP;
 				INSERT INTO crosslink_hierarchy VALUES ('institution', 1), ('branch', 2), ('consortium', 0);
-				CREATE TEMP TABLE crosslink_entry_keys (entry_id text, authority text, symbol text) ON COMMIT DROP;
-				INSERT INTO crosslink_entry_keys VALUES ('institution', 'ISIL', 'INST'), ('branch', 'ISIL', 'BRANCH'), ('consortium', 'ISIL', 'CON');
 				CREATE TEMP TABLE custom_property (id bigint, parent_id bigint, definition_id text) ON COMMIT DROP;
 				CREATE TEMP TABLE custom_property_definition (pd_id text, pd_name text) ON COMMIT DROP;
 				CREATE TEMP TABLE custom_property_text (id bigint, value text) ON COMMIT DROP;
 				INSERT INTO custom_property_definition VALUES ('ratio', 'policy.ill.InstitutionalLoanToBorrowRatio'), ('other', 'unrelated');
-				INSERT INTO custom_property VALUES (100, 2, 'ratio'), (101, 1, 'other');
-				INSERT INTO custom_property_text VALUES (100, '3:2'), (101, 'invalid unrelated value');
+				INSERT INTO custom_property VALUES (100, 2, 'ratio'), (101, 1, 'other'), (102, 3, 'ratio');
+				INSERT INTO custom_property_text VALUES (100, '3:2'), (101, 'invalid unrelated value'), (102, 'invalid excluded ratio');
 			`)
 			require.NoError(t, err)
 			for j, value := range tc.values {

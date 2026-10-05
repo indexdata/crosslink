@@ -6,23 +6,30 @@
 -- Example:
 --   psql "$DATABASE_URL" \
 --     --set=ON_ERROR_STOP=1 \
+--     --set=owner=ISIL:OWNER \
+--     --set=include_consortium=true \
+--     --set=include_tiers_network=true \
 --     --file=other-scripts/export-crosslink-directory.sql \
 --     --quiet --tuples-only --no-align \
 --     > crosslink-directory.ndjson
 --
 -- The output order is significant: parent entries precede their children,
--- followed by default tiers and then the default network.
+-- followed by default tiers and then the default network when
+-- include_tiers_network is true.
 --
 -- Mapping notes:
---   * The first symbol by legacy priority, authority, and value is the stable
---     CrossLink import key for an entry. Deleted entry tombstones and residual
---     DELETED-* symbols created by mod-rs anonymization are omitted.
+--   * The mod-rs directory_entry.de_id is preserved as the CrossLink import
+--     key. Symbols are exported as entry metadata only. Deleted entry
+--     tombstones and residual DELETED-* symbols created by mod-rs
+--     anonymization are omitted.
 --   * service/service_account rows become entry endpoints.
 --   * address/address_line rows become entry addresses. addr_country_code is
 --     appended as a CountryCode component when one is not already present.
---   * Tenant-local NCIP, Z39.50 target, ILL, and holdings settings are attached
---     to the entry identified by default_request_symbol. The legacy HTTP
---     Z39.50 proxy is deployment-level CrossLink configuration and is omitted.
+--   * The consortium, the owner identified by the psql `owner` variable, and
+--     the owner's direct children are exported. Tenant-local NCIP, Z39.50
+--     target, ILL, and holdings settings are attached to the selected owner.
+--     The legacy HTTP Z39.50 proxy is deployment-level CrossLink configuration
+--     and is omitted.
 --     Configure last-resort lenders after import because references to child
 --     entries cannot be resolved while their parent entry is being imported.
 --   * Each entry's policy.ill.InstitutionalLoanToBorrowRatio custom text
@@ -35,6 +42,11 @@
 --     request_service_type setting does not describe routing capabilities.
 --   * Every non-consortium entry belongs to each generated tier and to one
 --     reciprocal network named Default.
+--   * Set include_consortium=false to omit the consortium entry. In that mode,
+--     pass consortium=<UUID> to reuse the consortium UUID from the first
+--     shard. Parent references and generated tier/network keys continue to use
+--     that canonical UUID. Set include_tiers_network independently when
+--     exporting generated tiers and the network for later consolidation.
 --   * Fields with no mod-rs equivalent are emitted as explicit nulls or empty
 --     arrays because the CrossLink import contract requires every field.
 --
@@ -43,7 +55,59 @@
 
 \set ON_ERROR_STOP on
 
+\if :{?include_consortium}
+\else
+\set include_consortium 'true'
+\endif
+
+\if :{?include_tiers_network}
+\else
+\set include_tiers_network 'true'
+\endif
+
+\if :{?consortium}
+\else
+\set consortium ''
+\endif
+
+SELECT
+    lower(btrim(:'include_consortium')) IN ('true', 'false')
+        AS crosslink_include_consortium_valid,
+    lower(btrim(:'include_tiers_network')) IN ('true', 'false')
+        AS crosslink_include_tiers_network_valid
+\gset
+
+\if :crosslink_include_consortium_valid
+\else
+\warn Invalid include_consortium value. Use true or false.
+SELECT 1 / 0;
+\endif
+
+\if :crosslink_include_tiers_network_valid
+\else
+\warn Invalid include_tiers_network value. Use true or false.
+SELECT 1 / 0;
+\endif
+
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+
+CREATE TEMP TABLE crosslink_export_options ON COMMIT DROP AS
+SELECT
+    :'include_consortium'::boolean AS include_consortium,
+    :'include_tiers_network'::boolean AS include_tiers_network;
+
+SELECT coalesce(
+    nullif(btrim(:'consortium'), '')::uuid,
+    '00000000-0000-0000-0000-000000000000'::uuid
+) IS NOT NULL
+    AS crosslink_consortium_valid
+\gset
+
+\if :crosslink_consortium_valid
+\else
+\warn Invalid consortium value. Use a UUID from the first directory export.
+SELECT 1 / 0;
+\endif
 
 CREATE TEMP TABLE crosslink_entry_base ON COMMIT DROP AS
 SELECT
@@ -61,16 +125,156 @@ SELECT
     directory_entry.de_email_address AS email,
     directory_entry.de_phone_number AS phone_number,
     directory_entry.de_lms_location_code AS lms_location_code,
-    directory_entry.custom_properties_id
+    directory_entry.custom_properties_id,
+    folio_location.item_location
 FROM directory_entry
 LEFT JOIN refdata_value AS entry_type
   ON entry_type.rdv_id = directory_entry.de_type_rv_fk
+LEFT JOIN LATERAL (
+    SELECT nullif(btrim(custom_property_text.value), '') AS item_location
+    FROM custom_property
+    JOIN custom_property_definition
+      ON custom_property_definition.pd_id = custom_property.definition_id
+    JOIN custom_property_text ON custom_property_text.id = custom_property.id
+    WHERE custom_property.parent_id = directory_entry.custom_properties_id
+      AND custom_property_definition.pd_name = 'folio_location_filter'
+    ORDER BY custom_property.id
+    LIMIT 1
+) AS folio_location ON true
 WHERE NOT EXISTS (
     SELECT 1
     FROM directory_entry_tag
     JOIN tag ON tag.id = directory_entry_tag.tag_id
     WHERE directory_entry_tag.directory_entry_tags_id = directory_entry.de_id
       AND lower(btrim(tag.norm_value)) = 'deleted'
+);
+
+CREATE TEMP TABLE crosslink_consortium ON COMMIT DROP AS
+SELECT coalesce(nullif(btrim(:'consortium'), ''), entry.entry_id) AS entry_id
+FROM crosslink_entry_base AS entry
+WHERE entry.entry_type = 'Consortium';
+
+CREATE TEMP TABLE crosslink_symbols ON COMMIT DROP AS
+WITH existing_symbols AS (
+    SELECT
+        symbol.sym_owner_fk AS entry_id,
+        upper(btrim(naming_authority.na_symbol)) AS authority,
+        upper(btrim(symbol.sym_symbol)) AS symbol,
+        row_number() OVER (
+            PARTITION BY symbol.sym_owner_fk
+            ORDER BY symbol.sym_priority NULLS LAST,
+                     upper(btrim(naming_authority.na_symbol)),
+                     upper(btrim(symbol.sym_symbol)),
+                     symbol.sym_id
+        ) AS key_order
+    FROM symbol
+    JOIN naming_authority
+      ON naming_authority.na_id = symbol.sym_authority_fk
+    JOIN crosslink_entry_base
+      ON crosslink_entry_base.entry_id = symbol.sym_owner_fk
+    WHERE nullif(btrim(naming_authority.na_symbol), '') IS NOT NULL
+      AND nullif(btrim(symbol.sym_symbol), '') IS NOT NULL
+      AND upper(btrim(symbol.sym_symbol)) NOT LIKE 'DELETED-%'
+)
+SELECT
+    entry_id,
+    authority,
+    symbol,
+    key_order
+FROM existing_symbols
+;
+
+CREATE TEMP TABLE crosslink_tier_settings ON COMMIT DROP AS
+WITH settings AS (
+    SELECT
+        max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+            FILTER (WHERE st_key = 'default_service_level') AS service_level,
+        max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+            FILTER (WHERE st_key = 'minimum_cost') AS minimum_cost
+    FROM app_setting
+)
+SELECT
+    coalesce(lower(service_level), 'standard') AS service_level,
+    coalesce(minimum_cost, '0') AS minimum_cost
+FROM settings;
+
+CREATE TEMP TABLE crosslink_tenant_settings ON COMMIT DROP AS
+SELECT
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'default_request_symbol') AS default_request_symbol,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'host_lms_integration') AS host_lms_integration,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'ncip_server_address') AS ncip_server_address,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'ncip_from_agency') AS ncip_from_agency,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'ncip_from_agency_authentication') AS ncip_from_agency_authentication,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'ncip_to_agency') AS ncip_to_agency,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'borrower_check') AS borrower_check,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'accept_item') AS accept_item,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'check_in_item') AS check_in_item,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'check_out_item') AS check_out_item,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'use_request_item') AS use_request_item,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'ncip_request_item_pickup_location') AS supplier_pickup_location,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'ncip_use_title_request_type') AS ncip_use_title_request_type,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'default_institutional_patron_id') AS default_institutional_patron_id,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'z3950_server_address') AS z3950_server_address,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'max_requests') AS max_requests_per_patron,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'check_duplicate_time') AS duplicate_check_window_hours
+FROM app_setting;
+
+CREATE TEMP TABLE crosslink_local_entry ON COMMIT DROP AS
+SELECT DISTINCT symbol.entry_id
+FROM crosslink_symbols AS symbol
+CROSS JOIN crosslink_tenant_settings AS settings
+WHERE symbol.authority || ':' || symbol.symbol = :'owner';
+
+CREATE TEMP TABLE crosslink_export_entry_ids ON COMMIT DROP AS
+WITH selected_entries AS (
+    SELECT entry.entry_id
+    FROM crosslink_entry_base AS entry
+    WHERE entry.entry_type = 'Consortium'
+
+    UNION
+
+    SELECT local_entry.entry_id
+    FROM crosslink_local_entry AS local_entry
+
+    UNION
+
+    SELECT child.entry_id
+    FROM crosslink_entry_base AS child
+    JOIN crosslink_local_entry AS local_entry
+      ON local_entry.entry_id = child.parent_id
+)
+SELECT entry_id
+FROM selected_entries;
+
+DELETE FROM crosslink_symbols AS symbol
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM crosslink_export_entry_ids AS exported
+    WHERE exported.entry_id = symbol.entry_id
+);
+
+DELETE FROM crosslink_entry_base AS entry
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM crosslink_export_entry_ids AS exported
+    WHERE exported.entry_id = entry.entry_id
 );
 
 CREATE TEMP TABLE crosslink_entry_ratios ON COMMIT DROP AS
@@ -116,32 +320,6 @@ BEGIN
 END
 $$;
 
-CREATE TEMP TABLE crosslink_symbols ON COMMIT DROP AS
-SELECT
-    symbol.sym_owner_fk AS entry_id,
-    upper(btrim(naming_authority.na_symbol)) AS authority,
-    upper(btrim(symbol.sym_symbol)) AS symbol,
-    row_number() OVER (
-        PARTITION BY symbol.sym_owner_fk
-        ORDER BY symbol.sym_priority NULLS LAST,
-                 upper(btrim(naming_authority.na_symbol)),
-                 upper(btrim(symbol.sym_symbol)),
-                 symbol.sym_id
-    ) AS key_order
-FROM symbol
-JOIN naming_authority
-  ON naming_authority.na_id = symbol.sym_authority_fk
-JOIN crosslink_entry_base
-  ON crosslink_entry_base.entry_id = symbol.sym_owner_fk
-WHERE nullif(btrim(naming_authority.na_symbol), '') IS NOT NULL
-  AND nullif(btrim(symbol.sym_symbol), '') IS NOT NULL
-  AND upper(btrim(symbol.sym_symbol)) NOT LIKE 'DELETED-%';
-
-CREATE TEMP TABLE crosslink_entry_keys ON COMMIT DROP AS
-SELECT entry_id, authority, symbol
-FROM crosslink_symbols
-WHERE key_order = 1;
-
 CREATE TEMP TABLE crosslink_hierarchy ON COMMIT DROP AS
 WITH RECURSIVE hierarchy AS (
     SELECT
@@ -166,64 +344,13 @@ WITH RECURSIVE hierarchy AS (
 )
 SELECT * FROM hierarchy;
 
-CREATE TEMP TABLE crosslink_tier_settings ON COMMIT DROP AS
-WITH settings AS (
-    SELECT
-        max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-            FILTER (WHERE st_key = 'default_service_level') AS service_level,
-        max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-            FILTER (WHERE st_key = 'minimum_cost') AS minimum_cost
-    FROM app_setting
-)
-SELECT
-    coalesce(lower(service_level), 'standard') AS service_level,
-    coalesce(minimum_cost, '0') AS minimum_cost
-FROM settings;
-
-CREATE TEMP TABLE crosslink_tenant_settings ON COMMIT DROP AS
-SELECT
-    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-        FILTER (WHERE st_key = 'default_request_symbol') AS default_request_symbol,
-    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-        FILTER (WHERE st_key = 'host_lms_integration') AS host_lms_integration,
-    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-        FILTER (WHERE st_key = 'ncip_server_address') AS ncip_server_address,
-    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-        FILTER (WHERE st_key = 'ncip_from_agency') AS ncip_from_agency,
-    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-        FILTER (WHERE st_key = 'ncip_from_agency_authentication') AS ncip_from_agency_authentication,
-    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-        FILTER (WHERE st_key = 'ncip_to_agency') AS ncip_to_agency,
-    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-        FILTER (WHERE st_key = 'borrower_check') AS borrower_check,
-    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-        FILTER (WHERE st_key = 'accept_item') AS accept_item,
-    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-        FILTER (WHERE st_key = 'check_in_item') AS check_in_item,
-    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-        FILTER (WHERE st_key = 'check_out_item') AS check_out_item,
-    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-        FILTER (WHERE st_key = 'use_request_item') AS use_request_item,
-    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-        FILTER (WHERE st_key = 'ncip_request_item_pickup_location') AS requester_pickup_location,
-    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-        FILTER (WHERE st_key = 'z3950_server_address') AS z3950_server_address,
-    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-        FILTER (WHERE st_key = 'max_requests') AS max_requests_per_patron
-FROM app_setting;
-
-CREATE TEMP TABLE crosslink_local_entry ON COMMIT DROP AS
-SELECT DISTINCT symbol.entry_id
-FROM crosslink_symbols AS symbol
-CROSS JOIN crosslink_tenant_settings AS settings
-WHERE symbol.authority || ':' || symbol.symbol = upper(btrim(settings.default_request_symbol));
-
 DO $$
 DECLARE
     problem text;
     consortium_count integer;
     entry_count integer;
     hierarchy_count integer;
+    hierarchy_duplicates text;
     minimum_cost_text text;
     service_level_text text;
     local_entry_count integer;
@@ -231,6 +358,7 @@ DECLARE
     ncip_from_agency_text text;
     ncip_dependent_config boolean;
     max_requests_text text;
+    duplicate_check_window_text text;
 BEGIN
     SELECT count(*) INTO consortium_count
     FROM crosslink_entry_base
@@ -255,15 +383,6 @@ BEGIN
         RAISE EXCEPTION 'Directory entries have unsupported or missing types: %', problem;
     END IF;
 
-    SELECT string_agg(entry.entry_id || ' (' || entry.name || ')', ', ' ORDER BY entry.entry_id)
-    INTO problem
-    FROM crosslink_entry_base AS entry
-    LEFT JOIN crosslink_entry_keys AS key ON key.entry_id = entry.entry_id
-    WHERE key.entry_id IS NULL;
-    IF problem IS NOT NULL THEN
-        RAISE EXCEPTION 'Every directory entry needs a nonblank symbol: %', problem;
-    END IF;
-
     SELECT string_agg(authority || ':' || symbol, ', ' ORDER BY authority, symbol)
     INTO problem
     FROM (
@@ -284,7 +403,22 @@ BEGIN
         FROM crosslink_entry_base AS entry
         LEFT JOIN crosslink_hierarchy AS hierarchy USING (entry_id)
         WHERE hierarchy.entry_id IS NULL;
-        RAISE EXCEPTION 'Directory hierarchy contains a cycle or an unreachable parent: %', problem;
+
+        SELECT string_agg(entry_id || ' (' || row_count || ' rows)', ', ' ORDER BY entry_id)
+        INTO hierarchy_duplicates
+        FROM (
+            SELECT entry_id, count(*) AS row_count
+            FROM crosslink_hierarchy
+            GROUP BY entry_id
+            HAVING count(*) > 1
+        ) AS duplicates;
+
+        RAISE EXCEPTION
+            'Directory hierarchy mismatch: % base entries, % hierarchy rows; missing entries: %; duplicate hierarchy entries: %',
+            entry_count,
+            hierarchy_count,
+            coalesce(problem, '<none>'),
+            coalesce(hierarchy_duplicates, '<none>');
     END IF;
 
     SELECT string_agg(child.entry_id || ' (' || child.name || ')', ', ' ORDER BY child.entry_id)
@@ -321,8 +455,9 @@ BEGIN
             'host_lms_integration', 'ncip_server_address', 'ncip_from_agency',
             'ncip_from_agency_authentication', 'ncip_to_agency', 'borrower_check',
             'accept_item', 'check_in_item', 'check_out_item', 'use_request_item',
-            'ncip_request_item_pickup_location', 'z3950_server_address',
-            'max_requests'
+            'ncip_request_item_pickup_location', 'ncip_use_title_request_type',
+            'default_institutional_patron_id', 'z3950_server_address',
+            'max_requests', 'check_duplicate_time'
         )
         GROUP BY st_key
         HAVING count(*) > 1
@@ -347,10 +482,20 @@ BEGIN
     IF max_requests_text IS NOT NULL THEN
         IF max_requests_text !~ '^[0-9]+$' THEN
             RAISE EXCEPTION 'max_requests must be an integer from 0 through 2147483647: %', max_requests_text;
-    END IF;
+        END IF;
         IF max_requests_text::numeric > 2147483647 THEN
             RAISE EXCEPTION 'max_requests must be an integer from 0 through 2147483647: %', max_requests_text;
+        END IF;
     END IF;
+
+    SELECT duplicate_check_window_hours
+    INTO duplicate_check_window_text
+    FROM crosslink_tenant_settings;
+    IF duplicate_check_window_text IS NOT NULL THEN
+        IF duplicate_check_window_text !~ '^[0-9]+$'
+           OR duplicate_check_window_text::numeric > 2147483647 THEN
+            RAISE EXCEPTION 'check_duplicate_time must be an integer from 0 through 2147483647: %', duplicate_check_window_text;
+        END IF;
     END IF;
 
     SELECT string_agg(source || ':' || record_id || '=' || supply_preference, ', ' ORDER BY source, record_id)
@@ -393,7 +538,7 @@ BEGIN
             OR lower(check_in_item) = 'ncip'
             OR lower(check_out_item) = 'ncip'
             OR lower(use_request_item) = 'ncip'
-            OR requester_pickup_location IS NOT NULL
+            OR supplier_pickup_location IS NOT NULL
     INTO ncip_server_text, ncip_from_agency_text, ncip_dependent_config
     FROM crosslink_tenant_settings;
     IF (ncip_server_text IS NULL) <> (ncip_from_agency_text IS NULL)
@@ -403,7 +548,7 @@ BEGIN
 
     SELECT count(*) INTO local_entry_count FROM crosslink_local_entry;
     IF local_entry_count <> 1 THEN
-        RAISE EXCEPTION 'default_request_symbol must identify exactly one exported directory entry; found %', local_entry_count;
+        RAISE EXCEPTION 'owner must identify exactly one exported directory entry; found %', local_entry_count;
     END IF;
 
 END
@@ -415,15 +560,15 @@ WITH ordered_entries AS (
         entry.*,
         ratio.lend_to_borrow_ratio,
         hierarchy.depth,
-        key.authority AS key_authority,
-        key.symbol AS key_symbol,
         row_number() OVER (
-            ORDER BY hierarchy.depth, entry.name, entry.entry_id
+            ORDER BY hierarchy.depth,
+                     CASE WHEN entry.entry_type = 'Consortium' THEN 0 ELSE 1 END,
+                     entry.name,
+                     entry.entry_id
         ) AS entry_order
     FROM crosslink_entry_base AS entry
     JOIN crosslink_entry_ratios AS ratio USING (entry_id)
     JOIN crosslink_hierarchy AS hierarchy USING (entry_id)
-    JOIN crosslink_entry_keys AS key USING (entry_id)
 ),
 entry_records AS (
     SELECT
@@ -431,17 +576,19 @@ entry_records AS (
         entry.entry_order AS record_order,
         jsonb_build_object(
             'type', 'entry',
-            'key', jsonb_build_object(
-                'authority', entry.key_authority,
-                'symbol', entry.key_symbol
-            ),
+            'key', CASE
+                WHEN entry.entry_type = 'Consortium'
+                    THEN (SELECT entry_id FROM crosslink_consortium)
+                ELSE entry.entry_id
+            END,
             'data', jsonb_build_object(
                 'name', entry.name,
                 'type', entry.entry_type,
-                'parent', CASE WHEN parent_key.entry_id IS NULL THEN NULL ELSE jsonb_build_object(
-                    'authority', parent_key.authority,
-                    'symbol', parent_key.symbol
-                ) END,
+                'parent', CASE
+                    WHEN parent_key.entry_type = 'Consortium'
+                        THEN (SELECT entry_id FROM crosslink_consortium)
+                    ELSE parent_key.entry_id
+                END,
                 'description', entry.description,
                 'organizationId', NULL,
                 'contactName', entry.contact_name,
@@ -465,7 +612,9 @@ entry_records AS (
             )
         ) AS record
     FROM ordered_entries AS entry
-    LEFT JOIN crosslink_entry_keys AS parent_key ON parent_key.entry_id = entry.parent_id
+    CROSS JOIN crosslink_export_options AS export_options
+    LEFT JOIN crosslink_entry_base AS parent_key
+      ON parent_key.entry_id = entry.parent_id
     LEFT JOIN LATERAL (
         SELECT jsonb_agg(
             jsonb_build_object('authority', authority, 'symbol', symbol)
@@ -571,19 +720,41 @@ entry_records AS (
             'acceptItemEnabled', lower(tenant_settings.accept_item) = 'ncip'IS TRUE,
             'checkInItemEnabled', lower(tenant_settings.check_in_item) = 'ncip'IS TRUE,
             'checkOutItemEnabled', lower(tenant_settings.check_out_item) = 'ncip'IS TRUE,
-            'itemLocation', NULL,
-            'requestItemRequestType', NULL,
-            'requestItemRequestScopeType', NULL,
-            'requestItemBibIdCode', NULL,
+            'itemLocation', entry.item_location,
+            'requestItemRequestType', CASE lower(tenant_settings.host_lms_integration)
+                WHEN 'sierra' THEN 'Hold'
+                WHEN 'folio' THEN 'Page'
+                ELSE 'Loan'
+            END,
+            'requestItemRequestScopeType', CASE lower(tenant_settings.host_lms_integration)
+                WHEN 'sierra' THEN 'Title'
+                WHEN 'folio' THEN CASE
+                    WHEN lower(tenant_settings.ncip_use_title_request_type) = 'yes' THEN 'Title'
+                    ELSE 'Item'
+                END
+                ELSE 'Bibliographic Item'
+            END,
+            'requestItemBibIdCode', CASE lower(tenant_settings.host_lms_integration)
+                WHEN 'evergreen' THEN 'BibID'
+                ELSE 'SYSNUMBER'
+            END,
             'requestItemEnabled', lower(tenant_settings.use_request_item) = 'ncip'IS TRUE,
             'requestItemPickupLocationEnabled', entry.lms_location_code IS NOT NULL,
             'requesterPickupLocation', entry.lms_location_code,
-            'supplierPickupLocation', tenant_settings.requester_pickup_location,
-            'requesterPatronPattern', NULL,
-            'patronProfiles', NULL
+            'supplierPickupLocation', tenant_settings.supplier_pickup_location,
+            'requesterPatronPattern', tenant_settings.default_institutional_patron_id,
+            'patronProfiles', coalesce((
+                SELECT jsonb_agg(jsonb_build_object(
+                    'code', profile.hlpp_code,
+                    'name', profile.hlpp_name,
+                    'canCreateRequests', coalesce(profile.hlpp_can_create_requests, true)
+                ) ORDER BY profile.hlpp_code, profile.hlpp_id)
+                FROM host_lms_patron_profile AS profile
+                WHERE coalesce(profile.hlpp_hidden, false) IS FALSE
+            ), '[]'::jsonb)
         ) AS item
         WHERE local_entry.entry_id IS NOT NULL
-          AND tenant_settings.ncip_server_address IS NOT NULL
+           AND tenant_settings.ncip_server_address IS NOT NULL
           AND tenant_settings.ncip_from_agency IS NOT NULL
     ) AS lms_config ON true
     LEFT JOIN LATERAL (
@@ -617,16 +788,25 @@ entry_records AS (
             'iso18626Url', iso_endpoint.address,
             'iso18626Vendor', CASE WHEN iso_endpoint.address IS NULL THEN NULL ELSE 'ReShare' END,
             'lendersOfLastResort', '[]'::jsonb,
-            'includeRequestingAgencyInfo', NULL,
-            'includeSupplierInfo', NULL,
-            'includeReturnInfo', NULL,
-            'includeVendorNote', NULL,
+            'includeRequestingAgencyInfo', false,
+            'includeSupplierInfo', false,
+            'includeReturnInfo', false,
+            'includeVendorNote', false,
             'useOfferedCosts', NULL,
             'noteFieldSeparator', NULL,
             'supplierPatronPattern', NULL,
-            'duplicateCheckWindowHours', NULL,
-            'maxRequestsPerPatron', CASE WHEN local_entry.entry_id IS NOT NULL
-                THEN tenant_settings.max_requests_per_patron::integer ELSE NULL END
+            'duplicateCheckWindowHours', CASE
+                WHEN local_entry.entry_id IS NOT NULL
+                  OR entry.parent_id IN (SELECT entry_id FROM crosslink_local_entry)
+                THEN tenant_settings.duplicate_check_window_hours::integer
+                ELSE NULL
+            END,
+            'maxRequestsPerPatron', CASE
+                WHEN local_entry.entry_id IS NOT NULL
+                  OR entry.parent_id IN (SELECT entry_id FROM crosslink_local_entry)
+                THEN tenant_settings.max_requests_per_patron::integer
+                ELSE NULL
+            END
         ) AS item
         FROM (
             SELECT EXISTS (
@@ -703,18 +883,16 @@ entry_records AS (
         ) AS item
         WHERE local_entry.entry_id IS NOT NULL
     ) AS holdings_policy ON true
+    WHERE export_options.include_consortium OR entry.entry_type <> 'Consortium'
 ),
 consortium AS (
-    SELECT key.authority, key.symbol
-    FROM ordered_entries AS entry
-    JOIN crosslink_entry_keys AS key USING (entry_id)
-    WHERE entry.entry_type = 'Consortium'
+    SELECT entry_id
+    FROM crosslink_consortium
 ),
 members AS (
     SELECT
         entry.entry_order,
-        entry.key_authority AS authority,
-        entry.key_symbol AS symbol,
+        entry.entry_id,
         row_number() OVER (ORDER BY entry.entry_order)::integer AS priority
     FROM ordered_entries AS entry
     WHERE entry.entry_type <> 'Consortium'
@@ -733,10 +911,7 @@ tier_records AS (
         jsonb_build_object(
             'type', 'tier',
             'key', jsonb_build_object(
-                'consortium', jsonb_build_object(
-                    'authority', consortium.authority,
-                    'symbol', consortium.symbol
-                ),
+                'consortium', consortium.entry_id,
                 'name', 'Default ' || settings.service_level || ' ' || tier_type.tier_type
             ),
             'data', jsonb_build_object(
@@ -745,7 +920,7 @@ tier_records AS (
                 'cost', settings.minimum_cost::double precision,
                 'entries', coalesce((
                     SELECT jsonb_agg(
-                        jsonb_build_object('authority', member.authority, 'symbol', member.symbol)
+                        member.entry_id
                         ORDER BY member.entry_order
                     )
                     FROM members AS member
@@ -755,6 +930,8 @@ tier_records AS (
     FROM crosslink_tier_settings AS settings
     CROSS JOIN tier_types AS tier_type
     CROSS JOIN consortium
+    CROSS JOIN crosslink_export_options AS export_options
+    WHERE export_options.include_tiers_network
 ),
 network_record AS (
     SELECT
@@ -763,10 +940,7 @@ network_record AS (
         jsonb_build_object(
             'type', 'network',
             'key', jsonb_build_object(
-                'consortium', jsonb_build_object(
-                    'authority', consortium.authority,
-                    'symbol', consortium.symbol
-                ),
+                'consortium', consortium.entry_id,
                 'name', 'Default'
             ),
             'data', jsonb_build_object(
@@ -774,8 +948,7 @@ network_record AS (
                 'entries', coalesce((
                     SELECT jsonb_agg(
                         jsonb_build_object(
-                            'authority', member.authority,
-                            'symbol', member.symbol,
+                            'entry', member.entry_id,
                             'priority', member.priority
                         )
                         ORDER BY member.entry_order
@@ -785,6 +958,8 @@ network_record AS (
             )
         ) AS record
     FROM consortium
+    CROSS JOIN crosslink_export_options AS export_options
+    WHERE export_options.include_tiers_network
 ),
 export_records AS (
     SELECT record_type_order, record_order, record FROM entry_records

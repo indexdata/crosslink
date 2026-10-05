@@ -25,10 +25,10 @@ func TestImportOrderedAggregates(t *testing.T) {
 		entryImportRecord(consortium, "Consortium", nil, "Consortium"),
 		entryImportRecord(institution, "Institution", consortium, "Institution"),
 		entryImportRecord(branch, "Branch", institution, "Branch"),
-		map[string]any{"type": "tier", "key": map[string]any{"consortium": consortium, "name": "Loan"}, "data": map[string]any{"level": "standard", "type": "loan", "cost": 1.5, "entries": []any{institution, branch}}},
-		map[string]any{"type": "network", "key": map[string]any{"consortium": consortium, "name": "Main"}, "data": map[string]any{"reciprocal": true, "entries": []any{
-			map[string]any{"authority": "ISIL", "symbol": "INST", "priority": 7},
-			map[string]any{"authority": "ISIL", "symbol": "BRANCH", "priority": 3},
+		map[string]any{"type": "tier", "key": map[string]any{"consortium": importEntryUUID(consortium), "name": "Loan"}, "data": map[string]any{"level": "standard", "type": "loan", "cost": 1.5, "entries": []any{importEntryUUID(institution), importEntryUUID(branch)}}},
+		map[string]any{"type": "network", "key": map[string]any{"consortium": importEntryUUID(consortium), "name": "Main"}, "data": map[string]any{"reciprocal": true, "entries": []any{
+			map[string]any{"entry": importEntryUUID(institution), "priority": 7},
+			map[string]any{"entry": importEntryUUID(branch), "priority": 3},
 		}}},
 	}
 
@@ -157,8 +157,12 @@ func appImportPath(policy string) string {
 }
 
 func entryImportRecord(key map[string]any, name string, parent map[string]any, entryType string) map[string]any {
+	var parentID any
+	if parent != nil {
+		parentID = importEntryUUID(parent)
+	}
 	data := map[string]any{
-		"name": name, "type": entryType, "parent": parent, "description": nil, "organizationId": nil,
+		"name": name, "type": entryType, "parent": parentID, "description": nil, "organizationId": nil,
 		"contactName": nil, "email": nil, "fromEmail": nil, "tenant": nil, "vendor": nil, "phoneNumber": nil,
 		"lmsLocationCode": nil, "hrid": nil, "timeZone": nil, "symbols": []any{key},
 		"endpoints": []any{}, "addresses": []any{}, "closures": []any{}, "lmsConfig": nil,
@@ -178,7 +182,12 @@ func entryImportRecord(key map[string]any, name string, parent map[string]any, e
 			"requesterPatronPattern": nil, "patronProfiles": nil,
 		}
 	}
-	return map[string]any{"type": "entry", "key": key, "data": data}
+	return map[string]any{"type": "entry", "key": importEntryUUID(key), "data": data}
+}
+
+func importEntryUUID(symbol map[string]any) uuid.UUID {
+	key := symbol["authority"].(string) + ":" + symbol["symbol"].(string)
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(key))
 }
 
 func symbolObject(authority, symbol string) map[string]any {

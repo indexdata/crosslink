@@ -8,6 +8,7 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	brokerepo "github.com/indexdata/crosslink/broker/repo"
 	sched_db "github.com/indexdata/crosslink/broker/scheduler/db"
 	"github.com/jackc/pgx/v5"
@@ -67,7 +68,7 @@ func (r *PgImportRepo) ImportPatronRequest(ctx common.ExtendedContext, bundle Pa
 		incomingID := bundle.PatronRequest.ID
 		targetID := incomingID
 		exists := false
-		if bundle.PatronRequest.Side == pr_db.PatronRequestSide("lending") {
+		if bundle.PatronRequest.Side == prservice.SideLending {
 			matches, err := r.queries.LockImportLendingPatronRequestMatches(ctx, tx, LockImportLendingPatronRequestMatchesParams{
 				ID:             incomingID,
 				SupplierSymbol: bundle.PatronRequest.SupplierSymbol,
@@ -99,7 +100,7 @@ func (r *PgImportRepo) ImportPatronRequest(ctx common.ExtendedContext, bundle Pa
 		}
 
 		existing, err := r.queries.LockImportPatronRequest(ctx, tx, targetID)
-		if bundle.PatronRequest.Side != pr_db.PatronRequestSide("lending") {
+		if bundle.PatronRequest.Side != prservice.SideLending {
 			exists = err == nil
 		}
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -126,11 +127,11 @@ func (r *PgImportRepo) ImportPatronRequest(ctx common.ExtendedContext, bundle Pa
 					return &ConflictError{Resource: "patron request", Identifier: bundle.PatronRequest.ID, Reason: "side does not match existing aggregate"}
 				}
 				switch existing.Side {
-				case pr_db.PatronRequestSide("borrowing"):
+				case prservice.SideBorrowing:
 					if existing.RequesterSymbol != bundle.PatronRequest.RequesterSymbol {
 						return &ConflictError{Resource: "patron request", Identifier: bundle.PatronRequest.ID, Reason: "requester symbol does not match existing aggregate owner"}
 					}
-				case pr_db.PatronRequestSide("lending"):
+				case prservice.SideLending:
 					if existing.SupplierSymbol != bundle.PatronRequest.SupplierSymbol {
 						return &ConflictError{Resource: "patron request", Identifier: bundle.PatronRequest.ID, Reason: "supplier symbol does not match existing aggregate owner"}
 					}
@@ -224,6 +225,10 @@ func updateImportedPatronRequestParams(params pr_db.CreatePatronRequestParams) U
 }
 
 func (r *PgImportRepo) saveIllAggregate(ctx common.ExtendedContext, tx DBTX, bundle PatronRequestBundle, updating bool) error {
+	if bundle.PatronRequest.Side == prservice.SideLending {
+		// this is not needed for lending side
+		return nil
+	}
 	requesterRequestID := bundle.PatronRequest.RequesterReqID
 	var associated GetImportIllTransactionByRequesterRequestIDRow
 	associationExists := false

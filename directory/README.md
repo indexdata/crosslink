@@ -88,27 +88,26 @@ on each physical line, without an enclosing array. Blank lines are ignored.
 
 | Type | Key | Data |
 | --- | --- | --- |
-| `entry` | Symbol `authority` and `symbol` | Complete entry fields, owned collections, and configurations |
-| `tier` | Consortium symbol and tier `name` | `level`, `type`, `cost`, and entry symbols |
-| `network` | Consortium symbol and network `name` | `reciprocal` and entry symbols with individual `priority` values |
+| `entry` | Entry UUID | Complete entry fields, owned collections, and configurations |
+| `tier` | Consortium UUID and tier `name` | `level`, `type`, `cost`, and entry UUIDs |
+| `network` | Consortium UUID and network `name` | `reciprocal` and entry UUIDs with individual `priority` values |
 
-Symbol authorities and values are trimmed and uppercased. An entry's key must
-appear exactly once in its `symbols` array. Referenced entries must already
+Symbol authorities and values are trimmed and uppercased. Entry UUIDs are the
+stable import identity; symbols are metadata. Referenced entries must already
 exist or have been imported by an earlier successful record: put consortiums
 before institutions, institutions before branches, and members before tiers
 and networks. The same applies to references in `illConfig.lendersOfLastResort`.
-Different symbols resolving to the same entry cannot appear twice in a tier or
-network's membership list.
+An entry UUID cannot appear twice in a tier or network's membership list.
 
 Save the following as `directory.ndjson`. This example assumes an empty
 directory; only one consortium entry is allowed. For an existing directory,
-use its consortium symbol and choose the appropriate conflict policy.
+use its consortium UUID and choose the appropriate conflict policy.
 
 ```ndjson
-{"type":"entry","key":{"authority":"ISIL","symbol":"EXAMPLE-CON"},"data":{"name":"Example consortium","type":"Consortium","parent":null,"description":null,"organizationId":null,"contactName":null,"email":null,"fromEmail":null,"tenant":null,"vendor":null,"phoneNumber":null,"lmsLocationCode":null,"hrid":null,"timeZone":null,"symbols":[{"authority":"ISIL","symbol":"EXAMPLE-CON"}],"endpoints":[],"addresses":[],"closures":[],"lmsConfig":null,"catalogConfig":null,"illConfig":null,"holdingsPolicy":null}}
-{"type":"entry","key":{"authority":"ISIL","symbol":"EXAMPLE-LIB"},"data":{"name":"Example library","type":"Institution","parent":{"authority":"ISIL","symbol":"EXAMPLE-CON"},"description":null,"organizationId":null,"contactName":null,"email":null,"fromEmail":null,"tenant":null,"vendor":null,"phoneNumber":null,"lmsLocationCode":null,"hrid":null,"timeZone":null,"symbols":[{"authority":"ISIL","symbol":"EXAMPLE-LIB"}],"endpoints":[],"addresses":[],"closures":[],"lmsConfig":null,"catalogConfig":null,"illConfig":null,"holdingsPolicy":null}}
-{"type":"tier","key":{"consortium":{"authority":"ISIL","symbol":"EXAMPLE-CON"},"name":"Standard loan"},"data":{"level":"standard","type":"loan","cost":0,"entries":[{"authority":"ISIL","symbol":"EXAMPLE-LIB"}]}}
-{"type":"network","key":{"consortium":{"authority":"ISIL","symbol":"EXAMPLE-CON"},"name":"Main network"},"data":{"reciprocal":true,"entries":[{"authority":"ISIL","symbol":"EXAMPLE-LIB","priority":1}]}}
+{"type":"entry","key":"00000000-0000-0000-0000-000000000001","data":{"name":"Example consortium","type":"Consortium","parent":null,"description":null,"organizationId":null,"contactName":null,"email":null,"fromEmail":null,"tenant":null,"vendor":null,"phoneNumber":null,"lmsLocationCode":null,"hrid":null,"timeZone":null,"symbols":[{"authority":"ISIL","symbol":"EXAMPLE-CON"}],"endpoints":[],"addresses":[],"closures":[],"lmsConfig":null,"catalogConfig":null,"illConfig":null,"holdingsPolicy":null}}
+{"type":"entry","key":"00000000-0000-0000-0000-000000000002","data":{"name":"Example library","type":"Institution","parent":"00000000-0000-0000-0000-000000000001","description":null,"organizationId":null,"contactName":null,"email":null,"fromEmail":null,"tenant":null,"vendor":null,"phoneNumber":null,"lmsLocationCode":null,"hrid":null,"timeZone":null,"symbols":[{"authority":"ISIL","symbol":"EXAMPLE-LIB"}],"endpoints":[],"addresses":[],"closures":[],"lmsConfig":null,"catalogConfig":null,"illConfig":null,"holdingsPolicy":null}}
+{"type":"tier","key":{"consortium":"00000000-0000-0000-0000-000000000001","name":"Standard loan"},"data":{"level":"standard","type":"loan","cost":0,"entries":["00000000-0000-0000-0000-000000000002"]}}
+{"type":"network","key":{"consortium":"00000000-0000-0000-0000-000000000001","name":"Main network"},"data":{"reciprocal":true,"entries":[{"entry":"00000000-0000-0000-0000-000000000002","priority":1}]}}
 ```
 
 Entry imports require every field shown, including explicit `null` values for
@@ -116,7 +115,7 @@ absent optional values or configurations and empty arrays for empty collections.
 Non-null configuration objects also have required fields. Unknown fields are
 rejected; see the `ImportEntryRecord`, `ImportTierRecord`, and
 `ImportNetworkRecord` schemas in [api.yaml](api.yaml) for the complete contract.
-Database IDs are generated by the service.
+Entry database IDs are supplied by the import key; this allows mod-rs UUIDs to be preserved.
 
 Complete imports include raw host settings: `lmsConfig.vendor`,
 `ncipNamespaceEnabled`, `bibIdNormalization`, `catalogConfig.profile`, MARC
@@ -155,8 +154,8 @@ create a resource when its key does not exist. For an existing key:
 | `skip` | Leaves the resource unchanged, increments `skipped`, and adds a diagnostic to `errors`. |
 | `update` | Replaces the resource's data, preserves its root database ID, and increments `imported`. |
 
-An entry matches by its key symbol; a tier or network matches by the resolved
-consortium entry and exact name. For example, reimporting the sample with `skip`
+An entry matches by its key UUID; a tier or network matches by the resolved
+consortium UUID and exact name. For example, reimporting the sample with `skip`
 leaves all four resources unchanged. With `update`, changing the network's
 priority to `5` replaces that library's priority with `5`.
 

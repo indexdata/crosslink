@@ -388,15 +388,15 @@ func TestImportRecordLimitIsExact(t *testing.T) {
 }
 
 func validEntryRecord() string {
-	return `{"type":"entry","key":{"authority":"isil","symbol":"abc"},"data":{"name":"Library","type":"Institution","parent":null,"description":null,"organizationId":null,"contactName":null,"email":null,"fromEmail":null,"tenant":null,"vendor":null,"phoneNumber":null,"lmsLocationCode":null,"hrid":null,"timeZone":null,"symbols":[{"authority":"isil","symbol":"abc"}],"endpoints":[],"addresses":[],"closures":[],"lmsConfig":null,"catalogConfig":null,"illConfig":null,"holdingsPolicy":null}}`
+	return `{"type":"entry","key":"d6ed641d-4f2e-43f2-b78d-1e24818c884b","data":{"name":"Library","type":"Institution","parent":null,"description":null,"organizationId":null,"contactName":null,"email":null,"fromEmail":null,"tenant":null,"vendor":null,"phoneNumber":null,"lmsLocationCode":null,"hrid":null,"timeZone":null,"symbols":[{"authority":"ISIL","symbol":"ABC"}],"endpoints":[],"addresses":[],"closures":[],"lmsConfig":null,"catalogConfig":null,"illConfig":null,"holdingsPolicy":null}}`
 }
 
 func validTierRecord() string {
-	return `{"type":"tier","key":{"consortium":{"authority":"isil","symbol":"con"},"name":"Primary"},"data":{"level":"standard","type":"loan","cost":0,"entries":[]}}`
+	return `{"type":"tier","key":{"consortium":"d6ed641d-4f2e-43f2-b78d-1e24818c884b","name":"Primary"},"data":{"level":"standard","type":"loan","cost":0,"entries":[]}}`
 }
 
 func validNetworkRecord() string {
-	return `{"type":"network","key":{"consortium":{"authority":"isil","symbol":"con"},"name":"Main"},"data":{"reciprocal":null,"entries":[]}}`
+	return `{"type":"network","key":{"consortium":"d6ed641d-4f2e-43f2-b78d-1e24818c884b","name":"Main"},"data":{"reciprocal":null,"entries":[]}}`
 }
 
 type errorReader struct{ err error }

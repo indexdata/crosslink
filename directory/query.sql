@@ -7,6 +7,9 @@ SELECT * FROM entries WHERE id = $1 LIMIT 1 FOR UPDATE;
 -- name: EntryByIdForImportUpdate :one
 SELECT * FROM entries WHERE id = $1 LIMIT 1 FOR UPDATE NOWAIT;
 
+-- name: LockEntryImportID :exec
+SELECT pg_advisory_xact_lock(hashtextextended('directoryish:entry-id:' || (@id::uuid)::text, 0));
+
 -- name: EntryBySymbolForUpdate :one
 SELECT e.* FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = @authority AND s.symbol = @symbol LIMIT 1 FOR UPDATE OF e;
 
@@ -15,6 +18,9 @@ SELECT e.* FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = @aut
 
 -- name: SymbolByAuthorityAndSymbolForUpdate :one
 SELECT * FROM symbols WHERE authority = @authority AND symbol = @symbol LIMIT 1 FOR UPDATE;
+
+-- name: FirstSymbolByOwner :one
+SELECT * FROM symbols WHERE owner = @owner AND position(':' in authority) = 0 ORDER BY authority, symbol LIMIT 1;
 
 -- name: GetConsortialEntry :one
 SELECT * FROM entries WHERE type = 'Consortium' LIMIT 1;
@@ -37,6 +43,14 @@ INSERT INTO entries (
   name, description, contact_name, email, from_email, tenant, vendor, phone_number, time_zone, organization_id, type, parent, lms_location_code, lend_to_borrow_ratio, hrid
 ) VALUES (
   $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+)
+RETURNING *;
+
+-- name: CreateImportedEntry :one
+INSERT INTO entries (
+  id, name, description, contact_name, email, from_email, tenant, vendor, phone_number, time_zone, organization_id, type, parent, lms_location_code, lend_to_borrow_ratio, hrid
+) VALUES (
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
 )
 RETURNING *;
 

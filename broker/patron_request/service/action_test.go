@@ -698,6 +698,83 @@ func TestHandleInvokeActionUpdateMetadataNeedReview(t *testing.T) {
 	assert.Equal(t, string(BorrowerStateNeedsReview), *resultData.ActionResult.ToState)
 }
 
+func TestHandleInvokeActionUpdateMetadataFromNeedsReview(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		identifier string
+		lookupErr  error
+		wantStatus events.EventStatus
+		wantState  pr_db.PatronRequestState
+	}{
+		{name: "missing identifier", wantStatus: events.EventStatusSuccess, wantState: BorrowerStateNeedsReview},
+		{name: "saved identifier resumes automatic sending", identifier: "record-123", wantStatus: events.EventStatusSuccess, wantState: BorrowerStateSent},
+		{name: "catalog error stays in review", identifier: "record-123", lookupErr: errors.New("catalog unavailable"), wantStatus: events.EventStatusError, wantState: BorrowerStateNeedsReview},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mode := dirapi.Auto
+			peer := peerWithMetadataMode(&mode)
+			peer.Vendor = string(dirapi.CrossLink)
+			illRepo := new(IllRepoMock)
+			illRepo.On("GetCachedPeersBySymbols", []string{"ISIL:x"}, mock.Anything).Return([]ill_db.Peer{peer}, "", nil)
+			prRepo := new(MockPrRepo)
+			prRepo.savedPr = pr_db.PatronRequest{
+				ID:              patronRequestId,
+				State:           BorrowerStateNeedsReview,
+				Side:            SideBorrowing,
+				RequesterSymbol: getDbText("ISIL:x"),
+				Tenant:          getDbText("testlib"),
+				NeedsAttention:  true,
+				IllRequest: iso18626.Request{
+					BibliographicInfo: iso18626.BibliographicInfo{Title: "Edited title", SupplierUniqueRecordId: tc.identifier},
+				},
+			}
+			lmsCreator := new(MockLmsCreator)
+			lmsCreator.On("GetAdapter", "ISIL:x").Return(createLmsAdapterMockLog(), nil)
+			lookup := &catalog.MockLookupAdapter{Err: tc.lookupErr}
+			if tc.identifier != "" {
+				lookup.Metadata = catalog.Metadata{Identifier: tc.identifier, Title: "Catalog title"}
+			}
+			prAction := CreatePatronRequestActionService(prRepo, illRepo, new(MockEventBus), new(MockIso18626Handler), lmsCreator, new(EmailSenderMock), lookupFactoryWithAdapter(lookup), nil)
+			action := BorrowerActionUpdateMetadata
+
+			status, result := prAction.handleInvokeAction(appCtx, events.Event{
+				ID: "metadata-retry", PatronRequestID: patronRequestId,
+				EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}},
+			})
+
+			assert.Equal(t, tc.wantStatus, status)
+			assert.Equal(t, tc.wantState, prRepo.savedPr.State)
+			require.NotNil(t, result)
+			if tc.wantState == BorrowerStateSent {
+				require.NotNil(t, result.ActionResult)
+				assert.Equal(t, ActionOutcomeSuccess, result.ActionResult.Outcome)
+				require.NotNil(t, result.ActionResult.ToState)
+				assert.Equal(t, string(BorrowerStateMetadataUpdated), *result.ActionResult.ToState)
+				assert.Nil(t, result.ActionResult.ChildActionError)
+				details, ok := result.CustomData["decisionDetails"].([]actionDecisionDetailMetadataUpdate)
+				require.True(t, ok)
+				require.Len(t, details, 1)
+				assert.Equal(t, tc.identifier, details[0].LookupParams.Identifier)
+				assert.Equal(t, string(dirapi.Replace), details[0].EffectiveMode)
+				assert.Equal(t, "Catalog title", prRepo.savedPr.IllRequest.BibliographicInfo.Title)
+				assert.Equal(t, tc.identifier, prRepo.savedPr.IllRequest.BibliographicInfo.SupplierUniqueRecordId)
+				assert.Equal(t, string(BorrowerActionSendRequest), prRepo.savedPr.LastAction.String)
+				assert.False(t, prRepo.savedPr.NeedsAttention)
+			} else {
+				assert.True(t, prRepo.savedPr.NeedsAttention)
+				if tc.lookupErr == nil {
+					require.NotNil(t, result.ActionResult)
+					assert.Equal(t, ActionOutcomeReview, result.ActionResult.Outcome)
+				} else {
+					require.NotNil(t, result.EventError)
+					assert.Equal(t, "metadata update failed", result.EventError.Message)
+				}
+			}
+			illRepo.AssertExpectations(t)
+		})
+	}
+}
+
 func TestHandleInvokeActionUpdateMetadataMissingLookupParamsNeedsReview(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
@@ -5061,7 +5138,11 @@ func TestHandleInvokeBorrowerActionFillLocally(t *testing.T) {
 			}
 			lmsCreator.On("GetAdapter", "ISIL:REQ1").Return(lmsAdapter, nil)
 			mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil)
-			prAction := CreatePatronRequestActionService(mockPrRepo, pickupRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+			mockEventBus := new(MockEventBus)
+			if tt.serviceType == iso18626.TypeServiceTypeCopyOrLoan {
+				mockEventBus.On("ProcessExclusiveTask", patronRequestId+"-task-1").Return(events.Event{EventStatus: events.EventStatusSuccess}, nil).Once()
+			}
+			prAction := CreatePatronRequestActionService(mockPrRepo, pickupRepo, mockEventBus, mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 			action := BorrowerActionFillLocally
 
 			status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
@@ -5076,6 +5157,14 @@ func TestHandleInvokeBorrowerActionFillLocally(t *testing.T) {
 			assert.Equal(t, BorrowerStateCompleted, mockPrRepo.savedPr.State)
 			assert.True(t, mockPrRepo.savedPr.TerminalState)
 			assert.False(t, mockPrRepo.savedPr.NeedsAttention)
+			if tt.serviceType == iso18626.TypeServiceTypeCopyOrLoan {
+				if assert.Len(t, mockEventBus.createdTaskData, 1) {
+					assert.Equal(t, BorrowerActionSendNotification, *mockEventBus.createdTaskData[0].Action)
+				}
+			} else {
+				assert.Empty(t, mockEventBus.createdTaskData)
+			}
+			mockEventBus.AssertExpectations(t)
 			if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage) {
 				assert.Equal(t, tt.expectedStatus, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.Status)
 				assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.ReasonForMessage)
@@ -5131,7 +5220,9 @@ func TestHandleInvokeBorrowerActionSupplyDocument(t *testing.T) {
 	lmsAdapter := new(mockLmsAdapter)
 	lmsCreator.On("GetAdapter", "ISIL:REQ1").Return(lmsAdapter, nil)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	mockEventBus := new(MockEventBus)
+	mockEventBus.On("ProcessExclusiveTask", patronRequestId+"-task-1").Return(events.Event{EventStatus: events.EventStatusSuccess}, nil).Once()
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopy}}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{
 		ID:              patronRequestId,
@@ -5174,6 +5265,13 @@ func TestHandleInvokeBorrowerActionSupplyDocument(t *testing.T) {
 		}
 	}
 	lmsAdapter.AssertNotCalled(t, "RequestItem", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	if assert.Len(t, mockEventBus.createdTaskData, 1) {
+		assert.Equal(t, BorrowerActionSendNotification, *mockEventBus.createdTaskData[0].Action)
+		params := mockEventBus.createdTaskData[0].CustomData["autoActionParams"].(*proapi.ModelAction_Params)
+		assert.Equal(t, "copy-completed-notification", *params.TemplateLabel)
+		assert.Equal(t, []proapi.ModelActionParamsSendTo{proapi.ModelActionParamsSendToPatron}, *params.SendTo)
+	}
+	mockEventBus.AssertExpectations(t)
 }
 
 func TestUpdateMetadataBorrowingRequestAddsDecisionDetails(t *testing.T) {

@@ -3,7 +3,7 @@ stateModels:
     type: StateModel
     name: CrossLink State Model
     desc: "Requester/Supplier workflow for returnable loans and non-returnable copies over ISO18626."
-    version: 3.7.0
+    version: 3.8.0
     pullslipPdfTemplateLabel: pullslip-pdf
     selector:
       serviceType: [Copy, Loan, CopyOrLoan]
@@ -146,6 +146,11 @@ stateModels:
         needsAttention: true
         editable: true
         actions:
+          - name: update-metadata
+            desc: Update the request metadata after staff review
+            transitions:
+              success: METADATA_UPDATED
+              review: NEEDS_REVIEW
           - name: check-duplicate
             desc: Check for a recent matching patron request before sending
             transitions:
@@ -598,6 +603,18 @@ stateModels:
         desc: Loan or document supply was completed
         side: REQUESTER
         terminal: true
+        actions:
+          - name: send-notification
+            desc: Send email notification when the document is delivered
+            trigger: auto
+            # FIXME: CopyOrLoan may be completed with a regular loan and no notification should be sent
+            # if CopyOrLoan is actually exposed a seperate COPY_COMPLETED state should be used instead
+            appliesTo:
+              serviceTypes: [Copy, CopyOrLoan]
+            params:
+              sendTo:
+                - patron
+              templateLabel: copy-completed-notification
 
       - name: CANCELLED
         display: Cancelled
@@ -1119,6 +1136,20 @@ batchActionDefaults:
       interval: 72h
 
 templateDefaults:
+  - title: Document delivered notification
+    labels:
+      - copy-completed-notification
+    subject: "Your requested document is ready"
+    contentType: text
+    audience: patron
+    purpose: email
+    body: |
+      Your document is now available.
+
+      Request number: {{.ReqId}}
+
+      Item Title: {{.Title}}
+
   - title: Received item notification
     labels:
       - received-notification
