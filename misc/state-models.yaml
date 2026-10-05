@@ -3,7 +3,7 @@ stateModels:
     type: StateModel
     name: CrossLink State Model
     desc: "Requester/Supplier workflow for returnable loans and non-returnable copies over ISO18626."
-    version: 3.7.0
+    version: 3.8.0
     pullslipPdfTemplateLabel: pullslip-pdf
     selector:
       serviceType: [Copy, Loan, CopyOrLoan]
@@ -146,6 +146,11 @@ stateModels:
         needsAttention: true
         editable: true
         actions:
+          - name: update-metadata
+            desc: Update the request metadata after staff review
+            transitions:
+              success: METADATA_UPDATED
+              review: NEEDS_REVIEW
           - name: check-duplicate
             desc: Check for a recent matching patron request before sending
             transitions:
