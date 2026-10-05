@@ -607,6 +607,8 @@ stateModels:
           - name: send-notification
             desc: Send email notification when the document is delivered
             trigger: auto
+            # FIXME: CopyOrLoan may be completed with a regular loan and no notification should be sent
+            # if CopyOrLoan is actually exposed a seperate COPY_COMPLETED state should be used instead
             appliesTo:
               serviceTypes: [Copy, CopyOrLoan]
             params:
