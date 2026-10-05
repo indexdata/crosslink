@@ -204,6 +204,41 @@ func TestHandleRetryRequestLeavesChangedLookupRotaForLocator(t *testing.T) {
 	assert.False(t, repo.savedSupplierPresent)
 }
 
+func TestHandleRetryRequestChangedYearRequiresLookup(t *testing.T) {
+	repo := &retryRequestRepo{
+		transaction: ill_db.IllTransaction{
+			ID: "transaction-id",
+			IllTransactionData: ill_db.IllTransactionData{
+				BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "same-item"},
+				PublicationInfo:   &iso18626.PublicationInfo{PublicationDate: "2021"},
+			},
+		},
+		selectedSupplier: ill_db.LocatedSupplier{
+			ID:         "supplier-id",
+			LastStatus: pgtype.Text{String: string(iso18626.TypeStatusRetryPossible), Valid: true},
+		},
+	}
+	requestType := iso18626.TypeRequestTypeRetry
+	request := &iso18626.Request{
+		Header:            iso18626.Header{RequestingAgencyRequestId: "retry-request-id"},
+		BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "same-item"},
+		PublicationInfo:   &iso18626.PublicationInfo{PublicationDate: "2022"},
+		ServiceInfo: &iso18626.ServiceInfo{
+			RequestType:                       &requestType,
+			RequestingAgencyPreviousRequestId: "previous-request-id",
+		},
+	}
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	id, lookupChanged, err := handleRetryRequest(ctx, request, repo)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "transaction-id", id)
+	assert.True(t, lookupChanged)
+	assert.False(t, repo.oldRotaRetired)
+	assert.False(t, repo.savedSupplierPresent)
+}
+
 func TestGetSupplierSymbol(t *testing.T) {
 	header := &iso18626.Header{
 		SupplyingAgencyId: iso18626.TypeAgencyId{

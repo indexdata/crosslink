@@ -448,6 +448,7 @@ func replaceCatalogConfig(ctx context.Context, queries *db.Queries, entryID uuid
 	}
 	if config.Query != nil {
 		params.QueryType, params.QueryIdentifier, params.QueryIsbn, params.QueryIssn, params.QueryTitle = config.Query.Type, config.Query.Identifier, config.Query.ISBN, config.Query.ISSN, config.Query.Title
+		params.QueryYear = config.Query.Year
 	}
 	if config.HoldingsFormat != nil {
 		var err error

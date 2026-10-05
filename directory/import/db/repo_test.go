@@ -146,6 +146,9 @@ func TestImportEntryCreatesCompleteAggregateWithGeneratedIDs(t *testing.T) {
 	var authentication string
 	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT from_agency_authentication FROM lms_configs WHERE entry=$1`, entryID).Scan(&authentication))
 	require.Equal(t, "credential-value", authentication)
+	var queryYear string
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT query_year FROM catalog_configs WHERE entry=$1`, entryID).Scan(&queryYear))
+	require.Equal(t, "dc.date = {term}", queryYear)
 	var zoomOptions map[string]string
 	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT zoom_options FROM catalog_configs WHERE entry=$1`, entryID).Scan(&zoomOptions))
 	require.Equal(t, map[string]string{"user": "private"}, zoomOptions)
@@ -1383,7 +1386,7 @@ func completeEntryAggregate(symbol string) model.EntryAggregate {
 	aggregate.Data.CatalogConfig = &model.CatalogConfig{
 		MetadataUpdateMode: &metadataMode,
 		Zoom:               &model.ZoomConfig{Address: "example.test:210", Options: &map[string]string{"user": "private"}},
-		Query:              &model.QueryConfig{Identifier: &text},
+		Query:              &model.QueryConfig{Identifier: &text, Year: stringPointer("dc.date = {term}")},
 		HoldingsFormat:     &model.HoldingsParserConfig{Marc: &model.MarcHoldingsParserConfig{MainField: &text}},
 		MetadataFormat:     &model.MetadataParserConfig{Marc21: &model.MarcMetadataParserConfig{Title: &text}},
 	}

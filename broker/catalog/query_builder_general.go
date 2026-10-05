@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	cqlparser "github.com/indexdata/cql-go/cql"
 	"github.com/indexdata/cql-go/cqlbuilder"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 )
@@ -75,6 +76,18 @@ func cqlEncode(value string) string {
 }
 
 func (s *QueryBuilderGen) Build(params LookupParams) (cql []string, pqf []string, err error) {
+	var yearClause string
+	isCql := s.config.Type != nil && *s.config.Type == dirapi.QueryConfigTypeCql
+	if s.config.Year != nil && *s.config.Year != "" && params.Year != "" {
+		if len(params.Year) != 4 || strings.IndexFunc(params.Year, func(r rune) bool { return r < '0' || r > '9' }) != -1 {
+			return nil, nil, fmt.Errorf("publication date must be exactly four digits (YYYY) when year filtering is configured")
+		}
+		encode := pqfEncode
+		if isCql {
+			encode = cqlEncode
+		}
+		yearClause = strings.ReplaceAll(*s.config.Year, "{term}", encode(params.Year))
+	}
 	type paramMapping struct {
 		value   string
 		mapping *string
@@ -91,11 +104,24 @@ func (s *QueryBuilderGen) Build(params LookupParams) (cql []string, pqf []string
 	var cqlList []string
 	for _, pm := range paramMappings {
 		if pm.value != "" && pm.mapping != nil && *pm.mapping != "" {
-			if s.config.Type != nil && *s.config.Type == dirapi.QueryConfigTypeCql {
+			if isCql {
 				cql := strings.ReplaceAll(*pm.mapping, "{term}", cqlEncode(pm.value))
+				if yearClause != "" {
+					// Parsing preserves compound template grouping while omitting
+					// redundant parentheses rejected by the GVI holdings service.
+					var parser cqlparser.Parser
+					query, err := parser.Parse("(" + cql + ") and (" + yearClause + ")")
+					if err != nil {
+						return nil, nil, fmt.Errorf("combining %s lookup with year: %w", pm.name, err)
+					}
+					cql = query.String()
+				}
 				cqlList = append(cqlList, cql)
 			} else {
 				pqf := strings.ReplaceAll(*pm.mapping, "{term}", pqfEncode(pm.value))
+				if yearClause != "" {
+					pqf = "@and " + pqf + " " + yearClause
+				}
 				pqfList = append(pqfList, pqf)
 			}
 		}

@@ -923,7 +923,8 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 				"identifier":"rec.id = {term}",
 				"isbn":"isbn = {term}",
 				"issn":"issn = {term}",
-				"title":"title = {term}"
+				"title":"title = {term}",
+				"year":"dc.date = {term}"
 			},
 			"holdingsFormat":{
 				"marc":{
@@ -1036,7 +1037,7 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 		t.Fatalf("holdingsPolicy did not round-trip: %#v", policy)
 	}
 	queryConfig := holdings["queryConfig"].(map[string]any)
-	if queryConfig["type"] != "cql" || queryConfig["identifier"] != "rec.id = {term}" {
+	if queryConfig["type"] != "cql" || queryConfig["identifier"] != "rec.id = {term}" || queryConfig["year"] != "dc.date = {term}" {
 		t.Fatalf("catalogConfig queryConfig did not round-trip: %#v", queryConfig)
 	}
 	metadataMarc := holdings["metadataFormat"].(map[string]any)["marc21"].(map[string]any)
@@ -1071,7 +1072,7 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 	metadataMarc = holdings["metadataFormat"].(map[string]any)["marc21"].(map[string]any)
 	if holdings["metadataUpdateMode"] != "merge" || zoom["address"] != "z3950.example.org:210/catalog" ||
 		options["count"] != "50" || options["preferredRecordSyntax"] != "usmarc" || options["emptyValue"] != "" ||
-		queryConfig["title"] != "new title query" || queryConfig["identifier"] != "rec.id = {term}" ||
+		queryConfig["title"] != "new title query" || queryConfig["identifier"] != "rec.id = {term}" || queryConfig["year"] != "dc.date = {term}" ||
 		marcHoldings["mainField"] != "998" || marcHoldings["locationSubField"] != "l" ||
 		metadataMarc["title"] != "246$a" || metadataMarc["author"] != "100$a" {
 		t.Fatalf("partial catalogConfig PATCH did not recursively merge fields: %#v", holdings)
@@ -1507,6 +1508,92 @@ func TestGetOwnedEntries(t *testing.T) {
 			t.Fatalf("expected invalid CQL status %d, got %d and body %s", http.StatusBadRequest, res.StatusCode, data)
 		}
 	})
+}
+
+func TestEntrySensitiveFieldAccess(t *testing.T) {
+	resetDb()
+
+	roles := []struct {
+		name        string
+		permissions string
+		global      bool
+		owned       bool
+	}{
+		{name: "public", permissions: `["directory.public.all"]`},
+		{name: "institutional admin", permissions: `["directory.institution.all"]`, owned: true},
+		{name: "consortial admin", permissions: `["directory.consortium.all"]`, global: true},
+		{name: "system user", permissions: `["directory.system.all"]`, global: true},
+		{name: "public and institutional admin", permissions: `["directory.public.all","directory.institution.all"]`, owned: true},
+	}
+	endpoints := []struct {
+		name string
+		path string
+		list bool
+	}{
+		{name: "by ID", path: "/entries/by-id/00000000-0000-0000-0000-000000000002"},
+		{name: "by symbol", path: "/entries/by-symbol/TEST:ANINST"},
+		{name: "list", path: "/entries?cql=" + url.QueryEscape(`name="An Institution"`), list: true},
+		{name: "owned list", path: "/entries/owned", list: true},
+	}
+	for _, role := range roles {
+		for _, tenant := range []string{"ANINST", "OTHER", ""} {
+			for _, endpoint := range endpoints {
+				t.Run(role.name+"/tenant="+tenant+"/"+endpoint.name, func(t *testing.T) {
+					res, data := jsonReq(t, http.MethodGet, endpoint.path, "", map[string]string{
+						"X-Okapi-Tenant":      tenant,
+						"X-Okapi-Permissions": role.permissions,
+					})
+					if endpoint.name == "owned list" && tenant == "" {
+						if res.StatusCode != http.StatusBadRequest {
+							t.Fatalf("expected missing tenant status 400, got %d", res.StatusCode)
+						}
+						return
+					}
+					if res.StatusCode != http.StatusOK {
+						t.Fatalf("expected status 200, got %d and body %s", res.StatusCode, data)
+					}
+					var entry map[string]any
+					if endpoint.list {
+						var result struct {
+							Items []map[string]any `json:"items"`
+							About struct {
+								Count int64 `json:"count"`
+							} `json:"about"`
+						}
+						if err := json.Unmarshal([]byte(data), &result); err != nil {
+							t.Fatalf("failed to parse entries: %v", err)
+						}
+						if endpoint.name == "owned list" && tenant != "ANINST" {
+							if len(result.Items) != 0 || result.About.Count != 0 {
+								t.Fatal("owned list returned entries outside tenant scope")
+							}
+							return
+						}
+						if len(result.Items) != 1 || result.About.Count != 1 {
+							t.Fatalf("expected one entry, got %d items and count %d", len(result.Items), result.About.Count)
+						}
+						entry = result.Items[0]
+					} else if err := json.Unmarshal([]byte(data), &entry); err != nil {
+						t.Fatalf("failed to parse entry: %v", err)
+					}
+					if entry["name"] != "An Institution" || entry["tenant"] != "ANINST" {
+						t.Fatal("ordinary entry fields were not preserved")
+					}
+					lmsConfig, ok := entry["lmsConfig"].(map[string]any)
+					if !ok {
+						t.Fatal("missing LMS config")
+					}
+					wantCredential := ""
+					if role.global || (role.owned && tenant == "ANINST") {
+						wantCredential = "pack_extra_lembas"
+					}
+					if lmsConfig["fromAgencyAuthentication"] != wantCredential {
+						t.Fatal("unexpected sensitive field visibility")
+					}
+				})
+			}
+		}
+	}
 }
 
 func TestPublicReadSanitizesProtectedLMSValues(t *testing.T) {
