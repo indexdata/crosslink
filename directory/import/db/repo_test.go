@@ -135,7 +135,7 @@ func TestImportEntryCreatesCompleteAggregateWithGeneratedIDs(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, model.OutcomeImported, result.Outcome)
-	entryID := entryIDBySymbol(t, aggregate.Key)
+	entryID := aggregate.Key
 	require.NotEqual(t, uuid.Nil, entryID)
 	for table, expected := range map[string]int{
 		"symbols": 1, "service_endpoints": 1, "addresses": 1, "address_components": 1, "closures": 1,
@@ -146,6 +146,9 @@ func TestImportEntryCreatesCompleteAggregateWithGeneratedIDs(t *testing.T) {
 	var authentication string
 	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT from_agency_authentication FROM lms_configs WHERE entry=$1`, entryID).Scan(&authentication))
 	require.Equal(t, "credential-value", authentication)
+	var queryYear string
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT query_year FROM catalog_configs WHERE entry=$1`, entryID).Scan(&queryYear))
+	require.Equal(t, "dc.date = {term}", queryYear)
 	var zoomOptions map[string]string
 	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT zoom_options FROM catalog_configs WHERE entry=$1`, entryID).Scan(&zoomOptions))
 	require.Equal(t, map[string]string{"user": "private"}, zoomOptions)
@@ -166,7 +169,7 @@ func TestImportEntryConflictPoliciesAndUpdateFullSynchronization(t *testing.T) {
 	aggregate := completeEntryAggregate("CON")
 	_, err := repo.ImportEntry(context.Background(), aggregate, model.ConflictPolicyFail)
 	require.NoError(t, err)
-	entryID := entryIDBySymbol(t, aggregate.Key)
+	entryID := aggregate.Key
 	var originalEndpointID uuid.UUID
 	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT id FROM service_endpoints WHERE entry=$1`, entryID).Scan(&originalEndpointID))
 
@@ -185,7 +188,7 @@ func TestImportEntryConflictPoliciesAndUpdateFullSynchronization(t *testing.T) {
 	updated, err := repo.ImportEntry(context.Background(), aggregate, model.ConflictPolicyUpdate)
 	require.NoError(t, err)
 	require.Equal(t, model.OutcomeImported, updated.Outcome)
-	require.Equal(t, entryID, entryIDBySymbol(t, aggregate.Key))
+	require.Equal(t, entryID, aggregate.Key)
 	assertOwnedCount(t, "service_endpoints", entryID, 0)
 	assertOwnedCount(t, "lms_configs", entryID, 0)
 	assertOwnedCount(t, "catalog_configs", entryID, 0)
@@ -212,7 +215,7 @@ func TestImportEntryUpdateReplacesLMSPatronProfiles(t *testing.T) {
 
 	_, err := repo.ImportEntry(context.Background(), aggregate, model.ConflictPolicyFail)
 	require.NoError(t, err)
-	entryID := entryIDBySymbol(t, aggregate.Key)
+	entryID := aggregate.Key
 	require.JSONEq(t, `[{"code":"STAFF","canCreateRequests":true}]`, lmsPatronProfiles(t, entryID))
 
 	replacementProfiles := []model.PatronProfile{{Name: stringPointer("Blocked"), CanCreateRequests: false}}
@@ -222,9 +225,65 @@ func TestImportEntryUpdateReplacesLMSPatronProfiles(t *testing.T) {
 	require.JSONEq(t, `[{"name":"Blocked","canCreateRequests":false}]`, lmsPatronProfiles(t, entryID))
 }
 
+func TestImportEntryPersistsLenderUUIDAsDirectorySymbol(t *testing.T) {
+	resetImportDatabase(t)
+	repo := importdb.New(testPool)
+	lender := minimalEntryAggregate("LENDER", "Institution")
+	lender.Data.Symbols = append(lender.Data.Symbols, model.SymbolRef{Authority: "ALT", Symbol: "ALIAS"})
+	_, err := repo.ImportEntry(context.Background(), lender, model.ConflictPolicyFail)
+	require.NoError(t, err)
+
+	requester := minimalEntryAggregate("REQUESTER", "Institution")
+	requester.Data.ILLConfig = &model.ILLConfig{LendersOfLastResort: []uuid.UUID{lender.Key}}
+	_, err = repo.ImportEntry(context.Background(), requester, model.ConflictPolicyFail)
+	require.NoError(t, err)
+
+	var lenders []string
+	require.NoError(t, testPool.QueryRow(context.Background(),
+		`SELECT lenders_of_last_resort FROM ill_configs WHERE entry=$1`, requester.Key).Scan(&lenders))
+	require.Equal(t, []string{"ALT:ALIAS"}, lenders)
+}
+
+func TestImportEntryRejectsLenderWithoutSymbol(t *testing.T) {
+	resetImportDatabase(t)
+	repo := importdb.New(testPool)
+	lender := minimalEntryAggregate("LENDER", "Institution")
+	lender.Data.Symbols = []model.SymbolRef{}
+	_, err := repo.ImportEntry(context.Background(), lender, model.ConflictPolicyFail)
+	require.NoError(t, err)
+
+	requester := minimalEntryAggregate("REQUESTER", "Institution")
+	requester.Data.ILLConfig = &model.ILLConfig{LendersOfLastResort: []uuid.UUID{lender.Key}}
+	_, err = repo.ImportEntry(context.Background(), requester, model.ConflictPolicyFail)
+
+	require.ErrorContains(t, err, "lender of last resort "+lender.Key.String()+" has no symbol")
+	assertEntryDoesNotExist(t, requester.Key)
+}
+
+func TestImportEntryRejectsLenderWithoutSerializableSymbol(t *testing.T) {
+	resetImportDatabase(t)
+	repo := importdb.New(testPool)
+	lender := minimalEntryAggregate("LENDER", "Institution")
+	lender.Data.Symbols = []model.SymbolRef{{Authority: "A:B", Symbol: "C"}}
+	_, err := repo.ImportEntry(context.Background(), lender, model.ConflictPolicyFail)
+	require.NoError(t, err)
+
+	requester := minimalEntryAggregate("REQUESTER", "Institution")
+	requester.Data.ILLConfig = &model.ILLConfig{LendersOfLastResort: []uuid.UUID{lender.Key}}
+	_, err = repo.ImportEntry(context.Background(), requester, model.ConflictPolicyFail)
+
+	require.ErrorContains(t, err, "lender of last resort "+lender.Key.String()+" has no symbol")
+	assertEntryDoesNotExist(t, requester.Key)
+}
+
 func TestConcurrentImportEntrySkipHonorsConflictPolicyForMissingKey(t *testing.T) {
 	resetImportDatabase(t)
-	newAggregate := func() model.EntryAggregate { return minimalEntryAggregate("concurrent", "Institution") }
+	entryID := uuid.New()
+	newAggregate := func() model.EntryAggregate {
+		aggregate := minimalEntryAggregate("concurrent", "Institution")
+		aggregate.Key = entryID
+		return aggregate
+	}
 	results, errs := concurrentlyImportEntry(t, newAggregate, model.ConflictPolicySkip, 8)
 
 	var imported, skipped int
@@ -244,7 +303,12 @@ func TestConcurrentImportEntrySkipHonorsConflictPolicyForMissingKey(t *testing.T
 
 func TestConcurrentImportEntryUpdateHonorsConflictPolicyForMissingKey(t *testing.T) {
 	resetImportDatabase(t)
-	newAggregate := func() model.EntryAggregate { return minimalEntryAggregate("concurrent", "Institution") }
+	entryID := uuid.New()
+	newAggregate := func() model.EntryAggregate {
+		aggregate := minimalEntryAggregate("concurrent", "Institution")
+		aggregate.Key = entryID
+		return aggregate
+	}
 	results, errs := concurrentlyImportEntry(t, newAggregate, model.ConflictPolicyUpdate, 8)
 
 	for index, err := range errs {
@@ -263,7 +327,7 @@ func TestImportEntryLocksAndRevalidatesSecondarySymbols(t *testing.T) {
 	owner := minimalEntryAggregate("OWNER", "Institution")
 	_, err := repo.ImportEntry(ctx, owner, model.ConflictPolicyFail)
 	require.NoError(t, err)
-	ownerID := entryIDBySymbol(t, owner.Key)
+	ownerID := owner.Key
 
 	secondary := model.SymbolRef{Authority: "ISIL", Symbol: "SHARED"}
 	blocker, err := testPool.Begin(ctx)
@@ -290,7 +354,9 @@ func TestImportEntryLocksAndRevalidatesSecondarySymbols(t *testing.T) {
 	importErr := <-importDone
 	require.ErrorContains(t, importErr, "entry symbol ISIL:SHARED already belongs to another entry")
 	assertEntryDoesNotExist(t, aggregate.Key)
-	require.Equal(t, ownerID, entryIDBySymbol(t, secondary))
+	var actualOwnerID uuid.UUID
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT owner FROM symbols WHERE authority=$1 AND symbol=$2`, secondary.Authority, secondary.Symbol).Scan(&actualOwnerID))
+	require.Equal(t, ownerID, actualOwnerID)
 }
 
 func TestConcurrentImportEntryOpposingParentsDoNotDeadlock(t *testing.T) {
@@ -315,9 +381,11 @@ func TestConcurrentImportEntryOpposingParentsDoNotDeadlock(t *testing.T) {
 		require.NoError(t, err)
 
 		first := minimalEntryAggregate(firstSymbol, "Branch")
-		first.Data.Parent = &model.SymbolRef{Authority: "ISIL", Symbol: secondSymbol}
+		first.Key = firstID
+		first.Data.Parent = &secondID
 		second := minimalEntryAggregate(secondSymbol, "Branch")
-		second.Data.Parent = &model.SymbolRef{Authority: "ISIL", Symbol: firstSymbol}
+		second.Key = secondID
+		second.Data.Parent = &firstID
 		pairs[index] = importPair{first: first, second: second}
 	}
 
@@ -381,9 +449,11 @@ func TestConcurrentImportEntryOpposingLendersDoNotDeadlock(t *testing.T) {
 		require.NoError(t, err)
 
 		first := minimalEntryAggregate(firstSymbol, "Institution")
-		first.Data.ILLConfig = &model.ILLConfig{LendersOfLastResort: []model.SymbolRef{{Authority: "ISIL", Symbol: secondSymbol}}}
+		first.Key = firstID
+		first.Data.ILLConfig = &model.ILLConfig{LendersOfLastResort: []uuid.UUID{secondID}}
 		second := minimalEntryAggregate(secondSymbol, "Institution")
-		second.Data.ILLConfig = &model.ILLConfig{LendersOfLastResort: []model.SymbolRef{{Authority: "ISIL", Symbol: firstSymbol}}}
+		second.Key = secondID
+		second.Data.ILLConfig = &model.ILLConfig{LendersOfLastResort: []uuid.UUID{firstID}}
 		pairs[index] = importPair{first: first, second: second}
 	}
 
@@ -414,7 +484,7 @@ func TestConcurrentImportEntryOpposingLendersDoNotDeadlock(t *testing.T) {
 	}
 }
 
-func TestImportEntryRetriesWhenParentSymbolChangesBeforeRowLock(t *testing.T) {
+func TestImportEntryUsesParentUUIDWhenParentSymbolChangesBeforeRowLock(t *testing.T) {
 	resetImportDatabase(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -440,7 +510,8 @@ func TestImportEntryRetriesWhenParentSymbolChangesBeforeRowLock(t *testing.T) {
 	require.NoError(t, err)
 
 	aggregate := minimalEntryAggregate("BRANCH", "Branch")
-	aggregate.Data.Parent = &model.SymbolRef{Authority: "ISIL", Symbol: "PARENT"}
+	aggregate.Key = ownerID
+	aggregate.Data.Parent = &originalParentID
 	repo, lockUnavailable := importRepoObservingLockUnavailable(t, ctx)
 	importDone := make(chan error, 1)
 	go func() {
@@ -456,7 +527,7 @@ func TestImportEntryRetriesWhenParentSymbolChangesBeforeRowLock(t *testing.T) {
 
 	var parentID uuid.UUID
 	require.NoError(t, testPool.QueryRow(ctx, `SELECT parent FROM entries WHERE id=$1`, ownerID).Scan(&parentID))
-	require.Equal(t, replacementParentID, parentID)
+	require.Equal(t, originalParentID, parentID)
 }
 
 func TestImportEntryRetriesWhenParentIsDeletedBeforeRowLock(t *testing.T) {
@@ -477,7 +548,7 @@ func TestImportEntryRetriesWhenParentIsDeletedBeforeRowLock(t *testing.T) {
 	require.NoError(t, err)
 
 	aggregate := minimalEntryAggregate("BRANCH", "Branch")
-	aggregate.Data.Parent = &model.SymbolRef{Authority: "ISIL", Symbol: "PARENT"}
+	aggregate.Data.Parent = &parentID
 	repo, lockUnavailable := importRepoObservingLockUnavailable(t, ctx)
 	importDone := make(chan error, 1)
 	go func() {
@@ -489,10 +560,10 @@ func TestImportEntryRetriesWhenParentIsDeletedBeforeRowLock(t *testing.T) {
 	_, err = blocker.Exec(ctx, `DELETE FROM entries WHERE id=$1`, parentID)
 	require.NoError(t, err)
 	require.NoError(t, blocker.Commit(ctx))
-	require.ErrorContains(t, <-importDone, "parent ISIL:PARENT does not exist")
+	require.ErrorContains(t, <-importDone, "parent "+parentID.String()+" does not exist")
 }
 
-func TestImportEntryRetriesSymbolCreatedByAPIAndReappliesPolicy(t *testing.T) {
+func TestImportEntryRejectsSymbolCreatedByAPIDuringImport(t *testing.T) {
 	for _, policy := range []model.ConflictPolicy{model.ConflictPolicySkip, model.ConflictPolicyUpdate} {
 		t.Run(string(policy), func(t *testing.T) {
 			resetImportDatabase(t)
@@ -529,21 +600,12 @@ func TestImportEntryRetriesSymbolCreatedByAPIAndReappliesPolicy(t *testing.T) {
 			require.NoError(t, blocker.Commit(ctx))
 
 			outcome := <-importDone
-			require.NoError(t, outcome.err)
-			require.Equal(t, apiEntryID, entryIDBySymbol(t, aggregate.Key))
-			if policy == model.ConflictPolicySkip {
-				require.Equal(t, model.OutcomeSkipped, outcome.result.Outcome)
-				var name, entryType string
-				require.NoError(t, testPool.QueryRow(ctx, `SELECT name, type FROM entries WHERE id=$1`, apiEntryID).Scan(&name, &entryType))
-				require.Equal(t, "API entry", name)
-				require.Equal(t, "Institution", entryType)
-			} else {
-				require.Equal(t, model.OutcomeImported, outcome.result.Outcome)
-				var name, entryType string
-				require.NoError(t, testPool.QueryRow(ctx, `SELECT name, type FROM entries WHERE id=$1`, apiEntryID).Scan(&name, &entryType))
-				require.Equal(t, aggregate.Data.Name, name)
-				require.Equal(t, "Consortium", entryType)
-			}
+			require.ErrorContains(t, outcome.err, "entry symbol ISIL:RACE already belongs to another entry")
+			assertEntryDoesNotExist(t, aggregate.Key)
+			var name, entryType string
+			require.NoError(t, testPool.QueryRow(ctx, `SELECT name, type FROM entries WHERE id=$1`, apiEntryID).Scan(&name, &entryType))
+			require.Equal(t, "API entry", name)
+			require.Equal(t, "Institution", entryType)
 		})
 	}
 }
@@ -574,7 +636,8 @@ func TestImportEntryRejectsCycle(t *testing.T) {
 	require.NoError(t, err)
 
 	branch := minimalEntryAggregate("BRANCH", "Branch")
-	branch.Data.Parent = &model.SymbolRef{Authority: "ISIL", Symbol: "INST"}
+	branch.Key = branchID
+	branch.Data.Parent = &institutionID
 	_, err = repo.ImportEntry(ctx, branch, model.ConflictPolicyUpdate)
 
 	require.ErrorContains(t, err, "would create a cycle")
@@ -584,11 +647,12 @@ func TestImportEntryRejectsMissingParentWithoutWriting(t *testing.T) {
 	resetImportDatabase(t)
 	repo := importdb.New(testPool)
 	aggregate := minimalEntryAggregate("LIB", "Institution")
-	aggregate.Data.Parent = &model.SymbolRef{Authority: "ISIL", Symbol: "MISSING"}
+	missingParentID := uuid.New()
+	aggregate.Data.Parent = &missingParentID
 
 	_, err := repo.ImportEntry(context.Background(), aggregate, model.ConflictPolicyFail)
 
-	require.ErrorContains(t, err, "parent ISIL:MISSING does not exist")
+	require.ErrorContains(t, err, "parent "+missingParentID.String()+" does not exist")
 	assertEntryDoesNotExist(t, aggregate.Key)
 }
 
@@ -601,7 +665,7 @@ func TestImportEntryRollsBackAfterLateSymbolConflict(t *testing.T) {
 
 	aggregate := minimalEntryAggregate("LIB", "Institution")
 	aggregate.Data.Parent = &consortium.Key
-	aggregate.Data.Symbols = append(aggregate.Data.Symbols, consortium.Key)
+	aggregate.Data.Symbols = append(aggregate.Data.Symbols, model.SymbolRef{Authority: "ISIL", Symbol: "CON"})
 	_, err = repo.ImportEntry(context.Background(), aggregate, model.ConflictPolicyFail)
 
 	require.Error(t, err)
@@ -613,12 +677,12 @@ func TestImportEntryRejectsAmbiguousLenderAuthorityBeforeWriting(t *testing.T) {
 	repo := importdb.New(testPool)
 	aggregate := minimalEntryAggregate("CON", "Consortium")
 	aggregate.Data.ILLConfig = &model.ILLConfig{
-		LendersOfLastResort: []model.SymbolRef{{Authority: "A:B", Symbol: "C"}},
+		LendersOfLastResort: []uuid.UUID{uuid.Nil},
 	}
 
 	_, err := repo.ImportEntry(context.Background(), aggregate, model.ConflictPolicyFail)
 
-	require.ErrorContains(t, err, "lender of last resort 1 authority must not contain ':'")
+	require.ErrorContains(t, err, "lender of last resort 1 must be a valid UUID")
 	assertEntryDoesNotExist(t, aggregate.Key)
 }
 
@@ -639,7 +703,7 @@ func TestImportTierConflictPoliciesAndUpdateReplacesAssignments(t *testing.T) {
 	repo, consortium, first, second := importRepoFixture(t)
 	aggregate := model.TierAggregate{
 		Key:  model.TierKey{Consortium: consortium, Name: "Loan"},
-		Data: model.TierData{Level: "standard", Type: "loan", Cost: 1.5, Entries: []model.SymbolRef{first}},
+		Data: model.TierData{Level: "standard", Type: "loan", Cost: 1.5, Entries: []uuid.UUID{first}},
 	}
 
 	result, err := repo.ImportTier(context.Background(), aggregate, model.ConflictPolicyFail)
@@ -647,7 +711,7 @@ func TestImportTierConflictPoliciesAndUpdateReplacesAssignments(t *testing.T) {
 	require.Equal(t, model.OutcomeImported, result.Outcome)
 	id := tierIDByKey(t, consortium, "Loan")
 	require.NotEqual(t, uuid.Nil, id)
-	require.Equal(t, []model.SymbolRef{first}, tierAssignments(t, id))
+	require.Equal(t, []uuid.UUID{first}, tierAssignments(t, id))
 
 	_, err = repo.ImportTier(context.Background(), aggregate, model.ConflictPolicyFail)
 	require.ErrorContains(t, err, "already exists")
@@ -657,47 +721,37 @@ func TestImportTierConflictPoliciesAndUpdateReplacesAssignments(t *testing.T) {
 
 	aggregate.Data.Level = "rush"
 	aggregate.Data.Cost = 2.5
-	aggregate.Data.Entries = []model.SymbolRef{second}
+	aggregate.Data.Entries = []uuid.UUID{second}
 	_, err = repo.ImportTier(context.Background(), aggregate, model.ConflictPolicyUpdate)
 	require.NoError(t, err)
 	require.Equal(t, id, tierIDByKey(t, consortium, "Loan"))
-	require.Equal(t, []model.SymbolRef{second}, tierAssignments(t, id))
+	require.Equal(t, []uuid.UUID{second}, tierAssignments(t, id))
 }
 
-func TestImportTierRejectsDuplicateEntryAliases(t *testing.T) {
+func TestImportTierRejectsDuplicateEntryUUIDs(t *testing.T) {
 	repo, consortium, first, second := importRepoFixture(t)
-	alias := addImportSymbolAlias(t, first)
 	ctx := context.Background()
 	aggregate := model.TierAggregate{
 		Key:  model.TierKey{Consortium: consortium, Name: "Aliases"},
-		Data: model.TierData{Level: "standard", Type: "loan", Cost: 1.5, Entries: []model.SymbolRef{first, alias}},
+		Data: model.TierData{Level: "standard", Type: "loan", Cost: 1.5, Entries: []uuid.UUID{first, first}},
 	}
 	_, err := repo.ImportTier(ctx, aggregate, model.ConflictPolicyFail)
-	require.ErrorContains(t, err, "duplicate assignment")
+	require.ErrorContains(t, err, "duplicate tier entry")
 	require.ErrorContains(t, err, first.String())
-	require.ErrorContains(t, err, alias.String())
 	assertTierDoesNotExist(t, consortium, aggregate.Key.Name)
 
-	aggregate.Data.Entries = []model.SymbolRef{second}
+	aggregate.Data.Entries = []uuid.UUID{second}
 	_, err = repo.ImportTier(ctx, aggregate, model.ConflictPolicyFail)
 	require.NoError(t, err)
 	id := tierIDByKey(t, consortium, aggregate.Key.Name)
-	aggregate.Data.Entries = []model.SymbolRef{first, alias}
+	aggregate.Data.Entries = []uuid.UUID{first, first}
 	aggregate.Data.Cost = 99
 	_, err = repo.ImportTier(ctx, aggregate, model.ConflictPolicyUpdate)
-	require.ErrorContains(t, err, "duplicate assignment")
-	require.Equal(t, []model.SymbolRef{second}, tierAssignments(t, id))
+	require.ErrorContains(t, err, "duplicate tier entry")
+	require.Equal(t, []uuid.UUID{second}, tierAssignments(t, id))
 	var cost float64
 	require.NoError(t, testPool.QueryRow(ctx, `SELECT cost FROM tiers WHERE id=$1`, id).Scan(&cost))
 	require.Equal(t, 1.5, cost)
-}
-
-func addImportSymbolAlias(t *testing.T, ref model.SymbolRef) model.SymbolRef {
-	t.Helper()
-	alias := model.SymbolRef{Authority: "ALIAS", Symbol: strings.ToUpper(uuid.NewString())}
-	_, err := testPool.Exec(context.Background(), `INSERT INTO symbols(owner, authority, symbol) VALUES($1, $2, $3)`, entryIDBySymbol(t, ref), alias.Authority, alias.Symbol)
-	require.NoError(t, err)
-	return alias
 }
 
 func TestExistingTierConflictPolicyPrecedesMissingAssignmentValidation(t *testing.T) {
@@ -706,11 +760,11 @@ func TestExistingTierConflictPolicyPrecedesMissingAssignmentValidation(t *testin
 			repo, consortium, first, _ := importRepoFixture(t)
 			aggregate := model.TierAggregate{
 				Key:  model.TierKey{Consortium: consortium, Name: "Loan"},
-				Data: model.TierData{Level: "standard", Type: "loan", Entries: []model.SymbolRef{first}},
+				Data: model.TierData{Level: "standard", Type: "loan", Entries: []uuid.UUID{first}},
 			}
 			_, err := repo.ImportTier(context.Background(), aggregate, model.ConflictPolicyFail)
 			require.NoError(t, err)
-			aggregate.Data.Entries = []model.SymbolRef{{Authority: "ISIL", Symbol: "MISSING"}}
+			aggregate.Data.Entries = []uuid.UUID{uuid.New()}
 
 			result, err := repo.ImportTier(context.Background(), aggregate, policy)
 
@@ -747,11 +801,9 @@ func TestConcurrentEntryAndTierImportsUseSameEntryLockOrder(t *testing.T) {
 	require.NoError(t, err)
 
 	repo := importdb.New(testPool)
-	consortium := model.SymbolRef{Authority: "ISIL", Symbol: "CON"}
-	member := model.SymbolRef{Authority: "ISIL", Symbol: "MEMBER"}
 	tier := model.TierAggregate{
-		Key:  model.TierKey{Consortium: consortium, Name: "Loan"},
-		Data: model.TierData{Level: "standard", Type: "loan", Entries: []model.SymbolRef{member}},
+		Key:  model.TierKey{Consortium: consortiumID, Name: "Loan"},
+		Data: model.TierData{Level: "standard", Type: "loan", Entries: []uuid.UUID{memberID}},
 	}
 	tierDone := make(chan error, 1)
 	go func() {
@@ -761,7 +813,8 @@ func TestConcurrentEntryAndTierImportsUseSameEntryLockOrder(t *testing.T) {
 	waitForDatabaseLockWaiters(t, ctx, 1)
 
 	entry := minimalEntryAggregate("MEMBER", "Institution")
-	entry.Data.Parent = &consortium
+	entry.Key = memberID
+	entry.Data.Parent = &consortiumID
 	entryRepo, lockUnavailable := importRepoObservingLockUnavailable(t, ctx)
 	entryDone := make(chan error, 1)
 	go func() {
@@ -780,7 +833,7 @@ func TestConcurrentImportTierSkipHonorsConflictPolicyForMissingKey(t *testing.T)
 	newAggregate := func() model.TierAggregate {
 		return model.TierAggregate{
 			Key:  model.TierKey{Consortium: consortium, Name: "Concurrent"},
-			Data: model.TierData{Level: "standard", Type: "loan", Entries: []model.SymbolRef{}},
+			Data: model.TierData{Level: "standard", Type: "loan", Entries: []uuid.UUID{}},
 		}
 	}
 	results, errs := concurrentlyImportTier(repo, newAggregate, model.ConflictPolicySkip, 8)
@@ -794,7 +847,7 @@ func TestConcurrentImportTierUpdateHonorsConflictPolicyForMissingKey(t *testing.
 	newAggregate := func() model.TierAggregate {
 		return model.TierAggregate{
 			Key:  model.TierKey{Consortium: consortium, Name: "Concurrent"},
-			Data: model.TierData{Level: "standard", Type: "loan", Entries: []model.SymbolRef{}},
+			Data: model.TierData{Level: "standard", Type: "loan", Entries: []uuid.UUID{}},
 		}
 	}
 	results, errs := concurrentlyImportTier(repo, newAggregate, model.ConflictPolicyUpdate, 8)
@@ -805,15 +858,14 @@ func TestConcurrentImportTierUpdateHonorsConflictPolicyForMissingKey(t *testing.
 
 func TestImportTierRollsBackWhenMemberIsMissing(t *testing.T) {
 	repo, consortium, first, _ := importRepoFixture(t)
-	missing := model.SymbolRef{Authority: "ISIL", Symbol: "MISSING"}
 	aggregate := model.TierAggregate{
 		Key:  model.TierKey{Consortium: consortium, Name: "Loan"},
-		Data: model.TierData{Level: "standard", Type: "loan", Entries: []model.SymbolRef{first, missing}},
+		Data: model.TierData{Level: "standard", Type: "loan", Entries: []uuid.UUID{first, uuid.New()}},
 	}
 
 	_, err := repo.ImportTier(context.Background(), aggregate, model.ConflictPolicyFail)
 
-	require.ErrorContains(t, err, "entry ISIL:MISSING does not exist")
+	require.ErrorContains(t, err, "does not exist")
 	assertTierDoesNotExist(t, consortium, "Loan")
 }
 
@@ -822,7 +874,7 @@ func TestImportNetworkConflictPoliciesAndUpdateReplacesAssignments(t *testing.T)
 	reciprocal := true
 	aggregate := model.NetworkAggregate{
 		Key:  model.NetworkKey{Consortium: consortium, Name: "Main"},
-		Data: model.NetworkData{Reciprocal: &reciprocal, Entries: []model.NetworkAssignment{{SymbolRef: first, Priority: 1}}},
+		Data: model.NetworkData{Reciprocal: &reciprocal, Entries: []model.NetworkAssignment{{Entry: first, Priority: 1}}},
 	}
 
 	result, err := repo.ImportNetwork(context.Background(), aggregate, model.ConflictPolicyFail)
@@ -830,7 +882,7 @@ func TestImportNetworkConflictPoliciesAndUpdateReplacesAssignments(t *testing.T)
 	require.Equal(t, model.OutcomeImported, result.Outcome)
 	id := networkIDByKey(t, consortium, "Main")
 	require.NotEqual(t, uuid.Nil, id)
-	require.Equal(t, []model.NetworkAssignment{{SymbolRef: first, Priority: 1}}, networkAssignments(t, id))
+	require.Equal(t, []model.NetworkAssignment{{Entry: first, Priority: 1}}, networkAssignments(t, id))
 
 	_, err = repo.ImportNetwork(context.Background(), aggregate, model.ConflictPolicyFail)
 	require.ErrorContains(t, err, "already exists")
@@ -839,41 +891,39 @@ func TestImportNetworkConflictPoliciesAndUpdateReplacesAssignments(t *testing.T)
 	require.Equal(t, model.OutcomeSkipped, skipped.Outcome)
 
 	aggregate.Data.Reciprocal = nil
-	aggregate.Data.Entries = []model.NetworkAssignment{{SymbolRef: second, Priority: 2}}
+	aggregate.Data.Entries = []model.NetworkAssignment{{Entry: second, Priority: 2}}
 	_, err = repo.ImportNetwork(context.Background(), aggregate, model.ConflictPolicyUpdate)
 	require.NoError(t, err)
 	require.Equal(t, id, networkIDByKey(t, consortium, "Main"))
-	require.Equal(t, []model.NetworkAssignment{{SymbolRef: second, Priority: 2}}, networkAssignments(t, id))
+	require.Equal(t, []model.NetworkAssignment{{Entry: second, Priority: 2}}, networkAssignments(t, id))
 }
 
-func TestImportNetworkRejectsDuplicateEntryAliases(t *testing.T) {
+func TestImportNetworkRejectsDuplicateEntryUUIDs(t *testing.T) {
 	repo, consortium, first, second := importRepoFixture(t)
-	alias := addImportSymbolAlias(t, first)
 	ctx := context.Background()
 	aggregate := model.NetworkAggregate{
 		Key: model.NetworkKey{Consortium: consortium, Name: "Aliases"},
 		Data: model.NetworkData{Entries: []model.NetworkAssignment{
-			{SymbolRef: first, Priority: 1}, {SymbolRef: alias, Priority: 99},
+			{Entry: first, Priority: 1}, {Entry: first, Priority: 99},
 		}},
 	}
 	_, err := repo.ImportNetwork(ctx, aggregate, model.ConflictPolicyFail)
-	require.ErrorContains(t, err, "duplicate assignment")
+	require.ErrorContains(t, err, "duplicate network entry")
 	require.ErrorContains(t, err, first.String())
-	require.ErrorContains(t, err, alias.String())
 	var count int
-	require.NoError(t, testPool.QueryRow(ctx, `SELECT count(*) FROM networks WHERE consortium=$1 AND name=$2`, entryIDBySymbol(t, consortium), aggregate.Key.Name).Scan(&count))
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT count(*) FROM networks WHERE consortium=$1 AND name=$2`, consortium, aggregate.Key.Name).Scan(&count))
 	require.Zero(t, count)
 
-	aggregate.Data.Entries = []model.NetworkAssignment{{SymbolRef: second, Priority: 5}}
+	aggregate.Data.Entries = []model.NetworkAssignment{{Entry: second, Priority: 5}}
 	_, err = repo.ImportNetwork(ctx, aggregate, model.ConflictPolicyFail)
 	require.NoError(t, err)
 	id := networkIDByKey(t, consortium, aggregate.Key.Name)
-	aggregate.Data.Entries = []model.NetworkAssignment{{SymbolRef: first, Priority: 1}, {SymbolRef: alias, Priority: 99}}
+	aggregate.Data.Entries = []model.NetworkAssignment{{Entry: first, Priority: 1}, {Entry: first, Priority: 99}}
 	reciprocal := true
 	aggregate.Data.Reciprocal = &reciprocal
 	_, err = repo.ImportNetwork(ctx, aggregate, model.ConflictPolicyUpdate)
-	require.ErrorContains(t, err, "duplicate assignment")
-	require.Equal(t, []model.NetworkAssignment{{SymbolRef: second, Priority: 5}}, networkAssignments(t, id))
+	require.ErrorContains(t, err, "duplicate network entry")
+	require.Equal(t, []model.NetworkAssignment{{Entry: second, Priority: 5}}, networkAssignments(t, id))
 	var storedReciprocal *bool
 	require.NoError(t, testPool.QueryRow(ctx, `SELECT reciprocal FROM networks WHERE id=$1`, id).Scan(&storedReciprocal))
 	require.Nil(t, storedReciprocal)
@@ -886,15 +936,15 @@ func TestExistingNetworkConflictPolicyPrecedesMissingAssignmentValidation(t *tes
 			aggregate := model.NetworkAggregate{
 				Key: model.NetworkKey{Consortium: consortium, Name: "Main"},
 				Data: model.NetworkData{Entries: []model.NetworkAssignment{{
-					SymbolRef: first,
-					Priority:  1,
+					Entry:    first,
+					Priority: 1,
 				}}},
 			}
 			_, err := repo.ImportNetwork(context.Background(), aggregate, model.ConflictPolicyFail)
 			require.NoError(t, err)
 			aggregate.Data.Entries = []model.NetworkAssignment{{
-				SymbolRef: model.SymbolRef{Authority: "ISIL", Symbol: "MISSING"},
-				Priority:  1,
+				Entry:    uuid.New(),
+				Priority: 1,
 			}}
 
 			result, err := repo.ImportNetwork(context.Background(), aggregate, policy)
@@ -932,11 +982,9 @@ func TestConcurrentEntryAndNetworkImportsUseSameEntryLockOrder(t *testing.T) {
 	require.NoError(t, err)
 
 	repo := importdb.New(testPool)
-	consortium := model.SymbolRef{Authority: "ISIL", Symbol: "CON"}
-	member := model.SymbolRef{Authority: "ISIL", Symbol: "MEMBER"}
 	network := model.NetworkAggregate{
-		Key:  model.NetworkKey{Consortium: consortium, Name: "Main"},
-		Data: model.NetworkData{Entries: []model.NetworkAssignment{{SymbolRef: member, Priority: 1}}},
+		Key:  model.NetworkKey{Consortium: consortiumID, Name: "Main"},
+		Data: model.NetworkData{Entries: []model.NetworkAssignment{{Entry: memberID, Priority: 1}}},
 	}
 	networkDone := make(chan error, 1)
 	go func() {
@@ -946,7 +994,8 @@ func TestConcurrentEntryAndNetworkImportsUseSameEntryLockOrder(t *testing.T) {
 	waitForDatabaseLockWaiters(t, ctx, 1)
 
 	entry := minimalEntryAggregate("MEMBER", "Institution")
-	entry.Data.Parent = &consortium
+	entry.Key = memberID
+	entry.Data.Parent = &consortiumID
 	entryRepo, lockUnavailable := importRepoObservingLockUnavailable(t, ctx)
 	entryDone := make(chan error, 1)
 	go func() {
@@ -1016,7 +1065,7 @@ func TestBusinessKeyLookupErrorsPreservePostgreSQLCause(t *testing.T) {
 			if resource == "tier" {
 				_, err = repo.ImportTier(context.Background(), model.TierAggregate{
 					Key:  model.TierKey{Consortium: consortium, Name: "Missing table"},
-					Data: model.TierData{Level: "standard", Type: "loan", Entries: []model.SymbolRef{}},
+					Data: model.TierData{Level: "standard", Type: "loan", Entries: []uuid.UUID{}},
 				}, model.ConflictPolicyFail)
 			} else {
 				_, err = repo.ImportNetwork(context.Background(), model.NetworkAggregate{
@@ -1091,17 +1140,17 @@ func TestAssignmentCreateErrorsPreservePostgreSQLCause(t *testing.T) {
 	}
 }
 
-func importAggregateWithAssignment(repo *importdb.PgImportRepo, resource string, consortium, entry model.SymbolRef) error {
+func importAggregateWithAssignment(repo *importdb.PgImportRepo, resource string, consortium, entry uuid.UUID) error {
 	if resource == "tier" {
 		_, err := repo.ImportTier(context.Background(), model.TierAggregate{
 			Key:  model.TierKey{Consortium: consortium, Name: "Assignment failure"},
-			Data: model.TierData{Level: "standard", Type: "loan", Entries: []model.SymbolRef{entry}},
+			Data: model.TierData{Level: "standard", Type: "loan", Entries: []uuid.UUID{entry}},
 		}, model.ConflictPolicyFail)
 		return err
 	}
 	_, err := repo.ImportNetwork(context.Background(), model.NetworkAggregate{
 		Key:  model.NetworkKey{Consortium: consortium, Name: "Assignment failure"},
-		Data: model.NetworkData{Entries: []model.NetworkAssignment{{SymbolRef: entry, Priority: 1}}},
+		Data: model.NetworkData{Entries: []model.NetworkAssignment{{Entry: entry, Priority: 1}}},
 	}, model.ConflictPolicyFail)
 	return err
 }
@@ -1110,17 +1159,17 @@ func TestAssignmentConsortiumLookupErrorsPreservePostgreSQLCause(t *testing.T) {
 	for _, resource := range []string{"tier", "network"} {
 		t.Run(resource, func(t *testing.T) {
 			repo, consortium, _, _ := importRepoFixture(t)
-			_, err := testPool.Exec(context.Background(), `ALTER TABLE symbols RENAME TO symbols_unavailable`)
+			_, err := testPool.Exec(context.Background(), `ALTER TABLE entries RENAME TO entries_unavailable`)
 			require.NoError(t, err)
 			t.Cleanup(func() {
-				_, restoreErr := testPool.Exec(context.Background(), `ALTER TABLE symbols_unavailable RENAME TO symbols`)
+				_, restoreErr := testPool.Exec(context.Background(), `ALTER TABLE entries_unavailable RENAME TO entries`)
 				require.NoError(t, restoreErr)
 			})
 
 			if resource == "tier" {
 				_, err = repo.ImportTier(context.Background(), model.TierAggregate{
 					Key:  model.TierKey{Consortium: consortium, Name: "Lookup failure"},
-					Data: model.TierData{Level: "standard", Type: "loan", Entries: []model.SymbolRef{}},
+					Data: model.TierData{Level: "standard", Type: "loan", Entries: []uuid.UUID{}},
 				}, model.ConflictPolicyFail)
 			} else {
 				_, err = repo.ImportNetwork(context.Background(), model.NetworkAggregate{
@@ -1141,41 +1190,40 @@ func TestAssignmentEntryLookupErrorsPreservePostgreSQLCause(t *testing.T) {
 	for _, resource := range []string{"tier", "network"} {
 		t.Run(resource, func(t *testing.T) {
 			repo, consortium, first, _ := importRepoFixture(t)
-			_, err := testPool.Exec(context.Background(), `ALTER TABLE symbols RENAME TO symbols_available`)
+			_, err := testPool.Exec(context.Background(), `ALTER TABLE entries RENAME TO entries_available`)
 			require.NoError(t, err)
 			t.Cleanup(func() {
-				_, cleanupErr := testPool.Exec(context.Background(), `DROP VIEW IF EXISTS symbols`)
+				_, cleanupErr := testPool.Exec(context.Background(), `DROP VIEW IF EXISTS entries`)
 				require.NoError(t, cleanupErr)
-				_, cleanupErr = testPool.Exec(context.Background(), `ALTER TABLE symbols_available RENAME TO symbols`)
+				_, cleanupErr = testPool.Exec(context.Background(), `ALTER TABLE entries_available RENAME TO entries`)
 				require.NoError(t, cleanupErr)
-				_, cleanupErr = testPool.Exec(context.Background(), `DROP FUNCTION fail_assignment_entry_lookup(text, uuid)`)
+				_, cleanupErr = testPool.Exec(context.Background(), `DROP FUNCTION fail_assignment_entry_lookup(uuid)`)
 				require.NoError(t, cleanupErr)
 			})
-			_, err = testPool.Exec(context.Background(), `
-				CREATE FUNCTION fail_assignment_entry_lookup(symbol_value text, owner_value uuid) RETURNS uuid AS $$
+			_, err = testPool.Exec(context.Background(), fmt.Sprintf(`
+				CREATE FUNCTION fail_assignment_entry_lookup(entry_id uuid) RETURNS boolean AS $$
 				BEGIN
-					IF symbol_value = 'FIRST' THEN
+					IF entry_id = '%s'::uuid THEN
 						RAISE EXCEPTION 'forced assignment entry lookup failure' USING ERRCODE = '42P01';
 					END IF;
-					RETURN owner_value;
+					RETURN true;
 				END;
-				$$ LANGUAGE plpgsql`)
+				$$ LANGUAGE plpgsql`, first)) //nolint:gosec // first is a generated UUID
 			require.NoError(t, err)
 			_, err = testPool.Exec(context.Background(), `
-				CREATE VIEW symbols AS
-				SELECT fail_assignment_entry_lookup(symbol, owner) AS owner, authority, symbol
-				FROM symbols_available`)
+				CREATE VIEW entries AS
+				SELECT * FROM entries_available WHERE fail_assignment_entry_lookup(id)`)
 			require.NoError(t, err)
 
 			if resource == "tier" {
 				_, err = repo.ImportTier(context.Background(), model.TierAggregate{
 					Key:  model.TierKey{Consortium: consortium, Name: "Assignment lookup failure"},
-					Data: model.TierData{Level: "standard", Type: "loan", Entries: []model.SymbolRef{first}},
+					Data: model.TierData{Level: "standard", Type: "loan", Entries: []uuid.UUID{first}},
 				}, model.ConflictPolicyFail)
 			} else {
 				_, err = repo.ImportNetwork(context.Background(), model.NetworkAggregate{
 					Key:  model.NetworkKey{Consortium: consortium, Name: "Assignment lookup failure"},
-					Data: model.NetworkData{Entries: []model.NetworkAssignment{{SymbolRef: first, Priority: 1}}},
+					Data: model.NetworkData{Entries: []model.NetworkAssignment{{Entry: first, Priority: 1}}},
 				}, model.ConflictPolicyFail)
 			}
 
@@ -1216,7 +1264,7 @@ func TestAggregateCommitErrorsPreservePostgreSQLCause(t *testing.T) {
 			if resource == "tier" {
 				_, err = repo.ImportTier(context.Background(), model.TierAggregate{
 					Key:  model.TierKey{Consortium: consortium, Name: "Commit failure"},
-					Data: model.TierData{Level: "standard", Type: "loan", Entries: []model.SymbolRef{}},
+					Data: model.TierData{Level: "standard", Type: "loan", Entries: []uuid.UUID{}},
 				}, model.ConflictPolicyFail)
 			} else {
 				_, err = repo.ImportNetwork(context.Background(), model.NetworkAggregate{
@@ -1233,7 +1281,7 @@ func TestAggregateCommitErrorsPreservePostgreSQLCause(t *testing.T) {
 	}
 }
 
-func importRepoFixture(t *testing.T) (*importdb.PgImportRepo, model.SymbolRef, model.SymbolRef, model.SymbolRef) {
+func importRepoFixture(t *testing.T) (*importdb.PgImportRepo, uuid.UUID, uuid.UUID, uuid.UUID) {
 	t.Helper()
 	resetImportDatabase(t)
 	repo := importdb.New(testPool)
@@ -1251,25 +1299,25 @@ func importRepoFixture(t *testing.T) (*importdb.PgImportRepo, model.SymbolRef, m
 	return repo, consortium.Key, first.Key, second.Key
 }
 
-func tierIDByKey(t *testing.T, consortium model.SymbolRef, name string) uuid.UUID {
+func tierIDByKey(t *testing.T, consortium uuid.UUID, name string) uuid.UUID {
 	t.Helper()
 	return aggregateIDByKey(t, "tiers", consortium, name)
 }
 
-func networkIDByKey(t *testing.T, consortium model.SymbolRef, name string) uuid.UUID {
+func networkIDByKey(t *testing.T, consortium uuid.UUID, name string) uuid.UUID {
 	t.Helper()
 	return aggregateIDByKey(t, "networks", consortium, name)
 }
 
-func aggregateIDByKey(t *testing.T, table string, consortium model.SymbolRef, name string) uuid.UUID {
+func aggregateIDByKey(t *testing.T, table string, consortium uuid.UUID, name string) uuid.UUID {
 	t.Helper()
-	query := fmt.Sprintf(`SELECT a.id FROM %s a JOIN symbols s ON s.owner=a.consortium WHERE s.authority=$1 AND s.symbol=$2 AND a.name=$3`, table) //nolint:gosec // table names are fixed test constants
+	query := fmt.Sprintf(`SELECT a.id FROM %s a WHERE consortium=$1 AND name=$2`, table) //nolint:gosec // table names are fixed test constants
 	var id uuid.UUID
-	require.NoError(t, testPool.QueryRow(context.Background(), query, consortium.Authority, consortium.Symbol, name).Scan(&id))
+	require.NoError(t, testPool.QueryRow(context.Background(), query, consortium, name).Scan(&id))
 	return id
 }
 
-func tierAssignments(t *testing.T, id uuid.UUID) []model.SymbolRef {
+func tierAssignments(t *testing.T, id uuid.UUID) []uuid.UUID {
 	t.Helper()
 	return aggregateAssignments(t, "entry_tiers", "tier", id)
 }
@@ -1277,43 +1325,42 @@ func tierAssignments(t *testing.T, id uuid.UUID) []model.SymbolRef {
 func networkAssignments(t *testing.T, id uuid.UUID) []model.NetworkAssignment {
 	t.Helper()
 	rows, err := testPool.Query(context.Background(), `
-		SELECT s.authority, s.symbol, en.priority
+		SELECT en.entry, en.priority
 		FROM entry_networks en
-		JOIN symbols s ON s.owner=en.entry
 		WHERE en.network=$1
-		ORDER BY s.authority, s.symbol`, id)
+		ORDER BY en.entry`, id)
 	require.NoError(t, err)
 	defer rows.Close()
 	var result []model.NetworkAssignment
 	for rows.Next() {
 		var assignment model.NetworkAssignment
-		require.NoError(t, rows.Scan(&assignment.Authority, &assignment.Symbol, &assignment.Priority))
+		require.NoError(t, rows.Scan(&assignment.Entry, &assignment.Priority))
 		result = append(result, assignment)
 	}
 	require.NoError(t, rows.Err())
 	return result
 }
 
-func aggregateAssignments(t *testing.T, table, aggregateColumn string, id uuid.UUID) []model.SymbolRef {
+func aggregateAssignments(t *testing.T, table, aggregateColumn string, id uuid.UUID) []uuid.UUID {
 	t.Helper()
-	query := fmt.Sprintf(`SELECT s.authority,s.symbol FROM %s a JOIN symbols s ON s.owner=a.entry WHERE a.%s=$1 ORDER BY s.authority,s.symbol`, table, aggregateColumn) //nolint:gosec // table and column names are fixed test constants
+	query := fmt.Sprintf(`SELECT a.entry FROM %s a WHERE a.%s=$1 ORDER BY a.entry`, table, aggregateColumn) //nolint:gosec // table and column names are fixed test constants
 	rows, err := testPool.Query(context.Background(), query, id)
 	require.NoError(t, err)
 	defer rows.Close()
-	var result []model.SymbolRef
+	var result []uuid.UUID
 	for rows.Next() {
-		var ref model.SymbolRef
-		require.NoError(t, rows.Scan(&ref.Authority, &ref.Symbol))
+		var ref uuid.UUID
+		require.NoError(t, rows.Scan(&ref))
 		result = append(result, ref)
 	}
 	require.NoError(t, rows.Err())
 	return result
 }
 
-func assertTierDoesNotExist(t *testing.T, consortium model.SymbolRef, name string) {
+func assertTierDoesNotExist(t *testing.T, consortium uuid.UUID, name string) {
 	t.Helper()
 	var count int
-	err := testPool.QueryRow(context.Background(), `SELECT count(*) FROM tiers t JOIN symbols s ON s.owner=t.consortium WHERE s.authority=$1 AND s.symbol=$2 AND t.name=$3`, consortium.Authority, consortium.Symbol, name).Scan(&count)
+	err := testPool.QueryRow(context.Background(), `SELECT count(*) FROM tiers WHERE consortium=$1 AND name=$2`, consortium, name).Scan(&count)
 	require.NoError(t, err)
 	require.Zero(t, count)
 }
@@ -1339,12 +1386,12 @@ func completeEntryAggregate(symbol string) model.EntryAggregate {
 	aggregate.Data.CatalogConfig = &model.CatalogConfig{
 		MetadataUpdateMode: &metadataMode,
 		Zoom:               &model.ZoomConfig{Address: "example.test:210", Options: &map[string]string{"user": "private"}},
-		Query:              &model.QueryConfig{Identifier: &text},
+		Query:              &model.QueryConfig{Identifier: &text, Year: stringPointer("dc.date = {term}")},
 		HoldingsFormat:     &model.HoldingsParserConfig{Marc: &model.MarcHoldingsParserConfig{MainField: &text}},
 		MetadataFormat:     &model.MetadataParserConfig{Marc21: &model.MarcMetadataParserConfig{Title: &text}},
 	}
 
-	aggregate.Data.ILLConfig = &model.ILLConfig{IsPickupLocation: &truth, ISO18626URL: &text, LendersOfLastResort: []model.SymbolRef{}, IncludeSupplierInfo: &truth, MaxRequestsPerPatron: &zero, MinimumCost: &minimumCost}
+	aggregate.Data.ILLConfig = &model.ILLConfig{IsPickupLocation: &truth, ISO18626URL: &text, LendersOfLastResort: []uuid.UUID{}, IncludeSupplierInfo: &truth, MaxRequestsPerPatron: &zero, MinimumCost: &minimumCost}
 	aggregate.Data.HoldingsPolicy = &model.HoldingsPolicy{
 		Locations:         []model.HoldingsLocation{{Code: "MAIN", Name: "Main", SupplyPreference: 1}},
 		ShelvingLocations: []model.HoldingsShelvingLocation{},
@@ -1357,11 +1404,11 @@ func completeEntryAggregate(symbol string) model.EntryAggregate {
 func stringPointer(value string) *string { return &value }
 
 func minimalEntryAggregate(symbol, entryType string) model.EntryAggregate {
-	key := model.SymbolRef{Authority: "ISIL", Symbol: symbol}
+	key := uuid.New()
 	return model.EntryAggregate{
 		Key: key,
 		Data: model.EntryData{
-			Name: "Entry " + symbol, Type: entryType, Symbols: []model.SymbolRef{key}, Endpoints: []model.ServiceEndpoint{},
+			Name: "Entry " + symbol, Type: entryType, Symbols: []model.SymbolRef{{Authority: "ISIL", Symbol: symbol}}, Endpoints: []model.ServiceEndpoint{},
 			Addresses: []model.Address{}, Closures: []model.Closure{},
 		},
 	}
@@ -1491,18 +1538,10 @@ func resetImportDatabase(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func entryIDBySymbol(t *testing.T, key model.SymbolRef) uuid.UUID {
-	t.Helper()
-	var id uuid.UUID
-	err := testPool.QueryRow(context.Background(), `SELECT owner FROM symbols WHERE authority=$1 AND symbol=$2`, key.Authority, key.Symbol).Scan(&id)
-	require.NoError(t, err)
-	return id
-}
-
-func assertEntryDoesNotExist(t *testing.T, key model.SymbolRef) {
+func assertEntryDoesNotExist(t *testing.T, key uuid.UUID) {
 	t.Helper()
 	var count int
-	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT count(*) FROM symbols WHERE authority=$1 AND symbol=$2`, key.Authority, key.Symbol).Scan(&count))
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT count(*) FROM entries WHERE id=$1`, key).Scan(&count))
 	require.Zero(t, count)
 }
 

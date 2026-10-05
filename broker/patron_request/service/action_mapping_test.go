@@ -20,7 +20,7 @@ func TestNewDefaultLoanActionMapping(t *testing.T) {
 		BorrowerStateOverLimit:        {{actionName: BorrowerActionCheckLimit}, {actionName: BorrowerActionOverrideLimit}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateLimitChecked:     {{actionName: BorrowerActionUpdateMetadata, auto: true}, {actionName: BorrowerActionSkipMetadataUpdate}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateMetadataUpdated:  {{actionName: BorrowerActionCheckDuplicate, auto: true}, {actionName: BorrowerActionCloseRequest}},
-		BorrowerStateNeedsReview:      {{actionName: BorrowerActionCheckDuplicate}, {actionName: BorrowerActionCloseRequest}},
+		BorrowerStateNeedsReview:      {{actionName: BorrowerActionUpdateMetadata}, {actionName: BorrowerActionCheckDuplicate}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateReadyToSend:      {{actionName: BorrowerActionSendRequest, auto: true}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateDuplicate:        {{actionName: BorrowerActionSendRequest}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateSupplierLocated:  {{actionName: BorrowerActionCancelRequest}},
@@ -253,7 +253,7 @@ func TestGetActionsForPatronRequest(t *testing.T) {
 	}))
 	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateCompleted}))
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionRerequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateCancelled}))
-	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionCheckDuplicate, BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNeedsReview}))
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionUpdateMetadata, BorrowerActionCheckDuplicate, BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNeedsReview}))
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionSendRequest, BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateDuplicate}))
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionValidatePatron, BorrowerActionSkipPatronValidation, BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateInvalidPatron}))
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionCloseRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}))

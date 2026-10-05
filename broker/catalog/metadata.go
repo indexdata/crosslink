@@ -56,7 +56,9 @@ func MetadataRequestUpdate(illRequest *iso18626.BibliographicInfo, metadata Meta
 	return nil
 }
 
-func LookupParamsFromBibliographicInfo(info iso18626.BibliographicInfo, serviceInfo *iso18626.ServiceInfo) LookupParams {
+// LookupParamsFromBibliographicInfo collects request lookup values. Publication
+// date validation is deferred to the query builder because year filtering is opt-in.
+func LookupParamsFromBibliographicInfo(info iso18626.BibliographicInfo, serviceInfo *iso18626.ServiceInfo, publicationInfo *iso18626.PublicationInfo) LookupParams {
 	var serviceType string
 	if serviceInfo != nil {
 		serviceType = string(serviceInfo.ServiceType)
@@ -65,6 +67,9 @@ func LookupParamsFromBibliographicInfo(info iso18626.BibliographicInfo, serviceI
 		Identifier:  info.SupplierUniqueRecordId,
 		Title:       info.Title,
 		ServiceType: serviceType,
+	}
+	if publicationInfo != nil {
+		params.Year = publicationInfo.PublicationDate
 	}
 	for _, id := range info.BibliographicItemId {
 		switch strings.TrimSpace(id.BibliographicItemIdentifierCode.Text) {

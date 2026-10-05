@@ -245,3 +245,10 @@ FROM (
     ORDER BY p.id
     FOR UPDATE OF p
 ) AS borrowing_requests;
+
+-- name: GetLendingPredecessorForUpdate :one
+SELECT sqlc.embed(patron_request)
+FROM patron_request
+WHERE supplier_symbol = $1 AND requester_symbol = $2 AND requester_req_id = $3
+  AND tenant IS NOT DISTINCT FROM sqlc.narg(tenant)::varchar AND side = 'lending'
+LIMIT 1 FOR UPDATE;

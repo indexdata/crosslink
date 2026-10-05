@@ -75,7 +75,6 @@ func TestImportContractReusesDirectoryCreationObjectsAndEnums(t *testing.T) {
 		for _, redundantAlias := range []string{"ImportEntryKey", "ImportSymbolRef", "ImportServiceEndpoint", "ImportAddressComponent", "ImportClosure"} {
 			require.NotContains(t, contract.Components.Schemas, redundantAlias)
 		}
-		requirePropertySchemaRef(t, contract, "ImportEntryRecord", "key", "SymbolProperties")
 		requireArrayItemsSchemaRef(t, contract, "ImportEntryData", "symbols", "SymbolProperties")
 		requireArrayItemsSchemaRef(t, contract, "ImportEntryData", "endpoints", "ServiceEndpointProperties")
 		requireArrayItemsSchemaRef(t, contract, "ImportEntryData", "closures", "ClosureProperties")
@@ -193,7 +192,7 @@ func TestStrictSharedCreationObjectsDoNotRejectComposedModels(t *testing.T) {
 		{
 			name:       "network assignment",
 			schemaName: "ImportNetworkAssignment",
-			value:      map[string]any{"authority": "ISIL", "symbol": "ABC", "priority": float64(1)},
+			value:      map[string]any{"entry": "d6ed641d-4f2e-43f2-b78d-1e24818c884b", "priority": float64(1)},
 		},
 	}
 

@@ -698,6 +698,83 @@ func TestHandleInvokeActionUpdateMetadataNeedReview(t *testing.T) {
 	assert.Equal(t, string(BorrowerStateNeedsReview), *resultData.ActionResult.ToState)
 }
 
+func TestHandleInvokeActionUpdateMetadataFromNeedsReview(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		identifier string
+		lookupErr  error
+		wantStatus events.EventStatus
+		wantState  pr_db.PatronRequestState
+	}{
+		{name: "missing identifier", wantStatus: events.EventStatusSuccess, wantState: BorrowerStateNeedsReview},
+		{name: "saved identifier resumes automatic sending", identifier: "record-123", wantStatus: events.EventStatusSuccess, wantState: BorrowerStateSent},
+		{name: "catalog error stays in review", identifier: "record-123", lookupErr: errors.New("catalog unavailable"), wantStatus: events.EventStatusError, wantState: BorrowerStateNeedsReview},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mode := dirapi.Auto
+			peer := peerWithMetadataMode(&mode)
+			peer.Vendor = string(dirapi.CrossLink)
+			illRepo := new(IllRepoMock)
+			illRepo.On("GetCachedPeersBySymbols", []string{"ISIL:x"}, mock.Anything).Return([]ill_db.Peer{peer}, "", nil)
+			prRepo := new(MockPrRepo)
+			prRepo.savedPr = pr_db.PatronRequest{
+				ID:              patronRequestId,
+				State:           BorrowerStateNeedsReview,
+				Side:            SideBorrowing,
+				RequesterSymbol: getDbText("ISIL:x"),
+				Tenant:          getDbText("testlib"),
+				NeedsAttention:  true,
+				IllRequest: iso18626.Request{
+					BibliographicInfo: iso18626.BibliographicInfo{Title: "Edited title", SupplierUniqueRecordId: tc.identifier},
+				},
+			}
+			lmsCreator := new(MockLmsCreator)
+			lmsCreator.On("GetAdapter", "ISIL:x").Return(createLmsAdapterMockLog(), nil)
+			lookup := &catalog.MockLookupAdapter{Err: tc.lookupErr}
+			if tc.identifier != "" {
+				lookup.Metadata = catalog.Metadata{Identifier: tc.identifier, Title: "Catalog title"}
+			}
+			prAction := CreatePatronRequestActionService(prRepo, illRepo, new(MockEventBus), new(MockIso18626Handler), lmsCreator, new(EmailSenderMock), lookupFactoryWithAdapter(lookup), nil)
+			action := BorrowerActionUpdateMetadata
+
+			status, result := prAction.handleInvokeAction(appCtx, events.Event{
+				ID: "metadata-retry", PatronRequestID: patronRequestId,
+				EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}},
+			})
+
+			assert.Equal(t, tc.wantStatus, status)
+			assert.Equal(t, tc.wantState, prRepo.savedPr.State)
+			require.NotNil(t, result)
+			if tc.wantState == BorrowerStateSent {
+				require.NotNil(t, result.ActionResult)
+				assert.Equal(t, ActionOutcomeSuccess, result.ActionResult.Outcome)
+				require.NotNil(t, result.ActionResult.ToState)
+				assert.Equal(t, string(BorrowerStateMetadataUpdated), *result.ActionResult.ToState)
+				assert.Nil(t, result.ActionResult.ChildActionError)
+				details, ok := result.CustomData["decisionDetails"].([]actionDecisionDetailMetadataUpdate)
+				require.True(t, ok)
+				require.Len(t, details, 1)
+				assert.Equal(t, tc.identifier, details[0].LookupParams.Identifier)
+				assert.Equal(t, string(dirapi.Replace), details[0].EffectiveMode)
+				assert.Equal(t, "Catalog title", prRepo.savedPr.IllRequest.BibliographicInfo.Title)
+				assert.Equal(t, tc.identifier, prRepo.savedPr.IllRequest.BibliographicInfo.SupplierUniqueRecordId)
+				assert.Equal(t, string(BorrowerActionSendRequest), prRepo.savedPr.LastAction.String)
+				assert.False(t, prRepo.savedPr.NeedsAttention)
+			} else {
+				assert.True(t, prRepo.savedPr.NeedsAttention)
+				if tc.lookupErr == nil {
+					require.NotNil(t, result.ActionResult)
+					assert.Equal(t, ActionOutcomeReview, result.ActionResult.Outcome)
+				} else {
+					require.NotNil(t, result.EventError)
+					assert.Equal(t, "metadata update failed", result.EventError.Message)
+				}
+			}
+			illRepo.AssertExpectations(t)
+		})
+	}
+}
+
 func TestHandleInvokeActionUpdateMetadataMissingLookupParamsNeedsReview(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
@@ -3528,6 +3605,92 @@ func TestHandleInvokeBorrowerActionAcceptRetryAutoActionCreateTaskError(t *testi
 	assert.Equal(t, "REQ1-2", mockPrRepo.createdPr.IllRequest.Header.RequestingAgencyRequestId)
 }
 
+func TestHandleInvokeLenderActionAddConditionMinimumCost(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		config     string
+		cost       any
+		supplier   pgtype.Text
+		noPeer     bool
+		lookupErr  error
+		wantError  string
+		wantLookup bool
+	}{
+		{name: "below minimum", config: `{"minimumCost":2.75}`, cost: 2.74, supplier: getDbText("ISIL:SUP1"), wantLookup: true, wantError: "offered cost 2.74 is below lender minimum cost 2.75"},
+		{name: "equal to minimum", config: `{"minimumCost":2.75}`, cost: 2.75, supplier: getDbText("ISIL:SUP1"), wantLookup: true},
+		{name: "above minimum", config: `{"minimumCost":2.75}`, cost: 2.76, supplier: getDbText("ISIL:SUP1"), wantLookup: true},
+		{name: "zero minimum", config: `{"minimumCost":0}`, cost: 0.0, supplier: getDbText("ISIL:SUP1"), wantLookup: true},
+		{name: "below zero minimum", config: `{"minimumCost":0}`, cost: -0.01, supplier: getDbText("ISIL:SUP1"), wantLookup: true, wantError: "offered cost -0.01 is below lender minimum cost 0"},
+		{name: "omitted minimum", config: `{}`, cost: 1.0, supplier: getDbText("ISIL:SUP1"), wantLookup: true},
+		{name: "null minimum", config: `{"minimumCost":null}`, cost: 1.0, supplier: getDbText("ISIL:SUP1"), wantLookup: true},
+		{name: "no ill config", cost: 1.0, supplier: getDbText("ISIL:SUP1"), wantLookup: true},
+		{name: "no cost", config: `{"minimumCost":2.75}`, supplier: getDbText("ISIL:SUP1")},
+		{name: "null cost", config: `{"minimumCost":2.75}`, cost: nil, supplier: getDbText("ISIL:SUP1")},
+		{name: "lookup failure", cost: 1.0, supplier: getDbText("ISIL:SUP1"), lookupErr: errors.New("directory unavailable"), wantLookup: true, wantError: "failed to look up lender for minimum cost check"},
+		{name: "no lender", cost: 1.0, supplier: getDbText("ISIL:SUP1"), noPeer: true, wantLookup: true, wantError: "no lender found for minimum cost check"},
+		{name: "missing supplier", cost: 1.0, wantError: "missing supplier symbol"},
+		{name: "empty supplier", cost: 1.0, supplier: getDbText(""), wantError: "missing supplier symbol for minimum cost check"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var config *dirapi.IllConfig
+			if tc.config != "" {
+				require.NoError(t, json.Unmarshal([]byte(tc.config), &config))
+			}
+			peers := []ill_db.Peer{{CustomData: dirapi.Entry{IllConfig: config}}}
+			if tc.noPeer {
+				peers = nil
+			}
+			illRepo := new(IllRepoMock)
+			illRepo.On("GetCachedPeersBySymbols", []string{tc.supplier.String}, mock.Anything).Return(peers, "", tc.lookupErr).Once()
+			prRepo := new(MockPrRepo)
+			lmsCreator := new(MockLmsCreator)
+			if tc.supplier.Valid {
+				lmsCreator.On("GetAdapter", tc.supplier.String).Return(lms.CreateLmsAdapterMockOK(), nil).Once()
+			}
+			isoHandler := new(MockIso18626Handler)
+			actionService := CreatePatronRequestActionService(prRepo, illRepo, *new(events.EventBus), isoHandler, lmsCreator, new(EmailSenderMock), nil, nil)
+			prRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{
+				ID: patronRequestId, Side: SideLending, State: LenderStateWillSupplyPending,
+				SupplierSymbol: tc.supplier, RequesterSymbol: getDbText("ISIL:REQ1"),
+				IllRequest: iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}},
+			}, nil)
+			params := map[string]any{"loanCondition": "Reading room use only", "currency": "DKK"}
+			if tc.cost != nil || tc.name == "null cost" {
+				params["cost"] = tc.cost
+			}
+			action := LenderActionAddCondition
+			status, result := actionService.handleInvokeAction(appCtx, events.Event{
+				PatronRequestID: patronRequestId,
+				EventData:       events.EventData{CommonEventData: events.CommonEventData{Action: &action}, CustomData: params},
+			})
+
+			if tc.wantError != "" {
+				assert.Equal(t, events.EventStatusError, status)
+				require.NotNil(t, result.EventError)
+				assert.Equal(t, tc.wantError, result.EventError.Message)
+				if tc.lookupErr != nil {
+					assert.Contains(t, result.EventError.Cause, tc.lookupErr.Error())
+				}
+				assert.Equal(t, LenderStateWillSupplyPending, prRepo.savedPr.State)
+				assert.True(t, prRepo.savedPr.NeedsAttention)
+				assert.Nil(t, isoHandler.lastSupplyingAgencyMessage)
+				assert.Empty(t, prRepo.savedNotifications)
+			} else {
+				assert.Equal(t, events.EventStatusSuccess, status)
+				assert.Equal(t, LenderStateConditionPending, prRepo.savedPr.State)
+				require.NotNil(t, isoHandler.lastSupplyingAgencyMessage)
+				assert.Len(t, prRepo.savedNotifications, 1)
+			}
+			if tc.wantLookup {
+				illRepo.AssertExpectations(t)
+			} else {
+				illRepo.AssertNotCalled(t, "GetCachedPeersBySymbols", mock.Anything, mock.Anything)
+			}
+			lmsCreator.AssertExpectations(t)
+		})
+	}
+}
+
 func TestHandleInvokeLenderActionAddConditionMissingConditionAndCost(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
@@ -6030,4 +6193,9 @@ func TestPullslipPrintedAndShippingGate(t *testing.T) {
 			assert.Equal(t, state == LenderStateSearching, mapping.IsActionSupported(pr, LenderActionShip))
 		})
 	}
+}
+
+func (r *MockPrRepo) GetLendingPredecessorForUpdate(ctx common.ExtendedContext, params pr_db.GetLendingPredecessorForUpdateParams) (pr_db.PatronRequest, error) {
+	args := r.Called(params)
+	return args.Get(0).(pr_db.PatronRequest), args.Error(1)
 }

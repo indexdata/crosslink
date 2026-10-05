@@ -81,7 +81,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	}); err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to update existing located supplier status", err)
 	}
-	lookupParams := catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo)
+	lookupParams := catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.PublicationInfo)
 
 	requester, err := s.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
 	if err != nil {
@@ -139,7 +139,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 			return events.LogErrorAndReturnResult(ctx, "failed to save updated ILL transaction metadata", err)
 		}
 		lookupParams = catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo,
-			illTrans.IllTransactionData.ServiceInfo)
+			illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.PublicationInfo)
 	}
 	var holdingsLog = map[string]any{}
 	holdingsLog["lookupQuery"] = query
@@ -393,7 +393,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
 	}
-	lookupParams := catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo)
+	lookupParams := catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.PublicationInfo)
 	lookupParams.Identifier = sup.LocalID.String
 	lookupResult, err := aa.Lookup(lookupParams)
 	if err != nil {

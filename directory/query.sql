@@ -7,6 +7,9 @@ SELECT * FROM entries WHERE id = $1 LIMIT 1 FOR UPDATE;
 -- name: EntryByIdForImportUpdate :one
 SELECT * FROM entries WHERE id = $1 LIMIT 1 FOR UPDATE NOWAIT;
 
+-- name: LockEntryImportID :exec
+SELECT pg_advisory_xact_lock(hashtextextended('directoryish:entry-id:' || (@id::uuid)::text, 0));
+
 -- name: EntryBySymbolForUpdate :one
 SELECT e.* FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = @authority AND s.symbol = @symbol LIMIT 1 FOR UPDATE OF e;
 
@@ -15,6 +18,9 @@ SELECT e.* FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = @aut
 
 -- name: SymbolByAuthorityAndSymbolForUpdate :one
 SELECT * FROM symbols WHERE authority = @authority AND symbol = @symbol LIMIT 1 FOR UPDATE;
+
+-- name: FirstSymbolByOwner :one
+SELECT * FROM symbols WHERE owner = @owner AND position(':' in authority) = 0 ORDER BY authority, symbol LIMIT 1;
 
 -- name: GetConsortialEntry :one
 SELECT * FROM entries WHERE type = 'Consortium' LIMIT 1;
@@ -37,6 +43,14 @@ INSERT INTO entries (
   name, description, contact_name, email, from_email, tenant, vendor, phone_number, time_zone, organization_id, type, parent, lms_location_code, hrid
 ) VALUES (
   $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+)
+RETURNING *;
+
+-- name: CreateImportedEntry :one
+INSERT INTO entries (
+  id, name, description, contact_name, email, from_email, tenant, vendor, phone_number, time_zone, organization_id, type, parent, lms_location_code, hrid
+) VALUES (
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
 )
 RETURNING *;
 
@@ -223,7 +237,7 @@ INSERT INTO catalog_configs (
   id, entry, metadata_update_mode,
   sru_address, sru_record_schema,
   zoom_address, zoom_options,
-  query_type, query_identifier, query_isbn, query_issn, query_title,
+  query_type, query_identifier, query_isbn, query_issn, query_title, query_year,
   holdings_marc_call_number_subfield, holdings_marc_item_id_subfield, holdings_marc_location_subfield,
   holdings_marc_main_field, holdings_marc_restricted_subfield, holdings_marc_shelving_location_subfield,
   holdings_marc21plus1_enabled, holdings_opac_enabled, holdings_reservoir_enabled,
@@ -242,6 +256,7 @@ INSERT INTO catalog_configs (
   @query_isbn,
   @query_issn,
   @query_title,
+  @query_year,
   @holdings_marc_call_number_subfield,
   @holdings_marc_item_id_subfield,
   @holdings_marc_location_subfield,
@@ -274,6 +289,7 @@ ON CONFLICT (entry) DO UPDATE SET
   query_isbn = @query_isbn,
   query_issn = @query_issn,
   query_title = @query_title,
+  query_year = @query_year,
   holdings_marc_call_number_subfield = @holdings_marc_call_number_subfield,
   holdings_marc_item_id_subfield = @holdings_marc_item_id_subfield,
   holdings_marc_location_subfield = @holdings_marc_location_subfield,

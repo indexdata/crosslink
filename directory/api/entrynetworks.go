@@ -208,6 +208,7 @@ func (a ApiImpl) GetNetworksForEntry(ctx context.Context, request GetNetworksFor
 				Id:         &row.ID,
 				Consortium: row.Consortium,
 				Name:       row.Name,
+				Reciprocal: row.Reciprocal,
 			}
 			networkList = append(networkList, network)
 		}
@@ -224,6 +225,7 @@ func (a ApiImpl) GetNetworksForEntry(ctx context.Context, request GetNetworksFor
 				Consortium: row.Consortium,
 				Name:       row.Name,
 				Priority:   &row.Priority,
+				Reciprocal: row.Reciprocal,
 			}
 			networkList = append(networkList, network)
 		}
