@@ -5138,7 +5138,11 @@ func TestHandleInvokeBorrowerActionFillLocally(t *testing.T) {
 			}
 			lmsCreator.On("GetAdapter", "ISIL:REQ1").Return(lmsAdapter, nil)
 			mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr, nil)
-			prAction := CreatePatronRequestActionService(mockPrRepo, pickupRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+			mockEventBus := new(MockEventBus)
+			if tt.serviceType == iso18626.TypeServiceTypeCopyOrLoan {
+				mockEventBus.On("ProcessExclusiveTask", patronRequestId+"-task-1").Return(events.Event{EventStatus: events.EventStatusSuccess}, nil).Once()
+			}
+			prAction := CreatePatronRequestActionService(mockPrRepo, pickupRepo, mockEventBus, mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 			action := BorrowerActionFillLocally
 
 			status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
@@ -5153,6 +5157,14 @@ func TestHandleInvokeBorrowerActionFillLocally(t *testing.T) {
 			assert.Equal(t, BorrowerStateCompleted, mockPrRepo.savedPr.State)
 			assert.True(t, mockPrRepo.savedPr.TerminalState)
 			assert.False(t, mockPrRepo.savedPr.NeedsAttention)
+			if tt.serviceType == iso18626.TypeServiceTypeCopyOrLoan {
+				if assert.Len(t, mockEventBus.createdTaskData, 1) {
+					assert.Equal(t, BorrowerActionSendNotification, *mockEventBus.createdTaskData[0].Action)
+				}
+			} else {
+				assert.Empty(t, mockEventBus.createdTaskData)
+			}
+			mockEventBus.AssertExpectations(t)
 			if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage) {
 				assert.Equal(t, tt.expectedStatus, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.Status)
 				assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.ReasonForMessage)
@@ -5208,7 +5220,9 @@ func TestHandleInvokeBorrowerActionSupplyDocument(t *testing.T) {
 	lmsAdapter := new(mockLmsAdapter)
 	lmsCreator.On("GetAdapter", "ISIL:REQ1").Return(lmsAdapter, nil)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	mockEventBus := new(MockEventBus)
+	mockEventBus.On("ProcessExclusiveTask", patronRequestId+"-task-1").Return(events.Event{EventStatus: events.EventStatusSuccess}, nil).Once()
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopy}}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{
 		ID:              patronRequestId,
@@ -5251,6 +5265,13 @@ func TestHandleInvokeBorrowerActionSupplyDocument(t *testing.T) {
 		}
 	}
 	lmsAdapter.AssertNotCalled(t, "RequestItem", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	if assert.Len(t, mockEventBus.createdTaskData, 1) {
+		assert.Equal(t, BorrowerActionSendNotification, *mockEventBus.createdTaskData[0].Action)
+		params := mockEventBus.createdTaskData[0].CustomData["autoActionParams"].(*proapi.ModelAction_Params)
+		assert.Equal(t, "copy-completed-notification", *params.TemplateLabel)
+		assert.Equal(t, []proapi.ModelActionParamsSendTo{proapi.ModelActionParamsSendToPatron}, *params.SendTo)
+	}
+	mockEventBus.AssertExpectations(t)
 }
 
 func TestUpdateMetadataBorrowingRequestAddsDecisionDetails(t *testing.T) {
