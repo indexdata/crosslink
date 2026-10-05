@@ -146,6 +146,11 @@ stateModels:
         needsAttention: true
         editable: true
         actions:
+          - name: update-metadata
+            desc: Update the request metadata after staff review
+            transitions:
+              success: METADATA_UPDATED
+              review: NEEDS_REVIEW
           - name: check-duplicate
             desc: Check for a recent matching patron request before sending
             transitions:

@@ -443,6 +443,21 @@ func TestNeedsReviewAndUpdate(t *testing.T) {
 		assert.Empty(t, r.BibliographicInfo.SupplierUniqueRecordId)
 	})
 
+	// Retrying metadata update without an identifier keeps the request in review.
+	updateAction := proapi.ExecuteAction{Action: string(prservice.BorrowerActionUpdateMetadata)}
+	updateActionBytes, err := json.Marshal(updateAction)
+	require.NoError(t, err)
+	respBytes = httpRequest(t, "POST", prPath+"/action"+queryParams, updateActionBytes, 200)
+	var pResult proapi.ActionResult
+	require.NoError(t, json.Unmarshal(respBytes, &pResult))
+	assert.Equal(t, "SUCCESS", pResult.Result)
+	respBytes = httpRequest(t, "GET", prPath+queryParams, []byte{}, 200)
+	require.NoError(t, json.Unmarshal(respBytes, &foundPr))
+	assert.Equal(t, string(prservice.BorrowerStateNeedsReview), foundPr.State)
+	require.NotNil(t, foundPr.LastActionOutcome)
+	assert.Equal(t, prservice.ActionOutcomeReview, *foundPr.LastActionOutcome)
+	assert.True(t, foundPr.NeedsAttention)
+
 	// PUT with SupplierUniqueRecordId: PUT only persists data, state stays NEEDS_REVIEW
 	updateWithId := proapi.CreatePatronRequest{
 		Id:              &prId,
@@ -468,12 +483,8 @@ func TestNeedsReviewAndUpdate(t *testing.T) {
 		assert.Equal(t, "WILLSUPPLY_LOANED", r.BibliographicInfo.SupplierUniqueRecordId)
 	})
 
-	// Manually invoke check-duplicate: a successful check resumes the pre-send chain.
-	sendAction := proapi.ExecuteAction{Action: string(prservice.BorrowerActionCheckDuplicate)}
-	sendActionBytes, err := json.Marshal(sendAction)
-	assert.NoError(t, err)
-	respBytes = httpRequest(t, "POST", prPath+"/action"+queryParams, sendActionBytes, 200)
-	var pResult proapi.ActionResult
+	// Retrying metadata update uses the saved identifier and resumes the pre-send chain.
+	respBytes = httpRequest(t, "POST", prPath+"/action"+queryParams, updateActionBytes, 200)
 	err = json.Unmarshal(respBytes, &pResult)
 	assert.NoError(t, err)
 	assert.Equal(t, "SUCCESS", pResult.Result)
@@ -483,8 +494,11 @@ func TestNeedsReviewAndUpdate(t *testing.T) {
 		respBytes = httpRequest(t, "GET", prPath+queryParams, []byte{}, 200)
 		err = json.Unmarshal(respBytes, &foundPr)
 		return err == nil && foundPr.State != string(prservice.BorrowerStateNeedsReview)
-	}), "timed out waiting for state to advance past NEEDS_REVIEW after check-duplicate")
+	}), "timed out waiting for state to advance past NEEDS_REVIEW after update-metadata")
 	assert.NotEqual(t, string(prservice.BorrowerStateNeedsReview), foundPr.State)
+	assert.NotEqual(t, string(prservice.BorrowerStateMetadataUpdated), foundPr.State)
+	assert.NotEqual(t, string(prservice.BorrowerStateReadyToSend), foundPr.State)
+	assert.Equal(t, "WILLSUPPLY_LOANED", foundPr.IllRequest.BibliographicInfo.SupplierUniqueRecordId)
 }
 
 func TestActionsToCompleteState(t *testing.T) {
