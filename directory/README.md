@@ -46,6 +46,10 @@ script exports a mod-rs tenant's directory as NDJSON accepted by this endpoint.
 It sets `illConfig.isPickupLocation` for entries with the legacy `pickup` tag,
 independently of their LMS location code or NCIP/ISO18626 configuration.
 Untagged entries are not designated as pickup locations.
+The script maps each entry's `policy.ill.InstitutionalLoanToBorrowRatio` custom
+text property to `lendToBorrowRatio`, preserving the ratio string. Missing
+properties export as null. Invalid ratios or multiple matching properties stop
+the export before NDJSON output; the error identifies the affected entries.
 
 The optional `lendToBorrowRatio` field expresses desired loans:borrows (for
 example, `50:2`). Each component must be positive, with one to four integer
@@ -57,7 +61,8 @@ migration validates existing entries without changing their ratios.
 
 The optional `illConfig.loadBalancingPolicy` accepts `deficit` or `proportional`.
 The broker reads this setting from the entry identified by `CONSORTIUM_SYMBOL`.
-An omitted or null policy, or an unset consortium symbol, uses `deficit`.
+An omitted or null policy, missing `illConfig`, or an unset consortium symbol
+uses `proportional`.
 Requester settings do not select the policy. PATCH omission preserves the current
 value; explicit null clears it. Imports also accept this optional field.
 

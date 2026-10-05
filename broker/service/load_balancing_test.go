@@ -46,10 +46,10 @@ func TestProportionalLoadBalancingScore(t *testing.T) {
 
 func TestLocateSuppliersLoadBalancingPolicy(t *testing.T) {
 	for _, tc := range []struct{ name, symbol, consortiumPolicy, requesterPolicy, first string }{
-		{"default consortium policy", "ISIL:SUPC", "", "proportional", "ISIL:SUP2"},
+		{"default consortium policy ignores requester", "ISIL:SUPC", "", "deficit", "ISIL:SUP1"},
 		{"deficit", "ISIL:SUPC", "deficit", "proportional", "ISIL:SUP2"},
 		{"proportional", "ISIL:SUPC", "proportional", "deficit", "ISIL:SUP1"},
-		{"no consortium ignores requester", "", "proportional", "proportional", "ISIL:SUP2"},
+		{"no consortium ignores requester", "", "deficit", "deficit", "ISIL:SUP1"},
 		{"invalid consortium policy", "ISIL:SUPC", "invalid", "deficit", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -80,7 +80,7 @@ func TestLocateSuppliersLoadBalancingPolicy(t *testing.T) {
 			require.Len(t, repo.savedLocatedSuppliers, 2)
 			assert.Equal(t, tc.first, repo.savedLocatedSuppliers[0].SupplierSymbol)
 			rota := result.CustomData[ROTA_INFO_KEY].(adapter.RotaInfo)
-			wantPolicy := dirapi.LoadBalancingPolicyDeficit
+			wantPolicy := dirapi.LoadBalancingPolicyProportional
 			if tc.symbol != "" && tc.consortiumPolicy != "" {
 				wantPolicy = dirapi.LoadBalancingPolicy(tc.consortiumPolicy)
 			}
@@ -91,10 +91,19 @@ func TestLocateSuppliersLoadBalancingPolicy(t *testing.T) {
 	}
 }
 
-func TestLoadBalancingPolicyNull(t *testing.T) {
-	var entry dirapi.Entry
-	require.NoError(t, json.Unmarshal([]byte(`{"illConfig":{"loadBalancingPolicy":null}}`), &entry))
-	policy, err := (&LookupAdapterFactory{consortiumSymbol: "ISIL:C"}).loadBalancingPolicy(entry)
-	require.NoError(t, err)
-	assert.Equal(t, dirapi.LoadBalancingPolicyDeficit, policy)
+func TestLoadBalancingPolicyFallback(t *testing.T) {
+	for _, tc := range []struct{ name, entry string }{
+		{"missing illConfig", `{}`},
+		{"null illConfig", `{"illConfig":null}`},
+		{"omitted policy", `{"illConfig":{}}`},
+		{"null policy", `{"illConfig":{"loadBalancingPolicy":null}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var entry dirapi.Entry
+			require.NoError(t, json.Unmarshal([]byte(tc.entry), &entry))
+			policy, err := (&LookupAdapterFactory{consortiumSymbol: "ISIL:C"}).loadBalancingPolicy(entry)
+			require.NoError(t, err)
+			assert.Equal(t, dirapi.LoadBalancingPolicyProportional, policy)
+		})
+	}
 }

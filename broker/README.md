@@ -345,12 +345,12 @@ automatically retry relative moves. This backend change adds no UI controls.
 ### Lender load balancing
 
 Lender scoring uses the consortium Directory entry's `illConfig.loadBalancingPolicy`.
-`deficit` (the default) prioritizes the largest lending shortfall:
+`deficit` prioritizes the largest lending shortfall:
 `actualBorrows * (desiredLoans / desiredBorrows) - actualLoans`.
-`proportional` prioritizes the smallest actual-to-desired ratio:
+`proportional` (the default) prioritizes the smallest actual-to-desired ratio:
 `(actualLoans / max(actualBorrows, 1)) / (desiredLoans / desiredBorrows)`.
 Each lender supplies its own `lendToBorrowRatio` (desired loans:borrows), defaulting
-to 1:1. Without `CONSORTIUM_SYMBOL`, the broker always uses deficit, regardless
-of requester settings. Locality, cost, network priority, and holdings preferences
-retain precedence over the score; last-resort lenders remain at the end.
+to 1:1. An omitted or null policy, missing `illConfig`, or unset
+`CONSORTIUM_SYMBOL` uses proportional, regardless of requester settings.
+Locality, cost, network priority, and holdings preferences retain precedence over the score; last-resort lenders remain at the end.
 Rota diagnostics include the selected `loadBalancingPolicy` and raw scores.

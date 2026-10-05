@@ -1762,7 +1762,7 @@ components:
         loadBalancingPolicy:
           allOf: [{ $ref: '#/components/schemas/LoadBalancingPolicy' }]
           nullable: true
-          description: Consortium lender scoring policy. Omitted or null defaults to deficit.
+          description: Consortium lender scoring policy. Omitted or null defaults to proportional.
 
     ImportCatalogConfig:
       type: object
@@ -2253,7 +2253,7 @@ components:
         loadBalancingPolicy:
           allOf: [{ $ref: '#/components/schemas/LoadBalancingPolicy' }]
           nullable: true
-          description: Consortium lender scoring policy. Omitted or null defaults to deficit.
+          description: Consortium lender scoring policy. Omitted or null defaults to proportional.
         isPickupLocation:
           type: boolean
           description: Whether this entry is offered as a pickup location. Applies to institutions and branches, independently of LMS pickup codes. Defaults to false.

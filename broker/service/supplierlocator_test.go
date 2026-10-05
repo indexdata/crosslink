@@ -485,14 +485,14 @@ func TestLocateSuppliersDeduplicatesHoldingSymbolsForDirectoryLookup(t *testing.
 	assert.Equal(t, [][]string{{"ISIL:SUP1", "ISIL:SUP2"}}, mockIllRepo.refreshSymbols)
 }
 
-func TestLocateSuppliersOrdersHigherLoadBalancingScoreFirst(t *testing.T) {
+func TestLocateSuppliersOrdersLowerProportionalScoreFirst(t *testing.T) {
 	for _, tt := range []struct {
 		name  string
 		ratio string
 		score float64
 	}{
-		{name: "ordinary ratio", ratio: "1:2", score: 4},
-		{name: "maximum quotient", ratio: "9999.99:0.01", score: 19999974},
+		{name: "ordinary ratio", ratio: "1:2", score: 0.6},
+		{name: "maximum quotient", ratio: "9999.99:0.01", score: 0.3 / 999999},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			mockIllRepo := &MockIllRepoLocateSuppliers{
@@ -540,8 +540,9 @@ func TestLocateSuppliersOrdersHigherLoadBalancingScoreFirst(t *testing.T) {
 			}
 			rotaInfo, ok := result.CustomData[ROTA_INFO_KEY].(adapter.RotaInfo)
 			if assert.True(t, ok) && assert.Len(t, rotaInfo.Suppliers, 2) {
-				assert.Equal(t, tt.score, rotaInfo.Suppliers[0].LoadBalancingScore)
-				assert.Equal(t, -12.0, rotaInfo.Suppliers[1].LoadBalancingScore)
+				assert.InDelta(t, tt.score, rotaInfo.Suppliers[0].LoadBalancingScore, 1e-12)
+				assert.Equal(t, dirapi.LoadBalancingPolicyProportional, rotaInfo.LoadBalancingPolicy)
+				assert.InDelta(t, 2.0, rotaInfo.Suppliers[1].LoadBalancingScore, 1e-12)
 			}
 		})
 	}

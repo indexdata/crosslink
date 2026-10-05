@@ -78,11 +78,11 @@ func (s *LookupAdapterFactory) GetAdapterSupplier(ctx common.ExtendedContext, su
 // loadBalancingPolicy uses only consortium configuration, never requester settings.
 func (f *LookupAdapterFactory) loadBalancingPolicy(configPeer dirapi.Entry) (dirapi.LoadBalancingPolicy, error) {
 	if f.consortiumSymbol == "" || configPeer.IllConfig == nil {
-		return dirapi.LoadBalancingPolicyDeficit, nil
+		return dirapi.LoadBalancingPolicyProportional, nil
 	}
 	policy, err := configPeer.IllConfig.LoadBalancingPolicy.Get()
 	if err != nil {
-		return dirapi.LoadBalancingPolicyDeficit, nil
+		return dirapi.LoadBalancingPolicyProportional, nil
 	}
 	if !policy.Valid() {
 		return "", fmt.Errorf("consortium %s has invalid loadBalancingPolicy %q", f.consortiumSymbol, policy)
