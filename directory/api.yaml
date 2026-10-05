@@ -1669,10 +1669,9 @@ components:
     ImportNetworkAssignment:
       type: object
       additionalProperties: false
-      required: [authority, symbol, priority]
+      required: [entry, priority]
       properties:
-        authority: { type: string, minLength: 1 }
-        symbol: { type: string, minLength: 1 }
+        entry: { type: string, format: uuid }
         priority: { type: integer, format: int32 }
 
     ImportTierKey:
@@ -1680,7 +1679,7 @@ components:
       additionalProperties: false
       required: [consortium, name]
       properties:
-        consortium: { $ref: '#/components/schemas/SymbolProperties' }
+        consortium: { type: string, format: uuid }
         name: { type: string, minLength: 1 }
 
     ImportNetworkKey:
@@ -1688,7 +1687,7 @@ components:
       additionalProperties: false
       required: [consortium, name]
       properties:
-        consortium: { $ref: '#/components/schemas/SymbolProperties' }
+        consortium: { type: string, format: uuid }
         name: { type: string, minLength: 1 }
 
     ImportAddress:
@@ -1746,7 +1745,7 @@ components:
           nullable: true
         lendersOfLastResort:
           type: array
-          items: { $ref: '#/components/schemas/SymbolProperties' }
+          items: { type: string, format: uuid }
         isPickupLocation: { type: boolean, nullable: true }
         includeRequestingAgencyInfo: { type: boolean, nullable: true }
         includeSupplierInfo: { type: boolean, nullable: true }
@@ -1937,7 +1936,7 @@ components:
         name: { type: string, minLength: 1 }
         type: { $ref: '#/components/schemas/EntryType' }
         parent:
-          allOf: [{ $ref: '#/components/schemas/SymbolProperties' }]
+          allOf: [{ type: string, format: uuid }]
           nullable: true
         description: { type: string, nullable: true }
         organizationId: { type: string, nullable: true }
@@ -1987,7 +1986,7 @@ components:
         cost: { type: number, format: double }
         entries:
           type: array
-          items: { $ref: '#/components/schemas/SymbolProperties' }
+          items: { type: string, format: uuid }
 
     ImportNetworkData:
       type: object
@@ -2005,7 +2004,7 @@ components:
       required: [type, key, data]
       properties:
         type: { type: string, enum: [entry] }
-        key: { $ref: '#/components/schemas/SymbolProperties' }
+        key: { type: string, format: uuid }
         data: { $ref: '#/components/schemas/ImportEntryData' }
 
     ImportTierRecord:
