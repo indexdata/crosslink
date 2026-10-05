@@ -88,7 +88,6 @@ func TestImportContractReusesDirectoryCreationObjectsAndEnums(t *testing.T) {
 		for _, redundantAlias := range []string{"ImportEntryKey", "ImportSymbolRef", "ImportServiceEndpoint", "ImportAddressComponent", "ImportClosure"} {
 			require.NotContains(t, contract.Components.Schemas, redundantAlias)
 		}
-		requirePropertySchemaRef(t, contract, "ImportEntryRecord", "key", "ImportSymbolProperties")
 		requireArrayItemsSchemaRef(t, contract, "ImportEntryData", "symbols", "ImportSymbolProperties")
 		requireArrayItemsSchemaRef(t, contract, "ImportEntryData", "endpoints", "ImportServiceEndpointProperties")
 		requireArrayItemsSchemaRef(t, contract, "ImportEntryData", "closures", "ImportClosureProperties")

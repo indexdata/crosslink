@@ -151,7 +151,7 @@ func TestCompletedDocumentNotificationAutoAction(t *testing.T) {
 
 func TestDocumentDeliveredNotificationTemplate(t *testing.T) {
 	templates := GetStateModelTemplateDefaults()
-	idx := slices.IndexFunc(templates, func(template proapi.CreateTemplate) bool {
+	idx := slices.IndexFunc(templates, func(template proapi.TemplateProperties) bool {
 		return slices.Contains(template.Labels, "copy-completed-notification")
 	})
 	if !assert.NotEqual(t, -1, idx) {
