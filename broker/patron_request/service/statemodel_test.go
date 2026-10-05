@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/indexdata/crosslink/broker/email"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	"github.com/indexdata/crosslink/iso18626"
@@ -117,6 +118,57 @@ func TestUnifiedStateModelDeclaresConditionalCopyWorkflow(t *testing.T) {
 				action.AppliesTo != nil && slices.Equal(action.AppliesTo.ServiceTypes, []proapi.StateModelServiceType{proapi.Copy, proapi.CopyOrLoan})
 		})
 	}))
+}
+
+func TestCompletedDocumentNotificationAutoAction(t *testing.T) {
+	service := &StateModelService{}
+	for _, serviceType := range []proapi.StateModelServiceType{proapi.Copy, proapi.CopyOrLoan, proapi.Loan} {
+		t.Run(string(serviceType), func(t *testing.T) {
+			mapping, err := service.GetActionMapping("default", serviceType)
+			if !assert.NoError(t, err) {
+				return
+			}
+			actions := mapping.GetAutoActionsForState(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateCompleted})
+			if serviceType == proapi.Loan {
+				assert.Empty(t, actions)
+			} else if assert.Len(t, actions, 1) {
+				action := actions[0]
+				assert.Equal(t, string(BorrowerActionSendNotification), action.Name)
+				if assert.NotNil(t, action.Params) {
+					if assert.NotNil(t, action.Params.TemplateLabel) {
+						assert.Equal(t, "copy-completed-notification", *action.Params.TemplateLabel)
+					}
+					if assert.NotNil(t, action.Params.SendTo) {
+						assert.Equal(t, []proapi.ModelActionParamsSendTo{proapi.ModelActionParamsSendToPatron}, *action.Params.SendTo)
+					}
+				}
+			}
+			assert.Empty(t, mapping.GetAutoActionsForState(pr_db.PatronRequest{Side: SideLending, State: LenderStateCompleted}))
+		})
+	}
+}
+
+func TestDocumentDeliveredNotificationTemplate(t *testing.T) {
+	templates := GetStateModelTemplateDefaults()
+	idx := slices.IndexFunc(templates, func(template proapi.CreateTemplate) bool {
+		return slices.Contains(template.Labels, "copy-completed-notification")
+	})
+	if !assert.NotEqual(t, -1, idx) {
+		return
+	}
+	template := templates[idx]
+	assert.Equal(t, "Document delivered notification", template.Title)
+	assert.Equal(t, proapi.Email, template.Purpose)
+	assert.Equal(t, proapi.Text, template.ContentType)
+	if assert.NotNil(t, template.Audience) {
+		assert.Equal(t, proapi.TemplateAudiencePatron, *template.Audience)
+	}
+	if assert.NotNil(t, template.Subject) {
+		assert.Equal(t, "Your requested document is ready", *template.Subject)
+	}
+	body, err := email.RenderTextTemplate(email.PullSlipData{ReqId: "REQ-123", Title: "Requested article"}, template.Body)
+	assert.NoError(t, err)
+	assert.Equal(t, "Your document is now available.\n\nRequest number: REQ-123\n\nItem Title: Requested article\n", body)
 }
 
 func TestLegacyReturnablesStateModelAlias(t *testing.T) {
