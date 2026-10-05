@@ -37,12 +37,14 @@ if [ "$curl_status" -ne 0 ]; then
 fi
 
 failed=$(jq -er '
-    [
-        (.patronRequests.failed // 0),
-        (.batchActions.failed // 0),
-        (.templates.failed // 0)
-    ]
-    | if any(. != 0) then "true" else "false" end
+    . as $response
+    | ([
+          (.patronRequests.failed // 0),
+          (.batchActions.failed // 0),
+          (.templates.failed // 0)
+      ] | any(. != 0))
+    or any($response.errors[]?; .type == null)
+    | if . then "true" else "false" end
 ' "$response_file") || {
     echo "Patron-request import response is not valid JSON" >&2
     exit 1

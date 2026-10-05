@@ -38,12 +38,14 @@ if [ "$curl_status" -ne 0 ]; then
 fi
 
 failed=$(jq -er '
-    [
-        (.entries.failed // 0),
-        (.tiers.failed // 0),
-        (.networks.failed // 0)
-    ]
-    | if any(. != 0) then "true" else "false" end
+    . as $response
+    | ([
+          (.entries.failed // 0),
+          (.tiers.failed // 0),
+          (.networks.failed // 0)
+      ] | any(. != 0))
+    or any($response.errors[]?; .type == null)
+    | if . then "true" else "false" end
 ' "$response_file") || {
     echo "Directory import response is not valid JSON" >&2
     exit 1
