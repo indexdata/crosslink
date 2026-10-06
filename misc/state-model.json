@@ -241,7 +241,7 @@
                 },
                 "params": {
                     "type": "object",
-                    "description": "Action parameters as arbitrary name/value pairs.",
+                    "description": "Static action parameters as arbitrary name/value pairs, supplied for both manual and automatic execution. Parameters already carried by a task retain precedence.",
                     "additionalProperties": true,
                     "properties": {
                         "sendTo": {

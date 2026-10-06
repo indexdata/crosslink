@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"slices"
 	"strconv"
@@ -129,20 +130,20 @@ func (e *autoActionFailure) Error() string {
 }
 
 type actionParams struct {
-	Noop             bool                       `json:"noop,omitempty"`
-	DueDate          *string                    `json:"dueDate,omitempty"`
-	Note             string                     `json:"note,omitempty"`
-	Barcode          string                     `json:"barcode,omitempty"`
-	CallNumber       string                     `json:"callNumber,omitempty"`
-	Title            string                     `json:"title,omitempty"`
-	LoanCondition    string                     `json:"loanCondition,omitempty"`
-	Cost             *float64                   `json:"cost,omitempty"`
-	Currency         string                     `json:"currency,omitempty"`
-	ReasonUnfilled   string                     `json:"reasonUnfilled,omitempty"`
-	ReasonRetry      string                     `json:"reasonRetry,omitempty"`
-	ItemID           string                     `json:"itemId,omitempty"`
-	DeliveryURL      string                     `json:"deliveryUrl,omitempty"`
-	AutoActionParams *proapi.ModelAction_Params `json:"autoActionParams,omitempty"`
+	Noop               bool                       `json:"noop,omitempty"`
+	DueDate            *string                    `json:"dueDate,omitempty"`
+	Note               string                     `json:"note,omitempty"`
+	Barcode            string                     `json:"barcode,omitempty"`
+	CallNumber         string                     `json:"callNumber,omitempty"`
+	Title              string                     `json:"title,omitempty"`
+	LoanCondition      string                     `json:"loanCondition,omitempty"`
+	Cost               *float64                   `json:"cost,omitempty"`
+	Currency           string                     `json:"currency,omitempty"`
+	ReasonUnfilled     string                     `json:"reasonUnfilled,omitempty"`
+	ReasonRetry        string                     `json:"reasonRetry,omitempty"`
+	ItemID             string                     `json:"itemId,omitempty"`
+	DeliveryURL        string                     `json:"deliveryUrl,omitempty"`
+	StaticActionParams *proapi.ModelAction_Params `json:"staticActionParams,omitempty"`
 }
 
 func CreatePatronRequestActionService(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, eventBus events.EventBus,
@@ -225,6 +226,8 @@ func (a *PatronRequestActionService) executeAction(ctx common.ExtendedContext, e
 	if !actionMapping.IsActionSupported(pr, action) {
 		return logActionErrorAndReturnResult(ctx, "state "+string(pr.State)+" does not support action "+string(action), errors.New("invalid action"))
 	}
+	config, _ := actionMapping.getStateConfig(pr)
+	event.EventData.CustomData = withStaticActionParams(event.EventData.CustomData, config.actions[action].Params)
 	if actionMapping.IsTransitionAction(pr, action) {
 		execResult := actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
 		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execResult)
@@ -251,6 +254,21 @@ func (a *PatronRequestActionService) executeAction(ctx common.ExtendedContext, e
 	default:
 		return logActionErrorAndReturnResult(ctx, "side "+string(pr.Side)+" is not supported", errors.New("invalid side"))
 	}
+}
+
+// withStaticActionParams supplies declaration parameters for manual and
+// automatic execution without mutating the caller's data. Parameters already
+// carried by a task retain precedence.
+func withStaticActionParams(customData map[string]any, params *proapi.ModelAction_Params) map[string]any {
+	if params == nil || customData["staticActionParams"] != nil {
+		return customData
+	}
+	data := maps.Clone(customData)
+	if data == nil {
+		data = make(map[string]any)
+	}
+	data["staticActionParams"] = params
+	return data
 }
 
 func (a *PatronRequestActionService) checkLimitBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
@@ -646,9 +664,9 @@ func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.Exten
 	currentState := pr.State
 	for _, action := range autoActions {
 		actionName := pr_db.PatronRequestAction(action.Name)
-		data := events.EventData{CommonEventData: events.CommonEventData{Action: &actionName, User: user}}
-		if action.Params != nil {
-			data.CustomData = map[string]any{"autoActionParams": action.Params}
+		data := events.EventData{
+			CommonEventData: events.CommonEventData{Action: &actionName, User: user},
+			CustomData:      withStaticActionParams(nil, action.Params),
 		}
 		eventID, err := a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, parentEventID, events.SignalConsumers)
 		if err != nil {
@@ -2091,27 +2109,27 @@ func logNotificationProblem(ctx common.ExtendedContext, pr pr_db.PatronRequest, 
 
 func (a *PatronRequestActionService) sendEmailNotification(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams, symbol string) actionExecutionResult {
 	result := events.EventResult{}
-	if params.AutoActionParams != nil && params.AutoActionParams.SendTo != nil && len(*params.AutoActionParams.SendTo) > 0 {
-		if params.AutoActionParams.TemplateLabel == nil {
+	if params.StaticActionParams != nil && params.StaticActionParams.SendTo != nil && len(*params.StaticActionParams.SendTo) > 0 {
+		if params.StaticActionParams.TemplateLabel == nil {
 			return logNotificationProblem(ctx, pr, "template label is not set", nil)
 		}
-		from, to, err := a.getDirectoryEmailData(ctx, symbol, slices.Contains(*params.AutoActionParams.SendTo, proapi.ModelActionParamsSendToStaff))
+		from, to, err := a.getDirectoryEmailData(ctx, symbol, slices.Contains(*params.StaticActionParams.SendTo, proapi.ModelActionParamsSendToStaff))
 		if err != nil {
 			return logNotificationProblem(ctx, pr, "error getting directory email data", err)
 		}
-		if slices.Contains(*params.AutoActionParams.SendTo, proapi.ModelActionParamsSendToPatron) {
+		if slices.Contains(*params.StaticActionParams.SendTo, proapi.ModelActionParamsSendToPatron) {
 			recipients := patronEmail(pr)
 			if len(recipients) == 0 {
 				result.Note = "no recipients found for patron"
 			} else {
-				sendErr := a.createAndSendEmail(ctx, pr, symbol, from, recipients, *params.AutoActionParams.TemplateLabel, proapi.ModelActionParamsSendToPatron)
+				sendErr := a.createAndSendEmail(ctx, pr, symbol, from, recipients, *params.StaticActionParams.TemplateLabel, proapi.ModelActionParamsSendToPatron)
 				if sendErr != nil {
 					return logNotificationProblem(ctx, pr, "error sending email to patron", sendErr)
 				}
 				result.Note = "patron email sent successfully"
 			}
 		}
-		if slices.Contains(*params.AutoActionParams.SendTo, proapi.ModelActionParamsSendToStaff) {
+		if slices.Contains(*params.StaticActionParams.SendTo, proapi.ModelActionParamsSendToStaff) {
 			var recipients []string
 			for _, r := range strings.Split(*to, ";") {
 				if trimmed := strings.TrimSpace(r); trimmed != "" {
@@ -2124,7 +2142,7 @@ func (a *PatronRequestActionService) sendEmailNotification(ctx common.ExtendedCo
 				}
 				result.Note += "no recipients found for staff"
 			} else {
-				sendErr := a.createAndSendEmail(ctx, pr, symbol, from, recipients, *params.AutoActionParams.TemplateLabel, proapi.ModelActionParamsSendToStaff)
+				sendErr := a.createAndSendEmail(ctx, pr, symbol, from, recipients, *params.StaticActionParams.TemplateLabel, proapi.ModelActionParamsSendToStaff)
 				if sendErr != nil {
 					return logNotificationProblem(ctx, pr, "error sending email to staff", sendErr)
 				}

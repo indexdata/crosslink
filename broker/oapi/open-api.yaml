@@ -1383,7 +1383,7 @@ components:
               description: Target state when the action requires review.
         params:
           type: object
-          description: Parameters for the action. The presence of parameters indicates that the action requires additional input to be executed.
+          description: Static action parameters supplied for both manual and automatic execution. Parameters already carried by a task retain precedence.
           additionalProperties: true
           properties:
             sendTo:

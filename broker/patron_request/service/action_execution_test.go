@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/lms"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	"github.com/stretchr/testify/assert"
@@ -218,6 +220,142 @@ func TestBoundPatronReviewDoesNotPropagate(t *testing.T) {
 	assert.Equal(t, ActionOutcomeReview, bus.processedTaskEvents[0].ResultData.ActionResult.Outcome)
 	assert.Equal(t, BorrowerStateInvalidPatron, repo.savedPr.State)
 	assert.True(t, repo.savedPr.NeedsAttention)
+}
+
+func TestManualNotificationRetryUsesStateModelParams(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		side     pr_db.PatronRequestSide
+		state    pr_db.PatronRequestState
+		audience proapi.ModelActionParamsSendTo
+		label    string
+		extra    bool
+		override bool
+	}{
+		{name: "patron", side: SideBorrowing, state: BorrowerStateReceived, audience: proapi.ModelActionParamsSendToPatron, label: "received-notification"},
+		{name: "staff", side: SideLending, state: LenderStateNew, audience: proapi.ModelActionParamsSendToStaff, label: "new-supply-request-notification"},
+		{name: "other custom data", side: SideBorrowing, state: BorrowerStateReceived, audience: proapi.ModelActionParamsSendToPatron, label: "received-notification", extra: true},
+		{name: "explicit parameters", side: SideBorrowing, state: BorrowerStateReceived, audience: proapi.ModelActionParamsSendToPatron, label: "retry-template", override: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pr := prWithPatronEmail(testPatronTo)
+			pr.ID, pr.Side, pr.State = patronRequestId, tc.side, tc.state
+			pr.RequesterSymbol, pr.SupplierSymbol = getDbText(testSymbol), getDbText(testSymbol)
+			repo := &MockPrRepo{savedPr: pr}
+			bus := new(MockEventBus)
+			lmsCreator := new(MockLmsCreator)
+			lmsCreator.On("GetAdapter", testSymbol).Return(lms.CreateLmsAdapterMockOK(), nil)
+			sender := new(notificationRetryEmailRecorder)
+			illRepo := new(IllRepoMock)
+			illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithFromEmailOnly(testFrom), nil).Once()
+			repo.On("GetTemplateByPurposeAudienceLabelAndOwner", pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams{
+				Purpose: string(proapi.Email), Owner: testSymbol, Label: tc.label, Audience: string(tc.audience),
+			}).Return(pr_db.Template{Body: "Your notification", Subject: getDbText("Notification")}, nil).Once()
+			svc := CreatePatronRequestActionService(repo, illRepo, bus, new(MockIso18626Handler), lmsCreator, sender, nil, nil)
+			mapping, err := svc.actionMappingService.GetActionMapping(pr.IllRequest)
+			require.NoError(t, err)
+			action := BorrowerActionSendNotification // The action name is shared by both sides.
+			event := events.Event{ID: "notification", PatronRequestID: pr.ID, EventData: events.EventData{
+				CommonEventData: events.CommonEventData{Action: &action},
+				CustomData:      map[string]any{"staticActionParams": mapping.GetAutoActionsForState(pr)[0].Params},
+			}}
+
+			status, result := svc.handleInvokeAction(appCtx, event)
+
+			require.Equal(t, events.EventStatusProblem, status)
+			require.Equal(t, ActionOutcomeFailure, result.ActionResult.Outcome)
+			require.True(t, repo.savedPr.NeedsAttention)
+			require.Zero(t, sender.sends)
+			var retryAvailable bool
+			for _, allowed := range mapping.GetAllowedActionsForPatronRequest(repo.savedPr, true).Actions {
+				if allowed.Name == string(action) {
+					retryAvailable = true
+					assert.Empty(t, allowed.Parameters)
+				}
+			}
+			require.True(t, retryAvailable, "the failed notification must be available for manual retry")
+
+			// Manual API calls carry no staticActionParams. Other custom data must
+			// survive resolution, and explicitly supplied parameters still win.
+			event.ID = "notification-retry"
+			event.EventData.CustomData = nil
+			if tc.extra {
+				event.EventData.CustomData = map[string]any{"note": "retry notification"}
+			}
+			if tc.override {
+				event.EventData.CustomData = map[string]any{"staticActionParams": staticParams(tc.label, tc.audience).StaticActionParams}
+			}
+			sender.ready = true
+
+			status, result = svc.handleInvokeAction(appCtx, event)
+
+			assert.Equal(t, events.EventStatusSuccess, status)
+			assert.Equal(t, ActionOutcomeSuccess, result.ActionResult.Outcome)
+			assert.False(t, repo.savedPr.NeedsAttention)
+			assert.Equal(t, tc.state, repo.savedPr.State)
+			require.Equal(t, 1, sender.sends)
+			assert.Equal(t, testFrom, sender.from)
+			recipient := testPatronTo
+			if tc.audience == proapi.ModelActionParamsSendToStaff {
+				recipient = testFrom
+			}
+			assert.Equal(t, []string{recipient}, sender.recipients)
+			assert.Contains(t, string(sender.raw), "Your notification")
+			assert.Empty(t, bus.createdTaskData, "a retry must not restart state entry actions")
+			if tc.extra {
+				assert.Equal(t, map[string]any{"note": "retry notification"}, event.EventData.CustomData)
+			}
+			repo.AssertExpectations(t)
+			illRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestStaticActionParamsPreserveTaskDataAndPrecedence(t *testing.T) {
+	declared := &proapi.ModelAction_Params{AdditionalProperties: map[string]any{"location": "configured"}}
+	explicit := &proapi.ModelAction_Params{AdditionalProperties: map[string]any{"location": "explicit"}}
+	for _, tc := range []struct {
+		name       string
+		customData map[string]any
+		params     *proapi.ModelAction_Params
+		want       map[string]any
+	}{
+		{name: "parameterless task", params: declared, want: map[string]any{"staticActionParams": declared}},
+		{name: "other task data", customData: map[string]any{"note": "staff input"}, params: declared,
+			want: map[string]any{"note": "staff input", "staticActionParams": declared}},
+		{name: "explicit task parameters", customData: map[string]any{"note": "staff input", "staticActionParams": explicit}, params: declared,
+			want: map[string]any{"note": "staff input", "staticActionParams": explicit}},
+		{name: "null task parameters", customData: map[string]any{"staticActionParams": nil}, params: declared,
+			want: map[string]any{"staticActionParams": declared}},
+		{name: "no declaration parameters", customData: map[string]any{"note": "staff input"}, want: map[string]any{"note": "staff input"}},
+		{name: "no parameters or task data"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			original := maps.Clone(tc.customData)
+
+			resolved := withStaticActionParams(tc.customData, tc.params)
+
+			assert.Equal(t, tc.want, resolved)
+			assert.Equal(t, original, tc.customData, "resolving declaration parameters must not alter the original task data")
+			assert.Equal(t, resolved, withStaticActionParams(resolved, tc.params), "parameters captured on automatic tasks must survive execution")
+		})
+	}
+}
+
+type notificationRetryEmailRecorder struct {
+	ready      bool
+	sends      int
+	from       string
+	recipients []string
+	raw        []byte
+}
+
+func (s *notificationRetryEmailRecorder) IsReadyToSend() bool { return s.ready }
+
+func (s *notificationRetryEmailRecorder) SendEmail(from string, recipients []string, raw []byte) error {
+	s.sends++
+	s.from, s.recipients, s.raw = from, recipients, raw
+	return nil
 }
 
 func TestTransitionIsNotHandledWhenPersistenceFails(t *testing.T) {

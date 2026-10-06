@@ -293,6 +293,11 @@ recovery-state entry actions before ending the source chain. Task-processing,
 persistence, and propagated child-chain errors are not suppressed by a configured
 transition.
 
+Both manual and automatic actions receive the static `params` declared for the
+action in the current state. Parameters already carried by a task retain
+precedence. Static configuration is carried under `staticActionParams` in task
+custom data, separately from user input.
+
 Attention starts with the resulting state's `needsAttention` setting, even when
 the action has no transition. Both `ERROR` and `PROBLEM` force attention to true.
 A subsequent successful action resets attention to its resulting state's setting;
