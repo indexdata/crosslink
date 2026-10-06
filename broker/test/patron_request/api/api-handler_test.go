@@ -342,11 +342,12 @@ func TestCrud(t *testing.T) {
 		assert.Equal(t, "send-notification", *foundPr.LastAction)
 	}
 	if assert.NotNil(t, foundPr.LastActionOutcome) {
-		assert.Equal(t, "success", *foundPr.LastActionOutcome)
+		assert.Equal(t, "failure", *foundPr.LastActionOutcome)
 	}
 	if assert.NotNil(t, foundPr.LastActionResult) {
-		assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
+		assert.Equal(t, "PROBLEM", *foundPr.LastActionResult)
 	}
+	assert.True(t, foundPr.NeedsAttention, "unavailable email requires attention without failing receive")
 
 	// TODO Do we really want to delete from DB or just add DELETED status ?
 	//// DELETE patron request

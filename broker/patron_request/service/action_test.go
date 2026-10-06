@@ -4698,26 +4698,27 @@ func TestSendEmailNotification(t *testing.T) {
 			wantStatus: events.EventStatusSuccess,
 		},
 		{
-			name:   "nil TemplateLabel – logged success",
+			name:   "nil TemplateLabel – problem",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
 			params: actionParams{AutoActionParams: &proapi.ModelAction_Params{
 				SendTo: sendToTargets(proapi.ModelActionParamsSendToPatron),
 			}},
 			setupMocks: func(_ *MockPrRepo, _ *IllRepoMock, _ *EmailSenderMock) {},
-			wantStatus: events.EventStatusSuccess,
+			wantStatus: events.EventStatusProblem,
 			wantNote:   "template label is not set",
 		},
 		{
-			name:   "GetPeerBySymbol error – logged success",
+			name:   "GetPeerBySymbol error – problem",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
 			params: autoParams(testTemplate, proapi.ModelActionParamsSendToPatron),
 			setupMocks: func(_ *MockPrRepo, illRepo *IllRepoMock, _ *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(ill_db.Peer{}, errors.New("db error"))
 			},
-			wantStatus: events.EventStatusSuccess,
+			wantStatus: events.EventStatusProblem,
 			wantNote:   "error getting directory email data",
+			wantErr:    "db error",
 		},
 		{
 			name:   "SendTo patron – no patron email addresses – note set",
@@ -4744,7 +4745,7 @@ func TestSendEmailNotification(t *testing.T) {
 			wantNote:   "patron email sent successfully",
 		},
 		{
-			name:   "SendTo patron – SendEmail fails – logged success",
+			name:   "SendTo patron – SendEmail fails – problem",
 			pr:     prWithPatronEmail(testPatronTo),
 			symbol: testSymbol,
 			params: autoParams(testTemplate, proapi.ModelActionParamsSendToPatron),
@@ -4753,8 +4754,9 @@ func TestSendEmailNotification(t *testing.T) {
 				prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
 				emailSvc.On("SendEmail", testFrom).Return(errors.New("smtp error"))
 			},
-			wantStatus: events.EventStatusSuccess,
+			wantStatus: events.EventStatusProblem,
 			wantNote:   "error sending email to patron",
+			wantErr:    "smtp error",
 		},
 		{
 			name:   "SendTo staff – email sent successfully",
@@ -4809,7 +4811,7 @@ func TestSendEmailNotification(t *testing.T) {
 			wantNote:   "staff email sent successfully",
 		},
 		{
-			name:   "SendTo staff – SendEmail fails – logged success",
+			name:   "SendTo staff – SendEmail fails – problem",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
 			params: autoParams(testTemplate, proapi.ModelActionParamsSendToStaff),
@@ -4818,8 +4820,9 @@ func TestSendEmailNotification(t *testing.T) {
 				prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
 				emailSvc.On("SendEmail", testFrom).Return(errors.New("smtp error"))
 			},
-			wantStatus: events.EventStatusSuccess,
+			wantStatus: events.EventStatusProblem,
 			wantNote:   "error sending email to staff",
+			wantErr:    "smtp error",
 		},
 		{
 			name:   "SendTo patron and staff – both emails sent – staff note wins",
@@ -4857,15 +4860,16 @@ func TestSendEmailNotification(t *testing.T) {
 			res := svc.sendEmailNotification(appCtx, tc.pr, tc.params, tc.symbol)
 
 			assert.Equal(t, tc.wantStatus, res.status)
-			if tc.wantErr != "" {
-				if assert.NotNil(t, res.result) {
-					assert.Contains(t, res.result.EventError.Message, tc.wantErr)
-				}
-			}
-			if tc.wantNote != "" {
-				if assert.NotNil(t, res.result) {
-					assert.Equal(t, tc.wantNote, res.result.Note)
-				}
+			if tc.wantStatus == events.EventStatusProblem {
+				require.NotNil(t, res.result)
+				require.NotNil(t, res.result.Problem)
+				require.NotNil(t, res.result.ActionResult)
+				assert.Equal(t, ActionOutcomeFailure, res.result.ActionResult.Outcome)
+				assert.Equal(t, tc.wantNote, res.result.Problem.Kind)
+				assert.Contains(t, res.result.Problem.Details, tc.wantErr)
+			} else if tc.wantNote != "" {
+				require.NotNil(t, res.result)
+				assert.Equal(t, tc.wantNote, res.result.Note)
 			}
 			illRepo.AssertExpectations(t)
 			emailSvc.AssertExpectations(t)
@@ -4923,9 +4927,11 @@ func TestHandleInvokeActionBorrowerActionSendNotification_emailServiceNotReady(t
 	}}
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}, CustomData: data}})
 
-	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.NotNil(t, resultData)
-	assert.Equal(t, "email service is not ready to send", resultData.Note)
+	assert.Equal(t, events.EventStatusProblem, status)
+	assert.Equal(t, ActionOutcomeFailure, resultData.ActionResult.Outcome)
+	assert.Equal(t, "email service is not ready to send", resultData.Problem.Details)
+	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
 	assert.Equal(t, BorrowerStateReceived, mockPrRepo.savedPr.State)
 }
 
@@ -4984,9 +4990,11 @@ func TestHandleInvokeActionLenderActionSendNotification_emailServiceNotReady(t *
 	}}
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}, CustomData: data}})
 
-	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.NotNil(t, resultData)
-	assert.Equal(t, "email service is not ready to send", resultData.Note)
+	assert.Equal(t, events.EventStatusProblem, status)
+	assert.Equal(t, ActionOutcomeFailure, resultData.ActionResult.Outcome)
+	assert.Equal(t, "email service is not ready to send", resultData.Problem.Details)
+	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
 	assert.Equal(t, LenderStateNew, mockPrRepo.savedPr.State)
 }
 

@@ -457,6 +457,8 @@ stateModels:
           - name: send-notification
             desc: Send email notification when the item is received
             trigger: auto
+            transitions:
+              failure: RECEIVED
             params:
               sendTo:
                 - patron
@@ -607,6 +609,8 @@ stateModels:
           - name: send-notification
             desc: Send email notification when the document is delivered
             trigger: auto
+            transitions:
+              failure: COMPLETED
             # FIXME: CopyOrLoan may be completed with a regular loan and no notification should be sent
             # if CopyOrLoan is actually exposed a seperate COPY_COMPLETED state should be used instead
             appliesTo:
@@ -625,6 +629,8 @@ stateModels:
           - name: send-notification
             desc: Send email notification when the request is cancelled
             trigger: auto
+            transitions:
+              failure: CANCELLED
             params:
               sendTo:
                 - patron
@@ -641,6 +647,8 @@ stateModels:
           - name: send-notification
             desc: Send email notification when item is unfilled
             trigger: auto
+            transitions:
+              failure: UNFILLED
             params:
               sendTo:
                 - patron
@@ -684,6 +692,8 @@ stateModels:
           - name: send-notification
             desc: Send staff email notification when a new supply request is received
             trigger: auto
+            transitions:
+              failure: NEW
             params:
               sendTo:
                 - staff

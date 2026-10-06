@@ -1363,7 +1363,13 @@ components:
           description: Makes this the primary action for the selected service types. At most one applicable action may be primary for a service type in a state.
         transitions:
           type: object
-          description: Action outcome to state transition mapping. When no transition is defined, the action is considered to be non-state-changing.
+          description: >-
+            Action outcome to state transition mapping. Outcome names only select target states.
+            Once persisted, a bound outcome handles an ERROR or PROBLEM: ERROR ends the current
+            automatic chain without propagation; PROBLEM continues normally. Unbound ERROR or
+            PROBLEM results stop and propagate. SUCCESS continues normally with or without a binding.
+            A state change runs the target state's entry actions and finishes the source state's
+            chain; a self-transition does not rerun entry actions.
           additionalProperties: false
           properties:
             success:
@@ -1371,7 +1377,7 @@ components:
               description: Target state when the action succeeds.
             failure:
               type: string
-              description: Target state when the action fails.
+              description: Target state for the failure outcome. Execution and attention behavior depend on event status, not the outcome name.
             review:
               type: string
               description: Target state when the action requires review.

@@ -222,7 +222,7 @@
                 },
                 "transitions": {
                     "type": "object",
-                    "description": "Action outcome to state transition mapping. When no transition is defined, the action is considered to be non-state-changing. A failure transition handles a persisted failure within an automatic action chain; an unbound failure propagates to the parent.",
+                    "description": "Action outcome to state transition mapping. Outcome names only select target states. Once persisted, a bound outcome handles an ERROR or PROBLEM: ERROR ends the current automatic chain without propagation; PROBLEM continues normally. Unbound ERROR or PROBLEM results stop and propagate. SUCCESS continues normally with or without a binding. A state change runs the target state's entry actions and finishes the source state's chain; a self-transition does not rerun entry actions.",
                     "additionalProperties": false,
                     "properties": {
                         "success": {
@@ -231,7 +231,7 @@
                         },
                         "failure": {
                             "type": "string",
-                            "description": "Target state when the action fails. Once persisted, this transition prevents the failure from propagating through an automatic action chain."
+                            "description": "Target state for the failure outcome. Execution and attention behavior depend on event status, not the outcome name."
                         },
                         "review": {
                             "type": "string",

@@ -274,6 +274,39 @@ For Loan and CopyOrLoan requests, generating a pull-slip PDF queues the `pullsli
 
 The `email-pullslips` batch queues the same action after SMTP successfully accepts an email containing a PDF. Emails without PDFs and failed generation or sending do not advance requests. Actions run asynchronously and recheck the current state. If queuing fails after output, the operation reports an error; retrying may reproduce the PDF or email, while repeated `pullslip-printed` actions in `SEARCHING` are harmless. Existing saved batch queries are not rewritten; use `WILL_SUPPLY` for pull-slip queries and include `SEARCHING` in aging queries as needed.
 
+## Action results and automatic execution
+
+Action outcomes (`success`, `failure`, and `review`) select their configured
+transitions. Event status controls automatic execution, independently of the
+outcome name:
+
+| Status | Bound outcome, persisted successfully | Unbound outcome |
+| --- | --- | --- |
+| `SUCCESS` | Apply the transition and continue normally | Continue in the current state |
+| `PROBLEM` | Apply the transition and continue normally | Stop and propagate the problem |
+| `ERROR` | Apply the transition and end the current chain without propagation | Stop and propagate the error |
+
+Normal continuation runs the remaining automatic actions after a self-transition,
+without restarting entry actions. A change of state runs the target state's entry
+actions and finishes the source state's chain. A bound `ERROR` can therefore run
+recovery-state entry actions before ending the source chain. Task-processing,
+persistence, and propagated child-chain errors are not suppressed by a configured
+transition.
+
+Attention starts with the resulting state's `needsAttention` setting, even when
+the action has no transition. Both `ERROR` and `PROBLEM` force attention to true.
+A subsequent successful action resets attention to its resulting state's setting;
+previous failures remain in event history. Outcome `failure` has no separate
+attention or execution rule.
+
+Email notification preparation and delivery failures produce `PROBLEM` with
+outcome `failure`, including the cause in the event result and manual action
+response. The default notification actions bind failure to their current states
+so fulfillment can continue. Existing custom models must add an equivalent
+binding if their notification failures should allow continuation. Email sending
+remains synchronous; successful sends and skipped recipients retain their
+existing behavior.
+
 ## Loan recall
 
 Lenders can invoke `recall` from `RECEIVED`, `RENEWED`, `OVERDUE`, or

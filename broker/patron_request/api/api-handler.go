@@ -822,6 +822,8 @@ func (a *PatronRequestApiHandler) invokeActionAndWriteResponse(w http.ResponseWr
 	var message *string
 	if completedEvent.ResultData.EventError != nil {
 		message = &completedEvent.ResultData.EventError.Message
+	} else if completedEvent.ResultData.Problem != nil {
+		message = &completedEvent.ResultData.Problem.Details
 	}
 	outcome := prservice.ActionOutcomeFailure
 	var toState *string
