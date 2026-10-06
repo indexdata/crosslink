@@ -17,12 +17,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRunAutoActionsStatusAndBinding(t *testing.T) {
+func TestRunAutoActionsUsesPersistedContinuationDecision(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		status     events.EventStatus
 		outcome    string
 		target     string
+		tolerated  bool
 		childError bool
 		processErr bool
 		readErr    bool
@@ -30,27 +31,28 @@ func TestRunAutoActionsStatusAndBinding(t *testing.T) {
 		wantTasks  int
 	}{
 		{name: "unbound success continues", status: events.EventStatusSuccess, outcome: ActionOutcomeSuccess, wantTasks: 2},
-		{name: "success failure outcome continues", status: events.EventStatusSuccess, outcome: ActionOutcomeFailure, wantTasks: 2},
-		{name: "bound problem failure continues", status: events.EventStatusProblem, outcome: ActionOutcomeFailure, target: string(LenderStateNew), wantTasks: 2},
-		{name: "bound problem review continues", status: events.EventStatusProblem, outcome: ActionOutcomeReview, target: string(LenderStateNew), wantTasks: 2},
-		{name: "bound problem success outcome continues", status: events.EventStatusProblem, outcome: ActionOutcomeSuccess, target: string(LenderStateNew), wantTasks: 2},
-		{name: "problem changes state", status: events.EventStatusProblem, outcome: ActionOutcomeReview, target: string(LenderStateValidated), wantTasks: 1},
+		{name: "successful failure outcome continues", status: events.EventStatusSuccess, outcome: ActionOutcomeFailure, wantTasks: 2},
+		{name: "unbound tolerated problem continues", status: events.EventStatusProblem, outcome: ActionOutcomeFailure, tolerated: true, wantTasks: 2},
+		{name: "bound tolerated problem review continues", status: events.EventStatusProblem, outcome: ActionOutcomeReview, target: string(LenderStateNew), tolerated: true, wantTasks: 2},
+		{name: "unbound tolerated error continues", status: events.EventStatusError, outcome: ActionOutcomeFailure, tolerated: true, wantTasks: 2},
+		{name: "bound tolerated error success outcome continues", status: events.EventStatusError, outcome: ActionOutcomeSuccess, target: string(LenderStateNew), tolerated: true, wantTasks: 2},
+		{name: "tolerated problem changes state", status: events.EventStatusProblem, outcome: ActionOutcomeReview, target: string(LenderStateValidated), tolerated: true, wantTasks: 1},
+		{name: "tolerated error changes state", status: events.EventStatusError, outcome: ActionOutcomeFailure, target: string(LenderStateValidated), tolerated: true, wantTasks: 1},
 		{name: "unbound problem propagates", status: events.EventStatusProblem, outcome: ActionOutcomeFailure, wantErr: "failed with status PROBLEM", wantTasks: 1},
-		{name: "bound error failure stops", status: events.EventStatusError, outcome: ActionOutcomeFailure, target: string(LenderStateNew), wantTasks: 1},
-		{name: "bound error review stops", status: events.EventStatusError, outcome: ActionOutcomeReview, target: string(LenderStateNew), wantTasks: 1},
-		{name: "bound error success outcome stops", status: events.EventStatusError, outcome: ActionOutcomeSuccess, target: string(LenderStateNew), wantTasks: 1},
+		{name: "bound problem propagates", status: events.EventStatusProblem, outcome: ActionOutcomeReview, target: string(LenderStateValidated), wantErr: "failed with status PROBLEM", wantTasks: 1},
 		{name: "unbound error propagates", status: events.EventStatusError, outcome: ActionOutcomeFailure, wantErr: "failed with status ERROR", wantTasks: 1},
-		{name: "bound problem child error propagates", status: events.EventStatusProblem, outcome: ActionOutcomeFailure, target: string(LenderStateNew), childError: true, wantErr: "child failed", wantTasks: 1},
-		{name: "bound error child error propagates", status: events.EventStatusError, outcome: ActionOutcomeReview, target: string(LenderStateNew), childError: true, wantErr: "child failed", wantTasks: 1},
-		{name: "task processing error propagates", status: events.EventStatusProblem, outcome: ActionOutcomeFailure, target: string(LenderStateNew), processErr: true, wantErr: "task completion failed", wantTasks: 1},
-		{name: "request reload error propagates", status: events.EventStatusProblem, outcome: ActionOutcomeFailure, target: string(LenderStateNew), readErr: true, wantErr: "reload failed", wantTasks: 1},
-		{name: "incomplete status propagates even with binding", status: events.EventStatusProcessing, outcome: ActionOutcomeFailure, target: string(LenderStateNew), wantErr: "failed with status PROCESSING", wantTasks: 1},
+		{name: "bound error propagates", status: events.EventStatusError, outcome: ActionOutcomeSuccess, target: string(LenderStateValidated), wantErr: "failed with status ERROR", wantTasks: 1},
+		{name: "tolerated problem child error propagates", status: events.EventStatusProblem, outcome: ActionOutcomeFailure, tolerated: true, childError: true, wantErr: "child failed", wantTasks: 1},
+		{name: "tolerated error child error propagates", status: events.EventStatusError, outcome: ActionOutcomeReview, tolerated: true, childError: true, wantErr: "child failed", wantTasks: 1},
+		{name: "task processing error propagates", status: events.EventStatusProblem, outcome: ActionOutcomeFailure, tolerated: true, processErr: true, wantErr: "task completion failed", wantTasks: 1},
+		{name: "request reload error propagates", status: events.EventStatusError, outcome: ActionOutcomeFailure, tolerated: true, readErr: true, wantErr: "reload failed", wantTasks: 1},
+		{name: "incomplete status propagates even with continuation flag", status: events.EventStatusProcessing, outcome: ActionOutcomeFailure, tolerated: true, wantErr: "failed with status PROCESSING", wantTasks: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pr := pr_db.PatronRequest{ID: patronRequestId, State: LenderStateNew, Side: SideLending}
 			prRepo := new(MockPrRepo)
 			bus := new(MockEventBus)
-			result := &events.ActionResult{Outcome: tc.outcome}
+			result := &events.ActionResult{Outcome: tc.outcome, ContinuationAllowed: tc.tolerated}
 			if tc.target != "" {
 				result.ToState = &tc.target
 			}
@@ -65,7 +67,7 @@ func TestRunAutoActionsStatusAndBinding(t *testing.T) {
 				EventStatus: tc.status,
 				ResultData:  events.EventResult{CommonEventData: events.CommonEventData{ActionResult: result}},
 			}, processErr).Once()
-			if tc.wantTasks == 2 || tc.target == string(LenderStateValidated) || tc.readErr {
+			if tc.wantTasks == 2 || (tc.target == string(LenderStateValidated) && tc.wantErr == "") || tc.readErr {
 				updatedPr := pr
 				if tc.target != "" {
 					updatedPr.State = pr_db.PatronRequestState(tc.target)
@@ -92,6 +94,63 @@ func TestRunAutoActionsStatusAndBinding(t *testing.T) {
 			bus.AssertExpectations(t)
 			prRepo.AssertExpectations(t)
 		})
+	}
+}
+
+func TestFinalizeActionContinueOnIndependentOfOutcomeBinding(t *testing.T) {
+	for _, status := range []events.EventStatus{events.EventStatusSuccess, events.EventStatusProblem, events.EventStatusError} {
+		for _, tolerated := range []bool{false, true} {
+			for _, target := range []string{"", string(LenderStateNew), string(LenderStateValidated)} {
+				t.Run(fmt.Sprintf("%s/tolerated=%t/target=%s", status, tolerated, target), func(t *testing.T) {
+					pr := pr_db.PatronRequest{ID: patronRequestId, State: LenderStateNew, Side: SideLending}
+					model, err := LoadStateModelByName("default")
+					require.NoError(t, err)
+					mapping := NewActionMappingForServiceType(model, proapi.Loan)
+					declaration := proapi.ModelAction{Name: string(LenderActionSendNotification)}
+					if target != "" {
+						require.NoError(t, json.Unmarshal([]byte(fmt.Sprintf(`{"name":"send-notification","transitions":{"review":%q}}`, target)), &declaration))
+					}
+					if tolerated {
+						declaration.ContinueOn = ptr([]proapi.ModelActionContinueOn{proapi.PROBLEM, proapi.ERROR})
+					} else if status == events.EventStatusProblem {
+						declaration.ContinueOn = ptr([]proapi.ModelActionContinueOn{proapi.ERROR})
+					} else if status == events.EventStatusError {
+						declaration.ContinueOn = ptr([]proapi.ModelActionContinueOn{proapi.PROBLEM})
+					}
+					mapping.lenderStateConfig[pr.State].actions[LenderActionSendNotification] = declaration
+					repo := &MockPrRepo{savedPr: pr}
+					bus := new(MockEventBus)
+					wantEntry := target == string(LenderStateValidated) && (tolerated || status == events.EventStatusSuccess)
+					if wantEntry {
+						bus.On("ProcessExclusiveTask", patronRequestId+"-task-1").Return(events.Event{EventStatus: events.EventStatusSuccess}, nil).Once()
+					}
+					svc := CreatePatronRequestActionService(repo, new(IllRepoMock), bus, new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
+					gotStatus, result := svc.finalizeActionExecution(appCtx, events.Event{}, mapping, LenderActionSendNotification, pr, actionExecutionResult{
+						status: status, pr: pr,
+						result: &events.EventResult{CommonEventData: events.CommonEventData{ActionResult: &events.ActionResult{Outcome: ActionOutcomeReview}}},
+					})
+					assert.Equal(t, status, gotStatus)
+					assert.Equal(t, ActionOutcomeReview, result.ActionResult.Outcome)
+					assert.Equal(t, tolerated && status != events.EventStatusSuccess, result.ActionResult.ContinuationAllowed)
+					assert.Equal(t, status != events.EventStatusSuccess, repo.savedPr.NeedsAttention)
+					if target == "" {
+						assert.Nil(t, result.ActionResult.ToState)
+						assert.Equal(t, pr.State, repo.savedPr.State)
+					} else {
+						require.NotNil(t, result.ActionResult.ToState)
+						assert.Equal(t, target, *result.ActionResult.ToState)
+						assert.Equal(t, pr_db.PatronRequestState(target), repo.savedPr.State)
+					}
+					assert.Equal(t, string(status), repo.savedPr.LastActionResult.String)
+					if wantEntry {
+						assert.Len(t, bus.createdTaskData, 1)
+					} else {
+						assert.Empty(t, bus.createdTaskData, "non-tolerated results and self-transitions must not start entry actions")
+					}
+					bus.AssertExpectations(t)
+				})
+			}
+		}
 	}
 }
 
@@ -141,7 +200,7 @@ func TestFinalizeActionAttentionUsesStatusAndResultingState(t *testing.T) {
 	}
 }
 
-func TestBoundNotificationProblemContinuesValidation(t *testing.T) {
+func TestUnboundToleratedNotificationProblemContinuesValidation(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		body string
@@ -184,7 +243,8 @@ func TestBoundNotificationProblemContinuesValidation(t *testing.T) {
 			}
 			assert.Equal(t, events.EventStatusProblem, notification.EventStatus)
 			assert.Equal(t, ActionOutcomeFailure, notification.ResultData.ActionResult.Outcome)
-			assert.Equal(t, string(LenderStateNew), *notification.ResultData.ActionResult.ToState)
+			assert.Nil(t, notification.ResultData.ActionResult.ToState)
+			assert.True(t, notification.ResultData.ActionResult.ContinuationAllowed)
 			assert.Contains(t, notification.ResultData.Problem.Details, "error sending email to staff")
 			if tc.smtp {
 				assert.Contains(t, notification.ResultData.Problem.Details, "SMTP failed")
@@ -205,7 +265,7 @@ func TestBoundNotificationProblemContinuesValidation(t *testing.T) {
 	}
 }
 
-func TestBoundPatronReviewDoesNotPropagate(t *testing.T) {
+func TestToleratedPatronReviewDoesNotPropagate(t *testing.T) {
 	pr := pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateNew, Side: SideBorrowing, RequesterSymbol: getDbText("ISIL:REC1")}
 	repo := &MockPrRepo{savedPr: pr}
 	bus := new(MockEventBus)
@@ -358,10 +418,10 @@ func (s *notificationRetryEmailRecorder) SendEmail(from string, recipients []str
 	return nil
 }
 
-func TestTransitionIsNotHandledWhenPersistenceFails(t *testing.T) {
+func TestToleratedActionCannotSuppressPersistenceFailure(t *testing.T) {
 	for _, step := range []string{"update", "commit"} {
 		t.Run(step, func(t *testing.T) {
-			pr := pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateNew, Side: SideBorrowing, RequesterSymbol: getDbText("ISIL:REC1")}
+			pr := pr_db.PatronRequest{ID: patronRequestId, State: LenderStateNew, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1")}
 			if step == "update" {
 				pr.ID = "pr-error"
 			}
@@ -372,15 +432,16 @@ func TestTransitionIsNotHandledWhenPersistenceFails(t *testing.T) {
 			}
 			bus := new(MockEventBus)
 			lmsCreator := new(MockLmsCreator)
-			lmsCreator.On("GetAdapter", "ISIL:REC1").Return(&MockLmsAdapterPatronProblem{}, nil)
-			svc := CreatePatronRequestActionService(repo, new(IllRepoMock), bus, new(MockIso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
+			lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lms.CreateLmsAdapterMockOK(), nil)
+			svc := CreatePatronRequestActionService(repo, new(IllRepoMock), bus, new(MockIso18626Handler), lmsCreator, &notificationRetryEmailRecorder{}, nil, nil)
 
 			assert.ErrorContains(t, svc.RunAutoActionsOnStateEntry(appCtx, pr, nil, "test-user"), "failed to persist patron request")
 
 			require.Len(t, bus.processedTaskEvents, 1)
 			assert.Equal(t, events.EventStatusError, bus.processedTaskEvents[0].EventStatus)
 			assert.Nil(t, bus.processedTaskEvents[0].ResultData.ActionResult.ToState)
-			assert.Equal(t, BorrowerStateNew, baseRepo.savedPr.State)
+			assert.False(t, bus.processedTaskEvents[0].ResultData.ActionResult.ContinuationAllowed)
+			assert.Equal(t, LenderStateNew, baseRepo.savedPr.State)
 		})
 	}
 }

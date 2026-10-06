@@ -54,7 +54,8 @@ script:post-response {
     expect(events.length).to.be.at.least(1);
     expect(events[0].eventStatus).to.equal("PROBLEM");
     expect(events[0].resultData.actionResult.outcome).to.equal("failure");
-    expect(events[0].resultData.actionResult.toState).to.equal("RECEIVED");
+    expect(events[0].resultData.actionResult).not.to.have.property("toState");
+    expect(events[0].resultData.actionResult.continuationAllowed).to.equal(true);
     expect(events[0].resultData.problem.Details).to.equal("email service is not ready to send");
   });
 }

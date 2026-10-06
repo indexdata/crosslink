@@ -24,8 +24,9 @@ The loan scenarios generate a supplier pull slip before shipping; this queues `p
 
 The local stack has no SMTP service. Notification actions therefore record
 `PROBLEM` with outcome `failure` and set `needsAttention`, while their configured
-self-transitions let fulfillment continue. The collection checks the notification
-problem and its details separately from successful fulfillment actions.
+`continueOn` policy lets fulfillment continue without a transition. The collection
+checks the notification problem and its details separately from successful
+fulfillment actions.
 
 The happy path ships with a past due date, receives the item, explicitly invokes supplier `overdue`, requests renewal, and accepts it with a future date before completing checkout/check-in and return. It checks `OVERDUE`, `RENEWAL_PENDING`, `RENEWED`, and due dates on both sides without waiting for the scheduler. Dates are calculated relative to the run time.
 

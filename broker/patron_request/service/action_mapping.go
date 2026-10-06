@@ -334,6 +334,24 @@ func (r *ActionMapping) GetActionTransition(pr pr_db.PatronRequest, action pr_db
 	return "", false
 }
 
+// canContinueAction uses the source state's declaration independently of the
+// outcome binding. Only completed action results can be tolerated.
+func (r *ActionMapping) canContinueAction(pr pr_db.PatronRequest, action pr_db.PatronRequestAction, status events.EventStatus) bool {
+	if status == events.EventStatusSuccess {
+		return true
+	}
+	if status != events.EventStatusProblem && status != events.EventStatusError {
+		return false
+	}
+	config, ok := r.getStateConfig(pr)
+	if !ok {
+		return false
+	}
+	declaration, ok := config.actions[action]
+	return ok && declaration.ContinueOn != nil &&
+		slices.Contains(*declaration.ContinueOn, proapi.ModelActionContinueOn(status))
+}
+
 func (r *ActionMapping) GetEventTransition(pr pr_db.PatronRequest, eventName string) (pr_db.PatronRequestState, bool, bool) {
 	stateConfig, ok := r.getStateConfig(pr)
 	if !ok {

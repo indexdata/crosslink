@@ -2364,9 +2364,12 @@ func TestHandleInvokeLenderActionValidateHandlesRequestItemFailureTransition(t *
 	}
 	validatedPR := initialPR
 	validatedPR.State = LenderStateValidated
+	itemPendingPR := validatedPR
+	itemPendingPR.State = LenderStateItemPending
 
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(initialPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(itemPendingPR, nil).Once()
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, nil).Once()
 	mockEventBus.On("CreateNoticeWithParent", "invoke-validate").Return("", nil)
 
@@ -2387,7 +2390,7 @@ func TestHandleInvokeLenderActionValidateHandlesRequestItemFailureTransition(t *
 	assert.Equal(t, string(events.EventStatusError), mockPrRepo.savedPr.LastActionResult.String)
 }
 
-func TestHandleInvokeLenderActionValidateHandlesWillSupplyFailureTransition(t *testing.T) {
+func TestHandleInvokeLenderActionValidateToleratesWillSupplyProblem(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockEventBus := new(MockEventBus)
 	mockEventBus.runTaskHandler = true
@@ -2444,33 +2447,7 @@ func TestHandleInvokeLenderActionValidateHandlesWillSupplyFailureTransition(t *t
 	lmsAdapter.AssertExpectations(t)
 }
 
-func TestRunAutoActionsHandlesPersistedFailureTransition(t *testing.T) {
-	mockEventBus := new(MockEventBus)
-	toState := string(LenderStateItemPending)
-	mockEventBus.On("ProcessExclusiveTask", patronRequestId+"-task-1").Return(events.Event{
-		EventStatus: events.EventStatusError,
-		ResultData: events.EventResult{CommonEventData: events.CommonEventData{
-			ActionResult: &events.ActionResult{
-				Outcome: ActionOutcomeFailure,
-				ToState: &toState,
-			},
-		}},
-	}, nil)
-	prAction := CreatePatronRequestActionService(new(MockPrRepo), new(IllRepoMock), mockEventBus, new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
-
-	err := prAction.RunAutoActionsOnStateEntry(appCtx, pr_db.PatronRequest{
-		ID:    patronRequestId,
-		State: LenderStateValidated,
-		Side:  SideLending,
-		IllRequest: iso18626.Request{
-			ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
-		},
-	}, nil, "")
-
-	assert.NoError(t, err)
-}
-
-func TestRunAutoActionsPropagatesUnboundFailure(t *testing.T) {
+func TestRunAutoActionsPropagatesUntoleratedFailure(t *testing.T) {
 	mockEventBus := new(MockEventBus)
 	mockEventBus.On("ProcessExclusiveTask", patronRequestId+"-task-1").Return(events.Event{
 		EventStatus: events.EventStatusError,

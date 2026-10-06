@@ -619,6 +619,12 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 	if err != nil {
 		return logActionErrorAndReturnResult(ctx, "failed to persist patron request", err)
 	}
+	// The request update has committed. Use the source declaration to decide
+	// whether further actions may run, including after a manual state change.
+	if !actionMapping.canContinueAction(currentPr, action, execResult.status) {
+		return execResult.status, execResult.result
+	}
+	execResult.result.ActionResult.ContinuationAllowed = execResult.status != events.EventStatusSuccess
 	if successorPr.ID != "" {
 		err := a.RunAutoActionsOnStateEntry(ctx, successorPr, &event.ID, event.EventData.User)
 		if err != nil {
@@ -688,19 +694,14 @@ func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.Exten
 			return &autoActionFailure{action: actionName, msg: *actionResult.ChildActionError}
 		}
 		if completedEvent.EventStatus != events.EventStatusSuccess {
-			// Any persisted outcome transition handles an unsuccessful result.
-			// ToState includes self-transitions and is returned only after the
-			// request update succeeds. ERROR ends this chain; PROBLEM follows the
-			// same state-change/continuation rules as SUCCESS.
-			if actionResult == nil || actionResult.ToState == nil ||
+			// The finalizer records tolerance only after persistence succeeds.
+			// Outcome bindings, including self-transitions, do not affect it.
+			if actionResult == nil || !actionResult.ContinuationAllowed ||
 				(completedEvent.EventStatus != events.EventStatusError && completedEvent.EventStatus != events.EventStatusProblem) {
 				return &autoActionFailure{
 					action: actionName,
 					msg:    fmt.Sprintf("auto action %s failed with status %s%s", actionName, completedEvent.EventStatus, autoActionErrorSuffix(completedEvent)),
 				}
-			}
-			if completedEvent.EventStatus == events.EventStatusError {
-				return nil
 			}
 		}
 
