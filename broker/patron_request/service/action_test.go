@@ -2364,9 +2364,12 @@ func TestHandleInvokeLenderActionValidateHandlesRequestItemFailureTransition(t *
 	}
 	validatedPR := initialPR
 	validatedPR.State = LenderStateValidated
+	itemPendingPR := validatedPR
+	itemPendingPR.State = LenderStateItemPending
 
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(initialPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(itemPendingPR, nil).Once()
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, nil).Once()
 	mockEventBus.On("CreateNoticeWithParent", "invoke-validate").Return("", nil)
 
@@ -2387,7 +2390,7 @@ func TestHandleInvokeLenderActionValidateHandlesRequestItemFailureTransition(t *
 	assert.Equal(t, string(events.EventStatusError), mockPrRepo.savedPr.LastActionResult.String)
 }
 
-func TestHandleInvokeLenderActionValidateHandlesWillSupplyFailureTransition(t *testing.T) {
+func TestHandleInvokeLenderActionValidateToleratesWillSupplyProblem(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockEventBus := new(MockEventBus)
 	mockEventBus.runTaskHandler = true
@@ -2444,33 +2447,7 @@ func TestHandleInvokeLenderActionValidateHandlesWillSupplyFailureTransition(t *t
 	lmsAdapter.AssertExpectations(t)
 }
 
-func TestRunAutoActionsHandlesPersistedFailureTransition(t *testing.T) {
-	mockEventBus := new(MockEventBus)
-	toState := string(LenderStateItemPending)
-	mockEventBus.On("ProcessExclusiveTask", patronRequestId+"-task-1").Return(events.Event{
-		EventStatus: events.EventStatusError,
-		ResultData: events.EventResult{CommonEventData: events.CommonEventData{
-			ActionResult: &events.ActionResult{
-				Outcome: ActionOutcomeFailure,
-				ToState: &toState,
-			},
-		}},
-	}, nil)
-	prAction := CreatePatronRequestActionService(new(MockPrRepo), new(IllRepoMock), mockEventBus, new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
-
-	err := prAction.RunAutoActionsOnStateEntry(appCtx, pr_db.PatronRequest{
-		ID:    patronRequestId,
-		State: LenderStateValidated,
-		Side:  SideLending,
-		IllRequest: iso18626.Request{
-			ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
-		},
-	}, nil, "")
-
-	assert.NoError(t, err)
-}
-
-func TestRunAutoActionsPropagatesUnboundFailure(t *testing.T) {
+func TestRunAutoActionsPropagatesUntoleratedFailure(t *testing.T) {
 	mockEventBus := new(MockEventBus)
 	mockEventBus.On("ProcessExclusiveTask", patronRequestId+"-task-1").Return(events.Event{
 		EventStatus: events.EventStatusError,
@@ -4633,7 +4610,7 @@ func TestCreateAndSendEmail_MissingDatabaseTemplateUsesStateModelDefault(t *test
 	emailSvc.AssertCalled(t, "SendEmail", "sender@example.com")
 }
 
-func TestLogNotificationErrorStoresCauseWithoutWritingToStandardLog(t *testing.T) {
+func TestLogNotificationProblemStoresCauseWithoutWritingToStandardLog(t *testing.T) {
 	var logOutput bytes.Buffer
 	ctx := common.CreateExtCtxWithLogArgsAndHandler(
 		context.Background(),
@@ -4641,7 +4618,7 @@ func TestLogNotificationErrorStoresCauseWithoutWritingToStandardLog(t *testing.T
 		slog.NewTextHandler(&logOutput, nil),
 	)
 
-	result := logNotificationErrorAndReturnSuccess(
+	result := logNotificationProblem(
 		ctx,
 		pr_db.PatronRequest{},
 		"error sending email to patron",
@@ -4649,8 +4626,11 @@ func TestLogNotificationErrorStoresCauseWithoutWritingToStandardLog(t *testing.T
 	)
 
 	assert.Empty(t, logOutput.String())
-	assert.Contains(t, result.result.Note, "error sending email to patron")
-	assert.Contains(t, result.result.Note, "Unsupported")
+	assert.Equal(t, events.EventStatusProblem, result.status)
+	assert.Equal(t, ActionOutcomeFailure, result.result.ActionResult.Outcome)
+	assert.Equal(t, "error sending email to patron", result.result.Problem.Kind)
+	assert.Contains(t, result.result.Problem.Details, "error sending email to patron")
+	assert.Contains(t, result.result.Problem.Details, "Unsupported")
 }
 
 // helpers for sendEmailNotification tests
@@ -4692,9 +4672,9 @@ func sendToTargets(targets ...proapi.ModelActionParamsSendTo) *[]proapi.ModelAct
 	return &s
 }
 
-func autoParams(tmpl string, targets ...proapi.ModelActionParamsSendTo) actionParams {
+func staticParams(tmpl string, targets ...proapi.ModelActionParamsSendTo) actionParams {
 	return actionParams{
-		AutoActionParams: &proapi.ModelAction_Params{
+		StaticActionParams: &proapi.ModelAction_Params{
 			TemplateLabel: ptr(tmpl),
 			SendTo:        sendToTargets(targets...),
 		},
@@ -4718,7 +4698,7 @@ func TestSendEmailNotification(t *testing.T) {
 		wantErr    string
 	}{
 		{
-			name:       "no AutoActionParams – success with empty result",
+			name:       "no StaticActionParams – success with empty result",
 			pr:         pr_db.PatronRequest{},
 			params:     actionParams{},
 			symbol:     testSymbol,
@@ -4728,7 +4708,7 @@ func TestSendEmailNotification(t *testing.T) {
 		{
 			name:       "nil SendTo – success with empty result",
 			pr:         pr_db.PatronRequest{},
-			params:     actionParams{AutoActionParams: &proapi.ModelAction_Params{}},
+			params:     actionParams{StaticActionParams: &proapi.ModelAction_Params{}},
 			symbol:     testSymbol,
 			setupMocks: func(_ *MockPrRepo, _ *IllRepoMock, _ *EmailSenderMock) {},
 			wantStatus: events.EventStatusSuccess,
@@ -4736,38 +4716,39 @@ func TestSendEmailNotification(t *testing.T) {
 		{
 			name:       "empty SendTo – success with empty result",
 			pr:         pr_db.PatronRequest{},
-			params:     actionParams{AutoActionParams: &proapi.ModelAction_Params{SendTo: sendToTargets()}},
+			params:     actionParams{StaticActionParams: &proapi.ModelAction_Params{SendTo: sendToTargets()}},
 			symbol:     testSymbol,
 			setupMocks: func(_ *MockPrRepo, _ *IllRepoMock, _ *EmailSenderMock) {},
 			wantStatus: events.EventStatusSuccess,
 		},
 		{
-			name:   "nil TemplateLabel – logged success",
+			name:   "nil TemplateLabel – problem",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
-			params: actionParams{AutoActionParams: &proapi.ModelAction_Params{
+			params: actionParams{StaticActionParams: &proapi.ModelAction_Params{
 				SendTo: sendToTargets(proapi.ModelActionParamsSendToPatron),
 			}},
 			setupMocks: func(_ *MockPrRepo, _ *IllRepoMock, _ *EmailSenderMock) {},
-			wantStatus: events.EventStatusSuccess,
+			wantStatus: events.EventStatusProblem,
 			wantNote:   "template label is not set",
 		},
 		{
-			name:   "GetPeerBySymbol error – logged success",
+			name:   "GetPeerBySymbol error – problem",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
-			params: autoParams(testTemplate, proapi.ModelActionParamsSendToPatron),
+			params: staticParams(testTemplate, proapi.ModelActionParamsSendToPatron),
 			setupMocks: func(_ *MockPrRepo, illRepo *IllRepoMock, _ *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(ill_db.Peer{}, errors.New("db error"))
 			},
-			wantStatus: events.EventStatusSuccess,
-			wantNote:   "error getting directory email data: db error",
+			wantStatus: events.EventStatusProblem,
+			wantNote:   "error getting directory email data",
+			wantErr:    "db error",
 		},
 		{
 			name:   "SendTo patron – no patron email addresses – note set",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
-			params: autoParams(testTemplate, proapi.ModelActionParamsSendToPatron),
+			params: staticParams(testTemplate, proapi.ModelActionParamsSendToPatron),
 			setupMocks: func(_ *MockPrRepo, illRepo *IllRepoMock, _ *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithFromEmailOnly(testFrom), nil)
 			},
@@ -4778,7 +4759,7 @@ func TestSendEmailNotification(t *testing.T) {
 			name:   "SendTo patron – email sent successfully",
 			pr:     prWithPatronEmail(testPatronTo),
 			symbol: testSymbol,
-			params: autoParams(testTemplate, proapi.ModelActionParamsSendToPatron),
+			params: staticParams(testTemplate, proapi.ModelActionParamsSendToPatron),
 			setupMocks: func(prRepo *MockPrRepo, illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithFromEmailOnly(testFrom), nil)
 				prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
@@ -4788,23 +4769,24 @@ func TestSendEmailNotification(t *testing.T) {
 			wantNote:   "patron email sent successfully",
 		},
 		{
-			name:   "SendTo patron – SendEmail fails – logged success",
+			name:   "SendTo patron – SendEmail fails – problem",
 			pr:     prWithPatronEmail(testPatronTo),
 			symbol: testSymbol,
-			params: autoParams(testTemplate, proapi.ModelActionParamsSendToPatron),
+			params: staticParams(testTemplate, proapi.ModelActionParamsSendToPatron),
 			setupMocks: func(prRepo *MockPrRepo, illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithFromEmailOnly(testFrom), nil)
 				prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
 				emailSvc.On("SendEmail", testFrom).Return(errors.New("smtp error"))
 			},
-			wantStatus: events.EventStatusSuccess,
-			wantNote:   "error sending email to patron: smtp error",
+			wantStatus: events.EventStatusProblem,
+			wantNote:   "error sending email to patron",
+			wantErr:    "smtp error",
 		},
 		{
 			name:   "SendTo staff – email sent successfully",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
-			params: autoParams(testTemplate, proapi.ModelActionParamsSendToStaff),
+			params: staticParams(testTemplate, proapi.ModelActionParamsSendToStaff),
 			setupMocks: func(prRepo *MockPrRepo, illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithEmail(testFrom, testStaffTo), nil)
 				prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
@@ -4817,7 +4799,7 @@ func TestSendEmailNotification(t *testing.T) {
 			name:   "SendTo staff – multiple semicolon-separated addresses all sent",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
-			params: autoParams(testTemplate, proapi.ModelActionParamsSendToStaff),
+			params: staticParams(testTemplate, proapi.ModelActionParamsSendToStaff),
 			setupMocks: func(prRepo *MockPrRepo, illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithEmail(testFrom, "a@example.com; b@example.com"), nil)
 				prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
@@ -4830,7 +4812,7 @@ func TestSendEmailNotification(t *testing.T) {
 			name:   "SendTo staff – trailing semicolon is ignored, email sent",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
-			params: autoParams(testTemplate, proapi.ModelActionParamsSendToStaff),
+			params: staticParams(testTemplate, proapi.ModelActionParamsSendToStaff),
 			setupMocks: func(prRepo *MockPrRepo, illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithEmail(testFrom, testStaffTo+";"), nil)
 				prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
@@ -4843,7 +4825,7 @@ func TestSendEmailNotification(t *testing.T) {
 			name:   "SendTo staff – fromEmail is used as staff recipient",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
-			params: autoParams(testTemplate, proapi.ModelActionParamsSendToStaff),
+			params: staticParams(testTemplate, proapi.ModelActionParamsSendToStaff),
 			setupMocks: func(prRepo *MockPrRepo, illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithFromEmailOnly(testFrom), nil)
 				prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
@@ -4853,23 +4835,24 @@ func TestSendEmailNotification(t *testing.T) {
 			wantNote:   "staff email sent successfully",
 		},
 		{
-			name:   "SendTo staff – SendEmail fails – logged success",
+			name:   "SendTo staff – SendEmail fails – problem",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
-			params: autoParams(testTemplate, proapi.ModelActionParamsSendToStaff),
+			params: staticParams(testTemplate, proapi.ModelActionParamsSendToStaff),
 			setupMocks: func(prRepo *MockPrRepo, illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithEmail(testFrom, testStaffTo), nil)
 				prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
 				emailSvc.On("SendEmail", testFrom).Return(errors.New("smtp error"))
 			},
-			wantStatus: events.EventStatusSuccess,
-			wantNote:   "error sending email to staff: smtp error",
+			wantStatus: events.EventStatusProblem,
+			wantNote:   "error sending email to staff",
+			wantErr:    "smtp error",
 		},
 		{
 			name:   "SendTo patron and staff – both emails sent – staff note wins",
 			pr:     prWithPatronEmail(testPatronTo),
 			symbol: testSymbol,
-			params: autoParams(testTemplate, proapi.ModelActionParamsSendToPatron, proapi.ModelActionParamsSendToStaff),
+			params: staticParams(testTemplate, proapi.ModelActionParamsSendToPatron, proapi.ModelActionParamsSendToStaff),
 			setupMocks: func(prRepo *MockPrRepo, illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithEmail(testFrom, testStaffTo), nil)
 				prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
@@ -4901,15 +4884,16 @@ func TestSendEmailNotification(t *testing.T) {
 			res := svc.sendEmailNotification(appCtx, tc.pr, tc.params, tc.symbol)
 
 			assert.Equal(t, tc.wantStatus, res.status)
-			if tc.wantErr != "" {
-				if assert.NotNil(t, res.result) {
-					assert.Contains(t, res.result.EventError.Message, tc.wantErr)
-				}
-			}
-			if tc.wantNote != "" {
-				if assert.NotNil(t, res.result) {
-					assert.Equal(t, tc.wantNote, res.result.Note)
-				}
+			if tc.wantStatus == events.EventStatusProblem {
+				require.NotNil(t, res.result)
+				require.NotNil(t, res.result.Problem)
+				require.NotNil(t, res.result.ActionResult)
+				assert.Equal(t, ActionOutcomeFailure, res.result.ActionResult.Outcome)
+				assert.Equal(t, tc.wantNote, res.result.Problem.Kind)
+				assert.Contains(t, res.result.Problem.Details, tc.wantErr)
+			} else if tc.wantNote != "" {
+				require.NotNil(t, res.result)
+				assert.Equal(t, tc.wantNote, res.result.Note)
 			}
 			illRepo.AssertExpectations(t)
 			emailSvc.AssertExpectations(t)
@@ -4937,7 +4921,7 @@ func TestHandleInvokeActionBorrowerActionSendNotification(t *testing.T) {
 	mockPrRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(pr_db.Template{Body: "body", Subject: pgtype.Text{String: "subj", Valid: true}}, nil)
 
 	action := BorrowerActionSendNotification
-	data := map[string]any{"autoActionParams": proapi.ModelAction_Params{
+	data := map[string]any{"staticActionParams": proapi.ModelAction_Params{
 		SendTo:        &[]proapi.ModelActionParamsSendTo{proapi.ModelActionParamsSendToPatron, proapi.ModelActionParamsSendToStaff},
 		TemplateLabel: ptr("received-template"),
 	}}
@@ -4961,15 +4945,17 @@ func TestHandleInvokeActionBorrowerActionSendNotification_emailServiceNotReady(t
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}}, nil)
 
 	action := BorrowerActionSendNotification
-	data := map[string]any{"autoActionParams": proapi.ModelAction_Params{
+	data := map[string]any{"staticActionParams": proapi.ModelAction_Params{
 		SendTo:        &[]proapi.ModelActionParamsSendTo{proapi.ModelActionParamsSendToPatron, proapi.ModelActionParamsSendToStaff},
 		TemplateLabel: ptr("received-template"),
 	}}
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}, CustomData: data}})
 
-	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.NotNil(t, resultData)
-	assert.Equal(t, "email service is not ready to send", resultData.Note)
+	assert.Equal(t, events.EventStatusProblem, status)
+	assert.Equal(t, ActionOutcomeFailure, resultData.ActionResult.Outcome)
+	assert.Equal(t, "email service is not ready to send", resultData.Problem.Details)
+	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
 	assert.Equal(t, BorrowerStateReceived, mockPrRepo.savedPr.State)
 }
 
@@ -4993,7 +4979,7 @@ func TestHandleInvokeActionLenderActionSendNotification(t *testing.T) {
 	mockPrRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(pr_db.Template{Body: "body", Subject: pgtype.Text{String: "subj", Valid: true}}, nil)
 
 	action := LenderActionSendNotification
-	data := map[string]any{"autoActionParams": proapi.ModelAction_Params{
+	data := map[string]any{"staticActionParams": proapi.ModelAction_Params{
 		SendTo:        &[]proapi.ModelActionParamsSendTo{proapi.ModelActionParamsSendToStaff},
 		TemplateLabel: ptr("new-supply-request-notification"),
 	}}
@@ -5022,15 +5008,17 @@ func TestHandleInvokeActionLenderActionSendNotification_emailServiceNotReady(t *
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}}, nil)
 
 	action := LenderActionSendNotification
-	data := map[string]any{"autoActionParams": proapi.ModelAction_Params{
+	data := map[string]any{"staticActionParams": proapi.ModelAction_Params{
 		SendTo:        &[]proapi.ModelActionParamsSendTo{proapi.ModelActionParamsSendToStaff},
 		TemplateLabel: ptr("new-supply-request-notification"),
 	}}
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}, CustomData: data}})
 
-	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.NotNil(t, resultData)
-	assert.Equal(t, "email service is not ready to send", resultData.Note)
+	assert.Equal(t, events.EventStatusProblem, status)
+	assert.Equal(t, ActionOutcomeFailure, resultData.ActionResult.Outcome)
+	assert.Equal(t, "email service is not ready to send", resultData.Problem.Details)
+	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
 	assert.Equal(t, LenderStateNew, mockPrRepo.savedPr.State)
 }
 
@@ -5311,7 +5299,7 @@ func TestHandleInvokeBorrowerActionSupplyDocument(t *testing.T) {
 	lmsAdapter.AssertNotCalled(t, "RequestItem", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 	if assert.Len(t, mockEventBus.createdTaskData, 1) {
 		assert.Equal(t, BorrowerActionSendNotification, *mockEventBus.createdTaskData[0].Action)
-		params := mockEventBus.createdTaskData[0].CustomData["autoActionParams"].(*proapi.ModelAction_Params)
+		params := mockEventBus.createdTaskData[0].CustomData["staticActionParams"].(*proapi.ModelAction_Params)
 		assert.Equal(t, "copy-completed-notification", *params.TemplateLabel)
 		assert.Equal(t, []proapi.ModelActionParamsSendTo{proapi.ModelActionParamsSendToPatron}, *params.SendTo)
 	}

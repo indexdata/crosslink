@@ -1123,3 +1123,75 @@ func TestStateModelServiceConcurrentGetStateModel(t *testing.T) {
 	}
 	assert.NotNil(t, first)
 }
+
+func TestValidateStateModelContinueOn(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		policy  *[]proapi.ModelActionContinueOn
+		wantErr string
+	}{
+		{name: "omitted"},
+		{name: "empty", policy: ptr([]proapi.ModelActionContinueOn{})},
+		{name: "problem only", policy: ptr([]proapi.ModelActionContinueOn{proapi.PROBLEM})},
+		{name: "error only", policy: ptr([]proapi.ModelActionContinueOn{proapi.ERROR})},
+		{name: "both", policy: ptr([]proapi.ModelActionContinueOn{proapi.PROBLEM, proapi.ERROR})},
+		{name: "success", policy: ptr([]proapi.ModelActionContinueOn{"SUCCESS"}), wantErr: "invalid continueOn status"},
+		{name: "processing", policy: ptr([]proapi.ModelActionContinueOn{"PROCESSING"}), wantErr: "invalid continueOn status"},
+		{name: "unknown", policy: ptr([]proapi.ModelActionContinueOn{"stop"}), wantErr: "invalid continueOn status"},
+		{name: "duplicate", policy: ptr([]proapi.ModelActionContinueOn{proapi.PROBLEM, proapi.PROBLEM}), wantErr: "repeats continueOn status"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			model := &proapi.StateModel{
+				Type: proapi.StateModelTypeStateModel, Name: "test", Version: "1.0.0",
+				States: []proapi.ModelState{{Name: "NEW", Side: proapi.REQUESTER, Initial: ptr(true), Actions: &[]proapi.ModelAction{
+					{Name: string(BorrowerActionValidatePatron), ContinueOn: tc.policy},
+				}}},
+			}
+			err := ValidateStateModel(model)
+			if tc.wantErr == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.ErrorContains(t, err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestDefaultStateModelContinuationPoliciesAndRecoveryTransition(t *testing.T) {
+	model, err := LoadStateModelByName("default")
+	if !assert.NoError(t, err) {
+		return
+	}
+	var policyCount, failureCount int
+	for _, state := range model.States {
+		if state.Actions == nil {
+			continue
+		}
+		for _, action := range *state.Actions {
+			label := string(state.Side) + "/" + state.Name + "/" + action.Name
+			switch {
+			case action.Name == "send-notification", state.Side == proapi.SUPPLIER && (action.Name == "request-item" || action.Name == "will-supply"):
+				if assert.NotNil(t, action.ContinueOn, label) {
+					assert.ElementsMatch(t, []proapi.ModelActionContinueOn{proapi.PROBLEM, proapi.ERROR}, *action.ContinueOn, label)
+				}
+				policyCount++
+			case state.Side == proapi.REQUESTER && action.Name == "validate-patron":
+				if assert.NotNil(t, action.ContinueOn, label) {
+					assert.Equal(t, []proapi.ModelActionContinueOn{proapi.PROBLEM}, *action.ContinueOn, label)
+				}
+				policyCount++
+			default:
+				assert.Nil(t, action.ContinueOn, label)
+			}
+			if action.Transitions != nil && action.Transitions.Failure != nil {
+				failureCount++
+				assert.Equal(t, proapi.SUPPLIER, state.Side)
+				assert.Equal(t, "VALIDATED", state.Name)
+				assert.Equal(t, "request-item", action.Name)
+				assert.Equal(t, "ITEM_PENDING", *action.Transitions.Failure)
+			}
+		}
+	}
+	assert.Equal(t, 11, policyCount)
+	assert.Equal(t, 1, failureCount)
+}

@@ -3,7 +3,7 @@ stateModels:
     type: StateModel
     name: CrossLink State Model
     desc: "Requester/Supplier workflow for returnable loans and non-returnable copies over ISO18626."
-    version: 3.8.0
+    version: 3.9.0
     pullslipPdfTemplateLabel: pullslip-pdf
     selector:
       serviceType: [Copy, Loan, CopyOrLoan]
@@ -19,6 +19,7 @@ stateModels:
         closingAction: close-request
         actions:
           - name: validate-patron
+            continueOn: [PROBLEM]
             desc: "Validate the patron via NCIP LookupUser, if enabled"
             transitions:
               success: VALIDATED
@@ -43,6 +44,7 @@ stateModels:
         editable: true
         actions:
           - name: validate-patron
+            continueOn: [PROBLEM]
             desc: Revalidate the patron after correcting the request
             transitions:
               success: VALIDATED
@@ -455,6 +457,7 @@ stateModels:
             transitions:
               success: SHIPPED_RETURNED
           - name: send-notification
+            continueOn: [PROBLEM, ERROR]
             desc: Send email notification when the item is received
             trigger: auto
             params:
@@ -605,6 +608,7 @@ stateModels:
         terminal: true
         actions:
           - name: send-notification
+            continueOn: [PROBLEM, ERROR]
             desc: Send email notification when the document is delivered
             trigger: auto
             # FIXME: CopyOrLoan may be completed with a regular loan and no notification should be sent
@@ -623,6 +627,7 @@ stateModels:
         terminal: true
         actions:
           - name: send-notification
+            continueOn: [PROBLEM, ERROR]
             desc: Send email notification when the request is cancelled
             trigger: auto
             params:
@@ -639,6 +644,7 @@ stateModels:
         terminal: true
         actions:
           - name: send-notification
+            continueOn: [PROBLEM, ERROR]
             desc: Send email notification when item is unfilled
             trigger: auto
             params:
@@ -682,6 +688,7 @@ stateModels:
         primaryAction: validate-patron
         actions:
           - name: send-notification
+            continueOn: [PROBLEM, ERROR]
             desc: Send staff email notification when a new supply request is received
             trigger: auto
             params:
@@ -701,6 +708,7 @@ stateModels:
         closingAction: cannot-supply
         actions:
           - name: request-item
+            continueOn: [PROBLEM, ERROR]
             desc: Reserve the item in the supplier LMS
             appliesTo:
               serviceTypes: [Loan]
@@ -711,6 +719,7 @@ stateModels:
               failure: ITEM_PENDING
             trigger: auto
           - name: will-supply
+            continueOn: [PROBLEM, ERROR]
             desc: Indicate supplier will supply and send ISO18626 WillSupply
             appliesTo:
               serviceTypes: [Copy, CopyOrLoan]
@@ -718,7 +727,6 @@ stateModels:
               serviceTypes: [Copy, CopyOrLoan]
             transitions:
               success: WILL_SUPPLY
-              failure: VALIDATED
             trigger: auto
           - name: cannot-supply
             desc: Indicate cannot supply and send ISO18626 Unfilled
@@ -750,10 +758,10 @@ stateModels:
         needsAttention: true
         actions:
           - name: request-item
+            continueOn: [PROBLEM, ERROR]
             desc: Retry reserving the item in the supplier LMS
             transitions:
               success: WILL_SUPPLY_PENDING
-              failure: ITEM_PENDING
           - name: add-item
             desc: Manually attach an item and continue the supply workflow
             transitions:
@@ -785,10 +793,10 @@ stateModels:
         closingAction: cannot-supply
         actions:
           - name: will-supply
+            continueOn: [PROBLEM, ERROR]
             desc: Indicate supplier will supply and send ISO18626 WillSupply
             transitions:
               success: WILL_SUPPLY
-              failure: WILL_SUPPLY_PENDING
             trigger: auto
           - name: cannot-supply
             desc: Indicate cannot supply and send ISO18626 Unfilled

@@ -22,6 +22,12 @@ docker compose up
 
 The loan scenarios generate a supplier pull slip before shipping; this queues `pullslip-printed` and moves the supplier to `SEARCHING`.
 
+The local stack has no SMTP service. Notification actions therefore record
+`PROBLEM` with outcome `failure` and set `needsAttention`, while their configured
+`continueOn` policy lets fulfillment continue without a transition. The collection
+checks the notification problem and its details separately from successful
+fulfillment actions.
+
 The happy path ships with a past due date, receives the item, explicitly invokes supplier `overdue`, requests renewal, and accepts it with a future date before completing checkout/check-in and return. It checks `OVERDUE`, `RENEWAL_PENDING`, `RENEWED`, and due dates on both sides without waiting for the scheduler. Dates are calculated relative to the run time.
 
 The separate `Open-ended loan` folder ships without a date and completes receipt and return, checking that neither side has a due date. This requires the local mock's undated checkout responses and absent `defaultLoanPeriod`.

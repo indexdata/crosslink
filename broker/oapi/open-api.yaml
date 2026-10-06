@@ -1361,9 +1361,28 @@ components:
           allOf:
             - $ref: '#/components/schemas/AppliesTo'
           description: Makes this the primary action for the selected service types. At most one applicable action may be primary for a service type in a state.
+        continueOn:
+          type: array
+          uniqueItems: true
+          description: >-
+            Non-success action results that may continue normal execution without propagation.
+            SUCCESS always continues. Omitted or empty means PROBLEM and ERROR stop and propagate,
+            after persisting the result and any outcome transition but before running further
+            automatic actions. Errors processing tasks, committing the request update, or
+            propagating a child-chain failure are never tolerated by this policy.
+          items:
+            type: string
+            enum:
+              - PROBLEM
+              - ERROR
         transitions:
           type: object
-          description: Action outcome to state transition mapping. When no transition is defined, the action is considered to be non-state-changing.
+          description: >-
+            Action outcome to state transition mapping. Outcome names only select target states.
+            An unbound outcome leaves the request in its current state. Binding an outcome does
+            not suppress errors; continueOn controls which non-success results may continue.
+            During normal continuation, a state change runs the target state's entry actions
+            and finishes the source state's chain; a self-transition does not rerun entry actions.
           additionalProperties: false
           properties:
             success:
@@ -1371,13 +1390,13 @@ components:
               description: Target state when the action succeeds.
             failure:
               type: string
-              description: Target state when the action fails.
+              description: Target state for the failure outcome. Execution and attention behavior depend on event status, not the outcome name.
             review:
               type: string
               description: Target state when the action requires review.
         params:
           type: object
-          description: Parameters for the action. The presence of parameters indicates that the action requires additional input to be executed.
+          description: Static action parameters supplied for both manual and automatic execution. Parameters already carried by a task retain precedence.
           additionalProperties: true
           properties:
             sendTo:

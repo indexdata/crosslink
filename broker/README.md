@@ -274,6 +274,52 @@ For Loan and CopyOrLoan requests, generating a pull-slip PDF queues the `pullsli
 
 The `email-pullslips` batch queues the same action after SMTP successfully accepts an email containing a PDF. Emails without PDFs and failed generation or sending do not advance requests. Actions run asynchronously and recheck the current state. If queuing fails after output, the operation reports an error; retrying may reproduce the PDF or email, while repeated `pullslip-printed` actions in `SEARCHING` are harmless. Existing saved batch queries are not rewritten; use `WILL_SUPPLY` for pull-slip queries and include `SEARCHING` in aging queries as needed.
 
+## Action results and automatic execution
+
+Action outcomes (`success`, `failure`, and `review`) only select their configured
+transitions. An unbound outcome leaves the request in its current state. Each
+action declaration may specify `continueOn: [PROBLEM, ERROR]` to tolerate those
+non-success results; omitted or empty `continueOn` tolerates neither. `SUCCESS`
+always continues normally.
+
+| Result | Bound outcome | Unbound outcome |
+| --- | --- | --- |
+| `SUCCESS` | Apply the transition and continue normally | Continue in the current state |
+| `PROBLEM` / `ERROR`, listed in `continueOn` | Apply the transition and continue normally | Continue in the current state |
+| `PROBLEM` / `ERROR`, not listed | Persist the transition, then stop and propagate | Stay in the current state, stop and propagate |
+
+Normal continuation runs the remaining automatic actions in the current state.
+A change of state runs the target state's entry actions and finishes the source
+state's chain; a self-transition does not restart entry actions. A non-tolerated
+result is persisted, along with any outcome transition, before propagation, and
+no further automatic actions run, including target-state entry actions. The
+source state's action declaration determines tolerance for both manual and
+automatic execution. Errors processing tasks, committing the request update, or
+propagating a child-chain failure are never tolerated by `continueOn`. An action's
+reported `ERROR` can be tolerated, including technical failures within that action.
+
+Both manual and automatic actions receive the static `params` declared for the
+action in the current state. Parameters already carried by a task retain
+precedence. Static configuration is carried under `staticActionParams` in task
+custom data, separately from user input.
+
+Attention starts with the resulting state's `needsAttention` setting, even when
+the action has no transition. Both `ERROR` and `PROBLEM` force attention to true.
+A subsequent successful action resets attention to its resulting state's setting;
+previous failures remain in event history. Outcome `failure` has no separate
+attention or execution rule.
+
+Email notification preparation and delivery failures produce `PROBLEM` with
+outcome `failure`, including the cause in the event result and manual action
+response. The default notification actions use `continueOn: [PROBLEM, ERROR]`
+without failure self-transitions so fulfillment can continue. Requester patron
+validation tolerates only `PROBLEM`; supplier item reservation and will-supply
+tolerate both statuses, retaining the reservation failure transition to
+ITEM_PENDING. Existing custom models must declare `continueOn` wherever they
+intend to tolerate failures; binding an outcome no longer suppresses them.
+Email sending remains synchronous; successful sends and skipped recipients retain
+their existing behavior.
+
 ## Loan recall
 
 Lenders can invoke `recall` from `RECEIVED`, `RENEWED`, `OVERDUE`, or

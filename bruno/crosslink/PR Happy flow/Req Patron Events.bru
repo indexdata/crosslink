@@ -43,10 +43,20 @@ script:post-response {
     expect(events[0].eventStatus).to.equal("SUCCESS");
   };
   
-  ["validate-patron", "check-limit", "update-metadata", "check-duplicate", "send-request", "accept-condition", "receive", "send-notification", "renew", "check-out", "check-in", "ship-return"].forEach(action => {
+  ["validate-patron", "check-limit", "update-metadata", "check-duplicate", "send-request", "accept-condition", "receive", "renew", "check-out", "check-in", "ship-return"].forEach(action => {
     test(`Check ${action}`, () => {
       expectActionWithFirstSuccess(action);
     });
+  });
+
+  test("Check handled send-notification problem", () => {
+    const events = eventsByAction("send-notification");
+    expect(events.length).to.be.at.least(1);
+    expect(events[0].eventStatus).to.equal("PROBLEM");
+    expect(events[0].resultData.actionResult.outcome).to.equal("failure");
+    expect(events[0].resultData.actionResult).not.to.have.property("toState");
+    expect(events[0].resultData.actionResult.continuationAllowed).to.equal(true);
+    expect(events[0].resultData.problem.Details).to.equal("email service is not ready to send");
   });
 }
 

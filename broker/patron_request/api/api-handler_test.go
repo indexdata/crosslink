@@ -670,6 +670,23 @@ func TestPostPatronRequestsIdActionRejectsTerminate(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "Action terminate is not allowed")
 }
 
+func TestInvokeActionReturnsProblemDetails(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoOkapiOwner), new(MockEventBusCapture), mockEventRepo, tenant.NewResolver(), nil, 10)
+	handler.SetActionTaskProcessor(&MockActionTaskProcessorProblem{})
+	rr := httptest.NewRecorder()
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+
+	handler.invokeActionAndWriteResponse(rr, ctx, "pr-1", "RECEIVED", invokeActionData(prservice.BorrowerActionSendNotification, "test-user"))
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	var result proapi.ActionResult
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &result))
+	assert.Equal(t, string(events.EventStatusProblem), result.Result)
+	assert.Equal(t, prservice.ActionOutcomeFailure, result.Outcome)
+	require.NotNil(t, result.Message)
+	assert.Equal(t, "email template body: unknown field PatronGivenName", *result.Message)
+}
+
 func TestPostPatronRequestsIdTerminateStoresTenantUserAndActionInInvokeTask(t *testing.T) {
 	tenantResolver := tenant.NewResolver().WithTenantToSymbol("ISIL:DK-{tenant}")
 	eventBus := new(MockEventBusCapture)
@@ -1334,6 +1351,14 @@ func (m *MockActionTaskProcessor) ProcessInvokeActionTask(ctx common.ExtendedCon
 }
 
 type MockActionTaskProcessorExclusiveError struct{}
+
+type MockActionTaskProcessorProblem struct{}
+
+func (m *MockActionTaskProcessorProblem) ProcessInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error) {
+	status, result := events.NewProblemResult("notification failed", "email template body: unknown field PatronGivenName")
+	result.ActionResult = &events.ActionResult{Outcome: prservice.ActionOutcomeFailure}
+	return events.Event{ID: event.ID, EventStatus: status, ResultData: *result}, nil
+}
 
 func (m *MockActionTaskProcessorExclusiveError) ProcessInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error) {
 	return events.Event{
