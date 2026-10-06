@@ -3,6 +3,18 @@
   "name": "Directory",
   "provides": [
     {
+      "id": "directory-oapi",
+      "version": "1.0",
+      "handlers": [
+        {
+          "methods": ["GET"],
+          "pathPattern": "/directory/oapi",
+          "permissionsRequired": [],
+          "permissionsDesired": []
+        }
+      ]
+    },
+    {
       "id": "entries",
       "version": "1.0",
       "handlers": [

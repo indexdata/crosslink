@@ -1,5 +1,22 @@
 # Directory service
 
+## OpenAPI specification
+
+`GET /directory/oapi` returns the bundled specification defined in
+[api.yaml](api.yaml). No Directory role is required. Select the representation
+with the optional `format` query parameter:
+
+```sh
+curl http://localhost:8086/directory/oapi
+curl http://localhost:8086/directory/oapi?format=yaml
+curl http://localhost:8086/directory/oapi?format=json
+```
+
+YAML is the default (`application/yaml`); JSON uses `application/json`. Both
+represent the complete specification, including references and extensions. YAML
+comments and source formatting are not preserved. Unsupported or empty format
+values return `400`. The `Accept` header does not select the representation.
+
 ## Catalog coverage year filtering
 
 Set `catalogConfig.queryConfig.year` to `dc.date = {term}` for CQL or

@@ -5,6 +5,8 @@ generate:
   models: true
   embedded-spec: true
 output: api/directory.gen.go
+compatibility:
+  preserve-original-operation-id-casing-in-embedded-spec: true
 output-options:
   nullable-type: true
   skip-prune: true
