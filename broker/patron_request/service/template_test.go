@@ -66,3 +66,47 @@ func TestGetStateModelTemplateDefaultAudienceNeutralMatchesAnyAudience(t *testin
 		})
 	}
 }
+
+func TestGetStateModelTemplateDefaultPrefersExactAudienceOverNeutral(t *testing.T) {
+	originalDefaults := stateModelsConfig.TemplateDefaults
+	t.Cleanup(func() {
+		stateModelsConfig.TemplateDefaults = originalDefaults
+	})
+	patronAudience := proapi.TemplateAudiencePatron
+	stateModelsConfig.TemplateDefaults = []proapi.CreateTemplate{
+		{
+			Title:       "Audience-neutral notification",
+			Purpose:     proapi.Email,
+			Body:        "Neutral notification body",
+			ContentType: proapi.Text,
+			Labels:      []string{"overlapping-audience-notification"},
+		},
+		{
+			Title:       "Patron notification",
+			Purpose:     proapi.Email,
+			Body:        "Patron notification body",
+			ContentType: proapi.Text,
+			Labels:      []string{"overlapping-audience-notification"},
+			Audience:    &patronAudience,
+		},
+	}
+
+	patronTemplate, err := GetStateModelTemplateDefault(
+		proapi.Email,
+		proapi.TemplateAudiencePatron,
+		"overlapping-audience-notification",
+	)
+	assert.NoError(t, err)
+	assert.Equal(t, "Patron notification body", patronTemplate.Body)
+	assert.Equal(t, string(proapi.TemplateAudiencePatron), patronTemplate.Audience.String)
+	assert.True(t, patronTemplate.Audience.Valid)
+
+	staffTemplate, err := GetStateModelTemplateDefault(
+		proapi.Email,
+		proapi.TemplateAudienceStaff,
+		"overlapping-audience-notification",
+	)
+	assert.NoError(t, err)
+	assert.Equal(t, "Neutral notification body", staffTemplate.Body)
+	assert.False(t, staffTemplate.Audience.Valid)
+}
