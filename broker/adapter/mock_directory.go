@@ -1,7 +1,6 @@
 package adapter
 
 import (
-	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -124,8 +123,9 @@ func (m *MockDirectoryLookupAdapter) Lookup(ctx common.ExtendedContext, params D
 	return dirs, strings.Join(params.Symbols, ","), nil
 }
 
-func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData dirapi.Entry, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo) {
+func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData dirapi.Entry, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo, policy dirapi.LoadBalancingPolicy) ([]Supplier, RotaInfo) {
 	var rotaInfo RotaInfo
+	rotaInfo.LoadBalancingPolicy = policy
 	rotaInfo.Request.Type = "mock"
 	rotaInfo.Suppliers = make([]SupplierMatch, 0, len(entries))
 	filtered := make([]Supplier, 0, len(entries))
@@ -142,6 +142,8 @@ func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx common.ExtendedContext, e
 			ItemLoanPolicy:     sup.ItemLoanPolicy,
 			LocationPreference: sup.LocationPreference,
 			ShelvingPreference: sup.ShelvingPreference,
+			Local:              sup.Local,
+			LoadBalancingScore: sup.LoadBalancingScore,
 			Match:              match,
 		})
 	}
@@ -152,7 +154,15 @@ func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx common.ExtendedContext, e
 		} else if !a.Local && b.Local {
 			return 1
 		}
-		return cmp.Compare(a.Ratio, b.Ratio)
+		return compareLoadBalancingScores(a.LoadBalancingScore, b.LoadBalancingScore, policy)
+	})
+	slices.SortFunc(rotaInfo.Suppliers, func(a, b SupplierMatch) int {
+		if a.Match && !b.Match {
+			return -1
+		} else if !a.Match && b.Match {
+			return 1
+		}
+		return CompareSuppliers(a, b, policy)
 	})
 	return filtered, rotaInfo
 }

@@ -124,7 +124,7 @@ Configuration is provided via environment variables:
 | `HOLDINGS_ISXN_LOOKUP`           | Whether to use ISBN/ISSN lookup for `sru` method   | `false`                                   |
 | `HOLDINGS_FORMAT`                | Parser for SRU holdings: `reservoir` , `marc` ,    | `reservoir`                               |
 |                                  | `opac` or `MARC-21plus-1`                          |                                           |
-| `CONSORTIUM_SYMBOL`              | Designates peer for which configuration is used    | (empty value)                             |
+| `CONSORTIUM_SYMBOL`              | Consortium configuration peer, including lender scoring policy    | (empty value)                             |
 |                                  | for consortium. At this time, it is used when      |                                           |
 |                                  | `HOLDINGS_ADAPTER` = `consortium` .                |                                           |
 | `DIRECTORY_ADAPTER`              | Directory lookup method: `mock` or `api`           | `mock`                                    |
@@ -341,3 +341,16 @@ that rebuilds the rota still retires the old rota using the existing retry behav
 Clients should serialize mutations and refresh after conflicts. After an uncertain
 outcome (for example a lost response), refresh before offering another edit; do not
 automatically retry relative moves. This backend change adds no UI controls.
+
+### Lender load balancing
+
+Lender scoring uses the consortium Directory entry's `illConfig.loadBalancingPolicy`.
+`deficit` prioritizes the largest lending shortfall:
+`actualBorrows * (desiredLoans / desiredBorrows) - actualLoans`.
+`proportional` (the default) prioritizes the smallest actual-to-desired ratio:
+`(actualLoans / max(actualBorrows, 1)) / (desiredLoans / desiredBorrows)`.
+Each lender supplies its own `lendToBorrowRatio` (desired loans:borrows), defaulting
+to 1:1. An omitted or null policy, missing `illConfig`, or unset
+`CONSORTIUM_SYMBOL` uses proportional, regardless of requester settings.
+Locality, cost, network priority, and holdings preferences retain precedence over the score; last-resort lenders remain at the end.
+Rota diagnostics include the selected `loadBalancingPolicy` and raw scores.

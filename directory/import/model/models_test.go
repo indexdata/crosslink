@@ -68,6 +68,42 @@ func TestEntryAggregateRejectsInvalidClosureRange(t *testing.T) {
 	require.EqualError(t, aggregate.NormalizeAndValidate(), "closure 1 endDate must not precede startDate")
 }
 
+func TestEntryAggregateValidatesLendToBorrowRatio(t *testing.T) {
+	valid := []string{"50:2", "5.5:1", "0.5:2", "005.50:01", "9999.99:9999.99", "0.01:9999.99", "9999.99:0.01", "0000.01:0001.00", "1000:1", "0100:1", "0010:1", "0001:1"}
+	for _, ratio := range valid {
+		t.Run("valid "+ratio, func(t *testing.T) {
+			aggregate := validEntryAggregate()
+			aggregate.Data.LendToBorrowRatio = &ratio
+			require.NoError(t, aggregate.NormalizeAndValidate())
+		})
+	}
+
+	invalid := []string{"0:1", "1:0", "0.0:2", "-1:2", "+1:2", "1e2:1", "1 :2", ".5:1", "5.:1", "1", "1:2:3", "10000:1", "1:10000", "00001:1", "1:00001", "1.001:1", "1:1.001", "0.001:1", "1:0.001", "0.00:1", "1:0.00", "9999.99:9999.999"}
+	for _, ratio := range invalid {
+		t.Run("invalid "+ratio, func(t *testing.T) {
+			aggregate := validEntryAggregate()
+			aggregate.Data.LendToBorrowRatio = &ratio
+
+			err := aggregate.NormalizeAndValidate()
+
+			require.EqualError(t, err, "invalid lendToBorrowRatio: must contain two positive unsigned decimals separated by a colon, each with at most four integer digits and two decimal places")
+		})
+	}
+}
+
 func validEntryAggregate() EntryAggregate {
 	return EntryAggregate{Key: uuid.New(), Data: EntryData{Name: "Library", Type: "Institution", Symbols: []SymbolRef{{Authority: "isil", Symbol: "lib"}}}}
+}
+
+func TestEntryAggregateLoadBalancingPolicy(t *testing.T) {
+	for _, policy := range []string{"deficit", "proportional", "invalid", ""} {
+		aggregate := validEntryAggregate()
+		aggregate.Data.ILLConfig = &ILLConfig{LoadBalancingPolicy: &policy}
+		err := aggregate.NormalizeAndValidate()
+		if policy == "invalid" || policy == "" {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err)
+		}
+	}
 }
