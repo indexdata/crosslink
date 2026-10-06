@@ -1591,6 +1591,12 @@ components:
           type: string
         lmsLocationCode:
           type: string
+        lendToBorrowRatio:
+          type: string
+          maxLength: 15
+          pattern: '^((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9])):((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9]))$'
+          description: Desired lending-to-borrowing ratio, expressed as desired_loans:desired_borrows. Both values must be positive unsigned decimals with one to four integer digits (including leading zeros) and at most two decimal places, ranging from 0.01 to 9999.99.
+          example: '50:2'
         illConfig:
           $ref: '#/components/schemas/AddEntryIllConfig'
         hrid:
@@ -1895,8 +1901,9 @@ components:
         maxRequestsPerPatron: { type: [integer, "null"], format: int32, minimum: 0 }
         minimumCost: { type: [number, "null"], format: double, minimum: 0 }
         loadBalancingPolicy:
-          allOf: [{ $ref: '#/components/schemas/LoadBalancingPolicy' }]
-          nullable: true
+          anyOf:
+            - $ref: '#/components/schemas/LoadBalancingPolicy'
+            - type: "null"
           description: Consortium lender scoring policy. Omitted or null defaults to proportional.
 
     ImportCatalogConfig:
@@ -2070,8 +2077,7 @@ components:
         phoneNumber: { type: [string, "null"] }
         lmsLocationCode: { type: [string, "null"] }
         lendToBorrowRatio:
-          type: string
-          nullable: true
+          type: [string, "null"]
           maxLength: 15
           pattern: '^((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9])):((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9]))$'
           description: Desired lending-to-borrowing ratio, expressed as desired_loans:desired_borrows. Both values must be positive unsigned decimals with one to four integer digits (including leading zeros) and at most two decimal places, ranging from 0.01 to 9999.99.
@@ -2308,12 +2314,6 @@ components:
               type: string
               format: uuid
               description: Unique id
-            lendToBorrowRatio:
-              type: string
-              maxLength: 15
-              pattern: '^((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9])):((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9]))$'
-              description: Desired lending-to-borrowing ratio, expressed as desired_loans:desired_borrows. Both values must be positive unsigned decimals with one to four integer digits (including leading zeros) and at most two decimal places, ranging from 0.01 to 9999.99.
-              example: '50:2'
             symbols:
               type: array
               items:
@@ -2349,8 +2349,9 @@ components:
       type: object
       properties:
         loadBalancingPolicy:
-          allOf: [{ $ref: '#/components/schemas/LoadBalancingPolicy' }]
-          nullable: true
+          anyOf:
+            - $ref: '#/components/schemas/LoadBalancingPolicy'
+            - type: "null"
           description: Consortium lender scoring policy. Omitted or null defaults to proportional.
         isPickupLocation:
           type: boolean
@@ -2636,8 +2637,7 @@ components:
         lmsLocationCode:
           type: [string, "null"]
         lendToBorrowRatio:
-          type: string
-          nullable: true
+          type: [string, "null"]
           maxLength: 15
           pattern: '^((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9])):((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9]))$'
           description: Desired lending-to-borrowing ratio, expressed as desired_loans:desired_borrows. Both values must be positive unsigned decimals with one to four integer digits (including leading zeros) and at most two decimal places, ranging from 0.01 to 9999.99.
