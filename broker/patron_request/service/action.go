@@ -2096,8 +2096,7 @@ func (a *PatronRequestActionService) sendNotificationLenderRequest(ctx common.Ex
 	return a.sendEmailNotification(ctx, pr, params, pr.SupplierSymbol.String)
 }
 
-func logNotificationProblem(ctx common.ExtendedContext, pr pr_db.PatronRequest, msg string, err error) actionExecutionResult {
-	ctx.Logger().Error(msg, "error", err)
+func logNotificationProblem(_ common.ExtendedContext, pr pr_db.PatronRequest, msg string, err error) actionExecutionResult {
 	details := msg
 	if err != nil {
 		details += ": " + err.Error()
@@ -2154,7 +2153,7 @@ func (a *PatronRequestActionService) sendEmailNotification(ctx common.ExtendedCo
 }
 
 func (a *PatronRequestActionService) createAndSendEmail(ctx common.ExtendedContext, pr pr_db.PatronRequest, symbol string, from string, recipients []string, label string, audience proapi.ModelActionParamsSendTo) error {
-	template, err := a.prRepo.GetTemplateByPurposeAudienceLabelAndOwner(ctx, pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams{
+	template, err := ResolveTemplate(ctx, a.prRepo, pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams{
 		Purpose:  string(proapi.Email),
 		Owner:    symbol,
 		Label:    label,

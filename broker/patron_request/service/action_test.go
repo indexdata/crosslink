@@ -1,11 +1,13 @@
 package prservice
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -28,6 +30,7 @@ import (
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/crosslink/ncip"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -4607,6 +4610,50 @@ func TestCreateAndSendEmail(t *testing.T) {
 			tc.assertEmail(t, mockEmail)
 		})
 	}
+}
+
+func TestCreateAndSendEmail_MissingDatabaseTemplateUsesStateModelDefault(t *testing.T) {
+	prRepo := new(MockPrRepo)
+	prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(pr_db.Template{}, pgx.ErrNoRows)
+	emailSvc := new(EmailSenderMock)
+	emailSvc.On("SendEmail", "sender@example.com").Return(nil)
+	svc := newActionServiceWithEmail(prRepo, emailSvc)
+
+	err := svc.createAndSendEmail(
+		appCtx,
+		pr_db.PatronRequest{RequesterReqID: pgtype.Text{String: "REQ-1", Valid: true}},
+		"ISIL:TEST",
+		"sender@example.com",
+		[]string{"patron@example.com"},
+		"copy-completed-notification",
+		proapi.ModelActionParamsSendToPatron,
+	)
+
+	assert.NoError(t, err)
+	emailSvc.AssertCalled(t, "SendEmail", "sender@example.com")
+}
+
+func TestLogNotificationProblemStoresCauseWithoutWritingToStandardLog(t *testing.T) {
+	var logOutput bytes.Buffer
+	ctx := common.CreateExtCtxWithLogArgsAndHandler(
+		context.Background(),
+		nil,
+		slog.NewTextHandler(&logOutput, nil),
+	)
+
+	result := logNotificationProblem(
+		ctx,
+		pr_db.PatronRequest{},
+		"error sending email to patron",
+		errors.New(`template: pull-slip:1: executing "pull-slip" at <.Unsupported>: can't evaluate field Unsupported`),
+	)
+
+	assert.Empty(t, logOutput.String())
+	assert.Equal(t, events.EventStatusProblem, result.status)
+	assert.Equal(t, ActionOutcomeFailure, result.result.ActionResult.Outcome)
+	assert.Equal(t, "error sending email to patron", result.result.Problem.Kind)
+	assert.Contains(t, result.result.Problem.Details, "error sending email to patron")
+	assert.Contains(t, result.result.Problem.Details, "Unsupported")
 }
 
 // helpers for sendEmailNotification tests
