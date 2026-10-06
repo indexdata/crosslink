@@ -1596,13 +1596,26 @@ components:
       type: object
       title: Batch Action Properties
       description: Common fields for creating and returning a scheduled batch action
+      allOf:
+        - $ref: '#/components/schemas/BatchActionMutableProperties'
+        - type: object
+          properties:
+            actionName:
+              $ref: '#/components/schemas/BatchActionName'
+      required:
+        - schedule
+        - actionName
+        - batchQuery
+
+    BatchActionMutableProperties:
+      type: object
+      title: Batch Action Mutable Properties
+      description: Mutable fields of a scheduled batch action
       properties:
         schedule:
           type: string
           minLength: 1
           description: RRULE schedule expression, e.g. "FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0" (every Monday at 06:00)
-        actionName:
-          $ref: '#/components/schemas/BatchActionName'
         title:
           type: string
           minLength: 1
@@ -1615,10 +1628,6 @@ components:
           type: object
           description: Parameters for the batch action. For request-aging, interval is required and must be a Go duration string such as "24h" or "168h". Additional parameters are passed to the generated patron-request background action.
           additionalProperties: true
-      required:
-        - schedule
-        - actionName
-        - batchQuery
 
     BatchActions:
       type: object
@@ -1640,9 +1649,11 @@ components:
       description: Request body for creating a batch action
       allOf:
         - $ref: '#/components/schemas/BatchActionProperties'
-        - type: object
-          required:
-            - title
+      required:
+        - schedule
+        - actionName
+        - title
+        - batchQuery
 
     BatchActionDefault:
       title: Batch Action Default
@@ -1654,27 +1665,19 @@ components:
             titleKey:
               type: string
               description: Stable identifier for this default, for clients to look up a localized title
-          required:
-            - titleKey
+      required:
+        - schedule
+        - actionName
+        - title
+        - batchQuery
+        - titleKey
 
     UpdateBatchAction:
       type: object
       title: Update Batch Action
       description: Request body for updating a batch action
-      properties:
-        title:
-          type: string
-          description: Title of the batch action, for display purposes
-        schedule:
-          type: string
-          description: RRULE schedule expression, e.g. "FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0" (every Monday at 06:00)
-        batchQuery:
-          type: string
-          description: Batch action selection query in CQL format
-        actionParams:
-          type: object
-          description: Parameters for the batch action
-          additionalProperties: true
+      allOf:
+        - $ref: '#/components/schemas/BatchActionMutableProperties'
       required:
         - schedule
         - batchQuery
@@ -1753,16 +1756,31 @@ components:
       type: object
       title: Template Properties
       description: Common fields for creating and returning a template
+      allOf:
+        - $ref: '#/components/schemas/TemplateMutableProperties'
+        - type: object
+          properties:
+            purpose:
+              $ref: '#/components/schemas/TemplatePurpose'
+      required:
+        - title
+        - purpose
+        - body
+        - contentType
+        - labels
+
+    TemplateMutableProperties:
+      type: object
+      title: Template Mutable Properties
+      description: Mutable fields of a template
       properties:
         title:
           type: string
           minLength: 1
           description: Human-readable title for the template
-        purpose:
-          $ref: '#/components/schemas/TemplatePurpose'
         subject:
           type: string
-          description: Subject line template, supports {{.X}} placeholders. Not used for pullslip templates. Supports same placeholders as template body.
+          description: Subject line template, supports {{.X}} placeholders. Not used for pullslip templates. Supports same placeholders as template body. Omit from a full-replacement update to clear it.
         body:
           type: string
           minLength: 1
@@ -1787,12 +1805,6 @@ components:
             minLength: 1
         audience:
           $ref: '#/components/schemas/TemplateAudience'
-      required:
-        - title
-        - purpose
-        - body
-        - contentType
-        - labels
 
     Templates:
       type: object
@@ -1820,25 +1832,8 @@ components:
       type: object
       title: Update Template
       description: Request body for replacing a template's mutable fields.
-      properties:
-        title:
-          type: string
-          description: Human-readable title for the template
-        subject:
-          type: string
-          description: Subject line template supporting {{.X}} placeholders. Not used for pull slip templates. Omit to clear. For full list of supported placeholders, see the Template object.
-        body:
-          type: string
-          description: Body of the email or pull slip template. Supports {{.X}} placeholders. For full list of supported placeholders, see the Template object.
-        contentType:
-          $ref: '#/components/schemas/TemplateContentType'
-        labels:
-          type: array
-          description: Labels identifying the template's usage context
-          items:
-            type: string
-        audience:
-          $ref: '#/components/schemas/TemplateAudience'
+      allOf:
+        - $ref: '#/components/schemas/TemplateMutableProperties'
       required:
         - title
         - body
