@@ -32,6 +32,9 @@
 --     and is omitted.
 --     Configure last-resort lenders after import because references to child
 --     entries cannot be resolved while their parent entry is being imported.
+--   * Each entry's policy.ill.InstitutionalLoanToBorrowRatio custom text
+--     property becomes lendToBorrowRatio unchanged. Missing properties become
+--     null; invalid or multiple values stop export before NDJSON is emitted.
 --   * The directory pickup tag marks an entry as a pickup location,
 --     independently of its LMS location code or NCIP/ISO endpoints.
 --   * default_service_level and minimum_cost seed loan and copy default tiers.
@@ -122,6 +125,7 @@ SELECT
     directory_entry.de_email_address AS email,
     directory_entry.de_phone_number AS phone_number,
     directory_entry.de_lms_location_code AS lms_location_code,
+    directory_entry.custom_properties_id,
     folio_location.item_location
 FROM directory_entry
 LEFT JOIN refdata_value AS entry_type
@@ -272,6 +276,49 @@ WHERE NOT EXISTS (
     FROM crosslink_export_entry_ids AS exported
     WHERE exported.entry_id = entry.entry_id
 );
+
+CREATE TEMP TABLE crosslink_entry_ratios ON COMMIT DROP AS
+SELECT
+    entry.entry_id,
+    entry.name,
+    count(property.id) AS property_count,
+    max(text_property.value) AS lend_to_borrow_ratio
+FROM crosslink_entry_base AS entry
+LEFT JOIN custom_property AS property
+  ON property.parent_id = entry.custom_properties_id
+ AND property.definition_id IN (
+     SELECT pd_id FROM custom_property_definition
+     WHERE pd_name = 'policy.ill.InstitutionalLoanToBorrowRatio'
+ )
+LEFT JOIN custom_property_text AS text_property ON text_property.id = property.id
+GROUP BY entry.entry_id, entry.name;
+
+DO $$
+DECLARE
+    problem text;
+BEGIN
+    SELECT string_agg(entry_id || ' (' || name || ')', ', ' ORDER BY entry_id)
+    INTO problem
+    FROM crosslink_entry_ratios
+    WHERE property_count > 1;
+    IF problem IS NOT NULL THEN
+        RAISE EXCEPTION 'Directory entries have multiple policy.ill.InstitutionalLoanToBorrowRatio properties: %', problem;
+    END IF;
+
+    -- Keep these limits aligned with Directory's lendToBorrowRatio validator:
+    -- positive decimals, at most four integer digits and two decimal places.
+    SELECT string_agg(entry_id || ' (' || name || ')', ', ' ORDER BY entry_id)
+    INTO problem
+    FROM crosslink_entry_ratios
+    WHERE property_count = 1
+      AND (lend_to_borrow_ratio IS NULL
+           OR length(lend_to_borrow_ratio) > 15
+           OR lend_to_borrow_ratio !~ '^((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9])):((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9]))$');
+    IF problem IS NOT NULL THEN
+        RAISE EXCEPTION 'Directory entries have invalid policy.ill.InstitutionalLoanToBorrowRatio values: %', problem;
+    END IF;
+END
+$$;
 
 CREATE TEMP TABLE crosslink_hierarchy ON COMMIT DROP AS
 WITH RECURSIVE hierarchy AS (
@@ -511,6 +558,7 @@ CREATE TEMP TABLE crosslink_export_records ON COMMIT DROP AS
 WITH ordered_entries AS (
     SELECT
         entry.*,
+        ratio.lend_to_borrow_ratio,
         hierarchy.depth,
         row_number() OVER (
             ORDER BY hierarchy.depth,
@@ -519,6 +567,7 @@ WITH ordered_entries AS (
                      entry.entry_id
         ) AS entry_order
     FROM crosslink_entry_base AS entry
+    JOIN crosslink_entry_ratios AS ratio USING (entry_id)
     JOIN crosslink_hierarchy AS hierarchy USING (entry_id)
 ),
 entry_records AS (
@@ -549,6 +598,7 @@ entry_records AS (
                 'vendor', CASE WHEN local_entry.entry_id IS NOT NULL THEN 'ReShare' ELSE NULL END,
                 'phoneNumber', entry.phone_number,
                 'lmsLocationCode', entry.lms_location_code,
+                'lendToBorrowRatio', entry.lend_to_borrow_ratio,
                 'hrid', NULL,
                 'timeZone', NULL,
                 'symbols', coalesce(symbols.items, '[]'::jsonb),

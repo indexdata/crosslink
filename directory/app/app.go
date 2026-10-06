@@ -3,6 +3,7 @@ package app
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -110,7 +111,9 @@ func InitDbPool() *pgxpool.Pool {
 	return dbpool
 }
 
-func RunMigrateScripts() {
+// RunMigrateScripts applies the Directory migrations and closes the migration resources.
+// Initialization, application, and cleanup failures are returned to the caller.
+func RunMigrateScripts() (resultErr error) {
 	migrationConnectionString := ConnectionString
 	// golang-migrate currently needs SSL disabled; pgx is fine with it
 	if !strings.Contains(migrationConnectionString, "?") {
@@ -118,14 +121,23 @@ func RunMigrateScripts() {
 	}
 	m, err := migrate.New(MigrationsFolder, migrationConnectionString)
 	if err != nil {
-		slog.Error("failed to initialize migrations", "error", err)
-		return
+		return fmt.Errorf("initialize Directory migrations: %w", err)
 	}
+
+	defer func() {
+		sourceErr, databaseErr := m.Close()
+		if sourceErr != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("close migration source: %w", sourceErr))
+		}
+		if databaseErr != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("close migration database: %w", databaseErr))
+		}
+	}()
 
 	// Migrate up
 	err = m.Up()
 	if err != nil && err != migrate.ErrNoChange {
-		slog.Error("database migration failed", "error", err)
-		return
+		return fmt.Errorf("apply Directory migrations: %w", err)
 	}
+	return nil
 }

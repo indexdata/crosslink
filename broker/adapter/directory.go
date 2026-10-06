@@ -17,7 +17,7 @@ var DEFAULT_BROKER_MODE common.BrokerMode
 
 type DirectoryLookupAdapter interface {
 	Lookup(ctx common.ExtendedContext, params DirectoryLookupParams) ([]DirectoryEntry, string, error)
-	FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData dirapi.Entry, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo)
+	FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData dirapi.Entry, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo, policy dirapi.LoadBalancingPolicy) ([]Supplier, RotaInfo)
 }
 
 type DirectoryLookupParams struct {
@@ -63,7 +63,7 @@ type SupplierOrdering interface {
 	GetCost() float64
 	GetLocationPreference() int
 	GetShelvingPreference() int
-	GetRatio() float32
+	GetLoadBalancingScore() float64
 	IsLocal() bool
 }
 
@@ -75,7 +75,7 @@ type Supplier struct {
 	Priority           int
 	Cost               float64
 	Local              bool
-	Ratio              float32
+	LoadBalancingScore float64
 	SupplierStatus     pgtype.Text
 	Location           string
 	ShelvingLocation   string
@@ -84,13 +84,13 @@ type Supplier struct {
 	ShelvingPreference int
 }
 
-func (s Supplier) GetSymbol() string          { return s.Symbol }
-func (s Supplier) GetPriority() int           { return s.Priority }
-func (s Supplier) GetCost() float64           { return s.Cost }
-func (s Supplier) GetLocationPreference() int { return s.LocationPreference }
-func (s Supplier) GetShelvingPreference() int { return s.ShelvingPreference }
-func (s Supplier) IsLocal() bool              { return s.Local }
-func (s Supplier) GetRatio() float32          { return s.Ratio }
+func (s Supplier) GetSymbol() string              { return s.Symbol }
+func (s Supplier) GetPriority() int               { return s.Priority }
+func (s Supplier) GetCost() float64               { return s.Cost }
+func (s Supplier) GetLocationPreference() int     { return s.LocationPreference }
+func (s Supplier) GetShelvingPreference() int     { return s.ShelvingPreference }
+func (s Supplier) IsLocal() bool                  { return s.Local }
+func (s Supplier) GetLoadBalancingScore() float64 { return s.LoadBalancingScore }
 
 type Network struct {
 	Name       string `json:"name"`
@@ -137,7 +137,7 @@ type SupplierMatch struct {
 	Priority           int            `json:"priority"`
 	Cost               string         `json:"cost"`
 	Local              bool           `json:"local"`
-	Ratio              float32        `json:"ratio"`
+	LoadBalancingScore float64        `json:"loadBalancingScore"`
 	Location           string         `json:"location,omitempty"`
 	ShelvingLocation   string         `json:"shelvingLocation,omitempty"`
 	ItemLoanPolicy     string         `json:"itemLoanPolicy,omitempty"`
@@ -151,13 +151,14 @@ func (s SupplierMatch) GetCost() float64 {
 	f, _ := strconv.ParseFloat(s.Cost, 64)
 	return f
 }
-func (s SupplierMatch) IsLocal() bool              { return s.Local }
-func (s SupplierMatch) GetRatio() float32          { return s.Ratio }
-func (s SupplierMatch) GetLocationPreference() int { return s.LocationPreference }
-func (s SupplierMatch) GetShelvingPreference() int { return s.ShelvingPreference }
+func (s SupplierMatch) IsLocal() bool                  { return s.Local }
+func (s SupplierMatch) GetLoadBalancingScore() float64 { return s.LoadBalancingScore }
+func (s SupplierMatch) GetLocationPreference() int     { return s.LocationPreference }
+func (s SupplierMatch) GetShelvingPreference() int     { return s.ShelvingPreference }
 
 type RotaInfo struct {
-	Request   Request         `json:"request"`
-	Requester Requester       `json:"requester"`
-	Suppliers []SupplierMatch `json:"suppliers"`
+	LoadBalancingPolicy dirapi.LoadBalancingPolicy `json:"loadBalancingPolicy"`
+	Request             Request                    `json:"request"`
+	Requester           Requester                  `json:"requester"`
+	Suppliers           []SupplierMatch            `json:"suppliers"`
 }

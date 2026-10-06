@@ -11,6 +11,7 @@ updates:
       - "/marcxml"
       - "/ncip"
       - "/sru"
+      - "/supply"
       - "/testutil"
       - "/zoom"
     schedule:
@@ -71,6 +72,18 @@ updates:
   # Docker illmock
   - package-ecosystem: docker
     directory: "/illmock"
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "deps"
+
+  # Docker supply
+  - package-ecosystem: docker
+    directory: "/supply"
     schedule:
       interval: weekly
       day: monday

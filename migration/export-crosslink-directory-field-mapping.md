@@ -21,6 +21,7 @@ the trimmed `st_default_value` when necessary.
 | `directory_entry.de_email_address` | `data.email` | Copied directly. |
 | `directory_entry.de_phone_number` | `data.phoneNumber` | Copied directly. |
 | `directory_entry.de_lms_location_code` | `data.lmsLocationCode` | Copied directly. |
+| Entry custom text property `policy.ill.InstitutionalLoanToBorrowRatio` | `data.lendToBorrowRatio` | Copied unchanged for each selected entry; missing properties become `null`. Invalid ratios or multiple matching properties stop export before NDJSON output. |
 | Entry matched by the psql `owner` variable | `data.vendor` | Set to `ReShare` for the matched local entry; otherwise `null`. |
 | `directory_entry_tag` joined to `tag.norm_value` | Record inclusion | Entries tagged `deleted`, case-insensitively, are excluded. |
 

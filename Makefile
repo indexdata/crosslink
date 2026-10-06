@@ -1,6 +1,6 @@
 GO ?= go
 DOCKER ?= docker
-SUBDIRS := testutil iso18626 ncip directory sru marcxml httpclient zoom illmock broker
+SUBDIRS := testutil iso18626 ncip directory sru marcxml httpclient zoom illmock broker supply
 TOOL_SUBDIRS := iso18626 ncip directory sru marcxml broker
 TOOL_SUBDIR_TARGETS := $(TOOL_SUBDIRS:%=%-tools-update)
 GOALS := $(or $(MAKECMDGOALS),all)

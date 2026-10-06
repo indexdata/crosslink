@@ -71,7 +71,13 @@ func TestMain(m *testing.M) {
 
 	time.Sleep(1 * time.Second)
 
-	app.RunMigrateScripts()
+	if err := app.RunMigrateScripts(); err != nil {
+		fmt.Fprintf(os.Stderr, "database migration setup failed: %v\n", err)
+		if cleanupErr := pgContainer.Terminate(ctx); cleanupErr != nil {
+			fmt.Fprintf(os.Stderr, "failed to stop database container: %v\n", cleanupErr)
+		}
+		os.Exit(1)
+	}
 	dbpool = app.InitDbPool()
 
 	// Set up fixtures so we can initialise the db with some test data

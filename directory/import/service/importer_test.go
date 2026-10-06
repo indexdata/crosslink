@@ -218,6 +218,33 @@ func TestImportAcceptsLMSPatronProfiles(t *testing.T) {
 	require.True(t, profiles[0].CanCreateRequests)
 }
 
+func TestImportAcceptsLendToBorrowRatio(t *testing.T) {
+	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
+	record := strings.Replace(validEntryRecord(), `"lmsLocationCode":null`, `"lmsLocationCode":null,"lendToBorrowRatio":"5.5:1"`, 1)
+
+	result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(record))
+
+	require.NoError(t, err)
+	assert.Equal(t, model.ImportSectionResult{Imported: 1}, result.Entries)
+	assert.Empty(t, result.Errors)
+	require.NotNil(t, repo.entry)
+	require.NotNil(t, repo.entry.Data.LendToBorrowRatio)
+	assert.Equal(t, "5.5:1", *repo.entry.Data.LendToBorrowRatio)
+}
+
+func TestImportRejectsInvalidLendToBorrowRatio(t *testing.T) {
+	for _, ratio := range []string{"0:1", "10000:1", "1:10000", "00001:1", "1:00001", "1.001:1", "1:1.001", "9999.99:9999.999"} {
+		t.Run(ratio, func(t *testing.T) {
+			repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
+			record := strings.Replace(validEntryRecord(), `"lmsLocationCode":null`, `"lmsLocationCode":null,"lendToBorrowRatio":"`+ratio+`"`, 1)
+			result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(record))
+			require.NoError(t, err)
+			require.Len(t, result.Errors, 1)
+			assert.Zero(t, repo.entryCalls)
+		})
+	}
+}
+
 func TestImportAcceptsNullLMSPatronProfiles(t *testing.T) {
 	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
 	lmsConfig := strings.Replace(validLMSConfig(), `"patronProfiles":[{"code":"STAFF","canCreateRequests":true}]`, `"patronProfiles":null`, 1)
@@ -479,6 +506,31 @@ func TestImportValidatesHostSettings(t *testing.T) {
 			require.Equal(t, int32(1), result.Entries.Failed)
 			require.Len(t, result.Errors, 1)
 			require.Zero(t, repo.entryCalls)
+		})
+	}
+}
+
+func TestImportLoadBalancingPolicy(t *testing.T) {
+	for _, value := range []string{`"proportional"`, `"deficit"`, `null`, `"invalid"`, `""`} {
+		t.Run(value, func(t *testing.T) {
+			repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
+			config := strings.Replace(validILLConfig(), `"illConfig":{`, `"illConfig":{"loadBalancingPolicy":`+value+`,`, 1)
+			record := strings.Replace(validEntryRecord(), `"illConfig":null`, config, 1)
+			result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(record))
+			require.NoError(t, err)
+			if value == `"invalid"` || value == `""` {
+				require.Len(t, result.Errors, 1)
+				assert.Zero(t, repo.entryCalls)
+				return
+			}
+			require.Empty(t, result.Errors)
+			require.NotNil(t, repo.entry.Data.ILLConfig)
+			if value == `null` {
+				assert.Nil(t, repo.entry.Data.ILLConfig.LoadBalancingPolicy)
+			} else {
+				require.NotNil(t, repo.entry.Data.ILLConfig.LoadBalancingPolicy)
+				assert.Equal(t, strings.Trim(value, `"`), *repo.entry.Data.ILLConfig.LoadBalancingPolicy)
+			}
 		})
 	}
 }
