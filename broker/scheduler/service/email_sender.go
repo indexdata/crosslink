@@ -10,6 +10,7 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
+	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	psservice "github.com/indexdata/crosslink/broker/pullslip/service"
 	"github.com/indexdata/go-utils/utils"
 )
@@ -98,7 +99,7 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 		return events.NewErrorResult("invalid email event data", "templateLabel field is required")
 	}
 
-	template, err := s.prRepo.GetTemplateByPurposeAudienceLabelAndOwner(ctx, pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams{
+	template, err := prservice.ResolveTemplate(ctx, s.prRepo, pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams{
 		Owner:    event.EventData.BatchActionData.Owner,
 		Purpose:  string(proapi.Email),
 		Label:    emailData.TemplateLabel,

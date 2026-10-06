@@ -1,11 +1,13 @@
 package prservice
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -28,6 +30,7 @@ import (
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/crosslink/ncip"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -4609,6 +4612,47 @@ func TestCreateAndSendEmail(t *testing.T) {
 	}
 }
 
+func TestCreateAndSendEmail_MissingDatabaseTemplateUsesStateModelDefault(t *testing.T) {
+	prRepo := new(MockPrRepo)
+	prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(pr_db.Template{}, pgx.ErrNoRows)
+	emailSvc := new(EmailSenderMock)
+	emailSvc.On("SendEmail", "sender@example.com").Return(nil)
+	svc := newActionServiceWithEmail(prRepo, emailSvc)
+
+	err := svc.createAndSendEmail(
+		appCtx,
+		pr_db.PatronRequest{RequesterReqID: pgtype.Text{String: "REQ-1", Valid: true}},
+		"ISIL:TEST",
+		"sender@example.com",
+		[]string{"patron@example.com"},
+		"copy-completed-notification",
+		proapi.ModelActionParamsSendToPatron,
+	)
+
+	assert.NoError(t, err)
+	emailSvc.AssertCalled(t, "SendEmail", "sender@example.com")
+}
+
+func TestLogNotificationErrorStoresCauseWithoutWritingToStandardLog(t *testing.T) {
+	var logOutput bytes.Buffer
+	ctx := common.CreateExtCtxWithLogArgsAndHandler(
+		context.Background(),
+		nil,
+		slog.NewTextHandler(&logOutput, nil),
+	)
+
+	result := logNotificationErrorAndReturnSuccess(
+		ctx,
+		pr_db.PatronRequest{},
+		"error sending email to patron",
+		errors.New(`template: pull-slip:1: executing "pull-slip" at <.Unsupported>: can't evaluate field Unsupported`),
+	)
+
+	assert.Empty(t, logOutput.String())
+	assert.Contains(t, result.result.Note, "error sending email to patron")
+	assert.Contains(t, result.result.Note, "Unsupported")
+}
+
 // helpers for sendEmailNotification tests
 
 func ptr[T any](v T) *T { return &v }
@@ -4717,7 +4761,7 @@ func TestSendEmailNotification(t *testing.T) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(ill_db.Peer{}, errors.New("db error"))
 			},
 			wantStatus: events.EventStatusSuccess,
-			wantNote:   "error getting directory email data",
+			wantNote:   "error getting directory email data: db error",
 		},
 		{
 			name:   "SendTo patron – no patron email addresses – note set",
@@ -4754,7 +4798,7 @@ func TestSendEmailNotification(t *testing.T) {
 				emailSvc.On("SendEmail", testFrom).Return(errors.New("smtp error"))
 			},
 			wantStatus: events.EventStatusSuccess,
-			wantNote:   "error sending email to patron",
+			wantNote:   "error sending email to patron: smtp error",
 		},
 		{
 			name:   "SendTo staff – email sent successfully",
@@ -4819,7 +4863,7 @@ func TestSendEmailNotification(t *testing.T) {
 				emailSvc.On("SendEmail", testFrom).Return(errors.New("smtp error"))
 			},
 			wantStatus: events.EventStatusSuccess,
-			wantNote:   "error sending email to staff",
+			wantNote:   "error sending email to staff: smtp error",
 		},
 		{
 			name:   "SendTo patron and staff – both emails sent – staff note wins",

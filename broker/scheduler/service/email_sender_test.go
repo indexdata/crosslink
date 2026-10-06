@@ -14,6 +14,7 @@ import (
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	psservice "github.com/indexdata/crosslink/broker/pullslip/service"
 	dirapi "github.com/indexdata/crosslink/directory/api"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 )
@@ -309,6 +310,23 @@ func TestGenerateAndEmailPullslip_TemplateLookupError(t *testing.T) {
 	assert.Equal(t, events.EventStatusError, status)
 	assert.NotNil(t, result)
 	assert.True(t, prRepo.templateCalled)
+}
+
+func TestGenerateAndEmailPullslip_MissingDatabaseTemplateUsesStateModelDefault(t *testing.T) {
+	prRepo := &mockEmailPrRepo{templateErr: pgx.ErrNoRows}
+	mailer := &mockEmailService{}
+	svc := newEmailSvc(prRepo, mailer, nil)
+	event := validEmailEvent()
+	event.EventData.CustomData["templateLabel"] = "pullslip-email"
+	event.EventData.CustomData["sendEmpty"] = true
+
+	status, result := svc.generateAndEmailPullslip(testCtx, event)
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Nil(t, result)
+	assert.True(t, mailer.called)
+	assert.Contains(t, string(mailer.data), "Scheduled pullslips")
+	assert.Contains(t, string(mailer.data), "automated pull slip summary")
 }
 
 func TestGenerateAndEmailPullslip_TemplateEmptySubject(t *testing.T) {
