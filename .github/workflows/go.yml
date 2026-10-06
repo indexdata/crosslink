@@ -18,6 +18,12 @@ on:
       - '**/chart/**' #trigger also when chart templates chnage to force republish
       - '.github/**' #trigger when pipeline changes
       - '**/go.mod' #trigger when dependencies change
+      - 'supply/go.sum'
+      - 'supply/**/*.sh'
+      - 'supply/**/.gitignore'
+      - 'supply/**/.dockerignore'
+      - 'supply/**/Dockerfile.dockerignore'
+      - 'pre-push'
       - '**/ModuleDescriptor-template.json' #trigger when module descriptor changes
   pull_request:
     branches: [ "main" ]
@@ -32,6 +38,12 @@ on:
       - '**/chart/**' #trigger also when chart templates change to force republish
       - '.github/**' #trigger when pipeline changes
       - '**/go.mod' #trigger when dependencies change
+      - 'supply/go.sum'
+      - 'supply/**/*.sh'
+      - 'supply/**/.gitignore'
+      - 'supply/**/.dockerignore'
+      - 'supply/**/Dockerfile.dockerignore'
+      - 'pre-push'
       - '**/ModuleDescriptor-template.json' #trigger when module descriptor changes
   release:
     types: [published]
@@ -41,7 +53,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        modules: [broker, directory, illmock]
+        modules: [broker, directory, illmock, supply]
     steps:
     - name: Checkout repository
       uses: actions/checkout@v7
