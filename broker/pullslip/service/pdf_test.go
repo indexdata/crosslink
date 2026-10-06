@@ -6,16 +6,14 @@ import (
 	"encoding/base64"
 	"errors"
 	"image/png"
-	"slices"
 	"testing"
 	"time"
 
 	"github.com/indexdata/crosslink/broker/common"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
-	"github.com/indexdata/crosslink/broker/patron_request/proapi"
-	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 )
@@ -257,15 +255,7 @@ func (m *mockPrRepo) GetTemplateByPurposeAudienceLabelAndOwner(_ common.Extended
 	if params.Owner == "error" {
 		return pr_db.Template{}, errors.New("template db error")
 	}
-	for _, t := range prservice.GetStateModelTemplateDefaults() {
-		if slices.Contains(t.Labels, params.Label) {
-			return pr_db.Template{
-				Body:        t.Body,
-				ContentType: string(proapi.Html),
-			}, nil
-		}
-	}
-	return pr_db.Template{}, nil
+	return pr_db.Template{}, pgx.ErrNoRows
 }
 
 func newSvcWithMock(repo pr_db.PrRepo) *PdfServiceImpl {
