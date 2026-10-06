@@ -245,6 +245,7 @@ func TestMessageAfterUNFILLED(t *testing.T) {
 
 func TestMessageSkipped(t *testing.T) {
 	adapter.DEFAULT_BROKER_MODE = common.BrokerModeTransparent
+	resetMockSupplierCounts(t)
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "5636c993-c41c-48f4-a285-470545f6f362"
 	data, _ := os.ReadFile("../testdata/request-unfilled-willsupply.xml")
@@ -369,6 +370,7 @@ func TestRequestWILLSUPPLY_LOANED(t *testing.T) {
 
 func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeOpaque_Broker(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	resetMockSupplierCounts(t)
 	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ-CANCEL-0", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque))
 	reqId := "5636c993-c41c-48f4-a285-470545f6f345-0"
 	data, _ := os.ReadFile("../testdata/request-willsupply-loaned-cancel.xml")
@@ -412,6 +414,11 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeOpaque_Broker(t *testing.T) {
 		"TASK, message-requester = SUCCESS, reason=CancelResponse, Cancelled\n"+
 		"TASK, confirm-supplier-msg = SUCCESS\n",
 		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 15, false, formatEvent))
+}
+
+func resetMockSupplierCounts(t *testing.T) {
+	getOrCreatePeer(t, illRepo, "ISIL:SUP1", 0, 0)
+	getOrCreatePeer(t, illRepo, "ISIL:SUP2", 0, 0)
 }
 
 func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testing.T) {

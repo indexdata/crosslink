@@ -9,6 +9,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEntryCases(t *testing.T) {
@@ -904,7 +907,8 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 			"supplierPatronPattern":"PATRON-{requesterSymbol}",
 			"duplicateCheckWindowHours":24,
 			"maxRequestsPerPatron":0,
-			"minimumCost":1.5
+			"minimumCost":1.5,
+			"loadBalancingPolicy":"proportional"
 		},
 		"symbols":[{"authority":"ISIL","symbol":"CONTRACT"}],
 		"catalogConfig":{
@@ -996,7 +1000,7 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 		illConfig["supplierPatronPattern"] != "PATRON-{requesterSymbol}" ||
 		illConfig["duplicateCheckWindowHours"] != float64(24) ||
 		illConfig["maxRequestsPerPatron"] != float64(0) ||
-		illConfig["minimumCost"] != 1.5 {
+		illConfig["minimumCost"] != 1.5 || illConfig["loadBalancingPolicy"] != "proportional" {
 		t.Fatalf("illConfig fields did not round-trip: %#v", illConfig)
 	}
 
@@ -1013,7 +1017,7 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 		t.Fatalf("failed to parse entry after illConfig PATCH: %v", err)
 	}
 	illConfig = entry["illConfig"].(map[string]any)
-	if illConfig["noteFieldSeparator"] != " / " || illConfig["useOfferedCosts"] != false || illConfig["iso18626Url"] != "https://iso.example.org/iso18626" || illConfig["maxRequestsPerPatron"] != float64(25) || illConfig["minimumCost"] != 1.5 {
+	if illConfig["noteFieldSeparator"] != " / " || illConfig["useOfferedCosts"] != false || illConfig["iso18626Url"] != "https://iso.example.org/iso18626" || illConfig["maxRequestsPerPatron"] != float64(25) || illConfig["minimumCost"] != 1.5 || illConfig["loadBalancingPolicy"] != "proportional" {
 		t.Fatalf("partial illConfig PATCH did not merge fields: %#v", illConfig)
 	}
 	if _, ok := illConfig["lendersOfLastResort"]; ok {
@@ -1615,6 +1619,78 @@ func TestPublicReadSanitizesProtectedLMSValues(t *testing.T) {
 	lmsConfig := entry["lmsConfig"].(map[string]any)
 	if lmsConfig["fromAgencyAuthentication"] != "" {
 		t.Fatalf("protected lmsConfig.fromAgencyAuthentication should be sanitized, got %#v", lmsConfig["fromAgencyAuthentication"])
+	}
+}
+
+func TestEntryLendToBorrowRatio(t *testing.T) {
+	resetDb()
+	headers := map[string]string{
+		"X-Okapi-Tenant":      "ANINST",
+		"X-Okapi-Permissions": `["directory.consortium.all"]`,
+	}
+
+	res, data := jsonReq(t, http.MethodPost, "/entries", `{"name":"Ratio entry","lendToBorrowRatio":"05.50:1"}`, headers)
+	require.Equal(t, http.StatusCreated, res.StatusCode, data)
+	var created struct {
+		Id string `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(data), &created))
+
+	assertRatio := func(expected *string) {
+		t.Helper()
+		res, data := jsonReq(t, http.MethodGet, "/entries/by-id/"+created.Id, "", headers)
+		require.Equal(t, http.StatusOK, res.StatusCode, data)
+		var entry struct {
+			LendToBorrowRatio *string `json:"lendToBorrowRatio"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(data), &entry))
+		assert.Equal(t, expected, entry.LendToBorrowRatio)
+	}
+	original := "05.50:1"
+	assertRatio(&original)
+
+	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+created.Id, `{"lendToBorrowRatio":"0.5:2"}`, headers)
+	require.Equal(t, http.StatusNoContent, res.StatusCode, data)
+	updated := "0.5:2"
+	assertRatio(&updated)
+
+	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+created.Id, `{"description":"ratio unchanged"}`, headers)
+	require.Equal(t, http.StatusNoContent, res.StatusCode, data)
+	assertRatio(&updated)
+
+	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+created.Id, `{"lendToBorrowRatio":null}`, headers)
+	require.Equal(t, http.StatusNoContent, res.StatusCode, data)
+	assertRatio(nil)
+
+	invalid := []string{"0:1", "1:0", "0.0:2", "-1:2", "+1:2", "1e2:1", "1 :2", ".5:1", "5.:1", "1", "1:2:3", "10000:1", "1:10000", "00001:1", "1:00001", "1.001:1", "1:1.001", "0.001:1", "1:0.001", "0.00:1", "1:0.00", "9999.99:9999.999"}
+	for _, ratio := range invalid {
+		t.Run(ratio, func(t *testing.T) {
+			body, err := json.Marshal(map[string]string{"lendToBorrowRatio": ratio})
+			require.NoError(t, err)
+			res, data := jsonReq(t, http.MethodPatch, "/entries/by-id/"+created.Id, string(body), headers)
+			require.Equal(t, http.StatusBadRequest, res.StatusCode, data)
+			body, err = json.Marshal(map[string]string{"name": "Invalid ratio", "lendToBorrowRatio": ratio})
+			require.NoError(t, err)
+			res, data = jsonReq(t, http.MethodPost, "/entries", string(body), headers)
+			require.Equal(t, http.StatusBadRequest, res.StatusCode, data)
+		})
+	}
+
+	for _, ratio := range invalid {
+		_, err := dbpool.Exec(context.Background(), `UPDATE entries SET lend_to_borrow_ratio = $1 WHERE id = $2`, ratio, created.Id)
+		require.Error(t, err, ratio)
+	}
+
+	for _, ratio := range []string{"9999.99:9999.99", "0.01:9999.99", "9999.99:0.01", "0000.01:0001.00", "1000:1", "0100:1", "0010:1", "0001:1"} {
+		body, err := json.Marshal(map[string]string{"lendToBorrowRatio": ratio})
+		require.NoError(t, err)
+		res, data := jsonReq(t, http.MethodPatch, "/entries/by-id/"+created.Id, string(body), headers)
+		require.Equal(t, http.StatusNoContent, res.StatusCode, data)
+		assertRatio(&ratio)
+		body, err = json.Marshal(map[string]string{"name": "Boundary ratio", "lendToBorrowRatio": ratio})
+		require.NoError(t, err)
+		res, data = jsonReq(t, http.MethodPost, "/entries", string(body), headers)
+		require.Equal(t, http.StatusCreated, res.StatusCode, data)
 	}
 }
 

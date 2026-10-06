@@ -51,7 +51,10 @@ func init() {
 }
 
 func main() {
-	app.RunMigrateScripts()
+	if err := app.RunMigrateScripts(); err != nil {
+		slog.Error("failed to migrate Directory database", "error", err)
+		os.Exit(1)
+	}
 	dbpool := app.InitDbPool()
 	defer dbpool.Close()
 	ctx, cancel := context.WithCancel(context.Background())
