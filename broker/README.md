@@ -230,6 +230,33 @@ illmock entries endpoint. Profile changes require restarting the broker. See
 [host profiles](../directory/host-profiles.md) for startup validation and limits.
 Default DB connection parameters can be changed with the `DB_*` environment variables.
 
+For Helm deployments, `directoryApiUrl` defaults to
+`http://crosslink-directory:8086/directory/entries`, targeting an existing Directory
+service in the broker's namespace. The chart does not install Directory. Override
+the value if the Directory service name, namespace, port, or deployment prefix differs:
+
+```yaml
+# Directory service with a custom name in the broker's namespace
+directoryApiUrl: http://library-directory:8086/directory/entries
+```
+
+```yaml
+# Directory service in a different namespace
+directoryApiUrl: http://crosslink-directory.metadata.svc:8086/directory/entries
+```
+
+An explicit `DIRECTORY_API_URL` in the chart's `env`, `envSecrets`, or `envConfigMaps`
+takes precedence over `directoryApiUrl`; configure the variable through only one
+of these sources. The fallback must be nonempty when no explicit source is configured.
+This profile source is required even with `DIRECTORY_ADAPTER=mock`.
+
+Before upgrading brokers, deploy Directory with all five `x-host-profiles` entries
+and verify that the corresponding `/directory/openapi.json` endpoint is reachable
+from the broker namespace. Then upgrade the brokers. Startup retries cover brief
+readiness delays; they do not replace configuring a reachable service. Restart
+brokers after subsequent profile changes. See the
+[profile rollout sequence](../directory/host-profiles.md#deployment-order).
+
 If `DB_PROVISION=true`, default `false`, the configured database user must have privileges to create roles and schemas in the database (the `CREATE` privilege on the database and the ability to run `CREATE SCHEMA`). The `DB_SCHEMA` env must be non-empty when provisioning (default).
 If `DB_PROVISION=false`, schema and role provisioning must be done before startup.
 

@@ -37,6 +37,10 @@ spec:
               value: "{{ .Values.containerPort }}"
             - name: DB_MIGRATE
               value: "{{ .Values.migrations.runOnStartup }}"
+            {{- if not (or (hasKey .Values.env "DIRECTORY_API_URL") (hasKey .Values.envSecrets "DIRECTORY_API_URL") (hasKey .Values.envConfigMaps "DIRECTORY_API_URL")) }}
+            - name: DIRECTORY_API_URL
+              value: {{ required "directoryApiUrl must be nonempty unless DIRECTORY_API_URL is configured in env, envSecrets, or envConfigMaps" .Values.directoryApiUrl | quote }}
+            {{- end }}
             {{- range $k, $v := .Values.env }}
             {{- if and (ne $k "HTTP_PORT") (ne $k "DB_MIGRATE") }}
             - name: {{ $k }}

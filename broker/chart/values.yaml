@@ -20,6 +20,11 @@ okapi-hooks:
     @descriptor@
 
 containerPort: 8080
+# Profile source used at startup, including when DIRECTORY_ADAPTER=mock.
+# Override for a different Directory service name, namespace, port, or path.
+# An explicit DIRECTORY_API_URL in env, envSecrets, or envConfigMaps takes precedence.
+directoryApiUrl: http://crosslink-directory:8086/directory/entries
+
 # envvars passed to the container
 env: {}
 

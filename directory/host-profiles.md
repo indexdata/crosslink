@@ -52,9 +52,30 @@ starts at 100 ms, doubles, and caps at one second; cancellation stops it promptl
 Invalid URLs, certificate errors, other HTTP statuses, oversized responses, and
 invalid specifications fail immediately. Exhausting the retry budget prevents
 startup; there is no local fallback.
-Deploy Directory with this extension before upgrading the broker. Profile changes
-take effect after restarting the broker; no broker rebuild or directory-record
-migration is required. All five supported profile entries must be present.
+
+### Deployment order
+
+1. Deploy Directory with `x-host-profiles` containing Generic, Alma, FOLIO, Koha,
+   and Sierra. Regenerate and deploy the specification through the normal Directory
+   build; editing the source YAML does not change a running service.
+2. Configure the broker's profile source and verify the derived `/openapi.json`
+   endpoint is reachable from the broker namespace and serves all five profiles.
+   For example, `http://crosslink-directory:8086/directory/entries` supplies profiles
+   at `http://crosslink-directory:8086/directory/openapi.json`.
+3. Upgrade the brokers after that endpoint is available. Mock peer lookup also
+   requires the profile source. The ten-second retry budget handles brief readiness
+   delays, not a missing service or an incorrect URL.
+
+The broker Helm chart defaults `directoryApiUrl` to the same-namespace
+`crosslink-directory` service on port 8086. Override it for other service names,
+namespaces, ports, or deployment prefixes. An explicit `DIRECTORY_API_URL` through
+`env`, `envSecrets`, or `envConfigMaps` takes precedence. See the
+[broker deployment configuration](../broker/README.md) for examples.
+
+After later profile changes, deploy the updated Directory and restart brokers to
+load new snapshots. No broker rebuild or directory-record migration is required.
+
+### Resolution behavior
 
 Conditional catalog defaults (query language, parser replacement, and record
 syntax based on the effective parser) remain in Go. The resolver validates profile
