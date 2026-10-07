@@ -29,7 +29,11 @@ script:post-response {
     const pr = res.getBody();
     // Automatic action is triggered when request goes in UNFILLED state
     expect(pr.lastAction).to.equal("send-notification")
-    expect(pr.lastActionResult).to.equal("SUCCESS")
+    // The local stack has no SMTP service; the notification problem is handled.
+    expect(pr.lastActionResult).to.equal("PROBLEM")
+    expect(pr.lastActionOutcome).to.equal("failure")
+    expect(pr.needsAttention).to.equal(true)
+    expect(pr.state).to.equal("UNFILLED")
   });
 }
 

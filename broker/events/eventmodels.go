@@ -112,6 +112,10 @@ type ActionResult struct {
 	Outcome          string  `json:"outcome"`
 	ToState          *string `json:"toState,omitempty"`
 	ChildActionError *string `json:"childActionError,omitempty"`
+	// ContinuationAllowed records a tolerated non-success result after the
+	// request update commits. Request-update failures never set this flag;
+	// task-processing and child-chain errors are checked separately.
+	ContinuationAllowed bool `json:"continuationAllowed,omitempty"`
 }
 
 type EventError struct {

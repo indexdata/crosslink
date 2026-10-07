@@ -493,7 +493,7 @@ func TestGetActionTransitionConditionPendingSelfTransition(t *testing.T) {
 	assert.Equal(t, LenderStateConditionPending, transition)
 }
 
-func TestGetActionTransitionWillSupplyFailureSelfTransition(t *testing.T) {
+func TestGetActionTransitionWillSupplyFailureIsUnbound(t *testing.T) {
 	mapping := mustActionMapping(t)
 
 	transition, ok := mapping.GetActionTransition(
@@ -501,8 +501,8 @@ func TestGetActionTransitionWillSupplyFailureSelfTransition(t *testing.T) {
 		LenderActionWillSupply,
 		ActionOutcomeFailure,
 	)
-	assert.True(t, ok)
-	assert.Equal(t, LenderStateWillSupplyPending, transition)
+	assert.False(t, ok)
+	assert.Empty(t, transition)
 }
 
 func TestGetActionTransitionRemoveItemKeepsItemPending(t *testing.T) {

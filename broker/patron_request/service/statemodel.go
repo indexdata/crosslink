@@ -406,6 +406,9 @@ func validateStateModelForServiceType(stateModel *proapi.StateModel, serviceType
 				if capabilityIndex == -1 {
 					return fmt.Errorf("action %s in state %s is not a built-in %s action", action.Name, state.Name, strings.ToLower(string(state.Side)))
 				}
+				if err := validateActionContinueOn(action, state.Name); err != nil {
+					return err
+				}
 				if err := validateActionTransitions(action, state.Name, allowedTransitionTargets, isTransitionCapability(allowedActions[capabilityIndex])); err != nil {
 					return err
 				}
@@ -468,6 +471,23 @@ func validateStateModelForServiceType(stateModel *proapi.StateModel, serviceType
 		}
 	}
 
+	return nil
+}
+
+func validateActionContinueOn(action proapi.ModelAction, stateName string) error {
+	if action.ContinueOn == nil {
+		return nil
+	}
+	seen := make(map[proapi.ModelActionContinueOn]bool)
+	for _, status := range *action.ContinueOn {
+		if !status.Valid() {
+			return fmt.Errorf("action %s in state %s has invalid continueOn status %q", action.Name, stateName, status)
+		}
+		if seen[status] {
+			return fmt.Errorf("action %s in state %s repeats continueOn status %q", action.Name, stateName, status)
+		}
+		seen[status] = true
+	}
 	return nil
 }
 
