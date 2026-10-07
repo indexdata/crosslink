@@ -183,7 +183,8 @@ make
 This will build the following binaries:
 
 * `broker` — the main program for the ILL service
-* `archive` — a utility for archiving old ILL transactions
+* `archive` — a utility for archiving old ILL transactions; initializes only the
+  database and does not require Directory or start broker background services
 
 You can also run included tests with:
 
@@ -224,7 +225,7 @@ You can run the `broker` program locally with:
 make run
 ```
 
-The application requires Postgres and an available Directory profile source at startup,
+The broker server requires Postgres and an available Directory profile source at startup,
 including in mock mode. Configure `DIRECTORY_API_URL` to point to a Directory or
 illmock entries endpoint. Profile changes require restarting the broker. See
 [host profiles](../directory/host-profiles.md) for startup validation and limits.
