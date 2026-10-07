@@ -2,20 +2,19 @@
 
 ## OpenAPI specification
 
-`GET /directory/oapi` returns the bundled specification defined in
-[api.yaml](api.yaml). No Directory role is required. Select the representation
-with the optional `format` query parameter:
+The bundled specification defined in [api.yaml](api.yaml) is available at
+`GET /directory/openapi.yaml` (`application/yaml`) and
+`GET /directory/openapi.json` (`application/json`). No Directory role is required.
 
 ```sh
-curl http://localhost:8086/directory/oapi
-curl http://localhost:8086/directory/oapi?format=yaml
-curl http://localhost:8086/directory/oapi?format=json
+curl http://localhost:8086/directory/openapi.yaml
+curl http://localhost:8086/directory/openapi.json
 ```
 
-YAML is the default (`application/yaml`); JSON uses `application/json`. Both
-represent the complete specification, including references and extensions. YAML
-comments and source formatting are not preserved. Unsupported or empty format
-values return `400`. The `Accept` header does not select the representation.
+Both endpoints return the complete specification, including references and
+extensions. YAML comments and source formatting are not preserved. The path
+selects the representation; query parameters and the `Accept` header do not change
+it.
 
 ## Catalog coverage year filtering
 

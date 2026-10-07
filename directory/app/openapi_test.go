@@ -13,7 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestOapiReturnsCompleteSpecificationWithoutPermissions(t *testing.T) {
+func TestOpenapiReturnsCompleteSpecificationWithoutPermissions(t *testing.T) {
 	handler := InitHandler(context.Background(), nil)
 	jsonData, err := api.GetSpecJSON()
 	require.NoError(t, err)
@@ -29,19 +29,23 @@ func TestOapiReturnsCompleteSpecificationWithoutPermissions(t *testing.T) {
 
 	for _, test := range []struct {
 		name        string
+		path        string
 		query       string
 		accept      string
 		contentType string
 	}{
-		{name: "default YAML", contentType: "application/yaml"},
-		{name: "explicit YAML", query: "?format=yaml", contentType: "application/yaml"},
-		{name: "explicit JSON", query: "?format=json", contentType: "application/json"},
-		{name: "Accept does not override default", accept: "application/json", contentType: "application/yaml"},
-		{name: "Accept does not override query", query: "?format=json", accept: "application/yaml", contentType: "application/json"},
+		{name: "YAML", path: "/openapi.yaml", contentType: "application/yaml"},
+		{name: "JSON", path: "/openapi.json", contentType: "application/json"},
+		{name: "Accept does not override YAML", path: "/openapi.yaml", accept: "application/json", contentType: "application/yaml"},
+		{name: "Accept does not override JSON", path: "/openapi.json", accept: "application/yaml", contentType: "application/json"},
+		{name: "format does not override YAML", path: "/openapi.yaml", query: "?format=json", contentType: "application/yaml"},
+		{name: "format does not override JSON", path: "/openapi.json", query: "?format=yaml", contentType: "application/json"},
+		{name: "unsupported format is ignored", path: "/openapi.yaml", query: "?format=xml", contentType: "application/yaml"},
+		{name: "empty format is ignored", path: "/openapi.json", query: "?format=", contentType: "application/json"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			request := httptest.NewRequest(http.MethodGet, "/directory/oapi"+test.query, nil)
+			request := httptest.NewRequest(http.MethodGet, "/directory"+test.path+test.query, nil)
 			request.Header.Set("Accept", test.accept)
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, request)
@@ -58,23 +62,24 @@ func TestOapiReturnsCompleteSpecificationWithoutPermissions(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, json.Unmarshal(data, &actual))
 			}
-			responseSchema := source.Paths.Find("/oapi").Get.Responses.Value("200").Value.Content[test.contentType].Schema.Value
+			responseSchema := source.Paths.Find(test.path).Get.Responses.Value("200").Value.Content[test.contentType].Schema.Value
 			require.NoError(t, responseSchema.VisitJSON(actual))
 			require.Equal(t, expected, actual)
 			paths := actual["paths"].(map[string]any)
-			require.Contains(t, paths, "/oapi")
+			require.Contains(t, paths, "/openapi.yaml")
+			require.Contains(t, paths, "/openapi.json")
+			require.NotContains(t, paths, "/oapi")
 		})
 	}
 }
 
-func TestOapiRejectsInvalidFormat(t *testing.T) {
+func TestOpenapiReplacesOldEndpoint(t *testing.T) {
 	handler := InitHandler(context.Background(), nil)
-	for _, format := range []string{"", "xml", "JSON"} {
-		t.Run("format="+format, func(t *testing.T) {
+	for _, path := range []string{"/directory/oapi", "/directory/oapi?format=json"} {
+		t.Run(path, func(t *testing.T) {
 			response := httptest.NewRecorder()
-			request := httptest.NewRequest(http.MethodGet, "/directory/oapi?format="+format, nil)
-			handler.ServeHTTP(response, request)
-			require.Equal(t, http.StatusBadRequest, response.Code)
+			handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+			require.Equal(t, http.StatusNotFound, response.Code)
 		})
 	}
 }

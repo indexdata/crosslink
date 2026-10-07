@@ -5,20 +5,11 @@ info:
 servers:
   - url: /directory
 paths:
-  /oapi:
+  /openapi.yaml:
     get:
-      summary: Retrieve the Directory OpenAPI specification
-      description: Returns the complete bundled OpenAPI specification without requiring a Directory role. Defaults to YAML.
-      operationId: getOapi
-      parameters:
-        - name: format
-          in: query
-          description: Specification representation. The Accept header does not select the format.
-          required: false
-          schema:
-            type: string
-            enum: [yaml, json]
-            default: yaml
+      summary: Retrieve the Directory OpenAPI specification as YAML
+      description: Returns the complete bundled OpenAPI specification as YAML without requiring a Directory role.
+      operationId: getOpenapiYaml
       responses:
         '200':
           description: Complete OpenAPI specification
@@ -27,15 +18,24 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        '500':
+          description: Failed to prepare the specification
+          content:
+            text/plain:
+              schema: { type: string }
+  /openapi.json:
+    get:
+      summary: Retrieve the Directory OpenAPI specification as JSON
+      description: Returns the complete bundled OpenAPI specification as JSON without requiring a Directory role.
+      operationId: getOpenapiJson
+      responses:
+        '200':
+          description: Complete OpenAPI specification
+          content:
             application/json:
               schema:
                 type: object
                 additionalProperties: true
-        '400':
-          description: Invalid specification format
-          content:
-            text/plain:
-              schema: { type: string }
         '500':
           description: Failed to prepare the specification
           content:

@@ -40,23 +40,22 @@ func useBlockStyle(node *yaml.Node) {
 	}
 }
 
-// GetOapi returns the complete bundled OpenAPI specification in YAML or JSON.
-func (a ApiImpl) GetOapi(_ context.Context, request GetOapiRequestObject) (GetOapiResponseObject, error) {
-	format := Yaml
-	if request.Params.Format != nil {
-		format = *request.Params.Format
-	}
-	if format != Yaml && format != Json {
-		return GetOapi400TextResponse("invalid format: expected yaml or json"), nil
-	}
+// GetOpenapiYaml returns the complete bundled OpenAPI specification as YAML.
+func (a ApiImpl) GetOpenapiYaml(_ context.Context, _ GetOpenapiYamlRequestObject) (GetOpenapiYamlResponseObject, error) {
 	formats, err := bundledSpecification()
 	if err != nil {
 		return nil, err
 	}
-	if format == Json {
-		return specificationResponse{contentType: "application/json", body: formats.json}, nil
-	}
 	return specificationResponse{contentType: "application/yaml", body: formats.yaml}, nil
+}
+
+// GetOpenapiJson returns the complete bundled OpenAPI specification as JSON.
+func (a ApiImpl) GetOpenapiJson(_ context.Context, _ GetOpenapiJsonRequestObject) (GetOpenapiJsonResponseObject, error) {
+	formats, err := bundledSpecification()
+	if err != nil {
+		return nil, err
+	}
+	return specificationResponse{contentType: "application/json", body: formats.json}, nil
 }
 
 type specificationResponse struct {
@@ -64,7 +63,15 @@ type specificationResponse struct {
 	body        []byte
 }
 
-func (response specificationResponse) VisitGetOapiResponse(writer http.ResponseWriter) error {
+func (response specificationResponse) VisitGetOpenapiYamlResponse(writer http.ResponseWriter) error {
+	return response.write(writer)
+}
+
+func (response specificationResponse) VisitGetOpenapiJsonResponse(writer http.ResponseWriter) error {
+	return response.write(writer)
+}
+
+func (response specificationResponse) write(writer http.ResponseWriter) error {
 	writer.Header().Set("Content-Type", response.contentType)
 	writer.WriteHeader(http.StatusOK)
 	_, err := writer.Write(response.body)
