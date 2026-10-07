@@ -217,6 +217,7 @@ func TestItem(t *testing.T) {
 	assert.Equal(t, "accepted-item-id", item.LmsItemID.String)
 
 	// Update works
+	expectedCreatedAt := time.Now().UTC().Add(time.Hour).Truncate(time.Microsecond)
 	item, err = prRepo.SaveItem(appCtx, pr_db.SaveItemParams{
 		ID:           itemId,
 		PrID:         prId,
@@ -236,7 +237,7 @@ func TestItem(t *testing.T) {
 			Valid:  true,
 		},
 		CreatedAt: pgtype.Timestamp{
-			Time:  time.Now().Add(time.Hour),
+			Time:  expectedCreatedAt,
 			Valid: true,
 		},
 	})
@@ -250,7 +251,8 @@ func TestItem(t *testing.T) {
 	assert.Equal(t, "c12", item.CallNumber.String)
 	assert.Equal(t, "t12", item.Title.String)
 	assert.Equal(t, "i12", item.ItemID.String)
-	assert.True(t, item.CreatedAt.Time.After(time.Now()))
+	assert.True(t, item.CreatedAt.Valid)
+	assert.True(t, expectedCreatedAt.Equal(item.CreatedAt.Time))
 
 	// Get by item id
 	item, err = prRepo.GetItemById(appCtx, itemId)

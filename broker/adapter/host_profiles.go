@@ -24,7 +24,7 @@ const hostProfileTimeout = 10 * time.Second
 // budget. It also applies when peer lookups use the mock Directory adapter.
 func LoadHostProfiles(ctx common.ExtendedContext, client *http.Client, entryURLs string) (*profiles.Resolver, error) {
 	if client == nil {
-		return nil, fmt.Errorf("Directory profile HTTP client is required")
+		return nil, fmt.Errorf("directory profile HTTP client is required")
 	}
 	specURL, err := hostProfileSpecURL(entryURLs)
 	if err != nil {
@@ -121,7 +121,7 @@ func hostProfileSpecURL(entryURLs string) (string, error) {
 	}
 	path := strings.TrimRight(parsed.Path, "/")
 	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || !strings.HasSuffix(path, "/entries") || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.User != nil {
-		return "", fmt.Errorf("Directory profile source must be an HTTP(S) entries URL without credentials, query, or fragment")
+		return "", fmt.Errorf("directory profile source must be an HTTP(S) entries URL without credentials, query, or fragment")
 	}
 	escapedPath := strings.TrimRight(parsed.EscapedPath(), "/")
 	parsed.Path = strings.TrimSuffix(path, "/entries") + "/openapi.json"

@@ -29,7 +29,7 @@ func NewResolver(specJSON []byte) (*Resolver, error) {
 		return nil, fmt.Errorf("decode Directory specification: %w", err)
 	}
 	if len(document.Profiles) == 0 {
-		return nil, fmt.Errorf("Directory specification has no x-host-profiles")
+		return nil, fmt.Errorf("directory specification has no x-host-profiles")
 	}
 	resolver := &Resolver{definitions: make(map[string]hostProfile, len(document.Profiles))}
 	for name, data := range document.Profiles {
