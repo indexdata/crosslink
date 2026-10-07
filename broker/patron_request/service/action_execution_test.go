@@ -206,7 +206,7 @@ func TestUnboundToleratedNotificationProblemContinuesValidation(t *testing.T) {
 		body string
 		smtp bool
 	}{
-		{name: "template expansion", body: "{{.PatronGivenName}}"},
+		{name: "template expansion", body: "{{.UnknownPlaceholder}}"},
 		{name: "SMTP", body: "New request", smtp: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -249,7 +249,7 @@ func TestUnboundToleratedNotificationProblemContinuesValidation(t *testing.T) {
 			if tc.smtp {
 				assert.Contains(t, notification.ResultData.Problem.Details, "SMTP failed")
 			} else {
-				assert.Contains(t, notification.ResultData.Problem.Details, "PatronGivenName")
+				assert.Contains(t, notification.ResultData.Problem.Details, "UnknownPlaceholder")
 				assert.Contains(t, notification.ResultData.Problem.Details, "template-1")
 			}
 			assert.Equal(t, events.EventStatusSuccess, validation.EventStatus)
