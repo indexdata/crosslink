@@ -42,6 +42,26 @@ Directory's [OpenAPI specification](api.yaml) stores vendor defaults in its root
 entries contain overrides of Generic defaults. `illConfig` remains independent
 and is not part of a host profile.
 
+The broker accepts only these case-sensitive profile fields:
+
+| Section | Allowed fields |
+| --- | --- |
+| `lmsConfig` | `ncipNamespaceEnabled`, `bibIdNormalization`, `requestItemRequestType`, `requestItemRequestScopeType`, `requestItemBibIdCode`, `requestItemPickupLocationEnabled`, `lookupUserEnabled`, `acceptItemEnabled`, `checkInItemEnabled`, `checkOutItemEnabled`, `requestItemEnabled` |
+| `catalogConfig` | `queryConfig`, `metadataFormat`, `holdingsFormat` |
+
+Both sections must be objects; empty objects are valid. Nested fields still follow
+the Directory API types and effective-setting validation. All other section fields
+are rejected even when empty or null, including `vendor`, `profile`, credentials,
+agencies, pickup codes, patron settings, metadata-update policy, and entire `sru`
+or `zoom` blocks. Configure these through individual Directory entries.
+`requestItemPickupLocationEnabled` controls protocol behavior and is allowed;
+institution-specific pickup codes are not. Conditional record syntax and schema
+defaults remain in the broker.
+
+Broker rejection prevents use of an invalid snapshot; it does not prevent Directory
+from publishing content already bundled into its public specification. Never put
+credentials or other institution-specific values in `x-host-profiles`.
+
 At startup the broker fetches `/openapi.json` from the first entry URL in
 `DIRECTORY_API_URL`, including when `DIRECTORY_ADAPTER=mock`. It preserves the
 Directory deployment prefix when replacing `/entries` with `/openapi.json`.

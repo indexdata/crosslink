@@ -20,7 +20,8 @@ type hostProfile struct {
 }
 
 // NewResolver loads and validates x-host-profiles from a Directory OpenAPI JSON
-// document. All currently supported profiles must be present.
+// document. Profiles may supply only reusable behavior defaults, and all currently
+// supported profiles must be present.
 func NewResolver(specJSON []byte) (*Resolver, error) {
 	var document struct {
 		Profiles map[string]json.RawMessage `json:"x-host-profiles"`
@@ -55,6 +56,31 @@ func NewResolver(specJSON []byte) (*Resolver, error) {
 }
 
 func decodeProfile(data []byte) (hostProfile, error) {
+	var profile hostProfile
+	if err := json.Unmarshal(data, &profile); err != nil {
+		return hostProfile{}, err
+	}
+	if profile.LMS == nil || profile.Catalog == nil {
+		return hostProfile{}, fmt.Errorf("lmsConfig and catalogConfig must be objects")
+	}
+	// Entry types also permit credentials, endpoints, selectors, and local policy.
+	// Check raw keys so those fields are rejected even when empty or null.
+	for key := range profile.LMS {
+		switch key {
+		case "ncipNamespaceEnabled", "bibIdNormalization", "requestItemRequestType",
+			"requestItemRequestScopeType", "requestItemBibIdCode", "requestItemPickupLocationEnabled",
+			"lookupUserEnabled", "acceptItemEnabled", "checkInItemEnabled", "checkOutItemEnabled", "requestItemEnabled":
+		default:
+			return hostProfile{}, fmt.Errorf("lmsConfig.%s is not allowed in host profiles", key)
+		}
+	}
+	for key := range profile.Catalog {
+		switch key {
+		case "queryConfig", "metadataFormat", "holdingsFormat":
+		default:
+			return hostProfile{}, fmt.Errorf("catalogConfig.%s is not allowed in host profiles", key)
+		}
+	}
 	// Validate names and types against the Directory API, including nested fields.
 	var config struct {
 		LMS     *dirapi.LmsConfig     `json:"lmsConfig"`
@@ -63,13 +89,6 @@ func decodeProfile(data []byte) (hostProfile, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&config); err != nil {
-		return hostProfile{}, err
-	}
-	if config.LMS == nil || config.Catalog == nil {
-		return hostProfile{}, fmt.Errorf("lmsConfig and catalogConfig must be objects")
-	}
-	var profile hostProfile
-	if err := json.Unmarshal(data, &profile); err != nil {
 		return hostProfile{}, err
 	}
 	return profile, nil

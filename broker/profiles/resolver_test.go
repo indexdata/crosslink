@@ -38,6 +38,8 @@ func TestNewResolverRejectsInvalidSpecification(t *testing.T) {
 		`{"lmsConfig":{},"catalogConfig":{},"illConfig":{}}`,
 		`{"lmsConfig":{"misspelledSetting":true},"catalogConfig":{}}`,
 		`{"lmsConfig":{},"catalogConfig":{"holdingsFormat":{"opac":{"includeTemporaryLocation":"yesPlease"}}}}`,
+		`{"lmsConfig":{},"catalogConfig":{"holdingsFormat":{"opac":{"misspelledSetting":true}}}}`,
+		`{"lmsConfig":{},"catalogConfig":{"queryConfig":{"address":"https://catalog.example/sru"}}}`,
 		`{"lmsConfig":{},"catalogConfig":{"holdingsFormat":{"marc":{"mainField":952}}}}`,
 		`{"lmsConfig":{},"catalogConfig":{"holdingsFormat":{"opac":{"availabilityRule":"invalid"}}}}`,
 	} {
@@ -50,6 +52,100 @@ func TestNewResolverRejectsInvalidSpecification(t *testing.T) {
 		_, err = NewResolver(data)
 		require.ErrorContains(t, err, "Alma", profile)
 	}
+}
+
+func TestNewResolverRejectsEntryFields(t *testing.T) {
+	const secret = "private-profile-value"
+	for _, tc := range []struct {
+		section, field string
+		value          any
+	}{
+		{"lmsConfig", "vendor", "Sierra"},
+		{"lmsConfig", "Vendor", "Sierra"},
+		{"lmsConfig", "address", "https://lms.example/ncip"},
+		{"lmsConfig", "fromAgency", "LIBRARY"},
+		{"lmsConfig", "fromAgencyAuthentication", secret},
+		{"lmsConfig", "toAgency", "LIBRARY"},
+		{"lmsConfig", "itemLocation", "STACKS"},
+		{"lmsConfig", "requesterPickupLocation", "DESK"},
+		{"lmsConfig", "supplierPickupLocation", "DESK"},
+		{"lmsConfig", "requesterPatronPattern", "{requesterSymbol}"},
+		{"lmsConfig", "patronProfiles", []any{map[string]any{"code": "staff"}}},
+		{"lmsConfig", "NcipNamespaceEnabled", false},
+		{"catalogConfig", "profile", "Sierra"},
+		{"catalogConfig", "Profile", "Sierra"},
+		{"catalogConfig", "sru", map[string]any{"address": "https://catalog.example/sru"}},
+		{"catalogConfig", "zoom", map[string]any{"address": "catalog.example:210", "options": map[string]any{"password": secret}}},
+		{"catalogConfig", "metadataUpdateMode", "none"},
+	} {
+		t.Run(tc.section+"."+tc.field, func(t *testing.T) {
+			for _, value := range []struct {
+				name string
+				data any
+			}{{"populated", tc.value}, {"empty string", ""}, {"empty object", map[string]any{}}, {"null", nil}} {
+				t.Run(value.name, func(t *testing.T) {
+					document := specification(t)
+					profile := document["x-host-profiles"].(map[string]any)["Generic"].(map[string]any)
+					profile[tc.section].(map[string]any)[tc.field] = value.data
+					data, err := json.Marshal(document)
+					require.NoError(t, err)
+					resolver, err := NewResolver(data)
+					require.ErrorContains(t, err, "host profile Generic")
+					require.ErrorContains(t, err, tc.section+"."+tc.field)
+					require.NotContains(t, err.Error(), secret)
+					require.Nil(t, resolver)
+				})
+			}
+		})
+	}
+}
+
+func TestNewResolverAcceptsBehaviorDefaults(t *testing.T) {
+	document := specification(t)
+	profile := document["x-host-profiles"].(map[string]any)["Generic"].(map[string]any)
+	lms := map[string]any{
+		"ncipNamespaceEnabled": false, "bibIdNormalization": "none",
+		"requestItemRequestType": "Hold", "requestItemRequestScopeType": "Title",
+		"requestItemBibIdCode": "SYSNUMBER", "requestItemPickupLocationEnabled": false,
+		"lookupUserEnabled": false, "acceptItemEnabled": false, "checkInItemEnabled": false,
+		"checkOutItemEnabled": false, "requestItemEnabled": false,
+	}
+	profile["lmsConfig"] = lms
+	profile["catalogConfig"] = map[string]any{
+		"queryConfig":    map[string]any{"type": "cql", "title": "title = {term}"},
+		"metadataFormat": map[string]any{"marc21": map[string]any{"title": "246$a"}},
+		"holdingsFormat": map[string]any{"opac": map[string]any{"includeItemId": false}},
+	}
+	data, err := json.Marshal(document)
+	require.NoError(t, err)
+	resolver, err := NewResolver(data)
+	require.NoError(t, err)
+	effective, err := resolver.Resolve(entry(t, `{"lmsConfig":{},"catalogConfig":{}}`))
+	require.NoError(t, err)
+	actual := asObject(effective.LMS)
+	for key, value := range lms {
+		require.Equal(t, value, actual[key], key)
+	}
+	require.Equal(t, "title = {term}", *effective.Catalog.QueryConfig.Title)
+	require.Equal(t, "246$a", *effective.Catalog.MetadataFormat.Marc21.Title)
+	require.False(t, *effective.Catalog.HoldingsFormat.Opac.IncludeItemId)
+}
+
+func TestProfileRestrictionsDoNotApplyToEntries(t *testing.T) {
+	raw := entry(t, `{
+		"lmsConfig":{"vendor":"Sierra","address":"https://lms.example/ncip","fromAgency":"LIBRARY",
+			"fromAgencyAuthentication":"entry-credential","requesterPickupLocation":"DESK"},
+		"catalogConfig":{"profile":"Koha","sru":{"address":"https://catalog.example/sru"}}
+	}`)
+	effective, err := testResolver(t).Resolve(raw)
+	require.NoError(t, err)
+	require.Equal(t, "Sierra", effective.LMSVendor)
+	require.Equal(t, "Koha", effective.CatalogProfile)
+	require.Equal(t, raw.LmsConfig.Address, effective.LMS.Address)
+	require.Equal(t, raw.LmsConfig.FromAgency, effective.LMS.FromAgency)
+	require.Equal(t, *raw.LmsConfig.FromAgencyAuthentication, *effective.LMS.FromAgencyAuthentication)
+	require.Equal(t, *raw.LmsConfig.RequesterPickupLocation, *effective.LMS.RequesterPickupLocation)
+	require.Equal(t, raw.CatalogConfig.Sru.Address, effective.Catalog.Sru.Address)
 }
 
 func TestResolverUsesDirectorySnapshot(t *testing.T) {
