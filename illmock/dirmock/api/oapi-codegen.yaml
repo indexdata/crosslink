@@ -10,3 +10,4 @@ output-options:
   skip-prune: true
   include-operation-ids:
     - getEntries
+    - getOpenapiJson

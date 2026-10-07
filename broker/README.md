@@ -128,8 +128,8 @@ Configuration is provided via environment variables:
 |                                  | for consortium. At this time, it is used when      |                                           |
 |                                  | `HOLDINGS_ADAPTER` = `consortium` .                |                                           |
 | `DIRECTORY_ADAPTER`              | Directory lookup method: `mock` or `api`           | `mock`                                    |
-| `DIRECTORY_API_URL`              | Comma separated list of URLs when                  | `http://localhost:8086/directory/entries` |
-|                                  | `DIRECTORY_ADAPTER` is `api`                       |                                           |
+| `DIRECTORY_API_URL`              | Comma separated entry URLs; first supplies profiles | `http://localhost:8086/directory/entries` |
+|                                  | at startup in both `api` and `mock` modes          |                                           |
 | `AVAILABILITY_ADAPTER`           | Availability adapter: `mock` , `zoom` ,            | `zoom`                                    |
 |                                  | `metaproxy` . see                                  |                                           |
 |                                  | [Building with native extensions (CGO)][cgo]       |                                           |
@@ -224,7 +224,11 @@ You can run the `broker` program locally with:
 make run
 ```
 
-The application requires a Postgres DB and will use hard-coded default DB connection params unless configured, see `DB_*` env vars above.
+The application requires Postgres and an available Directory profile source at startup,
+including in mock mode. Configure `DIRECTORY_API_URL` to point to a Directory or
+illmock entries endpoint. Profile changes require restarting the broker. See
+[host profiles](../directory/host-profiles.md) for startup validation and limits.
+Default DB connection parameters can be changed with the `DB_*` environment variables.
 
 If `DB_PROVISION=true`, default `false`, the configured database user must have privileges to create roles and schemas in the database (the `CREATE` privilege on the database and the ability to run `CREATE SCHEMA`). The `DB_SCHEMA` env must be non-empty when provisioning (default).
 If `DB_PROVISION=false`, schema and role provisioning must be done before startup.
@@ -240,7 +244,7 @@ with full privileges on the dedicated schema granted to the user.
 See the example [DB provisioning script](../misc/db-provision.sql).
 Optionally, with `DB_MIGRATE` off, migrations can be performed separately and the runtime user won't require any `CREATE` privileges.
 
-To run locally in a container, there is a `docker-compose.yml` file prepared with both the app and the DB.
+To run locally in a container, there is a `docker-compose.yml` file prepared with the app, the DB, and illmock as the profile source.
 
 To start just the DB container with default connection params:
 
@@ -254,7 +258,7 @@ To run db-up only (and exit):
 docker compose --profile db-up run --rm db-up
 ```
 
-Start the default stack (DB + broker; broker runs provision and migrations on startup):
+Start the default stack (DB + broker + illmock; broker runs provision and migrations on startup):
 
 ```
 docker compose up

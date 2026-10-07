@@ -170,6 +170,11 @@ func Init(ctx context.Context) (Context, error) {
 		return Context{}, err
 	}
 
+	profileResolver, err := adapter.LoadHostProfiles(common.CreateExtCtxWithArgs(ctx, nil), http.DefaultClient, DIRECTORY_API_URL)
+	if err != nil {
+		return Context{}, err
+	}
+
 	err = RunDbUp()
 	if err != nil {
 		return Context{}, err
@@ -192,8 +197,8 @@ func Init(ctx context.Context) (Context, error) {
 
 	prMessageHandler := prservice.CreatePatronRequestMessageHandler(prRepo, eventRepo, illRepo, eventBus)
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo, illRepo, dirAdapter)
-	lmsCreator := lms.NewLmsCreator(illRepo, dirAdapter)
-	lookupAdapterCreator := catalog.NewLookupAdapterCreator(AVAILABILITY_ADAPTER, METAPROXY_URL)
+	lmsCreator := lms.NewLmsCreator(illRepo, dirAdapter, profileResolver)
+	lookupAdapterCreator := catalog.NewLookupAdapterCreator(AVAILABILITY_ADAPTER, METAPROXY_URL, profileResolver)
 	lookupAdapterFactory := service.NewLookupAdapterFactory(illRepo, dirAdapter, CONSORTIUM_SYMBOL, lookupAdapterEnv, lookupAdapterCreator)
 	prActionService := prservice.CreatePatronRequestActionService(prRepo, illRepo, eventBus, &iso18626Handler, lmsCreator, email.NewEmailService(), lookupAdapterFactory, dirAdapter)
 	prMessageHandler.SetAutoActionRunner(prActionService)

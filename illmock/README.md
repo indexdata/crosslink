@@ -173,6 +173,9 @@ The directory service is accessible from the `/directory/entries` endpoint. For 
 
     curl http://localhost:8081/directory/entries
 
+The `/directory/openapi.json` endpoint exposes the mock specification, including
+`x-host-profiles` for the broker startup profile lookup.
+
 See [the shared Directory OpenAPI spec](../directory/api.yaml). The endpoint accepts the same `cql`, `limit`, and `offset` query parameters as Directory and returns `items` with `about.count`.
 This supports indexes `symbol` and `parentSymbol` with relations `any`, `=`, `==`, and `exact` for matching
 against an entry's symbols or its immediate parent's symbols. It also supports index `tenant` with

@@ -16,14 +16,17 @@ const (
 )
 
 type LookupAdapterCreatorImpl struct {
-	mode         string
-	metaproxyUrl string
+	mode            string
+	metaproxyUrl    string
+	profileResolver *profiles.Resolver
 }
 
-func NewLookupAdapterCreator(mode string, metaproxyUrl string) LookupAdapterCreator {
+// NewLookupAdapterCreator creates catalog adapters using the supplied Directory profile snapshot.
+func NewLookupAdapterCreator(mode string, metaproxyUrl string, profileResolver *profiles.Resolver) LookupAdapterCreator {
 	return &LookupAdapterCreatorImpl{
-		mode:         mode,
-		metaproxyUrl: metaproxyUrl,
+		mode:            mode,
+		metaproxyUrl:    metaproxyUrl,
+		profileResolver: profileResolver,
 	}
 }
 
@@ -58,7 +61,7 @@ func getHoldingsParser(config *dirapi.HoldingsParserConfig) (HoldingsParser, err
 
 func (c *LookupAdapterCreatorImpl) GetAdapter(ctx common.ExtendedContext, peer ill_db.Peer) (LookupAdapter, error) {
 	entry := peer.CustomData
-	effective, err := profiles.Resolve(entry)
+	effective, err := c.profileResolver.Resolve(entry)
 	if err != nil {
 		return nil, err
 	}

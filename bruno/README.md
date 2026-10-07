@@ -14,6 +14,9 @@ To execute it:
 docker compose up
 ```
 
+The broker loads host profiles from illmock during startup. Compose starts illmock
+before the broker; rebuild illmock after changing Directory profile definitions.
+
 2. Launch Bruno and open the `crosslink` collection located in this directory.
 
 3. In Bruno, load the `LocalDev` environment.

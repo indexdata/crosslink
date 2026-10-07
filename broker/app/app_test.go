@@ -7,7 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHandleHealthz(t *testing.T) {
@@ -130,10 +132,17 @@ func TestConfigLogger(t *testing.T) {
 }
 
 func TestMigrationFailed(t *testing.T) {
+	spec, err := dirapi.GetSpecJSON()
+	require.NoError(t, err)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(spec) }))
+	defer server.Close()
+	previous := DIRECTORY_API_URL
+	DIRECTORY_API_URL = server.URL + "/directory/entries"
+	t.Cleanup(func() { DIRECTORY_API_URL = previous })
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	_, err := Init(ctx)
+	_, err = Init(ctx)
 	assert.ErrorContains(t, err, "DB migration failed:")
 }
 
@@ -165,4 +174,32 @@ func TestBadClientDelay(t *testing.T) {
 	_, err := Init(ctx)
 	assert.ErrorContains(t, err, "invalid duration \"bad\"")
 	CLIENT_DELAY = "0ms"
+}
+
+func TestInitRequiresDirectoryProfilesInMockMode(t *testing.T) {
+	previousURL, previousAdapter := DIRECTORY_API_URL, DIRECTORY_ADAPTER
+	DIRECTORY_ADAPTER = "mock"
+	t.Cleanup(func() { DIRECTORY_API_URL, DIRECTORY_ADAPTER = previousURL, previousAdapter })
+	for _, test := range []struct {
+		name, body, expected string
+		status               int
+	}{
+		{"missing endpoint", "", "HTTP status 404", http.StatusNotFound},
+		{"invalid", "{}", "no x-host-profiles", http.StatusOK},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			requests := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests++
+				assert.Equal(t, "/directory/openapi.json", r.URL.Path)
+				w.WriteHeader(test.status)
+				_, _ = w.Write([]byte(test.body))
+			}))
+			defer server.Close()
+			DIRECTORY_API_URL = server.URL + "/directory/entries"
+			_, err := Init(context.Background())
+			require.ErrorContains(t, err, test.expected)
+			require.Equal(t, 1, requests)
+		})
+	}
 }

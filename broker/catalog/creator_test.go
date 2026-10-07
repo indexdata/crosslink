@@ -6,13 +6,14 @@ import (
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/test/profiletest"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestGetAdapterEmpty(t *testing.T) {
-	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
+	creator := NewLookupAdapterCreator(LookupAdapterZoom, "", profiletest.NewResolver(t))
 	peer := ill_db.Peer{}
 	aa, err := creator.GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), peer)
 	assert.NoError(t, err)
@@ -20,7 +21,7 @@ func TestGetAdapterEmpty(t *testing.T) {
 }
 
 func TestGetAdapterOtherNoConfig(t *testing.T) {
-	creator := NewLookupAdapterCreator("other", "")
+	creator := NewLookupAdapterCreator("other", "", profiletest.NewResolver(t))
 	peer := ill_db.Peer{}
 	aa, err := creator.GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), peer)
 	assert.NoError(t, err)
@@ -59,7 +60,7 @@ func TestParserOpac(t *testing.T) {
 }
 
 func TestGetAdapterBadParser(t *testing.T) {
-	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
+	creator := NewLookupAdapterCreator(LookupAdapterZoom, "", profiletest.NewResolver(t))
 	peer := ill_db.Peer{
 		CustomData: dirapi.Entry{
 			CatalogConfig: &dirapi.CatalogConfig{
@@ -79,7 +80,7 @@ func TestGetAdapterBadParser(t *testing.T) {
 }
 
 func TestGetAdapterEmptyHoldingsUsesMarcDefaults(t *testing.T) {
-	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
+	creator := NewLookupAdapterCreator(LookupAdapterZoom, "", profiletest.NewResolver(t))
 	peer := ill_db.Peer{
 		CustomData: dirapi.Entry{
 			CatalogConfig: &dirapi.CatalogConfig{
@@ -97,7 +98,7 @@ func TestGetAdapterEmptyHoldingsUsesMarcDefaults(t *testing.T) {
 }
 
 func TestGetAdapterOtherWithConfig(t *testing.T) {
-	creator := NewLookupAdapterCreator("other", "")
+	creator := NewLookupAdapterCreator("other", "", profiletest.NewResolver(t))
 	peer := ill_db.Peer{
 		CustomData: dirapi.Entry{
 			CatalogConfig: &dirapi.CatalogConfig{
@@ -113,7 +114,7 @@ func TestGetAdapterOtherWithConfig(t *testing.T) {
 }
 
 func TestGetAdapterMetadataOnly(t *testing.T) {
-	creator := NewLookupAdapterCreator("zoom", "")
+	creator := NewLookupAdapterCreator("zoom", "", profiletest.NewResolver(t))
 	mode := dirapi.Merge
 	peer := ill_db.Peer{
 		CustomData: dirapi.Entry{
@@ -135,7 +136,7 @@ func TestGetAdapterMock(t *testing.T) {
 			},
 		},
 	}
-	creator := NewLookupAdapterCreator(LookupAdapterMock, "")
+	creator := NewLookupAdapterCreator(LookupAdapterMock, "", profiletest.NewResolver(t))
 	aa, err := creator.GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), peer)
 	assert.NoError(t, err)
 	assert.IsType(t, &MockLookupAdapter{}, aa)
@@ -151,7 +152,7 @@ func TestGetAdapterZoom(t *testing.T) {
 			},
 		},
 	}
-	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
+	creator := NewLookupAdapterCreator(LookupAdapterZoom, "", profiletest.NewResolver(t))
 	aa, err := creator.GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), peer)
 	if !cgoEnabled() {
 		assert.Error(t, err)
@@ -173,7 +174,7 @@ func TestGetAdapterMetaproxy(t *testing.T) {
 			},
 		},
 	}
-	creator := NewLookupAdapterCreator(LookupAdapterMetaproxy, "http://metaproxy.indexdata.com")
+	creator := NewLookupAdapterCreator(LookupAdapterMetaproxy, "http://metaproxy.indexdata.com", profiletest.NewResolver(t))
 	aa, err := creator.GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), peer)
 	assert.NoError(t, err)
 	assert.IsType(t, &MetaproxyLookupAdapter{}, aa)
@@ -189,7 +190,7 @@ func TestGetAdapterMetaproxyMissingProxy(t *testing.T) {
 			},
 		},
 	}
-	creator := NewLookupAdapterCreator(LookupAdapterMetaproxy, "")
+	creator := NewLookupAdapterCreator(LookupAdapterMetaproxy, "", profiletest.NewResolver(t))
 	_, err := creator.GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), peer)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "METAPROXY_URL")
@@ -205,7 +206,7 @@ func TestGetAdapterSRU(t *testing.T) {
 			},
 		},
 	}
-	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
+	creator := NewLookupAdapterCreator(LookupAdapterZoom, "", profiletest.NewResolver(t))
 	aa, err := creator.GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), peer)
 	assert.NoError(t, err)
 	assert.IsType(t, &SruLookupAdapter{}, aa)

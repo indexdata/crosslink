@@ -19,7 +19,7 @@ func TestProfiles(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			raw := entry(t, `{"vendor":"Alma","illConfig":{"iso18626Vendor":"ReShare"},"lmsConfig":{"vendor":"`+name+`"},"catalogConfig":{"zoom":{"address":"catalog:210"}}}`)
 			before, _ := json.Marshal(raw)
-			e, err := Resolve(raw)
+			e, err := testResolver(t).Resolve(raw)
 			require.NoError(t, err)
 			after, _ := json.Marshal(raw)
 			require.Equal(t, string(before), string(after))
@@ -55,13 +55,13 @@ func TestEmptyHoldingsFormatUsesDefaults(t *testing.T) {
 			}
 			before, err := json.Marshal(raw)
 			require.NoError(t, err)
-			effective, err := Resolve(raw)
+			effective, err := testResolver(t).Resolve(raw)
 			require.NoError(t, err)
 			after, err := json.Marshal(raw)
 			require.NoError(t, err)
 			require.JSONEq(t, string(before), string(after))
 			raw.CatalogConfig.HoldingsFormat = nil
-			defaults, err := Resolve(raw)
+			defaults, err := testResolver(t).Resolve(raw)
 			require.NoError(t, err)
 			require.Equal(t, defaults, effective)
 			if profile == "" || profile == "Generic" {
@@ -74,7 +74,7 @@ func TestEmptyHoldingsFormatUsesDefaults(t *testing.T) {
 
 func TestIndependentOverrides(t *testing.T) {
 	raw := entry(t, `{"lmsConfig":{"vendor":"Sierra","requestItemPickupLocationEnabled":false,"requestItemRequestType":"","bibIdNormalization":"none"},"catalogConfig":{"profile":"Koha","zoom":{"address":"site","options":{"preferredRecordSyntax":"custom"}},"holdingsFormat":{"marc":{"callNumberSubField":"x","availability":[]}}}}`)
-	e, err := Resolve(raw)
+	e, err := testResolver(t).Resolve(raw)
 	require.NoError(t, err)
 	require.Equal(t, "Koha", e.CatalogProfile)
 	require.False(t, *e.LMS.RequestItemPickupLocationEnabled)
@@ -89,32 +89,32 @@ func TestIndependentOverrides(t *testing.T) {
 }
 func TestParserReplacement(t *testing.T) {
 	for _, parser := range []string{"marc", "reservoir", "marc21plus1"} {
-		e, err := Resolve(entry(t, `{"lmsConfig":{"vendor":"Sierra"},"catalogConfig":{"holdingsFormat":{"`+parser+`":{}}}}`))
+		e, err := testResolver(t).Resolve(entry(t, `{"lmsConfig":{"vendor":"Sierra"},"catalogConfig":{"holdingsFormat":{"`+parser+`":{}}}}`))
 		require.NoError(t, err)
 		require.Nil(t, e.Catalog.HoldingsFormat.Opac)
 		for key := range e.Origins {
 			require.NotContains(t, key, ".opac.")
 		}
 	}
-	e, err := Resolve(entry(t, `{"lmsConfig":{"vendor":"Koha"},"catalogConfig":{"holdingsFormat":{"opac":{}}}}`))
+	e, err := testResolver(t).Resolve(entry(t, `{"lmsConfig":{"vendor":"Koha"},"catalogConfig":{"holdingsFormat":{"opac":{}}}}`))
 	require.NoError(t, err)
 	require.Nil(t, e.Catalog.HoldingsFormat.Marc)
 	require.Equal(t, "availableNow", *e.Catalog.HoldingsFormat.Opac.AvailabilityRule)
 }
 func TestFallbackAndProfileOnly(t *testing.T) {
 	for _, data := range []string{`{}`, `{"vendor":"Alma","illConfig":{"iso18626Vendor":"Alma"}}`} {
-		e, err := Resolve(entry(t, data))
+		e, err := testResolver(t).Resolve(entry(t, data))
 		require.NoError(t, err)
 		require.Equal(t, "Generic", e.CatalogProfile)
 		require.Equal(t, "Generic", e.LMSVendor)
 	}
-	e, err := Resolve(entry(t, `{"lmsConfig":{"vendor":"Sierra"},"catalogConfig":{"profile":"Generic"}}`))
+	e, err := testResolver(t).Resolve(entry(t, `{"lmsConfig":{"vendor":"Sierra"},"catalogConfig":{"profile":"Generic"}}`))
 	require.NoError(t, err)
 	require.Equal(t, "Generic", e.CatalogProfile)
 	require.Nil(t, e.Catalog.Sru)
 	require.Nil(t, e.Catalog.Zoom)
 	require.Equal(t, "852", *e.Catalog.HoldingsFormat.Marc.MainField)
-	e, err = Resolve(entry(t, `{"catalogConfig":{"profile":"Alma"}}`))
+	e, err = testResolver(t).Resolve(entry(t, `{"catalogConfig":{"profile":"Alma"}}`))
 	require.NoError(t, err)
 	require.Nil(t, e.LMS)
 	require.Nil(t, e.Catalog.Zoom)
@@ -133,7 +133,7 @@ func TestZoomParserSyntax(t *testing.T) {
 				raw := entry(t, `{"catalogConfig":{"profile":"`+profile+`","zoom":{"address":"catalog:210"},"holdingsFormat":{`+tc.holdings+`}}}`)
 				before, err := json.Marshal(raw)
 				require.NoError(t, err)
-				e, err := Resolve(raw)
+				e, err := testResolver(t).Resolve(raw)
 				require.NoError(t, err)
 				h := asObject(e.Catalog.HoldingsFormat)
 				require.Len(t, h, 1)
@@ -158,7 +158,7 @@ func TestRejectConflictingHoldingsParsers(t *testing.T) {
 					raw := entry(t, `{"catalogConfig":{"profile":"`+profile+`","holdingsFormat":{"`+first+`":{},"`+second+`":{}}}}`)
 					before, err := json.Marshal(raw)
 					require.NoError(t, err)
-					_, err = Resolve(raw)
+					_, err = testResolver(t).Resolve(raw)
 					require.ErrorContains(t, err, "exactly one parser")
 					after, err := json.Marshal(raw)
 					require.NoError(t, err)
@@ -185,7 +185,7 @@ func TestSruSchemaDefaults(t *testing.T) {
 						want = "custom"
 						raw.CatalogConfig.Sru.RecordSchema = &want
 					}
-					e, err := Resolve(raw)
+					e, err := testResolver(t).Resolve(raw)
 					require.NoError(t, err)
 					require.Equal(t, want, *e.Catalog.Sru.RecordSchema)
 					require.Nil(t, e.Catalog.Zoom)
@@ -203,21 +203,30 @@ func TestValidation(t *testing.T) {
 		`{"catalogConfig":{"profile":"Koha","holdingsFormat":{"marc":{"availability":[{"operator":"equals","subField":"7"}]}}}}`,
 		`{"catalogConfig":{"profile":"Alma","holdingsFormat":{"opac":{"availabilityRule":"bad"}}}}`,
 	} {
-		_, err := Resolve(entry(t, data))
+		_, err := testResolver(t).Resolve(entry(t, data))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "profile")
 	}
 }
 
 func TestRejectConflictingCatalogEndpoints(t *testing.T) {
-	_, err := Resolve(entry(t, `{"catalogConfig":{"sru":{"address":"https://catalog/sru"},"zoom":{"address":"catalog:210"}}}`))
+	_, err := testResolver(t).Resolve(entry(t, `{"catalogConfig":{"sru":{"address":"https://catalog/sru"},"zoom":{"address":"catalog:210"}}}`))
 	require.ErrorContains(t, err, "simultaneous sru and zoom endpoints")
 }
 func TestDiagnosticsProtectCredentials(t *testing.T) {
-	effective, err := Resolve(entry(t, `{"lmsConfig":{"vendor":"Sierra","address":"https://secret-address","fromAgency":"secret-agency","fromAgencyAuthentication":"secret-password"},"catalogConfig":{"zoom":{"address":"secret-catalog","options":{"password":"secret-password"}}}}`))
+	effective, err := testResolver(t).Resolve(entry(t, `{"lmsConfig":{"vendor":"Sierra","address":"https://secret-address","fromAgency":"secret-agency","fromAgencyAuthentication":"secret-password"},"catalogConfig":{"zoom":{"address":"secret-catalog","options":{"password":"secret-password"}}}}`))
 	require.NoError(t, err)
 	diagnostics, err := json.Marshal(effective.Diagnostics())
 	require.NoError(t, err)
 	require.NotContains(t, string(diagnostics), "secret-")
 	require.Contains(t, string(diagnostics), "Sierra")
+}
+
+func testResolver(t testing.TB) *Resolver {
+	t.Helper()
+	spec, err := dirapi.GetSpecJSON()
+	require.NoError(t, err)
+	resolver, err := NewResolver(spec)
+	require.NoError(t, err)
+	return resolver
 }

@@ -47,6 +47,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      illmock:
+        condition: service_started
     environment:
       HTTP_PORT: 8081
       DB_TYPE: postgres
@@ -57,5 +59,13 @@ services:
       DB_PORT: 5432
       DB_PROVISION: "true"
       DB_MIGRATE: "true"
+      DIRECTORY_API_URL: http://illmock:8081/directory/entries
     ports:
       - "8081:8081"
+
+  illmock:
+    build:
+      context: ..
+      dockerfile: illmock/Dockerfile
+    environment:
+      HTTP_PORT: 8081

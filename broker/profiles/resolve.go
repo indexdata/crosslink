@@ -73,7 +73,10 @@ func supported(name, setting string) error {
 
 // Resolve applies profile defaults and explicit directory overrides to produce
 // validated effective LMS and catalog configurations without mutating entry.
-func Resolve(entry dirapi.Entry) (*Effective, error) {
+func (r *Resolver) Resolve(entry dirapi.Entry) (*Effective, error) {
+	if r == nil || r.definitions == nil {
+		return nil, fmt.Errorf("host profile resolver is not initialized")
+	}
 	rawL, rawC := asObject(entry.LmsConfig), asObject(entry.CatalogConfig)
 	vendor := selected(rawL, "vendor", "Generic")
 	profile := selected(rawC, "profile", vendor)
@@ -85,12 +88,12 @@ func Resolve(entry dirapi.Entry) (*Effective, error) {
 	}
 	e := &Effective{LMSVendor: vendor, CatalogProfile: profile, Origins: map[string]string{}}
 	l, c := object{}, object{}
-	merge(l, builtins["Generic"].LMS, "lmsConfig", "Generic", e.Origins)
+	merge(l, r.definitions["Generic"].LMS, "lmsConfig", "Generic", e.Origins)
 	if vendor != "Generic" {
-		merge(l, builtins[vendor].LMS, "lmsConfig", vendor, e.Origins)
+		merge(l, r.definitions[vendor].LMS, "lmsConfig", vendor, e.Origins)
 	}
 	merge(l, rawL, "lmsConfig", "directory", e.Origins)
-	merge(c, builtins[profile].Catalog, "catalogConfig", profile, e.Origins)
+	merge(c, r.definitions[profile].Catalog, "catalogConfig", profile, e.Origins)
 	// Switching parser replaces the entire profile parser, including its rules.
 	if h, ok := rawC["holdingsFormat"].(object); ok && len(h) > 0 {
 		for parser := range h {

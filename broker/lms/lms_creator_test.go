@@ -7,6 +7,7 @@ import (
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/test/profiletest"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -15,7 +16,7 @@ import (
 func TestGetAdapterGetCachedByPeersByPeersFail(t *testing.T) {
 	illRepo := &MockIllRepo{}
 	illRepo.On("GetCachedPeersBySymbols", mock.Anything).Return([]ill_db.Peer{}, "", assert.AnError)
-	creator := NewLmsCreator(illRepo, nil)
+	creator := NewLmsCreator(illRepo, nil, profiletest.NewResolver(t))
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	symbol := "TEST"
 	_, err := creator.GetAdapter(ctx, symbol)
@@ -26,7 +27,7 @@ func TestGetAdapterGetCachedByPeersByPeersFail(t *testing.T) {
 func TestGetAdapterNoPeers(t *testing.T) {
 	illRepo := &MockIllRepo{}
 	illRepo.On("GetCachedPeersBySymbols", mock.Anything).Return([]ill_db.Peer{}, "", nil)
-	creator := NewLmsCreator(illRepo, nil)
+	creator := NewLmsCreator(illRepo, nil, profiletest.NewResolver(t))
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	symbol := "TEST"
 	LmsAdapter, err := creator.GetAdapter(ctx, symbol)
@@ -51,7 +52,7 @@ func TestGetAdapterNcipOK(t *testing.T) {
 		},
 	}
 	illRepo.On("GetCachedPeersBySymbols", mock.Anything).Return([]ill_db.Peer{peer}, "", nil)
-	creator := NewLmsCreator(illRepo, nil)
+	creator := NewLmsCreator(illRepo, nil, profiletest.NewResolver(t))
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	symbol := "TEST"
 	LmsAdapter, err := creator.GetAdapter(ctx, symbol)
@@ -67,7 +68,7 @@ func TestGetAdapterEmptyConfigDoesNotEnableNcip(t *testing.T) {
 		},
 	}
 	illRepo.On("GetCachedPeersBySymbols", mock.Anything).Return([]ill_db.Peer{peer}, "", nil)
-	creator := NewLmsCreator(illRepo, nil)
+	creator := NewLmsCreator(illRepo, nil, profiletest.NewResolver(t))
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	symbol := "TEST"
 	_, err := creator.GetAdapter(ctx, symbol)

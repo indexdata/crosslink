@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/ncipclient"
+	"github.com/indexdata/crosslink/broker/test/profiletest"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/ncip"
 	"github.com/stretchr/testify/assert"
@@ -17,21 +18,21 @@ func TestCreateLmsAdapterNcip(t *testing.T) {
 		Address:    "http://ncip.example.com",
 		FromAgency: "MyAgency",
 	}
-	ad, err := CreateLmsAdapterNcip(config)
+	ad, err := CreateLmsAdapterNcip(config, profiletest.NewResolver(t))
 	assert.NoError(t, err)
 	assert.NotNil(t, ad)
 
 	config = dirapi.LmsConfig{
 		FromAgency: "MyAgency",
 	}
-	_, err = CreateLmsAdapterNcip(config)
+	_, err = CreateLmsAdapterNcip(config, profiletest.NewResolver(t))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "lmsConfig.address and fromAgency")
 
 	config = dirapi.LmsConfig{
 		Address: "http://ncip.example.com",
 	}
-	_, err = CreateLmsAdapterNcip(config)
+	_, err = CreateLmsAdapterNcip(config, profiletest.NewResolver(t))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "lmsConfig.address and fromAgency")
 }

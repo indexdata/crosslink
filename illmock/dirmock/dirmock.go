@@ -399,3 +399,16 @@ func (d *DirectoryMock) HandlerFromMux(mux *http.ServeMux) error {
 	mux.Handle(directoryBasePath+"/", peerURLCompatibilityMiddleware(apiValidator.OapiRequestValidator(swagger)(handler)))
 	return nil
 }
+
+// GetOpenapiJson serves the mock Directory specification, including host profiles.
+func (d *DirectoryMock) GetOpenapiJson(_ context.Context, _ directory.GetOpenapiJsonRequestObject) (directory.GetOpenapiJsonResponseObject, error) {
+	data, err := directory.GetSpecJSON()
+	if err != nil {
+		return nil, fmt.Errorf("load mock Directory specification: %w", err)
+	}
+	var response directory.GetOpenapiJson200JSONResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("decode mock Directory specification: %w", err)
+	}
+	return response, nil
+}

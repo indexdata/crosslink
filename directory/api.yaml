@@ -2,6 +2,74 @@ openapi: "3.0.0"
 info:
   version: 1.0.0
   title: Directory API
+x-host-profiles:
+  Alma:
+    lmsConfig: {}
+    catalogConfig:
+      holdingsFormat:
+        opac:
+          availabilityRule: availableNow
+          requireLocalLocation: true
+          includeItemId: true
+          includeItemLoanPolicy: true
+          allCirculations: true
+  FOLIO:
+    lmsConfig: {}
+    catalogConfig:
+      holdingsFormat:
+        opac:
+          availabilityRule: availableNow
+          requireLocalLocation: true
+          includeItemId: true
+          includeItemLoanPolicy: true
+          allCirculations: true
+          includeTemporaryLocation: true
+  Generic:
+    lmsConfig:
+      ncipNamespaceEnabled: true
+      bibIdNormalization: none
+      requestItemRequestType: Page
+      requestItemRequestScopeType: Item
+      requestItemBibIdCode: SYSNUMBER
+      requestItemPickupLocationEnabled: true
+      lookupUserEnabled: true
+      acceptItemEnabled: true
+      checkInItemEnabled: true
+      checkOutItemEnabled: true
+      requestItemEnabled: true
+    catalogConfig: {}
+  Koha:
+    lmsConfig:
+      ncipNamespaceEnabled: false
+    catalogConfig:
+      holdingsFormat:
+        marc:
+          mainField: "952"
+          locationSubField: b
+          shelvingLocationSubField: c
+          callNumberSubField: o
+          availability:
+            - subField: "7"
+              operator: equals
+              value: "0"
+            - subField: q
+              operator: absent
+  Sierra:
+    lmsConfig:
+      requestItemRequestType: Hold
+      requestItemRequestScopeType: Title
+      bibIdNormalization: sierra
+    catalogConfig:
+      holdingsFormat:
+        opac:
+          availabilityRule: publicNote
+          availablePublicNotes:
+            - AVAILABLE
+            - CHECK SHELVES
+            - CHECK SHELF
+          shelvingLocationSource: localLocation
+          includeItemId: false
+          includeItemLoanPolicy: false
 servers:
   - url: /directory
 paths:

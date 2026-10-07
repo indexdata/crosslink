@@ -17,6 +17,7 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/test/profiletest"
 	"github.com/indexdata/crosslink/broker/test/utils"
 	mockapp "github.com/indexdata/crosslink/illmock/app"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -31,6 +32,14 @@ func StartApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.Even
 }
 
 func StartAppReturnContext(ctx context.Context) app.Context {
+	if app.DIRECTORY_ADAPTER == "mock" {
+		server, err := profiletest.NewServer()
+		utils.Expect(err, "failed to start test Directory")
+		defer server.Close()
+		previousURL := app.DIRECTORY_API_URL
+		app.DIRECTORY_API_URL = server.URL + "/directory/entries"
+		defer func() { app.DIRECTORY_API_URL = previousURL }()
+	}
 	app.DB_PROVISION = true
 	appContext, err := app.Init(ctx)
 	utils.Expect(err, "failed to init app")

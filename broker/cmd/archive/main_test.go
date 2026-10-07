@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/app"
+	"github.com/indexdata/crosslink/broker/test/profiletest"
 	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/indexdata/crosslink/testutil"
 	_ "github.com/lib/pq" // PostgreSQL driver
@@ -15,6 +16,9 @@ import (
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 	app.DB_PROVISION = true
+	directoryServer, err := profiletest.NewServer()
+	test.Expect(err, "failed to start test Directory")
+	app.DIRECTORY_API_URL = directoryServer.URL + "/directory/entries"
 
 	pgContainer, err := testutil.RunPostgres(ctx)
 	test.Expect(err, "failed to start db container")
@@ -25,6 +29,7 @@ func TestMain(m *testing.M) {
 	app.MigrationsFolder = "file://../../migrations"
 
 	code := m.Run()
+	directoryServer.Close()
 
 	test.Expect(test.TerminatePGContainer(ctx, pgContainer), "failed to stop db container")
 	os.Exit(code)

@@ -12,6 +12,7 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/profiles"
+	"github.com/indexdata/crosslink/broker/test/profiletest"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/stretchr/testify/require"
 )
@@ -20,7 +21,7 @@ func profileParser(t *testing.T, name string) HoldingsParser {
 	t.Helper()
 	var entry dirapi.Entry
 	require.NoError(t, json.Unmarshal([]byte(`{"catalogConfig":{"profile":"`+name+`"}}`), &entry))
-	e, err := profiles.Resolve(entry)
+	e, err := profiletest.NewResolver(t).Resolve(entry)
 	require.NoError(t, err)
 	p, err := getHoldingsParser(e.Catalog.HoldingsFormat)
 	require.NoError(t, err)
@@ -94,7 +95,7 @@ func TestFolioEffectiveShelvingLocation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var entry dirapi.Entry
 			require.NoError(t, json.Unmarshal([]byte(`{"catalogConfig":{"profile":"FOLIO"`+tc.override+`}}`), &entry))
-			effective, err := profiles.Resolve(entry)
+			effective, err := profiletest.NewResolver(t).Resolve(entry)
 			require.NoError(t, err)
 			parser, err := getHoldingsParser(effective.Catalog.HoldingsFormat)
 			require.NoError(t, err)
@@ -138,7 +139,7 @@ func TestProfileLookupAggregationAndFallback(t *testing.T) {
 			defer server.Close()
 			var entry dirapi.Entry
 			require.NoError(t, json.Unmarshal([]byte(`{"lmsConfig":{"vendor":"`+name+`"},"catalogConfig":{"sru":{"address":"`+server.URL+`"}}}`), &entry))
-			ad, err := NewLookupAdapterCreator(LookupAdapterZoom, "").GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.Peer{CustomData: entry})
+			ad, err := NewLookupAdapterCreator(LookupAdapterZoom, "", profiletest.NewResolver(t)).GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.Peer{CustomData: entry})
 			require.NoError(t, err)
 			result, err := ad.Lookup(LookupParams{Identifier: "id", Isbn: "isbn", Issn: "issn", Title: "title"})
 			require.NoError(t, err)
@@ -152,7 +153,27 @@ func TestProfileLookupAggregationAndFallback(t *testing.T) {
 func TestProfileOnlyDoesNotEnableCatalog(t *testing.T) {
 	var entry dirapi.Entry
 	require.NoError(t, json.Unmarshal([]byte(`{"lmsConfig":{"vendor":"Sierra"},"catalogConfig":{"profile":"Koha"}}`), &entry))
-	a, err := NewLookupAdapterCreator(LookupAdapterZoom, "").GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.Peer{CustomData: entry})
+	a, err := NewLookupAdapterCreator(LookupAdapterZoom, "", profiletest.NewResolver(t)).GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.Peer{CustomData: entry})
 	require.NoError(t, err)
 	require.Nil(t, a)
+}
+
+func TestDirectorySnapshotChangesCatalogDefaults(t *testing.T) {
+	spec, err := dirapi.GetSpecJSON()
+	require.NoError(t, err)
+	var document map[string]any
+	require.NoError(t, json.Unmarshal(spec, &document))
+	document["x-host-profiles"].(map[string]any)["Alma"].(map[string]any)["catalogConfig"].(map[string]any)["holdingsFormat"].(map[string]any)["opac"].(map[string]any)["includeItemId"] = false
+	spec, err = json.Marshal(document)
+	require.NoError(t, err)
+	resolver, err := profiles.NewResolver(spec)
+	require.NoError(t, err)
+	var entry dirapi.Entry
+	require.NoError(t, json.Unmarshal([]byte(`{"catalogConfig":{"profile":"Alma","sru":{"address":"https://catalog/sru"}}}`), &entry))
+	adapter, err := NewLookupAdapterCreator(LookupAdapterZoom, "", resolver).GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.Peer{CustomData: entry})
+	require.NoError(t, err)
+	holdings, err := adapter.(*SruLookupAdapter).holdingsParser.Parse([]byte(`<opacRecord><holdings><holding><localLocation>MAIN</localLocation><circulations><circulation><availableNow value="1"/><itemId>123</itemId></circulation></circulations></holding></holdings></opacRecord>`), LookupParams{})
+	require.NoError(t, err)
+	require.Len(t, holdings, 1)
+	require.Empty(t, holdings[0].ItemId)
 }

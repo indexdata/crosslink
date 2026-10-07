@@ -35,20 +35,32 @@ address. Profiles never supply endpoints, credentials, agencies, databases, patr
 identifiers, pickup codes, or lending policies. Existing Generic circulation
 fallbacks remain unchanged.
 
-## Built-in profiles
+## Directory profiles
 
-The broker embeds one [YAML file per supported profile](../broker/profiles/builtin)
-using Go's `go:embed`. These files use the directory's `lmsConfig` and
-`catalogConfig` structure and are the source of vendor defaults. Vendor files
-contain overrides of Generic defaults; an empty section inherits those defaults.
-`illConfig` remains independent and is not part of a host profile.
+Directory's [OpenAPI specification](api.yaml) stores vendor defaults in its root
+`x-host-profiles` extension, using `lmsConfig` and `catalogConfig` sections. Vendor
+entries contain overrides of Generic defaults. `illConfig` remains independent
+and is not part of a host profile.
+
+At startup the broker fetches `/openapi.json` from the first entry URL in
+`DIRECTORY_API_URL`, including when `DIRECTORY_ADAPTER=mock`. It preserves the
+Directory deployment prefix when replacing `/entries` with `/openapi.json`.
+The fetch has a ten-second total budget, including requests and retry backoff,
+and a 10 MiB response limit. Transient connection failures, network timeouts,
+interrupted response reads, and HTTP 502/503/504 responses are retried. Backoff
+starts at 100 ms, doubles, and caps at one second; cancellation stops it promptly.
+Invalid URLs, certificate errors, other HTTP statuses, oversized responses, and
+invalid specifications fail immediately. Exhausting the retry budget prevents
+startup; there is no local fallback.
+Deploy Directory with this extension before upgrading the broker. Profile changes
+take effect after restarting the broker; no broker rebuild or directory-record
+migration is required. All five supported profile entries must be present.
 
 Conditional catalog defaults (query language, parser replacement, and record
-syntax based on the effective parser) remain in Go. The resolver checks YAML
-field names and types against the directory API, retains value origins, and
-applies explicit directory overrides without modifying the embedded defaults.
-Changing a built-in file requires rebuilding the broker, not migrating directory
-records. WMS and Aleph remain unsupported and have no built-in files.
+syntax based on the effective parser) remain in Go. The resolver validates profile
+field names, types, and effective settings, retains value origins, and applies
+explicit directory overrides without modifying its shared profile snapshot.
+WMS and Aleph remain unsupported.
 
 | Profile | Catalog defaults | Circulation defaults |
 | --- | --- | --- |

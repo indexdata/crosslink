@@ -8,6 +8,7 @@ import (
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/test/profiletest"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/stretchr/testify/assert"
 )
@@ -394,7 +395,7 @@ func TestGviHoldings(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
+	creator := NewLookupAdapterCreator(LookupAdapterZoom, "", profiletest.NewResolver(t))
 
 	qtype := dirapi.QueryConfigTypeCql
 	peer := ill_db.Peer{

@@ -275,3 +275,22 @@ func TestEmbeddedNetworkPriorities(t *testing.T) {
 	assert.Equal(t, int32(7), networks[1].Priority)
 	assert.Equal(t, int32(0), networks[2].Priority)
 }
+
+func TestOpenapiIncludesHostProfiles(t *testing.T) {
+	mock, err := NewJson("[]")
+	assert.NoError(t, err)
+	mux := http.NewServeMux()
+	assert.NoError(t, mock.HandlerFromMux(mux))
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/directory/openapi.json", nil))
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Equal(t, "application/json", recorder.Header().Get("Content-Type"))
+	var document struct {
+		Profiles map[string]json.RawMessage `json:"x-host-profiles"`
+	}
+	assert.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &document))
+	assert.Len(t, document.Profiles, 5)
+	for _, name := range []string{"Generic", "Alma", "FOLIO", "Koha", "Sierra"} {
+		assert.Contains(t, document.Profiles, name)
+	}
+}

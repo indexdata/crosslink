@@ -52,8 +52,9 @@ func (l *LmsAdapterNcip) requestItemRequestScopeType() string {
 	return "Item"
 }
 
-func CreateLmsAdapterNcip(lmsConfig dirapi.LmsConfig) (LmsAdapter, error) {
-	effective, err := profiles.Resolve(dirapi.Entry{LmsConfig: &lmsConfig})
+// CreateLmsAdapterNcip resolves Directory profile defaults before creating an NCIP adapter.
+func CreateLmsAdapterNcip(lmsConfig dirapi.LmsConfig, profileResolver *profiles.Resolver) (LmsAdapter, error) {
+	effective, err := profileResolver.Resolve(dirapi.Entry{LmsConfig: &lmsConfig})
 	if err != nil {
 		return nil, err
 	}

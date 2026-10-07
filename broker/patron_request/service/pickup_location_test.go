@@ -11,6 +11,7 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/lms"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	"github.com/indexdata/crosslink/broker/test/profiletest"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -221,7 +222,7 @@ func TestPickupCodeRequirementPerOperation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.config.Address = "http://unused.invalid"
 			tc.config.FromAgency = "MAIN"
-			adapter, err := lms.CreateLmsAdapterNcip(tc.config)
+			adapter, err := lms.CreateLmsAdapterNcip(tc.config, profiletest.NewResolver(t))
 			require.NoError(t, err)
 			require.Equal(t, tc.requestUsesCode, adapter.RequestItemUsesPickupLocation())
 			require.Equal(t, tc.acceptUsesCode, adapter.AcceptItemUsesPickupLocation())

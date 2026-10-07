@@ -23,6 +23,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      illmock:
+        condition: service_started
     environment:
       HTTP_PORT: 8080
       DB_TYPE: postgres

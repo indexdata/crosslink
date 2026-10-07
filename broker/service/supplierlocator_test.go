@@ -16,6 +16,7 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test/mocks"
+	"github.com/indexdata/crosslink/broker/test/profiletest"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -151,7 +152,7 @@ func TestCheckAvailabilityWithoutConfiguration(t *testing.T) {
 		new(adapter.MockDirectoryLookupAdapter),
 		"",
 		nil,
-		catalog.NewLookupAdapterCreator(catalog.LookupAdapterMock, ""),
+		catalog.NewLookupAdapterCreator(catalog.LookupAdapterMock, "", profiletest.NewResolver(t)),
 	)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, new(adapter.MockDirectoryLookupAdapter), factory)
 

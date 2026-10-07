@@ -12,6 +12,13 @@
           ],
           "pathPattern": "/directory/entries",
           "permissionsRequired": []
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/directory/openapi.json",
+          "permissionsRequired": []
         }
       ]
     }

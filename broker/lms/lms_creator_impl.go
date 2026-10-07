@@ -10,12 +10,15 @@ import (
 type lmsCreatorImpl struct {
 	illRepo                ill_db.IllRepo
 	directoryLookupAdapter adapter.DirectoryLookupAdapter
+	profileResolver        *profiles.Resolver
 }
 
-func NewLmsCreator(illRepo ill_db.IllRepo, directoryLookupAdapter adapter.DirectoryLookupAdapter) LmsCreator {
+// NewLmsCreator creates LMS adapters using the supplied Directory profile snapshot.
+func NewLmsCreator(illRepo ill_db.IllRepo, directoryLookupAdapter adapter.DirectoryLookupAdapter, profileResolver *profiles.Resolver) LmsCreator {
 	return &lmsCreatorImpl{
 		illRepo:                illRepo,
 		directoryLookupAdapter: directoryLookupAdapter,
+		profileResolver:        profileResolver,
 	}
 }
 
@@ -26,7 +29,7 @@ func (l *lmsCreatorImpl) GetAdapter(ctx common.ExtendedContext, symbol string) (
 	}
 	for _, peer := range peers {
 		entry := peer.CustomData
-		effective, err := profiles.Resolve(entry)
+		effective, err := l.profileResolver.Resolve(entry)
 		if err != nil {
 			return nil, err
 		}

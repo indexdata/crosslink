@@ -27,6 +27,7 @@ import (
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/shim"
+	"github.com/indexdata/crosslink/broker/test/profiletest"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/crosslink/ncip"
@@ -5155,7 +5156,7 @@ func TestHandleInvokeBorrowerActionFillLocally(t *testing.T) {
 			var lmsAdapter lms.LmsAdapter
 			if tt.disabledRequestItem {
 				var err error
-				lmsAdapter, err = lms.CreateLmsAdapterNcip(dirapi.LmsConfig{Address: "http://unused.invalid", FromAgency: "MAIN", RequestItemEnabled: new(false)})
+				lmsAdapter, err = lms.CreateLmsAdapterNcip(dirapi.LmsConfig{Address: "http://unused.invalid", FromAgency: "MAIN", RequestItemEnabled: new(false)}, profiletest.NewResolver(t))
 				require.NoError(t, err)
 			} else if tt.manualAdapter {
 				lmsAdapter = &lms.LmsAdapterManual{}
