@@ -5,6 +5,42 @@ info:
 servers:
   - url: /directory
 paths:
+  /openapi.yaml:
+    get:
+      summary: Retrieve the Directory OpenAPI specification as YAML
+      description: Returns the complete bundled OpenAPI specification as YAML without requiring a Directory role.
+      operationId: getOpenapiYaml
+      responses:
+        '200':
+          description: Complete OpenAPI specification
+          content:
+            application/yaml:
+              schema:
+                type: object
+                additionalProperties: true
+        '500':
+          description: Failed to prepare the specification
+          content:
+            text/plain:
+              schema: { type: string }
+  /openapi.json:
+    get:
+      summary: Retrieve the Directory OpenAPI specification as JSON
+      description: Returns the complete bundled OpenAPI specification as JSON without requiring a Directory role.
+      operationId: getOpenapiJson
+      responses:
+        '200':
+          description: Complete OpenAPI specification
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '500':
+          description: Failed to prepare the specification
+          content:
+            text/plain:
+              schema: { type: string }
   /import:
     post:
       summary: Import complete directory aggregates

@@ -3,6 +3,24 @@
   "name": "Directory",
   "provides": [
     {
+      "id": "directory-oapi",
+      "version": "1.0",
+      "handlers": [
+        {
+          "methods": ["GET"],
+          "pathPattern": "/directory/openapi.yaml",
+          "permissionsRequired": [],
+          "permissionsDesired": []
+        },
+        {
+          "methods": ["GET"],
+          "pathPattern": "/directory/openapi.json",
+          "permissionsRequired": [],
+          "permissionsDesired": []
+        }
+      ]
+    },
+    {
       "id": "entries",
       "version": "1.0",
       "handlers": [
