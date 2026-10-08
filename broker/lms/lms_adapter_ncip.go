@@ -423,6 +423,7 @@ func (l *LmsAdapterNcip) RequestItem(
 	}
 	itemElements := []ncip.SchemeValuePair{
 		{Text: string(NCIPBibliographicDescription)},
+		{Text: "Location"},
 	}
 	arg := ncip.RequestItem{
 		RequestId:          &ncip.RequestId{RequestIdentifierValue: requestId},

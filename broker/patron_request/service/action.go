@@ -1899,15 +1899,17 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 		if checkedOutItem.Title != "" {
 			item.Title = getDbText(checkedOutItem.Title)
 			_, err = a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
-				ID:           item.ID,
-				CreatedAt:    item.CreatedAt,
-				PrID:         item.PrID,
-				ItemID:       item.ItemID,
-				LmsRequestID: item.LmsRequestID,
-				LmsItemID:    item.LmsItemID,
-				Title:        item.Title,
-				CallNumber:   item.CallNumber,
-				Barcode:      item.Barcode,
+				ID:               item.ID,
+				CreatedAt:        item.CreatedAt,
+				PrID:             item.PrID,
+				ItemID:           item.ItemID,
+				LmsRequestID:     item.LmsRequestID,
+				LmsItemID:        item.LmsItemID,
+				Title:            item.Title,
+				CallNumber:       item.CallNumber,
+				Location:         item.Location,
+				ShelvingLocation: item.ShelvingLocation,
+				Barcode:          item.Barcode,
 			})
 			if err != nil {
 				status, result := logActionErrorAndReturnResult(ctx, "failed to save item", err)
