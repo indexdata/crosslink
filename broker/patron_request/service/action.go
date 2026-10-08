@@ -2101,7 +2101,12 @@ func (a *PatronRequestActionService) sendNotificationLenderRequest(ctx common.Ex
 func logNotificationProblem(_ common.ExtendedContext, pr pr_db.PatronRequest, msg string, err error) actionExecutionResult {
 	details := msg
 	if err != nil {
-		details += ": " + err.Error()
+		var templateErr *templateRenderError
+		if errors.As(err, &templateErr) {
+			details += ": " + templateErr.UserMessage()
+		} else {
+			details += ": " + err.Error()
+		}
 	}
 	status, result := events.NewProblemResult(msg, details)
 	result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
@@ -2190,11 +2195,11 @@ func (a *PatronRequestActionService) createAndSendEmail(ctx common.ExtendedConte
 		body, err = email.RenderTextTemplate(data, template.Labels, template.Body)
 	}
 	if err != nil {
-		return fmt.Errorf("render email template %q (label %q, audience %s) body: %w", template.ID, label, audience, err)
+		return &templateRenderError{templateID: template.ID, label: label, audience: audience, part: "body", err: err}
 	}
 	subject, err := email.RenderTextTemplate(data, template.Labels, template.Subject.String)
 	if err != nil {
-		return fmt.Errorf("render email template %q (label %q, audience %s) subject: %w", template.ID, label, audience, err)
+		return &templateRenderError{templateID: template.ID, label: label, audience: audience, part: "subject", err: err}
 	}
 	emailData := email.EmailData{
 		To:         recipients,

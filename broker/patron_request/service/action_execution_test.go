@@ -249,8 +249,10 @@ func TestUnboundToleratedNotificationProblemContinuesValidation(t *testing.T) {
 			if tc.smtp {
 				assert.Contains(t, notification.ResultData.Problem.Details, "SMTP failed")
 			} else {
-				assert.Contains(t, notification.ResultData.Problem.Details, "UnknownPlaceholder")
-				assert.Contains(t, notification.ResultData.Problem.Details, "template-1")
+				assert.Equal(t,
+					`error sending email to staff: Template "new-supply-request-notification" could not be rendered: unknown placeholder "UnknownPlaceholder" in body.`,
+					notification.ResultData.Problem.Details,
+				)
 			}
 			assert.Equal(t, events.EventStatusSuccess, validation.EventStatus)
 			assert.Nil(t, validation.ResultData.ActionResult.ChildActionError)
