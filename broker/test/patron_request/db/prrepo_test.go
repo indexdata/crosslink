@@ -236,7 +236,7 @@ func TestItem(t *testing.T) {
 			Valid:  true,
 		},
 		CreatedAt: pgtype.Timestamp{
-			Time:  time.Now().Add(time.Hour),
+			Time:  time.Now().UTC().Add(time.Hour),
 			Valid: true,
 		},
 	})
