@@ -83,7 +83,9 @@ var ErrInvalidStatus = errors.New(string(InvalidStatus))
 var ErrInvalidReason = errors.New(string(InvalidReason))
 var ErrDuplicateRequest = errors.New(string(ReqIsDuplicate))
 
-var waitingReqs = map[string]RequestWait{}
+// waitingReqs holds only this process's paused HTTP responses; event task claims
+// remain in Postgres. Confirmation callbacks can run concurrently with handlers.
+var waitingReqs sync.Map // map[string]RequestWait
 
 // RequestOptions controls local request processing and is never read from ISO messages.
 type RequestOptions struct {
@@ -570,18 +572,10 @@ func handleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18
 		return
 	}
 
-	eventId, err := createNotice(ctx, eventBus, illTrans.ID, events.EventNameRequesterMsgReceived, eventData, events.EventStatusSuccess)
-	if err != nil {
+	if err := createNoticeAndWait(ctx, eventBus, illTrans.ID, events.EventNameRequesterMsgReceived, eventData, w); err != nil {
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
-	var wg sync.WaitGroup
-	wg.Add(1)
-	waitingReqs[eventId] = RequestWait{
-		w:  &w,
-		wg: &wg,
-	}
-	wg.Wait()
 }
 
 func getRequesterMessageSupplier(ctx common.ExtendedContext, repo ill_db.IllRepo, illTransID string, symbol string) (*ill_db.LocatedSupplier, error) {
@@ -795,18 +789,10 @@ func handleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso186
 		return
 	}
 
-	eventId, err := createNotice(ctx, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusSuccess)
-	if err != nil {
+	if err := createNoticeAndWait(ctx, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, w); err != nil {
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
-	var wg sync.WaitGroup
-	wg.Add(1)
-	waitingReqs[eventId] = RequestWait{
-		w:  &w,
-		wg: &wg,
-	}
-	wg.Wait()
 }
 
 func validateStatusAndReasonForMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, eventData events.EventData, eventBus events.EventBus, illTrans ill_db.IllTransaction) (iso18626.TypeStatus, iso18626.TypeReasonForMessage, error) {
@@ -957,6 +943,22 @@ func createNotice(ctx common.ExtendedContext, eventBus events.EventBus, illTrans
 	return id, nil
 }
 
+func createNoticeAndWait(ctx common.ExtendedContext, eventBus events.EventBus, illTransID string, eventName events.EventName, data events.EventData, w http.ResponseWriter) error {
+	id := uuid.NewString()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	// Register before publishing: an observer may confirm the message before
+	// CreateNoticeWithID returns. No registry lock is held during database work.
+	waitingReqs.Store(id, RequestWait{w: &w, wg: &wg})
+	defer waitingReqs.Delete(id)
+	if err := eventBus.CreateNoticeWithID(id, illTransID, eventName, data, events.EventStatusSuccess, events.EventDomainIllTransaction, events.SignalConsumers); err != nil {
+		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransID)
+		return err
+	}
+	wg.Wait()
+	return nil
+}
+
 func (h *Iso18626Handler) ConfirmRequesterMsg(ctx common.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(HANDLER_COMP))
 	// called for all event bus instances.
@@ -976,7 +978,7 @@ func (h *Iso18626Handler) ConfirmRequesterMsg(ctx common.ExtendedContext, event 
 		})
 		return
 	}
-	if _, ok := waitingReqs[reqRequestEvent.ID]; !ok {
+	if _, ok := waitingReqs.Load(reqRequestEvent.ID); !ok {
 		return // instance doesn't have the paused request
 	}
 	// instance has the event, process it
@@ -1013,7 +1015,7 @@ func (h *Iso18626Handler) ConfirmSupplierMsg(ctx common.ExtendedContext, event e
 		})
 		return
 	}
-	if _, ok := waitingReqs[supRequestEvent.ID]; !ok {
+	if _, ok := waitingReqs.Load(supRequestEvent.ID); !ok {
 		return // instance doesn't have the paused request
 	}
 	// instance has the event, process it
@@ -1080,11 +1082,11 @@ func (h *Iso18626Handler) handleConfirmRequesterMsgTask(ctx common.ExtendedConte
 
 func (c *Iso18626Handler) confirmSupplierResponse(ctx common.ExtendedContext, illTransId string, waitRequestId string, requesterIllMsg *iso18626.ISO18626Message,
 	supplierResult events.EventResult) (*iso18626.ISO18626Message, error) {
-	wait, ok := waitingReqs[waitRequestId]
+	value, ok := waitingReqs.LoadAndDelete(waitRequestId)
 	if !ok {
 		return nil, fmt.Errorf("waiting request '%s' not found", waitRequestId)
 	}
-	delete(waitingReqs, waitRequestId)
+	wait := value.(RequestWait)
 	var errorMessage = ""
 	var errorType *iso18626.TypeErrorType
 	var messageStatus = iso18626.TypeMessageStatusOK
@@ -1144,11 +1146,11 @@ func (c *Iso18626Handler) confirmSupplierResponse(ctx common.ExtendedContext, il
 
 func (c *Iso18626Handler) confirmRequesterResponse(ctx common.ExtendedContext, illTransId string, waitRequestId string, supplierIllMsg *iso18626.ISO18626Message,
 	requesterResult events.EventResult) (*iso18626.ISO18626Message, error) {
-	wait, ok := waitingReqs[waitRequestId]
+	value, ok := waitingReqs.LoadAndDelete(waitRequestId)
 	if !ok {
 		return nil, fmt.Errorf("waiting request '%s' not found", waitRequestId)
 	}
-	delete(waitingReqs, waitRequestId)
+	wait := value.(RequestWait)
 	var errorMessage = ""
 	var errorType *iso18626.TypeErrorType
 	var messageStatus iso18626.TypeMessageStatus

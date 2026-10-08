@@ -61,7 +61,7 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("failed to start db container: %s", err))
 	}
 
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+	connStr, err := testutil.PostgresConnectionString(ctx, pgContainer, "sslmode=disable")
 	if err != nil {
 		panic(fmt.Sprintf("failed to get conn string: %s", err))
 	}

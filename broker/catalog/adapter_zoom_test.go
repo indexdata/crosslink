@@ -143,7 +143,7 @@ func TestLookupDiagnosticPQF(t *testing.T) {
 		metadataParser,
 	)
 	assert.NoError(t, err)
-	assert.Equal(t, "localhost:"+mappedPort+"/marc", aa.(*ZoomLookupAdapter).zurl)
+	assert.Equal(t, containerHost+":"+mappedPort+"/marc", aa.(*ZoomLookupAdapter).zurl)
 	assert.Equal(t, "danmarc", aa.(*ZoomLookupAdapter).options["preferredRecordSyntax"])
 
 	params := LookupParams{Identifier: "1234"}
@@ -174,7 +174,7 @@ func TestLookupDiagnosticCql(t *testing.T) {
 		metadataParser,
 	)
 	assert.NoError(t, err)
-	assert.Equal(t, "localhost:"+mappedPort+"/marc", aa.(*ZoomLookupAdapter).zurl)
+	assert.Equal(t, containerHost+":"+mappedPort+"/marc", aa.(*ZoomLookupAdapter).zurl)
 	assert.Equal(t, "danmarc", aa.(*ZoomLookupAdapter).options["preferredRecordSyntax"])
 
 	params := LookupParams{Identifier: "1234"}

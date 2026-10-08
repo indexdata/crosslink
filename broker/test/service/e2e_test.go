@@ -36,7 +36,7 @@ func TestMain(m *testing.M) {
 	pgContainer, err := testutil.RunPostgres(ctx)
 	test.Expect(err, "failed to start db container")
 
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+	connStr, err := testutil.PostgresConnectionString(ctx, pgContainer, "sslmode=disable")
 	test.Expect(err, "failed to get conn string")
 
 	mockPort := utils.Must(test.GetFreePort())
@@ -50,12 +50,12 @@ func TestMain(m *testing.M) {
 	adapter.MOCK_PEER_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	eventBus, illRepo, eventRepo, _ = apptest.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	code := m.Run()
 
+	cancel()
 	test.Expect(test.TerminatePGContainer(ctx, pgContainer), "failed to stop db container")
 	os.Exit(code)
 }
@@ -450,34 +450,35 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testi
 	assert.Equal(t, string(iso18626.TypeStatusLoanCompleted), illTrans.LastSupplierStatus.String)
 	assert.Equal(t, string(iso18626.TypeActionShippedReturn), illTrans.LastRequesterAction.String)
 	assert.Equal(t, requester.ID, illTrans.RequesterID.String)
-	assert.Equal(t, "NOTICE, request-received = SUCCESS\n"+
-		"TASK, locate-suppliers = SUCCESS\n"+
-		"TASK, select-supplier = SUCCESS\n"+
-		"TASK, check-availability = SUCCESS\n"+
-		"TASK, message-requester = SUCCESS, reason=RequestResponse, ExpectToSupply\n"+
-		"TASK, message-supplier = SUCCESS, Request\n"+
-		"NOTICE, requester-msg-received = SUCCESS, Cancel\n"+
-		"TASK, message-supplier = SUCCESS, Cancel\n"+
-		"TASK, confirm-requester-msg = SUCCESS\n"+
-		"NOTICE, supplier-msg-received = SUCCESS, reason=CancelResponse, Cancelled\n"+
-		"TASK, confirm-supplier-msg = SUCCESS\n"+
-		"TASK, select-supplier = SUCCESS\n"+
-		"TASK, check-availability = SUCCESS\n"+
-		"TASK, message-requester = SUCCESS, reason=StatusChange, ExpectToSupply\n"+
-		"TASK, message-supplier = SUCCESS, Request\n"+
-		"NOTICE, supplier-msg-received = SUCCESS, reason=RequestResponse, Loaned\n"+
-		"TASK, message-requester = SUCCESS, reason=StatusChange, Loaned\n"+
-		"TASK, confirm-supplier-msg = SUCCESS\n"+
-		"NOTICE, requester-msg-received = SUCCESS, Received\n"+
-		"TASK, message-supplier = SUCCESS, Received\n"+
-		"TASK, confirm-requester-msg = SUCCESS\n"+
-		"NOTICE, requester-msg-received = SUCCESS, ShippedReturn\n"+
-		"TASK, message-supplier = SUCCESS, ShippedReturn\n"+
-		"TASK, confirm-requester-msg = SUCCESS\n"+
-		"NOTICE, supplier-msg-received = SUCCESS, reason=StatusChange, LoanCompleted\n"+
-		"TASK, message-requester = SUCCESS, reason=StatusChange, LoanCompleted\n"+
-		"TASK, confirm-supplier-msg = SUCCESS\n",
-		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 25, false, formatEvent))
+	expected := "NOTICE, request-received = SUCCESS\n" +
+		"TASK, locate-suppliers = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, check-availability = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS, reason=RequestResponse, ExpectToSupply\n" +
+		"TASK, message-supplier = SUCCESS, Request\n" +
+		"NOTICE, requester-msg-received = SUCCESS, Cancel\n" +
+		"TASK, message-supplier = SUCCESS, Cancel\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS, reason=CancelResponse, Cancelled\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, check-availability = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS, reason=StatusChange, ExpectToSupply\n" +
+		"TASK, message-supplier = SUCCESS, Request\n" +
+		"NOTICE, supplier-msg-received = SUCCESS, reason=RequestResponse, Loaned\n" +
+		"TASK, message-requester = SUCCESS, reason=StatusChange, Loaned\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS, Received\n" +
+		"TASK, message-supplier = SUCCESS, Received\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS, ShippedReturn\n" +
+		"TASK, message-supplier = SUCCESS, ShippedReturn\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS, reason=StatusChange, LoanCompleted\n" +
+		"TASK, message-requester = SUCCESS, reason=StatusChange, LoanCompleted\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n"
+	assert.Equal(t, expected,
+		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, strings.Count(expected, "\n"), false, formatEvent))
 }
 
 func TestRequestUNFILLED_LOANED(t *testing.T) {

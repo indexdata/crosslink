@@ -39,7 +39,7 @@ func TestMain(m *testing.M) {
 	pgContainer, err := testutil.RunPostgres(ctx)
 	test.Expect(err, "failed to start db container")
 
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+	connStr, err := testutil.PostgresConnectionString(ctx, pgContainer, "sslmode=disable")
 	test.Expect(err, "failed to get conn string")
 
 	app.ConnectionString = connStr
@@ -57,9 +57,9 @@ func TestMain(m *testing.M) {
 	_, _, _, prRepo = apptest.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
-	defer cancel()
 	code := m.Run()
 
+	cancel()
 	test.Expect(test.TerminatePGContainer(ctx, pgContainer), "failed to stop db container")
 	os.Exit(code)
 }

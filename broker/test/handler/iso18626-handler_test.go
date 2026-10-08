@@ -50,7 +50,7 @@ func TestMain(m *testing.M) {
 	pgContainer, err := testutil.RunPostgres(ctx)
 	test.Expect(err, "failed to start db container")
 
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+	connStr, err := testutil.PostgresConnectionString(ctx, pgContainer, "sslmode=disable")
 	test.Expect(err, "failed to get conn string")
 
 	mockPort := utils.Must(test.GetFreePort())
@@ -63,12 +63,12 @@ func TestMain(m *testing.M) {
 	adapter.MOCK_PEER_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	_, illRepo, _, _ = apptest.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	code := m.Run()
 
+	cancel()
 	test.Expect(test.TerminatePGContainer(ctx, pgContainer), "failed to stop db container")
 	os.Exit(code)
 }

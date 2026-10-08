@@ -69,11 +69,13 @@ func GetFreePort() (int, error) {
 }
 
 func WaitForServiceUp(port int) {
+	client := &http.Client{Timeout: time.Second}
 	if !WaitForPredicateToBeTrue(func() bool {
-		resp, err := http.Get("http://localhost:" + strconv.Itoa(port) + "/healthz")
+		resp, err := client.Get("http://localhost:" + strconv.Itoa(port) + "/healthz")
 		if err != nil {
 			return false
 		}
+		defer resp.Body.Close()
 		return resp.StatusCode == http.StatusOK
 	}) {
 		panic("failed to start broker")
@@ -86,8 +88,11 @@ func WaitForServiceUp(port int) {
 // conflict error (HTTP 409 "removal already in progress") that arises when
 // testcontainers' Ryuk reaper races with the explicit Terminate call as the
 // test process winds down.
-func TerminatePGContainer(ctx context.Context, pgContainer testcontainers.Container) error {
-	if err := pgContainer.Terminate(ctx); err != nil {
+func TerminatePGContainer(_ context.Context, pgContainer testcontainers.Container) error {
+	cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := pgContainer.Terminate(cleanupCtx); err != nil {
 		if cerrdefs.IsConflict(err) && strings.Contains(err.Error(), "already in progress") {
 			return nil
 		}

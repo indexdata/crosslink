@@ -191,6 +191,14 @@ You can also run included tests with:
 make check
 ```
 
+The shared Testcontainers helpers isolate each package's resources and use
+`127.0.0.1` when the Docker endpoint resolves to `localhost`, keeping the host
+address consistent with the IPv4 published port. Explicit
+`TESTCONTAINERS_HOST_OVERRIDE` values and remote Docker or container gateway
+addresses are preserved. Test database connections have a 10-second connection
+timeout and a 30-second statement timeout; container startup is bounded to one
+minute. These defaults apply to tests.
+
 or run test for selected `_test` package
 
 ```

@@ -26,23 +26,23 @@ func TestMain(m *testing.M) {
 	pgContainer, err := testutil.RunPostgres(ctx)
 	test.Expect(err, "failed to start db container")
 
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+	connStr, err := testutil.PostgresConnectionString(ctx, pgContainer, "sslmode=disable")
 	test.Expect(err, "failed to get conn string")
 
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
-	startApp(ctx)
+	appCtx, cancel := context.WithCancel(ctx)
+	startApp(appCtx)
 
 	code := m.Run()
 
+	cancel()
 	test.Expect(test.TerminatePGContainer(ctx, pgContainer), "failed to stop db container")
 	os.Exit(code)
 }
 
 func startApp(ctx context.Context) {
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 	go func() {
 		err := app.Run(ctx)
 		test.Expect(err, "failed to start app")
