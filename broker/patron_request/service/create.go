@@ -55,7 +55,15 @@ func CreateBorrowingRequest(ctx common.ExtendedContext, repo pr_db.PrRepo, reque
 // its local predecessor, if held by the same supplier for the same requester.
 func CreateLendingRequest(ctx common.ExtendedContext, repo pr_db.PrRepo, request pr_db.PatronRequest) (pr_db.PatronRequest, error) {
 	info := request.IllRequest.ServiceInfo
-	if info == nil || info.RequestType == nil || (*info.RequestType != iso18626.TypeRequestTypeRetry && *info.RequestType != iso18626.TypeRequestTypeNew) || info.RequestingAgencyPreviousRequestId == "" {
+	if info == nil || info.RequestingAgencyPreviousRequestId == "" {
+		return repo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(request))
+	}
+	// An omitted request type defaults to New, as in the ISO request pipeline.
+	requestType := iso18626.TypeRequestTypeNew
+	if info.RequestType != nil {
+		requestType = *info.RequestType
+	}
+	if requestType != iso18626.TypeRequestTypeRetry && requestType != iso18626.TypeRequestTypeNew {
 		return repo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(request))
 	}
 	var created pr_db.PatronRequest

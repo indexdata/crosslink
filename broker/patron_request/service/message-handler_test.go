@@ -2182,7 +2182,7 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 }
 
 func TestHandleSuccessorRequestLinksSupplyRequests(t *testing.T) {
-	for _, requestType := range []iso18626.TypeRequestType{iso18626.TypeRequestTypeRetry, iso18626.TypeRequestTypeNew} {
+	for _, requestType := range []iso18626.TypeRequestType{iso18626.TypeRequestTypeRetry, iso18626.TypeRequestTypeNew, ""} {
 		t.Run(string(requestType), func(t *testing.T) {
 			for _, tc := range []struct {
 				name      string
@@ -2212,6 +2212,10 @@ func TestHandleSuccessorRequestLinksSupplyRequests(t *testing.T) {
 						},
 						ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan, RequestType: &requestType, RequestingAgencyPreviousRequestId: "old-remote-id"},
 					}
+					if requestType == "" {
+						// Exercise the valid default-New representation without requestType.
+						message.Request.ServiceInfo.RequestType = nil
+					}
 					response, err := handler.HandleMessage(appCtx, message, nil)
 					if tc.wantErr {
 						require.Error(t, err)
@@ -2236,7 +2240,6 @@ func TestCreateLendingRequestWithoutPredecessor(t *testing.T) {
 	retry, newType := iso18626.TypeRequestTypeRetry, iso18626.TypeRequestTypeNew
 	for _, info := range []*iso18626.ServiceInfo{
 		nil, {}, {RequestType: &retry},
-		{RequestingAgencyPreviousRequestId: "previous"},
 		{RequestType: &newType},
 	} {
 		repo := new(MockPrRepo)

@@ -105,11 +105,15 @@ func lendingPredecessorRequest(t *testing.T) pr_db.PatronRequest {
 func lendingSuccessor(t *testing.T, previous pr_db.PatronRequest, requestType iso18626.TypeRequestType) pr_db.PatronRequest {
 	request := lendingPredecessorRequest(t)
 	request.IllRequest.ServiceInfo = &iso18626.ServiceInfo{RequestType: &requestType, RequestingAgencyPreviousRequestId: previous.RequesterReqID.String}
+	if requestType == "" {
+		// An empty test case represents omission, rather than an explicit empty type.
+		request.IllRequest.ServiceInfo.RequestType = nil
+	}
 	return request
 }
 
 func TestCreateLendingRequestConcurrentSuccessors(t *testing.T) {
-	for _, requestType := range []iso18626.TypeRequestType{iso18626.TypeRequestTypeRetry, iso18626.TypeRequestTypeNew} {
+	for _, requestType := range []iso18626.TypeRequestType{iso18626.TypeRequestTypeRetry, iso18626.TypeRequestTypeNew, ""} {
 		t.Run(string(requestType), func(t *testing.T) {
 			for _, duplicate := range []bool{false, true} {
 				t.Run(fmt.Sprintf("duplicate=%v", duplicate), func(t *testing.T) {
@@ -154,7 +158,7 @@ func TestCreateLendingRequestConcurrentSuccessors(t *testing.T) {
 }
 
 func TestCreateLendingRequestRollsBackLinkFailure(t *testing.T) {
-	for _, requestType := range []iso18626.TypeRequestType{iso18626.TypeRequestTypeRetry, iso18626.TypeRequestTypeNew} {
+	for _, requestType := range []iso18626.TypeRequestType{iso18626.TypeRequestTypeRetry, iso18626.TypeRequestTypeNew, ""} {
 		t.Run(string(requestType), func(t *testing.T) {
 			previous := lendingPredecessorRequest(t)
 			_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams(previous))
@@ -172,7 +176,7 @@ func TestCreateLendingRequestRollsBackLinkFailure(t *testing.T) {
 }
 
 func TestCreateLendingRequestPredecessorScope(t *testing.T) {
-	for _, requestType := range []iso18626.TypeRequestType{iso18626.TypeRequestTypeRetry, iso18626.TypeRequestTypeNew} {
+	for _, requestType := range []iso18626.TypeRequestType{iso18626.TypeRequestTypeRetry, iso18626.TypeRequestTypeNew, ""} {
 		t.Run(string(requestType), func(t *testing.T) {
 			for _, field := range []string{"requester", "supplier", "tenant", "side", "missing"} {
 				t.Run(field, func(t *testing.T) {
