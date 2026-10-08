@@ -6252,3 +6252,8 @@ func (r *MockPrRepo) GetLendingPredecessorForUpdate(ctx common.ExtendedContext, 
 	args := r.Called(params)
 	return args.Get(0).(pr_db.PatronRequest), args.Error(1)
 }
+
+func (m *MockEventBus) CreateNoticeWithID(eventID string, id string, eventName events.EventName, data events.EventData, status events.EventStatus, eventDomain events.EventDomain, target events.SignalTarget) (string, error) {
+	_, err := m.CreateNotice(id, eventName, data, status, eventDomain, target)
+	return eventID, err
+}
