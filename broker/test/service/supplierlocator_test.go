@@ -234,71 +234,59 @@ func TestLocateSuppliersOrder(t *testing.T) {
 
 func TestLocateSupplierUnreachable(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	illTrId := createIllTransaction(t, illRepo, "ERROR;LOANED")
-	illTr, err := illRepo.GetIllTransactionById(appCtx, illTrId)
-	if err != nil {
-		t.Error("failed to get ill transaction by id: " + err.Error())
-	}
-	illTr.LastRequesterAction = pgtype.Text{
-		String: "Request",
-		Valid:  true,
-	}
-	illTr, err = illRepo.SaveIllTransaction(appCtx, ill_db.SaveIllTransactionParams(illTr))
-	if err != nil {
-		t.Error("failed to update ill transaction: " + err.Error())
-	}
-	var completedLocateSuppliers []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			completedLocateSuppliers = append(completedLocateSuppliers, event)
-		}
-	})
-	var completedMessageSupplier []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			completedMessageSupplier = append(completedMessageSupplier, event)
-		}
-	})
-	var completedSelectSupplier []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			completedSelectSupplier = append(completedSelectSupplier, event)
-		}
-	})
+	// Unique symbols keep loan counters independent of other tests and prior runs.
+	suffix := uuid.NewString()
+	failedSymbol := "ISIL:UNREACHABLE-" + suffix
+	workingSymbol := "ISIL:REACHABLE-" + suffix
+	failedPeer := getOrCreatePeer(t, illRepo, failedSymbol, 0, 1)
+	workingPeer := getOrCreatePeer(t, illRepo, workingSymbol, 10, 1)
+	illTrId := createIllTransaction(t, illRepo, "return-"+failedSymbol+"::ERROR;return-"+workingSymbol+"::LOANED")
 
 	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
-	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
-	if err != nil {
-		t.Error("Failed to notify with error " + err.Error())
-	}
-	var event events.Event
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		if len(completedLocateSuppliers) == 1 {
-			event, _ = eventRepo.GetEvent(appCtx, completedLocateSuppliers[0].ID)
-			return event.EventStatus == events.EventStatusSuccess
+	require.NoError(t, eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers))
+
+	// Poll persisted results instead of reading slices written by event callbacks.
+	var completedEvents []events.Event
+	require.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		var err error
+		completedEvents, _, err = eventRepo.GetIllTransactionEvents(appCtx, illTrId)
+		require.NoError(t, err)
+		var located, selected, failedMessages, successfulMessages int
+		selectedPeers := make(map[string]bool)
+		for _, event := range completedEvents {
+			if event.EventType != events.EventTypeTask {
+				continue
+			}
+			switch event.EventName {
+			case events.EventNameLocateSuppliers:
+				if event.EventStatus == events.EventStatusSuccess {
+					located++
+				}
+			case events.EventNameSelectSupplier:
+				if event.EventStatus == events.EventStatusSuccess {
+					selected++
+					peerID, _ := event.ResultData.CustomData["supplierId"].(string)
+					selectedPeers[peerID] = true
+				}
+			case events.EventNameMessageSupplier:
+				switch event.EventStatus {
+				case events.EventStatusProblem:
+					failedMessages++
+				case events.EventStatusSuccess:
+					successfulMessages++
+				}
+			}
 		}
-		return false
-	}) {
-		t.Error("expected to have locate-suppliers event received and successfully processed")
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		if len(completedSelectSupplier) >= 2 {
-			event, _ = eventRepo.GetEvent(appCtx, completedSelectSupplier[0].ID)
-			return event.EventStatus == events.EventStatusSuccess
-		}
-		return false
-	}) {
-		t.Error("expected to have select-supplier supplier event twice and successful")
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		if len(completedMessageSupplier) > 0 {
-			event, _ = eventRepo.GetEvent(appCtx, completedMessageSupplier[0].ID)
-			return event.EventStatus == events.EventStatusProblem
-		}
-		return false
-	}) {
-		t.Error("expected to have message-supplier failed")
-	}
+		return located == 1 && selected == 2 && selectedPeers[failedPeer.ID] && selectedPeers[workingPeer.ID] && failedMessages == 1 && successfulMessages == 1
+	}), "expected failed supplier followed by successful fallback; persisted events: %+v", completedEvents)
+
+	suppliers, _, err := illRepo.GetLocatedSuppliersByIllTransaction(appCtx, illTrId)
+	require.NoError(t, err)
+	require.Len(t, suppliers, 2)
+	assert.Equal(t, failedSymbol, suppliers[0].SupplierSymbol)
+	assert.Equal(t, "ERROR", suppliers[0].LocalID.String)
+	assert.Equal(t, workingSymbol, suppliers[1].SupplierSymbol)
+	assert.Equal(t, "LOANED", suppliers[1].LocalID.String)
 }
 
 func TestLocateSuppliersTaskAlreadyInProgress(t *testing.T) {
