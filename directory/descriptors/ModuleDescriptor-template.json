@@ -8,13 +8,7 @@
       "handlers": [
         {
           "methods": ["GET"],
-          "pathPattern": "/directory/openapi.yaml",
-          "permissionsRequired": [],
-          "permissionsDesired": []
-        },
-        {
-          "methods": ["GET"],
-          "pathPattern": "/directory/openapi.json",
+          "pathPattern": "/directory/openapi{extension}",
           "permissionsRequired": [],
           "permissionsDesired": []
         }

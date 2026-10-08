@@ -50,12 +50,22 @@ func TestHandlersMatchOpenAPI(t *testing.T) {
 	actual := make(map[string]struct{})
 	for _, provided := range descriptor.Provides {
 		for _, handler := range provided.Handlers {
+			if strings.Contains(handler.PathPattern, ".") {
+				t.Errorf("Okapi pathPattern must not contain periods: %s", handler.PathPattern)
+			}
+			paths := []string{handler.PathPattern}
+			if handler.PathPattern == basePath+"/openapi{extension}" {
+				// Okapi's placeholder consumes the suffix, including the period.
+				paths = []string{basePath + "/openapi.yaml", basePath + "/openapi.json"}
+			}
 			for _, method := range handler.Methods {
-				key := routeKey(method, handler.PathPattern)
-				if _, duplicate := actual[key]; duplicate {
-					t.Errorf("duplicate module descriptor handler %s", key)
+				for _, path := range paths {
+					key := routeKey(method, path)
+					if _, duplicate := actual[key]; duplicate {
+						t.Errorf("duplicate module descriptor handler %s", key)
+					}
+					actual[key] = struct{}{}
 				}
-				actual[key] = struct{}{}
 			}
 		}
 	}
