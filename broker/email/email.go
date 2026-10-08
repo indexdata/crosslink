@@ -967,6 +967,13 @@ func getPickupLocation(request pr_db.PatronRequest) string {
 }
 
 func getPickupURL(request pr_db.PatronRequest) string {
+	if deliveryInfo := request.IllResponse.DeliveryInfo; deliveryInfo != nil && deliveryInfo.SentVia != nil && deliveryInfo.SentVia.Text == string(iso18626.SentViaUrl) {
+		value := strings.TrimSpace(deliveryInfo.ItemId)
+		parsed, err := url.ParseRequestURI(value)
+		if err == nil && parsed.Host != "" && (strings.EqualFold(parsed.Scheme, "http") || strings.EqualFold(parsed.Scheme, "https")) {
+			return value
+		}
+	}
 	for _, deliveryInfo := range request.IllRequest.RequestedDeliveryInfo {
 		if deliveryInfo.Address == nil || deliveryInfo.Address.ElectronicAddress == nil {
 			continue

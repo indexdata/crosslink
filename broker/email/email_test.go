@@ -736,6 +736,24 @@ func TestGetPickupURL_ContinuesPastEmailToURL(t *testing.T) {
 	assert.Equal(t, "https://example.test/document/123", getPickupURL(pr))
 }
 
+func TestGetPickupURL_PrefersResponseURL(t *testing.T) {
+	pr := pr_db.PatronRequest{
+		IllRequest: iso18626.Request{RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{{
+			Address: &iso18626.Address{ElectronicAddress: &iso18626.ElectronicAddress{
+				ElectronicAddressData: "https://example.test/requested-url",
+			}},
+		}}},
+		IllResponse: iso18626.SupplyingAgencyMessage{
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				ItemId:  " https://example.test/response-url ",
+				SentVia: &iso18626.TypeSchemeValuePair{Text: string(iso18626.SentViaUrl)},
+			},
+		},
+	}
+
+	assert.Equal(t, "https://example.test/response-url", getPickupURL(pr))
+}
+
 func TestRenderTextTemplate(t *testing.T) {
 	template := "This is A&B query '{{.BatchQuery}}'."
 	data := GetBatchEmailData(1, 1, "select \"A&B\" from dual")
