@@ -144,14 +144,14 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 	placeholders := email.GetBatchEmailData(fullCount, len(prs), event.EventData.BatchActionData.Selector)
 	var body string
 	if template.ContentType == string(proapi.Html) {
-		body, err = email.RenderHtmlTemplate(placeholders, template.Body)
+		body, err = email.RenderHtmlTemplate(placeholders, template.Labels, template.Body)
 	} else {
-		body, err = email.RenderTextTemplate(placeholders, template.Body)
+		body, err = email.RenderTextTemplate(placeholders, template.Labels, template.Body)
 	}
 	if err != nil {
 		return events.NewErrorResult("failed to render email body", err.Error())
 	}
-	subject, err := email.RenderTextTemplate(placeholders, template.Subject.String)
+	subject, err := email.RenderTextTemplate(placeholders, template.Labels, template.Subject.String)
 	if err != nil {
 		return events.NewErrorResult("failed to render email subject", err.Error())
 	}

@@ -1139,6 +1139,170 @@ func TestGetStateModelTemplates(t *testing.T) {
 	}, labels)
 }
 
+func TestValidateTemplateRendering(t *testing.T) {
+	patronSubject := "Request {{.ReqId}}"
+	batchSubject := "{{.ActualCount}} requests"
+	unsupportedSubject := "Request {{.Unsupported}}"
+	conditionalUnsupportedSubject := "{{if .Title}}{{.Unsupported}}{{end}}"
+
+	for _, tc := range []struct {
+		name        string
+		purpose     proapi.TemplatePurpose
+		contentType proapi.TemplateContentType
+		body        string
+		subject     *string
+		labels      []string
+		wantErr     string
+	}{
+		{
+			name:        "patron request email",
+			purpose:     proapi.Email,
+			contentType: proapi.Html,
+			body:        "<p>{{.PatronName}}</p>",
+			subject:     &patronSubject,
+		},
+		{
+			name:        "batch email",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        "{{.FullCount}} requests for {{.BatchQuery}}",
+			subject:     &batchSubject,
+			labels:      []string{"pullslip-email"},
+		},
+		{
+			name:        "pullslip",
+			purpose:     proapi.Pullslip,
+			contentType: proapi.Html,
+			body:        "<p>{{.BarcodeBase64}}</p>",
+			subject:     &unsupportedSubject,
+		},
+		{
+			name:        "pullslip requires html content type",
+			purpose:     proapi.Pullslip,
+			contentType: proapi.Text,
+			body:        "Pull slip {{.ReqId}}",
+			wantErr:     "HTML",
+		},
+		{
+			name:        "pullslip html context validation",
+			purpose:     proapi.Pullslip,
+			contentType: proapi.Html,
+			body:        `{{if .Title}}<a href="{{end}}{{.Author}}`,
+			wantErr:     "body",
+		},
+		{
+			name:        "invalid body syntax",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        "{{.Unclosed",
+			wantErr:     "body",
+		},
+		{
+			name:        "unsupported body placeholder",
+			purpose:     proapi.Pullslip,
+			contentType: proapi.Html,
+			body:        "{{.Unsupported}}",
+			wantErr:     "Unsupported",
+		},
+		{
+			name:        "unsupported subject placeholder",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        "Request ready",
+			subject:     &unsupportedSubject,
+			wantErr:     "subject",
+		},
+		{
+			name:        "unsupported subject placeholder in unexecuted branch",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        "Request ready",
+			subject:     &conditionalUnsupportedSubject,
+			wantErr:     "Unsupported",
+		},
+		{
+			name:        "mixed email contexts",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        "{{.ReqId}}",
+			subject:     &batchSubject,
+			wantErr:     "does not render",
+		},
+		{
+			name:        "mixed batch and notification labels",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        "{{.BatchQuery}}",
+			labels:      []string{"pullslip-email", "received-notification"},
+			wantErr:     "cannot combine",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			labels := tc.labels
+			if len(labels) == 0 {
+				labels = []string{"received-notification"}
+			}
+			err := prservice.ValidateTemplateRendering(tc.purpose, tc.contentType, tc.body, tc.subject, labels)
+			if tc.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			assert.ErrorContains(t, err, tc.wantErr)
+		})
+	}
+}
+
+func TestTemplateSaveEndpointsRejectRenderingErrorsBeforeSave(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		call func(PatronRequestApiHandler, *httptest.ResponseRecorder, *http.Request)
+		body string
+		want string
+	}{
+		{
+			name: "create",
+			body: `{"title":"Invalid","purpose":"email","body":"{{.Unsupported}}","contentType":"text","labels":["received-notification"]}`,
+			call: func(handler PatronRequestApiHandler, rr *httptest.ResponseRecorder, req *http.Request) {
+				handler.PostTemplates(rr, req, proapi.PostTemplatesParams{Symbol: &symbol})
+			},
+			want: "Unsupported",
+		},
+		{
+			name: "update",
+			body: `{"title":"Invalid","subject":"{{.Unsupported}}","body":"Request ready","contentType":"text","labels":["received-notification"]}`,
+			call: func(handler PatronRequestApiHandler, rr *httptest.ResponseRecorder, req *http.Request) {
+				handler.PutTemplatesId(rr, req, "template-1", proapi.PutTemplatesIdParams{Symbol: &symbol})
+			},
+			want: "Unsupported",
+		},
+		{
+			name: "batch template with patron request placeholder",
+			body: `{"title":"Invalid","purpose":"email","subject":"Pull slips","body":"Request {{.ReqId}}","contentType":"text","labels":["pullslip-email"]}`,
+			call: func(handler PatronRequestApiHandler, rr *httptest.ResponseRecorder, req *http.Request) {
+				handler.PostTemplates(rr, req, proapi.PostTemplatesParams{Symbol: &symbol})
+			},
+			want: "ReqId",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &PrRepoTemplateCapture{template: pr_db.Template{
+				ID:      "template-1",
+				Owner:   symbol,
+				Purpose: string(proapi.Email),
+			}}
+			handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+			req := httptest.NewRequest(http.MethodPost, "/templates", strings.NewReader(tc.body))
+			rr := httptest.NewRecorder()
+
+			tc.call(handler, rr, req)
+
+			assert.Equal(t, http.StatusBadRequest, rr.Code)
+			assert.Contains(t, rr.Body.String(), tc.want)
+			assert.Zero(t, repo.saveCalls)
+		})
+	}
+}
+
 type PrRepoError struct {
 	mock.Mock
 	pr_db.PgPrRepo
@@ -1156,6 +1320,24 @@ type PrRepoTerminal struct {
 
 type PrRepoCopyWillSupply struct {
 	PrRepoError
+}
+
+type PrRepoTemplateCapture struct {
+	PrRepoError
+	template  pr_db.Template
+	saveCalls int
+}
+
+func (r *PrRepoTemplateCapture) GetTemplateByIdAndOwner(_ common.ExtendedContext, id string, owner string) (pr_db.Template, error) {
+	if r.template.ID != id || r.template.Owner != owner {
+		return pr_db.Template{}, pgx.ErrNoRows
+	}
+	return r.template, nil
+}
+
+func (r *PrRepoTemplateCapture) SaveTemplate(_ common.ExtendedContext, params pr_db.SaveTemplateParams) (pr_db.Template, error) {
+	r.saveCalls++
+	return pr_db.Template(params), nil
 }
 
 func (r *PrRepoCopyWillSupply) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {

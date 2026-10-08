@@ -62,6 +62,7 @@ func (m *MockPrRepo) GetTemplateByPurposeAudienceLabelAndOwner(_ common.Extended
 			return pr_db.Template{
 				Body:        t.Body,
 				ContentType: string(proapi.Html),
+				Labels:      slices.Clone(t.Labels),
 			}, nil
 		}
 	}

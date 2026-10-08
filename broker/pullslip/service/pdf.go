@@ -71,7 +71,7 @@ func (p *PdfServiceImpl) GeneratePdfPullSlip(ctx common.ExtendedContext, pr pr_d
 	if err != nil {
 		return nil, err
 	}
-	templateBody, err := p.getTemplateForPatronRequest(ctx, pr)
+	pdfTemplate, err := p.getTemplateForPatronRequest(ctx, pr)
 	if err != nil {
 		return []byte{}, err
 	}
@@ -79,7 +79,7 @@ func (p *PdfServiceImpl) GeneratePdfPullSlip(ctx common.ExtendedContext, pr pr_d
 	doc := document.NewDocument(document.PageSizeA4)
 
 	data := email.GetPullSlipData(pr, notes, conditions, barcodeData)
-	html, err := email.RenderHtmlTemplate(data, templateBody)
+	html, err := email.RenderHtmlTemplate(data, pdfTemplate.Labels, pdfTemplate.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -92,13 +92,13 @@ func (p *PdfServiceImpl) GeneratePdfPullSlip(ctx common.ExtendedContext, pr pr_d
 	return doc.ToBytes()
 }
 
-func (p *PdfServiceImpl) getTemplateForPatronRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (string, error) {
+func (p *PdfServiceImpl) getTemplateForPatronRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (pr_db.Template, error) {
 	stateModel, err := p.actionMappingService.GetStateModelForRequest(pr.IllRequest)
 	if err != nil {
-		return "", err
+		return pr_db.Template{}, err
 	}
 	if stateModel.PullslipPdfTemplateLabel == nil || *stateModel.PullslipPdfTemplateLabel == "" {
-		return "", errors.New("pullslipPdfTemplateLabel field is required")
+		return pr_db.Template{}, errors.New("pullslipPdfTemplateLabel field is required")
 	}
 	owner := pr.RequesterSymbol
 	if pr.Side == prservice.SideLending {
@@ -111,15 +111,15 @@ func (p *PdfServiceImpl) getTemplateForPatronRequest(ctx common.ExtendedContext,
 		Audience: string(proapi.ModelActionParamsSendToStaff),
 	})
 	if err != nil {
-		return "", err
+		return pr_db.Template{}, err
 	}
 	if pdfTemplate.Body == "" {
-		return "", errors.New("invalid pullslip pdf template, body field is required")
+		return pr_db.Template{}, errors.New("invalid pullslip pdf template, body field is required")
 	}
 	if pdfTemplate.ContentType != string(proapi.Html) {
-		return "", errors.New("invalid pullslip pdf template, it must be of type HTML")
+		return pr_db.Template{}, errors.New("invalid pullslip pdf template, it must be of type HTML")
 	}
-	return pdfTemplate.Body, nil
+	return pdfTemplate, nil
 }
 
 // barcodeWidth calculates a suitable barcode pixel width based on the number

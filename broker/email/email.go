@@ -11,8 +11,10 @@ import (
 	"mime/quotedprintable"
 	"net/smtp"
 	"net/textproto"
+	"reflect"
 	"strings"
 	text_template "text/template"
+	"text/template/parse"
 
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/iso18626"
@@ -291,8 +293,16 @@ func GetPullSlipData(pr pr_db.PatronRequest, notes []pr_db.Notification, conditi
 	return data
 }
 
-func RenderHtmlTemplate(data any, templateBody string) (string, error) {
-	tmpl, err := template.New("pull-slip").Parse(templateBody)
+func firstTemplateLabel(labels []string) string {
+	if len(labels) == 0 || labels[0] == "" {
+		return "template"
+	}
+	return labels[0]
+}
+
+func RenderHtmlTemplate(data any, labels []string, templateBody string) (string, error) {
+	label := firstTemplateLabel(labels)
+	tmpl, err := template.New(label).Parse(templateBody)
 	if err != nil {
 		return "", err
 	}
@@ -303,8 +313,9 @@ func RenderHtmlTemplate(data any, templateBody string) (string, error) {
 	return buf.String(), nil
 }
 
-func RenderTextTemplate(data any, templateBody string) (string, error) {
-	tmpl, err := text_template.New("pull-slip").Parse(templateBody)
+func RenderTextTemplate(data any, labels []string, templateBody string) (string, error) {
+	label := firstTemplateLabel(labels)
+	tmpl, err := text_template.New(label).Parse(templateBody)
 	if err != nil {
 		return "", err
 	}
@@ -313,6 +324,232 @@ func RenderTextTemplate(data any, templateBody string) (string, error) {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+func ValidateHtmlTemplate(data any, labels []string, templateBody string) error {
+	label := firstTemplateLabel(labels)
+	tmpl, err := template.New(label).Parse(templateBody)
+	if err != nil {
+		return err
+	}
+	for _, defined := range tmpl.Templates() {
+		if err := validateTemplateFields(defined.Tree.Root, data); err != nil {
+			return err
+		}
+	}
+	var buf bytes.Buffer
+	return tmpl.Execute(&buf, data)
+}
+
+func ValidateTextTemplate(data any, labels []string, templateBody string) error {
+	label := firstTemplateLabel(labels)
+	tmpl, err := text_template.New(label).Parse(templateBody)
+	if err != nil {
+		return err
+	}
+	for _, defined := range tmpl.Templates() {
+		if err := validateTemplateFields(defined.Root, data); err != nil {
+			return err
+		}
+	}
+	var buf bytes.Buffer
+	return tmpl.Execute(&buf, data)
+}
+
+func validateTemplateFields(node parse.Node, data any) error {
+	rootType := reflect.TypeOf(data)
+	if rootType == nil {
+		return errors.New("template validation data is nil")
+	}
+
+	indirect := func(dataType reflect.Type) reflect.Type {
+		for dataType != nil && dataType.Kind() == reflect.Pointer {
+			dataType = dataType.Elem()
+		}
+		return dataType
+	}
+	rootType = indirect(rootType)
+
+	resolveFields := func(dataType reflect.Type, fields []string) (reflect.Type, error) {
+		for _, fieldName := range fields {
+			dataType = indirect(dataType)
+			if dataType == nil || dataType.Kind() != reflect.Struct {
+				return nil, fmt.Errorf("can't evaluate field %s in type %v", fieldName, dataType)
+			}
+			field, ok := dataType.FieldByName(fieldName)
+			if !ok {
+				return nil, fmt.Errorf("unknown field %s", fieldName)
+			}
+			dataType = field.Type
+		}
+		return dataType, nil
+	}
+
+	type templateVariables map[string]reflect.Type
+	cloneVariables := func(variables templateVariables) templateVariables {
+		cloned := make(templateVariables, len(variables))
+		for name, dataType := range variables {
+			cloned[name] = dataType
+		}
+		return cloned
+	}
+
+	var inferNodeType func(parse.Node, reflect.Type, templateVariables) (reflect.Type, error)
+	inferNodeType = func(node parse.Node, dotType reflect.Type, variables templateVariables) (reflect.Type, error) {
+		switch node := node.(type) {
+		case *parse.DotNode:
+			return dotType, nil
+		case *parse.FieldNode:
+			return resolveFields(dotType, node.Ident)
+		case *parse.VariableNode:
+			dataType, ok := variables[node.Ident[0]]
+			if !ok {
+				return nil, fmt.Errorf("unknown template variable %s", node.Ident[0])
+			}
+			if len(node.Ident) == 1 {
+				return dataType, nil
+			}
+			if dataType == nil {
+				return nil, fmt.Errorf("cannot validate fields on template variable %s", node.Ident[0])
+			}
+			return resolveFields(dataType, node.Ident[1:])
+		case *parse.ChainNode:
+			baseType, err := inferNodeType(node.Node, dotType, variables)
+			if err != nil {
+				return nil, err
+			}
+			return resolveFields(baseType, node.Field)
+		case *parse.StringNode:
+			return reflect.TypeFor[string](), nil
+		case *parse.BoolNode:
+			return reflect.TypeFor[bool](), nil
+		case *parse.NumberNode:
+			return nil, errors.New("cannot validate a numeric scoped template expression")
+		default:
+			return nil, fmt.Errorf("cannot validate scoped template expression %T", node)
+		}
+	}
+
+	inferPipeType := func(pipe *parse.PipeNode, dotType reflect.Type, variables templateVariables) (reflect.Type, error) {
+		if pipe == nil || len(pipe.Cmds) != 1 || len(pipe.Cmds[0].Args) != 1 {
+			return nil, errors.New("cannot validate scoped template pipeline")
+		}
+		return inferNodeType(pipe.Cmds[0].Args[0], dotType, variables)
+	}
+
+	var walk func(parse.Node, reflect.Type, templateVariables) error
+	walk = func(node parse.Node, dotType reflect.Type, variables templateVariables) error {
+		if node == nil {
+			return nil
+		}
+		nodeValue := reflect.ValueOf(node)
+		if nodeValue.Kind() == reflect.Pointer && nodeValue.IsNil() {
+			return nil
+		}
+		switch node := node.(type) {
+		case *parse.ListNode:
+			for _, child := range node.Nodes {
+				if err := walk(child, dotType, variables); err != nil {
+					return err
+				}
+			}
+		case *parse.ActionNode:
+			return walk(node.Pipe, dotType, variables)
+		case *parse.PipeNode:
+			for _, command := range node.Cmds {
+				if err := walk(command, dotType, variables); err != nil {
+					return err
+				}
+			}
+			if len(node.Decl) == 1 {
+				// Some pipelines (for example printf) cannot be inferred statically.
+				// Retain the declaration so scalar uses remain valid; field access on
+				// an unknown type is rejected later.
+				variableType, _ := inferPipeType(node, dotType, variables)
+				variables[node.Decl[0].Ident[0]] = variableType
+			}
+		case *parse.CommandNode:
+			for _, argument := range node.Args {
+				if err := walk(argument, dotType, variables); err != nil {
+					return err
+				}
+			}
+		case *parse.IfNode:
+			branchVariables := cloneVariables(variables)
+			if err := walk(node.Pipe, dotType, branchVariables); err != nil {
+				return err
+			}
+			if err := walk(node.List, dotType, cloneVariables(branchVariables)); err != nil {
+				return err
+			}
+			return walk(node.ElseList, dotType, cloneVariables(branchVariables))
+		case *parse.RangeNode:
+			branchVariables := cloneVariables(variables)
+			if err := walk(node.Pipe, dotType, branchVariables); err != nil {
+				return err
+			}
+			rangeType, err := inferPipeType(node.Pipe, dotType, variables)
+			if err != nil {
+				return err
+			}
+			rangeType = indirect(rangeType)
+			if rangeType == nil {
+				return errors.New("cannot validate range over an unknown type")
+			}
+			switch rangeType.Kind() {
+			case reflect.Array, reflect.Slice, reflect.Map, reflect.Chan:
+				rangeType = rangeType.Elem()
+			default:
+				return fmt.Errorf("cannot range over type %v", rangeType)
+			}
+			if len(node.Pipe.Decl) == 1 {
+				branchVariables[node.Pipe.Decl[0].Ident[0]] = rangeType
+			} else if len(node.Pipe.Decl) == 2 {
+				branchVariables[node.Pipe.Decl[0].Ident[0]] = nil
+				branchVariables[node.Pipe.Decl[1].Ident[0]] = rangeType
+			}
+			if err := walk(node.List, rangeType, cloneVariables(branchVariables)); err != nil {
+				return err
+			}
+			return walk(node.ElseList, dotType, cloneVariables(branchVariables))
+		case *parse.WithNode:
+			branchVariables := cloneVariables(variables)
+			if err := walk(node.Pipe, dotType, branchVariables); err != nil {
+				return err
+			}
+			withType, err := inferPipeType(node.Pipe, dotType, variables)
+			if err != nil {
+				return err
+			}
+			if err := walk(node.List, withType, cloneVariables(branchVariables)); err != nil {
+				return err
+			}
+			return walk(node.ElseList, dotType, cloneVariables(branchVariables))
+		case *parse.TemplateNode:
+			if err := walk(node.Pipe, dotType, variables); err != nil {
+				return err
+			}
+			templateType, err := inferPipeType(node.Pipe, dotType, variables)
+			if err != nil {
+				return err
+			}
+			if templateType != rootType {
+				return errors.New("cannot validate a template invoked with scoped data")
+			}
+		case *parse.FieldNode:
+			_, err := resolveFields(dotType, node.Ident)
+			return err
+		case *parse.ChainNode:
+			_, err := inferNodeType(node, dotType, variables)
+			return err
+		case *parse.VariableNode:
+			_, err := inferNodeType(node, dotType, variables)
+			return err
+		}
+		return nil
+	}
+
+	return walk(node, rootType, templateVariables{"$": rootType})
 }
 
 func getStaffNotes(noteList []pr_db.Notification) string {

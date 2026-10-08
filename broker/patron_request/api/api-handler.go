@@ -1163,6 +1163,10 @@ func (a *PatronRequestApiHandler) PostTemplates(w http.ResponseWriter, r *http.R
 		api.AddBadRequestError(ctx, w, err)
 		return
 	}
+	if err := prservice.ValidateTemplateRendering(template.Purpose, template.ContentType, template.Body, template.Subject, template.Labels); err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
 	tem, err := a.prRepo.SaveTemplate(ctx, pr_db.SaveTemplateParams{
 		ID:          uuid.NewString(),
 		Owner:       symbol,
@@ -1224,6 +1228,10 @@ func (a *PatronRequestApiHandler) PutTemplatesId(w http.ResponseWriter, r *http.
 	// PUT replaces optional fields; omitted values are cleared.
 	tem.Audience = getDbText((*string)(updated.Audience))
 	tem.Subject = getDbText(updated.Subject)
+	if err := prservice.ValidateTemplateRendering(proapi.TemplatePurpose(tem.Purpose), updated.ContentType, updated.Body, updated.Subject, updated.Labels); err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
 	template, err := a.prRepo.SaveTemplate(ctx, pr_db.SaveTemplateParams(*tem))
 	if err != nil {
 		writeTemplateSaveError(ctx, w, err)

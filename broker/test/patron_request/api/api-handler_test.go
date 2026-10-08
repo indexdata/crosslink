@@ -1584,7 +1584,7 @@ func TestCRUDTemplate(t *testing.T) {
 
 	// POST – create a template
 	audience := proapi.TemplateAudiencePatron
-	subject := "Your ILL request {{title}} is ready"
+	subject := "Your ILL request {{.Title}} is ready"
 	newTemplate := proapi.CreateTemplate{
 		Title:       "Ready notification",
 		Purpose:     proapi.Email,
@@ -1592,7 +1592,7 @@ func TestCRUDTemplate(t *testing.T) {
 		Audience:    &audience,
 		Subject:     &subject,
 		Labels:      []string{"borrower-loaned"},
-		Body:        "Dear {{patronName}}, your item {{title}} has arrived.",
+		Body:        "Dear {{.PatronName}}, your item {{.Title}} has arrived.",
 	}
 	newTemplateBytes, err := json.Marshal(newTemplate)
 	assert.NoError(t, err)
@@ -1649,14 +1649,14 @@ func TestCRUDTemplate(t *testing.T) {
 
 	// PUT – update the template
 	updatedAudience := proapi.TemplateAudienceStaff
-	updatedSubject := "Staff: ILL item {{title}} ready for {{patronName}}"
+	updatedSubject := "Staff: ILL item {{.Title}} ready for {{.PatronName}}"
 	updateTemplate := proapi.UpdateTemplate{
 		Title:       "Ready notification – updated",
 		ContentType: proapi.Html,
 		Audience:    &updatedAudience,
 		Subject:     &updatedSubject,
 		Labels:      []string{"borrower-loaned", "staff"},
-		Body:        "<p>Dear {{patronName}}, your item is ready.</p>",
+		Body:        "<p>Dear {{.PatronName}}, your item is ready.</p>",
 	}
 	updateBytes, err := json.Marshal(updateTemplate)
 	assert.NoError(t, err)

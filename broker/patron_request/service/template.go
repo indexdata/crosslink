@@ -6,11 +6,58 @@ import (
 	"slices"
 
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/email"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+func ValidateTemplateRendering(purpose proapi.TemplatePurpose, contentType proapi.TemplateContentType, body string, subject *string, labels []string) error {
+	if purpose == proapi.Pullslip {
+		if contentType != proapi.Html {
+			return errors.New("pullslip templates must use HTML content type")
+		}
+		if err := email.ValidateHtmlTemplate(email.PullSlipData{}, labels, body); err != nil {
+			return fmt.Errorf("template body: %w", err)
+		}
+		return nil
+	}
+
+	validateWithData := func(data any) error {
+		var err error
+		if contentType == proapi.Html {
+			err = email.ValidateHtmlTemplate(data, labels, body)
+		} else {
+			err = email.ValidateTextTemplate(data, labels, body)
+		}
+		if err != nil {
+			return fmt.Errorf("template body: %w", err)
+		}
+		if subject != nil {
+			if err := email.ValidateTextTemplate(data, labels, *subject); err != nil {
+				return fmt.Errorf("template subject: %w", err)
+			}
+		}
+		return nil
+	}
+
+	if slices.Contains(labels, "pullslip-email") {
+		for _, label := range labels {
+			if label != "pullslip-email" {
+				return errors.New("batch email label pullslip-email cannot combine with patron-request notification labels")
+			}
+		}
+		if err := validateWithData(email.BatchEmailData{}); err != nil {
+			return fmt.Errorf("template does not render with batch-email data: %w", err)
+		}
+		return nil
+	}
+	if err := validateWithData(email.PullSlipData{}); err != nil {
+		return fmt.Errorf("template does not render with patron-request data: %w", err)
+	}
+	return nil
+}
 
 func GetStateModelTemplateDefault(purpose proapi.TemplatePurpose, audience proapi.TemplateAudience, label string) (pr_db.Template, error) {
 	var selected *proapi.TemplateProperties

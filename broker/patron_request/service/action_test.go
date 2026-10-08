@@ -4549,7 +4549,7 @@ func TestCreateAndSendEmail(t *testing.T) {
 			assertEmail: func(t *testing.T, m *EmailSenderMock) {
 				m.AssertNotCalled(t, "SendEmail", mock.Anything)
 			},
-			wantErrSubstr: "template: pull-slip:1: unclosed action",
+			wantErrSubstr: "template: test-label:1: unclosed action",
 		},
 		{
 			name:       "invalid template body",
@@ -4565,7 +4565,7 @@ func TestCreateAndSendEmail(t *testing.T) {
 			assertEmail: func(t *testing.T, m *EmailSenderMock) {
 				m.AssertNotCalled(t, "SendEmail", mock.Anything)
 			},
-			wantErrSubstr: "template: pull-slip:1: unclosed action",
+			wantErrSubstr: "template: test-label:1: unclosed action",
 		},
 	}
 
@@ -5778,7 +5778,11 @@ func (r *MockPrRepo) GetNotificationById(ctx common.ExtendedContext, id string) 
 
 func (r *MockPrRepo) GetTemplateByPurposeAudienceLabelAndOwner(ctx common.ExtendedContext, params pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams) (pr_db.Template, error) {
 	args := r.Called(params)
-	return args.Get(0).(pr_db.Template), args.Error(1)
+	template := args.Get(0).(pr_db.Template)
+	if len(template.Labels) == 0 && params.Label != "" {
+		template.Labels = []string{params.Label}
+	}
+	return template, args.Error(1)
 }
 
 type MockIso18626Handler struct {

@@ -56,9 +56,15 @@ func (m *mockEmailPrRepo) GetTemplateByPurposeAudienceLabelAndOwner(_ common.Ext
 		return pr_db.Template{}, m.templateErr
 	}
 	if m.template.ID != "" {
-		return m.template, nil
+		template := m.template
+		if len(template.Labels) == 0 {
+			template.Labels = []string{params.Label}
+		}
+		return template, nil
 	}
-	return validEmailTemplate(), nil
+	template := validEmailTemplate()
+	template.Labels = []string{params.Label}
+	return template, nil
 }
 
 // mockEmailIllRepo implements the owner lookup needed to resolve the sender address.
