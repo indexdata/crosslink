@@ -25,6 +25,15 @@ The broker exposes a JSON API that addresses two use cases:
    Internally, the broker creates an ILL transaction to back the execution of a _Patron Request_ so that the detailed monitoring is available through the `ILL Transactions API`.
    See the [Broker API Specification](./oapi/open-api.yaml) for details, where relevant endpoints are tagged with `patron-requests-api`.
 
+A `rerequest` creates a new borrowing request linked to its predecessor through
+`prevReqId` and `nextReqId`. With `noop: true`, the action only records the transition;
+the requester must create the replacement through `POST /patron_requests` and supply
+`prevReqId` to retain the link. Both flows send a `New` ISO18626 request carrying
+`requestingAgencyPreviousRequestId`. When the receiving supplier has the matching
+previous lending request for the same requester and tenant, it links the two supply
+requests atomically. A supplier without that predecessor accepts the request without
+links. Retries retain their `Retry` request type and use the same supplier-side linking.
+
 The broker’s APIs use hyperlinks to connect JSON resources.
 If you use Chrome or another browser to explore the API,
 consider installing an extension like [JSON Formatter Classic](https://chromewebstore.google.com/detail/json-formatter-classic/caacnjeoikecoeepknkbjdcaediamaej), which makes hyperlinked JSON easier to navigate.
