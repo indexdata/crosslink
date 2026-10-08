@@ -2181,60 +2181,63 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 	})
 }
 
-func TestHandleRetryRequestLinksSupplyRequests(t *testing.T) {
-	for _, tc := range []struct {
-		name      string
-		previous  pr_db.PatronRequest
-		lookupErr error
-		wantErr   bool
-	}{
-		{name: "matched", previous: pr_db.PatronRequest{ID: "local-previous"}},
-		{name: "not held locally", lookupErr: pgx.ErrNoRows},
-		{name: "lookup failure", lookupErr: errors.New("lookup failed"), wantErr: true},
-		{name: "already linked", previous: pr_db.PatronRequest{ID: "local-previous", NextReqID: getDbText("existing")}, wantErr: true},
-		{name: "update failure", previous: pr_db.PatronRequest{ID: "error-previous"}, wantErr: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			repo := new(MockPrRepo)
-			repo.On("GetLendingRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "new-remote-id").Return(pr_db.PatronRequest{}, pgx.ErrNoRows)
-			repo.On("GetLendingPredecessorForUpdate", pr_db.GetLendingPredecessorForUpdateParams{
-				SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1"), RequesterReqID: getDbText("old-remote-id"),
-			}).Return(tc.previous, tc.lookupErr)
-			handler := CreatePatronRequestMessageHandler(repo, nil, nil, new(MockEventBus))
-			retry := iso18626.TypeRequestTypeRetry
-			message := iso18626.NewISO18626Message()
-			message.Request = &iso18626.Request{
-				Header: iso18626.Header{
-					RequestingAgencyId:        iso18626.TypeAgencyId{AgencyIdType: iso18626.TypeSchemeValuePair{Text: "ISIL"}, AgencyIdValue: "REQ1"},
-					SupplyingAgencyId:         iso18626.TypeAgencyId{AgencyIdType: iso18626.TypeSchemeValuePair{Text: "ISIL"}, AgencyIdValue: "SUP1"},
-					RequestingAgencyRequestId: "new-remote-id",
-				},
-				ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan, RequestType: &retry, RequestingAgencyPreviousRequestId: "old-remote-id"},
+func TestHandleSuccessorRequestLinksSupplyRequests(t *testing.T) {
+	for _, requestType := range []iso18626.TypeRequestType{iso18626.TypeRequestTypeRetry, iso18626.TypeRequestTypeNew} {
+		t.Run(string(requestType), func(t *testing.T) {
+			for _, tc := range []struct {
+				name      string
+				previous  pr_db.PatronRequest
+				lookupErr error
+				wantErr   bool
+			}{
+				{name: "matched", previous: pr_db.PatronRequest{ID: "local-previous"}},
+				{name: "not held locally", lookupErr: pgx.ErrNoRows},
+				{name: "lookup failure", lookupErr: errors.New("lookup failed"), wantErr: true},
+				{name: "already linked", previous: pr_db.PatronRequest{ID: "local-previous", NextReqID: getDbText("existing")}, wantErr: true},
+				{name: "update failure", previous: pr_db.PatronRequest{ID: "error-previous"}, wantErr: true},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					repo := new(MockPrRepo)
+					repo.On("GetLendingRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "new-remote-id").Return(pr_db.PatronRequest{}, pgx.ErrNoRows)
+					repo.On("GetLendingPredecessorForUpdate", pr_db.GetLendingPredecessorForUpdateParams{
+						SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1"), RequesterReqID: getDbText("old-remote-id"),
+					}).Return(tc.previous, tc.lookupErr)
+					handler := CreatePatronRequestMessageHandler(repo, nil, nil, new(MockEventBus))
+					message := iso18626.NewISO18626Message()
+					message.Request = &iso18626.Request{
+						Header: iso18626.Header{
+							RequestingAgencyId:        iso18626.TypeAgencyId{AgencyIdType: iso18626.TypeSchemeValuePair{Text: "ISIL"}, AgencyIdValue: "REQ1"},
+							SupplyingAgencyId:         iso18626.TypeAgencyId{AgencyIdType: iso18626.TypeSchemeValuePair{Text: "ISIL"}, AgencyIdValue: "SUP1"},
+							RequestingAgencyRequestId: "new-remote-id",
+						},
+						ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan, RequestType: &requestType, RequestingAgencyPreviousRequestId: "old-remote-id"},
+					}
+					response, err := handler.HandleMessage(appCtx, message, nil)
+					if tc.wantErr {
+						require.Error(t, err)
+					} else {
+						require.NoError(t, err)
+						require.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
+						if tc.lookupErr == nil {
+							assert.Equal(t, getDbText(tc.previous.ID), repo.createdPr.PrevReqID)
+							assert.Equal(t, getDbText(repo.createdPr.ID), repo.savedPr.NextReqID)
+						} else {
+							assert.False(t, repo.createdPr.PrevReqID.Valid)
+						}
+					}
+					repo.AssertExpectations(t)
+				})
 			}
-			response, err := handler.HandleMessage(appCtx, message, nil)
-			if tc.wantErr {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				require.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
-				if tc.lookupErr == nil {
-					assert.Equal(t, getDbText(tc.previous.ID), repo.createdPr.PrevReqID)
-					assert.Equal(t, getDbText(repo.createdPr.ID), repo.savedPr.NextReqID)
-				} else {
-					assert.False(t, repo.createdPr.PrevReqID.Valid)
-				}
-			}
-			repo.AssertExpectations(t)
 		})
 	}
 }
 
-func TestCreateLendingRequestWithoutRetryPredecessor(t *testing.T) {
+func TestCreateLendingRequestWithoutPredecessor(t *testing.T) {
 	retry, newType := iso18626.TypeRequestTypeRetry, iso18626.TypeRequestTypeNew
 	for _, info := range []*iso18626.ServiceInfo{
 		nil, {}, {RequestType: &retry},
 		{RequestingAgencyPreviousRequestId: "previous"},
-		{RequestType: &newType, RequestingAgencyPreviousRequestId: "previous"},
+		{RequestType: &newType},
 	} {
 		repo := new(MockPrRepo)
 		created, err := CreateLendingRequest(appCtx, repo, pr_db.PatronRequest{ID: "next", Side: SideLending, IllRequest: iso18626.Request{ServiceInfo: info}})

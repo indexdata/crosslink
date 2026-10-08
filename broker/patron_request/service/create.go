@@ -51,11 +51,11 @@ func CreateBorrowingRequest(ctx common.ExtendedContext, repo pr_db.PrRepo, reque
 	return created, nil
 }
 
-// CreateLendingRequest creates a supply request and atomically links a Retry to
+// CreateLendingRequest creates a supply request and atomically links a retry or rerequest to
 // its local predecessor, if held by the same supplier for the same requester.
 func CreateLendingRequest(ctx common.ExtendedContext, repo pr_db.PrRepo, request pr_db.PatronRequest) (pr_db.PatronRequest, error) {
 	info := request.IllRequest.ServiceInfo
-	if info == nil || info.RequestType == nil || *info.RequestType != iso18626.TypeRequestTypeRetry || info.RequestingAgencyPreviousRequestId == "" {
+	if info == nil || info.RequestType == nil || (*info.RequestType != iso18626.TypeRequestTypeRetry && *info.RequestType != iso18626.TypeRequestTypeNew) || info.RequestingAgencyPreviousRequestId == "" {
 		return repo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(request))
 	}
 	var created pr_db.PatronRequest
@@ -69,7 +69,7 @@ func CreateLendingRequest(ctx common.ExtendedContext, repo pr_db.PrRepo, request
 		}
 		found := err == nil
 		if found {
-			// The predecessor lock serializes competing retries and prevents replacing
+			// The predecessor lock serializes competing successors and prevents replacing
 			// an existing successor when a message is delivered more than once.
 			if previous.NextReqID.Valid {
 				return fmt.Errorf("%w: request already has a successor", ErrInvalidPredecessor)
