@@ -1404,10 +1404,9 @@ func (a *PatronRequestActionService) createSuccessorBorrowingRequest(ctx common.
 		successorPr.IllRequest.ServiceInfo = &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}
 	}
 	requestType := iso18626.TypeRequestTypeNew
-	successorPr.IllRequest.ServiceInfo.RequestingAgencyPreviousRequestId = ""
+	successorPr.IllRequest.ServiceInfo.RequestingAgencyPreviousRequestId = pr.ID
 	if retry {
 		requestType = iso18626.TypeRequestTypeRetry
-		successorPr.IllRequest.ServiceInfo.RequestingAgencyPreviousRequestId = pr.ID
 	} else {
 		successorPr.IllRequest.Header.SupplyingAgencyRequestId = ""
 	}
