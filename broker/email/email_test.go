@@ -10,6 +10,7 @@ import (
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // ---------------------------------------------------------------------------
@@ -149,6 +150,19 @@ func TestRenderPullSlipHTML_ExecuteError(t *testing.T) {
 	_, err := RenderHtmlTemplate(PullSlipData{ReqId: "X"}, []string{"pullslip-pdf"}, "{{index . \"nonexistent\"}}")
 	// Execute on a struct with map-access fails
 	assert.Error(t, err)
+}
+
+func TestRenderPullSlipTemplateSupportsCancellationAndItemLocations(t *testing.T) {
+	data := PullSlipData{
+		CancellationReason: "Already available",
+		Location:           "Main Library",
+		ShelvingLocation:   "Stacks",
+	}
+
+	rendered, err := RenderTextTemplate(data, "{{.CancellationReason}}|{{.Location}}|{{.ShelvingLocation}}")
+
+	require.NoError(t, err)
+	assert.Equal(t, "Already available|Main Library|Stacks", rendered)
 }
 
 func TestValidateTextTemplateRejectsUnsupportedFieldInUnexecutedBranch(t *testing.T) {
@@ -369,11 +383,15 @@ func TestRenderTextTemplateUsesDefaultNameWhenFirstLabelIsMissing(t *testing.T) 
 
 func TestGetPullSlipData_PopulatesAllAvailableFields(t *testing.T) {
 	callNumber := "QA76.73.G63"
+	location := "Main Library"
+	shelvingLocation := "Stacks"
+	cancellationReason := "Requested item is locally available"
 	dueDate := utils.XSDDateTime{Time: time.Date(2026, 8, 15, 9, 30, 0, 0, time.UTC)}
 	pr := pr_db.PatronRequest{
-		RequesterReqID: pgtype.Text{String: "REQ-123", Valid: true},
-		DueAt:          pgtype.Timestamptz{Time: dueDate.Time, Valid: true},
-		Items:          []pr_db.PrItem{{ID: "item-1", CallNumber: &callNumber}},
+		RequesterReqID:     pgtype.Text{String: "REQ-123", Valid: true},
+		CancellationReason: pgtype.Text{String: cancellationReason, Valid: true},
+		DueAt:              pgtype.Timestamptz{Time: dueDate.Time, Valid: true},
+		Items:              []pr_db.PrItem{{ID: "item-1", CallNumber: &callNumber, Location: &location, ShelvingLocation: &shelvingLocation}},
 		IllRequest: iso18626.Request{
 			BibliographicInfo: iso18626.BibliographicInfo{
 				Author:                 "Jane Doe",
@@ -439,33 +457,36 @@ func TestGetPullSlipData_PopulatesAllAvailableFields(t *testing.T) {
 	data := GetPullSlipData(pr, notes, conditions, "barcode-base64")
 
 	assert.Equal(t, PullSlipData{
-		ReqId:             "REQ-123",
-		PickupLocation:    "Pickup Desk, Riga, LV-1050, LV",
-		PickupURL:         "https://example.test/document/123",
-		NeededBy:          "2026-08-01",
-		Title:             "Distributed Libraries",
-		TitleOfComponent:  "Resource sharing at scale",
-		Author:            "Jane Doe",
-		AuthorOfComponent: "John Contributor",
-		DueDate:           "2026-08-15",
-		ReturnAddress:     "Return Room, Shelf B, Riga, LV",
-		BarcodeBase64:     "barcode-base64",
-		ServiceType:       "Loan",
-		ServiceLevel:      "Rush",
-		SystemIdentifier:  "SYS-456",
-		Publisher:         "Index Press",
-		MaterialType:      "JournalArticle",
-		Volume:            "7",
-		Issue:             "2",
-		Pages:             "18",
-		StaffNotes:        "first note\nsecond note",
-		CallNumber:        "QA76.73.G63",
-		LoanConditions:    "library use only\nno renewal",
-		PatronGivenName:   "Ann",
-		PatronName:        "Ann",
-		PatronSurname:     "Reader",
-		PatronId:          "P-789",
-		PatronProfile:     "Faculty",
+		ReqId:              "REQ-123",
+		CancellationReason: cancellationReason,
+		PickupLocation:     "Pickup Desk, Riga, LV-1050, LV",
+		PickupURL:          "https://example.test/document/123",
+		NeededBy:           "2026-08-01",
+		Title:              "Distributed Libraries",
+		TitleOfComponent:   "Resource sharing at scale",
+		Author:             "Jane Doe",
+		AuthorOfComponent:  "John Contributor",
+		DueDate:            "2026-08-15",
+		ReturnAddress:      "Return Room, Shelf B, Riga, LV",
+		BarcodeBase64:      "barcode-base64",
+		ServiceType:        "Loan",
+		ServiceLevel:       "Rush",
+		SystemIdentifier:   "SYS-456",
+		Publisher:          "Index Press",
+		MaterialType:       "JournalArticle",
+		Volume:             "7",
+		Issue:              "2",
+		Pages:              "18",
+		StaffNotes:         "first note\nsecond note",
+		CallNumber:         "QA76.73.G63",
+		Location:           location,
+		ShelvingLocation:   shelvingLocation,
+		LoanConditions:     "library use only\nno renewal",
+		PatronGivenName:    "Ann",
+		PatronName:         "Ann",
+		PatronSurname:      "Reader",
+		PatronId:           "P-789",
+		PatronProfile:      "Faculty",
 	}, data)
 }
 
@@ -473,33 +494,36 @@ func TestGetPullSlipData_UsesDefaultsWhenOptionalFieldsAreMissing(t *testing.T) 
 	data := GetPullSlipData(pr_db.PatronRequest{}, nil, nil, DEFAULT_FOR_NO_VALUE)
 
 	assert.Equal(t, PullSlipData{
-		ReqId:             "",
-		PickupLocation:    DEFAULT_FOR_NO_VALUE,
-		PickupURL:         DEFAULT_FOR_NO_VALUE,
-		NeededBy:          DEFAULT_FOR_NO_VALUE,
-		Title:             DEFAULT_FOR_NO_VALUE,
-		TitleOfComponent:  DEFAULT_FOR_NO_VALUE,
-		Author:            DEFAULT_FOR_NO_VALUE,
-		AuthorOfComponent: DEFAULT_FOR_NO_VALUE,
-		DueDate:           DEFAULT_FOR_NO_VALUE,
-		ReturnAddress:     DEFAULT_FOR_NO_VALUE,
-		BarcodeBase64:     DEFAULT_FOR_NO_VALUE,
-		ServiceType:       DEFAULT_FOR_NO_VALUE,
-		ServiceLevel:      DEFAULT_FOR_NO_VALUE,
-		SystemIdentifier:  DEFAULT_FOR_NO_VALUE,
-		Publisher:         DEFAULT_FOR_NO_VALUE,
-		MaterialType:      DEFAULT_FOR_NO_VALUE,
-		Volume:            DEFAULT_FOR_NO_VALUE,
-		Issue:             DEFAULT_FOR_NO_VALUE,
-		Pages:             DEFAULT_FOR_NO_VALUE,
-		StaffNotes:        DEFAULT_FOR_NO_VALUE,
-		CallNumber:        DEFAULT_FOR_NO_VALUE,
-		LoanConditions:    DEFAULT_FOR_NO_VALUE,
-		PatronGivenName:   DEFAULT_FOR_NO_VALUE,
-		PatronName:        DEFAULT_FOR_NO_VALUE,
-		PatronSurname:     DEFAULT_FOR_NO_VALUE,
-		PatronId:          DEFAULT_FOR_NO_VALUE,
-		PatronProfile:     DEFAULT_FOR_NO_VALUE,
+		ReqId:              "",
+		CancellationReason: DEFAULT_FOR_NO_VALUE,
+		PickupLocation:     DEFAULT_FOR_NO_VALUE,
+		PickupURL:          DEFAULT_FOR_NO_VALUE,
+		NeededBy:           DEFAULT_FOR_NO_VALUE,
+		Title:              DEFAULT_FOR_NO_VALUE,
+		TitleOfComponent:   DEFAULT_FOR_NO_VALUE,
+		Author:             DEFAULT_FOR_NO_VALUE,
+		AuthorOfComponent:  DEFAULT_FOR_NO_VALUE,
+		DueDate:            DEFAULT_FOR_NO_VALUE,
+		ReturnAddress:      DEFAULT_FOR_NO_VALUE,
+		BarcodeBase64:      DEFAULT_FOR_NO_VALUE,
+		ServiceType:        DEFAULT_FOR_NO_VALUE,
+		ServiceLevel:       DEFAULT_FOR_NO_VALUE,
+		SystemIdentifier:   DEFAULT_FOR_NO_VALUE,
+		Publisher:          DEFAULT_FOR_NO_VALUE,
+		MaterialType:       DEFAULT_FOR_NO_VALUE,
+		Volume:             DEFAULT_FOR_NO_VALUE,
+		Issue:              DEFAULT_FOR_NO_VALUE,
+		Pages:              DEFAULT_FOR_NO_VALUE,
+		StaffNotes:         DEFAULT_FOR_NO_VALUE,
+		CallNumber:         DEFAULT_FOR_NO_VALUE,
+		Location:           DEFAULT_FOR_NO_VALUE,
+		ShelvingLocation:   DEFAULT_FOR_NO_VALUE,
+		LoanConditions:     DEFAULT_FOR_NO_VALUE,
+		PatronGivenName:    DEFAULT_FOR_NO_VALUE,
+		PatronName:         DEFAULT_FOR_NO_VALUE,
+		PatronSurname:      DEFAULT_FOR_NO_VALUE,
+		PatronId:           DEFAULT_FOR_NO_VALUE,
+		PatronProfile:      DEFAULT_FOR_NO_VALUE,
 	}, data)
 }
 

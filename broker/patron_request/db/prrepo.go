@@ -221,6 +221,7 @@ func patronRequestFromSearchView(v PatronRequestSearchView) PatronRequest {
 		InternalNote:              v.InternalNote,
 		StateModel:                v.StateModel,
 		RequesterPickupLocationID: v.RequesterPickupLocationID,
+		CancellationReason:        v.CancellationReason,
 		DueAt:                     v.DueAt,
 	}
 }

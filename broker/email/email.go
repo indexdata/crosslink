@@ -20,6 +20,7 @@ import (
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const DEFAULT_FOR_NO_VALUE = "n/a"
@@ -193,33 +194,36 @@ func joinAddresses(addrs []string) string {
 
 // Only string fields are allowed
 type PullSlipData struct {
-	ReqId             string
-	PickupLocation    string
-	PickupURL         string
-	NeededBy          string
-	Title             string
-	TitleOfComponent  string
-	Author            string
-	AuthorOfComponent string
-	DueDate           string
-	ReturnAddress     string
-	BarcodeBase64     string
-	ServiceType       string
-	ServiceLevel      string
-	SystemIdentifier  string
-	Publisher         string
-	MaterialType      string
-	Volume            string
-	Issue             string
-	Pages             string
-	StaffNotes        string
-	CallNumber        string
-	LoanConditions    string
-	PatronGivenName   string
-	PatronName        string
-	PatronSurname     string
-	PatronId          string
-	PatronProfile     string
+	ReqId              string
+	CancellationReason string
+	PickupLocation     string
+	PickupURL          string
+	NeededBy           string
+	Title              string
+	TitleOfComponent   string
+	Author             string
+	AuthorOfComponent  string
+	DueDate            string
+	ReturnAddress      string
+	BarcodeBase64      string
+	ServiceType        string
+	ServiceLevel       string
+	SystemIdentifier   string
+	Publisher          string
+	MaterialType       string
+	Volume             string
+	Issue              string
+	Pages              string
+	StaffNotes         string
+	CallNumber         string
+	Location           string
+	ShelvingLocation   string
+	LoanConditions     string
+	PatronGivenName    string
+	PatronName         string
+	PatronSurname      string
+	PatronId           string
+	PatronProfile      string
 }
 
 // Only string fields are allowed
@@ -231,33 +235,36 @@ type BatchEmailData struct {
 
 func GetPullSlipData(pr pr_db.PatronRequest, notes []pr_db.Notification, conditions []pr_db.Notification, barcodeData string) PullSlipData {
 	data := PullSlipData{
-		ReqId:             pr.RequesterReqID.String,
-		PickupLocation:    getPickupLocation(pr),
-		PickupURL:         getPickupURL(pr),
-		NeededBy:          DEFAULT_FOR_NO_VALUE,
-		Title:             DEFAULT_FOR_NO_VALUE,
-		TitleOfComponent:  DEFAULT_FOR_NO_VALUE,
-		Author:            DEFAULT_FOR_NO_VALUE,
-		AuthorOfComponent: DEFAULT_FOR_NO_VALUE,
-		DueDate:           DEFAULT_FOR_NO_VALUE,
-		ReturnAddress:     DEFAULT_FOR_NO_VALUE,
-		BarcodeBase64:     barcodeData,
-		ServiceType:       DEFAULT_FOR_NO_VALUE,
-		ServiceLevel:      DEFAULT_FOR_NO_VALUE,
-		SystemIdentifier:  DEFAULT_FOR_NO_VALUE,
-		Publisher:         DEFAULT_FOR_NO_VALUE,
-		MaterialType:      DEFAULT_FOR_NO_VALUE,
-		Volume:            DEFAULT_FOR_NO_VALUE,
-		Issue:             DEFAULT_FOR_NO_VALUE,
-		Pages:             DEFAULT_FOR_NO_VALUE,
-		StaffNotes:        getStaffNotes(notes),
-		CallNumber:        getCallNumber(pr),
-		LoanConditions:    getLoanConditions(conditions),
-		PatronGivenName:   DEFAULT_FOR_NO_VALUE,
-		PatronName:        DEFAULT_FOR_NO_VALUE,
-		PatronSurname:     DEFAULT_FOR_NO_VALUE,
-		PatronId:          DEFAULT_FOR_NO_VALUE,
-		PatronProfile:     DEFAULT_FOR_NO_VALUE,
+		ReqId:              pr.RequesterReqID.String,
+		CancellationReason: textValue(pr.CancellationReason, DEFAULT_FOR_NO_VALUE),
+		PickupLocation:     getPickupLocation(pr),
+		PickupURL:          getPickupURL(pr),
+		NeededBy:           DEFAULT_FOR_NO_VALUE,
+		Title:              DEFAULT_FOR_NO_VALUE,
+		TitleOfComponent:   DEFAULT_FOR_NO_VALUE,
+		Author:             DEFAULT_FOR_NO_VALUE,
+		AuthorOfComponent:  DEFAULT_FOR_NO_VALUE,
+		DueDate:            DEFAULT_FOR_NO_VALUE,
+		ReturnAddress:      DEFAULT_FOR_NO_VALUE,
+		BarcodeBase64:      barcodeData,
+		ServiceType:        DEFAULT_FOR_NO_VALUE,
+		ServiceLevel:       DEFAULT_FOR_NO_VALUE,
+		SystemIdentifier:   DEFAULT_FOR_NO_VALUE,
+		Publisher:          DEFAULT_FOR_NO_VALUE,
+		MaterialType:       DEFAULT_FOR_NO_VALUE,
+		Volume:             DEFAULT_FOR_NO_VALUE,
+		Issue:              DEFAULT_FOR_NO_VALUE,
+		Pages:              DEFAULT_FOR_NO_VALUE,
+		StaffNotes:         getStaffNotes(notes),
+		CallNumber:         getCallNumber(pr),
+		Location:           getItemLocation(pr, func(item pr_db.PrItem) *string { return item.Location }),
+		ShelvingLocation:   getItemLocation(pr, func(item pr_db.PrItem) *string { return item.ShelvingLocation }),
+		LoanConditions:     getLoanConditions(conditions),
+		PatronGivenName:    DEFAULT_FOR_NO_VALUE,
+		PatronName:         DEFAULT_FOR_NO_VALUE,
+		PatronSurname:      DEFAULT_FOR_NO_VALUE,
+		PatronId:           DEFAULT_FOR_NO_VALUE,
+		PatronProfile:      DEFAULT_FOR_NO_VALUE,
 	}
 	if pr.IllRequest.BibliographicInfo.Author != "" {
 		data.Author = pr.IllRequest.BibliographicInfo.Author
@@ -929,6 +936,22 @@ func getCallNumber(request pr_db.PatronRequest) string {
 		return DEFAULT_FOR_NO_VALUE
 	}
 	return callNumber
+}
+
+func getItemLocation(request pr_db.PatronRequest, value func(pr_db.PrItem) *string) string {
+	for _, item := range request.Items {
+		if location := value(item); location != nil && *location != "" {
+			return *location
+		}
+	}
+	return DEFAULT_FOR_NO_VALUE
+}
+
+func textValue(value pgtype.Text, fallback string) string {
+	if value.Valid && value.String != "" {
+		return value.String
+	}
+	return fallback
 }
 
 func getPickupLocation(request pr_db.PatronRequest) string {

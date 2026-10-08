@@ -36,6 +36,18 @@ func TestCreateLmsAdapterNcip(t *testing.T) {
 	assert.Contains(t, err.Error(), "lmsConfig.address and fromAgency")
 }
 
+func TestRequestedItemLocations(t *testing.T) {
+	location, shelvingLocation := requestedItemLocations(&ncip.ItemOptionalFields{
+		Location: []ncip.Location{{LocationName: ncip.LocationName{LocationNameInstance: []ncip.LocationNameInstance{
+			{LocationNameLevel: 1, LocationNameValue: "Main Library"},
+			{LocationNameLevel: 2, LocationNameValue: "Stacks"},
+		}}}},
+	})
+
+	assert.Equal(t, "Main Library", location)
+	assert.Equal(t, "Stacks", shelvingLocation)
+}
+
 func TestLookupUser(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	b := true

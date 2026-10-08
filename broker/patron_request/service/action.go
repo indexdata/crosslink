@@ -1603,14 +1603,16 @@ func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.Extended
 	// Commit the reservation identifier and LMS status together, after the LMS call.
 	err = a.prRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
 		savedItem, err := repo.SaveItem(ctx, pr_db.SaveItemParams{
-			ID:           uuid.NewString(),
-			CreatedAt:    pgtype.Timestamp{Valid: true, Time: time.Now()},
-			PrID:         pr.ID,
-			ItemID:       getDbText(itemID),
-			LmsRequestID: getDbText(lmsRequestID),
-			Title:        getDbTextPtr(&title),
-			CallNumber:   getDbTextPtr(&callNumber),
-			Barcode:      barcode,
+			ID:               uuid.NewString(),
+			CreatedAt:        pgtype.Timestamp{Valid: true, Time: time.Now()},
+			PrID:             pr.ID,
+			ItemID:           getDbText(itemID),
+			LmsRequestID:     getDbText(lmsRequestID),
+			Title:            getDbTextPtr(&title),
+			CallNumber:       getDbTextPtr(&callNumber),
+			Location:         getDbTextPtr(&response.Location),
+			ShelvingLocation: getDbTextPtr(&response.ShelvingLocation),
+			Barcode:          barcode,
 		})
 		if err != nil {
 			return err

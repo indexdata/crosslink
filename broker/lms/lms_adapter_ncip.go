@@ -457,16 +457,55 @@ func (l *LmsAdapterNcip) RequestItem(
 	if response.ItemOptionalFields != nil && response.ItemOptionalFields.BibliographicDescription != nil {
 		title = response.ItemOptionalFields.BibliographicDescription.Title
 	}
+	location, shelvingLocation := requestedItemLocations(response.ItemOptionalFields)
 	lmsRequestID := requestId
 	if response.RequestId != nil && strings.TrimSpace(response.RequestId.RequestIdentifierValue) != "" {
 		lmsRequestID = response.RequestId.RequestIdentifierValue
 	}
 	return &RequestedItem{
-		RequestID:  lmsRequestID,
-		Barcode:    barcode,
-		CallNumber: callNumber,
-		Title:      title,
+		RequestID:        lmsRequestID,
+		Barcode:          barcode,
+		CallNumber:       callNumber,
+		Title:            title,
+		Location:         location,
+		ShelvingLocation: shelvingLocation,
 	}, nil
+}
+
+func requestedItemLocations(fields *ncip.ItemOptionalFields) (string, string) {
+	if fields == nil {
+		return "", ""
+	}
+	var names []ncip.LocationNameInstance
+	for _, location := range fields.Location {
+		names = append(names, location.LocationName.LocationNameInstance...)
+	}
+	if len(names) == 0 {
+		return "", ""
+	}
+	// NCIP location names are hierarchical. Level 1 is the physical location;
+	// the next level is the shelving location when supplied.
+	var location, shelvingLocation string
+	for _, name := range names {
+		if strings.TrimSpace(name.LocationNameValue) == "" {
+			continue
+		}
+		switch name.LocationNameLevel {
+		case 1:
+			if location == "" {
+				location = strings.TrimSpace(name.LocationNameValue)
+			}
+		case 2:
+			if shelvingLocation == "" {
+				shelvingLocation = strings.TrimSpace(name.LocationNameValue)
+			}
+		}
+	}
+	if shelvingLocation == "" && location != "" && len(names) == 1 {
+		// Some LMSs return a single effective location only.
+		shelvingLocation = location
+	}
+	return location, shelvingLocation
 }
 
 func (l *LmsAdapterNcip) CancelRequestItem(requestId string, userId string) error {
