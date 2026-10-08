@@ -13,7 +13,7 @@ import (
 )
 
 func GetStateModelTemplateDefault(purpose proapi.TemplatePurpose, audience proapi.TemplateAudience, label string) (pr_db.Template, error) {
-	var selected *proapi.CreateTemplate
+	var selected *proapi.TemplateProperties
 	for i := range stateModelsConfig.TemplateDefaults {
 		template := &stateModelsConfig.TemplateDefaults[i]
 		if template.Purpose != purpose || !slices.Contains(template.Labels, label) {

@@ -39,8 +39,8 @@ func TestGetStateModelTemplateDefaultAudienceNeutralMatchesAnyAudience(t *testin
 		stateModelsConfig.TemplateDefaults = originalDefaults
 	})
 	stateModelsConfig.TemplateDefaults = append(
-		append([]proapi.CreateTemplate(nil), originalDefaults...),
-		proapi.CreateTemplate{
+		append([]proapi.TemplateProperties(nil), originalDefaults...),
+		proapi.TemplateProperties{
 			Title:       "Audience-neutral notification",
 			Purpose:     proapi.Email,
 			Body:        "Notification body",
@@ -73,7 +73,7 @@ func TestGetStateModelTemplateDefaultPrefersExactAudienceOverNeutral(t *testing.
 		stateModelsConfig.TemplateDefaults = originalDefaults
 	})
 	patronAudience := proapi.TemplateAudiencePatron
-	stateModelsConfig.TemplateDefaults = []proapi.CreateTemplate{
+	stateModelsConfig.TemplateDefaults = []proapi.TemplateProperties{
 		{
 			Title:       "Audience-neutral notification",
 			Purpose:     proapi.Email,

@@ -1,6 +1,7 @@
 package prservice
 
 import (
+	"encoding/json"
 	"slices"
 	"sync"
 	"testing"
@@ -150,7 +151,7 @@ func TestCompletedDocumentNotificationAutoAction(t *testing.T) {
 
 func TestDocumentDeliveredNotificationTemplate(t *testing.T) {
 	templates := GetStateModelTemplateDefaults()
-	idx := slices.IndexFunc(templates, func(template proapi.CreateTemplate) bool {
+	idx := slices.IndexFunc(templates, func(template proapi.TemplateProperties) bool {
 		return slices.Contains(template.Labels, "copy-completed-notification")
 	})
 	if !assert.NotEqual(t, -1, idx) {
@@ -374,7 +375,7 @@ func TestReturnablesPullslipPdfTemplateLabel(t *testing.T) {
 func TestStateModelTemplateDefaultsIncludePullslipPdf(t *testing.T) {
 	templates := GetStateModelTemplateDefaults()
 
-	idx := slices.IndexFunc(templates, func(template proapi.CreateTemplate) bool {
+	idx := slices.IndexFunc(templates, func(template proapi.TemplateProperties) bool {
 		return slices.Contains(template.Labels, "pullslip-pdf")
 	})
 	if !assert.NotEqual(t, -1, idx) {
@@ -390,6 +391,14 @@ func TestStateModelTemplateDefaultsIncludePullslipPdf(t *testing.T) {
 	}
 	assert.Contains(t, template.Body, "{{.BarcodeBase64}}")
 	assert.Contains(t, template.Body, "{{.ReqId}}")
+}
+
+func TestStateModelTemplateDefaultsExcludeResponseFields(t *testing.T) {
+	data, err := json.Marshal(GetStateModelTemplateDefaults())
+	assert.NoError(t, err)
+	assert.NotContains(t, string(data), `"id"`)
+	assert.NotContains(t, string(data), `"createdAt"`)
+	assert.NotContains(t, string(data), `"updatedAt"`)
 }
 
 func TestDefaultInvalidPatronStateIsEditableAndNeedsAttention(t *testing.T) {

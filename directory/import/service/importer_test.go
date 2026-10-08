@@ -289,6 +289,23 @@ func TestImportAcceptsMaxRequestsPerPatron(t *testing.T) {
 	assert.Equal(t, 1.25, *repo.entry.Data.ILLConfig.MinimumCost)
 }
 
+func TestImportAcceptsNullRequestLimitAndMinimumCost(t *testing.T) {
+	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
+	config := strings.Replace(validILLConfig(), `"maxRequestsPerPatron":0`, `"maxRequestsPerPatron":null`, 1)
+	config = strings.Replace(config, `"minimumCost":1.25`, `"minimumCost":null`, 1)
+	record := strings.Replace(validEntryRecord(), `"illConfig":null`, config, 1)
+
+	result, err := newTestImporter(t, repo).Import(context.Background(), model.ConflictPolicyFail, strings.NewReader(record))
+
+	require.NoError(t, err)
+	assert.Equal(t, model.ImportSectionResult{Imported: 1}, result.Entries)
+	assert.Empty(t, result.Errors)
+	require.NotNil(t, repo.entry)
+	require.NotNil(t, repo.entry.Data.ILLConfig)
+	assert.Nil(t, repo.entry.Data.ILLConfig.MaxRequestsPerPatron)
+	assert.Nil(t, repo.entry.Data.ILLConfig.MinimumCost)
+}
+
 func validLMSConfig() string {
 	return `"lmsConfig":{"vendor":null,"ncipNamespaceEnabled":null,"bibIdNormalization":null,"address":"https://example.test/ncip","fromAgency":"FROM","fromAgencyAuthentication":null,"toAgency":null,"lookupUserEnabled":true,"acceptItemEnabled":true,"checkInItemEnabled":true,"checkOutItemEnabled":true,"itemLocation":null,"requestItemRequestType":null,"requestItemRequestScopeType":null,"requestItemBibIdCode":null,"requestItemEnabled":true,"requestItemPickupLocationEnabled":true,"requesterPickupLocation":null,"supplierPickupLocation":null,"requesterPatronPattern":null,"patronProfiles":[{"code":"STAFF","canCreateRequests":true}]}`
 }
@@ -412,7 +429,9 @@ func TestNewRejectsMissingImportRecordSchema(t *testing.T) {
 func TestImportUsesInjectedOpenAPIRecordSchema(t *testing.T) {
 	spec := loadImportSpec(t)
 	minimumCost := 1.0
-	spec.Components.Schemas["ImportTierData"].Value.Properties["cost"].Value.Min = &minimumCost
+	schema := composedSchemaProperty(spec.Components.Schemas["ImportTierData"].Value, "cost")
+	require.NotNil(t, schema)
+	schema.Value.Min = &minimumCost
 	repo := &recordingRepo{result: model.RepoResult{Outcome: model.OutcomeImported}}
 	importer, err := New(repo, spec)
 	require.NoError(t, err)
@@ -440,6 +459,18 @@ func loadImportSpec(t *testing.T) *openapi3.T {
 	require.NoError(t, err)
 	require.NoError(t, spec.Validate(context.Background()))
 	return spec
+}
+
+func composedSchemaProperty(schema *openapi3.Schema, propertyName string) *openapi3.SchemaRef {
+	if property, ok := schema.Properties[propertyName]; ok {
+		return property
+	}
+	for _, member := range schema.AllOf {
+		if property := composedSchemaProperty(member.Value, propertyName); property != nil {
+			return property
+		}
+	}
+	return nil
 }
 
 func TestImportValidatesHostSettings(t *testing.T) {
