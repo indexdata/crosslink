@@ -394,7 +394,43 @@ func validateTemplateFields(node parse.Node, data any) error {
 		return cloned
 	}
 
+	isInteger := func(dataType reflect.Type) bool {
+		if dataType == nil {
+			return false
+		}
+		switch dataType.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+			return true
+		default:
+			return false
+		}
+	}
+
+	isAssignable := func(source reflect.Type, target reflect.Type) bool {
+		if source == nil || target == nil {
+			return false
+		}
+		if source.AssignableTo(target) {
+			return true
+		}
+		return isInteger(source) && isInteger(target) && source.ConvertibleTo(target)
+	}
+
+	type templateNil struct{}
+	templateNilType := reflect.TypeFor[templateNil]()
+	integerLiteral := func(node parse.Node) (int64, bool) {
+		number, ok := node.(*parse.NumberNode)
+		if !ok || !number.IsInt {
+			return 0, false
+		}
+		return number.Int64, true
+	}
+
 	var inferNodeType func(parse.Node, reflect.Type, templateVariables) (reflect.Type, error)
+	var inferPipeType func(*parse.PipeNode, reflect.Type, templateVariables) (reflect.Type, error)
+	var inferCommandType func(*parse.CommandNode, reflect.Type, bool, reflect.Type, templateVariables) (reflect.Type, error)
+
 	inferNodeType = func(node parse.Node, dotType reflect.Type, variables templateVariables) (reflect.Type, error) {
 		switch node := node.(type) {
 		case *parse.DotNode:
@@ -424,17 +460,287 @@ func validateTemplateFields(node parse.Node, data any) error {
 		case *parse.BoolNode:
 			return reflect.TypeFor[bool](), nil
 		case *parse.NumberNode:
-			return nil, errors.New("cannot validate a numeric scoped template expression")
+			isRuneInt := len(node.Text) > 0 && node.Text[0] == '\''
+			isHexInt := len(node.Text) > 2 && node.Text[0] == '0' &&
+				(node.Text[1] == 'x' || node.Text[1] == 'X') && !strings.ContainsAny(node.Text, "pP")
+			switch {
+			case node.IsComplex:
+				return reflect.TypeFor[complex128](), nil
+			case node.IsFloat && !isHexInt && !isRuneInt && strings.ContainsAny(node.Text, ".eEpP"):
+				return reflect.TypeFor[float64](), nil
+			case node.IsInt:
+				value := int(node.Int64)
+				if int64(value) != node.Int64 {
+					return nil, fmt.Errorf("%s overflows int", node.Text)
+				}
+				return reflect.TypeFor[int](), nil
+			case node.IsUint:
+				return nil, fmt.Errorf("%s overflows int", node.Text)
+			default:
+				return nil, errors.New("cannot infer template number type")
+			}
+		case *parse.NilNode:
+			return templateNilType, nil
+		case *parse.PipeNode:
+			return inferPipeType(node, dotType, variables)
 		default:
 			return nil, fmt.Errorf("cannot validate scoped template expression %T", node)
 		}
 	}
 
-	inferPipeType := func(pipe *parse.PipeNode, dotType reflect.Type, variables templateVariables) (reflect.Type, error) {
-		if pipe == nil || len(pipe.Cmds) != 1 || len(pipe.Cmds[0].Args) != 1 {
-			return nil, errors.New("cannot validate scoped template pipeline")
+	inferCommandType = func(command *parse.CommandNode, pipedType reflect.Type, hasPipedValue bool, dotType reflect.Type, variables templateVariables) (reflect.Type, error) {
+		if command == nil || len(command.Args) == 0 {
+			return nil, errors.New("cannot validate empty template command")
 		}
-		return inferNodeType(pipe.Cmds[0].Args[0], dotType, variables)
+
+		identifier, isBuiltin := command.Args[0].(*parse.IdentifierNode)
+		if !isBuiltin {
+			if hasPipedValue || len(command.Args) != 1 {
+				return nil, errors.New("cannot validate a dynamic template command")
+			}
+			if _, isNil := command.Args[0].(*parse.NilNode); isNil {
+				return nil, errors.New("nil is not a template command")
+			}
+			return inferNodeType(command.Args[0], dotType, variables)
+		}
+
+		argumentTypes := make([]reflect.Type, 0, len(command.Args))
+		argumentNodes := make([]parse.Node, 0, len(command.Args))
+		for _, argument := range command.Args[1:] {
+			argumentType, err := inferNodeType(argument, dotType, variables)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", identifier.Ident, err)
+			}
+			argumentTypes = append(argumentTypes, argumentType)
+			argumentNodes = append(argumentNodes, argument)
+		}
+		if hasPipedValue {
+			argumentTypes = append(argumentTypes, pipedType)
+			argumentNodes = append(argumentNodes, nil)
+		}
+
+		requireArguments := func(minimum int, maximum int) error {
+			if len(argumentTypes) < minimum || (maximum >= 0 && len(argumentTypes) > maximum) {
+				return fmt.Errorf("%s: invalid argument count %d", identifier.Ident, len(argumentTypes))
+			}
+			return nil
+		}
+
+		switch identifier.Ident {
+		case "index":
+			if err := requireArguments(2, -1); err != nil {
+				return nil, err
+			}
+			indexedType := argumentTypes[0]
+			for indexPosition, indexType := range argumentTypes[1:] {
+				indexedType = indirect(indexedType)
+				if indexedType == nil {
+					return nil, errors.New("index: cannot index a value of unknown type")
+				}
+				switch indexedType.Kind() {
+				case reflect.Array, reflect.Slice:
+					if !isInteger(indexType) {
+						return nil, fmt.Errorf("index: index type %v is not an integer", indexType)
+					}
+					if index, ok := integerLiteral(argumentNodes[indexPosition+1]); ok &&
+						(index < 0 || indexedType.Kind() == reflect.Array && index >= int64(indexedType.Len())) {
+						return nil, fmt.Errorf("index: literal index %d is out of range", index)
+					}
+					indexedType = indexedType.Elem()
+				case reflect.String:
+					if !isInteger(indexType) {
+						return nil, fmt.Errorf("index: index type %v is not an integer", indexType)
+					}
+					if index, ok := integerLiteral(argumentNodes[indexPosition+1]); ok && index < 0 {
+						return nil, fmt.Errorf("index: literal index %d is out of range", index)
+					}
+					indexedType = reflect.TypeFor[uint8]()
+				case reflect.Map:
+					if !isAssignable(indexType, indexedType.Key()) {
+						return nil, fmt.Errorf("index: key type %v is incompatible with %v", indexType, indexedType.Key())
+					}
+					indexedType = indexedType.Elem()
+				default:
+					return nil, fmt.Errorf("index: cannot index value of type %v", indexedType)
+				}
+			}
+			return indexedType, nil
+		case "len":
+			if err := requireArguments(1, 1); err != nil {
+				return nil, err
+			}
+			valueType := indirect(argumentTypes[0])
+			if valueType == nil {
+				return nil, errors.New("len: cannot inspect a value of unknown type")
+			}
+			switch valueType.Kind() {
+			case reflect.Array, reflect.Chan, reflect.Map, reflect.Slice, reflect.String:
+				return reflect.TypeFor[int](), nil
+			default:
+				return nil, fmt.Errorf("len: cannot inspect value of type %v", valueType)
+			}
+		case "slice":
+			if err := requireArguments(1, 4); err != nil {
+				return nil, err
+			}
+			valueType := indirect(argumentTypes[0])
+			if valueType == nil {
+				return nil, errors.New("slice: cannot slice a value of unknown type")
+			}
+			literalIndexes := make([]*int64, len(argumentTypes)-1)
+			for indexPosition, indexType := range argumentTypes[1:] {
+				if !isInteger(indexType) {
+					return nil, fmt.Errorf("slice: index type %v is not an integer", indexType)
+				}
+				if index, ok := integerLiteral(argumentNodes[indexPosition+1]); ok {
+					if index < 0 {
+						return nil, fmt.Errorf("slice: literal index %d is out of range", index)
+					}
+					literalIndexes[indexPosition] = &index
+				}
+			}
+			for indexPosition := 1; indexPosition < len(literalIndexes); indexPosition++ {
+				previous := literalIndexes[indexPosition-1]
+				current := literalIndexes[indexPosition]
+				if previous != nil && current != nil && *previous > *current {
+					return nil, fmt.Errorf("slice: invalid literal bounds %d > %d", *previous, *current)
+				}
+			}
+			switch valueType.Kind() {
+			case reflect.Array:
+				for _, index := range literalIndexes {
+					if index != nil && *index > int64(valueType.Len()) {
+						return nil, fmt.Errorf("slice: literal index %d is out of range", *index)
+					}
+				}
+				return reflect.SliceOf(valueType.Elem()), nil
+			case reflect.Slice:
+				return valueType, nil
+			case reflect.String:
+				if len(argumentTypes) == 4 {
+					return nil, errors.New("slice: cannot use three indexes with a string")
+				}
+				return valueType, nil
+			default:
+				return nil, fmt.Errorf("slice: cannot slice value of type %v", valueType)
+			}
+		case "and", "or":
+			if err := requireArguments(1, -1); err != nil {
+				return nil, err
+			}
+			resultType := argumentTypes[0]
+			for _, argumentType := range argumentTypes[1:] {
+				if argumentType != resultType {
+					resultType = nil
+				}
+			}
+			return resultType, nil
+		case "not":
+			if err := requireArguments(1, 1); err != nil {
+				return nil, err
+			}
+			return reflect.TypeFor[bool](), nil
+		case "eq", "ne", "lt", "le", "gt", "ge":
+			minimum := 2
+			maximum := 2
+			if identifier.Ident == "eq" {
+				maximum = -1
+			}
+			if err := requireArguments(minimum, maximum); err != nil {
+				return nil, err
+			}
+			comparisonKind := func(dataType reflect.Type) reflect.Kind {
+				if dataType == nil {
+					return reflect.Invalid
+				}
+				return dataType.Kind()
+			}
+			isSignedInteger := func(kind reflect.Kind) bool {
+				return kind >= reflect.Int && kind <= reflect.Int64
+			}
+			isUnsignedInteger := func(kind reflect.Kind) bool {
+				return kind >= reflect.Uint && kind <= reflect.Uintptr
+			}
+			leftType := argumentTypes[0]
+			leftKind := comparisonKind(leftType)
+			for _, argumentType := range argumentTypes[1:] {
+				rightType := argumentType
+				rightKind := comparisonKind(rightType)
+				leftIsNil := leftType == templateNilType
+				rightIsNil := rightType == templateNilType
+				if leftIsNil || rightIsNil {
+					if identifier.Ident != "eq" && identifier.Ident != "ne" {
+						return nil, fmt.Errorf("%s: nil is not ordered", identifier.Ident)
+					}
+					if leftIsNil && rightIsNil {
+						continue
+					}
+					nonNilType := leftType
+					if leftIsNil {
+						nonNilType = rightType
+					}
+					if nonNilType == nil {
+						return nil, fmt.Errorf("%s: cannot compare nil with an unknown type", identifier.Ident)
+					}
+					switch nonNilType.Kind() {
+					case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+						continue
+					default:
+						return nil, fmt.Errorf("%s: type %v cannot be nil", identifier.Ident, nonNilType)
+					}
+				}
+				integerPair := (isSignedInteger(leftKind) || isUnsignedInteger(leftKind)) &&
+					(isSignedInteger(rightKind) || isUnsignedInteger(rightKind))
+				floatPair := (leftKind == reflect.Float32 || leftKind == reflect.Float64) &&
+					(rightKind == reflect.Float32 || rightKind == reflect.Float64)
+				complexPair := (leftKind == reflect.Complex64 || leftKind == reflect.Complex128) &&
+					(rightKind == reflect.Complex64 || rightKind == reflect.Complex128)
+				stringPair := leftKind == reflect.String && rightKind == reflect.String
+				boolPair := leftKind == reflect.Bool && rightKind == reflect.Bool
+				if identifier.Ident == "eq" || identifier.Ident == "ne" {
+					comparablePair := leftKind == rightKind && leftType != nil && rightType != nil &&
+						leftKind != reflect.Interface && leftType.Comparable() && rightType.Comparable()
+					if !integerPair && !floatPair && !complexPair && !stringPair && !boolPair && !comparablePair {
+						return nil, fmt.Errorf("%s: incompatible or non-comparable argument types %v and %v", identifier.Ident, leftType, rightType)
+					}
+					continue
+				}
+				orderedPair := integerPair || floatPair || stringPair
+				if !orderedPair {
+					return nil, fmt.Errorf("%s: unordered or incompatible argument types %v and %v", identifier.Ident, leftType, rightType)
+				}
+			}
+			return reflect.TypeFor[bool](), nil
+		case "print", "println", "html", "js", "urlquery":
+			return reflect.TypeFor[string](), nil
+		case "printf":
+			if err := requireArguments(1, -1); err != nil {
+				return nil, err
+			}
+			if argumentTypes[0] == nil || argumentTypes[0].Kind() != reflect.String {
+				return nil, fmt.Errorf("printf: format type %v is not a string", argumentTypes[0])
+			}
+			return reflect.TypeFor[string](), nil
+		case "call":
+			return nil, errors.New("call: cannot statically validate function calls")
+		default:
+			return nil, fmt.Errorf("cannot statically validate template command %q", identifier.Ident)
+		}
+	}
+
+	inferPipeType = func(pipe *parse.PipeNode, dotType reflect.Type, variables templateVariables) (reflect.Type, error) {
+		if pipe == nil || len(pipe.Cmds) == 0 {
+			return nil, errors.New("cannot validate empty template pipeline")
+		}
+		var pipedType reflect.Type
+		for commandIndex, command := range pipe.Cmds {
+			var err error
+			pipedType, err = inferCommandType(command, pipedType, commandIndex > 0, dotType, variables)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return pipedType, nil
 	}
 
 	var walk func(parse.Node, reflect.Type, templateVariables) error
@@ -456,24 +762,16 @@ func validateTemplateFields(node parse.Node, data any) error {
 		case *parse.ActionNode:
 			return walk(node.Pipe, dotType, variables)
 		case *parse.PipeNode:
-			for _, command := range node.Cmds {
-				if err := walk(command, dotType, variables); err != nil {
-					return err
-				}
+			pipeType, err := inferPipeType(node, dotType, variables)
+			if err != nil {
+				return err
 			}
 			if len(node.Decl) == 1 {
-				// Some pipelines (for example printf) cannot be inferred statically.
-				// Retain the declaration so scalar uses remain valid; field access on
-				// an unknown type is rejected later.
-				variableType, _ := inferPipeType(node, dotType, variables)
-				variables[node.Decl[0].Ident[0]] = variableType
+				variables[node.Decl[0].Ident[0]] = pipeType
 			}
 		case *parse.CommandNode:
-			for _, argument := range node.Args {
-				if err := walk(argument, dotType, variables); err != nil {
-					return err
-				}
-			}
+			_, err := inferCommandType(node, nil, false, dotType, variables)
+			return err
 		case *parse.IfNode:
 			branchVariables := cloneVariables(variables)
 			if err := walk(node.Pipe, dotType, branchVariables); err != nil {
@@ -496,8 +794,13 @@ func validateTemplateFields(node parse.Node, data any) error {
 			if rangeType == nil {
 				return errors.New("cannot validate range over an unknown type")
 			}
+			var rangeKeyType reflect.Type
 			switch rangeType.Kind() {
-			case reflect.Array, reflect.Slice, reflect.Map, reflect.Chan:
+			case reflect.Array, reflect.Slice, reflect.Chan:
+				rangeKeyType = reflect.TypeFor[int]()
+				rangeType = rangeType.Elem()
+			case reflect.Map:
+				rangeKeyType = rangeType.Key()
 				rangeType = rangeType.Elem()
 			default:
 				return fmt.Errorf("cannot range over type %v", rangeType)
@@ -505,7 +808,7 @@ func validateTemplateFields(node parse.Node, data any) error {
 			if len(node.Pipe.Decl) == 1 {
 				branchVariables[node.Pipe.Decl[0].Ident[0]] = rangeType
 			} else if len(node.Pipe.Decl) == 2 {
-				branchVariables[node.Pipe.Decl[0].Ident[0]] = nil
+				branchVariables[node.Pipe.Decl[0].Ident[0]] = rangeKeyType
 				branchVariables[node.Pipe.Decl[1].Ident[0]] = rangeType
 			}
 			if err := walk(node.List, rangeType, cloneVariables(branchVariables)); err != nil {
@@ -528,6 +831,9 @@ func validateTemplateFields(node parse.Node, data any) error {
 		case *parse.TemplateNode:
 			if err := walk(node.Pipe, dotType, variables); err != nil {
 				return err
+			}
+			if node.Pipe == nil {
+				return nil
 			}
 			templateType, err := inferPipeType(node.Pipe, dotType, variables)
 			if err != nil {

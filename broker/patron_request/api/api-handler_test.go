@@ -1170,6 +1170,14 @@ func TestValidateTemplateRendering(t *testing.T) {
 			labels:      []string{"pullslip-email"},
 		},
 		{
+			name:        "batch email with arbitrary label",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        "{{.ActualCount}} requests",
+			subject:     &batchSubject,
+			labels:      []string{"pullslips"},
+		},
+		{
 			name:        "pullslip",
 			purpose:     proapi.Pullslip,
 			contentType: proapi.Html,

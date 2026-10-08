@@ -156,6 +156,152 @@ func TestValidateTextTemplateRejectsUnsupportedFieldInUnexecutedBranch(t *testin
 	assert.ErrorContains(t, err, "Unsupported")
 }
 
+func TestValidateTextTemplateRejectsInvalidCommandInUnexecutedBranch(t *testing.T) {
+	for _, testCase := range []struct {
+		name         string
+		templateBody string
+		command      string
+	}{
+		{
+			name:         "index cannot operate on struct",
+			templateBody: `{{if .Title}}{{index . "Unsupported"}}{{end}}`,
+			command:      "index",
+		},
+		{
+			name:         "len cannot operate on struct",
+			templateBody: `{{if .Title}}{{len .}}{{end}}`,
+			command:      "len",
+		},
+		{
+			name:         "call cannot be checked statically",
+			templateBody: `{{if .Title}}{{call .}}{{end}}`,
+			command:      "call",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			err := ValidateTextTemplate(PullSlipData{}, []string{"received-notification"}, testCase.templateBody)
+			assert.ErrorContains(t, err, testCase.command)
+		})
+	}
+}
+
+func TestValidateTextTemplateAcceptsValidCommandInUnexecutedBranch(t *testing.T) {
+	data := struct {
+		Title  string
+		Values map[string]string
+		Left   float32
+		Right  float64
+	}{}
+
+	for _, templateBody := range []string{
+		`{{if .Title}}{{index .Values "title"}}{{end}}`,
+		`{{if .Title}}{{eq .Left .Right}}{{end}}`,
+	} {
+		err := ValidateTextTemplate(data, []string{"received-notification"}, templateBody)
+		assert.NoError(t, err)
+	}
+}
+
+func TestValidateTextTemplateRejectsInvalidSliceAndComparisonCommands(t *testing.T) {
+	data := struct {
+		Title  string
+		Flag   bool
+		Values map[string]string
+		Number *int
+		Key    any
+		Items  []string
+	}{}
+	for _, testCase := range []struct {
+		name         string
+		templateBody string
+		command      string
+	}{
+		{
+			name:         "three-index string slice",
+			templateBody: `{{if .Title}}{{slice .Title 0 0 0}}{{end}}`,
+			command:      "slice",
+		},
+		{
+			name:         "reversed literal slice bounds",
+			templateBody: `{{if .Title}}{{slice .Title 2 1}}{{end}}`,
+			command:      "slice",
+		},
+		{
+			name:         "negative literal index",
+			templateBody: `{{if .Title}}{{index .Title -1}}{{end}}`,
+			command:      "index",
+		},
+		{
+			name:         "non-comparable map equality",
+			templateBody: `{{if .Title}}{{eq .Values .Values}}{{end}}`,
+			command:      "eq",
+		},
+		{
+			name:         "unordered boolean",
+			templateBody: `{{if .Title}}{{lt .Flag true}}{{end}}`,
+			command:      "lt",
+		},
+		{
+			name:         "unordered pointer",
+			templateBody: `{{if .Title}}{{lt .Number .Number}}{{end}}`,
+			command:      "lt",
+		},
+		{
+			name:         "floating-point slice index",
+			templateBody: `{{if .Title}}{{index .Items 1.0}}{{end}}`,
+			command:      "index",
+		},
+		{
+			name:         "integer literal overflowing int",
+			templateBody: `{{if .Title}}{{eq 9223372036854775808 9223372036854775808}}{{end}}`,
+			command:      "overflows int",
+		},
+		{
+			name:         "interface value is not assignable to string map key",
+			templateBody: `{{if .Title}}{{index .Values .Key}}{{end}}`,
+			command:      "index",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			err := ValidateTextTemplate(data, []string{"received-notification"}, testCase.templateBody)
+			assert.ErrorContains(t, err, testCase.command)
+		})
+	}
+}
+
+func TestValidateTextTemplateAcceptsNamedTemplateWithoutPipeline(t *testing.T) {
+	err := ValidateTextTemplate(
+		PullSlipData{},
+		[]string{"received-notification"},
+		`{{define "footer"}}Footer{{end}}{{template "footer"}}`,
+	)
+	assert.NoError(t, err)
+}
+
+func TestValidateTextTemplateAcceptsValidLogicalAndNilComparisons(t *testing.T) {
+	data := struct {
+		Title string
+		Value *[]int
+	}{}
+	for _, templateBody := range []string{
+		`{{if .Title}}{{or .Title 1}}{{end}}`,
+		`{{if .Title}}{{eq .Value nil}}{{end}}`,
+		`{{if .Title}}{{eq .Value .Value}}{{end}}`,
+	} {
+		err := ValidateTextTemplate(data, []string{"received-notification"}, templateBody)
+		assert.NoError(t, err)
+	}
+}
+
+func TestValidateTextTemplateInfersRangeIndexVariableType(t *testing.T) {
+	data := struct {
+		Values []string
+	}{}
+
+	err := ValidateTextTemplate(data, []string{"received-notification"}, `{{range $i, $value := .Values}}{{index $.Values $i}}{{end}}`)
+	assert.NoError(t, err)
+}
+
 func TestValidateTextTemplateAcceptsSupportedFieldsInConditionalBranches(t *testing.T) {
 	err := ValidateTextTemplate(PullSlipData{}, []string{"received-notification"}, "{{if .Title}}{{.Author}}{{else}}{{.Publisher}}{{end}}")
 	assert.NoError(t, err)

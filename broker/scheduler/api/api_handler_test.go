@@ -11,6 +11,7 @@ import (
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	sched_db "github.com/indexdata/crosslink/broker/scheduler/db"
 	schedoapi "github.com/indexdata/crosslink/broker/scheduler/oapi"
 	"github.com/indexdata/crosslink/broker/tenant"
@@ -33,6 +34,15 @@ type MockSchedRepo struct {
 type MockEventRepo struct {
 	mock.Mock
 	events.EventRepo
+}
+
+type MockTemplateRepo struct {
+	pr_db.PrRepo
+	template pr_db.Template
+}
+
+func (m *MockTemplateRepo) GetTemplateByPurposeAudienceLabelAndOwner(_ common.ExtendedContext, _ pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams) (pr_db.Template, error) {
+	return m.template, nil
 }
 
 func (m *MockEventRepo) GetBatchActionEvents(_ common.ExtendedContext, taskID string) ([]events.Event, error) {
@@ -93,12 +103,12 @@ var testOwnerScope = []string{testSymbol, "ISIL:S1"}
 
 func newHandler(repo sched_db.SchedRepo) SchedulerApiHandler {
 	resolver := tenant.NewResolver().WithIllRepo(new(testmocks.MockIllRepositorySuccess))
-	return NewSchedulerApiHandler(10, repo, nil, resolver)
+	return NewSchedulerApiHandler(10, repo, nil, resolver, nil)
 }
 
 func newHandlerWithEvents(repo sched_db.SchedRepo, eventRepo events.EventRepo) SchedulerApiHandler {
 	resolver := tenant.NewResolver().WithIllRepo(new(testmocks.MockIllRepositorySuccess))
-	return NewSchedulerApiHandler(10, repo, eventRepo, resolver)
+	return NewSchedulerApiHandler(10, repo, eventRepo, resolver, nil)
 }
 
 func newReq(method, body string) *http.Request {
@@ -206,7 +216,7 @@ func TestGetBatchActions_OkapiWithoutSymbolUsesTenantOwnedScope(t *testing.T) {
 	resolver := tenant.NewResolver().
 		WithTenantToSymbol("ISIL:DK-{tenant}").
 		WithIllRepo(new(testmocks.MockIllRepositorySuccess))
-	h := NewSchedulerApiHandler(10, repo, nil, resolver)
+	h := NewSchedulerApiHandler(10, repo, nil, resolver, nil)
 	req := httptest.NewRequest(http.MethodGet, "/broker/batch_actions", nil)
 	req.Header.Set(tenant.OkapiTenantHeader, "diku")
 	rr := httptest.NewRecorder()
@@ -429,6 +439,27 @@ func TestPostBatchActions_ActionParamsPersisted(t *testing.T) {
 	repo.AssertExpectations(t)
 }
 
+func TestPostBatchActions_RejectsTemplateThatCannotRenderBatchData(t *testing.T) {
+	repo := new(MockSchedRepo)
+	templateRepo := &MockTemplateRepo{template: pr_db.Template{
+		ID:          "template-id",
+		Subject:     pgtype.Text{String: "Request {{.ReqId}}", Valid: true},
+		Body:        "Request {{.ReqId}}",
+		ContentType: "text",
+		Labels:      []string{"pullslips"},
+	}}
+	resolver := tenant.NewResolver().WithIllRepo(new(testmocks.MockIllRepositorySuccess))
+	h := NewSchedulerApiHandler(10, repo, nil, resolver, templateRepo)
+	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"`+validRrule+`","title":"Email pull slips","actionParams":{"to":["staff@example.com"],"templateLabel":"pullslips"}}`)
+	rr := httptest.NewRecorder()
+
+	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
+
+	assertErrorStatus(t, rr, http.StatusBadRequest)
+	assert.Contains(t, rr.Body.String(), "ReqId")
+	repo.AssertNotCalled(t, "SaveScheduledTask", mock.Anything)
+}
+
 func TestPostBatchActions_MasterWithoutSymbolCreatesUnrestrictedAction(t *testing.T) {
 	repo := new(MockSchedRepo)
 	repo.On("SaveScheduledTask", mock.MatchedBy(func(p sched_db.SaveScheduledTaskParams) bool {
@@ -462,7 +493,7 @@ func TestPostBatchActions_OkapiWithoutSymbolUsesPrimaryMappedOwner(t *testing.T)
 	resolver := tenant.NewResolver().
 		WithTenantToSymbol("ISIL:DK-{tenant}").
 		WithIllRepo(new(testmocks.MockIllRepositorySuccess))
-	h := NewSchedulerApiHandler(10, repo, nil, resolver)
+	h := NewSchedulerApiHandler(10, repo, nil, resolver, nil)
 	req := httptest.NewRequest(http.MethodPost, "/broker/batch_actions",
 		strings.NewReader(`{"actionName":"request-aging","batchQuery":"title=test","schedule":"`+validRrule+`","title":"Request aging","actionParams":{"interval":"24h"}}`))
 	req.Header.Set(tenant.OkapiTenantHeader, "diku")
@@ -669,6 +700,30 @@ func TestPutBatchActionsId_OK_RecomputesRunAtAndPersistsActionData(t *testing.T)
 	assert.Equal(t, "author=doe", resp.BatchQuery)
 	assert.NotNil(t, resp.NextRun)
 	repo.AssertExpectations(t)
+}
+
+func TestPutBatchActionsId_RejectsTemplateThatCannotRenderBatchData(t *testing.T) {
+	repo := new(MockSchedRepo)
+	task := scheduledTaskFixture("task-1")
+	repo.On("GetScheduledTaskById", "task-1", testOwnerScope).Return(task, nil)
+	templateRepo := &MockTemplateRepo{template: pr_db.Template{
+		ID:          "template-id",
+		Subject:     pgtype.Text{String: "Request {{.ReqId}}", Valid: true},
+		Body:        "Request {{.ReqId}}",
+		ContentType: "text",
+		Labels:      []string{"pullslips"},
+	}}
+	resolver := tenant.NewResolver().WithIllRepo(new(testmocks.MockIllRepositorySuccess))
+	h := NewSchedulerApiHandler(10, repo, nil, resolver, templateRepo)
+	req := newReq(http.MethodPut, `{"batchQuery":"author=doe","schedule":"FREQ=DAILY","actionParams":{"to":["staff@example.com"],"templateLabel":"pullslips"}}`)
+	rr := httptest.NewRecorder()
+
+	h.PutBatchActionsId(rr, req, "task-1", schedoapi.PutBatchActionsIdParams{Symbol: symPtr(testSymbol)})
+
+	assertErrorStatus(t, rr, http.StatusBadRequest)
+	assert.Contains(t, rr.Body.String(), "ReqId")
+	repo.AssertNotCalled(t, "GetScheduledTaskByIdForUpdate", mock.Anything, mock.Anything)
+	repo.AssertNotCalled(t, "SaveScheduledTask", mock.Anything)
 }
 
 func TestPutBatchActionsId_OmittedTitlePreservesExistingTitle(t *testing.T) {

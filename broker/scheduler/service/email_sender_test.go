@@ -365,7 +365,7 @@ func TestGenerateAndEmailPullslip_TemplateInvalidBody(t *testing.T) {
 	status, result := svc.generateAndEmailPullslip(testCtx, validEmailEvent())
 	assert.Equal(t, events.EventStatusError, status)
 	assert.NotNil(t, result)
-	assert.Equal(t, "failed to render email body", result.EventError.Message)
+	assert.Equal(t, "invalid email template", result.EventError.Message)
 }
 
 func TestGenerateAndEmailPullslip_TemplateInvalidSubject(t *testing.T) {
@@ -385,7 +385,7 @@ func TestGenerateAndEmailPullslip_TemplateInvalidSubject(t *testing.T) {
 	status, result := svc.generateAndEmailPullslip(testCtx, validEmailEvent())
 	assert.Equal(t, events.EventStatusError, status)
 	assert.NotNil(t, result)
-	assert.Equal(t, "failed to render email subject", result.EventError.Message)
+	assert.Equal(t, "invalid email template", result.EventError.Message)
 }
 
 func TestGenerateAndEmailPullslip_TemplateEmptyBody(t *testing.T) {
@@ -480,14 +480,37 @@ func TestGenerateAndEmailPullslip_PerformsPlaceholderSubstitution(t *testing.T) 
 	}
 	mailer := &mockEmailService{}
 	svc := newEmailSvc(prRepo, mailer, nil)
+	event := validEmailEvent()
 
-	status, result := svc.generateAndEmailPullslip(testCtx, validEmailEvent())
+	status, result := svc.generateAndEmailPullslip(testCtx, event)
 
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Nil(t, result)
 	message := string(mailer.data)
 	assert.Contains(t, message, "Selected 5")
 	assert.Contains(t, message, "Attached 2 of 5 from cql.allRecords=3D1")
+}
+
+func TestGenerateAndEmailPullslip_RejectsPatronContextTemplateBeforeSelectingRequests(t *testing.T) {
+	prRepo := &mockEmailPrRepo{
+		template: pr_db.Template{
+			ID:          "template-id",
+			Subject:     pgtype.Text{String: "Subject", Valid: true},
+			Body:        "Request {{.ReqId}}",
+			ContentType: "text",
+		},
+	}
+	mailer := &mockEmailService{}
+	svc := newEmailSvc(prRepo, mailer, nil)
+	event := validEmailEvent()
+	event.EventData.CustomData["sendEmpty"] = true
+
+	status, result := svc.generateAndEmailPullslip(testCtx, event)
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.NotNil(t, result)
+	assert.False(t, prRepo.listCalled)
+	assert.False(t, mailer.called)
 }
 
 func TestGenerateAndEmailPullslip_HtmlTemplate(t *testing.T) {

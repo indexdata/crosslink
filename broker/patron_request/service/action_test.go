@@ -4567,6 +4567,22 @@ func TestCreateAndSendEmail(t *testing.T) {
 			},
 			wantErrSubstr: "template: test-label:1: unclosed action",
 		},
+		{
+			name:       "batch-only template is rejected for patron email",
+			from:       from,
+			recipients: recipients,
+			setupPrRepo: func(m *MockPrRepo) {
+				m.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(pr_db.Template{
+					Body:    "Matching {{.ActualCount}} requests",
+					Subject: pgtype.Text{String: "Your request", Valid: true},
+				}, nil)
+			},
+			setupEmail: func(m *EmailSenderMock) {},
+			assertEmail: func(t *testing.T, m *EmailSenderMock) {
+				m.AssertNotCalled(t, "SendEmail", mock.Anything)
+			},
+			wantErrSubstr: "ActualCount",
+		},
 	}
 
 	for _, tc := range tests {

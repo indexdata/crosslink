@@ -114,6 +114,16 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 	if template.Body == "" {
 		return events.NewErrorResult("invalid email template", "body field is required")
 	}
+	if err := prservice.ValidateTemplateRenderingForContext(
+		proapi.Email,
+		proapi.TemplateContentType(template.ContentType),
+		template.Body,
+		&template.Subject.String,
+		template.Labels,
+		prservice.BatchEmailTemplateContext,
+	); err != nil {
+		return events.NewErrorResult("invalid email template", err.Error())
+	}
 
 	prs, fullCount, err := s.prRepo.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: MAX_RECORDS_PER_EMAIL, Offset: 0}, pgcql)
 	if err != nil {

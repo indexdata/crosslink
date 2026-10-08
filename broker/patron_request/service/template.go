@@ -13,33 +13,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// TemplateRenderingContext identifies the data shape available to a template.
+type TemplateRenderingContext int
+
+const (
+	// PatronRequestTemplateContext validates templates rendered for one patron request.
+	PatronRequestTemplateContext TemplateRenderingContext = iota
+	// BatchEmailTemplateContext validates templates rendered for scheduled email batches.
+	BatchEmailTemplateContext
+)
+
 func ValidateTemplateRendering(purpose proapi.TemplatePurpose, contentType proapi.TemplateContentType, body string, subject *string, labels []string) error {
 	if purpose == proapi.Pullslip {
-		if contentType != proapi.Html {
-			return errors.New("pullslip templates must use HTML content type")
-		}
-		if err := email.ValidateHtmlTemplate(email.PullSlipData{}, labels, body); err != nil {
-			return fmt.Errorf("template body: %w", err)
-		}
-		return nil
-	}
-
-	validateWithData := func(data any) error {
-		var err error
-		if contentType == proapi.Html {
-			err = email.ValidateHtmlTemplate(data, labels, body)
-		} else {
-			err = email.ValidateTextTemplate(data, labels, body)
-		}
-		if err != nil {
-			return fmt.Errorf("template body: %w", err)
-		}
-		if subject != nil {
-			if err := email.ValidateTextTemplate(data, labels, *subject); err != nil {
-				return fmt.Errorf("template subject: %w", err)
-			}
-		}
-		return nil
+		return ValidateTemplateRenderingForContext(purpose, contentType, body, nil, labels, PatronRequestTemplateContext)
 	}
 
 	if slices.Contains(labels, "pullslip-email") {
@@ -48,13 +34,55 @@ func ValidateTemplateRendering(purpose proapi.TemplatePurpose, contentType proap
 				return errors.New("batch email label pullslip-email cannot combine with patron-request notification labels")
 			}
 		}
-		if err := validateWithData(email.BatchEmailData{}); err != nil {
+		if err := ValidateTemplateRenderingForContext(purpose, contentType, body, subject, labels, BatchEmailTemplateContext); err != nil {
 			return fmt.Errorf("template does not render with batch-email data: %w", err)
 		}
 		return nil
 	}
-	if err := validateWithData(email.PullSlipData{}); err != nil {
-		return fmt.Errorf("template does not render with patron-request data: %w", err)
+
+	patronErr := ValidateTemplateRenderingForContext(purpose, contentType, body, subject, labels, PatronRequestTemplateContext)
+	if patronErr == nil {
+		return nil
+	}
+	batchErr := ValidateTemplateRenderingForContext(purpose, contentType, body, subject, labels, BatchEmailTemplateContext)
+	if batchErr == nil {
+		return nil
+	}
+	return fmt.Errorf("template does not render with patron-request or batch-email data: patron-request: %w; batch-email: %v", patronErr, batchErr)
+}
+
+// ValidateTemplateRenderingForContext validates a template against its explicit rendering data context.
+func ValidateTemplateRenderingForContext(purpose proapi.TemplatePurpose, contentType proapi.TemplateContentType, body string, subject *string, labels []string, context TemplateRenderingContext) error {
+	if purpose == proapi.Pullslip && context != PatronRequestTemplateContext {
+		return errors.New("pullslip templates require patron-request rendering context")
+	}
+	if purpose == proapi.Pullslip && contentType != proapi.Html {
+		return errors.New("pullslip templates must use HTML content type")
+	}
+
+	var data any
+	switch context {
+	case PatronRequestTemplateContext:
+		data = email.PullSlipData{}
+	case BatchEmailTemplateContext:
+		data = email.BatchEmailData{}
+	default:
+		return fmt.Errorf("unknown template rendering context %d", context)
+	}
+
+	var err error
+	if contentType == proapi.Html {
+		err = email.ValidateHtmlTemplate(data, labels, body)
+	} else {
+		err = email.ValidateTextTemplate(data, labels, body)
+	}
+	if err != nil {
+		return fmt.Errorf("template body: %w", err)
+	}
+	if subject != nil {
+		if err := email.ValidateTextTemplate(data, labels, *subject); err != nil {
+			return fmt.Errorf("template subject: %w", err)
+		}
 	}
 	return nil
 }
