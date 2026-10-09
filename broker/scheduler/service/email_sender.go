@@ -114,6 +114,16 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 	if template.Body == "" {
 		return events.NewErrorResult("invalid email template", "body field is required")
 	}
+	if err := prservice.ValidateTemplateRenderingForContext(
+		proapi.Email,
+		proapi.TemplateContentType(template.ContentType),
+		template.Body,
+		&template.Subject.String,
+		template.Labels,
+		prservice.BatchEmailTemplateContext,
+	); err != nil {
+		return events.NewErrorResult("invalid email template", err.Error())
+	}
 
 	prs, fullCount, err := s.prRepo.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: MAX_RECORDS_PER_EMAIL, Offset: 0}, pgcql)
 	if err != nil {
@@ -144,14 +154,14 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 	placeholders := email.GetBatchEmailData(fullCount, len(prs), event.EventData.BatchActionData.Selector)
 	var body string
 	if template.ContentType == string(proapi.Html) {
-		body, err = email.RenderHtmlTemplate(placeholders, template.Body)
+		body, err = email.RenderHtmlTemplate(placeholders, template.Labels, template.Body)
 	} else {
-		body, err = email.RenderTextTemplate(placeholders, template.Body)
+		body, err = email.RenderTextTemplate(placeholders, template.Labels, template.Body)
 	}
 	if err != nil {
 		return events.NewErrorResult("failed to render email body", err.Error())
 	}
-	subject, err := email.RenderTextTemplate(placeholders, template.Subject.String)
+	subject, err := email.RenderTextTemplate(placeholders, template.Labels, template.Subject.String)
 	if err != nil {
 		return events.NewErrorResult("failed to render email subject", err.Error())
 	}

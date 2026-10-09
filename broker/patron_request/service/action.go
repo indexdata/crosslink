@@ -2170,17 +2170,27 @@ func (a *PatronRequestActionService) createAndSendEmail(ctx common.ExtendedConte
 	if err != nil {
 		return fmt.Errorf("load email loan conditions: %w", err)
 	}
+	if err := ValidateTemplateRenderingForContext(
+		proapi.Email,
+		proapi.TemplateContentType(template.ContentType),
+		template.Body,
+		&template.Subject.String,
+		template.Labels,
+		PatronRequestTemplateContext,
+	); err != nil {
+		return fmt.Errorf("validate email template %q (label %q, audience %s): %w", template.ID, label, audience, err)
+	}
 	data := email.GetPullSlipData(pr, notes, conditions, email.DEFAULT_FOR_NO_VALUE)
 	var body string
 	if template.ContentType == string(proapi.Html) {
-		body, err = email.RenderHtmlTemplate(data, template.Body)
+		body, err = email.RenderHtmlTemplate(data, template.Labels, template.Body)
 	} else {
-		body, err = email.RenderTextTemplate(data, template.Body)
+		body, err = email.RenderTextTemplate(data, template.Labels, template.Body)
 	}
 	if err != nil {
 		return fmt.Errorf("render email template %q (label %q, audience %s) body: %w", template.ID, label, audience, err)
 	}
-	subject, err := email.RenderTextTemplate(data, template.Subject.String)
+	subject, err := email.RenderTextTemplate(data, template.Labels, template.Subject.String)
 	if err != nil {
 		return fmt.Errorf("render email template %q (label %q, audience %s) subject: %w", template.ID, label, audience, err)
 	}

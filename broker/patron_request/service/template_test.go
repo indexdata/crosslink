@@ -33,6 +33,52 @@ func TestGetStateModelTemplateDefaultMatchesPurposeAudienceAndLabel(t *testing.T
 	assert.ErrorContains(t, err, "no state-model default template")
 }
 
+func TestValidateTemplateRenderingUsesRuntimeFallbackValues(t *testing.T) {
+	tests := []struct {
+		name        string
+		purpose     proapi.TemplatePurpose
+		contentType proapi.TemplateContentType
+		body        string
+		labels      []string
+	}{
+		{
+			name:        "patron request html",
+			purpose:     proapi.Pullslip,
+			contentType: proapi.Html,
+			body:        `{{index .Title 0}}`,
+			labels:      []string{"pullslip-pdf"},
+		},
+		{
+			name:        "patron request text",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        `{{index .Title 0}}`,
+			labels:      []string{"received-notification"},
+		},
+		{
+			name:        "batch email html",
+			purpose:     proapi.Email,
+			contentType: proapi.Html,
+			body:        `{{index .FullCount 0}}`,
+			labels:      []string{"pullslip-email"},
+		},
+		{
+			name:        "batch email text",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        `{{index .FullCount 0}}`,
+			labels:      []string{"pullslip-email"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := ValidateTemplateRendering(test.purpose, test.contentType, test.body, nil, test.labels)
+			assert.NoError(t, err)
+		})
+	}
+}
+
 func TestGetStateModelTemplateDefaultAudienceNeutralMatchesAnyAudience(t *testing.T) {
 	originalDefaults := stateModelsConfig.TemplateDefaults
 	t.Cleanup(func() {

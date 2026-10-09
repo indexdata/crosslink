@@ -221,7 +221,7 @@ func Init(ctx context.Context) (Context, error) {
 		return Context{}, err
 	}
 
-	schedApiHandler := schedapi.NewSchedulerApiHandler(API_PAGE_SIZE, schedRepo, eventRepo, tenantResolver)
+	schedApiHandler := schedapi.NewSchedulerApiHandler(API_PAGE_SIZE, schedRepo, eventRepo, tenantResolver, prRepo)
 	if err = StartScheduler(ctx, schedRepo, eventBus); err != nil {
 		return Context{}, err
 	}
