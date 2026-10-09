@@ -252,6 +252,17 @@ Run `make generate` before invoking `go build` or `go test` directly.
 See [Host LMS and catalog profiles](host-profiles.md) for `lmsConfig.vendor`,
 `catalogConfig.profile`, precedence, parser overrides, diagnostics and migration.
 
+## Directory entry symbols
+
+When patching entry symbols, omit `id` to create a new symbol. A supplied `id`
+must identify an existing symbol owned by the entry being patched; unknown or
+foreign IDs return HTTP 400 and roll back the entire PATCH. Symbols cannot be
+moved between entries through the API.
+
+Application writes lock the owner entry before modifying its symbols. Direct
+SQL maintenance must follow the same order; the search trigger alone cannot
+prevent deadlocks caused by acquiring these locks in the opposite order.
+
 ## Directory entry searches
 
 `cql.serverChoice` searches a combined document containing the entry's name,
@@ -277,9 +288,10 @@ field indexes such as `symbol` for exact identifier comparisons.
 
 A stored search vector and GIN index are maintained transactionally by database
 triggers when entry fields or symbols change, including imports. Migration 018
-backfills existing entries. Deploy with a coordinated restart: the new column
-changes the result shape of existing `SELECT *` queries, so older binaries must
-not serve against the migrated schema.
+backfills existing entries. SQLC expands wildcard selections into explicit column
+lists, so adding the search column preserves the result shape expected by
+pre-018 binaries. Existing binaries can continue serving against the upgraded
+schema. The migration takes database locks and may temporarily block requests.
 
 The `name` and `description` CQL indexes match case insensitively by default,
 using PostgreSQL `lower()` on both the stored value and the search term. For

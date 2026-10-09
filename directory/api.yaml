@@ -3079,7 +3079,7 @@ components:
         id:
           type: string
           format: uuid
-          description: Unique id
+          description: Existing symbol ID owned by the entry being patched. Omit to create a new symbol. Unknown or foreign IDs return HTTP 400; symbols cannot be moved between entries.
         symbol:
           type: string
           minLength: 1
