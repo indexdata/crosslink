@@ -477,36 +477,32 @@ func requestedItemLocations(fields *ncip.ItemOptionalFields) (string, string) {
 	if fields == nil {
 		return "", ""
 	}
-	var names []ncip.LocationNameInstance
-	for _, location := range fields.Location {
-		names = append(names, location.LocationName.LocationNameInstance...)
-	}
-	if len(names) == 0 {
-		return "", ""
-	}
-	// NCIP location names are hierarchical. Level 1 is the physical location;
-	// the next level is the shelving location when supplied.
-	var location, shelvingLocation string
-	for _, name := range names {
-		if strings.TrimSpace(name.LocationNameValue) == "" {
-			continue
-		}
-		switch name.LocationNameLevel {
-		case 1:
-			if location == "" {
-				location = strings.TrimSpace(name.LocationNameValue)
+	for _, itemLocation := range fields.Location {
+		names := itemLocation.LocationName.LocationNameInstance
+		var location, shelvingLocation string
+		for _, name := range names {
+			if strings.TrimSpace(name.LocationNameValue) == "" {
+				continue
 			}
-		case 2:
-			if shelvingLocation == "" {
-				shelvingLocation = strings.TrimSpace(name.LocationNameValue)
+			switch name.LocationNameLevel {
+			case 1:
+				if location == "" {
+					location = strings.TrimSpace(name.LocationNameValue)
+				}
+			case 2:
+				if shelvingLocation == "" {
+					shelvingLocation = strings.TrimSpace(name.LocationNameValue)
+				}
 			}
 		}
+		if shelvingLocation == "" && location != "" && len(names) == 1 {
+			shelvingLocation = location
+		}
+		if location != "" || shelvingLocation != "" {
+			return location, shelvingLocation
+		}
 	}
-	if shelvingLocation == "" && location != "" && len(names) == 1 {
-		// Some LMSs return a single effective location only.
-		shelvingLocation = location
-	}
-	return location, shelvingLocation
+	return "", ""
 }
 
 func (l *LmsAdapterNcip) CancelRequestItem(requestId string, userId string) error {

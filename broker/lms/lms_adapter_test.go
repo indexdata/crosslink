@@ -48,6 +48,23 @@ func TestRequestedItemLocations(t *testing.T) {
 	assert.Equal(t, "Stacks", shelvingLocation)
 }
 
+func TestRequestedItemLocationsDoesNotCombineHierarchies(t *testing.T) {
+	location, shelvingLocation := requestedItemLocations(&ncip.ItemOptionalFields{
+		Location: []ncip.Location{
+			{LocationName: ncip.LocationName{LocationNameInstance: []ncip.LocationNameInstance{
+				{LocationNameLevel: 1, LocationNameValue: "Library A"},
+			}}},
+			{LocationName: ncip.LocationName{LocationNameInstance: []ncip.LocationNameInstance{
+				{LocationNameLevel: 1, LocationNameValue: "Library B"},
+				{LocationNameLevel: 2, LocationNameValue: "Stacks B"},
+			}}},
+		},
+	})
+
+	assert.Equal(t, "Library A", location)
+	assert.Equal(t, "Library A", shelvingLocation)
+}
+
 func TestLookupUser(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	b := true
