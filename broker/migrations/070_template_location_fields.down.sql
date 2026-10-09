@@ -1,6 +1,7 @@
 DROP VIEW patron_request_search_view;
 ALTER TABLE item DROP COLUMN shelving_location;
 ALTER TABLE item DROP COLUMN location;
+UPDATE item SET barcode = barcode;
 ALTER TABLE patron_request DROP COLUMN cancellation_reason;
 CREATE VIEW patron_request_search_view AS
 SELECT
