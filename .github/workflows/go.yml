@@ -89,6 +89,8 @@ jobs:
 
     - name: Test
       env:
+        # Keep Ryuk available across gaps between test packages.
+        RYUK_RECONNECTION_TIMEOUT: "1m"
         RYUK_VERBOSE: "true"
       run: make check
       working-directory: ${{ matrix.modules }}
