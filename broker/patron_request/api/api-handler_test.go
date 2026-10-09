@@ -1121,7 +1121,7 @@ func TestGetStateModelTemplates(t *testing.T) {
 	var templates []proapi.CreateTemplate
 	err := json.Unmarshal(rr.Body.Bytes(), &templates)
 	assert.NoError(t, err)
-	assert.Len(t, templates, 7)
+	assert.Len(t, templates, 8)
 	labels := make([]string, 0, len(templates))
 	for _, template := range templates {
 		assert.NotEmpty(t, template.Title)
@@ -1129,6 +1129,7 @@ func TestGetStateModelTemplates(t *testing.T) {
 		labels = append(labels, template.Labels...)
 	}
 	assert.ElementsMatch(t, []string{
+		"new-request-notification",
 		"received-notification",
 		"copy-completed-notification",
 		"unfilled-notification",

@@ -121,6 +121,8 @@ func TestLegacyRerequestStartsInitialWorkflow(t *testing.T) {
 			repo := new(MockPrRepo)
 			bus := new(MockEventBus)
 			bus.On("ProcessExclusiveTask", "REQ1-2-task-1").Return(events.Event{EventStatus: events.EventStatusSuccess}, nil).Once()
+			bus.On("ProcessExclusiveTask", "REQ1-2-task-2").Return(events.Event{EventStatus: events.EventStatusSuccess}, nil).Once()
+			repo.On("GetPatronRequestById", "REQ1-2").Return(pr_db.PatronRequest{State: BorrowerStateNew}, nil).Once()
 			repo.On("GetPatronRequestById", "REQ1-2").Return(pr_db.PatronRequest{State: BorrowerStateValidated}, nil).Once()
 			original := pr_db.PatronRequest{
 				ID: "REQ1-1", Side: SideBorrowing, State: state, TerminalState: true,
@@ -132,8 +134,9 @@ func TestLegacyRerequestStartsInitialWorkflow(t *testing.T) {
 			next := result.successorPr
 			assert.Equal(t, iso18626.TypeServiceTypeLoan, next.IllRequest.ServiceInfo.ServiceType)
 			require.NoError(t, service.RunAutoActionsOnStateEntry(appCtx, next, nil, ""))
-			require.Len(t, bus.createdTaskData, 1)
-			assert.Equal(t, BorrowerActionValidatePatron, *bus.createdTaskData[0].Action)
+			require.Len(t, bus.createdTaskData, 2)
+			assert.Equal(t, BorrowerActionSendNotification, *bus.createdTaskData[0].Action)
+			assert.Equal(t, BorrowerActionValidatePatron, *bus.createdTaskData[1].Action)
 			bus.AssertExpectations(t)
 			repo.AssertExpectations(t)
 

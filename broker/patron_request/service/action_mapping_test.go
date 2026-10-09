@@ -14,7 +14,7 @@ import (
 
 func TestNewDefaultLoanActionMapping(t *testing.T) {
 	borrowerStateActionMapping := map[pr_db.PatronRequestState][]PatronRequestAction{
-		BorrowerStateNew:              {{actionName: BorrowerActionValidatePatron, auto: true}, {actionName: BorrowerActionSkipPatronValidation}, {actionName: BorrowerActionCloseRequest}},
+		BorrowerStateNew:              {{actionName: BorrowerActionSendNotification, auto: true}, {actionName: BorrowerActionValidatePatron, auto: true}, {actionName: BorrowerActionSkipPatronValidation}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateInvalidPatron:    {{actionName: BorrowerActionValidatePatron}, {actionName: BorrowerActionSkipPatronValidation}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateValidated:        {{actionName: BorrowerActionCheckLimit, auto: true}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateOverLimit:        {{actionName: BorrowerActionCheckLimit}, {actionName: BorrowerActionOverrideLimit}, {actionName: BorrowerActionCloseRequest}},

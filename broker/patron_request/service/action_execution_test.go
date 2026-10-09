@@ -273,15 +273,22 @@ func TestToleratedPatronReviewDoesNotPropagate(t *testing.T) {
 	bus := new(MockEventBus)
 	lmsCreator := new(MockLmsCreator)
 	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(&MockLmsAdapterPatronProblem{}, nil)
-	svc := CreatePatronRequestActionService(repo, new(IllRepoMock), bus, new(MockIso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
+	emailSvc := new(EmailSenderMock)
+	emailSvc.On("IsReadyToSend").Return(false)
+	svc := CreatePatronRequestActionService(repo, new(IllRepoMock), bus, new(MockIso18626Handler), lmsCreator, emailSvc, nil, nil)
 
 	require.NoError(t, svc.RunAutoActionsOnStateEntry(appCtx, pr, nil, "test-user"))
 
-	require.Len(t, bus.processedTaskEvents, 1)
+	require.Len(t, bus.processedTaskEvents, 2)
+	assert.Equal(t, BorrowerActionSendNotification, *bus.processedTaskEvents[0].EventData.Action)
 	assert.Equal(t, events.EventStatusProblem, bus.processedTaskEvents[0].EventStatus)
-	assert.Equal(t, ActionOutcomeReview, bus.processedTaskEvents[0].ResultData.ActionResult.Outcome)
+	assert.True(t, bus.processedTaskEvents[0].ResultData.ActionResult.ContinuationAllowed)
+	assert.Equal(t, BorrowerActionValidatePatron, *bus.processedTaskEvents[1].EventData.Action)
+	assert.Equal(t, events.EventStatusProblem, bus.processedTaskEvents[1].EventStatus)
+	assert.Equal(t, ActionOutcomeReview, bus.processedTaskEvents[1].ResultData.ActionResult.Outcome)
 	assert.Equal(t, BorrowerStateInvalidPatron, repo.savedPr.State)
 	assert.True(t, repo.savedPr.NeedsAttention)
+	emailSvc.AssertExpectations(t)
 }
 
 func TestManualNotificationRetryUsesStateModelParams(t *testing.T) {
