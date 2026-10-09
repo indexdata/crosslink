@@ -423,6 +423,7 @@ func (l *LmsAdapterNcip) RequestItem(
 	}
 	itemElements := []ncip.SchemeValuePair{
 		{Text: string(NCIPBibliographicDescription)},
+		{Text: "Location"},
 	}
 	arg := ncip.RequestItem{
 		RequestId:          &ncip.RequestId{RequestIdentifierValue: requestId},
@@ -457,16 +458,51 @@ func (l *LmsAdapterNcip) RequestItem(
 	if response.ItemOptionalFields != nil && response.ItemOptionalFields.BibliographicDescription != nil {
 		title = response.ItemOptionalFields.BibliographicDescription.Title
 	}
+	location, shelvingLocation := requestedItemLocations(response.ItemOptionalFields)
 	lmsRequestID := requestId
 	if response.RequestId != nil && strings.TrimSpace(response.RequestId.RequestIdentifierValue) != "" {
 		lmsRequestID = response.RequestId.RequestIdentifierValue
 	}
 	return &RequestedItem{
-		RequestID:  lmsRequestID,
-		Barcode:    barcode,
-		CallNumber: callNumber,
-		Title:      title,
+		RequestID:        lmsRequestID,
+		Barcode:          barcode,
+		CallNumber:       callNumber,
+		Title:            title,
+		Location:         location,
+		ShelvingLocation: shelvingLocation,
 	}, nil
+}
+
+func requestedItemLocations(fields *ncip.ItemOptionalFields) (string, string) {
+	if fields == nil {
+		return "", ""
+	}
+	for _, itemLocation := range fields.Location {
+		names := itemLocation.LocationName.LocationNameInstance
+		var location, shelvingLocation string
+		for _, name := range names {
+			if strings.TrimSpace(name.LocationNameValue) == "" {
+				continue
+			}
+			switch name.LocationNameLevel {
+			case 1:
+				if location == "" {
+					location = strings.TrimSpace(name.LocationNameValue)
+				}
+			case 2:
+				if shelvingLocation == "" {
+					shelvingLocation = strings.TrimSpace(name.LocationNameValue)
+				}
+			}
+		}
+		if shelvingLocation == "" && location != "" && len(names) == 1 {
+			shelvingLocation = location
+		}
+		if location != "" || shelvingLocation != "" {
+			return location, shelvingLocation
+		}
+	}
+	return "", ""
 }
 
 func (l *LmsAdapterNcip) CancelRequestItem(requestId string, userId string) error {

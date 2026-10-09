@@ -92,6 +92,28 @@ func TestImportPatronRequestInsertsAndSynchronizesCompleteBundle(t *testing.T) {
 	assert.Equal(t, "updated-patron", patron)
 }
 
+func TestImportPatronRequestUpdatePreservesStoredItemLocations(t *testing.T) {
+	prefix := uuid.NewString()
+	bundle := testPatronBundle(prefix, prefix+"-request")
+	bundle.Items[0].Location = pgtype.Text{String: "Main Library", Valid: true}
+	bundle.Items[0].ShelvingLocation = pgtype.Text{String: "Stacks", Valid: true}
+	require.NoError(t, importOnly(bundle))
+
+	bundle.Items[0].Location = pgtype.Text{}
+	bundle.Items[0].ShelvingLocation = pgtype.Text{}
+	_, err := importTestRepo.ImportPatronRequest(importTestCtx, bundle, importdb.ConflictPolicyUpdate)
+	require.NoError(t, err)
+
+	var location, shelvingLocation pgtype.Text
+	require.NoError(t, importTestPool.QueryRow(
+		context.Background(),
+		"SELECT location, shelving_location FROM item WHERE id=$1",
+		bundle.Items[0].ID,
+	).Scan(&location, &shelvingLocation))
+	assert.Equal(t, pgtype.Text{String: "Main Library", Valid: true}, location)
+	assert.Equal(t, pgtype.Text{String: "Stacks", Valid: true}, shelvingLocation)
+}
+
 func TestImportPatronRequestPersistsDueDate(t *testing.T) {
 	prefix := uuid.NewString()
 	bundle := testPatronBundle(prefix, prefix+"-request")

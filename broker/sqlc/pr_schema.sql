@@ -26,6 +26,7 @@ CREATE TABLE patron_request
     retry_bib_info       JSONB,
     state_model         VARCHAR NOT NULL DEFAULT 'default',
     requester_pickup_location_id UUID,
+    cancellation_reason       VARCHAR,
     due_at TIMESTAMPTZ
 );
 
@@ -42,6 +43,8 @@ CREATE TABLE item
     pr_id          VARCHAR   NOT NULL REFERENCES patron_request (id) ON DELETE CASCADE,
     barcode        VARCHAR   NOT NULL,
     call_number    VARCHAR,
+    location       VARCHAR,
+    shelving_location VARCHAR,
     title          VARCHAR,
     item_id        VARCHAR,
     lms_request_id VARCHAR,

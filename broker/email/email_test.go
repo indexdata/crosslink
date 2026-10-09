@@ -10,6 +10,7 @@ import (
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // ---------------------------------------------------------------------------
@@ -149,6 +150,19 @@ func TestRenderPullSlipHTML_ExecuteError(t *testing.T) {
 	_, err := RenderHtmlTemplate(PullSlipData{ReqId: "X"}, []string{"pullslip-pdf"}, "{{index . \"nonexistent\"}}")
 	// Execute on a struct with map-access fails
 	assert.Error(t, err)
+}
+
+func TestRenderPullSlipTemplateSupportsCancellationAndItemLocations(t *testing.T) {
+	data := PullSlipData{
+		CancellationReason: "Already available",
+		Location:           "Main Library",
+		ShelvingLocation:   "Stacks",
+	}
+
+	rendered, err := RenderTextTemplate(data, []string{"pullslip-pdf"}, "{{.CancellationReason}}|{{.Location}}|{{.ShelvingLocation}}")
+
+	require.NoError(t, err)
+	assert.Equal(t, "Already available|Main Library|Stacks", rendered)
 }
 
 func TestValidateTextTemplateRejectsUnsupportedFieldInUnexecutedBranch(t *testing.T) {
@@ -369,24 +383,34 @@ func TestRenderTextTemplateUsesDefaultNameWhenFirstLabelIsMissing(t *testing.T) 
 
 func TestGetPullSlipData_PopulatesAllAvailableFields(t *testing.T) {
 	callNumber := "QA76.73.G63"
+	location := "Main Library"
+	shelvingLocation := "Stacks"
+	cancellationReason := "Requested item is locally available"
 	dueDate := utils.XSDDateTime{Time: time.Date(2026, 8, 15, 9, 30, 0, 0, time.UTC)}
 	pr := pr_db.PatronRequest{
-		RequesterReqID: pgtype.Text{String: "REQ-123", Valid: true},
-		DueAt:          pgtype.Timestamptz{Time: dueDate.Time, Valid: true},
-		Items:          []pr_db.PrItem{{ID: "item-1", CallNumber: &callNumber}},
+		RequesterReqID:     pgtype.Text{String: "REQ-123", Valid: true},
+		CancellationReason: pgtype.Text{String: cancellationReason, Valid: true},
+		DueAt:              pgtype.Timestamptz{Time: dueDate.Time, Valid: true},
+		Items:              []pr_db.PrItem{{ID: "item-1", CallNumber: &callNumber, Location: &location, ShelvingLocation: &shelvingLocation}},
 		IllRequest: iso18626.Request{
 			BibliographicInfo: iso18626.BibliographicInfo{
 				Author:                 "Jane Doe",
+				AuthorOfComponent:      "John Contributor",
 				Title:                  "Distributed Libraries",
+				TitleOfComponent:       "Resource sharing at scale",
 				Volume:                 "7",
 				Issue:                  "2",
 				EstimatedNoPages:       "18",
 				SupplierUniqueRecordId: "SYS-456",
 			},
-			PublicationInfo: &iso18626.PublicationInfo{Publisher: "Index Press"},
+			PublicationInfo: &iso18626.PublicationInfo{
+				Publisher:       "Index Press",
+				PublicationType: &iso18626.TypeSchemeValuePair{Text: "JournalArticle"},
+			},
 			ServiceInfo: &iso18626.ServiceInfo{
-				ServiceType:  iso18626.TypeServiceTypeLoan,
-				ServiceLevel: &iso18626.TypeSchemeValuePair{Text: "Rush"},
+				ServiceType:    iso18626.TypeServiceTypeLoan,
+				ServiceLevel:   &iso18626.TypeSchemeValuePair{Text: "Rush"},
+				NeedBeforeDate: &utils.XSDDateTime{Time: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)},
 			},
 			RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{
 				{Address: &iso18626.Address{
@@ -397,11 +421,17 @@ func TestGetPullSlipData_PopulatesAllAvailableFields(t *testing.T) {
 						Country:    &iso18626.TypeSchemeValuePair{Text: "LV"},
 					},
 				}},
+				{Address: &iso18626.Address{
+					ElectronicAddress: &iso18626.ElectronicAddress{
+						ElectronicAddressData: "https://example.test/document/123",
+					},
+				}},
 			},
 			PatronInfo: &iso18626.PatronInfo{
-				PatronId:  "P-789",
-				GivenName: "Ann",
-				Surname:   "Reader",
+				PatronId:   "P-789",
+				GivenName:  "Ann",
+				Surname:    "Reader",
+				PatronType: &iso18626.TypeSchemeValuePair{Text: "Faculty"},
 			},
 		},
 		IllResponse: iso18626.SupplyingAgencyMessage{
@@ -427,26 +457,36 @@ func TestGetPullSlipData_PopulatesAllAvailableFields(t *testing.T) {
 	data := GetPullSlipData(pr, notes, conditions, "barcode-base64")
 
 	assert.Equal(t, PullSlipData{
-		ReqId:            "REQ-123",
-		PickupLocation:   "Pickup Desk, Riga, LV-1050, LV",
-		Title:            "Distributed Libraries",
-		Author:           "Jane Doe",
-		DueDate:          "2026-08-15",
-		ReturnAddress:    "Return Room, Shelf B, Riga, LV",
-		BarcodeBase64:    "barcode-base64",
-		ServiceType:      "Loan",
-		ServiceLevel:     "Rush",
-		SystemIdentifier: "SYS-456",
-		Publisher:        "Index Press",
-		Volume:           "7",
-		Issue:            "2",
-		Pages:            "18",
-		StaffNotes:       "first note\nsecond note",
-		CallNumber:       "QA76.73.G63",
-		LoanConditions:   "library use only\nno renewal",
-		PatronName:       "Ann",
-		PatronSurname:    "Reader",
-		PatronId:         "P-789",
+		ReqId:              "REQ-123",
+		CancellationReason: cancellationReason,
+		PickupLocation:     "Pickup Desk, Riga, LV-1050, LV",
+		PickupURL:          "https://example.test/document/123",
+		NeededBy:           "2026-08-01",
+		Title:              "Distributed Libraries",
+		TitleOfComponent:   "Resource sharing at scale",
+		Author:             "Jane Doe",
+		AuthorOfComponent:  "John Contributor",
+		DueDate:            "2026-08-15",
+		ReturnAddress:      "Return Room, Shelf B, Riga, LV",
+		BarcodeBase64:      "barcode-base64",
+		ServiceType:        "Loan",
+		ServiceLevel:       "Rush",
+		SystemIdentifier:   "SYS-456",
+		Publisher:          "Index Press",
+		MaterialType:       "JournalArticle",
+		Volume:             "7",
+		Issue:              "2",
+		Pages:              "18",
+		StaffNotes:         "first note\nsecond note",
+		CallNumber:         "QA76.73.G63",
+		Location:           location,
+		ShelvingLocation:   shelvingLocation,
+		LoanConditions:     "library use only\nno renewal",
+		PatronGivenName:    "Ann",
+		PatronName:         "Ann",
+		PatronSurname:      "Reader",
+		PatronId:           "P-789",
+		PatronProfile:      "Faculty",
 	}, data)
 }
 
@@ -454,27 +494,49 @@ func TestGetPullSlipData_UsesDefaultsWhenOptionalFieldsAreMissing(t *testing.T) 
 	data := GetPullSlipData(pr_db.PatronRequest{}, nil, nil, DEFAULT_FOR_NO_VALUE)
 
 	assert.Equal(t, PullSlipData{
-		ReqId:            "",
-		PickupLocation:   DEFAULT_FOR_NO_VALUE,
-		Title:            DEFAULT_FOR_NO_VALUE,
-		Author:           DEFAULT_FOR_NO_VALUE,
-		DueDate:          DEFAULT_FOR_NO_VALUE,
-		ReturnAddress:    DEFAULT_FOR_NO_VALUE,
-		BarcodeBase64:    DEFAULT_FOR_NO_VALUE,
-		ServiceType:      DEFAULT_FOR_NO_VALUE,
-		ServiceLevel:     DEFAULT_FOR_NO_VALUE,
-		SystemIdentifier: DEFAULT_FOR_NO_VALUE,
-		Publisher:        DEFAULT_FOR_NO_VALUE,
-		Volume:           DEFAULT_FOR_NO_VALUE,
-		Issue:            DEFAULT_FOR_NO_VALUE,
-		Pages:            DEFAULT_FOR_NO_VALUE,
-		StaffNotes:       DEFAULT_FOR_NO_VALUE,
-		CallNumber:       DEFAULT_FOR_NO_VALUE,
-		LoanConditions:   DEFAULT_FOR_NO_VALUE,
-		PatronName:       DEFAULT_FOR_NO_VALUE,
-		PatronSurname:    DEFAULT_FOR_NO_VALUE,
-		PatronId:         DEFAULT_FOR_NO_VALUE,
+		ReqId:              "",
+		CancellationReason: DEFAULT_FOR_NO_VALUE,
+		PickupLocation:     DEFAULT_FOR_NO_VALUE,
+		PickupURL:          DEFAULT_FOR_NO_VALUE,
+		NeededBy:           DEFAULT_FOR_NO_VALUE,
+		Title:              DEFAULT_FOR_NO_VALUE,
+		TitleOfComponent:   DEFAULT_FOR_NO_VALUE,
+		Author:             DEFAULT_FOR_NO_VALUE,
+		AuthorOfComponent:  DEFAULT_FOR_NO_VALUE,
+		DueDate:            DEFAULT_FOR_NO_VALUE,
+		ReturnAddress:      DEFAULT_FOR_NO_VALUE,
+		BarcodeBase64:      DEFAULT_FOR_NO_VALUE,
+		ServiceType:        DEFAULT_FOR_NO_VALUE,
+		ServiceLevel:       DEFAULT_FOR_NO_VALUE,
+		SystemIdentifier:   DEFAULT_FOR_NO_VALUE,
+		Publisher:          DEFAULT_FOR_NO_VALUE,
+		MaterialType:       DEFAULT_FOR_NO_VALUE,
+		Volume:             DEFAULT_FOR_NO_VALUE,
+		Issue:              DEFAULT_FOR_NO_VALUE,
+		Pages:              DEFAULT_FOR_NO_VALUE,
+		StaffNotes:         DEFAULT_FOR_NO_VALUE,
+		CallNumber:         DEFAULT_FOR_NO_VALUE,
+		Location:           DEFAULT_FOR_NO_VALUE,
+		ShelvingLocation:   DEFAULT_FOR_NO_VALUE,
+		LoanConditions:     DEFAULT_FOR_NO_VALUE,
+		PatronGivenName:    DEFAULT_FOR_NO_VALUE,
+		PatronName:         DEFAULT_FOR_NO_VALUE,
+		PatronSurname:      DEFAULT_FOR_NO_VALUE,
+		PatronId:           DEFAULT_FOR_NO_VALUE,
+		PatronProfile:      DEFAULT_FOR_NO_VALUE,
 	}, data)
+}
+
+func TestGetPullSlipData_UsesDefaultNeededByForZeroDate(t *testing.T) {
+	data := GetPullSlipData(pr_db.PatronRequest{
+		IllRequest: iso18626.Request{
+			ServiceInfo: &iso18626.ServiceInfo{
+				NeedBeforeDate: &utils.XSDDateTime{},
+			},
+		},
+	}, nil, nil, DEFAULT_FOR_NO_VALUE)
+
+	assert.Equal(t, DEFAULT_FOR_NO_VALUE, data.NeededBy)
 }
 
 // ── formatPhysicalAddress ─────────────────────────────────────────────────────
@@ -639,6 +701,78 @@ func TestGetPickupLocation_AddressWithNoUsableFields(t *testing.T) {
 	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getPickupLocation(pr))
 }
 
+// ── getPickupURL ───────────────────────────────────────────────────────────────────
+
+func TestGetPickupURL_IgnoresEmailAddress(t *testing.T) {
+	pr := pr_db.PatronRequest{IllRequest: iso18626.Request{
+		RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{{
+			Address: &iso18626.Address{ElectronicAddress: &iso18626.ElectronicAddress{
+				ElectronicAddressType: iso18626.TypeSchemeValuePair{Text: string(iso18626.ElectronicAddressTypeEmail)},
+				ElectronicAddressData: "patron@library.org",
+			}},
+		}},
+	}}
+
+	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getPickupURL(pr))
+}
+
+func TestGetPickupURL_RejectsUnsafeRequestSchemes(t *testing.T) {
+	for _, value := range []string{
+		"javascript://host/alert",
+		"ftp://files.example/item",
+	} {
+		t.Run(value, func(t *testing.T) {
+			pr := pr_db.PatronRequest{IllRequest: iso18626.Request{
+				RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{{
+					Address: &iso18626.Address{ElectronicAddress: &iso18626.ElectronicAddress{
+						ElectronicAddressData: value,
+					}},
+				}},
+			}}
+
+			assert.Equal(t, DEFAULT_FOR_NO_VALUE, getPickupURL(pr))
+		})
+	}
+}
+
+func TestGetPickupURL_ContinuesPastEmailToURL(t *testing.T) {
+	pr := pr_db.PatronRequest{IllRequest: iso18626.Request{
+		RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{
+			{
+				Address: &iso18626.Address{ElectronicAddress: &iso18626.ElectronicAddress{
+					ElectronicAddressType: iso18626.TypeSchemeValuePair{Text: string(iso18626.ElectronicAddressTypeEmail)},
+					ElectronicAddressData: "patron@library.org",
+				}},
+			},
+			{
+				Address: &iso18626.Address{ElectronicAddress: &iso18626.ElectronicAddress{
+					ElectronicAddressData: "https://example.test/document/123",
+				}},
+			},
+		},
+	}}
+
+	assert.Equal(t, "https://example.test/document/123", getPickupURL(pr))
+}
+
+func TestGetPickupURL_PrefersResponseURL(t *testing.T) {
+	pr := pr_db.PatronRequest{
+		IllRequest: iso18626.Request{RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{{
+			Address: &iso18626.Address{ElectronicAddress: &iso18626.ElectronicAddress{
+				ElectronicAddressData: "https://example.test/requested-url",
+			}},
+		}}},
+		IllResponse: iso18626.SupplyingAgencyMessage{
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				ItemId:  " https://example.test/response-url ",
+				SentVia: &iso18626.TypeSchemeValuePair{Text: string(iso18626.SentViaUrl)},
+			},
+		},
+	}
+
+	assert.Equal(t, "https://example.test/response-url", getPickupURL(pr))
+}
+
 func TestRenderTextTemplate(t *testing.T) {
 	template := "This is A&B query '{{.BatchQuery}}'."
 	data := GetBatchEmailData(1, 1, "select \"A&B\" from dual")
@@ -651,4 +785,17 @@ func TestRenderTextTemplate(t *testing.T) {
 	result, err = RenderHtmlTemplate(prData, []string{"received-notification"}, template)
 	assert.NoError(t, err)
 	assert.Equal(t, "<p>This is A&B request REQ-1-A&amp;B.</p>", result)
+}
+
+func TestRenderTextTemplateSupportsPatronGivenNameAndLegacyPatronName(t *testing.T) {
+	data := GetPullSlipData(pr_db.PatronRequest{
+		IllRequest: iso18626.Request{
+			PatronInfo: &iso18626.PatronInfo{GivenName: "Ann"},
+		},
+	}, nil, nil, DEFAULT_FOR_NO_VALUE)
+
+	result, err := RenderTextTemplate(data, []string{"pullslip-pdf"}, "{{.PatronGivenName}}/{{.PatronName}}")
+
+	assert.NoError(t, err)
+	assert.Equal(t, "Ann/Ann", result)
 }

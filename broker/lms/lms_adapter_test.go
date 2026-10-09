@@ -36,6 +36,35 @@ func TestCreateLmsAdapterNcip(t *testing.T) {
 	assert.Contains(t, err.Error(), "lmsConfig.address and fromAgency")
 }
 
+func TestRequestedItemLocations(t *testing.T) {
+	location, shelvingLocation := requestedItemLocations(&ncip.ItemOptionalFields{
+		Location: []ncip.Location{{LocationName: ncip.LocationName{LocationNameInstance: []ncip.LocationNameInstance{
+			{LocationNameLevel: 1, LocationNameValue: "Main Library"},
+			{LocationNameLevel: 2, LocationNameValue: "Stacks"},
+		}}}},
+	})
+
+	assert.Equal(t, "Main Library", location)
+	assert.Equal(t, "Stacks", shelvingLocation)
+}
+
+func TestRequestedItemLocationsDoesNotCombineHierarchies(t *testing.T) {
+	location, shelvingLocation := requestedItemLocations(&ncip.ItemOptionalFields{
+		Location: []ncip.Location{
+			{LocationName: ncip.LocationName{LocationNameInstance: []ncip.LocationNameInstance{
+				{LocationNameLevel: 1, LocationNameValue: "Library A"},
+			}}},
+			{LocationName: ncip.LocationName{LocationNameInstance: []ncip.LocationNameInstance{
+				{LocationNameLevel: 1, LocationNameValue: "Library B"},
+				{LocationNameLevel: 2, LocationNameValue: "Stacks B"},
+			}}},
+		},
+	})
+
+	assert.Equal(t, "Library A", location)
+	assert.Equal(t, "Library A", shelvingLocation)
+}
+
 func TestLookupUser(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	b := true
@@ -451,6 +480,8 @@ func TestRequestItem(t *testing.T) {
 	assert.Equal(t, "123.456", response.Barcode)
 	assert.Equal(t, "QA123 .A45", response.CallNumber)
 	assert.Equal(t, "", response.Title)
+	assert.Equal(t, "Main Library", response.Location)
+	assert.Equal(t, "Stacks", response.ShelvingLocation)
 	assert.Equal(t, "lms-req-1", response.RequestID)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
@@ -461,6 +492,10 @@ func TestRequestItem(t *testing.T) {
 	assert.Equal(t, "Loan", req.RequestType.Text)
 	assert.Equal(t, "Title", req.RequestScopeType.Text)
 	assert.Equal(t, itemLocation, req.ItemOptionalFields.Location[0].LocationName.LocationNameInstance[0].LocationNameValue)
+	assert.Equal(t, []ncip.SchemeValuePair{
+		{Text: "Bibliographic Description"},
+		{Text: "Location"},
+	}, req.ItemElementType)
 
 	ad = &LmsAdapterNcip{
 		config:     dirapi.LmsConfig{},
@@ -911,9 +946,19 @@ func (n *ncipClientMock) RequestItem(request ncip.RequestItem) (*ncip.RequestIte
 		}
 	}
 	for _, itemElement := range request.ItemElementType {
-		if n.honorTitle && itemElement.Text == "Bibliographic Description" {
+		switch itemElement.Text {
+		case "Bibliographic Description":
+			if !n.honorTitle {
+				continue
+			}
 			res.ItemOptionalFields.BibliographicDescription = &ncip.BibliographicDescription{Title: "request title"}
-			break
+		case "Location":
+			res.ItemOptionalFields.Location = []ncip.Location{{
+				LocationName: ncip.LocationName{LocationNameInstance: []ncip.LocationNameInstance{
+					{LocationNameLevel: 1, LocationNameValue: "Main Library"},
+					{LocationNameLevel: 2, LocationNameValue: "Stacks"},
+				}},
+			}}
 		}
 	}
 	return res, nil
