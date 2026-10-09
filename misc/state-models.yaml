@@ -3,7 +3,7 @@ stateModels:
     type: StateModel
     name: CrossLink State Model
     desc: "Requester/Supplier workflow for returnable loans and non-returnable copies over ISO18626."
-    version: 3.9.0
+    version: 3.10.0
     pullslipPdfTemplateLabel: pullslip-pdf
     selector:
       serviceType: [Copy, Loan, CopyOrLoan]
@@ -18,6 +18,14 @@ stateModels:
         primaryAction: validate-patron
         closingAction: close-request
         actions:
+          - name: send-notification
+            continueOn: [PROBLEM, ERROR]
+            desc: Send email notification when the patron request is created
+            trigger: auto
+            params:
+              sendTo:
+                - patron
+              templateLabel: new-request-notification
           - name: validate-patron
             continueOn: [PROBLEM]
             desc: "Validate the patron via NCIP LookupUser, if enabled"
@@ -1144,6 +1152,21 @@ batchActionDefaults:
       interval: 72h
 
 templateDefaults:
+  - title: Patron request created
+    labels:
+      - new-request-notification
+    subject: "Your request has been created"
+    contentType: text
+    audience: patron
+    purpose: email
+    body: |
+      Your request has been created successfully.
+
+      Request number: {{.ReqId}}
+      Item title: {{.Title}}
+
+      We’ll notify you when there is an update.
+
   - title: Document delivered notification
     labels:
       - copy-completed-notification

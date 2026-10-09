@@ -133,7 +133,7 @@ func TestLegacyRerequestStartsInitialWorkflow(t *testing.T) {
 			assert.Equal(t, iso18626.TypeServiceTypeLoan, next.IllRequest.ServiceInfo.ServiceType)
 			require.NoError(t, service.RunAutoActionsOnStateEntry(appCtx, next, nil, ""))
 			require.Len(t, bus.createdTaskData, 1)
-			assert.Equal(t, BorrowerActionValidatePatron, *bus.createdTaskData[0].Action)
+			assert.Equal(t, BorrowerActionSendNotification, *bus.createdTaskData[0].Action)
 			bus.AssertExpectations(t)
 			repo.AssertExpectations(t)
 

@@ -2467,7 +2467,7 @@ func TestRunAutoActionsPropagatesUntoleratedFailure(t *testing.T) {
 		},
 	}, nil, "")
 
-	assert.EqualError(t, err, "auto action validate-patron failed with status ERROR: action failed")
+	assert.EqualError(t, err, "auto action send-notification failed with status ERROR: action failed")
 }
 
 func TestHandleInvokeLenderActionValidateAutoActionCreateTaskError(t *testing.T) {
@@ -3577,7 +3577,7 @@ func TestHandleInvokeBorrowerActionAcceptRetryAutoActionCreateTaskError(t *testi
 	// The original PR (not the retry PR) should be marked as a chain failure.
 	assert.Equal(t, patronRequestId, mockPrRepo.savedPr.ID)
 	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
-	assert.Equal(t, string(BorrowerActionValidatePatron), mockPrRepo.savedPr.LastAction.String)
+	assert.Equal(t, string(BorrowerActionSendNotification), mockPrRepo.savedPr.LastAction.String)
 	assert.Equal(t, ActionOutcomeFailure, mockPrRepo.savedPr.LastActionOutcome.String)
 	assert.Equal(t, string(events.EventStatusError), mockPrRepo.savedPr.LastActionResult.String)
 	assert.Equal(t, "REQ1-2", mockPrRepo.createdPr.ID)
