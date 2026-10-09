@@ -167,7 +167,7 @@ func TestDocumentDeliveredNotificationTemplate(t *testing.T) {
 	if assert.NotNil(t, template.Subject) {
 		assert.Equal(t, "Your requested document is ready", *template.Subject)
 	}
-	body, err := email.RenderTextTemplate(email.PullSlipData{ReqId: "REQ-123", Title: "Requested article"}, template.Body)
+	body, err := email.RenderTextTemplate(email.PullSlipData{ReqId: "REQ-123", Title: "Requested article"}, template.Labels, template.Body)
 	assert.NoError(t, err)
 	assert.Equal(t, "Your document is now available.\n\nRequest number: REQ-123\n\nItem Title: Requested article\n", body)
 }
