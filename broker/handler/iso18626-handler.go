@@ -83,7 +83,7 @@ var ErrInvalidStatus = errors.New(string(InvalidStatus))
 var ErrInvalidReason = errors.New(string(InvalidReason))
 var ErrDuplicateRequest = errors.New(string(ReqIsDuplicate))
 
-var waitingReqs = map[string]RequestWait{}
+var waitingReqs = requestWaitRegistry{requests: make(map[string]RequestWait)}
 
 // RequestOptions controls local request processing and is never read from ISO messages.
 type RequestOptions struct {
@@ -570,18 +570,9 @@ func handleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18
 		return
 	}
 
-	eventId, err := createNotice(ctx, eventBus, illTrans.ID, events.EventNameRequesterMsgReceived, eventData, events.EventStatusSuccess)
-	if err != nil {
+	if err := waitForMessageConfirmation(ctx, eventBus, illTrans.ID, events.EventNameRequesterMsgReceived, eventData, w); err != nil {
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
-		return
 	}
-	var wg sync.WaitGroup
-	wg.Add(1)
-	waitingReqs[eventId] = RequestWait{
-		w:  &w,
-		wg: &wg,
-	}
-	wg.Wait()
 }
 
 func getRequesterMessageSupplier(ctx common.ExtendedContext, repo ill_db.IllRepo, illTransID string, symbol string) (*ill_db.LocatedSupplier, error) {
@@ -795,18 +786,9 @@ func handleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso186
 		return
 	}
 
-	eventId, err := createNotice(ctx, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusSuccess)
-	if err != nil {
+	if err := waitForMessageConfirmation(ctx, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, w); err != nil {
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
-		return
 	}
-	var wg sync.WaitGroup
-	wg.Add(1)
-	waitingReqs[eventId] = RequestWait{
-		w:  &w,
-		wg: &wg,
-	}
-	wg.Wait()
 }
 
 func validateStatusAndReasonForMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, eventData events.EventData, eventBus events.EventBus, illTrans ill_db.IllTransaction) (iso18626.TypeStatus, iso18626.TypeReasonForMessage, error) {
@@ -976,7 +958,7 @@ func (h *Iso18626Handler) ConfirmRequesterMsg(ctx common.ExtendedContext, event 
 		})
 		return
 	}
-	if _, ok := waitingReqs[reqRequestEvent.ID]; !ok {
+	if !waitingReqs.contains(reqRequestEvent.ID) {
 		return // instance doesn't have the paused request
 	}
 	// instance has the event, process it
@@ -1013,7 +995,7 @@ func (h *Iso18626Handler) ConfirmSupplierMsg(ctx common.ExtendedContext, event e
 		})
 		return
 	}
-	if _, ok := waitingReqs[supRequestEvent.ID]; !ok {
+	if !waitingReqs.contains(supRequestEvent.ID) {
 		return // instance doesn't have the paused request
 	}
 	// instance has the event, process it
@@ -1080,11 +1062,10 @@ func (h *Iso18626Handler) handleConfirmRequesterMsgTask(ctx common.ExtendedConte
 
 func (c *Iso18626Handler) confirmSupplierResponse(ctx common.ExtendedContext, illTransId string, waitRequestId string, requesterIllMsg *iso18626.ISO18626Message,
 	supplierResult events.EventResult) (*iso18626.ISO18626Message, error) {
-	wait, ok := waitingReqs[waitRequestId]
+	wait, ok := waitingReqs.take(waitRequestId)
 	if !ok {
 		return nil, fmt.Errorf("waiting request '%s' not found", waitRequestId)
 	}
-	delete(waitingReqs, waitRequestId)
 	var errorMessage = ""
 	var errorType *iso18626.TypeErrorType
 	var messageStatus = iso18626.TypeMessageStatusOK
@@ -1144,11 +1125,10 @@ func (c *Iso18626Handler) confirmSupplierResponse(ctx common.ExtendedContext, il
 
 func (c *Iso18626Handler) confirmRequesterResponse(ctx common.ExtendedContext, illTransId string, waitRequestId string, supplierIllMsg *iso18626.ISO18626Message,
 	requesterResult events.EventResult) (*iso18626.ISO18626Message, error) {
-	wait, ok := waitingReqs[waitRequestId]
+	wait, ok := waitingReqs.take(waitRequestId)
 	if !ok {
 		return nil, fmt.Errorf("waiting request '%s' not found", waitRequestId)
 	}
-	delete(waitingReqs, waitRequestId)
 	var errorMessage = ""
 	var errorType *iso18626.TypeErrorType
 	var messageStatus iso18626.TypeMessageStatus
@@ -1206,4 +1186,47 @@ func (c *Iso18626Handler) confirmRequesterResponse(ctx common.ExtendedContext, i
 type RequestWait struct {
 	w  *http.ResponseWriter
 	wg *sync.WaitGroup
+}
+
+// requestWaitRegistry coordinates HTTP handlers and asynchronous confirmations.
+// Taking a waiter removes it atomically so only one confirmation can write to it.
+type requestWaitRegistry struct {
+	mu       sync.Mutex
+	requests map[string]RequestWait
+}
+
+func (r *requestWaitRegistry) register(id string, wait RequestWait) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.requests[id] = wait
+}
+
+func (r *requestWaitRegistry) contains(id string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.requests[id]
+	return ok
+}
+
+func (r *requestWaitRegistry) take(id string) (RequestWait, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	wait, ok := r.requests[id]
+	delete(r.requests, id)
+	return wait, ok
+}
+
+func waitForMessageConfirmation(ctx common.ExtendedContext, eventBus events.EventBus, illTransID string, eventName events.EventName, data events.EventData, w http.ResponseWriter) error {
+	id := uuid.NewString()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	// Register before publishing: a consumer may confirm before creation returns.
+	waitingReqs.register(id, RequestWait{w: &w, wg: &wg})
+	defer waitingReqs.take(id)
+	if _, err := eventBus.CreateNoticeWithID(id, illTransID, eventName, data, events.EventStatusSuccess, events.EventDomainIllTransaction, events.SignalConsumers); err != nil {
+		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransID)
+		return err
+	}
+	wg.Wait()
+	return nil
 }
