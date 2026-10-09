@@ -202,11 +202,14 @@ const defaultEntryLimit = 10
 func handleEntryCQL(cqlString string, noBaseArgs int) (pgcql.Query, error) {
 	def := pgcql.NewPgDefinition()
 
-	f := pgcql.NewFieldString().WithLikeOps()
+	def.AddField("cql.serverChoice", pgcql.NewFieldTsVector().
+		WithLanguage("simple").WithServerChoiceRel(cql.ALL).WithColumn("e.search"))
+
+	f := pgcql.NewFieldString().WithLikeOps().WithLower()
 	f.SetColumn("e.name")
 	def.AddField("name", f)
 
-	f = pgcql.NewFieldString().WithLikeOps()
+	f = pgcql.NewFieldString().WithLikeOps().WithLower()
 	f.SetColumn("e.description")
 	def.AddField("description", f)
 

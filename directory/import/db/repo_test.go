@@ -526,7 +526,10 @@ func TestImportEntryUsesParentUUIDWhenParentSymbolChangesBeforeRowLock(t *testin
 	}()
 	waitForLockUnavailable(t, ctx, lockUnavailable)
 
-	_, err = testPool.Exec(ctx, `UPDATE symbols SET owner=$1 WHERE authority='ISIL' AND symbol='PARENT'`, replacementParentID)
+	// Symbol changes now lock their owners to refresh the search document. Move
+	// the symbol in the transaction holding the original parent's lock, before
+	// allowing the importer to acquire it; the parent UUID must remain stable.
+	_, err = blocker.Exec(ctx, `UPDATE symbols SET owner=$1 WHERE authority='ISIL' AND symbol='PARENT'`, replacementParentID)
 	require.NoError(t, err)
 	require.NoError(t, blocker.Commit(ctx))
 	require.NoError(t, <-importDone)
