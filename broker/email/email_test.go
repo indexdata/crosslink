@@ -159,7 +159,7 @@ func TestRenderPullSlipTemplateSupportsCancellationAndItemLocations(t *testing.T
 		ShelvingLocation:   "Stacks",
 	}
 
-	rendered, err := RenderTextTemplate(data, "{{.CancellationReason}}|{{.Location}}|{{.ShelvingLocation}}")
+	rendered, err := RenderTextTemplate(data, []string{"pullslip-pdf"}, "{{.CancellationReason}}|{{.Location}}|{{.ShelvingLocation}}")
 
 	require.NoError(t, err)
 	assert.Equal(t, "Already available|Main Library|Stacks", rendered)
@@ -716,6 +716,25 @@ func TestGetPickupURL_IgnoresEmailAddress(t *testing.T) {
 	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getPickupURL(pr))
 }
 
+func TestGetPickupURL_RejectsUnsafeRequestSchemes(t *testing.T) {
+	for _, value := range []string{
+		"javascript://host/alert",
+		"ftp://files.example/item",
+	} {
+		t.Run(value, func(t *testing.T) {
+			pr := pr_db.PatronRequest{IllRequest: iso18626.Request{
+				RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{{
+					Address: &iso18626.Address{ElectronicAddress: &iso18626.ElectronicAddress{
+						ElectronicAddressData: value,
+					}},
+				}},
+			}}
+
+			assert.Equal(t, DEFAULT_FOR_NO_VALUE, getPickupURL(pr))
+		})
+	}
+}
+
 func TestGetPickupURL_ContinuesPastEmailToURL(t *testing.T) {
 	pr := pr_db.PatronRequest{IllRequest: iso18626.Request{
 		RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{
@@ -775,7 +794,7 @@ func TestRenderTextTemplateSupportsPatronGivenNameAndLegacyPatronName(t *testing
 		},
 	}, nil, nil, DEFAULT_FOR_NO_VALUE)
 
-	result, err := RenderTextTemplate(data, "{{.PatronGivenName}}/{{.PatronName}}")
+	result, err := RenderTextTemplate(data, []string{"pullslip-pdf"}, "{{.PatronGivenName}}/{{.PatronName}}")
 
 	assert.NoError(t, err)
 	assert.Equal(t, "Ann/Ann", result)

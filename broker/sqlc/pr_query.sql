@@ -104,8 +104,8 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (id) DO UPDATE
     SET barcode = EXCLUDED.barcode,
         call_number = EXCLUDED.call_number,
-        location = EXCLUDED.location,
-        shelving_location = EXCLUDED.shelving_location,
+        location = COALESCE(EXCLUDED.location, item.location),
+        shelving_location = COALESCE(EXCLUDED.shelving_location, item.shelving_location),
         title = EXCLUDED.title,
         item_id = EXCLUDED.item_id,
         lms_request_id = EXCLUDED.lms_request_id,

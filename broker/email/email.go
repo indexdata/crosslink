@@ -980,7 +980,7 @@ func getPickupURL(request pr_db.PatronRequest) string {
 		}
 		value := strings.TrimSpace(deliveryInfo.Address.ElectronicAddress.ElectronicAddressData)
 		parsed, err := url.ParseRequestURI(value)
-		if err == nil && parsed.Scheme != "" && parsed.Host != "" {
+		if err == nil && parsed.Host != "" && (strings.EqualFold(parsed.Scheme, "http") || strings.EqualFold(parsed.Scheme, "https")) {
 			return value
 		}
 	}
