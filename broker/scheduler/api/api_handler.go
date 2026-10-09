@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -179,6 +180,10 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 		brokerapi.AddBadRequestError(ctx, w, err)
 		return
 	}
+	if err := validateBatchEmailActionParams(taskToSave.ActionData.BatchActionData.ActionName, paramsMap); err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return
+	}
 	task, err := h.schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(taskToSave))
 	if err != nil {
 		h.writeScheduledTaskSaveError(ctx, w, err)
@@ -307,17 +312,23 @@ func (h SchedulerApiHandler) PutBatchActionsId(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if update.ActionParams != nil {
-		if templateLabel, _ := (*update.ActionParams)["templateLabel"].(string); templateLabel != "" {
-			taskForValidation, validationErr := h.schedRepo.GetScheduledTaskById(ctx, id, owners)
-			if validationErr != nil {
-				h.writeScheduledTaskMutationError(ctx, w, validationErr)
-				return
-			}
-			taskForValidation.ActionData.CustomData = *update.ActionParams
-			if validationErr = h.validateBatchEmailTemplate(ctx, taskForValidation); validationErr != nil {
-				brokerapi.AddBadRequestError(ctx, w, validationErr)
-				return
-			}
+		taskForValidation, validationErr := h.schedRepo.GetScheduledTaskById(ctx, id, owners)
+		if validationErr != nil {
+			h.writeScheduledTaskMutationError(ctx, w, validationErr)
+			return
+		}
+		if validationErr = validateBatchActionTask(taskForValidation); validationErr != nil {
+			h.writeScheduledTaskMutationError(ctx, w, validationErr)
+			return
+		}
+		if validationErr = validateBatchEmailActionParams(taskForValidation.ActionData.BatchActionData.ActionName, *update.ActionParams); validationErr != nil {
+			brokerapi.AddBadRequestError(ctx, w, validationErr)
+			return
+		}
+		taskForValidation.ActionData.CustomData = *update.ActionParams
+		if validationErr = h.validateBatchEmailTemplate(ctx, taskForValidation); validationErr != nil {
+			brokerapi.AddBadRequestError(ctx, w, validationErr)
+			return
 		}
 	}
 	task, err := h.mutateScheduledTask(ctx, id, owners, func(task *sched_db.ScheduledTask) {
@@ -434,6 +445,21 @@ func (h SchedulerApiHandler) validateBatchEmailTemplate(ctx common.ExtendedConte
 		prservice.BatchEmailTemplateContext,
 	); err != nil {
 		return fmt.Errorf("%w: %w", errInvalidBatchEmailTemplate, err)
+	}
+	return nil
+}
+
+func validateBatchEmailActionParams(actionName string, params map[string]any) error {
+	if actionName != string(schedoapi.EmailPullslips) {
+		return nil
+	}
+	rawLabel, ok := params["templateLabel"]
+	if !ok {
+		return errors.New("templateLabel field is required for email-pullslips action")
+	}
+	templateLabel, ok := rawLabel.(string)
+	if !ok || strings.TrimSpace(templateLabel) == "" {
+		return errors.New("templateLabel field must be a non-empty string for email-pullslips action")
 	}
 	return nil
 }
