@@ -556,6 +556,9 @@ func (i Importer) importTemplate(ctx common.ExtendedContext, policy importdb.Con
 	if err = json.Unmarshal(data, &create); err != nil {
 		return nil, importdb.Result{}, err
 	}
+	if err = prservice.ValidateTemplateRendering(create.Purpose, create.ContentType, create.Body, create.Subject, create.Labels); err != nil {
+		return nil, importdb.Result{}, fmt.Errorf("validate template rendering: %w", err)
+	}
 
 	labels := strings.Join(create.Labels, ",")
 	audience := pgtype.Text{}

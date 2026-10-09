@@ -773,6 +773,43 @@ func TestImportTemplateRejectsEmptyLabel(t *testing.T) {
 	assert.Zero(t, repo.templateCalls)
 }
 
+func TestImportTemplateRejectsInvalidRendering(t *testing.T) {
+	tests := []struct {
+		name    string
+		data    string
+		wantErr string
+	}{
+		{
+			name:    "pullslip must be html",
+			data:    `{"title":"Pull slip","purpose":"pullslip","body":"{{.ReqId}}","contentType":"text","labels":["pullslip-pdf"]}`,
+			wantErr: "HTML",
+		},
+		{
+			name:    "unknown placeholder",
+			data:    `{"title":"Notification","purpose":"email","body":"{{.Unsupported}}","contentType":"text","labels":["received-notification"]}`,
+			wantErr: "Unsupported",
+		},
+		{
+			name:    "batch template with patron request placeholder",
+			data:    `{"title":"Batch","purpose":"email","body":"{{.ReqId}}","contentType":"text","labels":["pullslip-email"]}`,
+			wantErr: "ReqId",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &recordingImportRepo{}
+			cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+			importer := newImporter(repo, cache, nil, nil, fixedClock)
+
+			_, _, err := importer.importTemplate(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", json.RawMessage(tt.data))
+
+			require.ErrorContains(t, err, tt.wantErr)
+			assert.Zero(t, repo.templateCalls)
+		})
+	}
+}
+
 func TestImporterAcceptsRecordAtSizeLimit(t *testing.T) {
 	repo := &recordingImportRepo{}
 	importer := newImporter(repo, &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}, nil, nil, fixedClock)

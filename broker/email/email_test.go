@@ -106,7 +106,7 @@ func TestRenderPullSlipHTML(t *testing.T) {
 		DueDate:          "2026-01-01",
 		ReturnAddress:    "1 Test Street",
 		SystemIdentifier: "abc123",
-	}, template)
+	}, []string{"pullslip-pdf"}, template)
 	assert.NoError(t, err)
 	assert.True(t, strings.Contains(html, "Loan"))
 	assert.True(t, strings.Contains(html, "John Doe"))
@@ -115,7 +115,7 @@ func TestRenderPullSlipHTML(t *testing.T) {
 }
 
 func TestRenderPullSlipHTML_UsesProvidedTemplate(t *testing.T) {
-	html, err := RenderHtmlTemplate(PullSlipData{ReqId: "REQ-1"}, "<main>{{.ReqId}}</main>")
+	html, err := RenderHtmlTemplate(PullSlipData{ReqId: "REQ-1"}, []string{"pullslip-pdf"}, "<main>{{.ReqId}}</main>")
 
 	assert.NoError(t, err)
 	assert.Equal(t, "<main>REQ-1</main>", html)
@@ -141,14 +141,226 @@ func TestGetPullSlipDataUsesCanonicalDueDate(t *testing.T) {
 }
 
 func TestRenderPullSlipHTML_InvalidTemplate(t *testing.T) {
-	_, err := RenderHtmlTemplate(PullSlipData{ReqId: "X"}, "{{.Unclosed")
+	_, err := RenderHtmlTemplate(PullSlipData{ReqId: "X"}, []string{"pullslip-pdf"}, "{{.Unclosed")
 	assert.Error(t, err)
 }
 
 func TestRenderPullSlipHTML_ExecuteError(t *testing.T) {
-	_, err := RenderHtmlTemplate(PullSlipData{ReqId: "X"}, "{{index . \"nonexistent\"}}")
+	_, err := RenderHtmlTemplate(PullSlipData{ReqId: "X"}, []string{"pullslip-pdf"}, "{{index . \"nonexistent\"}}")
 	// Execute on a struct with map-access fails
 	assert.Error(t, err)
+}
+
+func TestValidateTextTemplateRejectsUnsupportedFieldInUnexecutedBranch(t *testing.T) {
+	err := ValidateTextTemplate(PullSlipData{}, []string{"received-notification"}, "{{if .Title}}{{.Unsupported}}{{end}}")
+	assert.ErrorContains(t, err, "Unsupported")
+}
+
+func TestValidateTextTemplateRejectsInvalidCommandInUnexecutedBranch(t *testing.T) {
+	for _, testCase := range []struct {
+		name         string
+		templateBody string
+		command      string
+	}{
+		{
+			name:         "index cannot operate on struct",
+			templateBody: `{{if .Title}}{{index . "Unsupported"}}{{end}}`,
+			command:      "index",
+		},
+		{
+			name:         "len cannot operate on struct",
+			templateBody: `{{if .Title}}{{len .}}{{end}}`,
+			command:      "len",
+		},
+		{
+			name:         "call cannot be checked statically",
+			templateBody: `{{if .Title}}{{call .}}{{end}}`,
+			command:      "call",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			err := ValidateTextTemplate(PullSlipData{}, []string{"received-notification"}, testCase.templateBody)
+			assert.ErrorContains(t, err, testCase.command)
+		})
+	}
+}
+
+func TestValidateTextTemplateAcceptsValidCommandInUnexecutedBranch(t *testing.T) {
+	data := struct {
+		Title  string
+		Values map[string]string
+		Left   float32
+		Right  float64
+	}{}
+
+	for _, templateBody := range []string{
+		`{{if .Title}}{{index .Values "title"}}{{end}}`,
+		`{{if .Title}}{{eq .Left .Right}}{{end}}`,
+	} {
+		err := ValidateTextTemplate(data, []string{"received-notification"}, templateBody)
+		assert.NoError(t, err)
+	}
+}
+
+func TestValidateTextTemplateRejectsInvalidSliceAndComparisonCommands(t *testing.T) {
+	data := struct {
+		Title  string
+		Flag   bool
+		Values map[string]string
+		Number *int
+		Key    any
+		Items  []string
+	}{}
+	for _, testCase := range []struct {
+		name         string
+		templateBody string
+		command      string
+	}{
+		{
+			name:         "three-index string slice",
+			templateBody: `{{if .Title}}{{slice .Title 0 0 0}}{{end}}`,
+			command:      "slice",
+		},
+		{
+			name:         "reversed literal slice bounds",
+			templateBody: `{{if .Title}}{{slice .Title 2 1}}{{end}}`,
+			command:      "slice",
+		},
+		{
+			name:         "negative literal index",
+			templateBody: `{{if .Title}}{{index .Title -1}}{{end}}`,
+			command:      "index",
+		},
+		{
+			name:         "non-comparable map equality",
+			templateBody: `{{if .Title}}{{eq .Values .Values}}{{end}}`,
+			command:      "eq",
+		},
+		{
+			name:         "unordered boolean",
+			templateBody: `{{if .Title}}{{lt .Flag true}}{{end}}`,
+			command:      "lt",
+		},
+		{
+			name:         "unordered pointer",
+			templateBody: `{{if .Title}}{{lt .Number .Number}}{{end}}`,
+			command:      "lt",
+		},
+		{
+			name:         "floating-point slice index",
+			templateBody: `{{if .Title}}{{index .Items 1.0}}{{end}}`,
+			command:      "index",
+		},
+		{
+			name:         "integer literal overflowing int",
+			templateBody: `{{if .Title}}{{eq 9223372036854775808 9223372036854775808}}{{end}}`,
+			command:      "overflows int",
+		},
+		{
+			name:         "interface value is not assignable to string map key",
+			templateBody: `{{if .Title}}{{index .Values .Key}}{{end}}`,
+			command:      "index",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			err := ValidateTextTemplate(data, []string{"received-notification"}, testCase.templateBody)
+			assert.ErrorContains(t, err, testCase.command)
+		})
+	}
+}
+
+func TestValidateTextTemplateAcceptsNamedTemplateWithoutPipeline(t *testing.T) {
+	err := ValidateTextTemplate(
+		PullSlipData{},
+		[]string{"received-notification"},
+		`{{define "footer"}}Footer{{end}}{{template "footer"}}`,
+	)
+	assert.NoError(t, err)
+}
+
+func TestValidateTextTemplateAcceptsValidLogicalAndNilComparisons(t *testing.T) {
+	data := struct {
+		Title string
+		Value *[]int
+	}{}
+	for _, templateBody := range []string{
+		`{{if .Title}}{{or .Title 1}}{{end}}`,
+		`{{if .Title}}{{eq .Value nil}}{{end}}`,
+		`{{if .Title}}{{eq .Value .Value}}{{end}}`,
+	} {
+		err := ValidateTextTemplate(data, []string{"received-notification"}, templateBody)
+		assert.NoError(t, err)
+	}
+}
+
+func TestValidateTextTemplateInfersRangeIndexVariableType(t *testing.T) {
+	data := struct {
+		Values []string
+	}{}
+
+	err := ValidateTextTemplate(data, []string{"received-notification"}, `{{range $i, $value := .Values}}{{index $.Values $i}}{{end}}`)
+	assert.NoError(t, err)
+}
+
+func TestValidateTextTemplateAcceptsSupportedFieldsInConditionalBranches(t *testing.T) {
+	err := ValidateTextTemplate(PullSlipData{}, []string{"received-notification"}, "{{if .Title}}{{.Author}}{{else}}{{.Publisher}}{{end}}")
+	assert.NoError(t, err)
+}
+
+func TestValidateTextTemplateAcceptsSupportedFieldsThroughNamedVariables(t *testing.T) {
+	err := ValidateTextTemplate(PullSlipData{}, []string{"received-notification"}, "{{$request := .}}{{$request.Title}}")
+	assert.NoError(t, err)
+}
+
+func TestValidateTextTemplateRejectsInvalidScopedFieldsInUnexecutedBranches(t *testing.T) {
+	for _, templateBody := range []string{
+		"{{with .Title}}{{.ReqId}}{{end}}",
+		"{{$request := .}}{{if .Title}}{{$request.Unsupported}}{{end}}",
+	} {
+		err := ValidateTextTemplate(PullSlipData{}, []string{"received-notification"}, templateBody)
+		assert.Error(t, err)
+	}
+}
+
+func TestValidateTextTemplateReturnsErrorForRangeWithUnknownVariableType(t *testing.T) {
+	var err error
+	assert.NotPanics(t, func() {
+		err = ValidateTextTemplate(
+			PullSlipData{},
+			[]string{"received-notification"},
+			`{{$items := printf "%s" .Title}}{{range $items}}{{end}}`,
+		)
+	})
+	assert.ErrorContains(t, err, "range")
+}
+
+func TestValidateHtmlTemplateUsesHtmlRenderingContexts(t *testing.T) {
+	err := ValidateHtmlTemplate(PullSlipData{}, []string{"received-notification"}, `{{if .Title}}<a href="{{end}}{{.Author}}`)
+	assert.Error(t, err)
+}
+
+func TestRenderTextTemplateUsesFirstLabelAsTemplateName(t *testing.T) {
+	result, err := RenderTextTemplate(
+		PullSlipData{Title: "Requested book"},
+		[]string{"received-notification", "secondary-label"},
+		`{{define "received-notification"}}Ready: {{.Title}}{{end}}`,
+	)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "Ready: Requested book", result)
+}
+
+func TestRenderTextTemplateUsesDefaultNameWhenFirstLabelIsMissing(t *testing.T) {
+	for _, labels := range [][]string{nil, {""}} {
+		result, err := RenderTextTemplate(
+			PullSlipData{Title: "Requested book"},
+			labels,
+			`{{define "template"}}Ready: {{.Title}}{{end}}`,
+		)
+
+		assert.NoError(t, err)
+		assert.Equal(t, "Ready: Requested book", result)
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -430,13 +642,13 @@ func TestGetPickupLocation_AddressWithNoUsableFields(t *testing.T) {
 func TestRenderTextTemplate(t *testing.T) {
 	template := "This is A&B query '{{.BatchQuery}}'."
 	data := GetBatchEmailData(1, 1, "select \"A&B\" from dual")
-	result, err := RenderTextTemplate(data, template)
+	result, err := RenderTextTemplate(data, []string{"pullslip-email"}, template)
 	assert.NoError(t, err)
 	assert.Equal(t, "This is A&B query 'select \"A&B\" from dual'.", result)
 
 	template = "<p>This is A&B request {{.ReqId}}.</p>"
 	prData := GetPullSlipData(pr_db.PatronRequest{RequesterReqID: pgtype.Text{String: "REQ-1-A&B", Valid: true}}, nil, nil, "")
-	result, err = RenderHtmlTemplate(prData, template)
+	result, err = RenderHtmlTemplate(prData, []string{"received-notification"}, template)
 	assert.NoError(t, err)
 	assert.Equal(t, "<p>This is A&B request REQ-1-A&amp;B.</p>", result)
 }
