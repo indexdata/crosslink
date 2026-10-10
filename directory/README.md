@@ -291,7 +291,26 @@ triggers when entry fields or symbols change, including imports. Migration 018
 backfills existing entries. SQLC expands wildcard selections into explicit column
 lists, so adding the search column preserves the result shape expected by
 pre-018 binaries. Existing binaries can continue serving against the upgraded
-schema. The migration takes database locks and may temporarily block requests.
+schema after the migration completes.
+
+Migration 018 runs as one transaction: it adds the search column, creates the
+symbols ownership index before backfill, installs the search triggers, backfills
+all entries, and builds the GIN index. The initial schema change takes an
+exclusive lock on `entries` that is held until the transaction completes,
+blocking entry reads and writes throughout the backfill and index builds. The
+regular symbols index build also blocks symbol writes until commit. Migration
+duration depends on data volume and active transactions; requests may time out
+while waiting. Concurrent transactions that acquire locks in the opposite order
+can also deadlock with the migration.
+
+Plan a maintenance window for this upgrade. Stop all Directory instances and
+import jobs, pause other database writers, and allow active transactions to
+finish before starting one upgraded instance to apply migrations. Once migration
+018 succeeds and that instance is ready, restore the remaining instances and
+resume traffic and imports. A rolling update alone does not enforce this
+sequence. If migration fails, inspect the error and migration version/dirty state
+before retrying; a failed transaction rolls back its schema changes, but the
+migration runner may leave the version marked dirty and prevent startup.
 
 The `name` and `description` CQL indexes match case insensitively by default,
 using PostgreSQL `lower()` on both the stored value and the search term. For
