@@ -318,6 +318,9 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 				eventName = SupplierUnfilledLocal
 			}
 		case iso18626.TypeStatusCancelled:
+			if reason := strings.TrimSpace(sam.MessageInfo.Note); reason != "" {
+				pr.CancellationReason = getDbText(reason)
+			}
 			if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse {
 				if sam.MessageInfo.AnswerYesNo != nil && *sam.MessageInfo.AnswerYesNo == iso18626.TypeYesNoN {
 					return contradictoryCancelResponse()

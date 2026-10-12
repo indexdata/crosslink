@@ -985,12 +985,14 @@ func TestHandleSupplyingAgencyMessageCancelled(t *testing.T) {
 		},
 		MessageInfo: iso18626.MessageInfo{
 			ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
+			Note:             "  Item no longer needed  ",
 		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled},
 	}, pr_db.PatronRequest{State: BorrowerStateCancelPending, Side: SideBorrowing})
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, BorrowerStateCancelled, mockPrRepo.savedPr.State)
+	assert.Equal(t, pgtype.Text{String: "Item no longer needed", Valid: true}, mockPrRepo.savedPr.CancellationReason)
 	assert.NoError(t, err)
 }
 

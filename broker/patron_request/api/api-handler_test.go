@@ -684,7 +684,7 @@ func TestInvokeActionReturnsProblemDetails(t *testing.T) {
 	assert.Equal(t, string(events.EventStatusProblem), result.Result)
 	assert.Equal(t, prservice.ActionOutcomeFailure, result.Outcome)
 	require.NotNil(t, result.Message)
-	assert.Equal(t, "email template body: unknown field PatronGivenName", *result.Message)
+	assert.Equal(t, "email template body: unknown field UnknownPlaceholder", *result.Message)
 }
 
 func TestPostPatronRequestsIdTerminateStoresTenantUserAndActionInInvokeTask(t *testing.T) {
@@ -1545,7 +1545,7 @@ type MockActionTaskProcessorExclusiveError struct{}
 type MockActionTaskProcessorProblem struct{}
 
 func (m *MockActionTaskProcessorProblem) ProcessInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error) {
-	status, result := events.NewProblemResult("notification failed", "email template body: unknown field PatronGivenName")
+	status, result := events.NewProblemResult("notification failed", "email template body: unknown field UnknownPlaceholder")
 	result.ActionResult = &events.ActionResult{Outcome: prservice.ActionOutcomeFailure}
 	return events.Event{ID: event.ID, EventStatus: status, ResultData: *result}, nil
 }

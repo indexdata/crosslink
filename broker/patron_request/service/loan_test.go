@@ -178,6 +178,37 @@ func TestShippingWithoutDateRetainsCompletedCheckout(t *testing.T) {
 	adapter.AssertNumberOfCalls(t, "CheckOutItem", 1)
 }
 
+func TestShippingCheckoutTitlePreservesItemLocations(t *testing.T) {
+	pr := testLoan()
+	item := pr_db.Item{
+		ID:               "item",
+		PrID:             pr.ID,
+		Barcode:          "barcode",
+		Location:         pgtype.Text{String: "Main Library", Valid: true},
+		ShelvingLocation: pgtype.Text{String: "Stacks", Valid: true},
+	}
+	repo := &MockPrRepo{savedPr: pr, savedItems: []pr_db.Item{item}}
+	var saved pr_db.SaveItemParams
+	repo.On("SaveItem", mock.Anything).Run(func(args mock.Arguments) {
+		saved = args.Get(0).(pr_db.SaveItemParams)
+	}).Return(item, nil).Once()
+	directory := new(IllRepoMock)
+	directory.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything).Return([]ill_db.Peer{{CustomData: dirapi.Entry{}}}, "", nil)
+	adapter := new(mockLmsAdapter)
+	adapter.On("CheckOutItem", "", "barcode", "", "").Return(&lms.CheckedOutItem{Title: "LMS title"}, nil).Once()
+	sender := new(MockIso18626Handler)
+	svc := CreatePatronRequestActionService(repo, directory, new(MockEventBus), sender, nil, nil, nil, nil)
+
+	result := svc.shipLenderRequest(appCtx, "event", pr, adapter, pr.IllRequest, actionParams{})
+
+	require.Equal(t, events.EventStatusSuccess, result.status)
+	assert.Equal(t, pgtype.Text{String: "LMS title", Valid: true}, saved.Title)
+	assert.Equal(t, pgtype.Text{String: "Main Library", Valid: true}, saved.Location)
+	assert.Equal(t, pgtype.Text{String: "Stacks", Valid: true}, saved.ShelvingLocation)
+	repo.AssertExpectations(t)
+	adapter.AssertExpectations(t)
+}
+
 func TestShippingRetryRecalculatesDueDate(t *testing.T) {
 	for _, tc := range []struct {
 		name                       string

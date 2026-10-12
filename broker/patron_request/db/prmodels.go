@@ -44,12 +44,14 @@ const (
 )
 
 type PrItem struct {
-	LmsStatus  LmsStatus  `json:"lms_status"`
-	LmsDueDate *time.Time `json:"lms_due_date"`
-	ID         string     `json:"id"`
-	Barcode    string     `json:"barcode"`
-	CallNumber *string    `json:"call_number"`
-	Title      *string    `json:"title"`
-	ItemID     *string    `json:"item_id"`
-	CreatedAt  time.Time  `json:"created_at"`
+	LmsStatus        LmsStatus  `json:"lms_status"`
+	LmsDueDate       *time.Time `json:"lms_due_date"`
+	ID               string     `json:"id"`
+	Barcode          string     `json:"barcode"`
+	CallNumber       *string    `json:"call_number"`
+	Location         *string    `json:"location"`
+	ShelvingLocation *string    `json:"shelving_location"`
+	Title            *string    `json:"title"`
+	ItemID           *string    `json:"item_id"`
+	CreatedAt        time.Time  `json:"created_at"`
 }

@@ -1603,14 +1603,16 @@ func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.Extended
 	// Commit the reservation identifier and LMS status together, after the LMS call.
 	err = a.prRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
 		savedItem, err := repo.SaveItem(ctx, pr_db.SaveItemParams{
-			ID:           uuid.NewString(),
-			CreatedAt:    pgtype.Timestamp{Valid: true, Time: time.Now()},
-			PrID:         pr.ID,
-			ItemID:       getDbText(itemID),
-			LmsRequestID: getDbText(lmsRequestID),
-			Title:        getDbTextPtr(&title),
-			CallNumber:   getDbTextPtr(&callNumber),
-			Barcode:      barcode,
+			ID:               uuid.NewString(),
+			CreatedAt:        pgtype.Timestamp{Valid: true, Time: time.Now()},
+			PrID:             pr.ID,
+			ItemID:           getDbText(itemID),
+			LmsRequestID:     getDbText(lmsRequestID),
+			Title:            getDbTextPtr(&title),
+			CallNumber:       getDbTextPtr(&callNumber),
+			Location:         getDbTextPtr(&response.Location),
+			ShelvingLocation: getDbTextPtr(&response.ShelvingLocation),
+			Barcode:          barcode,
 		})
 		if err != nil {
 			return err
@@ -1897,15 +1899,17 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 		if checkedOutItem.Title != "" {
 			item.Title = getDbText(checkedOutItem.Title)
 			_, err = a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
-				ID:           item.ID,
-				CreatedAt:    item.CreatedAt,
-				PrID:         item.PrID,
-				ItemID:       item.ItemID,
-				LmsRequestID: item.LmsRequestID,
-				LmsItemID:    item.LmsItemID,
-				Title:        item.Title,
-				CallNumber:   item.CallNumber,
-				Barcode:      item.Barcode,
+				ID:               item.ID,
+				CreatedAt:        item.CreatedAt,
+				PrID:             item.PrID,
+				ItemID:           item.ItemID,
+				LmsRequestID:     item.LmsRequestID,
+				LmsItemID:        item.LmsItemID,
+				Title:            item.Title,
+				CallNumber:       item.CallNumber,
+				Location:         item.Location,
+				ShelvingLocation: item.ShelvingLocation,
+				Barcode:          item.Barcode,
 			})
 			if err != nil {
 				status, result := logActionErrorAndReturnResult(ctx, "failed to save item", err)
@@ -2099,7 +2103,12 @@ func (a *PatronRequestActionService) sendNotificationLenderRequest(ctx common.Ex
 func logNotificationProblem(_ common.ExtendedContext, pr pr_db.PatronRequest, msg string, err error) actionExecutionResult {
 	details := msg
 	if err != nil {
-		details += ": " + err.Error()
+		var templateErr *templateRenderError
+		if errors.As(err, &templateErr) {
+			details += ": " + templateErr.UserMessage()
+		} else {
+			details += ": " + err.Error()
+		}
 	}
 	status, result := events.NewProblemResult(msg, details)
 	result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
@@ -2178,6 +2187,10 @@ func (a *PatronRequestActionService) createAndSendEmail(ctx common.ExtendedConte
 		template.Labels,
 		PatronRequestTemplateContext,
 	); err != nil {
+		var contentErr *templateContentError
+		if errors.As(err, &contentErr) {
+			return &templateRenderError{templateID: template.ID, label: label, audience: audience, part: contentErr.part, err: contentErr.err}
+		}
 		return fmt.Errorf("validate email template %q (label %q, audience %s): %w", template.ID, label, audience, err)
 	}
 	data := email.GetPullSlipData(pr, notes, conditions, email.DEFAULT_FOR_NO_VALUE)
@@ -2188,11 +2201,11 @@ func (a *PatronRequestActionService) createAndSendEmail(ctx common.ExtendedConte
 		body, err = email.RenderTextTemplate(data, template.Labels, template.Body)
 	}
 	if err != nil {
-		return fmt.Errorf("render email template %q (label %q, audience %s) body: %w", template.ID, label, audience, err)
+		return &templateRenderError{templateID: template.ID, label: label, audience: audience, part: "body", err: err}
 	}
 	subject, err := email.RenderTextTemplate(data, template.Labels, template.Subject.String)
 	if err != nil {
-		return fmt.Errorf("render email template %q (label %q, audience %s) subject: %w", template.ID, label, audience, err)
+		return &templateRenderError{templateID: template.ID, label: label, audience: audience, part: "subject", err: err}
 	}
 	emailData := email.EmailData{
 		To:         recipients,

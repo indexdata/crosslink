@@ -1806,13 +1806,15 @@ components:
           description: >-
             Body of the email or pull slip template. Supports {{.X}} placeholders.
             Supported placeholders for patron request templates include
-            {{.ReqId}}, {{.PickupLocation}}, {{.Title}},
-            {{.Author}}, {{.DueDate}}, {{.ReturnAddress}}, {{.BarcodeBase64}},
+            {{.ReqId}}, {{.CancellationReason}}, {{.PickupLocation}}, {{.PickupURL}}, {{.NeededBy}},
+            {{.Title}}, {{.TitleOfComponent}}, {{.Author}}, {{.AuthorOfComponent}},
+            {{.MaterialType}}, {{.DueDate}}, {{.ReturnAddress}}, {{.BarcodeBase64}},
             {{.ServiceType}}, {{.ServiceLevel}}, {{.SystemIdentifier}},
             {{.Publisher}}, {{.Volume}}, {{.Issue}}, {{.Pages}}, {{.StaffNotes}},
-            {{.CallNumber}}, {{.LoanConditions}}, {{.PatronName}},
-            {{.PatronSurname}}, {{.PatronId}} and batch templates include
-            {{.FullCount}}, {{.ActualCount}}, {{.BatchQuery}}.
+            {{.CallNumber}}, {{.Location}}, {{.ShelvingLocation}}, {{.LoanConditions}}, {{.PatronGivenName}}, {{.PatronName}},
+            {{.PatronSurname}}, {{.PatronId}}, {{.PatronProfile}} and batch templates include
+            {{.FullCount}}, {{.ActualCount}}, {{.BatchQuery}}. {{.PatronName}} remains
+            supported as a backwards-compatible alias for {{.PatronGivenName}}.
         contentType:
           $ref: '#/components/schemas/TemplateContentType'
         labels:

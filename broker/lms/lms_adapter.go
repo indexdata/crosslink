@@ -22,10 +22,12 @@ func (e *PatronProfileIneligibleError) Error() string {
 // call. A nil response with a nil error means the adapter intentionally skipped
 // the operation, for example because RequestItem is disabled or handled manually.
 type RequestedItem struct {
-	RequestID  string
-	Barcode    string
-	CallNumber string
-	Title      string
+	RequestID        string
+	Barcode          string
+	CallNumber       string
+	Title            string
+	Location         string
+	ShelvingLocation string
 }
 
 // CheckedOutItem contains data returned by a confirmed checkout, including

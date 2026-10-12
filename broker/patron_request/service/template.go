@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/email"
@@ -82,14 +83,55 @@ func ValidateTemplateRenderingForContext(purpose proapi.TemplatePurpose, content
 		err = email.ValidateTextTemplate(data, labels, body)
 	}
 	if err != nil {
-		return fmt.Errorf("template body: %w", err)
+		return &templateContentError{part: "body", err: err}
 	}
 	if subject != nil {
 		if err := email.ValidateTextTemplate(data, labels, *subject); err != nil {
-			return fmt.Errorf("template subject: %w", err)
+			return &templateContentError{part: "subject", err: err}
 		}
 	}
 	return nil
+}
+
+type templateContentError struct {
+	part string
+	err  error
+}
+
+func (e *templateContentError) Error() string {
+	return fmt.Sprintf("template %s: %v", e.part, e.err)
+}
+
+func (e *templateContentError) Unwrap() error {
+	return e.err
+}
+
+type templateRenderError struct {
+	templateID string
+	label      string
+	audience   proapi.ModelActionParamsSendTo
+	part       string
+	err        error
+}
+
+func (e *templateRenderError) Error() string {
+	return fmt.Sprintf("render email template %q (label %q, audience %s) %s: %v", e.templateID, e.label, e.audience, e.part, e.err)
+}
+
+func (e *templateRenderError) Unwrap() error {
+	return e.err
+}
+
+func (e *templateRenderError) UserMessage() string {
+	for _, marker := range []string{"can't evaluate field ", "unknown field "} {
+		if index := strings.Index(e.err.Error(), marker); index >= 0 {
+			field := strings.Fields(e.err.Error()[index+len(marker):])
+			if len(field) > 0 {
+				return fmt.Sprintf(`Template %q could not be rendered: unknown placeholder %q in %s.`, e.label, field[0], e.part)
+			}
+		}
+	}
+	return fmt.Sprintf(`Template %q could not be rendered: invalid %s template.`, e.label, e.part)
 }
 
 func GetStateModelTemplateDefault(purpose proapi.TemplatePurpose, audience proapi.TemplateAudience, label string) (pr_db.Template, error) {

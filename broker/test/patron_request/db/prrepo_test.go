@@ -586,17 +586,20 @@ func TestMarkConditionNotificationsReceipt(t *testing.T) {
 func TestListPatronRequests(t *testing.T) {
 	prIds := []string{}
 
-	// Create 2 requests; only the first carries an internal note
+	// Create 2 requests; only the first carries an internal note and cancellation reason
 	for i := 0; i < 2; i++ {
 		prId := uuid.NewString()
 		prIds = append(prIds, prId)
 		var internalNote pgtype.Text
+		var cancellationReason pgtype.Text
 		if i == 0 {
 			internalNote = pgtype.Text{String: "staff only", Valid: true}
+			cancellationReason = pgtype.Text{String: "already available", Valid: true}
 		}
 		_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
-			ID:           prId,
-			InternalNote: internalNote,
+			ID:                 prId,
+			InternalNote:       internalNote,
+			CancellationReason: cancellationReason,
 			CreatedAt: pgtype.Timestamp{
 				Time:  time.Now(),
 				Valid: true,
@@ -792,6 +795,7 @@ func TestListPatronRequests(t *testing.T) {
 	if assert.Len(t, list, 1) {
 		assert.Equal(t, prIds[0], list[0].ID)
 		assert.Equal(t, "staff only", list[0].InternalNote.String)
+		assert.Equal(t, "already available", list[0].CancellationReason.String)
 	}
 
 	// has_internal_note=false selects requests without one
