@@ -37,18 +37,23 @@ fallbacks remain unchanged.
 
 ## Built-in profiles
 
-The broker embeds one [YAML file per supported profile](../broker/profiles/builtin)
-using Go's `go:embed`. These files use the directory's `lmsConfig` and
-`catalogConfig` structure and are the source of vendor defaults. Vendor files
-contain overrides of Generic defaults; an empty section inherits those defaults.
-`illConfig` remains independent and is not part of a host profile.
+The directory's [OpenAPI schema](api.yaml) defines vendor defaults in
+`x-host-profiles`. This is the sole source of profile values. Each profile uses
+the directory's `lmsConfig` and `catalogConfig` structure; `illConfig` remains
+independent and is not part of a host profile.
+
+`make -C broker generate-profiles` validates these definitions against the
+generated directory API types and generates a Go table compiled into broker.
+The target is included in broker generation and builds; Docker generates the
+table inside the build. The generated table is ignored and removed by `clean`.
+Changing a profile requires regenerating and rebuilding broker, not migrating
+directory records. Broker does not parse profile YAML or fetch profiles over HTTP
+at runtime. WMS and Aleph remain unsupported.
 
 Conditional catalog defaults (query language, parser replacement, and record
-syntax based on the effective parser) remain in Go. The resolver checks YAML
-field names and types against the directory API, retains value origins, and
-applies explicit directory overrides without modifying the embedded defaults.
-Changing a built-in file requires rebuilding the broker, not migrating directory
-records. WMS and Aleph remain unsupported and have no built-in files.
+syntax based on the effective parser) remain in Go. Resolution retains value
+origins and applies explicit directory overrides without modifying the generated
+defaults. This build-time source change preserves existing resolution behavior.
 
 | Profile | Catalog defaults | Circulation defaults |
 | --- | --- | --- |

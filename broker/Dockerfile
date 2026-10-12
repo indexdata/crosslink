@@ -56,6 +56,11 @@ WORKDIR /app/broker
 # Copy Broker sources after dependencies have been downloaded.
 COPY broker/ ./
 
+# Generate host defaults from the directory schema before compiling broker.
+RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
+    --mount=type=cache,sharing=shared,target=/root/.cache/go-build \
+    go run ./profiles/cmd/genprofiles
+
 # Build, reuse both module and build caches
 RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
     --mount=type=cache,sharing=shared,target=/root/.cache/go-build \

@@ -21,8 +21,8 @@ broker/**/*_test.go
 # Include OpenAPI specs
 !broker/oapi/*.yaml
 
-# Include embedded built-in profiles
-!broker/profiles/builtin/*.yaml
+# Generate host profiles inside the build.
+broker/profiles/builtin_gen.go
 
 # Include statemodels
 !broker/patron_request/service/statemodels

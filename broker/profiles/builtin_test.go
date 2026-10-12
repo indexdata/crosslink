@@ -1,9 +1,11 @@
 package profiles
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func TestBuiltinDefinitions(t *testing.T) {
@@ -14,18 +16,15 @@ func TestBuiltinDefinitions(t *testing.T) {
 	before := asObject(builtins)
 	_, err := Resolve(entry(t, `{"lmsConfig":{"vendor":"Koha","ncipNamespaceEnabled":true},"catalogConfig":{"holdingsFormat":{"marc":{"mainField":"999","availability":[]}}}}`))
 	require.NoError(t, err)
-	require.Equal(t, before, asObject(builtins), "directory overrides must not change embedded defaults")
+	require.Equal(t, before, asObject(builtins), "directory overrides must not change generated defaults")
 }
 
-func TestDecodeBuiltinRejectsInvalidConfiguration(t *testing.T) {
-	for _, data := range []string{
-		"illConfig:\n  iso18626Vendor: ReShare\n",
-		"lmsConfig:\n  misspelledSetting: true\n",
-		"catalogConfig:\n  holdingsFormat:\n    opac:\n      includeTemporaryLocation: yesPlease\n",
-		"catalogConfig:\n  holdingsFormat:\n    marc:\n      mainField: 952\n",
-		"lmsConfig: {}\nlmsConfig: {}\n",
-	} {
-		_, err := decodeBuiltin([]byte(data))
-		require.Error(t, err, data)
+func TestBuiltinDefinitionsMatchDirectorySchema(t *testing.T) {
+	data, err := os.ReadFile("../../directory/api.yaml")
+	require.NoError(t, err)
+	var schema struct {
+		Profiles map[string]any `yaml:"x-host-profiles"`
 	}
+	require.NoError(t, yaml.Unmarshal(data, &schema))
+	require.Equal(t, asObject(schema.Profiles), asObject(builtins))
 }
