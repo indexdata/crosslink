@@ -14,9 +14,9 @@ import (
 
 func TestNewDefaultLoanActionMapping(t *testing.T) {
 	borrowerStateActionMapping := map[pr_db.PatronRequestState][]PatronRequestAction{
-		BorrowerStateNew:              {{actionName: BorrowerActionSendNotification, auto: true}, {actionName: BorrowerActionValidatePatron, auto: true}, {actionName: BorrowerActionSkipPatronValidation}, {actionName: BorrowerActionCloseRequest}},
+		BorrowerStateNew:              {{actionName: BorrowerActionValidatePatron, auto: true}, {actionName: BorrowerActionSkipPatronValidation}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateInvalidPatron:    {{actionName: BorrowerActionValidatePatron}, {actionName: BorrowerActionSkipPatronValidation}, {actionName: BorrowerActionCloseRequest}},
-		BorrowerStateValidated:        {{actionName: BorrowerActionCheckLimit, auto: true}, {actionName: BorrowerActionCloseRequest}},
+		BorrowerStateValidated:        {{actionName: BorrowerActionSendNotification, auto: true}, {actionName: BorrowerActionCheckLimit, auto: true}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateOverLimit:        {{actionName: BorrowerActionCheckLimit}, {actionName: BorrowerActionOverrideLimit}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateLimitChecked:     {{actionName: BorrowerActionUpdateMetadata, auto: true}, {actionName: BorrowerActionSkipMetadataUpdate}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateMetadataUpdated:  {{actionName: BorrowerActionCheckDuplicate, auto: true}, {actionName: BorrowerActionCloseRequest}},
@@ -337,6 +337,16 @@ func TestGetAllowedActionsForPatronRequest1(t *testing.T) {
 		{Name: string(BorrowerActionSkipPatronValidation), Parameters: []string{}, Available: true},
 		{Name: string(BorrowerActionCloseRequest), Parameters: []string{}, Available: true},
 	}}, mapping.GetAllowedActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateInvalidPatron}, true))
+
+	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{
+		{Name: string(BorrowerActionCheckLimit), Parameters: []string{}, Primary: &tt, Available: true},
+		{Name: string(BorrowerActionCloseRequest), Parameters: []string{}, Available: true},
+	}}, mapping.GetAllowedActionsForPatronRequest(pr_db.PatronRequest{
+		Side:             SideBorrowing,
+		State:            BorrowerStateValidated,
+		LastAction:       pgtype.Text{String: string(BorrowerActionCheckLimit), Valid: true},
+		LastActionResult: pgtype.Text{String: string(events.EventStatusError), Valid: true},
+	}, true))
 }
 
 func TestGetActionTransitionMissingCases(t *testing.T) {

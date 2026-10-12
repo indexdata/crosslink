@@ -149,7 +149,7 @@ func TestCompletedDocumentNotificationAutoAction(t *testing.T) {
 	}
 }
 
-func TestNewRequestNotificationAutoAction(t *testing.T) {
+func TestValidatedRequestNotificationAutoAction(t *testing.T) {
 	service := &StateModelService{}
 	for _, serviceType := range []proapi.StateModelServiceType{proapi.Copy, proapi.CopyOrLoan, proapi.Loan} {
 		t.Run(string(serviceType), func(t *testing.T) {
@@ -157,7 +157,7 @@ func TestNewRequestNotificationAutoAction(t *testing.T) {
 			if !assert.NoError(t, err) {
 				return
 			}
-			actions := mapping.GetAutoActionsForState(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew})
+			actions := mapping.GetAutoActionsForState(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated})
 			if assert.Len(t, actions, 2) {
 				notification := actions[0]
 				assert.Equal(t, string(BorrowerActionSendNotification), notification.Name)
@@ -169,7 +169,7 @@ func TestNewRequestNotificationAutoAction(t *testing.T) {
 						assert.Equal(t, []proapi.ModelActionParamsSendTo{proapi.ModelActionParamsSendToPatron}, *notification.Params.SendTo)
 					}
 				}
-				assert.Equal(t, string(BorrowerActionValidatePatron), actions[1].Name)
+				assert.Equal(t, string(BorrowerActionCheckLimit), actions[1].Name)
 			}
 		})
 	}

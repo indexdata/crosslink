@@ -18,14 +18,6 @@ stateModels:
         primaryAction: validate-patron
         closingAction: close-request
         actions:
-          - name: send-notification
-            continueOn: [PROBLEM, ERROR]
-            desc: Send email notification when the patron request is created
-            trigger: auto
-            params:
-              sendTo:
-                - patron
-              templateLabel: new-request-notification
           - name: validate-patron
             continueOn: [PROBLEM]
             desc: "Validate the patron via NCIP LookupUser, if enabled"
@@ -73,6 +65,14 @@ stateModels:
         primaryAction: check-limit
         closingAction: close-request
         actions:
+          - name: send-notification
+            continueOn: [PROBLEM, ERROR]
+            desc: Send email notification when the patron request is created
+            trigger: auto
+            params:
+              sendTo:
+                - patron
+              templateLabel: new-request-notification
           - name: check-limit
             desc: Check the patron's active-request limit
             trigger: auto

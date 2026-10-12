@@ -830,7 +830,9 @@ func TestHandleInvokeActionValidateSendRequest(t *testing.T) {
 	mockIso18626Handler := new(MockIso18626Handler)
 
 	lmsCreator.On("GetAdapter", "ISIL:x").Return(createLmsAdapterMockLog(), nil)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	emailSvc := new(EmailSenderMock)
+	emailSvc.On("IsReadyToSend").Return(false)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, emailSvc, nil, nil)
 	illRequest := iso18626.Request{BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "12312"}}
 	fakeEventID := "1234"
 	//action := BorrowerActionUpdateMetadata
@@ -847,6 +849,8 @@ func TestHandleInvokeActionValidateSendRequest(t *testing.T) {
 	sentPR.State = BorrowerStateSent
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(sentPR, nil)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(initialPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(limitCheckedPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(updatePr, nil).Once()
@@ -1058,7 +1062,9 @@ func TestHandleInvokeActionSkipPatronValidationRunsConfiguredAutoActions(t *test
 	mockIso18626Handler := new(MockIso18626Handler)
 
 	lmsCreator.On("GetAdapter", "ISIL:x").Return(createLmsAdapterMockLog(), nil)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	emailSvc := new(EmailSenderMock)
+	emailSvc.On("IsReadyToSend").Return(false)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, emailSvc, nil, nil)
 	illRequest := iso18626.Request{BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "12312"}}
 	fakeEventID := "1234"
 	initialPR := pr_db.PatronRequest{
@@ -1083,6 +1089,8 @@ func TestHandleInvokeActionSkipPatronValidationRunsConfiguredAutoActions(t *test
 	sentPR.State = BorrowerStateSent
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(sentPR, nil)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(initialPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(limitCheckedPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(metadataUpdatedPR, nil).Once()
@@ -2467,7 +2475,7 @@ func TestRunAutoActionsPropagatesUntoleratedFailure(t *testing.T) {
 		},
 	}, nil, "")
 
-	assert.EqualError(t, err, "auto action send-notification failed with status ERROR: action failed")
+	assert.EqualError(t, err, "auto action validate-patron failed with status ERROR: action failed")
 }
 
 func TestHandleInvokeLenderActionValidateAutoActionCreateTaskError(t *testing.T) {
@@ -3577,7 +3585,7 @@ func TestHandleInvokeBorrowerActionAcceptRetryAutoActionCreateTaskError(t *testi
 	// The original PR (not the retry PR) should be marked as a chain failure.
 	assert.Equal(t, patronRequestId, mockPrRepo.savedPr.ID)
 	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
-	assert.Equal(t, string(BorrowerActionSendNotification), mockPrRepo.savedPr.LastAction.String)
+	assert.Equal(t, string(BorrowerActionValidatePatron), mockPrRepo.savedPr.LastAction.String)
 	assert.Equal(t, ActionOutcomeFailure, mockPrRepo.savedPr.LastActionOutcome.String)
 	assert.Equal(t, string(events.EventStatusError), mockPrRepo.savedPr.LastActionResult.String)
 	assert.Equal(t, "REQ1-2", mockPrRepo.createdPr.ID)
