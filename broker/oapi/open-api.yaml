@@ -1841,6 +1841,41 @@ components:
           items:
             $ref: '#/components/schemas/Template'
 
+    TemplatePlaceholder:
+      type: object
+      title: Template Placeholder
+      description: Placeholder available for use in a template
+      required:
+        - placeholder
+        - description
+      properties:
+        placeholder:
+          type: string
+          description: Ready-to-insert Go template expression
+          example: '{{.ReqId}}'
+        description:
+          type: string
+          description: Human-readable description of the placeholder value
+
+    TemplatePlaceholders:
+      type: object
+      title: Template Placeholders
+      description: Placeholders grouped by the template data source in which they are available
+      required:
+        - singleRecord
+        - batchRecord
+      properties:
+        singleRecord:
+          type: array
+          description: Placeholders available to templates rendered for a single patron request record
+          items:
+            $ref: '#/components/schemas/TemplatePlaceholder'
+        batchRecord:
+          type: array
+          description: Placeholders available to templates rendered for a batch of patron request records
+          items:
+            $ref: '#/components/schemas/TemplatePlaceholder'
+
     CreateTemplate:
       x-go-type: Template
       type: object
@@ -3635,6 +3670,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  /templates/placeholders:
+    get:
+      summary: List available template placeholders
+      tags:
+        - templates-api
+        - patron-requests-api
+      responses:
+        '200':
+          description: Template placeholders grouped by data source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplatePlaceholders'
 
   /templates/{id}:
     get:

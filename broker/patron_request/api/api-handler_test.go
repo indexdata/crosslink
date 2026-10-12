@@ -1140,6 +1140,36 @@ func TestGetStateModelTemplates(t *testing.T) {
 	}, labels)
 }
 
+func TestGetTemplatesPlaceholders(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), tenant.NewResolver(), nil, 10)
+	req := httptest.NewRequest(http.MethodGet, "/templates/placeholders", nil)
+	rr := httptest.NewRecorder()
+
+	handler.GetTemplatesPlaceholders(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	var responseFields map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &responseFields))
+	assert.Contains(t, responseFields, "singleRecord")
+	assert.Contains(t, responseFields, "batchRecord")
+	assert.NotContains(t, responseFields, "pullSlip")
+	assert.NotContains(t, responseFields, "batchEmail")
+	var placeholders proapi.TemplatePlaceholders
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &placeholders))
+	require.Len(t, placeholders.SingleRecord, 30)
+	assert.Equal(t, proapi.TemplatePlaceholder{
+		Placeholder: "{{.ReqId}}",
+		Description: "Requester request identifier",
+	}, placeholders.SingleRecord[0])
+	require.Len(t, placeholders.BatchRecord, 3)
+	assert.Equal(t, []proapi.TemplatePlaceholder{
+		{Placeholder: "{{.FullCount}}", Description: "Total number of requests matched by the batch query"},
+		{Placeholder: "{{.ActualCount}}", Description: "Number of requests included in the batch email"},
+		{Placeholder: "{{.BatchQuery}}", Description: "Query used to select requests for the batch"},
+	}, placeholders.BatchRecord)
+}
+
 func TestValidateTemplateRendering(t *testing.T) {
 	patronSubject := "Request {{.ReqId}}"
 	batchSubject := "{{.ActualCount}} requests"
