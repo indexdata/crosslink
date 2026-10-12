@@ -67,7 +67,7 @@ stateModels:
         actions:
           - name: send-notification
             continueOn: [PROBLEM, ERROR]
-            desc: Send email notification when the patron request is created
+            desc: Send email notification after patron validation completes or is skipped
             trigger: auto
             params:
               sendTo:
@@ -1152,15 +1152,15 @@ batchActionDefaults:
       interval: 72h
 
 templateDefaults:
-  - title: Patron request created
+  - title: Patron request processing started
     labels:
       - new-request-notification
-    subject: "Your request has been created"
+    subject: "Your request is now being processed"
     contentType: text
     audience: patron
     purpose: email
     body: |
-      Your request has been created successfully.
+      Your request is now being processed.
 
       Request number: {{.ReqId}}
       Item title: {{.Title}}

@@ -198,7 +198,7 @@ func TestDocumentDeliveredNotificationTemplate(t *testing.T) {
 	assert.Equal(t, "Your document is now available.\n\nRequest number: REQ-123\n\nItem Title: Requested article\n", body)
 }
 
-func TestPatronRequestCreatedNotificationTemplate(t *testing.T) {
+func TestPatronRequestProcessingNotificationTemplate(t *testing.T) {
 	templates := GetStateModelTemplateDefaults()
 	idx := slices.IndexFunc(templates, func(template proapi.TemplateProperties) bool {
 		return slices.Contains(template.Labels, "new-request-notification")
@@ -207,18 +207,18 @@ func TestPatronRequestCreatedNotificationTemplate(t *testing.T) {
 		return
 	}
 	template := templates[idx]
-	assert.Equal(t, "Patron request created", template.Title)
+	assert.Equal(t, "Patron request processing started", template.Title)
 	assert.Equal(t, proapi.Email, template.Purpose)
 	assert.Equal(t, proapi.Text, template.ContentType)
 	if assert.NotNil(t, template.Audience) {
 		assert.Equal(t, proapi.TemplateAudiencePatron, *template.Audience)
 	}
 	if assert.NotNil(t, template.Subject) {
-		assert.Equal(t, "Your request has been created", *template.Subject)
+		assert.Equal(t, "Your request is now being processed", *template.Subject)
 	}
 	body, err := email.RenderTextTemplate(email.PullSlipData{ReqId: "REQ-123", Title: "Requested article"}, template.Labels, template.Body)
 	assert.NoError(t, err)
-	assert.Equal(t, "Your request has been created successfully.\n\nRequest number: REQ-123\nItem title: Requested article\n\nWe’ll notify you when there is an update.\n", body)
+	assert.Equal(t, "Your request is now being processed.\n\nRequest number: REQ-123\nItem title: Requested article\n\nWe’ll notify you when there is an update.\n", body)
 }
 
 func TestLegacyReturnablesStateModelAlias(t *testing.T) {
