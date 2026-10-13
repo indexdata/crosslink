@@ -149,6 +149,32 @@ func TestCompletedDocumentNotificationAutoAction(t *testing.T) {
 	}
 }
 
+func TestValidatedRequestNotificationAutoAction(t *testing.T) {
+	service := &StateModelService{}
+	for _, serviceType := range []proapi.StateModelServiceType{proapi.Copy, proapi.CopyOrLoan, proapi.Loan} {
+		t.Run(string(serviceType), func(t *testing.T) {
+			mapping, err := service.GetActionMapping("default", serviceType)
+			if !assert.NoError(t, err) {
+				return
+			}
+			actions := mapping.GetAutoActionsForState(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated})
+			if assert.Len(t, actions, 2) {
+				notification := actions[0]
+				assert.Equal(t, string(BorrowerActionSendNotification), notification.Name)
+				if assert.NotNil(t, notification.Params) {
+					if assert.NotNil(t, notification.Params.TemplateLabel) {
+						assert.Equal(t, "new-request-notification", *notification.Params.TemplateLabel)
+					}
+					if assert.NotNil(t, notification.Params.SendTo) {
+						assert.Equal(t, []proapi.ModelActionParamsSendTo{proapi.ModelActionParamsSendToPatron}, *notification.Params.SendTo)
+					}
+				}
+				assert.Equal(t, string(BorrowerActionCheckLimit), actions[1].Name)
+			}
+		})
+	}
+}
+
 func TestDocumentDeliveredNotificationTemplate(t *testing.T) {
 	templates := GetStateModelTemplateDefaults()
 	idx := slices.IndexFunc(templates, func(template proapi.TemplateProperties) bool {
@@ -170,6 +196,29 @@ func TestDocumentDeliveredNotificationTemplate(t *testing.T) {
 	body, err := email.RenderTextTemplate(email.PullSlipData{ReqId: "REQ-123", Title: "Requested article"}, template.Labels, template.Body)
 	assert.NoError(t, err)
 	assert.Equal(t, "Your document is now available.\n\nRequest number: REQ-123\n\nItem Title: Requested article\n", body)
+}
+
+func TestPatronRequestProcessingNotificationTemplate(t *testing.T) {
+	templates := GetStateModelTemplateDefaults()
+	idx := slices.IndexFunc(templates, func(template proapi.TemplateProperties) bool {
+		return slices.Contains(template.Labels, "new-request-notification")
+	})
+	if !assert.NotEqual(t, -1, idx) {
+		return
+	}
+	template := templates[idx]
+	assert.Equal(t, "Patron request processing started", template.Title)
+	assert.Equal(t, proapi.Email, template.Purpose)
+	assert.Equal(t, proapi.Text, template.ContentType)
+	if assert.NotNil(t, template.Audience) {
+		assert.Equal(t, proapi.TemplateAudiencePatron, *template.Audience)
+	}
+	if assert.NotNil(t, template.Subject) {
+		assert.Equal(t, "Your request is now being processed", *template.Subject)
+	}
+	body, err := email.RenderTextTemplate(email.PullSlipData{ReqId: "REQ-123", Title: "Requested article"}, template.Labels, template.Body)
+	assert.NoError(t, err)
+	assert.Equal(t, "Your request is now being processed.\n\nRequest number: REQ-123\nItem title: Requested article\n\nWe’ll notify you when there is an update.\n", body)
 }
 
 func TestLegacyReturnablesStateModelAlias(t *testing.T) {
@@ -1201,6 +1250,6 @@ func TestDefaultStateModelContinuationPoliciesAndRecoveryTransition(t *testing.T
 			}
 		}
 	}
-	assert.Equal(t, 11, policyCount)
+	assert.Equal(t, 12, policyCount)
 	assert.Equal(t, 1, failureCount)
 }

@@ -194,43 +194,68 @@ func joinAddresses(addrs []string) string {
 
 // Only string fields are allowed
 type PullSlipData struct {
-	ReqId              string
-	CancellationReason string
-	PickupLocation     string
-	PickupURL          string
-	NeededBy           string
-	Title              string
-	TitleOfComponent   string
-	Author             string
-	AuthorOfComponent  string
-	DueDate            string
-	ReturnAddress      string
-	BarcodeBase64      string
-	ServiceType        string
-	ServiceLevel       string
-	SystemIdentifier   string
-	Publisher          string
-	MaterialType       string
-	Volume             string
-	Issue              string
-	Pages              string
-	StaffNotes         string
-	CallNumber         string
-	Location           string
-	ShelvingLocation   string
-	LoanConditions     string
-	PatronGivenName    string
-	PatronName         string
-	PatronSurname      string
-	PatronId           string
-	PatronProfile      string
+	ReqId              string `description:"Requester request identifier"`
+	CancellationReason string `description:"Reason the request was cancelled"`
+	PickupLocation     string `description:"Pickup location for the requested item"`
+	PickupURL          string `description:"URL where the requested item can be accessed"`
+	NeededBy           string `description:"Date by which the patron needs the item"`
+	Title              string `description:"Title of the requested item"`
+	TitleOfComponent   string `description:"Title of the requested component, such as an article or chapter"`
+	Author             string `description:"Author of the requested item"`
+	AuthorOfComponent  string `description:"Author of the requested component, such as an article or chapter"`
+	DueDate            string `description:"Date by which the item must be returned"`
+	ReturnAddress      string `description:"Address to which the item must be returned"`
+	BarcodeBase64      string `description:"Base64-encoded barcode image"`
+	ServiceType        string `description:"Requested ISO 18626 service type"`
+	ServiceLevel       string `description:"Requested ISO 18626 service level"`
+	SystemIdentifier   string `description:"System identifier of the requested item"`
+	Publisher          string `description:"Publisher of the requested item"`
+	MaterialType       string `description:"Material type of the requested item"`
+	Volume             string `description:"Volume of the requested item"`
+	Issue              string `description:"Issue of the requested item"`
+	Pages              string `description:"Pages of the requested item"`
+	StaffNotes         string `description:"Notes intended for staff"`
+	CallNumber         string `description:"Library call number of the requested item"`
+	Location           string `description:"Library location of the requested item"`
+	ShelvingLocation   string `description:"Shelving location of the requested item"`
+	LoanConditions     string `description:"Conditions that apply to the loan"`
+	PatronGivenName    string `description:"Patron's given name"`
+	PatronName         string `description:"Patron's given name (legacy alias)"`
+	PatronSurname      string `description:"Patron's surname"`
+	PatronId           string `description:"Patron identifier"`
+	PatronProfile      string `description:"Patron profile"`
 }
 
 // Only string fields are allowed
 type BatchEmailData struct {
-	FullCount   string
-	ActualCount string
-	BatchQuery  string
+	FullCount   string `description:"Total number of requests matched by the batch query"`
+	ActualCount string `description:"Number of requests included in the batch email"`
+	BatchQuery  string `description:"Query used to select requests for the batch"`
+}
+
+type TemplatePlaceholder struct {
+	Placeholder string
+	Description string
+}
+
+func GetPullSlipTemplatePlaceholders() []TemplatePlaceholder {
+	return getTemplatePlaceholders(reflect.TypeFor[PullSlipData]())
+}
+
+func GetBatchEmailTemplatePlaceholders() []TemplatePlaceholder {
+	return getTemplatePlaceholders(reflect.TypeFor[BatchEmailData]())
+}
+
+func getTemplatePlaceholders(dataType reflect.Type) []TemplatePlaceholder {
+	placeholders := make([]TemplatePlaceholder, 0, dataType.NumField())
+	for i := range dataType.NumField() {
+		field := dataType.Field(i)
+		placeholders = append(placeholders, TemplatePlaceholder{
+			Placeholder: "{{." + field.Name + "}}",
+			Description: field.Tag.Get("description"),
+		})
+	}
+	return placeholders
 }
 
 func GetPullSlipData(pr pr_db.PatronRequest, notes []pr_db.Notification, conditions []pr_db.Notification, barcodeData string) PullSlipData {

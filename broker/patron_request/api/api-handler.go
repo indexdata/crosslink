@@ -15,6 +15,7 @@ import (
 	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/broker/api"
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/email"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/oapi"
@@ -1142,6 +1143,24 @@ func (a *PatronRequestApiHandler) GetTemplates(w http.ResponseWriter, r *http.Re
 	resp := proapi.Templates{Items: responseItems}
 	resp.About = proapi.About(api.CollectAboutData(count, offset, limit, r))
 	api.WriteJsonResponse(w, resp)
+}
+
+func (a *PatronRequestApiHandler) GetTemplatesPlaceholders(w http.ResponseWriter, _ *http.Request) {
+	toAPIPlaceholders := func(source []email.TemplatePlaceholder) []proapi.TemplatePlaceholder {
+		result := make([]proapi.TemplatePlaceholder, 0, len(source))
+		for _, placeholder := range source {
+			result = append(result, proapi.TemplatePlaceholder{
+				Placeholder: placeholder.Placeholder,
+				Description: placeholder.Description,
+			})
+		}
+		return result
+	}
+
+	api.WriteJsonResponse(w, proapi.TemplatePlaceholders{
+		SingleRecord: toAPIPlaceholders(email.GetPullSlipTemplatePlaceholders()),
+		BatchRecord:  toAPIPlaceholders(email.GetBatchEmailTemplatePlaceholders()),
+	})
 }
 
 func (a *PatronRequestApiHandler) PostTemplates(w http.ResponseWriter, r *http.Request, params proapi.PostTemplatesParams) {

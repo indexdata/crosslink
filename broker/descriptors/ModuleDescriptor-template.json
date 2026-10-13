@@ -379,6 +379,15 @@
           "methods": [
             "GET"
           ],
+          "pathPattern": "/broker/templates/placeholders",
+          "permissionsRequired": [
+            "broker.templates.get"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
           "pathPattern": "/broker/templates/{id}",
           "permissionsRequired": [
             "broker.templates.item.get"
