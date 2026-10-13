@@ -84,20 +84,21 @@ WHERE entries.id = symbols.owner
   AND symbols.authority = @authority
   AND symbols.symbol = @symbol;
 
--- name: UpsertSymbol :one
+-- name: CreateSymbol :one
 INSERT INTO symbols (
-  id, owner, symbol, authority
+  owner, symbol, authority
 ) VALUES (
-  coalesce(sqlc.narg('id'), gen_random_uuid()),
   @owner,
   @symbol,
   @authority
 )
-ON CONFLICT (id) DO UPDATE SET
-  owner = @owner,
+RETURNING *;
+
+-- name: UpdateOwnedSymbol :one
+UPDATE symbols SET
   symbol = @symbol,
   authority = @authority
-WHERE symbols.id = sqlc.narg('id')
+WHERE id = @id AND owner = @owner
 RETURNING *;
 
 -- name: DeleteOtherOwnedSymbols :exec

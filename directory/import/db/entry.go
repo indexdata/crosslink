@@ -340,7 +340,7 @@ func replaceEntryChildren(ctx context.Context, queries *db.Queries, entryID uuid
 		return err
 	}
 	for _, symbol := range data.Symbols {
-		if _, err := queries.UpsertSymbol(ctx, db.UpsertSymbolParams{Owner: entryID, Authority: symbol.Authority, Symbol: symbol.Symbol}); err != nil {
+		if _, err := queries.CreateSymbol(ctx, db.CreateSymbolParams{Owner: entryID, Authority: symbol.Authority, Symbol: symbol.Symbol}); err != nil {
 			return err
 		}
 	}

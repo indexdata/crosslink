@@ -202,11 +202,14 @@ const defaultEntryLimit = 10
 func handleEntryCQL(cqlString string, noBaseArgs int) (pgcql.Query, error) {
 	def := pgcql.NewPgDefinition()
 
-	f := pgcql.NewFieldString().WithLikeOps()
+	def.AddField("cql.serverChoice", pgcql.NewFieldTsVector().
+		WithLanguage("simple").WithServerChoiceRel(cql.ALL).WithColumn("e.search"))
+
+	f := pgcql.NewFieldString().WithLikeOps().WithLower()
 	f.SetColumn("e.name")
 	def.AddField("name", f)
 
-	f = pgcql.NewFieldString().WithLikeOps()
+	f = pgcql.NewFieldString().WithLikeOps().WithLower()
 	f.SetColumn("e.description")
 	def.AddField("description", f)
 
@@ -785,7 +788,7 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 
 	if request.Body.Symbols != nil {
 		for _, symbol := range *request.Body.Symbols {
-			_, err = qtx.UpsertSymbol(ctx, db.UpsertSymbolParams{
+			_, err = qtx.CreateSymbol(ctx, db.CreateSymbolParams{
 				Owner:     insertedEntry.ID,
 				Symbol:    strings.ToUpper(symbol.Symbol),
 				Authority: strings.ToUpper(symbol.Authority),
@@ -1082,14 +1085,21 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 			}
 		}
 
-		// Update/create symbols
+		// The entry is already locked. Restrict updates to its own symbols so
+		// the search trigger never needs to lock another entry after a symbol.
 		for _, symbol := range reqsyms {
-			_, err = qtx.UpsertSymbol(ctx, db.UpsertSymbolParams{
-				ID:        symbol.Id,
-				Owner:     orig.ID,
-				Symbol:    strings.ToUpper(symbol.Symbol),
-				Authority: strings.ToUpper(symbol.Authority),
-			})
+			if symbol.Id == nil {
+				_, err = qtx.CreateSymbol(ctx, db.CreateSymbolParams{
+					Owner: orig.ID, Symbol: strings.ToUpper(symbol.Symbol), Authority: strings.ToUpper(symbol.Authority),
+				})
+			} else {
+				_, err = qtx.UpdateOwnedSymbol(ctx, db.UpdateOwnedSymbolParams{
+					ID: *symbol.Id, Owner: orig.ID, Symbol: strings.ToUpper(symbol.Symbol), Authority: strings.ToUpper(symbol.Authority),
+				})
+				if errors.Is(err, pgx.ErrNoRows) {
+					return UpdateEntry400TextResponse("Symbol ID does not belong to this entry"), nil
+				}
+			}
 			if err != nil {
 				var pge *pgconn.PgError
 				if errors.As(err, &pge) {

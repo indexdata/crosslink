@@ -1,0 +1,10 @@
+DROP TRIGGER directory_entry_search_symbol_refresh ON symbols;
+DROP TRIGGER directory_entry_search_symbol_lock ON symbols;
+DROP TRIGGER directory_entry_search_entry ON entries;
+DROP FUNCTION directory_entry_search_on_symbol();
+DROP FUNCTION directory_entry_search_lock_symbol_owners();
+DROP FUNCTION directory_entry_search_on_entry();
+DROP FUNCTION directory_entry_search_document(uuid, text, text, text, text, text);
+DROP INDEX entries_search_idx;
+DROP INDEX symbols_owner_authority_symbol_idx;
+ALTER TABLE entries DROP COLUMN search;

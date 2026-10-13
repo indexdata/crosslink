@@ -164,7 +164,12 @@ paths:
       parameters:
         - name: cql
           in: query
-          description: CQL query filter. The parentSymbol index matches entries by their immediate parent's symbols.
+          description: >-
+            CQL query filter. cql.serverChoice searches entry name, description,
+            organization ID, email, phone number, and owned symbols using the simple
+            full-text configuration. The default relation requires all words;
+            all, any, adj, and trailing word-prefix wildcards are supported.
+            The parentSymbol index matches entries by their immediate parent's symbols.
           required: false
           style: form
           schema:
@@ -251,7 +256,13 @@ paths:
       parameters:
         - name: cql
           in: query
-          description: CQL query filter applied within the current tenant's owned entries. The parentSymbol index matches entries by their immediate parent's symbols.
+          description: >-
+            CQL query filter applied within the current tenant's owned entries.
+            cql.serverChoice searches entry name, description, organization ID,
+            email, phone number, and owned symbols using the simple full-text
+            configuration. The default relation requires all words; all, any, adj,
+            and trailing word-prefix wildcards are supported.
+            The parentSymbol index matches entries by their immediate parent's symbols.
           required: false
           style: form
           schema:
@@ -3068,7 +3079,7 @@ components:
         id:
           type: string
           format: uuid
-          description: Unique id
+          description: Existing symbol ID owned by the entry being patched. Omit to create a new symbol. Unknown or foreign IDs return HTTP 400; symbols cannot be moved between entries.
         symbol:
           type: string
           minLength: 1
