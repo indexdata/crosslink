@@ -830,7 +830,9 @@ func TestHandleInvokeActionValidateSendRequest(t *testing.T) {
 	mockIso18626Handler := new(MockIso18626Handler)
 
 	lmsCreator.On("GetAdapter", "ISIL:x").Return(createLmsAdapterMockLog(), nil)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	emailSvc := new(EmailSenderMock)
+	emailSvc.On("IsReadyToSend").Return(false)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, emailSvc, nil, nil)
 	illRequest := iso18626.Request{BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "12312"}}
 	fakeEventID := "1234"
 	//action := BorrowerActionUpdateMetadata
@@ -847,6 +849,8 @@ func TestHandleInvokeActionValidateSendRequest(t *testing.T) {
 	sentPR.State = BorrowerStateSent
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(sentPR, nil)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(initialPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(limitCheckedPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(updatePr, nil).Once()
@@ -1058,7 +1062,9 @@ func TestHandleInvokeActionSkipPatronValidationRunsConfiguredAutoActions(t *test
 	mockIso18626Handler := new(MockIso18626Handler)
 
 	lmsCreator.On("GetAdapter", "ISIL:x").Return(createLmsAdapterMockLog(), nil)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	emailSvc := new(EmailSenderMock)
+	emailSvc.On("IsReadyToSend").Return(false)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, emailSvc, nil, nil)
 	illRequest := iso18626.Request{BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "12312"}}
 	fakeEventID := "1234"
 	initialPR := pr_db.PatronRequest{
@@ -1083,6 +1089,8 @@ func TestHandleInvokeActionSkipPatronValidationRunsConfiguredAutoActions(t *test
 	sentPR.State = BorrowerStateSent
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(sentPR, nil)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(initialPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(limitCheckedPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(metadataUpdatedPR, nil).Once()
@@ -6271,4 +6279,9 @@ func TestPullslipPrintedAndShippingGate(t *testing.T) {
 func (r *MockPrRepo) GetLendingPredecessorForUpdate(ctx common.ExtendedContext, params pr_db.GetLendingPredecessorForUpdateParams) (pr_db.PatronRequest, error) {
 	args := r.Called(params)
 	return args.Get(0).(pr_db.PatronRequest), args.Error(1)
+}
+
+func (m *MockEventBus) CreateNoticeWithID(eventID string, id string, eventName events.EventName, data events.EventData, status events.EventStatus, eventDomain events.EventDomain, target events.SignalTarget) (string, error) {
+	_, err := m.CreateNotice(id, eventName, data, status, eventDomain, target)
+	return eventID, err
 }

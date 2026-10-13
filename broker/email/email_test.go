@@ -799,3 +799,46 @@ func TestRenderTextTemplateSupportsPatronGivenNameAndLegacyPatronName(t *testing
 	assert.NoError(t, err)
 	assert.Equal(t, "Ann/Ann", result)
 }
+
+func TestGetTemplatePlaceholdersReturnsFieldsWithDescriptions(t *testing.T) {
+	wantPullSlip := []TemplatePlaceholder{
+		{Placeholder: "{{.ReqId}}", Description: "Requester request identifier"},
+		{Placeholder: "{{.CancellationReason}}", Description: "Reason the request was cancelled"},
+		{Placeholder: "{{.PickupLocation}}", Description: "Pickup location for the requested item"},
+		{Placeholder: "{{.PickupURL}}", Description: "URL where the requested item can be accessed"},
+		{Placeholder: "{{.NeededBy}}", Description: "Date by which the patron needs the item"},
+		{Placeholder: "{{.Title}}", Description: "Title of the requested item"},
+		{Placeholder: "{{.TitleOfComponent}}", Description: "Title of the requested component, such as an article or chapter"},
+		{Placeholder: "{{.Author}}", Description: "Author of the requested item"},
+		{Placeholder: "{{.AuthorOfComponent}}", Description: "Author of the requested component, such as an article or chapter"},
+		{Placeholder: "{{.DueDate}}", Description: "Date by which the item must be returned"},
+		{Placeholder: "{{.ReturnAddress}}", Description: "Address to which the item must be returned"},
+		{Placeholder: "{{.BarcodeBase64}}", Description: "Base64-encoded barcode image"},
+		{Placeholder: "{{.ServiceType}}", Description: "Requested ISO 18626 service type"},
+		{Placeholder: "{{.ServiceLevel}}", Description: "Requested ISO 18626 service level"},
+		{Placeholder: "{{.SystemIdentifier}}", Description: "System identifier of the requested item"},
+		{Placeholder: "{{.Publisher}}", Description: "Publisher of the requested item"},
+		{Placeholder: "{{.MaterialType}}", Description: "Material type of the requested item"},
+		{Placeholder: "{{.Volume}}", Description: "Volume of the requested item"},
+		{Placeholder: "{{.Issue}}", Description: "Issue of the requested item"},
+		{Placeholder: "{{.Pages}}", Description: "Pages of the requested item"},
+		{Placeholder: "{{.StaffNotes}}", Description: "Notes intended for staff"},
+		{Placeholder: "{{.CallNumber}}", Description: "Library call number of the requested item"},
+		{Placeholder: "{{.Location}}", Description: "Library location of the requested item"},
+		{Placeholder: "{{.ShelvingLocation}}", Description: "Shelving location of the requested item"},
+		{Placeholder: "{{.LoanConditions}}", Description: "Conditions that apply to the loan"},
+		{Placeholder: "{{.PatronGivenName}}", Description: "Patron's given name"},
+		{Placeholder: "{{.PatronName}}", Description: "Patron's given name (legacy alias)"},
+		{Placeholder: "{{.PatronSurname}}", Description: "Patron's surname"},
+		{Placeholder: "{{.PatronId}}", Description: "Patron identifier"},
+		{Placeholder: "{{.PatronProfile}}", Description: "Patron profile"},
+	}
+	wantBatchEmail := []TemplatePlaceholder{
+		{Placeholder: "{{.FullCount}}", Description: "Total number of requests matched by the batch query"},
+		{Placeholder: "{{.ActualCount}}", Description: "Number of requests included in the batch email"},
+		{Placeholder: "{{.BatchQuery}}", Description: "Query used to select requests for the batch"},
+	}
+
+	assert.Equal(t, wantPullSlip, GetPullSlipTemplatePlaceholders())
+	assert.Equal(t, wantBatchEmail, GetBatchEmailTemplatePlaceholders())
+}
