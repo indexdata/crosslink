@@ -83,6 +83,10 @@ func Resolve(entry dirapi.Entry) (*Effective, error) {
 	if err := supported(profile, "catalogConfig.profile"); err != nil {
 		return nil, err
 	}
+	builtins, err := loadBuiltins()
+	if err != nil {
+		return nil, fmt.Errorf("resolve host profiles: %w", err)
+	}
 	e := &Effective{LMSVendor: vendor, CatalogProfile: profile, Origins: map[string]string{}}
 	l, c := object{}, object{}
 	merge(l, builtins["Generic"].LMS, "lmsConfig", "Generic", e.Origins)
