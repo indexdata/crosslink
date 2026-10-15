@@ -42,18 +42,23 @@ The directory's [OpenAPI schema](api.yaml) defines vendor defaults in
 the directory's `lmsConfig` and `catalogConfig` structure; `illConfig` remains
 independent and is not part of a host profile.
 
-`make -C broker generate-profiles` validates these definitions against the
-generated directory API types and generates a Go table compiled into broker.
-The target is included in broker generation and builds; Docker generates the
-table inside the build. The generated table is ignored and removed by `clean`.
-Changing a profile requires regenerating and rebuilding broker, not migrating
-directory records. Broker does not parse profile YAML or fetch profiles over HTTP
-at runtime. WMS and Aleph remain unsupported.
+Directory's existing API generation embeds the complete specification, including
+`x-host-profiles`, in its Go package. Broker reads that bundled JSON through
+`dirapi.GetSpecJSON()` on the first profile resolution, validates definitions
+against the generated Directory API types, and caches the definitions or error
+for the lifetime of the process. Invalid definitions return a resolution error;
+they do not silently fall back to Generic. No separate profile generation step
+or generated profile table is needed.
+
+Changing a profile requires regenerating Directory sources and rebuilding broker,
+not migrating Directory records. Broker generation prepares Directory sources;
+Docker also generates them inside the build. Broker does not parse profile YAML
+or fetch profiles over HTTP at runtime. WMS and Aleph remain unsupported.
 
 Conditional catalog defaults (query language, parser replacement, and record
 syntax based on the effective parser) remain in Go. Resolution retains value
-origins and applies explicit directory overrides without modifying the generated
-defaults. This build-time source change preserves existing resolution behavior.
+origins and applies explicit directory overrides without modifying the cached
+defaults. Loading bundled definitions preserves existing resolution behavior.
 
 | Profile | Catalog defaults | Circulation defaults |
 | --- | --- | --- |
