@@ -252,6 +252,75 @@ Run `make generate` before invoking `go build` or `go test` directly.
 See [Host LMS and catalog profiles](host-profiles.md) for `lmsConfig.vendor`,
 `catalogConfig.profile`, precedence, parser overrides, diagnostics and migration.
 
+## Directory entry symbols
+
+When patching entry symbols, omit `id` to create a new symbol. A supplied `id`
+must identify an existing symbol owned by the entry being patched; unknown or
+foreign IDs return HTTP 400 and roll back the entire PATCH. Symbols cannot be
+moved between entries through the API.
+
+Application writes lock the owner entry before modifying its symbols. Direct
+SQL maintenance must follow the same order; the search trigger alone cannot
+prevent deadlocks caused by acquiring these locks in the opposite order.
+
+## Directory entry searches
+
+`cql.serverChoice` searches a combined document containing the entry's name,
+description, organization ID, email, phone number, and all its own symbols
+(both `authority:symbol` and bare symbol values). It uses PostgreSQL full-text
+search with the fixed `simple` configuration: case is normalized without English
+stemming or stop-word removal. NULL fields contribute no text. Parent and child
+entry data are not included.
+
+| CQL example | Behavior |
+| --- | --- |
+| `cql.serverChoice="central library"` | Both words, potentially in different fields |
+| `cql.serverChoice all "central library"` | Both words |
+| `cql.serverChoice any "central library"` | Either word |
+| `cql.serverChoice adj "central library"` | Adjacent words in order |
+| `cql.serverChoice="centr*"` | Word-prefix matching |
+
+This index is available on both `/entries` and `/entries/owned`; existing access
+restrictions, counts, pagination, and result ordering apply. Results are not
+ranked by relevance. Email addresses, phone numbers, and symbols follow
+PostgreSQL tokenization rather than arbitrary substring matching. Use dedicated
+field indexes such as `symbol` for exact identifier comparisons.
+
+A stored search vector and GIN index are maintained transactionally by database
+triggers when entry fields or symbols change, including imports. Migration 018
+backfills existing entries. SQLC expands wildcard selections into explicit column
+lists, so adding the search column preserves the result shape expected by
+pre-018 binaries. Existing binaries can continue serving against the upgraded
+schema after the migration completes.
+
+Migration 018 runs as one transaction: it adds the search column, creates the
+symbols ownership index before backfill, installs the search triggers, backfills
+all entries, and builds the GIN index. The initial schema change takes an
+exclusive lock on `entries` that is held until the transaction completes,
+blocking entry reads and writes throughout the backfill and index builds. The
+regular symbols index build also blocks symbol writes until commit. Migration
+duration depends on data volume and active transactions; requests may time out
+while waiting. Concurrent transactions that acquire locks in the opposite order
+can also deadlock with the migration.
+
+Plan a maintenance window for this upgrade. Stop all Directory instances and
+import jobs, pause other database writers, and allow active transactions to
+finish before starting one upgraded instance to apply migrations. Once migration
+018 succeeds and that instance is ready, restore the remaining instances and
+resume traffic and imports. A rolling update alone does not enforce this
+sequence. If migration fails, inspect the error and migration version/dirty state
+before retrying; a failed transaction rolls back its schema changes, but the
+migration runner may leave the version marked dirty and prevent startup.
+
+The `name` and `description` CQL indexes match case insensitively by default,
+using PostgreSQL `lower()` on both the stored value and the search term. For
+example, `name="central library"` matches `Central Library`, and
+`description="*LIBRARY*"` matches descriptions containing `library` in any case.
+This also applies to `==`, `exact`, and `<>` comparisons. Existing wildcard and
+escaping rules apply; no CQL relation modifier is required. Other indexes and
+result ordering retain their existing behavior. This does not add full-text
+search or accent normalization.
+
 ### Pickup locations
 
 Set `illConfig.isPickupLocation` to `true` to offer an institution or branch in the request form's pickup-location selector. This flag is independent of `lmsConfig.requesterPickupLocation`: manual workflows can offer locations without an LMS code. Migration 012 enables the flag for existing entries whose requester pickup code is non-null (including empty strings), preserving other ILL settings. Other entries remain unselected unless explicitly enabled. Imports can set the flag in `illConfig`.

@@ -25,6 +25,8 @@ type EventBus interface {
 	Start(ctx common.ExtendedContext) error
 	CreateTask(id string, eventName EventName, data EventData, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error)
 	CreateNotice(id string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, target SignalTarget) (string, error)
+	// CreateNoticeWithID publishes a notice using a caller-allocated event ID.
+	CreateNoticeWithID(eventID string, id string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, target SignalTarget) (string, error)
 	// CreateNoticeWithParent creates a notice linked to a parent event.
 	CreateNoticeWithParent(id string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error)
 	// BeginTask marks a task as processing and emits SignalTaskBegin to the selected target.
@@ -224,15 +226,19 @@ func (p *PostgresEventBus) CreateTask(classId string, eventName EventName, data 
 }
 
 func (p *PostgresEventBus) CreateNotice(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, target SignalTarget) (string, error) {
-	return p.createNotice(classId, eventName, data, status, eventDomain, nil, target)
+	return p.CreateNoticeWithID(uuid.NewString(), classId, eventName, data, status, eventDomain, target)
 }
 
 func (p *PostgresEventBus) CreateNoticeWithParent(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error) {
-	return p.createNotice(classId, eventName, data, status, eventDomain, parentId, target)
+	return p.createNotice(uuid.NewString(), classId, eventName, data, status, eventDomain, parentId, target)
 }
 
-func (p *PostgresEventBus) createNotice(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error) {
-	id := uuid.New().String()
+// CreateNoticeWithID publishes a notice using a caller-allocated event ID.
+func (p *PostgresEventBus) CreateNoticeWithID(eventID string, classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, target SignalTarget) (string, error) {
+	return p.createNotice(eventID, classId, eventName, data, status, eventDomain, nil, target)
+}
+
+func (p *PostgresEventBus) createNotice(id string, classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error) {
 	illTransactionID, patronRequestID := getIllTransactionAndPatronRequestId(classId, eventDomain)
 	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
 		event, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
