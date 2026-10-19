@@ -172,7 +172,7 @@ func TestFieldExistsStringGenerate(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Generate() error = %v", err)
 		}
-		wantSQL := "NOT EXISTS (SELECT 1 FROM item i WHERE i.pr_id = pr.id AND COALESCE(i.barcode, '') <> '')"
+		wantSQL := "NOT EXISTS (SELECT 1 FROM item i WHERE i.pr_id = pr.id AND i.barcode IS NOT NULL AND i.barcode <> '')"
 		if gotSQL != wantSQL {
 			t.Fatalf("sql = %q, want %q", gotSQL, wantSQL)
 		}
@@ -187,7 +187,7 @@ func TestFieldExistsStringGenerate(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Generate() error = %v", err)
 		}
-		wantSQL := "EXISTS (SELECT 1 FROM item i WHERE i.pr_id = pr.id AND COALESCE(i.barcode, '') <> '')"
+		wantSQL := "EXISTS (SELECT 1 FROM item i WHERE i.pr_id = pr.id AND i.barcode IS NOT NULL AND i.barcode <> '')"
 		if gotSQL != wantSQL {
 			t.Fatalf("sql = %q, want %q", gotSQL, wantSQL)
 		}
@@ -216,7 +216,7 @@ func TestHandlePatronRequestsQueryItemFieldsUseExists(t *testing.T) {
 		{
 			name:      "call_number empty",
 			cql:       `call_number = ""`,
-			wantWhere: "NOT EXISTS (SELECT 1 FROM item cql_item WHERE cql_item.pr_id = patron_request_search_view.id AND COALESCE(cql_item.call_number, '') <> '')",
+			wantWhere: "NOT EXISTS (SELECT 1 FROM item cql_item WHERE cql_item.pr_id = patron_request_search_view.id AND cql_item.call_number IS NOT NULL AND cql_item.call_number <> '')",
 		},
 	}
 

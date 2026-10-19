@@ -87,5 +87,5 @@ func (f *FieldExistsString) existsSql(predicate string) string {
 }
 
 func (f *FieldExistsString) nonEmptyValuePredicate() string {
-	return fmt.Sprintf("COALESCE(%s, '') <> ''", f.valueExpression)
+	return fmt.Sprintf("%s IS NOT NULL AND %s <> ''", f.valueExpression, f.valueExpression)
 }
