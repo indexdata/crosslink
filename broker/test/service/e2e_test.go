@@ -11,10 +11,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/events"
-	"github.com/indexdata/crosslink/broker/holdings"
 
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
@@ -24,26 +23,17 @@ import (
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/indexdata/crosslink/testutil"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 func TestMain(m *testing.M) {
 	ill_db.PeerRefreshInterval = 0 //force refresh for every test
 	ctx := context.Background()
 	app.DB_PROVISION = true
-	pgContainer, err := postgres.Run(ctx, "postgres",
-		postgres.WithDatabase("crosslink"),
-		postgres.WithUsername("crosslink"),
-		postgres.WithPassword("crosslink"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(5*time.Second)),
-	)
+	pgContainer, err := testutil.RunPostgres(ctx)
 	test.Expect(err, "failed to start db container")
 
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
@@ -52,7 +42,7 @@ func TestMain(m *testing.M) {
 	mockPort := utils.Must(test.GetFreePort())
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
 	test.Expect(os.Setenv("PEER_URL", "http://localhost:"+strconv.Itoa(app.HTTP_PORT)+"/iso18626"), "failed to set peer URL")
-	app.AVAILABILITY_ADAPTER = holdings.AvailabilityAdapterMock
+	app.AVAILABILITY_ADAPTER = catalog.LookupAdapterMock
 
 	apptest.StartMockApp(mockPort)
 	app.ConnectionString = connStr
@@ -66,7 +56,7 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 
-	test.Expect(pgContainer.Terminate(ctx), "failed to stop db container")
+	test.Expect(test.TerminatePGContainer(ctx, pgContainer), "failed to stop db container")
 	os.Exit(code)
 }
 
@@ -155,6 +145,12 @@ func TestRequestUNFILLED(t *testing.T) {
 		"TASK, select-supplier = PROBLEM, problem=no-suppliers\n" +
 		"TASK, message-requester = SUCCESS\n"
 	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+	suppliers, _, err := illRepo.GetLocatedSuppliersByIllTransaction(appCtx, illTrans.ID)
+	assert.NoError(t, err)
+	if assert.Len(t, suppliers, 1) {
+		assert.Equal(t, string(iso18626.ReasonUnfilledNotOnShelf), suppliers[0].ReasonUnfilled.String)
+		assert.Equal(t, "Searched the shelf, item is missing", suppliers[0].Note.String)
+	}
 
 	data, err = os.ReadFile("../testdata/request-retry-after-unfilled.xml")
 	assert.Nil(t, err)
@@ -249,6 +245,7 @@ func TestMessageAfterUNFILLED(t *testing.T) {
 
 func TestMessageSkipped(t *testing.T) {
 	adapter.DEFAULT_BROKER_MODE = common.BrokerModeTransparent
+	resetMockSupplierCounts(t)
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "5636c993-c41c-48f4-a285-470545f6f362"
 	data, _ := os.ReadFile("../testdata/request-unfilled-willsupply.xml")
@@ -373,6 +370,7 @@ func TestRequestWILLSUPPLY_LOANED(t *testing.T) {
 
 func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeOpaque_Broker(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	resetMockSupplierCounts(t)
 	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ-CANCEL-0", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque))
 	reqId := "5636c993-c41c-48f4-a285-470545f6f345-0"
 	data, _ := os.ReadFile("../testdata/request-willsupply-loaned-cancel.xml")
@@ -416,6 +414,11 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeOpaque_Broker(t *testing.T) {
 		"TASK, message-requester = SUCCESS, reason=CancelResponse, Cancelled\n"+
 		"TASK, confirm-supplier-msg = SUCCESS\n",
 		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 15, false, formatEvent))
+}
+
+func resetMockSupplierCounts(t *testing.T) {
+	getOrCreatePeer(t, illRepo, "ISIL:SUP1", 0, 0)
+	getOrCreatePeer(t, illRepo, "ISIL:SUP2", 0, 0)
 }
 
 func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testing.T) {
@@ -717,7 +720,7 @@ func TestRequestRETRY_COST(t *testing.T) {
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n" +
-		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"NOTICE, request-received = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n"
 	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }
@@ -754,7 +757,7 @@ func TestRequestRETRY_COST_LOANED(t *testing.T) {
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n" +
-		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"NOTICE, request-received = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n" +
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
@@ -803,7 +806,60 @@ func TestRequestRETRY_ONLOAN_LOANED(t *testing.T) {
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, request-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
 		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n"
+	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+}
+
+func TestRequestRETRY_CHANGED_BIBINFO(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	reqId := "e3a1b2c3-d4e5-6789-abcd-ef0123456789"
+	data, err := os.ReadFile("../testdata/request-retry-changed-bibinfo.xml")
+	assert.Nil(t, err)
+	req, err := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader(data))
+	assert.Nil(t, err)
+	req.Header.Add("Content-Type", "application/xml")
+	client := &http.Client{}
+	res, err := client.Do(req)
+	assert.Nil(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	var illTrans ill_db.IllTransaction
+	test.WaitForPredicateToBeTrue(func() bool {
+		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
+		if err != nil {
+			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
+		}
+		return illTrans.LastSupplierStatus.String == "LoanCompleted" &&
+			illTrans.LastRequesterAction.String == "ShippedReturn"
+	})
+	assert.Equal(t, "LoanCompleted", illTrans.LastSupplierStatus.String)
+	assert.Equal(t, "ShippedReturn", illTrans.LastRequesterAction.String)
+	exp := "NOTICE, request-received = SUCCESS\n" +
+		"TASK, locate-suppliers = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, check-availability = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, request-received = SUCCESS\n" +
+		"TASK, locate-suppliers = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, check-availability = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n" +
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +

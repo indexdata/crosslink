@@ -17,14 +17,11 @@ import (
 	"github.com/indexdata/crosslink/broker/dbutil"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/indexdata/crosslink/testutil"
-	"github.com/jackc/pgx/v5"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
-
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	test "github.com/indexdata/crosslink/broker/test/utils"
+	"github.com/indexdata/crosslink/testutil"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var eventBus events.EventBus
@@ -35,14 +32,7 @@ func TestMain(m *testing.M) {
 	ctx := context.Background()
 	app.DB_PROVISION = true
 
-	pgContainer, err := postgres.Run(ctx, "postgres",
-		postgres.WithDatabase("crosslink"),
-		postgres.WithUsername("crosslink"),
-		postgres.WithPassword("crosslink"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(5*time.Second)),
-	)
+	pgContainer, err := testutil.RunPostgres(ctx)
 	test.Expect(err, "failed to start db container")
 
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
@@ -65,7 +55,7 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 
-	test.Expect(pgContainer.Terminate(ctx), "failed to stop db container")
+	test.Expect(test.TerminatePGContainer(ctx, pgContainer), "failed to stop db container")
 	os.Exit(code)
 }
 
@@ -73,8 +63,9 @@ func TestMultipleEventHandlers(t *testing.T) {
 	noPools := 3
 	noEvents := 2
 	receivedAr := make([][]events.Event, noPools)
+	var receivedMu sync.Mutex
 	var normalCreated atomic.Int32
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 	for i := 0; i < noPools; i++ {
 		dbPool, err := dbutil.InitDbPool(app.ConnectionString)
 		assert.NoError(t, err, "failed to init db pool")
@@ -84,6 +75,8 @@ func TestMultipleEventHandlers(t *testing.T) {
 		eventBus := app.CreateEventBus(eventRepo)
 
 		eventBus.HandleEventCreated(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
+			receivedMu.Lock()
+			defer receivedMu.Unlock()
 			receivedAr[i] = append(receivedAr[i], event)
 		})
 		eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
@@ -92,9 +85,14 @@ func TestMultipleEventHandlers(t *testing.T) {
 		err = app.StartEventBus(ctx, eventBus)
 		assert.NoError(t, err, "failed to start event bus")
 	}
+	// Registered after the pool defers so it runs first (LIFO), cancelling the
+	// event bus goroutines before their pools are closed.
+	defer func() { cancel(); time.Sleep(50 * time.Millisecond) }()
 
 	var requestReceived1 []events.Event
 	eventBus.HandleEventCreated(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
+		receivedMu.Lock()
+		defer receivedMu.Unlock()
 		requestReceived1 = append(requestReceived1, event)
 	})
 
@@ -105,6 +103,8 @@ func TestMultipleEventHandlers(t *testing.T) {
 	}
 
 	if !test.WaitForPredicateToBeTrue(func() bool {
+		receivedMu.Lock()
+		defer receivedMu.Unlock()
 		total := len(requestReceived1)
 		for i := 0; i < noPools; i++ {
 			total += len(receivedAr[i])
@@ -113,12 +113,16 @@ func TestMultipleEventHandlers(t *testing.T) {
 	}) {
 		t.Error("Expected to have some events")
 	}
+	receivedMu.Lock()
 	total := len(requestReceived1)
 	for i := 0; i < noPools; i++ {
 		total += len(receivedAr[i])
 	}
+	receivedMu.Unlock()
 	assert.Equal(t, noEvents, total, "Total number of events should match the number of created tasks")
 	if total != noEvents {
+		receivedMu.Lock()
+		defer receivedMu.Unlock()
 		for e := range requestReceived1 {
 			t.Logf("Request event %d: %s", e, requestReceived1[e].ID)
 		}
@@ -134,8 +138,9 @@ func TestBroadcastEventHandlers(t *testing.T) {
 	noPools := 3
 	noEvents := 2
 	receivedAr := make([][]events.Event, noPools)
+	var receivedMu sync.Mutex
 	var normalCreated atomic.Int32
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 	for i := 0; i < noPools; i++ {
 		dbPool, err := dbutil.InitDbPool(app.ConnectionString)
 		assert.NoError(t, err, "failed to init db pool")
@@ -145,6 +150,8 @@ func TestBroadcastEventHandlers(t *testing.T) {
 		eventBus := app.CreateEventBus(eventRepo)
 
 		eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, events.HandlerRoleObserver, func(ctx common.ExtendedContext, event events.Event) {
+			receivedMu.Lock()
+			defer receivedMu.Unlock()
 			receivedAr[i] = append(receivedAr[i], event)
 		})
 		eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
@@ -153,9 +160,14 @@ func TestBroadcastEventHandlers(t *testing.T) {
 		err = app.StartEventBus(ctx, eventBus)
 		assert.NoError(t, err, "failed to start event bus")
 	}
+	// Registered after the pool defers so it runs first (LIFO), cancelling the
+	// event bus goroutines before their pools are closed.
+	defer func() { cancel(); time.Sleep(50 * time.Millisecond) }()
 
 	var requestReceived1 []events.Event
 	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, events.HandlerRoleObserver, func(ctx common.ExtendedContext, event events.Event) {
+		receivedMu.Lock()
+		defer receivedMu.Unlock()
 		requestReceived1 = append(requestReceived1, event)
 	})
 	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
@@ -169,6 +181,8 @@ func TestBroadcastEventHandlers(t *testing.T) {
 	}
 
 	if !test.WaitForPredicateToBeTrue(func() bool {
+		receivedMu.Lock()
+		defer receivedMu.Unlock()
 		total := len(requestReceived1)
 		for i := 0; i < noPools; i++ {
 			total += len(receivedAr[i])
@@ -177,13 +191,17 @@ func TestBroadcastEventHandlers(t *testing.T) {
 	}) {
 		t.Error("Expected to have some events")
 	}
+	receivedMu.Lock()
 	total := len(requestReceived1)
 	for i := 0; i < noPools; i++ {
 		total += len(receivedAr[i])
 	}
+	receivedMu.Unlock()
 	assert.Equal(t, noEvents*(noPools+1), total, "Total number of events should match the number of created tasks")
 	assert.Equal(t, int32(0), normalCreated.Load(), "broadcast-created signals should not invoke normal created handlers")
-	if total != noEvents {
+	if total != noEvents*(noPools+1) {
+		receivedMu.Lock()
+		defer receivedMu.Unlock()
 		for e := range requestReceived1 {
 			t.Logf("Request event %d: %s", e, requestReceived1[e].ID)
 		}
@@ -202,7 +220,7 @@ func TestBroadcastTaskLifecycleHandlersDoNotDuplicateCoreHandlers(t *testing.T) 
 	var coreCompleted atomic.Int32
 	var broadcastStarted atomic.Int32
 	var broadcastCompleted atomic.Int32
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 
 	for i := 0; i < noPools; i++ {
 		dbPool, err := dbutil.InitDbPool(app.ConnectionString)
@@ -227,6 +245,9 @@ func TestBroadcastTaskLifecycleHandlersDoNotDuplicateCoreHandlers(t *testing.T) 
 		err = app.StartEventBus(ctx, eventBus)
 		assert.NoError(t, err, "failed to start event bus")
 	}
+	// Registered after the pool defers so it runs first (LIFO), cancelling the
+	// event bus goroutines before their pools are closed.
+	defer func() { cancel(); time.Sleep(50 * time.Millisecond) }()
 
 	eventBus.HandleTaskStarted(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		coreStarted.Add(1)
@@ -334,6 +355,53 @@ func TestTransactionRollback(t *testing.T) {
 	_, err = eventRepo.GetEvent(appCtx, eventId)
 	if err == nil {
 		t.Error("should not find event")
+	}
+}
+
+func TestGetBatchActionEvents(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	taskID := uuid.NewString()
+	otherTaskID := uuid.NewString()
+	patronRequestID := uuid.NewString()
+	otherPatronRequestID := uuid.NewString()
+	createPatronRequestForEventTest(t, patronRequestID)
+	createPatronRequestForEventTest(t, otherPatronRequestID)
+	now := time.Now()
+	type eventFixture struct {
+		taskID          string
+		eventName       events.EventName
+		patronRequestID string
+	}
+	fixtures := []eventFixture{
+		{taskID, events.EventNameInvokeBatchAction, events.DEFAULT_PATRON_REQUEST_ID},
+		{otherTaskID, events.EventNameInvokeBatchAction, events.DEFAULT_PATRON_REQUEST_ID},
+		{taskID, events.EventNameInvokeBatchAction, events.DEFAULT_PATRON_REQUEST_ID},
+		{taskID, events.EventNameInvokeBackgroundAction, patronRequestID},
+		{taskID, events.EventNameInvokeAction, otherPatronRequestID},
+	}
+	for i, fixture := range fixtures {
+		_, err := eventRepo.SaveEvent(ctx, events.SaveEventParams{
+			ID: uuid.NewString(), IllTransactionID: events.DEFAULT_ILL_TRANSACTION_ID,
+			PatronRequestID: fixture.patronRequestID,
+			Timestamp:       pgtype.Timestamp{Time: now.Add(time.Duration(i) * time.Second), Valid: true},
+			EventType:       events.EventTypeTask, EventName: fixture.eventName,
+			EventStatus: events.EventStatusSuccess,
+			EventData: events.EventData{CommonEventData: events.CommonEventData{
+				BatchActionData: &events.BatchActionData{TaskId: fixture.taskID},
+			}},
+		})
+		assert.NoError(t, err)
+	}
+
+	eventList, err := eventRepo.GetBatchActionEvents(ctx, taskID)
+	assert.NoError(t, err)
+	if assert.Len(t, eventList, 3) {
+		assert.True(t, eventList[0].Timestamp.Time.After(eventList[1].Timestamp.Time))
+		for _, event := range eventList {
+			assert.Equal(t, taskID, event.EventData.BatchActionData.TaskId)
+		}
+		assert.Equal(t, events.EventNameInvokeBackgroundAction, eventList[0].EventName)
+		assert.Equal(t, patronRequestID, eventList[0].PatronRequestID)
 	}
 }
 

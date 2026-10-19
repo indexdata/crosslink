@@ -1,25 +1,29 @@
 package adapter
 
 import (
+	"fmt"
+	"reflect"
 	"strconv"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/indexdata/crosslink/broker/common"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 )
 
 var DEFAULT_BROKER_MODE common.BrokerMode
 
 type DirectoryLookupAdapter interface {
-	Lookup(params DirectoryLookupParams) ([]DirectoryEntry, string, error)
-	FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData directory.Entry, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo)
+	Lookup(ctx common.ExtendedContext, params DirectoryLookupParams) ([]DirectoryEntry, string, error)
+	FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData dirapi.Entry, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo, policy dirapi.LoadBalancingPolicy) ([]Supplier, RotaInfo)
 }
 
 type DirectoryLookupParams struct {
 	Symbols []string
 	Tenant  string
+	EntryID string
 }
 
 type DirectoryEntry struct {
@@ -27,40 +31,71 @@ type DirectoryEntry struct {
 	BranchSymbols []string
 	Name          string
 	URL           string
-	Vendor        directory.EntryVendor
+	Vendor        dirapi.EntryVendor
 	BrokerMode    common.BrokerMode
-	CustomData    directory.Entry
+	CustomData    dirapi.Entry
+}
+
+// DeduplicateDirectoryEntries collapses identical replica responses with the same
+// Directory UUID, preserving first-seen order. Conflicting responses for a UUID
+// are rejected. Entries without a UUID remain distinct.
+func DeduplicateDirectoryEntries(entries []DirectoryEntry) ([]DirectoryEntry, error) {
+	seen := make(map[uuid.UUID]DirectoryEntry)
+	var result []DirectoryEntry
+	for _, entry := range entries {
+		if id := entry.CustomData.Id; id != nil {
+			if previous, ok := seen[*id]; ok {
+				if !reflect.DeepEqual(previous, entry) {
+					return nil, fmt.Errorf("directory entry %s: conflicting responses from directory replicas", id)
+				}
+				continue
+			}
+			seen[*id] = entry
+		}
+		result = append(result, entry)
+	}
+	return result, nil
 }
 
 type SupplierOrdering interface {
 	GetSymbol() string
 	GetPriority() int
 	GetCost() float64
-	GetRatio() float32
+	GetLocationPreference() int
+	GetShelvingPreference() int
+	GetLoadBalancingScore() float64
 	IsLocal() bool
 }
 
 type Supplier struct {
-	LocalIdentifier string
-	PeerId          string
-	CustomData      directory.Entry
-	Symbol          string
-	Priority        int
-	Cost            float64
-	Local           bool
-	Ratio           float32
-	SupplierStatus  pgtype.Text
+	LocalIdentifier    string
+	PeerId             string
+	CustomData         dirapi.Entry
+	Symbol             string
+	Priority           int
+	Cost               float64
+	Local              bool
+	LoadBalancingScore float64
+	SupplierStatus     pgtype.Text
+	Location           string
+	ShelvingLocation   string
+	ItemLoanPolicy     string
+	LocationPreference int
+	ShelvingPreference int
 }
 
-func (s Supplier) GetSymbol() string { return s.Symbol }
-func (s Supplier) GetPriority() int  { return s.Priority }
-func (s Supplier) GetCost() float64  { return s.Cost }
-func (s Supplier) IsLocal() bool     { return s.Local }
-func (s Supplier) GetRatio() float32 { return s.Ratio }
+func (s Supplier) GetSymbol() string              { return s.Symbol }
+func (s Supplier) GetPriority() int               { return s.Priority }
+func (s Supplier) GetCost() float64               { return s.Cost }
+func (s Supplier) GetLocationPreference() int     { return s.LocationPreference }
+func (s Supplier) GetShelvingPreference() int     { return s.ShelvingPreference }
+func (s Supplier) IsLocal() bool                  { return s.Local }
+func (s Supplier) GetLoadBalancingScore() float64 { return s.LoadBalancingScore }
 
 type Network struct {
-	Name     string `json:"name"`
-	Priority int    `json:"priority"`
+	Name       string `json:"name"`
+	Priority   int    `json:"priority"`
+	Reciprocal *bool  `json:"reciprocal,omitempty"`
 }
 
 type Tier struct {
@@ -95,14 +130,19 @@ type TierMatch struct {
 }
 
 type SupplierMatch struct {
-	Match    bool           `json:"match"`
-	Networks []NetworkMatch `json:"networks"`
-	Tiers    []TierMatch    `json:"tiers"`
-	Symbol   string         `json:"symbol"`
-	Priority int            `json:"priority"`
-	Cost     string         `json:"cost"`
-	Local    bool           `json:"local"`
-	Ratio    float32        `json:"ratio"`
+	Match              bool           `json:"match"`
+	Networks           []NetworkMatch `json:"networks"`
+	Tiers              []TierMatch    `json:"tiers"`
+	Symbol             string         `json:"symbol"`
+	Priority           int            `json:"priority"`
+	Cost               string         `json:"cost"`
+	Local              bool           `json:"local"`
+	LoadBalancingScore float64        `json:"loadBalancingScore"`
+	Location           string         `json:"location,omitempty"`
+	ShelvingLocation   string         `json:"shelvingLocation,omitempty"`
+	ItemLoanPolicy     string         `json:"itemLoanPolicy,omitempty"`
+	LocationPreference int            `json:"locationPreference"`
+	ShelvingPreference int            `json:"shelvingPreference"`
 }
 
 func (s SupplierMatch) GetSymbol() string { return s.Symbol }
@@ -111,11 +151,14 @@ func (s SupplierMatch) GetCost() float64 {
 	f, _ := strconv.ParseFloat(s.Cost, 64)
 	return f
 }
-func (s SupplierMatch) IsLocal() bool     { return s.Local }
-func (s SupplierMatch) GetRatio() float32 { return s.Ratio }
+func (s SupplierMatch) IsLocal() bool                  { return s.Local }
+func (s SupplierMatch) GetLoadBalancingScore() float64 { return s.LoadBalancingScore }
+func (s SupplierMatch) GetLocationPreference() int     { return s.LocationPreference }
+func (s SupplierMatch) GetShelvingPreference() int     { return s.ShelvingPreference }
 
 type RotaInfo struct {
-	Request   Request         `json:"request"`
-	Requester Requester       `json:"requester"`
-	Suppliers []SupplierMatch `json:"suppliers"`
+	LoadBalancingPolicy dirapi.LoadBalancingPolicy `json:"loadBalancingPolicy"`
+	Request             Request                    `json:"request"`
+	Requester           Requester                  `json:"requester"`
+	Suppliers           []SupplierMatch            `json:"suppliers"`
 }

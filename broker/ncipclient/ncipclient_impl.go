@@ -1,10 +1,11 @@
 package ncipclient
 
 import (
+	"bytes"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"net/http"
-	"reflect"
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/httpclient"
@@ -12,6 +13,7 @@ import (
 )
 
 type NcipClientImpl struct {
+	disableNamespace         bool
 	client                   *http.Client
 	address                  string
 	fromAgency               string
@@ -20,8 +22,9 @@ type NcipClientImpl struct {
 	logFunc                  NcipLogFunc
 }
 
-func NewNcipClient(client *http.Client, address string, fromAgency string, toAgency string, fromAgencyAuthentication string) NcipClient {
+func NewNcipClient(client *http.Client, address string, fromAgency string, toAgency string, fromAgencyAuthentication string, disableNamespace bool) NcipClient {
 	return &NcipClientImpl{
+		disableNamespace:         disableNamespace,
 		client:                   client,
 		address:                  address,
 		fromAgency:               fromAgency,
@@ -34,134 +37,162 @@ func (n *NcipClientImpl) SetLogFunc(logFunc NcipLogFunc) {
 	n.logFunc = logFunc
 }
 
-func (n *NcipClientImpl) LookupUser(lookup ncip.LookupUser) (*ncip.LookupUserResponse, error) {
+func (n *NcipClientImpl) LookupUser(lookup ncip.LookupUser) (response *ncip.LookupUserResponse, err error) {
 	lookup.InitiationHeader = n.prepareHeader(lookup.InitiationHeader)
 
 	ncipMessage := &ncip.NCIPMessage{
 		LookupUser: &lookup,
 	}
-	ncipResponse, err := n.sendReceiveMessage(ncipMessage)
+	var ncipResponse *ncip.NCIPMessage
+	defer func() { n.logOperation(ncipMessage, ncipResponse, err) }()
+	ncipResponse, err = n.sendReceiveMessage(ncipMessage)
 	if err != nil {
 		return nil, err
 	}
-	response := ncipResponse.LookupUserResponse
+	response = ncipResponse.LookupUserResponse
 	if response == nil {
 		return nil, fmt.Errorf("invalid NCIP response: missing LookupUserResponse")
 	}
-	return response, n.checkProblem("NCIP user lookup", response.Problem)
+	err = n.checkProblem("NCIP user lookup", response.Problem)
+	return response, err
 }
 
-func (n *NcipClientImpl) AcceptItem(accept ncip.AcceptItem) (*ncip.AcceptItemResponse, error) {
+func (n *NcipClientImpl) AcceptItem(accept ncip.AcceptItem) (response *ncip.AcceptItemResponse, err error) {
 	accept.InitiationHeader = n.prepareHeader(accept.InitiationHeader)
 	ncipMessage := &ncip.NCIPMessage{
 		AcceptItem: &accept,
 	}
-	ncipResponse, err := n.sendReceiveMessage(ncipMessage)
+	var ncipResponse *ncip.NCIPMessage
+	defer func() { n.logOperation(ncipMessage, ncipResponse, err) }()
+	ncipResponse, err = n.sendReceiveMessage(ncipMessage)
 	if err != nil {
 		return nil, err
 	}
-	response := ncipResponse.AcceptItemResponse
+	response = ncipResponse.AcceptItemResponse
 	if response == nil {
 		return nil, fmt.Errorf("invalid NCIP response: missing AcceptItemResponse")
 	}
-	return response, n.checkProblem("NCIP accept item", response.Problem)
+	err = n.checkProblem("NCIP accept item", response.Problem)
+	return response, err
 }
 
-func (n *NcipClientImpl) DeleteItem(delete ncip.DeleteItem) (*ncip.DeleteItemResponse, error) {
+func (n *NcipClientImpl) DeleteItem(delete ncip.DeleteItem) (response *ncip.DeleteItemResponse, err error) {
 	delete.InitiationHeader = n.prepareHeader(delete.InitiationHeader)
 	ncipMessage := &ncip.NCIPMessage{
 		DeleteItem: &delete,
 	}
-	ncipResponse, err := n.sendReceiveMessage(ncipMessage)
+	var ncipResponse *ncip.NCIPMessage
+	defer func() { n.logOperation(ncipMessage, ncipResponse, err) }()
+	ncipResponse, err = n.sendReceiveMessage(ncipMessage)
 	if err != nil {
 		return nil, err
 	}
-	response := ncipResponse.DeleteItemResponse
+	response = ncipResponse.DeleteItemResponse
 	if response == nil {
 		return nil, fmt.Errorf("invalid NCIP response: missing DeleteItemResponse")
 	}
-	return response, n.checkProblem("NCIP delete item", response.Problem)
+	err = n.checkProblem("NCIP delete item", response.Problem)
+	return response, err
 }
 
-func (n *NcipClientImpl) RequestItem(request ncip.RequestItem) (*ncip.RequestItemResponse, error) {
+func (n *NcipClientImpl) RequestItem(request ncip.RequestItem) (response *ncip.RequestItemResponse, err error) {
 	request.InitiationHeader = n.prepareHeader(request.InitiationHeader)
 	ncipMessage := &ncip.NCIPMessage{
 		RequestItem: &request,
 	}
-	ncipResponse, err := n.sendReceiveMessage(ncipMessage)
+	var ncipResponse *ncip.NCIPMessage
+	defer func() { n.logOperation(ncipMessage, ncipResponse, err) }()
+	ncipResponse, err = n.sendReceiveMessage(ncipMessage)
 	if err != nil {
 		return nil, err
 	}
-	response := ncipResponse.RequestItemResponse
+	response = ncipResponse.RequestItemResponse
 	if response == nil {
 		return nil, fmt.Errorf("invalid NCIP response: missing RequestItemResponse")
 	}
-	return response, n.checkProblem("NCIP request item", response.Problem)
+	err = n.checkProblem("NCIP request item", response.Problem)
+	return response, err
 }
 
-func (n *NcipClientImpl) CancelRequestItem(request ncip.CancelRequestItem) (*ncip.CancelRequestItemResponse, error) {
+func (n *NcipClientImpl) CancelRequestItem(request ncip.CancelRequestItem) (response *ncip.CancelRequestItemResponse, err error) {
 	request.InitiationHeader = n.prepareHeader(request.InitiationHeader)
 	ncipMessage := &ncip.NCIPMessage{
 		CancelRequestItem: &request,
 	}
-	ncipResponse, err := n.sendReceiveMessage(ncipMessage)
+	var ncipResponse *ncip.NCIPMessage
+	defer func() { n.logOperation(ncipMessage, ncipResponse, err) }()
+	ncipResponse, err = n.sendReceiveMessage(ncipMessage)
 	if err != nil {
 		return nil, err
 	}
-	response := ncipResponse.CancelRequestItemResponse
+	response = ncipResponse.CancelRequestItemResponse
 	if response == nil {
 		return nil, fmt.Errorf("invalid NCIP response: missing CancelRequestItemResponse")
 	}
-	return response, n.checkProblem("NCIP cancel request item", response.Problem)
+	err = n.checkProblem("NCIP cancel request item", response.Problem)
+	return response, err
 }
 
-func (n *NcipClientImpl) CheckInItem(request ncip.CheckInItem) (*ncip.CheckInItemResponse, error) {
+func (n *NcipClientImpl) CheckInItem(request ncip.CheckInItem) (response *ncip.CheckInItemResponse, err error) {
 	request.InitiationHeader = n.prepareHeader(request.InitiationHeader)
 	ncipMessage := &ncip.NCIPMessage{
 		CheckInItem: &request,
 	}
-	ncipResponse, err := n.sendReceiveMessage(ncipMessage)
+	var ncipResponse *ncip.NCIPMessage
+	defer func() { n.logOperation(ncipMessage, ncipResponse, err) }()
+	ncipResponse, err = n.sendReceiveMessage(ncipMessage)
 	if err != nil {
 		return nil, err
 	}
-	response := ncipResponse.CheckInItemResponse
+	response = ncipResponse.CheckInItemResponse
 	if response == nil {
 		return nil, fmt.Errorf("invalid NCIP response: missing CheckInItemResponse")
 	}
-	return response, n.checkProblem("NCIP check in item", response.Problem)
+	err = n.checkProblem("NCIP check in item", response.Problem)
+	return response, err
 }
 
-func (n *NcipClientImpl) CheckOutItem(request ncip.CheckOutItem) (*ncip.CheckOutItemResponse, error) {
+func (n *NcipClientImpl) CheckOutItem(request ncip.CheckOutItem) (response *ncip.CheckOutItemResponse, err error) {
 	request.InitiationHeader = n.prepareHeader(request.InitiationHeader)
 	ncipMessage := &ncip.NCIPMessage{
 		CheckOutItem: &request,
 	}
-	ncipResponse, err := n.sendReceiveMessage(ncipMessage)
+	var ncipResponse *ncip.NCIPMessage
+	defer func() { n.logOperation(ncipMessage, ncipResponse, err) }()
+	ncipResponse, err = n.sendReceiveMessage(ncipMessage)
 	if err != nil {
 		return nil, err
 	}
-	response := ncipResponse.CheckOutItemResponse
+	response = ncipResponse.CheckOutItemResponse
 	if response == nil {
 		return nil, fmt.Errorf("invalid NCIP response: missing CheckOutItemResponse")
 	}
-	return response, n.checkProblem("NCIP check out item", response.Problem)
+	// The XSD decoder represents malformed dates as zero; they do not undo checkout.
+	if response.DateDue != nil && (response.DateDue.IsZero() || response.DateDue.Year() < 1) {
+		response.DateDue = nil
+	}
+	err = n.checkProblem("NCIP check out item", response.Problem)
+	return response, err
 }
 
-func (n *NcipClientImpl) CreateUserFiscalTransaction(request ncip.CreateUserFiscalTransaction) (*ncip.CreateUserFiscalTransactionResponse, error) {
+func (n *NcipClientImpl) CreateUserFiscalTransaction(request ncip.CreateUserFiscalTransaction) (response *ncip.CreateUserFiscalTransactionResponse, err error) {
 	request.InitiationHeader = n.prepareHeader(request.InitiationHeader)
 
 	ncipMessage := &ncip.NCIPMessage{
 		CreateUserFiscalTransaction: &request,
 	}
-	ncipResponse, err := n.sendReceiveMessage(ncipMessage)
+	var ncipResponse *ncip.NCIPMessage
+	defer func() { n.logOperation(ncipMessage, ncipResponse, err) }()
+	ncipResponse, err = n.sendReceiveMessage(ncipMessage)
 	if err != nil {
 		return nil, err
 	}
-	response := ncipResponse.CreateUserFiscalTransactionResponse
+	response = ncipResponse.CreateUserFiscalTransactionResponse
 	if response == nil {
 		return nil, fmt.Errorf("invalid NCIP response: missing CreateUserFiscalTransactionResponse")
 	}
-	return response, n.checkProblem("NCIP create user fiscal transaction", response.Problem)
+	err = n.checkProblem("NCIP create user fiscal transaction", response.Problem)
+	return response, err
 }
 
 func (n *NcipClientImpl) checkProblem(op string, responseProblems []ncip.Problem) error {
@@ -197,32 +228,12 @@ func (n *NcipClientImpl) sendReceiveMessage(message *ncip.NCIPMessage) (*ncip.NC
 	var respMessage ncip.NCIPMessage
 
 	err := httpclient.NewClient().RequestResponse(n.client, http.MethodPost, []string{httpclient.ContentTypeApplicationXml},
-		n.address, message, &respMessage, xml.Marshal, xml.Unmarshal)
-	if n.logFunc != nil {
-		hideSensitive(message)
-		var outgoing map[string]any
-		var err1 error
-		outgoing, err1 = common.StructToMap(message)
-
-		hideSensitive(&respMessage)
-		var incoming map[string]any
-		var err2 error
-		incoming, err2 = common.StructToMap(&respMessage)
-
-		logErr := err
-		if logErr == nil {
-			logErr = err1
-		}
-		if logErr == nil {
-			logErr = err2
-		}
-		n.logFunc(outgoing, incoming, logErr)
-	}
+		n.address, message, &respMessage, n.marshal, n.unmarshal)
 	if err != nil {
-		return nil, fmt.Errorf("NCIP message exchange failed: %s", err.Error())
+		return &respMessage, fmt.Errorf("NCIP message exchange failed: %s", err.Error())
 	}
 	if len(respMessage.Problem) > 0 {
-		return nil, &NcipError{
+		return &respMessage, &NcipError{
 			Message: "NCIP message processing failed",
 			Problem: respMessage.Problem[0],
 		}
@@ -230,56 +241,134 @@ func (n *NcipClientImpl) sendReceiveMessage(message *ncip.NCIPMessage) (*ncip.NC
 	return &respMessage, nil
 }
 
-func hideSensitive(message *ncip.NCIPMessage) {
-	traverse(reflect.ValueOf(message), 0)
+func (n *NcipClientImpl) logOperation(outgoingMessage *ncip.NCIPMessage, incomingMessage *ncip.NCIPMessage, operationErr error) {
+	if n.logFunc == nil {
+		return
+	}
+
+	outgoing, outgoingErr := common.StructToMap(outgoingMessage)
+	hideSensitive(outgoing)
+
+	var incoming map[string]any
+	var incomingErr error
+	if incomingMessage != nil {
+		incoming, incomingErr = common.StructToMap(incomingMessage)
+		hideSensitive(incoming)
+	}
+
+	logErr := operationErr
+	if logErr == nil {
+		logErr = outgoingErr
+	}
+	if logErr == nil {
+		logErr = incomingErr
+	}
+	n.logFunc(outgoing, incoming, logErr)
+}
+
+func hideSensitive(message map[string]any) {
+	traverse(message, 0)
 }
 
 // removes values from the FromAgencyAuthentication and FromSystemAuthentication fields
-// as well as AuthenticationInput fields except if type is "username"
-func traverse(v reflect.Value, level int) {
+// as well as user name/address information and AuthenticationInput fields except
+// if type is "username"
+func traverse(value any, level int) {
 	if level > 20 {
 		return
 	}
-	level = level + 1
-	if !v.IsValid() {
-		return
-	}
-	if v.Kind() == reflect.Pointer {
-		if v.IsNil() {
-			return
+	level++
+	switch v := value.(type) {
+	case map[string]any:
+		if authenticationType, ok := v["AuthenticationInputType"].(map[string]any); ok {
+			if authenticationType["#text"] != "username" {
+				if _, exists := v["AuthenticationInputData"]; exists {
+					v["AuthenticationInputData"] = "***"
+				}
+			}
 		}
-		traverse(v.Elem(), level)
-		return
-	}
-	if v.Kind() == reflect.Slice {
-		if v.IsNil() {
-			return
+		for key, field := range v {
+			if key == "FromAgencyAuthentication" || key == "FromSystemAuthentication" ||
+				key == "NameInformation" || key == "UserAddressInformation" {
+				v[key] = "***"
+				continue
+			}
+			traverse(field, level)
 		}
-		for i := 0; i < v.Len(); i++ {
-			traverse(v.Index(i), level)
-		}
-		return
-	}
-	if v.Kind() != reflect.Struct {
-		return
-	}
-	t := v.Type()
-	if t == reflect.TypeOf(ncip.AuthenticationInput{}) {
-		ncipAuthenticationInput := v.Interface().(ncip.AuthenticationInput)
-		exclude := ncipAuthenticationInput.AuthenticationInputType.Text != "username"
-		if exclude {
-			ncipAuthenticationInput.AuthenticationInputData = "***"
-			v.Set(reflect.ValueOf(ncipAuthenticationInput))
-		}
-		return
-	}
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-		if field.Type.Kind() == reflect.String &&
-			(field.Name == "FromAgencyAuthentication" || field.Name == "FromSystemAuthentication") {
-			v.Field(i).SetString("***")
-		} else {
-			traverse(v.Field(i), level)
+	case []any:
+		for _, item := range v {
+			traverse(item, level)
 		}
 	}
+}
+
+// transformNamespace handles namespace-free NCIP integrations while keeping
+// the strongly typed NCIP model and all text/attribute values intact.
+func transformNamespace(data []byte, remove bool) ([]byte, error) {
+	const ns = "http://www.niso.org/2008/ncip"
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	var out bytes.Buffer
+	encoder := xml.NewEncoder(&out)
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		switch t := token.(type) {
+		case xml.StartElement:
+			if remove && t.Name.Space == ns {
+				t.Name.Space = ""
+			} else if !remove && t.Name.Space == "" {
+				t.Name.Space = ns
+			}
+			attrs := t.Attr[:0]
+			for _, a := range t.Attr {
+				if a.Name.Local == "xmlns" || a.Name.Space == "xmlns" {
+					continue
+				}
+				if remove && a.Name.Space == ns {
+					a.Name.Space = ""
+				}
+				attrs = append(attrs, a)
+			}
+			t.Attr = attrs
+			token = t
+		case xml.EndElement:
+			if remove && t.Name.Space == ns {
+				t.Name.Space = ""
+			} else if !remove && t.Name.Space == "" {
+				t.Name.Space = ns
+			}
+			token = t
+		}
+		if err := encoder.EncodeToken(token); err != nil {
+			return nil, err
+		}
+	}
+	if err := encoder.Flush(); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+func (n *NcipClientImpl) marshal(v any) ([]byte, error) {
+	b, err := xml.Marshal(v)
+	if err != nil || !n.disableNamespace {
+		return b, err
+	}
+	return transformNamespace(b, true)
+}
+
+func (n *NcipClientImpl) unmarshal(b []byte, v any) error {
+	if n.disableNamespace {
+		var err error
+		b, err = transformNamespace(b, false)
+		if err != nil {
+			return err
+		}
+	}
+	return xml.Unmarshal(b, v)
 }

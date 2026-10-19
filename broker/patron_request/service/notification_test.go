@@ -94,13 +94,22 @@ func TestHandleInvokeNotificationSuccess(t *testing.T) {
 		EventData:       events.EventData{CommonEventData: events.CommonEventData{Notification: &pr_db.Notification{ID: "n1"}}},
 	}
 	mockPrRepo := new(MockPrRepo)
+	mockEventBus := new(MockEventBus)
 	mockPrRepo.On("GetPatronRequestById", "2").Return(pr_db.PatronRequest{ID: patronRequestId, State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1"), RequesterReqID: getDbText("req-1")}, nil)
 	mockPrRepo.On("GetNotificationById", "n1").Return(pr_db.Notification{ID: "n1", Note: pgtype.Text{String: "Say hi", Valid: true}}, nil)
-	service := CreatePatronRequestNotificationService(mockPrRepo, new(MockEventBus), new(MockIso18626Handler))
+	service := CreatePatronRequestNotificationService(mockPrRepo, mockEventBus, new(MockIso18626Handler))
 
 	status, result := service.handleInvokeNotification(appCtx, notificationEvent)
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.NotNil(t, result)
+	assert.Nil(t, result.OutgoingMessage)
+	assert.Nil(t, result.IncomingMessage)
+	if assert.Len(t, mockEventBus.createdNoticeData, 1) {
+		assert.Equal(t, events.EventNameIllSupplierMessage, mockEventBus.createdNoticeNames[0])
+		assert.Equal(t, events.EventStatusSuccess, mockEventBus.createdNoticeStatus[0])
+		assert.NotNil(t, mockEventBus.createdNoticeData[0].OutgoingMessage.SupplyingAgencyMessage)
+		assert.NotNil(t, mockEventBus.createdNoticeData[0].IncomingMessage.SupplyingAgencyMessageConfirmation)
+	}
 }
 
 func TestHandleInvokeNotificationMissingSymbol(t *testing.T) {

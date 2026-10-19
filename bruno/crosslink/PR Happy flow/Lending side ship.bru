@@ -26,11 +26,15 @@ auth:basic {
 
 body:json {
   {
-      "action": "ship"
+      "action": "ship",
+      "actionParams": {
+        "dueDate": "{{loanDueDate}}"
+      }
   }
 }
 
 script:pre-request {
+  bru.setVar("loanDueDate", new Date(Date.now() - 86400000).toISOString());
   bru.sleep(Number(bru.getEnvVar("sleepDelay")))
 }
 

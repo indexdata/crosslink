@@ -1,0 +1,569 @@
+package api
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	brokerapi "github.com/indexdata/crosslink/broker/api"
+	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/events"
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	"github.com/indexdata/crosslink/broker/patron_request/proapi"
+	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
+	sched_db "github.com/indexdata/crosslink/broker/scheduler/db"
+	schedoapi "github.com/indexdata/crosslink/broker/scheduler/oapi"
+	sched_service "github.com/indexdata/crosslink/broker/scheduler/service"
+	"github.com/indexdata/crosslink/broker/tenant"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+var errDuplicateBatchActionTitle = errors.New("a batch action with this owner and title already exists")
+var errInvalidBatchEmailTemplate = errors.New("invalid batch email template")
+
+// SchedulerApiHandler implements schedoapi.ServerInterface.
+type SchedulerApiHandler struct {
+	limitDefault   int32
+	schedRepo      sched_db.SchedRepo
+	eventRepo      events.EventRepo
+	tenantResolver *tenant.TenantResolver
+	templateRepo   pr_db.PrRepo
+}
+
+// NewSchedulerApiHandler creates a SchedulerApiHandler.
+func NewSchedulerApiHandler(limitDefault int32, schedRepo sched_db.SchedRepo, eventRepo events.EventRepo, tenantResolver *tenant.TenantResolver, templateRepo pr_db.PrRepo) SchedulerApiHandler {
+	return SchedulerApiHandler{
+		limitDefault:   limitDefault,
+		schedRepo:      schedRepo,
+		eventRepo:      eventRepo,
+		tenantResolver: tenantResolver,
+		templateRepo:   templateRepo,
+	}
+}
+
+// GetBatchActions lists all batch actions for the resolved owner, with pagination.
+func (h SchedulerApiHandler) GetBatchActions(w http.ResponseWriter, r *http.Request, params schedoapi.GetBatchActionsParams) {
+	logParams := map[string]string{"method": "GetBatchActions"}
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+
+	owners, ok := h.resolveOwnerScope(ctx, w, r, params.Symbol)
+	if !ok {
+		return
+	}
+
+	limit := h.limitDefault
+	if params.Limit != nil && *params.Limit > 0 {
+		limit = *params.Limit
+	}
+	offset := int32(0)
+	if params.Offset != nil && *params.Offset > 0 {
+		offset = *params.Offset
+	}
+
+	items, count, err := h.schedRepo.GetScheduledTasks(ctx, sched_db.GetScheduledTasksParams{
+		Owners: owners,
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		brokerapi.AddInternalError(ctx, w, err)
+		return
+	}
+
+	resp := schedoapi.BatchActions{
+		About: schedoapi.About(brokerapi.CollectAboutData(count, offset, limit, r)),
+		Items: toBatchActionList(r, items),
+	}
+	brokerapi.WriteJsonResponse(w, resp)
+}
+
+func (h SchedulerApiHandler) GetBatchActionsIdEvents(w http.ResponseWriter, r *http.Request, id string, params schedoapi.GetBatchActionsIdEventsParams) {
+	_, ctx, done := h.getScheduledTask(w, r, "GetBatchActionsIdEvents", id, params.Symbol)
+	if done {
+		return
+	}
+
+	eventList, err := h.eventRepo.GetBatchActionEvents(ctx, id)
+	if err != nil {
+		brokerapi.AddInternalError(ctx, w, err)
+		return
+	}
+	items := make([]schedoapi.Event, 0, len(eventList))
+	for _, event := range eventList {
+		var patronRequestID *string
+		if event.PatronRequestID != "" && !events.IsSyntheticID(event.PatronRequestID) {
+			patronRequestID = &event.PatronRequestID
+		}
+		items = append(items, schedoapi.Event(brokerapi.ToApiEvent(event, event.IllTransactionID, patronRequestID)))
+	}
+	brokerapi.WriteJsonResponse(w, schedoapi.Events{
+		About: schedoapi.About{Count: int64(len(items))}, Items: items,
+	})
+}
+
+// PostBatchActions creates a new batch action.
+func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Request, params schedoapi.PostBatchActionsParams) {
+	logParams := map[string]string{"method": "PostBatchActions"}
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+
+	if r.Body == nil || r.Body == http.NoBody {
+		brokerapi.AddBadRequestError(ctx, w, errors.New("missing body"))
+		return
+	}
+	var create schedoapi.CreateBatchAction
+	if err := json.NewDecoder(r.Body).Decode(&create); err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return
+	}
+	if create.Title == nil || *create.Title == "" {
+		brokerapi.AddBadRequestError(ctx, w, errors.New("title must not be empty"))
+		return
+	}
+	if !create.ActionName.Valid() {
+		brokerapi.AddBadRequestError(ctx, w, errors.New("unknown actionName: "+string(create.ActionName)))
+		return
+	}
+	if create.Schedule == "" {
+		brokerapi.AddBadRequestError(ctx, w, errors.New("schedule must not be empty"))
+		return
+	}
+	if create.BatchQuery == "" {
+		brokerapi.AddBadRequestError(ctx, w, errors.New("batchQuery must not be empty"))
+		return
+	}
+
+	owner, ok := h.resolveBatchActionOwner(ctx, w, r, params.Symbol)
+	if !ok {
+		return
+	}
+
+	next, err := sched_service.NextScheduleTime(create.Schedule)
+	if err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return
+	}
+	now := pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	taskId := uuid.New().String()
+	paramsMap := make(map[string]any)
+	if create.ActionParams != nil {
+		paramsMap = *create.ActionParams
+	}
+	taskToSave := sched_db.ScheduledTask{
+		ID:        taskId,
+		EventName: events.EventNameInvokeBatchAction,
+		Schedule:  create.Schedule,
+		Status:    sched_db.ScheduledTaskStatusPending,
+		Owner:     owner,
+		ActionData: events.EventData{
+			CommonEventData: events.CommonEventData{
+				BatchActionData: &events.BatchActionData{
+					ActionName: string(create.ActionName),
+					Selector:   create.BatchQuery,
+					TaskId:     taskId,
+					Owner:      owner,
+				},
+			},
+			CustomData: paramsMap,
+		},
+		Title:     pgtype.Text{String: *create.Title, Valid: true},
+		RunAt:     next,
+		CreatedAt: now,
+	}
+	if err := h.validateBatchEmailTemplate(ctx, taskToSave); err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return
+	}
+	if err := validateBatchEmailActionParams(taskToSave.ActionData.BatchActionData.ActionName, paramsMap); err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return
+	}
+	task, err := h.schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(taskToSave))
+	if err != nil {
+		h.writeScheduledTaskSaveError(ctx, w, err)
+		return
+	}
+
+	w.Header().Set("Location", brokerapi.LinkAbs(r, brokerapi.Path("batch_actions", task.ID), nil))
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(toBatchAction(r, task))
+}
+
+// GetBatchActionsId returns a single batch action by ID.
+func (h SchedulerApiHandler) GetBatchActionsId(w http.ResponseWriter, r *http.Request, id string, params schedoapi.GetBatchActionsIdParams) {
+	task, _, done := h.getScheduledTask(w, r, "GetBatchActionsId", id, params.Symbol)
+	if done {
+		return
+	}
+	brokerapi.WriteJsonResponse(w, toBatchAction(r, task))
+}
+
+func (h SchedulerApiHandler) getScheduledTask(w http.ResponseWriter, r *http.Request, methodName string, id string, symbol *schedoapi.Symbol) (sched_db.ScheduledTask, common.ExtendedContext, bool) {
+	logParams := map[string]string{"method": methodName, "id": id}
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+
+	owners, ok := h.resolveOwnerScope(ctx, w, r, symbol)
+	if !ok {
+		return sched_db.ScheduledTask{}, ctx, true
+	}
+
+	task, err := h.schedRepo.GetScheduledTaskById(ctx, id, owners)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			brokerapi.AddNotFoundError(w)
+			return sched_db.ScheduledTask{}, ctx, true
+		}
+		brokerapi.AddInternalError(ctx, w, err)
+		return sched_db.ScheduledTask{}, ctx, true
+	}
+	if err := validateBatchActionTask(task); err != nil {
+		brokerapi.AddInternalError(ctx, w, err)
+		return sched_db.ScheduledTask{}, ctx, true
+	}
+	return task, ctx, false
+}
+
+// DeleteBatchActionsId deletes a batch action by ID.
+func (h SchedulerApiHandler) DeleteBatchActionsId(w http.ResponseWriter, r *http.Request, id string, params schedoapi.DeleteBatchActionsIdParams) {
+	logParams := map[string]string{"method": "DeleteBatchActionsId", "id": id}
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+
+	owners, ok := h.resolveOwnerScope(ctx, w, r, params.Symbol)
+	if !ok {
+		return
+	}
+
+	err := h.schedRepo.WithTxFunc(ctx, func(schedRepo sched_db.SchedRepo) error {
+		task, inErr := schedRepo.GetScheduledTaskByIdForUpdate(ctx, id, owners)
+		if inErr != nil {
+			return inErr
+		}
+		if inErr = validateBatchActionTask(task); inErr != nil {
+			return inErr
+		}
+		active, inErr := schedRepo.HasActiveBatchActionEvents(ctx, task.ID)
+		if inErr != nil {
+			return inErr
+		}
+		if active {
+			return errBatchActionInProgress
+		}
+		if inErr = schedRepo.DeleteBatchActionEvents(ctx, task.ID); inErr != nil {
+			return inErr
+		}
+		return schedRepo.DeleteScheduledTask(ctx, task.ID, owners)
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			brokerapi.AddNotFoundError(w)
+			return
+		}
+		if errors.Is(err, errBatchActionInProgress) {
+			brokerapi.WriteJsonErrorResponse(w, err, http.StatusConflict)
+			return
+		}
+		brokerapi.AddInternalError(ctx, w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+var errBatchActionInProgress = errors.New("batch action is currently queued or being processed")
+
+func (h SchedulerApiHandler) PutBatchActionsId(w http.ResponseWriter, r *http.Request, id string, params schedoapi.PutBatchActionsIdParams) {
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
+		Other: map[string]string{"method": "PutBatchActionsId", "id": id},
+	})
+	owners, ok := h.resolveOwnerScope(ctx, w, r, params.Symbol)
+	if !ok {
+		return
+	}
+	if r.Body == nil || r.Body == http.NoBody {
+		brokerapi.AddBadRequestError(ctx, w, errors.New("missing body"))
+		return
+	}
+	var update schedoapi.UpdateBatchAction
+	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return
+	}
+	if update.Schedule == "" {
+		brokerapi.AddBadRequestError(ctx, w, errors.New("schedule must not be empty"))
+		return
+	}
+	if update.BatchQuery == "" {
+		brokerapi.AddBadRequestError(ctx, w, errors.New("batchQuery must not be empty"))
+		return
+	}
+	if update.Title != nil && *update.Title == "" {
+		brokerapi.AddBadRequestError(ctx, w, errors.New("title must not be empty"))
+		return
+	}
+	next, err := sched_service.NextScheduleTime(update.Schedule)
+	if err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return
+	}
+	if update.ActionParams != nil {
+		taskForValidation, validationErr := h.schedRepo.GetScheduledTaskById(ctx, id, owners)
+		if validationErr != nil {
+			h.writeScheduledTaskMutationError(ctx, w, validationErr)
+			return
+		}
+		if validationErr = validateBatchActionTask(taskForValidation); validationErr != nil {
+			h.writeScheduledTaskMutationError(ctx, w, validationErr)
+			return
+		}
+		if validationErr = validateBatchEmailActionParams(taskForValidation.ActionData.BatchActionData.ActionName, *update.ActionParams); validationErr != nil {
+			brokerapi.AddBadRequestError(ctx, w, validationErr)
+			return
+		}
+		taskForValidation.ActionData.CustomData = *update.ActionParams
+		if validationErr = h.validateBatchEmailTemplate(ctx, taskForValidation); validationErr != nil {
+			brokerapi.AddBadRequestError(ctx, w, validationErr)
+			return
+		}
+	}
+	task, err := h.mutateScheduledTask(ctx, id, owners, func(task *sched_db.ScheduledTask) {
+		task.Schedule = update.Schedule
+		task.RunAt = next
+		task.ActionData.BatchActionData.Selector = update.BatchQuery
+		if update.Title != nil {
+			task.Title = toPgText(update.Title)
+		}
+		if update.ActionParams != nil {
+			task.ActionData.CustomData = *update.ActionParams
+		}
+	})
+	if err != nil {
+		h.writeScheduledTaskMutationError(ctx, w, err)
+		return
+	}
+
+	brokerapi.WriteJsonResponse(w, toBatchAction(r, task))
+}
+
+func (h SchedulerApiHandler) PostBatchActionsIdDisable(w http.ResponseWriter, r *http.Request, id string, params schedoapi.PostBatchActionsIdDisableParams) {
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
+		Other: map[string]string{"method": "PostBatchActionsIdDisable", "id": id},
+	})
+	owners, ok := h.resolveOwnerScope(ctx, w, r, params.Symbol)
+	if !ok {
+		return
+	}
+	_, err := h.mutateScheduledTask(ctx, id, owners, func(task *sched_db.ScheduledTask) {
+		task.Status = sched_db.ScheduledTaskStatusStopped
+	})
+	if err != nil {
+		h.writeScheduledTaskMutationError(ctx, w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h SchedulerApiHandler) PostBatchActionsIdEnable(w http.ResponseWriter, r *http.Request, id string, params schedoapi.PostBatchActionsIdEnableParams) {
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
+		Other: map[string]string{"method": "PostBatchActionsIdEnable", "id": id},
+	})
+	owners, ok := h.resolveOwnerScope(ctx, w, r, params.Symbol)
+	if !ok {
+		return
+	}
+	_, err := h.mutateScheduledTask(ctx, id, owners, func(task *sched_db.ScheduledTask) {
+		task.Status = sched_db.ScheduledTaskStatusPending
+	})
+	if err != nil {
+		h.writeScheduledTaskMutationError(ctx, w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h SchedulerApiHandler) mutateScheduledTask(
+	ctx common.ExtendedContext,
+	id string,
+	owners []string,
+	mutate func(*sched_db.ScheduledTask),
+) (sched_db.ScheduledTask, error) {
+	var task sched_db.ScheduledTask
+	err := h.schedRepo.WithTxFunc(ctx, func(repo sched_db.SchedRepo) error {
+		var inErr error
+		task, inErr = repo.GetScheduledTaskByIdForUpdate(ctx, id, owners)
+		if inErr != nil {
+			return inErr
+		}
+		if inErr = validateBatchActionTask(task); inErr != nil {
+			return inErr
+		}
+		mutate(&task)
+		task, inErr = repo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
+		return inErr
+	})
+	return task, err
+}
+
+func (h SchedulerApiHandler) validateBatchEmailTemplate(ctx common.ExtendedContext, task sched_db.ScheduledTask) error {
+	if task.ActionData.BatchActionData == nil ||
+		task.ActionData.BatchActionData.ActionName != string(schedoapi.EmailPullslips) {
+		return nil
+	}
+	templateLabel, _ := task.ActionData.CustomData["templateLabel"].(string)
+	if templateLabel == "" {
+		return nil
+	}
+	if h.templateRepo == nil {
+		return fmt.Errorf("%w: template repository is unavailable", errInvalidBatchEmailTemplate)
+	}
+	template, err := prservice.ResolveTemplate(ctx, h.templateRepo, pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams{
+		Owner:    task.Owner,
+		Purpose:  string(proapi.Email),
+		Label:    templateLabel,
+		Audience: string(proapi.ModelActionParamsSendToStaff),
+	})
+	if err != nil {
+		return fmt.Errorf("%w: %w", errInvalidBatchEmailTemplate, err)
+	}
+	if !template.Subject.Valid || template.Subject.String == "" {
+		return fmt.Errorf("%w: subject field is required", errInvalidBatchEmailTemplate)
+	}
+	if template.Body == "" {
+		return fmt.Errorf("%w: body field is required", errInvalidBatchEmailTemplate)
+	}
+	if err := prservice.ValidateTemplateRenderingForContext(
+		proapi.Email,
+		proapi.TemplateContentType(template.ContentType),
+		template.Body,
+		&template.Subject.String,
+		template.Labels,
+		prservice.BatchEmailTemplateContext,
+	); err != nil {
+		return fmt.Errorf("%w: %w", errInvalidBatchEmailTemplate, err)
+	}
+	return nil
+}
+
+func validateBatchEmailActionParams(actionName string, params map[string]any) error {
+	if actionName != string(schedoapi.EmailPullslips) {
+		return nil
+	}
+	rawLabel, ok := params["templateLabel"]
+	if !ok {
+		return errors.New("templateLabel field is required for email-pullslips action")
+	}
+	templateLabel, ok := rawLabel.(string)
+	if !ok || strings.TrimSpace(templateLabel) == "" {
+		return errors.New("templateLabel field must be a non-empty string for email-pullslips action")
+	}
+	return nil
+}
+
+func validateBatchActionTask(task sched_db.ScheduledTask) error {
+	if task.ActionData.BatchActionData == nil {
+		return errors.New("missing batchActionData")
+	}
+	return nil
+}
+
+func (h SchedulerApiHandler) writeScheduledTaskMutationError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
+	if errors.Is(err, pgx.ErrNoRows) {
+		brokerapi.AddNotFoundError(w)
+		return
+	}
+	h.writeScheduledTaskSaveError(ctx, w, err)
+}
+
+func (h SchedulerApiHandler) writeScheduledTaskSaveError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+		brokerapi.WriteJsonErrorResponse(w, errDuplicateBatchActionTitle, http.StatusConflict)
+		return
+	}
+	brokerapi.AddInternalError(ctx, w, err)
+}
+
+// resolveOwnerScope returns the owners the request may access. A nil scope
+// means unrestricted master access.
+func (h SchedulerApiHandler) resolveOwnerScope(ctx common.ExtendedContext, w http.ResponseWriter, r *http.Request, symbol *string) ([]string, bool) {
+	t, err := h.tenantResolver.Resolve(ctx, r, symbol)
+	if err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return nil, false
+	}
+	owners, err := t.GetOwnedSymbols()
+	if err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return nil, false
+	}
+	return owners, true
+}
+
+// resolveBatchActionOwner resolves the owner for a new batch action. An empty
+// owner represents unrestricted master access.
+func (h SchedulerApiHandler) resolveBatchActionOwner(ctx common.ExtendedContext, w http.ResponseWriter, r *http.Request, symbol *string) (string, bool) {
+	t, err := h.tenantResolver.Resolve(ctx, r, symbol)
+	if err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return "", false
+	}
+	owner, err := t.GetRequestSymbol()
+	if err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return "", false
+	}
+	return owner, true
+}
+
+func toBatchAction(r *http.Request, task sched_db.ScheduledTask) schedoapi.BatchAction {
+	actionData := task.ActionData.BatchActionData
+	if actionData == nil { // Prevent panic for nil, should never happen
+		actionData = &events.BatchActionData{}
+	}
+	active := task.Status != sched_db.ScheduledTaskStatusStopped
+	resp := schedoapi.BatchAction{
+		Id:         task.ID,
+		Owner:      task.Owner,
+		Schedule:   task.Schedule,
+		ActionName: schedoapi.BatchActionName(actionData.ActionName),
+		CreatedAt:  task.CreatedAt.Time,
+		BatchQuery: actionData.Selector,
+		Active:     active,
+		EventsLink: brokerapi.Link(r, brokerapi.Path("batch_actions", task.ID, "events"), nil),
+	}
+	if len(task.ActionData.CustomData) > 0 {
+		resp.ActionParams = &task.ActionData.CustomData
+	}
+	if task.UpdatedAt.Valid {
+		resp.UpdatedAt = &task.UpdatedAt.Time
+	}
+	if task.RunAt.Valid {
+		resp.NextRun = &task.RunAt.Time
+	}
+	if task.Title.Valid {
+		resp.Title = &task.Title.String
+	}
+	return resp
+}
+
+func toBatchActionList(r *http.Request, items []sched_db.ScheduledTask) []schedoapi.BatchAction {
+	result := make([]schedoapi.BatchAction, 0, len(items))
+	for _, task := range items {
+		if task.ActionData.BatchActionData != nil {
+			result = append(result, toBatchAction(r, task))
+		}
+	}
+	return result
+}
+
+func toPgText(text *string) pgtype.Text {
+	if text == nil {
+		return pgtype.Text{Valid: false}
+	}
+	return pgtype.Text{String: *text, Valid: true}
+}

@@ -5,14 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/indexdata/cql-go/pgcql"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
@@ -24,14 +27,15 @@ import (
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/oapi-codegen/nullable"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 var mockEventBus = new(MockEventBus)
 var mockEventRepo = new(mocks.MockEventRepositorySuccess)
 var symbol = "ISIL:REQ"
-var lendingString = string(prservice.SideLending)
 var proapiBorrowingSide = proapi.Side(prservice.SideBorrowing)
 var proapiLendingSide = proapi.Side(prservice.SideLending)
 
@@ -117,28 +121,45 @@ func TestToApiPatronRequestOmitsIllTransactionLinkWithoutRequesterReqID(t *testi
 	assert.Nil(t, apiPr.IllTransactionLink)
 }
 
+func TestToApiPatronRequestSurfacesInternalNote(t *testing.T) {
+	req := httptest.NewRequest("GET", "http://localhost/patron_requests/pr-1", nil)
+	pr := pr_db.PatronRequest{
+		ID:           "pr-1",
+		InternalNote: pgtype.Text{String: "staff note", Valid: true},
+		StateModel:   "default",
+	}
+	apiPr := toApiPatronRequest(req, patronRequestSearchViewFromPatronRequest(pr, false))
+	assert.Equal(t, "default", apiPr.StateModel)
+	if assert.NotNil(t, apiPr.InternalNote) {
+		assert.Equal(t, "staff note", *apiPr.InternalNote)
+	}
+}
+
 func patronRequestSearchViewFromPatronRequest(pr pr_db.PatronRequest, hasCost bool) pr_db.PatronRequestSearchView {
 	return pr_db.PatronRequestSearchView{
-		ID:                pr.ID,
-		CreatedAt:         pr.CreatedAt,
-		IllRequest:        pr.IllRequest,
-		State:             pr.State,
-		Side:              pr.Side,
-		Patron:            pr.Patron,
-		RequesterSymbol:   pr.RequesterSymbol,
-		SupplierSymbol:    pr.SupplierSymbol,
-		Tenant:            pr.Tenant,
-		RequesterReqID:    pr.RequesterReqID,
-		NeedsAttention:    pr.NeedsAttention,
-		LastAction:        pr.LastAction,
-		LastActionOutcome: pr.LastActionOutcome,
-		LastActionResult:  pr.LastActionResult,
-		Items:             pr.Items,
-		Language:          pr.Language,
-		TerminalState:     pr.TerminalState,
-		UpdatedAt:         pr.UpdatedAt,
-		IllResponse:       pr.IllResponse,
-		HasCost:           hasCost,
+		ID:                        pr.ID,
+		CreatedAt:                 pr.CreatedAt,
+		IllRequest:                pr.IllRequest,
+		State:                     pr.State,
+		Side:                      pr.Side,
+		Patron:                    pr.Patron,
+		RequesterSymbol:           pr.RequesterSymbol,
+		SupplierSymbol:            pr.SupplierSymbol,
+		Tenant:                    pr.Tenant,
+		RequesterReqID:            pr.RequesterReqID,
+		NeedsAttention:            pr.NeedsAttention,
+		LastAction:                pr.LastAction,
+		LastActionOutcome:         pr.LastActionOutcome,
+		LastActionResult:          pr.LastActionResult,
+		Items:                     pr.Items,
+		Language:                  pr.Language,
+		TerminalState:             pr.TerminalState,
+		UpdatedAt:                 pr.UpdatedAt,
+		IllResponse:               pr.IllResponse,
+		InternalNote:              pr.InternalNote,
+		StateModel:                pr.StateModel,
+		RequesterPickupLocationID: pr.RequesterPickupLocationID,
+		HasCost:                   hasCost,
 	}
 }
 
@@ -147,12 +168,38 @@ func TestGetPatronRequests(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	params := proapi.GetPatronRequestsParams{
-		Side:   &lendingString,
+		Side:   &proapiLendingSide,
 		Symbol: &symbol,
 	}
 	handler.GetPatronRequests(rr, req, params)
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Contains(t, rr.Body.String(), "DB error")
+}
+
+func TestGetPatronRequestsFacetsDBError(t *testing.T) {
+	facets := proapi.Facets{"requester_symbol"}
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	params := proapi.GetPatronRequestsParams{
+		Facets: &facets,
+	}
+	handler.GetPatronRequests(rr, req, params)
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DB error")
+}
+
+func TestGetPatronRequestsFacetsUnsupported(t *testing.T) {
+	facets := proapi.Facets{"nosuch"}
+	handler := NewPrApiHandler(new(PrRepoFacetsUnsupported), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	params := proapi.GetPatronRequestsParams{
+		Facets: &facets,
+	}
+	handler.GetPatronRequests(rr, req, params)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "nosuch")
 }
 
 func TestGetPatronRequestsNoSymbol(t *testing.T) {
@@ -161,14 +208,14 @@ func TestGetPatronRequestsNoSymbol(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	params := proapi.GetPatronRequestsParams{
-		Side: &lendingString,
+		Side: &proapiLendingSide,
 	}
 	handler.GetPatronRequests(rr, req, params)
 	assert.Equal(t, http.StatusOK, rr.Code)
-	if assert.NotNil(t, repo.cql) {
-		assert.Contains(t, *repo.cql, "side = lending")
-		assert.NotContains(t, *repo.cql, "supplier_symbol =")
-		assert.NotContains(t, *repo.cql, "requester_symbol =")
+	if assert.NotNil(t, repo.pgcql) {
+		assert.Contains(t, repo.pgcql.GetWhereClause(), "side =")
+		assert.NotContains(t, repo.pgcql.GetWhereClause(), "supplier_symbol =")
+		assert.NotContains(t, repo.pgcql.GetWhereClause(), "requester_symbol =")
 	}
 }
 
@@ -180,7 +227,7 @@ func TestGetPatronRequestsWithLimits(t *testing.T) {
 	limit := proapi.Limit(10)
 	cql := "state = NEW"
 	params := proapi.GetPatronRequestsParams{
-		Side:   &lendingString,
+		Side:   &proapiLendingSide,
 		Symbol: &symbol,
 		Offset: &offset,
 		Limit:  &limit,
@@ -198,16 +245,16 @@ func TestGetPatronRequestsWithRequesterReqId(t *testing.T) {
 	rr := httptest.NewRecorder()
 	requesterReqID := "req-123"
 	params := proapi.GetPatronRequestsParams{
-		Side:           &lendingString,
+		Side:           &proapiLendingSide,
 		Symbol:         &symbol,
 		RequesterReqId: &requesterReqID,
 	}
 	handler.GetPatronRequests(rr, req, params)
 	assert.Equal(t, http.StatusOK, rr.Code)
-	if assert.NotNil(t, repo.cql) {
-		assert.Contains(t, *repo.cql, "requester_req_id_exact = req-123")
-		assert.Contains(t, *repo.cql, "side = lending")
-		assert.Contains(t, *repo.cql, "supplier_symbol_exact = ISIL:REQ")
+	if assert.NotNil(t, repo.pgcql) {
+		assert.Contains(t, repo.pgcql.GetWhereClause(), "requester_req_id =")
+		assert.Contains(t, repo.pgcql.GetWhereClause(), "side =")
+		assert.Contains(t, repo.pgcql.GetWhereClause(), "supplier_symbol =")
 	}
 }
 
@@ -225,8 +272,8 @@ func TestGetPatronRequestsWithSymbolNoSideGroupsOwnerRestriction(t *testing.T) {
 	handler.GetPatronRequests(rr, req, params)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
-	if assert.NotNil(t, repo.cql) {
-		assert.Equal(t, "id = pr-1 and (side = lending and supplier_symbol_exact = ISIL:REQ or (side = borrowing and requester_symbol_exact = ISIL:REQ))", *repo.cql)
+	if assert.NotNil(t, repo.pgcql) {
+		assert.Equal(t, "id = $3 AND ((side = $4 AND supplier_symbol = $5) OR (side = $6 AND requester_symbol = $7))", repo.pgcql.GetWhereClause())
 	}
 }
 
@@ -247,6 +294,69 @@ func TestPostPatronRequests(t *testing.T) {
 	handler.PostPatronRequests(rr, req, proapi.PostPatronRequestsParams{XOkapiTenant: &tenant})
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Contains(t, rr.Body.String(), "DB error")
+}
+
+type createdPatronRequestRepo struct {
+	createCalls int
+	PrRepoError
+	created pr_db.PatronRequest
+	view    pr_db.PatronRequestSearchView
+}
+
+func (r *createdPatronRequestRepo) CreatePatronRequest(ctx common.ExtendedContext, params pr_db.CreatePatronRequestParams) (pr_db.PatronRequest, error) {
+	r.createCalls++
+	return r.created, nil
+}
+
+func (r *createdPatronRequestRepo) GetPatronRequestSearchView(ctx common.ExtendedContext, id string) (pr_db.PatronRequestSearchView, error) {
+	return r.view, nil
+}
+
+type failingInitialAutoActionRunner struct{}
+
+func (failingInitialAutoActionRunner) RunAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest, parentEventID *string, user string) error {
+	return errors.New("auto-action failed")
+}
+
+func TestPostPatronRequestsReturnsCreatedWhenInitialAutoActionFails(t *testing.T) {
+	now := time.Now()
+	id := "pr-123"
+	repo := &createdPatronRequestRepo{
+		created: pr_db.PatronRequest{ID: id},
+		view: pr_db.PatronRequestSearchView{
+			ID:                id,
+			CreatedAt:         pgtype.Timestamp{Valid: true, Time: now},
+			State:             pr_db.PatronRequestState("VALIDATED"),
+			StateModel:        "default",
+			Side:              prservice.SideBorrowing,
+			IllRequest:        validIllRequest(),
+			NeedsAttention:    true,
+			LastAction:        pgtype.Text{String: "update-metadata", Valid: true},
+			LastActionOutcome: pgtype.Text{String: "failure", Valid: true},
+			LastActionResult:  pgtype.Text{String: "error", Valid: true},
+		},
+	}
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	handler.SetAutoActionRunner(failingInitialAutoActionRunner{})
+	body := proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol, IllRequest: validIllRequest()}
+	jsonBytes, err := json.Marshal(body)
+	assert.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/patron_requests", bytes.NewReader(jsonBytes))
+	rr := httptest.NewRecorder()
+	okapiTenant := proapi.Tenant("test-lib")
+
+	handler.PostPatronRequests(rr, req, proapi.PostPatronRequestsParams{XOkapiTenant: &okapiTenant})
+
+	assert.Equal(t, http.StatusCreated, rr.Code)
+	assert.Equal(t, "https://example.com/patron_requests/"+id, rr.Header().Get("Location"))
+	var response map[string]any
+	assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), &response))
+	assert.Equal(t, id, response["id"])
+	assert.Equal(t, "VALIDATED", response["state"])
+	assert.Equal(t, "update-metadata", response["lastAction"])
+	assert.Equal(t, "failure", response["lastActionOutcome"])
+	assert.Equal(t, "error", response["lastActionResult"])
+	assert.Equal(t, true, response["needsAttention"])
 }
 
 func TestPostPatronRequestsMissingSymbol(t *testing.T) {
@@ -294,6 +404,64 @@ func TestDeletePatronRequestsIdNotFound(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.DeletePatronRequestsId(rr, req, "2", proapi.DeletePatronRequestsIdParams{Symbol: &symbol})
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+func TestDeletePatronRequestsIdRejectsSyntheticID(t *testing.T) {
+	handler := NewPrApiHandler(nil, nil, nil, nil, nil, 10)
+	req := httptest.NewRequest(http.MethodDelete, "/patron_requests/"+events.DEFAULT_PATRON_REQUEST_ID, nil)
+	rr := httptest.NewRecorder()
+
+	handler.DeletePatronRequestsId(rr, req, events.DEFAULT_PATRON_REQUEST_ID, proapi.DeletePatronRequestsIdParams{})
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "synthetic IDs cannot be deleted")
+}
+
+func internalNoteBody(t *testing.T, note *string) *bytes.Buffer {
+	jsonBytes, err := json.Marshal(proapi.UpdateInternalNote{InternalNote: note})
+	assert.NoError(t, err)
+	return bytes.NewBuffer(jsonBytes)
+}
+
+func TestPutPatronRequestsIdInternalNoteSetsNote(t *testing.T) {
+	repo := new(PrRepoError)
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	note := "hello staff"
+	req, _ := http.NewRequest("PUT", "/", internalNoteBody(t, &note))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsIdInternalNote(rr, req, "4", proapi.PutPatronRequestsIdInternalNoteParams{Symbol: &symbol})
+	assert.Equal(t, http.StatusNoContent, rr.Code)
+	assert.Equal(t, pgtype.Text{Valid: true, String: "hello staff"}, repo.lastInternalNote)
+}
+
+func TestPutPatronRequestsIdInternalNoteClearsOnEmpty(t *testing.T) {
+	repo := new(PrRepoError)
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	empty := ""
+	req, _ := http.NewRequest("PUT", "/", internalNoteBody(t, &empty))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsIdInternalNote(rr, req, "4", proapi.PutPatronRequestsIdInternalNoteParams{Symbol: &symbol})
+	assert.Equal(t, http.StatusNoContent, rr.Code)
+	assert.False(t, repo.lastInternalNote.Valid, "empty string should clear to NULL")
+}
+
+func TestPutPatronRequestsIdInternalNoteClearsOnAbsent(t *testing.T) {
+	repo := new(PrRepoError)
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBufferString("{}"))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsIdInternalNote(rr, req, "4", proapi.PutPatronRequestsIdInternalNoteParams{Symbol: &symbol})
+	assert.Equal(t, http.StatusNoContent, rr.Code)
+	assert.False(t, repo.lastInternalNote.Valid, "absent field should clear to NULL")
+}
+
+func TestPutPatronRequestsIdInternalNoteNotFound(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	note := "x"
+	req, _ := http.NewRequest("PUT", "/", internalNoteBody(t, &note))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsIdInternalNote(rr, req, "2", proapi.PutPatronRequestsIdInternalNoteParams{Symbol: &symbol})
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
 
@@ -364,7 +532,25 @@ func TestGetPatronRequestsIdActions(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsIdActions(rr, req, "3", proapi.GetPatronRequestsIdActionsParams{Symbol: &symbol, Side: &proapiBorrowingSide})
 	assert.Equal(t, http.StatusOK, rr.Code)
-	assert.Equal(t, "{\"actions\":[]}\n", rr.Body.String())
+	assert.Equal(t, "{\"actions\":[{\"available\":true,\"name\":\"skip-patron-validation\",\"parameters\":[]},{\"available\":true,\"name\":\"close-request\",\"parameters\":[]}]}\n", rr.Body.String())
+}
+
+func TestGetPatronRequestsIdActionsUsesCopyApplicability(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoCopyWillSupply), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	handler.GetPatronRequestsIdActions(rr, req, "copy-will-supply", proapi.GetPatronRequestsIdActionsParams{Symbol: &symbol, Side: &proapiLendingSide})
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	var allowed proapi.AllowedActions
+	assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), &allowed))
+	assert.True(t, slices.ContainsFunc(allowed.Actions, func(action proapi.AllowedAction) bool {
+		return action.Name == string(prservice.LenderActionSupplyDocument) && action.Primary != nil && *action.Primary &&
+			slices.Equal(action.Parameters, []string{"note", "deliveryUrl"})
+	}))
+	assert.False(t, slices.ContainsFunc(allowed.Actions, func(action proapi.AllowedAction) bool {
+		return action.Name == string(prservice.LenderActionShip)
+	}))
 }
 
 func TestGetPatronRequestsIdActionsNoSymbol(t *testing.T) {
@@ -373,7 +559,7 @@ func TestGetPatronRequestsIdActionsNoSymbol(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsIdActions(rr, req, "3", proapi.GetPatronRequestsIdActionsParams{Side: &proapiBorrowingSide})
 	assert.Equal(t, http.StatusOK, rr.Code)
-	assert.Equal(t, "{\"actions\":[]}\n", rr.Body.String())
+	assert.Equal(t, "{\"actions\":[{\"available\":true,\"name\":\"skip-patron-validation\",\"parameters\":[]},{\"available\":true,\"name\":\"close-request\",\"parameters\":[]}]}\n", rr.Body.String())
 }
 
 func TestGetPatronRequestsIdActionsDbError(t *testing.T) {
@@ -436,7 +622,7 @@ func TestPostPatronRequestsIdActionStoresTenantUserInInvokeTask(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoOkapiOwner), eventBus, mockEventRepo, tenantResolver, nil, 10)
 	handler.SetActionTaskProcessor(&MockActionTaskProcessor{})
 
-	reqBody := `{"action":"` + string(prservice.BorrowerActionSendRequest) + `"}`
+	reqBody := `{"action":"` + string(prservice.BorrowerActionCheckDuplicate) + `"}`
 	req, _ := http.NewRequest("POST", "/broker/patron_requests/3/action", strings.NewReader(reqBody))
 	req.Header.Set("X-Okapi-Tenant", "tenant1")
 	req.Header.Set("X-Okapi-User-Id", "okapi-user-1")
@@ -453,7 +639,7 @@ func TestPostPatronRequestsIdActionReturnsExclusiveTaskError(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoOkapiOwner), eventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
 	handler.SetActionTaskProcessor(&MockActionTaskProcessorExclusiveError{})
 
-	reqBody := `{"action":"` + string(prservice.BorrowerActionSendRequest) + `"}`
+	reqBody := `{"action":"` + string(prservice.BorrowerActionCheckDuplicate) + `"}`
 	req, _ := http.NewRequest("POST", "/", strings.NewReader(reqBody))
 	rr := httptest.NewRecorder()
 
@@ -470,12 +656,90 @@ func TestPostPatronRequestsIdActionReturnsExclusiveTaskError(t *testing.T) {
 	}
 }
 
+func TestPostPatronRequestsIdActionRejectsTerminate(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoOkapiOwner), new(MockEventBusCapture), mockEventRepo, tenant.NewResolver(), nil, 10)
+	handler.SetActionTaskProcessor(&MockActionTaskProcessor{})
+
+	reqBody := `{"action":"` + string(prservice.TerminateAction) + `"}`
+	req, _ := http.NewRequest("POST", "/", strings.NewReader(reqBody))
+	rr := httptest.NewRecorder()
+
+	handler.PostPatronRequestsIdAction(rr, req, "3", proapi.PostPatronRequestsIdActionParams{Side: &proapiBorrowingSide})
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Action terminate is not allowed")
+}
+
+func TestInvokeActionReturnsProblemDetails(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoOkapiOwner), new(MockEventBusCapture), mockEventRepo, tenant.NewResolver(), nil, 10)
+	handler.SetActionTaskProcessor(&MockActionTaskProcessorProblem{})
+	rr := httptest.NewRecorder()
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+
+	handler.invokeActionAndWriteResponse(rr, ctx, "pr-1", "RECEIVED", invokeActionData(prservice.BorrowerActionSendNotification, "test-user"))
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	var result proapi.ActionResult
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &result))
+	assert.Equal(t, string(events.EventStatusProblem), result.Result)
+	assert.Equal(t, prservice.ActionOutcomeFailure, result.Outcome)
+	require.NotNil(t, result.Message)
+	assert.Equal(t, "email template body: unknown field UnknownPlaceholder", *result.Message)
+}
+
+func TestPostPatronRequestsIdTerminateStoresTenantUserAndActionInInvokeTask(t *testing.T) {
+	tenantResolver := tenant.NewResolver().WithTenantToSymbol("ISIL:DK-{tenant}")
+	eventBus := new(MockEventBusCapture)
+	handler := NewPrApiHandler(new(PrRepoOkapiOwner), eventBus, mockEventRepo, tenantResolver, nil, 10)
+	handler.SetActionTaskProcessor(&MockActionTaskProcessor{})
+
+	req, _ := http.NewRequest("POST", "/broker/patron_requests/3/terminate", nil)
+	req.Header.Set("X-Okapi-Tenant", "tenant1")
+	req.Header.Set("X-Okapi-User-Id", "okapi-user-1")
+	req.Header.Set("X-Okapi-Token", "header.eyJzdWIiOiJva2FwaS1zdWJqZWN0IiwidXNlcl9pZCI6Im9rYXBpLXVzZXItMSJ9.signature")
+	rr := httptest.NewRecorder()
+
+	handler.PostPatronRequestsIdTerminate(rr, req, "3", proapi.PostPatronRequestsIdTerminateParams{Side: &proapiBorrowingSide})
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, events.EventNameInvokeAction, eventBus.lastEventName)
+	assert.NotNil(t, eventBus.lastData.Action)
+	assert.Equal(t, prservice.TerminateAction, *eventBus.lastData.Action)
+	assert.Equal(t, "okapi-subject", eventBus.lastData.User)
+}
+
+func TestPostPatronRequestsIdTerminateRejectsTerminal(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoTerminal), new(MockEventBusCapture), mockEventRepo, tenant.NewResolver(), nil, 10)
+	handler.SetActionTaskProcessor(&MockActionTaskProcessor{})
+
+	req, _ := http.NewRequest("POST", "/", nil)
+	rr := httptest.NewRecorder()
+
+	handler.PostPatronRequestsIdTerminate(rr, req, "3", proapi.PostPatronRequestsIdTerminateParams{Symbol: &symbol, Side: &proapiBorrowingSide})
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "already terminal")
+}
+
 func TestGetPatronRequestsIdEventsNoSymbol(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsIdEvents(rr, req, "3", proapi.GetPatronRequestsIdEventsParams{Side: &proapiBorrowingSide})
 	assert.Equal(t, http.StatusOK, rr.Code)
+}
+
+func TestGetPatronRequestsIdEventsRejectsSyntheticIDs(t *testing.T) {
+	handler := NewPrApiHandler(nil, nil, nil, nil, nil, 10)
+	for _, id := range []string{events.DEFAULT_ILL_TRANSACTION_ID, events.DEFAULT_PATRON_REQUEST_ID} {
+		t.Run(id, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/patron_requests/"+id+"/events", nil)
+			rr := httptest.NewRecorder()
+			handler.GetPatronRequestsIdEvents(rr, req, id, proapi.GetPatronRequestsIdEventsParams{})
+			assert.Equal(t, http.StatusBadRequest, rr.Code)
+			assert.Contains(t, rr.Body.String(), "synthetic IDs are not allowed")
+		})
+	}
 }
 
 func TestGetPatronRequestsIdEventsDbError(t *testing.T) {
@@ -574,7 +838,7 @@ func TestGetPatronRequestsIdNotificationsWithKindFilter(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 
-	kind := proapi.GetPatronRequestsIdNotificationsParamsKind(proapi.PrNotificationKindCondition)
+	kind := proapi.NotificationKind("condition")
 	limit := proapi.Limit(5)
 	offset := proapi.Offset(2)
 	handler.GetPatronRequestsIdNotifications(rr, req, "3", proapi.GetPatronRequestsIdNotificationsParams{
@@ -597,7 +861,7 @@ func TestGetPatronRequestsIdNotificationsWithKindFilter(t *testing.T) {
 	err := json.Unmarshal(rr.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	if assert.Len(t, response.Items, 1) {
-		assert.Equal(t, proapi.PrNotificationKindCondition, response.Items[0].Kind)
+		assert.Equal(t, proapi.NotificationKind("condition"), response.Items[0].Kind)
 		assert.Equal(t, "NoReproduction", *response.Items[0].Condition)
 		assert.Equal(t, "please do not copy", *response.Items[0].Note)
 	}
@@ -609,21 +873,26 @@ func TestParseAndValidateIllRequestAndBuildDbPatronRequest(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	creationTime := time.Now()
 	id := uuid.NewString()
+	patron := "user-1"
 	reqWithID := &proapi.CreatePatronRequest{
 		Id:              &id,
 		RequesterSymbol: &symbol,
 		IllRequest:      validIllRequest(),
+		Patron:          &patron,
 	}
 
 	illRequest, requesterReqID, err := handler.parseAndValidateIllRequest(ctx, reqWithID, creationTime)
 	assert.NoError(t, err)
 	assert.Equal(t, id, requesterReqID)
-	pr := buildDbPatronRequest(reqWithID, nil, pgtype.Timestamp{Valid: true, Time: creationTime}, requesterReqID, illRequest)
+	pr := buildDbPatronRequest(reqWithID, nil, pgtype.Timestamp{Valid: true, Time: creationTime}, requesterReqID, illRequest, prservice.BorrowerStateNew, "default")
 	assert.Equal(t, id, pr.ID)
 	assert.True(t, pr.CreatedAt.Valid)
 	assert.True(t, pr.RequesterReqID.Valid)
 	assert.Equal(t, id, pr.RequesterReqID.String)
 	assert.False(t, pr.SupplierSymbol.Valid)
+	assert.Equal(t, patron, pr.Patron.String)
+	assert.Equal(t, patron, pr.IllRequest.PatronInfo.PatronId)
+	assert.Equal(t, "default", pr.StateModel)
 
 	reqWithoutID := &proapi.CreatePatronRequest{RequesterSymbol: &symbol}
 	_, _, err = handler.parseAndValidateIllRequest(ctx, reqWithoutID, creationTime)
@@ -824,19 +1093,315 @@ func TestPutPatronRequestsIdNotificationsNotificationIdReceiptFailedToSave(t *te
 	assert.Contains(t, rr.Body.String(), "DB error")
 }
 
+func TestGetStateModelBatchActions(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	handler.GetStateModelBatchActions(rr, req, proapi.GetStateModelBatchActionsParams{})
+	assert.Equal(t, http.StatusOK, rr.Code)
+	var actions []proapi.BatchActionDefault
+	err := json.Unmarshal(rr.Body.Bytes(), &actions)
+	assert.NoError(t, err)
+	assert.Len(t, actions, 5)
+	// Clients key translated titles off titleKey, so each default needs a distinct one.
+	seen := map[string]bool{}
+	for _, action := range actions {
+		assert.NotEmpty(t, action.TitleKey)
+		assert.False(t, seen[action.TitleKey], "duplicate titleKey %s", action.TitleKey)
+		seen[action.TitleKey] = true
+	}
+}
+
+func TestGetStateModelTemplates(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	handler.GetStateModelTemplates(rr, req, proapi.GetStateModelTemplatesParams{})
+	assert.Equal(t, http.StatusOK, rr.Code)
+	var templates []proapi.CreateTemplate
+	err := json.Unmarshal(rr.Body.Bytes(), &templates)
+	assert.NoError(t, err)
+	assert.Len(t, templates, 8)
+	labels := make([]string, 0, len(templates))
+	for _, template := range templates {
+		assert.NotEmpty(t, template.Title)
+		assert.NotEmpty(t, template.Labels)
+		labels = append(labels, template.Labels...)
+	}
+	assert.ElementsMatch(t, []string{
+		"new-request-notification",
+		"received-notification",
+		"copy-completed-notification",
+		"unfilled-notification",
+		"cancelled-notification",
+		"new-supply-request-notification",
+		"pullslip-email",
+		"pullslip-pdf",
+	}, labels)
+}
+
+func TestGetTemplatesPlaceholders(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), tenant.NewResolver(), nil, 10)
+	req := httptest.NewRequest(http.MethodGet, "/templates/placeholders", nil)
+	rr := httptest.NewRecorder()
+
+	handler.GetTemplatesPlaceholders(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	var responseFields map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &responseFields))
+	assert.Contains(t, responseFields, "singleRecord")
+	assert.Contains(t, responseFields, "batchRecord")
+	assert.NotContains(t, responseFields, "pullSlip")
+	assert.NotContains(t, responseFields, "batchEmail")
+	var placeholders proapi.TemplatePlaceholders
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &placeholders))
+	require.Len(t, placeholders.SingleRecord, 30)
+	assert.Equal(t, proapi.TemplatePlaceholder{
+		Placeholder: "{{.ReqId}}",
+		Description: "Requester request identifier",
+	}, placeholders.SingleRecord[0])
+	require.Len(t, placeholders.BatchRecord, 3)
+	assert.Equal(t, []proapi.TemplatePlaceholder{
+		{Placeholder: "{{.FullCount}}", Description: "Total number of requests matched by the batch query"},
+		{Placeholder: "{{.ActualCount}}", Description: "Number of requests included in the batch email"},
+		{Placeholder: "{{.BatchQuery}}", Description: "Query used to select requests for the batch"},
+	}, placeholders.BatchRecord)
+}
+
+func TestValidateTemplateRendering(t *testing.T) {
+	patronSubject := "Request {{.ReqId}}"
+	batchSubject := "{{.ActualCount}} requests"
+	unsupportedSubject := "Request {{.Unsupported}}"
+	conditionalUnsupportedSubject := "{{if .Title}}{{.Unsupported}}{{end}}"
+
+	for _, tc := range []struct {
+		name        string
+		purpose     proapi.TemplatePurpose
+		contentType proapi.TemplateContentType
+		body        string
+		subject     *string
+		labels      []string
+		wantErr     string
+	}{
+		{
+			name:        "patron request email",
+			purpose:     proapi.Email,
+			contentType: proapi.Html,
+			body:        "<p>{{.PatronName}}</p>",
+			subject:     &patronSubject,
+		},
+		{
+			name:        "batch email",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        "{{.FullCount}} requests for {{.BatchQuery}}",
+			subject:     &batchSubject,
+			labels:      []string{"pullslip-email"},
+		},
+		{
+			name:        "batch email with arbitrary label",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        "{{.ActualCount}} requests",
+			subject:     &batchSubject,
+			labels:      []string{"pullslips"},
+		},
+		{
+			name:        "pullslip",
+			purpose:     proapi.Pullslip,
+			contentType: proapi.Html,
+			body:        "<p>{{.BarcodeBase64}}</p>",
+			subject:     &unsupportedSubject,
+		},
+		{
+			name:        "pullslip requires html content type",
+			purpose:     proapi.Pullslip,
+			contentType: proapi.Text,
+			body:        "Pull slip {{.ReqId}}",
+			wantErr:     "HTML",
+		},
+		{
+			name:        "pullslip html context validation",
+			purpose:     proapi.Pullslip,
+			contentType: proapi.Html,
+			body:        `{{if .Title}}<a href="{{end}}{{.Author}}`,
+			wantErr:     "body",
+		},
+		{
+			name:        "invalid body syntax",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        "{{.Unclosed",
+			wantErr:     "body",
+		},
+		{
+			name:        "unsupported body placeholder",
+			purpose:     proapi.Pullslip,
+			contentType: proapi.Html,
+			body:        "{{.Unsupported}}",
+			wantErr:     "Unsupported",
+		},
+		{
+			name:        "unsupported subject placeholder",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        "Request ready",
+			subject:     &unsupportedSubject,
+			wantErr:     "subject",
+		},
+		{
+			name:        "unsupported subject placeholder in unexecuted branch",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        "Request ready",
+			subject:     &conditionalUnsupportedSubject,
+			wantErr:     "Unsupported",
+		},
+		{
+			name:        "mixed email contexts",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        "{{.ReqId}}",
+			subject:     &batchSubject,
+			wantErr:     "does not render",
+		},
+		{
+			name:        "mixed batch and notification labels",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        "{{.BatchQuery}}",
+			labels:      []string{"pullslip-email", "received-notification"},
+			wantErr:     "cannot combine",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			labels := tc.labels
+			if len(labels) == 0 {
+				labels = []string{"received-notification"}
+			}
+			err := prservice.ValidateTemplateRendering(tc.purpose, tc.contentType, tc.body, tc.subject, labels)
+			if tc.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			assert.ErrorContains(t, err, tc.wantErr)
+		})
+	}
+}
+
+func TestTemplateSaveEndpointsRejectRenderingErrorsBeforeSave(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		call func(PatronRequestApiHandler, *httptest.ResponseRecorder, *http.Request)
+		body string
+		want string
+	}{
+		{
+			name: "create",
+			body: `{"title":"Invalid","purpose":"email","body":"{{.Unsupported}}","contentType":"text","labels":["received-notification"]}`,
+			call: func(handler PatronRequestApiHandler, rr *httptest.ResponseRecorder, req *http.Request) {
+				handler.PostTemplates(rr, req, proapi.PostTemplatesParams{Symbol: &symbol})
+			},
+			want: "Unsupported",
+		},
+		{
+			name: "update",
+			body: `{"title":"Invalid","subject":"{{.Unsupported}}","body":"Request ready","contentType":"text","labels":["received-notification"]}`,
+			call: func(handler PatronRequestApiHandler, rr *httptest.ResponseRecorder, req *http.Request) {
+				handler.PutTemplatesId(rr, req, "template-1", proapi.PutTemplatesIdParams{Symbol: &symbol})
+			},
+			want: "Unsupported",
+		},
+		{
+			name: "batch template with patron request placeholder",
+			body: `{"title":"Invalid","purpose":"email","subject":"Pull slips","body":"Request {{.ReqId}}","contentType":"text","labels":["pullslip-email"]}`,
+			call: func(handler PatronRequestApiHandler, rr *httptest.ResponseRecorder, req *http.Request) {
+				handler.PostTemplates(rr, req, proapi.PostTemplatesParams{Symbol: &symbol})
+			},
+			want: "ReqId",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &PrRepoTemplateCapture{template: pr_db.Template{
+				ID:      "template-1",
+				Owner:   symbol,
+				Purpose: string(proapi.Email),
+			}}
+			handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+			req := httptest.NewRequest(http.MethodPost, "/templates", strings.NewReader(tc.body))
+			rr := httptest.NewRecorder()
+
+			tc.call(handler, rr, req)
+
+			assert.Equal(t, http.StatusBadRequest, rr.Code)
+			assert.Contains(t, rr.Body.String(), tc.want)
+			assert.Zero(t, repo.saveCalls)
+		})
+	}
+}
+
 type PrRepoError struct {
 	mock.Mock
 	pr_db.PgPrRepo
-	counter int64
+	counter          int64
+	lastInternalNote pgtype.Text
 }
 
 type PrRepoOkapiOwner struct {
 	PrRepoError
 }
 
+type PrRepoTerminal struct {
+	PrRepoError
+}
+
+type PrRepoCopyWillSupply struct {
+	PrRepoError
+}
+
+type PrRepoTemplateCapture struct {
+	PrRepoError
+	template  pr_db.Template
+	saveCalls int
+}
+
+func (r *PrRepoTemplateCapture) GetTemplateByIdAndOwner(_ common.ExtendedContext, id string, owner string) (pr_db.Template, error) {
+	if r.template.ID != id || r.template.Owner != owner {
+		return pr_db.Template{}, pgx.ErrNoRows
+	}
+	return r.template, nil
+}
+
+func (r *PrRepoTemplateCapture) SaveTemplate(_ common.ExtendedContext, params pr_db.SaveTemplateParams) (pr_db.Template, error) {
+	r.saveCalls++
+	return pr_db.Template(params), nil
+}
+
+func (r *PrRepoCopyWillSupply) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
+	if id != "copy-will-supply" {
+		return r.PrRepoError.GetPatronRequestById(ctx, id)
+	}
+	return pr_db.PatronRequest{
+		ID:             id,
+		State:          prservice.LenderStateWillSupply,
+		Side:           prservice.SideLending,
+		SupplierSymbol: pgtype.Text{String: symbol, Valid: true},
+		IllRequest:     validIllRequest(),
+	}, nil
+}
+
 func (r *PrRepoOkapiOwner) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
 	if id == "3" {
-		return pr_db.PatronRequest{ID: id, State: prservice.BorrowerStateValidated, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: "ISIL:DK-TENANT1", Valid: true}}, nil
+		return pr_db.PatronRequest{ID: id, State: prservice.BorrowerStateNeedsReview, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: "ISIL:DK-TENANT1", Valid: true}}, nil
+	}
+	return r.PrRepoError.GetPatronRequestById(ctx, id)
+}
+
+func (r *PrRepoTerminal) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
+	if id == "3" {
+		return pr_db.PatronRequest{ID: id, State: prservice.BorrowerStateCompleted, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, TerminalState: true}, nil
 	}
 	return r.PrRepoError.GetPatronRequestById(ctx, id)
 }
@@ -848,7 +1413,7 @@ func (r *PrRepoOkapiOwner) GetPatronRequestSearchView(ctx common.ExtendedContext
 
 type PrRepoCapture struct {
 	PrRepoError
-	cql *string
+	pgcql pgcql.Query
 }
 
 type PrRepoNotificationsCapture struct {
@@ -858,13 +1423,13 @@ type PrRepoNotificationsCapture struct {
 	fullCount     int64
 }
 
-func (r *PrRepoCapture) ListPatronRequests(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, cql *string) ([]pr_db.PatronRequest, int64, error) {
-	r.cql = cql
+func (r *PrRepoCapture) ListPatronRequests(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, pgcql pgcql.Query) ([]pr_db.PatronRequest, int64, error) {
+	r.pgcql = pgcql
 	return []pr_db.PatronRequest{}, 0, nil
 }
 
-func (r *PrRepoCapture) ListPatronRequestsSearchView(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, cql *string) ([]pr_db.PatronRequestSearchView, int64, error) {
-	r.cql = cql
+func (r *PrRepoCapture) ListPatronRequestsSearchView(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, pgcql pgcql.Query) ([]pr_db.PatronRequestSearchView, int64, error) {
+	r.pgcql = pgcql
 	return []pr_db.PatronRequestSearchView{}, 0, nil
 }
 
@@ -884,6 +1449,8 @@ func (r *PrRepoError) GetPatronRequestById(ctx common.ExtendedContext, id string
 		return pr_db.PatronRequest{}, pgx.ErrNoRows
 	case "3", "4":
 		return pr_db.PatronRequest{ID: id, State: prservice.BorrowerStateNew, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}}, nil
+	case "5":
+		return pr_db.PatronRequest{ID: id, State: prservice.BorrowerStateNeedsReview, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}}, nil
 	default:
 		return pr_db.PatronRequest{}, errors.New("DB error")
 	}
@@ -894,16 +1461,24 @@ func (r *PrRepoError) GetPatronRequestSearchView(ctx common.ExtendedContext, id 
 	return patronRequestSearchViewFromPatronRequest(pr, false), err
 }
 
-func (r *PrRepoError) ListPatronRequests(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, cql *string) ([]pr_db.PatronRequest, int64, error) {
+func (r *PrRepoError) ListPatronRequests(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, pgcql pgcql.Query) ([]pr_db.PatronRequest, int64, error) {
 	return []pr_db.PatronRequest{}, 0, errors.New("DB error")
 }
 
-func (r *PrRepoError) ListPatronRequestsSearchView(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, cql *string) ([]pr_db.PatronRequestSearchView, int64, error) {
+func (r *PrRepoError) ListPatronRequestsSearchView(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, pgcql pgcql.Query) ([]pr_db.PatronRequestSearchView, int64, error) {
 	return []pr_db.PatronRequestSearchView{}, 0, errors.New("DB error")
 }
 
 func (r *PrRepoError) UpdatePatronRequest(ctx common.ExtendedContext, params pr_db.UpdatePatronRequestParams) (pr_db.PatronRequest, error) {
 	return pr_db.PatronRequest{}, errors.New("DB error")
+}
+
+func (r *PrRepoError) UpdatePatronRequestInternalNote(ctx common.ExtendedContext, id string, internalNote pgtype.Text) error {
+	r.lastInternalNote = internalNote
+	if id == "4" {
+		return nil
+	}
+	return errors.New("DB error")
 }
 
 func (r *PrRepoError) CreatePatronRequest(ctx common.ExtendedContext, params pr_db.CreatePatronRequestParams) (pr_db.PatronRequest, error) {
@@ -944,6 +1519,18 @@ func (r *PrRepoError) GetNotificationById(ctx common.ExtendedContext, id string)
 	}
 }
 
+func (r *PrRepoError) GetPatronRequestsFacets(_ common.ExtendedContext, _ []string, _ pgcql.Query) ([]pr_db.Facet, error) {
+	return nil, errors.New("DB error")
+}
+
+type PrRepoFacetsUnsupported struct {
+	PrRepoCapture
+}
+
+func (r *PrRepoFacetsUnsupported) GetPatronRequestsFacets(_ common.ExtendedContext, _ []string, _ pgcql.Query) ([]pr_db.Facet, error) {
+	return nil, fmt.Errorf("%w: nosuch", pr_db.ErrUnsupportedFacet)
+}
+
 type MockIso18626Handler struct {
 	mock.Mock
 	handler.Iso18626Handler
@@ -960,10 +1547,12 @@ func (h *MockEventBus) CreateTask(id string, eventName events.EventName, data ev
 
 type MockEventBusCapture struct {
 	MockEventBus
-	lastData events.EventData
+	lastEventName events.EventName
+	lastData      events.EventData
 }
 
 func (h *MockEventBusCapture) CreateTask(id string, eventName events.EventName, data events.EventData, eventDomain events.EventDomain, parentId *string, target events.SignalTarget) (string, error) {
+	h.lastEventName = eventName
 	h.lastData = data
 	return uuid.NewString(), nil
 }
@@ -984,6 +1573,14 @@ func (m *MockActionTaskProcessor) ProcessInvokeActionTask(ctx common.ExtendedCon
 
 type MockActionTaskProcessorExclusiveError struct{}
 
+type MockActionTaskProcessorProblem struct{}
+
+func (m *MockActionTaskProcessorProblem) ProcessInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error) {
+	status, result := events.NewProblemResult("notification failed", "email template body: unknown field UnknownPlaceholder")
+	result.ActionResult = &events.ActionResult{Outcome: prservice.ActionOutcomeFailure}
+	return events.Event{ID: event.ID, EventStatus: status, ResultData: *result}, nil
+}
+
 func (m *MockActionTaskProcessorExclusiveError) ProcessInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error) {
 	return events.Event{
 		ID:          event.ID,
@@ -994,4 +1591,484 @@ func (m *MockActionTaskProcessorExclusiveError) ProcessInvokeActionTask(ctx comm
 			},
 		},
 	}, nil
+}
+
+// --- PutPatronRequestsId tests ---
+
+// illRepoNoTx returns pgx.ErrNoRows for GetIllTransactionByRequesterRequestId,
+// meaning no ILL transaction has been sent for the given patron request yet.
+// PrRepoUpdateCapture captures the params passed to UpdatePatronRequest and returns success.
+type PrRepoUpdateCapture struct {
+	PrRepoError
+	lastUpdateParams *pr_db.UpdatePatronRequestParams
+	state            pr_db.PatronRequestState
+	pickupLocationID pgtype.UUID
+}
+
+func (r *PrRepoUpdateCapture) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
+	if id == "3" {
+		state := r.state
+		if state == "" {
+			state = prservice.BorrowerStateNeedsReview
+		}
+		return pr_db.PatronRequest{ID: id, RequesterPickupLocationID: r.pickupLocationID, State: state, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, InternalNote: pgtype.Text{String: "original note", Valid: true}, Patron: pgtype.Text{String: "original patron", Valid: true}}, nil
+	}
+	return r.PrRepoError.GetPatronRequestById(ctx, id)
+}
+
+func (r *PrRepoUpdateCapture) UpdatePatronRequest(ctx common.ExtendedContext, params pr_db.UpdatePatronRequestParams) (pr_db.PatronRequest, error) {
+	paramsCopy := params
+	r.lastUpdateParams = &paramsCopy
+	return pr_db.PatronRequest(paramsCopy), nil
+}
+
+// PrRepoUpdateCapturePreset embeds PrRepoUpdateCapture but returns a PR with a preset CreatedAt for id "3".
+type PrRepoUpdateCapturePreset struct {
+	PrRepoUpdateCapture
+	presetCreatedAt pgtype.Timestamp
+}
+
+func (r *PrRepoUpdateCapturePreset) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
+	pr, err := r.PrRepoUpdateCapture.GetPatronRequestById(ctx, id)
+	if err == nil {
+		pr.CreatedAt = r.presetCreatedAt
+	}
+	return pr, err
+}
+
+// PrRepoWrongOwner returns a PR whose RequesterSymbol does not match the requesting symbol.
+type PrRepoWrongOwner struct {
+	PrRepoError
+}
+
+// PrRepoLendingSide returns a lending-side PR for id "3".
+type PrRepoLendingSide struct {
+	PrRepoError
+}
+
+// PrRepoBranchOwner returns a borrowing-side PR for id "3" whose RequesterSymbol
+// is "ISIL:S1" — the branch symbol that MockIllRepositorySuccess returns for any
+// peer, allowing a test to reach the requesterSymbol mismatch check.
+type PrRepoBranchOwner struct {
+	PrRepoError
+}
+
+func (r *PrRepoBranchOwner) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
+	if id == "3" {
+		return pr_db.PatronRequest{
+			ID:              id,
+			State:           prservice.BorrowerStateNew,
+			Side:            prservice.SideBorrowing,
+			RequesterSymbol: pgtype.Text{String: "ISIL:S1", Valid: true},
+		}, nil
+	}
+	return r.PrRepoError.GetPatronRequestById(ctx, id)
+}
+
+func (r *PrRepoWrongOwner) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
+	if id == "3" {
+		return pr_db.PatronRequest{
+			ID:              id,
+			State:           prservice.BorrowerStateNew,
+			Side:            prservice.SideBorrowing,
+			RequesterSymbol: pgtype.Text{String: "ISIL:OTHER", Valid: true},
+		}, nil
+	}
+	return r.PrRepoError.GetPatronRequestById(ctx, id)
+}
+
+func (r *PrRepoLendingSide) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
+	if id == "3" {
+		return pr_db.PatronRequest{
+			ID:             id,
+			State:          prservice.BorrowerStateNew,
+			Side:           prservice.SideLending,
+			SupplierSymbol: pgtype.Text{String: symbol, Valid: true},
+		}, nil
+	}
+	return r.PrRepoError.GetPatronRequestById(ctx, id)
+}
+
+func putBody(t *testing.T, id string, illReq iso18626.Request) *bytes.Buffer {
+	t.Helper()
+	toUpdate := proapi.CreatePatronRequest{
+		Id:              &id,
+		RequesterSymbol: &symbol,
+		IllRequest:      illReq,
+	}
+	jsonBytes, err := json.Marshal(toUpdate)
+	assert.NoError(t, err)
+	return bytes.NewBuffer(jsonBytes)
+}
+
+func TestPutPatronRequestsIdMissingBody(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("PUT", "/", nil)
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "body is required")
+}
+
+func TestPutPatronRequestsIdInvalidJson(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBufferString("{bad json"))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestPutPatronRequestsIdEmptySymbol(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	body := proapi.CreatePatronRequest{IllRequest: validIllRequest()}
+	jsonBytes, _ := json.Marshal(body)
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBuffer(jsonBytes))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "symbol must be specified")
+}
+
+func TestPutPatronRequestsIdMissingId(t *testing.T) {
+	repo := new(PrRepoUpdateCapture)
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	body := proapi.CreatePatronRequest{RequesterSymbol: &symbol, IllRequest: validIllRequest()}
+	jsonBytes, _ := json.Marshal(body)
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBuffer(jsonBytes))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusOK, rr.Code)
+	if assert.NotNil(t, repo.lastUpdateParams) {
+		assert.Equal(t, "3", repo.lastUpdateParams.ID)
+	}
+}
+
+func TestPutPatronRequestsIdIdMismatch(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	otherId := "other-id"
+	body := proapi.CreatePatronRequest{Id: &otherId, RequesterSymbol: &symbol, IllRequest: validIllRequest()}
+	jsonBytes, _ := json.Marshal(body)
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBuffer(jsonBytes))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "patron request id does not match")
+}
+
+func TestPutPatronRequestsIdNewStateIsEditable(t *testing.T) {
+	repo := new(PrRepoUpdateCapture)
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusOK, rr.Code)
+	if assert.NotNil(t, repo.lastUpdateParams) {
+		assert.Equal(t, "3", repo.lastUpdateParams.ID)
+	}
+}
+
+func TestPutPatronRequestsIdDuplicateStateIsEditable(t *testing.T) {
+	repo := &PrRepoUpdateCapture{state: prservice.BorrowerStateDuplicate}
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusOK, rr.Code)
+	if assert.NotNil(t, repo.lastUpdateParams) {
+		assert.Equal(t, prservice.BorrowerStateDuplicate, repo.lastUpdateParams.State)
+	}
+}
+
+func TestPutPatronRequestsIdNotFound(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "2", validIllRequest()))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "2", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+func TestPutPatronRequestsIdPrRepoError(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "1", validIllRequest()))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "1", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DB error")
+}
+
+func TestPutPatronRequestsIdWrongOwner(t *testing.T) {
+	// WithIllRepo on the resolver is required so that IsOwnerOf can look up branch symbols
+	// without erroring; the mock returns no branch symbols for "ISIL:OTHER", producing 404.
+	tenantResolver := tenant.NewResolver().WithIllRepo(new(mocks.MockIllRepositorySuccess))
+	handler := NewPrApiHandler(new(PrRepoWrongOwner), mockEventBus, mockEventRepo, tenantResolver, nil, 10)
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+func TestPutPatronRequestsIdUpdateError(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "5", validIllRequest()))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "5", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DB error")
+}
+
+func TestPutPatronRequestsIdNotBorrowingSide(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoLendingSide), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "only borrower-side patron requests can be updated")
+}
+
+func TestPutPatronRequestsIdRequesterSymbolMismatch(t *testing.T) {
+	// "ISIL:DIFFERENT" is the body/request symbol; MockIllRepositorySuccess returns
+	// "ISIL:S1" as a branch of that symbol, so ownership passes. The existing PR
+	// stores "ISIL:S1" directly, which differs from the body symbol → mismatch error.
+	tenantResolver := tenant.NewResolver().WithIllRepo(new(mocks.MockIllRepositorySuccess))
+	handler := NewPrApiHandler(new(PrRepoBranchOwner), mockEventBus, mockEventRepo, tenantResolver, nil, 10)
+	differentSymbol := "ISIL:DIFFERENT"
+	id := "3"
+	body := proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &differentSymbol, IllRequest: validIllRequest()}
+	jsonBytes, _ := json.Marshal(body)
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBuffer(jsonBytes))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "requesterSymbol does not match existing patron request")
+}
+
+func TestPutPatronRequestsIdPreservesCreatedAt(t *testing.T) {
+	originalCreatedAt := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+	repo := &PrRepoUpdateCapturePreset{
+		presetCreatedAt: pgtype.Timestamp{Valid: true, Time: originalCreatedAt},
+	}
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "3", validIllRequest()))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusOK, rr.Code)
+	if assert.NotNil(t, repo.lastUpdateParams) {
+		assert.Equal(t, originalCreatedAt, repo.lastUpdateParams.IllRequest.Header.Timestamp.Time)
+	}
+}
+
+func TestPutPatronRequestsIdOK(t *testing.T) {
+	repo := new(PrRepoUpdateCapture)
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	id := "3"
+	patron := "user-1"
+	note := "staff note"
+	toUpdate := proapi.CreatePatronRequest{
+		Id:              &id,
+		RequesterSymbol: &symbol,
+		IllRequest:      validIllRequest(),
+		Patron:          &patron,
+		InternalNote:    &note,
+	}
+	jsonBytes, _ := json.Marshal(toUpdate)
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBuffer(jsonBytes))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusOK, rr.Code)
+	if assert.NotNil(t, repo.lastUpdateParams) {
+		assert.Equal(t, validIllRequest().BibliographicInfo.Title, repo.lastUpdateParams.IllRequest.BibliographicInfo.Title)
+		assert.True(t, repo.lastUpdateParams.Patron.Valid)
+		assert.Equal(t, patron, repo.lastUpdateParams.Patron.String)
+		assert.True(t, repo.lastUpdateParams.InternalNote.Valid)
+		assert.Equal(t, note, repo.lastUpdateParams.InternalNote.String)
+		assert.Equal(t, "default", repo.lastUpdateParams.StateModel)
+	}
+	var response proapi.PatronRequest
+	err := json.Unmarshal(rr.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, id, response.Id)
+}
+
+func TestPutPatronRequestsIdNotePatronAbsent(t *testing.T) {
+	repo := new(PrRepoUpdateCapture)
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	id := "3"
+	toUpdate := proapi.CreatePatronRequest{
+		Id:              &id,
+		RequesterSymbol: &symbol,
+		IllRequest:      validIllRequest(),
+	}
+	jsonBytes, _ := json.Marshal(toUpdate)
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBuffer(jsonBytes))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusOK, rr.Code)
+	if assert.NotNil(t, repo.lastUpdateParams) {
+		assert.Equal(t, validIllRequest().BibliographicInfo.Title, repo.lastUpdateParams.IllRequest.BibliographicInfo.Title)
+		assert.True(t, repo.lastUpdateParams.Patron.Valid)
+		assert.Equal(t, "original patron", repo.lastUpdateParams.Patron.String)
+		assert.Equal(t, "original note", repo.lastUpdateParams.InternalNote.String)
+	}
+	var response proapi.PatronRequest
+	err := json.Unmarshal(rr.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, id, response.Id)
+}
+
+func TestPutPatronRequestsIdEmptyIllRequest(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	id := "5"
+	body := proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol}
+	// IllRequest is zero-valued, which parseAndValidateIllRequest rejects as errInvalidPatronRequest
+	jsonBytes, _ := json.Marshal(body)
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBuffer(jsonBytes))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "5", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "illRequest must not be empty")
+}
+
+func TestPutPatronRequestsIdInvalidBrokerSymbol(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	previousBrokerSymbol := brokerSymbol
+	brokerSymbol = "BROKER"
+	defer func() {
+		brokerSymbol = previousBrokerSymbol
+	}()
+	req, _ := http.NewRequest("PUT", "/", putBody(t, "5", validIllRequest()))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsId(rr, req, "5", proapi.PutPatronRequestsIdParams{})
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "invalid BROKER_SYMBOL")
+}
+
+func TestPatronRequestPickupLocationRoundTrip(t *testing.T) {
+	var request proapi.CreatePatronRequest
+	require.NoError(t, json.Unmarshal([]byte(`{"requesterSymbol":"ISIL:MAIN","requesterPickupLocationId":"11111111-1111-4111-8111-111111111111","illRequest":{}}`), &request))
+	pr := buildDbPatronRequest(&request, nil, pgtype.Timestamp{}, "request-1", request.IllRequest, "", "default")
+	assert.Equal(t, pgtype.UUID{Bytes: uuid.MustParse("11111111-1111-4111-8111-111111111111"), Valid: true}, pr.RequesterPickupLocationID)
+	result := toApiPatronRequest(httptest.NewRequest(http.MethodGet, "/patron_requests/request-1", nil), patronRequestSearchViewFromPatronRequest(pr, false))
+	require.NotNil(t, result.RequesterPickupLocationId)
+	assert.Equal(t, uuid.MustParse("11111111-1111-4111-8111-111111111111"), *result.RequesterPickupLocationId)
+}
+
+func TestPatronRequestPickupLocationIDValidation(t *testing.T) {
+	for _, value := range []string{"branch-1", ""} {
+		var request proapi.CreatePatronRequest
+		require.Error(t, json.Unmarshal([]byte(`{"requesterPickupLocationId":"`+value+`","illRequest":{}}`), &request))
+	}
+	for _, body := range []string{`{"illRequest":{}}`, `{"illRequest":{},"requesterPickupLocationId":null}`} {
+		var request proapi.CreatePatronRequest
+		require.NoError(t, json.Unmarshal([]byte(body), &request))
+		pr := buildDbPatronRequest(&request, nil, pgtype.Timestamp{}, "request-1", request.IllRequest, "", "default")
+		require.False(t, pr.RequesterPickupLocationID.Valid)
+		require.Nil(t, toPickupLocationID(pr.RequesterPickupLocationID))
+	}
+}
+
+func TestPutPatronRequestsIdPickupLocationOptional(t *testing.T) {
+	original, replacement := uuid.New(), uuid.New()
+	for _, tc := range []struct {
+		name            string
+		supplied        nullable.Nullable[uuid.UUID]
+		expected        pgtype.UUID
+		validationError error
+	}{
+		{name: "omitted preserves selection", expected: pgtype.UUID{Bytes: original, Valid: true}},
+		{name: "supplied replaces selection", supplied: nullable.NewNullableWithValue(replacement), expected: pgtype.UUID{Bytes: replacement, Valid: true}},
+		{name: "null clears selection", supplied: nullable.NewNullNullable[uuid.UUID]()},
+		{name: "backend failure rejected", supplied: nullable.NewNullableWithValue(replacement), validationError: errors.New("directory unavailable")},
+		{name: "replica conflict rejected", supplied: nullable.NewNullableWithValue(replacement), validationError: errors.New("conflicting responses from directory replicas")},
+		{name: "invalid selection rejected", supplied: nullable.NewNullableWithValue(replacement), validationError: fmt.Errorf("%w: pickup location is not requester institution", prservice.ErrInvalidPickupLocation)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &PrRepoUpdateCapture{pickupLocationID: pgtype.UUID{Bytes: original, Valid: true}}
+			handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+			validation := &pickupLocationValidatorStub{err: tc.validationError}
+			handler.SetPickupLocationValidator(validation)
+			id := "3"
+			body, err := json.Marshal(proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol, IllRequest: validIllRequest(), RequesterPickupLocationId: tc.supplied})
+			require.NoError(t, err)
+			rr := httptest.NewRecorder()
+			handler.PutPatronRequestsId(rr, httptest.NewRequest(http.MethodPut, "/", bytes.NewReader(body)), id, proapi.PutPatronRequestsIdParams{})
+			if tc.validationError != nil {
+				status := http.StatusInternalServerError
+				if errors.Is(tc.validationError, prservice.ErrInvalidPickupLocation) {
+					status = http.StatusBadRequest
+				}
+				require.Equal(t, status, rr.Code, rr.Body.String())
+				require.Nil(t, repo.lastUpdateParams)
+				require.Contains(t, rr.Body.String(), tc.validationError.Error())
+			} else {
+				require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+				require.NotNil(t, repo.lastUpdateParams)
+				require.Equal(t, tc.expected, repo.lastUpdateParams.RequesterPickupLocationID)
+			}
+			if tc.supplied.IsSpecified() && !tc.supplied.IsNull() {
+				require.Len(t, validation.requests, 1)
+				require.Equal(t, replacement, uuid.UUID(validation.requests[0].RequesterPickupLocationID.Bytes))
+				require.Equal(t, symbol, validation.requests[0].RequesterSymbol.String)
+			} else {
+				require.Empty(t, validation.requests)
+			}
+		})
+	}
+}
+
+type pickupLocationValidatorStub struct {
+	err      error
+	requests []pr_db.PatronRequest
+}
+
+func (v *pickupLocationValidatorStub) ValidateRequesterPickupLocation(ctx common.ExtendedContext, pr pr_db.PatronRequest) error {
+	v.requests = append(v.requests, pr)
+	return v.err
+}
+
+func TestCreateValidatesPickupBeforePersistence(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		selected        bool
+		validationError error
+		status          int
+	}{
+		{name: "valid selection", selected: true, status: http.StatusCreated},
+		{name: "missing entry", selected: true, validationError: fmt.Errorf("%w: pickup location not found", prservice.ErrInvalidPickupLocation), status: http.StatusBadRequest},
+		{name: "unrelated institution", selected: true, validationError: fmt.Errorf("%w: pickup location is not requester institution", prservice.ErrInvalidPickupLocation), status: http.StatusBadRequest},
+		{name: "directory unavailable", selected: true, validationError: errors.New("directory unavailable"), status: http.StatusInternalServerError},
+		{name: "database failure", selected: true, validationError: errors.New("database unavailable"), status: http.StatusInternalServerError},
+		{name: "replica conflict", selected: true, validationError: errors.New("conflicting responses from directory replicas"), status: http.StatusInternalServerError},
+		{name: "no selection", status: http.StatusCreated},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			id := "new-request"
+			repo := &createdPatronRequestRepo{created: pr_db.PatronRequest{ID: id}, view: pr_db.PatronRequestSearchView{ID: id, IllRequest: validIllRequest()}}
+			validation := &pickupLocationValidatorStub{err: tc.validationError}
+			handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+			handler.SetPickupLocationValidator(validation)
+			body := proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol, IllRequest: validIllRequest()}
+			pickupID := uuid.New()
+			if tc.selected {
+				body.RequesterPickupLocationId.Set(pickupID)
+			}
+			encoded, err := json.Marshal(body)
+			require.NoError(t, err)
+			rr := httptest.NewRecorder()
+			handler.PostPatronRequests(rr, httptest.NewRequest(http.MethodPost, "/patron_requests", bytes.NewReader(encoded)), proapi.PostPatronRequestsParams{})
+			require.Equal(t, tc.status, rr.Code, rr.Body.String())
+			if tc.selected {
+				require.Len(t, validation.requests, 1)
+				require.Equal(t, symbol, validation.requests[0].RequesterSymbol.String)
+				require.Equal(t, pickupID, uuid.UUID(validation.requests[0].RequesterPickupLocationID.Bytes))
+			} else {
+				require.Empty(t, validation.requests)
+			}
+			if tc.validationError != nil {
+				require.Zero(t, repo.createCalls)
+				require.Contains(t, rr.Body.String(), tc.validationError.Error())
+			} else {
+				require.Equal(t, 1, repo.createCalls)
+			}
+		})
+	}
 }

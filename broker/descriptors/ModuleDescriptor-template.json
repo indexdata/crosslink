@@ -8,11 +8,38 @@
       "handlers": [
         {
           "methods": [
+            "POST"
+          ],
+          "pathPattern": "/broker/ill_transactions/{id}/located_suppliers",
+          "permissionsRequired": [
+            "broker.located_suppliers.write"
+          ]
+        },
+        {
+          "methods": [
+            "POST"
+          ],
+          "pathPattern": "/broker/ill_transactions/{id}/located_suppliers/{supplierId}/move",
+          "permissionsRequired": [
+            "broker.located_suppliers.write"
+          ]
+        },
+        {
+          "methods": [
             "GET"
           ],
           "pathPattern": "/broker/ill_transactions/{id}",
           "permissionsRequired": [
             "broker.ill_transactions.item.get"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/ill_transactions/{id}/events",
+          "permissionsRequired": [
+            "broker.ill_transactions.item.events.get"
           ]
         },
         {
@@ -98,6 +125,15 @@
         },
         {
           "methods": [
+            "PUT"
+          ],
+          "pathPattern": "/broker/patron_requests/{id}",
+          "permissionsRequired": [
+            "broker.patron_requests.item.put"
+          ]
+        },
+        {
+          "methods": [
             "DELETE"
           ],
           "pathPattern": "/broker/patron_requests/{id}",
@@ -133,12 +169,48 @@
           ]
         },
         {
+          "methods": [
+            "POST"
+          ],
+          "pathPattern": "/broker/patron_requests/{id}/terminate",
+          "permissionsRequired": [
+            "broker.patron_requests.item.terminate.post"
+          ]
+        },
+        {
           "methods" : [
             "GET"
           ],
           "pathPattern": "/broker/state_model/models/{id}",
           "permissionsRequired" : [
             "broker.state_model.item.get"
+          ]
+        },
+        {
+          "methods" : [
+            "GET"
+          ],
+          "pathPattern": "/broker/state_model/capabilities",
+          "permissionsRequired" : [
+            "broker.state_model.capabilities.get"
+          ]
+        },
+        {
+          "methods" : [
+            "GET"
+          ],
+          "pathPattern": "/broker/state_model/batch_actions",
+          "permissionsRequired" : [
+            "broker.state_model.batch_actions.get"
+          ]
+        },
+        {
+          "methods" : [
+            "GET"
+          ],
+          "pathPattern": "/broker/state_model/templates",
+          "permissionsRequired" : [
+            "broker.state_model.templates.get"
           ]
         },
         {
@@ -179,6 +251,15 @@
         },
         {
           "methods": [
+            "PUT"
+          ],
+          "pathPattern": "/broker/patron_requests/{id}/internal_note",
+          "permissionsRequired": [
+            "broker.patron_requests.item.internal_note.put"
+          ]
+        },
+        {
+          "methods": [
             "GET"
           ],
           "pathPattern": "/broker/pullslips/{id}",
@@ -203,6 +284,132 @@
           "permissionsRequired": [
             "broker.pullslips.post"
           ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/batch_actions",
+          "permissionsRequired": [
+            "broker.batch_actions.get"
+          ]
+        },
+        {
+          "methods": [
+            "POST"
+          ],
+          "pathPattern": "/broker/batch_actions",
+          "permissionsRequired": [
+            "broker.batch_actions.post"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/batch_actions/{id}",
+          "permissionsRequired": [
+            "broker.batch_actions.item.get"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/batch_actions/{id}/events",
+          "permissionsRequired": [
+            "broker.batch_actions.item.events.get"
+          ]
+        },
+        {
+          "methods": [
+            "PUT"
+          ],
+          "pathPattern": "/broker/batch_actions/{id}",
+          "permissionsRequired": [
+            "broker.batch_actions.item.put"
+          ]
+        },
+        {
+          "methods": [
+            "DELETE"
+          ],
+          "pathPattern": "/broker/batch_actions/{id}",
+          "permissionsRequired": [
+            "broker.batch_actions.item.delete"
+          ]
+        },
+        {
+          "methods": [
+            "POST"
+          ],
+          "pathPattern": "/broker/batch_actions/{id}/enable",
+          "permissionsRequired": [
+            "broker.batch_actions.item.enable.post"
+          ]
+        },
+        {
+          "methods": [
+            "POST"
+          ],
+          "pathPattern": "/broker/batch_actions/{id}/disable",
+          "permissionsRequired": [
+            "broker.batch_actions.item.disable.post"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/templates",
+          "permissionsRequired": [
+            "broker.templates.get"
+          ]
+        },
+        {
+          "methods": [
+            "POST"
+          ],
+          "pathPattern": "/broker/templates",
+          "permissionsRequired": [
+            "broker.templates.post"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/templates/placeholders",
+          "permissionsRequired": [
+            "broker.templates.get"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/templates/{id}",
+          "permissionsRequired": [
+            "broker.templates.item.get"
+          ]
+        },
+        {
+          "methods": [
+            "PUT"
+          ],
+          "pathPattern": "/broker/templates/{id}",
+          "permissionsRequired": [
+            "broker.templates.item.put"
+          ]
+        },
+        {
+          "methods": [
+            "DELETE"
+          ],
+          "pathPattern": "/broker/templates/{id}",
+          "permissionsRequired": [
+            "broker.templates.item.delete"
+          ]
         }
       ]
     }
@@ -210,15 +417,23 @@
   "requires": [],
   "permissionSets": [
     {
+      "description": "Add and reorder untried suppliers for requesting tenants",
+      "displayName": "Broker - edit supplier rota",
+      "permissionName": "broker.located_suppliers.write",
+      "visible": true
+    },
+    {
       "description": "Read ILL transaction",
       "displayName": "ILL Broker - view all",
       "permissionName": "broker.all.read",
       "visible": true,
       "subPermissions": [
         "broker.ill_transactions.item.get",
+        "broker.ill_transactions.item.events.get",
         "broker.ill_transactions.get",
         "broker.located_suppliers.get",
         "broker.events.get",
+        "broker.sse.events.get",
         "broker.peers.item.get",
         "broker.peers.get"
       ]
@@ -237,6 +452,11 @@
       "description": "Read ILL transactions",
       "displayName": "Broker - read ILL transactions",
       "permissionName": "broker.ill_transactions.get"
+    },
+    {
+      "description": "Read events for an ILL transaction",
+      "displayName": "Broker - read ILL transaction events",
+      "permissionName": "broker.ill_transactions.item.events.get"
     },
     {
       "description": "Read located suppliers",
@@ -274,6 +494,11 @@
       "permissionName": "broker.patron_requests.item.get"
     },
     {
+      "description": "Update a patron request",
+      "displayName": "Broker - update patron request (item)",
+      "permissionName": "broker.patron_requests.item.put"
+    },
+    {
       "description": "Delete a patron request",
       "displayName": "Broker - delete patron request (item)",
       "permissionName": "broker.patron_requests.item.delete"
@@ -287,6 +512,11 @@
       "description": "Execute action for a patron request",
       "displayName": "Broker - execute patron request action",
       "permissionName": "broker.patron_requests.item.action.post"
+    },
+    {
+      "description": "Manually close a patron request",
+      "displayName": "Broker - manually close patron request",
+      "permissionName": "broker.patron_requests.item.terminate.post"
     },
     {
       "description": "Read events for a patron request",
@@ -314,6 +544,11 @@
       "permissionName": "broker.patron_requests.item.notifications.item.receipt.put"
     },
     {
+      "description": "Update the internal note on a patron request",
+      "displayName": "Broker - update patron request internal note",
+      "permissionName": "broker.patron_requests.item.internal_note.put"
+    },
+    {
       "description": "Get pull slip by id",
       "displayName": "Broker - get pull slip by id",
       "permissionName": "broker.pullslips.item.get"
@@ -329,6 +564,136 @@
       "permissionName": "broker.pullslips.post"
     },
     {
+      "description": "List batch actions",
+      "displayName": "Broker - list batch actions",
+      "permissionName": "broker.batch_actions.get"
+    },
+    {
+      "description": "Create a batch action",
+      "displayName": "Broker - create batch action",
+      "permissionName": "broker.batch_actions.post"
+    },
+    {
+      "description": "Read a batch action",
+      "displayName": "Broker - read batch action",
+      "permissionName": "broker.batch_actions.item.get"
+    },
+    {
+      "description": "Read events for a batch action",
+      "displayName": "Broker - read batch action events",
+      "permissionName": "broker.batch_actions.item.events.get"
+    },
+    {
+      "description": "Update a batch action",
+      "displayName": "Broker - update batch action",
+      "permissionName": "broker.batch_actions.item.put"
+    },
+    {
+      "description": "Delete a batch action",
+      "displayName": "Broker - delete batch action",
+      "permissionName": "broker.batch_actions.item.delete"
+    },
+    {
+      "description": "Enable a batch action",
+      "displayName": "Broker - enable batch action",
+      "permissionName": "broker.batch_actions.item.enable.post"
+    },
+    {
+      "description": "Disable a batch action",
+      "displayName": "Broker - disable batch action",
+      "permissionName": "broker.batch_actions.item.disable.post"
+    },
+    {
+      "description": "List templates",
+      "displayName": "Broker - list templates",
+      "permissionName": "broker.templates.get"
+    },
+    {
+      "description": "Create a template",
+      "displayName": "Broker - create template",
+      "permissionName": "broker.templates.post"
+    },
+    {
+      "description": "Read a template",
+      "displayName": "Broker - read template",
+      "permissionName": "broker.templates.item.get"
+    },
+    {
+      "description": "Update a template",
+      "displayName": "Broker - update template",
+      "permissionName": "broker.templates.item.put"
+    },
+    {
+      "description": "Delete a template",
+      "displayName": "Broker - delete template",
+      "permissionName": "broker.templates.item.delete"
+    },
+    {
+      "description": "Read-only access to templates",
+      "displayName": "Broker - templates: read",
+      "permissionName": "broker.templates.read",
+      "visible": true,
+      "subPermissions": [
+        "broker.templates.get",
+        "broker.templates.item.get"
+      ]
+    },
+    {
+      "description": "Write access to templates",
+      "displayName": "Broker - templates: write",
+      "permissionName": "broker.templates.write",
+      "visible": true,
+      "subPermissions": [
+        "broker.templates.post",
+        "broker.templates.item.put",
+        "broker.templates.item.delete"
+      ]
+    },
+    {
+      "description": "Read and write access to templates",
+      "displayName": "Broker - templates: all",
+      "permissionName": "broker.templates.all",
+      "visible": true,
+      "subPermissions": [
+        "broker.templates.read",
+        "broker.templates.write"
+      ]
+    },
+    {
+      "description": "Read-only access to batch actions",
+      "displayName": "Broker - batch actions: read",
+      "permissionName": "broker.batch_actions.read",
+      "visible": true,
+      "subPermissions": [
+        "broker.batch_actions.get",
+        "broker.batch_actions.item.get",
+        "broker.batch_actions.item.events.get"
+      ]
+    },
+    {
+      "description": "Write access to batch actions",
+      "displayName": "Broker - batch actions: write",
+      "permissionName": "broker.batch_actions.write",
+      "visible": true,
+      "subPermissions": [
+        "broker.batch_actions.post",
+        "broker.batch_actions.item.put",
+        "broker.batch_actions.item.delete",
+        "broker.batch_actions.item.enable.post",
+        "broker.batch_actions.item.disable.post"
+      ]
+    },
+    {
+      "description": "Read and write access to batch actions",
+      "displayName": "Broker - batch actions: all",
+      "permissionName": "broker.batch_actions.all",
+      "visible": true,
+      "subPermissions": [
+        "broker.batch_actions.read",
+        "broker.batch_actions.write"
+      ]
+    },
+    {
       "description": "Read-only access to patron requests",
       "displayName": "Broker - patron requests: read",
       "permissionName": "broker.patron_requests.read",
@@ -340,6 +705,7 @@
         "broker.patron_requests.item.events.get",
         "broker.patron_requests.item.items.get",
         "broker.patron_requests.item.notifications.get",
+        "broker.sse.events.get",
         "broker.pullslips.item.get",
         "broker.pullslips.item.pdf.get"
       ]
@@ -351,10 +717,13 @@
       "visible": true,
       "subPermissions": [
         "broker.patron_requests.post",
+        "broker.patron_requests.item.put",
         "broker.patron_requests.item.delete",
         "broker.patron_requests.item.action.post",
+        "broker.patron_requests.item.terminate.post",
         "broker.patron_requests.item.notifications.post",
         "broker.patron_requests.item.notifications.item.receipt.put",
+        "broker.patron_requests.item.internal_note.put",
         "broker.pullslips.post"
       ]
     },
@@ -375,14 +744,34 @@
       "visible": true
     },
     {
+      "description": "Read state model capabilities",
+      "displayName": "Broker - state model capabilities: read",
+      "permissionName": "broker.state_model.capabilities.get",
+      "visible": true
+    },
+    {
+      "description": "Read state model batch actions defaults",
+      "displayName": "Broker - state model batch actions defaults: read",
+      "permissionName": "broker.state_model.batch_actions.get",
+      "visible": true
+    },
+    {
+      "description": "Read state model template defaults",
+      "displayName": "Broker - state model template defaults: read",
+      "permissionName": "broker.state_model.templates.get",
+      "visible": true
+    },
+    {
       "description": "All broker permissions (read and write)",
       "displayName": "Broker - all permissions",
       "permissionName": "broker.all",
       "visible": true,
       "subPermissions": [
         "broker.ill_transactions.item.get",
+        "broker.ill_transactions.item.events.get",
         "broker.ill_transactions.get",
         "broker.located_suppliers.get",
+        "broker.located_suppliers.write",
         "broker.events.get",
         "broker.peers.item.get",
         "broker.peers.get",
@@ -390,18 +779,37 @@
         "broker.patron_requests.get",
         "broker.patron_requests.post",
         "broker.patron_requests.item.get",
+        "broker.patron_requests.item.put",
         "broker.patron_requests.item.delete",
         "broker.patron_requests.item.actions.get",
         "broker.patron_requests.item.events.get",
         "broker.patron_requests.item.action.post",
+        "broker.patron_requests.item.terminate.post",
         "broker.state_model.item.get",
+        "broker.state_model.capabilities.get",
+        "broker.state_model.batch_actions.get",
+        "broker.state_model.templates.get",
         "broker.patron_requests.item.items.get",
         "broker.patron_requests.item.notifications.get",
         "broker.patron_requests.item.notifications.post",
         "broker.patron_requests.item.notifications.item.receipt.put",
+        "broker.patron_requests.item.internal_note.put",
         "broker.pullslips.item.get",
         "broker.pullslips.item.pdf.get",
-        "broker.pullslips.post"
+        "broker.pullslips.post",
+        "broker.batch_actions.get",
+        "broker.batch_actions.post",
+        "broker.batch_actions.item.get",
+        "broker.batch_actions.item.events.get",
+        "broker.batch_actions.item.put",
+        "broker.batch_actions.item.delete",
+        "broker.batch_actions.item.enable.post",
+        "broker.batch_actions.item.disable.post",
+        "broker.templates.get",
+        "broker.templates.post",
+        "broker.templates.item.get",
+        "broker.templates.item.put",
+        "broker.templates.item.delete"
       ]
     }
   ]

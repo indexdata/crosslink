@@ -1,0 +1,7 @@
+{
+    "lmsConfig" : {
+    "address" : "https://the.red-door.org",
+    "fromAgency" : "paintitblack",
+    "acceptItemEnabled":false
+    }
+ }

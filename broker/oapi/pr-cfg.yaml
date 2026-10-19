@@ -1,6 +1,7 @@
 package: proapi
 output: patron_request/proapi/pr-openapi_gen.go
 output-options:
+  nullable-type: true
   include-tags:
     - patron-requests-api
   overlay:

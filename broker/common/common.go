@@ -3,6 +3,7 @@ package common
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"reflect"
 	"strings"
 )
@@ -80,6 +81,31 @@ func PackItemsNote(items [][]string) string {
 	return current.String()
 }
 
+// StripItemsNotePayload removes the packed items payload from a note, keeping the text around it.
+func StripItemsNotePayload(note string) string {
+	if note == "" {
+		return ""
+	}
+	_, startIdx, endIdx := UnpackItemsNote(note)
+	if startIdx < 0 || endIdx < 0 {
+		return strings.TrimSpace(note)
+	}
+	before := strings.TrimSpace(note[:startIdx])
+	afterStart := endIdx + len(MULTIPLE_ITEMS_END)
+	after := ""
+	if afterStart < len(note) {
+		after = strings.TrimSpace(note[afterStart:])
+	}
+	switch {
+	case before != "" && after != "":
+		return before + "\n" + after
+	case before != "":
+		return before
+	default:
+		return after
+	}
+}
+
 func PackItemNote(fields []string) string {
 	escaped := make([]string, len(fields))
 	for i, f := range fields {
@@ -118,18 +144,28 @@ func UnpackItemNote(input string) []string {
 	return result
 }
 
-func SplitSymbol(symbol string) (string, string, error) {
-	symbolParts := strings.SplitN(symbol, ":", 2)
-	if len(symbolParts) != 2 {
+func SplitSymbol(symbol string) (authority, value string, err error) {
+	authority, value, found := strings.Cut(symbol, ":")
+	if !found || authority == "" || value == "" {
 		return "", "", fmt.Errorf("invalid symbol: %s", symbol)
 	}
-	return symbolParts[0], symbolParts[1], nil
+	return authority, value, nil
 }
 
-func SplitAgencySymbol(symbol string) (string, string) {
-	symbolParts := strings.SplitN(symbol, ":", 2)
-	if len(symbolParts) != 2 {
+func SplitSymbolLenient(symbol string) (string, string) {
+	authority, value, found := strings.Cut(symbol, ":")
+	if !found {
 		return "", symbol
 	}
-	return symbolParts[0], symbolParts[1]
+	return authority, value
+}
+
+func ToInt32(i int) int32 {
+	if i > math.MaxInt32 {
+		return math.MaxInt32
+	} else if i < math.MinInt32 {
+		return math.MinInt32
+	} else {
+		return int32(i)
+	}
 }

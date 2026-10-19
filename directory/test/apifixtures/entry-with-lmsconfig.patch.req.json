@@ -1,0 +1,11 @@
+{
+    "lmsConfig" : {
+    "address" : "https://thedoor.ismadeofsoup.com",
+    "fromAgency" : "bongiornio",
+    "acceptItemEnabled":false,
+    "requestItemEnabled":false,
+    "patronProfiles":[
+      {"name":"Faculty","canCreateRequests":true}
+    ]
+ }
+}

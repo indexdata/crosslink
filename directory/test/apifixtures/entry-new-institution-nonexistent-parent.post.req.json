@@ -1,0 +1,15 @@
+{
+  "name":"New Institution",
+  "type":"Institution",
+  "symbols": [
+    {"authority":"TEST", "symbol":"NWINST"}
+  ],
+  "parent" : "70000000-0000-0000-0000-000000000001",
+  "endpoints": [
+    {
+      "name": "Primary",
+      "type": "ISO18626",
+      "address": "https://some.host.tld/path"
+    }
+  ]
+}

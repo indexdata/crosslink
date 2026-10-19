@@ -1,0 +1,52 @@
+meta {
+  name: Check next lending request
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{host}}/patron_requests?side=lending&requester_req_id={{rejectionPrId}}
+  body: none
+  auth: basic
+}
+
+params:query {
+  side: lending
+  requester_req_id: {{rejectionPrId}}
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{rejectionNextTenant}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")))
+}
+
+script:post-response {
+  test("HTTP request succeeds", () => {
+    expect(res.getStatus()).to.be.within(200, 299);
+  });
+  const responseData = res.getBody();
+  const lendingPr = responseData.items && responseData.items[0];
+  test("Check if found lending PR", () => {
+      expect(lendingPr).to.exist;
+      expect(lendingPr.id).to.be.a("string").and.not.empty;
+      expect(lendingPr.id).not.to.equal(bru.getVar("rejectionLendingPrId"));
+      expect(lendingPr.supplierSymbol).to.equal(bru.getVar("rejectionNextSymbol"));
+      bru.setVar("rejectionNextLendingPrId", lendingPr.id);
+      expect(lendingPr.state).to.equal("WILL_SUPPLY");
+      expect(lendingPr.lastActionResult).to.equal("SUCCESS")
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

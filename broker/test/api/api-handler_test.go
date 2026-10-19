@@ -33,11 +33,9 @@ import (
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	mocks "github.com/indexdata/crosslink/broker/test/mocks"
 	test "github.com/indexdata/crosslink/broker/test/utils"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
+	"github.com/indexdata/crosslink/testutil"
 	"github.com/indexdata/go-utils/utils"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 var illRepo ill_db.IllRepo
@@ -45,21 +43,14 @@ var eventRepo events.EventRepo
 var sseBroker *api.SseBroker
 var mockIllRepoError = new(mocks.MockIllRepositoryError)
 var mockEventRepoError = new(mocks.MockEventRepositoryError)
-var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError, tenant.NewResolver(), api.LIMIT_DEFAULT)
+var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError, tenant.NewResolver(), nil, api.LIMIT_DEFAULT)
 
 func TestMain(m *testing.M) {
 	app.TENANT_TO_SYMBOL = "ISIL:DK-{tenant}"
 	ctx := context.Background()
 	app.DB_PROVISION = true
 
-	pgContainer, err := postgres.Run(ctx, "postgres",
-		postgres.WithDatabase("crosslink"),
-		postgres.WithUsername("crosslink"),
-		postgres.WithPassword("crosslink"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(5*time.Second)),
-	)
+	pgContainer, err := testutil.RunPostgres(ctx)
 	test.Expect(err, "failed to start db container")
 
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
@@ -79,7 +70,7 @@ func TestMain(m *testing.M) {
 	defer cancel()
 	code := m.Run()
 
-	test.Expect(pgContainer.Terminate(ctx), "failed to stop db container")
+	test.Expect(test.TerminatePGContainer(ctx, pgContainer), "failed to stop db container")
 	os.Exit(code)
 }
 
@@ -91,10 +82,11 @@ func TestGetIndex(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, vcs.GetCommit(), resp.Revision)
 	assert.Equal(t, vcs.GetSignature(), resp.Signature)
-	assert.Equal(t, getLocalhostWithPort()+api.ILL_TRANSACTIONS_PATH, resp.Links.IllTransactionsLink)
-	assert.Equal(t, getLocalhostWithPort()+api.EVENTS_PATH, resp.Links.EventsLink)
-	assert.Equal(t, getLocalhostWithPort()+api.PEERS_PATH, resp.Links.PeersLink)
-	assert.Equal(t, getLocalhostWithPort()+api.LOCATED_SUPPLIERS_PATH, resp.Links.LocatedSuppliersLink)
+	assert.Equal(t, api.ILL_TRANSACTIONS_PATH, resp.Links.IllTransactionsLink)
+	assert.Equal(t, api.PEERS_PATH, resp.Links.PeersLink)
+	assert.Equal(t, "/batch_actions", resp.Links.BatchActionsLink)
+	assert.Equal(t, api.PATRON_REQUESTS_PATH+"?side=borrowing", resp.Links.BorrowingRequestsLink)
+	assert.Equal(t, api.PATRON_REQUESTS_PATH+"?side=lending", resp.Links.LendingRequestsLink)
 }
 
 func TestGetEvents(t *testing.T) {
@@ -180,8 +172,8 @@ func TestGetIllTransactions(t *testing.T) {
 	assert.Nil(t, resp.About.PrevLink)
 	assert.NotNil(t, resp.About.NextLink)
 	assert.NotNil(t, resp.About.LastLink)
-	assert.Equal(t, getLocalhostWithPort()+"/ill_transactions?offset=10", *resp.About.NextLink)
-	assert.Equal(t, getLocalhostWithPort()+"/ill_transactions?offset=20", *resp.About.LastLink)
+	assert.Equal(t, "/ill_transactions?offset=10", *resp.About.NextLink)
+	assert.Equal(t, "/ill_transactions?offset=20", *resp.About.LastLink)
 
 	body = getResponseBody(t, "/ill_transactions?offset=1000")
 	err = json.Unmarshal(body, &resp)
@@ -218,9 +210,9 @@ func TestGetIllTransactions(t *testing.T) {
 	assert.NotNil(t, resp.About.LastLink)
 	nextLink := *resp.About.NextLink
 	lastLink := *resp.About.LastLink
-	assert.True(t, strings.HasPrefix(nextLink, getLocalhostWithPort()+"/broker/ill_transactions?"))
+	assert.True(t, strings.HasPrefix(nextLink, "/broker/ill_transactions?"))
 	assert.Contains(t, nextLink, "requester_symbol="+url.QueryEscape("ISIL:DK-BIB1"))
-	assert.True(t, strings.HasPrefix(lastLink, getLocalhostWithPort()+"/broker/ill_transactions?"))
+	assert.True(t, strings.HasPrefix(lastLink, "/broker/ill_transactions?"))
 	assert.Contains(t, lastLink, "requester_symbol="+url.QueryEscape("ISIL:DK-BIB1"))
 	assert.Contains(t, lastLink, "offset=10")
 
@@ -233,7 +225,7 @@ func TestGetIllTransactions(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, resp.About.PrevLink)
 	prevLink = *resp.About.PrevLink
-	assert.True(t, strings.HasPrefix(prevLink, getLocalhostWithPort()+"/broker/ill_transactions?"))
+	assert.True(t, strings.HasPrefix(prevLink, "/broker/ill_transactions?"))
 	assert.Contains(t, prevLink, "offset=0")
 
 	body = getResponseBody(t, "/ill_transactions?cql="+url.QueryEscape("requester_symbol = ISIL:DK-BIB1"))
@@ -267,7 +259,7 @@ func TestGetIllTransactionsOkapiIncludesBranchSymbols(t *testing.T) {
 	tenantName := "BIBBRANCH" + strings.ToUpper(uuid.NewString())
 	mainSymbol := "ISIL:DK-" + tenantName
 	branchSymbol := "ISIL:DK-BRANCH" + strings.ToUpper(uuid.NewString())
-	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, mainSymbol, "http://example.invalid", app.BROKER_MODE, directory.CrossLink, directory.Entry{})
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, mainSymbol, "http://example.invalid", app.BROKER_MODE, dirapi.CrossLink, dirapi.Entry{}, mainSymbol)
 	_, err := illRepo.SaveBranchSymbol(ctx, ill_db.SaveBranchSymbolParams{
 		PeerID:      peer.ID,
 		SymbolValue: branchSymbol,
@@ -306,17 +298,33 @@ func TestGetIllTransactionsOkapiIncludesBranchSymbols(t *testing.T) {
 
 func TestGetIllTransactionsId(t *testing.T) {
 	illId := apptest.GetIllTransId(t, illRepo)
+	eventID := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusSuccess, events.EventNameSelectSupplier)
+	peer := apptest.CreatePeer(t, illRepo, "ISIL:CASCADE-"+uuid.NewString(), "")
+	apptest.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "ISIL:CASCADE", string(iso18626.TypeStatusLoaned))
 	body := getResponseBody(t, "/ill_transactions/"+illId)
 	var resp oapi.IllTransaction
 	err := json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.Equal(t, illId, resp.Id)
-	assert.Equal(t, getLocalhostWithPort()+"/events?ill_transaction_id="+url.PathEscape(illId), resp.EventsLink)
-	assert.Equal(t, getLocalhostWithPort()+"/located_suppliers?ill_transaction_id="+url.PathEscape(illId), resp.LocatedSuppliersLink)
+	assert.Equal(t, "/ill_transactions/"+url.PathEscape(illId)+"/events", resp.EventsLink)
+	assert.Equal(t, "/located_suppliers?ill_transaction_id="+url.PathEscape(illId), resp.LocatedSuppliersLink)
 
-	// Delete peer
+	// Delete transaction and verify owned rows cascade.
 	httpRequest(t, "DELETE", "/ill_transactions/"+illId, nil, "", http.StatusNoContent)
+	_, err = eventRepo.GetEvent(common.CreateExtCtxWithArgs(context.Background(), nil), eventID)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+	suppliers, _, err := illRepo.GetLocatedSuppliersByIllTransaction(common.CreateExtCtxWithArgs(context.Background(), nil), illId)
+	assert.NoError(t, err)
+	assert.Empty(t, suppliers)
 	httpRequest(t, "DELETE", "/ill_transactions/"+illId, nil, "", http.StatusNotFound)
+}
+
+func TestSyntheticIllTransactionCannotBeDeleted(t *testing.T) {
+	err := illRepo.DeleteIllTransaction(
+		common.CreateExtCtxWithArgs(context.Background(), nil),
+		events.DEFAULT_ILL_TRANSACTION_ID,
+	)
+	assert.Error(t, err)
 }
 
 func TestGetLocatedSuppliers(t *testing.T) {
@@ -331,6 +339,34 @@ func TestGetLocatedSuppliers(t *testing.T) {
 	assert.GreaterOrEqual(t, len(resp.Items), 1)
 	assert.Equal(t, resp.Items[0].Id, locSup.ID)
 	assert.GreaterOrEqual(t, resp.About.Count, int64(len(resp.Items)))
+	assert.Equal(t, peer.Name, *resp.Items[0].SupplierName)
+	assert.Nil(t, resp.Items[0].DirectoryEntryId)
+	assert.Nil(t, resp.Items[0].ReasonUnfilled)
+	assert.Nil(t, resp.Items[0].Note)
+
+	entryId := uuid.New()
+	dirPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:LOC_SUP_DIR", "", app.BROKER_MODE, dirapi.ReShare, dirapi.Entry{Id: &entryId}, "Directory Library")
+	_, err = illRepo.SaveLocatedSupplier(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveLocatedSupplierParams{
+		ID:               uuid.NewString(),
+		IllTransactionID: illId,
+		SupplierID:       dirPeer.ID,
+		SupplierSymbol:   "ISIL:LOC_SUP_DIR",
+		Ordinal:          1,
+		SupplierStatus:   ill_db.SupplierStateSkippedPg,
+		ReasonUnfilled:   pgtype.Text{String: "NotOnShelf", Valid: true},
+		Note:             pgtype.Text{String: "Searched the shelf", Valid: true},
+	})
+	assert.NoError(t, err)
+	body = getResponseBody(t, "/located_suppliers?ill_transaction_id="+illId)
+	err = json.Unmarshal(body, &resp)
+	assert.NoError(t, err)
+	if assert.Len(t, resp.Items, 2) {
+		assert.Equal(t, int64(2), resp.About.Count)
+		assert.Equal(t, "Directory Library", *resp.Items[1].SupplierName)
+		assert.Equal(t, entryId.String(), *resp.Items[1].DirectoryEntryId)
+		assert.Equal(t, "NotOnShelf", *resp.Items[1].ReasonUnfilled)
+		assert.Equal(t, "Searched the shelf", *resp.Items[1].Note)
+	}
 
 	body = getResponseBody(t, "/located_suppliers?ill_transaction_id=not-exists")
 	err = json.Unmarshal(body, &resp)
@@ -362,8 +398,8 @@ func TestBrokerCRUD(t *testing.T) {
 	err = json.Unmarshal(body, &tran)
 	assert.NoError(t, err)
 	assert.Equal(t, illId, tran.Id)
-	assert.Equal(t, getLocalhostWithPort()+"/broker/events?ill_transaction_id="+url.PathEscape(illId), tran.EventsLink)
-	assert.Equal(t, getLocalhostWithPort()+"/broker/located_suppliers?ill_transaction_id="+url.PathEscape(illId), tran.LocatedSuppliersLink)
+	assert.Equal(t, "/broker/ill_transactions/"+url.PathEscape(illId)+"/events", tran.EventsLink)
+	assert.Equal(t, "/broker/located_suppliers?ill_transaction_id="+url.PathEscape(illId), tran.LocatedSuppliersLink)
 
 	httpGet(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "diku", http.StatusOK)
 	httpGet(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "ruc", http.StatusNotFound)
@@ -444,6 +480,15 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.Len(t, events.Items, 1)
 	assert.Equal(t, eventId, events.Items[0].Id)
 
+	body = httpGet(t, "/broker/ill_transactions/"+url.PathEscape(illId)+"/events", "diku", http.StatusOK)
+	err = json.Unmarshal(body, &events)
+	assert.NoError(t, err)
+	assert.Len(t, events.Items, 1)
+	assert.Equal(t, eventId, events.Items[0].Id)
+
+	httpGet(t, "/broker/ill_transactions/"+url.PathEscape(uuid.NewString())+"/events", "diku", http.StatusNotFound)
+	httpGet(t, "/broker/ill_transactions/00000000-0000-0000-0000-000000000001/events", "diku", http.StatusBadRequest)
+
 	body = httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusOK)
 	err = json.Unmarshal(body, &events)
 	assert.NoError(t, err)
@@ -472,7 +517,7 @@ func TestPeersLinks(t *testing.T) {
 	assert.GreaterOrEqual(t, int(resp.About.Count), int(2*api.LIMIT_DEFAULT))
 	assert.NotNil(t, resp.About.NextLink)
 	assert.NotNil(t, resp.About.LastLink)
-	assert.True(t, strings.HasPrefix(*resp.About.NextLink, getLocalhostWithPort()+"/peers?"))
+	assert.True(t, strings.HasPrefix(*resp.About.NextLink, "/peers?"))
 	assert.Contains(t, *resp.About.NextLink, "offset="+strconv.Itoa(int(api.LIMIT_DEFAULT)))
 	expectedLastOffset := int(((resp.About.Count - 1) / int64(api.LIMIT_DEFAULT)) * int64(api.LIMIT_DEFAULT))
 	assert.Contains(t, *resp.About.LastLink, "offset="+strconv.Itoa(expectedLastOffset))
@@ -507,6 +552,33 @@ func TestPeersNoHeaders(t *testing.T) {
 	httpRequest(t, "DELETE", "/peers/"+respPeer.Id, nil, "", http.StatusNotFound)
 }
 
+func TestDeletePeerWithTransactionAsRequesterAndSupplier(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	peer := apptest.CreatePeer(t, illRepo, "ISIL:DELETE-PEER-"+uuid.NewString(), "")
+	illID := uuid.NewString()
+	_, err := illRepo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams{
+		ID:          illID,
+		Timestamp:   test.GetNow(),
+		RequesterID: pgtype.Text{String: peer.ID, Valid: true},
+	})
+	assert.NoError(t, err)
+	apptest.CreateLocatedSupplier(
+		t,
+		illRepo,
+		illID,
+		peer.ID,
+		"ISIL:DELETE-PEER",
+		string(iso18626.TypeStatusLoaned),
+	)
+
+	httpRequest(t, "DELETE", "/peers/"+peer.ID, nil, "", http.StatusNoContent)
+
+	_, err = illRepo.GetIllTransactionById(ctx, illID)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+	_, err = illRepo.GetPeerById(ctx, peer.ID)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
 func TestPeersBadRequestJson(t *testing.T) {
 	httpRequest(t, "POST", "/peers", []byte("{"), "", http.StatusBadRequest)
 
@@ -537,9 +609,9 @@ func TestPeersCRUD(t *testing.T) {
 		"X-Okapi-Url":    "http://localhost:1234",
 	}
 	email := "v2"
-	custom := directory.Entry{
-		Name:  "v1",
-		Email: &email,
+	custom := dirapi.Entry{
+		Name:      "v1",
+		FromEmail: &email,
 	}
 	// Create peer
 	loanCount := int32(5)
@@ -579,8 +651,8 @@ func TestPeersCRUD(t *testing.T) {
 	assert.Equal(t, "Unknown", respPeers.Items[0].Vendor)
 	assert.NotNil(t, respPeers.Items[0].CustomData)
 	assert.Equal(t, "v1", respPeers.Items[0].CustomData.Name)
-	if assert.NotNil(t, respPeers.Items[0].CustomData.Email) {
-		assert.Equal(t, "v2", *respPeers.Items[0].CustomData.Email)
+	if assert.NotNil(t, respPeers.Items[0].CustomData.FromEmail) {
+		assert.Equal(t, "v2", *respPeers.Items[0].CustomData.FromEmail)
 	}
 	assert.Equal(t, "http://localhost:1234", (*respPeers.Items[0].HttpHeaders)["X-Okapi-Url"])
 	assert.Equal(t, int32(5), *respPeers.Items[0].LoansCount)
@@ -653,8 +725,8 @@ func TestPeersCRUD(t *testing.T) {
 	assert.Equal(t, toCreate.Id, respPeers.Items[0].Id)
 	assert.NotNil(t, respPeers.Items[0].CustomData)
 	assert.Equal(t, "v1", respPeers.Items[0].CustomData.Name)
-	if assert.NotNil(t, respPeers.Items[0].CustomData.Email) {
-		assert.Equal(t, "v2", *respPeers.Items[0].CustomData.Email)
+	if assert.NotNil(t, respPeers.Items[0].CustomData.FromEmail) {
+		assert.Equal(t, "v2", *respPeers.Items[0].CustomData.FromEmail)
 	}
 	assert.Equal(t, "http://localhost:1234", (*respPeers.Items[0].HttpHeaders)["X-Okapi-Url"])
 

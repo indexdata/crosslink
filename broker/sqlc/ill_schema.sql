@@ -56,7 +56,9 @@ CREATE TABLE located_supplier
     last_reason         VARCHAR,
     supplier_request_id VARCHAR,
     local_supplier      BOOLEAN NOT NULL DEFAULT false,
-    FOREIGN KEY (ill_transaction_id) REFERENCES ill_transaction (id),
+    reason_unfilled     VARCHAR,
+    note                VARCHAR,
+    FOREIGN KEY (ill_transaction_id) REFERENCES ill_transaction (id) ON DELETE CASCADE,
     FOREIGN KEY (supplier_id) REFERENCES peer (id)
 );
 

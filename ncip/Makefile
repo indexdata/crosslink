@@ -25,7 +25,7 @@ $(GEN_SCHEMA_OUT): $(GEN_SCHEMA_IN)
 	$(GO) fmt $@
 
 clean:
-	rm -f $(GEN_SCHEMA_OUT)
+	rm -f $(GEN_SCHEMA_OUT) $(COVERAGE)
 
 check: generate
 	$(GO) test -v -cover -coverpkg=./... -coverprofile=$(COVERAGE) ./...
@@ -37,7 +37,7 @@ vulncheck: generate
 	$(GO) run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 deps-update:
-	$(GO) get -u ./...
+	$(GO) get -t -u ./...
 	$(GO) mod tidy
 
 tools-update:

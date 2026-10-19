@@ -1,0 +1,330 @@
+# Directory service
+
+## OpenAPI specification
+
+The bundled specification defined in [api.yaml](api.yaml) is available at
+`GET /directory/openapi.yaml` (`application/yaml`) and
+`GET /directory/openapi.json` (`application/json`). No Directory role is required.
+
+```sh
+curl http://localhost:8086/directory/openapi.yaml
+curl http://localhost:8086/directory/openapi.json
+```
+
+Both endpoints return the complete specification, including references and
+extensions. YAML comments and source formatting are not preserved. The path
+selects the representation; query parameters and the `Accept` header do not change
+it.
+
+## Catalog coverage year filtering
+
+Set `catalogConfig.queryConfig.year` to `dc.date = {term}` for CQL or
+`@attr 1=30 {term}` for PQF to enable publication year filtering. There is no
+default: an omitted or empty template disables both filtering and validation.
+When enabled, a supplied ISO18626 `publicationInfo.publicationDate` must be
+exactly four ASCII digits (`YYYY`); other formats return a lookup error. An
+absent date leaves queries unchanged. The year clause is ANDed with each
+identifier, ISBN, ISSN, or title lookup, never searched by itself.
+
+For the GVI `marc21plus1` service, the server filters individual MARC 924
+holdings. CrossLink does not additionally interpret holdings date ranges.
+The template can also be used with other catalogs supporting coverage queries.
+
+## Local database
+
+Start a temporary PostgreSQL server and create the Directory database:
+
+```
+docker run --name crosslink-directory-postgres --rm -d \
+  -e POSTGRES_PASSWORD=directory -p 54322:5432 postgres
+until docker exec crosslink-directory-postgres pg_isready -U postgres; do sleep 1; done
+PGPASSWORD=directory psql -p 54322 -U postgres -h localhost \
+  -c 'create database directory;'
+```
+
+Run the service with a matching connection string. Database migrations are
+applied automatically during startup:
+
+```
+DATABASE_URL=postgresql://postgres:directory@localhost:54322/directory make run
+```
+
+## Import
+
+`POST /directory/import` loads complete directory entries, tiers, and networks
+from a newline-delimited JSON (NDJSON) stream. It requires the
+`directory.consortium.all` permission. Like the [broker import API](../broker/import/README.md),
+it processes each record in its own transaction and supports `fail`, `skip`,
+and `update` conflict policies.
+
+The [`export-crosslink-directory.sql`](../migration/export-crosslink-directory.sql)
+script exports a mod-rs tenant's directory as NDJSON accepted by this endpoint.
+It sets `illConfig.isPickupLocation` for entries with the legacy `pickup` tag,
+independently of their LMS location code or NCIP/ISO18626 configuration.
+Untagged entries are not designated as pickup locations.
+The script maps each entry's `policy.ill.InstitutionalLoanToBorrowRatio` custom
+text property to `lendToBorrowRatio`, preserving the ratio string. Missing
+properties export as null. Invalid ratios or multiple matching properties stop
+the export before NDJSON output; the error identifies the affected entries.
+
+The optional `lendToBorrowRatio` field expresses desired loans:borrows (for
+example, `50:2`). Each component must be positive, with one to four integer
+digits and at most two decimal places (`0.01` through `9999.99`). Leading zeros
+count toward the four integer digits; the whole string is at most 15 characters.
+These limits apply to entry creation, updates, and imports. Existing ratios
+outside these limits must be corrected before applying migration 016; the
+migration validates existing entries without changing their ratios.
+
+The optional `illConfig.loadBalancingPolicy` accepts `deficit` or `proportional`.
+The broker reads this setting from the entry identified by `CONSORTIUM_SYMBOL`.
+An omitted or null policy, missing `illConfig`, or an unset consortium symbol
+uses `proportional`.
+Requester settings do not select the policy. PATCH omission preserves the current
+value; explicit null clears it. Imports also accept this optional field.
+
+With a lender's desired loans:borrows ratio, `deficit` scores
+`actualBorrows * (desiredLoans / desiredBorrows) - actualLoans` and prioritizes
+higher scores. `proportional` scores
+`(actualLoans / max(actualBorrows, 1)) / (desiredLoans / desiredBorrows)` and
+prioritizes lower scores. Other rota priorities still take precedence.
+
+Before adding migrations, check current `main` for the next available version.
+Directory startup and integration test setup stop if migration initialization or
+application fails. The load-balancing migrations follow
+`014_catalog_query_year`: ratio in 015, ratio bounds in 016, and policy in 017.
+These numbers apply to databases following the mainline history. Persistent
+preview databases that already applied the earlier branch numbering need schema
+and migration-history reconciliation before upgrading; disposable test databases
+can be recreated.
+
+### Request format and sample data
+
+Each record has `type`, `key`, and `data` fields. Put one complete JSON object
+on each physical line, without an enclosing array. Blank lines are ignored.
+
+| Type | Key | Data |
+| --- | --- | --- |
+| `entry` | Entry UUID | Complete entry fields, owned collections, and configurations |
+| `tier` | Consortium UUID and tier `name` | `level`, `type`, `cost`, and entry UUIDs |
+| `network` | Consortium UUID and network `name` | `reciprocal` and entry UUIDs with individual `priority` values |
+
+Symbol authorities and values are trimmed and uppercased. Entry UUIDs are the
+stable import identity; symbols are metadata. Referenced entries must already
+exist or have been imported by an earlier successful record: put consortiums
+before institutions, institutions before branches, and members before tiers
+and networks. The same applies to references in `illConfig.lendersOfLastResort`.
+An entry UUID cannot appear twice in a tier or network's membership list.
+
+Save the following as `directory.ndjson`. This example assumes an empty
+directory; only one consortium entry is allowed. For an existing directory,
+use its consortium UUID and choose the appropriate conflict policy.
+
+```ndjson
+{"type":"entry","key":"00000000-0000-0000-0000-000000000001","data":{"name":"Example consortium","type":"Consortium","parent":null,"description":null,"organizationId":null,"contactName":null,"email":null,"fromEmail":null,"tenant":null,"vendor":null,"phoneNumber":null,"lmsLocationCode":null,"hrid":null,"timeZone":null,"symbols":[{"authority":"ISIL","symbol":"EXAMPLE-CON"}],"endpoints":[],"addresses":[],"closures":[],"lmsConfig":null,"catalogConfig":null,"illConfig":null,"holdingsPolicy":null}}
+{"type":"entry","key":"00000000-0000-0000-0000-000000000002","data":{"name":"Example library","type":"Institution","parent":"00000000-0000-0000-0000-000000000001","description":null,"organizationId":null,"contactName":null,"email":null,"fromEmail":null,"tenant":null,"vendor":null,"phoneNumber":null,"lmsLocationCode":null,"hrid":null,"timeZone":null,"symbols":[{"authority":"ISIL","symbol":"EXAMPLE-LIB"}],"endpoints":[],"addresses":[],"closures":[],"lmsConfig":null,"catalogConfig":null,"illConfig":null,"holdingsPolicy":null}}
+{"type":"tier","key":{"consortium":"00000000-0000-0000-0000-000000000001","name":"Standard loan"},"data":{"level":"standard","type":"loan","cost":0,"entries":["00000000-0000-0000-0000-000000000002"]}}
+{"type":"network","key":{"consortium":"00000000-0000-0000-0000-000000000001","name":"Main network"},"data":{"reciprocal":true,"entries":[{"entry":"00000000-0000-0000-0000-000000000002","priority":1}]}}
+```
+
+Entry imports require every field shown, including explicit `null` values for
+absent optional values or configurations and empty arrays for empty collections.
+Non-null configuration objects also have required fields. Unknown fields are
+rejected; see the `ImportEntryRecord`, `ImportTierRecord`, and
+`ImportNetworkRecord` schemas in [api.yaml](api.yaml) for the complete contract.
+Entry database IDs are supplied by the import key; this allows mod-rs UUIDs to be preserved.
+
+Complete imports include raw host settings: `lmsConfig.vendor`,
+`ncipNamespaceEnabled`, `bibIdNormalization`, `catalogConfig.profile`, MARC
+availability predicates, and OPAC parser options. These fields are required in
+their respective non-null configuration objects; use `null` to inherit defaults.
+Explicit `false` and empty arrays are preserved. Imports replace stored
+configuration, so include all overrides when restoring an entry. Configure at
+most one SRU/ZOOM endpoint and at most one holdings parser.
+
+### Import with curl
+
+For the local service started above:
+
+```sh
+curl --fail-with-body \
+  -X POST \
+  -H 'Content-Type: application/x-ndjson' \
+  -H 'X-Okapi-Permissions: ["directory.consortium.all"]' \
+  --data-binary @directory.ndjson \
+  'http://localhost:8086/directory/import?conflictPolicy=fail'
+```
+
+Use `--data-binary` to preserve line boundaries. The permissions header above
+is for direct local access. When accessing the service through a gateway, use
+that deployment's authentication and tenant headers with an account granted
+`directory.consortium.all`.
+
+### Conflict policies
+
+Set `conflictPolicy` in the URL to `fail`, `skip`, or `update`. All three policies
+create a resource when its key does not exist. For an existing key:
+
+| Policy | Behavior |
+| --- | --- |
+| `fail` (default) | Leaves the resource unchanged, increments `failed`, and adds an error detail. Continues with later records. |
+| `skip` | Leaves the resource unchanged, increments `skipped`, and adds a diagnostic to `errors`. |
+| `update` | Replaces the resource's data, preserves its root database ID, and increments `imported`. |
+
+An entry matches by its key UUID; a tier or network matches by the resolved
+consortium UUID and exact name. For example, reimporting the sample with `skip`
+leaves all four resources unchanged. With `update`, changing the network's
+priority to `5` replaces that library's priority with `5`.
+
+Updates synchronize complete aggregates, rather than patching individual fields.
+For entries, submitted symbols, endpoints, addresses, closures, and configurations
+replace the existing values; owned child IDs can change. An empty collection
+removes its existing contents, and a `null` configuration removes that
+configuration. Entry imports do not change tier or network memberships; import
+the corresponding tier or network to replace its full membership list.
+For example, updating a network with `"entries":[]` removes all its memberships.
+Validation still applies under every policy, and a failed record leaves that
+record's existing data unchanged.
+
+### Response and limits
+
+A completed stream returns HTTP 200 even if some records failed or were skipped.
+The initial sample import returns:
+
+```json
+{
+  "entries": {"imported": 2, "failed": 0, "skipped": 0},
+  "tiers": {"imported": 1, "failed": 0, "skipped": 0},
+  "networks": {"imported": 1, "failed": 0, "skipped": 0},
+  "errors": [],
+  "errorsOmitted": 0
+}
+```
+
+Always inspect the counters and `errors`, even when curl succeeds. Error details
+include `line`, `error`, and, when available, `type` and `key`. Here, `line` is the
+one-based **nonblank record number**, not the physical line number. At most 1,000
+error or skip details are retained; `errorsOmitted` counts additional details.
+
+| Status | Meaning |
+| --- | --- |
+| `400` | Missing body, unsupported conflict policy, or incorrect content type |
+| `401` | Missing consortial-admin permission |
+| `413` | Request exceeds 1 GiB or a record exceeds 1 MiB |
+| `500` | Import stream could not be read |
+
+Record-level errors do not stop later records. Fatal stream errors stop the
+import, but records already committed remain committed, including when the
+response is HTTP 413 or 500.
+
+## Build and test
+
+The SQLC and OpenAPI generator versions are pinned as Go tools in `go.mod`.
+Generate the database and API sources with:
+
+```
+make generate
+```
+
+Generated Go sources are build artifacts and are not stored in the repository.
+The standard build, test, lint, and run targets generate them automatically:
+
+```
+make all
+make check
+make lint
+make run
+```
+
+Run `make generate` before invoking `go build` or `go test` directly.
+
+## Environment variables
+
+| Name                      | Description                                                                    | Default value                                               |
+|---------------------------|--------------------------------------------------------------------------------|-------------------------------------------------------------|
+| `HOST`                    | Address on which the HTTP server listens                                       | `localhost`                                                 |
+| `HTTP_PORT`               | Port on which the HTTP server listens                                          | `8086`                                                      |
+| `DATABASE_URL`            | PostgreSQL connection string used by the service and database migrations       | `postgresql://postgres:directory@localhost:54322/directory` |
+| `LOG_LEVEL`               | Log level: `debug`, `info`, `warn`, or `error`                                 | `info`                                                      |
+| `LOG_FORMAT`              | Log output format; set to `json` for structured JSON logs                      | `text`                                                      |
+
+## Host integration profiles
+
+See [Host LMS and catalog profiles](host-profiles.md) for `lmsConfig.vendor`,
+`catalogConfig.profile`, precedence, parser overrides, diagnostics and migration.
+
+## Directory entry symbols
+
+When patching entry symbols, omit `id` to create a new symbol. A supplied `id`
+must identify an existing symbol owned by the entry being patched; unknown or
+foreign IDs return HTTP 400 and roll back the entire PATCH. Symbols cannot be
+moved between entries through the API.
+
+Application writes lock the owner entry before modifying its symbols. Direct
+SQL maintenance must follow the same order; the search trigger alone cannot
+prevent deadlocks caused by acquiring these locks in the opposite order.
+
+## Directory entry searches
+
+`cql.serverChoice` searches a combined document containing the entry's name,
+description, organization ID, email, phone number, and all its own symbols
+(both `authority:symbol` and bare symbol values). It uses PostgreSQL full-text
+search with the fixed `simple` configuration: case is normalized without English
+stemming or stop-word removal. NULL fields contribute no text. Parent and child
+entry data are not included.
+
+| CQL example | Behavior |
+| --- | --- |
+| `cql.serverChoice="central library"` | Both words, potentially in different fields |
+| `cql.serverChoice all "central library"` | Both words |
+| `cql.serverChoice any "central library"` | Either word |
+| `cql.serverChoice adj "central library"` | Adjacent words in order |
+| `cql.serverChoice="centr*"` | Word-prefix matching |
+
+This index is available on both `/entries` and `/entries/owned`; existing access
+restrictions, counts, pagination, and result ordering apply. Results are not
+ranked by relevance. Email addresses, phone numbers, and symbols follow
+PostgreSQL tokenization rather than arbitrary substring matching. Use dedicated
+field indexes such as `symbol` for exact identifier comparisons.
+
+A stored search vector and GIN index are maintained transactionally by database
+triggers when entry fields or symbols change, including imports. Migration 018
+backfills existing entries. SQLC expands wildcard selections into explicit column
+lists, so adding the search column preserves the result shape expected by
+pre-018 binaries. Existing binaries can continue serving against the upgraded
+schema after the migration completes.
+
+Migration 018 runs as one transaction: it adds the search column, creates the
+symbols ownership index before backfill, installs the search triggers, backfills
+all entries, and builds the GIN index. The initial schema change takes an
+exclusive lock on `entries` that is held until the transaction completes,
+blocking entry reads and writes throughout the backfill and index builds. The
+regular symbols index build also blocks symbol writes until commit. Migration
+duration depends on data volume and active transactions; requests may time out
+while waiting. Concurrent transactions that acquire locks in the opposite order
+can also deadlock with the migration.
+
+Plan a maintenance window for this upgrade. Stop all Directory instances and
+import jobs, pause other database writers, and allow active transactions to
+finish before starting one upgraded instance to apply migrations. Once migration
+018 succeeds and that instance is ready, restore the remaining instances and
+resume traffic and imports. A rolling update alone does not enforce this
+sequence. If migration fails, inspect the error and migration version/dirty state
+before retrying; a failed transaction rolls back its schema changes, but the
+migration runner may leave the version marked dirty and prevent startup.
+
+The `name` and `description` CQL indexes match case insensitively by default,
+using PostgreSQL `lower()` on both the stored value and the search term. For
+example, `name="central library"` matches `Central Library`, and
+`description="*LIBRARY*"` matches descriptions containing `library` in any case.
+This also applies to `==`, `exact`, and `<>` comparisons. Existing wildcard and
+escaping rules apply; no CQL relation modifier is required. Other indexes and
+result ordering retain their existing behavior. This does not add full-text
+search or accent normalization.
+
+### Pickup locations
+
+Set `illConfig.isPickupLocation` to `true` to offer an institution or branch in the request form's pickup-location selector. This flag is independent of `lmsConfig.requesterPickupLocation`: manual workflows can offer locations without an LMS code. Migration 012 enables the flag for existing entries whose requester pickup code is non-null (including empty strings), preserving other ILL settings. Other entries remain unselected unless explicitly enabled. Imports can set the flag in `illConfig`.
+
+The broker accepts the requesting institution's UUID or a descendant's UUID. An explicit selection supplies that entry's shipping address and, when needed, its LMS pickup code. Omitting the selection retains existing defaults. LMS operations that consume a pickup code still require one for explicit selections.
+
+Filter Directory entries with CQL `isPickupLocation=true` or `isPickupLocation=false`. Missing flags (including entries without ILL configuration) match `false`. The former `requesterPickupLocation` CQL filter is no longer supported.

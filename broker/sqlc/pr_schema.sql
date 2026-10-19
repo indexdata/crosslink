@@ -18,8 +18,16 @@ CREATE TABLE patron_request
     items               JSONB NOT NULL DEFAULT '[]'::jsonb,
     language            regconfig NOT NULL DEFAULT 'english',
     terminal_state      BOOLEAN NOT NULL DEFAULT false,
-    updated_at          TIMESTAMP,
-    ill_response        jsonb NOT NULL DEFAULT '{}'::jsonb
+    updated_at          TIMESTAMP NOT NULL DEFAULT now(),
+    ill_response        jsonb NOT NULL DEFAULT '{}'::jsonb,
+    internal_note       TEXT,
+    next_req_id         VARCHAR,
+    prev_req_id         VARCHAR,
+    retry_bib_info       JSONB,
+    state_model         VARCHAR NOT NULL DEFAULT 'default',
+    requester_pickup_location_id UUID,
+    cancellation_reason       VARCHAR,
+    due_at TIMESTAMPTZ
 );
 
 CREATE OR REPLACE FUNCTION get_next_hrid(prefix VARCHAR) RETURNS VARCHAR AS $$
@@ -31,13 +39,19 @@ $$ LANGUAGE plpgsql;
 
 CREATE TABLE item
 (
-    id          VARCHAR PRIMARY KEY,
-    pr_id       VARCHAR   NOT NULL REFERENCES patron_request (id),
-    barcode     VARCHAR   NOT NULL,
-    call_number VARCHAR,
-    title       VARCHAR,
-    item_id     VARCHAR,
-    created_at  TIMESTAMP NOT NULL DEFAULT now()
+    id             VARCHAR PRIMARY KEY,
+    pr_id          VARCHAR   NOT NULL REFERENCES patron_request (id) ON DELETE CASCADE,
+    barcode        VARCHAR   NOT NULL,
+    call_number    VARCHAR,
+    location       VARCHAR,
+    shelving_location VARCHAR,
+    title          VARCHAR,
+    item_id        VARCHAR,
+    lms_request_id VARCHAR,
+    lms_item_id    VARCHAR,
+    created_at     TIMESTAMP NOT NULL DEFAULT now(),
+    lms_status VARCHAR NOT NULL DEFAULT 'UNKNOWN' CHECK (lms_status IN ('UNKNOWN', 'REQUESTED', 'ACCEPTED', 'CHECKED_OUT', 'CHECKED_IN', 'DELETED')),
+    lms_due_date TIMESTAMPTZ
 );
 
 CREATE INDEX idx_item_barcode_pr_id
@@ -54,7 +68,7 @@ CREATE INDEX idx_item_call_number_pr_id
 CREATE TABLE notification
 (
     id              VARCHAR PRIMARY KEY,
-    pr_id           VARCHAR   NOT NULL REFERENCES patron_request (id),
+    pr_id           VARCHAR   NOT NULL REFERENCES patron_request (id) ON DELETE CASCADE,
     from_symbol     VARCHAR   NOT NULL,
     to_symbol       VARCHAR   NOT NULL,
     direction       VARCHAR   NOT NULL DEFAULT 'sent',
@@ -66,6 +80,21 @@ CREATE TABLE notification
     receipt         VARCHAR,
     created_at      TIMESTAMP NOT NULL DEFAULT now(),
     acknowledged_at TIMESTAMP
+);
+
+CREATE TABLE template
+(
+    id           VARCHAR PRIMARY KEY,
+    owner        VARCHAR   NOT NULL,
+    title        VARCHAR   NOT NULL,
+    purpose      VARCHAR   NOT NULL,
+    subject      TEXT,
+    body         TEXT      NOT NULL,
+    content_type VARCHAR   NOT NULL,
+    labels       TEXT[]    NOT NULL DEFAULT '{}',
+    audience     VARCHAR,
+    created_at   TIMESTAMP NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMP NOT NULL DEFAULT now()
 );
 
 CREATE OR REPLACE FUNCTION immutable_to_timestamp(text)
@@ -115,13 +144,20 @@ SELECT
         WHERE n.pr_id = pr.id and cost is not null
     ) AS has_cost,
     (unread.unread_notifications_count > 0) AS has_unread_notification,
+    (pr.internal_note IS NOT NULL AND btrim(pr.internal_note) <> '') AS has_internal_note,
     pr.ill_request -> 'serviceInfo' ->> 'serviceType' AS service_type,
     pr.ill_request -> 'serviceInfo' -> 'serviceLevel' ->> '#text' AS service_level,
     immutable_to_timestamp(pr.ill_request -> 'serviceInfo' ->> 'needBeforeDate') AS needed_at,
-    unread.unread_notifications_count AS unread_notifications_count
+    unread.unread_notifications_count AS unread_notifications_count,
+    req_peer.name AS requester_name,
+    sup_peer.name AS supplier_name
 FROM patron_request pr
 LEFT JOIN LATERAL (
     SELECT COUNT(*) AS unread_notifications_count
     FROM notification n
     WHERE n.pr_id = pr.id and n.acknowledged_at is null
-) unread ON true;
+) unread ON true
+LEFT JOIN symbol req_sym ON req_sym.symbol_value = pr.requester_symbol
+LEFT JOIN peer req_peer ON req_peer.id = req_sym.peer_id
+LEFT JOIN symbol sup_sym ON sup_sym.symbol_value = pr.supplier_symbol
+LEFT JOIN peer sup_peer ON sup_peer.id = sup_sym.peer_id;

@@ -7,7 +7,7 @@ import (
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -41,8 +41,8 @@ func strPtr(s string) *string {
 func TestGetAdapterNcipOK(t *testing.T) {
 	illRepo := &MockIllRepo{}
 	peer := ill_db.Peer{
-		CustomData: directory.Entry{
-			LmsConfig: &directory.LmsConfig{
+		CustomData: dirapi.Entry{
+			LmsConfig: &dirapi.LmsConfig{
 				Address:                  "http://ncip.example.com",
 				FromAgency:               "AGENCY1",
 				ToAgency:                 strPtr("AGENCY2"),
@@ -59,11 +59,11 @@ func TestGetAdapterNcipOK(t *testing.T) {
 	assert.IsType(t, &LmsAdapterNcip{}, LmsAdapter)
 }
 
-func TestGetAdapterNcipFail(t *testing.T) {
+func TestGetAdapterEmptyConfigDoesNotEnableNcip(t *testing.T) {
 	illRepo := &MockIllRepo{}
 	peer := ill_db.Peer{
-		CustomData: directory.Entry{
-			LmsConfig: &directory.LmsConfig{},
+		CustomData: dirapi.Entry{
+			LmsConfig: &dirapi.LmsConfig{},
 		},
 	}
 	illRepo.On("GetCachedPeersBySymbols", mock.Anything).Return([]ill_db.Peer{peer}, "", nil)
@@ -71,8 +71,7 @@ func TestGetAdapterNcipFail(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	symbol := "TEST"
 	_, err := creator.GetAdapter(ctx, symbol)
-	assert.Error(t, err)
-	assert.Equal(t, "missing NCIP address in LMS configuration", err.Error())
+	assert.NoError(t, err)
 }
 
 type MockIllRepo struct {

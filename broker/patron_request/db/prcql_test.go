@@ -1,18 +1,35 @@
 package pr_db
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/indexdata/cql-go/cql"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestPatronRequestDateWithin(t *testing.T) {
+	for _, field := range []string{"created_at", "updated_at", "needed_at", "due_at"} {
+		t.Run(field, func(t *testing.T) {
+			query, err := ParsePatronRequestsCql(fmt.Sprintf(`%s within "2026-09-01 2026-09-17" and side = borrowing`, field))
+			require.NoError(t, err)
+			assert.Equal(t, fmt.Sprintf("(%s >= $3 AND %s <= $4) AND side = $5", field, field), query.GetWhereClause())
+			assert.Equal(t, []any{
+				time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC),
+				time.Date(2026, 9, 17, 0, 0, 0, 0, time.UTC),
+				"borrowing",
+			}, query.GetQueryArguments())
+		})
+	}
+}
 
 func TestHandlePatronRequestsQueryKeepsOwnerRestrictionGrouped(t *testing.T) {
 	cql := "cql.allRecords = 1 and (side = lending and supplier_symbol_exact = ISIL:REQ or (side = borrowing and requester_symbol_exact = ISIL:REQ))"
 
-	query, err := handlePatronRequestsQuery(cql, 2)
-	if err != nil {
-		t.Fatalf("handlePatronRequestsQuery() error = %v", err)
-	}
+	query, err := ParsePatronRequestsCql(cql)
+	assert.NoError(t, err, "ParsePatronRequestsCQL() error = %v", err)
 
 	want := "TRUE AND ((side = $3 AND supplier_symbol = $4) OR (side = $5 AND requester_symbol = $6))"
 	if got := query.GetWhereClause(); got != want {
@@ -87,15 +104,18 @@ func TestFieldTextArrayContainsGenerate(t *testing.T) {
 func TestHandlePatronRequestsQueryIsbnUsesNormIsxn(t *testing.T) {
 	cql := `isbn = "978-3-16-148410-0"`
 
-	query, err := handlePatronRequestsQuery(cql, 2)
-	if err != nil {
-		t.Fatalf("handlePatronRequestsQuery() error = %v", err)
-	}
+	query, err := ParsePatronRequestsCql(cql)
+	assert.NoError(t, err, "ParsePatronRequestsCQL() error = %v", err)
 
 	wantWhere := "bibliographic_item_identifiers(ill_request, 'ISBN') @> ARRAY[norm_isxn($3)]::text[]"
-	if got := query.GetWhereClause(); got != wantWhere {
-		t.Fatalf("where clause = %q, want %q", got, wantWhere)
-	}
+	assert.Equal(t, wantWhere, query.GetWhereClause(), "where clause = %q, want %q", query.GetWhereClause(), wantWhere)
+}
+
+func TestPatronRequestDuplicateFields(t *testing.T) {
+	query, err := ParsePatronRequestsCql(`patron_exact = "patron-1" and supplier_unique_record_id = "record-1" and title_exact = "A Title" and id <> "current-pr"`)
+	assert.NoError(t, err)
+	assert.Equal(t, "((patron = $3 AND ill_request->'bibliographicInfo'->>'supplierUniqueRecordId' = $4) AND lower(ill_request->'bibliographicInfo'->>'title') = lower($5)) AND id NOT IN($6)", query.GetWhereClause())
+	assert.Equal(t, []any{"patron-1", "record-1", "A Title", "current-pr"}, query.GetQueryArguments())
 }
 
 func TestFieldExistsStringGenerate(t *testing.T) {
@@ -202,9 +222,9 @@ func TestHandlePatronRequestsQueryItemFieldsUseExists(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			query, err := handlePatronRequestsQuery(tc.cql, 2)
+			query, err := ParsePatronRequestsCql(tc.cql)
 			if err != nil {
-				t.Fatalf("handlePatronRequestsQuery() error = %v", err)
+				t.Fatalf("ParsePatronRequestsCql() error = %v", err)
 			}
 			if got := query.GetWhereClause(); got != tc.wantWhere {
 				t.Fatalf("where clause = %q, want %q", got, tc.wantWhere)

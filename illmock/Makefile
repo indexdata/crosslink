@@ -1,4 +1,5 @@
 GO ?= go
+DEPS_UPDATE_CONSTRAINTS := github.com/dprotaso/go-yit@v0.0.0-20250513224043-18a80f8f6df4
 GIT ?= git
 GOFMT ?= gofmt "-s"
 OS ?= $(shell uname)
@@ -6,21 +7,24 @@ DOCKER ?= docker
 PACKAGES ?= $(shell $(GO) list ./...)
 GOFILES := $(shell find . -name "*.go")
 MODULE=illmock
-COMMIT_ID=commit.txt
 COVERAGE=coverage.out
 PROGRAMS := $(shell cd cmd; ls)
+OAPI_CFG=dirmock/api/oapi-codegen.yaml
+OAPI_SPEC=../directory/api.yaml
+OAPI_GEN=dirmock/api/directory.gen.go
+OAPI_CODEGEN ?= $(GO) tool oapi-codegen
 
-.PHONY: all check clean coverage docker fmt fmt-check generate run doc view-coverage deps-update lint vulncheck
+.PHONY: all check clean clean-build-caches coverage docker fmt fmt-check generate run doc view-coverage deps-update lint vulncheck
 
 all: $(PROGRAMS)
 
 docker: generate
 	cd .. && $(DOCKER) build -t indexdata/$(MODULE):latest -f ./$(MODULE)/Dockerfile .
 
-generate: $(COMMIT_ID)
+generate: $(OAPI_GEN)
 
-$(COMMIT_ID):
-	$(GIT) rev-parse --short HEAD | tr -d '\n' > $(COMMIT_ID)
+$(OAPI_GEN): $(OAPI_CFG) $(OAPI_SPEC)
+	$(OAPI_CODEGEN) --config=$(OAPI_CFG) $(OAPI_SPEC)
 
 $(PROGRAMS): $(GOFILES) $(COMMIT_ID) $(OAPI_GEN)
 	$(GO) build -v -o $@ ./cmd/$@
@@ -52,13 +56,15 @@ README.html: README.md
 	pandoc $< -o $@
 
 deps-update:
-	$(GO) get -u ./...
+	$(GO) get -t -u ./... $(DEPS_UPDATE_CONSTRAINTS)
 	$(GO) mod tidy
 
 clean:
-	$(GO) clean -testcache
-	$(GO) clean -cache
 	rm -f $(PROGRAMS)
 	rm -f $(COVERAGE)
-	rm -f $(COMMIT_ID)
 	rm -f README.html
+	rm -f $(OAPI_GEN)
+
+clean-build-caches:
+	$(GO) clean -cache
+	$(DOCKER) builder prune --all --force

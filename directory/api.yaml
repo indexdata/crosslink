@@ -1,0 +1,3445 @@
+openapi: "3.1.0"
+info:
+  version: 1.0.0
+  title: Directory API
+x-host-profiles:
+  Alma:
+    lmsConfig: {}
+    catalogConfig:
+      holdingsFormat:
+        opac:
+          availabilityRule: availableNow
+          requireLocalLocation: true
+          includeItemId: true
+          includeItemLoanPolicy: true
+          allCirculations: true
+  FOLIO:
+    lmsConfig: {}
+    catalogConfig:
+      holdingsFormat:
+        opac:
+          availabilityRule: availableNow
+          requireLocalLocation: true
+          includeItemId: true
+          includeItemLoanPolicy: true
+          allCirculations: true
+          includeTemporaryLocation: true
+  Generic:
+    lmsConfig:
+      ncipNamespaceEnabled: true
+      bibIdNormalization: none
+      requestItemRequestType: Page
+      requestItemRequestScopeType: Item
+      requestItemBibIdCode: SYSNUMBER
+      requestItemPickupLocationEnabled: true
+      lookupUserEnabled: true
+      acceptItemEnabled: true
+      checkInItemEnabled: true
+      checkOutItemEnabled: true
+      requestItemEnabled: true
+    catalogConfig: {}
+  Koha:
+    lmsConfig:
+      ncipNamespaceEnabled: false
+    catalogConfig:
+      holdingsFormat:
+        marc:
+          mainField: "952"
+          locationSubField: b
+          shelvingLocationSubField: c
+          callNumberSubField: o
+          availability:
+            - subField: "7"
+              operator: equals
+              value: "0"
+            - subField: q
+              operator: absent
+  Sierra:
+    lmsConfig:
+      requestItemRequestType: Hold
+      requestItemRequestScopeType: Title
+      bibIdNormalization: sierra
+    catalogConfig:
+      holdingsFormat:
+        opac:
+          availabilityRule: publicNote
+          availablePublicNotes:
+            - AVAILABLE
+            - CHECK SHELVES
+            - CHECK SHELF
+          shelvingLocationSource: localLocation
+          includeItemId: false
+          includeItemLoanPolicy: false
+servers:
+  - url: /directory
+paths:
+  /openapi.yaml:
+    get:
+      summary: Retrieve the Directory OpenAPI specification as YAML
+      description: Returns the complete bundled OpenAPI specification as YAML without requiring a Directory role.
+      operationId: getOpenapiYaml
+      responses:
+        '200':
+          description: Complete OpenAPI specification
+          content:
+            application/yaml:
+              schema:
+                type: object
+                additionalProperties: true
+        '500':
+          description: Failed to prepare the specification
+          content:
+            text/plain:
+              schema: { type: string }
+  /openapi.json:
+    get:
+      summary: Retrieve the Directory OpenAPI specification as JSON
+      description: Returns the complete bundled OpenAPI specification as JSON without requiring a Directory role.
+      operationId: getOpenapiJson
+      responses:
+        '200':
+          description: Complete OpenAPI specification
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '500':
+          description: Failed to prepare the specification
+          content:
+            text/plain:
+              schema: { type: string }
+  /import:
+    post:
+      summary: Import complete directory aggregates
+      description: Imports ordered NDJSON entry, tier, and network aggregates. Parent entries must appear in earlier committed records.
+      operationId: postImport
+      parameters:
+        - name: conflictPolicy
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ConflictPolicy'
+      requestBody:
+        required: true
+        content:
+          application/x-ndjson:
+            schema:
+              type: string
+              format: binary
+            x-ndjson-item-schema:
+              $ref: '#/components/schemas/ImportRecord'
+      responses:
+        '200':
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportResult'
+        '400':
+          description: Invalid import request
+          content:
+            text/plain:
+              schema: { type: string }
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema: { type: string }
+        '413':
+          description: Import request or record is too large
+          content:
+            text/plain:
+              schema: { type: string }
+        '500':
+          description: Failed to read the import stream
+          content:
+            text/plain:
+              schema: { type: string }
+  /entries:
+    get:
+      summary: Returns all entries
+      description: Returns all entries from the system that the user has access to.
+      operationId: getEntries
+      parameters:
+        - name: cql
+          in: query
+          description: >-
+            CQL query filter. cql.serverChoice searches entry name, description,
+            organization ID, email, phone number, and owned symbols using the simple
+            full-text configuration. The default relation requires all words;
+            all, any, adj, and trailing word-prefix wildcards are supported.
+            The parentSymbol index matches entries by their immediate parent's symbols.
+          required: false
+          style: form
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Entry list response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntriesResponse'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    post:
+      summary: Creates a new entry
+      description: Creates a new entry
+      operationId: addEntry
+      requestBody:
+        description: Entry to add
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddEntry'
+      responses:
+        '201':
+          description: Entry response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Id'
+          links:
+            GetEntryByID:
+              operationId: getEntry
+              parameters:
+                key: 'id'
+                value: '$response.body#/id'
+            UpdateEntry:
+              operationId: updateEntry
+              parameters:
+                key: 'id'
+                value: '$response.body#/id'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entries/owned:
+    get:
+      summary: Returns entries owned by the current tenant
+      description: Returns entries whose tenant matches the tenant in the authentication data.
+      operationId: getOwnedEntries
+      parameters:
+        - name: cql
+          in: query
+          description: >-
+            CQL query filter applied within the current tenant's owned entries.
+            cql.serverChoice searches entry name, description, organization ID,
+            email, phone number, and owned symbols using the simple full-text
+            configuration. The default relation requires all words; all, any, adj,
+            and trailing word-prefix wildcards are supported.
+            The parentSymbol index matches entries by their immediate parent's symbols.
+          required: false
+          style: form
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Owned entry list response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntriesResponse'
+        '400':
+          description: Missing tenant or invalid request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entries/{key}/{value}:
+    get:
+      summary: Returns a directory entry by ID or symbol
+      operationId: getEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+      responses:
+        '200':
+          description: Entry response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entry'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    patch:
+      summary: Update an entry
+      description: Update an entry
+      operationId: updateEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+      requestBody:
+        description: Updated fields
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntryPatch'
+      responses:
+        '204':
+          description: entry updated
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    delete:
+      summary: Delete directory entry by ID
+      operationId: deleteEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+      responses:
+        '204':
+          description: entry deleted
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entries/{key}/{value}/tiers:
+    get:
+      summary: Get all Tiers for a given Entry
+      operationId: getTiersForEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+      responses:
+        '200':
+          description: Tier list response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TiersResponse'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    post: 
+      summary: Add an Entry Tier to a given Entry
+      operationId: addTierForEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+      requestBody:
+        description: Entry Tier to add
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntryTierAssignmentProperties'
+      responses:
+        '201':
+          description: Entry Tier response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Id'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entries/{key}/{value}/tiers/{id}:
+    delete:
+      summary: Delete an Entry Tier from a given Entry
+      operationId: deleteTierForEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+        - name: id
+          in: path
+          description: ID of Tier to delete from entry
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Tier deleted from Entry
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal sever error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entries/{key}/{value}/networks:
+    get:
+      summary: Get all Networks for a given Entry
+      operationId: getNetworksForEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+      responses:
+        '200':
+          description: Network list response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworksForEntryResponse'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    post:
+      summary: Add an Entry Network to a given Entry
+      operationId: addNetworkForEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+      requestBody:
+        description: Entry Network to add
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntryNetworkAssignmentProperties'
+      responses:
+        '201':
+          description: Entry Network response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Id'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entries/{key}/{value}/networks/{id}:
+    delete:
+      summary: Delete an Entry Network from a given Entry
+      operationId: deleteNetworkForEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+        - name: id
+          in: path
+          description: ID of Network to delete from entry
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Network deleted from Entry
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /tiers:
+    get:
+      summary: Get all tiers
+      description: Return all tiers that the user has access to
+      operationId: getTiers
+      parameters:
+        - name: q
+          in: query
+          description: keywords to filter by
+          required: false
+          style: form
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Tiers list response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TiersResponse'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    post:
+      summary: Create a new Tier
+      description: Create a new Tier
+      operationId: addTier
+      requestBody:
+        description: Tier to add
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddTier'
+      responses:
+        '201':
+          description: Tier response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Id'
+          links:
+            GetTierById:
+              operationId: getTier
+              parameters:
+                id: '$response.body#/id'
+            UpdateTier:
+              operationId: updateTier
+              parameters:
+                id: '$response.body#/id'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '409':
+          description: A tier with the same name already exists in the consortium
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /tiers/{id}:
+    get:
+      summary: Returns a Tier by ID
+      operationId: getTier
+      parameters:
+        - name: id
+          in: path
+          description: ID of tier to fetch
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Tier response
+          content: 
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tier'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    patch:
+      summary: Update a Tier
+      operationId: updateTier
+      parameters:
+        - name: id
+          in: path
+          description: ID of Tier to update
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: Updated fields
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TierPatch'
+      responses:
+        '204':
+          description: Tier updated
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    delete:
+      summary: Delete Tier by ID
+      operationId: deleteTier
+      parameters:
+        - name: id
+          in: path
+          description: ID of Tier to update
+          required: true
+          schema: 
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Tier deleted
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /networks:
+    get:
+      summary: Get all networks
+      description: Return all networks that the user has access to
+      operationId: getNetworks
+      parameters:
+        - name: q
+          in: query
+          description: keywords to filter by
+          required: false
+          style: form
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Network list response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworksResponse'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    post:
+      summary: Create a new network
+      description: Create a new network
+      operationId: addNetwork
+      requestBody:
+        description: Network to add
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddNetwork'
+      responses:
+        '201':
+          description: Network response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Id'
+          links:
+            GetNetworkById:
+              operationId: GetNetworkById
+              parameters:
+                id: '$response.body#/id'
+            UpdateNetwork:
+              operationId: updateNetwork
+              parameters:
+                id: '$response.body#/id'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '409':
+          description: A network with the same name already exists in the consortium
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /networks/{id}:
+    get:
+      summary: Returns a Network by ID
+      operationId: getNetwork
+      parameters:
+        - name: id
+          in: path
+          description: ID of network to fetch
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Network response
+          content: 
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Network'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    patch:
+      summary: Update a Network
+      operationId: updateNetwork
+      parameters:
+        - name: id
+          in: path
+          description: ID of Network to update
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: Updated fields
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NetworkPatch'
+      responses:
+        '204':
+          description: Network updated
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    delete:
+      summary: Delete Network by ID
+      operationId: deleteNetwork
+      parameters:
+        - name: id
+          in: path
+          description: ID of Network to update
+          required: true
+          schema: 
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Network deleted
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entry-tiers:
+    get:
+      summary: Returns all Entry Tier Mappings
+      description: Returns all Entry Tier mappings from the system that the user has access to
+      operationId: getEntryTiers
+      parameters:
+        - name: q
+          in: query
+          description: keywords to filter by
+          required: false
+          style: form
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Entry Tiers list response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryTiersResponse'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    post:
+      summary: Creates a new Entry Tier
+      description: Creates a new Entry Tier Relationship
+      operationId: addEntryTier
+      requestBody:
+        description: Entry Tier to add
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEntryTier'
+      responses:
+        '201':
+          description: Entry Tier response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Id'
+          links:
+            GetEntryByID:
+              operationId: getEntryTierByID
+              parameters:
+                id: '$response.body#/id'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entry-tiers/{id}:
+    get:
+      summary: Returns an Entry Tier by ID
+      operationId: getEntryTierByID
+      parameters:
+        - name: id
+          in: path
+          description: ID of Entry Tier
+          required: true
+          schema: 
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Entry Tier response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryTier'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    delete:
+      summary: Delete Entry Tier by ID
+      operationId: deleteEntryTier
+      parameters:
+      - name: id
+        in: path
+        description: ID of Entry Tier
+        required: true
+        schema: 
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: Entry Tier deleted
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entry-networks:
+    get:
+      summary: Returns all Entry Network Mappings
+      description: Returns all Entry Network mappings from the system that the user has access to
+      operationId: getEntryNetworks
+      parameters:
+        - name: q
+          in: query
+          description: keywords to filter by
+          required: false
+          style: form
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Entry Networks list response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryNetworksResponse'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    post:
+      summary: Creates a new Entry Network
+      description: Creates a new Entry Network Relationship
+      operationId: addEntryNetwork
+      requestBody:
+        description: Entry Network to add
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEntryNetwork'
+      responses:
+        '201':
+          description: Entry Network response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Id'
+          links:
+            GetEntryNetworkByID:
+              operationId: getEntryNetworkByID
+              parameters:
+                id: '$response.body#/id'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entry-networks/{id}:
+    get:
+      summary: Returns an Entry Network by ID
+      operationId: getEntryNetworkByID
+      parameters:
+        - name: id
+          in: path
+          description: ID of Entry Network
+          required: true
+          schema: 
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Entry Network response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryNetwork'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    patch:
+      summary: Update an Entry Network
+      operationId: updateEntryNetwork
+      parameters:
+        - name: id
+          in: path
+          description: ID of Entry Network to update
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: Updated fields
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntryNetworkPatch'
+      responses:
+        '204':
+          description: Entry Network updated
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+
+    delete:
+      summary: Delete Entry Network by ID
+      operationId: deleteEntryNetwork
+      parameters:
+      - name: id
+        in: path
+        description: ID of Entry Network
+        required: true
+        schema: 
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: Entry Network deleted
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /closures:
+    get:
+      summary: Get all Closures
+      description: Return all Closures that the user has access to
+      operationId: getClosures
+      parameters:
+        - name: q
+          in: query
+          description: keywords to filter by
+          required: false
+          style: form
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Closures list response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClosuresResponse'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    post:
+      summary: Create a new Closure
+      description: Create a new Closure
+      operationId: addClosure
+      requestBody:
+        description: Closure to add
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClosure'
+      responses:
+        '201':
+          description: Closure response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Id'
+          links:
+            GetClosureById:
+              operationId: GetClosureById
+              parameters:
+                id: '$response.body#/id'
+            UpdateClosure:
+              operationId: updateClosure
+              parameters:
+                id: '$response.body#/id'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /closures/{id}:
+    get:
+      summary: Returns a Closure by ID
+      operationId: getClosure
+      parameters:
+        - name: id
+          in: path
+          description: ID of Closure to fetch
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Closure response
+          content: 
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Closure'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    patch:
+      summary: Update a Closure
+      description: Update a Closure
+      operationId: updateClosure
+      parameters:
+        - name: id
+          in: path
+          description: ID of Closure to update
+          required: true
+          schema: 
+            type: string
+            format: uuid
+      requestBody:
+        description: Updated fields
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClosurePatch'
+      responses:
+        '204':
+          description: Closure updated
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    delete:
+      summary: Delete Closure by ID
+      operationId: deleteClosure
+      parameters:
+        - name: id
+          in: path
+          description: ID of Closure to delete
+          required: true
+          schema: 
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Closure deleted
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+components:
+  parameters:
+    Offset:
+      name: offset
+      in: query
+      description: Offset for pagination (first item is 0)
+      schema:
+        type: integer
+        format: int32
+        minimum: 0
+    Limit:
+      name: limit
+      in: query
+      description: Limit for pagination
+      schema:
+        type: integer
+        format: int32
+        minimum: 0
+        maximum: 1000
+        default: 10
+    entryLookupKey:
+      name: key
+      in: path
+      description: Key to look up entry, either 'id' or 'symbol'
+      required: true
+      schema:
+        type: string
+        enum: [by-id, by-symbol]
+    entryLookupValue:
+      name: value
+      in: path
+      description: Value of id or symbol to access entry by
+      required: true
+      schema:
+        type: string
+
+  schemas:
+    ConflictPolicy:
+      type: string
+      enum: [fail, skip, update]
+      default: fail
+
+    EntryProperties:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+        type:
+          $ref: '#/components/schemas/EntryType'
+        parent:
+          type: string
+          format: uuid
+        description:
+          type: string
+        organizationId:
+          type: string
+        contactName:
+          type: string
+        email:
+          type: string
+        fromEmail:
+          type: string
+        tenant:
+          type: string
+          description: Tenant that owns the entry; only consortial administrators may set this field.
+        vendor:
+          $ref: '#/components/schemas/EntryVendor'
+        phoneNumber:
+          type: string
+        lmsLocationCode:
+          type: string
+        lendToBorrowRatio:
+          type: string
+          maxLength: 15
+          pattern: '^((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9])):((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9]))$'
+          description: Desired lending-to-borrowing ratio, expressed as desired_loans:desired_borrows. Both values must be positive unsigned decimals with one to four integer digits (including leading zeros) and at most two decimal places, ranging from 0.01 to 9999.99.
+          example: '50:2'
+        illConfig:
+          $ref: '#/components/schemas/AddEntryIllConfig'
+        hrid:
+          type: string
+        timeZone:
+          type: string
+        lmsConfig:
+          description: Configuration for LMS (Library Management System) integration via NCIP protocol
+          allOf:
+            - $ref: '#/components/schemas/LmsConfig'
+        catalogConfig:
+          $ref: '#/components/schemas/CatalogConfig'
+        holdingsPolicy:
+          description: Policy that determines whether and in which order holdings may supply an item.
+          allOf:
+            - $ref: '#/components/schemas/HoldingsPolicy'
+
+    AddEntry:
+      x-go-type: Entry
+      allOf:
+        - $ref: '#/components/schemas/EntryProperties'
+        - type: object
+          properties:
+            symbols:
+              type: array
+              items:
+                $ref: '#/components/schemas/SymbolProperties'
+            addresses:
+              type: array
+              items:
+                $ref: '#/components/schemas/AddressProperties'
+            endpoints:
+              type: array
+              items:
+                $ref: '#/components/schemas/ServiceEndpointProperties'
+
+    AddEntrySymbol:
+      x-go-type: Symbol
+      allOf:
+        - $ref: '#/components/schemas/SymbolProperties'
+
+    AddEntryServiceEndpoint:
+      x-go-type: ServiceEndpoint
+      allOf:
+        - $ref: '#/components/schemas/ServiceEndpointProperties'
+
+    AddEntryAddress:
+      x-go-type: Address
+      allOf:
+        - $ref: '#/components/schemas/AddressProperties'
+
+    CreateClosure:
+      x-go-type: Closure
+      allOf:
+        - $ref: '#/components/schemas/ClosureProperties'
+        - type: object
+          required:
+            - entry
+          properties:
+            entry:
+              type: string
+              format: uuid
+
+    AddEntryIllConfig:
+      x-go-type: IllConfig
+      allOf:
+        - $ref: '#/components/schemas/IllConfig'
+
+    AddTier:
+      x-go-type: Tier
+      allOf:
+        - $ref: '#/components/schemas/TierProperties'
+
+    AddNetwork:
+      x-go-type: Network
+      allOf:
+        - $ref: '#/components/schemas/NetworkProperties'
+
+    CreateEntryTier:
+      x-go-type: EntryTier
+      allOf:
+        - $ref: '#/components/schemas/EntryTierProperties'
+
+    EntryType:
+      type: string
+      enum: [Institution, Consortium, Branch]
+      x-enum-varnames: [EntryTypeInstitution, EntryTypeConsortium, EntryTypeBranch]
+
+    TierPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        level:
+          $ref: '#/components/schemas/TierLevel'
+        type:
+          $ref: '#/components/schemas/TierType'
+        cost:
+          type: number
+          format: double
+
+    TierLevel:
+      type: string
+      enum: [express, normal, rush, secondarymail, standard, urgent]
+      default: standard
+
+    TierType:
+      type: string
+      enum: [loan, copy]
+      default: loan
+
+    QueryConfigType:
+      type: string
+      enum: [cql, pqf]
+      x-enum-varnames: [QueryConfigTypeCql, QueryConfigTypePqf]
+
+    HostLmsVendor:
+      type: string
+      enum: [Alma, Sierra, Koha, WMS, Aleph, FOLIO, Generic]
+      x-go-type: string
+
+    BibIdNormalization:
+      type: string
+      enum: [none, sierra]
+      x-go-type: string
+
+    AddressType:
+      type: string
+      enum: [Default, Shipping, Billing, Other]
+
+    AddressComponentType:
+      type: string
+      enum: [Thoroughfare, Locality, AdministrativeArea, PostalCode, CountryCode, Other]
+
+    MarcAvailabilityOperator:
+      type: string
+      enum: [equals, absent]
+      x-go-type: string
+
+    OpacAvailabilityRule:
+      type: string
+      enum: [availableNow, publicNote]
+      x-go-type: string
+
+    ShelvingLocationSource:
+      type: string
+      enum: [shelvingLocation, localLocation]
+      x-go-type: string
+
+    ImportItemType:
+      type: string
+      enum: [entry, tier, network]
+
+    ImportSectionResult:
+      type: object
+      additionalProperties: false
+      required: [imported, failed, skipped]
+      properties:
+        imported: { type: integer, format: int32 }
+        failed: { type: integer, format: int32 }
+        skipped: { type: integer, format: int32 }
+
+    ImportItemError:
+      type: object
+      additionalProperties: false
+      required: [line, error]
+      properties:
+        line: { type: integer, format: int32 }
+        type:
+          $ref: '#/components/schemas/ImportItemType'
+        key: { type: string }
+        error: { type: string }
+
+    ImportResult:
+      type: object
+      additionalProperties: false
+      required: [entries, tiers, networks, errors, errorsOmitted]
+      properties:
+        entries: { $ref: '#/components/schemas/ImportSectionResult' }
+        tiers: { $ref: '#/components/schemas/ImportSectionResult' }
+        networks: { $ref: '#/components/schemas/ImportSectionResult' }
+        errors:
+          type: array
+          maxItems: 1000
+          items: { $ref: '#/components/schemas/ImportItemError' }
+        errorsOmitted:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of additional error details omitted from the response.
+
+    ImportNetworkAssignment:
+      type: object
+      additionalProperties: false
+      required: [entry, priority]
+      properties:
+        entry: { type: string, format: uuid }
+        priority: { type: integer, format: int32 }
+
+    ImportSymbolProperties:
+      type: object
+      additionalProperties: false
+      required: [symbol, authority]
+      properties:
+        symbol: { type: string, minLength: 1 }
+        authority: { type: string, minLength: 1 }
+
+    ImportServiceEndpointProperties:
+      type: object
+      additionalProperties: false
+      required: [name, type, address]
+      properties:
+        name: { type: string }
+        type: { type: string }
+        address: { type: string }
+
+    ImportClosureProperties:
+      type: object
+      additionalProperties: false
+      required: [startDate, endDate, reason]
+      properties:
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        reason: { type: string }
+
+    ImportTierNetworkKeyProperties:
+      type: object
+      additionalProperties: false
+      required: [consortium, name]
+      properties:
+        consortium: { type: string, format: uuid }
+        name: { type: string, minLength: 1 }
+
+    ImportTierKey:
+      allOf:
+        - $ref: '#/components/schemas/ImportTierNetworkKeyProperties'
+
+    ImportNetworkKey:
+      allOf:
+        - $ref: '#/components/schemas/ImportTierNetworkKeyProperties'
+
+    ImportAddress:
+      type: object
+      additionalProperties: false
+      required: [type, addressComponents]
+      properties:
+        type:
+          $ref: '#/components/schemas/AddressType'
+        addressComponents:
+          type: array
+          items: { $ref: '#/components/schemas/AddressComponent' }
+
+    ImportLmsConfig:
+      type: object
+      additionalProperties: false
+      required: [vendor, ncipNamespaceEnabled, bibIdNormalization, address, fromAgency, fromAgencyAuthentication, toAgency, lookupUserEnabled, acceptItemEnabled, checkInItemEnabled, checkOutItemEnabled, itemLocation, requestItemRequestType, requestItemRequestScopeType, requestItemBibIdCode, requestItemEnabled, requestItemPickupLocationEnabled, requesterPickupLocation, supplierPickupLocation, requesterPatronPattern, patronProfiles]
+      properties:
+        vendor:
+          anyOf: [{ $ref: '#/components/schemas/HostLmsVendor' }, { type: "null" }]
+        ncipNamespaceEnabled: { type: [boolean, "null"] }
+        bibIdNormalization:
+          anyOf: [{ $ref: '#/components/schemas/BibIdNormalization' }, { type: "null" }]
+        address: { type: string }
+        fromAgency: { type: string }
+        fromAgencyAuthentication: { type: [string, "null"] }
+        toAgency: { type: [string, "null"] }
+        lookupUserEnabled: { type: [boolean, "null"] }
+        acceptItemEnabled: { type: [boolean, "null"] }
+        checkInItemEnabled: { type: [boolean, "null"] }
+        checkOutItemEnabled: { type: [boolean, "null"] }
+        itemLocation: { type: [string, "null"] }
+        requestItemRequestType: { type: [string, "null"] }
+        requestItemRequestScopeType: { type: [string, "null"] }
+        requestItemBibIdCode: { type: [string, "null"] }
+        requestItemEnabled: { type: [boolean, "null"] }
+        requestItemPickupLocationEnabled: { type: [boolean, "null"] }
+        requesterPickupLocation: { type: [string, "null"] }
+        supplierPickupLocation: { type: [string, "null"] }
+        requesterPatronPattern: { type: [string, "null"] }
+        patronProfiles:
+          anyOf: [{ $ref: '#/components/schemas/PatronProfiles' }, { type: "null" }]
+    ImportIllConfig:
+      type: object
+      additionalProperties: false
+      required: [iso18626Url, iso18626Vendor, lendersOfLastResort, includeRequestingAgencyInfo, includeSupplierInfo, includeReturnInfo, includeVendorNote, useOfferedCosts, noteFieldSeparator, supplierPatronPattern, duplicateCheckWindowHours]
+      properties:
+        isPickupLocation: { type: [boolean, "null"] }
+        iso18626Url: { type: [string, "null"] }
+        iso18626Vendor:
+          anyOf: [{ $ref: '#/components/schemas/EntryVendor' }, { type: "null" }]
+        lendersOfLastResort:
+          type: array
+          items: { type: string, format: uuid }
+        includeRequestingAgencyInfo: { type: [boolean, "null"] }
+        includeSupplierInfo: { type: [boolean, "null"] }
+        includeReturnInfo: { type: [boolean, "null"] }
+        includeVendorNote: { type: [boolean, "null"] }
+        useOfferedCosts: { type: [boolean, "null"] }
+        noteFieldSeparator: { type: [string, "null"] }
+        supplierPatronPattern: { type: [string, "null"] }
+        duplicateCheckWindowHours: { type: [integer, "null"], format: int32, minimum: 0 }
+        defaultLoanPeriod: { type: [integer, "null"], format: int32, minimum: 1 }
+        maxRequestsPerPatron: { type: [integer, "null"], format: int32, minimum: 0 }
+        minimumCost: { type: [number, "null"], format: double, minimum: 0 }
+        loadBalancingPolicy:
+          anyOf:
+            - $ref: '#/components/schemas/LoadBalancingPolicy'
+            - type: "null"
+          description: Consortium lender scoring policy. Omitted or null defaults to proportional.
+
+    ImportCatalogConfig:
+      type: object
+      additionalProperties: false
+      required: [profile, metadataUpdateMode, sru, zoom, queryConfig, holdingsFormat, metadataFormat]
+      properties:
+        profile:
+          anyOf: [{ $ref: '#/components/schemas/HostLmsVendor' }, { type: "null" }]
+        metadataUpdateMode:
+          anyOf: [{ $ref: '#/components/schemas/MetadataUpdateMode' }, { type: "null" }]
+        sru:
+          anyOf: [{ $ref: '#/components/schemas/ImportSruConfig' }, { type: "null" }]
+        zoom:
+          anyOf: [{ $ref: '#/components/schemas/ImportZoomConfig' }, { type: "null" }]
+        queryConfig:
+          anyOf: [{ $ref: '#/components/schemas/ImportQueryConfig' }, { type: "null" }]
+        holdingsFormat:
+          anyOf: [{ $ref: '#/components/schemas/ImportHoldingsParserConfig' }, { type: "null" }]
+        metadataFormat:
+          anyOf: [{ $ref: '#/components/schemas/ImportMetadataParserConfig' }, { type: "null" }]
+    ImportSruConfig:
+      type: object
+      additionalProperties: false
+      required: [address, recordSchema]
+      properties:
+        address: { type: string }
+        recordSchema: { type: [string, "null"] }
+
+    ImportZoomConfig:
+      type: object
+      additionalProperties: false
+      required: [address, options]
+      properties:
+        address: { type: string }
+        options:
+          type: [object, "null"]
+          additionalProperties: { type: string }
+
+    ImportQueryConfig:
+      type: object
+      additionalProperties: false
+      required: [type, identifier, isbn, issn, title]
+      properties:
+        type:
+          anyOf: [{ $ref: '#/components/schemas/QueryConfigType' }, { type: "null" }]
+        identifier: { type: [string, "null"] }
+        isbn: { type: [string, "null"] }
+        issn: { type: [string, "null"] }
+        title: { type: [string, "null"] }
+        year: { type: [string, "null"] }
+
+    ImportHoldingsParserConfig:
+      type: object
+      additionalProperties: false
+      required: [marc, marc21plus1, opac, reservoir]
+      properties:
+        marc:
+          anyOf: [{ $ref: '#/components/schemas/ImportMarcHoldingsParserConfig' }, { type: "null" }]
+        marc21plus1: { type: [object, "null"], additionalProperties: false }
+        opac:
+          anyOf: [{ $ref: '#/components/schemas/ImportOpacHoldingsParserConfig' }, { type: "null" }]
+        reservoir: { type: [object, "null"], additionalProperties: false }
+
+    ImportMarcHoldingsParserConfig:
+      type: object
+      additionalProperties: false
+      required: [availability, callNumberSubField, itemIdSubField, locationSubField, mainField, restrictedSubField, shelvingLocationSubField]
+      properties:
+        availability:
+          type: [array, "null"]
+          items: { $ref: '#/components/schemas/ImportMarcAvailabilityPredicate' }
+        callNumberSubField: { type: [string, "null"] }
+        itemIdSubField: { type: [string, "null"] }
+        locationSubField: { type: [string, "null"] }
+        mainField: { type: [string, "null"] }
+        restrictedSubField: { type: [string, "null"] }
+        shelvingLocationSubField: { type: [string, "null"] }
+
+    ImportMarcAvailabilityPredicate:
+      type: object
+      additionalProperties: false
+      required: [subField, operator, value]
+      properties:
+        subField: { type: string, minLength: 1 }
+        operator: { $ref: '#/components/schemas/MarcAvailabilityOperator' }
+        value: { type: [string, "null"] }
+
+    ImportOpacHoldingsParserConfig:
+      type: object
+      additionalProperties: false
+      required: [availabilityRule, availablePublicNotes, requireLocalLocation, shelvingLocationSource, includeItemId, includeItemLoanPolicy, includeTemporaryLocation, allCirculations]
+      properties:
+        availabilityRule:
+          anyOf: [{ $ref: '#/components/schemas/OpacAvailabilityRule' }, { type: "null" }]
+        availablePublicNotes:
+          type: [array, "null"]
+          items: { type: string }
+        requireLocalLocation: { type: [boolean, "null"] }
+        shelvingLocationSource:
+          anyOf: [{ $ref: '#/components/schemas/ShelvingLocationSource' }, { type: "null" }]
+        includeItemId: { type: [boolean, "null"] }
+        includeItemLoanPolicy: { type: [boolean, "null"] }
+        includeTemporaryLocation: { type: [boolean, "null"] }
+        allCirculations: { type: [boolean, "null"] }
+
+    ImportMetadataParserConfig:
+      type: object
+      additionalProperties: false
+      required: [marc21]
+      properties:
+        marc21:
+          anyOf: [{ $ref: '#/components/schemas/ImportMarcMetadataParserConfig' }, { type: "null" }]
+    ImportMarcMetadataParserConfig:
+      type: object
+      additionalProperties: false
+      required: [author, edition, identifier, isbn, issn, subtitle, title]
+      properties:
+        author: { type: [string, "null"] }
+        edition: { type: [string, "null"] }
+        identifier: { type: [string, "null"] }
+        isbn: { type: [string, "null"] }
+        issn: { type: [string, "null"] }
+        subtitle: { type: [string, "null"] }
+        title: { type: [string, "null"] }
+
+    ImportHoldingsPolicy:
+      type: object
+      additionalProperties: false
+      required: [locations, shelvingLocations, locationPolicies, itemLoanPolicies]
+      properties:
+        locations:
+          type: array
+          items: { $ref: '#/components/schemas/HoldingsLocation' }
+        shelvingLocations:
+          type: array
+          items: { $ref: '#/components/schemas/HoldingsShelvingLocation' }
+        locationPolicies:
+          type: array
+          items: { $ref: '#/components/schemas/ImportHoldingsLocationPolicy' }
+        itemLoanPolicies:
+          type: array
+          items: { $ref: '#/components/schemas/HoldingsItemLoanPolicy' }
+
+    ImportHoldingsLocationPolicy:
+      type: object
+      additionalProperties: false
+      required: [locationCode, shelvingLocationCode, supplyPreference]
+      properties:
+        locationCode: { type: [string, "null"] }
+        shelvingLocationCode: { type: string }
+        supplyPreference: { $ref: '#/components/schemas/HoldingsSupplyPreference' }
+
+    ImportEntryDataProperties:
+      type: object
+      additionalProperties: false
+      required: [name, type, parent, description, organizationId, contactName, email, fromEmail, tenant, vendor, phoneNumber, lmsLocationCode, hrid, timeZone, symbols, endpoints, addresses, closures, lmsConfig, catalogConfig, illConfig, holdingsPolicy]
+      properties:
+        name: { type: string, minLength: 1 }
+        type: { $ref: '#/components/schemas/EntryType' }
+        parent:
+          allOf: [{ type: [string, "null"], format: uuid }]
+        description: { type: [string, "null"] }
+        organizationId: { type: [string, "null"] }
+        contactName: { type: [string, "null"] }
+        email: { type: [string, "null"] }
+        fromEmail: { type: [string, "null"] }
+        tenant: { type: [string, "null"] }
+        vendor:
+          anyOf: [{ $ref: '#/components/schemas/EntryVendor' }, { type: "null" }]
+        phoneNumber: { type: [string, "null"] }
+        lmsLocationCode: { type: [string, "null"] }
+        lendToBorrowRatio:
+          type: [string, "null"]
+          maxLength: 15
+          pattern: '^((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9])):((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9]))$'
+          description: Desired lending-to-borrowing ratio, expressed as desired_loans:desired_borrows. Both values must be positive unsigned decimals with one to four integer digits (including leading zeros) and at most two decimal places, ranging from 0.01 to 9999.99.
+        hrid: { type: [string, "null"] }
+        timeZone: { type: [string, "null"] }
+        symbols:
+          type: array
+          items: { $ref: '#/components/schemas/ImportSymbolProperties' }
+        endpoints:
+          type: array
+          items: { $ref: '#/components/schemas/ImportServiceEndpointProperties' }
+        addresses:
+          type: array
+          items: { $ref: '#/components/schemas/ImportAddress' }
+        closures:
+          type: array
+          items: { $ref: '#/components/schemas/ImportClosureProperties' }
+        lmsConfig:
+          anyOf: [{ $ref: '#/components/schemas/ImportLmsConfig' }, { type: "null" }]
+        catalogConfig:
+          anyOf: [{ $ref: '#/components/schemas/ImportCatalogConfig' }, { type: "null" }]
+        illConfig:
+          anyOf: [{ $ref: '#/components/schemas/ImportIllConfig' }, { type: "null" }]
+        holdingsPolicy:
+          anyOf: [{ $ref: '#/components/schemas/ImportHoldingsPolicy' }, { type: "null" }]
+
+    ImportEntryData:
+      allOf:
+        - $ref: '#/components/schemas/ImportEntryDataProperties'
+
+    ImportTierData:
+      allOf:
+        - $ref: '#/components/schemas/ImportTierDataProperties'
+
+    ImportTierDataProperties:
+      type: object
+      additionalProperties: false
+      required: [level, type, cost, entries]
+      properties:
+        level: { $ref: '#/components/schemas/TierLevel' }
+        type: { $ref: '#/components/schemas/TierType' }
+        cost: { type: number, format: double }
+        entries:
+          type: array
+          items: { type: string, format: uuid }
+
+    ImportNetworkData:
+      allOf:
+        - $ref: '#/components/schemas/ImportNetworkDataProperties'
+
+    ImportNetworkDataProperties:
+      type: object
+      additionalProperties: false
+      required: [reciprocal, entries]
+      properties:
+        reciprocal: { type: [boolean, "null"] }
+        entries:
+          type: array
+          items: { $ref: '#/components/schemas/ImportNetworkAssignment' }
+
+    ImportRecordProperties:
+      type: object
+      required: [type]
+      properties:
+        type: { type: string, enum: [entry, tier, network] }
+
+    ImportEntryRecord:
+      allOf:
+        - $ref: '#/components/schemas/ImportRecordProperties'
+        - type: object
+          additionalProperties: false
+          required: [key, data]
+          properties:
+            type: { type: string, enum: [entry] }
+            key: { type: string, format: uuid }
+            data:
+              $ref: '#/components/schemas/ImportEntryData'
+
+    ImportTierRecord:
+      allOf:
+        - $ref: '#/components/schemas/ImportRecordProperties'
+        - type: object
+          additionalProperties: false
+          required: [key, data]
+          properties:
+            type: { type: string, enum: [tier] }
+            key:
+              $ref: '#/components/schemas/ImportTierKey'
+            data:
+              $ref: '#/components/schemas/ImportTierData'
+
+    ImportNetworkRecord:
+      allOf:
+        - $ref: '#/components/schemas/ImportRecordProperties'
+        - type: object
+          additionalProperties: false
+          required: [key, data]
+          properties:
+            type: { type: string, enum: [network] }
+            key:
+              $ref: '#/components/schemas/ImportNetworkKey'
+            data:
+              $ref: '#/components/schemas/ImportNetworkData'
+
+    ImportRecord:
+      oneOf:
+        - $ref: '#/components/schemas/ImportEntryRecord'
+        - $ref: '#/components/schemas/ImportTierRecord'
+        - $ref: '#/components/schemas/ImportNetworkRecord'
+      discriminator:
+        propertyName: type
+        mapping:
+          entry: '#/components/schemas/ImportEntryRecord'
+          tier: '#/components/schemas/ImportTierRecord'
+          network: '#/components/schemas/ImportNetworkRecord'
+
+    NetworksResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Network'
+    NetworksForEntryResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NetworkForEntryDetails'
+    TiersResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tier'
+    EntriesResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Entry'
+    ClosuresResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Closure'
+    EntryNetworksResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntryNetwork'
+    EntryTiersResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntryTier'
+    About:
+      type: object
+      required:
+        - count
+      properties:
+        count:
+          type: integer
+          format: int64
+          description: Total number of items in the result
+        nextLink:
+          type: string
+          description: Link to the next page of results
+        prevLink:
+          type: string
+          description: Link to the previous page of results
+    Id:
+      required:
+        - id
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique id
+    Entry:
+      allOf:
+        - $ref: '#/components/schemas/EntryProperties'
+        - type: object
+          required:
+            - id
+          properties:
+            id:
+              readOnly: true
+              type: string
+              format: uuid
+              description: Unique id
+            symbols:
+              type: array
+              items:
+                $ref: '#/components/schemas/Symbol'
+            addresses:
+              type: array
+              items:
+                $ref: '#/components/schemas/Address'
+            closures:
+              type: array
+              items:
+                $ref: '#/components/schemas/Closure'
+            endpoints:
+              type: array
+              items:
+                $ref: '#/components/schemas/ServiceEndpoint'
+            networks:
+              readOnly: true
+              type: array
+              items:
+                $ref: '#/components/schemas/EntryNetworkDetails'
+            tiers:
+              readOnly: true
+              type: array
+              items:
+                $ref: '#/components/schemas/Tier'
+    LoadBalancingPolicy:
+      type: string
+      enum: [deficit, proportional]
+      x-enum-varnames: [LoadBalancingPolicyDeficit, LoadBalancingPolicyProportional]
+      description: Algorithm for lender scoring. Deficit prioritizes the largest lending shortfall; proportional prioritizes the lowest actual-to-desired lending ratio.
+    IllConfig:
+      type: object
+      properties:
+        loadBalancingPolicy:
+          anyOf:
+            - $ref: '#/components/schemas/LoadBalancingPolicy'
+            - type: "null"
+          description: Consortium lender scoring policy. Omitted or null defaults to proportional.
+        isPickupLocation:
+          type: boolean
+          description: Whether this entry is offered as a pickup location. Applies to institutions and branches, independently of LMS pickup codes. Defaults to false.
+        defaultLoanPeriod:
+          type: [integer, "null"]
+          format: int32
+          minimum: 1
+          description: Default supplier loan period in calendar days. Omitted or null disables the fallback.
+        maxRequestsPerPatron:
+          type: [integer, "null"]
+          format: int32
+          minimum: 0
+          description: Maximum number of active requests allowed per patron. 0, omitted, or null disables the limit.
+        minimumCost:
+          type: [number, "null"]
+          format: double
+          minimum: 0
+          description: Minimum cost configured for ILL requests. Omitted or null means no minimum cost is configured.
+        iso18626Url:
+          type: string
+          description: URL of the ISO18626 service. When set, used instead of an ISO18626 service from endpoints.
+        iso18626Vendor:
+          description: ISO18626 service vendor. Used only when iso18626Url is non-empty.
+          allOf:
+            - $ref: '#/components/schemas/EntryVendor'
+        lendersOfLastResort:
+          type: array
+          description: Suppliers appended to the end of the rota when no regular supplier can fill the request. Each normalized authority and symbol pair must be unique and exist in the directory; authorities must not contain colons.
+          items:
+            $ref: '#/components/schemas/SymbolProperties'
+        includeRequestingAgencyInfo:
+          type: boolean
+          description: Whether outgoing requests include requestingAgencyInfo populated from the requester directory entry.
+        includeSupplierInfo:
+          type: boolean
+          description: Whether outgoing requests include supplierInfo populated from the supplier directory entry.
+        includeReturnInfo:
+          type: boolean
+          description: Whether Loaned messages include returnInfo populated from the supplier directory entry.
+        includeVendorNote:
+          type: boolean
+          description: Whether broker-generated supplying-agency messages include the supplier vendor in the note.
+        useOfferedCosts:
+          type: boolean
+          description: Whether deliveryCosts are transferred to offeredCosts for messages sent to this requester.
+        noteFieldSeparator:
+          type: string
+          description: Separator used between fields added to notes in messages sent to this entry.
+        supplierPatronPattern:
+          type: string
+          description: Format pattern used to create a patron ID for requests received by this supplier.
+        duplicateCheckWindowHours:
+          type: integer
+          format: int32
+          description: The number of hours to check for duplicate requests. If a request is submitted within this window, it will be considered a duplicate.
+          minimum: 0
+    EntryVendor:
+      type: string
+      description: ISO18626 vendor type
+      enum:
+        - Alma
+        - ReShare
+        - CrossLink
+        - ILLiad
+        - Unknown
+    CatalogConfig:
+      description: >-
+        Raw catalog overrides. Defaults resolve as Generic, then profile (or
+        lmsConfig.vendor when profile is unset), then explicit values. False,
+        empty values where valid, and explicit parser choices take precedence.
+        Same-parser holdings fields merge; a different parser replaces its defaults.
+        Selecting a profile does not enable lookup without an SRU or ZOOM address.
+      type: object
+      properties:
+        profile:
+          anyOf:
+            - $ref: '#/components/schemas/HostLmsVendor'
+            - type: "null"
+          description: Host integration profile, independent of the ILL vendor. WMS and Aleph are reserved and currently unsupported.
+        sru:
+          $ref: '#/components/schemas/SruConfig'
+        zoom:
+          $ref: '#/components/schemas/ZoomConfig'
+        queryConfig:
+          $ref: '#/components/schemas/QueryConfig'
+        holdingsFormat:
+          $ref: '#/components/schemas/HoldingsParserConfig'
+        metadataUpdateMode:
+          $ref: '#/components/schemas/MetadataUpdateMode'
+        metadataFormat:
+          $ref: '#/components/schemas/MetadataParserConfig'
+      additionalProperties: false
+    CatalogConfigPatch:
+      type: object
+      properties:
+        profile:
+          anyOf:
+            - $ref: '#/components/schemas/HostLmsVendor'
+            - type: "null"
+          description: Host integration profile, independent of the ILL vendor. WMS and Aleph are reserved and currently unsupported.
+        sru:
+          $ref: '#/components/schemas/SruConfigPatch'
+        zoom:
+          $ref: '#/components/schemas/ZoomConfigPatch'
+        queryConfig:
+          $ref: '#/components/schemas/QueryConfig'
+        holdingsFormat:
+          $ref: '#/components/schemas/HoldingsParserConfig'
+        metadataUpdateMode:
+          $ref: '#/components/schemas/MetadataUpdateMode'
+        metadataFormat:
+          $ref: '#/components/schemas/MetadataParserConfig'
+      additionalProperties: false
+    MetadataUpdateMode:
+      type: string
+      description: Determines how lookup metadata updates the outgoing ILL request metadata.
+      enum: [replace, merge, none, auto]
+    SruConfig:
+      type: object
+      required: [address]
+      properties:
+        address:
+          type: string
+        recordSchema:
+          type: string
+      additionalProperties: false
+    SruConfigPatch:
+      type: object
+      properties:
+        address:
+          type: string
+        recordSchema:
+          type: string
+      additionalProperties: false
+    ZoomConfig:
+      type: object
+      required: [address]
+      properties:
+        address:
+          type: string
+        options:
+          type: object
+          additionalProperties:
+            type: string
+      additionalProperties: false
+    ZoomConfigPatch:
+      type: object
+      properties:
+        address:
+          type: string
+        options:
+          type: object
+          additionalProperties:
+            type: [string, "null"]
+      additionalProperties: false
+    QueryConfig:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/QueryConfigType'
+        title:
+          type: string
+        isbn:
+          type: string
+        issn:
+          type: string
+        identifier:
+          type: string
+        year:
+          type: string
+          description: >-
+            Optional publication year query template using {term}, for example
+            dc.date = {term} for CQL or @attr 1=30 {term} for PQF. No default.
+            When non-empty and publicationDate is supplied, the date must be
+            exactly four ASCII digits (YYYY). The year clause is ANDed with
+            each lookup query; it is never searched alone. An absent publication
+            date or an absent/empty template omits the clause.
+      additionalProperties: false
+    MetadataParserConfig:
+      type: object
+      properties:
+        marc21:
+          $ref: '#/components/schemas/MarcMetadataParserConfig'
+      additionalProperties: false
+    MarcMetadataParserConfig:
+      type: object
+      properties:
+        identifier: { type: string }
+        isbn: { type: string }
+        issn: { type: string }
+        title: { type: string }
+        subtitle: { type: string }
+        author: { type: string }
+        edition: { type: string }
+      additionalProperties: false
+    HoldingsParserConfig:
+      type: object
+      properties:
+        marc:
+          $ref: '#/components/schemas/MarcHoldingsParserConfig'
+        opac:
+          $ref: '#/components/schemas/OpacHoldingsParserConfig'
+        reservoir:
+          type: object
+          additionalProperties: false
+        marc21plus1:
+          type: object
+          additionalProperties: false
+      additionalProperties: false
+    MarcHoldingsParserConfig:
+      type: object
+      properties:
+        availability:
+          type: array
+          description: All predicates must match a candidate item. Equals requires a present matching subfield; absent rejects any occurrence.
+          items:
+            $ref: '#/components/schemas/MarcAvailabilityPredicate'
+        mainField: { type: string }
+        locationSubField: { type: string }
+        shelvingLocationSubField: { type: string }
+        itemIdSubField: { type: string }
+        restrictedSubField: { type: string }
+        callNumberSubField: { type: string }
+      additionalProperties: false
+    MarcAvailabilityPredicate:
+      type: object
+      required: [subField, operator]
+      properties:
+        subField: { type: string, minLength: 1 }
+        operator:
+          $ref: '#/components/schemas/MarcAvailabilityOperator'
+        value: { type: string }
+      additionalProperties: false
+    OpacHoldingsParserConfig:
+      type: object
+      properties:
+        availabilityRule:
+          $ref: '#/components/schemas/OpacAvailabilityRule'
+        availablePublicNotes:
+          type: array
+          items: { type: string }
+        requireLocalLocation: { type: boolean }
+        shelvingLocationSource:
+          $ref: '#/components/schemas/ShelvingLocationSource'
+        includeItemId: { type: boolean }
+        includeItemLoanPolicy: { type: boolean }
+        includeTemporaryLocation: { type: boolean }
+        allCirculations: { type: boolean }
+      additionalProperties: false
+    EntryPatch:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        type:
+          anyOf:
+            - $ref: '#/components/schemas/EntryType'
+            - type: "null"
+        parent:
+          type: [string, "null"]
+          format: uuid
+        description:
+          type: [string, "null"]
+        organizationId:
+          type: [string, "null"]
+        contactName:
+          type: [string, "null"]
+        email:
+          type: [string, "null"]
+        fromEmail:
+          type: [string, "null"]
+        tenant:
+          type: [string, "null"]
+          description: Tenant that owns the entry; only consortial administrators may modify this field.
+        vendor:
+          anyOf:
+            - $ref: '#/components/schemas/EntryVendor'
+            - type: "null"
+        phoneNumber:
+          type: [string, "null"]
+        lmsLocationCode:
+          type: [string, "null"]
+        lendToBorrowRatio:
+          type: [string, "null"]
+          maxLength: 15
+          pattern: '^((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9])):((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9]))$'
+          description: Desired lending-to-borrowing ratio, expressed as desired_loans:desired_borrows. Both values must be positive unsigned decimals with one to four integer digits (including leading zeros) and at most two decimal places, ranging from 0.01 to 9999.99.
+        illConfig:
+          anyOf:
+            - $ref: '#/components/schemas/AddEntryIllConfig'
+            - type: "null"
+        hrid:
+          type: [string, "null"]
+        timeZone:
+          type: [string, "null"]
+        lmsConfig:
+          anyOf:
+            - $ref: '#/components/schemas/LmsConfigPatch'
+            - type: "null"
+        catalogConfig:
+          anyOf:
+            - $ref: '#/components/schemas/CatalogConfigPatch'
+            - type: "null"
+        holdingsPolicy:
+          anyOf:
+            - $ref: '#/components/schemas/HoldingsPolicy'
+            - type: "null"
+        symbols:
+          type: [array, "null"]
+          items:
+            $ref: '#/components/schemas/SymbolPatch'
+        endpoints:
+          type: [array, "null"]
+          items:
+            $ref: '#/components/schemas/ServiceEndpointPatch'
+        addresses:
+          type: [array, "null"]
+          items:
+            $ref: '#/components/schemas/AddressPatch'
+        closures:
+          type: [array, "null"]
+          items:
+            $ref: '#/components/schemas/ClosurePatch'
+
+    HoldingsPolicy:
+      type: object
+      properties:
+        locations:
+          type: array
+          items:
+            $ref: '#/components/schemas/HoldingsLocation'
+        shelvingLocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/HoldingsShelvingLocation'
+        locationPolicies:
+          type: array
+          items:
+            $ref: '#/components/schemas/HoldingsLocationPolicy'
+        itemLoanPolicies:
+          type: array
+          items:
+            $ref: '#/components/schemas/HoldingsItemLoanPolicy'
+      additionalProperties: false
+
+    HoldingsLocation:
+      type: object
+      required:
+        - code
+        - name
+        - supplyPreference
+      properties:
+        code:
+          type: string
+          description: Location code (for example, "MAIN").
+        name:
+          type: string
+          description: Human-readable location name (for example, "Main Library").
+        supplyPreference:
+          $ref: '#/components/schemas/HoldingsSupplyPreference'
+      additionalProperties: false
+
+    HoldingsShelvingLocation:
+      type: object
+      required:
+        - code
+        - name
+        - supplyPreference
+      properties:
+        code:
+          type: string
+          description: Shelving location code (for example, "STACKS").
+        name:
+          type: string
+          description: Human-readable shelving location name (for example, "Stacks").
+        supplyPreference:
+          $ref: '#/components/schemas/HoldingsSupplyPreference'
+      additionalProperties: false
+
+    HoldingsLocationPolicy:
+      type: object
+      required:
+        - shelvingLocationCode
+        - supplyPreference
+      properties:
+        locationCode:
+          type: string
+          description: Location code. When omitted, the override applies across all locations.
+        shelvingLocationCode:
+          type: string
+          description: Shelving location code to which the override applies.
+        supplyPreference:
+          $ref: '#/components/schemas/HoldingsSupplyPreference'
+      additionalProperties: false
+
+    HoldingsItemLoanPolicy:
+      type: object
+      required:
+        - code
+        - name
+        - lendable
+      properties:
+        code:
+          type: string
+          description: Item loan policy code (for example, "NORMAL").
+        name:
+          type: string
+          description: Human-readable item loan policy name (for example, "Normal loan").
+        lendable:
+          type: boolean
+          description: Whether items governed by this loan policy may be supplied.
+      additionalProperties: false
+
+    HoldingsSupplyPreference:
+      type: integer
+      minimum: -1
+      maximum: 10000
+      description: Supply preference where -1 disables supply, 0 means no preference, and 10000 is the highest preference.
+
+    LmsConfig:
+      description: >-
+        Raw circulation overrides, independent of illConfig.iso18626Vendor and
+        the deprecated top-level vendor. Generic defaults are followed by the
+        selected host vendor and explicit values. Defaults are never persisted.
+        A vendor alone does not enable NCIP; address and fromAgency must both
+        be configured to create a circulation adapter.
+      type: object
+      properties:
+        ncipNamespaceEnabled:
+          type: boolean
+        bibIdNormalization:
+          $ref: '#/components/schemas/BibIdNormalization'
+        vendor:
+          anyOf:
+            - $ref: '#/components/schemas/HostLmsVendor'
+            - type: "null"
+          description: Host integration profile, independent of the ILL vendor. WMS and Aleph are reserved and currently unsupported.
+        address:
+          type: string
+          x-go-type-skip-optional-pointer: true
+          description: Base URL of the LMS API
+        fromAgency:
+          type: string
+          x-go-type-skip-optional-pointer: true
+          description: Agency code used when the entry is acting as the supplying agency
+        fromAgencyAuthentication:
+          type: string
+          x-oapi-codegen-extra-tags:
+            protected: "true"
+          description: Authentication token or credentials for the fromAgency
+        toAgency:
+          type: string
+          description: Agency code used when the entry is acting as the requesting agency
+        lookupUserEnabled:
+          type: boolean
+          description: Whether user lookup is enabled
+        acceptItemEnabled:
+          type: boolean
+          description: Whether item acceptance is enabled
+        checkInItemEnabled:
+          type: boolean
+          description: Whether item check-in is enabled
+        checkOutItemEnabled:
+          type: boolean
+          description: Whether item check-out is enabled
+        requestItemEnabled:
+          type: boolean
+          description: Whether item requesting is enabled
+        itemLocation:
+          type: string
+          description: Location code to include in NCIP RequestItem messages
+        requestItemRequestType:
+          type: string
+          description: For Request Item requests, the type of request to create
+        requestItemRequestScopeType:
+          type: string
+          description: For Request Item requests, the scope type of request to create
+        requestItemBibIdCode:
+          type: string
+          description: For Request Item requests, the code indicating how to interpret the bib id
+        requestItemPickupLocationEnabled:
+          type: boolean
+          description: Whether to include a pickup location when making Request Item requests
+        requesterPickupLocation:
+          type: string
+          description: Pickup location code used when acting as requesting agency
+        supplierPickupLocation:
+          type: string
+          description: Pickup location code used when acting as supplying agency
+        requesterPatronPattern:
+          type: string
+          description: "'{requesterSymbol}' occurrences are replaced with requesting agency ISIL"
+        patronProfiles:
+          description: Patron profiles used to determine whether a user returned by NCIP LookupUser is eligible to create ILL requests.
+          allOf:
+            - $ref: '#/components/schemas/PatronProfiles'
+
+    PatronProfiles:
+      type: array
+      description: Patron profile eligibility rules, inspected in order until the configured code matches. A rule without a code matches any profile, including when the LMS returns no profile. If no rule matches, requests are allowed.
+      items:
+        $ref: '#/components/schemas/PatronProfile'
+
+    PatronProfile:
+      type: object
+      required:
+        - canCreateRequests
+      properties:
+        code:
+          type: string
+          minLength: 1
+          description: Profile code returned by the LMS (for example, "STAFF"). When omitted, any code matches.
+        name:
+          type: string
+          minLength: 1
+          description: Display label for the profile (for example, "Staff"). Not used for matching.
+        canCreateRequests:
+          type: boolean
+          description: Whether patrons with this profile may create ILL requests.
+      additionalProperties: false
+
+    LmsConfigPatch:
+      type: object
+      properties:
+        ncipNamespaceEnabled:
+          type: [boolean, "null"]
+        bibIdNormalization:
+          anyOf:
+            - $ref: '#/components/schemas/BibIdNormalization'
+            - type: "null"
+        vendor:
+          anyOf:
+            - $ref: '#/components/schemas/HostLmsVendor'
+            - type: "null"
+          description: Host integration profile, independent of the ILL vendor. WMS and Aleph are reserved and currently unsupported.
+        address:
+          type: string
+        fromAgency:
+          type: string
+        fromAgencyAuthentication:
+          type: [string, "null"]
+        toAgency:
+          type: [string, "null"]
+        lookupUserEnabled:
+          type: [boolean, "null"]
+        acceptItemEnabled:
+          type: [boolean, "null"]
+        checkInItemEnabled:
+          type: [boolean, "null"]
+        checkOutItemEnabled:
+          type: [boolean, "null"]
+        requestItemEnabled:
+          type: [boolean, "null"]
+        itemLocation:
+          type: [string, "null"]
+        requestItemRequestType:
+          type: [string, "null"]
+        requestItemRequestScopeType:
+          type: [string, "null"]
+        requestItemBibIdCode:
+          type: [string, "null"]
+        requestItemPickupLocationEnabled:
+          type: [boolean, "null"]
+        requesterPickupLocation:
+          type: [string, "null"]
+        supplierPickupLocation:
+          type: [string, "null"]
+        requesterPatronPattern:
+          type: [string, "null"]
+        patronProfiles:
+          anyOf:
+            - $ref: '#/components/schemas/PatronProfiles'
+            - type: "null"
+
+    SymbolProperties:
+      type: object
+      additionalProperties: false
+      required:
+        - symbol
+        - authority
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique id
+        symbol:
+          type: string
+          minLength: 1
+          description: Uppercase string
+        authority:
+          type: string
+          minLength: 1
+          description: Uppercase string
+    Symbol:
+      allOf:
+        - $ref: '#/components/schemas/SymbolProperties'
+        - type: object
+          required:
+            - id
+    SymbolPatch:
+      type: object
+      additionalProperties: false
+      required:
+        - symbol
+        - authority
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Existing symbol ID owned by the entry being patched. Omit to create a new symbol. Unknown or foreign IDs return HTTP 400; symbols cannot be moved between entries.
+        symbol:
+          type: string
+          minLength: 1
+          description: Uppercase string
+        authority:
+          type: string
+          minLength: 1
+          description: Uppercase string
+
+    ServiceEndpointProperties:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - type
+        - address
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique id
+        name:
+          type: string
+        type:
+          type: string
+        address:
+          type: string
+    ServiceEndpoint:
+      allOf:
+        - $ref: '#/components/schemas/ServiceEndpointProperties'
+        - type: object
+          required:
+            - id
+    ServiceEndpointPatch:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - type
+        - address
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique id
+        name:
+          type: string
+        type:
+          type: string
+        address:
+          type: string
+
+    AddressComponent:
+      type: object
+      additionalProperties: false
+      required:
+        - seq
+        - type
+        - value
+      properties:
+        seq:
+          type: integer
+          format: int32
+          description: Sequence number for ordering components
+        type:
+          $ref: '#/components/schemas/AddressComponentType'
+        value:
+          type: string
+
+    AddressProperties:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          $ref: '#/components/schemas/AddressType'
+        addressComponents:
+          type: array
+          items:
+            $ref: '#/components/schemas/AddressComponent'
+    Address:
+      allOf:
+        - required:
+          - id
+          - entry
+          properties:
+            id:
+              readOnly: true
+              type: string
+              format: uuid
+              description: Unique id
+            entry:
+              readOnly: true
+              type: string
+              format: uuid
+        - $ref: '#/components/schemas/AddressProperties'
+    AddressPatch:
+      allOf:
+        - properties:
+            id:
+              type: string
+              format: uuid
+              description: Unique id
+        - $ref: '#/components/schemas/AddressProperties'
+
+    ClosureProperties:
+      type: object
+      additionalProperties: false
+      required:
+        - startDate
+        - endDate
+        - reason
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique identifier
+        entry:
+          type: string
+          format: uuid
+        startDate:
+          type: string
+          format: date
+          description: ISO8601 date
+        endDate:
+          type: string
+          format: date
+          description: ISO8601 date
+        reason:
+          type: string
+
+    Closure:
+      allOf:
+        - $ref: '#/components/schemas/ClosureProperties'
+        - type: object
+          required:
+            - id
+            - entry
+    ClosurePatch:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier
+        startDate:
+          type: string
+          format: date
+          description: ISO8601 date
+        endDate:
+          type: string
+          format: date
+          description: ISO8601 date
+        reason:
+          type: string
+
+    NetworkProperties:
+      type: object
+      required:
+        - consortium
+        - name
+      properties:
+        consortium:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          pattern: '.*\S.*'
+        reciprocal:
+          type: boolean
+
+    Network:
+      allOf:
+        - $ref: '#/components/schemas/NetworkProperties'
+        - type: object
+          required:
+            - id
+          properties:
+            id:
+              readOnly: true
+              type: string
+              format: uuid
+              description: Unique identifier
+
+    NetworkPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        reciprocal:
+          type: [boolean, "null"]
+
+    EntryNetworkDetails:
+      allOf:
+        - $ref: '#/components/schemas/Network'
+        - type: object
+          required:
+            - priority
+          properties:
+            priority:
+              type: integer
+              format: int32
+              description: Priority of this network for the associated entry
+
+    NetworkForEntryDetails:
+      allOf:
+        - $ref: '#/components/schemas/Network'
+        - type: object
+          properties:
+            priority:
+              type: integer
+              format: int32
+              description: Priority of this network for the associated entry; omitted for consortium-owned network listings
+
+    TierProperties:
+      type: object
+      required:
+        - consortium
+        - name
+        - level
+        - type
+        - cost
+      properties:
+        consortium:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          pattern: '.*\S.*'
+        level:
+          $ref: '#/components/schemas/TierLevel'
+        type:
+          $ref: '#/components/schemas/TierType'
+        cost:
+          type: number
+          format: double
+          default: 0.0
+
+    Tier:
+      allOf:
+        - $ref: '#/components/schemas/TierProperties'
+        - type: object
+          required:
+            - id
+          properties:
+            id:
+              readOnly: true
+              type: string
+              format: uuid
+              description: Unique identifier
+
+    EntryNetworkProperties:
+      type: object
+      required:
+        - entry
+        - network
+      properties:
+        entry:
+          type: string
+          format: uuid
+          description: ID of entry
+        network:
+          type: string
+          format: uuid
+          description: ID of network
+        priority:
+          type: integer
+          format: int32
+          default: 0
+          description: Priority of this network for the associated entry
+
+    EntryNetwork:
+      allOf:
+        - $ref: '#/components/schemas/EntryNetworkProperties'
+        - type: object
+          required:
+            - id
+            - priority
+          properties:
+            id:
+              readOnly: true
+              type: string
+              format: uuid
+              description: Unique identifier
+
+    EntryNetworkPatch:
+      type: object
+      additionalProperties: false
+      required:
+        - priority
+      properties:
+        priority:
+          type: integer
+          format: int32
+          description: Priority of this network for the associated entry
+
+    CreateEntryNetwork:
+      allOf:
+        - $ref: '#/components/schemas/EntryNetworkProperties'
+
+    EntryTierProperties:
+      type: object
+      required:
+        - entry
+        - tier
+      properties:
+        entry:
+          type: string
+          format: uuid
+          description: ID of entry
+        tier:
+          type: string
+          format: uuid
+          description: ID of tier
+
+    EntryTier:
+      allOf:
+        - $ref: '#/components/schemas/EntryTierProperties'
+        - type: object
+          required:
+            - id
+          properties:
+            id:
+              readOnly: true
+              type: string
+              format: uuid
+              description: Unique identifier
+
+    EntryTierAssignmentProperties:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier
+
+    AddEntryTier:
+      allOf:
+        - $ref: '#/components/schemas/EntryTierProperties'
+
+    EntryNetworkAssignmentProperties:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier
+        priority:
+          type: integer
+          format: int32
+          default: 0
+          description: Priority of this network for the associated entry
+
+    AddEntryNetwork:
+      allOf:
+        - $ref: '#/components/schemas/EntryNetworkProperties'

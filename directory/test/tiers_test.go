@@ -1,0 +1,137 @@
+package test
+
+import (
+	"net/http"
+	"testing"
+)
+
+func TestTierCases(t *testing.T) {
+	consortiumPermissionHeaders := map[string]string{
+		"X-Okapi-Tenant":      "ANINST",
+		"X-Okapi-Permissions": `["directory.consortium.all"]`,
+	}
+
+	institutionPermissionHeaders := map[string]string{
+		"X-Okapi-Tenant":      "ANINST",
+		"X-Okapi-Permissions": `["directory.institution.all"]`,
+	}
+
+	cases := []httpTestCase{
+		{
+			name:        "GET all tiers",
+			method:      http.MethodGet,
+			endpoint:    "/tiers",
+			status:      http.StatusOK,
+			resFile:     "tiers.get.res.json",
+			addlHeaders: institutionPermissionHeaders,
+		},
+		{
+			name:        "GET a tier",
+			method:      http.MethodGet,
+			endpoint:    "/tiers/30000000-0000-0000-0000-000000000001",
+			status:      http.StatusOK,
+			resFile:     "tier.get.res.json",
+			addlHeaders: institutionPermissionHeaders,
+		},
+		{
+			name:            "POST tier",
+			method:          http.MethodPost,
+			endpoint:        "/tiers",
+			status:          http.StatusCreated,
+			bodyFile:        "tier.post.req.json",
+			refetchEndpoint: "/tiers",
+			refetchFile:     "tier.post.refetch.json",
+			addlHeaders:     consortiumPermissionHeaders,
+		},
+		{
+			name:        "POST tier missing consortium",
+			method:      http.MethodPost,
+			endpoint:    "/tiers",
+			status:      http.StatusBadRequest,
+			body:        `{"name":"No Consortium Tier","level":"standard","type":"loan"}`,
+			addlHeaders: consortiumPermissionHeaders,
+		},
+		{
+			name:        "POST tier with non-consortium entry",
+			method:      http.MethodPost,
+			endpoint:    "/tiers",
+			status:      http.StatusBadRequest,
+			body:        `{"name":"Institution Tier","consortium":"00000000-0000-0000-0000-000000000002","level":"standard","type":"loan"}`,
+			addlHeaders: consortiumPermissionHeaders,
+		},
+		{
+			name:        "POST tier without name",
+			method:      http.MethodPost,
+			endpoint:    "/tiers",
+			status:      http.StatusBadRequest,
+			body:        `{"consortium":"00000000-0000-0000-0000-000000000004","level":"standard","type":"loan","cost":0}`,
+			addlHeaders: consortiumPermissionHeaders,
+		},
+		{
+			name:        "POST tier with blank name",
+			method:      http.MethodPost,
+			endpoint:    "/tiers",
+			status:      http.StatusBadRequest,
+			body:        `{"name":"   ","consortium":"00000000-0000-0000-0000-000000000004","level":"standard","type":"loan","cost":0}`,
+			addlHeaders: consortiumPermissionHeaders,
+		},
+		{
+			name:        "POST tier with duplicate name",
+			method:      http.MethodPost,
+			endpoint:    "/tiers",
+			status:      http.StatusConflict,
+			body:        `{"name":"Top Tier","consortium":"00000000-0000-0000-0000-000000000004","level":"standard","type":"loan","cost":0}`,
+			addlHeaders: consortiumPermissionHeaders,
+		},
+		{
+			name:        "PATCH tier",
+			method:      http.MethodPatch,
+			endpoint:    "/tiers/30000000-0000-0000-0000-000000000001",
+			status:      http.StatusNoContent,
+			bodyFile:    "tier.patch.req.json",
+			refetchFile: "tier.patch.refetch.json",
+			addlHeaders: consortiumPermissionHeaders,
+		},
+		{
+			name:        "PATCH tier not found",
+			method:      http.MethodPatch,
+			endpoint:    "/tiers/ffffffff-ffff-ffff-ffff-ffffffffffff",
+			status:      http.StatusNotFound,
+			body:        `{"cost":2.5}`,
+			addlHeaders: consortiumPermissionHeaders,
+		},
+		{
+			name:        "PATCH tier rejects name",
+			method:      http.MethodPatch,
+			endpoint:    "/tiers/30000000-0000-0000-0000-000000000002",
+			status:      http.StatusBadRequest,
+			body:        `{"name":"Top Tier"}`,
+			addlHeaders: consortiumPermissionHeaders,
+		},
+		{
+			name:        "PATCH tier rejects consortium",
+			method:      http.MethodPatch,
+			endpoint:    "/tiers/30000000-0000-0000-0000-000000000002",
+			status:      http.StatusBadRequest,
+			body:        `{"consortium":"00000000-0000-0000-0000-000000000004"}`,
+			addlHeaders: consortiumPermissionHeaders,
+		},
+		{
+			name:        "PATCH tier without permission",
+			method:      http.MethodPatch,
+			endpoint:    "/tiers/30000000-0000-0000-0000-000000000001",
+			status:      http.StatusUnauthorized,
+			body:        `{"cost":2.5}`,
+			addlHeaders: institutionPermissionHeaders,
+		},
+		{
+			name:          "DELETE tier",
+			method:        http.MethodDelete,
+			endpoint:      "/tiers/30000000-0000-0000-0000-000000000002",
+			status:        http.StatusNoContent,
+			refetchStatus: http.StatusNotFound,
+			addlHeaders:   consortiumPermissionHeaders,
+		},
+	}
+	testCases(t, cases)
+}

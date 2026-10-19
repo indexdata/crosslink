@@ -12,12 +12,14 @@ import (
 
 var LANGUAGE = utils.GetEnv("LANGUAGE", "english")
 
+const NumberBaseArgs = 2 // SQLC base query has two args: $1=limit, $2=offset
+
 type FieldAllRecords struct{}
 
-func (f *FieldAllRecords) GetColumn() string       { return "" }
-func (f *FieldAllRecords) SetColumn(column string) {}
-func (f *FieldAllRecords) Sort() string            { return "" }
-func (f *FieldAllRecords) Generate(sc cql.SearchClause, queryArgumentIndex int) (string, []any, error) {
+func (f *FieldAllRecords) GetColumn() string  { return "" }
+func (f *FieldAllRecords) SetColumn(_ string) {}
+func (f *FieldAllRecords) Sort() string       { return "" }
+func (f *FieldAllRecords) Generate(_ cql.SearchClause, _ int) (string, []any, error) {
 	// Accept standard cql.allRecords = 1 (ignore term/relation).
 	return "TRUE", nil, nil
 }
@@ -74,7 +76,10 @@ func (f *FieldTextArrayContains) Generate(sc cql.SearchClause, queryArgumentInde
 	}
 }
 
-func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, error) {
+// ParsePatronRequestsCql parses cqlString into a pgcql.Query whose placeholder
+// numbering starts at $3, matching the two base SQL arguments (limit and offset)
+// used by both ListPatronRequestsCql and GetPatronRequestsFacetsCql.
+func ParsePatronRequestsCql(cqlString string) (pgcql.Query, error) {
 	def := pgcql.NewPgDefinition()
 
 	fa := &FieldAllRecords{}
@@ -116,6 +121,10 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	fb = pgcql.NewFieldBool()
 	def.AddField("has_unread_notification", fb)
 
+	// presence flag only; note contents are not searchable.
+	fb = pgcql.NewFieldBool()
+	def.AddField("has_internal_note", fb)
+
 	fb = pgcql.NewFieldBool()
 	def.AddField("terminal_state", fb)
 
@@ -133,9 +142,13 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 
 	nf = pgcql.NewFieldDate()
 	def.AddField("needed_at", nf)
+	def.AddField("due_at", pgcql.NewFieldDate())
 
 	f = pgcql.NewFieldString().WithFullText(LANGUAGE).WithColumn("ill_request->'bibliographicInfo'->>'title'")
 	def.AddField("title", f)
+
+	f = pgcql.NewFieldString().WithExact().WithLower().WithColumn("ill_request->'bibliographicInfo'->>'title'")
+	def.AddField("title_exact", f)
 
 	f = pgcql.NewFieldString().WithFullText(LANGUAGE).WithColumn("ill_request->'bibliographicInfo'->>'author'")
 	def.AddField("author", f)
@@ -151,30 +164,99 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	f = pgcql.NewFieldString().WithLikeOps()
 	def.AddField("patron", f)
 
+	f = pgcql.NewFieldString().WithExact().WithColumn("patron")
+	def.AddField("patron_exact", f)
+
+	f = pgcql.NewFieldString().WithExact().WithColumn("ill_request->'bibliographicInfo'->>'supplierUniqueRecordId'")
+	def.AddField("supplier_unique_record_id", f)
+
 	f = pgcql.NewFieldString().WithSplit().WithExact()
 	def.AddField("id", f)
 
+	f = pgcql.NewFieldString().WithLikeOps().WithLower().WithColumn("ill_request->'patronInfo'->>'givenName'")
+	def.AddField("given_name", f)
+
+	f = pgcql.NewFieldString().WithLikeOps().WithLower().WithColumn("ill_request->'patronInfo'->>'surname'")
+	def.AddField("surname", f)
+
 	ftv := pgcql.NewFieldTsVector().WithLanguage(LANGUAGE).WithServerChoiceRel(cql.ALL).WithColumn("search")
 	def.AddField("cql.serverChoice", ftv)
+
+	f = pgcql.NewFieldString().WithLikeOps().WithPrefixMatchOnly().WithLower()
+	def.AddField("requester_name", f)
+
+	f = pgcql.NewFieldString().WithLikeOps().WithPrefixMatchOnly().WithLower()
+	def.AddField("supplier_name", f)
 
 	var parser cql.Parser
 	query, err := parser.Parse(cqlString)
 	if err != nil {
 		return nil, err
 	}
-	return def.Parse(query, noBaseArgs+1)
+	return def.Parse(query, NumberBaseArgs+1)
+}
+
+// facetValuePlaceholder and facetLabelPlaceholder are the placeholder column names
+// in the getPatronRequestsFacets SQL template. GetPatronRequestsFacetsCql substitutes
+// them with the requested facet's symbol (value) and peer-name (label) columns.
+const (
+	facetValuePlaceholder = "requester_symbol"
+	facetLabelPlaceholder = "requester_name"
+)
+
+// facetLabelColumns maps each supported facet field (a symbol column) to the
+// peer-name column used as its display label.
+var facetLabelColumns = map[string]string{
+	"requester_symbol": "requester_name",
+	"supplier_symbol":  "supplier_name",
+}
+
+func (q *Queries) GetPatronRequestsFacetsCql(ctx context.Context, db DBTX, facetField string, pgcql pgcql.Query) ([]GetPatronRequestsFacetsRow, error) {
+	if pgcql == nil {
+		return nil, fmt.Errorf("pgcql.Query must not be nil; use cql.allRecords=1 for no filter")
+	}
+	labelField, ok := facetLabelColumns[facetField]
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrUnsupportedFacet, facetField)
+	}
+	// facetField is validated against an allowlist by the caller (GetPatronRequestsFacets)
+	// and the map lookup above, so both columns are safe to substitute directly.
+	sql := strings.ReplaceAll(getPatronRequestsFacets, facetValuePlaceholder, facetField)
+	sql = strings.ReplaceAll(sql, facetLabelPlaceholder, labelField)
+
+	idx := strings.Index(sql, "GROUP BY")
+	if idx == -1 {
+		return nil, fmt.Errorf("base SQL query missing GROUP BY clause")
+	}
+	if pgcql.GetWhereClause() != "" {
+		sql = sql[:idx] + "AND (" + pgcql.GetWhereClause() + ") " + sql[idx:]
+	}
+	sqlArguments := make([]interface{}, 0, NumberBaseArgs+len(pgcql.GetQueryArguments()))
+	sqlArguments = append(sqlArguments, int64(100), int64(0)) // 100 facet values should be more than enough; offset is always 0 for facets
+	sqlArguments = append(sqlArguments, pgcql.GetQueryArguments()...)
+	rows, err := db.Query(ctx, sql, sqlArguments...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute facets query: %w", err)
+	}
+	defer rows.Close()
+	var items []GetPatronRequestsFacetsRow
+	for rows.Next() {
+		var i GetPatronRequestsFacetsRow
+		if err := rows.Scan(&i.Value, &i.Label, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPatronRequestsParams,
-	cqlString *string, explainAnalyze bool) ([]ListPatronRequestsRow, []string, error) {
-	if cqlString == nil {
-		rows, err := q.ListPatronRequests(ctx, db, arg)
-		return rows, nil, err
-	}
-	noBaseArgs := 2 // we have two base arguments: limit and offset
-	res, err := handlePatronRequestsQuery(*cqlString, noBaseArgs)
-	if err != nil {
-		return nil, nil, err
+	pgcql pgcql.Query, explainAnalyze bool) ([]ListPatronRequestsRow, []string, error) {
+	if pgcql == nil {
+		return nil, nil, fmt.Errorf("pgcql.Query must not be nil; use cql.allRecords=1 for no filter")
 	}
 	orgSql := listPatronRequests
 	pos := strings.Index(orgSql, "ORDER BY")
@@ -186,21 +268,21 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 		return nil, nil, fmt.Errorf("base query missing LIMIT")
 	}
 	orderBy := orgSql[pos:limitPos]
-	if res.GetOrderByClause() != "" {
-		orderBy = res.GetOrderByClause() + " "
+	if pgcql.GetOrderByClause() != "" {
+		orderBy = pgcql.GetOrderByClause() + " "
 	}
 	sqlPrefix := orgSql[:pos]
-	if res.GetWhereClause() != "" {
+	if pgcql.GetWhereClause() != "" {
 		if strings.Contains(strings.ToUpper(sqlPrefix), "WHERE ") {
-			sqlPrefix += "AND " + res.GetWhereClause() + " "
+			sqlPrefix += "AND " + pgcql.GetWhereClause() + " "
 		} else {
-			sqlPrefix += "WHERE " + res.GetWhereClause() + " "
+			sqlPrefix += "WHERE " + pgcql.GetWhereClause() + " "
 		}
 	}
 	sql := sqlPrefix + orderBy + orgSql[limitPos:]
-	sqlArguments := make([]interface{}, 0, noBaseArgs+len(res.GetQueryArguments()))
+	sqlArguments := make([]interface{}, 0, NumberBaseArgs+len(pgcql.GetQueryArguments()))
 	sqlArguments = append(sqlArguments, arg.Limit, arg.Offset)
-	sqlArguments = append(sqlArguments, res.GetQueryArguments()...)
+	sqlArguments = append(sqlArguments, pgcql.GetQueryArguments()...)
 	explainResult := []string{}
 	if explainAnalyze {
 		explainRows, err := db.Query(ctx, "EXPLAIN ANALYZE "+sql, sqlArguments...)
@@ -247,13 +329,24 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 			&i.PatronRequestSearchView.TerminalState,
 			&i.PatronRequestSearchView.UpdatedAt,
 			&i.PatronRequestSearchView.IllResponse,
+			&i.PatronRequestSearchView.InternalNote,
+			&i.PatronRequestSearchView.NextReqID,
+			&i.PatronRequestSearchView.PrevReqID,
+			&i.PatronRequestSearchView.RetryBibInfo,
+			&i.PatronRequestSearchView.StateModel,
+			&i.PatronRequestSearchView.RequesterPickupLocationID,
+			&i.PatronRequestSearchView.CancellationReason,
+			&i.PatronRequestSearchView.DueAt,
 			&i.PatronRequestSearchView.HasNotification,
 			&i.PatronRequestSearchView.HasCost,
 			&i.PatronRequestSearchView.HasUnreadNotification,
+			&i.PatronRequestSearchView.HasInternalNote,
 			&i.PatronRequestSearchView.ServiceType,
 			&i.PatronRequestSearchView.ServiceLevel,
 			&i.PatronRequestSearchView.NeededAt,
 			&i.PatronRequestSearchView.UnreadNotificationsCount,
+			&i.PatronRequestSearchView.RequesterName,
+			&i.PatronRequestSearchView.SupplierName,
 			&i.FullCount,
 		); err != nil {
 			return nil, nil, err

@@ -11,7 +11,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/indexdata/cql-go/cqlbuilder"
+	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/shim"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 
 	"github.com/indexdata/crosslink/broker/adapter"
 
@@ -29,8 +32,22 @@ import (
 
 var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 
+func getPeerShim(peer ill_db.Peer) shim.Iso18626Shim {
+	noteFieldSeparator := common.IllConfigString(peer.CustomData, shim.NOTE_FIELD_SEP, func(c dirapi.IllConfig) *string { return c.NoteFieldSeparator })
+	useOfferedCosts := common.IllConfigBool(peer.CustomData, shim.OFFERED_COSTS, func(c dirapi.IllConfig) *bool { return c.UseOfferedCosts })
+	return shim.GetShimWithConfig(peer.Vendor, noteFieldSeparator, useOfferedCosts)
+}
+
 const HANDLER_COMP = "iso18626_handler"
 const ORIGINAL_INCOMING_MESSAGE = "originalIncomingMessage"
+
+var lookupQueryBuilder = utils.Must(catalog.NewQueryBuilderGen(&dirapi.QueryConfig{
+	Identifier: new("supplier_unique_record_id = {term}"),
+	Type:       new(dirapi.QueryConfigTypeCql),
+}))
+
+const queryTimeFormat = "2006-01-02 15:04:05"
+const duplicateCheckKey = "duplicateCheck"
 
 type ErrorValue string
 
@@ -46,6 +63,7 @@ const (
 	InvalidAction             ErrorValue = "invalid action"
 	InvalidStatus             ErrorValue = "invalid status"
 	InvalidReason             ErrorValue = "invalid reason"
+	ReqIsDuplicate            ErrorValue = "duplicate request: an ILL request with the same patron, item, and service type was already submitted within the configured time window"
 )
 
 const PublicFailedToProcessReqMsg = "failed to process request"
@@ -63,11 +81,18 @@ var ErrReqAgencyNotFound = errors.New(string(ReqAgencyNotFound))
 var ErrInvalidAction = errors.New(string(InvalidAction))
 var ErrInvalidStatus = errors.New(string(InvalidStatus))
 var ErrInvalidReason = errors.New(string(InvalidReason))
+var ErrDuplicateRequest = errors.New(string(ReqIsDuplicate))
 
-var waitingReqs = map[string]RequestWait{}
+var waitingReqs = requestWaitRegistry{requests: make(map[string]RequestWait)}
+
+// RequestOptions controls local request processing and is never read from ISO messages.
+type RequestOptions struct {
+	// SkipDuplicateCheck permits an intentional rerequest of an existing transaction.
+	SkipDuplicateCheck bool
+}
 
 type Iso18626HandlerInterface interface {
-	HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter)
+	HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, options ...RequestOptions) map[string]any
 	HandleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter)
 	HandleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter)
 }
@@ -137,7 +162,16 @@ func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapt
 	}
 }
 
-func handleNewRequest(ctx common.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo, requesterSymbol pgtype.Text, peers []ill_db.Peer) (string, error) {
+func handleNewRequest(ctx common.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo, requesterSymbol pgtype.Text, peers []ill_db.Peer, skipDuplicateCheck bool) (string, map[string]any, error) {
+	resultMap := map[string]any{}
+	if !skipDuplicateCheck && !strings.EqualFold(peers[0].Vendor, string(dirapi.CrossLink)) {
+		var err error
+		resultMap, err = checkDuplicateRequest(ctx, request, repo, requesterSymbol.String, peers[0])
+		if err != nil {
+			return "", resultMap, err
+		}
+	}
+
 	supplierSymbol := createPgText(request.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + request.Header.SupplyingAgencyId.AgencyIdValue)
 	requesterRequestId := createPgText(request.Header.RequestingAgencyRequestId)
 	supplierRequestId := createPgText(request.Header.SupplyingAgencyRequestId)
@@ -169,14 +203,88 @@ func handleNewRequest(ctx common.ExtendedContext, request *iso18626.Request, rep
 		SupplierRequestID:   supplierRequestId,
 		IllTransactionData:  illTransactionData,
 	})
-	return id, err
+	return id, resultMap, err
 }
 
-func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo) (string, error) {
+func checkDuplicateRequest(ctx common.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo, requesterSymbol string, peer ill_db.Peer) (map[string]any, error) {
+	resultMap := map[string]any{}
+	duplicateCheck := events.DuplicateCheck{}
+	resultMap[duplicateCheckKey] = &duplicateCheck
+	var windowHours *int32
+	if peer.CustomData.IllConfig != nil {
+		windowHours = peer.CustomData.IllConfig.DuplicateCheckWindowHours
+	}
+	duplicateCheck.WindowHours = windowHours
+	if windowHours == nil || *windowHours <= 0 {
+		duplicateCheck.Enabled = false
+		return resultMap, nil
+	}
+	duplicateCheck.Enabled = true
+
+	patronId := ""
+	if request.PatronInfo != nil {
+		patronId = request.PatronInfo.PatronId
+	}
+
+	if patronId == "" {
+		return resultMap, nil
+	}
+
+	lookupParams := catalog.LookupParamsFromBibliographicInfo(request.BibliographicInfo, request.ServiceInfo, request.PublicationInfo)
+	duplicateCheck.LookupParams = &lookupParams
+	if lookupParams.ServiceType == "" {
+		return resultMap, nil
+	}
+
+	cqlList, _, err := lookupQueryBuilder.Build(lookupParams)
+	if err != nil {
+		ctx.Logger().Warn("failed build lookup query", "error", err)
+		return resultMap, nil
+	}
+
+	lookupCql := strings.Join(cqlList, " or ")
+	qb, err := cqlbuilder.NewQueryFromString("(" + lookupCql + ")")
+	if err != nil {
+		ctx.Logger().Warn("failed to build duplicate check query", "error", err)
+		return resultMap, err
+	}
+	formattedTime := time.Now().Add(-time.Duration(*windowHours) * time.Hour).Format(queryTimeFormat)
+	duplicateCheck.CutoffTime = &formattedTime
+	query, err := qb.And().Search("requester_symbol").Term(requesterSymbol).
+		And().Search("patron_id").Term(patronId).
+		And().Search("timestamp").Rel(">=").Term(formattedTime).
+		And().Search("service_type").Term(lookupParams.ServiceType).
+		Build()
+	if err != nil {
+		ctx.Logger().Warn("failed to build duplicate check query", "error", err)
+		return resultMap, err
+	}
+	cql := query.String()
+	trans, _, err := repo.ListIllTransactions(ctx, ill_db.ListIllTransactionsParams{Limit: 1, Offset: 0}, &cql, []string{requesterSymbol})
+	if err != nil {
+		ctx.Logger().Warn("failed to check for duplicate requests, proceeding", "error", err)
+		return resultMap, nil // fail open
+	}
+	if len(trans) == 0 {
+		return resultMap, nil
+	}
+	duplicateCheck.Duplicate = true
+	duplicateCheck.MatchedTransactionId = &trans[0].ID
+	matchedValues := catalog.LookupParamsFromBibliographicInfo(
+		trans[0].IllTransactionData.BibliographicInfo,
+		trans[0].IllTransactionData.ServiceInfo,
+		trans[0].IllTransactionData.PublicationInfo,
+	)
+	duplicateCheck.MatchedValues = &matchedValues
+	return resultMap, ErrDuplicateRequest
+}
+
+func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo) (string, bool, error) {
 	// ServiceInfo already nil checked in handleIso18626Request
 	prevReqId := createPgText(request.ServiceInfo.RequestingAgencyPreviousRequestId)
 
 	var id string
+	var retryLookupChanged bool
 	err := repo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
 		illTrans, err := repo.GetIllTransactionByRequesterRequestIdForUpdate(ctx, prevReqId)
 		if err != nil {
@@ -196,6 +304,8 @@ func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, r
 
 		illTrans.LastRequesterAction = createPgText("Request")
 
+		oldParams := catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.PublicationInfo)
+
 		illTransactionData := ill_db.IllTransactionData{
 			BibliographicInfo:     request.BibliographicInfo,
 			PublicationInfo:       request.PublicationInfo,
@@ -208,6 +318,24 @@ func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, r
 		}
 		illTrans.IllTransactionData = illTransactionData
 
+		newParams := catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.PublicationInfo)
+		retryLookupChanged = oldParams != newParams
+		if !retryLookupChanged {
+			// RetryPossible terminates the previous supplier request. When the
+			// lookup is unchanged, the same selected supplier is reused for a new
+			// request, so clear the fields that belong to the completed attempt.
+			selSup.PrevStatus = pgtype.Text{}
+			selSup.LastStatus = pgtype.Text{}
+			selSup.PrevReason = pgtype.Text{}
+			selSup.LastReason = pgtype.Text{}
+			selSup.ReasonUnfilled = pgtype.Text{}
+			selSup.Note = pgtype.Text{}
+			selSup.SupplierRequestID = pgtype.Text{}
+			if _, err = repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(selSup)); err != nil {
+				return err
+			}
+		}
+
 		timestamp := pgtype.Timestamp{
 			Time:  request.Header.Timestamp.Time,
 			Valid: true,
@@ -217,45 +345,48 @@ func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, r
 		_, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
 		return err
 	})
-	return id, err
+	return id, retryLookupChanged, err
 }
 
-func (h *Iso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
-	handleRequest(ctx, illMessage, w, h.illRepo, h.eventBus, h.dirAdapter)
+func (h *Iso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, options ...RequestOptions) map[string]any {
+	return handleRequest(ctx, illMessage, w, h.illRepo, h.eventBus, h.dirAdapter, options...)
 }
 
-func handleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter) {
+func handleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter, options ...RequestOptions) map[string]any {
 	request := illMessage.Request
+	resultMap := map[string]any{}
 	if request.Header.RequestingAgencyRequestId == "" {
 		handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdIsEmpty)
-		return
+		return resultMap
 	}
 
 	requesterSymbol := createPgText(request.Header.RequestingAgencyId.AgencyIdType.Text + ":" + request.Header.RequestingAgencyId.AgencyIdValue)
 	peers, _, _ := repo.GetCachedPeersBySymbols(ctx, []string{requesterSymbol.String}, dirAdapter)
 	if len(peers) != 1 {
 		handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqAgencyNotFound)
-		return
+		return resultMap
 	}
 
 	var err error
 	var id string
-	var event events.EventName
 
 	requestType := iso18626.TypeRequestTypeNew
 	if request.ServiceInfo != nil && request.ServiceInfo.RequestType != nil {
 		requestType = *request.ServiceInfo.RequestType
 	}
+	mustLocate := true
 	switch requestType {
 	case iso18626.TypeRequestTypeRetry:
-		event = events.EventNameRequesterMsgReceived
-		id, err = handleRetryRequest(ctx, request, repo)
+		id, mustLocate, err = handleRetryRequest(ctx, request, repo)
 	case iso18626.TypeRequestTypeNew:
-		event = events.EventNameRequestReceived
-		id, err = handleNewRequest(ctx, request, repo, requesterSymbol, peers)
+		skipDuplicateCheck := false
+		for _, option := range options {
+			skipDuplicateCheck = skipDuplicateCheck || option.SkipDuplicateCheck
+		}
+		id, resultMap, err = handleNewRequest(ctx, request, repo, requesterSymbol, peers, skipDuplicateCheck)
 	default:
 		handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, UnsupportedRequestType)
-		return
+		return resultMap
 	}
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -263,13 +394,15 @@ func handleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Mess
 			handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdAlreadyExists)
 		} else if errors.Is(err, ErrRetryNotPossible) {
 			handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, RetryNotPossible)
+		} else if errors.Is(err, ErrDuplicateRequest) {
+			handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIsDuplicate)
 		} else {
 			ctx.Logger().Error(InternalFailedToSaveTx, "error", err)
 			http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		}
-		return
+		return resultMap
 	}
-	afterShim := shim.GetShim(peers[0].Vendor).ApplyToIncomingRequest(illMessage, &peers[0], nil)
+	afterShim := getPeerShim(peers[0]).ApplyToIncomingRequest(illMessage, &peers[0], nil)
 	var resmsg = createRequestResponse(request, iso18626.TypeMessageStatusOK, nil, "")
 	eventData := events.EventData{
 		CommonEventData: events.CommonEventData{
@@ -278,13 +411,16 @@ func handleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Mess
 		},
 		CustomData: map[string]any{
 			ORIGINAL_INCOMING_MESSAGE: illMessage,
+			events.MUST_LOCATE:        mustLocate,
 		},
 	}
+	event := events.EventNameRequestReceived
 	if _, err = createNotice(ctx, eventBus, id, event, eventData, events.EventStatusSuccess); err != nil {
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
-		return
+		return resultMap
 	}
 	writeResponse(ctx, resmsg, w)
+	return resultMap
 }
 
 func writeResponse(ctx common.ExtendedContext, resmsg *iso18626.ISO18626Message, w http.ResponseWriter) {
@@ -434,18 +570,9 @@ func handleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18
 		return
 	}
 
-	eventId, err := createNotice(ctx, eventBus, illTrans.ID, events.EventNameRequesterMsgReceived, eventData, events.EventStatusSuccess)
-	if err != nil {
+	if err := waitForMessageConfirmation(ctx, eventBus, illTrans.ID, events.EventNameRequesterMsgReceived, eventData, w); err != nil {
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
-		return
 	}
-	var wg sync.WaitGroup
-	wg.Add(1)
-	waitingReqs[eventId] = RequestWait{
-		w:  &w,
-		wg: &wg,
-	}
-	wg.Wait()
 }
 
 func getRequesterMessageSupplier(ctx common.ExtendedContext, repo ill_db.IllRepo, illTransID string, symbol string) (*ill_db.LocatedSupplier, error) {
@@ -477,7 +604,7 @@ func applyRequesterShim(ctx common.ExtendedContext, repo ill_db.IllRepo, reqId s
 	if err != nil {
 		return err
 	}
-	afterShim := shim.GetShim(requester.Vendor).ApplyToIncomingRequest(illMessage, &requester, supplier)
+	afterShim := getPeerShim(requester).ApplyToIncomingRequest(illMessage, &requester, supplier)
 	eventData.IncomingMessage = afterShim
 	eventData.CustomData = map[string]any{
 		ORIGINAL_INCOMING_MESSAGE: illMessage,
@@ -626,7 +753,7 @@ func handleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso186
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
-	afterShim := shim.GetShim(supplierPeer.Vendor).ApplyToIncomingRequest(illMessage, &requester, &supplier)
+	afterShim := getPeerShim(supplierPeer).ApplyToIncomingRequest(illMessage, &requester, &supplier)
 	var resmsg = createSupplyingAgencyResponse(afterShim, iso18626.TypeMessageStatusOK, nil, "")
 	eventData := events.EventData{
 		CommonEventData: events.CommonEventData{
@@ -652,25 +779,16 @@ func handleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso186
 			return
 		}
 	}
-	err = updateLocatedSupplier(ctx, repo, illTrans, status, reason, supReqId, supplierPeer.ID, supplier.ID)
+	err = updateLocatedSupplier(ctx, repo, illTrans, status, reason, afterShim.SupplyingAgencyMessage.MessageInfo, supReqId, supplierPeer.ID, supplier.ID)
 	if err != nil {
 		ctx.Logger().Error("failed to update located supplier status to: "+string(status), "error", err, "transactionId", illTrans.ID)
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
 
-	eventId, err := createNotice(ctx, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusSuccess)
-	if err != nil {
+	if err := waitForMessageConfirmation(ctx, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, w); err != nil {
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
-		return
 	}
-	var wg sync.WaitGroup
-	wg.Add(1)
-	waitingReqs[eventId] = RequestWait{
-		w:  &w,
-		wg: &wg,
-	}
-	wg.Wait()
 }
 
 func validateStatusAndReasonForMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, eventData events.EventData, eventBus events.EventBus, illTrans ill_db.IllTransaction) (iso18626.TypeStatus, iso18626.TypeReasonForMessage, error) {
@@ -693,7 +811,7 @@ func validateStatusAndReasonForMessage(ctx common.ExtendedContext, illMessage *i
 }
 
 func updateLocatedSupplier(ctx common.ExtendedContext, repo ill_db.IllRepo, illTrans ill_db.IllTransaction,
-	status iso18626.TypeStatus, reason iso18626.TypeReasonForMessage, supReqId string, supPeerId string, supId string) error {
+	status iso18626.TypeStatus, reason iso18626.TypeReasonForMessage, messageInfo iso18626.MessageInfo, supReqId string, supPeerId string, supId string) error {
 	return repo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
 		locSup, err := repo.GetLocatedSupplierByIdForUpdate(ctx, supId)
 		if err != nil {
@@ -705,6 +823,15 @@ func updateLocatedSupplier(ctx common.ExtendedContext, repo ill_db.IllRepo, illT
 			if locSup.LastStatus.String != string(status) {
 				locSup.PrevStatus = locSup.LastStatus
 				locSup.LastStatus = createPgText(string(status))
+			}
+			if status == iso18626.TypeStatusUnfilled {
+				reasonUnfilled := ""
+				if messageInfo.ReasonUnfilled != nil {
+					reasonUnfilled = messageInfo.ReasonUnfilled.Text
+				}
+				note := shim.StripReShareConditionMarkers(common.StripItemsNotePayload(messageInfo.Note))
+				locSup.ReasonUnfilled = pgtype.Text{String: reasonUnfilled, Valid: reasonUnfilled != ""}
+				locSup.Note = pgtype.Text{String: note, Valid: note != ""}
 			}
 		} else {
 			level := slog.LevelWarn
@@ -724,7 +851,7 @@ func updateLocatedSupplier(ctx common.ExtendedContext, repo ill_db.IllRepo, illT
 			ctx.Logger().Error("failed to update located supplier with id: "+locSup.ID, "error", err, "transactionId", illTrans.ID)
 			return err
 		}
-		if status == iso18626.TypeStatusLoaned {
+		if status == iso18626.TypeStatusLoaned && reason != iso18626.TypeReasonForMessageRenewResponse {
 			updatePeerLoanCount(ctx, repo, supPeerId, illTrans.ID)
 			updatePeerBorrowCount(ctx, repo, illTrans)
 		}
@@ -831,7 +958,7 @@ func (h *Iso18626Handler) ConfirmRequesterMsg(ctx common.ExtendedContext, event 
 		})
 		return
 	}
-	if _, ok := waitingReqs[reqRequestEvent.ID]; !ok {
+	if !waitingReqs.contains(reqRequestEvent.ID) {
 		return // instance doesn't have the paused request
 	}
 	// instance has the event, process it
@@ -868,7 +995,7 @@ func (h *Iso18626Handler) ConfirmSupplierMsg(ctx common.ExtendedContext, event e
 		})
 		return
 	}
-	if _, ok := waitingReqs[supRequestEvent.ID]; !ok {
+	if !waitingReqs.contains(supRequestEvent.ID) {
 		return // instance doesn't have the paused request
 	}
 	// instance has the event, process it
@@ -935,11 +1062,10 @@ func (h *Iso18626Handler) handleConfirmRequesterMsgTask(ctx common.ExtendedConte
 
 func (c *Iso18626Handler) confirmSupplierResponse(ctx common.ExtendedContext, illTransId string, waitRequestId string, requesterIllMsg *iso18626.ISO18626Message,
 	supplierResult events.EventResult) (*iso18626.ISO18626Message, error) {
-	wait, ok := waitingReqs[waitRequestId]
+	wait, ok := waitingReqs.take(waitRequestId)
 	if !ok {
 		return nil, fmt.Errorf("waiting request '%s' not found", waitRequestId)
 	}
-	delete(waitingReqs, waitRequestId)
 	var errorMessage = ""
 	var errorType *iso18626.TypeErrorType
 	var messageStatus = iso18626.TypeMessageStatusOK
@@ -999,11 +1125,10 @@ func (c *Iso18626Handler) confirmSupplierResponse(ctx common.ExtendedContext, il
 
 func (c *Iso18626Handler) confirmRequesterResponse(ctx common.ExtendedContext, illTransId string, waitRequestId string, supplierIllMsg *iso18626.ISO18626Message,
 	requesterResult events.EventResult) (*iso18626.ISO18626Message, error) {
-	wait, ok := waitingReqs[waitRequestId]
+	wait, ok := waitingReqs.take(waitRequestId)
 	if !ok {
 		return nil, fmt.Errorf("waiting request '%s' not found", waitRequestId)
 	}
-	delete(waitingReqs, waitRequestId)
 	var errorMessage = ""
 	var errorType *iso18626.TypeErrorType
 	var messageStatus iso18626.TypeMessageStatus
@@ -1061,4 +1186,47 @@ func (c *Iso18626Handler) confirmRequesterResponse(ctx common.ExtendedContext, i
 type RequestWait struct {
 	w  *http.ResponseWriter
 	wg *sync.WaitGroup
+}
+
+// requestWaitRegistry coordinates HTTP handlers and asynchronous confirmations.
+// Taking a waiter removes it atomically so only one confirmation can write to it.
+type requestWaitRegistry struct {
+	mu       sync.Mutex
+	requests map[string]RequestWait
+}
+
+func (r *requestWaitRegistry) register(id string, wait RequestWait) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.requests[id] = wait
+}
+
+func (r *requestWaitRegistry) contains(id string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.requests[id]
+	return ok
+}
+
+func (r *requestWaitRegistry) take(id string) (RequestWait, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	wait, ok := r.requests[id]
+	delete(r.requests, id)
+	return wait, ok
+}
+
+func waitForMessageConfirmation(ctx common.ExtendedContext, eventBus events.EventBus, illTransID string, eventName events.EventName, data events.EventData, w http.ResponseWriter) error {
+	id := uuid.NewString()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	// Register before publishing: a consumer may confirm before creation returns.
+	waitingReqs.register(id, RequestWait{w: &w, wg: &wg})
+	defer waitingReqs.take(id)
+	if _, err := eventBus.CreateNoticeWithID(id, illTransID, eventName, data, events.EventStatusSuccess, events.EventDomainIllTransaction, events.SignalConsumers); err != nil {
+		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransID)
+		return err
+	}
+	wg.Wait()
+	return nil
 }

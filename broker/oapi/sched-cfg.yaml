@@ -1,0 +1,10 @@
+package: schedoapi
+output: scheduler/oapi/sched_openapi_gen.go
+output-options:
+  include-tags:
+    - scheduler-api
+  overlay:
+    path: oapi/overlay.yaml
+generate:
+  models: true
+  std-http-server: true

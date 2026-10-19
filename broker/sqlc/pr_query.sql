@@ -24,7 +24,25 @@ WHERE ill_request IS NOT NULL
 ORDER BY created_at
 LIMIT $1 OFFSET $2;
 
+-- name: GetPatronRequestsFacets :many
+-- TEMPLATE: 'requester_symbol' (value) and 'requester_name' (label) are placeholder
+-- column names. This query is not meant to be called directly; use
+-- GetPatronRequestsFacetsCql in prcql.go, which substitutes both columns with the
+-- validated facet field's symbol/name columns at runtime.
+SELECT requester_symbol AS value, requester_name AS label, COUNT(*) AS count
+FROM patron_request_search_view
+WHERE ill_request IS NOT NULL
+GROUP BY 1, 2
+ORDER BY count DESC, value ASC
+LIMIT $1 OFFSET $2;
+
 -- name: UpdatePatronRequest :one
+-- internal_note ($20) is a pass-through to keep PatronRequest <-> UpdatePatronRequestParams
+-- convertible; edits go through UpdatePatronRequestInternalNote.
+-- items ($15) is likewise a pass-through: it is intentionally ignored (COALESCE always keeps
+-- the stored value, since items is NOT NULL) so this generic update can never clobber the
+-- item cache maintained by trigger_update_patron_request_items. Do not set PatronRequest.Items
+-- before calling this query; items are only ever written by that trigger.
 UPDATE patron_request
 SET ill_request         = $3,
     state               = $4,
@@ -38,18 +56,32 @@ SET ill_request         = $3,
     last_action         = $12,
     last_action_outcome = $13,
     last_action_result  = $14,
-    items               = $15,
+    items               = COALESCE(items, $15),
     language            = $16,
     terminal_state      = $17,
     updated_at          = now(),
-    ill_response    = $19
+    ill_response        = $19,
+    internal_note       = $20,
+    next_req_id         = $21,
+    prev_req_id         = $22,
+    retry_bib_info       = $23,
+    state_model          = $24,
+    requester_pickup_location_id = $25,
+    cancellation_reason = $26,
+    due_at = $27
 WHERE id = $1 AND created_at = $2 AND (updated_at is null OR updated_at = $18)
 RETURNING sqlc.embed(patron_request);
 
 -- name: CreatePatronRequest :one
-INSERT INTO patron_request (id, created_at, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, items, language, terminal_state, updated_at, ill_response)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+INSERT INTO patron_request (id, created_at, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, items, language, terminal_state, updated_at, ill_response, internal_note, next_req_id, prev_req_id, retry_bib_info, state_model, requester_pickup_location_id, cancellation_reason, due_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
 RETURNING sqlc.embed(patron_request);
+
+-- name: UpdatePatronRequestInternalNote :exec
+UPDATE patron_request
+SET internal_note = $2,
+    updated_at    = now()
+WHERE id = $1;
 
 -- name: DeletePatronRequest :exec
 DELETE
@@ -67,16 +99,24 @@ LIMIT 1;
 SELECT get_next_hrid($1)::TEXT AS hrid;
 
 -- name: SaveItem :one
-INSERT INTO item (id, pr_id, barcode, call_number, title, item_id, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO item (id, pr_id, barcode, call_number, location, shelving_location, title, item_id, lms_request_id, lms_item_id, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (id) DO UPDATE
-    SET pr_id       = EXCLUDED.pr_id,
-        barcode = EXCLUDED.barcode,
+    SET barcode = EXCLUDED.barcode,
         call_number = EXCLUDED.call_number,
+        location = COALESCE(EXCLUDED.location, item.location),
+        shelving_location = COALESCE(EXCLUDED.shelving_location, item.shelving_location),
         title = EXCLUDED.title,
         item_id = EXCLUDED.item_id,
+        lms_request_id = EXCLUDED.lms_request_id,
+        lms_item_id = EXCLUDED.lms_item_id,
         created_at = EXCLUDED.created_at
+    WHERE item.pr_id = EXCLUDED.pr_id
 RETURNING sqlc.embed(item);
+
+-- LMS progress is updated separately, so editing item metadata cannot erase it.
+-- name: SetItemLmsStatus :execrows
+UPDATE item SET lms_status = $2, lms_due_date = $3 WHERE id = $1;
 
 -- name: GetItemById :one
 SELECT sqlc.embed(item)
@@ -94,12 +134,20 @@ DELETE
 FROM item
 WHERE id = $1;
 
+-- For requester items, record the request ID and item ID sent to AcceptItem
+-- after success and clear both after deletion. NULL/empty request ID means no
+-- cleanup is needed.
+-- name: SetItemLmsRequestID :execrows
+UPDATE item
+SET lms_request_id = $2,
+    lms_item_id = $3
+WHERE id = $1;
+
 -- name: SaveNotification :one
 INSERT INTO notification (id, pr_id, from_symbol, to_symbol, direction, kind, note, cost, currency, condition, receipt, created_at, acknowledged_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 ON CONFLICT (id) DO UPDATE
-    SET pr_id           = EXCLUDED.pr_id,
-        from_symbol     = EXCLUDED.from_symbol,
+    SET from_symbol     = EXCLUDED.from_symbol,
         to_symbol       = EXCLUDED.to_symbol,
         direction       = EXCLUDED.direction,
         kind            = EXCLUDED.kind,
@@ -110,6 +158,7 @@ ON CONFLICT (id) DO UPDATE
         receipt         = EXCLUDED.receipt,
         created_at      = EXCLUDED.created_at,
         acknowledged_at = EXCLUDED.acknowledged_at
+    WHERE notification.pr_id = EXCLUDED.pr_id
 RETURNING sqlc.embed(notification);
 
 -- name: GetNotificationById :one
@@ -139,3 +188,70 @@ WHERE pr_id = sqlc.arg(pr_id)::text
 DELETE
 FROM notification
 WHERE id = $1;
+
+-- name: SaveTemplate :one
+INSERT INTO template (id, owner, title, purpose, subject, body, content_type, labels, audience, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+ON CONFLICT (id) DO UPDATE
+    SET title        = EXCLUDED.title,
+        purpose      = EXCLUDED.purpose,
+        subject      = EXCLUDED.subject,
+        body         = EXCLUDED.body,
+        content_type = EXCLUDED.content_type,
+        labels       = EXCLUDED.labels,
+        audience     = EXCLUDED.audience,
+        updated_at   = now()
+RETURNING sqlc.embed(template);
+
+-- name: GetTemplateByIdAndOwner :one
+SELECT sqlc.embed(template)
+FROM template
+WHERE id = $1 AND owner = $2
+LIMIT 1;
+
+-- name: GetTemplatesByOwner :many
+SELECT sqlc.embed(template), COUNT(*) OVER () as full_count
+FROM template
+WHERE owner = $3
+ORDER BY created_at
+    LIMIT $1 OFFSET $2;
+
+-- name: DeleteTemplateByIdAndOwner :exec
+DELETE
+FROM template
+WHERE id = $1 AND owner = $2;
+
+
+-- name: GetTemplateByPurposeAudienceLabelAndOwner :one
+-- Finds the best-matching template for a given owner, purpose, and label.
+-- Audience is optional: a template with a NULL audience matches any requested audience.
+-- When multiple templates match, prefer one with a specific audience over a NULL audience.
+SELECT sqlc.embed(template)
+FROM template
+WHERE owner = $1
+  AND purpose = $2
+  AND labels @> ARRAY[sqlc.arg(label)::text]
+  AND (audience IS NULL OR audience = sqlc.arg(audience)::text)
+ORDER BY
+    CASE WHEN audience IS NOT NULL THEN 0 ELSE 1 END,
+    created_at
+LIMIT 1;
+
+-- name: RotaRequestClosed :one
+-- Lock active rows as well as terminal ones. Aggregate outside the locking
+-- subquery so every match is locked, even when an earlier row is terminal.
+SELECT COALESCE(bool_or(terminal_state), false)::boolean AS closed
+FROM (
+    SELECT p.terminal_state FROM patron_request p JOIN ill_transaction i
+      ON p.requester_req_id = i.requester_request_id AND p.requester_symbol = i.requester_symbol
+    WHERE i.id = $1 AND p.side = 'borrowing'
+    ORDER BY p.id
+    FOR UPDATE OF p
+) AS borrowing_requests;
+
+-- name: GetLendingPredecessorForUpdate :one
+SELECT sqlc.embed(patron_request)
+FROM patron_request
+WHERE supplier_symbol = $1 AND requester_symbol = $2 AND requester_req_id = $3
+  AND tenant IS NOT DISTINCT FROM sqlc.narg(tenant)::varchar AND side = 'lending'
+LIMIT 1 FOR UPDATE;

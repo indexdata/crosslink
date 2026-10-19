@@ -8,7 +8,7 @@ import (
 	"time"
 
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 
 	"github.com/indexdata/crosslink/broker/shim"
 	"github.com/indexdata/crosslink/broker/vcs"
@@ -40,10 +40,10 @@ const KindConfirmationError = "confirmation-error"
 const BrokerInfoStatus = iso18626.TypeStatusExpectToSupply
 
 var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
-var appendSupplierInfo, _ = utils.GetEnvBool("SUPPLIER_INFO", true)
-var appendRequestingAgencyInfo, _ = utils.GetEnvBool("REQ_AGENCY_INFO", true)
-var appendReturnInfo, _ = utils.GetEnvBool("RETURN_INFO", true)
-var vendorNote, _ = utils.GetEnvBool("VENDOR_NOTE", true)
+var appendSupplierInfo, _ = common.GetDeprecatedEnvBool("SUPPLIER_INFO", true, "use illConfig.includeSupplierInfo in the supplier directory entry instead")
+var appendRequestingAgencyInfo, _ = common.GetDeprecatedEnvBool("REQ_AGENCY_INFO", true, "use illConfig.includeRequestingAgencyInfo in the requester directory entry instead")
+var appendReturnInfo, _ = common.GetDeprecatedEnvBool("RETURN_INFO", true, "use illConfig.includeReturnInfo in the supplier directory entry instead")
+var vendorNote, _ = common.GetDeprecatedEnvBool("VENDOR_NOTE", true, "use illConfig.includeVendorNote in the requester directory entry instead")
 
 type Iso18626Client struct {
 	eventBus         events.EventBus
@@ -143,8 +143,12 @@ func populateReturnAddress(message *iso18626.ISO18626Message, name string, agenc
 }
 
 func prependVendorNote(message *iso18626.SupplyingAgencyMessage, vendor string) {
+	prependVendorNoteWithSeparator(message, vendor, shim.NOTE_FIELD_SEP)
+}
+
+func prependVendorNoteWithSeparator(message *iso18626.SupplyingAgencyMessage, vendor string, noteFieldSeparator string) {
 	if message.MessageInfo.Note != "" {
-		sep := shim.NOTE_FIELD_SEP
+		sep := noteFieldSeparator
 		if strings.HasPrefix(message.MessageInfo.Note, "#") {
 			sep = ""
 		}
@@ -311,8 +315,8 @@ func createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedS
 	if sup != nil && sup.SupplierSymbol != "" && (isRequestingMessage || brokerMode == string(common.BrokerModeTransparent)) {
 		supplierSymbol = sup.SupplierSymbol
 	}
-	requesterAgencyType, requesterAgencyValue := common.SplitAgencySymbol(requesterSymbol)
-	supplierAgencyType, supplierAgencyValue := common.SplitAgencySymbol(supplierSymbol)
+	requesterAgencyType, requesterAgencyValue := common.SplitSymbolLenient(requesterSymbol)
+	supplierAgencyType, supplierAgencyValue := common.SplitSymbolLenient(supplierSymbol)
 	return iso18626.Header{
 		RequestingAgencyId: iso18626.TypeAgencyId{
 			AgencyIdType:  iso18626.TypeSchemeValuePair{Text: requesterAgencyType},
@@ -330,29 +334,29 @@ func createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedS
 	}
 }
 
-// suppliers like Alma often send a wrong reason so we try to guess the correct reason based on the requester action and previous status
+// guessReason preserves explicit responses and normalizes request and status messages.
 func guessReason(reason iso18626.TypeReasonForMessage, requesterAction string, prevStatus string, targetStatus iso18626.TypeStatus) iso18626.TypeReasonForMessage {
-	// Notification and CancelResponse are a special cases where we don't try to guess the reason
-	if reason == iso18626.TypeReasonForMessageNotification || reason == iso18626.TypeReasonForMessageCancelResponse {
+	// Preserve explicit notifications, decision responses, and unsolicited loan status changes.
+	switch reason {
+	case iso18626.TypeReasonForMessageNotification,
+		iso18626.TypeReasonForMessageCancelResponse,
+		iso18626.TypeReasonForMessageRenewResponse,
+		iso18626.TypeReasonForMessageStatusRequestResponse:
 		return reason
+	case iso18626.TypeReasonForMessageStatusChange:
+		if targetStatus == iso18626.TypeStatusOverdue || targetStatus == iso18626.TypeStatusRecalled {
+			return reason
+		}
 	}
 	if reason != "" && targetStatus == iso18626.TypeStatusUnfilled { // For unfilled we want to send notification
 		return iso18626.TypeReasonForMessageNotification
 	}
-	var expectedReason iso18626.TypeReasonForMessage
-	switch requesterAction {
-	case string(iso18626.TypeActionStatusRequest):
-		expectedReason = iso18626.TypeReasonForMessageStatusRequestResponse
-	case string(iso18626.TypeActionRenew):
-		expectedReason = iso18626.TypeReasonForMessageRenewResponse
-	default: //for everything else we guess we check if there is a previous status
-		if len(prevStatus) > 0 {
-			expectedReason = iso18626.TypeReasonForMessageStatusChange
-		} else {
-			expectedReason = iso18626.TypeReasonForMessageRequestResponse
+	if requesterAction == string(ill_db.RequestAction) {
+		if prevStatus == "" || prevStatus == string(iso18626.TypeStatusRetryPossible) {
+			return iso18626.TypeReasonForMessageRequestResponse
 		}
 	}
-	return expectedReason
+	return iso18626.TypeReasonForMessageStatusChange
 }
 
 func (c *Iso18626Client) checkConfirmationError(ctx common.ExtendedContext, response *iso18626.ISO18626Message, defaultStatus events.EventStatus, result *events.EventResult) events.EventStatus {
@@ -456,8 +460,8 @@ func (c *Iso18626Client) HandleIllMessage(ctx common.ExtendedContext, peer *ill_
 	if peer == nil {
 		return nil, fmt.Errorf("peer is nil")
 	}
-	if strings.EqualFold(peer.Vendor, string(directory.CrossLink)) {
-		return c.prMessageHandler.HandleMessage(ctx, msg)
+	if strings.EqualFold(peer.Vendor, string(dirapi.CrossLink)) {
+		return c.prMessageHandler.HandleMessage(ctx, msg, peer)
 	}
 	return c.SendHttpPost(peer, msg)
 }
@@ -470,7 +474,7 @@ func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626M
 		httpClient.WithHeaders(k, v)
 	}
 	time.Sleep(c.sendDelay)
-	iso18626Shim := shim.GetShim(peer.Vendor)
+	iso18626Shim := getPeerShim(peer)
 	var resmsg iso18626.ISO18626Message
 	err := httpClient.RequestResponse(c.client, http.MethodPost,
 		[]string{httpclient.ContentTypeApplicationXml, httpclient.ContentTypeTextXml},
@@ -493,40 +497,22 @@ func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626M
 	return &resmsg, nil
 }
 
+func getPeerShim(peer *ill_db.Peer) shim.Iso18626Shim {
+	noteFieldSeparator := common.IllConfigString(peer.CustomData, shim.NOTE_FIELD_SEP, func(c dirapi.IllConfig) *string { return c.NoteFieldSeparator })
+	useOfferedCosts := common.IllConfigBool(peer.CustomData, shim.OFFERED_COSTS, func(c dirapi.IllConfig) *bool { return c.UseOfferedCosts })
+	return shim.GetShimWithConfig(peer.Vendor, noteFieldSeparator, useOfferedCosts)
+}
+
 func getPeerInfo(peer *ill_db.Peer, symbol string) (string, iso18626.TypeAgencyId, iso18626.PhysicalAddress, iso18626.ElectronicAddress) {
 	name := peer.Name
 	agencyId := iso18626.TypeAgencyId{}
 	if symbol != "" {
 		name = fmt.Sprintf("%v (%v)", peer.Name, symbol)
-		agencyType, agencyValue := common.SplitAgencySymbol(symbol)
+		agencyType, agencyValue := common.SplitSymbolLenient(symbol)
 		agencyId.AgencyIdType = iso18626.TypeSchemeValuePair{Text: agencyType}
 		agencyId.AgencyIdValue = agencyValue
 	}
-	address := iso18626.PhysicalAddress{}
-	if peer.CustomData.Addresses != nil {
-		for _, addr := range *peer.CustomData.Addresses {
-			if addr.AddressComponents != nil && addr.Type == "Shipping" {
-				for _, comp := range *addr.AddressComponents {
-					switch comp.Type {
-					case "Thoroughfare":
-						address.Line1 = comp.Value
-					case "Locality":
-						address.Locality = comp.Value
-					case "AdministrativeArea":
-						address.Region = &iso18626.TypeSchemeValuePair{
-							Text: comp.Value,
-						}
-					case "PostalCode":
-						address.PostalCode = comp.Value
-					case "CountryCode":
-						address.Country = &iso18626.TypeSchemeValuePair{
-							Text: comp.Value,
-						}
-					}
-				}
-			}
-		}
-	}
+	address := common.DirectoryShippingAddress(peer.CustomData)
 	email := iso18626.ElectronicAddress{}
 	if peer.CustomData.Email != nil {
 		email.ElectronicAddressData = *peer.CustomData.Email
@@ -659,21 +645,24 @@ func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarge
 	sam.MessageInfo.ReasonForMessage = guessReason(reason, trCtx.transaction.LastRequesterAction.String, trCtx.transaction.LastSupplierStatus.String, target.status)
 	sam.StatusInfo.Status = target.status
 	sam.StatusInfo.LastChange = utils.XSDDateTime{Time: time.Now()}
-	if sam.StatusInfo.Status == iso18626.TypeStatusLoaned &&
+	if sam.StatusInfo.Status == iso18626.TypeStatusLoaned && sam.MessageInfo.ReasonForMessage != iso18626.TypeReasonForMessageRenewResponse &&
 		sam.DeliveryInfo != nil &&
 		sam.DeliveryInfo.DateSent.IsZero() {
 		sam.DeliveryInfo.DateSent = utils.XSDDateTime{Time: time.Now()}
 	}
 
-	if target.status == iso18626.TypeStatusLoaned && appendReturnInfo {
+	includeReturnInfo := target.peer != nil && common.IllConfigBool(target.peer.CustomData, appendReturnInfo, func(c dirapi.IllConfig) *bool { return c.IncludeReturnInfo })
+	if target.status == iso18626.TypeStatusLoaned && sam.MessageInfo.ReasonForMessage != iso18626.TypeReasonForMessageRenewResponse && includeReturnInfo {
 		name, agencyId, address, _ := getPeerInfo(target.peer, target.supplier.SupplierSymbol)
 		populateReturnAddress(message, name, agencyId, address)
 	}
 	if !isInternalCrossLinkMessage(trCtx, target) {
 		prependSupplierSymbolNote(trCtx, target, sam)
 	}
-	if vendorNote && target.brokerInfoMessage && target.peer != nil && target.peer.Vendor != trCtx.requester.Vendor {
-		prependVendorNote(sam, target.peer.Vendor)
+	includeVendorNote := common.IllConfigBool(trCtx.requester.CustomData, vendorNote, func(c dirapi.IllConfig) *bool { return c.IncludeVendorNote })
+	noteFieldSeparator := common.IllConfigString(trCtx.requester.CustomData, shim.NOTE_FIELD_SEP, func(c dirapi.IllConfig) *string { return c.NoteFieldSeparator })
+	if includeVendorNote && target.brokerInfoMessage && target.peer != nil && target.peer.Vendor != trCtx.requester.Vendor {
+		prependVendorNoteWithSeparator(sam, target.peer.Vendor, noteFieldSeparator)
 	}
 	return message
 }
@@ -685,15 +674,15 @@ func isInternalCrossLinkMessage(trCtx transactionContext, target *messageTarget)
 }
 
 func isCrossLinkVendor(peer *ill_db.Peer) bool {
-	return peer != nil && strings.EqualFold(peer.Vendor, string(directory.CrossLink))
+	return peer != nil && strings.EqualFold(peer.Vendor, string(dirapi.CrossLink))
 }
 
 func prependSupplierSymbolNote(trCtx transactionContext, target *messageTarget, sam *iso18626.SupplyingAgencyMessage) {
 	if trCtx.requester != nil && trCtx.requester.BrokerMode == string(common.BrokerModeOpaque) &&
 		target != nil && target.supplier != nil {
-		_, symbol := common.SplitAgencySymbol(target.supplier.SupplierSymbol)
+		_, symbol := common.SplitSymbolLenient(target.supplier.SupplierSymbol)
 		if sam.MessageInfo.Note != "" {
-			sep := shim.NOTE_FIELD_SEP
+			sep := common.IllConfigString(trCtx.requester.CustomData, shim.NOTE_FIELD_SEP, func(c dirapi.IllConfig) *string { return c.NoteFieldSeparator })
 			if strings.HasPrefix(sam.MessageInfo.Note, "#") {
 				sep = ""
 			}
@@ -773,11 +762,11 @@ func createRequestMessage(trCtx transactionContext) (*iso18626.ISO18626Message, 
 	}
 	message.Request.BibliographicInfo.SupplierUniqueRecordId = trCtx.selectedSupplier.LocalID.String
 	requesterName, _, deliveryAddress, email := getPeerInfo(trCtx.requester, trCtx.transaction.RequesterSymbol.String)
-	if appendRequestingAgencyInfo {
+	if common.IllConfigBool(trCtx.requester.CustomData, appendRequestingAgencyInfo, func(c dirapi.IllConfig) *bool { return c.IncludeRequestingAgencyInfo }) {
 		populateRequesterInfo(message, requesterName, deliveryAddress, email)
 	}
 	populateDeliveryAddress(message, deliveryAddress, email)
-	if appendSupplierInfo {
+	if common.IllConfigBool(trCtx.selectedSupplierPeer.CustomData, appendSupplierInfo, func(c dirapi.IllConfig) *bool { return c.IncludeSupplierInfo }) {
 		supplierName, suppAgencyId, supplierAddress, _ := getPeerInfo(trCtx.selectedSupplierPeer, trCtx.selectedSupplier.SupplierSymbol)
 		populateSupplierInfo(message, supplierName, suppAgencyId, supplierAddress)
 	}

@@ -1,6 +1,7 @@
 package events
 
 import (
+	"github.com/indexdata/crosslink/broker/catalog"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/iso18626"
@@ -28,27 +29,38 @@ type EventDomain string
 const (
 	EventDomainPatronRequest  EventDomain = "PATRON_REQUEST"
 	EventDomainIllTransaction EventDomain = "ILL_TRANSACTION"
+	EventDomainScheduler      EventDomain = "SCHEDULER"
 )
+
+func IsSyntheticID(id string) bool {
+	return id == DEFAULT_ILL_TRANSACTION_ID || id == DEFAULT_PATRON_REQUEST_ID
+}
 
 type EventName string
 
 const (
-	EventNameRequestTerminated    EventName = "request-terminated"
-	EventNameRequestReceived      EventName = "request-received"
-	EventNameLocateSuppliers      EventName = "locate-suppliers"
-	EventNameSelectSupplier       EventName = "select-supplier"
-	EventNameSupplierMsgReceived  EventName = "supplier-msg-received"
-	EventNameMessageRequester     EventName = "message-requester"
-	EventNameRequesterMsgReceived EventName = "requester-msg-received"
-	EventNameMessageSupplier      EventName = "message-supplier"
-	EventNameConfirmRequesterMsg  EventName = "confirm-requester-msg"
-	EventNameConfirmSupplierMsg   EventName = "confirm-supplier-msg"
-	EventNameInvokeAction         EventName = "invoke-action"
-	EventNamePatronRequestMessage EventName = "patron-request-message"
-	EventNameLmsRequesterMessage  EventName = "lms-requester-message"
-	EventNameLmsSupplierMessage   EventName = "lms-supplier-message"
-	EventNameSendNotification     EventName = "send-notification"
-	EventNameCheckAvailability    EventName = "check-availability"
+	EventNameSupplierAdded          EventName = "supplier-added"
+	EventNameSupplierMoved          EventName = "supplier-moved"
+	EventNameRequestTerminated      EventName = "request-terminated"
+	EventNameRequestReceived        EventName = "request-received"
+	EventNameLocateSuppliers        EventName = "locate-suppliers"
+	EventNameSelectSupplier         EventName = "select-supplier"
+	EventNameSupplierMsgReceived    EventName = "supplier-msg-received"
+	EventNameMessageRequester       EventName = "message-requester"
+	EventNameRequesterMsgReceived   EventName = "requester-msg-received"
+	EventNameMessageSupplier        EventName = "message-supplier"
+	EventNameConfirmRequesterMsg    EventName = "confirm-requester-msg"
+	EventNameConfirmSupplierMsg     EventName = "confirm-supplier-msg"
+	EventNameInvokeAction           EventName = "invoke-action"
+	EventNamePatronRequestMessage   EventName = "patron-request-message"
+	EventNameIllRequesterMessage    EventName = "ill-requester-message"
+	EventNameIllSupplierMessage     EventName = "ill-supplier-message"
+	EventNameLmsRequesterMessage    EventName = "lms-requester-message"
+	EventNameLmsSupplierMessage     EventName = "lms-supplier-message"
+	EventNameSendNotification       EventName = "send-notification"
+	EventNameCheckAvailability      EventName = "check-availability"
+	EventNameInvokeBatchAction      EventName = "invoke-batch-action"
+	EventNameInvokeBackgroundAction EventName = "invoke-background-action"
 )
 
 type Signal string
@@ -93,12 +105,17 @@ type CommonEventData struct {
 	Action          *pr_db.PatronRequestAction `json:"action,omitempty"`
 	ActionResult    *ActionResult              `json:"actionResult,omitempty"`
 	Notification    *pr_db.Notification        `json:"notification,omitempty"`
+	BatchActionData *BatchActionData           `json:"batchActionData,omitempty"`
 }
 
 type ActionResult struct {
 	Outcome          string  `json:"outcome"`
 	ToState          *string `json:"toState,omitempty"`
 	ChildActionError *string `json:"childActionError,omitempty"`
+	// ContinuationAllowed records a tolerated non-success result after the
+	// request update commits. Request-update failures never set this flag;
+	// task-processing and child-chain errors are checked separately.
+	ContinuationAllowed bool `json:"continuationAllowed,omitempty"`
 }
 
 type EventError struct {
@@ -122,6 +139,13 @@ type NotifyData struct {
 	Target SignalTarget `json:"target"`
 }
 
+type BatchActionData struct {
+	ActionName string `json:"actionName"`
+	Selector   string `json:"selector"`
+	TaskId     string `json:"taskId"`
+	Owner      string `json:"owner"`
+}
+
 func NewErrorResult(message string, cause string) (EventStatus, *EventResult) {
 	return EventStatusError, &EventResult{
 		CommonEventData: CommonEventData{
@@ -142,4 +166,17 @@ func NewProblemResult(kind string, details string) (EventStatus, *EventResult) {
 			},
 		},
 	}
+}
+
+const MUST_LOCATE = "mustLocate"
+
+type DuplicateCheck struct {
+	Enabled                bool                  `json:"enabled"`
+	LookupParams           *catalog.LookupParams `json:"lookupParams"`
+	WindowHours            *int32                `json:"windowHours"`
+	CutoffTime             *string               `json:"cutoffTime"`
+	Duplicate              bool                  `json:"duplicate"`
+	MatchedTransactionId   *string               `json:"matchedTransactionId,omitempty"`
+	MatchedPatronRequestId *string               `json:"matchedPatronRequestId,omitempty"`
+	MatchedValues          *catalog.LookupParams `json:"matchedValues,omitempty"`
 }

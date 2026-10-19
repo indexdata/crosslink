@@ -15,13 +15,14 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/shim"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-var SUPPLIER_PATRON_PATTERN = utils.GetEnv("SUPPLIER_PATRON_PATTERN", "%v_user")
+var SUPPLIER_PATRON_PATTERN = common.GetDeprecatedEnv("SUPPLIER_PATRON_PATTERN", "%v_user", "use illConfig.supplierPatronPattern in the supplier directory entry instead")
 
 const COMP_MESSAGE = "pr_massage_handler"
 const iso18626UserFallback = "iso18626@unknown"
@@ -62,7 +63,7 @@ func (m *PatronRequestMessageHandler) runAutoActionsOnStateEntry(ctx common.Exte
 }
 
 func (m *PatronRequestMessageHandler) applyEventTransition(pr pr_db.PatronRequest, eventName MessageEvent) (pr_db.PatronRequest, bool, bool, error) {
-	actionMapping, err := m.actionMappingService.GetActionMapping(pr)
+	actionMapping, err := m.actionMappingService.GetActionMapping(pr.IllRequest)
 	if err != nil {
 		return pr, false, false, err
 	}
@@ -72,21 +73,24 @@ func (m *PatronRequestMessageHandler) applyEventTransition(pr pr_db.PatronReques
 	}
 	if hasTransition && transitionState != pr.State {
 		pr.State = transitionState
-		if config, configOk := actionMapping.getStateConfig(pr); configOk && config.terminal {
-			pr.TerminalState = true
+		if config, configOk := actionMapping.getStateConfig(pr); configOk {
+			if config.terminal {
+				pr.TerminalState = true
+			}
+			pr.NeedsAttention = config.needsAttention
 		}
 		return pr, true, true, nil
 	}
 	return pr, false, true, nil
 }
 
-func (m *PatronRequestMessageHandler) HandleMessage(ctx common.ExtendedContext, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
+func (m *PatronRequestMessageHandler) HandleMessage(ctx common.ExtendedContext, msg *iso18626.ISO18626Message, recipientPeer *ill_db.Peer) (*iso18626.ISO18626Message, error) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(COMP_MESSAGE))
 	if msg == nil {
 		return nil, errors.New("cannot process nil message")
 	}
 
-	_, response, _, handleErr := m.handlePatronRequestMessage(ctx, msg)
+	_, response, _, handleErr := m.handlePatronRequestMessageWithPeer(ctx, msg, recipientPeer)
 	return response, handleErr
 }
 
@@ -148,6 +152,10 @@ func taskParentID(task *events.Event) *string {
 }
 
 func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.ExtendedContext, msg *iso18626.ISO18626Message) (events.EventStatus, *iso18626.ISO18626Message, pr_db.PatronRequest, error) {
+	return m.handlePatronRequestMessageWithPeer(ctx, msg, nil)
+}
+
+func (m *PatronRequestMessageHandler) handlePatronRequestMessageWithPeer(ctx common.ExtendedContext, msg *iso18626.ISO18626Message, recipientPeer *ill_db.Peer) (events.EventStatus, *iso18626.ISO18626Message, pr_db.PatronRequest, error) {
 	if msg.SupplyingAgencyMessage != nil {
 		pr, err := m.prRepo.GetPatronRequestByIdAndSide(ctx, msg.SupplyingAgencyMessage.Header.RequestingAgencyRequestId, SideBorrowing)
 		if err != nil {
@@ -167,7 +175,7 @@ func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.Exte
 		})
 		return status, response, pr, err
 	} else if msg.Request != nil {
-		status, response, pr, err := m.handleRequestMessage(ctx, *msg.Request)
+		status, response, pr, err := m.handleRequestMessageWithPeer(ctx, *msg.Request, recipientPeer)
 		return status, response, pr, err
 	} else {
 		return events.EventStatusError, nil, pr_db.PatronRequest{}, errors.New("cannot process message without content")
@@ -176,6 +184,10 @@ func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.Exte
 
 func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.ExtendedContext, sam iso18626.SupplyingAgencyMessage, pr pr_db.PatronRequest) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	return m.handleSupplyingAgencyMessageWithParent(ctx, sam, pr, nil)
+}
+
+func isLocalSupply(pr pr_db.PatronRequest, supplierSymbol string) bool {
+	return pr.RequesterSymbol.Valid && pr.RequesterSymbol.String == supplierSymbol
 }
 
 func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx common.ExtendedContext, sam iso18626.SupplyingAgencyMessage, pr pr_db.PatronRequest, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
@@ -211,61 +223,125 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 		return createSAMResponse(sam, iso18626.TypeMessageStatusOK, nil, nil)
 	case iso18626.TypeReasonForMessageStatusChange,
 		iso18626.TypeReasonForMessageRequestResponse,
+		iso18626.TypeReasonForMessageRenewResponse,
 		iso18626.TypeReasonForMessageCancelResponse:
 		// continue to status mapping
 	default:
 		return unsupportedReason()
 	}
 
+	// Treat placeholder due dates as absent without rejecting the workflow message.
+	if sam.StatusInfo.DueDate != nil && sam.StatusInfo.DueDate.IsZero() {
+		sam.StatusInfo.DueDate = nil
+	}
 	supSymbol := sam.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + sam.Header.SupplyingAgencyId.AgencyIdValue
+	isNewSupplier := supSymbol != ":" && pr.SupplierSymbol.Valid && pr.SupplierSymbol.String != supSymbol
 	if supSymbol != ":" {
 		pr.SupplierSymbol = pgtype.Text{
 			String: supSymbol,
 			Valid:  true,
 		}
 	}
-
+	originalPr := pr
 	eventName := MessageEvent("")
-	switch sam.StatusInfo.Status {
-	case iso18626.TypeStatusExpectToSupply:
-		eventName = SupplierExpectToSupply
-	case iso18626.TypeStatusWillSupply:
-		if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse {
-			if sam.MessageInfo.AnswerYesNo != nil && *sam.MessageInfo.AnswerYesNo == iso18626.TypeYesNoY {
-				return contradictoryCancelResponse()
-			}
-			eventName = SupplierCancelRejected
-		} else if strings.Contains(sam.MessageInfo.Note, shim.RESHARE_ADD_LOAN_CONDITION) {
-			eventName = SupplierWillSupplyCond
-			setSupplierMessage(sam, &pr)
-		} else {
-			eventName = SupplierWillSupply
-			setSupplierMessage(sam, &pr)
+	var retryBibInfo *iso18626.BibliographicInfo
+	if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageRenewResponse {
+		if sam.MessageInfo.AnswerYesNo == nil {
+			return statusChangeNotAllowed()
 		}
-	case iso18626.TypeStatusLoaned:
-		err := m.saveItems(ctx, pr, sam)
-		if err != nil {
-			return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
-				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
-				ErrorValue: err.Error(),
-			}, err)
-		}
-		setSupplierMessage(sam, &pr)
-		eventName = SupplierLoaned
-	case iso18626.TypeStatusLoanCompleted, iso18626.TypeStatusCopyCompleted:
-		eventName = SupplierCompleted
-	case iso18626.TypeStatusUnfilled:
-		eventName = SupplierUnfilled
-	case iso18626.TypeStatusCancelled:
-		// Cancellation transition is accepted only for cancel-response messages.
-		if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse {
-			if sam.MessageInfo.AnswerYesNo != nil && *sam.MessageInfo.AnswerYesNo == iso18626.TypeYesNoN {
-				return contradictoryCancelResponse()
+		switch *sam.MessageInfo.AnswerYesNo {
+		case iso18626.TypeYesNoY:
+			eventName = SupplierRenewalAccepted
+			// An undated acceptance replaces the previous deadline with an open-ended loan.
+			pr.DueAt = pgtype.Timestamptz{}
+			if sam.StatusInfo.DueDate != nil {
+				pr.DueAt = pgtype.Timestamptz{Time: sam.StatusInfo.DueDate.Time, Valid: true}
 			}
-			eventName = SupplierCancelAccepted
+		case iso18626.TypeYesNoN:
+			eventName = SupplierRenewalRejected
+		default:
+			return statusChangeNotAllowed()
+		}
+		setLoanMessage(sam, &pr)
+	} else {
+		switch sam.StatusInfo.Status {
+		case iso18626.TypeStatusExpectToSupply:
+			switch {
+			case isNewSupplier && isLocalSupply(pr, supSymbol):
+				eventName = SupplierNewExpectToSupplyLocal
+			case isNewSupplier:
+				eventName = SupplierNewExpectToSupply
+			case isLocalSupply(pr, supSymbol):
+				eventName = SupplierExpectToSupplyLocal
+			default:
+				eventName = SupplierExpectToSupply
+			}
+		case iso18626.TypeStatusWillSupply:
+			if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse {
+				if sam.MessageInfo.AnswerYesNo != nil && *sam.MessageInfo.AnswerYesNo == iso18626.TypeYesNoY {
+					return contradictoryCancelResponse()
+				}
+				eventName = SupplierCancelRejected
+			} else if strings.Contains(sam.MessageInfo.Note, shim.RESHARE_ADD_LOAN_CONDITION) {
+				eventName = SupplierWillSupplyCond
+				setSupplierMessage(sam, &pr)
+			} else {
+				eventName = SupplierWillSupply
+				setSupplierMessage(sam, &pr)
+			}
+		case iso18626.TypeStatusLoaned:
+			setSupplierMessage(sam, &pr)
+			if sam.StatusInfo.DueDate != nil {
+				pr.DueAt = pgtype.Timestamptz{Time: sam.StatusInfo.DueDate.Time, Valid: true}
+			}
+			eventName = SupplierLoaned
+		case iso18626.TypeStatusRecalled, iso18626.TypeStatusOverdue:
+			if sam.StatusInfo.DueDate != nil {
+				pr.DueAt = pgtype.Timestamptz{Time: sam.StatusInfo.DueDate.Time, Valid: true}
+			}
+			eventName = SupplierOverdue
+			if sam.StatusInfo.Status == iso18626.TypeStatusRecalled {
+				eventName = SupplierRecalled
+			}
+			setLoanMessage(sam, &pr)
+		case iso18626.TypeStatusLoanCompleted, iso18626.TypeStatusCopyCompleted:
+			if sam.StatusInfo.Status == iso18626.TypeStatusCopyCompleted {
+				setSupplierMessage(sam, &pr)
+			}
+			eventName = SupplierCompleted
+			if isLocalSupply(pr, supSymbol) {
+				eventName = SupplierCompletedLocal
+			}
+		case iso18626.TypeStatusUnfilled:
+			eventName = SupplierUnfilled
+			if isLocalSupply(pr, supSymbol) {
+				eventName = SupplierUnfilledLocal
+			}
+		case iso18626.TypeStatusCancelled:
+			if reason := strings.TrimSpace(sam.MessageInfo.Note); reason != "" {
+				pr.CancellationReason = getDbText(reason)
+			}
+			if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse {
+				if sam.MessageInfo.AnswerYesNo != nil && *sam.MessageInfo.AnswerYesNo == iso18626.TypeYesNoN {
+					return contradictoryCancelResponse()
+				}
+				eventName = SupplierCancelAccepted
+			} else if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageStatusChange &&
+				isLocalSupply(pr, supSymbol) {
+				eventName = SupplierCancelledLocal
+			}
+		case iso18626.TypeStatusRetryPossible:
+			eventName = SupplierRetryConditional
+			setSupplierMessage(sam, &pr)
+			// later, we can use MessageInfo.Note to pass bibliographic hints for the retry request
+			if sam.MessageInfo.ReasonRetry != nil && (*sam.MessageInfo.ReasonRetry).Text == string(iso18626.ReasonRetryNotFoundAsCited) &&
+				sam.DeliveryInfo != nil && sam.DeliveryInfo.ItemId != "" {
+				retryBibInfo = &iso18626.BibliographicInfo{
+					SupplierUniqueRecordId: sam.DeliveryInfo.ItemId,
+				}
+			}
 		}
 	}
-
 	if eventName == "" {
 		return statusChangeNotAllowed()
 	}
@@ -279,6 +355,34 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	}
 	if !eventDefined {
 		return statusChangeNotAllowed()
+	}
+	// Transitionless recall events acknowledge duplicates and late messages without
+	// replacing the recall deadline/status or reopening a returned loan.
+	if !stateChanged && (eventName == SupplierRecalled ||
+		(originalPr.State == BorrowerStateRecalled && (eventName == SupplierOverdue ||
+			eventName == SupplierRenewalAccepted || eventName == SupplierRenewalRejected))) {
+		updatedPr = originalPr
+	}
+	if eventName == SupplierLoaned {
+		err = m.saveItems(ctx, pr, sam)
+		if err != nil {
+			return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+				ErrorValue: err.Error(),
+			}, err)
+		}
+	}
+	if stateChanged &&
+		(eventName == SupplierCompletedLocal ||
+			eventName == SupplierCancelledLocal ||
+			eventName == SupplierUnfilledLocal) {
+		ctx.Logger().Warn("ignoring transition configured for local audit event",
+			"event", eventName, "state", pr.State)
+		updatedPr = pr
+		stateChanged = false
+	}
+	if retryBibInfo != nil {
+		updatedPr.RetryBibInfo = retryBibInfo
 	}
 	return m.updatePatronRequestAndCreateSamResponse(ctx, updatedPr, sam, stateChanged, parentEventID)
 }
@@ -349,6 +453,10 @@ func createRequestResponse(request iso18626.Request, messageStatus iso18626.Type
 }
 
 func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedContext, request iso18626.Request) (events.EventStatus, *iso18626.ISO18626Message, pr_db.PatronRequest, error) {
+	return m.handleRequestMessageWithPeer(ctx, request, nil)
+}
+
+func (m *PatronRequestMessageHandler) handleRequestMessageWithPeer(ctx common.ExtendedContext, request iso18626.Request, recipientPeer *ill_db.Peer) (events.EventStatus, *iso18626.ISO18626Message, pr_db.PatronRequest, error) {
 	raRequestId := request.Header.RequestingAgencyRequestId
 	if raRequestId == "" {
 		status, response, err := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
@@ -380,12 +488,33 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 			})
 		return status, response, existingPr, handleErr
 	}
-	pr, err := m.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams{
+	stateModelName, actionMapping, err := m.actionMappingService.ResolveActionMapping(request)
+	if err != nil {
+		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+			ErrorValue: err.Error(),
+		}, err)
+		return status, response, pr_db.PatronRequest{}, handleErr
+	}
+	lenderInitialState, ok := actionMapping.GetInitialState(SideLending)
+	if !ok {
+		internalErr := fmt.Errorf("no initial state defined for lender side")
+		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+			ErrorValue: internalErr.Error(),
+		}, internalErr)
+		return status, response, pr_db.PatronRequest{}, handleErr
+	}
+	supplierPatronPattern := SUPPLIER_PATRON_PATTERN
+	if recipientPeer != nil {
+		supplierPatronPattern = common.IllConfigString(recipientPeer.CustomData, supplierPatronPattern, func(c dirapi.IllConfig) *string { return c.SupplierPatronPattern })
+	}
+	pr, err := CreateLendingRequest(ctx, m.prRepo, pr_db.PatronRequest{
 		ID:              uuid.NewString(),
 		CreatedAt:       pgtype.Timestamp{Valid: true, Time: time.Now()},
-		State:           LenderStateNew,
+		State:           lenderInitialState,
 		Side:            SideLending,
-		Patron:          getDbText(fmt.Sprintf(SUPPLIER_PATRON_PATTERN, request.Header.SupplyingAgencyId.AgencyIdValue)),
+		Patron:          getDbText(fmt.Sprintf(supplierPatronPattern, request.Header.SupplyingAgencyId.AgencyIdValue)),
 		RequesterSymbol: getDbText(requesterSymbol),
 		IllRequest:      request,
 		SupplierSymbol:  getDbText(supplierSymbol),
@@ -393,6 +522,8 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 		Language:        pr_db.LANGUAGE,
 		Items:           []pr_db.PrItem{},
 		TerminalState:   false,
+		NeedsAttention:  true,
+		StateModel:      stateModelName,
 	})
 	if err != nil {
 		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
@@ -477,6 +608,8 @@ func (m *PatronRequestMessageHandler) handleRequestingAgencyMessageWithParent(ct
 		}
 	case iso18626.TypeActionReceived:
 		eventName = RequesterReceived
+	case iso18626.TypeActionRenew:
+		eventName = RequesterRenew
 	case iso18626.TypeActionShippedReturn:
 		eventName = RequesterShippedReturn
 	default:
@@ -560,13 +693,20 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ct
 }
 
 func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) error {
-	result, _, _ := common.UnpackItemsNote(sam.MessageInfo.Note)
-	for _, item := range result {
+	result, startIdx, endIdx := common.UnpackItemsNote(sam.MessageInfo.Note)
+	if len(result) == 0 {
+		if startIdx >= 0 || endIdx >= 0 {
+			return errors.New("malformed multiple items note: start and end markers must both be present in order")
+		}
+		_, err := ensureFallbackRequesterItem(ctx, m.prRepo, pr)
+		return err
+	}
+	for index, item := range result {
 		var loopErr error
 		if len(item) == 1 && item[0] != "" {
-			loopErr = m.saveItem(ctx, pr.ID, &item[0], nil, nil)
+			loopErr = m.saveItem(ctx, pr.ID, requesterItemBarcode(pr.ID, index, len(result)), &item[0], nil, nil)
 		} else if len(item) == 3 {
-			loopErr = m.saveItem(ctx, pr.ID, &item[0], &item[1], &item[2])
+			loopErr = m.saveItem(ctx, pr.ID, requesterItemBarcode(pr.ID, index, len(result)), &item[0], &item[1], &item[2])
 		} else {
 			loopErr = errors.New("incorrect item param count: " + strconv.Itoa(len(item)))
 		}
@@ -577,10 +717,7 @@ func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr p
 	return nil
 }
 
-func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId string, supplierBarcode *string, callNumber *string, name *string) error {
-	// not using supplier barcode as it may not be unique, using prId instead to link item to request, as
-	// each request can have only one item without barcode and prId is unique for each request
-	requesterBarcode := prId
+func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId string, requesterBarcode string, supplierBarcode *string, callNumber *string, name *string) error {
 	_, err := m.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
 		ID:         uuid.NewString(),
 		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
@@ -596,26 +733,26 @@ func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId 
 func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) error {
 	supSymbol, reqSymbol := getSymbolsFromHeader(sam.Header)
 	var note pgtype.Text
-	noteText := stripReShareConditionMarkers(stripItemsNotePayload(sam.MessageInfo.Note))
+	noteText := shim.StripReShareConditionMarkers(common.StripItemsNotePayload(sam.MessageInfo.Note))
 	if noteText != "" {
 		note = getDbText(noteText)
 	}
 	var condition pgtype.Text
 	if sam.DeliveryInfo != nil && sam.DeliveryInfo.LoanCondition != nil {
-		if sam.DeliveryInfo.LoanCondition.Text != "" {
-			condition = getDbText(sam.DeliveryInfo.LoanCondition.Text)
+		if value := strings.TrimSpace(sam.DeliveryInfo.LoanCondition.Text); value != "" {
+			condition = getDbText(value)
 		}
 	}
 
 	var currency pgtype.Text
 	var cost pgtype.Numeric
-	if sam.MessageInfo.OfferedCosts != nil {
+	if hasNonZeroCost(sam.MessageInfo.OfferedCosts) {
 		var err error
 		cost, currency, err = toNotificationCost(sam.MessageInfo.OfferedCosts)
 		if err != nil {
 			return err
 		}
-	} else if sam.DeliveryInfo != nil && sam.DeliveryInfo.DeliveryCosts != nil {
+	} else if sam.DeliveryInfo != nil && hasNonZeroCost(sam.DeliveryInfo.DeliveryCosts) {
 		var err error
 		cost, currency, err = toNotificationCost(sam.DeliveryInfo.DeliveryCosts)
 		if err != nil {
@@ -646,32 +783,8 @@ func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.Extende
 	return err
 }
 
-func stripItemsNotePayload(note string) string {
-	if note == "" {
-		return ""
-	}
-	_, startIdx, endIdx := common.UnpackItemsNote(note)
-	if startIdx < 0 || endIdx < 0 {
-		return strings.TrimSpace(note)
-	}
-	before := strings.TrimSpace(note[:startIdx])
-	afterStart := endIdx + len(common.MULTIPLE_ITEMS_END)
-	after := ""
-	if afterStart < len(note) {
-		after = strings.TrimSpace(note[afterStart:])
-	}
-	switch {
-	case before != "" && after != "":
-		return before + "\n" + after
-	case before != "":
-		return before
-	default:
-		return after
-	}
-}
-
 func (m *PatronRequestMessageHandler) extractRamNotifications(ctx common.ExtendedContext, pr pr_db.PatronRequest, ram iso18626.RequestingAgencyMessage) error {
-	noteText := stripReShareConditionMarkers(ram.Note)
+	noteText := shim.StripReShareConditionMarkers(ram.Note)
 	if noteText == "" {
 		return nil
 	}
@@ -692,12 +805,8 @@ func (m *PatronRequestMessageHandler) extractRamNotifications(ctx common.Extende
 	return err
 }
 
-func stripReShareConditionMarkers(note string) string {
-	cleaned := note
-	cleaned = strings.ReplaceAll(cleaned, shim.RESHARE_ADD_LOAN_CONDITION, "")
-	cleaned = strings.ReplaceAll(cleaned, shim.RESHARE_LOAN_CONDITION_AGREE, "")
-	cleaned = strings.ReplaceAll(cleaned, shim.RESHARE_LOAN_CONDITION_REJECT, "")
-	return strings.TrimSpace(cleaned)
+func hasNonZeroCost(value *iso18626.TypeCosts) bool {
+	return value != nil && value.MonetaryValue.Base != 0
 }
 
 func toNotificationCost(value *iso18626.TypeCosts) (pgtype.Numeric, pgtype.Text, error) {
@@ -716,11 +825,6 @@ func toNotificationCost(value *iso18626.TypeCosts) (pgtype.Numeric, pgtype.Text,
 
 func (m *PatronRequestMessageHandler) extractRequestNotifications(ctx common.ExtendedContext, pr pr_db.PatronRequest, request iso18626.Request) error {
 	supSymbol, reqSymbol := getSymbolsFromHeader(request.Header)
-	var note pgtype.Text
-	if request.ServiceInfo != nil && request.ServiceInfo.Note != "" {
-		note = getDbText(request.ServiceInfo.Note)
-	}
-
 	var currency pgtype.Text
 	var cost pgtype.Numeric
 	if request.BillingInfo != nil && request.BillingInfo.MaximumCosts != nil {
@@ -731,18 +835,17 @@ func (m *PatronRequestMessageHandler) extractRequestNotifications(ctx common.Ext
 		}
 	}
 
-	if !note.Valid && !cost.Valid {
+	if !cost.Valid {
 		return nil
 	}
 
 	_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
 		ID:         uuid.NewString(),
 		PrID:       pr.ID,
-		Note:       note,
 		FromSymbol: reqSymbol,
 		ToSymbol:   supSymbol,
 		Direction:  pr_db.NotificationDirectionReceived,
-		Kind:       inferNotificationKind(note.Valid, false, cost.Valid),
+		Kind:       pr_db.NotificationKindCondition,
 		Currency:   currency,
 		Cost:       cost,
 		CreatedAt: pgtype.Timestamp{

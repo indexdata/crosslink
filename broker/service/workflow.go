@@ -39,7 +39,12 @@ func CreateWorkflowManager(eventBus events.EventBus, illRepo ill_db.IllRepo, con
 func (w *WorkflowManager) RequestReceived(ctx common.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	common.Must(ctx, func() (string, error) {
-		return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameLocateSuppliers, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+		if event.EventData.CustomData[events.MUST_LOCATE] == true {
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameLocateSuppliers, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+		} else {
+			// call message supplier directly, skipping locate suppliers step
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+		}
 	}, "")
 }
 
@@ -57,15 +62,19 @@ func (w *WorkflowManager) OnLocateSupplierComplete(ctx common.ExtendedContext, e
 func (w *WorkflowManager) OnCheckAvailabilityComplete(ctx common.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	common.Must(ctx, func() (string, error) {
-		if event.EventStatus != events.EventStatusSuccess {
+		availabilityValue, hasAvailabilityResult := event.ResultData.CustomData[AvailabilityKey].(string)
+		if event.EventStatus != events.EventStatusSuccess && !hasAvailabilityResult {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 		}
-		skipped, ok := event.ResultData.CustomData["skipped"].(bool)
-		if !ok {
-			return "", fmt.Errorf("failed to detect if supplier is skipped by availability check")
+		if !hasAvailabilityResult {
+			return "", fmt.Errorf("failed to detect supplier availability")
 		}
-		if skipped {
+		availability := Availability(availabilityValue)
+		if availability == AvailabilityUnavailable {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+		}
+		if availability != AvailabilityAvailable && availability != AvailabilityUnknown {
+			return "", fmt.Errorf("unexpected supplier availability %q", availability)
 		}
 		id, err := w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 		if err != nil {
@@ -280,23 +289,13 @@ func (w *WorkflowManager) shouldForwardMessage(ctx common.ExtendedContext, event
 }
 
 func (w *WorkflowManager) skipAllSuppliersByStatus(ctx common.ExtendedContext, illTransId string, supplierStatus pgtype.Text) {
-	suppliers, err := w.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
-		IllTransactionID: illTransId,
-		SupplierStatus:   supplierStatus,
-	})
-	if err != nil {
-		ctx.Logger().Error("could not read supplier", "error", err)
-		return
-	}
-	if len(suppliers) > 0 {
-		for _, supplier := range suppliers {
-			supplier.SupplierStatus = ill_db.SupplierStateSkippedPg
-			_, err = w.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(supplier))
-			if err != nil {
-				ctx.Logger().Error("could not update selected supplier status", "error", err)
-				return
-			}
+	if err := w.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		if _, err := repo.GetIllTransactionByIdForUpdate(ctx, illTransId); err != nil {
+			return err
 		}
+		return repo.SkipLocatedSuppliersByIllTransactionAndStatus(ctx, illTransId, supplierStatus)
+	}); err != nil {
+		ctx.Logger().Error("could not update supplier status", "error", err)
 	}
 }
 

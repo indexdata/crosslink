@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -21,12 +22,10 @@ import (
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/indexdata/crosslink/testutil"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 var basePath = "/pullslips"
@@ -37,14 +36,7 @@ func TestMain(m *testing.M) {
 	ctx := context.Background()
 	app.DB_PROVISION = true
 
-	pgContainer, err := postgres.Run(ctx, "postgres",
-		postgres.WithDatabase("crosslink"),
-		postgres.WithUsername("crosslink"),
-		postgres.WithPassword("crosslink"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(5*time.Second)),
-	)
+	pgContainer, err := testutil.RunPostgres(ctx)
 	test.Expect(err, "failed to start db container")
 
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
@@ -68,7 +60,7 @@ func TestMain(m *testing.M) {
 	defer cancel()
 	code := m.Run()
 
-	test.Expect(pgContainer.Terminate(ctx), "failed to stop db container")
+	test.Expect(test.TerminatePGContainer(ctx, pgContainer), "failed to stop db container")
 	os.Exit(code)
 }
 
@@ -115,6 +107,30 @@ func TestCreateSinglePullSlip(t *testing.T) {
 		Items:         []pr_db.PrItem{},
 		TerminalState: false,
 	})
+
+	for _, tmpl := range prservice.GetStateModelTemplateDefaults() {
+		if slices.Contains(tmpl.Labels, "pullslip-pdf") {
+			_, inErr := prRepo.SaveTemplate(appCtx, pr_db.SaveTemplateParams{
+				ID:          "pullslip-pdf-1",
+				Owner:       supSymbol,
+				Title:       tmpl.Title,
+				Purpose:     string(tmpl.Purpose),
+				Body:        tmpl.Body,
+				ContentType: string(tmpl.ContentType),
+				Labels:      tmpl.Labels,
+				Audience: pgtype.Text{
+					String: string(*tmpl.Audience),
+					Valid:  true,
+				},
+				CreatedAt: pgtype.Timestamp{
+					Time:  time.Now(),
+					Valid: true,
+				},
+			})
+			assert.NoError(t, inErr, "failed to save template")
+		}
+	}
+
 	assert.NoError(t, err)
 
 	// Create pull slip

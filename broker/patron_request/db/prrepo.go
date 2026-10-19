@@ -1,8 +1,11 @@
 package pr_db
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 
+	"github.com/indexdata/cql-go/pgcql"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/jackc/pgx/v5"
@@ -11,14 +14,17 @@ import (
 )
 
 type PrRepo interface {
+	GetLendingPredecessorForUpdate(ctx common.ExtendedContext, params GetLendingPredecessorForUpdateParams) (PatronRequest, error)
 	repo.Transactional[PrRepo]
 	GetPatronRequestById(ctx common.ExtendedContext, id string) (PatronRequest, error)
 	GetPatronRequestSearchView(ctx common.ExtendedContext, id string) (PatronRequestSearchView, error)
 	GetPatronRequestByIdForUpdate(ctx common.ExtendedContext, id string) (PatronRequest, error)
 	GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id string, side PatronRequestSide) (PatronRequest, error)
-	ListPatronRequests(ctx common.ExtendedContext, args ListPatronRequestsParams, cql *string) ([]PatronRequest, int64, error)
-	ListPatronRequestsSearchView(ctx common.ExtendedContext, args ListPatronRequestsParams, cql *string) ([]PatronRequestSearchView, int64, error)
+	ListPatronRequests(ctx common.ExtendedContext, args ListPatronRequestsParams, pgcql pgcql.Query) ([]PatronRequest, int64, error)
+	ListPatronRequestsSearchView(ctx common.ExtendedContext, args ListPatronRequestsParams, pgcql pgcql.Query) ([]PatronRequestSearchView, int64, error)
+	GetPatronRequestsFacets(ctx common.ExtendedContext, facetFields []string, pgcql pgcql.Query) ([]Facet, error)
 	UpdatePatronRequest(ctx common.ExtendedContext, params UpdatePatronRequestParams) (PatronRequest, error)
+	UpdatePatronRequestInternalNote(ctx common.ExtendedContext, id string, internalNote pgtype.Text) error
 	CreatePatronRequest(ctx common.ExtendedContext, params CreatePatronRequestParams) (PatronRequest, error)
 	DeletePatronRequest(ctx common.ExtendedContext, id string) error
 	GetLendingRequestBySupplierSymbolAndRequesterReqId(ctx common.ExtendedContext, supplierSymbol string, requesterReId string) (PatronRequest, error)
@@ -26,12 +32,33 @@ type PrRepo interface {
 	SaveItem(ctx common.ExtendedContext, params SaveItemParams) (Item, error)
 	GetItemById(ctx common.ExtendedContext, id string) (Item, error)
 	GetItemsByPrId(ctx common.ExtendedContext, prId string) ([]Item, error)
+	SetItemLmsRequestID(ctx common.ExtendedContext, params SetItemLmsRequestIDParams) error
+	SetItemLmsStatus(ctx common.ExtendedContext, params SetItemLmsStatusParams) error
 	SaveNotification(ctx common.ExtendedContext, params SaveNotificationParams) (Notification, error)
 	GetNotificationById(ctx common.ExtendedContext, id string) (Notification, error)
 	GetNotificationsByPrId(ctx common.ExtendedContext, params GetNotificationsByPrIdParams) ([]Notification, int64, error)
 	MarkConditionNotificationsReceipt(ctx common.ExtendedContext, params MarkConditionNotificationsReceiptParams) error
 	DeleteNotificationById(ctx common.ExtendedContext, id string) error
 	DeleteItemById(ctx common.ExtendedContext, id string) error
+
+	SaveTemplate(ctx common.ExtendedContext, params SaveTemplateParams) (Template, error)
+	GetTemplateByIdAndOwner(ctx common.ExtendedContext, id string, owner string) (Template, error)
+	GetTemplatesByOwner(ctx common.ExtendedContext, params GetTemplatesByOwnerParams) ([]Template, int64, error)
+	GetTemplateByPurposeAudienceLabelAndOwner(ctx common.ExtendedContext, params GetTemplateByPurposeAudienceLabelAndOwnerParams) (Template, error)
+	DeleteTemplateByIdAndOwner(ctx common.ExtendedContext, id string, owner string) error
+}
+
+var ErrUnsupportedFacet = errors.New("unsupported facet field")
+
+type Facet struct {
+	Field  string
+	Values []FacetValue
+}
+
+type FacetValue struct {
+	Value string
+	Label *string
+	Count int64
 }
 
 type PgPrRepo struct {
@@ -89,8 +116,8 @@ func (r *PgPrRepo) GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id st
 	return pr, nil
 }
 
-func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPatronRequestsParams, cql *string) ([]PatronRequest, int64, error) {
-	rows, fullCount, err := r.listPatronRequestRows(ctx, params, cql)
+func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPatronRequestsParams, pgcql pgcql.Query) ([]PatronRequest, int64, error) {
+	rows, fullCount, err := r.listPatronRequestRows(ctx, params, pgcql)
 	if err != nil {
 		return nil, fullCount, err
 	}
@@ -101,8 +128,42 @@ func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPat
 	return list, fullCount, nil
 }
 
-func (r *PgPrRepo) ListPatronRequestsSearchView(ctx common.ExtendedContext, params ListPatronRequestsParams, cql *string) ([]PatronRequestSearchView, int64, error) {
-	rows, fullCount, err := r.listPatronRequestRows(ctx, params, cql)
+func (r *PgPrRepo) GetPatronRequestsFacets(ctx common.ExtendedContext, facetFields []string, pgcql pgcql.Query) ([]Facet, error) {
+	var facets []Facet
+	for _, field := range facetFields {
+		switch field {
+		case "requester_symbol", "supplier_symbol":
+			rows, err := r.queries.GetPatronRequestsFacetsCql(ctx, r.GetConnOrTx(), field, pgcql)
+			if err != nil {
+				return nil, err
+			}
+			var values []FacetValue
+			for _, row := range rows {
+				if row.Value.Valid {
+					value := FacetValue{
+						Value: row.Value.String,
+						Count: row.Count,
+					}
+					if row.Label.Valid {
+						label := row.Label.String
+						value.Label = &label
+					}
+					values = append(values, value)
+				}
+			}
+			facets = append(facets, Facet{
+				Field:  field,
+				Values: values,
+			})
+		default:
+			return nil, fmt.Errorf("%w: %s", ErrUnsupportedFacet, field)
+		}
+	}
+	return facets, nil
+}
+
+func (r *PgPrRepo) ListPatronRequestsSearchView(ctx common.ExtendedContext, params ListPatronRequestsParams, pgcql pgcql.Query) ([]PatronRequestSearchView, int64, error) {
+	rows, fullCount, err := r.listPatronRequestRows(ctx, params, pgcql)
 	if err != nil {
 		return nil, fullCount, err
 	}
@@ -113,8 +174,9 @@ func (r *PgPrRepo) ListPatronRequestsSearchView(ctx common.ExtendedContext, para
 	return list, fullCount, nil
 }
 
-func (r *PgPrRepo) listPatronRequestRows(ctx common.ExtendedContext, params ListPatronRequestsParams, cql *string) ([]ListPatronRequestsRow, int64, error) {
-	rows, explainResult, err := r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, cql, r.explainAnalyze)
+func (r *PgPrRepo) listPatronRequestRows(ctx common.ExtendedContext, params ListPatronRequestsParams, pgcql pgcql.Query) ([]ListPatronRequestsRow, int64, error) {
+	db := r.GetConnOrTx()
+	rows, explainResult, err := r.queries.ListPatronRequestsCql(ctx, db, params, pgcql, r.explainAnalyze)
 	var fullCount int64
 	if err == nil {
 		for _, line := range explainResult {
@@ -125,7 +187,7 @@ func (r *PgPrRepo) listPatronRequestRows(ctx common.ExtendedContext, params List
 		} else {
 			params.Limit = 1
 			params.Offset = 0
-			countRows, _, countErr := r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, cql, false)
+			countRows, _, countErr := r.queries.ListPatronRequestsCql(ctx, db, params, pgcql, false)
 			err = countErr
 			if err == nil && len(countRows) > 0 {
 				fullCount = countRows[0].FullCount
@@ -137,25 +199,30 @@ func (r *PgPrRepo) listPatronRequestRows(ctx common.ExtendedContext, params List
 
 func patronRequestFromSearchView(v PatronRequestSearchView) PatronRequest {
 	return PatronRequest{
-		ID:                v.ID,
-		CreatedAt:         v.CreatedAt,
-		IllRequest:        v.IllRequest,
-		State:             v.State,
-		Side:              v.Side,
-		Patron:            v.Patron,
-		RequesterSymbol:   v.RequesterSymbol,
-		SupplierSymbol:    v.SupplierSymbol,
-		Tenant:            v.Tenant,
-		RequesterReqID:    v.RequesterReqID,
-		NeedsAttention:    v.NeedsAttention,
-		LastAction:        v.LastAction,
-		LastActionOutcome: v.LastActionOutcome,
-		LastActionResult:  v.LastActionResult,
-		Language:          v.Language,
-		Items:             v.Items,
-		TerminalState:     v.TerminalState,
-		UpdatedAt:         v.UpdatedAt,
-		IllResponse:       v.IllResponse,
+		ID:                        v.ID,
+		CreatedAt:                 v.CreatedAt,
+		IllRequest:                v.IllRequest,
+		State:                     v.State,
+		Side:                      v.Side,
+		Patron:                    v.Patron,
+		RequesterSymbol:           v.RequesterSymbol,
+		SupplierSymbol:            v.SupplierSymbol,
+		Tenant:                    v.Tenant,
+		RequesterReqID:            v.RequesterReqID,
+		NeedsAttention:            v.NeedsAttention,
+		LastAction:                v.LastAction,
+		LastActionOutcome:         v.LastActionOutcome,
+		LastActionResult:          v.LastActionResult,
+		Language:                  v.Language,
+		Items:                     v.Items,
+		TerminalState:             v.TerminalState,
+		UpdatedAt:                 v.UpdatedAt,
+		IllResponse:               v.IllResponse,
+		InternalNote:              v.InternalNote,
+		StateModel:                v.StateModel,
+		RequesterPickupLocationID: v.RequesterPickupLocationID,
+		CancellationReason:        v.CancellationReason,
+		DueAt:                     v.DueAt,
 	}
 }
 
@@ -163,7 +230,17 @@ func (r *PgPrRepo) UpdatePatronRequest(ctx common.ExtendedContext, params Update
 	row, err := r.queries.UpdatePatronRequest(ctx, r.GetConnOrTx(), params)
 	return row.PatronRequest, err
 }
+
+func (r *PgPrRepo) UpdatePatronRequestInternalNote(ctx common.ExtendedContext, id string, internalNote pgtype.Text) error {
+	return r.queries.UpdatePatronRequestInternalNote(ctx, r.GetConnOrTx(), UpdatePatronRequestInternalNoteParams{
+		ID:           id,
+		InternalNote: internalNote,
+	})
+}
 func (r *PgPrRepo) CreatePatronRequest(ctx common.ExtendedContext, params CreatePatronRequestParams) (PatronRequest, error) {
+	if !params.UpdatedAt.Valid {
+		params.UpdatedAt = params.CreatedAt
+	}
 	row, err := r.queries.CreatePatronRequest(ctx, r.GetConnOrTx(), params)
 	return row.PatronRequest, err
 }
@@ -209,6 +286,27 @@ func (r *PgPrRepo) GetItemsByPrId(ctx common.ExtendedContext, prId string) ([]It
 	return list, err
 }
 
+func (r *PgPrRepo) SetItemLmsRequestID(ctx common.ExtendedContext, params SetItemLmsRequestIDParams) error {
+	rows, err := r.queries.SetItemLmsRequestID(ctx, r.GetConnOrTx(), params)
+	if err != nil {
+		return err
+	}
+	if rows != 1 {
+		return fmt.Errorf("expected to update one item, updated %d", rows)
+	}
+	return nil
+}
+
+// SetItemLmsStatus persists confirmed LMS progress without changing item metadata.
+// It returns pgx.ErrNoRows if the item no longer exists.
+func (r *PgPrRepo) SetItemLmsStatus(ctx common.ExtendedContext, params SetItemLmsStatusParams) error {
+	rows, err := r.queries.SetItemLmsStatus(ctx, r.GetConnOrTx(), params)
+	if err == nil && rows == 0 {
+		return pgx.ErrNoRows
+	}
+	return err
+}
+
 func (r *PgPrRepo) SaveNotification(ctx common.ExtendedContext, params SaveNotificationParams) (Notification, error) {
 	row, err := r.queries.SaveNotification(ctx, r.GetConnOrTx(), params)
 	return row.Notification, err
@@ -251,4 +349,50 @@ func (r *PgPrRepo) DeleteNotificationById(ctx common.ExtendedContext, id string)
 
 func (r *PgPrRepo) DeleteItemById(ctx common.ExtendedContext, id string) error {
 	return r.queries.DeleteItemById(ctx, r.GetConnOrTx(), id)
+}
+
+func (r *PgPrRepo) SaveTemplate(ctx common.ExtendedContext, params SaveTemplateParams) (Template, error) {
+	if !params.UpdatedAt.Valid {
+		params.UpdatedAt = params.CreatedAt
+	}
+	row, err := r.queries.SaveTemplate(ctx, r.GetConnOrTx(), params)
+	return row.Template, err
+}
+
+func (r *PgPrRepo) GetTemplateByIdAndOwner(ctx common.ExtendedContext, id string, owner string) (Template, error) {
+	row, err := r.queries.GetTemplateByIdAndOwner(ctx, r.GetConnOrTx(), GetTemplateByIdAndOwnerParams{
+		ID:    id,
+		Owner: owner,
+	})
+	return row.Template, err
+}
+
+func (r *PgPrRepo) GetTemplatesByOwner(ctx common.ExtendedContext, params GetTemplatesByOwnerParams) ([]Template, int64, error) {
+	rows, err := r.queries.GetTemplatesByOwner(ctx, r.GetConnOrTx(), params)
+	var list []Template
+	var fullCount int64
+	for _, row := range rows {
+		fullCount = row.FullCount
+		list = append(list, row.Template)
+	}
+	return list, fullCount, err
+}
+
+func (r *PgPrRepo) GetTemplateByPurposeAudienceLabelAndOwner(ctx common.ExtendedContext, params GetTemplateByPurposeAudienceLabelAndOwnerParams) (Template, error) {
+	row, err := r.queries.GetTemplateByPurposeAudienceLabelAndOwner(ctx, r.GetConnOrTx(), params)
+	return row.Template, err
+}
+
+func (r *PgPrRepo) DeleteTemplateByIdAndOwner(ctx common.ExtendedContext, id string, owner string) error {
+	return r.queries.DeleteTemplateByIdAndOwner(ctx, r.GetConnOrTx(), DeleteTemplateByIdAndOwnerParams{
+		ID:    id,
+		Owner: owner,
+	})
+}
+
+// GetLendingPredecessorForUpdate locks a predecessor within the same agency pair
+// and tenant. Call it inside WithTxFunc to hold the lock while linking requests.
+func (r *PgPrRepo) GetLendingPredecessorForUpdate(ctx common.ExtendedContext, params GetLendingPredecessorForUpdateParams) (PatronRequest, error) {
+	row, err := r.queries.GetLendingPredecessorForUpdate(ctx, r.GetConnOrTx(), params)
+	return row.PatronRequest, err
 }

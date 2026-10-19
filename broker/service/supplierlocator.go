@@ -1,18 +1,24 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"math"
+	"math/big"
+	"regexp"
+	"slices"
+	"strings"
 	"time"
 
 	_ "time/tzdata"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
+	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
-	"github.com/indexdata/crosslink/broker/holdings"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -21,23 +27,34 @@ const SUP_PROBLEM = "no-suppliers"
 const ROTA_INFO_KEY = "rotaInfo"
 const DATE_LAYOUT = "2006-01-02"
 
+const AvailabilityKey = "availability"
+
+// Leading zeros count toward the four integer digits; zero components are invalid.
+const lendToBorrowRatioMaxLength = 15
+
+var lendToBorrowRatioPattern = regexp.MustCompile(`^((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9])):((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9]))$`)
+
+type Availability string
+
+const (
+	AvailabilityAvailable   Availability = "available"
+	AvailabilityUnavailable Availability = "unavailable"
+	AvailabilityUnknown     Availability = "unknown"
+)
+
 type SupplierLocator struct {
-	eventBus            events.EventBus
-	illRepo             ill_db.IllRepo
-	dirAdapter          adapter.DirectoryLookupAdapter
-	holdingsAdapter     holdings.LookupAdapter
-	availabilityCreator holdings.AvailabilityCreator
-	consortiumSymbol    string
+	eventBus             events.EventBus
+	illRepo              ill_db.IllRepo
+	dirAdapter           adapter.DirectoryLookupAdapter
+	lookupAdapterFactory *LookupAdapterFactory
 }
 
-func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, holdingsAdapter holdings.LookupAdapter, availabilityCreator holdings.AvailabilityCreator, consortiumSymbol string) SupplierLocator {
+func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, lookupAdapterFactory *LookupAdapterFactory) SupplierLocator {
 	return SupplierLocator{
-		eventBus:            eventBus,
-		illRepo:             illRepo,
-		dirAdapter:          dirAdapter,
-		holdingsAdapter:     holdingsAdapter,
-		availabilityCreator: availabilityCreator,
-		consortiumSymbol:    consortiumSymbol,
+		eventBus:             eventBus,
+		illRepo:              illRepo,
+		dirAdapter:           dirAdapter,
+		lookupAdapterFactory: lookupAdapterFactory,
 	}
 }
 
@@ -56,101 +73,134 @@ func (s *SupplierLocator) CheckAvailability(ctx common.ExtendedContext, event ev
 	_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.checkAvailability)
 }
 
-func createHoldingsParams(illTransactionData ill_db.IllTransactionData) holdings.LookupParams {
-	var holdingsParams holdings.LookupParams
-	bibliographicInfo := illTransactionData.BibliographicInfo
-	holdingsParams.Identifier = bibliographicInfo.SupplierUniqueRecordId
-	holdingsParams.Title = bibliographicInfo.Title
-	for _, id := range bibliographicInfo.BibliographicItemId {
-		code := id.BibliographicItemIdentifierCode.Text
-		switch code {
-		case "ISBN":
-			holdingsParams.Isbn = id.BibliographicItemIdentifier
-		case "ISSN":
-			holdingsParams.Issn = id.BibliographicItemIdentifier
-		}
-	}
-	if illTransactionData.ServiceInfo != nil {
-		holdingsParams.ServiceType = string(illTransactionData.ServiceInfo.ServiceType)
-	}
-	return holdingsParams
-}
-
-// 3 cases to consider for getting the adapter:
-// 1. If holdingsAdapter is set from the start (for example for testing), use it directly
-// 2. If consortiumSymbol is set, lookup the peer for the consortium and use its holdings adapter
-// 3. Otherwise, use the holdings adapter for the requesting peer
-func (s *SupplierLocator) getConsortialAdapter(ctx common.ExtendedContext, requestPeer ill_db.Peer) (holdings.LookupAdapter, error) {
-	lookupAdapter := s.holdingsAdapter
-	if lookupAdapter != nil {
-		return lookupAdapter, nil
-	}
-	if s.consortiumSymbol == "" {
-		return s.availabilityCreator.GetAdapter(requestPeer)
-	}
-	peers, _, err := s.illRepo.GetCachedPeersBySymbols(ctx, []string{s.consortiumSymbol}, s.dirAdapter) // trigger caching of consortium peer
-	if err != nil {
-		return nil, fmt.Errorf("failed to lookup consortium peer: %w", err)
-	}
-	if len(peers) == 0 {
-		return nil, fmt.Errorf("no peer found for consortium symbol '%s'", s.consortiumSymbol)
-	}
-	return s.availabilityCreator.GetAdapter(peers[0])
-}
-
 func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
 	}
-	holdingsParams := createHoldingsParams(illTrans.IllTransactionData)
-	if holdingsParams.Identifier == "" && holdingsParams.Isbn == "" && holdingsParams.Issn == "" {
-		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM,
-			"ILL transaction missing bibliograhpic identifiers (SupplierUniqueRecordId/ISBN/ISSN)", nil)
+	// Every locate run builds a replacement rota. Retire any existing rota before
+	// lookup so all failure paths observe no selected supplier, while a new request
+	// simply performs a no-op update.
+	if err = s.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		if _, err := repo.GetIllTransactionByIdForUpdate(ctx, illTrans.ID); err != nil {
+			return err
+		}
+		return repo.SkipLocatedSuppliersByIllTransaction(ctx, illTrans.ID)
+	}); err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to update existing located supplier status", err)
 	}
+	lookupParams := catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.PublicationInfo)
 
 	requester, err := s.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read requester peer", err)
 	}
-	lookupAdapter, err := s.getConsortialAdapter(ctx, requester)
+
+	if s.lookupAdapterFactory == nil {
+		return events.LogErrorAndReturnResult(ctx, "lookup adapter factory not configured", fmt.Errorf("lookup adapter factory is nil"))
+	}
+
+	lookupAdapter, configPeer, err := s.lookupAdapterFactory.GetAdapterRequester(ctx, requester)
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "failed to get holdings adapter for locating suppliers", err)
+		return events.LogErrorAndReturnResult(ctx, "failed to get lookup adapter for locating suppliers", err)
 	}
 	if lookupAdapter == nil {
-		return events.LogErrorAndReturnResult(ctx, "no holdings adapter available for locating suppliers", fmt.Errorf("no adapter found"))
+		return events.LogErrorAndReturnResult(ctx, "no lookup adapter available for locating suppliers", fmt.Errorf("no adapter found"))
 	}
-	holdings, query, err := lookupAdapter.Lookup(holdingsParams)
+
+	policy, err := s.lookupAdapterFactory.loadBalancingPolicy(configPeer)
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, fmt.Sprintf("failed to locate holdings for query '%s'", query), err)
+		return events.LogErrorAndReturnResult(ctx, "failed to determine load balancing policy", err)
+	}
+
+	metadataUpdateMode := dirapi.None
+	if configPeer.CatalogConfig != nil && configPeer.CatalogConfig.MetadataUpdateMode != nil {
+		metadataUpdateMode = *configPeer.CatalogConfig.MetadataUpdateMode
+	}
+
+	var query string
+	lookupResult, err := lookupAdapter.Lookup(lookupParams)
+	if lookupResult != nil {
+		query = lookupResult.GetQuery() // get the query even if there was an error, for logging purposes
+	}
+	if err != nil {
+		if query != "" {
+			return events.LogErrorAndReturnResult(ctx, fmt.Sprintf("failed to perform lookup for query '%s'", query), err)
+		} else {
+			return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, fmt.Sprintf("failed to perform lookup: %s", err.Error()), nil)
+		}
+	}
+
+	// holdings before metadata, so that transaction is only saved if both holdings and metadata are successfully retrieved and updated
+	holdingsResult, err := lookupResult.GetHoldings()
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, fmt.Sprintf("failed to get holdings for query '%s'", query), err)
+	}
+
+	// only want metadata lookup for non-Crosslink vendors, because Crosslink is dealt with in post of patron requests.
+	if metadataUpdateMode != dirapi.None && requester.Vendor != string(dirapi.CrossLink) {
+		metadata, err := lookupResult.GetMetadata()
+		if err != nil {
+			return events.LogErrorAndReturnResult(ctx, "failed to get metadata for locating suppliers", err)
+		}
+		err = catalog.MetadataRequestUpdate(&illTrans.IllTransactionData.BibliographicInfo, metadata, lookupParams, metadataUpdateMode)
+		if err != nil {
+			return events.LogErrorAndReturnResult(ctx, "failed to update metadata for locating suppliers", err)
+		}
+		_, err = s.illRepo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
+		if err != nil {
+			return events.LogErrorAndReturnResult(ctx, "failed to save updated ILL transaction metadata", err)
+		}
+		lookupParams = catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo,
+			illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.PublicationInfo)
 	}
 	var holdingsLog = map[string]any{}
 	holdingsLog["lookupQuery"] = query
-	if len(holdings) == 0 {
-		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no holdings located",
-			map[string]any{"holdings": holdingsLog, "supplierUniqueRecordId": holdingsParams.Identifier})
+
+	// save symbols from holdings results for later use in determining if a supplier is a match for the original holdings results or
+	// just a last resort match - this is needed because last resort symbols are added to the holdings results before filtering and
+	// sorting but we want to be able to determine which suppliers are matching the original holdings results vs just matching the
+	// last resort symbols
+	var lookupSymbols []string
+	for _, holding := range holdingsResult {
+		lookupSymbols = append(lookupSymbols, holding.Symbol)
 	}
-	holdingsLog["entries"] = holdings
-	holdingsSymbols := make([]string, 0, len(holdings))
-	symbolToLocalId := make(map[string]string, len(holdings))
-	holdingSymbolCounts := make(map[string]int, len(holdings))
-	potentialSuppliers := make([]adapter.Supplier, 0, len(holdings))
-	for _, holding := range holdings {
-		holdingSymbolCounts[holding.Symbol]++
-		if holdingSymbolCounts[holding.Symbol] > 1 {
-			if holdingSymbolCounts[holding.Symbol] == 2 {
-				ctx.Logger().Warn("Multiple holdings for supplier, only first holding will be used",
-					"symbol", holding.Symbol,
-					"localIdentifier", holding.LocalIdentifier,
-					"supplierUniqueRecordId", holdingsParams.Identifier,
-					"isbn", holdingsParams.Isbn,
-					"issn", holdingsParams.Issn,
-				)
+
+	// deal with last resort symbols configured for requester or consortium (if any) - these are added as holdings results to
+	// be processed like normal holdings, but just use bibliographicInfo.SupplierUniqueRecordId for localIdentifier
+	var lenderLastResort []dirapi.SymbolProperties
+	if requester.CustomData.IllConfig != nil && requester.CustomData.IllConfig.LendersOfLastResort != nil {
+		lenderLastResort = *requester.CustomData.IllConfig.LendersOfLastResort
+	} else if configPeer.IllConfig != nil && configPeer.IllConfig.LendersOfLastResort != nil {
+		lenderLastResort = *configPeer.IllConfig.LendersOfLastResort
+	}
+	if lookupParams.Identifier != "" {
+		for _, sym := range lenderLastResort {
+			var fullSymbol string
+			if sym.Authority != "" {
+				fullSymbol = sym.Authority + ":" + sym.Symbol
+			} else {
+				fullSymbol = "ISIL:" + sym.Symbol
 			}
-			continue
+			holdingsResult = append(holdingsResult, catalog.Holding{
+				Symbol:          fullSymbol,
+				LocalIdentifier: lookupParams.Identifier,
+			})
 		}
-		holdingsSymbols = append(holdingsSymbols, holding.Symbol)
-		symbolToLocalId[holding.Symbol] = holding.LocalIdentifier
+	}
+	if len(holdingsResult) == 0 {
+		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no holdings located",
+			map[string]any{"holdings": holdingsLog, "supplierUniqueRecordId": lookupParams.Identifier})
+	}
+	holdingsLog["entries"] = holdingsResult
+
+	holdingsSymbols := make([]string, 0, len(holdingsResult))
+	holdingsBySymbol := make(map[string][]catalog.Holding, len(holdingsResult))
+	for _, holding := range holdingsResult {
+		if len(holdingsBySymbol[holding.Symbol]) == 0 {
+			holdingsSymbols = append(holdingsSymbols, holding.Symbol)
+		}
+		holdingsBySymbol[holding.Symbol] = append(holdingsBySymbol[holding.Symbol], holding)
 	}
 	peers, query, err := s.illRepo.GetCachedPeersBySymbols(ctx, holdingsSymbols, s.dirAdapter)
 	var directoryLog = map[string]any{}
@@ -158,9 +208,14 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if err != nil {
 		directoryLog["error"] = err.Error()
 	}
+	potentialSuppliers := make([]adapter.Supplier, 0, len(holdingsResult))
 	if len(peers) > 0 { //even with lookup error we may have locally cached peers
 		var dirEntriesLog = []any{}
 		for _, peer := range peers {
+			loadBalancingScore, err := getLoadBalancingScore(peer, policy)
+			if err != nil {
+				return events.LogErrorAndReturnResult(ctx, "failed to calculate supplier load balancing score", err)
+			}
 			peerSymbols, err := s.illRepo.GetSymbolsByPeerId(ctx, peer.ID)
 			if err != nil {
 				return events.LogErrorAndReturnResult(ctx, "failed to read symbols", err)
@@ -188,7 +243,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 			}
 			dirEntriesLog = append(dirEntriesLog, map[string]any{"id": peer.ID, "name": peer.Name, "symbols": symbolsLog, "branchSymbols": branchSymbolsLog})
 			for _, sym := range symbols {
-				if localId, ok := symbolToLocalId[sym]; ok {
+				if holdings, ok := holdingsBySymbol[sym]; ok {
 					local := false
 					supplierStatus := ill_db.SupplierStateNewPg
 					if illTrans.RequesterSymbol.Valid && sym == illTrans.RequesterSymbol.String {
@@ -198,15 +253,21 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 							local = true
 						}
 					}
-					potentialSuppliers = append(potentialSuppliers, adapter.Supplier{
-						PeerId:          peer.ID,
-						CustomData:      peer.CustomData,
-						LocalIdentifier: localId,
-						Ratio:           getPeerRatio(peer),
-						Symbol:          sym,
-						Local:           local,
-						SupplierStatus:  supplierStatus,
-					})
+					for _, holding := range holdings {
+						supplier := adapter.Supplier{
+							PeerId:             peer.ID,
+							CustomData:         peer.CustomData,
+							LocalIdentifier:    holding.LocalIdentifier,
+							LoadBalancingScore: loadBalancingScore,
+							Symbol:             sym,
+							Local:              local,
+							SupplierStatus:     supplierStatus,
+							Location:           holding.Location,
+							ShelvingLocation:   holding.ShelvingLocation,
+							ItemLoanPolicy:     holding.ItemLoanPolicy,
+						}
+						potentialSuppliers = append(potentialSuppliers, supplier)
+					}
 				}
 			}
 		}
@@ -218,24 +279,81 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	}
 	var rotaInfo adapter.RotaInfo
 	potentialSuppliers, rotaInfo = s.dirAdapter.FilterAndSort(ctx, potentialSuppliers, requester.CustomData,
-		illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.BillingInfo)
+		illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.BillingInfo, policy)
+	// A located supplier is symbol-level, so keep the best eligible holding for each symbol after sorting.
+	potentialSuppliers = firstSupplierPerSymbol(potentialSuppliers)
 	if len(potentialSuppliers) == 0 {
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no located suppliers match",
 			map[string]any{"holdings": holdingsLog, "directory": directoryLog, ROTA_INFO_KEY: rotaInfo})
 	}
+
+	// Appending an automatically discovered rota must serialize with manual edits
+	// too. Network discovery/ranking above runs outside this short transaction.
 	var locatedSuppliers []*ill_db.LocatedSupplier
-	for i, sup := range potentialSuppliers {
-		added, loopErr := s.addLocatedSupplier(ctx, illTrans.ID, ToInt32(i), &sup)
-		if loopErr == nil {
-			locatedSuppliers = append(locatedSuppliers, added)
-		} else {
-			ctx.Logger().Error("failed to add supplier", "error", loopErr)
+	err = s.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		if _, err := repo.GetIllTransactionByIdForUpdate(ctx, illTrans.ID); err != nil {
+			return err
 		}
+		existing, _, err := repo.GetLocatedSuppliersByIllTransaction(ctx, illTrans.ID)
+		if err != nil {
+			return err
+		}
+		ordinal, err := freeRotaOrdinal(existing)
+		if err != nil {
+			return err
+		}
+		locator := *s
+		locator.illRepo = repo
+		for pass := 1; pass <= 2; pass++ {
+			for _, sup := range potentialSuppliers {
+				matchPass := 1
+				if !slices.Contains(lookupSymbols, sup.Symbol) {
+					matchPass = 2
+				}
+				if pass != matchPass {
+					continue
+				}
+				// A manual addition made during discovery keeps its priority and identifier.
+				// Opaque requester-symbol additions are skipped rather than new.
+				if slices.ContainsFunc(existing, func(row ill_db.LocatedSupplier) bool {
+					return row.SupplierSymbol == sup.Symbol && (row.SupplierStatus == ill_db.SupplierStateNewPg ||
+						(row.SupplierStatus == ill_db.SupplierStateSkippedPg && sup.SupplierStatus == ill_db.SupplierStateSkippedPg))
+				}) {
+					continue
+				}
+				added, err := locator.addLocatedSupplier(ctx, illTrans.ID, ordinal, &sup)
+				if err != nil {
+					return err
+				}
+				locatedSuppliers = append(locatedSuppliers, added)
+				if ordinal == math.MaxInt32 {
+					return fmt.Errorf("rota ordinal space exhausted")
+				}
+				ordinal++
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to save located suppliers", err)
 	}
 
 	return events.EventStatusSuccess, &events.EventResult{
 		CustomData: map[string]any{"suppliers": locatedSuppliers, "holdings": holdingsLog, "directory": directoryLog, ROTA_INFO_KEY: rotaInfo},
 	}
+}
+
+func firstSupplierPerSymbol(suppliers []adapter.Supplier) []adapter.Supplier {
+	result := make([]adapter.Supplier, 0, len(suppliers))
+	seen := make(map[string]struct{}, len(suppliers))
+	for _, supplier := range suppliers {
+		if _, ok := seen[supplier.Symbol]; ok {
+			continue
+		}
+		seen[supplier.Symbol] = struct{}{}
+		result = append(result, supplier)
+	}
+	return result
 }
 
 func (s *SupplierLocator) addLocatedSupplier(ctx common.ExtendedContext, transId string, ordinal int32, supplier *adapter.Supplier) (*ill_db.LocatedSupplier, error) {
@@ -270,35 +388,41 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "multiple selected suppliers", map[string]any{"supplierCount": len(suppliers)})
 	}
 	sup := suppliers[0]
-	eventData := map[string]any{}
-	eventData["skipped"] = false
-	eventData["localSupplier"] = sup.LocalSupplier
+	eventData := map[string]any{
+		AvailabilityKey: string(AvailabilityUnknown),
+		"localSupplier": sup.LocalSupplier,
+	}
+	result := &events.EventResult{CustomData: eventData}
 	peer, err := s.illRepo.GetPeerById(ctx, sup.SupplierID)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not get peer", err)
 	}
-	aa, err := s.availabilityCreator.GetAdapter(peer)
+	aa, err := s.lookupAdapterFactory.GetAdapterSupplier(ctx, peer)
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "could not create availability adapter", err)
+		return events.LogErrorAndReturnExistingResult(ctx, "could not create availability adapter", err, result)
 	}
 	if aa == nil {
 		ctx.Logger().Debug("skipping availability check for supplier without availability config", "supplierSymbol", sup.SupplierSymbol)
-		return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
+		return events.EventStatusSuccess, result
 	}
 
 	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
 	}
-	holdingsParams := createHoldingsParams(illTrans.IllTransactionData)
-	holdingsParams.Identifier = sup.LocalID.String
-	results, _, err := aa.Lookup(holdingsParams)
+	lookupParams := catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.PublicationInfo)
+	lookupParams.Identifier = sup.LocalID.String
+	lookupResult, err := aa.Lookup(lookupParams)
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "failed to perform availability lookup", err)
+		return events.LogErrorAndReturnExistingResult(ctx, "failed to perform availability lookup", err, result)
 	}
-	if len(results) == 0 {
+	holdingsResults, err := lookupResult.GetHoldings()
+	if err != nil {
+		return events.LogErrorAndReturnExistingResult(ctx, "failed to get holdings for availability lookup", err, result)
+	}
+	if len(holdingsResults) == 0 {
 		ctx.Logger().Debug("availability lookup returned no results for supplier, skipping", "supplierSymbol", sup.SupplierSymbol)
-		eventData["skipped"] = true
+		eventData[AvailabilityKey] = string(AvailabilityUnavailable)
 		sup.SupplierStatus = ill_db.SupplierStateSkippedPg
 		_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(sup))
 		if err != nil {
@@ -306,28 +430,49 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 		}
 	} else {
 		ctx.Logger().Debug("availability lookup returned results for supplier, not skipping", "supplierSymbol", sup.SupplierSymbol)
+		eventData[AvailabilityKey] = string(AvailabilityAvailable)
 	}
-	return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
+	return events.EventStatusSuccess, result
 }
 
 func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
-	suppliers, err := s.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
-		IllTransactionID: event.IllTransactionID,
-		SupplierStatus:   ill_db.SupplierStateSelectedPg,
+	// Refresh outside the lock, then re-read the current rota inside the transaction.
+	suppliers, err := s.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{IllTransactionID: event.IllTransactionID, SupplierStatus: ill_db.SupplierStateNewPg})
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "could not read supplier rota", err)
+	}
+	supplierSymbols := make([]string, 0, len(suppliers))
+	for _, supplier := range suppliers {
+		supplierSymbols = append(supplierSymbols, supplier.SupplierSymbol)
+	}
+	_, _, _ = s.illRepo.GetCachedPeersBySymbols(ctx, supplierSymbols, s.dirAdapter)
+
+	var status events.EventStatus
+	var result *events.EventResult
+	err = s.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		if _, err := repo.GetIllTransactionByIdForUpdate(ctx, event.IllTransactionID); err != nil {
+			return err
+		}
+		locator := *s
+		locator.illRepo = repo
+		status, result = locator.selectSupplierLocked(ctx, event)
+		if status == events.EventStatusError {
+			return errors.New("supplier selection failed")
+		}
+		return nil
 	})
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "could not find selected suppliers", err)
+		return events.LogErrorAndReturnResult(ctx, "could not commit supplier selection", err)
 	}
-	if len(suppliers) > 0 {
-		for _, supplier := range suppliers {
-			supplier.SupplierStatus = ill_db.SupplierStateSkippedPg
-			_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(supplier))
-			if err != nil {
-				return events.LogErrorAndReturnResult(ctx, "could not update previous selected supplier", err)
-			}
-		}
+	return status, result
+}
+
+func (s *SupplierLocator) selectSupplierLocked(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+	err := s.illRepo.SkipLocatedSuppliersByIllTransactionAndStatus(ctx, event.IllTransactionID, ill_db.SupplierStateSelectedPg)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "could not update previous selected supplier", err)
 	}
-	suppliers, err = s.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
+	suppliers, err := s.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
 		IllTransactionID: event.IllTransactionID,
 		SupplierStatus:   ill_db.SupplierStateNewPg,
 	})
@@ -338,11 +483,6 @@ func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event event
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no suppliers with new status", nil)
 	}
 	eventData := map[string]any{}
-	supplierSymbols := make([]string, 0, len(suppliers))
-	for _, supplier := range suppliers {
-		supplierSymbols = append(supplierSymbols, supplier.SupplierSymbol)
-	}
-	_, _, _ = s.illRepo.GetCachedPeersBySymbols(ctx, supplierSymbols, s.dirAdapter)
 	locSup, skippedSuppliers, err := s.getNextSupplier(ctx, suppliers)
 	if len(skippedSuppliers) > 0 {
 		eventData["skippedSuppliers"] = skippedSuppliers
@@ -367,6 +507,17 @@ func (s *SupplierLocator) getNextSupplier(ctx common.ExtendedContext, suppliers 
 	skippedSuppliers := []SkippedSupplier{}
 	for _, sup := range suppliers {
 		if sup.ID != "" {
+			// The caller holds the ILL lock, but protocol handlers lock only the
+			// supplier. Re-read under that lock before either selecting or skipping
+			// so full-row saves preserve the latest protocol fields.
+			var err error
+			sup, err = s.illRepo.GetLocatedSupplierByIdForUpdate(ctx, sup.ID)
+			if err != nil {
+				return ill_db.LocatedSupplier{}, skippedSuppliers, fmt.Errorf("lock supplier candidate: %w", err)
+			}
+			if sup.SupplierStatus != ill_db.SupplierStateNewPg {
+				continue
+			}
 			peer, err := s.illRepo.GetPeerById(ctx, sup.SupplierID)
 			if err != nil {
 				return ill_db.LocatedSupplier{}, skippedSuppliers, err
@@ -383,14 +534,17 @@ func (s *SupplierLocator) getNextSupplier(ctx common.ExtendedContext, suppliers 
 				currentTime := time.Now().In(timezoneLoc)
 				skipSup := false
 				for _, closure := range *peer.CustomData.Closures {
-					if closure.StartDate != nil && closure.EndDate != nil {
-						startDate, err := getDateWithTimezone(*closure.StartDate, timezoneLoc, false)
+					if closure.StartDate.IsZero() || closure.EndDate.IsZero() {
+						continue
+					}
+					{
+						startDate, err := getDateWithTimezone(closure.StartDate.Format(time.DateOnly), timezoneLoc, false)
 						if err != nil {
 							ctx.Logger().Error("failed to parse closure start date", "error", err)
 							skipSup = true
 							continue
 						}
-						endDate, err := getDateWithTimezone(*closure.EndDate, timezoneLoc, true)
+						endDate, err := getDateWithTimezone(closure.EndDate.Format(time.DateOnly), timezoneLoc, true)
 						if err != nil {
 							ctx.Logger().Error("failed to parse closure end date", "error", err)
 							skipSup = true
@@ -439,22 +593,42 @@ func getDateWithTimezone(date string, loc *time.Location, endOfDay bool) (time.T
 	return returnDate, nil
 }
 
-func getPeerRatio(peer ill_db.Peer) float32 {
-	if peer.BorrowsCount != 0 {
-		return float32(peer.LoansCount) / float32(peer.BorrowsCount)
-	} else {
-		return math.MaxFloat32
+// getLoadBalancingScore interprets lendToBorrowRatio as desired loans:borrows.
+// Calculate exactly before conversion to avoid rounding intermediate values.
+// The bounded ratio and int32 counters keep scores within float64 range.
+func getLoadBalancingScore(peer ill_db.Peer, policy dirapi.LoadBalancingPolicy) (float64, error) {
+	if !policy.Valid() {
+		return 0, fmt.Errorf("invalid loadBalancingPolicy %q", policy)
 	}
-}
-
-func ToInt32(i int) int32 {
-	if i > math.MaxInt32 {
-		return math.MaxInt32
-	} else if i < math.MinInt32 {
-		return math.MinInt32
-	} else {
-		return int32(i)
+	desiredLoans := big.NewRat(1, 1)
+	desiredBorrows := big.NewRat(1, 1)
+	if peer.CustomData.LendToBorrowRatio != nil {
+		ratio := *peer.CustomData.LendToBorrowRatio
+		if len(ratio) > lendToBorrowRatioMaxLength {
+			return 0, fmt.Errorf("peer %s has lendToBorrowRatio exceeding %d characters", peer.ID, lendToBorrowRatioMaxLength)
+		}
+		if !lendToBorrowRatioPattern.MatchString(ratio) {
+			return 0, fmt.Errorf("peer %s has invalid lendToBorrowRatio %q", peer.ID, ratio)
+		}
+		parts := strings.Split(ratio, ":")
+		if _, ok := desiredLoans.SetString(parts[0]); !ok {
+			return 0, fmt.Errorf("peer %s has invalid lendToBorrowRatio %q", peer.ID, ratio)
+		}
+		if _, ok := desiredBorrows.SetString(parts[1]); !ok {
+			return 0, fmt.Errorf("peer %s has invalid lendToBorrowRatio %q", peer.ID, ratio)
+		}
 	}
+	targetLending := new(big.Rat).Quo(desiredLoans, desiredBorrows)
+	if policy == dirapi.LoadBalancingPolicyProportional {
+		borrows := max(int64(peer.BorrowsCount), 1)
+		actualRatio := big.NewRat(int64(peer.LoansCount), borrows)
+		score, _ := new(big.Rat).Quo(actualRatio, targetLending).Float64()
+		return score, nil
+	}
+	targetLending.Mul(targetLending, big.NewRat(int64(peer.BorrowsCount), 1))
+	score := targetLending.Sub(targetLending, big.NewRat(int64(peer.LoansCount), 1))
+	loadBalancingScore, _ := score.Float64()
+	return loadBalancingScore, nil
 }
 
 type SkippedSupplier struct {

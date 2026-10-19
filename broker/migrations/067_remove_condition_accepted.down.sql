@@ -1,0 +1,2 @@
+-- Keep WILL_SUPPLY on rollback: it is supported by the previous model too.
+-- The merged states cannot be safely separated without rewriting history.

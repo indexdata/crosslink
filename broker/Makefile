@@ -1,4 +1,5 @@
 GO ?= go
+DEPS_UPDATE_CONSTRAINTS := github.com/dprotaso/go-yit@v0.0.0-20250513224043-18a80f8f6df4
 GIT ?= git
 GOFMT ?= gofmt "-s"
 OS ?= $(shell uname)
@@ -19,9 +20,8 @@ GIT_HEAD_REF_FILE := $(if $(GIT_HEAD_REF),$(shell $(GIT) rev-parse --git-path $(
 GIT_PACKED_REFS_FILE := $(shell $(GIT) rev-parse --git-path packed-refs 2>/dev/null)
 GIT_COMMIT_DEPS = $(GIT_HEAD_FILE) $(wildcard $(GIT_HEAD_REF_FILE)) $(wildcard $(GIT_PACKED_REFS_FILE))
 COVERAGE=coverage.out
-RETURNABLES_JSON=patron_request/service/statemodels/returnables.json
-RETURNABLES_YAML=../misc/returnables.yaml
-PULLSLIP_TEMPLATE=pullslip/service/pull_slip_template.html
+STATE_MODELS_JSON=patron_request/service/statemodels/state-models.json
+STATE_MODELS_YAML=../misc/state-models.yaml
 
 # SQLC
 SQLC ?= $(GO) tool sqlc
@@ -30,7 +30,9 @@ SQL_GEN_OUT_ILL_DB = ill_db/ill_db_gen.go ill_db/ill_models_gen.go ill_db/ill_qu
 SQL_GEN_OUT_EVENT = events/event_db_gen.go events/event_models_gen.go events/event_query.sql_gen.go
 SQL_GEN_OUT_PR = patron_request/db/pr_db_gen.go patron_request/db/pr_models_gen.go patron_request/db/pr_query.sql_gen.go
 SQL_GEN_OUT_PS = pullslip/db/ps_db_gen.go pullslip/db/ps_models_gen.go pullslip/db/ps_query.sql_gen.go
-SQL_GEN_OUT = $(SQL_GEN_OUT_ILL_DB) $(SQL_GEN_OUT_EVENT) $(SQL_GEN_OUT_PR) $(SQL_GEN_OUT_PS)
+SQL_GEN_OUT_SCHED = scheduler/db/sched_db_gen.go scheduler/db/sched_models_gen.go scheduler/db/sched_query.sql_gen.go
+SQL_GEN_OUT_IMPORT = import/db/import_db_gen.go import/db/import_models_gen.go import/db/import_query.sql_gen.go
+SQL_GEN_OUT = $(SQL_GEN_OUT_ILL_DB) $(SQL_GEN_OUT_EVENT) $(SQL_GEN_OUT_PR) $(SQL_GEN_OUT_PS) $(SQL_GEN_OUT_SCHED) $(SQL_GEN_OUT_IMPORT)
 SQL_GEN_IN = sqlc/*.sql
 
 # OpenAPI
@@ -54,22 +56,35 @@ PS_OAPI_CFG = $(PS_OAPI_DIR)/ps-cfg.yaml
 PS_OAPI_SPEC = $(PS_OAPI_DIR)/open-api.yaml
 PS_OAPI_GEN = pullslip/oapi/ps-openapi_gen.go
 
-.PHONY: all docker generate generate-sqlc generate-api generate-commit-id check run fmt fmt-check clean view-coverage deps-update tools-update lint vulncheck check-coverage
+# Scheduled task OpenAPI
+SCHED_OAPI_DIR=oapi
+SCHED_OAPI_CFG = $(SCHED_OAPI_DIR)/sched-cfg.yaml
+SCHED_OAPI_SPEC = $(SCHED_OAPI_DIR)/open-api.yaml
+SCHED_OAPI_GEN = scheduler/oapi/sched_openapi_gen.go
+
+# Import OpenAPI
+IMPORT_OAPI_DIR=oapi
+IMPORT_OAPI_CFG = $(IMPORT_OAPI_DIR)/import-cfg.yaml
+IMPORT_OAPI_SPEC = $(IMPORT_OAPI_DIR)/open-api.yaml
+IMPORT_OAPI_GEN = import/oapi/import_openapi_gen.go
+
+.PHONY: all docker generate generate-sqlc generate-api generate-commit-id check run fmt fmt-check clean clean-build-caches view-coverage deps-update tools-update lint vulncheck check-coverage
 
 all: $(BINARY) archive
 
 docker: generate
 	cd .. && $(DOCKER) build -t indexdata/$(MODULE):latest -f ./$(MODULE)/Dockerfile .
 
-generate: generate-commit-id generate-sqlc generate-api $(RETURNABLES_JSON)
+generate: generate-commit-id generate-sqlc generate-api $(STATE_MODELS_JSON)
 
 generate-commit-id: $(COMMIT_ID)
 
 generate-sqlc: $(SQL_GEN_OUT)
 
-generate-api: $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN)
+generate-api: $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(IMPORT_OAPI_GEN)
 
-$(RETURNABLES_JSON): $(RETURNABLES_YAML)
+$(STATE_MODELS_JSON): $(STATE_MODELS_YAML)
+	mkdir -p $(@D)
 	$(GO) run github.com/mikefarah/yq/v4@v4.52.5 eval -o=json $< > $@.tmp
 	mv -f $@.tmp $@
 
@@ -82,19 +97,22 @@ $(PR_OAPI_GEN): $(PR_OAPI_CFG) $(PR_OAPI_SPEC) $(PR_OAPI_OVERLAY)
 $(PS_OAPI_GEN): $(PS_OAPI_CFG) $(PS_OAPI_SPEC)
 	$(OAPI_CODEGEN) -config ./$(PS_OAPI_CFG) ./$(PS_OAPI_SPEC)
 
+$(SCHED_OAPI_GEN): $(SCHED_OAPI_CFG) $(SCHED_OAPI_SPEC)
+	$(OAPI_CODEGEN) -config ./$(SCHED_OAPI_CFG) ./$(SCHED_OAPI_SPEC)
+
+$(IMPORT_OAPI_GEN): $(IMPORT_OAPI_CFG) $(IMPORT_OAPI_SPEC) $(OAPI_OVERLAY)
+	$(OAPI_CODEGEN) -config ./$(IMPORT_OAPI_CFG) ./$(IMPORT_OAPI_SPEC)
+
 $(SQL_GEN_OUT): $(SQL_GEN_IN) $(SQLC_CONFIG)
 	$(SQLC) generate -f $(SQLC_CONFIG)
 
 $(COMMIT_ID): $(GIT_COMMIT_DEPS)
-	commit="$$( $(GIT) rev-parse --short HEAD )"; \
-	if [ ! -f "$@" ] || [ "$$(cat "$@")" != "$$commit" ]; then \
-		printf "%s" "$$commit" > "$@"; \
-	fi
+	commit_id="$$( $(GIT) rev-parse --short HEAD )" && printf '%s' "$$commit_id" > $(COMMIT_ID)
 
-$(BINARY):  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(BUILD_GOFILES) $(RETURNABLES_JSON) $(PULLSLIP_TEMPLATE)
+$(BINARY):  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(IMPORT_OAPI_GEN) $(BUILD_GOFILES) $(STATE_MODELS_JSON)
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
 
-archive:  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(BUILD_GOFILES) $(RETURNABLES_JSON) $(PULLSLIP_TEMPLATE)
+archive:  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(IMPORT_OAPI_GEN) $(BUILD_GOFILES) $(STATE_MODELS_JSON)
 	$(GO) build -v -o archive ./cmd/archive
 
 check: generate
@@ -122,7 +140,7 @@ check-coverage: check
 	$(GO) run github.com/vladopajic/go-test-coverage/v2@latest --config=./.testcoverage.yaml
 
 deps-update:
-	$(GO) get -u ./...
+	$(GO) get -t -u ./... $(DEPS_UPDATE_CONSTRAINTS)
 	$(GO) mod tidy
 
 tools-update:
@@ -131,12 +149,18 @@ tools-update:
 	$(GO) mod tidy
 
 clean:
-	$(GO) clean -testcache
-	$(GO) clean -cache
 	rm -f $(BINARY) archive
 	rm -f $(COVERAGE)
 	rm -f $(COMMIT_ID)
+	rm -f $(STATE_MODELS_JSON) $(STATE_MODELS_JSON).tmp
+	rmdir $(dir $(STATE_MODELS_JSON)) 2>/dev/null || true
 	rm -f $(SQL_GEN_OUT)
 	rm -f $(OAPI_GEN)
 	rm -f $(PR_OAPI_GEN)
 	rm -f $(PS_OAPI_GEN)
+	rm -f $(SCHED_OAPI_GEN)
+	rm -f $(IMPORT_OAPI_GEN)
+
+clean-build-caches:
+	$(GO) clean -cache
+	$(DOCKER) builder prune --all --force

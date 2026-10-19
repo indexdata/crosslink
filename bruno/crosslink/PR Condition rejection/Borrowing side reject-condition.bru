@@ -1,0 +1,50 @@
+meta {
+  name: Borrowing side reject-condition
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{host}}/patron_requests/{{rejectionPrId}}/action?side=borrowing
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: borrowing
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+body:json {
+  {
+      "action": "reject-condition"
+  }
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")))
+}
+
+script:post-response {
+  test("HTTP request succeeds", () => {
+    expect(res.getStatus()).to.be.within(200, 299);
+  });
+  test("for success", function() {
+    const pr = res.getBody();
+    expect(pr.result).to.equal("SUCCESS")
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

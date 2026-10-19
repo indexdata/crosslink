@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=./profile.schema.json
+---
+# Overrides of Generic defaults. Connection details and local policy belong in the directory.
+lmsConfig: {}
+catalogConfig:
+  holdingsFormat:
+    opac:
+      availabilityRule: availableNow
+      requireLocalLocation: true
+      includeItemId: true
+      includeItemLoanPolicy: true
+      allCirculations: true
+      includeTemporaryLocation: true

@@ -2,7 +2,6 @@ package adapter
 
 import (
 	"cmp"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,10 +14,12 @@ import (
 
 	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/broker/common"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 )
+
+const COMP = "api_directory"
 
 type ApiDirectory struct {
 	urls   []string
@@ -31,10 +32,12 @@ func CreateApiDirectory(client *http.Client, urls []string) DirectoryLookupAdapt
 	return &ApiDirectory{client: client, urls: urls}
 }
 
-func (a *ApiDirectory) GetDirectory(symbols []string, tenant string, durl string) ([]DirectoryEntry, string, error) {
+func (a *ApiDirectory) getDirectory(ctx common.ExtendedContext, symbols []string, tenant string, durl string, entryID string) ([]DirectoryEntry, string, error) {
+	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(COMP))
 	var cql string
 	if len(symbols) > 0 {
-		cql = "symbol any \"" + cqlbuilder.EscapeMaskingChars(cqlbuilder.EscapeSpecialChars(strings.Join(symbols, " "))) + "\""
+		symbolTerm := cqlbuilder.EscapeMaskingChars(cqlbuilder.EscapeSpecialChars(strings.Join(symbols, " ")))
+		cql = "(symbol any \"" + symbolTerm + "\" or parentSymbol any \"" + symbolTerm + "\")"
 	}
 	if tenant != "" {
 		if cql != "" {
@@ -42,25 +45,45 @@ func (a *ApiDirectory) GetDirectory(symbols []string, tenant string, durl string
 		}
 		cql += "tenant=\"" + cqlbuilder.EscapeMaskingChars(cqlbuilder.EscapeSpecialChars(tenant)) + "\""
 	}
-	if cql == "" {
+	if cql == "" && entryID == "" {
 		return []DirectoryEntry{}, "", fmt.Errorf("no symbols or tenant provided for directory lookup")
 	}
 	var dirEntries []DirectoryEntry
-	query := "?maximumRecords=1000&cql=" + url.QueryEscape(cql)
-	fullUrl := durl + query
-	response, err := a.client.Get(fullUrl)
+	query := "?limit=1000&cql=" + url.QueryEscape(cql)
+	if entryID != "" {
+		query = "/by-id/" + url.PathEscape(entryID)
+	}
+	fullUrl := strings.TrimRight(durl, "/") + query
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullUrl, nil)
+	if err != nil {
+		return []DirectoryEntry{}, query, err
+	}
+	req.Header.Set("X-Okapi-Permissions", `["directory.system.all"]`)
+	if tenant != "" {
+		req.Header.Set("X-Okapi-Tenant", tenant)
+	}
+	response, err := a.client.Do(req)
 	if err != nil {
 		return []DirectoryEntry{}, query, err
 	}
 	defer response.Body.Close()
 
 	body := utils.Must(io.ReadAll(response.Body))
+	if entryID != "" && response.StatusCode == http.StatusNotFound {
+		return []DirectoryEntry{}, query, nil
+	}
 	if response.StatusCode != http.StatusOK {
 		return []DirectoryEntry{}, query, fmt.Errorf("API returned non-OK status: %d, body: %s", response.StatusCode, body)
 	}
 
-	var responseList directory.EntriesResponse
-	err = json.Unmarshal(body, &responseList)
+	var responseList dirapi.EntriesResponse
+	if entryID != "" {
+		var entry dirapi.Entry
+		err = json.Unmarshal(body, &entry)
+		responseList.Items = []dirapi.Entry{entry}
+	} else {
+		err = json.Unmarshal(body, &responseList)
+	}
 	if err != nil {
 		return []DirectoryEntry{}, query, err
 	}
@@ -76,27 +99,38 @@ func (a *ApiDirectory) GetDirectory(symbols []string, tenant string, durl string
 				symbols = append(symbols, authority+":"+s.Symbol)
 			}
 			if d.Parent != nil {
-				childSymbolsById[*d.Parent] = append(childSymbolsById[*d.Parent], symbols...)
+				parentID := d.Parent.String()
+				childSymbolsById[parentID] = append(childSymbolsById[parentID], symbols...)
 			}
 		}
-		ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
-		if len(symbols) == 0 {
-			ctx.Logger().Warn("Directory entry has no symbols", "entryName", d.Name)
+		if len(symbols) == 0 && entryID == "" {
+			ctx.Logger().Info("Directory entry has no symbols and will be ignored", "entryName", d.Name)
 			continue
 		}
 		apiUrl := ""
-		if d.Endpoints != nil {
+		useIllConfig := d.IllConfig != nil && d.IllConfig.Iso18626Url != nil && *d.IllConfig.Iso18626Url != ""
+		if useIllConfig {
+			apiUrl = *d.IllConfig.Iso18626Url
+		} else if d.Endpoints != nil {
 			for _, s := range *d.Endpoints {
 				if s.Type == "ISO18626" && s.Address != "" {
 					apiUrl = s.Address
 				}
 			}
 		}
-		vendor := directory.Unknown
-		if d.Vendor != nil {
-			vendor = *d.Vendor
-		} else if apiUrl != "" {
-			vendor = GetVendorFromUrl(apiUrl)
+		vendor := dirapi.Unknown
+		if useIllConfig {
+			if d.IllConfig.Iso18626Vendor != nil {
+				vendor = *d.IllConfig.Iso18626Vendor
+			} else {
+				vendor = GetVendorFromUrl(apiUrl)
+			}
+		} else {
+			if d.Vendor != nil {
+				vendor = *d.Vendor
+			} else if apiUrl != "" {
+				vendor = GetVendorFromUrl(apiUrl)
+			}
 		}
 		entry := DirectoryEntry{
 			Name:       d.Name,
@@ -120,11 +154,11 @@ func (a *ApiDirectory) GetDirectory(symbols []string, tenant string, durl string
 	return dirEntries, query, nil
 }
 
-func (a *ApiDirectory) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, string, error) {
+func (a *ApiDirectory) Lookup(ctx common.ExtendedContext, params DirectoryLookupParams) ([]DirectoryEntry, string, error) {
 	var directoryList []DirectoryEntry
 	var query string
 	for _, durl := range a.urls {
-		d, queryVal, err := a.GetDirectory(params.Symbols, params.Tenant, durl)
+		d, queryVal, err := a.getDirectory(ctx, params.Symbols, params.Tenant, durl, params.EntryID)
 		query = queryVal
 		if err != nil {
 			return []DirectoryEntry{}, query, err
@@ -134,8 +168,9 @@ func (a *ApiDirectory) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, s
 	return directoryList, query, nil
 }
 
-func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData directory.Entry, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo) {
+func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData dirapi.Entry, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo, policy dirapi.LoadBalancingPolicy) ([]Supplier, RotaInfo) {
 	var rotaInfo RotaInfo
+	rotaInfo.LoadBalancingPolicy = policy
 
 	filtered := []Supplier{}
 	reqNetworks := getPeerNetworks(requesterData)
@@ -165,8 +200,13 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 		rotaInfo.Request.Cost = utils.FormatDecimal(billingInfo.MaximumCosts.MonetaryValue.Base, billingInfo.MaximumCosts.MonetaryValue.Exp) + curSuffix
 	}
 	for _, sup := range entries {
+		applyHoldingsPolicy(&sup)
 		var supMatch SupplierMatch
 		supMatch.Symbol = sup.Symbol
+		supMatch.Location = sup.Location
+		supMatch.ShelvingLocation = sup.ShelvingLocation
+		supMatch.ItemLoanPolicy = sup.ItemLoanPolicy
+		supMatch.LoadBalancingScore = sup.LoadBalancingScore
 		supNetworks := getPeerNetworks(sup.CustomData)
 		supMatch.Networks = make([]NetworkMatch, 0, len(supNetworks))
 		for name := range supNetworks {
@@ -176,11 +216,11 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 				Match:    false,
 			})
 		}
-		priority := math.MaxInt
+		sharedPriority := math.MaxInt
 		for name, reqNet := range reqNetworks {
 			if _, ok := supNetworks[name]; ok {
-				if priority > reqNet.Priority {
-					priority = reqNet.Priority
+				if sharedPriority > reqNet.Priority {
+					sharedPriority = reqNet.Priority
 				}
 				for i, n := range supMatch.Networks {
 					if n.Name == name {
@@ -202,11 +242,12 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 			}
 			return cmp.Compare(a.Name, b.Name)
 		})
-		if priority < math.MaxInt {
-			sup.Priority = priority
+		if sharedPriority < math.MaxInt {
+			sup.Priority = sharedPriority
 			suppTiers := getPeerTiers(sup.CustomData)
 			supMatch.Tiers = make([]TierMatch, 0, len(suppTiers))
 			cost := math.MaxFloat64
+			priority := math.MaxInt
 			for _, suppTier := range suppTiers {
 				var tierMatch TierMatch
 				tierMatch.Name = suppTier.Name
@@ -217,8 +258,10 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 				suppTypeMatch := svcType == "" || svcType == strings.ToLower(suppTier.Type)
 				suppLevelMatch := svcLevel == "" || svcLevel == strings.ToLower(suppTier.Level)
 				suppCostMatch := costMatches(suppTier.Cost, maxCost)
+				tierPriority := sharedNetworkPriorityForCost(suppTier.Cost, reqNetworks, supNetworks)
+				suppNetworkMatch := tierPriority < math.MaxInt
 
-				if suppTypeMatch && suppLevelMatch && suppCostMatch {
+				if suppTypeMatch && suppLevelMatch && suppCostMatch && suppNetworkMatch {
 					reciprocal := true
 					//supplier tier matched the request, if the tier is free it must be reciprocal
 					if suppTier.Cost == 0 {
@@ -234,8 +277,9 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 						}
 					}
 					tierMatch.Match = reciprocal
-					if reciprocal && cost > suppTier.Cost {
+					if reciprocal && (cost > suppTier.Cost || cost == suppTier.Cost && priority > tierPriority) {
 						cost = suppTier.Cost
+						priority = tierPriority
 					}
 				}
 				supMatch.Tiers = append(supMatch.Tiers, tierMatch)
@@ -253,16 +297,18 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 				}
 				return cmp.Compare(a.Name, b.Name)
 			})
-			if cost < math.MaxFloat64 {
+			if cost < math.MaxFloat64 && holdingMatchesPolicy(sup) {
 				supMatch.Match = true
 				supMatch.Cost = fmt.Sprintf("%.2f", cost)
 				sup.Cost = cost
+				sup.Priority = priority
 				filtered = append(filtered, sup)
 			}
 			supMatch.Priority = sup.Priority
 			supMatch.Local = sup.Local
-			supMatch.Ratio = sup.Ratio
 		}
+		supMatch.LocationPreference = sup.LocationPreference
+		supMatch.ShelvingPreference = sup.ShelvingPreference
 		rotaInfo.Suppliers = append(rotaInfo.Suppliers, supMatch)
 	}
 	slices.SortFunc(rotaInfo.Suppliers, func(a, b SupplierMatch) int {
@@ -271,10 +317,10 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 		} else if !a.Match && b.Match {
 			return 1
 		}
-		return CompareSuppliers(a, b)
+		return CompareSuppliers(a, b, policy)
 	})
-	slices.SortFunc(filtered, func(a, b Supplier) int {
-		return CompareSuppliers(a, b)
+	slices.SortStableFunc(filtered, func(a, b Supplier) int {
+		return CompareSuppliers(a, b, policy)
 	})
 	return filtered, rotaInfo
 }
@@ -289,7 +335,34 @@ func costMatches(suppCost, maxCost float64) bool {
 	}
 }
 
-func CompareSuppliers(a, b SupplierOrdering) int {
+func sharedNetworkPriorityForCost(suppCost float64, reqNetworks, supNetworks map[string]Network) int {
+	priority := math.MaxInt
+	for name, reqNet := range reqNetworks {
+		supNet, ok := supNetworks[name]
+		if !ok {
+			continue
+		}
+		if networkAllowsCost(reqNet, suppCost) && networkAllowsCost(supNet, suppCost) {
+			if priority > reqNet.Priority {
+				priority = reqNet.Priority
+			}
+		}
+	}
+	return priority
+}
+
+func networkAllowsCost(network Network, cost float64) bool {
+	if network.Reciprocal == nil {
+		return true
+	}
+	if *network.Reciprocal {
+		return cost == 0
+	}
+	return cost > 0
+}
+
+// CompareSuppliers orders eligible suppliers using the selected consortium policy.
+func CompareSuppliers(a, b SupplierOrdering, policy dirapi.LoadBalancingPolicy) int {
 	if a.IsLocal() && !b.IsLocal() {
 		return -1
 	} else if !a.IsLocal() && b.IsLocal() {
@@ -303,36 +376,106 @@ func CompareSuppliers(a, b SupplierOrdering) int {
 	if sort != 0 {
 		return sort
 	}
-	sort = cmp.Compare(a.GetRatio(), b.GetRatio())
+	sort = cmp.Compare(b.GetLocationPreference(), a.GetLocationPreference())
+	if sort != 0 {
+		return sort
+	}
+	sort = cmp.Compare(b.GetShelvingPreference(), a.GetShelvingPreference())
+	if sort != 0 {
+		return sort
+	}
+	sort = compareLoadBalancingScores(a.GetLoadBalancingScore(), b.GetLoadBalancingScore(), policy)
 	if sort != 0 {
 		return sort
 	}
 	return cmp.Compare(a.GetSymbol(), b.GetSymbol())
 }
 
-func getPeerNetworks(peerData directory.Entry) map[string]Network {
+func applyHoldingsPolicy(supplier *Supplier) {
+	policy := supplier.CustomData.HoldingsPolicy
+	if policy == nil {
+		return
+	}
+	if policy.Locations != nil {
+		for _, location := range *policy.Locations {
+			if location.Code == supplier.Location {
+				supplier.LocationPreference = location.SupplyPreference
+				break
+			}
+		}
+	}
+	if policy.ShelvingLocations != nil {
+		for _, shelvingLocation := range *policy.ShelvingLocations {
+			if shelvingLocation.Code == supplier.ShelvingLocation {
+				supplier.ShelvingPreference = shelvingLocation.SupplyPreference
+				break
+			}
+		}
+	}
+	var generalOverride *int
+	var exactOverride *int
+	if policy.LocationPolicies != nil {
+		for i := range *policy.LocationPolicies {
+			locationPolicy := &(*policy.LocationPolicies)[i]
+			if locationPolicy.ShelvingLocationCode != supplier.ShelvingLocation {
+				continue
+			}
+			if locationPolicy.LocationCode == nil {
+				generalOverride = &locationPolicy.SupplyPreference
+			} else if *locationPolicy.LocationCode == supplier.Location {
+				exactOverride = &locationPolicy.SupplyPreference
+			}
+		}
+	}
+	if exactOverride != nil {
+		// A location/shelving pair is more specific than an all-locations shelving override.
+		supplier.ShelvingPreference = *exactOverride
+	} else if generalOverride != nil {
+		supplier.ShelvingPreference = *generalOverride
+	}
+}
+
+func holdingMatchesPolicy(sup Supplier) bool {
+	if sup.LocationPreference < 0 || sup.ShelvingPreference < 0 {
+		return false
+	}
+	policy := sup.CustomData.HoldingsPolicy
+	if policy == nil {
+		return true
+	}
+	if policy.ItemLoanPolicies == nil {
+		return true
+	}
+	for _, itemPolicy := range *policy.ItemLoanPolicies {
+		if itemPolicy.Code == sup.ItemLoanPolicy && !itemPolicy.Lendable {
+			return false
+		}
+	}
+	return true
+}
+
+func getPeerNetworks(peerData dirapi.Entry) map[string]Network {
 	networks := map[string]Network{}
 	if peerData.Networks != nil {
 		for _, n := range *peerData.Networks {
-			if n.Priority != nil {
-				networks[n.Name] = Network{
-					Name:     n.Name,
-					Priority: int(*n.Priority),
-				}
+			networks[n.Name] = Network{
+				Name:       n.Name,
+				Priority:   int(n.Priority),
+				Reciprocal: n.Reciprocal,
 			}
 		}
 	}
 	return networks
 }
 
-func getPeerTiers(peerData directory.Entry) []Tier {
+func getPeerTiers(peerData dirapi.Entry) []Tier {
 	tiers := []Tier{}
 	if peerData.Tiers != nil {
 		for _, t := range *peerData.Tiers {
 			tiers = append(tiers, Tier{
 				Name:  t.Name,
-				Level: t.Level,
-				Type:  t.Type,
+				Level: string(t.Level),
+				Type:  string(t.Type),
 				Cost:  t.Cost,
 			})
 		}
@@ -340,30 +483,37 @@ func getPeerTiers(peerData directory.Entry) []Tier {
 	return tiers
 }
 
-func GetVendorFromUrl(url string) directory.EntryVendor {
+func GetVendorFromUrl(url string) dirapi.EntryVendor {
 	url = strings.ToLower(url)
 	if strings.Contains(url, "alma.exlibrisgroup.com") || strings.Contains(url, "rapido.exlibrisgroup.com") {
-		return directory.Alma
+		return dirapi.Alma
 	} else if strings.Contains(url, "/rs/externalapi/iso18626") {
-		return directory.ReShare
+		return dirapi.ReShare
 	} else if strings.Contains(url, "atlas-sys.com") || strings.Contains(url, "illiad") {
-		return directory.ILLiad
+		return dirapi.ILLiad
 	} else {
-		return directory.Unknown
+		return dirapi.Unknown
 	}
 }
 
-func GetBrokerMode(vendor directory.EntryVendor) common.BrokerMode {
+func GetBrokerMode(vendor dirapi.EntryVendor) common.BrokerMode {
 	switch vendor {
-	case directory.Alma:
+	case dirapi.Alma:
 		return common.BrokerModeOpaque
-	case directory.ILLiad:
+	case dirapi.ILLiad:
 		return common.BrokerModeOpaque
-	case directory.ReShare:
+	case dirapi.ReShare:
 		return common.BrokerModeTransparent
-	case directory.CrossLink:
+	case dirapi.CrossLink:
 		return common.BrokerModeTransparent
 	default:
 		return DEFAULT_BROKER_MODE
 	}
+}
+
+func compareLoadBalancingScores(a, b float64, policy dirapi.LoadBalancingPolicy) int {
+	if policy == dirapi.LoadBalancingPolicyProportional {
+		return cmp.Compare(a, b)
+	}
+	return cmp.Compare(b, a)
 }

@@ -1,0 +1,143 @@
+package app
+
+import (
+	"cmp"
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+	"strings"
+
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	slogctx "github.com/veqryn/slog-context"
+	sloghttp "github.com/veqryn/slog-context/http"
+	pgxUUID "github.com/vgarvardt/pgx-google-uuid/v5"
+
+	"github.com/indexdata/crosslink/directory/api"
+	"github.com/indexdata/crosslink/directory/auth"
+	"github.com/indexdata/crosslink/directory/db"
+	"github.com/indexdata/crosslink/directory/enhancedcontext"
+	importdb "github.com/indexdata/crosslink/directory/import/db"
+	importservice "github.com/indexdata/crosslink/directory/import/service"
+)
+
+var Host = cmp.Or(os.Getenv("HOST"), "localhost")
+var Port = cmp.Or(os.Getenv("HTTP_PORT"), "8086")
+var ConnectionString = cmp.Or(os.Getenv("DATABASE_URL"), "postgresql://postgres:directory@localhost:54322/directory")
+var MigrationsFolder = "file://migrations"
+var BasePath = "/directory"
+
+func httpLoggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = r.WithContext(sloghttp.With(r.Context(), "path", r.URL.Path))
+		slogctx.Info(r.Context(), "Request", "method", r.Method)
+		next.ServeHTTP(w, r)
+	})
+}
+
+func StartApp(ctx context.Context, dbpool *pgxpool.Pool) {
+	handler := InitHandler(ctx, dbpool)
+	addr := fmt.Sprintf("%s:%s", Host, Port)
+	slog.InfoContext(ctx, "Starting directory", "addr", addr)
+	s := &http.Server{
+		Handler: handler,
+		Addr:    addr,
+	}
+
+	if err := s.ListenAndServe(); err != nil {
+		slog.ErrorContext(ctx, "Server failed", "error", err)
+		os.Exit(1)
+	}
+}
+
+func InitHandler(ctx context.Context, dbpool *pgxpool.Pool) http.Handler {
+	swagger, err := api.GetSpec()
+	if err != nil {
+		slog.ErrorContext(ctx, "Error loading API spec", "error", err)
+		os.Exit(1)
+	}
+	if err := swagger.Validate(ctx); err != nil {
+		slog.ErrorContext(ctx, "Invalid API spec", "error", err)
+		os.Exit(1)
+	}
+
+	queries := db.New(dbpool)
+	importRepo := importdb.New(dbpool)
+	importer, err := importservice.New(importRepo, swagger)
+	if err != nil {
+		slog.ErrorContext(ctx, "Invalid import schemas", "error", err)
+		os.Exit(1)
+	}
+	impl := api.NewApiImpl(dbpool, queries, importer)
+	si := api.NewStrictHandler(impl, nil)
+	m := http.NewServeMux()
+	h := api.HandlerWithOptions(si, api.StdHTTPServerOptions{
+		BaseURL:    BasePath,
+		BaseRouter: m,
+	})
+	handlerWithValidation := openAPIRequestValidationMiddleware(swagger)
+	handlerWithLogging := httpLoggingMiddleware(handlerWithValidation(h))
+	handlerWithHelper := enhancedcontext.EnhancedContextMiddleware(handlerWithLogging)
+	handlerWithLimit := ImportBodyLimitMiddleware(MaxImportBodyBytes, handlerWithHelper)
+	handlerWithAuth := auth.FolioTokenAwareMiddleware(handlerWithLimit)
+	return handlerWithAuth
+}
+
+func InitDbPool() *pgxpool.Pool {
+	ctx := context.Background()
+
+	pgxConfig, err := pgxpool.ParseConfig(ConnectionString)
+	if err != nil {
+		panic(err)
+	}
+
+	pgxConfig.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		pgxUUID.Register(conn.TypeMap())
+		return nil
+	}
+
+	dbpool, err := pgxpool.NewWithConfig(ctx, pgxConfig)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Unable to create connection pool: %v\n", err)
+		os.Exit(1)
+	}
+
+	return dbpool
+}
+
+// RunMigrateScripts applies the Directory migrations and closes the migration resources.
+// Initialization, application, and cleanup failures are returned to the caller.
+func RunMigrateScripts() (resultErr error) {
+	migrationConnectionString := ConnectionString
+	// golang-migrate currently needs SSL disabled; pgx is fine with it
+	if !strings.Contains(migrationConnectionString, "?") {
+		migrationConnectionString += "?sslmode=disable"
+	}
+	m, err := migrate.New(MigrationsFolder, migrationConnectionString)
+	if err != nil {
+		return fmt.Errorf("initialize Directory migrations: %w", err)
+	}
+
+	defer func() {
+		sourceErr, databaseErr := m.Close()
+		if sourceErr != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("close migration source: %w", sourceErr))
+		}
+		if databaseErr != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("close migration database: %w", databaseErr))
+		}
+	}()
+
+	// Migrate up
+	err = m.Up()
+	if err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("apply Directory migrations: %w", err)
+	}
+	return nil
+}

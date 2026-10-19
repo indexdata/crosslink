@@ -1,0 +1,13 @@
+{
+  "name":"Institution with LmsConfig",
+  "type":"Institution",
+  "lmsConfig" : {
+    "address" : "https://do.not.taunt.happy.fun.ball",
+    "fromAgency" : "happyfunballdotcom",
+    "patronProfiles": [
+      {"code":"STAFF","name":"Staff","canCreateRequests":true},
+      {"code":"BLOCKED","canCreateRequests":false},
+      {"canCreateRequests":true}
+    ]
+  }
+}

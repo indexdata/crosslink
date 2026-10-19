@@ -367,7 +367,9 @@ func (app *MockApp) Run() error {
 	if err != nil {
 		return err
 	}
-	dir.HandlerFromMux(mux)
+	if err := dir.HandlerFromMux(mux); err != nil {
+		return err
+	}
 
 	app.server = &http.Server{Addr: addr, Handler: mux}
 	app.flowsApi.Run()

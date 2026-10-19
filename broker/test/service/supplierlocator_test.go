@@ -16,10 +16,11 @@ import (
 	"github.com/indexdata/crosslink/broker/service"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	test "github.com/indexdata/crosslink/broker/test/utils"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var eventBus events.EventBus
@@ -233,71 +234,59 @@ func TestLocateSuppliersOrder(t *testing.T) {
 
 func TestLocateSupplierUnreachable(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	illTrId := createIllTransaction(t, illRepo, "ERROR;LOANED")
-	illTr, err := illRepo.GetIllTransactionById(appCtx, illTrId)
-	if err != nil {
-		t.Error("failed to get ill transaction by id: " + err.Error())
-	}
-	illTr.LastRequesterAction = pgtype.Text{
-		String: "Request",
-		Valid:  true,
-	}
-	illTr, err = illRepo.SaveIllTransaction(appCtx, ill_db.SaveIllTransactionParams(illTr))
-	if err != nil {
-		t.Error("failed to update ill transaction: " + err.Error())
-	}
-	var completedLocateSuppliers []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			completedLocateSuppliers = append(completedLocateSuppliers, event)
-		}
-	})
-	var completedMessageSupplier []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			completedMessageSupplier = append(completedMessageSupplier, event)
-		}
-	})
-	var completedSelectSupplier []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			completedSelectSupplier = append(completedSelectSupplier, event)
-		}
-	})
+	// Unique symbols keep loan counters independent of other tests and prior runs.
+	suffix := uuid.NewString()
+	failedSymbol := "ISIL:UNREACHABLE-" + suffix
+	workingSymbol := "ISIL:REACHABLE-" + suffix
+	failedPeer := getOrCreatePeer(t, illRepo, failedSymbol, 0, 1)
+	workingPeer := getOrCreatePeer(t, illRepo, workingSymbol, 10, 1)
+	illTrId := createIllTransaction(t, illRepo, "return-"+failedSymbol+"::ERROR;return-"+workingSymbol+"::LOANED")
 
 	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
-	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
-	if err != nil {
-		t.Error("Failed to notify with error " + err.Error())
-	}
-	var event events.Event
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		if len(completedLocateSuppliers) == 1 {
-			event, _ = eventRepo.GetEvent(appCtx, completedLocateSuppliers[0].ID)
-			return event.EventStatus == events.EventStatusSuccess
+	require.NoError(t, eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers))
+
+	// Poll persisted results instead of reading slices written by event callbacks.
+	var completedEvents []events.Event
+	require.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		var err error
+		completedEvents, _, err = eventRepo.GetIllTransactionEvents(appCtx, illTrId)
+		require.NoError(t, err)
+		var located, selected, failedMessages, successfulMessages int
+		selectedPeers := make(map[string]bool)
+		for _, event := range completedEvents {
+			if event.EventType != events.EventTypeTask {
+				continue
+			}
+			switch event.EventName {
+			case events.EventNameLocateSuppliers:
+				if event.EventStatus == events.EventStatusSuccess {
+					located++
+				}
+			case events.EventNameSelectSupplier:
+				if event.EventStatus == events.EventStatusSuccess {
+					selected++
+					peerID, _ := event.ResultData.CustomData["supplierId"].(string)
+					selectedPeers[peerID] = true
+				}
+			case events.EventNameMessageSupplier:
+				switch event.EventStatus {
+				case events.EventStatusProblem:
+					failedMessages++
+				case events.EventStatusSuccess:
+					successfulMessages++
+				}
+			}
 		}
-		return false
-	}) {
-		t.Error("expected to have locate-suppliers event received and successfully processed")
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		if len(completedSelectSupplier) >= 2 {
-			event, _ = eventRepo.GetEvent(appCtx, completedSelectSupplier[0].ID)
-			return event.EventStatus == events.EventStatusSuccess
-		}
-		return false
-	}) {
-		t.Error("expected to have select-supplier supplier event twice and successful")
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		if len(completedMessageSupplier) > 0 {
-			event, _ = eventRepo.GetEvent(appCtx, completedMessageSupplier[0].ID)
-			return event.EventStatus == events.EventStatusProblem
-		}
-		return false
-	}) {
-		t.Error("expected to have message-supplier failed")
-	}
+		return located == 1 && selected == 2 && selectedPeers[failedPeer.ID] && selectedPeers[workingPeer.ID] && failedMessages == 1 && successfulMessages == 1
+	}), "expected failed supplier followed by successful fallback; persisted events: %+v", completedEvents)
+
+	suppliers, _, err := illRepo.GetLocatedSuppliersByIllTransaction(appCtx, illTrId)
+	require.NoError(t, err)
+	require.Len(t, suppliers, 2)
+	assert.Equal(t, failedSymbol, suppliers[0].SupplierSymbol)
+	assert.Equal(t, "ERROR", suppliers[0].LocalID.String)
+	assert.Equal(t, workingSymbol, suppliers[1].SupplierSymbol)
+	assert.Equal(t, "LOANED", suppliers[1].LocalID.String)
 }
 
 func TestLocateSuppliersTaskAlreadyInProgress(t *testing.T) {
@@ -337,13 +326,19 @@ func TestLocateSuppliersErrors(t *testing.T) {
 			name:        "MissingRequestId",
 			supReqId:    "",
 			eventStatus: events.EventStatusProblem,
-			problem:     "ILL transaction missing bibliograhpic identifiers (SupplierUniqueRecordId/ISBN/ISSN)",
+			problem:     "failed to perform lookup: missing lookup parameter: identifier",
 		},
 		{
-			name:        "FailedToLocateHoldings",
+			name:        "FailedToLookup",
 			supReqId:    "error",
 			eventStatus: events.EventStatusError,
-			message:     "failed to locate holdings for query 'error'",
+			message:     "failed to perform lookup for query 'error'",
+		},
+		{
+			name:        "FailedToLookupHoldings",
+			supReqId:    "error-holdings",
+			eventStatus: events.EventStatusError,
+			message:     "failed to get holdings for query 'error-holdings'",
 		},
 		{
 			name:        "NoHoldingsFound",
@@ -680,7 +675,7 @@ func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
 func TestLocalSupplyToAlmaPeer(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqSymbol := "ISIL:REQ" + uuid.NewString()
-	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, reqSymbol, adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.Alma, directory.Entry{})
+	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, reqSymbol, adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), dirapi.Alma, dirapi.Entry{}, reqSymbol)
 	data := ill_db.IllTransactionData{
 		BibliographicInfo: iso18626.BibliographicInfo{
 			SupplierUniqueRecordId: "return-" + reqSymbol,
@@ -826,9 +821,11 @@ func createIllTransaction(t *testing.T, illRepo ill_db.IllRepo, supplierRecordId
 	illId := uuid.New().String()
 	reqReqId := uuid.New().String()
 	_, err := illRepo.SaveIllTransaction(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
-		ID:                 illId,
-		Timestamp:          test.GetNow(),
-		IllTransactionData: data,
+		ID:                  illId,
+		Timestamp:           test.GetNow(),
+		IllTransactionData:  data,
+		RequesterSymbol:     getPgText("ISIL:REQ"),
+		LastRequesterAction: getPgText(string(ill_db.RequestAction)),
 		RequesterID: pgtype.Text{
 			String: requester.ID,
 			Valid:  true,
@@ -857,8 +854,8 @@ func getOrCreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, loans 
 				Valid: true,
 			},
 			Url:          adapter.MOCK_PEER_URL,
-			LoansCount:   service.ToInt32(loans),
-			BorrowsCount: service.ToInt32(borrows),
+			LoansCount:   common.ToInt32(loans),
+			BorrowsCount: common.ToInt32(borrows),
 		})
 		if err != nil {
 			t.Errorf("Failed to save peer: %s", err)
@@ -873,8 +870,8 @@ func getOrCreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, loans 
 		}
 		return peer
 	} else {
-		peer.LoansCount = service.ToInt32(loans)
-		peer.BorrowsCount = service.ToInt32(borrows)
+		peer.LoansCount = common.ToInt32(loans)
+		peer.BorrowsCount = common.ToInt32(borrows)
 		peer, err := illRepo.SavePeer(ctx, ill_db.SavePeerParams(peer))
 		if err != nil {
 			t.Errorf("Failed to update peer: %s", err)
@@ -897,14 +894,86 @@ func getSupplierId(i int, result map[string]interface{}) string {
 	return ""
 }
 
-func TestCheckAvailability_Z3950AdapterSkipped(t *testing.T) {
+func waitForTransactionEvent(t *testing.T, illTrId string, eventName events.EventName, eventStatus events.EventStatus) events.Event {
+	t.Helper()
+	var found events.Event
+	var lastErr error
+	ok := test.WaitForPredicateToBeTrue(func() bool {
+		eventsList, _, err := eventRepo.GetIllTransactionEvents(common.CreateExtCtxWithArgs(context.Background(), nil), illTrId)
+		if err != nil {
+			lastErr = err
+			return false
+		}
+		lastErr = nil
+		for _, transactionEvent := range eventsList {
+			if transactionEvent.EventName == eventName && (eventStatus == "" || transactionEvent.EventStatus == eventStatus) {
+				found = transactionEvent
+				return true
+			}
+		}
+		return false
+	})
+	if !ok && lastErr != nil {
+		require.NoError(t, lastErr, "failed to find events for ill transaction id %v", illTrId)
+	}
+	require.True(t, ok, "expected %s event with status %s", eventName, eventStatus)
+	return found
+}
+
+func TestCheckAvailability_MetadataOnlyBypassed(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	// Create a peer with Holdings config in CustomData
-	customData := directory.Entry{HoldingsConfig: &directory.HoldingsConfig{}}
-	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData)
+	mode := dirapi.Merge
+	customData := dirapi.Entry{CatalogConfig: &dirapi.CatalogConfig{MetadataUpdateMode: &mode}}
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:METADATA-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), dirapi.CrossLink, customData, "ISIL:METADATA-SUP")
+	illTrId := createIllTransaction(t, illRepo, "metadata-only")
+	supplier := apptest.CreateLocatedSupplier(t, illRepo, illTrId, peer.ID, "ISIL:METADATA-SUP", "")
+	assert.NotNil(t, supplier)
+
+	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameCheckAvailability)
+	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
+	assert.NoError(t, err)
+
+	availabilityEvent := waitForTransactionEvent(t, illTrId, events.EventNameCheckAvailability, events.EventStatusSuccess)
+	assert.Equal(t, string(service.AvailabilityUnknown), availabilityEvent.ResultData.CustomData[service.AvailabilityKey])
+	waitForTransactionEvent(t, illTrId, events.EventNameMessageSupplier, events.EventStatusSuccess)
+}
+
+func TestCheckAvailability_MissingConfigurationUnknown(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	peer := apptest.CreatePeerWithModeAndVendor(
+		t,
+		illRepo,
+		"ISIL:NO-AVAILABILITY-CONFIG",
+		adapter.MOCK_PEER_URL,
+		string(common.BrokerModeOpaque),
+		dirapi.CrossLink,
+		dirapi.Entry{},
+		"ISIL:NO-AVAILABILITY-CONFIG",
+	)
+
+	illTrId := createIllTransaction(t, illRepo, "missing-availability-config")
+	supplier := apptest.CreateLocatedSupplier(t, illRepo, illTrId, peer.ID, "ISIL:NO-AVAILABILITY-CONFIG", "")
+	assert.NotNil(t, supplier)
+
+	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameCheckAvailability)
+	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
+	assert.NoError(t, err)
+
+	availabilityEvent := waitForTransactionEvent(t, illTrId, events.EventNameCheckAvailability, events.EventStatusSuccess)
+	assert.Equal(t, string(service.AvailabilityUnknown), availabilityEvent.ResultData.CustomData[service.AvailabilityKey])
+	waitForTransactionEvent(t, illTrId, events.EventNameMessageSupplier, events.EventStatusSuccess)
+}
+
+func TestCheckAvailability_Z3950AdapterUnavailable(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	// Create a peer with Catalog config in CustomData
+	customData := dirapi.Entry{CatalogConfig: &dirapi.CatalogConfig{
+		Zoom: &dirapi.ZoomConfig{Address: "a"},
+	}}
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), dirapi.CrossLink, customData, "ISIL:Z3950-SUP")
 
 	// Create an ILL transaction and a located supplier for it
-	illTrId := apptest.GetIllTransId(t, illRepo)
+	illTrId := createIllTransaction(t, illRepo, "unavailable")
 	supplier := apptest.CreateLocatedSupplier(t, illRepo, illTrId, peer.ID, "ISIL:Z3950-SUP", "")
 	assert.NotNil(t, supplier)
 
@@ -928,33 +997,33 @@ func TestCheckAvailability_Z3950AdapterSkipped(t *testing.T) {
 	})
 	assert.Equal(t, ill_db.SupplierStateSkippedPg, updatedSupplier.SupplierStatus)
 
-	// Check that the event log contains the skipped flag
+	// Check that the event log contains the availability outcome
 	eventsList, _, err := eventRepo.GetIllTransactionEvents(appCtx, illTrId)
 	assert.NoError(t, err)
 	found := false
 	for _, ev := range eventsList {
-		if ev.EventName == events.EventNameCheckAvailability && ev.ResultData.CustomData["skipped"] == true {
+		if ev.EventName == events.EventNameCheckAvailability && ev.ResultData.CustomData[service.AvailabilityKey] == string(service.AvailabilityUnavailable) {
 			found = true
 			break
 		}
 	}
-	assert.True(t, found, "Expected check-availability event with skipped=true in CustomData")
+	assert.True(t, found, "Expected check-availability event with availability=unavailable in CustomData")
 }
 
-func TestCheckAvailability_Z3950AdapterNotSkipped(t *testing.T) {
+func TestCheckAvailability_Z3950AdapterAvailable(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	customData := directory.Entry{HoldingsConfig: &directory.HoldingsConfig{
-		Zoom: &directory.ZoomConfig{
+	customData := dirapi.Entry{CatalogConfig: &dirapi.CatalogConfig{
+		Zoom: &dirapi.ZoomConfig{
 			Address: "a",
 			Options: &map[string]string{
 				"location": "1234", // ensures that holdings lookup returns a result and supplier is not skipped
 			},
 		},
 	}}
-	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData)
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), dirapi.CrossLink, customData, "ISIL:Z3950-SUP")
 
 	// Create an ILL transaction and a located supplier for it
-	illTrId := apptest.GetIllTransId(t, illRepo)
+	illTrId := createIllTransaction(t, illRepo, "available")
 	supplier := apptest.CreateLocatedSupplier(t, illRepo, illTrId, peer.ID, "ISIL:Z3950-SUP", "")
 	assert.NotNil(t, supplier)
 
@@ -975,7 +1044,7 @@ func TestCheckAvailability_Z3950AdapterNotSkipped(t *testing.T) {
 			t.Errorf("failed to find events for ill transaction for id %v", illTrId)
 		}
 		for _, ev := range eventsList {
-			if ev.EventName == events.EventNameCheckAvailability && ev.ResultData.CustomData["skipped"] == false {
+			if ev.EventName == events.EventNameCheckAvailability && ev.ResultData.CustomData[service.AvailabilityKey] == string(service.AvailabilityAvailable) {
 				return true
 			}
 		}
@@ -985,19 +1054,19 @@ func TestCheckAvailability_Z3950AdapterNotSkipped(t *testing.T) {
 	assert.NoError(t, err)
 	found := false
 	for _, ev := range eventsList {
-		if ev.EventName == events.EventNameCheckAvailability && ev.ResultData.CustomData["skipped"] == false {
+		if ev.EventName == events.EventNameCheckAvailability && ev.ResultData.CustomData[service.AvailabilityKey] == string(service.AvailabilityAvailable) {
 			found = true
 			break
 		}
 	}
-	assert.True(t, found, "Expected check-availability event with skipped=false in CustomData")
+	assert.True(t, found, "Expected check-availability event with availability=available in CustomData")
 }
 
 func TestCheckAvailability_Z3950AdapterError(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	customData := directory.Entry{
-		HoldingsConfig: &directory.HoldingsConfig{
-			Zoom: &directory.ZoomConfig{
+	customData := dirapi.Entry{
+		CatalogConfig: &dirapi.CatalogConfig{
+			Zoom: &dirapi.ZoomConfig{
 				Address: "a",
 				Options: &map[string]string{
 					"adapter-error": "true",
@@ -1005,10 +1074,10 @@ func TestCheckAvailability_Z3950AdapterError(t *testing.T) {
 			},
 		},
 	}
-	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData)
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), dirapi.CrossLink, customData, "ISIL:Z3950-SUP")
 
 	// Create an ILL transaction and a located supplier for it
-	illTrId := apptest.GetIllTransId(t, illRepo)
+	illTrId := createIllTransaction(t, illRepo, "adapter-error")
 	supplier := apptest.CreateLocatedSupplier(t, illRepo, illTrId, peer.ID, "ISIL:Z3950-SUP", "")
 	assert.NotNil(t, supplier)
 
@@ -1017,36 +1086,18 @@ func TestCheckAvailability_Z3950AdapterError(t *testing.T) {
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
 	assert.NoError(t, err)
 
-	test.WaitForPredicateToBeTrue(func() bool {
-		eventsList, _, err := eventRepo.GetIllTransactionEvents(appCtx, illTrId)
-		if err != nil {
-			t.Errorf("failed to find events for ill transaction for id %v", illTrId)
-		}
-		for _, ev := range eventsList {
-			if ev.EventStatus == events.EventStatusError {
-				return true
-			}
-		}
-		return false
-	})
-	eventsList, _, err := eventRepo.GetIllTransactionEvents(appCtx, illTrId)
-	assert.NoError(t, err)
-	var found *events.Event
-	for _, ev := range eventsList {
-		if ev.EventStatus == events.EventStatusError {
-			found = &ev
-			break
-		}
-	}
-	assert.NotNil(t, found, "Expected check-availability event error")
+	found := waitForTransactionEvent(t, illTrId, events.EventNameCheckAvailability, events.EventStatusError)
 	assert.Contains(t, found.ResultData.EventError.Message, "could not create availability adapter")
+	assert.Equal(t, string(service.AvailabilityUnknown), found.ResultData.CustomData[service.AvailabilityKey])
+	assert.Equal(t, false, found.ResultData.CustomData["localSupplier"])
+	waitForTransactionEvent(t, illTrId, events.EventNameMessageSupplier, events.EventStatusSuccess)
 }
 
 func TestCheckAvailability_Z3950LookupError(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	customData := directory.Entry{
-		HoldingsConfig: &directory.HoldingsConfig{
-			Zoom: &directory.ZoomConfig{
+	customData := dirapi.Entry{
+		CatalogConfig: &dirapi.CatalogConfig{
+			Zoom: &dirapi.ZoomConfig{
 				Address: "a",
 				Options: &map[string]string{
 					"lookup-error": "true",
@@ -1054,10 +1105,10 @@ func TestCheckAvailability_Z3950LookupError(t *testing.T) {
 			},
 		},
 	}
-	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData)
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), dirapi.CrossLink, customData, "ISIL:Z3950-SUP")
 
 	// Create an ILL transaction and a located supplier for it
-	illTrId := apptest.GetIllTransId(t, illRepo)
+	illTrId := createIllTransaction(t, illRepo, "lookup-error")
 	supplier := apptest.CreateLocatedSupplier(t, illRepo, illTrId, peer.ID, "ISIL:Z3950-SUP", "")
 	assert.NotNil(t, supplier)
 
@@ -1066,27 +1117,32 @@ func TestCheckAvailability_Z3950LookupError(t *testing.T) {
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
 	assert.NoError(t, err)
 
-	test.WaitForPredicateToBeTrue(func() bool {
-		eventsList, _, err := eventRepo.GetIllTransactionEvents(appCtx, illTrId)
-		if err != nil {
-			t.Errorf("failed to find events for ill transaction for id %v", illTrId)
-		}
-		for _, ev := range eventsList {
-			if ev.EventStatus == events.EventStatusError {
-				return true
-			}
-		}
-		return false
-	})
-	eventsList, _, err := eventRepo.GetIllTransactionEvents(appCtx, illTrId)
-	assert.NoError(t, err)
-	var found *events.Event
-	for _, ev := range eventsList {
-		if ev.EventStatus == events.EventStatusError {
-			found = &ev
-			break
-		}
-	}
-	assert.NotNil(t, found, "Expected check-availability event error")
+	found := waitForTransactionEvent(t, illTrId, events.EventNameCheckAvailability, events.EventStatusError)
 	assert.Contains(t, found.ResultData.EventError.Message, "failed to perform availability lookup")
+	assert.Equal(t, string(service.AvailabilityUnknown), found.ResultData.CustomData[service.AvailabilityKey])
+	assert.Equal(t, false, found.ResultData.CustomData["localSupplier"])
+	waitForTransactionEvent(t, illTrId, events.EventNameMessageSupplier, events.EventStatusSuccess)
+}
+
+func TestCheckAvailability_HoldingsErrorFailsOpen(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	customData := dirapi.Entry{CatalogConfig: &dirapi.CatalogConfig{
+		Zoom: &dirapi.ZoomConfig{
+			Address: "a",
+			Options: &map[string]string{"holdings-error": "true"},
+		},
+	}}
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:HOLDINGS-ERROR-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), dirapi.CrossLink, customData, "ISIL:HOLDINGS-ERROR-SUP")
+	illTrId := createIllTransaction(t, illRepo, "holdings-error")
+	supplier := apptest.CreateLocatedSupplier(t, illRepo, illTrId, peer.ID, "ISIL:HOLDINGS-ERROR-SUP", "")
+	assert.NotNil(t, supplier)
+
+	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameCheckAvailability)
+	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
+	assert.NoError(t, err)
+
+	found := waitForTransactionEvent(t, illTrId, events.EventNameCheckAvailability, events.EventStatusError)
+	assert.Contains(t, found.ResultData.EventError.Message, "failed to get holdings for availability lookup")
+	assert.Equal(t, string(service.AvailabilityUnknown), found.ResultData.CustomData[service.AvailabilityKey])
+	waitForTransactionEvent(t, illTrId, events.EventNameMessageSupplier, events.EventStatusSuccess)
 }

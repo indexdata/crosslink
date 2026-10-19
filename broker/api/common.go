@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/url"
@@ -51,11 +52,16 @@ func Query(params ...string) url.Values {
 }
 
 func Link(r *http.Request, path string, query url.Values) string {
-	return link(r, withBasePath(r, path), query.Encode())
+	return link(withBasePath(r, path), query.Encode())
 }
 
 func LinkRel(r *http.Request, relPath string, urlValues url.Values) string {
-	return link(r, path(false, r.URL.Path, relPath), urlValues.Encode())
+	return link(path(false, r.URL.Path, relPath), urlValues.Encode())
+}
+
+// LinkAbs is the absolute form, for Location headers.
+func LinkAbs(r *http.Request, path string, query url.Values) string {
+	return getProto(r) + "://" + getHost(r) + link(withBasePath(r, path), query.Encode())
 }
 
 func hostOnly(host string) string {
@@ -110,13 +116,11 @@ func getProto(r *http.Request) string {
 	return proto
 }
 
-func link(r *http.Request, path string, query string) string {
+func link(path string, query string) string {
 	if query != "" {
-		path = path + "?" + query
+		return path + "?" + query
 	}
-	scheme := getProto(r)
-	host := getHost(r)
-	return scheme + "://" + host + path
+	return path
 }
 
 func CollectAboutData(fullCount int64, offset int32, limit int32, r *http.Request) oapi.About {
@@ -173,34 +177,26 @@ func WriteJsonResponse(w http.ResponseWriter, resp any) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-func AddInternalError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
+func WriteJsonErrorResponse(w http.ResponseWriter, err error, statusCode int) {
 	errorString := err.Error()
 	resp := oapi.Error{
 		Error: &errorString,
 	}
-	ctx.Logger().Error("error serving api request", "error", err.Error())
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusInternalServerError)
+	w.WriteHeader(statusCode)
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func AddInternalError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
+	ctx.Logger().Error("error serving api request", "error", err.Error())
+	WriteJsonErrorResponse(w, err, http.StatusInternalServerError)
 }
 
 func AddBadRequestError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
-	errorString := err.Error()
-	resp := oapi.Error{
-		Error: &errorString,
-	}
 	ctx.Logger().Error("error serving api request", "error", err.Error())
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
-	_ = json.NewEncoder(w).Encode(resp)
+	WriteJsonErrorResponse(w, err, http.StatusBadRequest)
 }
 
 func AddNotFoundError(w http.ResponseWriter) {
-	errorString := "not found"
-	resp := oapi.Error{
-		Error: &errorString,
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotFound)
-	_ = json.NewEncoder(w).Encode(resp)
+	WriteJsonErrorResponse(w, errors.New("not found"), http.StatusNotFound)
 }

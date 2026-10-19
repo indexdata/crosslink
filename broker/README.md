@@ -4,7 +4,7 @@ CrossLink broker is a system to manage inter-library loans (ILL), specifically i
 
 * accepts and handles ILL requests from external requesters (e.g Alma or ReShare) via the ISO18626 protocol
 * locates suppliers and their holdings from a Union Catalog using the _Search/Retrieval via URL_ (SRU) protocol
-* resolves supplier information via the [Directory API](./../directory/directory_api.yaml)
+* resolves supplier information via the [Directory API](./../directory/api.yaml)
 * checks item availability using the Z3.50 or the SRU protocol
 * negotiates loans with external suppliers (e.g Alma or ReShare) via ISO18626
 * allows internal requesters and suppliers to manage ILL requests using a convenient JSON API
@@ -20,10 +20,19 @@ The broker exposes a JSON API that addresses two use cases:
    See the [Broker API Specification](./oapi/open-api.yaml) for details.
 
 2. The `Patron Request API` is used to create and manage ILL borrowing and lending requests directly in the broker.
-   The lifecycle of a _Patron Request_ is governed by a state model—a specification of allowed states, actions, and transitions, see the [State Model Schema](./../misc/state-model.json) and a specific implementation for handling [returnables](./../misc/returnables.yaml).
+   The lifecycle of a _Patron Request_ is governed by a state model—a specification of allowed states, actions, and transitions. See the [State Model Schema](./../misc/state-model.json) and the embedded [state model for returnable loans and non-returnable copies](./../misc/state-models.yaml), whose conditional elements use `appliesTo.serviceTypes`.
    This API supports building multi-tenant management/staff UIs on top of the broker or tightly integrating the broker into existing solutions.
    Internally, the broker creates an ILL transaction to back the execution of a _Patron Request_ so that the detailed monitoring is available through the `ILL Transactions API`.
    See the [Broker API Specification](./oapi/open-api.yaml) for details, where relevant endpoints are tagged with `patron-requests-api`.
+
+A `rerequest` creates a new borrowing request linked to its predecessor through
+`prevReqId` and `nextReqId`. With `noop: true`, the action only records the transition;
+the requester must create the replacement through `POST /patron_requests` and supply
+`prevReqId` to retain the link. Both flows send a `New` ISO18626 request carrying
+`requestingAgencyPreviousRequestId`. When the receiving supplier has the matching
+previous lending request for the same requester and tenant, it links the two supply
+requests atomically. A supplier without that predecessor accepts the request without
+links. Retries retain their `Retry` request type and use the same supplier-side linking.
 
 The broker’s APIs use hyperlinks to connect JSON resources.
 If you use Chrome or another browser to explore the API,
@@ -75,51 +84,102 @@ Note that for all modes, the broker attaches Directory information about the sup
 
 Configuration is provided via environment variables:
 
-| Name                      | Description                                                                           | Default value                             |
-|---------------------------|---------------------------------------------------------------------------------------|-------------------------------------------|
-| `HTTP_PORT`               | Server port                                                                           | `8081`                                    |
-| `DB_TYPE`                 | Database type                                                                         | `postgres`                                |
-| `DB_USER`                 | Database user                                                                         | `crosslink`                               |
-| `DB_PASSWORD`             | Database password                                                                     | `crosslink`                               |
-| `DB_HOST`                 | Database host                                                                         | `localhost`                               |
-| `DB_DATABASE`             | Database name                                                                         | `crosslink`                               |
-| `DB_PORT`                 | Database port                                                                         | `25432`                                   |
-| `DB_SCHEMA`               | Database schema to use                                                                | `crosslink_broker`                        |
-| `DB_PROVISION`            | Should app create DB role/schema (`true`/`false`)                                     | `false`                                   |
-| `DB_MIGRATE`              | Should app run DB migrations (`true`/`false`)                                         | `true`                                    |
-| `DB_EXPLAIN_ANALYZE`      | Whether to run `EXPLAIN ANALYZE` on patron requests limited by CQL                    | `false`                                   |
-| `LOG_LEVEL`               | Log level: `ERROR`, `WARN`, `INFO`, `DEBUG`                                           | `INFO`                                    |
-| `ENABLE_JSON_LOG`         | Should JSON log format be enabled                                                     | `false`                                   |
-| `BROKER_MODE`             | Default broker mode if not configured for a peer: `opaque` or `transparent`           | `opaque`                                  |
-| `BROKER_SYMBOL`           | Symbol for the broker when in the `opaque` mode                                       | `ISIL:BROKER`                             |
-| `REQ_AGENCY_INFO`         | Should `request/requestingAgencyInfo` be populated from Directory                     | `true`                                    |
-| `SUPPLIER_INFO`           | Should `request/supplierInfo` be populated from Directory                             | `true`                                    |
-| `RETURN_INFO`             | Should `returnInfo` be populated from Directory for supplier `Loaned` message         | `true`                                    |
-| `VENDOR_NOTE`             | Should `note` field be prepended with `Vendor: {vendor}` text                         | `true`                                    |
-| `OFFERED_COSTS`           | Should `deliveryCosts` be transferred to `offeredCosts` for ReShare vendor requesters | `false`                                   |
-| `NOTE_FIELD_SEP`          | Separator for fields (e.g. Vendor) prepended to the note                              | `, `                                      |
-| `CLIENT_DELAY`            | Delay duration for outgoing ISO18626 messages                                         | `0ms`                                     |
-| `SHUTDOWN_DELAY`          | Delay duration for graceful shutdown (in-flight connections)                          | `15s`                                     |
-| `MAX_MESSAGE_SIZE`        | Max accepted ISO18626 message size                                                    | `100KB`                                   |
-| `HOLDINGS_ADAPTER`        | Holdings lookup method: `mock`, `sru` or `consortium`                                 | `mock`                                    |
-| `HOLDINGS_SRU_URL`        | Comma separated list of URLs when `HOLDINGS_ADAPTER` is `sru`                         | `http://localhost:8081/sru`               |
-| `HOLDINGS_ISXN_LOOKUP`    | Whether to use ISBN/ISSN lookup for `sru` method                                      | `false`                                   |
-| `HOLDINGS_FORMAT`         | Parser for SRU holdings: `reservoir`, `marc`, `opac` or `MARC-21plus-1`               | `reservoir`                               |
-| `CONSORTIUM_SYMBOL`       | Designates peer for which configuration is used for consortium. At this time, it is   |  (empty value)                            |
-|                           | used when `HOLDINGS_ADAPTER` = `consortium`.                                          |                                           |
-| `DIRECTORY_ADAPTER`       | Directory lookup method: `mock` or `api`                                              | `mock`                                    |
-| `DIRECTORY_API_URL`       | Comma separated list of URLs when `DIRECTORY_ADAPTER` is `api`                        | `http://localhost:8081/directory/entries` |
-| `AVAILABILITY_ADAPTER`    | Availability adapter: `mock` , `zoom`, `metaproxy`.                                   | `zoom`                                    |
-|                           | see [Building with native extensions (CGO)](#building-with-native-extensions-cgo)     |                                           |
-| `METAPROXY_URL`           | Metaproxy URL when `AVAILABILITY_ADAPTER` = `metaproxy`                               | (empty value)                             |
-| `PEER_REFRESH_INTERVAL`   | Peer refresh interval (via Directory lookup)                                          | `5m`                                      |
-| `MOCK_PEER_URL`           | Mocked peer URLs value when `DIRECTORY_ADAPTER` is `mock`                             | `http://localhost:19083/iso18626`         |
-| `API_PAGE_SIZE`           | Default value for the `limit` query parameter when paging the API                     | `10`                                      |
-| `TENANT_TO_SYMBOL`        | Pattern to map tenant to `requesterSymbol` when accessing the API via Okapi,          | (empty value)                             |
-|                           | the `{tenant}` token is replaced by the `X-Okapi-Tenant` header value.                |                                           |
-|                           | If pattern is exactly `directory` the symbol will be obtained by directory lookup.    |                                           |
-| `SUPPLIER_PATRON_PATTERN` | Pattern used to create patron ID when receiving Request on supplier side              | `%v_user`                                 |
-| `LANGUAGE`                | Language parameter used for ts_vector search in DB                                    | `english`                                 |
+| Name                             | Description                                        | Default value                             |
+|----------------------------------|----------------------------------------------------|-------------------------------------------|
+| `HTTP_PORT`                      | Server port                                        | `8081`                                    |
+| `DB_TYPE`                        | Database type                                      | `postgres`                                |
+| `DB_USER`                        | Database user                                      | `crosslink`                               |
+| `DB_PASSWORD`                    | Database password                                  | `crosslink`                               |
+| `DB_HOST`                        | Database host                                      | `localhost`                               |
+| `DB_DATABASE`                    | Database name                                      | `crosslink`                               |
+| `DB_PORT`                        | Database port                                      | `25432`                                   |
+| `DB_SCHEMA`                      | Database schema to use                             | `crosslink_broker`                        |
+| `DB_PROVISION`                   | Should app create DB role/schema (`true`/`false`)  | `false`                                   |
+| `DB_MIGRATE`                     | Should app run DB migrations (`true`/`false`)      | `true`                                    |
+| `DB_EXPLAIN_ANALYZE`             | Whether to run `EXPLAIN ANALYZE` on patron         | `false`                                   |
+|                                  | requests limited by CQL                            |                                           |
+| `LOG_LEVEL`                      | Log level: `ERROR` , `WARN` , `INFO` , `DEBUG`     | `INFO`                                    |
+| `ENABLE_JSON_LOG`                | Should JSON log format be enabled                  | `false`                                   |
+| `BROKER_MODE`                    | Default broker mode if not configured for a peer:  | `opaque`                                  |
+|                                  | `opaque` or `transparent`                          |                                           |
+| `BROKER_SYMBOL`                  | Symbol for the broker when in the `opaque` mode    | `ISIL:BROKER`                             |
+| `REQ_AGENCY_INFO`                | Should `request/requestingAgencyInfo` be populated | `true`                                    |
+|                                  | from Directory Deprecated: use requester           |                                           |
+|                                  | `illConfig.includeRequestingAgencyInfo` .          |                                           |
+| `SUPPLIER_INFO`                  | Should `request/supplierInfo` be populated from    | `true`                                    |
+|                                  | Directory Deprecated: use supplier                 |                                           |
+|                                  | `illConfig.includeSupplierInfo` .                  |                                           |
+| `RETURN_INFO`                    | Should `returnInfo` be populated from Directory    | `true`                                    |
+|                                  | for supplier `Loaned` message Deprecated: use      |                                           |
+|                                  | supplier `illConfig.includeReturnInfo` .           |                                           |
+| `VENDOR_NOTE`                    | Should `note` field be prepended with              | `true`                                    |
+|                                  | `Vendor: {vendor}` text Deprecated: use requester  |                                           |
+|                                  | `illConfig.includeVendorNote` .                    |                                           |
+| `OFFERED_COSTS`                  | Should `deliveryCosts` be transferred to           | `false`                                   |
+|                                  | `offeredCosts` for ReShare vendor requesters       |                                           |
+|                                  | Deprecated: use requester                          |                                           |
+|                                  | `illConfig.useOfferedCosts` .                      |                                           |
+| `NOTE_FIELD_SEP`                 | Separator for fields (e.g. Vendor) prepended to    | `, `                                      |
+|                                  | the note Deprecated: use recipient                 |                                           |
+|                                  | `illConfig.noteFieldSeparator` .                   |                                           |
+| `CLIENT_DELAY`                   | Delay duration for outgoing ISO18626 messages      | `0ms`                                     |
+| `SHUTDOWN_DELAY`                 | Delay duration for graceful shutdown (in-flight    | `15s`                                     |
+|                                  | connections)                                       |                                           |
+| `MAX_MESSAGE_SIZE`               | Max accepted ISO18626 message size                 | `100KB`                                   |
+| `HOLDINGS_ADAPTER`               | Holdings lookup method: `mock` , `sru` or          | `mock`                                    |
+|                                  | `consortium`                                       |                                           |
+| `HOLDINGS_SRU_URL`               | Comma separated list of URLs when                  | `http://localhost:8081/sru`               |
+|                                  | `HOLDINGS_ADAPTER` is `sru`                        |                                           |
+| `HOLDINGS_ISXN_LOOKUP`           | Whether to use ISBN/ISSN lookup for `sru` method   | `false`                                   |
+| `HOLDINGS_FORMAT`                | Parser for SRU holdings: `reservoir` , `marc` ,    | `reservoir`                               |
+|                                  | `opac` or `MARC-21plus-1`                          |                                           |
+| `CONSORTIUM_SYMBOL`              | Consortium configuration peer, including lender scoring policy    | (empty value)                             |
+|                                  | for consortium. At this time, it is used when      |                                           |
+|                                  | `HOLDINGS_ADAPTER` = `consortium` .                |                                           |
+| `DIRECTORY_ADAPTER`              | Directory lookup method: `mock` or `api`           | `mock`                                    |
+| `DIRECTORY_API_URL`              | Comma separated list of URLs when                  | `http://localhost:8086/directory/entries` |
+|                                  | `DIRECTORY_ADAPTER` is `api`                       |                                           |
+| `AVAILABILITY_ADAPTER`           | Availability adapter: `mock` , `zoom` ,            | `zoom`                                    |
+|                                  | `metaproxy` . see                                  |                                           |
+|                                  | [Building with native extensions (CGO)][cgo]       |                                           |
+| `METAPROXY_URL`                  | Metaproxy URL when `AVAILABILITY_ADAPTER` =        | (empty value)                             |
+|                                  | `metaproxy`                                        |                                           |
+| `PEER_REFRESH_INTERVAL`          | Peer refresh interval (via Directory lookup)       | `5m`                                      |
+| `MOCK_PEER_URL`                  | Mocked peer URLs value when `DIRECTORY_ADAPTER` is | `http://localhost:19083/iso18626`         |
+|                                  | `mock`                                             |                                           |
+| `MOCK_PICKUP_INSTITUTION_SYMBOL` | Institution symbol owning synthetic pickup         | `ISIL:MOCK`                               |
+|                                  | locations in mock directory mode; use this as the  |                                           |
+|                                  | requester symbol for selected pickup locations     |                                           |
+| `API_PAGE_SIZE`                  | Default value for the `limit` query parameter when | `10`                                      |
+|                                  | paging the API                                     |                                           |
+| `TENANT_TO_SYMBOL`               | Pattern to map tenant to `requesterSymbol` when    | (empty value)                             |
+|                                  | accessing the API via Okapi, the `{tenant}` token  |                                           |
+|                                  | is replaced by the `X-Okapi-Tenant` header value.  |                                           |
+|                                  | If pattern is exactly `directory` the symbol will  |                                           |
+|                                  | be obtained by directory lookup.                   |                                           |
+| `SUPPLIER_PATRON_PATTERN`        | Pattern used to create patron ID when receiving    | `%v_user`                                 |
+|                                  | Request on supplier side Deprecated: use supplier  |                                           |
+|                                  | `illConfig.supplierPatronPattern` .                |                                           |
+| `LANGUAGE`                       | Language parameter used for ts_vector search in DB | `english`                                 |
+| `SCHEDULER_RETRY_DELAY`          | Delay for rescheduling failed scheduled tasks and  | `5m`                                      |
+|                                  | fallback poll interval in `waitUntil`              |                                           |
+| `SMTP_HOST`                      | SMTP server host for sending emails, if not        | (empty value)                             |
+|                                  | configured all email tasks will fail               |                                           |
+| `SMTP_PORT`                      | SMTP server port                                   | `2525`                                    |
+| `SMTP_USERNAME`                  | Username for SMTP authentication                   | (empty value)                             |
+| `SMTP_PASSWORD`                  | Password for SMTP authentication                   | (empty value)                             |
+| `BATCH_PULLSLIP_MAX_COUNT`       | Max count of Patron request to include in pullslip | `100`                                     |
+|                                  | batch                                              |                                           |
+| `BATCH_ACTION_RUN_RETENTION`     | Number of batch action events to retain. Set to 0  | `5`                                       |
+|                                  | to disable retention cleanup.                      |                                           |
+
+[cgo]: #building-with-native-extensions-cgo
+
+Availability checks are enabled per supplier by the presence of `catalogConfig.sru` or `catalogConfig.zoom` in its Directory entry.
+Other catalog settings, such as `metadataUpdateMode`, do not enable availability checks. A successful lookup with no holdings skips
+the supplier and advances the rota.
+Adapter, lookup, and result-processing failures are recorded as errors but fail open: the selected supplier still receives the request.
+This prevents a transient catalog failure from being treated as confirmed unavailability.
 
 # Build
 
@@ -208,3 +268,144 @@ Start the default stack (DB + broker; broker runs provision and migrations on st
 ```
 docker compose up
 ```
+
+# Data import
+
+For information about importing patron requests, batch actions, and templates, see the [Import API documentation](import/README.md).
+
+### Supplier pull slips and shipment
+
+When a supplier uses `add-condition` with a cost, the offered cost must be at least the lender's Directory `illConfig.minimumCost`. An omitted or null minimum imposes no limit; a configured zero still applies. The action fails before sending conditions if the cost is too low or the lender's settings cannot be resolved. Conditions without a cost do not require this check. Amounts are compared directly without currency conversion.
+
+While requester conditions are pending, `accept-condition` agrees to the supplier's terms, `reject-condition` cancels with that supplier and allows the broker to try another, and `cancel-request` cancels through the broker to stop further sourcing. Both cancellation actions enter `CANCEL_PENDING` while awaiting the response; the current supplier can still refuse cancellation.
+
+For Loan and CopyOrLoan requests, generating a pull-slip PDF queues the `pullslip-printed` action for the included eligible supplier requests. Accepted conditions return the supplier to `WILL_SUPPLY`. Printing moves `WILL_SUPPLY` to `SEARCHING` (picking and awaiting shipment). Reprinting in `SEARCHING` leaves the state unchanged. The `ship` action is available only in `SEARCHING`. Copy delivery remains available without this loan workflow.
+
+The `email-pullslips` batch queues the same action after SMTP successfully accepts an email containing a PDF. Emails without PDFs and failed generation or sending do not advance requests. Actions run asynchronously and recheck the current state. If queuing fails after output, the operation reports an error; retrying may reproduce the PDF or email, while repeated `pullslip-printed` actions in `SEARCHING` are harmless. Existing saved batch queries are not rewritten; use `WILL_SUPPLY` for pull-slip queries and include `SEARCHING` in aging queries as needed.
+
+## Action results and automatic execution
+
+Action outcomes (`success`, `failure`, and `review`) only select their configured
+transitions. An unbound outcome leaves the request in its current state. Each
+action declaration may specify `continueOn: [PROBLEM, ERROR]` to tolerate those
+non-success results; omitted or empty `continueOn` tolerates neither. `SUCCESS`
+always continues normally.
+
+| Result | Bound outcome | Unbound outcome |
+| --- | --- | --- |
+| `SUCCESS` | Apply the transition and continue normally | Continue in the current state |
+| `PROBLEM` / `ERROR`, listed in `continueOn` | Apply the transition and continue normally | Continue in the current state |
+| `PROBLEM` / `ERROR`, not listed | Persist the transition, then stop and propagate | Stay in the current state, stop and propagate |
+
+Normal continuation runs the remaining automatic actions in the current state.
+A change of state runs the target state's entry actions and finishes the source
+state's chain; a self-transition does not restart entry actions. A non-tolerated
+result is persisted, along with any outcome transition, before propagation, and
+no further automatic actions run, including target-state entry actions. The
+source state's action declaration determines tolerance for both manual and
+automatic execution. Errors processing tasks, committing the request update, or
+propagating a child-chain failure are never tolerated by `continueOn`. An action's
+reported `ERROR` can be tolerated, including technical failures within that action.
+
+Both manual and automatic actions receive the static `params` declared for the
+action in the current state. Parameters already carried by a task retain
+precedence. Static configuration is carried under `staticActionParams` in task
+custom data, separately from user input.
+
+Attention starts with the resulting state's `needsAttention` setting, even when
+the action has no transition. Both `ERROR` and `PROBLEM` force attention to true.
+A subsequent successful action resets attention to its resulting state's setting;
+previous failures remain in event history. Outcome `failure` has no separate
+attention or execution rule.
+
+Email notification preparation and delivery failures produce `PROBLEM` with
+outcome `failure`, including the cause in the event result and manual action
+response. The default notification actions use `continueOn: [PROBLEM, ERROR]`
+without failure self-transitions so fulfillment can continue. Requester patron
+validation tolerates only `PROBLEM`; supplier item reservation and will-supply
+tolerate both statuses, retaining the reservation failure transition to
+ITEM_PENDING. Existing custom models must declare `continueOn` wherever they
+intend to tolerate failures; binding an outcome no longer suppresses them.
+Email sending remains synchronous; successful sends and skipped recipients retain
+their existing behavior.
+
+## Loan recall
+
+Lenders can invoke `recall` from `RECEIVED`, `RENEWED`, `OVERDUE`, or
+`RENEWAL_PENDING` for `Loan` and `CopyOrLoan`. Optional action parameters are
+`note` and `dueDate` (a date or RFC3339 timestamp). An omitted or null date
+preserves the current deadline, including an open-ended loan; a date without
+a time means the end of the supplier's calendar day. Blank or invalid dates
+are rejected. A recall date may be in the past, allowing an immediate return
+request for an already overdue loan.
+
+The action sends ISO18626 `StatusChange` / `Recalled` and moves the lender to
+`RECALLED` only after successful sending. The borrower enters `RECALLED` with
+staff attention required. Its primary action is `ship-return`; `check-in`
+remains available, while checkout and renewal are unavailable. Recall
+supersedes pending renewal. Duplicate recall and late renewal/overdue messages
+preserve the recall status and deadline; recall after return shipment does
+not reopen the loan. The existing return and completion steps still apply.
+Recall during outbound shipment is not supported.
+
+### Manual supplier rota editing
+
+Okapi must grant staff `broker.located_suppliers.write` to add or reorder suppliers.
+No broker environment setting is required. Tenants that enforce automatic ordering
+should withhold this permission. The broker independently checks requester
+ownership, and these mutations require the tenant-scoped `/broker` routes.
+
+* `POST /broker/ill_transactions/{id}/located_suppliers/{supplierId}/move`
+  with `{"offset":-3}` moves the **located supplier ID** among `new` entries.
+  Negative moves up, positive moves down, and destinations are clamped. Zero
+  and already-reached boundaries return `200` without changes or an audit event.
+  The response is the updated `LocatedSuppliers` list. Selected/skipped suppliers
+  retain their status and ordinal; other new suppliers retain relative order.
+* `POST /broker/ill_transactions/{id}/located_suppliers` with
+  `{"supplierSymbol":"ISIL:EXAMPLE","localId":"record-123"}` returns `201` with
+  the created supplier. Both fields are required. It inserts a `new` supplier
+  first among new entries, storing `localId` as `localID`. The exact requester
+  symbol is instead appended as `skipped` in opaque mode, preserving existing
+  ordinals; in transparent mode it is `new` and marked as a local supplier.
+  Other symbols, including aliases on the requester peer, are non-local.
+  Manual addition bypasses holdings discovery and ranking. Normal downstream checks, including
+  closures and availability, still apply. It neither selects/sends immediately
+  nor restarts a stalled workflow.
+
+Requests may originate from patrons or staff, and remaining candidates may be
+edited while another supplier is selected. Completed transactions and terminal
+borrowing requests return `409`; archived/missing transactions return `404`.
+A recorded requester Cancel addressed to the broker also blocks edits with `409`,
+even if the supplier refuses cancellation. Supplier-targeted cancellations do not
+block edits. A retry with a new requester request ID starts a fresh cancellation scope.
+A supplier absent from the specified transaction returns `404`, a target no longer
+`new` returns `409`, and an existing symbol in any rota status returns `409`.
+Unknown/ambiguous symbols or suppliers without a usable HTTP(S) endpoint return
+`422`; Directory transport failures return `500`. Transactions belonging to
+another requester return `404`.
+
+Edits, ordinal updates, and `supplier-added`/`supplier-moved` audit notices commit
+atomically. Notices include the staff user and edit details and notify observers.
+Automatic selection and rota persistence share the same transaction lock.
+Rota edits also lock the linked borrowing request until commit, so it cannot
+become terminal between the edit's eligibility check and commit. Locks are
+acquired in patron-request then ILL-transaction order, matching imports. Manual
+additions during discovery retain their identifier and priority. An explicit retry
+that rebuilds the rota still retires the old rota using the existing retry behavior.
+
+Clients should serialize mutations and refresh after conflicts. After an uncertain
+outcome (for example a lost response), refresh before offering another edit; do not
+automatically retry relative moves. This backend change adds no UI controls.
+
+### Lender load balancing
+
+Lender scoring uses the consortium Directory entry's `illConfig.loadBalancingPolicy`.
+`deficit` prioritizes the largest lending shortfall:
+`actualBorrows * (desiredLoans / desiredBorrows) - actualLoans`.
+`proportional` (the default) prioritizes the smallest actual-to-desired ratio:
+`(actualLoans / max(actualBorrows, 1)) / (desiredLoans / desiredBorrows)`.
+Each lender supplies its own `lendToBorrowRatio` (desired loans:borrows), defaulting
+to 1:1. An omitted or null policy, missing `illConfig`, or unset
+`CONSORTIUM_SYMBOL` uses proportional, regardless of requester settings.
+Locality, cost, network priority, and holdings preferences retain precedence over the score; last-resort lenders remain at the end.
+Rota diagnostics include the selected `loadBalancingPolicy` and raw scores.

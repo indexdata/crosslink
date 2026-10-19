@@ -1,0 +1,45 @@
+meta {
+  name: Lending side ship check
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{host}}/patron_requests/{{recallLendingPrId}}?side=lending
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: lending
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
+script:post-response {
+  test("for ship", function() {
+    const pr = res.getBody();
+    expect(pr.lastAction).to.equal("ship")
+    expect(pr.lastActionResult).to.equal("SUCCESS")
+    expect(pr.state).to.equal("SHIPPED");
+    expect(pr.dueDate).to.not.exist;
+    expect(pr.illResponse.statusInfo.dueDate).to.not.exist;
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

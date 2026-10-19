@@ -1,0 +1,47 @@
+meta {
+  name: Borrowing side next supplier check
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{host}}/patron_requests/{{rejectionPrId}}?side=borrowing
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: borrowing
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")))
+}
+
+script:post-response {
+  test("HTTP request succeeds", () => {
+    expect(res.getStatus()).to.be.within(200, 299);
+  });
+  test("requester continues with the other supplier", function() {
+    const pr = res.getBody();
+    expect(pr.state).to.equal("WILL_SUPPLY");
+    expect(pr.supplierSymbol).to.equal(bru.getVar("rejectionNextSymbol"));
+    expect(pr.supplierSymbol).not.to.equal(bru.getVar("rejectionFirstSymbol"));
+    expect(pr.terminalState).to.equal(false);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

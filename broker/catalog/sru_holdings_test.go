@@ -1,0 +1,812 @@
+package catalog
+
+import (
+	"encoding/xml"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	dirapi "github.com/indexdata/crosslink/directory/api"
+	"github.com/indexdata/crosslink/iso18626"
+	"github.com/indexdata/crosslink/marcxml"
+	"github.com/indexdata/crosslink/sru"
+	"github.com/indexdata/crosslink/sru/diag"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func createSruAdapter(t *testing.T, isxn bool, url ...string) LookupAdapter {
+	parser := &ReservoirHoldingsParser{}
+	queryBuilder := NewQueryBuilderIsxn(isxn)
+	metadataParser := NewMetadataParserMarc(dirapi.MarcMetadataParserConfig{})
+	ad := CreateSruLookupAdapter(http.DefaultClient, url, "", queryBuilder, parser, metadataParser, "marcxml")
+	assert.NotNil(t, ad)
+	return ad
+}
+
+func TestSru500(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(500)
+		w.Write([]byte("<hello"))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createSruAdapter(t, false, server.URL)
+	p := LookupParams{
+		Identifier: "123",
+	}
+	result, err := ad.Lookup(p)
+	assert.NotEmpty(t, result.GetQuery())
+	assert.ErrorContains(t, err, "500")
+}
+
+func TestSruBadXml(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte("<hello"))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createSruAdapter(t, false, server.URL)
+	p := LookupParams{
+		Identifier: "123",
+	}
+	result, err := ad.Lookup(p)
+	assert.NotEmpty(t, result.GetQuery())
+	assert.ErrorContains(t, err, "unexpected EOF")
+}
+
+func TestSruBadDiagnostics(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		retVersion := sru.VersionDefinition2_0
+		diagnostics := []diag.Diagnostic{
+			{
+				DiagnosticComplexType: diag.DiagnosticComplexType{
+					Uri:     "info:srw/diagnostic/1/1",
+					Message: "General system error",
+					Details: "Something went wrong",
+				},
+			},
+		}
+		sr := sru.SearchRetrieveResponse{
+			SearchRetrieveResponseDefinition: sru.SearchRetrieveResponseDefinition{
+				Version:     &retVersion,
+				Diagnostics: &sru.DiagnosticsDefinition{Diagnostic: diagnostics},
+			},
+		}
+		buf, _ := xml.Marshal(sr)
+		w.Write(buf)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createSruAdapter(t, false, server.URL)
+	p := LookupParams{
+		Identifier: "123",
+	}
+	result, err := ad.Lookup(p)
+	assert.NotEmpty(t, result.GetQuery())
+	assert.ErrorContains(t, err, "General system error: Something went wrong")
+}
+
+func TestSruMarcxmlNoHits(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		retVersion := sru.VersionDefinition2_0
+		sr := sru.SearchRetrieveResponse{
+			SearchRetrieveResponseDefinition: sru.SearchRetrieveResponseDefinition{
+				Version:         &retVersion,
+				NumberOfRecords: 0,
+			},
+		}
+		buf, _ := xml.Marshal(sr)
+		w.Write(buf)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createSruAdapter(t, false, server.URL)
+	p := LookupParams{
+		Identifier: "123",
+	}
+	result, err := ad.Lookup(p)
+	assert.NotEmpty(t, result.GetQuery())
+	assert.NoError(t, err)
+	holdings, err := result.GetHoldings()
+	assert.NoError(t, err)
+	assert.Len(t, holdings, 0)
+}
+
+func TestSruMarcxmlStringEncoding(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		retVersion := sru.VersionDefinition2_0
+		escaping := sru.RecordXMLEscapingDefinitionString
+		sr := sru.SearchRetrieveResponse{
+			SearchRetrieveResponseDefinition: sru.SearchRetrieveResponseDefinition{
+				Version:         &retVersion,
+				NumberOfRecords: 1,
+				Records: &sru.RecordsDefinition{
+					Record: []sru.RecordDefinition{
+						{
+							RecordXMLEscaping: &escaping,
+							RecordSchema:      "info:srw/schema/1/marcxml-v1.1",
+							RecordData: sru.StringOrXmlFragmentDefinition{
+								XMLContent: []byte("<record></record>"),
+							},
+						},
+					},
+				},
+			},
+		}
+		sru_buf, _ := xml.Marshal(sr)
+		w.Write(sru_buf)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createSruAdapter(t, false, server.URL)
+	p := LookupParams{
+		Identifier: "123",
+	}
+	result, err := ad.Lookup(p)
+	assert.NotEmpty(t, result.GetQuery())
+	assert.ErrorContains(t, err, "unsupported RecordXMLEscaping: string")
+}
+
+func TestSruMarcxmlUnsupportedSchema(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		retVersion := sru.VersionDefinition2_0
+		escaping := sru.RecordXMLEscapingDefinitionXml
+		sr := sru.SearchRetrieveResponse{
+			SearchRetrieveResponseDefinition: sru.SearchRetrieveResponseDefinition{
+				Version:         &retVersion,
+				NumberOfRecords: 1,
+				Records: &sru.RecordsDefinition{
+					Record: []sru.RecordDefinition{
+						{
+							RecordXMLEscaping: &escaping,
+							RecordSchema:      "info:srw/schema/1/dc-v1.1",
+							RecordData: sru.StringOrXmlFragmentDefinition{
+								XMLContent: []byte("<record></record>"),
+							},
+						},
+					},
+				},
+			},
+		}
+		sru_buf, _ := xml.Marshal(sr)
+		w.Write(sru_buf)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createSruAdapter(t, false, server.URL)
+	p := LookupParams{
+		Identifier: "123",
+	}
+	result, err := ad.Lookup(p)
+	assert.NotEmpty(t, result.GetQuery())
+	assert.ErrorContains(t, err, "unsupported RecordSchema: info:srw/schema/1/dc-v1.1")
+}
+
+func TestSruMarcxmlBadSurrogateDiagnostic(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		retVersion := sru.VersionDefinition2_0
+		escaping := sru.RecordXMLEscapingDefinitionXml
+		sr := sru.SearchRetrieveResponse{
+			SearchRetrieveResponseDefinition: sru.SearchRetrieveResponseDefinition{
+				Version:         &retVersion,
+				NumberOfRecords: 1,
+				Records: &sru.RecordsDefinition{
+					Record: []sru.RecordDefinition{
+						{
+							RecordXMLEscaping: &escaping,
+							RecordSchema:      "info:srw/schema/1/diagnostics-v1.1",
+							RecordData: sru.StringOrXmlFragmentDefinition{
+								XMLContent: []byte("<record></record>"),
+							},
+						},
+					},
+				},
+			},
+		}
+		sru_buf, _ := xml.Marshal(sr)
+		w.Write(sru_buf)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createSruAdapter(t, false, server.URL)
+	p := LookupParams{
+		Identifier: "123",
+	}
+	result, err := ad.Lookup(p)
+	assert.NotEmpty(t, result.GetQuery())
+	assert.ErrorContains(t, err, "decoding surrogate diagnostic failed:")
+}
+
+func TestSruMarcxmlOkSurrogateDiagnostic(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		retVersion := sru.VersionDefinition2_0
+		escaping := sru.RecordXMLEscapingDefinitionXml
+		var diagnostic diag.Diagnostic
+		diagnostic.Uri = "info:srw/diagnostic/1/1"
+		diagnostic.Message = "General system error"
+		diagnostic.Details = "Something went wrong"
+		diag_buf, err := xml.Marshal(diagnostic)
+		assert.NoError(t, err)
+		sr := sru.SearchRetrieveResponse{
+			SearchRetrieveResponseDefinition: sru.SearchRetrieveResponseDefinition{
+				Version:         &retVersion,
+				NumberOfRecords: 1,
+				Records: &sru.RecordsDefinition{
+					Record: []sru.RecordDefinition{
+						{
+							RecordXMLEscaping: &escaping,
+							RecordSchema:      "info:srw/schema/1/diagnostics-v1.1",
+							RecordData: sru.StringOrXmlFragmentDefinition{
+								XMLContent: diag_buf,
+							},
+						},
+					},
+				},
+			},
+		}
+		sru_buf, _ := xml.Marshal(sr)
+		w.Write(sru_buf)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createSruAdapter(t, false, server.URL)
+	p := LookupParams{
+		Identifier: "123",
+	}
+	result, err := ad.Lookup(p)
+	assert.NotEmpty(t, result.GetQuery())
+	assert.ErrorContains(t, err, "surrogate diagnostic: General system error: Something went wrong")
+}
+
+func TestSruMarcxmlBadMarc(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		rec_buf := []byte("<rec")
+		retVersion := sru.VersionDefinition2_0
+		escaping := sru.RecordXMLEscapingDefinitionXml
+		sru_buf, _ := xml.Marshal(rec_buf)
+		sr := sru.SearchRetrieveResponse{
+			SearchRetrieveResponseDefinition: sru.SearchRetrieveResponseDefinition{
+				Version:         &retVersion,
+				NumberOfRecords: 1,
+				Records: &sru.RecordsDefinition{
+					Record: []sru.RecordDefinition{
+						{
+							RecordXMLEscaping: &escaping,
+							RecordSchema:      "info:srw/schema/1/marcxml-v1.1",
+							RecordData: sru.StringOrXmlFragmentDefinition{
+								XMLContent: sru_buf,
+							},
+						},
+					},
+				},
+			},
+		}
+		sru_buf, _ = xml.Marshal(sr)
+		w.Write(sru_buf)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createSruAdapter(t, false, server.URL)
+	p := LookupParams{
+		Identifier: "123",
+	}
+	result, err := ad.Lookup(p)
+	assert.NotEmpty(t, result.GetQuery())
+	assert.ErrorContains(t, err, "failed to parse holdings from SRU record: decoding")
+}
+
+func TestSruMarcxmlWithFallbackHoldings(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		rec_buf := marcxml.Record{RecordType: marcxml.RecordType{
+			Type: "Bibliographic",
+			Datafield: []marcxml.DataFieldType{
+				{
+					Tag: "245", // not 999
+					Subfield: []marcxml.SubfieldatafieldType{
+						{
+							Code: "a",
+							Text: "The computer",
+						},
+					},
+				},
+				{
+					Tag:  "999",
+					Ind1: "1",
+					Ind2: "0",
+					Subfield: []marcxml.SubfieldatafieldType{
+						{
+							Code: "i",
+							Text: "123",
+						},
+						{
+							Code: "l",
+							Text: "l1",
+						},
+						{
+							Code: "s",
+							Text: "s1",
+						},
+					},
+				},
+			},
+		}}
+		retVersion := sru.VersionDefinition2_0
+		escaping := sru.RecordXMLEscapingDefinitionXml
+		sru_buf, _ := xml.Marshal(rec_buf)
+		sr := sru.SearchRetrieveResponse{
+			SearchRetrieveResponseDefinition: sru.SearchRetrieveResponseDefinition{
+				Version:         &retVersion,
+				NumberOfRecords: 1,
+				Records: &sru.RecordsDefinition{
+					Record: []sru.RecordDefinition{
+						{
+							RecordXMLEscaping: &escaping,
+							RecordSchema:      "info:srw/schema/1/marcxml-v1.1",
+							RecordData: sru.StringOrXmlFragmentDefinition{
+								XMLContent: sru_buf,
+							},
+						},
+					},
+				},
+			},
+		}
+		sru_buf, _ = xml.Marshal(sr)
+		w.Write(sru_buf)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createSruAdapter(t, false, server.URL)
+	p := LookupParams{
+		Identifier: "123",
+	}
+	result, err := ad.Lookup(p)
+	assert.NotEmpty(t, result.GetQuery())
+	assert.NoError(t, err)
+	holdings, err := result.GetHoldings()
+	assert.NoError(t, err)
+	assert.Len(t, holdings, 1)
+	assert.Equal(t, "l1", holdings[0].LocalIdentifier)
+	assert.Equal(t, "ISIL:s1", holdings[0].Symbol)
+}
+
+func TestSruMarcxmlWithHoldingsDoesNotUseFallback(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		recBuf := marcxml.Record{RecordType: marcxml.RecordType{
+			Type: "Bibliographic",
+			Datafield: []marcxml.DataFieldType{
+				{
+					Tag:  "999",
+					Ind1: "1",
+					Ind2: "1",
+					Subfield: []marcxml.SubfieldatafieldType{
+						{
+							Code: "l",
+							Text: "primary-local",
+						},
+						{
+							Code: "s",
+							Text: "primary-symbol",
+						},
+					},
+				},
+				{
+					Tag:  "999",
+					Ind1: "1",
+					Ind2: "0",
+					Subfield: []marcxml.SubfieldatafieldType{
+						{
+							Code: "l",
+							Text: "fallback-local",
+						},
+						{
+							Code: "s",
+							Text: "fallback-symbol",
+						},
+					},
+				},
+			},
+		}}
+		retVersion := sru.VersionDefinition2_0
+		escaping := sru.RecordXMLEscapingDefinitionXml
+		recordXML, err := xml.Marshal(recBuf)
+		assert.NoError(t, err)
+		sr := sru.SearchRetrieveResponse{
+			SearchRetrieveResponseDefinition: sru.SearchRetrieveResponseDefinition{
+				Version:         &retVersion,
+				NumberOfRecords: 1,
+				Records: &sru.RecordsDefinition{
+					Record: []sru.RecordDefinition{
+						{
+							RecordXMLEscaping: &escaping,
+							RecordSchema:      "info:srw/schema/1/marcxml-v1.1",
+							RecordData: sru.StringOrXmlFragmentDefinition{
+								XMLContent: recordXML,
+							},
+						},
+					},
+				},
+			},
+		}
+		responseXML, err := xml.Marshal(sr)
+		assert.NoError(t, err)
+		w.Write(responseXML)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createSruAdapter(t, false, server.URL)
+	p := LookupParams{
+		Identifier: "123",
+	}
+	result, err := ad.Lookup(p)
+	assert.NotEmpty(t, result.GetQuery())
+	assert.NoError(t, err)
+	holdings, err := result.GetHoldings()
+	assert.NoError(t, err)
+	assert.Len(t, holdings, 1)
+	assert.Equal(t, "primary-local", holdings[0].LocalIdentifier)
+	assert.Equal(t, "ISIL:primary-symbol", holdings[0].Symbol)
+}
+
+func TestSruMarcxmlLeavesSchemedSymbolUnchanged(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		recBuf := marcxml.Record{RecordType: marcxml.RecordType{
+			Type: "Bibliographic",
+			Datafield: []marcxml.DataFieldType{
+				{
+					Tag:  "999",
+					Ind1: "1",
+					Ind2: "1",
+					Subfield: []marcxml.SubfieldatafieldType{
+						{
+							Code: "l",
+							Text: "local-1",
+						},
+						{
+							Code: "s",
+							Text: "SCHEME:symbol-1",
+						},
+					},
+				},
+			},
+		}}
+		retVersion := sru.VersionDefinition2_0
+		escaping := sru.RecordXMLEscapingDefinitionXml
+		recordXML, err := xml.Marshal(recBuf)
+		assert.NoError(t, err)
+		sr := sru.SearchRetrieveResponse{
+			SearchRetrieveResponseDefinition: sru.SearchRetrieveResponseDefinition{
+				Version:         &retVersion,
+				NumberOfRecords: 1,
+				Records: &sru.RecordsDefinition{
+					Record: []sru.RecordDefinition{
+						{
+							RecordXMLEscaping: &escaping,
+							RecordSchema:      "info:srw/schema/1/marcxml-v1.1",
+							RecordData: sru.StringOrXmlFragmentDefinition{
+								XMLContent: recordXML,
+							},
+						},
+					},
+				},
+			},
+		}
+		responseXML, err := xml.Marshal(sr)
+		assert.NoError(t, err)
+		w.Write(responseXML)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createSruAdapter(t, false, server.URL)
+	p := LookupParams{
+		Identifier: "123",
+	}
+	result, err := ad.Lookup(p)
+	assert.NotEmpty(t, result.GetQuery())
+	assert.NoError(t, err)
+	holdings, err := result.GetHoldings()
+	assert.NoError(t, err)
+	assert.Len(t, holdings, 1)
+	assert.Equal(t, "local-1", holdings[0].LocalIdentifier)
+	assert.Equal(t, "SCHEME:symbol-1", holdings[0].Symbol)
+}
+
+func TestSruMarcxmlUsesFallbackWhenPrimaryFieldHasNoUsableHolding(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		recBuf := marcxml.Record{RecordType: marcxml.RecordType{
+			Type: "Bibliographic",
+			Datafield: []marcxml.DataFieldType{
+				{
+					Tag:  "999",
+					Ind1: "1",
+					Ind2: "1",
+					Subfield: []marcxml.SubfieldatafieldType{
+						{
+							Code: "l",
+							Text: "primary-local",
+						},
+					},
+				},
+				{
+					Tag:  "999",
+					Ind1: "1",
+					Ind2: "0",
+					Subfield: []marcxml.SubfieldatafieldType{
+						{
+							Code: "l",
+							Text: "fallback-local",
+						},
+						{
+							Code: "s",
+							Text: "fallback-symbol",
+						},
+					},
+				},
+			},
+		}}
+		retVersion := sru.VersionDefinition2_0
+		escaping := sru.RecordXMLEscapingDefinitionXml
+		recordXML, err := xml.Marshal(recBuf)
+		assert.NoError(t, err)
+		sr := sru.SearchRetrieveResponse{
+			SearchRetrieveResponseDefinition: sru.SearchRetrieveResponseDefinition{
+				Version:         &retVersion,
+				NumberOfRecords: 1,
+				Records: &sru.RecordsDefinition{
+					Record: []sru.RecordDefinition{
+						{
+							RecordXMLEscaping: &escaping,
+							RecordSchema:      "info:srw/schema/1/marcxml-v1.1",
+							RecordData: sru.StringOrXmlFragmentDefinition{
+								XMLContent: recordXML,
+							},
+						},
+					},
+				},
+			},
+		}
+		responseXML, err := xml.Marshal(sr)
+		assert.NoError(t, err)
+		w.Write(responseXML)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createSruAdapter(t, false, server.URL)
+	p := LookupParams{
+		Identifier: "123",
+	}
+	result, err := ad.Lookup(p)
+	assert.NotEmpty(t, result.GetQuery())
+	assert.NoError(t, err)
+	holdings, err := result.GetHoldings()
+	assert.NoError(t, err)
+	assert.Len(t, holdings, 1)
+	assert.Equal(t, "fallback-local", holdings[0].LocalIdentifier)
+	assert.Equal(t, "ISIL:fallback-symbol", holdings[0].Symbol)
+}
+
+func TestSruMarcxmlWithHoldings(t *testing.T) {
+	var receivedQuery string
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "GET", r.Method)
+		query := r.URL.Query().Get("query")
+		receivedQuery = query
+		w.Header().Set("Content-Type", "application/xml")
+		rec_buf := marcxml.Record{RecordType: marcxml.RecordType{
+			Type: "Bibliographic",
+			Datafield: []marcxml.DataFieldType{
+				{
+					Tag:  "999",
+					Ind1: "1",
+					Ind2: "1",
+					Subfield: []marcxml.SubfieldatafieldType{
+						{
+							Code: "l", // local identifier
+							Text: "l1",
+						},
+						{
+							Code: "s", // source identifier
+							Text: "s1",
+						},
+						{
+							Code: "l",
+							Text: "l2",
+						},
+						{
+							Code: "s",
+							Text: "s2",
+						},
+					},
+				},
+			},
+		}}
+		xml_buf1, err := xml.Marshal(rec_buf)
+		assert.NoError(t, err)
+
+		rec_buf = marcxml.Record{RecordType: marcxml.RecordType{
+			Type: "Bibliographic",
+			Datafield: []marcxml.DataFieldType{
+				{
+					Tag:  "999",
+					Ind1: "1",
+					Ind2: "1",
+					Subfield: []marcxml.SubfieldatafieldType{
+						{
+							Code: "l", // local identifier
+							Text: "l3",
+						},
+						{
+							Code: "s", // source identifier
+							Text: "s3",
+						},
+					},
+				},
+			},
+		}}
+		xml_buf2, err := xml.Marshal(rec_buf)
+		assert.NoError(t, err)
+
+		retVersion := sru.VersionDefinition2_0
+		escaping := sru.RecordXMLEscapingDefinitionXml
+		sr := sru.SearchRetrieveResponse{
+			SearchRetrieveResponseDefinition: sru.SearchRetrieveResponseDefinition{
+				Version:         &retVersion,
+				NumberOfRecords: 2,
+				Records: &sru.RecordsDefinition{
+					Record: []sru.RecordDefinition{
+						{
+							RecordXMLEscaping: &escaping,
+							RecordSchema:      "info:srw/schema/1/marcxml-v1.1",
+							RecordData: sru.StringOrXmlFragmentDefinition{
+								XMLContent: xml_buf1,
+							},
+						},
+						{
+							RecordXMLEscaping: &escaping,
+							RecordSchema:      "info:srw/schema/1/marcxml-v1.1",
+							RecordData: sru.StringOrXmlFragmentDefinition{
+								XMLContent: xml_buf2,
+							},
+						},
+					},
+				},
+			},
+		}
+		xml_buf, err := xml.Marshal(sr)
+		assert.NoError(t, err)
+		w.Write(xml_buf)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createSruAdapter(t, true, server.URL)
+	p := LookupParams{
+		Identifier: "123",
+	}
+	result, err := ad.Lookup(p)
+	assert.NoError(t, err)
+	assert.Equal(t, "rec.id = 123", result.GetQuery())
+	assert.Equal(t, "rec.id = 123", receivedQuery)
+	holdingsList, err := result.GetHoldings()
+	assert.NoError(t, err)
+	assert.Len(t, holdingsList, 3)
+	assert.Equal(t, "l1", holdingsList[0].LocalIdentifier)
+	assert.Equal(t, "ISIL:s1", holdingsList[0].Symbol)
+	assert.Equal(t, "l2", holdingsList[1].LocalIdentifier)
+	assert.Equal(t, "ISIL:s2", holdingsList[1].Symbol)
+	assert.Equal(t, "l3", holdingsList[2].LocalIdentifier)
+	assert.Equal(t, "ISIL:s3", holdingsList[2].Symbol)
+
+	ad = createSruAdapter(t, true, server.URL, server.URL)
+	p = LookupParams{
+		Identifier: "123",
+		Isbn:       "99-222",
+		Issn:       "99-333",
+	}
+	result, err = ad.Lookup(p)
+	assert.NoError(t, err)
+	assert.Equal(t, "rec.id = 123 or isbn = 99-222 or issn = 99-333", result.GetQuery())
+	assert.Equal(t, "rec.id = 123 or isbn = 99-222 or issn = 99-333", receivedQuery)
+	holdingsList, err = result.GetHoldings()
+	assert.NoError(t, err)
+	assert.Len(t, holdingsList, 3)
+	assert.Equal(t, "l1", holdingsList[0].LocalIdentifier)
+	assert.Equal(t, "ISIL:s1", holdingsList[0].Symbol)
+	assert.Equal(t, "l2", holdingsList[1].LocalIdentifier)
+	assert.Equal(t, "ISIL:s2", holdingsList[1].Symbol)
+	assert.Equal(t, "l3", holdingsList[2].LocalIdentifier)
+	assert.Equal(t, "ISIL:s3", holdingsList[2].Symbol)
+
+	ad = createSruAdapter(t, false, server.URL)
+	p = LookupParams{
+		Isbn: "99-222",
+	}
+	_, err = ad.Lookup(p)
+	assert.Error(t, err)
+	assert.Equal(t, "missing SRU lookup parameters. Provide at least one of: identifier (supplierUniqueRecordId)", err.Error())
+	assert.ErrorIs(t, err, ErrMissingLookupParameters)
+
+	ad = createSruAdapter(t, true, server.URL)
+	p = LookupParams{
+		Title: "some",
+	}
+	_, err = ad.Lookup(p)
+	assert.Error(t, err)
+	assert.Equal(t, "missing SRU lookup parameters. Provide at least one of: identifier (supplierUniqueRecordId), isbn, issn", err.Error())
+	assert.ErrorIs(t, err, ErrMissingLookupParameters)
+}
+
+func TestSruYearFilteredHoldingsFallback(t *testing.T) {
+	for _, queryType := range []dirapi.QueryConfigType{dirapi.QueryConfigTypeCql, dirapi.QueryConfigTypePqf} {
+		t.Run(string(queryType), func(t *testing.T) {
+			template, queryParam := "dc.date = {term}", "query"
+			wantQueries := []string{`rec.id = record and dc.date = 2021`, `isbn = isbn and dc.date = 2021`}
+			if queryType == dirapi.QueryConfigTypePqf {
+				template, queryParam = "@attr 1=30 {term}", "x-pquery"
+				wantQueries = []string{`@and @attr 1=12 "record" @attr 1=30 "2021"`, `@and @attr 1=7 "isbn" @attr 1=30 "2021"`}
+			}
+			var queries []string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				queries = append(queries, r.URL.Query().Get(queryParam))
+				// A matched bibliographic record without a matching 924 must allow fallback.
+				record := marcxml.Record{}
+				if len(queries) == 2 {
+					record.Datafield = []marcxml.DataFieldType{{Tag: "924", Ind1: "0", Ind2: " ", Subfield: []marcxml.SubfieldatafieldType{
+						{Code: "a", Text: "holding"}, {Code: "b", Text: "DE-929"}, {Code: "d", Text: "c"},
+						{Code: "q", Text: "1994"}, {Code: "x", Text: "-"},
+					}}}
+				}
+				data, err := xml.Marshal(record)
+				assert.NoError(t, err)
+				response := sru.SearchRetrieveResponse{SearchRetrieveResponseDefinition: sru.SearchRetrieveResponseDefinition{
+					NumberOfRecords: 1,
+					Records:         &sru.RecordsDefinition{Record: []sru.RecordDefinition{{RecordSchema: "marcxml", RecordData: sru.StringOrXmlFragmentDefinition{XMLContent: data}}}},
+				}}
+				w.Header().Set("Content-Type", "application/xml")
+				assert.NoError(t, xml.NewEncoder(w).Encode(response))
+			}))
+			defer server.Close()
+			builder, err := NewQueryBuilderGen(&dirapi.QueryConfig{Type: &queryType, Year: &template})
+			require.NoError(t, err)
+			adapter := CreateSruLookupAdapter(server.Client(), []string{server.URL}, "", builder, NewMarc21Plus1HoldingsParser(), nil, "marcxml")
+			params := LookupParamsFromBibliographicInfo(iso18626.BibliographicInfo{SupplierUniqueRecordId: "record"}, nil, &iso18626.PublicationInfo{PublicationDate: "2021"})
+			params.Isbn = "isbn"
+			result, err := adapter.Lookup(params)
+			require.NoError(t, err)
+			holdings, err := result.GetHoldings()
+			require.NoError(t, err)
+			assert.Equal(t, []Holding{{Symbol: "ISIL:DE-929", LocalIdentifier: "holding"}}, holdings)
+			assert.Equal(t, wantQueries, queries)
+
+			params.Year = "2021-05-01"
+			_, err = adapter.Lookup(params)
+			assert.ErrorContains(t, err, "YYYY")
+			assert.Equal(t, wantQueries, queries, "invalid dates must fail before contacting SRU")
+		})
+	}
+}

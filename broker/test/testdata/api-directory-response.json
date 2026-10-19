@@ -2,7 +2,7 @@
   "items": [
     {
       "description": "nalb",
-      "email": "interlibrary@alburycity.nsw.gov.au",
+      "fromEmail": "interlibrary@alburycity.nsw.gov.au",
       "vendor": "ReShare",
       "endpoints": [
         {
@@ -134,7 +134,7 @@
     },
     {
       "description": "nu",
-      "email": "library.resourcesharing@sydney.edu.au",
+      "fromEmail": "library.resourcesharing@sydney.edu.au",
       "endpoints": [
         {
           "address": "http://localhost:8083/rs/externalApi/iso18626",
@@ -283,7 +283,7 @@
     },
     {
       "description": "vvwa",
-      "email": "library@worksafe.vic.gov.au",
+      "fromEmail": "library@worksafe.vic.gov.au",
       "endpoints": [
         {
           "address": "http://localhost:8083/iso18626",
@@ -381,7 +381,7 @@
     },
     {
       "description": "vu",
-      "email": "ill-library@unimelb.edu.au",
+      "fromEmail": "ill-library@unimelb.edu.au",
       "endpoints": [
         {
           "address": "http://crosslink-illmock/iso18626",

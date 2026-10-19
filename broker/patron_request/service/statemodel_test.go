@@ -1,42 +1,536 @@
 package prservice
 
 import (
+	"encoding/json"
 	"slices"
 	"sync"
 	"testing"
 
+	"github.com/indexdata/crosslink/broker/email"
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
+	"github.com/indexdata/crosslink/iso18626"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestBuiltInStateModelCapabilities(t *testing.T) {
 	c := BuiltInStateModelCapabilities()
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateValidated)))
+	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateOverLimit)))
+	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateLimitChecked)))
+	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateInvalidPatron)))
+	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateLocalSupply)))
+	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateDuplicate)))
+	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateReadyToSend)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateValidated)))
+	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateItemPending)))
+	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateWillSupplyPending)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateReceived)))
 
 	assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
-		return a.Name == string(BorrowerActionValidate)
+		return a.Name == string(BorrowerActionValidatePatron) && !isTransitionCapability(a)
+	}))
+	assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
+		return a.Name == string(BorrowerActionCheckLimit) && !isTransitionCapability(a)
 	}))
 	assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
 		return a.Name == string(BorrowerActionReceive)
 	}))
+	assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
+		return a.Name == string(BorrowerActionSupplyDocument) && slices.Equal(a.Parameters, []string{"note", "deliveryUrl"})
+	}))
+	for _, transitionAction := range []pr_db.PatronRequestAction{
+		BorrowerActionSkipPatronValidation,
+		BorrowerActionSkipMetadataUpdate,
+		BorrowerActionOverrideLimit,
+		BorrowerActionCloseRequest,
+		BorrowerActionRejectRetry,
+	} {
+		assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
+			return a.Name == string(transitionAction) && isTransitionCapability(a)
+		}))
+	}
 
+	assert.True(t, slices.ContainsFunc(c.SupplierActions, func(a proapi.ActionCapability) bool {
+		return a.Name == string(LenderActionRequestItem) && len(a.Parameters) == 0
+	}))
 	assert.True(t, slices.ContainsFunc(c.SupplierActions, func(a proapi.ActionCapability) bool {
 		return a.Name == string(LenderActionWillSupply)
 	}))
 	assert.True(t, slices.ContainsFunc(c.SupplierActions, func(a proapi.ActionCapability) bool {
 		return a.Name == string(LenderActionWillSupply) && slices.Contains(a.Parameters, "note")
 	}))
+	assert.True(t, slices.ContainsFunc(c.SupplierActions, func(a proapi.ActionCapability) bool {
+		return a.Name == string(LenderActionSupplyDocument) && slices.Equal(a.Parameters, []string{"note", "deliveryUrl"})
+	}))
+	assert.True(t, slices.ContainsFunc(c.SupplierActions, func(a proapi.ActionCapability) bool {
+		return a.Name == string(LenderActionAddItem) && slices.Equal(a.Parameters, []string{"barcode", "callNumber", "title", "itemId"})
+	}))
+	assert.True(t, slices.ContainsFunc(c.SupplierActions, func(a proapi.ActionCapability) bool {
+		return a.Name == string(LenderActionRemoveItem) && slices.Equal(a.Parameters, []string{"barcode"})
+	}))
 
 	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierWillSupply)))
+	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierNewExpectToSupply)))
+	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierNewExpectToSupplyLocal)))
+	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierCancelledLocal)))
+	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierCompletedLocal)))
+	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierUnfilledLocal)))
 	assert.True(t, slices.Contains(c.RequesterMessageEvents, string(RequesterCancelRequest)))
 	assert.True(t, slices.Contains(c.RequesterMessageEvents, string(RequesterReceived)))
 	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierCancelRejected)))
 }
 
-func TestValidateStateModelWithPrimaryAction(t *testing.T) {
-	s := "validate"
+func TestUnifiedStateModelDeclaresConditionalCopyWorkflow(t *testing.T) {
+	model, err := LoadStateModelByName("default")
+	if !assert.NoError(t, err) || !assert.NotNil(t, model) {
+		return
+	}
+
+	assert.Equal(t, "CrossLink State Model", model.Name)
+	if assert.NotNil(t, model.Selector) {
+		assert.ElementsMatch(t, []proapi.StateModelServiceType{
+			proapi.StateModelServiceType(iso18626.TypeServiceTypeLoan),
+			proapi.StateModelServiceType(iso18626.TypeServiceTypeCopy),
+			proapi.StateModelServiceType(iso18626.TypeServiceTypeCopyOrLoan),
+		}, model.Selector.ServiceType)
+	}
+	assert.True(t, slices.ContainsFunc(model.States, func(state proapi.ModelState) bool {
+		return state.Name == string(LenderStateShipped) && state.AppliesTo != nil &&
+			slices.Contains(state.AppliesTo.ServiceTypes, proapi.Loan)
+	}))
+	assert.True(t, slices.ContainsFunc(model.States, func(state proapi.ModelState) bool {
+		if state.Side != proapi.SUPPLIER || state.Name != string(LenderStateWillSupply) || state.Actions == nil {
+			return false
+		}
+		return slices.ContainsFunc(*state.Actions, func(action proapi.ModelAction) bool {
+			return action.Name == string(LenderActionSupplyDocument) && action.PrimaryFor != nil &&
+				slices.Equal(action.PrimaryFor.ServiceTypes, []proapi.StateModelServiceType{proapi.Copy}) &&
+				action.AppliesTo != nil && slices.Equal(action.AppliesTo.ServiceTypes, []proapi.StateModelServiceType{proapi.Copy, proapi.CopyOrLoan})
+		})
+	}))
+	assert.True(t, slices.ContainsFunc(model.States, func(state proapi.ModelState) bool {
+		if state.Side != proapi.REQUESTER || state.Name != string(BorrowerStateLocalSupply) || state.Actions == nil {
+			return false
+		}
+		return slices.ContainsFunc(*state.Actions, func(action proapi.ModelAction) bool {
+			return action.Name == string(BorrowerActionSupplyDocument) && action.PrimaryFor != nil &&
+				slices.Equal(action.PrimaryFor.ServiceTypes, []proapi.StateModelServiceType{proapi.Copy}) &&
+				action.AppliesTo != nil && slices.Equal(action.AppliesTo.ServiceTypes, []proapi.StateModelServiceType{proapi.Copy, proapi.CopyOrLoan})
+		})
+	}))
+}
+
+func TestCompletedDocumentNotificationAutoAction(t *testing.T) {
+	service := &StateModelService{}
+	for _, serviceType := range []proapi.StateModelServiceType{proapi.Copy, proapi.CopyOrLoan, proapi.Loan} {
+		t.Run(string(serviceType), func(t *testing.T) {
+			mapping, err := service.GetActionMapping("default", serviceType)
+			if !assert.NoError(t, err) {
+				return
+			}
+			actions := mapping.GetAutoActionsForState(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateCompleted})
+			if serviceType == proapi.Loan {
+				assert.Empty(t, actions)
+			} else if assert.Len(t, actions, 1) {
+				action := actions[0]
+				assert.Equal(t, string(BorrowerActionSendNotification), action.Name)
+				if assert.NotNil(t, action.Params) {
+					if assert.NotNil(t, action.Params.TemplateLabel) {
+						assert.Equal(t, "copy-completed-notification", *action.Params.TemplateLabel)
+					}
+					if assert.NotNil(t, action.Params.SendTo) {
+						assert.Equal(t, []proapi.ModelActionParamsSendTo{proapi.ModelActionParamsSendToPatron}, *action.Params.SendTo)
+					}
+				}
+			}
+			assert.Empty(t, mapping.GetAutoActionsForState(pr_db.PatronRequest{Side: SideLending, State: LenderStateCompleted}))
+		})
+	}
+}
+
+func TestValidatedRequestNotificationAutoAction(t *testing.T) {
+	service := &StateModelService{}
+	for _, serviceType := range []proapi.StateModelServiceType{proapi.Copy, proapi.CopyOrLoan, proapi.Loan} {
+		t.Run(string(serviceType), func(t *testing.T) {
+			mapping, err := service.GetActionMapping("default", serviceType)
+			if !assert.NoError(t, err) {
+				return
+			}
+			actions := mapping.GetAutoActionsForState(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated})
+			if assert.Len(t, actions, 2) {
+				notification := actions[0]
+				assert.Equal(t, string(BorrowerActionSendNotification), notification.Name)
+				if assert.NotNil(t, notification.Params) {
+					if assert.NotNil(t, notification.Params.TemplateLabel) {
+						assert.Equal(t, "new-request-notification", *notification.Params.TemplateLabel)
+					}
+					if assert.NotNil(t, notification.Params.SendTo) {
+						assert.Equal(t, []proapi.ModelActionParamsSendTo{proapi.ModelActionParamsSendToPatron}, *notification.Params.SendTo)
+					}
+				}
+				assert.Equal(t, string(BorrowerActionCheckLimit), actions[1].Name)
+			}
+		})
+	}
+}
+
+func TestDocumentDeliveredNotificationTemplate(t *testing.T) {
+	templates := GetStateModelTemplateDefaults()
+	idx := slices.IndexFunc(templates, func(template proapi.TemplateProperties) bool {
+		return slices.Contains(template.Labels, "copy-completed-notification")
+	})
+	if !assert.NotEqual(t, -1, idx) {
+		return
+	}
+	template := templates[idx]
+	assert.Equal(t, "Document delivered notification", template.Title)
+	assert.Equal(t, proapi.Email, template.Purpose)
+	assert.Equal(t, proapi.Text, template.ContentType)
+	if assert.NotNil(t, template.Audience) {
+		assert.Equal(t, proapi.TemplateAudiencePatron, *template.Audience)
+	}
+	if assert.NotNil(t, template.Subject) {
+		assert.Equal(t, "Your requested document is ready", *template.Subject)
+	}
+	body, err := email.RenderTextTemplate(email.PullSlipData{ReqId: "REQ-123", Title: "Requested article"}, template.Labels, template.Body)
+	assert.NoError(t, err)
+	assert.Equal(t, "Your document is now available.\n\nRequest number: REQ-123\n\nItem Title: Requested article\n", body)
+}
+
+func TestPatronRequestProcessingNotificationTemplate(t *testing.T) {
+	templates := GetStateModelTemplateDefaults()
+	idx := slices.IndexFunc(templates, func(template proapi.TemplateProperties) bool {
+		return slices.Contains(template.Labels, "new-request-notification")
+	})
+	if !assert.NotEqual(t, -1, idx) {
+		return
+	}
+	template := templates[idx]
+	assert.Equal(t, "Patron request processing started", template.Title)
+	assert.Equal(t, proapi.Email, template.Purpose)
+	assert.Equal(t, proapi.Text, template.ContentType)
+	if assert.NotNil(t, template.Audience) {
+		assert.Equal(t, proapi.TemplateAudiencePatron, *template.Audience)
+	}
+	if assert.NotNil(t, template.Subject) {
+		assert.Equal(t, "Your request is now being processed", *template.Subject)
+	}
+	body, err := email.RenderTextTemplate(email.PullSlipData{ReqId: "REQ-123", Title: "Requested article"}, template.Labels, template.Body)
+	assert.NoError(t, err)
+	assert.Equal(t, "Your request is now being processed.\n\nRequest number: REQ-123\nItem title: Requested article\n\nWe’ll notify you when there is an update.\n", body)
+}
+
+func TestLegacyReturnablesStateModelAlias(t *testing.T) {
+	service := &StateModelService{}
+	defaultModel, err := service.GetStateModel("default")
+	assert.NoError(t, err)
+	legacyModel, err := service.GetStateModel("returnables")
+	assert.NoError(t, err)
+	assert.Same(t, defaultModel, legacyModel)
+}
+
+func TestValidateImportState(t *testing.T) {
+	service := &StateModelService{}
+
+	tests := []struct {
+		name        string
+		modelName   string
+		serviceType proapi.StateModelServiceType
+		side        pr_db.PatronRequestSide
+		state       pr_db.PatronRequestState
+		terminal    bool
+		errorText   string
+	}{
+		{
+			name:        "accepts a non-initial requester state",
+			modelName:   "default",
+			serviceType: proapi.Loan,
+			side:        SideBorrowing,
+			state:       BorrowerStateSent,
+		},
+		{
+			name:        "returns the configured terminal flag",
+			modelName:   "default",
+			serviceType: proapi.Loan,
+			side:        SideLending,
+			state:       LenderStateCompleted,
+			terminal:    true,
+		},
+		{
+			name:        "supports the legacy model alias",
+			modelName:   "returnables",
+			serviceType: proapi.Loan,
+			side:        SideBorrowing,
+			state:       BorrowerStateSent,
+		},
+		{
+			name:        "rejects an unknown model",
+			modelName:   "missing",
+			serviceType: proapi.Loan,
+			side:        SideBorrowing,
+			state:       BorrowerStateSent,
+			errorText:   `state model "missing" not found`,
+		},
+		{
+			name:        "rejects an unknown state",
+			modelName:   "default",
+			serviceType: proapi.Loan,
+			side:        SideBorrowing,
+			state:       pr_db.PatronRequestState("NOT_A_STATE"),
+			errorText:   `state "NOT_A_STATE" is not supported`,
+		},
+		{
+			name:        "rejects a state from the other side",
+			modelName:   "default",
+			serviceType: proapi.Loan,
+			side:        SideBorrowing,
+			state:       LenderStateItemPending,
+			errorText:   `state "ITEM_PENDING" is not supported`,
+		},
+		{
+			name:        "rejects a state inapplicable to the service type",
+			modelName:   "default",
+			serviceType: proapi.Copy,
+			side:        SideLending,
+			state:       LenderStateShipped,
+			errorText:   `state "SHIPPED" is not supported`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			terminal, err := service.ValidateImportState(tt.modelName, tt.serviceType, tt.side, tt.state)
+			assert.Equal(t, tt.terminal, terminal)
+			if tt.errorText == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.ErrorContains(t, err, tt.errorText)
+			}
+		})
+	}
+}
+
+func TestValidateStateModelRejectsEmptyAppliesToServiceTypes(t *testing.T) {
+	model, err := LoadStateModelByName("default")
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	for stateIndex := range model.States {
+		state := &model.States[stateIndex]
+		if state.Side == proapi.REQUESTER && state.Name == string(BorrowerStateShipped) {
+			state.AppliesTo = &proapi.AppliesTo{}
+			break
+		}
+	}
+
+	err = ValidateStateModel(model)
+	assert.EqualError(t, err, "state SHIPPED side REQUESTER appliesTo.serviceTypes must not be empty")
+}
+
+func TestValidateStateModelRejectsTransitionToInapplicableState(t *testing.T) {
+	model, err := LoadStateModelByName("default")
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	for stateIndex := range model.States {
+		state := &model.States[stateIndex]
+		if state.Side != proapi.REQUESTER || state.Name != string(BorrowerStateSent) || state.Events == nil {
+			continue
+		}
+		for eventIndex := range *state.Events {
+			event := &(*state.Events)[eventIndex]
+			if event.Name == string(SupplierCompleted) {
+				target := string(BorrowerStateShipped)
+				event.Transition = &target
+			}
+		}
+	}
+
+	err = ValidateStateModel(model)
+	assert.ErrorContains(t, err, "state model is invalid for service type Copy")
+	assert.ErrorContains(t, err, "event completed in state SENT has invalid transition target SHIPPED")
+}
+
+func TestValidateSelectorlessStateModelPerServiceType(t *testing.T) {
+	model, err := LoadStateModelByName("default")
+	if !assert.NoError(t, err) {
+		return
+	}
+	model.Selector = nil
+
+	for stateIndex := range model.States {
+		state := &model.States[stateIndex]
+		if state.Side != proapi.REQUESTER || state.Name != string(BorrowerStateSent) || state.Events == nil {
+			continue
+		}
+		for eventIndex := range *state.Events {
+			event := &(*state.Events)[eventIndex]
+			if event.Name == string(SupplierCompleted) {
+				target := string(BorrowerStateShipped)
+				event.Transition = &target
+			}
+		}
+	}
+
+	err = ValidateStateModel(model)
+	assert.ErrorContains(t, err, "state model is invalid for service type Copy")
+	assert.ErrorContains(t, err, "event completed in state SENT has invalid transition target SHIPPED")
+}
+
+func TestValidateStateModelRejectsChildApplicabilityOutsideState(t *testing.T) {
+	model, err := LoadStateModelByName("default")
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	for stateIndex := range model.States {
+		state := &model.States[stateIndex]
+		if state.Side == proapi.REQUESTER && state.Name == string(BorrowerStateShipped) && state.Actions != nil {
+			(*state.Actions)[0].AppliesTo = &proapi.AppliesTo{ServiceTypes: []proapi.StateModelServiceType{proapi.Copy}}
+			break
+		}
+	}
+
+	err = ValidateStateModel(model)
+	assert.EqualError(t, err, "action receive in state SHIPPED side REQUESTER includes service type Copy excluded by its parent")
+}
+
+func TestDefaultIncludesLocalSupplyRequesterState(t *testing.T) {
+	model, err := LoadStateModelByName("default")
+	if !assert.NoError(t, err) || !assert.NotNil(t, model) {
+		return
+	}
+
+	stateIndex := slices.IndexFunc(model.States, func(state proapi.ModelState) bool {
+		return state.Name == string(BorrowerStateLocalSupply) && state.Side == proapi.REQUESTER
+	})
+	assert.NotEqual(t, -1, stateIndex)
+}
+
+func TestReturnablesPullslipPdfTemplateLabel(t *testing.T) {
+	model, err := LoadStateModelByName("returnables")
+	if !assert.NoError(t, err) || !assert.NotNil(t, model) {
+		return
+	}
+
+	if assert.NotNil(t, model.PullslipPdfTemplateLabel) {
+		assert.Equal(t, "pullslip-pdf", *model.PullslipPdfTemplateLabel)
+	}
+}
+
+func TestStateModelTemplateDefaultsIncludePullslipPdf(t *testing.T) {
+	templates := GetStateModelTemplateDefaults()
+
+	idx := slices.IndexFunc(templates, func(template proapi.TemplateProperties) bool {
+		return slices.Contains(template.Labels, "pullslip-pdf")
+	})
+	if !assert.NotEqual(t, -1, idx) {
+		return
+	}
+
+	template := templates[idx]
+	assert.Equal(t, "Pullslip PDF template", template.Title)
+	assert.Equal(t, proapi.Pullslip, template.Purpose)
+	assert.Equal(t, proapi.Html, template.ContentType)
+	if assert.NotNil(t, template.Audience) {
+		assert.Equal(t, proapi.TemplateAudienceStaff, *template.Audience)
+	}
+	assert.Contains(t, template.Body, "{{.BarcodeBase64}}")
+	assert.Contains(t, template.Body, "{{.ReqId}}")
+}
+
+func TestStateModelTemplateDefaultsExcludeResponseFields(t *testing.T) {
+	data, err := json.Marshal(GetStateModelTemplateDefaults())
+	assert.NoError(t, err)
+	assert.NotContains(t, string(data), `"id"`)
+	assert.NotContains(t, string(data), `"createdAt"`)
+	assert.NotContains(t, string(data), `"updatedAt"`)
+}
+
+func TestDefaultInvalidPatronStateIsEditableAndNeedsAttention(t *testing.T) {
+	model, err := LoadStateModelByName("default")
+	if !assert.NoError(t, err) || !assert.NotNil(t, model) {
+		return
+	}
+
+	stateIndex := slices.IndexFunc(model.States, func(state proapi.ModelState) bool {
+		return state.Name == string(BorrowerStateInvalidPatron) && state.Side == proapi.REQUESTER
+	})
+	if !assert.NotEqual(t, -1, stateIndex) {
+		return
+	}
+	state := model.States[stateIndex]
+	assert.NotNil(t, state.Editable)
+	assert.True(t, *state.Editable)
+	assert.NotNil(t, state.NeedsAttention)
+	assert.True(t, *state.NeedsAttention)
+	assert.NotNil(t, state.ClosingAction)
+	assert.Equal(t, string(BorrowerActionCloseRequest), *state.ClosingAction)
+	assert.True(t, slices.ContainsFunc(*state.Actions, func(action proapi.ModelAction) bool {
+		return action.Name == string(BorrowerActionSkipPatronValidation)
+	}))
+	assert.True(t, slices.ContainsFunc(*state.Actions, func(action proapi.ModelAction) bool {
+		return action.Name == string(BorrowerActionCloseRequest)
+	}))
+}
+
+func TestDefaultNewRequesterStateIsEditable(t *testing.T) {
+	model, err := LoadStateModelByName("default")
+	if !assert.NoError(t, err) || !assert.NotNil(t, model) {
+		return
+	}
+
+	stateIndex := slices.IndexFunc(model.States, func(state proapi.ModelState) bool {
+		return state.Name == string(BorrowerStateNew) && state.Side == proapi.REQUESTER
+	})
+	if !assert.NotEqual(t, -1, stateIndex) {
+		return
+	}
+	state := model.States[stateIndex]
+	assert.NotNil(t, state.Editable)
+	assert.True(t, *state.Editable)
+	assert.NotNil(t, state.ClosingAction)
+	assert.Equal(t, string(BorrowerActionCloseRequest), *state.ClosingAction)
+	assert.True(t, slices.ContainsFunc(*state.Actions, func(action proapi.ModelAction) bool {
+		return action.Name == string(BorrowerActionSkipPatronValidation)
+	}))
+	assert.True(t, slices.ContainsFunc(*state.Actions, func(action proapi.ModelAction) bool {
+		return action.Name == string(BorrowerActionCloseRequest)
+	}))
+}
+
+func TestDefaultDuplicateStateIsEditableAndNeedsAttention(t *testing.T) {
+	model, err := LoadStateModelByName("default")
+	if !assert.NoError(t, err) || !assert.NotNil(t, model) {
+		return
+	}
+
+	stateIndex := slices.IndexFunc(model.States, func(state proapi.ModelState) bool {
+		return state.Name == string(BorrowerStateDuplicate) && state.Side == proapi.REQUESTER
+	})
+	if !assert.NotEqual(t, -1, stateIndex) {
+		return
+	}
+	state := model.States[stateIndex]
+	assert.NotNil(t, state.Editable)
+	assert.True(t, *state.Editable)
+	assert.NotNil(t, state.NeedsAttention)
+	assert.True(t, *state.NeedsAttention)
+	assert.Nil(t, state.Terminal)
+	assert.NotNil(t, state.PrimaryAction)
+	assert.Equal(t, string(BorrowerActionSendRequest), *state.PrimaryAction)
+	assert.NotNil(t, state.ClosingAction)
+	assert.Equal(t, string(BorrowerActionCloseRequest), *state.ClosingAction)
+	assert.True(t, slices.ContainsFunc(*state.Actions, func(action proapi.ModelAction) bool {
+		return action.Name == string(BorrowerActionSendRequest)
+	}))
+}
+
+func TestValidateStateModelMissingInitial(t *testing.T) {
+	s := "validate-patron"
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
@@ -45,6 +539,62 @@ func TestValidateStateModelWithPrimaryAction(t *testing.T) {
 			{
 				Name: "NEW",
 				Side: proapi.REQUESTER,
+				Actions: &[]proapi.ModelAction{
+					{Name: s},
+				},
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.Error(t, err)
+	assert.Equal(t, "initial state not defined for side REQUESTER", err.Error())
+}
+
+func TestValidateStateModelDoubleInitial(t *testing.T) {
+	s := "validate-patron"
+	tt := true
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name: "NEW",
+				Side: proapi.REQUESTER,
+				Actions: &[]proapi.ModelAction{
+					{Name: s},
+				},
+				Initial: &tt,
+			},
+			{
+				Name: "OTHER",
+				Side: proapi.REQUESTER,
+				Actions: &[]proapi.ModelAction{
+					{Name: s},
+				},
+				Initial: &tt,
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.Error(t, err)
+	assert.Equal(t, "initial state defined multiple times for side REQUESTER: NEW and OTHER", err.Error())
+}
+
+func TestValidateStateModelWithPrimaryAction(t *testing.T) {
+	s := "validate-patron"
+	tt := true
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name:    "NEW",
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Actions: &[]proapi.ModelAction{
 					{Name: s},
 				},
@@ -58,15 +608,17 @@ func TestValidateStateModelWithPrimaryAction(t *testing.T) {
 }
 
 func TestValidateStateModelWithoutPrimaryAction(t *testing.T) {
-	s := "validate"
+	s := "validate-patron"
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
 		Version: "1.0.0",
 		States: []proapi.ModelState{
 			{
-				Name: "NEW",
-				Side: proapi.REQUESTER,
+				Name:    "NEW",
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Actions: &[]proapi.ModelAction{
 					{Name: s},
 				},
@@ -80,16 +632,18 @@ func TestValidateStateModelWithoutPrimaryAction(t *testing.T) {
 
 func TestValidateStateModelPrimaryActionUndefined(t *testing.T) {
 	s := "other"
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
 		Version: "1.0.0",
 		States: []proapi.ModelState{
 			{
-				Name: "NEW",
-				Side: proapi.REQUESTER,
+				Name:    "NEW",
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Actions: &[]proapi.ModelAction{
-					{Name: "validate"},
+					{Name: "validate-patron"},
 				},
 				PrimaryAction: &s,
 			},
@@ -103,6 +657,7 @@ func TestValidateStateModelPrimaryActionUndefined(t *testing.T) {
 
 func TestValidateStateModelPrimaryActionNoActionsDefined(t *testing.T) {
 	s := "other"
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
@@ -111,6 +666,7 @@ func TestValidateStateModelPrimaryActionNoActionsDefined(t *testing.T) {
 			{
 				Name:          "NEW",
 				Side:          proapi.REQUESTER,
+				Initial:       &tt,
 				Actions:       nil,
 				PrimaryAction: &s,
 			},
@@ -122,15 +678,197 @@ func TestValidateStateModelPrimaryActionNoActionsDefined(t *testing.T) {
 	assert.Equal(t, "primary action other undefined in state NEW side REQUESTER", err.Error())
 }
 
-func TestValidateStateModelInvalidRequesterAction(t *testing.T) {
+func TestValidateStateModelClosingActionUndefined(t *testing.T) {
+	s := "ship"
+	valid := "will-supply"
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
 		Version: "1.0.0",
 		States: []proapi.ModelState{
 			{
-				Name: "NEW",
+				Name:    "VALIDATED",
+				Side:    proapi.SUPPLIER,
+				Initial: &tt,
+				Actions: &[]proapi.ModelAction{
+					{Name: valid},
+				},
+				PrimaryAction: &valid,
+				ClosingAction: &s,
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.Error(t, err)
+	assert.Equal(t, "closing action ship undefined in state VALIDATED side SUPPLIER", err.Error())
+}
+
+func TestValidateStateModelClosingActionNoActionsDefined(t *testing.T) {
+	s := "ship"
+	tt := true
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name:          "VALIDATED",
+				Side:          proapi.SUPPLIER,
+				Initial:       &tt,
+				ClosingAction: &s,
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.Error(t, err)
+	assert.Equal(t, "closing action ship undefined in state VALIDATED side SUPPLIER", err.Error())
+}
+
+func TestValidateStateModelClosingActionWithoutSuccessTransition(t *testing.T) {
+	closingAction := string(BorrowerActionValidatePatron)
+	tt := true
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name:          string(BorrowerStateNew),
+				Side:          proapi.REQUESTER,
+				Initial:       &tt,
+				ClosingAction: &closingAction,
+				Actions: &[]proapi.ModelAction{
+					{Name: closingAction},
+				},
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.EqualError(t, err, "closing action validate-patron in state NEW side REQUESTER must define a success transition")
+}
+
+func TestValidateStateModelClosingActionTransitionsToNonTerminalState(t *testing.T) {
+	closingAction := string(BorrowerActionCloseRequest)
+	target := string(BorrowerStateValidated)
+	tt := true
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name:          string(BorrowerStateNew),
+				Side:          proapi.REQUESTER,
+				Initial:       &tt,
+				ClosingAction: &closingAction,
+				Actions: &[]proapi.ModelAction{
+					{
+						Name: closingAction,
+						Transitions: &struct {
+							Failure *string `json:"failure,omitempty"`
+							Review  *string `json:"review,omitempty"`
+							Success *string `json:"success,omitempty"`
+						}{
+							Success: &target,
+						},
+					},
+				},
+			},
+			{
+				Name: string(BorrowerStateValidated),
 				Side: proapi.REQUESTER,
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.EqualError(t, err, "closing action close-request in state NEW side REQUESTER has non-terminal success transition target VALIDATED")
+}
+
+func TestValidateStateModelManualCloseTerminal(t *testing.T) {
+	tt := true
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name:        string(BorrowerStateManuallyClosed),
+				Side:        proapi.REQUESTER,
+				Initial:     &tt,
+				Terminal:    &tt,
+				ManualClose: &tt,
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.NoError(t, err)
+}
+
+func TestValidateStateModelManualCloseNonTerminal(t *testing.T) {
+	tt := true
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name:        string(BorrowerStateNew),
+				Side:        proapi.REQUESTER,
+				Initial:     &tt,
+				ManualClose: &tt,
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "must be terminal")
+}
+
+func TestValidateStateModelManualCloseDuplicateSide(t *testing.T) {
+	tt := true
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name:        string(BorrowerStateCancelled),
+				Side:        proapi.REQUESTER,
+				Terminal:    &tt,
+				ManualClose: &tt,
+			},
+			{
+				Name:        string(BorrowerStateManuallyClosed),
+				Side:        proapi.REQUESTER,
+				Terminal:    &tt,
+				ManualClose: &tt,
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "manualClose state defined multiple times")
+}
+
+func TestValidateStateModelInvalidRequesterAction(t *testing.T) {
+	tt := true
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name:    "NEW",
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Actions: &[]proapi.ModelAction{
 					{Name: "not-an-action"},
 				},
@@ -144,14 +882,16 @@ func TestValidateStateModelInvalidRequesterAction(t *testing.T) {
 }
 
 func TestValidateStateModelInvalidMessageEvent(t *testing.T) {
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
 		Version: "1.0.0",
 		States: []proapi.ModelState{
 			{
-				Name: "SENT",
-				Side: proapi.REQUESTER,
+				Name:    "SENT",
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Events: &[]proapi.ModelEvent{
 					{Name: "not-an-event"},
 				},
@@ -184,19 +924,22 @@ func TestValidateStateModelUnsupportedSide(t *testing.T) {
 
 func TestValidateStateModelInvalidActionSuccessTransitionTarget(t *testing.T) {
 	invalidTarget := "DOES_NOT_EXIST"
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
 		Version: "1.0.0",
 		States: []proapi.ModelState{
 			{
-				Name: "NEW",
-				Side: proapi.REQUESTER,
+				Name:    "NEW",
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Actions: &[]proapi.ModelAction{
 					{
-						Name: string(BorrowerActionValidate),
+						Name: string(BorrowerActionValidatePatron),
 						Transitions: &struct {
 							Failure *string `json:"failure,omitempty"`
+							Review  *string `json:"review,omitempty"`
 							Success *string `json:"success,omitempty"`
 						}{
 							Success: &invalidTarget,
@@ -214,19 +957,22 @@ func TestValidateStateModelInvalidActionSuccessTransitionTarget(t *testing.T) {
 
 func TestValidateStateModelInvalidActionFailureTransitionTarget(t *testing.T) {
 	invalidTarget := "DOES_NOT_EXIST"
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
 		Version: "1.0.0",
 		States: []proapi.ModelState{
 			{
-				Name: "VALIDATED",
-				Side: proapi.REQUESTER,
+				Name:    "VALIDATED",
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Actions: &[]proapi.ModelAction{
 					{
 						Name: string(BorrowerActionSendRequest),
 						Transitions: &struct {
 							Failure *string `json:"failure,omitempty"`
+							Review  *string `json:"review,omitempty"`
 							Success *string `json:"success,omitempty"`
 						}{
 							Failure: &invalidTarget,
@@ -244,14 +990,16 @@ func TestValidateStateModelInvalidActionFailureTransitionTarget(t *testing.T) {
 
 func TestValidateStateModelInvalidEventTransitionTarget(t *testing.T) {
 	invalidTarget := "DOES_NOT_EXIST"
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
 		Version: "1.0.0",
 		States: []proapi.ModelState{
 			{
-				Name: "SENT",
-				Side: proapi.REQUESTER,
+				Name:    "SENT",
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Events: &[]proapi.ModelEvent{
 					{
 						Name:       string(SupplierWillSupply),
@@ -269,19 +1017,22 @@ func TestValidateStateModelInvalidEventTransitionTarget(t *testing.T) {
 
 func TestValidateStateModelActionTransitionTargetMustExistInModelForSameSide(t *testing.T) {
 	transition := string(BorrowerStateValidated)
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
 		Version: "1.0.0",
 		States: []proapi.ModelState{
 			{
-				Name: string(BorrowerStateNew),
-				Side: proapi.REQUESTER,
+				Name:    string(BorrowerStateNew),
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Actions: &[]proapi.ModelAction{
 					{
-						Name: string(BorrowerActionValidate),
+						Name: string(BorrowerActionValidatePatron),
 						Transitions: &struct {
 							Failure *string `json:"failure,omitempty"`
+							Review  *string `json:"review,omitempty"`
 							Success *string `json:"success,omitempty"`
 						}{
 							Success: &transition,
@@ -299,19 +1050,22 @@ func TestValidateStateModelActionTransitionTargetMustExistInModelForSameSide(t *
 
 func TestValidateStateModelActionTransitionCannotCrossSides(t *testing.T) {
 	transition := string(BorrowerStateValidated)
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
 		Version: "1.0.0",
 		States: []proapi.ModelState{
 			{
-				Name: string(BorrowerStateNew),
-				Side: proapi.REQUESTER,
+				Name:    string(BorrowerStateNew),
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Actions: &[]proapi.ModelAction{
 					{
-						Name: string(BorrowerActionValidate),
+						Name: string(BorrowerActionValidatePatron),
 						Transitions: &struct {
 							Failure *string `json:"failure,omitempty"`
+							Review  *string `json:"review,omitempty"`
 							Success *string `json:"success,omitempty"`
 						}{
 							Success: &transition,
@@ -320,8 +1074,9 @@ func TestValidateStateModelActionTransitionCannotCrossSides(t *testing.T) {
 				},
 			},
 			{
-				Name: string(LenderStateValidated),
-				Side: proapi.SUPPLIER,
+				Name:    string(LenderStateValidated),
+				Side:    proapi.SUPPLIER,
+				Initial: &tt,
 			},
 		},
 	}
@@ -333,14 +1088,16 @@ func TestValidateStateModelActionTransitionCannotCrossSides(t *testing.T) {
 
 func TestValidateStateModelEventTransitionCannotCrossSides(t *testing.T) {
 	transition := string(BorrowerStateShipped)
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
 		Version: "1.0.0",
 		States: []proapi.ModelState{
 			{
-				Name: string(BorrowerStateSent),
-				Side: proapi.REQUESTER,
+				Name:    string(BorrowerStateSent),
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Events: &[]proapi.ModelEvent{
 					{
 						Name:       string(SupplierLoaned),
@@ -349,8 +1106,9 @@ func TestValidateStateModelEventTransitionCannotCrossSides(t *testing.T) {
 				},
 			},
 			{
-				Name: string(LenderStateShipped),
-				Side: proapi.SUPPLIER,
+				Name:    string(LenderStateShipped),
+				Side:    proapi.SUPPLIER,
+				Initial: &tt,
 			},
 		},
 	}
@@ -358,6 +1116,29 @@ func TestValidateStateModelEventTransitionCannotCrossSides(t *testing.T) {
 	err := ValidateStateModel(model)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid transition target")
+}
+
+func TestValidateStateModelTransitionActionRequiresSuccessTransition(t *testing.T) {
+	model, err := LoadStateModelByName("default")
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	for stateIndex := range model.States {
+		state := &model.States[stateIndex]
+		if state.Name != string(BorrowerStateInvalidPatron) || state.Actions == nil {
+			continue
+		}
+		for actionIndex := range *state.Actions {
+			action := &(*state.Actions)[actionIndex]
+			if action.Name == string(BorrowerActionSkipPatronValidation) {
+				action.Transitions = nil
+			}
+		}
+	}
+
+	err = ValidateStateModel(model)
+	assert.ErrorContains(t, err, "transition action skip-patron-validation in state INVALID_PATRON must define a success transition")
 }
 
 func TestStateModelServiceConcurrentGetStateModel(t *testing.T) {
@@ -372,7 +1153,7 @@ func TestStateModelServiceConcurrentGetStateModel(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			model, err := service.GetStateModel("returnables")
+			model, err := service.GetStateModel("default")
 			if err != nil {
 				errs <- err
 				return
@@ -399,4 +1180,76 @@ func TestStateModelServiceConcurrentGetStateModel(t *testing.T) {
 		assert.Same(t, first, model)
 	}
 	assert.NotNil(t, first)
+}
+
+func TestValidateStateModelContinueOn(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		policy  *[]proapi.ModelActionContinueOn
+		wantErr string
+	}{
+		{name: "omitted"},
+		{name: "empty", policy: ptr([]proapi.ModelActionContinueOn{})},
+		{name: "problem only", policy: ptr([]proapi.ModelActionContinueOn{proapi.PROBLEM})},
+		{name: "error only", policy: ptr([]proapi.ModelActionContinueOn{proapi.ERROR})},
+		{name: "both", policy: ptr([]proapi.ModelActionContinueOn{proapi.PROBLEM, proapi.ERROR})},
+		{name: "success", policy: ptr([]proapi.ModelActionContinueOn{"SUCCESS"}), wantErr: "invalid continueOn status"},
+		{name: "processing", policy: ptr([]proapi.ModelActionContinueOn{"PROCESSING"}), wantErr: "invalid continueOn status"},
+		{name: "unknown", policy: ptr([]proapi.ModelActionContinueOn{"stop"}), wantErr: "invalid continueOn status"},
+		{name: "duplicate", policy: ptr([]proapi.ModelActionContinueOn{proapi.PROBLEM, proapi.PROBLEM}), wantErr: "repeats continueOn status"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			model := &proapi.StateModel{
+				Type: proapi.StateModelTypeStateModel, Name: "test", Version: "1.0.0",
+				States: []proapi.ModelState{{Name: "NEW", Side: proapi.REQUESTER, Initial: ptr(true), Actions: &[]proapi.ModelAction{
+					{Name: string(BorrowerActionValidatePatron), ContinueOn: tc.policy},
+				}}},
+			}
+			err := ValidateStateModel(model)
+			if tc.wantErr == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.ErrorContains(t, err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestDefaultStateModelContinuationPoliciesAndRecoveryTransition(t *testing.T) {
+	model, err := LoadStateModelByName("default")
+	if !assert.NoError(t, err) {
+		return
+	}
+	var policyCount, failureCount int
+	for _, state := range model.States {
+		if state.Actions == nil {
+			continue
+		}
+		for _, action := range *state.Actions {
+			label := string(state.Side) + "/" + state.Name + "/" + action.Name
+			switch {
+			case action.Name == "send-notification", state.Side == proapi.SUPPLIER && (action.Name == "request-item" || action.Name == "will-supply"):
+				if assert.NotNil(t, action.ContinueOn, label) {
+					assert.ElementsMatch(t, []proapi.ModelActionContinueOn{proapi.PROBLEM, proapi.ERROR}, *action.ContinueOn, label)
+				}
+				policyCount++
+			case state.Side == proapi.REQUESTER && action.Name == "validate-patron":
+				if assert.NotNil(t, action.ContinueOn, label) {
+					assert.Equal(t, []proapi.ModelActionContinueOn{proapi.PROBLEM}, *action.ContinueOn, label)
+				}
+				policyCount++
+			default:
+				assert.Nil(t, action.ContinueOn, label)
+			}
+			if action.Transitions != nil && action.Transitions.Failure != nil {
+				failureCount++
+				assert.Equal(t, proapi.SUPPLIER, state.Side)
+				assert.Equal(t, "VALIDATED", state.Name)
+				assert.Equal(t, "request-item", action.Name)
+				assert.Equal(t, "ITEM_PENDING", *action.Transitions.Failure)
+			}
+		}
+	}
+	assert.Equal(t, 12, policyCount)
+	assert.Equal(t, 1, failureCount)
 }

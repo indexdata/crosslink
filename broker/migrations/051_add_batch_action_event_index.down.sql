@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_event_batch_action_task_timestamp;

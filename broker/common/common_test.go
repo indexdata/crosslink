@@ -148,6 +148,16 @@ func TestUnpackItemsNote(t *testing.T) {
 	assert.Nil(t, result)
 }
 
+func TestStripItemsNotePayload(t *testing.T) {
+	payload := PackItemsNote([][]string{{"item-1", "call-1"}})
+	assert.Equal(t, "", StripItemsNotePayload(""))
+	assert.Equal(t, "plain note", StripItemsNotePayload(" plain note "))
+	assert.Equal(t, "", StripItemsNotePayload(payload))
+	assert.Equal(t, "before", StripItemsNotePayload("before "+payload))
+	assert.Equal(t, "after", StripItemsNotePayload(payload+" after"))
+	assert.Equal(t, "before\nafter", StripItemsNotePayload("before "+payload+" after"))
+}
+
 func TestPackItemsNote(t *testing.T) {
 	items := [][]string{
 		{"T1", "CallNumber1", "Barcode1"},
@@ -175,6 +185,16 @@ func TestSplitSymbol(t *testing.T) {
 	assert.Equal(t, "", authority)
 	assert.Equal(t, "", symbol)
 
+	authority, symbol, err = SplitSymbol(":REQ")
+	assert.Error(t, err)
+	assert.Equal(t, "", authority)
+	assert.Equal(t, "", symbol)
+
+	authority, symbol, err = SplitSymbol("ISIL:")
+	assert.Error(t, err)
+	assert.Equal(t, "", authority)
+	assert.Equal(t, "", symbol)
+
 	authority, symbol, err = SplitSymbol("ISIL:REQ")
 	assert.NoError(t, err)
 	assert.Equal(t, "ISIL", authority)
@@ -186,20 +206,20 @@ func TestSplitSymbol(t *testing.T) {
 	assert.Equal(t, "REQ:1", symbol)
 }
 
-func TestSplitAgencySymbol(t *testing.T) {
-	authority, symbol := SplitAgencySymbol("")
+func TestSplitSymbolLenient(t *testing.T) {
+	authority, symbol := SplitSymbolLenient("")
 	assert.Equal(t, "", authority)
 	assert.Equal(t, "", symbol)
 
-	authority, symbol = SplitAgencySymbol("REQ")
+	authority, symbol = SplitSymbolLenient("REQ")
 	assert.Equal(t, "", authority)
 	assert.Equal(t, "REQ", symbol)
 
-	authority, symbol = SplitAgencySymbol("ISIL:REQ")
+	authority, symbol = SplitSymbolLenient("ISIL:REQ")
 	assert.Equal(t, "ISIL", authority)
 	assert.Equal(t, "REQ", symbol)
 
-	authority, symbol = SplitAgencySymbol("ISIL:REQ:1")
+	authority, symbol = SplitSymbolLenient("ISIL:REQ:1")
 	assert.Equal(t, "ISIL", authority)
 	assert.Equal(t, "REQ:1", symbol)
 }

@@ -87,7 +87,7 @@ func (s *TenantResolver) clearStale() {
 	})
 }
 
-func (s *TenantResolver) mapTenantToSymbols(tenant string) ([]string, error) {
+func (s *TenantResolver) mapTenantToSymbols(ctx common.ExtendedContext, tenant string) ([]string, error) {
 	if s.tenantToSymbol != MapToSymbolDirectory {
 		return []string{strings.ReplaceAll(s.tenantToSymbol, "{tenant}", strings.ToUpper(tenant))}, nil
 	}
@@ -101,7 +101,7 @@ func (s *TenantResolver) mapTenantToSymbols(tenant string) ([]string, error) {
 	if s.directoryLookupAdapter == nil {
 		return nil, errors.New("directoryLookupAdapter must not be nil for tenant to symbol lookup")
 	}
-	entries, _, err := s.directoryLookupAdapter.Lookup(adapter.DirectoryLookupParams{Tenant: tenant})
+	entries, _, err := s.directoryLookupAdapter.Lookup(ctx, adapter.DirectoryLookupParams{Tenant: tenant})
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func (s *TenantResolver) Resolve(ctx common.ExtendedContext, r *http.Request, sy
 		if tenantHeader == "" {
 			return nil, errors.New("header " + OkapiTenantHeader + " must be specified")
 		}
-		symbols, err := s.mapTenantToSymbols(tenantHeader)
+		symbols, err := s.mapTenantToSymbols(ctx, tenantHeader)
 		if err != nil {
 			return nil, fmt.Errorf("failed to map tenant to symbol: %w", err)
 		}

@@ -12,20 +12,22 @@ import (
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/indexdata/crosslink/testutil"
 	"github.com/indexdata/go-utils/utils"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
+	"github.com/stretchr/testify/require"
 )
 
 var prRepo pr_db.PrRepo
+var eventRepo events.EventRepo
 var appCtx = common.CreateExtCtxWithArgs(context.Background(), nil)
 
 func TestMain(m *testing.M) {
@@ -33,14 +35,7 @@ func TestMain(m *testing.M) {
 	ctx := context.Background()
 	app.DB_PROVISION = true
 
-	pgContainer, err := postgres.Run(ctx, "postgres",
-		postgres.WithDatabase("crosslink"),
-		postgres.WithUsername("crosslink"),
-		postgres.WithPassword("crosslink"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(5*time.Second)),
-	)
+	pgContainer, err := testutil.RunPostgres(ctx)
 	test.Expect(err, "failed to start db container")
 
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
@@ -59,19 +54,110 @@ func TestMain(m *testing.M) {
 	apptest.StartMockApp(mockPort)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	_, _, _, prRepo = apptest.StartApp(ctx)
+	_, _, eventRepo, prRepo = apptest.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	defer cancel()
 	code := m.Run()
 
-	test.Expect(pgContainer.Terminate(ctx), "failed to stop db container")
+	test.Expect(test.TerminatePGContainer(ctx, pgContainer), "failed to stop db container")
 	os.Exit(code)
+}
+
+func TestDeletePatronRequestCascadesOwnedRows(t *testing.T) {
+	prID := uuid.NewString()
+	itemID := uuid.NewString()
+	notificationID := uuid.NewString()
+	eventID := uuid.NewString()
+	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID: prID, CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Language: "english", Items: []pr_db.PrItem{},
+	})
+	assert.NoError(t, err)
+	_, err = prRepo.SaveItem(appCtx, pr_db.SaveItemParams{
+		ID: itemID, PrID: prID, Barcode: "cascade",
+		CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+	})
+	assert.NoError(t, err)
+	_, err = prRepo.SaveNotification(appCtx, pr_db.SaveNotificationParams{
+		ID: notificationID, PrID: prID, FromSymbol: "from", ToSymbol: "to",
+		Direction: pr_db.NotificationDirectionSent, Kind: pr_db.NotificationKindNote,
+		CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+	})
+	assert.NoError(t, err)
+	_, err = eventRepo.SaveEvent(appCtx, events.SaveEventParams{
+		ID: eventID, Timestamp: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		IllTransactionID: events.DEFAULT_ILL_TRANSACTION_ID, PatronRequestID: prID,
+		EventType: events.EventTypeTask, EventName: events.EventNameInvokeAction,
+		EventStatus: events.EventStatusSuccess, LastSignal: string(events.SignalTaskComplete),
+	})
+	assert.NoError(t, err)
+
+	assert.NoError(t, prRepo.DeletePatronRequest(appCtx, prID))
+	_, err = prRepo.GetItemById(appCtx, itemID)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+	_, err = prRepo.GetNotificationById(appCtx, notificationID)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+	_, err = eventRepo.GetEvent(appCtx, eventID)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestSyntheticPatronRequestCannotBeDeleted(t *testing.T) {
+	err := prRepo.DeletePatronRequest(appCtx, events.DEFAULT_PATRON_REQUEST_ID)
+	assert.Error(t, err)
+}
+
+func TestDeleteItemById(t *testing.T) {
+	prID := uuid.NewString()
+	itemID := uuid.NewString()
+	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID: prID, CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Language: "english", Items: []pr_db.PrItem{},
+	})
+	assert.NoError(t, err)
+	_, err = prRepo.SaveItem(appCtx, pr_db.SaveItemParams{
+		ID: itemID, PrID: prID, Barcode: "delete-item",
+		CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+	})
+	assert.NoError(t, err)
+	t.Cleanup(func() {
+		assert.NoError(t, prRepo.DeletePatronRequest(appCtx, prID))
+	})
+
+	assert.NoError(t, prRepo.DeleteItemById(appCtx, itemID))
+	_, err = prRepo.GetItemById(appCtx, itemID)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+	pr, err := prRepo.GetPatronRequestById(appCtx, prID)
+	assert.NoError(t, err)
+	assert.Empty(t, pr.Items)
+}
+
+func TestDeleteNotificationById(t *testing.T) {
+	prID := uuid.NewString()
+	notificationID := uuid.NewString()
+	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID: prID, CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Language: "english", Items: []pr_db.PrItem{},
+	})
+	assert.NoError(t, err)
+	_, err = prRepo.SaveNotification(appCtx, pr_db.SaveNotificationParams{
+		ID: notificationID, PrID: prID, FromSymbol: "from", ToSymbol: "to",
+		Direction: pr_db.NotificationDirectionSent, Kind: pr_db.NotificationKindNote,
+		CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+	})
+	assert.NoError(t, err)
+	t.Cleanup(func() {
+		assert.NoError(t, prRepo.DeletePatronRequest(appCtx, prID))
+	})
+
+	assert.NoError(t, prRepo.DeleteNotificationById(appCtx, notificationID))
+	_, err = prRepo.GetNotificationById(appCtx, notificationID)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestItem(t *testing.T) {
 	prId := uuid.NewString()
-	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+	pr, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
 		ID: prId,
 		CreatedAt: pgtype.Timestamp{
 			Time:  time.Now(),
@@ -82,6 +168,8 @@ func TestItem(t *testing.T) {
 		TerminalState: false,
 	})
 	assert.NoError(t, err)
+	assert.True(t, pr.UpdatedAt.Valid)
+	assert.Equal(t, pr.CreatedAt.Time, pr.UpdatedAt.Time)
 
 	// Save works
 	itemId := uuid.NewString()
@@ -114,13 +202,28 @@ func TestItem(t *testing.T) {
 	assert.Equal(t, "c123", item.CallNumber.String)
 	assert.Equal(t, "t123", item.Title.String)
 	assert.Equal(t, "i123", item.ItemID.String)
+	assert.False(t, item.LmsRequestID.Valid)
+	assert.False(t, item.LmsItemID.Valid)
 	assert.True(t, item.CreatedAt.Valid)
+
+	assert.NoError(t, prRepo.SetItemLmsRequestID(appCtx, pr_db.SetItemLmsRequestIDParams{
+		ID:           itemId,
+		LmsRequestID: pgtype.Text{String: "requester-request-id", Valid: true},
+		LmsItemID:    pgtype.Text{String: "accepted-item-id", Valid: true},
+	}))
+	item, err = prRepo.GetItemById(appCtx, itemId)
+	assert.NoError(t, err)
+	assert.Equal(t, "requester-request-id", item.LmsRequestID.String)
+	assert.Equal(t, "i123", item.ItemID.String)
+	assert.Equal(t, "accepted-item-id", item.LmsItemID.String)
 
 	// Update works
 	item, err = prRepo.SaveItem(appCtx, pr_db.SaveItemParams{
-		ID:      itemId,
-		PrID:    prId,
-		Barcode: "b12",
+		ID:           itemId,
+		PrID:         prId,
+		Barcode:      "b12",
+		LmsRequestID: item.LmsRequestID,
+		LmsItemID:    item.LmsItemID,
 		CallNumber: pgtype.Text{
 			String: "c12",
 			Valid:  true,
@@ -134,13 +237,15 @@ func TestItem(t *testing.T) {
 			Valid:  true,
 		},
 		CreatedAt: pgtype.Timestamp{
-			Time:  time.Now().Add(time.Hour),
+			Time:  time.Now().UTC().Add(time.Hour),
 			Valid: true,
 		},
 	})
 
 	assert.NoError(t, err)
 	assert.Equal(t, itemId, item.ID)
+	assert.Equal(t, "requester-request-id", item.LmsRequestID.String)
+	assert.Equal(t, "accepted-item-id", item.LmsItemID.String)
 	assert.Equal(t, prId, item.PrID)
 	assert.Equal(t, "b12", item.Barcode)
 	assert.Equal(t, "c12", item.CallNumber.String)
@@ -159,11 +264,73 @@ func TestItem(t *testing.T) {
 	assert.Len(t, items, 1)
 	assert.Equal(t, itemId, items[0].ID)
 
-	err = prRepo.DeleteItemById(appCtx, itemId)
+	assert.NoError(t, prRepo.SetItemLmsRequestID(appCtx, pr_db.SetItemLmsRequestIDParams{ID: itemId}))
+	item, err = prRepo.GetItemById(appCtx, itemId)
 	assert.NoError(t, err)
+	assert.False(t, item.LmsRequestID.Valid)
+	assert.False(t, item.LmsItemID.Valid)
 
 	err = prRepo.DeletePatronRequest(appCtx, prId)
 	assert.NoError(t, err)
+	_, err = prRepo.GetItemById(appCtx, itemId)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestUpdatePatronRequestPreservesTriggerMaintainedItems(t *testing.T) {
+	prId := uuid.NewString()
+	pr, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID:        prId,
+		CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Language:  "english",
+		Items:     []pr_db.PrItem{},
+	})
+	assert.NoError(t, err)
+	t.Cleanup(func() {
+		assert.NoError(t, prRepo.DeletePatronRequest(appCtx, prId))
+	})
+
+	// Saving an item fires trigger_update_patron_request_items, which updates
+	// patron_request.items in the DB independently of the in-memory pr above.
+	_, err = prRepo.SaveItem(appCtx, pr_db.SaveItemParams{
+		ID:        uuid.NewString(),
+		PrID:      prId,
+		Barcode:   "b1",
+		CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+	})
+	assert.NoError(t, err)
+
+	// pr.Items is stale (still the empty value from before SaveItem); a generic
+	// update must not let it clobber the trigger-maintained cache.
+	pr.Items = []pr_db.PrItem{}
+	updatedPr, err := prRepo.UpdatePatronRequest(appCtx, pr_db.UpdatePatronRequestParams(pr))
+	assert.NoError(t, err)
+	if assert.Len(t, updatedPr.Items, 1) {
+		assert.Equal(t, "b1", updatedPr.Items[0].Barcode)
+	}
+
+	persistedPr, err := prRepo.GetPatronRequestById(appCtx, prId)
+	assert.NoError(t, err)
+	if assert.Len(t, persistedPr.Items, 1) {
+		assert.Equal(t, "b1", persistedPr.Items[0].Barcode)
+	}
+}
+
+func TestTemplateUpdatedAtInitializedFromCreatedAt(t *testing.T) {
+	createdAt := pgtype.Timestamp{Time: time.Now(), Valid: true}
+	template, err := prRepo.SaveTemplate(appCtx, pr_db.SaveTemplateParams{
+		ID:          uuid.NewString(),
+		Owner:       "ISIL:TEST",
+		Title:       "Test template",
+		Purpose:     "general",
+		Body:        "Body",
+		ContentType: "text/plain",
+		Labels:      []string{},
+		CreatedAt:   createdAt,
+	})
+
+	assert.NoError(t, err)
+	assert.True(t, template.UpdatedAt.Valid)
+	assert.Equal(t, template.CreatedAt.Time, template.UpdatedAt.Time)
 }
 
 func TestNotification(t *testing.T) {
@@ -298,11 +465,10 @@ func TestNotification(t *testing.T) {
 	assert.Equal(t, notificaitonId, notifications[0].ID)
 	assert.Equal(t, int64(1), fullCount)
 
-	err = prRepo.DeleteNotificationById(appCtx, notificaitonId)
-	assert.NoError(t, err)
-
 	err = prRepo.DeletePatronRequest(appCtx, prId)
 	assert.NoError(t, err)
+	_, err = prRepo.GetNotificationById(appCtx, notificaitonId)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestMarkConditionNotificationsReceipt(t *testing.T) {
@@ -422,12 +588,20 @@ func TestListPatronRequests(t *testing.T) {
 	prIds := []string{}
 	itemIds := []string{}
 
-	// Create 2 requests
+	// Create 2 requests; only the first carries an internal note and cancellation reason
 	for i := 0; i < 2; i++ {
 		prId := uuid.NewString()
 		prIds = append(prIds, prId)
+		var internalNote pgtype.Text
+		var cancellationReason pgtype.Text
+		if i == 0 {
+			internalNote = pgtype.Text{String: "staff only", Valid: true}
+			cancellationReason = pgtype.Text{String: "already available", Valid: true}
+		}
 		_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
-			ID: prId,
+			ID:                 prId,
+			InternalNote:       internalNote,
+			CancellationReason: cancellationReason,
 			CreatedAt: pgtype.Timestamp{
 				Time:  time.Now(),
 				Valid: true,
@@ -530,185 +704,240 @@ func TestListPatronRequests(t *testing.T) {
 	assert.NoError(t, err)
 
 	cql := "title = Androids"
+	pgcql, err := pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err := prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  1,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 
 	assert.NoError(t, err)
 	assert.Len(t, list, 1)
 	assert.Equal(t, int64(2), fullCount)
 
 	cql = "requester_symbol = isil:req"
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 	assert.NoError(t, err)
 	assert.Len(t, list, 2)
 	assert.Equal(t, int64(2), fullCount)
 
 	cql = "supplier_symbol = isil:sup"
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 	assert.NoError(t, err)
 	assert.Len(t, list, 2)
 	assert.Equal(t, int64(2), fullCount)
 
 	cql = "requester_req_id = req-123"
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 	assert.NoError(t, err)
 	assert.Len(t, list, 2)
 	assert.Equal(t, int64(2), fullCount)
 
 	cql = `isbn = "978-3-16-148410-0"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 	assert.NoError(t, err)
 	assert.Len(t, list, 2)
 	assert.Equal(t, int64(2), fullCount)
 
 	cql = `issn = "2049-3630"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 	assert.NoError(t, err)
 	assert.Len(t, list, 2)
 	assert.Equal(t, int64(2), fullCount)
 
 	cql = `isbn = "9783161484100"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 	assert.NoError(t, err)
 	assert.Len(t, list, 2)
 	assert.Equal(t, int64(2), fullCount)
 
 	cql = `issn = "20493630"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 	assert.NoError(t, err)
 	assert.Len(t, list, 2)
 	assert.Equal(t, int64(2), fullCount)
 
 	cql = `issn = "1234567x"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 	assert.NoError(t, err)
 	assert.Len(t, list, 2)
 	assert.Equal(t, int64(2), fullCount)
 
 	cql = `item_id = "item-123"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
-	assert.NoError(t, err)
-	assert.Len(t, list, 1)
+	}, pgcql)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
 	assert.Equal(t, prIds[0], list[0].ID)
 	assert.Equal(t, int64(1), fullCount)
 
 	cql = `barcode = "barcode-123"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
-	assert.NoError(t, err)
-	assert.Len(t, list, 1)
+	}, pgcql)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
 	assert.Equal(t, prIds[0], list[0].ID)
 	assert.Equal(t, int64(1), fullCount)
 
 	cql = `barcode = "barcode-*"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
-	assert.NoError(t, err)
-	assert.Len(t, list, 1)
+	}, pgcql)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
 	assert.Equal(t, prIds[0], list[0].ID)
 	assert.Equal(t, int64(1), fullCount)
 
 	cql = `call_number = "call-123"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
-	assert.NoError(t, err)
-	assert.Len(t, list, 1)
+	}, pgcql)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
 	assert.Equal(t, prIds[0], list[0].ID)
 	assert.Equal(t, int64(1), fullCount)
 
 	cql = `barcode <> "barcode-123"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
-	assert.NoError(t, err)
-	assert.Len(t, list, 1)
+	}, pgcql)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
 	assert.Equal(t, prIds[1], list[0].ID)
 	assert.Equal(t, int64(1), fullCount)
 
 	cql = `call_number = ""`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
-	assert.NoError(t, err)
-	assert.Len(t, list, 1)
+	}, pgcql)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
 	assert.Equal(t, prIds[1], list[0].ID)
 	assert.Equal(t, int64(1), fullCount)
 
 	cql = `call_number <> ""`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
-	assert.NoError(t, err)
-	assert.Len(t, list, 1)
+	}, pgcql)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
 	assert.Equal(t, prIds[0], list[0].ID)
 	assert.Equal(t, int64(1), fullCount)
 
 	// not found
 	cql = "title = banners"
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 
 	assert.NoError(t, err)
 	assert.Len(t, list, 0)
 	assert.Equal(t, int64(0), fullCount)
 
-	// no CQL
+	cql = "cql.allRecords=1"
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  1,
 		Offset: 0,
-	}, nil)
+	}, pgcql)
 	assert.NoError(t, err)
 	assert.Len(t, list, 1)
 	assert.Equal(t, int64(2), fullCount)
 
-	cql = "cql.allRecords=1"
-	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
-		Limit:  1,
-		Offset: 0,
-	}, &cql)
+	// has_internal_note=true selects requests that have a note (and round-trips its value)
+	cql = `requester_req_id_exact = REQ-123 and has_internal_note=true`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
 	assert.NoError(t, err)
-	assert.Len(t, list, 1)
-	assert.Equal(t, int64(2), fullCount)
+	list, _, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, pgcql)
+	assert.NoError(t, err)
+	if assert.Len(t, list, 1) {
+		assert.Equal(t, prIds[0], list[0].ID)
+		assert.Equal(t, "staff only", list[0].InternalNote.String)
+		assert.Equal(t, "already available", list[0].CancellationReason.String)
+	}
+
+	// has_internal_note=false selects requests without one
+	cql = `requester_req_id_exact = REQ-123 and has_internal_note=false`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
+	list, _, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, pgcql)
+	assert.NoError(t, err)
+	if assert.Len(t, list, 1) {
+		assert.Equal(t, prIds[1], list[0].ID)
+	}
 
 	for _, itemId := range itemIds {
 		err = prRepo.DeleteItemById(appCtx, itemId)
@@ -717,5 +946,26 @@ func TestListPatronRequests(t *testing.T) {
 	for _, prId := range prIds {
 		err = prRepo.DeletePatronRequest(appCtx, prId)
 		assert.NoError(t, err)
+	}
+}
+
+func TestRequesterPickupLocationPersistence(t *testing.T) {
+	pickup := pgtype.UUID{Bytes: uuid.New(), Valid: true}
+	pr, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID: uuid.NewString(), CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Language: "english", Items: []pr_db.PrItem{}, RequesterPickupLocationID: pickup,
+	})
+	if !assert.NoError(t, err) {
+		return
+	}
+	assert.Equal(t, pickup, pr.RequesterPickupLocationID)
+	view, err := prRepo.GetPatronRequestSearchView(appCtx, pr.ID)
+	if assert.NoError(t, err) {
+		assert.Equal(t, pickup, view.RequesterPickupLocationID)
+	}
+	pr.RequesterPickupLocationID = pgtype.UUID{Bytes: uuid.New(), Valid: true}
+	updated, err := prRepo.UpdatePatronRequest(appCtx, pr_db.UpdatePatronRequestParams(pr))
+	if assert.NoError(t, err) {
+		assert.Equal(t, pr.RequesterPickupLocationID, updated.RequesterPickupLocationID)
 	}
 }

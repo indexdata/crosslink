@@ -6,12 +6,12 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 func GetNow() pgtype.Timestamp {
@@ -82,29 +82,15 @@ func WaitForServiceUp(port int) {
 	}
 }
 
-func StartPGContainer() (context.Context, *postgres.PostgresContainer, string, error) {
-	ctx := context.Background()
-	pgContainer, err := postgres.Run(ctx, "postgres",
-		postgres.WithDatabase("crosslink"),
-		postgres.WithUsername("crosslink"),
-		postgres.WithPassword("crosslink"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(5*time.Second)),
-	)
-	if err != nil {
-		return ctx, pgContainer, "", fmt.Errorf("failed to start db container: %w", err)
-	}
-
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		return ctx, pgContainer, "", fmt.Errorf("failed to get conn string: %w", err)
-	}
-	return ctx, pgContainer, connStr, nil
-}
-
+// TerminatePGContainer stops a Postgres test container. It silently ignores the
+// conflict error (HTTP 409 "removal already in progress") that arises when
+// testcontainers' Ryuk reaper races with the explicit Terminate call as the
+// test process winds down.
 func TerminatePGContainer(ctx context.Context, pgContainer testcontainers.Container) error {
 	if err := pgContainer.Terminate(ctx); err != nil {
+		if cerrdefs.IsConflict(err) && strings.Contains(err.Error(), "already in progress") {
+			return nil
+		}
 		return fmt.Errorf("failed to stop db container: %w", err)
 	}
 	return nil

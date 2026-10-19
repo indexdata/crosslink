@@ -6,13 +6,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"reflect"
 	"strconv"
 	"testing"
 
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/indexdata/crosslink/broker/common"
 	mockapp "github.com/indexdata/crosslink/illmock/app"
 	"github.com/indexdata/crosslink/illmock/netutil"
 	"github.com/indexdata/crosslink/ncip"
@@ -40,7 +40,7 @@ func createTestClient() NcipClient {
 		"http://localhost:"+os.Getenv("HTTP_PORT")+"/ncip",
 		"ILL-MOCK",
 		"ILL-MOCK",
-		"pass").(*NcipClientImpl)
+		"pass", false)
 }
 
 func TestPrepareHeaderValues(t *testing.T) {
@@ -70,6 +70,10 @@ func TestLookupUserAutoOK(t *testing.T) {
 
 func TestLookupUserAutoInvalidUser(t *testing.T) {
 	ncipClient := createTestClient()
+	var logErr error
+	ncipClient.SetLogFunc(func(outgoing map[string]any, incoming map[string]any, err error) {
+		logErr = err
+	})
 	lookup := ncip.LookupUser{
 		UserId: &ncip.UserId{
 			UserIdentifierValue: "foo",
@@ -78,6 +82,9 @@ func TestLookupUserAutoInvalidUser(t *testing.T) {
 	_, err := ncipClient.LookupUser(lookup)
 	assert.Error(t, err)
 	assert.Equal(t, "NCIP user lookup failed: Unknown User: foo", err.Error())
+	var ncipErr *NcipError
+	assert.ErrorAs(t, logErr, &ncipErr)
+	assert.Equal(t, string(ncip.UnknownUser), ncipErr.Problem.ProblemType.Text)
 }
 
 func TestLookupUserMissingAddress(t *testing.T) {
@@ -206,7 +213,7 @@ func TestEmptyNcipResponse(t *testing.T) {
 	assert.Equal(t, "invalid NCIP response: missing LookupUserResponse", err.Error())
 	assert.NotNil(t, logOutgoing)
 	assert.NotNil(t, logIncoming)
-	assert.Nil(t, logError)
+	assert.EqualError(t, logError, "invalid NCIP response: missing LookupUserResponse")
 
 	accept := ncip.AcceptItem{
 		RequestId: ncip.RequestId{
@@ -282,6 +289,10 @@ func TestLookupUserProblemResponse(t *testing.T) {
 	ncipClient.fromAgencyAuthentication = "pass"
 	ncipClient.toAgency = "ILL-MOCK"
 	ncipClient.address = server.URL
+	var logErr error
+	ncipClient.SetLogFunc(func(outgoing map[string]any, incoming map[string]any, err error) {
+		logErr = err
+	})
 
 	lookup := ncip.LookupUser{
 		UserId: &ncip.UserId{
@@ -291,6 +302,9 @@ func TestLookupUserProblemResponse(t *testing.T) {
 	_, err := ncipClient.LookupUser(lookup)
 	assert.Error(t, err)
 	assert.Equal(t, "NCIP message processing failed: Some Problem: Details about the problem", err.Error())
+	var ncipErr *NcipError
+	assert.ErrorAs(t, logErr, &ncipErr)
+	assert.Equal(t, "Some Problem", ncipErr.Problem.ProblemType.Text)
 }
 
 func TestAcceptItemOK(t *testing.T) {
@@ -512,23 +526,85 @@ func TestHideSensitive(t *testing.T) {
 			},
 		},
 	}
-	hideSensitive(sampleMessage)
-	assert.Equal(t, "ILL-MOCK", sampleMessage.LookupUser.InitiationHeader.ToAgencyId.AgencyId.Text)
-	assert.Equal(t, "***", sampleMessage.LookupUser.InitiationHeader.FromAgencyAuthentication)
-	assert.Equal(t, "***", sampleMessage.LookupUser.InitiationHeader.FromSystemAuthentication)
-	assert.Equal(t, "validuser", sampleMessage.LookupUser.UserId.UserIdentifierValue)
-	assert.Equal(t, "***", sampleMessage.LookupUser.AuthenticationInput[0].AuthenticationInputData)
-	assert.Equal(t, "myuser", sampleMessage.LookupUser.AuthenticationInput[1].AuthenticationInputData)
+	messageMap, err := common.StructToMap(sampleMessage)
+	assert.NoError(t, err)
+	hideSensitive(messageMap)
+	messageJSON, err := json.Marshal(messageMap)
+	assert.NoError(t, err)
+	assert.Contains(t, string(messageJSON), "ILL-MOCK")
+	assert.Contains(t, string(messageJSON), "validuser")
+	assert.Contains(t, string(messageJSON), "myuser")
+	assert.NotContains(t, string(messageJSON), "supersecret")
+	assert.NotContains(t, string(messageJSON), "othersecret")
+	assert.NotContains(t, string(messageJSON), "1234")
+	assert.Equal(t, "supersecret", sampleMessage.LookupUser.InitiationHeader.FromAgencyAuthentication)
+	assert.Equal(t, "1234", sampleMessage.LookupUser.AuthenticationInput[0].AuthenticationInputData)
 }
 
-func TestHideSensitiveLevel(t *testing.T) {
-	sampleMessage := &ncip.NCIPMessage{}
-	traverse(reflect.ValueOf(sampleMessage), 30)
+func TestHideSensitiveRedactsRoutingNameWithoutMutatingMessage(t *testing.T) {
+	sampleMessage := &ncip.NCIPMessage{
+		CheckInItemResponse: &ncip.CheckInItemResponse{
+			RoutingInformation: &ncip.RoutingInformation{
+				NameInformation: &ncip.NameInformation{
+					PersonalNameInformation: &ncip.PersonalNameInformation{
+						StructuredPersonalUserName: &ncip.StructuredPersonalUserName{
+							GivenName: "Jane",
+							Surname:   "Doe",
+						},
+					},
+				},
+			},
+		},
+	}
+	messageMap, err := common.StructToMap(sampleMessage)
+	assert.NoError(t, err)
+
+	hideSensitive(messageMap)
+
+	response := messageMap["CheckInItemResponse"].(map[string]any)
+	routing := response["RoutingInformation"].(map[string]any)
+	assert.Equal(t, "***", routing["NameInformation"])
+	assert.Equal(t, "Jane", sampleMessage.CheckInItemResponse.RoutingInformation.NameInformation.PersonalNameInformation.StructuredPersonalUserName.GivenName)
 }
 
-func TestHideSensitiveInvalid(t *testing.T) {
-	invalid := reflect.Value{}
-	traverse(invalid, 0)
+func TestLogOperationRedactsLookupUserDetailsWithoutMutatingResponse(t *testing.T) {
+	client := &NcipClientImpl{}
+	var loggedIncoming map[string]any
+	client.SetLogFunc(func(_ map[string]any, incoming map[string]any, _ error) {
+		loggedIncoming = incoming
+	})
+	response := &ncip.NCIPMessage{
+		LookupUserResponse: &ncip.LookupUserResponse{
+			UserOptionalFields: &ncip.UserOptionalFields{
+				NameInformation: &ncip.NameInformation{
+					PersonalNameInformation: &ncip.PersonalNameInformation{
+						StructuredPersonalUserName: &ncip.StructuredPersonalUserName{
+							GivenName: "Jane",
+							Surname:   "Doe",
+						},
+					},
+				},
+				UserAddressInformation: []ncip.UserAddressInformation{{
+					ElectronicAddress: &ncip.ElectronicAddress{
+						ElectronicAddressType: ncip.SchemeValuePair{Text: "mailto"},
+						ElectronicAddressData: "jane@example.org",
+					},
+				}},
+			},
+		},
+	}
+
+	client.logOperation(&ncip.NCIPMessage{}, response, nil)
+
+	loggedJSON, err := json.Marshal(loggedIncoming)
+	assert.NoError(t, err)
+	assert.Contains(t, string(loggedJSON), `"NameInformation":"***"`)
+	assert.Contains(t, string(loggedJSON), `"UserAddressInformation":"***"`)
+	assert.NotContains(t, string(loggedJSON), "Jane")
+	assert.NotContains(t, string(loggedJSON), "Doe")
+	assert.NotContains(t, string(loggedJSON), "jane@example.org")
+	assert.Equal(t, "Jane", response.LookupUserResponse.UserOptionalFields.NameInformation.PersonalNameInformation.StructuredPersonalUserName.GivenName)
+	assert.Equal(t, "jane@example.org", response.LookupUserResponse.UserOptionalFields.UserAddressInformation[0].ElectronicAddress.ElectronicAddressData)
 }
 
 func TestSetLogFunc(t *testing.T) {

@@ -3,18 +3,241 @@ package handler
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/shim"
 	"github.com/indexdata/crosslink/broker/test/mocks"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 )
+
+type retryRequestRepo struct {
+	mocks.MockIllRepositorySuccess
+	transaction          ill_db.IllTransaction
+	selectedSupplier     ill_db.LocatedSupplier
+	savedSupplier        ill_db.LocatedSupplier
+	savedSupplierPresent bool
+	oldRotaRetired       bool
+}
+
+func (r *retryRequestRepo) WithTxFunc(ctx common.ExtendedContext, fn func(ill_db.IllRepo) error) error {
+	return fn(r)
+}
+
+func (r *retryRequestRepo) GetIllTransactionByRequesterRequestIdForUpdate(ctx common.ExtendedContext, requesterRequestID pgtype.Text) (ill_db.IllTransaction, error) {
+	return r.transaction, nil
+}
+
+func (r *retryRequestRepo) GetSelectedSupplierForIllTransaction(ctx common.ExtendedContext, illTransID string) (ill_db.LocatedSupplier, error) {
+	return r.selectedSupplier, nil
+}
+
+func (r *retryRequestRepo) GetLocatedSupplierByIdForUpdate(ctx common.ExtendedContext, id string) (ill_db.LocatedSupplier, error) {
+	return r.selectedSupplier, nil
+}
+
+func (r *retryRequestRepo) SaveLocatedSupplier(ctx common.ExtendedContext, params ill_db.SaveLocatedSupplierParams) (ill_db.LocatedSupplier, error) {
+	r.savedSupplier = ill_db.LocatedSupplier(params)
+	r.savedSupplierPresent = true
+	return r.savedSupplier, nil
+}
+
+func (r *retryRequestRepo) SkipLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) error {
+	r.oldRotaRetired = true
+	return nil
+}
+
+func TestHandleRetryRequestResetsReusedSelectedSupplierAttempt(t *testing.T) {
+	oldInfo := iso18626.BibliographicInfo{SupplierUniqueRecordId: "same-item", Title: "Same title"}
+	repo := &retryRequestRepo{
+		transaction: ill_db.IllTransaction{
+			ID: "transaction-id",
+			IllTransactionData: ill_db.IllTransactionData{
+				BibliographicInfo: oldInfo,
+			},
+		},
+		selectedSupplier: ill_db.LocatedSupplier{
+			ID:                "supplier-id",
+			SupplierStatus:    ill_db.SupplierStateSelectedPg,
+			LastStatus:        pgtype.Text{String: string(iso18626.TypeStatusRetryPossible), Valid: true},
+			PrevStatus:        pgtype.Text{String: string(iso18626.TypeStatusWillSupply), Valid: true},
+			LastReason:        pgtype.Text{String: string(iso18626.TypeReasonForMessageStatusChange), Valid: true},
+			PrevReason:        pgtype.Text{String: string(iso18626.TypeReasonForMessageRequestResponse), Valid: true},
+			ReasonUnfilled:    pgtype.Text{String: "NotOnShelf", Valid: true},
+			Note:              pgtype.Text{String: "old note", Valid: true},
+			SupplierRequestID: pgtype.Text{String: "old-supplier-request-id", Valid: true},
+		},
+	}
+	requestType := iso18626.TypeRequestTypeRetry
+	request := &iso18626.Request{
+		Header:            iso18626.Header{RequestingAgencyRequestId: "retry-request-id"},
+		BibliographicInfo: oldInfo,
+		ServiceInfo: &iso18626.ServiceInfo{
+			RequestType:                       &requestType,
+			RequestingAgencyPreviousRequestId: "previous-request-id",
+		},
+	}
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	id, lookupChanged, err := handleRetryRequest(ctx, request, repo)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "transaction-id", id)
+	assert.False(t, lookupChanged)
+	assert.False(t, repo.oldRotaRetired)
+	if assert.True(t, repo.savedSupplierPresent) {
+		assert.Equal(t, ill_db.SupplierStateSelectedPg, repo.savedSupplier.SupplierStatus)
+		assert.False(t, repo.savedSupplier.LastStatus.Valid)
+		assert.False(t, repo.savedSupplier.LastReason.Valid)
+		assert.False(t, repo.savedSupplier.SupplierRequestID.Valid)
+		assert.False(t, repo.savedSupplier.PrevStatus.Valid)
+		assert.False(t, repo.savedSupplier.PrevReason.Valid)
+		assert.False(t, repo.savedSupplier.ReasonUnfilled.Valid)
+		assert.False(t, repo.savedSupplier.Note.Valid)
+	}
+}
+
+func TestUpdateLocatedSupplierUnfilledReasonAndNote(t *testing.T) {
+	text := func(value string) pgtype.Text { return pgtype.Text{String: value, Valid: true} }
+	stored := ill_db.LocatedSupplier{ID: "supplier-id", ReasonUnfilled: text("PolicyProblem"), Note: text("stored note")}
+	tests := []struct {
+		name        string
+		supplier    ill_db.LocatedSupplier
+		status      iso18626.TypeStatus
+		messageInfo iso18626.MessageInfo
+		wantReason  pgtype.Text
+		wantNote    pgtype.Text
+	}{
+		{
+			name:     "unfilled stores reason and cleaned note",
+			supplier: ill_db.LocatedSupplier{ID: "supplier-id", LastStatus: text(string(iso18626.TypeStatusWillSupply))},
+			status:   iso18626.TypeStatusUnfilled,
+			messageInfo: iso18626.MessageInfo{
+				ReasonUnfilled: &iso18626.TypeSchemeValuePair{Text: "NotOnShelf"},
+				Note:           "Missing " + common.PackItemsNote([][]string{{"item-1", "call-1"}}) + shim.RESHARE_ADD_LOAN_CONDITION,
+			},
+			wantReason: text("NotOnShelf"),
+			wantNote:   text("Missing"),
+		},
+		{
+			name:     "unfilled without reason or note stores nulls",
+			supplier: stored,
+			status:   iso18626.TypeStatusUnfilled,
+		},
+		{
+			name:        "other status leaves stored values",
+			supplier:    stored,
+			status:      iso18626.TypeStatusWillSupply,
+			messageInfo: iso18626.MessageInfo{Note: "on its way"},
+			wantReason:  stored.ReasonUnfilled,
+			wantNote:    stored.Note,
+		},
+		{
+			name: "invalid transition to unfilled leaves stored values",
+			supplier: ill_db.LocatedSupplier{ID: "supplier-id", LastStatus: text(string(iso18626.TypeStatusLoanCompleted)),
+				ReasonUnfilled: stored.ReasonUnfilled, Note: stored.Note},
+			status: iso18626.TypeStatusUnfilled,
+			messageInfo: iso18626.MessageInfo{
+				ReasonUnfilled: &iso18626.TypeSchemeValuePair{Text: "NotOnShelf"},
+				Note:           "too late",
+			},
+			wantReason: stored.ReasonUnfilled,
+			wantNote:   stored.Note,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &retryRequestRepo{selectedSupplier: tt.supplier}
+			ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+			err := updateLocatedSupplier(ctx, repo, ill_db.IllTransaction{ID: "transaction-id"}, tt.status,
+				iso18626.TypeReasonForMessageStatusChange, tt.messageInfo, "", "peer-id", tt.supplier.ID)
+			assert.NoError(t, err)
+			if assert.True(t, repo.savedSupplierPresent) {
+				assert.Equal(t, tt.wantReason, repo.savedSupplier.ReasonUnfilled)
+				assert.Equal(t, tt.wantNote, repo.savedSupplier.Note)
+			}
+		})
+	}
+}
+
+func TestHandleRetryRequestLeavesChangedLookupRotaForLocator(t *testing.T) {
+	repo := &retryRequestRepo{
+		transaction: ill_db.IllTransaction{
+			ID: "transaction-id",
+			IllTransactionData: ill_db.IllTransactionData{
+				BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "old-item"},
+			},
+		},
+		selectedSupplier: ill_db.LocatedSupplier{
+			ID:         "supplier-id",
+			LastStatus: pgtype.Text{String: string(iso18626.TypeStatusRetryPossible), Valid: true},
+		},
+	}
+	requestType := iso18626.TypeRequestTypeRetry
+	request := &iso18626.Request{
+		Header:            iso18626.Header{RequestingAgencyRequestId: "retry-request-id"},
+		BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "new-item"},
+		ServiceInfo: &iso18626.ServiceInfo{
+			RequestType:                       &requestType,
+			RequestingAgencyPreviousRequestId: "previous-request-id",
+		},
+	}
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	id, lookupChanged, err := handleRetryRequest(ctx, request, repo)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "transaction-id", id)
+	assert.True(t, lookupChanged)
+	assert.False(t, repo.oldRotaRetired)
+	assert.False(t, repo.savedSupplierPresent)
+}
+
+func TestHandleRetryRequestChangedYearRequiresLookup(t *testing.T) {
+	repo := &retryRequestRepo{
+		transaction: ill_db.IllTransaction{
+			ID: "transaction-id",
+			IllTransactionData: ill_db.IllTransactionData{
+				BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "same-item"},
+				PublicationInfo:   &iso18626.PublicationInfo{PublicationDate: "2021"},
+			},
+		},
+		selectedSupplier: ill_db.LocatedSupplier{
+			ID:         "supplier-id",
+			LastStatus: pgtype.Text{String: string(iso18626.TypeStatusRetryPossible), Valid: true},
+		},
+	}
+	requestType := iso18626.TypeRequestTypeRetry
+	request := &iso18626.Request{
+		Header:            iso18626.Header{RequestingAgencyRequestId: "retry-request-id"},
+		BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "same-item"},
+		PublicationInfo:   &iso18626.PublicationInfo{PublicationDate: "2022"},
+		ServiceInfo: &iso18626.ServiceInfo{
+			RequestType:                       &requestType,
+			RequestingAgencyPreviousRequestId: "previous-request-id",
+		},
+	}
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	id, lookupChanged, err := handleRetryRequest(ctx, request, repo)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "transaction-id", id)
+	assert.True(t, lookupChanged)
+	assert.False(t, repo.oldRotaRetired)
+	assert.False(t, repo.savedSupplierPresent)
+}
 
 func TestGetSupplierSymbol(t *testing.T) {
 	header := &iso18626.Header{
@@ -144,7 +367,7 @@ type MockIllRepositorySuccessAlma struct {
 func (r *MockIllRepositorySuccessAlma) GetPeerById(ctx common.ExtendedContext, id string) (ill_db.Peer, error) {
 	return ill_db.Peer{
 		ID:     id,
-		Vendor: string(directory.Alma),
+		Vendor: string(dirapi.Alma),
 	}, nil
 }
 
@@ -154,4 +377,307 @@ type MockIllRepositoryNoSelectedSupplier struct {
 
 func (r *MockIllRepositoryNoSelectedSupplier) GetSelectedSupplierForIllTransaction(ctx common.ExtendedContext, illTransId string) (ill_db.LocatedSupplier, error) {
 	return ill_db.LocatedSupplier{}, pgx.ErrNoRows
+}
+
+// mockDuplicateCheckRepo overrides FindDuplicateIllTransaction to return
+// configurable results for duplicate-check testing.
+type mockDuplicateCheckRepo struct {
+	mocks.MockIllRepositorySuccess
+	duplicate          bool
+	matchedTransaction ill_db.IllTransaction
+	err                error
+	called             bool
+	cql                string
+}
+
+func (r *mockDuplicateCheckRepo) ListIllTransactions(ctx common.ExtendedContext, params ill_db.ListIllTransactionsParams, cql *string, symbols []string) ([]ill_db.IllTransaction, int64, error) {
+	if cql != nil {
+		r.cql = *cql
+	}
+	r.called = true
+	if r.duplicate {
+		matchedTransaction := r.matchedTransaction
+		matchedTransaction.ID = "duplicate-id"
+		return []ill_db.IllTransaction{matchedTransaction}, 1, nil
+	}
+	return []ill_db.IllTransaction{}, 0, r.err
+}
+
+func TestCheckDuplicateRequest(t *testing.T) {
+	window1 := int32(1)
+	window0 := int32(0)
+	windowNeg := int32(-1)
+
+	baseRequest := &iso18626.Request{
+		BibliographicInfo: iso18626.BibliographicInfo{
+			SupplierUniqueRecordId: "rec-1",
+			Title:                  "Test Title",
+		},
+		ServiceInfo: &iso18626.ServiceInfo{
+			ServiceType: iso18626.TypeServiceTypeLoan,
+		},
+		PatronInfo: &iso18626.PatronInfo{
+			PatronId: "patron-1",
+		},
+	}
+
+	isbnRequest := &iso18626.Request{
+		BibliographicInfo: iso18626.BibliographicInfo{
+			BibliographicItemId: []iso18626.BibliographicItemId{
+				{
+					BibliographicItemIdentifier:     "978-1234",
+					BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{Text: "ISBN"},
+				},
+			},
+		},
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopy},
+		PatronInfo:  &iso18626.PatronInfo{PatronId: "patron-2"},
+	}
+
+	tests := []struct {
+		name           string
+		request        *iso18626.Request
+		peer           ill_db.Peer
+		duplicate      bool
+		repoErr        error
+		wantErr        error
+		wantRepoCalled bool
+		wantPatronId   string
+		wantIdentifier string
+		wantIsbn       string
+		wantIssn       string
+		wantTitle      string
+		wantSvcType    string
+		matchedInfo    iso18626.BibliographicInfo
+		wantMatched    catalog.LookupParams
+	}{
+		{
+			name:           "no DuplicateCheckWindowHours configured - skips check",
+			request:        baseRequest,
+			peer:           ill_db.Peer{},
+			wantErr:        nil,
+			wantRepoCalled: false,
+		},
+		{
+			name:           "window is zero - skips check",
+			request:        baseRequest,
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &window0}}},
+			wantErr:        nil,
+			wantRepoCalled: false,
+		},
+		{
+			name:           "window is negative - skips check",
+			request:        baseRequest,
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &windowNeg}}},
+			wantErr:        nil,
+			wantRepoCalled: false,
+		},
+		{
+			name:           "db error - fails open, allows request through",
+			request:        baseRequest,
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &window1}}},
+			repoErr:        errors.New("db connection error"),
+			wantErr:        nil,
+			wantRepoCalled: true,
+			wantPatronId:   "patron-1",
+			wantIdentifier: "rec-1",
+			wantTitle:      "Test Title",
+			wantSvcType:    "Loan",
+		},
+		{
+			name:           "no duplicate found (ErrNoRows) - not a duplicate",
+			request:        baseRequest,
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &window1}}},
+			repoErr:        pgx.ErrNoRows,
+			wantErr:        nil,
+			wantRepoCalled: true,
+			wantPatronId:   "patron-1",
+			wantIdentifier: "rec-1",
+			wantTitle:      "Test Title",
+			wantSvcType:    "Loan",
+		},
+		{
+			name:           "duplicate found - returns ErrDuplicateRequest",
+			request:        baseRequest,
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &window1}}},
+			duplicate:      true,
+			wantErr:        ErrDuplicateRequest,
+			wantRepoCalled: true,
+			wantPatronId:   "patron-1",
+			wantIdentifier: "rec-1",
+			wantTitle:      "Test Title",
+			wantSvcType:    "Loan",
+			matchedInfo: iso18626.BibliographicInfo{
+				SupplierUniqueRecordId: "rec-1",
+				Title:                  "test title",
+			},
+			wantMatched: catalog.LookupParams{
+				Identifier:  "rec-1",
+				Title:       "test title",
+				ServiceType: "Loan",
+			},
+		},
+		{
+			name: "nil PatronInfo - skips duplicate check (can't verify same patron)",
+			request: &iso18626.Request{
+				BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "rec-1"},
+				ServiceInfo:       &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
+			},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &window1}}},
+			repoErr:        pgx.ErrNoRows,
+			wantErr:        nil,
+			wantRepoCalled: false,
+		},
+		{
+			name: "no service level - skips duplicate check (can't verify same patron)",
+			request: &iso18626.Request{
+				BibliographicInfo: iso18626.BibliographicInfo{
+					SupplierUniqueRecordId: "rec-1",
+					Title:                  "Test Title",
+				},
+				PatronInfo: &iso18626.PatronInfo{
+					PatronId: "patron-1",
+				},
+			},
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &window1}}},
+			repoErr:        pgx.ErrNoRows,
+			wantErr:        nil,
+			wantRepoCalled: false,
+		},
+		{
+			name:           "isbn passed as parameter to DB query",
+			request:        isbnRequest,
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &window1}}},
+			repoErr:        pgx.ErrNoRows,
+			wantErr:        nil,
+			wantRepoCalled: true,
+			wantPatronId:   "patron-2",
+			wantIsbn:       "978-1234",
+			wantSvcType:    "Copy",
+		},
+		{
+			name:           "duplicate found via isbn - returns ErrDuplicateRequest",
+			request:        isbnRequest,
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &window1}}},
+			duplicate:      true,
+			wantErr:        ErrDuplicateRequest,
+			wantRepoCalled: true,
+			wantPatronId:   "patron-2",
+			wantIsbn:       "978-1234",
+			wantSvcType:    "Copy",
+			matchedInfo: iso18626.BibliographicInfo{
+				BibliographicItemId: []iso18626.BibliographicItemId{
+					{
+						BibliographicItemIdentifier:     "978-1-234",
+						BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{Text: "ISBN"},
+					},
+				},
+			},
+			wantMatched: catalog.LookupParams{
+				Isbn:        "978-1-234",
+				ServiceType: "Copy",
+			},
+		},
+		{
+			name:           "no duplicate - returns nil",
+			request:        isbnRequest,
+			peer:           ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &window1}}},
+			duplicate:      false,
+			wantErr:        nil,
+			wantRepoCalled: true,
+			wantPatronId:   "patron-2",
+			wantIsbn:       "978-1234",
+			wantSvcType:    "Copy",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+			mockRepo := &mockDuplicateCheckRepo{
+				duplicate: tt.duplicate,
+				matchedTransaction: ill_db.IllTransaction{
+					IllTransactionData: ill_db.IllTransactionData{
+						BibliographicInfo: tt.matchedInfo,
+						ServiceInfo:       tt.request.ServiceInfo,
+					},
+				},
+				err: tt.repoErr,
+			}
+			result, err := checkDuplicateRequest(appCtx, tt.request, mockRepo, "ISIL:REQ1", tt.peer)
+			_, hasKey := result[duplicateCheckKey]
+			assert.True(t, hasKey)
+			assert.Equal(t, tt.wantErr, err)
+			assert.Equal(t, tt.wantRepoCalled, mockRepo.called)
+			if tt.wantRepoCalled {
+				assert.True(t, tt.wantPatronId == "" || strings.Contains(mockRepo.cql, tt.wantPatronId))
+				assert.True(t, tt.wantIdentifier == "" || strings.Contains(mockRepo.cql, tt.wantIdentifier))
+				assert.True(t, tt.wantIsbn == "" || strings.Contains(mockRepo.cql, tt.wantIsbn))
+				assert.True(t, tt.wantIssn == "" || strings.Contains(mockRepo.cql, tt.wantIssn))
+				assert.True(t, tt.wantTitle == "" || strings.Contains(mockRepo.cql, tt.wantTitle))
+				assert.True(t, tt.wantSvcType == "" || strings.Contains(mockRepo.cql, tt.wantSvcType))
+			}
+			if tt.duplicate {
+				dupCheck, ok := result[duplicateCheckKey].(*events.DuplicateCheck)
+				assert.True(t, ok)
+				assert.True(t, dupCheck.Enabled)
+				assert.Equal(t, tt.wantIdentifier, dupCheck.LookupParams.Identifier)
+				assert.Equal(t, tt.wantIsbn, dupCheck.LookupParams.Isbn)
+				assert.Equal(t, tt.wantIssn, dupCheck.LookupParams.Issn)
+				assert.Equal(t, tt.wantTitle, dupCheck.LookupParams.Title)
+				assert.Equal(t, tt.wantSvcType, dupCheck.LookupParams.ServiceType)
+				assert.Equal(t, window1, *dupCheck.WindowHours)
+				assert.NotNil(t, dupCheck.CutoffTime)
+				assert.Equal(t, "duplicate-id", *dupCheck.MatchedTransactionId)
+				if assert.NotNil(t, dupCheck.MatchedValues) {
+					assert.Equal(t, tt.wantMatched, *dupCheck.MatchedValues)
+				}
+			}
+		})
+	}
+}
+
+func TestHandleNewRequestChecksDuplicatesOnlyForExternalRequester(t *testing.T) {
+	windowHours := int32(1)
+	request := &iso18626.Request{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: "request-1",
+			Timestamp:                 utils.XSDDateTime{Time: time.Now()},
+		},
+		BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "record-1"},
+		ServiceInfo:       &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
+		PatronInfo:        &iso18626.PatronInfo{PatronId: "patron-1"},
+	}
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+
+	t.Run("CrossLink requester bypasses legacy transaction check", func(t *testing.T) {
+		repo := &mockDuplicateCheckRepo{duplicate: true}
+		_, _, err := handleNewRequest(ctx, request, repo, createPgText("ISIL:REQ"), []ill_db.Peer{{
+			Vendor:     string(dirapi.CrossLink),
+			CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &windowHours}},
+		}}, false)
+		assert.NoError(t, err)
+		assert.False(t, repo.called)
+	})
+
+	t.Run("intentional rerequest bypasses external requester duplicate check", func(t *testing.T) {
+		repo := &mockDuplicateCheckRepo{duplicate: true}
+		id, _, err := handleNewRequest(ctx, request, repo, createPgText("ISIL:REQ"), []ill_db.Peer{{
+			Vendor:     string(dirapi.Alma),
+			CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &windowHours}},
+		}}, true)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, id)
+		assert.False(t, repo.called)
+	})
+
+	t.Run("external requester retains legacy transaction check", func(t *testing.T) {
+		repo := &mockDuplicateCheckRepo{duplicate: true}
+		_, _, err := handleNewRequest(ctx, request, repo, createPgText("ISIL:REQ"), []ill_db.Peer{{
+			Vendor:     string(dirapi.Alma),
+			CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{DuplicateCheckWindowHours: &windowHours}},
+		}}, false)
+		assert.ErrorIs(t, err, ErrDuplicateRequest)
+		assert.True(t, repo.called)
+	})
 }

@@ -1,0 +1,19 @@
+{
+  "items": [
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "Das Konsortium",
+      "type": "Consortium",
+      "symbols": [
+        {
+          "authority": "TEST",
+          "id": "60000000-0000-0000-0000-000000000003",
+          "symbol": "ANCONS"
+        }
+      ]
+    }
+  ],
+  "about": {
+    "count": 4
+  }
+}

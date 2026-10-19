@@ -1,0 +1,223 @@
+package api
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"strings"
+
+	"github.com/indexdata/crosslink/directory/auth"
+	"github.com/indexdata/crosslink/directory/db"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+)
+
+func (a ApiImpl) AddNetwork(ctx context.Context, request AddNetworkRequestObject) (AddNetworkResponseObject, error) {
+	authData := auth.GetAuthData(ctx)
+
+	if !authData.HasRole(auth.ConsortialAdminRole) {
+		slog.ErrorContext(ctx, "permission denied")
+		return AddNetwork401TextResponse("Access denied"), nil
+	}
+
+	if request.Body == nil || request.Body.Consortium == uuid.Nil {
+		return AddNetwork400TextResponse("You must provide a consortium"), nil
+	}
+	if strings.TrimSpace(request.Body.Name) == "" {
+		return AddNetwork400TextResponse("You must provide a network name"), nil
+	}
+
+	consortium, err := a.queries.EntryById(ctx, request.Body.Consortium)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return AddNetwork400TextResponse("Consortium not found"), nil
+		}
+		slog.ErrorContext(ctx, "failed to get consortium", "error", err, "consortium", request.Body.Consortium)
+		return AddNetwork500TextResponse("Internal server error"), nil
+	}
+
+	if consortium.Type != string(EntryTypeConsortium) {
+		return AddNetwork400TextResponse("Entry is not a consortium"), nil
+	}
+
+	tx, err := a.pool.Begin(ctx)
+
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to begin transaction", "error", err, "operation", "AddNetwork")
+		return AddNetwork500TextResponse("Internal server error"), nil
+	}
+
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	qtx := a.queries.WithTx(tx)
+
+	insertedNetwork, err := qtx.CreateNetwork(ctx, db.CreateNetworkParams{
+		Name:       request.Body.Name,
+		Consortium: request.Body.Consortium,
+		Reciprocal: request.Body.Reciprocal,
+	})
+
+	if err != nil {
+		if isUniqueConstraintViolation(err, "networks_consortium_name_unique") {
+			return AddNetwork409TextResponse("A network with this name already exists in the consortium"), nil
+		}
+		slog.ErrorContext(ctx, "failed to create network", "error", err, "name", request.Body.Name)
+		return AddNetwork500TextResponse("Error creating network"), nil
+	}
+
+	var resp Id
+	resp.Id = insertedNetwork.ID
+
+	err = tx.Commit(ctx)
+
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to commit transaction", "error", err, "operation", "AddNetwork")
+		return AddNetwork500TextResponse("Internal server error"), nil
+	}
+
+	return AddNetwork201JSONResponse(resp), nil
+
+}
+
+func (a ApiImpl) GetNetwork(ctx context.Context, request GetNetworkRequestObject) (GetNetworkResponseObject, error) {
+
+	authData := auth.GetAuthData(ctx)
+	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole}
+
+	if !authData.HasRoleFromList(validRoles) {
+		slog.ErrorContext(ctx, "permission denied")
+		return GetNetwork401TextResponse("Access denied"), nil
+	}
+
+	network, err := a.queries.GetNetworkById(ctx, request.Id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return GetNetwork404TextResponse("Network not found"), nil
+		} else {
+			slog.ErrorContext(ctx, "failed to get network", "error", err, "id", request.Id)
+			return GetNetwork500TextResponse("Internal server error"), nil
+		}
+	}
+
+	networkResponse := Network{
+		Id:         &network.ID,
+		Consortium: network.Consortium,
+		Name:       network.Name,
+		Reciprocal: network.Reciprocal,
+	}
+
+	return GetNetwork200JSONResponse(networkResponse), nil
+}
+
+func (a ApiImpl) GetNetworks(ctx context.Context, request GetNetworksRequestObject) (GetNetworksResponseObject, error) {
+	authData := auth.GetAuthData(ctx)
+	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole}
+
+	if !authData.HasRoleFromList(validRoles) {
+		slog.ErrorContext(ctx, "permission denied")
+		return GetNetworks401TextResponse("Access denied"), nil
+	}
+
+	params := db.ListNetworksParams{
+		Limit:  derefOrDefault(request.Params.Limit, 1000),
+		Offset: derefOrDefault(request.Params.Offset, 0),
+	}
+
+	rows, err := a.queries.ListNetworks(ctx, params)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to list networks", "error", err)
+		return GetNetworks500TextResponse("Internal Server Error"), nil
+	}
+
+	networkList := make([]Network, 0, len(rows))
+
+	for _, row := range rows {
+		network := Network{
+			Id:         &row.ID,
+			Consortium: row.Consortium,
+			Name:       row.Name,
+			Reciprocal: row.Reciprocal,
+		}
+		networkList = append(networkList, network)
+	}
+
+	resp := NetworksResponse{
+		Items: networkList,
+		About: About{
+			Count: int64(len(networkList)),
+		},
+	}
+
+	return GetNetworks200JSONResponse(resp), nil
+
+}
+
+func (a ApiImpl) DeleteNetwork(ctx context.Context, request DeleteNetworkRequestObject) (DeleteNetworkResponseObject, error) {
+	authData := auth.GetAuthData(ctx)
+
+	if !authData.HasRole(auth.ConsortialAdminRole) {
+		slog.ErrorContext(ctx, "permission denied")
+		return DeleteNetwork401TextResponse("Access denied"), nil
+	}
+
+	err := a.queries.DeleteNetworkById(ctx, request.Id)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to delete network", "error", err, "id", request.Id)
+		return DeleteNetwork500TextResponse("Internal server error"), nil
+	}
+	return DeleteNetwork204Response{}, nil
+
+}
+
+func (a ApiImpl) UpdateNetwork(ctx context.Context, request UpdateNetworkRequestObject) (UpdateNetworkResponseObject, error) {
+	authData := auth.GetAuthData(ctx)
+	if !authData.HasRole(auth.ConsortialAdminRole) {
+		slog.ErrorContext(ctx, "permission denied")
+		return UpdateNetwork401TextResponse("Access denied"), nil
+	}
+	if request.Body == nil {
+		return UpdateNetwork400TextResponse("You must provide fields to update"), nil
+	}
+
+	tx, err := a.pool.Begin(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to begin transaction", "error", err, "operation", "UpdateNetwork")
+		return UpdateNetwork500TextResponse("Internal server error"), nil
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	qtx := a.queries.WithTx(tx)
+	orig, err := qtx.GetNetworkByIdForUpdate(ctx, request.Id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return UpdateNetwork404TextResponse("Network not found"), nil
+	} else if err != nil {
+		slog.ErrorContext(ctx, "failed to get network for update", "error", err, "id", request.Id)
+		return UpdateNetwork500TextResponse("Internal server error"), nil
+	}
+
+	reciprocal := orig.Reciprocal
+	if request.Body.Reciprocal.IsSpecified() {
+		if request.Body.Reciprocal.IsNull() {
+			reciprocal = nil
+		} else {
+			value := request.Body.Reciprocal.MustGet()
+			reciprocal = &value
+		}
+	}
+
+	err = qtx.UpdateNetwork(ctx, db.UpdateNetworkParams{
+		ID:         request.Id,
+		Reciprocal: reciprocal,
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to update network", "error", err, "id", request.Id)
+		return UpdateNetwork500TextResponse("Internal server error"), nil
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		slog.ErrorContext(ctx, "failed to commit transaction", "error", err, "operation", "UpdateNetwork")
+		return UpdateNetwork500TextResponse("Internal server error"), nil
+	}
+	return UpdateNetwork204Response{}, nil
+}

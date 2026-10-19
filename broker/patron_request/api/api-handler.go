@@ -15,6 +15,7 @@ import (
 	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/broker/api"
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/email"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/oapi"
@@ -28,26 +29,34 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/oapi-codegen/nullable"
 )
+
+type PickupLocationValidator interface {
+	ValidateRequesterPickupLocation(ctx common.ExtendedContext, pr pr_db.PatronRequest) error
+}
 
 type ActionTaskProcessor interface {
 	ProcessInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error)
 }
 
-var illRequestValidator = validator.New(validator.WithRequiredStructEnabled())
 var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 var errInvalidPatronRequest = errors.New("invalid patron request")
+var errDuplicateTemplateLabel = errors.New("one or more template labels already exist for this owner, purpose, and audience")
+
+const templateLabelUniqueConstraint = "template_owner_purpose_audience_labels_unique"
 
 type PatronRequestApiHandler struct {
-	limitDefault         int32
-	prRepo               pr_db.PrRepo
-	eventBus             events.EventBus
-	eventRepo            events.EventRepo
-	actionMappingService prservice.ActionMappingService
-	autoActionRunner     prservice.AutoActionRunner
-	actionTaskProcessor  ActionTaskProcessor
-	tenantResolver       *tenant.TenantResolver
-	notificationSender   prservice.PatronRequestNotificationService
+	pickupLocationValidator PickupLocationValidator
+	limitDefault            int32
+	prRepo                  pr_db.PrRepo
+	eventBus                events.EventBus
+	eventRepo               events.EventRepo
+	actionMappingService    prservice.ActionMappingService
+	autoActionRunner        prservice.AutoActionRunner
+	actionTaskProcessor     ActionTaskProcessor
+	tenantResolver          *tenant.TenantResolver
+	notificationSender      prservice.PatronRequestNotificationService
 }
 
 func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
@@ -61,6 +70,10 @@ func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
 		tenantResolver:       tenantResolver,
 		notificationSender:   *prservice.CreatePatronRequestNotificationService(prRepo, eventBus, iso18626Handler),
 	}
+}
+
+func (a *PatronRequestApiHandler) SetPickupLocationValidator(validator PickupLocationValidator) {
+	a.pickupLocationValidator = validator
 }
 
 func (a *PatronRequestApiHandler) SetAutoActionRunner(autoActionRunner prservice.AutoActionRunner) {
@@ -112,10 +125,18 @@ func (a *PatronRequestApiHandler) GetStateModelCapabilities(w http.ResponseWrite
 	api.WriteJsonResponse(w, prservice.BuiltInStateModelCapabilities())
 }
 
+func (a *PatronRequestApiHandler) GetStateModelBatchActions(w http.ResponseWriter, r *http.Request, params proapi.GetStateModelBatchActionsParams) {
+	api.WriteJsonResponse(w, prservice.GetStateModelBatchActionDefaults())
+}
+
+func (a *PatronRequestApiHandler) GetStateModelTemplates(w http.ResponseWriter, r *http.Request, params proapi.GetStateModelTemplatesParams) {
+	api.WriteJsonResponse(w, prservice.GetStateModelTemplateDefaults())
+}
+
 func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *http.Request, params proapi.GetPatronRequestsParams) {
 	logParams := map[string]string{"method": "GetPatronRequests"}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 	symbol, err := a.getRequestSymbol(ctx, r, params.Symbol)
@@ -148,7 +169,7 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 	var side pr_db.PatronRequestSide
 	if isSideParamValid(params.Side) {
 		side = pr_db.PatronRequestSide(*params.Side)
-		_, err = qb.And().Search("side").Term(*params.Side).Build()
+		_, err = qb.And().Search("side").Term(string(*params.Side)).Build()
 		if err != nil {
 			api.AddBadRequestError(ctx, w, err)
 			return
@@ -174,7 +195,13 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 		return
 	}
 	cqlStr := cql.String()
-	prs, count, err := a.prRepo.ListPatronRequestsSearchView(ctx, pr_db.ListPatronRequestsParams{Limit: limit, Offset: offset}, &cqlStr)
+	pgcql, err := pr_db.ParsePatronRequestsCql(cqlStr)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+
+	prs, count, err := a.prRepo.ListPatronRequestsSearchView(ctx, pr_db.ListPatronRequestsParams{Limit: limit, Offset: offset}, pgcql)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) { //DB error
 		api.AddInternalError(ctx, w, err)
 		return
@@ -185,8 +212,45 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 	}
 
 	resp := proapi.PatronRequests{Items: responseItems}
-	resp.About = proapi.About(api.CollectAboutData(count, offset, limit, r))
+	resp.About = toProAboutWithFacets(api.CollectAboutData(count, offset, limit, r))
+	var facets []pr_db.Facet
+	if params.Facets != nil {
+		facets, err = a.prRepo.GetPatronRequestsFacets(ctx, *params.Facets, pgcql)
+	}
+	if err != nil {
+		if errors.Is(err, pr_db.ErrUnsupportedFacet) {
+			api.AddBadRequestError(ctx, w, err)
+		} else {
+			api.AddInternalError(ctx, w, err)
+		}
+		return
+	}
+	if len(facets) > 0 {
+		facetResults := make(proapi.FacetsResult, len(facets))
+		for i, field := range facets {
+			facetResults[i].Name = field.Field
+			facetResults[i].Values = make([]proapi.FacetResultValue, len(field.Values))
+			for j, value := range field.Values {
+				facetResults[i].Values[j] = proapi.FacetResultValue{
+					Value: value.Value,
+					Label: value.Label,
+					Count: value.Count,
+				}
+			}
+		}
+		resp.About.Facets = &facetResults
+	}
 	api.WriteJsonResponse(w, resp)
+}
+
+func toProAboutWithFacets(a oapi.About) proapi.AboutWithFacets {
+	return proapi.AboutWithFacets{
+		Count:     a.Count,
+		FirstLink: a.FirstLink,
+		LastLink:  a.LastLink,
+		NextLink:  a.NextLink,
+		PrevLink:  a.PrevLink,
+	}
 }
 
 func AddOwnerRestriction(queryBuilder *cqlbuilder.QueryBuilder, symbol string, side pr_db.PatronRequestSide) (*cqlbuilder.QueryBuilder, error) {
@@ -253,9 +317,32 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		api.AddInternalError(ctx, w, err)
 		return
 	}
-	dbreq := buildDbPatronRequest(&newPr, params.XOkapiTenant, creationTime, requesterReqId, illRequest)
-	pr, err := a.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(dbreq))
+	stateModelName, actionMapping, err := a.actionMappingService.ResolveActionMapping(illRequest)
 	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	borrowerInitialState, ok := actionMapping.GetInitialState(prservice.SideBorrowing)
+	if !ok {
+		api.AddInternalError(ctx, w, fmt.Errorf("no initial state defined for borrower side"))
+		return
+	}
+
+	dbreq := buildDbPatronRequest(&newPr, params.XOkapiTenant, creationTime, requesterReqId, illRequest, borrowerInitialState, stateModelName)
+	if !a.validatePickupLocation(w, ctx, dbreq) {
+		return
+	}
+	dbreq.PrevReqID = getDbText(newPr.PrevReqId)
+	pr, err := prservice.CreateBorrowingRequest(ctx, a.prRepo, dbreq)
+	if err != nil {
+		if errors.Is(err, prservice.ErrInvalidPredecessor) {
+			api.AddBadRequestError(ctx, w, err)
+			return
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			api.AddNotFoundError(w)
+			return
+		}
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgerrcode.IsIntegrityConstraintViolation(pgErr.Code) {
 			api.AddBadRequestError(ctx, w, errors.New("a patron request with this ID already exists"))
@@ -265,18 +352,16 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		return
 	}
 	if a.autoActionRunner != nil {
-		err = a.autoActionRunner.RunAutoActionsOnStateEntry(ctx, pr, nil, tenant.GetUser())
-		if err != nil {
-			api.AddInternalError(ctx, w, err)
-			return
-		}
+		// The patron request is already persisted, so return its current state
+		// even when an initial auto-action fails.
+		_ = a.autoActionRunner.RunAutoActionsOnStateEntry(ctx, pr, nil, tenant.GetUser())
 	}
 	prView, err := a.prRepo.GetPatronRequestSearchView(ctx, pr.ID)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return
 	}
-	w.Header().Set("Location", api.Link(r, api.Path("patron_requests", pr.ID), nil))
+	w.Header().Set("Location", api.LinkAbs(r, api.Path("patron_requests", pr.ID), nil))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(toApiPatronRequest(r, prView))
@@ -285,9 +370,13 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 func (a *PatronRequestApiHandler) DeletePatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.DeletePatronRequestsIdParams) {
 	logParams := map[string]string{"method": "DeletePatronRequestsId", "id": id}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+	if id == events.DEFAULT_PATRON_REQUEST_ID {
+		api.AddBadRequestError(ctx, w, errors.New("synthetic IDs cannot be deleted"))
+		return
+	}
 	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
 	if err != nil {
 		api.AddBadRequestError(ctx, w, err)
@@ -304,9 +393,7 @@ func (a *PatronRequestApiHandler) DeletePatronRequestsId(w http.ResponseWriter, 
 	if pr == nil {
 		return
 	}
-	err = a.prRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
-		return repo.DeletePatronRequest(ctx, pr.ID)
-	})
+	err = a.prRepo.DeletePatronRequest(ctx, pr.ID)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return
@@ -324,7 +411,7 @@ func getOwnerSymbol(side pr_db.PatronRequestSide, requesterSymbol pgtype.Text, s
 	return ""
 }
 
-func (a *PatronRequestApiHandler) getOwnedPatronRequest(w http.ResponseWriter, ctx common.ExtendedContext, id string, side *string, tenant tenant.Tenant) *pr_db.PatronRequest {
+func (a *PatronRequestApiHandler) getOwnedPatronRequest(w http.ResponseWriter, ctx common.ExtendedContext, id string, side *proapi.Side, tenant tenant.Tenant) *pr_db.PatronRequest {
 	pr, err := a.prRepo.GetPatronRequestById(ctx, id)
 	if err != nil {
 		handleDbError(w, ctx, err)
@@ -336,7 +423,7 @@ func (a *PatronRequestApiHandler) getOwnedPatronRequest(w http.ResponseWriter, c
 	return &pr
 }
 
-func (a *PatronRequestApiHandler) getOwnedPatronRequestSearchView(w http.ResponseWriter, ctx common.ExtendedContext, id string, side *string, tenant tenant.Tenant) *pr_db.PatronRequestSearchView {
+func (a *PatronRequestApiHandler) getOwnedPatronRequestSearchView(w http.ResponseWriter, ctx common.ExtendedContext, id string, side *proapi.Side, tenant tenant.Tenant) *pr_db.PatronRequestSearchView {
 	pr, err := a.prRepo.GetPatronRequestSearchView(ctx, id)
 	if err != nil {
 		handleDbError(w, ctx, err)
@@ -348,13 +435,13 @@ func (a *PatronRequestApiHandler) getOwnedPatronRequestSearchView(w http.Respons
 	return &pr
 }
 
-func (a *PatronRequestApiHandler) checkOwnership(w http.ResponseWriter, ctx common.ExtendedContext, prSide pr_db.PatronRequestSide, requesterSymbol pgtype.Text, supplierSymbol pgtype.Text, side *string, tenant tenant.Tenant) bool {
+func (a *PatronRequestApiHandler) checkOwnership(w http.ResponseWriter, ctx common.ExtendedContext, prSide pr_db.PatronRequestSide, requesterSymbol pgtype.Text, supplierSymbol pgtype.Text, side *proapi.Side, tenant tenant.Tenant) bool {
 	isOwner, err := tenant.IsOwnerOf(getOwnerSymbol(prSide, requesterSymbol, supplierSymbol))
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return false
 	}
-	if isOwner && (!isSideParamValid(side) || string(prSide) == *side) {
+	if isOwner && (!isSideParamValid(side) || string(prSide) == string(*side)) {
 		return true
 	}
 	api.AddNotFoundError(w)
@@ -369,14 +456,141 @@ func handleDbError(w http.ResponseWriter, ctx common.ExtendedContext, err error)
 	api.AddInternalError(ctx, w, err)
 }
 
-func isSideParamValid(side *string) bool {
-	return side != nil && (*side == string(prservice.SideBorrowing) || *side == string(prservice.SideLending))
+func isSideParamValid(side *proapi.Side) bool {
+	return side != nil && side.Valid()
+}
+
+func (a *PatronRequestApiHandler) checkEditable(w http.ResponseWriter, ctx common.ExtendedContext, pr pr_db.PatronRequest) bool {
+	actionMapping, err := a.actionMappingService.GetActionMapping(pr.IllRequest)
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return true
+	}
+	if !actionMapping.IsEditableState(pr) {
+		api.AddBadRequestError(ctx, w, fmt.Errorf("patron request is not editable in state %q", pr.State))
+		return true
+	}
+	return false
+}
+
+func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.PutPatronRequestsIdParams) {
+	logParams := map[string]string{"method": "PutPatronRequestsId", "id": id}
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+
+	var newPr proapi.CreatePatronRequest
+	err := decodeRequiredBody(r, &newPr)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	tenant, err := a.tenantResolver.Resolve(ctx, r, newPr.RequesterSymbol)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	if symbol == "" {
+		api.AddBadRequestError(ctx, w, errors.New("symbol must be specified"))
+		return
+	}
+	logParams["symbol"] = symbol
+	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+
+	if newPr.Id == nil {
+		newPr.Id = &id
+	} else if *newPr.Id != id {
+		api.AddBadRequestError(ctx, w, fmt.Errorf("patron request id does not match"))
+		return
+	}
+	existingPr, err := a.prRepo.GetPatronRequestById(ctx, id)
+	if err != nil {
+		handleDbError(w, ctx, err)
+		return
+	}
+	if !a.checkOwnership(w, ctx, existingPr.Side, existingPr.RequesterSymbol, existingPr.SupplierSymbol, nil, tenant) {
+		return
+	}
+	if existingPr.Side != prservice.SideBorrowing {
+		api.AddBadRequestError(ctx, w, fmt.Errorf("only borrower-side patron requests can be updated"))
+		return
+	}
+	if !existingPr.RequesterSymbol.Valid || existingPr.RequesterSymbol.String == "" {
+		api.AddInternalError(ctx, w, fmt.Errorf("existing patron request missing requesterSymbol"))
+		return
+	}
+	if newPr.RequesterSymbol != nil && *newPr.RequesterSymbol != "" && *newPr.RequesterSymbol != existingPr.RequesterSymbol.String {
+		api.AddBadRequestError(ctx, w, fmt.Errorf("requesterSymbol does not match existing patron request"))
+		return
+	}
+	if a.checkEditable(w, ctx, existingPr) {
+		return
+	}
+	symbol = existingPr.RequesterSymbol.String
+	logParams["symbol"] = symbol
+	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+	newPr.RequesterSymbol = &symbol
+	creationTime := time.Now()
+	if existingPr.CreatedAt.Valid {
+		creationTime = existingPr.CreatedAt.Time
+	}
+	if newPr.Patron == nil && existingPr.Patron.Valid {
+		patron := existingPr.Patron.String
+		newPr.Patron = &patron
+	}
+	illRequest, requesterReqId, err := a.parseAndValidateIllRequest(ctx, &newPr, creationTime)
+	if err != nil {
+		if errors.Is(err, errInvalidPatronRequest) {
+			api.AddBadRequestError(ctx, w, err)
+			return
+		}
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	stateModelName, _, err := a.actionMappingService.ResolveActionMapping(illRequest)
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+
+	existingPr.RequesterReqID = getDbText(&requesterReqId)
+	existingPr.IllRequest = illRequest
+	if newPr.RequesterPickupLocationId.IsSpecified() {
+		existingPr.RequesterPickupLocationID = getPickupLocationID(newPr.RequesterPickupLocationId)
+		if !a.validatePickupLocation(w, ctx, existingPr) {
+			return
+		}
+	}
+	existingPr.StateModel = stateModelName
+	existingPr.Patron = getDbText(newPr.Patron)
+	if newPr.InternalNote != nil {
+		var note pgtype.Text
+		if trimmed := strings.TrimSpace(*newPr.InternalNote); trimmed != "" {
+			note = pgtype.Text{Valid: true, String: trimmed}
+		}
+		existingPr.InternalNote = note
+	}
+	updatedPr, err := a.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(existingPr))
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	prView, err := a.prRepo.GetPatronRequestSearchView(ctx, updatedPr.ID)
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(toApiPatronRequest(r, prView))
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdParams) {
 	logParams := map[string]string{"method": "GetPatronRequestsId", "id": id}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
@@ -398,10 +612,56 @@ func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *
 	api.WriteJsonResponse(w, toApiPatronRequest(r, *pr))
 }
 
+func (a *PatronRequestApiHandler) PutPatronRequestsIdInternalNote(w http.ResponseWriter, r *http.Request, id string, params proapi.PutPatronRequestsIdInternalNoteParams) {
+	logParams := map[string]string{"method": "PutPatronRequestsIdInternalNote", "id": id}
+	if params.Side != nil {
+		logParams["side"] = string(*params.Side)
+	}
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	logParams["symbol"] = symbol
+	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+
+	var body proapi.UpdateInternalNote
+	if err = decodeRequiredBody(r, &body); err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+
+	pr := a.getOwnedPatronRequest(w, ctx, id, params.Side, tenant)
+	if pr == nil {
+		return
+	}
+
+	var noteText string
+	if body.InternalNote != nil {
+		noteText = *body.InternalNote
+	}
+	var note pgtype.Text
+	if trimmed := strings.TrimSpace(noteText); trimmed != "" {
+		note = pgtype.Text{Valid: true, String: trimmed}
+	}
+
+	if err = a.prRepo.UpdatePatronRequestInternalNote(ctx, pr.ID, note); err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdActionsParams) {
 	logParams := map[string]string{"method": "GetPatronRequestsIdActions", "id": id}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
@@ -421,19 +681,32 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWrit
 	if pr == nil {
 		return
 	}
-	actionMapping, err := a.actionMappingService.GetActionMapping(*pr)
+	actionMapping, err := a.actionMappingService.GetActionMapping(pr.IllRequest)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return
 	}
-	actions := actionMapping.GetAllowedActionsForPatronRequest(*pr)
+	_, err = a.eventRepo.GetOlderIncompleteEvent(ctx, events.Event{
+		ID: uuid.NewString(),
+		Timestamp: pgtype.Timestamp{
+			Time:  time.Now(),
+			Valid: true,
+		},
+		EventType:        events.EventTypeTask,
+		EventName:        events.EventNameInvokeAction,
+		EventStatus:      events.EventStatusNew,
+		PatronRequestID:  pr.ID,
+		IllTransactionID: events.DEFAULT_ILL_TRANSACTION_ID,
+	})
+	available := err != nil && errors.Is(err, pgx.ErrNoRows)
+	actions := actionMapping.GetAllowedActionsForPatronRequest(*pr, available)
 	api.WriteJsonResponse(w, actions)
 }
 
 func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWriter, r *http.Request, id string, params proapi.PostPatronRequestsIdActionParams) {
 	logParams := map[string]string{"method": "PostPatronRequestsIdAction", "id": id}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
@@ -460,7 +733,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 		return
 	}
 
-	actionMapping, err := a.actionMappingService.GetActionMapping(*pr)
+	actionMapping, err := a.actionMappingService.GetActionMapping(pr.IllRequest)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return
@@ -471,25 +744,75 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 		return
 	}
 	eventAction := pr_db.PatronRequestAction(action.Action)
-	data := events.EventData{CommonEventData: events.CommonEventData{
-		Action: &eventAction,
-		User:   tenant.GetUser(),
-	}}
+	data := invokeActionData(eventAction, tenant.GetUser())
 	if action.ActionParams != nil {
 		data.CustomData = *action.ActionParams
 	}
+	a.invokeActionAndWriteResponse(w, ctx, pr.ID, fromState, data)
+}
+
+func (a *PatronRequestApiHandler) PostPatronRequestsIdTerminate(w http.ResponseWriter, r *http.Request, id string, params proapi.PostPatronRequestsIdTerminateParams) {
+	logParams := map[string]string{"method": "PostPatronRequestsIdTerminate", "id": id}
+	if params.Side != nil {
+		logParams["side"] = string(*params.Side)
+	}
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+
+	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	logParams["symbol"] = symbol
+	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+	pr := a.getOwnedPatronRequest(w, ctx, id, params.Side, tenant)
+	if pr == nil {
+		return
+	}
+
+	actionMapping, err := a.actionMappingService.GetActionMapping(pr.IllRequest)
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	if actionMapping.IsTerminalState(*pr) || pr.TerminalState {
+		api.AddBadRequestError(ctx, w, errors.New("patron request "+id+" is already terminal"))
+		return
+	}
+	if _, ok := actionMapping.GetManualCloseState(*pr); !ok {
+		api.AddInternalError(ctx, w, errors.New("state model does not define a manual close target for side "+string(pr.Side)))
+		return
+	}
+
+	data := invokeActionData(prservice.TerminateAction, tenant.GetUser())
+	a.invokeActionAndWriteResponse(w, ctx, pr.ID, string(pr.State), data)
+}
+
+func invokeActionData(action pr_db.PatronRequestAction, user string) events.EventData {
+	return events.EventData{CommonEventData: events.CommonEventData{
+		Action: &action,
+		User:   user,
+	}}
+}
+
+func (a *PatronRequestApiHandler) invokeActionAndWriteResponse(w http.ResponseWriter, ctx common.ExtendedContext, prID string, fromState string, data events.EventData) {
 	if a.actionTaskProcessor == nil {
 		api.AddInternalError(ctx, w, errors.New("action task processor not configured"))
 		return
 	}
-	eventId, err := a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, nil, events.SignalConsumers)
+	eventId, err := a.eventBus.CreateTask(prID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, nil, events.SignalConsumers)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return
 	}
 	completedEvent, err := a.actionTaskProcessor.ProcessInvokeActionTask(ctx, events.Event{
 		ID:              eventId,
-		PatronRequestID: pr.ID,
+		PatronRequestID: prID,
 		EventData:       data,
 	})
 	// Manual invoke-action requests are handled inline and return the completed task result.
@@ -500,6 +823,8 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 	var message *string
 	if completedEvent.ResultData.EventError != nil {
 		message = &completedEvent.ResultData.EventError.Message
+	} else if completedEvent.ResultData.Problem != nil {
+		message = &completedEvent.ResultData.Problem.Details
 	}
 	outcome := prservice.ActionOutcomeFailure
 	var toState *string
@@ -523,9 +848,13 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 func (a *PatronRequestApiHandler) GetPatronRequestsIdEvents(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdEventsParams) {
 	logParams := map[string]string{"method": "GetPatronRequestsIdEvents", "id": id}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+	if events.IsSyntheticID(id) {
+		api.AddBadRequestError(ctx, w, errors.New("synthetic IDs are not allowed for event lookup"))
+		return
+	}
 
 	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
 	if err != nil {
@@ -561,7 +890,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdEvents(w http.ResponseWrite
 func (a *PatronRequestApiHandler) GetPatronRequestsIdItems(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdItemsParams) {
 	logParams := map[string]string{"method": "GetPatronRequestsIdItems", "id": id}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
@@ -599,7 +928,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdItems(w http.ResponseWriter
 func (a *PatronRequestApiHandler) GetPatronRequestsIdNotifications(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdNotificationsParams) {
 	logParams := map[string]string{"method": "GetPatronRequestsIdNotifications", "id": id}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
@@ -655,7 +984,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdNotifications(w http.Respon
 func (a *PatronRequestApiHandler) PostPatronRequestsIdNotifications(w http.ResponseWriter, r *http.Request, id string, params proapi.PostPatronRequestsIdNotificationsParams) {
 	logParams := map[string]string{"method": "PostPatronRequestsIdNotifications", "id": id}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
@@ -703,7 +1032,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdNotifications(w http.Respo
 		ctx.Logger().Error("failed to send notification for patron request", "notificationId", dbNotification.ID, "error", err.Error())
 	}
 
-	//w.Header().Set("Location", api.Link(r, api.Path("patron_requests", id, "notifications", dbNotification.ID), nil))
+	//w.Header().Set("Location", api.LinkAbs(r, api.Path("patron_requests", id, "notifications", dbNotification.ID), nil))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(apiN)
@@ -712,7 +1041,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdNotifications(w http.Respo
 func (a *PatronRequestApiHandler) PutPatronRequestsIdNotificationsNotificationIdReceipt(w http.ResponseWriter, r *http.Request, id string, notificationId string, params proapi.PutPatronRequestsIdNotificationsNotificationIdReceiptParams) {
 	logParams := map[string]string{"method": "PutPatronRequestsIdNotificationsNotificationIdReceipt", "id": id}
 	if params.Side != nil {
-		logParams["side"] = *params.Side
+		logParams["side"] = string(*params.Side)
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
@@ -775,6 +1104,218 @@ func (a *PatronRequestApiHandler) PutPatronRequestsIdNotificationsNotificationId
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (a *PatronRequestApiHandler) GetTemplates(w http.ResponseWriter, r *http.Request, params proapi.GetTemplatesParams) {
+	logParams := map[string]string{"method": "GetTemplates"}
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+	limit := a.limitDefault
+	if params.Limit != nil {
+		limit = *params.Limit
+	}
+	var offset int32 = 0
+	if params.Offset != nil {
+		offset = *params.Offset
+	}
+	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	templates, count, err := a.prRepo.GetTemplatesByOwner(ctx, pr_db.GetTemplatesByOwnerParams{
+		Owner:  symbol,
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+
+	responseItems := make([]proapi.Template, 0, len(templates))
+	for _, t := range templates {
+		responseItems = append(responseItems, toApiTemplate(t))
+	}
+
+	resp := proapi.Templates{Items: responseItems}
+	resp.About = proapi.About(api.CollectAboutData(count, offset, limit, r))
+	api.WriteJsonResponse(w, resp)
+}
+
+func (a *PatronRequestApiHandler) GetTemplatesPlaceholders(w http.ResponseWriter, _ *http.Request) {
+	toAPIPlaceholders := func(source []email.TemplatePlaceholder) []proapi.TemplatePlaceholder {
+		result := make([]proapi.TemplatePlaceholder, 0, len(source))
+		for _, placeholder := range source {
+			result = append(result, proapi.TemplatePlaceholder{
+				Placeholder: placeholder.Placeholder,
+				Description: placeholder.Description,
+			})
+		}
+		return result
+	}
+
+	api.WriteJsonResponse(w, proapi.TemplatePlaceholders{
+		SingleRecord: toAPIPlaceholders(email.GetPullSlipTemplatePlaceholders()),
+		BatchRecord:  toAPIPlaceholders(email.GetBatchEmailTemplatePlaceholders()),
+	})
+}
+
+func (a *PatronRequestApiHandler) PostTemplates(w http.ResponseWriter, r *http.Request, params proapi.PostTemplatesParams) {
+	logParams := map[string]string{"method": "PostTemplates"}
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	var template proapi.CreateTemplate
+	err = decodeRequiredBody(r, &template)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	if err := prservice.ValidateTemplateRendering(template.Purpose, template.ContentType, template.Body, template.Subject, template.Labels); err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	tem, err := a.prRepo.SaveTemplate(ctx, pr_db.SaveTemplateParams{
+		ID:          uuid.NewString(),
+		Owner:       symbol,
+		Title:       template.Title,
+		Purpose:     string(template.Purpose),
+		Body:        template.Body,
+		ContentType: string(template.ContentType),
+		Labels:      template.Labels,
+		Subject:     getDbText(template.Subject),
+		Audience:    getDbText((*string)(template.Audience)),
+		CreatedAt:   pgtype.Timestamp{Time: time.Now(), Valid: true},
+	})
+	if err != nil {
+		writeTemplateSaveError(ctx, w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(toApiTemplate(tem))
+}
+
+func (a *PatronRequestApiHandler) DeleteTemplatesId(w http.ResponseWriter, r *http.Request, id string, params proapi.DeleteTemplatesIdParams) {
+	ctx, tem := a.getTemplateById(w, r, id, params.Symbol, "DeleteTemplatesId")
+	if tem == nil {
+		return
+	}
+	err := a.prRepo.DeleteTemplateByIdAndOwner(ctx, tem.ID, tem.Owner)
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *PatronRequestApiHandler) GetTemplatesId(w http.ResponseWriter, r *http.Request, id string, params proapi.GetTemplatesIdParams) {
+	_, tem := a.getTemplateById(w, r, id, params.Symbol, "GetTemplatesId")
+	if tem == nil {
+		return
+	}
+	api.WriteJsonResponse(w, toApiTemplate(*tem))
+}
+
+func (a *PatronRequestApiHandler) PutTemplatesId(w http.ResponseWriter, r *http.Request, id string, params proapi.PutTemplatesIdParams) {
+	ctx, tem := a.getTemplateById(w, r, id, params.Symbol, "PutTemplatesId")
+	if tem == nil {
+		return
+	}
+	var updated proapi.UpdateTemplate
+	err := decodeRequiredBody(r, &updated)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	tem.Body = updated.Body
+	tem.ContentType = string(updated.ContentType)
+	tem.Labels = updated.Labels
+	tem.Title = updated.Title
+	// PUT replaces optional fields; omitted values are cleared.
+	tem.Audience = getDbText((*string)(updated.Audience))
+	tem.Subject = getDbText(updated.Subject)
+	if err := prservice.ValidateTemplateRendering(proapi.TemplatePurpose(tem.Purpose), updated.ContentType, updated.Body, updated.Subject, updated.Labels); err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	template, err := a.prRepo.SaveTemplate(ctx, pr_db.SaveTemplateParams(*tem))
+	if err != nil {
+		writeTemplateSaveError(ctx, w, err)
+		return
+	}
+	api.WriteJsonResponse(w, toApiTemplate(template))
+}
+
+func writeTemplateSaveError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == templateLabelUniqueConstraint {
+		api.WriteJsonErrorResponse(w, errDuplicateTemplateLabel, http.StatusConflict)
+		return
+	}
+	api.AddInternalError(ctx, w, err)
+}
+
+func (a *PatronRequestApiHandler) getTemplateById(w http.ResponseWriter, r *http.Request, id string, symbolString *string, methodName string) (common.ExtendedContext, *pr_db.Template) {
+	logParams := map[string]string{"method": methodName, "id": id}
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+	tenant, err := a.tenantResolver.Resolve(ctx, r, symbolString)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return ctx, nil
+	}
+	symbol, err := tenant.GetRequestSymbol()
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return ctx, nil
+	}
+	tem, err := a.prRepo.GetTemplateByIdAndOwner(ctx, id, symbol)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			api.AddNotFoundError(w)
+			return ctx, nil
+		}
+		api.AddInternalError(ctx, w, err)
+		return ctx, nil
+	}
+	return ctx, &tem
+}
+
+func toApiTemplate(template pr_db.Template) proapi.Template {
+	t := proapi.Template{
+		Id:          template.ID,
+		Title:       template.Title,
+		Purpose:     proapi.TemplatePurpose(template.Purpose),
+		Body:        template.Body,
+		ContentType: proapi.TemplateContentType(template.ContentType),
+		Labels:      template.Labels,
+		CreatedAt:   template.CreatedAt.Time,
+	}
+	if template.Subject.Valid {
+		t.Subject = &template.Subject.String
+	}
+	if template.Audience.Valid {
+		audience := proapi.TemplateAudience(template.Audience.String)
+		t.Audience = &audience
+	}
+	if template.UpdatedAt.Valid {
+		t.UpdatedAt = &template.UpdatedAt.Time
+	}
+	return t
+}
+
 func toApiPatronRequest(r *http.Request, request pr_db.PatronRequestSearchView) proapi.PatronRequest {
 	items := []proapi.PrItem{}
 	for _, item := range request.Items {
@@ -803,28 +1344,37 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequestSearchView) 
 	}
 
 	pr := proapi.PatronRequest{
-		Id:                       request.ID,
-		CreatedAt:                request.CreatedAt.Time,
-		State:                    string(request.State),
-		Side:                     string(request.Side),
-		Patron:                   toString(request.Patron),
-		RequesterSymbol:          toString(request.RequesterSymbol),
-		SupplierSymbol:           toString(request.SupplierSymbol),
-		IllRequest:               request.IllRequest,
-		RequesterRequestId:       toString(request.RequesterReqID),
-		NeedsAttention:           request.NeedsAttention,
-		HasCost:                  request.HasCost,
-		UnreadNotificationsCount: request.UnreadNotificationsCount,
-		LastAction:               toString(request.LastAction),
-		LastActionOutcome:        toString(request.LastActionOutcome),
-		LastActionResult:         toString(request.LastActionResult),
-		Items:                    &items,
-		NotificationsLink:        notificationsLink,
-		ItemsLink:                itemsLink,
-		AvailableActionsLink:     availableActionsLink,
-		IllTransactionLink:       illTransactionLink,
-		EventsLink:               eventsLink,
-		TerminalState:            request.TerminalState,
+		Id:                        request.ID,
+		CreatedAt:                 request.CreatedAt.Time,
+		State:                     string(request.State),
+		StateModel:                request.StateModel,
+		Side:                      proapi.PatronRequestSide(request.Side),
+		Patron:                    toString(request.Patron),
+		RequesterSymbol:           toString(request.RequesterSymbol),
+		RequesterPickupLocationId: toPickupLocationID(request.RequesterPickupLocationID),
+		DueDate:                   toLoanDate(request.DueAt),
+		SupplierSymbol:            toString(request.SupplierSymbol),
+		IllRequest:                request.IllRequest,
+		RequesterRequestId:        toString(request.RequesterReqID),
+		NeedsAttention:            request.NeedsAttention,
+		HasCost:                   request.HasCost,
+		UnreadNotificationsCount:  request.UnreadNotificationsCount,
+		LastAction:                toString(request.LastAction),
+		LastActionOutcome:         toString(request.LastActionOutcome),
+		LastActionResult:          toString(request.LastActionResult),
+		Items:                     &items,
+		NotificationsLink:         notificationsLink,
+		ItemsLink:                 itemsLink,
+		AvailableActionsLink:      availableActionsLink,
+		IllTransactionLink:        illTransactionLink,
+		EventsLink:                eventsLink,
+		TerminalState:             request.TerminalState,
+		InternalNote:              toString(request.InternalNote),
+		RequesterName:             toString(request.RequesterName),
+		SupplierName:              toString(request.SupplierName),
+		NextReqId:                 toString(request.NextReqID),
+		PrevReqId:                 toString(request.PrevReqID),
+		RetryBibInfo:              request.RetryBibInfo,
 	}
 	if request.UpdatedAt.Valid {
 		pr.UpdatedAt = &request.UpdatedAt.Time
@@ -851,7 +1401,7 @@ func (a *PatronRequestApiHandler) parseAndValidateIllRequest(
 	if request.RequesterSymbol == nil || *request.RequesterSymbol == "" {
 		return iso18626.Request{}, "", fmt.Errorf("%w: requesterSymbol must be specified", errInvalidPatronRequest)
 	}
-	reqSymbolType, reqSymbolValue, err := parseAgencySymbol(*request.RequesterSymbol)
+	reqSymbolType, reqSymbolValue, err := common.SplitSymbol(*request.RequesterSymbol)
 	if err != nil {
 		return iso18626.Request{}, "", fmt.Errorf("%w: requesterSymbol: %w", errInvalidPatronRequest, err)
 	}
@@ -871,6 +1421,7 @@ func (a *PatronRequestApiHandler) parseAndValidateIllRequest(
 		reqSymbolValue,
 		requesterReqId,
 		creationTime,
+		request.Patron,
 	)
 	if err != nil {
 		return iso18626.Request{}, "", err
@@ -896,26 +1447,19 @@ func getDbText(value *string) pgtype.Text {
 	}
 }
 
-func parseAgencySymbol(symbol string) (string, string, error) {
-	scheme, value, ok := strings.Cut(symbol, ":")
-	if !ok || scheme == "" || value == "" {
-		return "", "", fmt.Errorf("expected format SCHEME:VALUE, got %q", symbol)
-	}
-	return scheme, value, nil
-}
-
 func prepareAndValidateIllRequest(
 	rawIllRequest iso18626.Request,
 	reqSymbolType string,
 	reqSymbolValue string,
 	requesterReqId string,
 	creationTime time.Time,
+	patron *string,
 ) (iso18626.Request, error) {
 	if reflect.ValueOf(rawIllRequest).IsZero() {
 		return iso18626.Request{}, fmt.Errorf("%w: illRequest must not be empty", errInvalidPatronRequest)
 	}
 	illRequest := rawIllRequest
-	suppSymbolType, suppSymbolValue, err := parseAgencySymbol(brokerSymbol)
+	suppSymbolType, suppSymbolValue, err := common.SplitSymbol(brokerSymbol)
 	if err != nil {
 		return iso18626.Request{}, fmt.Errorf("invalid BROKER_SYMBOL %q: %w", brokerSymbol, err)
 	}
@@ -929,8 +1473,14 @@ func prepareAndValidateIllRequest(
 	}
 	illRequest.Header.Timestamp = utils.XSDDateTime{Time: creationTime}
 	illRequest.Header.RequestingAgencyRequestId = requesterReqId
-	if err = validateIllRequest(illRequest); err != nil {
+	if err = prservice.ValidateIllRequest(illRequest); err != nil {
 		return iso18626.Request{}, fmt.Errorf("%w: invalid illRequest: %w", errInvalidPatronRequest, err)
+	}
+	if patron != nil {
+		if illRequest.PatronInfo == nil {
+			illRequest.PatronInfo = &iso18626.PatronInfo{}
+		}
+		illRequest.PatronInfo.PatronId = *patron
 	}
 	return illRequest, nil
 }
@@ -941,37 +1491,36 @@ func buildDbPatronRequest(
 	creationTime pgtype.Timestamp,
 	requesterReqId string,
 	illRequest iso18626.Request,
+	initialState pr_db.PatronRequestState,
+	stateModel string,
 ) pr_db.PatronRequest {
 	return pr_db.PatronRequest{
-		ID:              requesterReqId,
-		CreatedAt:       creationTime,
-		State:           prservice.BorrowerStateNew,
-		Side:            prservice.SideBorrowing,
-		Patron:          getDbText(request.Patron),
-		RequesterSymbol: getDbText(request.RequesterSymbol),
-		SupplierSymbol:  getDbText(nil),
-		IllRequest:      illRequest,
-		Tenant:          getDbText(tenant),
-		RequesterReqID:  getDbText(&requesterReqId),
-		Language:        pr_db.LANGUAGE,
-		Items:           []pr_db.PrItem{},
-		TerminalState:   false,
+		ID:                        requesterReqId,
+		CreatedAt:                 creationTime,
+		State:                     initialState,
+		Side:                      prservice.SideBorrowing,
+		Patron:                    getDbText(request.Patron),
+		RequesterSymbol:           getDbText(request.RequesterSymbol),
+		RequesterPickupLocationID: getPickupLocationID(request.RequesterPickupLocationId),
+		SupplierSymbol:            getDbText(nil),
+		IllRequest:                illRequest,
+		Tenant:                    getDbText(tenant),
+		RequesterReqID:            getDbText(&requesterReqId),
+		InternalNote:              getDbText(request.InternalNote),
+		Language:                  pr_db.LANGUAGE,
+		Items:                     []pr_db.PrItem{},
+		TerminalState:             false,
+		NeedsAttention:            true,
+		StateModel:                stateModel,
 		// LastAction, LastActionOutcome and LastActionResult are not set on creation
 		// they will be updated when the first action is executed.
 	}
 }
 
-func validateIllRequest(request iso18626.Request) error {
-	requestForValidation := request
-	if requestForValidation.Header.MultipleItemRequestId == "" {
-		//schema workaround
-		requestForValidation.Header.MultipleItemRequestId = "#empty"
-	}
-	return illRequestValidator.Struct(requestForValidation)
-}
-
 func toApiItem(item pr_db.Item) proapi.PrItem {
 	return proapi.PrItem{
+		LmsStatus:  apiLmsStatus(item.LmsStatus),
+		LmsDueDate: toLoanDate(item.LmsDueDate),
 		Id:         item.ID,
 		Barcode:    item.Barcode,
 		CallNumber: toString(item.CallNumber),
@@ -983,6 +1532,8 @@ func toApiItem(item pr_db.Item) proapi.PrItem {
 
 func toApiPrItem(item pr_db.PrItem) proapi.PrItem {
 	return proapi.PrItem{
+		LmsStatus:  apiLmsStatus(item.LmsStatus),
+		LmsDueDate: item.LmsDueDate,
 		Id:         item.ID,
 		Barcode:    item.Barcode,
 		CallNumber: item.CallNumber,
@@ -990,6 +1541,20 @@ func toApiPrItem(item pr_db.PrItem) proapi.PrItem {
 		Title:      item.Title,
 		CreatedAt:  time.Time(item.CreatedAt),
 	}
+}
+
+func apiLmsStatus(status pr_db.LmsStatus) proapi.PrItemLmsStatus {
+	if status == "" {
+		status = pr_db.LmsStatusUnknown
+	}
+	return proapi.PrItemLmsStatus(status)
+}
+
+func toLoanDate(date pgtype.Timestamptz) *time.Time {
+	if !date.Valid {
+		return nil
+	}
+	return &date.Time
 }
 
 func toApiNotification(notification pr_db.Notification) (proapi.PrNotification, error) {
@@ -1007,17 +1572,17 @@ func toApiNotification(notification pr_db.Notification) (proapi.PrNotification, 
 		val := f.Float64
 		cost = &val
 	}
-	var receipt *string
+	var receipt *proapi.NotificationReceipt
 	if notification.Receipt != "" {
-		r := string(notification.Receipt)
+		r := proapi.NotificationReceipt(notification.Receipt)
 		receipt = &r
 	}
 	return proapi.PrNotification{
 		Id:             notification.ID,
 		FromSymbol:     notification.FromSymbol,
 		ToSymbol:       notification.ToSymbol,
-		Direction:      string(notification.Direction),
-		Kind:           proapi.PrNotificationKind(notification.Kind),
+		Direction:      proapi.NotificationDirection(notification.Direction),
+		Kind:           proapi.NotificationKind(notification.Kind),
 		Note:           toString(notification.Note),
 		Cost:           cost,
 		Currency:       toString(notification.Currency),
@@ -1052,4 +1617,39 @@ func toDbNotification(create proapi.CreatePrNotification, pr pr_db.PatronRequest
 			Valid: true,
 		},
 	}
+}
+
+// validatePickupLocation is shared by creation and explicit pickup updates.
+func (a *PatronRequestApiHandler) validatePickupLocation(w http.ResponseWriter, ctx common.ExtendedContext, pr pr_db.PatronRequest) bool {
+	if !pr.RequesterPickupLocationID.Valid {
+		return true
+	}
+	if a.pickupLocationValidator == nil {
+		api.AddInternalError(ctx, w, errors.New("pickup location validator is not configured"))
+		return false
+	}
+	if err := a.pickupLocationValidator.ValidateRequesterPickupLocation(ctx, pr); err != nil {
+		if errors.Is(err, prservice.ErrInvalidPickupLocation) {
+			api.AddBadRequestError(ctx, w, err)
+		} else {
+			api.AddInternalError(ctx, w, err)
+		}
+		return false
+	}
+	return true
+}
+
+func getPickupLocationID(id nullable.Nullable[uuid.UUID]) pgtype.UUID {
+	if !id.IsSpecified() || id.IsNull() {
+		return pgtype.UUID{}
+	}
+	return pgtype.UUID{Bytes: id.MustGet(), Valid: true}
+}
+
+func toPickupLocationID(id pgtype.UUID) *uuid.UUID {
+	if !id.Valid {
+		return nil
+	}
+	value := uuid.UUID(id.Bytes)
+	return &value
 }

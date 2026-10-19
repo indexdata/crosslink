@@ -12,14 +12,14 @@ import (
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	test "github.com/indexdata/crosslink/broker/test/utils"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
 )
 
 var respBody []byte
-var dirEntries directory.EntriesResponse
+var dirEntries dirapi.EntriesResponse
 
 func TestMain(m *testing.M) {
 	respBody, _ = os.ReadFile("../testdata/api-directory-response.json")
@@ -33,41 +33,61 @@ func createDirectoryAdapter(urls ...string) adapter.DirectoryLookupAdapter {
 	return adapter.CreateApiDirectory(http.DefaultClient, urls)
 }
 
+func createLookupCtx() common.ExtendedContext {
+	return common.CreateExtCtxWithArgs(context.Background(), nil)
+}
+
+func boolPtr(v bool) *bool {
+	return &v
+}
+
+func withNetworkReciprocal(entry dirapi.Entry, reciprocal *bool) dirapi.Entry {
+	if entry.Networks == nil {
+		return entry
+	}
+	networks := slices.Clone(*entry.Networks)
+	for i := range networks {
+		networks[i].Reciprocal = reciprocal
+	}
+	entry.Networks = &networks
+	return entry
+}
+
 func TestGetVendorFromUrl(t *testing.T) {
 	tests := []struct {
 		name     string
 		url      string
-		expected directory.EntryVendor
+		expected dirapi.EntryVendor
 	}{
 		{
 			name:     "alma",
 			url:      "https://example.alma.exlibrisgroup.com/view/uresolver/01TEST_INST/openurl",
-			expected: directory.Alma,
+			expected: dirapi.Alma,
 		},
 		{
 			name:     "rapido",
 			url:      "https://example.rapido.exlibrisgroup.com/iso18626",
-			expected: directory.Alma,
+			expected: dirapi.Alma,
 		},
 		{
 			name:     "reshare",
 			url:      "https://tenant-okapi.example.org/_/invoke/tenant/test/rs/externalApi/iso18626",
-			expected: directory.ReShare,
+			expected: dirapi.ReShare,
 		},
 		{
 			name:     "illiad atlas-sys",
 			url:      "https://example.Atlas-Sys.com/ILLiad/ISO18626",
-			expected: directory.ILLiad,
+			expected: dirapi.ILLiad,
 		},
 		{
 			name:     "illiad path",
 			url:      "https://example.org/ILLIAD/iso18626",
-			expected: directory.ILLiad,
+			expected: dirapi.ILLiad,
 		},
 		{
 			name:     "unknown",
 			url:      "https://example.org/iso18626",
-			expected: directory.Unknown,
+			expected: dirapi.Unknown,
 		},
 	}
 
@@ -79,8 +99,8 @@ func TestGetVendorFromUrl(t *testing.T) {
 }
 
 func TestGetBrokerMode(t *testing.T) {
-	assert.Equal(t, common.BrokerModeOpaque, adapter.GetBrokerMode(directory.ILLiad))
-	assert.Equal(t, common.BrokerModeTransparent, adapter.GetBrokerMode(directory.CrossLink))
+	assert.Equal(t, common.BrokerModeOpaque, adapter.GetBrokerMode(dirapi.ILLiad))
+	assert.Equal(t, common.BrokerModeTransparent, adapter.GetBrokerMode(dirapi.CrossLink))
 }
 
 func TestLookup400(t *testing.T) {
@@ -95,7 +115,7 @@ func TestLookup400(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	_, _, err := ad.Lookup(p)
+	_, _, err := ad.Lookup(createLookupCtx(), p)
 	assert.ErrorContains(t, err, "400")
 }
 
@@ -104,7 +124,7 @@ func TestLookupInvalidUrl(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	_, _, err := ad.Lookup(p)
+	_, _, err := ad.Lookup(createLookupCtx(), p)
 	assert.ErrorContains(t, err, "unsupported protocol scheme")
 }
 
@@ -120,14 +140,14 @@ func TestLookupInvalidJson(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	_, _, err := ad.Lookup(p)
+	_, _, err := ad.Lookup(createLookupCtx(), p)
 	assert.ErrorContains(t, err, "unexpected end of JSON input")
 }
 
 func TestLookupEmptyList(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
-		resp := directory.EntriesResponse{}
+		resp := dirapi.EntriesResponse{}
 		respBytes, _ := json.Marshal(resp)
 		w.Write(respBytes)
 	})
@@ -138,7 +158,7 @@ func TestLookupEmptyList(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	entries, _, err := ad.Lookup(p)
+	entries, _, err := ad.Lookup(createLookupCtx(), p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 0)
 }
@@ -158,10 +178,10 @@ func TestLookupNoVendor(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	entries, _, err := ad.Lookup(p)
+	entries, _, err := ad.Lookup(createLookupCtx(), p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 1)
-	assert.Equal(t, directory.Unknown, entries[0].Vendor)
+	assert.Equal(t, dirapi.Unknown, entries[0].Vendor)
 	assert.Equal(t, common.BrokerMode(""), entries[0].BrokerMode)
 }
 
@@ -169,7 +189,9 @@ func TestLookupWithVendor(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 		respBody := "{\"items\":[{" +
-			"\"name\":\"Peer\",\"vendor\":\"ReShare\",\"symbols\":[{\"authority\":\"ISIL\",\"symbol\":\"PEER\"}]}]," +
+			"\"name\":\"Peer\",\"vendor\":\"Alma\",\"illConfig\":{\"iso18626Url\":\"https://configured.example/iso18626\",\"iso18626Vendor\":\"ReShare\"}," +
+			"\"endpoints\":[{\"type\":\"ISO18626\",\"address\":\"https://legacy.example/iso18626\"}]," +
+			"\"symbols\":[{\"authority\":\"ISIL\",\"symbol\":\"PEER\"}]}]," +
 			"\"resultInfo\":{\"totalRecords\":1}}"
 		w.Write([]byte(respBody))
 	})
@@ -180,11 +202,43 @@ func TestLookupWithVendor(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	entries, _, err := ad.Lookup(p)
+	entries, _, err := ad.Lookup(createLookupCtx(), p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 1)
-	assert.Equal(t, directory.ReShare, entries[0].Vendor)
+	assert.Equal(t, "https://configured.example/iso18626", entries[0].URL)
+	assert.Equal(t, dirapi.ReShare, entries[0].Vendor)
 	assert.Equal(t, common.BrokerModeTransparent, entries[0].BrokerMode)
+}
+
+func TestLookupIgnoresIllConfigVendorWithoutUrl(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"items":[{"name":"Peer","vendor":"Alma","illConfig":{"iso18626Vendor":"ReShare"},"endpoints":[{"type":"ISO18626","address":"https://legacy.example/iso18626"}],"symbols":[{"authority":"ISIL","symbol":"PEER"}]}]}`))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	entries, _, err := createDirectoryAdapter(server.URL).Lookup(createLookupCtx(), adapter.DirectoryLookupParams{Symbols: []string{"ISIL:PEER"}})
+	assert.NoError(t, err)
+	if assert.Len(t, entries, 1) {
+		assert.Equal(t, "https://legacy.example/iso18626", entries[0].URL)
+		assert.Equal(t, dirapi.Alma, entries[0].Vendor)
+	}
+}
+
+func TestLookupDoesNotMixEntryVendorWithIllConfigUrl(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"items":[{"name":"Peer","vendor":"Alma","illConfig":{"iso18626Url":"https://example.test/rs/externalapi/iso18626"},"symbols":[{"authority":"ISIL","symbol":"PEER"}]}]}`))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	entries, _, err := createDirectoryAdapter(server.URL).Lookup(createLookupCtx(), adapter.DirectoryLookupParams{Symbols: []string{"ISIL:PEER"}})
+	assert.NoError(t, err)
+	if assert.Len(t, entries, 1) {
+		assert.Equal(t, dirapi.ReShare, entries[0].Vendor)
+	}
 }
 
 func TestLookupMissingSymbols(t *testing.T) {
@@ -203,10 +257,137 @@ func TestLookupMissingSymbols(t *testing.T) {
 		Symbols: []string{"ISIL:PEER"},
 		Tenant:  "tenant1",
 	}
-	entries, cql, err := ad.Lookup(p)
+	entries, cql, err := ad.Lookup(createLookupCtx(), p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 0)
-	assert.Equal(t, "?maximumRecords=1000&cql=symbol+any+%22ISIL%3APEER%22+and+tenant%3D%22tenant1%22", cql)
+	assert.Equal(t, "?limit=1000&cql=%28symbol+any+%22ISIL%3APEER%22+or+parentSymbol+any+%22ISIL%3APEER%22%29+and+tenant%3D%22tenant1%22", cql)
+}
+
+func TestLookupSendsSystemAndTenantHeaders(t *testing.T) {
+	var permissionsHeader string
+	var tenantHeader string
+	var rawQuery string
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		permissionsHeader = r.Header.Get("X-Okapi-Permissions")
+		tenantHeader = r.Header.Get("X-Okapi-Tenant")
+		rawQuery = r.URL.RawQuery
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"about":{"count":0},"items":[]}`))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createDirectoryAdapter(server.URL)
+	p := adapter.DirectoryLookupParams{
+		Symbols: []string{"ISIL:PEER"},
+		Tenant:  "tenant1",
+	}
+	_, cql, err := ad.Lookup(createLookupCtx(), p)
+
+	assert.NoError(t, err)
+	assert.Equal(t, `["directory.system.all"]`, permissionsHeader)
+	assert.Equal(t, "tenant1", tenantHeader)
+	assert.Equal(t, "limit=1000&cql=%28symbol+any+%22ISIL%3APEER%22+or+parentSymbol+any+%22ISIL%3APEER%22%29+and+tenant%3D%22tenant1%22", rawQuery)
+	assert.Equal(t, "?"+rawQuery, cql)
+}
+
+func TestLookupDeserializesDirectoryConfigurationFields(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		respBody := `{
+			"about":{"count":1},
+			"items":[{
+				"id":"00000000-0000-0000-0000-000000000001",
+				"name":"Configured Peer",
+				"type":"Institution",
+				"email":"contact@example.org",
+				"fromEmail":"from@example.org",
+				"tenant":"tenant1",
+				"vendor":"CrossLink",
+				"symbols":[{"authority":"ISIL","symbol":"PEER"}],
+				"illConfig":{"lendersOfLastResort":[{"authority":"ISIL","symbol":"LOR"}]},
+				"lmsConfig":{
+					"address":"https://lms.example.org",
+					"fromAgency":"FROM",
+					"fromAgencyAuthentication":"secret",
+					"toAgency":"TO"
+				},
+				"catalogConfig":{
+					"metadataUpdateMode":"merge",
+					"zoom":{
+						"address":"z3950.example.org:210/catalog",
+						"options":{
+							"preferredRecordSyntax":"usmarc",
+							"count":"20",
+							"location":"STACKS"
+						}
+					},
+					"queryConfig":{
+						"type":"cql",
+						"identifier":"rec.id = {term}",
+						"isbn":"isbn = {term}",
+						"issn":"issn = {term}",
+						"title":"title = {term}"
+					},
+					"holdingsFormat":{
+						"marc":{
+							"mainField":"999",
+							"itemIdSubField":"i",
+							"locationSubField":"l",
+							"callNumberSubField":"c",
+							"restrictedSubField":"r",
+							"shelvingLocationSubField":"s"
+						},
+						"opac":{}
+					},
+					"metadataFormat":{
+						"marc21":{
+							"title":"245$a",
+							"author":"100$a",
+							"identifier":"001",
+							"isbn":"020$a",
+							"issn":"022$a",
+							"edition":"250$a",
+							"subtitle":"245$b"
+						}
+					}
+				}
+			}]
+		}`
+		w.Write([]byte(respBody))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createDirectoryAdapter(server.URL)
+	entries, _, err := ad.Lookup(createLookupCtx(), adapter.DirectoryLookupParams{Symbols: []string{"ISIL:PEER"}})
+
+	assert.NoError(t, err)
+	if assert.Len(t, entries, 1) {
+		customData := entries[0].CustomData
+		assert.Equal(t, "contact@example.org", *customData.Email)
+		assert.Equal(t, "from@example.org", *customData.FromEmail)
+		assert.Equal(t, "tenant1", *customData.Tenant)
+		assert.Equal(t, dirapi.CrossLink, *customData.Vendor)
+		assert.Equal(t, "LOR", (*customData.IllConfig.LendersOfLastResort)[0].Symbol)
+		assert.Equal(t, "https://lms.example.org", customData.LmsConfig.Address)
+		assert.Equal(t, "secret", *customData.LmsConfig.FromAgencyAuthentication)
+
+		catalogConfig := customData.CatalogConfig
+		if assert.NotNil(t, catalogConfig) {
+			assert.Equal(t, dirapi.Merge, *catalogConfig.MetadataUpdateMode)
+			assert.Equal(t, "z3950.example.org:210/catalog", catalogConfig.Zoom.Address)
+			assert.Equal(t, "usmarc", (*catalogConfig.Zoom.Options)["preferredRecordSyntax"])
+			assert.Equal(t, "20", (*catalogConfig.Zoom.Options)["count"])
+			assert.Equal(t, "STACKS", (*catalogConfig.Zoom.Options)["location"])
+			assert.Equal(t, dirapi.QueryConfigTypeCql, *catalogConfig.QueryConfig.Type)
+			assert.Equal(t, "rec.id = {term}", *catalogConfig.QueryConfig.Identifier)
+			assert.Equal(t, "999", *catalogConfig.HoldingsFormat.Marc.MainField)
+			assert.NotNil(t, catalogConfig.HoldingsFormat.Opac)
+			assert.Equal(t, "245$a", *catalogConfig.MetadataFormat.Marc21.Title)
+			assert.Equal(t, "100$a", *catalogConfig.MetadataFormat.Marc21.Author)
+		}
+	}
 }
 
 func TestLookupDefaultsEmptyAuthorityToISIL(t *testing.T) {
@@ -224,7 +405,7 @@ func TestLookupDefaultsEmptyAuthorityToISIL(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	entries, _, err := ad.Lookup(p)
+	entries, _, err := ad.Lookup(createLookupCtx(), p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 1)
 	assert.Equal(t, []string{"ISIL:PEER"}, entries[0].Symbols)
@@ -243,11 +424,11 @@ func TestLookup(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	entries, _, err := ad.Lookup(p)
+	entries, _, err := ad.Lookup(createLookupCtx(), p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 6)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")
-	assert.Equal(t, entries[0].Vendor, directory.ReShare)
+	assert.Equal(t, entries[0].Vendor, dirapi.ReShare)
 	assert.Len(t, entries[0].Symbols, 1)
 	assert.Equal(t, common.BrokerModeTransparent, entries[0].BrokerMode)
 	assert.Equal(t, entries[3].Name, "University of Melbourne")
@@ -258,22 +439,22 @@ func TestLookup(t *testing.T) {
 	p = adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	entries, _, err = ad.Lookup(p)
+	entries, _, err = ad.Lookup(createLookupCtx(), p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 12)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")
-	assert.Equal(t, entries[0].Vendor, directory.ReShare)
+	assert.Equal(t, entries[0].Vendor, dirapi.ReShare)
 	assert.Len(t, entries[0].Symbols, 1)
 }
 
 func TestFilterAndSort(t *testing.T) {
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
-		{PeerId: "1", Ratio: 0.5, Symbol: "AU-NALB", CustomData: dirEntries.Items[0]},
-		{PeerId: "2", Ratio: 0.8, Symbol: "AU-NU", CustomData: dirEntries.Items[2]},
-		{PeerId: "3", Ratio: 0.7, Symbol: "AU-VVWA", CustomData: dirEntries.Items[4]}}
+		{PeerId: "1", LoadBalancingScore: 0.5, Symbol: "AU-NALB", CustomData: dirEntries.Items[0]},
+		{PeerId: "2", LoadBalancingScore: 0.8, Symbol: "AU-NU", CustomData: dirEntries.Items[2]},
+		{PeerId: "3", LoadBalancingScore: 0.7, Symbol: "AU-VVWA", CustomData: dirEntries.Items[4]}}
 	serviceInfo := iso18626.ServiceInfo{
 		ServiceLevel: &iso18626.TypeSchemeValuePair{
 			Text: "Rush",
@@ -289,7 +470,7 @@ func TestFilterAndSort(t *testing.T) {
 		},
 	}
 	var rotaInfo adapter.RotaInfo
-	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
 	assert.Len(t, entries, 2)
 	assert.Equal(t, "2", entries[0].PeerId)
 	assert.Equal(t, "3", entries[1].PeerId)
@@ -310,7 +491,7 @@ func TestFilterAndSort(t *testing.T) {
 	assert.Equal(t, sup.Networks[2], adapter.NetworkMatch{Name: "Queensland", Priority: 3, Match: true})
 	assert.Equal(t, "", sup.Cost)
 	assert.Equal(t, 1, sup.Priority)
-	assert.Equal(t, float32(0.5), sup.Ratio)
+	assert.Equal(t, 0.5, sup.LoadBalancingScore)
 	assert.Len(t, sup.Tiers, 4)
 
 	sup = rotaInfo.Suppliers[1]
@@ -323,7 +504,7 @@ func TestFilterAndSort(t *testing.T) {
 	assert.Equal(t, sup.Networks[3], adapter.NetworkMatch{Name: "National", Priority: 9, Match: false})
 	assert.Equal(t, "44.80", sup.Cost)
 	assert.Equal(t, 2, sup.Priority)
-	assert.Equal(t, float32(0.7), sup.Ratio)
+	assert.Equal(t, 0.7, sup.LoadBalancingScore)
 	assert.Len(t, sup.Tiers, 4)
 	assert.Equal(t, sup.Tiers[0], adapter.TierMatch{Name: "Premium Pay for Peer - Rush Copy", Level: "rush", Type: "copy", Cost: "44.80", Match: true})
 	assert.Equal(t, sup.Tiers[1], adapter.TierMatch{Name: "Reciprocal Peer to Peer - Core Copy", Level: "core", Type: "copy", Cost: "0.00", Match: false})
@@ -342,7 +523,7 @@ func TestFilterAndSort(t *testing.T) {
 	assert.Equal(t, sup.Networks[5], adapter.NetworkMatch{Name: "National", Priority: 9, Match: false})
 	assert.Equal(t, "44.80", sup.Cost)
 	assert.Equal(t, 1, sup.Priority)
-	assert.Equal(t, float32(0.8), sup.Ratio)
+	assert.Equal(t, 0.8, sup.LoadBalancingScore)
 	assert.Len(t, sup.Tiers, 4)
 	assert.Equal(t, sup.Tiers[0], adapter.TierMatch{Name: "Premium Pay for Peer - Rush Copy", Level: "rush", Type: "copy", Cost: "44.80", Match: true})
 	assert.Equal(t, sup.Tiers[1], adapter.TierMatch{Name: "Premium Pay for Peer - Core Copy", Level: "core", Type: "copy", Cost: "22.40", Match: false})
@@ -352,13 +533,15 @@ func TestFilterAndSort(t *testing.T) {
 	bytes, err := json.MarshalIndent(rotaInfo, "", "  ")
 	assert.NoError(t, err)
 	assert.Contains(t, string(bytes), "\"request\"")
+	assert.Contains(t, string(bytes), "\"loadBalancingScore\"")
+	assert.NotContains(t, string(bytes), "\"ratio\"")
 }
 
 func TestFilterAndSortFilterByCost(t *testing.T) {
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
-	entries := []adapter.Supplier{{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]}, {PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]}}
+	entries := []adapter.Supplier{{PeerId: "1", LoadBalancingScore: 0.5, CustomData: dirEntries.Items[0]}, {PeerId: "2", LoadBalancingScore: 0.7, CustomData: dirEntries.Items[1]}}
 	serviceInfo := iso18626.ServiceInfo{
 		ServiceLevel: &iso18626.TypeSchemeValuePair{
 			Text: "Core",
@@ -374,17 +557,17 @@ func TestFilterAndSortFilterByCost(t *testing.T) {
 		},
 	}
 	var rotaInfo adapter.RotaInfo
-	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
 	assert.Len(t, entries, 1)
 	assert.Equal(t, "1", entries[0].PeerId)
 	assert.Equal(t, "loan", rotaInfo.Request.Type)
 }
 
 func TestFilterAndSortFilterByCost0(t *testing.T) {
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
-	entries := []adapter.Supplier{{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]}, {PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]}}
+	entries := []adapter.Supplier{{PeerId: "1", LoadBalancingScore: 0.5, CustomData: dirEntries.Items[0]}, {PeerId: "2", LoadBalancingScore: 0.7, CustomData: dirEntries.Items[1]}}
 	serviceInfo := iso18626.ServiceInfo{
 		ServiceLevel: &iso18626.TypeSchemeValuePair{
 			Text: "Core",
@@ -400,20 +583,20 @@ func TestFilterAndSortFilterByCost0(t *testing.T) {
 		},
 	}
 	var rotaInfo adapter.RotaInfo
-	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
 	assert.Len(t, entries, 1)
 	assert.Equal(t, "1", entries[0].PeerId)
 	assert.Equal(t, "loan", rotaInfo.Request.Type)
 }
 
 func TestFilterAndSortByType(t *testing.T) {
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
-		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
-		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[2]},
-		{PeerId: "3", Ratio: 0.7, CustomData: dirEntries.Items[4]}}
+		{PeerId: "1", LoadBalancingScore: 0.5, CustomData: dirEntries.Items[0]},
+		{PeerId: "2", LoadBalancingScore: 0.7, CustomData: dirEntries.Items[2]},
+		{PeerId: "3", LoadBalancingScore: 0.7, CustomData: dirEntries.Items[4]}}
 	serviceInfo := iso18626.ServiceInfo{
 		ServiceLevel: &iso18626.TypeSchemeValuePair{
 			Text: "Core",
@@ -429,21 +612,21 @@ func TestFilterAndSortByType(t *testing.T) {
 		},
 	}
 	var rotaInfo adapter.RotaInfo
-	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
 	assert.Len(t, entries, 2)
-	assert.Equal(t, "1", entries[0].PeerId)
-	assert.Equal(t, "2", entries[1].PeerId)
+	assert.Equal(t, "2", entries[0].PeerId)
+	assert.Equal(t, "1", entries[1].PeerId)
 	assert.Equal(t, "loan", rotaInfo.Request.Type)
 }
 
 func TestFilterAndSortByLevel(t *testing.T) {
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
-		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
-		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[2]},
-		{PeerId: "3", Ratio: 0.7, CustomData: dirEntries.Items[4]}}
+		{PeerId: "1", LoadBalancingScore: 0.5, CustomData: dirEntries.Items[0]},
+		{PeerId: "2", LoadBalancingScore: 0.7, CustomData: dirEntries.Items[2]},
+		{PeerId: "3", LoadBalancingScore: 0.7, CustomData: dirEntries.Items[4]}}
 	serviceInfo := iso18626.ServiceInfo{
 		ServiceLevel: &iso18626.TypeSchemeValuePair{
 			Text: "Rush",
@@ -459,7 +642,7 @@ func TestFilterAndSortByLevel(t *testing.T) {
 		},
 	}
 	var rotaInfo adapter.RotaInfo
-	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
 	assert.Len(t, entries, 2)
 	assert.Equal(t, "2", entries[0].PeerId)
 	assert.Equal(t, "3", entries[1].PeerId)
@@ -467,13 +650,13 @@ func TestFilterAndSortByLevel(t *testing.T) {
 }
 
 func TestFilterAndSortReciprocal(t *testing.T) {
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[4]
 	entries := []adapter.Supplier{
-		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
-		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[2]},
-		{PeerId: "3", Ratio: 0.7, CustomData: dirEntries.Items[4]}}
+		{PeerId: "1", LoadBalancingScore: 0.5, CustomData: dirEntries.Items[0]},
+		{PeerId: "2", LoadBalancingScore: 0.7, CustomData: dirEntries.Items[2]},
+		{PeerId: "3", LoadBalancingScore: 0.7, CustomData: dirEntries.Items[4]}}
 	serviceInfo := iso18626.ServiceInfo{
 		ServiceLevel: &iso18626.TypeSchemeValuePair{
 			Text: "Rush",
@@ -489,22 +672,172 @@ func TestFilterAndSortReciprocal(t *testing.T) {
 		},
 	}
 	var rotaInfo adapter.RotaInfo
-	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
 	assert.Len(t, entries, 1)
 	assert.Equal(t, "3", entries[0].PeerId)
 	assert.Equal(t, "copy", rotaInfo.Request.Type)
 }
 
+func TestFilterAndSortReciprocalNetworkExcludesPaidTiers(t *testing.T) {
+	appCtx := createLookupCtx()
+	ad := createDirectoryAdapter("")
+	requesterData := withNetworkReciprocal(dirEntries.Items[0], boolPtr(true))
+	entries := []adapter.Supplier{
+		{PeerId: "2", LoadBalancingScore: 0.7, Symbol: "AU-NU", CustomData: dirEntries.Items[2]},
+	}
+	serviceInfo := iso18626.ServiceInfo{
+		ServiceLevel: &iso18626.TypeSchemeValuePair{
+			Text: "Core",
+		},
+		ServiceType: iso18626.TypeServiceTypeLoan,
+	}
+	billingInfo := iso18626.BillingInfo{
+		MaximumCosts: &iso18626.TypeCosts{
+			MonetaryValue: utils.XSDDecimal{
+				Base: 3500,
+				Exp:  2,
+			},
+		},
+	}
+
+	entries, rotaInfo := ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
+
+	assert.Empty(t, entries)
+	assert.Len(t, rotaInfo.Suppliers, 1)
+	assert.False(t, rotaInfo.Suppliers[0].Match)
+}
+
+func TestFilterAndSortPaidNetworkExcludesFreeTiers(t *testing.T) {
+	appCtx := createLookupCtx()
+	ad := createDirectoryAdapter("")
+	requesterData := withNetworkReciprocal(dirEntries.Items[4], boolPtr(false))
+	entries := []adapter.Supplier{
+		{PeerId: "3", LoadBalancingScore: 0.7, Symbol: "AU-VVWA", CustomData: dirEntries.Items[4]},
+	}
+	serviceInfo := iso18626.ServiceInfo{
+		ServiceLevel: &iso18626.TypeSchemeValuePair{
+			Text: "Rush",
+		},
+		ServiceType: iso18626.TypeServiceTypeCopy,
+	}
+	billingInfo := iso18626.BillingInfo{
+		MaximumCosts: &iso18626.TypeCosts{
+			MonetaryValue: utils.XSDDecimal{
+				Base: 0,
+				Exp:  2,
+			},
+		},
+	}
+
+	entries, rotaInfo := ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
+
+	assert.Empty(t, entries)
+	assert.Len(t, rotaInfo.Suppliers, 1)
+	assert.False(t, rotaInfo.Suppliers[0].Match)
+}
+
+func TestFilterAndSortPaidNetworkAllowsPaidTiers(t *testing.T) {
+	appCtx := createLookupCtx()
+	ad := createDirectoryAdapter("")
+	requesterData := withNetworkReciprocal(dirEntries.Items[0], boolPtr(false))
+	entries := []adapter.Supplier{
+		{PeerId: "2", LoadBalancingScore: 0.7, Symbol: "AU-NU", CustomData: withNetworkReciprocal(dirEntries.Items[2], boolPtr(false))},
+	}
+	serviceInfo := iso18626.ServiceInfo{
+		ServiceLevel: &iso18626.TypeSchemeValuePair{
+			Text: "Core",
+		},
+		ServiceType: iso18626.TypeServiceTypeLoan,
+	}
+	billingInfo := iso18626.BillingInfo{
+		MaximumCosts: &iso18626.TypeCosts{
+			MonetaryValue: utils.XSDDecimal{
+				Base: 3500,
+				Exp:  2,
+			},
+		},
+	}
+
+	entries, rotaInfo := ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
+
+	assert.Len(t, entries, 1)
+	assert.Equal(t, "2", entries[0].PeerId)
+	assert.Equal(t, 34.4, entries[0].Cost)
+	assert.Len(t, rotaInfo.Suppliers, 1)
+	assert.True(t, rotaInfo.Suppliers[0].Match)
+	assert.Equal(t, "34.40", rotaInfo.Suppliers[0].Cost)
+}
+
+func TestFilterAndSortUsesCompatibleNetworkPriority(t *testing.T) {
+	appCtx := createLookupCtx()
+	ad := createDirectoryAdapter("")
+	requesterNetworks := []dirapi.EntryNetworkDetails{
+		{Name: "Reciprocal", Priority: 1, Reciprocal: boolPtr(true)},
+		{Name: "Paid Low", Priority: 5, Reciprocal: boolPtr(false)},
+		{Name: "Paid High", Priority: 3, Reciprocal: boolPtr(false)},
+	}
+	paidTier := []dirapi.Tier{
+		{Name: "Paid Core Loan", Level: dirapi.Standard, Type: dirapi.Loan, Cost: 34.4},
+	}
+	requesterData := dirapi.Entry{Name: "Requester", Networks: &requesterNetworks}
+	supplierANetworks := []dirapi.EntryNetworkDetails{
+		{Name: "Reciprocal", Priority: 1, Reciprocal: boolPtr(true)},
+		{Name: "Paid Low", Priority: -10, Reciprocal: boolPtr(false)},
+	}
+	supplierBNetworks := []dirapi.EntryNetworkDetails{
+		{Name: "Paid High", Priority: 99, Reciprocal: boolPtr(false)},
+	}
+	entries := []adapter.Supplier{
+		{PeerId: "A", Symbol: "A", CustomData: dirapi.Entry{Name: "Supplier A", Networks: &supplierANetworks, Tiers: &paidTier}},
+		{PeerId: "B", Symbol: "B", CustomData: dirapi.Entry{Name: "Supplier B", Networks: &supplierBNetworks, Tiers: &paidTier}},
+	}
+	serviceInfo := iso18626.ServiceInfo{
+		ServiceLevel: &iso18626.TypeSchemeValuePair{
+			Text: "Standard",
+		},
+		ServiceType: iso18626.TypeServiceTypeLoan,
+	}
+	billingInfo := iso18626.BillingInfo{
+		MaximumCosts: &iso18626.TypeCosts{
+			MonetaryValue: utils.XSDDecimal{
+				Base: 3500,
+				Exp:  2,
+			},
+		},
+	}
+
+	entries, rota := ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
+
+	if !assert.Len(t, entries, 2) {
+		return
+	}
+	assert.Equal(t, "B", entries[0].PeerId)
+	assert.Equal(t, 3, entries[0].Priority)
+	assert.Equal(t, "A", entries[1].PeerId)
+	assert.Equal(t, 5, entries[1].Priority)
+	assert.Equal(t, 99, rota.Suppliers[0].Networks[0].Priority)
+
+	(*requesterData.Networks)[1].Priority = -2
+	(*requesterData.Networks)[2].Priority = 0
+	entries, _ = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo, dirapi.LoadBalancingPolicyDeficit)
+	if !assert.Len(t, entries, 2) {
+		return
+	}
+	assert.Equal(t, "A", entries[0].PeerId)
+	assert.Equal(t, -2, entries[0].Priority)
+	assert.Equal(t, 0, entries[1].Priority)
+}
+
 func TestFilterAndSortNoFilters(t *testing.T) {
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
-		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
-		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[2]},
-		{PeerId: "3", Ratio: 0.8, CustomData: dirEntries.Items[4]}}
+		{PeerId: "1", LoadBalancingScore: 0.5, CustomData: dirEntries.Items[0]},
+		{PeerId: "2", LoadBalancingScore: 0.7, CustomData: dirEntries.Items[2]},
+		{PeerId: "3", LoadBalancingScore: 0.8, CustomData: dirEntries.Items[4]}}
 	var rotaInfo adapter.RotaInfo
-	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, nil, nil)
+	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, nil, nil, dirapi.LoadBalancingPolicyDeficit)
 	assert.Len(t, entries, 2)
 	assert.Equal(t, "1", entries[0].PeerId)
 	assert.Equal(t, "3", entries[1].PeerId)
@@ -512,54 +845,210 @@ func TestFilterAndSortNoFilters(t *testing.T) {
 }
 
 func TestCompareSuppliers(t *testing.T) {
-	assert.True(t, adapter.CompareSuppliers(adapter.Supplier{}, adapter.Supplier{}) == 0)
+	assert.True(t, adapter.CompareSuppliers(adapter.Supplier{}, adapter.Supplier{}, dirapi.LoadBalancingPolicyDeficit) == 0)
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1},
-		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1}) == 0)
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1},
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1}, dirapi.LoadBalancingPolicyDeficit) == 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 0, Priority: 1, Ratio: 1},
-		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1}) < 0)
+		adapter.Supplier{Cost: 0, Priority: 1, LoadBalancingScore: 1},
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1}, dirapi.LoadBalancingPolicyDeficit) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 0, Priority: 1, Ratio: 1},
-		adapter.Supplier{Cost: 1, Priority: 0, Ratio: 0}) < 0)
+		adapter.Supplier{Cost: 0, Priority: 1, LoadBalancingScore: 1},
+		adapter.Supplier{Cost: 1, Priority: 0, LoadBalancingScore: 0}, dirapi.LoadBalancingPolicyDeficit) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 1, Priority: 0, Ratio: 1},
-		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1}) < 0)
+		adapter.Supplier{Cost: 1, Priority: 0, LoadBalancingScore: 1},
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1}, dirapi.LoadBalancingPolicyDeficit) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 1, Priority: 0, Ratio: 1},
-		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 0}) < 0)
+		adapter.Supplier{Cost: 1, Priority: 0, LoadBalancingScore: 1},
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 0}, dirapi.LoadBalancingPolicyDeficit) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 0},
-		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1}) < 0)
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 0},
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1}, dirapi.LoadBalancingPolicyDeficit) > 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 2, Priority: 1, Ratio: 1},
-		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1}) > 0)
+		adapter.Supplier{Cost: 2, Priority: 1, LoadBalancingScore: 1},
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1}, dirapi.LoadBalancingPolicyDeficit) > 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 1, Priority: 2, Ratio: 1},
-		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1}) > 0)
+		adapter.Supplier{Cost: 1, Priority: 2, LoadBalancingScore: 1},
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1}, dirapi.LoadBalancingPolicyDeficit) > 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 2},
-		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1}) > 0)
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 2},
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1}, dirapi.LoadBalancingPolicyDeficit) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1, Local: true},
-		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1, Local: false}) < 0)
+		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 2, LoadBalancingScore: 2},
+		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 1, LoadBalancingScore: 1}, dirapi.LoadBalancingPolicyDeficit) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1, Local: false},
-		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1, Local: true}) > 0)
+		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 1, ShelvingPreference: 2, LoadBalancingScore: 2},
+		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 1, ShelvingPreference: 1, LoadBalancingScore: 1}, dirapi.LoadBalancingPolicyDeficit) < 0)
 
-	suppliers := []adapter.Supplier{{Cost: 1, Priority: 1, Ratio: 1, Local: false}, {Cost: 1, Priority: 1, Ratio: 1, Local: true}}
+	assert.True(t, adapter.CompareSuppliers(
+		adapter.Supplier{Cost: 2, Priority: 1, LocationPreference: 100},
+		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 0}, dirapi.LoadBalancingPolicyDeficit) > 0)
+
+	assert.True(t, adapter.CompareSuppliers(
+		adapter.Supplier{Cost: 1, Priority: 2, LocationPreference: 100},
+		adapter.Supplier{Cost: 1, Priority: 1, LocationPreference: 0}, dirapi.LoadBalancingPolicyDeficit) > 0)
+
+	assert.True(t, adapter.CompareSuppliers(
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1, Local: true},
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1, Local: false}, dirapi.LoadBalancingPolicyDeficit) < 0)
+
+	assert.True(t, adapter.CompareSuppliers(
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1, Local: false},
+		adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 1, Local: true}, dirapi.LoadBalancingPolicyDeficit) > 0)
+
+	suppliers := []adapter.Supplier{{Cost: 1, Priority: 1, LoadBalancingScore: 1, Local: false}, {Cost: 1, Priority: 1, LoadBalancingScore: 1, Local: true}}
 	slices.SortFunc(suppliers, func(a, b adapter.Supplier) int {
-		return adapter.CompareSuppliers(a, b)
+		return adapter.CompareSuppliers(a, b, dirapi.LoadBalancingPolicyDeficit)
 	})
 	assert.True(t, suppliers[0].Local) // Local sorted as first
+	assert.False(t, suppliers[1].Local)
+}
+
+func TestFilterAndSortAppliesHoldingsPolicy(t *testing.T) {
+	appCtx := createLookupCtx()
+	ad := createDirectoryAdapter("")
+	networks := []dirapi.EntryNetworkDetails{{Name: "Reciprocal", Priority: 1}}
+	tiers := []dirapi.Tier{{Name: "Core Loan", Level: "Core", Type: "Loan", Cost: 0}}
+	customData := dirapi.Entry{
+		Name: "Supplier", Networks: &networks, Tiers: &tiers,
+		HoldingsPolicy: &dirapi.HoldingsPolicy{
+			ItemLoanPolicies: &[]dirapi.HoldingsItemLoanPolicy{
+				{Code: "NONCIRC", Name: "Non-circulating", Lendable: false},
+				{Code: "NORMAL", Name: "Normal", Lendable: true},
+			},
+			Locations: &[]dirapi.HoldingsLocation{
+				{Code: "CLOSED", SupplyPreference: -1},
+				{Code: "MAIN", SupplyPreference: 2},
+				{Code: "BRANCH", SupplyPreference: 1},
+			},
+			ShelvingLocations: &[]dirapi.HoldingsShelvingLocation{
+				{Code: "STACKS", SupplyPreference: 1},
+				{Code: "POPULAR", SupplyPreference: 10},
+				{Code: "RESTRICTED", SupplyPreference: -1},
+			},
+			LocationPolicies: &[]dirapi.HoldingsLocationPolicy{
+				{LocationCode: strPtr("MAIN"), ShelvingLocationCode: "RESTRICTED", SupplyPreference: 3},
+				{ShelvingLocationCode: "POPULAR", SupplyPreference: -1},
+				{LocationCode: strPtr("BRANCH"), ShelvingLocationCode: "POPULAR", SupplyPreference: 10},
+			},
+		},
+	}
+	entries := []adapter.Supplier{
+		{PeerId: "disabled-item", Symbol: "A", ItemLoanPolicy: "NONCIRC", CustomData: customData},
+		{PeerId: "disabled-location", Symbol: "B", Location: "CLOSED", CustomData: customData},
+		{PeerId: "preferred", Symbol: "C", Location: "MAIN", ShelvingLocation: "STACKS", ItemLoanPolicy: "NORMAL", CustomData: customData},
+		{PeerId: "unknown-policy", Symbol: "D", Location: "BRANCH", ShelvingLocation: "POPULAR", ItemLoanPolicy: "UNKNOWN", CustomData: customData},
+		{PeerId: "disabled-shelf", Symbol: "E", ShelvingLocation: "RESTRICTED", CustomData: customData},
+		{PeerId: "enabled-override", Symbol: "F", Location: "MAIN", ShelvingLocation: "RESTRICTED", CustomData: customData},
+		{PeerId: "disabled-override", Symbol: "G", Location: "MAIN", ShelvingLocation: "POPULAR", CustomData: customData},
+		{PeerId: "unknown-location", Symbol: "H", Location: "UNKNOWN", ShelvingLocation: "UNKNOWN", CustomData: customData},
+	}
+	serviceInfo := iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}
+
+	filtered, rotaInfo := ad.FilterAndSort(appCtx, entries, customData, &serviceInfo, nil, dirapi.LoadBalancingPolicyDeficit)
+
+	var ids []string
+	for _, supplier := range filtered {
+		ids = append(ids, supplier.PeerId)
+	}
+	assert.Equal(t, []string{"enabled-override", "preferred", "unknown-policy", "unknown-location"}, ids)
+	assert.Len(t, rotaInfo.Suppliers, len(entries))
+	for i, supplier := range filtered {
+		assert.True(t, rotaInfo.Suppliers[i].Match)
+		assert.Equal(t, supplier.LocationPreference, rotaInfo.Suppliers[i].LocationPreference)
+		assert.Equal(t, supplier.ShelvingPreference, rotaInfo.Suppliers[i].ShelvingPreference)
+	}
+	for _, supplier := range rotaInfo.Suppliers[len(filtered):] {
+		assert.False(t, supplier.Match)
+	}
+}
+
+func TestFilterAndSortResolvesHoldingsPolicyForNonMatchingSuppliers(t *testing.T) {
+	networks := []dirapi.EntryNetworkDetails{{Name: "Reciprocal", Priority: 1}}
+	tiers := []dirapi.Tier{{Name: "Core Loan", Level: "Core", Type: "Loan", Cost: 0}}
+	requester := dirapi.Entry{Networks: &networks, Tiers: &tiers}
+	for _, tc := range []struct {
+		name     string
+		networks []dirapi.EntryNetworkDetails
+		tiers    []dirapi.Tier
+	}{
+		{name: "no shared network", networks: []dirapi.EntryNetworkDetails{{Name: "Other", Priority: 1}}, tiers: tiers},
+		{name: "no matching tier", networks: networks, tiers: []dirapi.Tier{{Type: "Copy", Cost: 0}}},
+		{name: "no matching cost", networks: networks, tiers: []dirapi.Tier{{Type: "Loan", Cost: 10}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			supplier := adapter.Supplier{
+				Symbol: "A", Location: "MAIN", ShelvingLocation: "STACKS",
+				LocationPreference: 99, ShelvingPreference: 98,
+				CustomData: dirapi.Entry{
+					Networks: &tc.networks, Tiers: &tc.tiers,
+					HoldingsPolicy: &dirapi.HoldingsPolicy{
+						Locations:         &[]dirapi.HoldingsLocation{{Code: "MAIN", SupplyPreference: 2}},
+						ShelvingLocations: &[]dirapi.HoldingsShelvingLocation{{Code: "STACKS", SupplyPreference: 1}},
+						LocationPolicies:  &[]dirapi.HoldingsLocationPolicy{{LocationCode: strPtr("MAIN"), ShelvingLocationCode: "STACKS", SupplyPreference: 3}},
+					},
+				},
+			}
+			serviceInfo := iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}
+			filtered, rotaInfo := createDirectoryAdapter("").FilterAndSort(createLookupCtx(), []adapter.Supplier{supplier}, requester, &serviceInfo, nil, dirapi.LoadBalancingPolicyDeficit)
+			assert.Empty(t, filtered)
+			if assert.Len(t, rotaInfo.Suppliers, 1) {
+				match := rotaInfo.Suppliers[0]
+				assert.False(t, match.Match)
+				assert.Equal(t, 2, match.LocationPreference)
+				assert.Equal(t, 3, match.ShelvingPreference)
+			}
+		})
+	}
+}
+
+func strPtr(s string) *string {
+	return &s
+}
+
+func TestFilterAndSortProportional(t *testing.T) {
+	networks := []dirapi.EntryNetworkDetails{{Name: "Reciprocal", Priority: 1}}
+	tiers := []dirapi.Tier{{Name: "Core Loan", Level: "Core", Type: "Loan", Cost: 0}}
+	requester := dirapi.Entry{Networks: &networks, Tiers: &tiers}
+	serviceInfo := iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}
+	entries := []adapter.Supplier{
+		{Symbol: "A", LoadBalancingScore: 0.1, CustomData: requester},
+		{Symbol: "B", LoadBalancingScore: 0.5, CustomData: requester},
+	}
+	for _, policy := range []dirapi.LoadBalancingPolicy{dirapi.LoadBalancingPolicyDeficit, dirapi.LoadBalancingPolicyProportional} {
+		filtered, rota := createDirectoryAdapter("").FilterAndSort(createLookupCtx(), entries, requester, &serviceInfo, nil, policy)
+		assert.Equal(t, policy, rota.LoadBalancingPolicy)
+		if assert.Len(t, filtered, 2) && assert.Len(t, rota.Suppliers, 2) {
+			want := "B"
+			score := 0.5
+			if policy == dirapi.LoadBalancingPolicyProportional {
+				want = "A"
+				score = 0.1
+			}
+			assert.Equal(t, want, filtered[0].Symbol)
+			assert.Equal(t, want, rota.Suppliers[0].Symbol)
+			assert.Equal(t, score, rota.Suppliers[0].LoadBalancingScore)
+		}
+	}
+	// Earlier priorities take precedence over the proportional score.
+	for _, preferred := range []adapter.Supplier{
+		{Local: true, LoadBalancingScore: 10},
+		{Cost: 0, Priority: 2, LoadBalancingScore: 10},
+		{Cost: 1, Priority: 0, LoadBalancingScore: 10},
+		{Cost: 1, Priority: 1, LocationPreference: 1, LoadBalancingScore: 10},
+		{Cost: 1, Priority: 1, ShelvingPreference: 1, LoadBalancingScore: 10},
+	} {
+		assert.Less(t, adapter.CompareSuppliers(preferred, adapter.Supplier{Cost: 1, Priority: 1, LoadBalancingScore: 0.1}, dirapi.LoadBalancingPolicyProportional), 0)
+	}
+	assert.Less(t, adapter.CompareSuppliers(adapter.Supplier{Symbol: "A", LoadBalancingScore: 1}, adapter.Supplier{Symbol: "B", LoadBalancingScore: 1}, dirapi.LoadBalancingPolicyProportional), 0)
 }

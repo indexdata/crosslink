@@ -1,0 +1,5 @@
+{
+  "srvcId": "crosslink-supply-99.99.99",
+  "instId": "inst-crosslink-supply-99.99.99",
+  "url": "http://host.k3d.internal:8086"
+}

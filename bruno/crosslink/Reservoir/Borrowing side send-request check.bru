@@ -1,7 +1,7 @@
 meta {
   name: Borrowing side send-request check
   type: http
-  seq: 3
+  seq: 2
 }
 
 get {
@@ -27,8 +27,13 @@ auth:basic {
 script:post-response {
   test("for send-request", function() {
     const pr = res.getBody();
-    expect(pr.lastAction).to.equal("send-request")
-    expect(pr.lastActionResult).to.equal("SUCCESS")
+    // Automatic action is triggered when request goes in UNFILLED state
+    expect(pr.lastAction).to.equal("send-notification")
+    // The local stack has no SMTP service; the notification problem is handled.
+    expect(pr.lastActionResult).to.equal("PROBLEM")
+    expect(pr.lastActionOutcome).to.equal("failure")
+    expect(pr.needsAttention).to.equal(true)
+    expect(pr.state).to.equal("UNFILLED")
   });
 }
 

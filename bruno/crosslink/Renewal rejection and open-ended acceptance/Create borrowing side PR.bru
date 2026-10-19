@@ -1,0 +1,57 @@
+meta {
+  name: Create borrowing side PR
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{host}}/patron_requests
+  body: json
+  auth: basic
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+body:json {
+  {
+      "illRequest": {
+        "bibliographicInfo": {
+          "supplierUniqueRecordId": "return-{{supplierSymbol}}::{{itemId}}",
+          "title" : "my fake title"
+        },
+        "serviceInfo" : {
+          "serviceType": "Loan"
+        }
+      },
+      "patron": "{{requesterPatron}}",
+      "side": "borrowing",
+      "state": "NEW",
+      "requesterSymbol": "{{requesterSymbol}}"
+  }
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
+script:post-response {
+  const responseData = res.getBody();
+  
+  test("Capture patron request id", () => {
+      expect(responseData.id).to.be.a("string").and.not.empty;
+      bru.setVar("renewalOmittedPrId", responseData.id);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

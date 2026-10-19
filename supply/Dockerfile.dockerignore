@@ -1,0 +1,9 @@
+# The Supply image only needs its module manifests and application sources.
+**
+!supply/
+!supply/go.mod
+!supply/go.sum
+!supply/main.go
+!supply/app/
+!supply/app/**
+supply/app/**/*_test.go

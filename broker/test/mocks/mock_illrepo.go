@@ -57,6 +57,14 @@ func (r *MockIllRepositorySuccess) SaveLocatedSupplier(ctx common.ExtendedContex
 	return supplier, nil
 }
 
+func (r *MockIllRepositorySuccess) SkipLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) error {
+	return nil
+}
+
+func (r *MockIllRepositorySuccess) SkipLocatedSuppliersByIllTransactionAndStatus(ctx common.ExtendedContext, id string, status pgtype.Text) error {
+	return nil
+}
+
 func (r *MockIllRepositorySuccess) GetLocatedSuppliersByIllTransactionAndStatus(ctx common.ExtendedContext, params ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams) ([]ill_db.LocatedSupplier, error) {
 	return []ill_db.LocatedSupplier{{
 		ID:               uuid.New().String(),
@@ -130,6 +138,15 @@ func (r *MockIllRepositorySuccess) GetLocatedSuppliersByIllTransaction(ctx commo
 	return []ill_db.LocatedSupplier{{ID: uuid.NewString(), IllTransactionID: id}}, 0, nil
 }
 
+func (r *MockIllRepositorySuccess) GetLocatedSuppliersByIllTransactionForUpdate(ctx common.ExtendedContext, id string) ([]ill_db.LocatedSupplier, error) {
+	rows, _, err := r.GetLocatedSuppliersByIllTransaction(ctx, id)
+	return rows, err
+}
+
+func (r *MockIllRepositorySuccess) GetLocatedSuppliersWithPeerByIllTransaction(ctx common.ExtendedContext, id string) ([]ill_db.GetLocatedSuppliersWithPeerByIllTransactionRow, int64, error) {
+	return []ill_db.GetLocatedSuppliersWithPeerByIllTransactionRow{{LocatedSupplier: ill_db.LocatedSupplier{ID: uuid.NewString(), IllTransactionID: id}}}, 0, nil
+}
+
 func (r *MockIllRepositorySuccess) SaveSymbol(ctx common.ExtendedContext, params ill_db.SaveSymbolParams) (ill_db.Symbol, error) {
 	return ill_db.Symbol(params), nil
 }
@@ -143,10 +160,6 @@ func (r *MockIllRepositorySuccess) GetSymbolsByPeerId(ctx common.ExtendedContext
 		SymbolValue: "ISIL:SUP1",
 		PeerID:      peerId,
 	}}, nil
-}
-
-func (r *MockIllRepositorySuccess) DeleteLocatedSupplierByIllTransaction(ctx common.ExtendedContext, illTransId string) error {
-	return nil
 }
 
 func (r *MockIllRepositorySuccess) DeleteIllTransaction(ctx common.ExtendedContext, id string) error {
@@ -229,6 +242,14 @@ func (r *MockIllRepositoryError) SaveLocatedSupplier(ctx common.ExtendedContext,
 	return ill_db.LocatedSupplier{}, errors.New("DB error")
 }
 
+func (r *MockIllRepositoryError) SkipLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) error {
+	return errors.New("DB error")
+}
+
+func (r *MockIllRepositoryError) SkipLocatedSuppliersByIllTransactionAndStatus(ctx common.ExtendedContext, id string, status pgtype.Text) error {
+	return errors.New("DB error")
+}
+
 func (r *MockIllRepositoryError) GetLocatedSuppliersByIllTransactionAndStatus(ctx common.ExtendedContext, params ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams) ([]ill_db.LocatedSupplier, error) {
 	return []ill_db.LocatedSupplier{}, errors.New("DB error")
 }
@@ -281,6 +302,15 @@ func (r *MockIllRepositoryError) GetLocatedSuppliersByIllTransaction(ctx common.
 	return []ill_db.LocatedSupplier{}, 0, errors.New("DB error")
 }
 
+func (r *MockIllRepositoryError) GetLocatedSuppliersByIllTransactionForUpdate(ctx common.ExtendedContext, id string) ([]ill_db.LocatedSupplier, error) {
+	rows, _, err := r.GetLocatedSuppliersByIllTransaction(ctx, id)
+	return rows, err
+}
+
+func (r *MockIllRepositoryError) GetLocatedSuppliersWithPeerByIllTransaction(ctx common.ExtendedContext, id string) ([]ill_db.GetLocatedSuppliersWithPeerByIllTransactionRow, int64, error) {
+	return []ill_db.GetLocatedSuppliersWithPeerByIllTransactionRow{}, 0, errors.New("DB error")
+}
+
 func (r *MockIllRepositoryError) SaveSymbol(ctx common.ExtendedContext, params ill_db.SaveSymbolParams) (ill_db.Symbol, error) {
 	return ill_db.Symbol{}, errors.New("DB error")
 }
@@ -291,10 +321,6 @@ func (r *MockIllRepositoryError) DeleteSymbolByPeerId(ctx common.ExtendedContext
 
 func (r *MockIllRepositoryError) GetSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]ill_db.Symbol, error) {
 	return []ill_db.Symbol{}, errors.New("DB error")
-}
-
-func (r *MockIllRepositoryError) DeleteLocatedSupplierByIllTransaction(ctx common.ExtendedContext, illTransId string) error {
-	return errors.New("DB error")
 }
 
 func (r *MockIllRepositoryError) DeleteIllTransaction(ctx common.ExtendedContext, id string) error {
@@ -337,4 +363,32 @@ func (r *MockIllRepositoryError) GetExclusiveBranchSymbolsByPeerId(ctx common.Ex
 
 func (r *MockIllRepositoryError) GetLocatedSupplierByIdForUpdate(ctx common.ExtendedContext, id string) (ill_db.LocatedSupplier, error) {
 	return ill_db.LocatedSupplier{}, errors.New("DB error")
+}
+
+func (r *MockIllRepositorySuccess) GetCachedPeerByDirectoryEntryID(ctx common.ExtendedContext, id uuid.UUID, directoryAdapter adapter.DirectoryLookupAdapter) (ill_db.Peer, string, error) {
+	return ill_db.Peer{}, "", nil
+}
+func (r *MockIllRepositoryError) GetCachedPeerByDirectoryEntryID(ctx common.ExtendedContext, id uuid.UUID, directoryAdapter adapter.DirectoryLookupAdapter) (ill_db.Peer, string, error) {
+	return ill_db.Peer{}, "", errors.New("DB error")
+}
+
+func (r *MockIllRepositorySuccess) SaveRotaAudit(ctx common.ExtendedContext, id string, name, user string, data map[string]any) error {
+	return nil
+}
+func (r *MockIllRepositoryError) SaveRotaAudit(ctx common.ExtendedContext, id string, name, user string, data map[string]any) error {
+	return errors.New("DB error")
+}
+func (r *MockIllRepositorySuccess) RotaRequestClosed(ctx common.ExtendedContext, id string) (bool, error) {
+	return false, nil
+}
+func (r *MockIllRepositoryError) RotaRequestClosed(ctx common.ExtendedContext, id string) (bool, error) {
+	return false, errors.New("DB error")
+}
+
+func (r *MockIllRepositorySuccess) RotaRequestCancelled(ctx common.ExtendedContext, transactionID, brokerSymbol string) (bool, error) {
+	return false, nil
+}
+
+func (r *MockIllRepositoryError) RotaRequestCancelled(ctx common.ExtendedContext, transactionID, brokerSymbol string) (bool, error) {
+	return false, errors.New("DB error")
 }

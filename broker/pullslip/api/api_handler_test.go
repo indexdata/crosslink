@@ -5,11 +5,16 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/indexdata/cql-go/pgcql"
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	"github.com/indexdata/crosslink/broker/patron_request/proapi"
+	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	ps_db "github.com/indexdata/crosslink/broker/pullslip/db"
 	psoapi "github.com/indexdata/crosslink/broker/pullslip/oapi"
 	"github.com/indexdata/crosslink/broker/tenant"
@@ -41,8 +46,8 @@ type MockPrRepo struct {
 	pr_db.PrRepo
 }
 
-func (m *MockPrRepo) ListPatronRequests(ctx common.ExtendedContext, params pr_db.ListPatronRequestsParams, cql *string) ([]pr_db.PatronRequest, int64, error) {
-	args := m.Called(*cql)
+func (m *MockPrRepo) ListPatronRequests(ctx common.ExtendedContext, params pr_db.ListPatronRequestsParams, pgcql pgcql.Query) ([]pr_db.PatronRequest, int64, error) {
+	args := m.Called(pgcql)
 	return args.Get(0).([]pr_db.PatronRequest), args.Get(1).(int64), args.Error(2)
 }
 
@@ -51,12 +56,35 @@ func (m *MockPrRepo) GetNotificationsByPrId(ctx common.ExtendedContext, params p
 	return args.Get(0).([]pr_db.Notification), args.Get(1).(int64), args.Error(2)
 }
 
+func (m *MockPrRepo) GetTemplateByPurposeAudienceLabelAndOwner(_ common.ExtendedContext, params pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams) (pr_db.Template, error) {
+	for _, t := range prservice.GetStateModelTemplateDefaults() {
+		if slices.Contains(t.Labels, params.Label) {
+			return pr_db.Template{
+				Body:        t.Body,
+				ContentType: string(proapi.Html),
+				Labels:      slices.Clone(t.Labels),
+			}, nil
+		}
+	}
+	return pr_db.Template{}, nil
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 var sym = "ISIL:TEST"
 
+// withOwnerRestriction returns a mock matcher that asserts the pgcql.Query WHERE
+// clause contains the owner restriction (supplier_symbol and requester_symbol).
+func withOwnerRestriction() interface{} {
+	return mock.MatchedBy(func(q pgcql.Query) bool {
+		wc := q.GetWhereClause()
+		return strings.Contains(wc, "supplier_symbol") &&
+			strings.Contains(wc, "requester_symbol")
+	})
+}
+
 func newHandler(psRepo ps_db.PsRepo, prRepo pr_db.PrRepo) PullSlipApiHandler {
-	return NewPsApiHandler(psRepo, prRepo, tenant.NewResolver())
+	return NewPsApiHandler(psRepo, prRepo, tenant.NewResolver(), nil)
 }
 
 func newRequest(method, body string) *http.Request {
@@ -207,7 +235,9 @@ func patronRequest(id, requesterSym string) pr_db.PatronRequest {
 func TestPostPullslips_OK(t *testing.T) {
 	pr := patronRequest("pr-1", sym)
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", "id any pr-1 and (side = lending and supplier_symbol_exact = ISIL:TEST or (side = borrowing and requester_symbol_exact = ISIL:TEST))").Return([]pr_db.PatronRequest{pr}, int64(1), nil)
+
+	prRepo.On("ListPatronRequests", withOwnerRestriction()).Return([]pr_db.PatronRequest{pr}, int64(1), nil)
+
 	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindNote)).Return([]pr_db.Notification{{Note: pgtype.Text{String: "Be careful with item"}}}, int64(1), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{{Condition: pgtype.Text{String: "Library use only"}}}, int64(1), nil)
 
@@ -249,7 +279,7 @@ func TestPostPullslips_InvalidJSON(t *testing.T) {
 
 func TestPostPullslips_PrNotFound(t *testing.T) {
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", "id any pr-missing and (side = lending and supplier_symbol_exact = ISIL:TEST or (side = borrowing and requester_symbol_exact = ISIL:TEST))").Return([]pr_db.PatronRequest{}, int64(1), pgx.ErrNoRows)
+	prRepo.On("ListPatronRequests", withOwnerRestriction()).Return([]pr_db.PatronRequest{}, int64(1), pgx.ErrNoRows)
 
 	h := newHandler(nil, prRepo)
 	req := newRequest(http.MethodPost, postBody("pr-missing"))
@@ -262,7 +292,7 @@ func TestPostPullslips_PrNotFound(t *testing.T) {
 
 func TestPostPullslips_PrRepoError(t *testing.T) {
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", "id any pr-err and (side = lending and supplier_symbol_exact = ISIL:TEST or (side = borrowing and requester_symbol_exact = ISIL:TEST))").Return([]pr_db.PatronRequest{}, int64(1), errors.New("db err"))
+	prRepo.On("ListPatronRequests", withOwnerRestriction()).Return([]pr_db.PatronRequest{}, int64(1), errors.New("db err"))
 
 	h := newHandler(nil, prRepo)
 	req := newRequest(http.MethodPost, postBody("pr-err"))
@@ -277,7 +307,7 @@ func TestPostPullslips_SaveError(t *testing.T) {
 	pr := patronRequest("pr-1", sym)
 
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", "id any pr-1 and (side = lending and supplier_symbol_exact = ISIL:TEST or (side = borrowing and requester_symbol_exact = ISIL:TEST))").Return([]pr_db.PatronRequest{pr}, int64(1), nil)
+	prRepo.On("ListPatronRequests", withOwnerRestriction()).Return([]pr_db.PatronRequest{pr}, int64(1), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindNote)).Return([]pr_db.Notification{{Note: pgtype.Text{String: "Be careful with item"}}}, int64(1), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{{Condition: pgtype.Text{String: "Library use only"}}}, int64(1), nil)
 
@@ -323,7 +353,7 @@ func cqlBody(cql string) string {
 func TestPostPullslips_CqlBased_OK(t *testing.T) {
 	pr := patronRequest("pr-cql", sym)
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", mock.AnythingOfType("string")).Return([]pr_db.PatronRequest{pr}, int64(1), nil)
+	prRepo.On("ListPatronRequests", withOwnerRestriction()).Return([]pr_db.PatronRequest{pr}, int64(1), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-cql", string(pr_db.NotificationKindNote)).Return([]pr_db.Notification{}, int64(0), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-cql", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{}, int64(0), nil)
 
@@ -343,7 +373,7 @@ func TestPostPullslips_CqlBased_OK(t *testing.T) {
 
 func TestPostPullslips_EmptyPrList(t *testing.T) {
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", mock.AnythingOfType("string")).Return([]pr_db.PatronRequest{}, int64(0), nil)
+	prRepo.On("ListPatronRequests", withOwnerRestriction()).Return([]pr_db.PatronRequest{}, int64(0), nil)
 
 	h := newHandler(nil, prRepo)
 	req := newRequest(http.MethodPost, postBody("pr-none"))
@@ -362,7 +392,7 @@ func TestPostPullslipsIdRegenerate_OK(t *testing.T) {
 
 	pr := patronRequest("pr-1", sym)
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", slip.SearchCriteria).Return([]pr_db.PatronRequest{pr}, int64(1), nil)
+	prRepo.On("ListPatronRequests", withOwnerRestriction()).Return([]pr_db.PatronRequest{pr}, int64(1), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindNote)).Return([]pr_db.Notification{}, int64(0), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{}, int64(0), nil)
 
@@ -403,7 +433,9 @@ func TestPostPullslipsIdRegenerate_PrRepoError(t *testing.T) {
 	psRepo.On("GetPullSlipByIdAndOwner", "ps-err", sym).Return(slip, nil)
 
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", slip.SearchCriteria).Return([]pr_db.PatronRequest{}, int64(0), errors.New("db err"))
+	prRepo.On("ListPatronRequests", mock.MatchedBy(func(q pgcql.Query) bool {
+		return strings.Contains(q.GetWhereClause(), "state")
+	})).Return([]pr_db.PatronRequest{}, int64(0), errors.New("db err"))
 
 	h := newHandler(psRepo, prRepo)
 	req := newRequest(http.MethodPost, "")
@@ -421,7 +453,7 @@ func TestPostPullslipsIdRegenerate_SaveError(t *testing.T) {
 
 	pr := patronRequest("pr-1", sym)
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", slip.SearchCriteria).Return([]pr_db.PatronRequest{pr}, int64(1), nil)
+	prRepo.On("ListPatronRequests", withOwnerRestriction()).Return([]pr_db.PatronRequest{pr}, int64(1), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindNote)).Return([]pr_db.Notification{}, int64(0), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{}, int64(0), nil)
 
@@ -446,4 +478,67 @@ func TestWritePdf(t *testing.T) {
 	assert.Equal(t, "application/pdf", rr.Header().Get("Content-Type"))
 	assert.Contains(t, rr.Header().Get("Content-Disposition"), "pull-slips")
 	assert.Equal(t, []byte("%PDF-direct"), rr.Body.Bytes())
+}
+
+type printedEventBus struct {
+	events.EventBus
+	ids []string
+	err error
+}
+
+func (b *printedEventBus) CreateTask(id string, name events.EventName, data events.EventData, domain events.EventDomain, parent *string, target events.SignalTarget) (string, error) {
+	b.ids = append(b.ids, id)
+	return "task", b.err
+}
+
+type printedPDF struct{ err error }
+
+func (p printedPDF) GeneratePdfPullSlipForPrs(common.ExtendedContext, []pr_db.PatronRequest) ([]byte, error) {
+	return []byte("PDF"), p.err
+}
+
+func TestPullslipOutputQueuesOnlySavedPDFRequests(t *testing.T) {
+	for _, tc := range []struct {
+		name                      string
+		regenerate                bool
+		pdfErr, saveErr, queueErr error
+		wantStatus, wantQueued    int
+	}{
+		{name: "create", wantStatus: 200, wantQueued: 1},
+		{name: "regenerate", regenerate: true, wantStatus: 200, wantQueued: 1},
+		{name: "generation failure", pdfErr: errors.New("PDF failed"), wantStatus: 500},
+		{name: "save failure", saveErr: errors.New("save failed"), wantStatus: 500},
+		{name: "queue failure", queueErr: errors.New("queue failed"), wantStatus: 500, wantQueued: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pr := patronRequest("included", sym)
+			pr.Side = prservice.SideLending
+			pr.State = prservice.LenderStateWillSupply
+			repo := new(MockPrRepo)
+			repo.On("ListPatronRequests", mock.Anything).Return([]pr_db.PatronRequest{pr}, int64(200), nil).Once()
+			psRepo := new(MockPsRepo)
+			if tc.regenerate {
+				psRepo.On("GetPullSlipByIdAndOwner", "slip", sym).Return(pullSlipFixture("slip"), nil)
+			}
+			if tc.pdfErr == nil {
+				psRepo.On("SavePullSlip", mock.Anything).Return(ps_db.PullSlip{}, tc.saveErr).Once()
+			}
+			bus := &printedEventBus{err: tc.queueErr}
+			h := NewPsApiHandler(psRepo, repo, tenant.NewResolver(), bus)
+			h.pdfService = printedPDF{err: tc.pdfErr}
+			rr := httptest.NewRecorder()
+			req := newRequest(http.MethodPost, postBody(pr.ID))
+			if tc.regenerate {
+				h.PostPullslipsIdRegenerate(rr, req, "slip", psoapi.PostPullslipsIdRegenerateParams{Symbol: &sym})
+			} else {
+				h.PostPullslips(rr, req, psoapi.PostPullslipsParams{Symbol: &sym})
+			}
+			assert.Equal(t, tc.wantStatus, rr.Code)
+			if assert.Len(t, bus.ids, tc.wantQueued) && tc.wantQueued > 0 {
+				assert.Equal(t, "included", bus.ids[0])
+			}
+			repo.AssertExpectations(t)
+			psRepo.AssertExpectations(t)
+		})
+	}
 }

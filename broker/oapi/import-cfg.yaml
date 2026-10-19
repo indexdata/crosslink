@@ -1,0 +1,11 @@
+package: importoapi
+output: import/oapi/import_openapi_gen.go
+output-options:
+  include-tags:
+    - import-api
+  skip-prune: true
+  overlay:
+    path: oapi/overlay.yaml
+generate:
+  models: true
+  std-http-server: true

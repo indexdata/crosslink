@@ -21,5 +21,8 @@ vulncheck:
 	$(GO) run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 deps-update:
-	$(GO) get -u ./...
+	$(GO) get -t -u ./...
 	$(GO) mod tidy
+
+clean:
+	rm -f $(COVERAGE)

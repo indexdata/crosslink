@@ -4,23 +4,106 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/indexdata/crosslink/broker/adapter"
+	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
-	"github.com/indexdata/crosslink/broker/holdings"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test/mocks"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var appCtx = common.CreateExtCtxWithArgs(context.Background(), nil)
+
+func TestGetLoadBalancingScore(t *testing.T) {
+	tests := []struct {
+		name    string
+		ratio   *string
+		borrows int32
+		loans   int32
+		want    float64
+	}{
+		{name: "default ratio", borrows: 20, loans: 6, want: 14},
+		{name: "more borrowing desired", ratio: stringPointer("1:2"), borrows: 20, loans: 6, want: 4},
+		{name: "more lending desired", ratio: stringPointer("3:1"), borrows: 4, loans: 24, want: -12},
+		{name: "decimal ratio", ratio: stringPointer("5.5:1"), borrows: 2, loans: 4, want: 7},
+		{name: "fractional ratio", ratio: stringPointer("0.5:2"), borrows: 20, loans: 6, want: -1},
+		{name: "leading zeros", ratio: stringPointer("009:01"), borrows: 2, loans: 4, want: 14},
+		{name: "decimal leading zeros", ratio: stringPointer("005.50:01"), borrows: 2, loans: 4, want: 7},
+		{name: "loans to borrows contract", ratio: stringPointer("50:2"), borrows: 10, loans: 0, want: 250},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			peer := ill_db.Peer{
+				ID:           "peer-1",
+				BorrowsCount: tt.borrows,
+				LoansCount:   tt.loans,
+				CustomData:   dirapi.Entry{Name: "Supplier", LendToBorrowRatio: tt.ratio},
+			}
+			score, err := getLoadBalancingScore(peer, dirapi.LoadBalancingPolicyDeficit)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, score)
+		})
+	}
+}
+
+func TestGetLoadBalancingScoreRejectsInvalidRatio(t *testing.T) {
+	for _, ratio := range []string{"", "0:1", "1:0", "-1:2", "+1:2", ".5:1", "1e2:1", "1:2:3", "10000:1", "1:10000", "00001:1", "1:00001", "1.001:1", "1:1.001", "0.001:1", "1:0.001", "0.00:1", "1:0.00"} {
+		t.Run(ratio, func(t *testing.T) {
+			peer := ill_db.Peer{ID: "peer-1", CustomData: dirapi.Entry{Name: "Supplier", LendToBorrowRatio: &ratio}}
+			_, err := getLoadBalancingScore(peer, dirapi.LoadBalancingPolicyDeficit)
+			assert.EqualError(t, err, "peer peer-1 has invalid lendToBorrowRatio "+strconv.Quote(ratio))
+		})
+	}
+}
+
+func TestGetLoadBalancingScoreRejectsOversizedRatio(t *testing.T) {
+	ratio := "1" + strings.Repeat("0", 100000) + ":1"
+	peer := ill_db.Peer{ID: "peer-1", CustomData: dirapi.Entry{LendToBorrowRatio: &ratio}}
+	_, err := getLoadBalancingScore(peer, dirapi.LoadBalancingPolicyDeficit)
+	require.EqualError(t, err, "peer peer-1 has lendToBorrowRatio exceeding 15 characters")
+}
+
+func TestGetLoadBalancingScoreHandlesBoundaryRatios(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		ratio   string
+		borrows int32
+		loans   int32
+		want    float64
+	}{
+		{name: "maximum length", ratio: "9999.99:9999.99", borrows: 20, loans: 6, want: 14},
+		{name: "maximum quotient", ratio: "9999.99:0.01", borrows: 1, want: 999999},
+		{name: "minimum quotient", ratio: "0.01:9999.99", borrows: 999999, want: 1},
+		{name: "zero borrows", ratio: "9999.99:0.01", loans: 6, want: -6},
+		{name: "maximum counters", ratio: "9999.99:0.01", borrows: math.MaxInt32, loans: math.MaxInt32, want: float64(math.MaxInt32) * 999998},
+		{name: "leading zeros", ratio: "0000.01:0001.00", borrows: 100, want: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			peer := ill_db.Peer{ID: "peer-1", BorrowsCount: tt.borrows, LoansCount: tt.loans, CustomData: dirapi.Entry{LendToBorrowRatio: &tt.ratio}}
+			score, err := getLoadBalancingScore(peer, dirapi.LoadBalancingPolicyDeficit)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, score)
+			_, err = json.Marshal(adapter.RotaInfo{Suppliers: []adapter.SupplierMatch{{LoadBalancingScore: score}}})
+			require.NoError(t, err)
+		})
+	}
+}
+
+func stringPointer(value string) *string {
+	return &value
+}
 
 func TestGetDateWithTimezone(t *testing.T) {
 	act, err := time.LoadLocation("Australia/ACT")
@@ -61,11 +144,47 @@ func TestGetDateWithTimezone(t *testing.T) {
 	assert.Equal(t, "Local", date.Location().String())
 }
 
+func TestCheckAvailabilityWithoutConfiguration(t *testing.T) {
+	mockRepo := new(mocks.MockIllRepositorySuccess)
+	factory := NewLookupAdapterFactory(
+		mockRepo,
+		new(adapter.MockDirectoryLookupAdapter),
+		"",
+		nil,
+		catalog.NewLookupAdapterCreator(catalog.LookupAdapterMock, ""),
+	)
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, new(adapter.MockDirectoryLookupAdapter), factory)
+
+	status, result := locator.checkAvailability(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	if assert.NotNil(t, result) {
+		assert.Equal(t, string(AvailabilityUnknown), result.CustomData[AvailabilityKey])
+		assert.Equal(t, false, result.CustomData["localSupplier"])
+	}
+}
+
+func TestFirstSupplierPerSymbolKeepsBestSortedHolding(t *testing.T) {
+	suppliers := []adapter.Supplier{
+		{Symbol: "ISIL:A", LocalIdentifier: "best"},
+		{Symbol: "ISIL:A", LocalIdentifier: "other"},
+		{Symbol: "ISIL:B", LocalIdentifier: "only"},
+	}
+
+	result := firstSupplierPerSymbol(suppliers)
+
+	if assert.Len(t, result, 2) {
+		assert.Equal(t, "best", result[0].LocalIdentifier)
+		assert.Equal(t, "only", result[1].LocalIdentifier)
+	}
+}
+
 func TestGetNextSupplierEmptyMap(t *testing.T) {
 	peerId := "p1"
 	mockIllRepo := new(MockIllRepoRequester)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{}, nil)
-	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(holdings.SruHoldingsLookupAdapter), new(holdings.AvailabilityCreatorImpl), "")
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
 
 	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
 	assert.NoError(t, err)
@@ -87,11 +206,12 @@ func TestGetNextSupplierClosed(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data directory.Entry
+	var data dirapi.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
-	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(holdings.SruHoldingsLookupAdapter), new(holdings.AvailabilityCreatorImpl), "")
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
 
 	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId, SupplierSymbol: "ISIL:SUP"}})
 	assert.NoError(t, err)
@@ -105,7 +225,8 @@ func TestGetNextSupplierFailToLoadPeer(t *testing.T) {
 	peerId := "p1"
 	mockIllRepo := new(MockIllRepoRequester)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{}, errors.New("db error"))
-	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(holdings.SruHoldingsLookupAdapter), new(holdings.AvailabilityCreatorImpl), "")
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
 
 	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
 	assert.Equal(t, "db error", err.Error())
@@ -119,11 +240,12 @@ func TestGetNextSupplierNoClosures(t *testing.T) {
 	jsonData := "{" +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data directory.Entry
+	var data dirapi.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
-	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(holdings.SruHoldingsLookupAdapter), new(holdings.AvailabilityCreatorImpl), "")
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
 
 	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
 	assert.NoError(t, err)
@@ -143,11 +265,12 @@ func TestGetNextSupplierNoStartDate(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data directory.Entry
+	var data dirapi.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
-	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(holdings.SruHoldingsLookupAdapter), new(holdings.AvailabilityCreatorImpl), "")
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
 
 	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
 	assert.NoError(t, err)
@@ -167,11 +290,12 @@ func TestGetNextSupplierNoEndDate(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data directory.Entry
+	var data dirapi.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
-	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(holdings.SruHoldingsLookupAdapter), new(holdings.AvailabilityCreatorImpl), "")
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
 
 	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
 	assert.NoError(t, err)
@@ -193,11 +317,12 @@ func TestGetNextSupplierBothInPast(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data directory.Entry
+	var data dirapi.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
-	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(holdings.SruHoldingsLookupAdapter), new(holdings.AvailabilityCreatorImpl), "")
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
 
 	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
 	assert.NoError(t, err)
@@ -219,11 +344,12 @@ func TestGetNextSupplierBothInFuture(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data directory.Entry
+	var data dirapi.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
-	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(holdings.SruHoldingsLookupAdapter), new(holdings.AvailabilityCreatorImpl), "")
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
 
 	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
 	assert.NoError(t, err)
@@ -232,8 +358,6 @@ func TestGetNextSupplierBothInFuture(t *testing.T) {
 }
 
 func TestGetNextSupplierCannotParseDate(t *testing.T) {
-	peerId := "p1"
-	mockIllRepo := new(MockIllRepoRequester)
 	end := time.Now().Add(72 * time.Hour).Format(DATE_LAYOUT)
 	jsonData := "{\"closures\": " +
 		"[{\"id\": \"00251ffa-d517-5e1a-9a9a-a98033dda361\"," +
@@ -244,21 +368,12 @@ func TestGetNextSupplierCannotParseDate(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data directory.Entry
+	var data dirapi.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
-	assert.NoError(t, err)
-	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
-	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(holdings.SruHoldingsLookupAdapter), new(holdings.AvailabilityCreatorImpl), "")
-
-	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
-	assert.NoError(t, err)
-	assert.Len(t, skipped, 1)
-	assert.Equal(t, "", locSup.ID)
+	assert.Error(t, err)
 }
 
 func TestGetNextSupplierCannotParseEndDate(t *testing.T) {
-	peerId := "p1"
-	mockIllRepo := new(MockIllRepoRequester)
 	start := time.Now().Add(-48 * time.Hour).Format(DATE_LAYOUT)
 	jsonData := "{\"closures\": " +
 		"[{\"id\": \"00251ffa-d517-5e1a-9a9a-a98033dda361\"," +
@@ -269,16 +384,9 @@ func TestGetNextSupplierCannotParseEndDate(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data directory.Entry
+	var data dirapi.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
-	assert.NoError(t, err)
-	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
-	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(holdings.SruHoldingsLookupAdapter), new(holdings.AvailabilityCreatorImpl), "")
-
-	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
-	assert.NoError(t, err)
-	assert.Len(t, skipped, 1)
-	assert.Equal(t, "", locSup.ID)
+	assert.Error(t, err)
 }
 
 func TestGetNextSupplierBetweenHolidays(t *testing.T) {
@@ -303,11 +411,12 @@ func TestGetNextSupplierBetweenHolidays(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/Victoria\"" +
 		"}"
-	var data directory.Entry
+	var data dirapi.Entry
 	err = json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
-	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(holdings.SruHoldingsLookupAdapter), new(holdings.AvailabilityCreatorImpl), "")
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
 
 	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "l1", SupplierID: peerId}})
 	assert.NoError(t, err)
@@ -329,11 +438,12 @@ func TestGetNextSupplierClosedEventFailed(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data directory.Entry
+	var data dirapi.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
-	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(holdings.SruHoldingsLookupAdapter), new(holdings.AvailabilityCreatorImpl), "")
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
 	status, result := locator.selectSupplier(appCtx, events.Event{IllTransactionID: "1"})
 
 	assert.Equal(t, events.EventStatusProblem, status)
@@ -367,11 +477,102 @@ func TestLocateSuppliersDeduplicatesHoldingSymbolsForDirectoryLookup(t *testing.
 		},
 	}
 
-	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.MockDirectoryLookupAdapter), new(holdings.MockHoldingsLookupAdapter), new(holdings.AvailabilityCreatorImpl), "")
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.MockDirectoryLookupAdapter), "", new(catalog.MockLookupShared), new(catalog.LookupAdapterCreatorImpl))
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.MockDirectoryLookupAdapter), lookupAdapterFactory)
 	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, [][]string{{"ISIL:SUP1", "ISIL:SUP2"}}, mockIllRepo.refreshSymbols)
+}
+
+func TestLocateSuppliersOrdersLowerProportionalScoreFirst(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		ratio string
+		score float64
+	}{
+		{name: "ordinary ratio", ratio: "1:2", score: 0.6},
+		{name: "maximum quotient", ratio: "9999.99:0.01", score: 0.3 / 999999},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			mockIllRepo := &MockIllRepoLocateSuppliers{
+				illTransaction: ill_db.IllTransaction{
+					ID:          "ill-1",
+					RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+					IllTransactionData: ill_db.IllTransactionData{
+						BibliographicInfo: iso18626.BibliographicInfo{
+							SupplierUniqueRecordId: "return-ISIL:SUP1::L1;return-ISIL:SUP2::L2",
+						},
+					},
+				},
+				requester: ill_db.Peer{ID: "requester-1"},
+				peers: []ill_db.Peer{
+					{
+						ID:           "peer-2",
+						BorrowsCount: 4,
+						LoansCount:   24,
+						CustomData:   dirapi.Entry{Name: "Supplier 2", LendToBorrowRatio: stringPointer("3:1")},
+					},
+					{
+						ID:           "peer-1",
+						BorrowsCount: 20,
+						LoansCount:   6,
+						CustomData:   dirapi.Entry{Name: "Supplier 1", LendToBorrowRatio: stringPointer(tt.ratio)},
+					},
+				},
+				peerSymbols: map[string][]ill_db.Symbol{
+					"peer-1": {{SymbolValue: "ISIL:SUP1", PeerID: "peer-1"}},
+					"peer-2": {{SymbolValue: "ISIL:SUP2", PeerID: "peer-2"}},
+				},
+			}
+
+			directory := new(adapter.MockDirectoryLookupAdapter)
+			lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, directory, "", new(catalog.MockLookupShared), new(catalog.LookupAdapterCreatorImpl))
+			locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, directory, lookupAdapterFactory)
+			status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+			require.Equal(t, events.EventStatusSuccess, status)
+			_, err := json.Marshal(result.CustomData[ROTA_INFO_KEY])
+			require.NoError(t, err)
+			if assert.Len(t, mockIllRepo.savedLocatedSuppliers, 2) {
+				assert.Equal(t, "ISIL:SUP1", mockIllRepo.savedLocatedSuppliers[0].SupplierSymbol)
+				assert.Equal(t, "ISIL:SUP2", mockIllRepo.savedLocatedSuppliers[1].SupplierSymbol)
+			}
+			rotaInfo, ok := result.CustomData[ROTA_INFO_KEY].(adapter.RotaInfo)
+			if assert.True(t, ok) && assert.Len(t, rotaInfo.Suppliers, 2) {
+				assert.InDelta(t, tt.score, rotaInfo.Suppliers[0].LoadBalancingScore, 1e-12)
+				assert.Equal(t, dirapi.LoadBalancingPolicyProportional, rotaInfo.LoadBalancingPolicy)
+				assert.InDelta(t, 2.0, rotaInfo.Suppliers[1].LoadBalancingScore, 1e-12)
+			}
+		})
+	}
+}
+
+func TestLocateSuppliersRetiresOldRotaBeforeNoHoldingsResult(t *testing.T) {
+	mockIllRepo := &MockIllRepoLocateSuppliers{
+		illTransaction: ill_db.IllTransaction{
+			ID:          "ill-1",
+			RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+			IllTransactionData: ill_db.IllTransactionData{
+				BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "not-found"},
+			},
+		},
+		requester: ill_db.Peer{ID: "requester-1"},
+		existingSuppliers: []ill_db.LocatedSupplier{{
+			ID:               "old-selected-supplier",
+			IllTransactionID: "ill-1",
+			SupplierStatus:   ill_db.SupplierStateSelectedPg,
+		}},
+	}
+	lookupAdapter := &catalog.MockLookupAdapter{}
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.MockDirectoryLookupAdapter), "", lookupAdapter, nil)
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.MockDirectoryLookupAdapter), lookupAdapterFactory)
+
+	status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+	assert.Equal(t, events.EventStatusProblem, status)
+	assert.True(t, mockIllRepo.oldRotaRetired)
+	assert.Equal(t, "no holdings located", result.Problem.Details)
 }
 
 func TestLocateSuppliersUsesFirstHoldingLocalIdentifierForDuplicateSymbol(t *testing.T) {
@@ -394,7 +595,8 @@ func TestLocateSuppliersUsesFirstHoldingLocalIdentifierForDuplicateSymbol(t *tes
 		},
 	}
 
-	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.MockDirectoryLookupAdapter), new(holdings.MockHoldingsLookupAdapter), new(holdings.AvailabilityCreatorImpl), "")
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.MockDirectoryLookupAdapter), "", new(catalog.MockLookupShared), new(catalog.LookupAdapterCreatorImpl))
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.MockDirectoryLookupAdapter), lookupAdapterFactory)
 	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
@@ -405,14 +607,150 @@ func TestLocateSuppliersUsesFirstHoldingLocalIdentifierForDuplicateSymbol(t *tes
 	}
 }
 
+func TestLocateSuppliersLastResortRequester(t *testing.T) {
+	mockIllRepo := &MockIllRepoLocateSuppliers{
+		illTransaction: ill_db.IllTransaction{
+			ID:          "ill-1",
+			RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+			IllTransactionData: ill_db.IllTransactionData{
+				BibliographicInfo: iso18626.BibliographicInfo{
+					SupplierUniqueRecordId: "return-ISIL:SUP1::L1;return-ISIL:SUP1::L2;return-ISIL:SUP2::L3",
+				},
+			},
+		},
+		requester: ill_db.Peer{ID: "requester-1", CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{LendersOfLastResort: &[]dirapi.SymbolProperties{{Authority: "ISIL", Symbol: "SUP2"}, {Symbol: "SUP3"}}}}},
+		peers: []ill_db.Peer{
+			{ID: "peer-1", BorrowsCount: 1},
+			{ID: "peer-2", BorrowsCount: 1},
+			{ID: "peer-3", BorrowsCount: 1},
+		},
+		peerSymbols: map[string][]ill_db.Symbol{
+			"peer-1": {{SymbolValue: "ISIL:SUP1", PeerID: "peer-1"}},
+			"peer-2": {{SymbolValue: "ISIL:SUP2", PeerID: "peer-2"}},
+			"peer-3": {{SymbolValue: "ISIL:SUP3", PeerID: "peer-3"}},
+		},
+	}
+
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.MockDirectoryLookupAdapter), "", new(catalog.MockLookupShared), new(catalog.LookupAdapterCreatorImpl))
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.MockDirectoryLookupAdapter), lookupAdapterFactory)
+	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, [][]string{{"ISIL:SUP1", "ISIL:SUP2", "ISIL:SUP3"}}, mockIllRepo.refreshSymbols)
+
+	if assert.Len(t, mockIllRepo.savedLocatedSuppliers, 3) {
+		assert.Equal(t, "ISIL:SUP1", mockIllRepo.savedLocatedSuppliers[0].SupplierSymbol)
+		assert.Equal(t, "L1", mockIllRepo.savedLocatedSuppliers[0].LocalID.String)
+		assert.True(t, mockIllRepo.savedLocatedSuppliers[0].LocalID.Valid)
+
+		assert.Equal(t, "ISIL:SUP2", mockIllRepo.savedLocatedSuppliers[1].SupplierSymbol)
+		assert.Equal(t, "L3", mockIllRepo.savedLocatedSuppliers[1].LocalID.String)
+		assert.True(t, mockIllRepo.savedLocatedSuppliers[1].LocalID.Valid)
+
+		assert.Equal(t, "ISIL:SUP3", mockIllRepo.savedLocatedSuppliers[2].SupplierSymbol)
+		assert.Equal(t, "return-ISIL:SUP1::L1;return-ISIL:SUP1::L2;return-ISIL:SUP2::L3", mockIllRepo.savedLocatedSuppliers[2].LocalID.String)
+		assert.True(t, mockIllRepo.savedLocatedSuppliers[2].LocalID.Valid)
+	}
+}
+
+func TestLocateSuppliersLastResortLookupEmpty(t *testing.T) {
+	mockIllRepo := &MockIllRepoLocateSuppliers{
+		illTransaction: ill_db.IllTransaction{
+			ID:          "ill-1",
+			RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+			IllTransactionData: ill_db.IllTransactionData{
+				BibliographicInfo: iso18626.BibliographicInfo{
+					SupplierUniqueRecordId: "not-found",
+				},
+			},
+		},
+		requester: ill_db.Peer{ID: "requester-1", CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{LendersOfLastResort: &[]dirapi.SymbolProperties{{Authority: "ISIL", Symbol: "SUP2"}, {Symbol: "SUP3"}}}}},
+		peers: []ill_db.Peer{
+			{ID: "peer-2", BorrowsCount: 1},
+			{ID: "peer-3", BorrowsCount: 1},
+		},
+		peerSymbols: map[string][]ill_db.Symbol{
+			"peer-2": {{SymbolValue: "ISIL:SUP2", PeerID: "peer-2"}},
+			"peer-3": {{SymbolValue: "ISIL:SUP3", PeerID: "peer-3"}},
+		},
+	}
+
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.MockDirectoryLookupAdapter), "", new(catalog.MockLookupShared), new(catalog.LookupAdapterCreatorImpl))
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.MockDirectoryLookupAdapter), lookupAdapterFactory)
+	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, [][]string{{"ISIL:SUP2", "ISIL:SUP3"}}, mockIllRepo.refreshSymbols)
+
+	if assert.Len(t, mockIllRepo.savedLocatedSuppliers, 2) {
+		assert.Equal(t, "ISIL:SUP2", mockIllRepo.savedLocatedSuppliers[0].SupplierSymbol)
+		assert.Equal(t, "not-found", mockIllRepo.savedLocatedSuppliers[0].LocalID.String)
+		assert.True(t, mockIllRepo.savedLocatedSuppliers[0].LocalID.Valid)
+
+		assert.Equal(t, "ISIL:SUP3", mockIllRepo.savedLocatedSuppliers[1].SupplierSymbol)
+		assert.Equal(t, "not-found", mockIllRepo.savedLocatedSuppliers[1].LocalID.String)
+		assert.True(t, mockIllRepo.savedLocatedSuppliers[1].LocalID.Valid)
+	}
+}
+
+func TestLocateSuppliersLastResortConsortium(t *testing.T) {
+	for _, policy := range []dirapi.LoadBalancingPolicy{dirapi.LoadBalancingPolicyDeficit, dirapi.LoadBalancingPolicyProportional} {
+		t.Run(string(policy), func(t *testing.T) {
+			mockIllRepo := &MockIllRepoLocateSuppliers{
+				illTransaction: ill_db.IllTransaction{
+					ID:          "ill-1",
+					RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+					IllTransactionData: ill_db.IllTransactionData{
+						BibliographicInfo: iso18626.BibliographicInfo{
+							SupplierUniqueRecordId: "return-ISIL:SUP1::L1",
+						},
+					},
+				},
+				requester: ill_db.Peer{ID: "requester-1"},
+				peers: []ill_db.Peer{
+					{ID: "peer-1", BorrowsCount: 100, LoansCount: 50},
+					{ID: "peer-2", BorrowsCount: 10, LoansCount: 1},
+				},
+				peerSymbols: map[string][]ill_db.Symbol{
+					"peer-1": {{SymbolValue: "ISIL:SUP1", PeerID: "peer-1"}},
+					"peer-2": {{SymbolValue: "ISIL:SUP2", PeerID: "peer-2"}},
+				},
+				consortiumPeers: []ill_db.Peer{
+					{ID: "consortium-peer-1", CustomData: dirapi.Entry{Symbols: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUPC"}}, IllConfig: &dirapi.IllConfig{LendersOfLastResort: &[]dirapi.SymbolProperties{{Authority: "ISIL", Symbol: "SUP2"}}}}},
+				},
+			}
+
+			mockIllRepo.consortiumPeers[0].CustomData.IllConfig.LoadBalancingPolicy.Set(policy)
+			lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.MockDirectoryLookupAdapter), "ISIL:SUPC", new(catalog.MockLookupShared), new(catalog.LookupAdapterCreatorImpl))
+			locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.MockDirectoryLookupAdapter), lookupAdapterFactory)
+			status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+			assert.Equal(t, events.EventStatusSuccess, status)
+			assert.Equal(t, [][]string{{"ISIL:SUP1", "ISIL:SUP2"}}, mockIllRepo.refreshSymbols)
+			if assert.Len(t, mockIllRepo.savedLocatedSuppliers, 2) {
+				assert.Equal(t, "ISIL:SUP1", mockIllRepo.savedLocatedSuppliers[0].SupplierSymbol)
+				assert.Equal(t, "L1", mockIllRepo.savedLocatedSuppliers[0].LocalID.String)
+				assert.True(t, mockIllRepo.savedLocatedSuppliers[0].LocalID.Valid)
+
+				assert.Equal(t, "ISIL:SUP2", mockIllRepo.savedLocatedSuppliers[1].SupplierSymbol)
+				assert.Equal(t, "return-ISIL:SUP1::L1", mockIllRepo.savedLocatedSuppliers[1].LocalID.String)
+				assert.True(t, mockIllRepo.savedLocatedSuppliers[1].LocalID.Valid)
+			}
+		})
+	}
+}
+
 type MockIllRepoLocateSuppliers struct {
 	mocks.MockIllRepositorySuccess
 	illTransaction        ill_db.IllTransaction
 	requester             ill_db.Peer
+	existingSuppliers     []ill_db.LocatedSupplier
+	oldRotaRetired        bool
 	peers                 []ill_db.Peer
 	peerSymbols           map[string][]ill_db.Symbol
 	refreshSymbols        [][]string
 	savedLocatedSuppliers []ill_db.SaveLocatedSupplierParams
+	consortiumPeers       []ill_db.Peer
 }
 
 func (r *MockIllRepoLocateSuppliers) GetIllTransactionById(ctx common.ExtendedContext, id string) (ill_db.IllTransaction, error) {
@@ -423,7 +761,25 @@ func (r *MockIllRepoLocateSuppliers) GetPeerById(ctx common.ExtendedContext, id 
 	return r.requester, nil
 }
 
+func (r *MockIllRepoLocateSuppliers) GetLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) ([]ill_db.LocatedSupplier, int64, error) {
+	return r.existingSuppliers, int64(len(r.existingSuppliers)), nil
+}
+
+func (r *MockIllRepoLocateSuppliers) SkipLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) error {
+	r.oldRotaRetired = true
+	return nil
+}
+
 func (r *MockIllRepoLocateSuppliers) GetCachedPeersBySymbols(ctx common.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string, error) {
+	if len(r.consortiumPeers) > 0 && r.consortiumPeers[0].CustomData.Symbols != nil {
+		for _, sym := range *r.consortiumPeers[0].CustomData.Symbols {
+			for _, s := range symbols {
+				if sym.Authority+":"+sym.Symbol == s {
+					return r.consortiumPeers, "<refresh>", nil
+				}
+			}
+		}
+	}
 	r.refreshSymbols = append(r.refreshSymbols, append([]string(nil), symbols...))
 	return r.peers, "<refresh>", nil
 }
@@ -437,7 +793,9 @@ func (r *MockIllRepoLocateSuppliers) GetExclusiveBranchSymbolsByPeerId(ctx commo
 }
 
 func (r *MockIllRepoLocateSuppliers) SaveLocatedSupplier(ctx common.ExtendedContext, params ill_db.SaveLocatedSupplierParams) (ill_db.LocatedSupplier, error) {
-	r.savedLocatedSuppliers = append(r.savedLocatedSuppliers, params)
+	if params.SupplierStatus != ill_db.SupplierStateSkippedPg {
+		r.savedLocatedSuppliers = append(r.savedLocatedSuppliers, params)
+	}
 	return ill_db.LocatedSupplier(params), nil
 }
 
@@ -445,6 +803,10 @@ type MockIllRepoRequester struct {
 	mocks.MockIllRepositorySuccess
 	refreshSymbols [][]string
 	refreshErr     error
+}
+
+func (r *MockIllRepoRequester) GetLocatedSupplierByIdForUpdate(ctx common.ExtendedContext, id string) (ill_db.LocatedSupplier, error) {
+	return ill_db.LocatedSupplier{ID: id, SupplierID: "p1", SupplierSymbol: "ISIL:SUP", SupplierStatus: ill_db.SupplierStateNewPg}, nil
 }
 
 func (r *MockIllRepoRequester) GetPeerById(ctx common.ExtendedContext, peerId string) (ill_db.Peer, error) {
@@ -462,4 +824,321 @@ func (r *MockIllRepoRequester) GetLocatedSuppliersByIllTransactionAndStatus(ctx 
 func (r *MockIllRepoRequester) GetCachedPeersBySymbols(ctx common.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string, error) {
 	r.refreshSymbols = append(r.refreshSymbols, symbols)
 	return []ill_db.Peer{}, "<refresh>", r.refreshErr
+}
+
+// MockIllRepoLocateSuppliersWithSave extends MockIllRepoLocateSuppliers with tracking of
+// SaveIllTransaction calls, allowing the metadata-update tests to verify what was persisted.
+type MockIllRepoLocateSuppliersWithSave struct {
+	MockIllRepoLocateSuppliers
+	savedTransactions  []ill_db.SaveIllTransactionParams
+	saveTransactionErr error
+}
+
+func (r *MockIllRepoLocateSuppliersWithSave) SaveIllTransaction(ctx common.ExtendedContext, params ill_db.SaveIllTransactionParams) (ill_db.IllTransaction, error) {
+	if r.saveTransactionErr != nil {
+		return ill_db.IllTransaction{}, r.saveTransactionErr
+	}
+	r.savedTransactions = append(r.savedTransactions, params)
+	return ill_db.IllTransaction{IllTransactionData: params.IllTransactionData}, nil
+}
+
+// metadataTestRepo builds a MockIllRepoLocateSuppliersWithSave pre-wired with a single
+// ISIL:SUP1 supplier peer so the holdings lookup completes successfully.
+func metadataTestRepo(illTrans ill_db.IllTransaction, requester ill_db.Peer) *MockIllRepoLocateSuppliersWithSave {
+	return &MockIllRepoLocateSuppliersWithSave{
+		MockIllRepoLocateSuppliers: MockIllRepoLocateSuppliers{
+			illTransaction: illTrans,
+			requester:      requester,
+			peers:          []ill_db.Peer{{ID: "peer-1", BorrowsCount: 1}},
+			peerSymbols: map[string][]ill_db.Symbol{
+				"peer-1": {{SymbolValue: "ISIL:SUP1", PeerID: "peer-1"}},
+			},
+		},
+	}
+}
+
+// metadataTestRequester returns a peer carrying the given MetadataUpdateMode in its CatalogConfig.
+// Pass nil to leave CatalogConfig absent (mode defaults to None).
+func metadataTestRequester(mode *dirapi.MetadataUpdateMode) ill_db.Peer {
+	var cc *dirapi.CatalogConfig
+	if mode != nil {
+		cc = &dirapi.CatalogConfig{MetadataUpdateMode: mode}
+	}
+	return ill_db.Peer{
+		ID:         "requester-1",
+		CustomData: dirapi.Entry{Name: "test-requester", CatalogConfig: cc},
+	}
+}
+
+func TestLocateSuppliersMetadataModeNoneSkipsUpdate(t *testing.T) {
+	illTrans := ill_db.IllTransaction{
+		ID:          "ill-1",
+		RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+		IllTransactionData: ill_db.IllTransactionData{
+			BibliographicInfo: iso18626.BibliographicInfo{
+				SupplierUniqueRecordId: "some-id",
+				Title:                  "Original Title",
+			},
+		},
+	}
+	mockRepo := metadataTestRepo(illTrans, metadataTestRequester(nil)) // no CatalogConfig → mode=None
+	holdingsAdapter := &catalog.MockLookupAdapter{
+		Holdings: []catalog.Holding{{Symbol: "ISIL:SUP1"}},
+	}
+	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", holdingsAdapter, nil)
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, new(adapter.MockDirectoryLookupAdapter), factory)
+
+	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Empty(t, mockRepo.savedTransactions, "SaveIllTransaction should not be called when mode is None")
+}
+
+func TestLocateSuppliersMetadataSkippedForCrossLinkVendor(t *testing.T) {
+	mode := dirapi.Merge
+	illTrans := ill_db.IllTransaction{
+		ID:          "ill-1",
+		RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+		IllTransactionData: ill_db.IllTransactionData{
+			BibliographicInfo: iso18626.BibliographicInfo{
+				SupplierUniqueRecordId: "some-id",
+				Title:                  "Original Title",
+			},
+		},
+	}
+	requester := metadataTestRequester(&mode)
+	requester.Vendor = string(dirapi.CrossLink) // CrossLink vendor bypasses the metadata update
+	mockRepo := metadataTestRepo(illTrans, requester)
+	holdingsAdapter := &catalog.MockLookupAdapter{
+		Holdings: []catalog.Holding{{Symbol: "ISIL:SUP1"}},
+	}
+	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", holdingsAdapter, nil)
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, new(adapter.MockDirectoryLookupAdapter), factory)
+
+	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Empty(t, mockRepo.savedTransactions, "SaveIllTransaction should not be called for CrossLink vendor")
+}
+
+func TestLocateSuppliersMetadataMergePopulatesEmptyFields(t *testing.T) {
+	mode := dirapi.Merge
+	illTrans := ill_db.IllTransaction{
+		ID:          "ill-1",
+		RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+		IllTransactionData: ill_db.IllTransactionData{
+			BibliographicInfo: iso18626.BibliographicInfo{
+				SupplierUniqueRecordId: "some-id",
+				// Title intentionally empty so Merge fills it in
+			},
+		},
+	}
+	mockRepo := metadataTestRepo(illTrans, metadataTestRequester(&mode))
+	holdingsAdapter := &catalog.MockLookupAdapter{
+		Metadata: catalog.Metadata{Title: "Catalog Title", Author: "Catalog Author"},
+		Holdings: []catalog.Holding{{Symbol: "ISIL:SUP1"}},
+	}
+	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", holdingsAdapter, nil)
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, new(adapter.MockDirectoryLookupAdapter), factory)
+
+	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	if assert.Len(t, mockRepo.savedTransactions, 1) {
+		saved := mockRepo.savedTransactions[0].IllTransactionData.BibliographicInfo
+		assert.Equal(t, "Catalog Title", saved.Title)
+		assert.Equal(t, "Catalog Author", saved.Author)
+	}
+}
+
+func TestLocateSuppliersMetadataMergePreservesExistingFields(t *testing.T) {
+	mode := dirapi.Merge
+	illTrans := ill_db.IllTransaction{
+		ID:          "ill-1",
+		RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+		IllTransactionData: ill_db.IllTransactionData{
+			BibliographicInfo: iso18626.BibliographicInfo{
+				SupplierUniqueRecordId: "some-id",
+				Title:                  "Patron Title", // already set → Merge should not overwrite
+			},
+		},
+	}
+	mockRepo := metadataTestRepo(illTrans, metadataTestRequester(&mode))
+	holdingsAdapter := &catalog.MockLookupAdapter{
+		Metadata: catalog.Metadata{Title: "Catalog Title"},
+		Holdings: []catalog.Holding{{Symbol: "ISIL:SUP1"}},
+	}
+	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", holdingsAdapter, nil)
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, new(adapter.MockDirectoryLookupAdapter), factory)
+
+	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	if assert.Len(t, mockRepo.savedTransactions, 1) {
+		saved := mockRepo.savedTransactions[0].IllTransactionData.BibliographicInfo
+		assert.Equal(t, "Patron Title", saved.Title) // preserved by Merge
+	}
+}
+
+func TestLocateSuppliersMetadataAutoWithIdentifierReplaces(t *testing.T) {
+	mode := dirapi.Auto
+	illTrans := ill_db.IllTransaction{
+		ID:          "ill-1",
+		RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+		IllTransactionData: ill_db.IllTransactionData{
+			BibliographicInfo: iso18626.BibliographicInfo{
+				SupplierUniqueRecordId: "record-123", // non-empty → Auto resolves to Replace
+				Title:                  "Old Title",
+			},
+		},
+	}
+	mockRepo := metadataTestRepo(illTrans, metadataTestRequester(&mode))
+	holdingsAdapter := &catalog.MockLookupAdapter{
+		Metadata: catalog.Metadata{Title: "Catalog Title"},
+		Holdings: []catalog.Holding{{Symbol: "ISIL:SUP1"}},
+	}
+	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", holdingsAdapter, nil)
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, new(adapter.MockDirectoryLookupAdapter), factory)
+
+	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	if assert.Len(t, mockRepo.savedTransactions, 1) {
+		saved := mockRepo.savedTransactions[0].IllTransactionData.BibliographicInfo
+		assert.Equal(t, "Catalog Title", saved.Title) // replaced
+	}
+}
+
+func TestLocateSuppliersMetadataAutoWithoutIdentifierMerges(t *testing.T) {
+	mode := dirapi.Auto
+	illTrans := ill_db.IllTransaction{
+		ID:          "ill-1",
+		RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+		IllTransactionData: ill_db.IllTransactionData{
+			BibliographicInfo: iso18626.BibliographicInfo{
+				// SupplierUniqueRecordId intentionally empty → Auto resolves to Merge
+				Title: "Patron Title",
+				BibliographicItemId: []iso18626.BibliographicItemId{
+					{
+						BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{Text: "ISBN"},
+						BibliographicItemIdentifier:     "978-0-123",
+					},
+				},
+			},
+		},
+	}
+	mockRepo := metadataTestRepo(illTrans, metadataTestRequester(&mode))
+	holdingsAdapter := &catalog.MockLookupAdapter{
+		Metadata: catalog.Metadata{Title: "Catalog Title"},
+		Holdings: []catalog.Holding{{Symbol: "ISIL:SUP1"}},
+	}
+	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", holdingsAdapter, nil)
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, new(adapter.MockDirectoryLookupAdapter), factory)
+
+	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	if assert.Len(t, mockRepo.savedTransactions, 1) {
+		saved := mockRepo.savedTransactions[0].IllTransactionData.BibliographicInfo
+		assert.Equal(t, "Patron Title", saved.Title) // preserved by Merge
+	}
+}
+
+func TestLocateSuppliersMetadataLookupError(t *testing.T) {
+	mode := dirapi.Merge
+	illTrans := ill_db.IllTransaction{
+		ID:          "ill-1",
+		RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+		IllTransactionData: ill_db.IllTransactionData{
+			BibliographicInfo: iso18626.BibliographicInfo{
+				SupplierUniqueRecordId: "some-id",
+			},
+		},
+	}
+	mockRepo := metadataTestRepo(illTrans, metadataTestRequester(&mode))
+	holdingsAdapter := &catalog.MockLookupAdapter{
+		Err: errors.New("metadata lookup failed"),
+	}
+	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", holdingsAdapter, nil)
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, new(adapter.MockDirectoryLookupAdapter), factory)
+
+	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+	assert.Equal(t, events.EventStatusProblem, status)
+	assert.Empty(t, mockRepo.savedTransactions)
+}
+
+func TestLocateSuppliersMetadataSaveTransactionError(t *testing.T) {
+	mode := dirapi.Merge
+	illTrans := ill_db.IllTransaction{
+		ID:          "ill-1",
+		RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+		IllTransactionData: ill_db.IllTransactionData{
+			BibliographicInfo: iso18626.BibliographicInfo{
+				SupplierUniqueRecordId: "some-id",
+			},
+		},
+	}
+	mockRepo := metadataTestRepo(illTrans, metadataTestRequester(&mode))
+	mockRepo.saveTransactionErr = errors.New("db error")
+	holdingsAdapter := &catalog.MockLookupAdapter{
+		Metadata: catalog.Metadata{Title: "Catalog Title"},
+	}
+	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", holdingsAdapter, nil)
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, new(adapter.MockDirectoryLookupAdapter), factory)
+
+	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+	assert.Equal(t, events.EventStatusError, status)
+}
+
+func (r *MockIllRepoRequester) WithTxFunc(ctx common.ExtendedContext, fn func(ill_db.IllRepo) error) error {
+	return fn(r)
+}
+
+func (r *MockIllRepoLocateSuppliers) WithTxFunc(ctx common.ExtendedContext, fn func(ill_db.IllRepo) error) error {
+	return fn(r)
+}
+
+func TestLocateSuppliersPreservesAdditionsDuringDiscovery(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		requesterSymbol string
+		existingStatus  pgtype.Text
+		wantSymbols     []string
+	}{
+		{name: "manual new supplier", requesterSymbol: "ISIL:REQ", existingStatus: ill_db.SupplierStateNewPg, wantSymbols: []string{"ISIL:SUP2"}},
+		{name: "manual skipped opaque requester", requesterSymbol: "ISIL:SUP1", existingStatus: ill_db.SupplierStateSkippedPg, wantSymbols: []string{"ISIL:SUP2"}},
+		{name: "retired external supplier is rediscovered", requesterSymbol: "ISIL:REQ", existingStatus: ill_db.SupplierStateSkippedPg, wantSymbols: []string{"ISIL:SUP1", "ISIL:SUP2"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// These rows are returned when discovery finishes, after the initial retirement.
+			existing := ill_db.LocatedSupplier{ID: "existing", SupplierSymbol: "ISIL:SUP1", SupplierStatus: tc.existingStatus, Ordinal: 8, LocalID: pgtype.Text{String: "manual-record", Valid: true}}
+			mockRepo := &MockIllRepoLocateSuppliers{
+				illTransaction: ill_db.IllTransaction{
+					ID: "ill-1", RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+					RequesterSymbol:    pgtype.Text{String: tc.requesterSymbol, Valid: true},
+					IllTransactionData: ill_db.IllTransactionData{BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "return-ISIL:SUP1::automatic-record;return-ISIL:SUP2::second-record"}},
+				},
+				requester:         ill_db.Peer{ID: "requester-1", BrokerMode: string(common.BrokerModeOpaque)},
+				peers:             []ill_db.Peer{{ID: "peer-1", BorrowsCount: 1}, {ID: "peer-2", BorrowsCount: 1}},
+				peerSymbols:       map[string][]ill_db.Symbol{"peer-1": {{SymbolValue: "ISIL:SUP1", PeerID: "peer-1"}}, "peer-2": {{SymbolValue: "ISIL:SUP2", PeerID: "peer-2"}}},
+				existingSuppliers: []ill_db.LocatedSupplier{existing},
+			}
+			directory := new(adapter.MockDirectoryLookupAdapter)
+			factory := NewLookupAdapterFactory(mockRepo, directory, "", new(catalog.MockLookupShared), new(catalog.LookupAdapterCreatorImpl))
+			locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, directory, factory)
+			status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+			assert.Equal(t, events.EventStatusSuccess, status)
+			// Inspect the result too: this mock's savedLocatedSuppliers excludes skipped rows.
+			added, ok := result.CustomData["suppliers"].([]*ill_db.LocatedSupplier)
+			if assert.True(t, ok) && assert.Len(t, added, len(tc.wantSymbols)) {
+				for i, symbol := range tc.wantSymbols {
+					assert.Equal(t, symbol, added[i].SupplierSymbol)
+					assert.Equal(t, int32(9+i), added[i].Ordinal)
+				}
+			}
+			assert.Equal(t, existing, mockRepo.existingSuppliers[0])
+		})
+	}
 }

@@ -1,12 +1,15 @@
 package prservice
 
 import (
+	"fmt"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
+	"github.com/indexdata/crosslink/iso18626"
 )
 
 type ActionMappingService struct {
@@ -19,13 +22,61 @@ func (r *ActionMappingService) NewActionMappingService() *ActionMappingService {
 	}
 }
 
-func (r *ActionMappingService) GetActionMapping(pr pr_db.PatronRequest) (*ActionMapping, error) {
-	//TODO: check the PatronRequest loan type to decide what kind of state model/mapping to return
-	stateModel, err := r.getStateModelService().GetStateModel("returnables")
+func (r *ActionMappingService) GetActionMapping(request iso18626.Request) (*ActionMapping, error) {
+	_, mapping, err := r.ResolveActionMapping(request)
+	return mapping, err
+}
+
+func (r *ActionMappingService) GetStateModelForRequest(request iso18626.Request) (*proapi.StateModel, error) {
+	name, _, err := r.ResolveActionMapping(request)
 	if err != nil {
 		return nil, err
 	}
-	return NewActionMapping(stateModel), nil
+	return r.getStateModelService().GetStateModel(name)
+}
+
+// ResolveActionMapping selects the state model once and returns both the
+// persisted model key and the effective mapping for the request's service type.
+func (r *ActionMappingService) ResolveActionMapping(request iso18626.Request) (string, *ActionMapping, error) {
+	modelName, serviceType, err := selectStateModel(request)
+	if err != nil {
+		return "", nil, err
+	}
+	mapping, err := r.getStateModelService().GetActionMapping(modelName, serviceType)
+	if err != nil {
+		return "", nil, err
+	}
+	return modelName, mapping, nil
+}
+
+func selectStateModel(request iso18626.Request) (string, proapi.StateModelServiceType, error) {
+	if request.ServiceInfo == nil {
+		// Preserve the state model used by legacy requests created before service
+		// type based model selection was introduced. New ISO requests require
+		// serviceInfo and are selected by service type below.
+		if _, ok := stateModelsConfig.StateModels[defaultStateModelName]; ok {
+			return defaultStateModelName, proapi.Loan, nil
+		}
+		return "", "", fmt.Errorf("cannot select state model without service info: default model not found")
+	}
+
+	serviceType := proapi.StateModelServiceType(request.ServiceInfo.ServiceType)
+	var matches []string
+	for name, stateModel := range stateModelsConfig.StateModels {
+		if stateModel.Selector != nil && slices.Contains(stateModel.Selector.ServiceType, serviceType) {
+			matches = append(matches, name)
+		}
+	}
+	sort.Strings(matches)
+
+	switch len(matches) {
+	case 0:
+		return "", "", fmt.Errorf("no state model matches service type %q", serviceType)
+	case 1:
+		return matches[0], serviceType, nil
+	default:
+		return "", "", fmt.Errorf("multiple state models match service type %q: %s", serviceType, strings.Join(matches, ", "))
+	}
 }
 
 func (r *ActionMappingService) GetStateModel(modelName string) (*proapi.StateModel, error) {
@@ -46,25 +97,36 @@ type PatronRequestAction struct {
 }
 
 type ActionMapping struct {
+	StateModelName             string
 	borrowerStateActionMapping map[pr_db.PatronRequestState][]PatronRequestAction
 	lenderStateActionMapping   map[pr_db.PatronRequestState][]PatronRequestAction
 	borrowerStateConfig        map[pr_db.PatronRequestState]stateConfig
 	lenderStateConfig          map[pr_db.PatronRequestState]stateConfig
+	borrowerManualCloseState   *pr_db.PatronRequestState
+	lenderManualCloseState     *pr_db.PatronRequestState
+	borrowerInitialState       *pr_db.PatronRequestState
+	lenderInitialState         *pr_db.PatronRequestState
 }
 
 type stateConfig struct {
-	actions     map[pr_db.PatronRequestAction]proapi.ModelAction
-	events      map[string]proapi.ModelEvent
-	autoActions []pr_db.PatronRequestAction
-	terminal    bool
+	actions        map[pr_db.PatronRequestAction]proapi.ModelAction
+	events         map[string]proapi.ModelEvent
+	autoActions    []proapi.ModelAction
+	terminal       bool
+	needsAttention bool
+	closingAction  *pr_db.PatronRequestAction
+	editable       bool
 }
 
-// Constructor function to initialize the mappings for given StateModel
-func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
+// NewActionMappingForServiceType builds a mapping containing only states,
+// actions, and events that apply to serviceType. The source model is immutable;
+// applicability is resolved while the mapping indexes are built.
+func NewActionMappingForServiceType(stateModel *proapi.StateModel, serviceType proapi.StateModelServiceType) *ActionMapping {
 	r := new(ActionMapping)
 	if stateModel == nil || stateModel.States == nil {
 		return r
 	}
+	r.StateModelName = stateModel.Name
 
 	borrowerMap := make(map[pr_db.PatronRequestState][]PatronRequestAction)
 	lenderMap := make(map[pr_db.PatronRequestState][]PatronRequestAction)
@@ -72,25 +134,43 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 	lenderConfig := make(map[pr_db.PatronRequestState]stateConfig)
 
 	for _, state := range stateModel.States {
+		if !appliesToServiceType(state.AppliesTo, serviceType) {
+			continue
+		}
 		stateName := pr_db.PatronRequestState(state.Name)
 		currentStateConfig := stateConfig{
-			actions:  make(map[pr_db.PatronRequestAction]proapi.ModelAction),
-			events:   make(map[string]proapi.ModelEvent),
-			terminal: false,
+			actions:        make(map[pr_db.PatronRequestAction]proapi.ModelAction),
+			events:         make(map[string]proapi.ModelEvent),
+			terminal:       false,
+			needsAttention: false,
 		}
 		if state.Terminal != nil && *state.Terminal {
 			currentStateConfig.terminal = true
 		}
+		if state.NeedsAttention != nil && *state.NeedsAttention {
+			currentStateConfig.needsAttention = true
+		}
+		if state.Editable != nil && *state.Editable {
+			currentStateConfig.editable = true
+		}
+		if state.ClosingAction != nil && *state.ClosingAction != "" {
+			closingAction := pr_db.PatronRequestAction(*state.ClosingAction)
+			currentStateConfig.closingAction = &closingAction
+		}
 		actionEntries := make([]PatronRequestAction, 0)
 		if state.Actions != nil {
 			for _, action := range *state.Actions {
+				if !appliesToServiceType(action.AppliesTo, serviceType) {
+					continue
+				}
 				entry := PatronRequestAction{actionName: pr_db.PatronRequestAction(action.Name)}
 				currentStateConfig.actions[entry.actionName] = action
 				if action.Trigger != nil && strings.EqualFold(string(*action.Trigger), string(proapi.Auto)) {
-					currentStateConfig.autoActions = append(currentStateConfig.autoActions, entry.actionName)
+					currentStateConfig.autoActions = append(currentStateConfig.autoActions, action)
 					entry.auto = true
 				}
-				if state.PrimaryAction != nil && string(*state.PrimaryAction) == action.Name {
+				if (state.PrimaryAction != nil && string(*state.PrimaryAction) == action.Name) ||
+					(action.PrimaryFor != nil && appliesToServiceType(action.PrimaryFor, serviceType)) {
 					entry.primary = true
 				}
 				actionEntries = append(actionEntries, entry)
@@ -98,6 +178,9 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 		}
 		if state.Events != nil {
 			for _, event := range *state.Events {
+				if !appliesToServiceType(event.AppliesTo, serviceType) {
+					continue
+				}
 				currentStateConfig.events[event.Name] = event
 			}
 		}
@@ -106,9 +189,25 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 		case proapi.REQUESTER:
 			borrowerMap[stateName] = actionEntries
 			borrowerConfig[stateName] = currentStateConfig
+			if state.ManualClose != nil && *state.ManualClose {
+				manualCloseState := stateName
+				r.borrowerManualCloseState = &manualCloseState
+			}
+			if state.Initial != nil && *state.Initial {
+				initialState := stateName
+				r.borrowerInitialState = &initialState
+			}
 		case proapi.SUPPLIER:
 			lenderMap[stateName] = actionEntries
 			lenderConfig[stateName] = currentStateConfig
+			if state.ManualClose != nil && *state.ManualClose {
+				manualCloseState := stateName
+				r.lenderManualCloseState = &manualCloseState
+			}
+			if state.Initial != nil && *state.Initial {
+				initialState := stateName
+				r.lenderInitialState = &initialState
+			}
 		}
 	}
 
@@ -120,8 +219,15 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 	return r
 }
 
+func appliesToServiceType(appliesTo *proapi.AppliesTo, serviceType proapi.StateModelServiceType) bool {
+	if appliesTo == nil {
+		return true
+	}
+	return slices.Contains(appliesTo.ServiceTypes, serviceType)
+}
+
 func (r *ActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_db.PatronRequestAction {
-	info := r.GetAllowedActionsForPatronRequest(pr)
+	info := r.GetAllowedActionsForPatronRequest(pr, true)
 	actions := make([]pr_db.PatronRequestAction, 0, len(info.Actions))
 	for _, action := range info.Actions {
 		actions = append(actions, pr_db.PatronRequestAction(action.Name))
@@ -129,7 +235,7 @@ func (r *ActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_
 	return actions
 }
 
-func (r *ActionMapping) GetAllowedActionsForPatronRequest(pr pr_db.PatronRequest) proapi.AllowedActions {
+func (r *ActionMapping) GetAllowedActionsForPatronRequest(pr pr_db.PatronRequest, available bool) proapi.AllowedActions {
 	prLastActionFailed := strings.EqualFold(pr.LastActionResult.String, string(events.EventStatusError)) ||
 		strings.EqualFold(pr.LastActionResult.String, string(events.EventStatusProblem))
 	hasFailed := false
@@ -147,6 +253,9 @@ func (r *ActionMapping) GetAllowedActionsForPatronRequest(pr pr_db.PatronRequest
 		Actions: []proapi.AllowedAction{},
 	}
 	for _, action := range actionEntries {
+		if action.actionName == BorrowerActionRerequest && pr.NextReqID.Valid {
+			continue
+		}
 		name := string(action.actionName)
 		if pr.LastAction.String == name && prLastActionFailed {
 			hasFailed = true
@@ -166,6 +275,7 @@ func (r *ActionMapping) GetAllowedActionsForPatronRequest(pr pr_db.PatronRequest
 						Name:       capability.Name,
 						Parameters: capability.Parameters,
 						Primary:    primary,
+						Available:  available,
 					})
 			}
 		}
@@ -187,6 +297,14 @@ func (r *ActionMapping) IsActionSupported(pr pr_db.PatronRequest, action pr_db.P
 	return ok
 }
 
+func (r *ActionMapping) IsTransitionAction(pr pr_db.PatronRequest, action pr_db.PatronRequestAction) bool {
+	if !r.IsActionSupported(pr, action) {
+		return false
+	}
+	capability, ok := getActionCapability(pr.Side, action)
+	return ok && isTransitionCapability(capability)
+}
+
 func (r *ActionMapping) GetActionTransition(pr pr_db.PatronRequest, action pr_db.PatronRequestAction, outcome string) (pr_db.PatronRequestState, bool) {
 	stateConfig, ok := r.getStateConfig(pr)
 	if !ok {
@@ -199,13 +317,39 @@ func (r *ActionMapping) GetActionTransition(pr pr_db.PatronRequest, action pr_db
 	if actionConfig.Transitions == nil {
 		return "", false
 	}
-	if outcome == ActionOutcomeSuccess && actionConfig.Transitions.Success != nil && *actionConfig.Transitions.Success != "" {
-		return pr_db.PatronRequestState(*actionConfig.Transitions.Success), true
-	}
-	if outcome == ActionOutcomeFailure && actionConfig.Transitions.Failure != nil && *actionConfig.Transitions.Failure != "" {
-		return pr_db.PatronRequestState(*actionConfig.Transitions.Failure), true
+	switch outcome {
+	case ActionOutcomeSuccess:
+		if actionConfig.Transitions.Success != nil && *actionConfig.Transitions.Success != "" {
+			return pr_db.PatronRequestState(*actionConfig.Transitions.Success), true
+		}
+	case ActionOutcomeFailure:
+		if actionConfig.Transitions.Failure != nil && *actionConfig.Transitions.Failure != "" {
+			return pr_db.PatronRequestState(*actionConfig.Transitions.Failure), true
+		}
+	case ActionOutcomeReview:
+		if actionConfig.Transitions.Review != nil && *actionConfig.Transitions.Review != "" {
+			return pr_db.PatronRequestState(*actionConfig.Transitions.Review), true
+		}
 	}
 	return "", false
+}
+
+// canContinueAction uses the source state's declaration independently of the
+// outcome binding. Only completed action results can be tolerated.
+func (r *ActionMapping) canContinueAction(pr pr_db.PatronRequest, action pr_db.PatronRequestAction, status events.EventStatus) bool {
+	if status == events.EventStatusSuccess {
+		return true
+	}
+	if status != events.EventStatusProblem && status != events.EventStatusError {
+		return false
+	}
+	config, ok := r.getStateConfig(pr)
+	if !ok {
+		return false
+	}
+	declaration, ok := config.actions[action]
+	return ok && declaration.ContinueOn != nil &&
+		slices.Contains(*declaration.ContinueOn, proapi.ModelActionContinueOn(status))
 }
 
 func (r *ActionMapping) GetEventTransition(pr pr_db.PatronRequest, eventName string) (pr_db.PatronRequestState, bool, bool) {
@@ -223,12 +367,63 @@ func (r *ActionMapping) GetEventTransition(pr pr_db.PatronRequest, eventName str
 	return pr_db.PatronRequestState(*eventConfig.Transition), true, true
 }
 
-func (r *ActionMapping) GetAutoActionsForState(pr pr_db.PatronRequest) []pr_db.PatronRequestAction {
+func (r *ActionMapping) GetAutoActionsForState(pr pr_db.PatronRequest) []proapi.ModelAction {
 	stateConfig, ok := r.getStateConfig(pr)
 	if !ok || len(stateConfig.autoActions) == 0 {
-		return []pr_db.PatronRequestAction{}
+		return []proapi.ModelAction{}
 	}
-	return append([]pr_db.PatronRequestAction{}, stateConfig.autoActions...)
+	return append([]proapi.ModelAction{}, stateConfig.autoActions...)
+}
+
+// GetInitialState returns the initial state for the given side, as defined in the state model.
+func (r *ActionMapping) GetInitialState(side pr_db.PatronRequestSide) (pr_db.PatronRequestState, bool) {
+	if side == SideBorrowing {
+		if r.borrowerInitialState == nil {
+			return "", false
+		}
+		return *r.borrowerInitialState, true
+	}
+	if side == SideLending {
+		if r.lenderInitialState == nil {
+			return "", false
+		}
+		return *r.lenderInitialState, true
+	}
+	return "", false
+}
+
+func (r *ActionMapping) GetManualCloseState(pr pr_db.PatronRequest) (pr_db.PatronRequestState, bool) {
+	if pr.Side == SideBorrowing {
+		if r.borrowerManualCloseState == nil {
+			return "", false
+		}
+		return *r.borrowerManualCloseState, true
+	}
+	if pr.Side == SideLending {
+		if r.lenderManualCloseState == nil {
+			return "", false
+		}
+		return *r.lenderManualCloseState, true
+	}
+	return "", false
+}
+
+func (r *ActionMapping) IsTerminalState(pr pr_db.PatronRequest) bool {
+	stateConfig, ok := r.getStateConfig(pr)
+	return ok && stateConfig.terminal
+}
+
+func (r *ActionMapping) IsEditableState(pr pr_db.PatronRequest) bool {
+	stateConfig, ok := r.getStateConfig(pr)
+	return ok && stateConfig.editable
+}
+
+func (r *ActionMapping) GetClosingAction(pr pr_db.PatronRequest) *pr_db.PatronRequestAction {
+	config, ok := r.getStateConfig(pr)
+	if !ok {
+		return nil
+	}
+	return config.closingAction
 }
 
 func (r *ActionMapping) getStateConfig(pr pr_db.PatronRequest) (stateConfig, bool) {
@@ -236,6 +431,9 @@ func (r *ActionMapping) getStateConfig(pr pr_db.PatronRequest) (stateConfig, boo
 		cfg, ok := r.borrowerStateConfig[pr.State]
 		return cfg, ok
 	}
-	cfg, ok := r.lenderStateConfig[pr.State]
-	return cfg, ok
+	if pr.Side == SideLending {
+		cfg, ok := r.lenderStateConfig[pr.State]
+		return cfg, ok
+	}
+	return stateConfig{}, false
 }

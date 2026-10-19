@@ -13,7 +13,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/indexdata/crosslink/broker/holdings"
+	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/indexdata/crosslink/broker/catalog"
+	"github.com/indexdata/crosslink/broker/email"
+	importapi "github.com/indexdata/crosslink/broker/import/api"
+	importdb "github.com/indexdata/crosslink/broker/import/db"
+	importoapi "github.com/indexdata/crosslink/broker/import/oapi"
 	prapi "github.com/indexdata/crosslink/broker/patron_request/api"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
@@ -21,6 +26,10 @@ import (
 	psapi "github.com/indexdata/crosslink/broker/pullslip/api"
 	ps_db "github.com/indexdata/crosslink/broker/pullslip/db"
 	psoapi "github.com/indexdata/crosslink/broker/pullslip/oapi"
+	schedapi "github.com/indexdata/crosslink/broker/scheduler/api"
+	sched_db "github.com/indexdata/crosslink/broker/scheduler/db"
+	schedoapi "github.com/indexdata/crosslink/broker/scheduler/oapi"
+	sched_service "github.com/indexdata/crosslink/broker/scheduler/service"
 	"github.com/indexdata/crosslink/broker/tenant"
 
 	"github.com/dustin/go-humanize"
@@ -40,6 +49,7 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgxpool"
+	nethttpmiddleware "github.com/oapi-codegen/nethttp-middleware"
 
 	"github.com/indexdata/crosslink/broker/lms"
 )
@@ -68,7 +78,7 @@ var HOLDINGS_FORMAT = utils.GetEnv("HOLDINGS_FORMAT", "reservoir")
 var CONSORTIUM_SYMBOL = utils.GetEnv("CONSORTIUM_SYMBOL", "")
 var DIRECTORY_ADAPTER = utils.GetEnv("DIRECTORY_ADAPTER", "mock")
 var AVAILABILITY_ADAPTER = utils.GetEnv("AVAILABILITY_ADAPTER", "zoom")
-var DIRECTORY_API_URL = utils.GetEnv("DIRECTORY_API_URL", "http://localhost:8081/directory/entries")
+var DIRECTORY_API_URL = utils.GetEnv("DIRECTORY_API_URL", "http://localhost:8086/directory/entries")
 var MAX_MESSAGE_SIZE, _ = utils.GetEnvAny("MAX_MESSAGE_SIZE", int(100*1024), func(val string) (int, error) {
 	v, err := humanize.ParseBytes(val)
 	if err != nil && v > uint64(math.MaxInt) {
@@ -92,16 +102,18 @@ var ServeMux *http.ServeMux
 var appCtx = common.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
 
 type Context struct {
-	EventBus       events.EventBus
-	IllRepo        ill_db.IllRepo
-	EventRepo      events.EventRepo
-	DirAdapter     adapter.DirectoryLookupAdapter
-	PrRepo         pr_db.PrRepo
-	TenantResolver *tenant.TenantResolver
-	ApiHandler     api.ApiHandler
-	PrApiHandler   prapi.PatronRequestApiHandler
-	SseBroker      *api.SseBroker
-	PsApiHandler   psapi.PullSlipApiHandler
+	EventBus         events.EventBus
+	IllRepo          ill_db.IllRepo
+	EventRepo        events.EventRepo
+	DirAdapter       adapter.DirectoryLookupAdapter
+	PrRepo           pr_db.PrRepo
+	TenantResolver   *tenant.TenantResolver
+	ApiHandler       api.ApiHandler
+	PrApiHandler     prapi.PatronRequestApiHandler
+	SseBroker        *api.SseBroker
+	PsApiHandler     psapi.PullSlipApiHandler
+	SchedApiHandler  schedapi.SchedulerApiHandler
+	ImportApiHandler importapi.ApiHandler
 }
 
 func configLog() slog.Handler {
@@ -134,11 +146,11 @@ func configLog() slog.Handler {
 
 func Init(ctx context.Context) (Context, error) {
 	appCtx.Logger().Info("starting " + vcs.GetSignature())
-	holdingsAdapter, err := holdings.CreateHoldingsLookupShared(map[string]any{
-		holdings.HoldingsAdapter:    HOLDINGS_ADAPTER,
-		holdings.HoldingsSruURL:     HOLDINGS_SRU_URL,
-		holdings.HoldingsIsxnLookup: HOLDINGS_ISXN_LOOKUP,
-		holdings.HoldingsFormat:     HOLDINGS_FORMAT,
+	lookupAdapterEnv, err := catalog.CreateLookupAdapterFromEnv(map[string]any{
+		catalog.HoldingsAdapter:    HOLDINGS_ADAPTER,
+		catalog.HoldingsSruURL:     HOLDINGS_SRU_URL,
+		catalog.HoldingsIsxnLookup: HOLDINGS_ISXN_LOOKUP,
+		catalog.HoldingsFormat:     HOLDINGS_FORMAT,
 	})
 	if err != nil {
 		return Context{}, err
@@ -173,40 +185,62 @@ func Init(ctx context.Context) (Context, error) {
 	illRepo := ill_db.CreateIllRepo(pool)
 	prRepo := pr_db.CreatePrRepo(pool, DB_EXPLAIN_ANALYZE)
 	psRepo := ps_db.CreatePsRepo(pool)
+	schedRepo := sched_db.CreateSchedRepo(pool)
+
+	var emailSenderService *sched_service.EmailSenderService
+	emailSenderService, err = sched_service.NewEmailSenderService(prRepo, illRepo, eventBus)
 
 	prMessageHandler := prservice.CreatePatronRequestMessageHandler(prRepo, eventRepo, illRepo, eventBus)
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo, illRepo, dirAdapter)
 	lmsCreator := lms.NewLmsCreator(illRepo, dirAdapter)
-	availabilityCreator := holdings.NewAvailabilityCreator(AVAILABILITY_ADAPTER, METAPROXY_URL)
-	prActionService := prservice.CreatePatronRequestActionService(prRepo, eventBus, &iso18626Handler, lmsCreator)
+	lookupAdapterCreator := catalog.NewLookupAdapterCreator(AVAILABILITY_ADAPTER, METAPROXY_URL)
+	lookupAdapterFactory := service.NewLookupAdapterFactory(illRepo, dirAdapter, CONSORTIUM_SYMBOL, lookupAdapterEnv, lookupAdapterCreator)
+	prActionService := prservice.CreatePatronRequestActionService(prRepo, illRepo, eventBus, &iso18626Handler, lmsCreator, email.NewEmailService(), lookupAdapterFactory, dirAdapter)
 	prMessageHandler.SetAutoActionRunner(prActionService)
 	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, prMessageHandler, MAX_MESSAGE_SIZE, delay)
-	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter, availabilityCreator, CONSORTIUM_SYMBOL)
+	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, lookupAdapterFactory)
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
 	tenantResolver := tenant.NewResolver().WithIllRepo(illRepo).WithLookupAdapter(dirAdapter).WithTenantToSymbol(TENANT_TO_SYMBOL)
-	apiHandler := api.NewApiHandler(eventRepo, illRepo, tenantResolver, API_PAGE_SIZE)
+	apiHandler := api.NewApiHandler(eventRepo, illRepo, tenantResolver, dirAdapter, API_PAGE_SIZE)
 	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, eventRepo, tenantResolver, &iso18626Handler, API_PAGE_SIZE)
+	prApiHandler.SetPickupLocationValidator(prActionService)
 	prApiHandler.SetAutoActionRunner(prActionService)
 	prApiHandler.SetActionTaskProcessor(prActionService)
 	sseBroker := api.NewSseBroker(appCtx, tenantResolver)
-	psApiHandler := psapi.NewPsApiHandler(psRepo, prRepo, tenantResolver)
+	psApiHandler := psapi.NewPsApiHandler(psRepo, prRepo, tenantResolver, eventBus)
 
-	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, *prActionService, prApiHandler, sseBroker)
+	batchActionService := sched_service.NewBatchActionService(eventBus, prRepo, schedRepo, emailSenderService)
+
+	if err != nil {
+		appCtx.Logger().Warn("email service not available, email sending events will fail", "error", err)
+	}
+
+	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, sseBroker, batchActionService, *prActionService)
 	err = StartEventBus(ctx, eventBus)
 	if err != nil {
 		return Context{}, err
 	}
+
+	schedApiHandler := schedapi.NewSchedulerApiHandler(API_PAGE_SIZE, schedRepo, eventRepo, tenantResolver, prRepo)
+	if err = StartScheduler(ctx, schedRepo, eventBus); err != nil {
+		return Context{}, err
+	}
+
+	importRepo := importdb.CreateImportRepo(pool)
+	importApiHandler := importapi.NewApiHandler(importRepo, illRepo, dirAdapter, &prservice.StateModelService{})
 	return Context{
-		EventBus:       eventBus,
-		IllRepo:        illRepo,
-		EventRepo:      eventRepo,
-		DirAdapter:     dirAdapter,
-		PrRepo:         prRepo,
-		TenantResolver: tenantResolver,
-		ApiHandler:     apiHandler,
-		PrApiHandler:   prApiHandler,
-		SseBroker:      sseBroker,
-		PsApiHandler:   psApiHandler,
+		EventBus:         eventBus,
+		IllRepo:          illRepo,
+		EventRepo:        eventRepo,
+		DirAdapter:       dirAdapter,
+		PrRepo:           prRepo,
+		TenantResolver:   tenantResolver,
+		ApiHandler:       apiHandler,
+		PrApiHandler:     prApiHandler,
+		SseBroker:        sseBroker,
+		PsApiHandler:     psApiHandler,
+		SchedApiHandler:  schedApiHandler,
+		ImportApiHandler: importApiHandler,
 	}, nil
 }
 
@@ -220,6 +254,10 @@ func Run(ctx context.Context) error {
 
 func StartServer(ctx Context) error {
 	ServeMux = http.NewServeMux()
+	oapiValidator, err := newOpenAPIRequestValidator()
+	if err != nil {
+		return err
+	}
 	ServeMux.HandleFunc("GET /healthz", HandleHealthz)
 	//all methods must be mapped explicitly to avoid conflicts with the index handler
 	ServeMux.HandleFunc("GET /iso18626", handler.Iso18626PostHandler(ctx.IllRepo, ctx.EventBus, ctx.DirAdapter, MAX_MESSAGE_SIZE))
@@ -231,14 +269,24 @@ func StartServer(ctx Context) error {
 		_, _ = w.Write(oapi.OpenAPISpecYAML)
 	})
 	oapi.HandlerFromMux(&ctx.ApiHandler, ServeMux)
-	proapi.HandlerFromMux(&ctx.PrApiHandler, ServeMux)
+	proapi.HandlerWithOptions(&ctx.PrApiHandler, proapi.StdHTTPServerOptions{
+		BaseRouter:  ServeMux,
+		Middlewares: []proapi.MiddlewareFunc{oapiValidator},
+	})
 	psoapi.HandlerFromMux(&ctx.PsApiHandler, ServeMux)
+	schedoapi.HandlerFromMux(&ctx.SchedApiHandler, ServeMux)
+	importoapi.HandlerFromMux(&ctx.ImportApiHandler, ServeMux)
 	ServeMux.HandleFunc("GET /sse/events", ctx.SseBroker.ServeHTTP)
 	if ctx.TenantResolver.HasTenantMapping() {
 		basePath := tenant.OKAPI_PATH_PREFIX
 		oapi.HandlerFromMuxWithBaseURL(&ctx.ApiHandler, ServeMux, basePath)
-		proapi.HandlerFromMuxWithBaseURL(&ctx.PrApiHandler, ServeMux, basePath)
+		proapi.HandlerWithOptions(&ctx.PrApiHandler, proapi.StdHTTPServerOptions{
+			BaseURL:     basePath,
+			BaseRouter:  ServeMux,
+			Middlewares: []proapi.MiddlewareFunc{oapiValidator},
+		})
 		psoapi.HandlerFromMuxWithBaseURL(&ctx.PsApiHandler, ServeMux, basePath)
+		schedoapi.HandlerFromMuxWithBaseURL(&ctx.SchedApiHandler, ServeMux, basePath)
 		ServeMux.HandleFunc("GET "+basePath+"/sse/events", ctx.SseBroker.ServeHTTP)
 	}
 	signatureHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -278,6 +326,29 @@ func StartServer(ctx Context) error {
 		appCtx.Logger().Info("HTTP server shutdown complete")
 		return nil
 	}
+}
+
+func newOpenAPIRequestValidator() (func(http.Handler) http.Handler, error) {
+	spec, err := openapi3.NewLoader().LoadFromData(oapi.OpenAPISpecYAML)
+	if err != nil {
+		return nil, err
+	}
+	spec.Servers = openapi3.Servers{
+		{URL: "/"},
+		{URL: tenant.OKAPI_PATH_PREFIX},
+	}
+	return nethttpmiddleware.OapiRequestValidatorWithOptions(spec, &nethttpmiddleware.Options{
+		ErrorHandlerWithOpts:  writeOpenAPIValidationError,
+		SilenceServersWarning: true,
+	}), nil
+}
+
+func writeOpenAPIValidationError(_ context.Context, err error, w http.ResponseWriter, _ *http.Request, opts nethttpmiddleware.ErrorHandlerOpts) {
+	statusCode := opts.StatusCode
+	if statusCode == 0 {
+		statusCode = http.StatusBadRequest
+	}
+	api.WriteJsonErrorResponse(w, err, statusCode)
 }
 
 func RunDbUp() error {
@@ -325,7 +396,7 @@ func CreateEventBus(eventRepo events.EventRepo) events.EventBus {
 
 func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626Client,
 	supplierLocator service.SupplierLocator, workflowManager service.WorkflowManager, iso18626Handler handler.Iso18626Handler,
-	prActionService prservice.PatronRequestActionService, prApiHandler prapi.PatronRequestApiHandler, sseBroker *api.SseBroker) {
+	sseBroker *api.SseBroker, batchActionService *sched_service.BatchActionService, prActionService prservice.PatronRequestActionService) {
 	eventBus.HandleEventCreated(events.EventNameMessageSupplier, events.HandlerRoleConsumer, iso18626Client.MessageSupplier)
 	eventBus.HandleEventCreated(events.EventNameMessageRequester, events.HandlerRoleConsumer, iso18626Client.MessageRequester)
 	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, events.HandlerRoleObserver, iso18626Handler.ConfirmRequesterMsg)
@@ -346,6 +417,10 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, events.HandlerRoleObserver, sseBroker.IncomingIsoMessage)
 	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, events.HandlerRoleObserver, sseBroker.IncomingIsoMessage)
 
+	eventBus.HandleEventCreated(events.EventNameInvokeBatchAction, events.HandlerRoleConsumer, batchActionService.BatchAction)
+
+	eventBus.HandleEventCreated(events.EventNameInvokeBackgroundAction, events.HandlerRoleConsumer, prActionService.InvokeAction)
+
 	// Invoke-action is intentionally not registered on event-created/task-completed handlers.
 	// It is processed inline by patron-request services and API handlers.
 }
@@ -354,6 +429,18 @@ func StartEventBus(ctx context.Context, eventBus events.EventBus) error {
 	if err != nil {
 		return fmt.Errorf("starting event bus failed err=%w", err)
 	}
+	return nil
+}
+
+// StartScheduler creates the scheduler service, begins listening on
+// sched_db.SchedulerChannel, and launches the scheduling loop in a background goroutine.
+func StartScheduler(ctx context.Context, schedRepo sched_db.SchedRepo, eventBus events.EventBus) error {
+	extCtx := common.CreateExtCtxWithArgs(ctx, nil)
+	svc := sched_service.NewSchedulerService(schedRepo, eventBus, ConnectionString)
+	if err := svc.Listen(extCtx); err != nil {
+		return fmt.Errorf("starting scheduler listener failed: %w", err)
+	}
+	go svc.Run(extCtx)
 	return nil
 }
 

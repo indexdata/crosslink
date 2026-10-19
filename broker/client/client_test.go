@@ -12,7 +12,7 @@ import (
 
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/google/uuid"
@@ -98,9 +98,26 @@ func TestSendHttpPost(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestGetPeerShimUsesDirectoryConfiguration(t *testing.T) {
+	enabled := true
+	separator := " | "
+	peer := &ill_db.Peer{
+		Vendor: string(dirapi.ReShare),
+		CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{
+			UseOfferedCosts:    &enabled,
+			NoteFieldSeparator: &separator,
+		}},
+	}
+
+	configuredShim := getPeerShim(peer).(*shim.Iso18626ReShareShim)
+
+	assert.True(t, configuredShim.UseOfferedCosts)
+	assert.Equal(t, separator, configuredShim.NoteFieldSeparator)
+}
+
 func TestGetPeerNameAndAddress(t *testing.T) {
-	jsonString := "{\"id\":\"758f6cc5-0a5a-5d34-922a-8e981d7902f5\",\"name\":\"ACTLegislativeAssemblyLibrary\",\"description\":\"act\",\"type\":\"institution\",\"email\":\"LALibrary@parliament.act.gov.au\",\"symbols\":[{\"id\":\"f4ea1bf8-8278-5c0f-8e0f-9db9b35fa3cf\",\"symbol\":\"AU-ACT\",\"authority\":\"ISIL\"}],\"endpoints\":[{\"id\":\"e7c5c06b-d1ce-5294-a07c-ae13522ed0e3\",\"entry\":\"758f6cc5-0a5a-5d34-922a-8e981d7902f5\",\"name\":\"ACTISO18626Service\",\"type\":\"ISO18626\",\"address\":\"https://act-okapi.au.reshare.indexdata.com/_/invoke/tenant/act/rs/externalApi/iso18626\"}],\"networks\":[{\"id\":\"b35cf98c-2341-5f64-8a7c-a0e6343413ff\",\"name\":\"NSW&ACTGovt&Arts\",\"consortium\":\"d5ab4617-d503-588e-802c-df8d25bb411f\",\"priority\":1}],\"tiers\":[{\"id\":\"6bb0026f-8127-528f-bb39-30d8d90e47bd\",\"name\":\"ReciprocalPeertoPeer-CoreLoan\",\"consortium\":\"d5ab4617-d503-588e-802c-df8d25bb411f\",\"type\":\"Loan\",\"level\":\"Standard\",\"cost\":0.0}],\"addresses\":[{\"id\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"entry\":\"758f6cc5-0a5a-5d34-922a-8e981d7902f5\",\"type\":\"Shipping\",\"addressComponents\":[{\"id\":\"06f2dbed-6e86-5627-9305-1e0dfc773521\",\"address\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"type\":\"Thoroughfare\",\"value\":\"196LondonCircuit\"},{\"id\":\"e69b518d-1b03-528e-a1fb-8dc92385aff5\",\"address\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"type\":\"Locality\",\"value\":\"Canberra\"},{\"id\":\"8a585d89-f37d-5827-bfac-e7cfb3cdbbb5\",\"address\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"type\":\"AdministrativeArea\",\"value\":\"ACT\"},{\"id\":\"b7883220-3110-57c0-9895-61abbbe0d830\",\"address\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"type\":\"PostalCode\",\"value\":\"2601\"},{\"id\":\"af5b9560-4562-52a8-bdfc-100191a712ca\",\"address\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"type\":\"CountryCode\",\"value\":\"AUS\"}]}]}"
-	var data directory.Entry
+	jsonString := "{\"id\":\"758f6cc5-0a5a-5d34-922a-8e981d7902f5\",\"name\":\"ACTLegislativeAssemblyLibrary\",\"description\":\"act\",\"type\":\"institution\",\"email\":\"LALibrary@parliament.act.gov.au\",\"fromEmail\":\"LALibrary@parliament.act.gov.au\",\"symbols\":[{\"id\":\"f4ea1bf8-8278-5c0f-8e0f-9db9b35fa3cf\",\"symbol\":\"AU-ACT\",\"authority\":\"ISIL\"}],\"endpoints\":[{\"id\":\"e7c5c06b-d1ce-5294-a07c-ae13522ed0e3\",\"entry\":\"758f6cc5-0a5a-5d34-922a-8e981d7902f5\",\"name\":\"ACTISO18626Service\",\"type\":\"ISO18626\",\"address\":\"https://act-okapi.au.reshare.indexdata.com/_/invoke/tenant/act/rs/externalApi/iso18626\"}],\"networks\":[{\"id\":\"b35cf98c-2341-5f64-8a7c-a0e6343413ff\",\"name\":\"NSW&ACTGovt&Arts\",\"consortium\":\"d5ab4617-d503-588e-802c-df8d25bb411f\",\"priority\":1}],\"tiers\":[{\"id\":\"6bb0026f-8127-528f-bb39-30d8d90e47bd\",\"name\":\"ReciprocalPeertoPeer-CoreLoan\",\"consortium\":\"d5ab4617-d503-588e-802c-df8d25bb411f\",\"type\":\"Loan\",\"level\":\"Standard\",\"cost\":0.0}],\"addresses\":[{\"id\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"entry\":\"758f6cc5-0a5a-5d34-922a-8e981d7902f5\",\"type\":\"Shipping\",\"addressComponents\":[{\"id\":\"06f2dbed-6e86-5627-9305-1e0dfc773521\",\"address\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"type\":\"Thoroughfare\",\"value\":\"196LondonCircuit\"},{\"id\":\"e69b518d-1b03-528e-a1fb-8dc92385aff5\",\"address\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"type\":\"Locality\",\"value\":\"Canberra\"},{\"id\":\"8a585d89-f37d-5827-bfac-e7cfb3cdbbb5\",\"address\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"type\":\"AdministrativeArea\",\"value\":\"ACT\"},{\"id\":\"b7883220-3110-57c0-9895-61abbbe0d830\",\"address\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"type\":\"PostalCode\",\"value\":\"2601\"},{\"id\":\"af5b9560-4562-52a8-bdfc-100191a712ca\",\"address\":\"1ef3063a-8ec6-587e-bbc3-fdb59024f471\",\"type\":\"CountryCode\",\"value\":\"AUS\"}]}]}"
+	var data dirapi.Entry
 	err := json.Unmarshal([]byte(jsonString), &data)
 	assert.Nil(t, err)
 	peer := ill_db.Peer{
@@ -330,12 +347,14 @@ func TestValidateReason(t *testing.T) {
 	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, reason)
 	reason = guessReason("", string(ill_db.RequestAction), string(iso18626.TypeStatusExpectToSupply), iso18626.TypeStatusExpectToSupply)
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
-	reason = guessReason("", string(iso18626.TypeActionNotification), "", iso18626.TypeStatusExpectToSupply)
+	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(ill_db.RequestAction), string(iso18626.TypeStatusRetryPossible), iso18626.TypeStatusWillSupply)
 	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, reason)
+	reason = guessReason("", string(iso18626.TypeActionNotification), "", iso18626.TypeStatusExpectToSupply)
+	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
 	reason = guessReason("", string(iso18626.TypeActionNotification), string(iso18626.TypeStatusExpectToSupply), iso18626.TypeStatusExpectToSupply)
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionCancel), "", iso18626.TypeStatusExpectToSupply)
-	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, reason)
+	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageCancelResponse, string(iso18626.TypeActionCancel), "", iso18626.TypeStatusCancelled)
 	assert.Equal(t, iso18626.TypeReasonForMessageCancelResponse, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
@@ -351,19 +370,45 @@ func TestValidateReason(t *testing.T) {
 	reason = guessReason("", string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionRenew), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
-	assert.Equal(t, iso18626.TypeReasonForMessageRenewResponse, reason)
+	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
-	assert.Equal(t, iso18626.TypeReasonForMessageStatusRequestResponse, reason)
+	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionRenew), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
-	assert.Equal(t, iso18626.TypeReasonForMessageRenewResponse, reason)
+	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
-	assert.Equal(t, iso18626.TypeReasonForMessageStatusRequestResponse, reason)
+	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusUnfilled)
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, reason)
 	reason = guessReason("", string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusUnfilled)
-	assert.Equal(t, iso18626.TypeReasonForMessageStatusRequestResponse, reason)
+	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
+}
+
+func TestGuessReasonPreservesExplicitResponsesAfterRequesterAction(t *testing.T) {
+	for _, reason := range []iso18626.TypeReasonForMessage{
+		iso18626.TypeReasonForMessageCancelResponse,
+		iso18626.TypeReasonForMessageRenewResponse,
+		iso18626.TypeReasonForMessageStatusRequestResponse,
+	} {
+		for _, action := range []iso18626.TypeAction{iso18626.TypeActionRenew, iso18626.TypeActionStatusRequest, iso18626.TypeActionShippedReturn} {
+			t.Run(string(reason)+"/"+string(action), func(t *testing.T) {
+				assert.Equal(t, reason, guessReason(reason, string(action), string(iso18626.TypeStatusLoaned), iso18626.TypeStatusLoaned))
+			})
+		}
+	}
+}
+
+func TestGuessReasonDoesNotInferResponsesFromLastAction(t *testing.T) {
+	for _, action := range []iso18626.TypeAction{iso18626.TypeActionRenew, iso18626.TypeActionStatusRequest} {
+		for _, reason := range []iso18626.TypeReasonForMessage{"", iso18626.TypeReasonForMessageStatusChange} {
+			for _, status := range []iso18626.TypeStatus{iso18626.TypeStatusLoaned, iso18626.TypeStatusLoanCompleted} {
+				t.Run(string(action)+"/"+string(reason)+"/"+string(status), func(t *testing.T) {
+					assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, guessReason(reason, string(action), string(iso18626.TypeStatusLoaned), status))
+				})
+			}
+		}
+	}
 }
 
 func TestPrependVendorInNote(t *testing.T) {
@@ -630,7 +675,7 @@ func TestBuildSupplyingAgencyMessage(t *testing.T) {
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
 	supPeer := &ill_db.Peer{
 		Name:   "isil:sup1",
-		Vendor: string(directory.Alma),
+		Vendor: string(dirapi.Alma),
 	}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
 	msgTarget := messageTarget{
@@ -644,10 +689,33 @@ func TestBuildSupplyingAgencyMessage(t *testing.T) {
 	assert.False(t, message.DeliveryInfo.DateSent.IsZero())
 	assert.Equal(t, "sup1", message.Header.SupplyingAgencyId.AgencyIdValue)
 	assert.Equal(t, "REQ", message.Header.RequestingAgencyId.AgencyIdValue)
-	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, message.MessageInfo.ReasonForMessage)
+	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, message.MessageInfo.ReasonForMessage)
 	assert.Equal(t, "Vendor: Alma", message.MessageInfo.Note)
 	assert.Equal(t, iso18626.TypeStatusLoaned, message.StatusInfo.Status)
 	assert.Equal(t, "isil:sup1 (isil:sup1)", message.ReturnInfo.Name)
+}
+
+// The last requester action remains Renew even after the renewal is answered.
+func TestBuildSupplyingAgencyMessageLoanStatusAfterRenew(t *testing.T) {
+	for _, mode := range []common.BrokerMode{common.BrokerModeTransparent, common.BrokerModeOpaque} {
+		for _, status := range []iso18626.TypeStatus{iso18626.TypeStatusRecalled, iso18626.TypeStatusOverdue} {
+			t.Run(string(mode)+"/"+string(status), func(t *testing.T) {
+				event := createSupplyingAgencyMessageEvent(true)
+				sam := event.EventData.IncomingMessage.SupplyingAgencyMessage
+				sam.MessageInfo = iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange}
+				sam.StatusInfo.Status = status
+				sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
+				peer := &ill_db.Peer{Vendor: string(dirapi.Alma)}
+				trCtx := createTransactionContext(event, sup, peer, mode)
+				trCtx.transaction.LastRequesterAction = getPgText(string(iso18626.TypeActionRenew))
+				trCtx.transaction.LastSupplierStatus = getPgText(string(iso18626.TypeStatusLoaned))
+				message := createSupplyingAgencyMessage(trCtx, &messageTarget{status: status, supplier: sup, peer: peer}).SupplyingAgencyMessage
+				assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, message.MessageInfo.ReasonForMessage)
+				assert.Equal(t, status, message.StatusInfo.Status)
+				assert.Nil(t, message.MessageInfo.AnswerYesNo)
+			})
+		}
+	}
 }
 
 func TestBuildSupplyingAgencyMessageDateSentOnlyForLoaned(t *testing.T) {
@@ -659,7 +727,7 @@ func TestBuildSupplyingAgencyMessageDateSentOnlyForLoaned(t *testing.T) {
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
 	supPeer := &ill_db.Peer{
 		Name:   "isil:sup1",
-		Vendor: string(directory.Alma),
+		Vendor: string(dirapi.Alma),
 	}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
 	msgTarget := messageTarget{
@@ -682,7 +750,7 @@ func TestBuildSupplyingAgencyMessage_NoIncomingMessage(t *testing.T) {
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
 	supPeer := &ill_db.Peer{
 		Name:   "isil:sup1",
-		Vendor: string(directory.Alma),
+		Vendor: string(dirapi.Alma),
 	}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
 	msgTarget := messageTarget{
@@ -695,7 +763,7 @@ func TestBuildSupplyingAgencyMessage_NoIncomingMessage(t *testing.T) {
 	assert.Nil(t, message.DeliveryInfo)
 	assert.Equal(t, "sup1", message.Header.SupplyingAgencyId.AgencyIdValue)
 	assert.Equal(t, "REQ", message.Header.RequestingAgencyId.AgencyIdValue)
-	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, message.MessageInfo.ReasonForMessage)
+	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, message.MessageInfo.ReasonForMessage)
 	assert.Equal(t, "Vendor: Alma", message.MessageInfo.Note)
 	assert.Equal(t, iso18626.TypeStatusLoaned, message.StatusInfo.Status)
 	assert.Equal(t, "isil:sup1 (isil:sup1)", message.ReturnInfo.Name)
@@ -708,9 +776,9 @@ func TestBuildSupplyingAgencyMessage_SkippedNotificationOpaqueUsesTargetSupplier
 	skipped := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
 	skippedPeer := &ill_db.Peer{
 		Name:   "isil:sup1",
-		Vendor: string(directory.Alma),
+		Vendor: string(dirapi.Alma),
 	}
-	trCtx := createTransactionContext(event, selected, &ill_db.Peer{Vendor: string(directory.Alma)}, common.BrokerModeOpaque)
+	trCtx := createTransactionContext(event, selected, &ill_db.Peer{Vendor: string(dirapi.Alma)}, common.BrokerModeOpaque)
 	msgTarget := messageTarget{
 		status:            iso18626.TypeStatusLoaned,
 		brokerInfoMessage: false,
@@ -732,10 +800,10 @@ func TestBuildSupplyingAgencyMessage_SupplierAndVendorNoteForCrossLinkToAlma(t *
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
 	supPeer := &ill_db.Peer{
 		Name:   "isil:sup1",
-		Vendor: string(directory.Alma),
+		Vendor: string(dirapi.Alma),
 	}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeOpaque)
-	trCtx.requester.Vendor = string(directory.CrossLink)
+	trCtx.requester.Vendor = string(dirapi.CrossLink)
 	msgTarget := messageTarget{
 		status:            iso18626.TypeStatusLoaned,
 		brokerInfoMessage: true,
@@ -747,16 +815,48 @@ func TestBuildSupplyingAgencyMessage_SupplierAndVendorNoteForCrossLinkToAlma(t *
 	assert.Equal(t, "Vendor: Alma, Supplier: sup1", message.MessageInfo.Note)
 }
 
+func TestBuildSupplyingAgencyMessageUsesRequesterAndSupplierIllConfig(t *testing.T) {
+	disabled := false
+	separator := " | "
+	event := createSupplyingAgencyMessageEvent(true)
+	event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo.Note = "original"
+	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
+	supPeer := &ill_db.Peer{
+		Name:   "isil:sup1",
+		Vendor: string(dirapi.Alma),
+		CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{
+			IncludeReturnInfo: &disabled,
+		}},
+	}
+	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeOpaque)
+	trCtx.requester.Vendor = string(dirapi.CrossLink)
+	trCtx.requester.CustomData.IllConfig = &dirapi.IllConfig{
+		IncludeVendorNote:  &disabled,
+		NoteFieldSeparator: &separator,
+	}
+	msgTarget := messageTarget{
+		status:            iso18626.TypeStatusLoaned,
+		brokerInfoMessage: true,
+		supplier:          sup,
+		peer:              supPeer,
+	}
+
+	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
+
+	assert.Nil(t, message.ReturnInfo)
+	assert.Equal(t, "Supplier: sup1 | original", message.MessageInfo.Note)
+}
+
 func TestBuildSupplyingAgencyMessage_NoSupplierNoteForCrossLinkToCrossLink(t *testing.T) {
 	event := createSupplyingAgencyMessageEvent(true)
 	event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo.Note = "Original note"
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
 	supPeer := &ill_db.Peer{
 		Name:   "isil:sup1",
-		Vendor: string(directory.CrossLink),
+		Vendor: string(dirapi.CrossLink),
 	}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeOpaque)
-	trCtx.requester.Vendor = string(directory.CrossLink)
+	trCtx.requester.Vendor = string(dirapi.CrossLink)
 	msgTarget := messageTarget{
 		status:            iso18626.TypeStatusLoaned,
 		brokerInfoMessage: true,
@@ -788,7 +888,7 @@ func TestCreateRequestMessage(t *testing.T) {
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1", LocalID: getPgText("id1")}
 	supPeer := &ill_db.Peer{
 		Name:   "isil:sup1",
-		Vendor: string(directory.Alma),
+		Vendor: string(dirapi.Alma),
 	}
 	trCtx := createTransactionContext(events.Event{}, sup, supPeer, common.BrokerModeTransparent)
 
@@ -802,11 +902,29 @@ func TestCreateRequestMessage(t *testing.T) {
 	assert.Equal(t, "Requester (ISIL:REQ)", message.Request.RequestingAgencyInfo.Name)
 }
 
+func TestCreateRequestMessageUsesDirectoryInfoFlags(t *testing.T) {
+	disabled := false
+	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1", LocalID: getPgText("id1")}
+	supPeer := &ill_db.Peer{
+		Name: "isil:sup1",
+		CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{
+			IncludeSupplierInfo: &disabled,
+		}},
+	}
+	trCtx := createTransactionContext(events.Event{}, sup, supPeer, common.BrokerModeTransparent)
+	trCtx.requester.CustomData.IllConfig = &dirapi.IllConfig{IncludeRequestingAgencyInfo: &disabled}
+
+	message, _ := createRequestMessage(trCtx)
+
+	assert.Empty(t, message.Request.SupplierInfo)
+	assert.Nil(t, message.Request.RequestingAgencyInfo)
+}
+
 func TestCreateRequestingAgencyMessage(t *testing.T) {
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1", LocalID: getPgText("id1")}
 	supPeer := &ill_db.Peer{
 		Name:   "isil:sup1",
-		Vendor: string(directory.Alma),
+		Vendor: string(dirapi.Alma),
 	}
 	var iMessage = iso18626.NewISO18626Message()
 	iMessage.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
@@ -836,7 +954,7 @@ func TestCreateRequestingAgencyMessage_error(t *testing.T) {
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1", LocalID: getPgText("id1")}
 	supPeer := &ill_db.Peer{
 		Name:   "isil:sup1",
-		Vendor: string(directory.Alma),
+		Vendor: string(dirapi.Alma),
 	}
 	event := events.Event{}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
@@ -855,7 +973,7 @@ func TestSendAndUpdateSupplier_DontSend(t *testing.T) {
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1", LocalID: getPgText("id1")}
 	supPeer := &ill_db.Peer{
 		Name:   "isil:sup1",
-		Vendor: string(directory.Alma),
+		Vendor: string(dirapi.Alma),
 	}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
 	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
@@ -940,7 +1058,7 @@ func TestPrependSupplierSymbolNote(t *testing.T) {
 	assert.Equal(t, "Supplier: SUP2", sam.MessageInfo.Note)
 
 	// Supplier attribution is mandatory in opaque mode, including internal CrossLink flows.
-	requester.Vendor = string(directory.CrossLink)
+	requester.Vendor = string(dirapi.CrossLink)
 	sam.MessageInfo.Note = "Original note"
 	prependSupplierSymbolNote(trCtx, &target, &sam)
 	assert.Equal(t, "Supplier: SUP2, Original note", sam.MessageInfo.Note)
@@ -962,7 +1080,7 @@ func TestHandleIllMessage(t *testing.T) {
 	assert.EqualError(t, err, "peer is nil")
 
 	// To internal peer
-	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{Vendor: string(directory.CrossLink)}, sam)
+	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{Vendor: string(dirapi.CrossLink)}, sam)
 	assert.EqualError(t, err, "searching pr with id=req-1")
 
 	// Internal, case insensitive
@@ -984,4 +1102,16 @@ func (r *MockPrRepo) GetPatronRequestById(ctx common.ExtendedContext, id string)
 
 func (r *MockPrRepo) GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id string, side pr_db.PatronRequestSide) (pr_db.PatronRequest, error) {
 	return pr_db.PatronRequest{}, errors.New("searching pr with id=" + id)
+}
+
+func TestGetPeerInfoUsesContactEmail(t *testing.T) {
+	contactEmail := "contact@example.org"
+	fromEmail := "sender@example.org"
+	peer := &ill_db.Peer{CustomData: dirapi.Entry{
+		Email:     &contactEmail,
+		FromEmail: &fromEmail,
+	}}
+
+	_, _, _, electronicAddress := getPeerInfo(peer, "")
+	assert.Equal(t, contactEmail, electronicAddress.ElectronicAddressData)
 }

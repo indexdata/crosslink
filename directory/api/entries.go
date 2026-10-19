@@ -1,0 +1,1411 @@
+package api
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"strings"
+
+	"github.com/google/uuid"
+	"github.com/indexdata/cql-go/cql"
+	"github.com/indexdata/cql-go/pgcql"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/oapi-codegen/nullable"
+
+	"github.com/indexdata/crosslink/directory/auth"
+	"github.com/indexdata/crosslink/directory/db"
+	"github.com/indexdata/crosslink/directory/domain"
+)
+
+func isOwnedEntry(authData *auth.AuthData, tenant *string) bool {
+	if authData == nil || tenant == nil || *tenant == "" {
+		return false
+	}
+
+	authTenant := authData.GetInstitution()
+	return authTenant != "" && authTenant == *tenant
+}
+
+func canSeeSensitiveEntry(authData *auth.AuthData, tenant *string) bool {
+	return authData.HasRole(auth.ConsortialAdminRole) || authData.HasRole(auth.SystemUserRole) ||
+		(authData.HasRole(auth.InstitutionalAdminRole) && isOwnedEntry(authData, tenant))
+}
+
+func maybeUpdateEntryVendor(cur *string, patch nullable.Nullable[EntryVendor]) *string {
+	if !patch.IsSpecified() {
+		return cur
+	}
+	if patch.IsNull() {
+		return nil
+	}
+	value := string(patch.MustGet())
+	return &value
+}
+
+func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
+	var (
+		id                 uuid.UUID
+		name               string
+		description        *string
+		contactName        *string
+		organizationId     *string
+		email              *string
+		fromEmail          *string
+		tenant             *string
+		vendor             *string
+		phoneNumber        *string
+		lmsLocationCode    *string
+		lendToBorrowRatio  *string
+		illConfigJSON      []byte
+		lmsConfigJSON      []byte
+		catalogConfigJSON  []byte
+		holdingsPolicyJSON []byte
+		hrid               *string
+		timeZone           *string
+		entryType          *string
+		parent             *uuid.UUID
+		symbolsJSON        [][]byte
+		endpointsJSON      [][]byte
+		addressesJSON      [][]byte
+		tiersJSON          [][]byte
+		networksJSON       [][]byte
+		closuresJSON       [][]byte
+		totalCount         int
+	)
+
+	if err := rows.Scan(&id, &name, &description, &organizationId, &contactName, &email, &fromEmail, &tenant, &vendor, &phoneNumber,
+		&lmsLocationCode, &lendToBorrowRatio, &illConfigJSON, &lmsConfigJSON, &catalogConfigJSON, &holdingsPolicyJSON, &hrid, &timeZone, &entryType, &parent, &symbolsJSON, &endpointsJSON,
+		&addressesJSON, &tiersJSON, &networksJSON, &closuresJSON, &totalCount); err != nil {
+		return Entry{}, 0, err
+	}
+
+	symbols, err := unmarshalJSONArray[Symbol](symbolsJSON)
+	if err != nil {
+		return Entry{}, 0, fmt.Errorf("unmarshalling symbols: %w", err)
+	}
+
+	endpoints, err := unmarshalJSONArray[ServiceEndpoint](endpointsJSON)
+	if err != nil {
+		return Entry{}, 0, fmt.Errorf("unmarshalling endpoints: %w", err)
+	}
+
+	addresses, err := unmarshalJSONArray[Address](addressesJSON)
+	if err != nil {
+		return Entry{}, 0, fmt.Errorf("unmarshalling addresses: %w", err)
+	}
+
+	closures, err := unmarshalJSONArray[Closure](closuresJSON)
+	if err != nil {
+		return Entry{}, 0, fmt.Errorf("unmarshalling closures: %w", err)
+	}
+
+	lmsConfig, err := unmarshalJSONObject[LmsConfig](lmsConfigJSON)
+	if err != nil {
+		return Entry{}, 0, fmt.Errorf("unmarshalling lms config: %w", err)
+	}
+
+	catalogConfig, err := unmarshalJSONObject[CatalogConfig](catalogConfigJSON)
+	if err != nil {
+		return Entry{}, 0, fmt.Errorf("unmarshalling holdings config: %w", err)
+	}
+	holdingsPolicy, err := unmarshalJSONObject[HoldingsPolicy](holdingsPolicyJSON)
+	if err != nil {
+		return Entry{}, 0, fmt.Errorf("failed to parse holdings policy: %w", err)
+	}
+
+	tiers, err := unmarshalJSONArray[Tier](tiersJSON)
+	if err != nil {
+		return Entry{}, 0, fmt.Errorf("unmarshalling tiers: %w", err)
+	}
+
+	networks, err := unmarshalJSONArray[EntryNetworkDetails](networksJSON)
+	if err != nil {
+		return Entry{}, 0, fmt.Errorf("unmarshalling networks config: %w", err)
+	}
+
+	illConfig, err := unmarshalJSONObject[IllConfig](illConfigJSON)
+	if err != nil {
+		return Entry{}, 0, fmt.Errorf("unmarshalling ill config: %w", err)
+	}
+
+	// Use nil for empty arrays so they're omitted in JSON (omitempty)
+	var symbolsPtr *[]Symbol
+	if len(symbols) > 0 {
+		symbolsPtr = &symbols
+	}
+
+	var endpointsPtr *[]ServiceEndpoint
+	if len(endpoints) > 0 {
+		endpointsPtr = &endpoints
+	}
+
+	var addressesPtr *[]Address
+	if len(addresses) > 0 {
+		addressesPtr = &addresses
+	}
+
+	var closuresPtr *[]Closure
+	if len(closures) > 0 {
+		closuresPtr = &closures
+	}
+
+	var tiersPtr *[]Tier
+	if len(tiers) > 0 {
+		tiersPtr = &tiers
+	}
+
+	var networksPtr *[]EntryNetworkDetails
+	if len(networks) > 0 {
+		networksPtr = &networks
+	}
+
+	lmsConfigPtr := lmsConfig
+
+	typeValue := EntryType(*entryType)
+
+	return Entry{
+		Id:                &id,
+		Name:              name,
+		Type:              &typeValue,
+		OrganizationId:    organizationId,
+		Description:       description,
+		ContactName:       contactName,
+		Email:             email,
+		FromEmail:         fromEmail,
+		Tenant:            tenant,
+		Hrid:              hrid,
+		LmsLocationCode:   lmsLocationCode,
+		LendToBorrowRatio: lendToBorrowRatio,
+		IllConfig:         illConfig,
+		PhoneNumber:       phoneNumber,
+		Parent:            parent,
+		Symbols:           symbolsPtr,
+		Endpoints:         endpointsPtr,
+		Addresses:         addressesPtr,
+		Closures:          closuresPtr,
+		LmsConfig:         lmsConfigPtr,
+		CatalogConfig:     catalogConfig,
+		HoldingsPolicy:    holdingsPolicy,
+		Tiers:             tiersPtr,
+		Networks:          networksPtr,
+		TimeZone:          timeZone,
+		Vendor:            (*EntryVendor)(vendor),
+	}, totalCount, nil
+}
+
+const defaultEntryOrder = "ORDER BY e.name, e.id"
+const defaultEntryLimit = 10
+
+// handleEntryCQL converts a CQL query string to a PostgreSQL WHERE clause
+func handleEntryCQL(cqlString string, noBaseArgs int) (pgcql.Query, error) {
+	def := pgcql.NewPgDefinition()
+
+	def.AddField("cql.serverChoice", pgcql.NewFieldTsVector().
+		WithLanguage("simple").WithServerChoiceRel(cql.ALL).WithColumn("e.search"))
+
+	f := pgcql.NewFieldString().WithLikeOps().WithLower()
+	f.SetColumn("e.name")
+	def.AddField("name", f)
+
+	f = pgcql.NewFieldString().WithLikeOps().WithLower()
+	f.SetColumn("e.description")
+	def.AddField("description", f)
+
+	f = pgcql.NewFieldString().WithLikeOps()
+	f.SetColumn("e.type")
+	def.AddField("type", f)
+
+	f = pgcql.NewFieldString().WithExact()
+	f.SetColumn("e.parent")
+	def.AddField("parent", f)
+
+	f = pgcql.NewFieldString().WithExact()
+	f.SetColumn("e.tenant")
+	def.AddField("tenant", f)
+
+	fb := pgcql.NewFieldBool()
+	fb.SetColumn("COALESCE((SELECT i.is_pickup_location FROM ill_configs i WHERE i.entry = e.id), FALSE)")
+	def.AddField("isPickupLocation", fb)
+
+	def.AddField("symbol", &fieldEntrySymbol{index: "symbol", ownerColumn: "e.id"})
+	def.AddField("parentSymbol", &fieldEntrySymbol{index: "parentSymbol", ownerColumn: "e.parent"})
+
+	var parser cql.Parser
+	query, err := parser.Parse(cqlString)
+	if err != nil {
+		return nil, err
+	}
+	return def.Parse(query, noBaseArgs+1)
+}
+
+type fieldEntrySymbol struct {
+	index       string
+	ownerColumn string
+}
+
+func (f *fieldEntrySymbol) GetColumn() string  { return "" }
+func (f *fieldEntrySymbol) SetColumn(_ string) {}
+func (f *fieldEntrySymbol) Sort() string       { return "" }
+func (f *fieldEntrySymbol) Generate(sc cql.SearchClause, queryArgumentIndex int) (string, []any, error) {
+	switch sc.Relation {
+	case cql.EQ, cql.EXACT, "==":
+		return fmt.Sprintf(`EXISTS (
+			SELECT 1 FROM symbols entry_symbol
+			WHERE entry_symbol.owner = %s
+				AND (entry_symbol.authority || ':' || entry_symbol.symbol = $%d OR entry_symbol.symbol = $%d)
+		)`, f.ownerColumn, queryArgumentIndex, queryArgumentIndex), []any{strings.ToUpper(sc.Term)}, nil
+	case cql.ANY:
+		terms := strings.Fields(strings.ToUpper(sc.Term))
+		return fmt.Sprintf(`EXISTS (
+			SELECT 1 FROM symbols entry_symbol
+			WHERE entry_symbol.owner = %s
+				AND (entry_symbol.authority || ':' || entry_symbol.symbol = ANY($%d::text[]) OR entry_symbol.symbol = ANY($%d::text[]))
+		)`, f.ownerColumn, queryArgumentIndex, queryArgumentIndex), []any{terms}, nil
+	default:
+		return "", nil, fmt.Errorf("unsupported relation %s for %s", sc.Relation, f.index)
+	}
+}
+
+// buildEntrySQL builds the base SQL query for entries with nested subresources
+func buildEntrySQL(whereClause string) string {
+	baseQuery := `
+	
+	SELECT
+		e.id,
+		e.name,
+		e.description,
+		e.organization_id,
+		e.contact_name,
+		e.email,
+		e.from_email,
+		e.tenant,
+		e.vendor,
+		e.phone_number,
+		e.lms_location_code,
+		e.lend_to_borrow_ratio,
+		(
+		SELECT json_strip_nulls(json_build_object(
+			'isPickupLocation', i.is_pickup_location,
+			'iso18626Url', i.iso18626_url,
+			'iso18626Vendor', i.iso18626_vendor,
+			'lendersOfLastResort', CASE WHEN i.lenders_of_last_resort IS NULL THEN NULL ELSE (
+				SELECT json_agg(json_build_object(
+					'authority', split_part(value, ':', 1),
+					'symbol', substring(value from position(':' in value) + 1)
+				))
+				FROM unnest(i.lenders_of_last_resort) value
+			) END,
+			'includeRequestingAgencyInfo', i.include_requesting_agency_info,
+			'includeSupplierInfo', i.include_supplier_info,
+			'includeReturnInfo', i.include_return_info,
+			'includeVendorNote', i.include_vendor_note,
+			'useOfferedCosts', i.use_offered_costs,
+			'noteFieldSeparator', i.note_field_separator,
+			'supplierPatronPattern', i.supplier_patron_pattern,
+			'duplicateCheckWindowHours', i.duplicate_check_window_hours,
+			'defaultLoanPeriod', i.default_loan_period,
+			'maxRequestsPerPatron', i.max_requests_per_patron,
+			'minimumCost', i.minimum_cost,
+			'loadBalancingPolicy', i.load_balancing_policy
+		)) FROM ill_configs i WHERE i.entry = e.id) as ill_config,
+		(
+		SELECT 
+			json_strip_nulls(json_build_object(
+				'vendor', l.vendor,
+				'ncipNamespaceEnabled', l.ncip_namespace_enabled,
+				'bibIdNormalization', l.bib_id_normalization,
+				'acceptItemEnabled', l.accept_item_enabled,
+				'address', NULLIF(l.address, ''),
+				'checkInItemEnabled', l.checkin_item_enabled,
+				'checkOutItemEnabled', l.checkout_item_enabled,
+				'fromAgency', NULLIF(l.from_agency, ''),
+				'fromAgencyAuthentication', l.from_agency_authentication,
+				'itemLocation', l.item_location,
+				'lookupUserEnabled', l.lookup_user_enabled,
+				'requestItemBibIdCode', l.request_item_bib_code,
+				'requestItemEnabled', l.request_item_enabled,
+				'requestItemPickupLocationEnabled', l.request_item_pickup_location_enabled,
+				'requestItemRequestScopeType', l.request_item_scope_type,
+				'requestItemRequestType', l.request_item_request_type,
+				'requesterPatronPattern', l.requester_patron_pattern,
+				'requesterPickupLocation', l.requester_pickup_location,
+				'supplierPickupLocation', l.supplier_pickup_location,
+				'patronProfiles', l.patron_profiles,
+				'toAgency', l.to_agency
+			))
+		from lms_configs l WHERE l.entry = e.id) as lms_config,
+		(
+		SELECT
+			json_strip_nulls(json_build_object(
+				'profile', h.profile,
+				'metadataUpdateMode', h.metadata_update_mode,
+				'sru', CASE WHEN h.sru_address IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
+					'address', h.sru_address,
+					'recordSchema', h.sru_record_schema
+				)) END,
+				'zoom', CASE WHEN h.zoom_address IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
+					'address', h.zoom_address,
+					'options', h.zoom_options
+				)) END,
+				'queryConfig', CASE WHEN h.query_type IS NULL AND h.query_identifier IS NULL AND h.query_isbn IS NULL AND h.query_issn IS NULL AND h.query_title IS NULL AND h.query_year IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
+					'type', h.query_type,
+					'identifier', h.query_identifier,
+					'isbn', h.query_isbn,
+					'issn', h.query_issn,
+					'title', h.query_title,
+					'year', h.query_year
+				)) END,
+				'holdingsFormat', COALESCE(h.holdings_config, NULLIF(jsonb_strip_nulls(jsonb_build_object(
+					'marc', CASE WHEN h.holdings_marc_call_number_subfield IS NULL
+						AND h.holdings_marc_item_id_subfield IS NULL
+						AND h.holdings_marc_location_subfield IS NULL
+						AND h.holdings_marc_main_field IS NULL
+						AND h.holdings_marc_restricted_subfield IS NULL
+						AND h.holdings_marc_shelving_location_subfield IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
+							'callNumberSubField', h.holdings_marc_call_number_subfield,
+							'itemIdSubField', h.holdings_marc_item_id_subfield,
+							'locationSubField', h.holdings_marc_location_subfield,
+							'mainField', h.holdings_marc_main_field,
+							'restrictedSubField', h.holdings_marc_restricted_subfield,
+							'shelvingLocationSubField', h.holdings_marc_shelving_location_subfield
+						)) END,
+					'marc21plus1', CASE WHEN h.holdings_marc21plus1_enabled THEN json_build_object() ELSE NULL END,
+					'opac', CASE WHEN h.holdings_opac_enabled THEN json_build_object() ELSE NULL END,
+					'reservoir', CASE WHEN h.holdings_reservoir_enabled THEN json_build_object() ELSE NULL END
+				)), '{}'::jsonb)),
+				'metadataFormat', CASE WHEN h.metadata_marc21_author IS NULL
+					AND h.metadata_marc21_edition IS NULL
+					AND h.metadata_marc21_identifier IS NULL
+					AND h.metadata_marc21_isbn IS NULL
+					AND h.metadata_marc21_issn IS NULL
+					AND h.metadata_marc21_subtitle IS NULL
+					AND h.metadata_marc21_title IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
+						'marc21', json_strip_nulls(json_build_object(
+							'author', h.metadata_marc21_author,
+							'edition', h.metadata_marc21_edition,
+							'identifier', h.metadata_marc21_identifier,
+							'isbn', h.metadata_marc21_isbn,
+							'issn', h.metadata_marc21_issn,
+							'subtitle', h.metadata_marc21_subtitle,
+							'title', h.metadata_marc21_title
+						))
+					)) END
+				)
+			)
+		from catalog_configs h WHERE h.entry = e.id) as catalog_config,
+		(SELECT hp.policy FROM holdings_policies hp WHERE hp.entry = e.id) as holdings_policy,
+		e.hrid,
+		e.time_zone,
+		e.type,
+		e.parent,
+		ARRAY(SELECT row_to_json(s) FROM symbols s WHERE s.owner = e.id ORDER BY s.id) as symbols,
+		ARRAY(SELECT row_to_json(ep) FROM service_endpoints ep WHERE ep.entry = e.id ORDER BY ep.id) as endpoints,
+		ARRAY(
+			SELECT row_to_json(a_with_components)
+			FROM (
+				SELECT
+				a.id,
+				a.type,
+				ARRAY(
+					SELECT row_to_json(ac)
+					FROM address_components ac
+						WHERE ac.address = a.id
+						ORDER BY ac.seq
+				) as "addressComponents"
+			FROM addresses a
+			WHERE a.entry = e.id
+			ORDER BY a.id
+			) a_with_components
+		) as addresses,
+		ARRAY(
+			SELECT json_build_object(
+				'id', tiers.id,
+				'consortium', tiers.consortium,
+				'name', tiers.name,
+				'level', tiers.level,
+				'type', tiers.type,
+				'cost', tiers.cost
+			) from entry_tiers INNER JOIN tiers ON tiers.id = entry_tiers.tier
+			WHERE entry_tiers.entry = e.id
+			ORDER BY tiers.id
+		) as tiers,
+		ARRAY(
+			SELECT json_build_object(
+				'id', networks.id,
+				'consortium', networks.consortium,
+				'name', networks.name,
+				'priority', entry_networks.priority,
+				'reciprocal', networks.reciprocal
+			) from entry_networks INNER JOIN networks ON networks.id = entry_networks.network
+			WHERE entry_networks.entry = e.id
+			ORDER BY networks.id
+		) as networks,
+		ARRAY(
+		SELECT json_build_object(
+		'id', c.id,
+		'entry', c.entry,
+		'startDate', c.start_date::date,
+		'endDate', c.end_date::date,
+		'reason', c.reason
+		)
+		FROM closures c
+		WHERE c.entry = e.id
+		ORDER BY c.id
+		) as closures,
+		COUNT(*) OVER() as total_count
+		FROM entries e
+	`
+	if whereClause != "" {
+		return baseQuery + "\n" + whereClause
+	}
+	return baseQuery
+}
+
+func buildEntryListQuery(cqlString *string, limit *Limit, offset *Offset, baseWhere string, baseArgs []any) (string, []any, error) {
+	whereClause := baseWhere
+	args := baseArgs
+
+	if cqlString != nil && *cqlString != "" {
+		res, err := handleEntryCQL(*cqlString, len(args))
+		if err != nil {
+			return "", nil, err
+		}
+
+		if cqlWhere := res.GetWhereClause(); cqlWhere != "" {
+			if whereClause == "" {
+				whereClause = cqlWhere
+			} else {
+				// Parenthesize the complete CQL predicate so an OR expression cannot
+				// broaden a caller-supplied base scope such as tenant ownership.
+				whereClause += " AND (" + cqlWhere + ")"
+			}
+		}
+		args = append(args, res.GetQueryArguments()...)
+	}
+
+	if whereClause != "" {
+		whereClause = "WHERE " + whereClause + "\n"
+	}
+	query := buildEntrySQL(whereClause + defaultEntryOrder)
+
+	entryLimit := defaultEntryLimit
+	if limit != nil {
+		entryLimit = int(*limit)
+	}
+	args = append(args, entryLimit)
+	query += fmt.Sprintf("\nLIMIT $%d", len(args))
+
+	if offset != nil {
+		args = append(args, *offset)
+		query += fmt.Sprintf("\nOFFSET $%d", len(args))
+	}
+
+	return query, args, nil
+}
+
+func (a ApiImpl) queryEntryList(ctx context.Context, query string, args []any, transform func(*Entry) error) (EntriesResponse, error) {
+	rows, err := a.pool.Query(ctx, query, args...)
+	if err != nil {
+		return EntriesResponse{}, fmt.Errorf("querying entries: %w", err)
+	}
+	defer rows.Close()
+
+	// Initialise items as explicitly zero length because a nil slice is
+	// JSON-encoded as null rather than [].
+	items := make([]Entry, 0)
+	var totalCount int
+
+	for rows.Next() {
+		entry, count, err := scanEntryRow(rows)
+		if err != nil {
+			return EntriesResponse{}, fmt.Errorf("scanning entry row: %w", err)
+		}
+		if transform != nil {
+			if err := transform(&entry); err != nil {
+				return EntriesResponse{}, fmt.Errorf("transforming entry: %w", err)
+			}
+		}
+
+		items = append(items, entry)
+		totalCount = count
+	}
+
+	if err := rows.Err(); err != nil {
+		return EntriesResponse{}, fmt.Errorf("iterating entry rows: %w", err)
+	}
+
+	return EntriesResponse{
+		Items: items,
+		About: About{Count: int64(totalCount)},
+	}, nil
+}
+
+func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject) (GetEntriesResponseObject, error) {
+
+	authData := auth.GetAuthData(ctx)
+	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole, auth.PublicUserRole}
+	if !authData.HasRoleFromList(validRoles) {
+		slog.ErrorContext(ctx, "permission denied")
+		return GetEntries401TextResponse("Access denied"), nil
+	}
+
+	query, args, err := buildEntryListQuery(request.Params.Cql, request.Params.Limit, request.Params.Offset, "", nil)
+	if err != nil {
+		return GetEntries400TextResponse(fmt.Sprintf("CQL parse error: %v", err)), nil
+	}
+
+	response, err := a.queryEntryList(ctx, query, args, func(entry *Entry) error {
+		if !canSeeSensitiveEntry(authData, entry.Tenant) {
+			return sanitizeEntry(entry)
+		}
+		return nil
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to read entries", "error", err)
+		return GetEntries500TextResponse("Internal server error"), nil
+	}
+
+	return GetEntries200JSONResponse(response), nil
+}
+
+func (a ApiImpl) GetOwnedEntries(ctx context.Context, request GetOwnedEntriesRequestObject) (GetOwnedEntriesResponseObject, error) {
+	authData := auth.GetAuthData(ctx)
+	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole, auth.PublicUserRole}
+	if !authData.HasRoleFromList(validRoles) {
+		slog.ErrorContext(ctx, "permission denied")
+		return GetOwnedEntries401TextResponse("Access denied"), nil
+	}
+
+	tenant := authData.GetInstitution()
+	if tenant == "" {
+		return GetOwnedEntries400TextResponse("Tenant is required"), nil
+	}
+
+	query, args, err := buildEntryListQuery(
+		request.Params.Cql,
+		request.Params.Limit,
+		request.Params.Offset,
+		"e.tenant = $1",
+		[]any{tenant},
+	)
+	if err != nil {
+		return GetOwnedEntries400TextResponse(fmt.Sprintf("CQL parse error: %v", err)), nil
+	}
+
+	response, err := a.queryEntryList(ctx, query, args, func(entry *Entry) error {
+		if !canSeeSensitiveEntry(authData, entry.Tenant) {
+			return sanitizeEntry(entry)
+		}
+		return nil
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to read owned entries", "error", err)
+		return GetOwnedEntries500TextResponse("Internal server error"), nil
+	}
+
+	return GetOwnedEntries200JSONResponse(response), nil
+}
+
+func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (GetEntryResponseObject, error) {
+	var query string
+	var args []interface{}
+
+	authData := auth.GetAuthData(ctx)
+
+	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole, auth.PublicUserRole}
+	if !authData.HasRoleFromList(validRoles) {
+		slog.ErrorContext(ctx, "permission denied")
+		return GetEntry401TextResponse("Access denied"), nil
+	}
+
+	switch request.Key {
+	case GetEntryParamsKeyById:
+		parsedId, perr := uuid.Parse(request.Value)
+		if perr != nil {
+			return GetEntry400TextResponse("Error parsing id"), nil
+		}
+		query = buildEntrySQL("WHERE e.id = $1")
+		args = []interface{}{parsedId}
+	case GetEntryParamsKeyBySymbol:
+		authority, symbol, perr := resolveCombinedSymbol(request.Value)
+		if perr != nil {
+			return GetEntry400TextResponse("No delimiter found or other issue parsing symbol"), nil
+		}
+		query = buildEntrySQL(`
+			WHERE e.id = (
+				SELECT owner FROM symbols WHERE authority = $1 AND symbol = $2
+			)
+		`)
+		args = []interface{}{authority, symbol}
+	}
+
+	rows, err := a.pool.Query(ctx, query, args...)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to query entry", "error", err)
+		return GetEntry500TextResponse("Internal server error"), nil
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return GetEntry404TextResponse("Entry not found"), nil
+	}
+
+	entry, _, err := scanEntryRow(rows)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to scan entry row", "error", err)
+		return GetEntry500TextResponse("Internal server error"), nil
+	}
+
+	if !canSeeSensitiveEntry(authData, entry.Tenant) {
+		err := sanitizeEntry(&entry)
+		if err != nil {
+			slog.ErrorContext(ctx, "error sanitizing protected fields", "error", err)
+			return GetEntry500TextResponse("Internal server error"), nil
+		}
+	}
+
+	return GetEntry200JSONResponse(entry), nil
+}
+
+func sanitizeEntry(entry *Entry) error {
+	return Sanitize(entry)
+
+}
+
+func validateLendersOfLastResort(ctx context.Context, queries *db.Queries, lenders *[]SymbolProperties) (string, error) {
+	if lenders == nil {
+		return "", nil
+	}
+
+	type symbolKey struct {
+		authority string
+		symbol    string
+	}
+
+	seen := make(map[symbolKey]struct{}, len(*lenders))
+	keys := make([]symbolKey, 0, len(*lenders))
+	for _, lender := range *lenders {
+		key := symbolKey{
+			authority: strings.ToUpper(lender.Authority),
+			symbol:    strings.ToUpper(lender.Symbol),
+		}
+		if strings.Contains(key.authority, ":") {
+			return "Lender of last resort authority must not contain ':'", nil
+		}
+		if _, exists := seen[key]; exists {
+			return fmt.Sprintf("Duplicate lender of last resort: %s:%s", key.authority, key.symbol), nil
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+
+	for _, key := range keys {
+		_, err := queries.EntryBySymbol(ctx, db.EntryBySymbolParams{Authority: key.authority, Symbol: key.symbol})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Sprintf("Lender of last resort does not exist: %s:%s", key.authority, key.symbol), nil
+		}
+		if err != nil {
+			return "", fmt.Errorf("lookup lender of last resort %s:%s: %w", key.authority, key.symbol, err)
+		}
+	}
+
+	return "", nil
+}
+
+func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (AddEntryResponseObject, error) {
+
+	authData := auth.GetAuthData(ctx)
+	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole}
+	if !authData.HasRoleFromList(validRoles) {
+		slog.ErrorContext(ctx, "permission denied")
+		return AddEntry401TextResponse("Access denied"), nil
+	}
+
+	tx, err := a.pool.Begin(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to begin transaction", "error", err)
+		return AddEntry500TextResponse("Internal server error"), nil
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	qtx := a.queries.WithTx(tx)
+	entryType := derefOrDefault(request.Body.Type, EntryType("Institution"))
+
+	if entryType == "Consortium" {
+		if err := qtx.LockConsortiumEntryChanges(ctx); err != nil {
+			slog.ErrorContext(ctx, "failed to lock consortium entry changes", "error", err)
+			return AddEntry500TextResponse("Internal server error"), nil
+		}
+		_, err := qtx.GetConsortialEntry(ctx)
+		if err == nil {
+			return AddEntry400TextResponse("An entry of type Consortium already exists"), nil
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			slog.ErrorContext(ctx, "failed to check for consortium entry", "error", err)
+			return AddEntry500TextResponse("Internal server error"), nil
+		}
+	}
+
+	if request.Body.Parent != nil {
+		parentEntry, err := qtx.EntryByIdForUpdate(ctx, *request.Body.Parent)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return AddEntry400TextResponse("Value for Parent is not a valid Entry"), nil
+		} else if err != nil {
+			slog.ErrorContext(ctx, "failed to fetch parent entry", "error", err)
+			return AddEntry500TextResponse("Internal server error"), nil
+		}
+		validParent, reason := domain.ValidParentForType(string(entryType), parentEntry.Type)
+		if !validParent {
+			return AddEntry400TextResponse("Invalid entry for parent: " + reason), nil
+		}
+	}
+
+	toInsert := db.CreateEntryParams{
+		Name:              request.Body.Name,
+		Description:       request.Body.Description,
+		ContactName:       request.Body.ContactName,
+		Email:             request.Body.Email,
+		FromEmail:         request.Body.FromEmail,
+		Tenant:            request.Body.Tenant,
+		PhoneNumber:       request.Body.PhoneNumber,
+		TimeZone:          request.Body.TimeZone,
+		OrganizationID:    request.Body.OrganizationId,
+		Type:              string(entryType),
+		Parent:            request.Body.Parent,
+		LmsLocationCode:   request.Body.LmsLocationCode,
+		LendToBorrowRatio: request.Body.LendToBorrowRatio,
+		Hrid:              request.Body.Hrid,
+	}
+	if request.Body.Vendor != nil {
+		vendor := string(*request.Body.Vendor)
+		toInsert.Vendor = &vendor
+	}
+	insertedEntry, err := qtx.CreateEntry(ctx, toInsert)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to create entry", "error", err, "name", request.Body.Name)
+		return AddEntry500TextResponse("Internal server error"), nil
+	}
+
+	if request.Body.Symbols != nil {
+		for _, symbol := range *request.Body.Symbols {
+			_, err = qtx.CreateSymbol(ctx, db.CreateSymbolParams{
+				Owner:     insertedEntry.ID,
+				Symbol:    strings.ToUpper(symbol.Symbol),
+				Authority: strings.ToUpper(symbol.Authority),
+			})
+			if err != nil {
+				var pge *pgconn.PgError
+				if errors.As(err, &pge) {
+					if pge.SQLState() == "23505" { //unique_violation
+						slog.InfoContext(ctx, "duplicate symbol rejected", "symbol", symbol.Symbol, "authority", symbol.Authority)
+						return AddEntry400TextResponse("Duplicate symbol"), nil
+					}
+				}
+				slog.ErrorContext(ctx, "failed to create symbol", "error", err, "symbol", symbol.Symbol, "authority", symbol.Authority)
+				return AddEntry500TextResponse("Internal server error"), nil
+			}
+		}
+	}
+
+	if request.Body.Endpoints != nil {
+		for _, endpoint := range *request.Body.Endpoints {
+			_, err = qtx.UpsertServiceEndpoint(ctx, db.UpsertServiceEndpointParams{
+				Entry:   insertedEntry.ID,
+				Name:    endpoint.Name,
+				Type:    endpoint.Type,
+				Address: endpoint.Address,
+			})
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to create service endpoint", "error", err, "name", endpoint.Name, "type", endpoint.Type)
+				return AddEntry500TextResponse("Internal server error"), nil
+			}
+		}
+	}
+
+	if request.Body.Addresses != nil {
+		for _, address := range *request.Body.Addresses {
+			insertedAddress, err := qtx.UpsertAddress(ctx, db.UpsertAddressParams{
+				Entry: insertedEntry.ID,
+				Type:  string(address.Type),
+			})
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to upsert address", "error", err, "type", address.Type)
+				return AddEntry500TextResponse("Internal server error"), nil
+			}
+
+			if address.AddressComponents != nil {
+				for _, component := range *address.AddressComponents {
+					_, err = qtx.CreateAddressComponent(ctx, db.CreateAddressComponentParams{
+						Address: insertedAddress.ID,
+						Seq:     component.Seq,
+						Type:    string(component.Type),
+						Value:   component.Value,
+					})
+					if err != nil {
+						slog.ErrorContext(ctx, "failed to create address component", "error", err, "type", component.Type, "seq", component.Seq)
+						return AddEntry500TextResponse("Internal server error"), nil
+					}
+				}
+			}
+		}
+	}
+
+	if request.Body.LmsConfig != nil {
+		lmsConfig := request.Body.LmsConfig
+		_, err := qtx.UpsertLMSConfig(ctx, db.UpsertLMSConfigParams{
+			Entry:                            &insertedEntry.ID,
+			Vendor:                           maybeUpdateCol[string](nil, lmsConfig.Vendor),
+			NcipNamespaceEnabled:             lmsConfig.NcipNamespaceEnabled,
+			BibIDNormalization:               lmsConfig.BibIdNormalization,
+			Address:                          lmsConfig.Address,
+			FromAgency:                       lmsConfig.FromAgency,
+			FromAgencyAuthentication:         lmsConfig.FromAgencyAuthentication,
+			ToAgency:                         lmsConfig.ToAgency,
+			LookupUserEnabled:                lmsConfig.LookupUserEnabled,
+			AcceptItemEnabled:                lmsConfig.AcceptItemEnabled,
+			CheckinItemEnabled:               lmsConfig.CheckInItemEnabled,
+			CheckoutItemEnabled:              lmsConfig.CheckOutItemEnabled,
+			ItemLocation:                     lmsConfig.ItemLocation,
+			RequestItemRequestType:           lmsConfig.RequestItemRequestType,
+			RequestItemScopeType:             lmsConfig.RequestItemRequestScopeType,
+			RequestItemBibCode:               lmsConfig.RequestItemBibIdCode,
+			RequestItemEnabled:               lmsConfig.RequestItemEnabled,
+			RequestItemPickupLocationEnabled: lmsConfig.RequestItemPickupLocationEnabled,
+			RequesterPickupLocation:          lmsConfig.RequesterPickupLocation,
+			RequesterPatronPattern:           lmsConfig.RequesterPatronPattern,
+			SupplierPickupLocation:           lmsConfig.SupplierPickupLocation,
+			PatronProfiles:                   patronProfilesJSON(lmsConfig.PatronProfiles),
+		})
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to create lmsConfig component", "error", err, "to_agency", lmsConfig.ToAgency)
+			return AddEntry500TextResponse("Internal server error"), nil
+		}
+	}
+
+	if request.Body.CatalogConfig != nil {
+		params := catalogConfigToDBParams(insertedEntry.ID, *request.Body.CatalogConfig)
+		if validationErr := validateCatalogConfigParams(params); validationErr != nil {
+			return AddEntry400TextResponse(validationErr.Error()), nil
+		}
+		_, err := qtx.UpsertCatalogConfig(ctx, params)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to create catalogConfig component", "error", err)
+			return AddEntry500TextResponse("Internal server error"), nil
+		}
+	}
+
+	if request.Body.IllConfig != nil {
+		validationMessage, validationErr := validateLendersOfLastResort(ctx, qtx, request.Body.IllConfig.LendersOfLastResort)
+		if validationErr != nil {
+			slog.ErrorContext(ctx, "failed to validate lenders of last resort", "error", validationErr)
+			return AddEntry500TextResponse("Internal server error"), nil
+		}
+		if validationMessage != "" {
+			return AddEntry400TextResponse(validationMessage), nil
+		}
+		_, err := qtx.UpsertIllConfig(ctx, illConfigToDBParams(insertedEntry.ID, *request.Body.IllConfig))
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to create illConfig component", "error", err)
+			return AddEntry500TextResponse("Internal server error"), nil
+		}
+	}
+
+	if request.Body.HoldingsPolicy != nil {
+		_, err := qtx.UpsertHoldingsPolicy(ctx, db.UpsertHoldingsPolicyParams{
+			Entry:  insertedEntry.ID,
+			Policy: holdingsPolicyJSON(*request.Body.HoldingsPolicy),
+		})
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to create holdingsPolicy component", "error", err)
+			return AddEntry500TextResponse("Internal server error"), nil
+		}
+	}
+
+	var resp Id
+	resp.Id = insertedEntry.ID
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to commit transaction", "error", err)
+		return AddEntry500TextResponse("Internal server error"), nil
+	}
+
+	return AddEntry201JSONResponse(resp), nil
+}
+
+func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObject) (UpdateEntryResponseObject, error) {
+
+	authData := auth.GetAuthData(ctx)
+	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole}
+	writeRoles := []auth.DirectoryRole{auth.ConsortialAdminRole}
+
+	if !authData.HasRoleFromList(validRoles) {
+		slog.ErrorContext(ctx, "permission denied")
+		return UpdateEntry401TextResponse("Access denied"), nil
+	}
+
+	tx, err := a.pool.Begin(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to begin transaction", "error", err)
+		return UpdateEntry500TextResponse("Internal server error"), nil
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	qtx := a.queries.WithTx(tx)
+
+	var orig db.Entry
+	switch request.Key {
+	case UpdateEntryParamsKeyById:
+		parsedId, perr := uuid.Parse(request.Value)
+		if perr != nil {
+			return UpdateEntry400TextResponse("Error parsing id"), nil
+		}
+		orig, err = qtx.EntryByIdForUpdate(ctx, parsedId)
+	case UpdateEntryParamsKeyBySymbol:
+		authority, symbol, perr := resolveCombinedSymbol(request.Value)
+		if perr != nil {
+			return UpdateEntry400TextResponse("No delimiter found or other issue parsing symbol"), nil
+		}
+		orig, err = qtx.EntryBySymbolForUpdate(ctx, db.EntryBySymbolForUpdateParams{Authority: authority, Symbol: symbol})
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return UpdateEntry404TextResponse("Entry not found"), nil
+	} else if err != nil {
+		slog.ErrorContext(ctx, "failed to fetch entry for update", "error", err)
+		return UpdateEntry500TextResponse("Internal server error"), nil
+	}
+
+	if !authData.HasRoleFromList(writeRoles) && (!isOwnedEntry(authData, orig.Tenant) || request.Body.Tenant.IsSpecified()) {
+		slog.ErrorContext(ctx, "permission denied")
+		return UpdateEntry401TextResponse("Access denied"), nil
+	}
+
+	if request.Body.Type.IsSpecified() && request.Body.Type.IsNull() {
+		slog.ErrorContext(ctx, "type cannot be null")
+		return UpdateEntry400TextResponse("'type' cannot be set to null"), nil
+	}
+	origTypeEntryPatch := EntryType(orig.Type)
+	resultingType := string(*maybeUpdateCol(&origTypeEntryPatch, request.Body.Type))
+	var parentEntry db.Entry
+	parent := maybeUpdateCol(orig.Parent, request.Body.Parent)
+	if parent != nil {
+		if *parent == orig.ID {
+			return UpdateEntry400TextResponse("An entry cannot be its own parent"), nil
+		}
+		parentEntry, err = qtx.EntryByIdForUpdate(ctx, *parent)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return UpdateEntry400TextResponse("Value for Parent is not a valid Entry"), nil
+		} else if err != nil {
+			slog.ErrorContext(ctx, "failed to fetch parent entry", "error", err)
+			return UpdateEntry500TextResponse("Internal server error"), nil
+		}
+	}
+
+	if parent != nil {
+		validParent, reason := domain.ValidParentForType(resultingType, parentEntry.Type)
+		if !validParent {
+			return UpdateEntry400TextResponse("Invalid entry for parent: " + reason), nil
+		}
+	}
+
+	if resultingType != orig.Type {
+		children, err := qtx.EntriesByParent(ctx, &orig.ID)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to fetch child entries", "error", err)
+			return UpdateEntry500TextResponse("Internal server error"), nil
+		}
+		resultingParent := orig
+		resultingParent.Type = resultingType
+		for _, child := range children {
+			valid, reason := domain.ValidParentForType(child.Type, resultingParent.Type)
+			if !valid {
+				return UpdateEntry400TextResponse("Entry type is invalid for existing child: " + reason), nil
+			}
+		}
+	}
+
+	if resultingType == "Consortium" || orig.Type == "Consortium" {
+		if err := qtx.LockConsortiumEntryChanges(ctx); err != nil {
+			slog.ErrorContext(ctx, "failed to lock consortium entry changes", "error", err)
+			return UpdateEntry500TextResponse("Internal server error"), nil
+		}
+	}
+	if resultingType == "Consortium" && resultingType != orig.Type {
+		consortialEntry, err := qtx.GetConsortialEntry(ctx)
+		if err == nil && consortialEntry.ID != orig.ID {
+			return UpdateEntry400TextResponse("An entry of type Consortium already exists"), nil
+		} else if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			slog.ErrorContext(ctx, "failed to check for consortium entry", "error", err)
+			return UpdateEntry500TextResponse("Internal server error"), nil
+		}
+	}
+
+	err = qtx.UpdateEntry(ctx, db.UpdateEntryParams{
+		Name:              derefOrDefault(request.Body.Name, orig.Name),
+		Description:       maybeUpdateCol(orig.Description, request.Body.Description),
+		ContactName:       maybeUpdateCol(orig.ContactName, request.Body.ContactName),
+		Email:             maybeUpdateCol(orig.Email, request.Body.Email),
+		FromEmail:         maybeUpdateCol(orig.FromEmail, request.Body.FromEmail),
+		Tenant:            maybeUpdateCol(orig.Tenant, request.Body.Tenant),
+		Vendor:            maybeUpdateEntryVendor(orig.Vendor, request.Body.Vendor),
+		PhoneNumber:       maybeUpdateCol(orig.PhoneNumber, request.Body.PhoneNumber),
+		Parent:            maybeUpdateCol(orig.Parent, request.Body.Parent),
+		LmsLocationCode:   maybeUpdateCol(orig.LmsLocationCode, request.Body.LmsLocationCode),
+		LendToBorrowRatio: maybeUpdateCol(orig.LendToBorrowRatio, request.Body.LendToBorrowRatio),
+		Hrid:              maybeUpdateCol(orig.Hrid, request.Body.Hrid),
+		Type:              resultingType,
+		TimeZone:          maybeUpdateCol(orig.TimeZone, request.Body.TimeZone),
+		OrganizationID:    maybeUpdateCol(orig.OrganizationID, request.Body.OrganizationId),
+		ID:                orig.ID,
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to update entry", "error", err, "id", orig.ID)
+		return UpdateEntry500TextResponse("Internal server error"), nil
+	}
+
+	if request.Body.Symbols.IsSpecified() && !request.Body.Symbols.IsNull() {
+		reqsyms := request.Body.Symbols.MustGet()
+		// Delete existing symbols not present
+		var patchedSymbols []uuid.UUID
+		for _, symbol := range reqsyms {
+			if symbol.Id != nil {
+				patchedSymbols = append(patchedSymbols, *symbol.Id)
+			}
+		}
+		if len(patchedSymbols) > 0 {
+			err = qtx.DeleteOtherOwnedSymbols(ctx, db.DeleteOtherOwnedSymbolsParams{Owner: orig.ID, Ids: patchedSymbols})
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to delete other owned symbols", "error", err, "entry_id", orig.ID)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		} else {
+			err = qtx.DeleteAllOwnedSymbols(ctx, orig.ID)
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to delete all owned symbols", "error", err, "entry_id", orig.ID)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		}
+
+		// The entry is already locked. Restrict updates to its own symbols so
+		// the search trigger never needs to lock another entry after a symbol.
+		for _, symbol := range reqsyms {
+			if symbol.Id == nil {
+				_, err = qtx.CreateSymbol(ctx, db.CreateSymbolParams{
+					Owner: orig.ID, Symbol: strings.ToUpper(symbol.Symbol), Authority: strings.ToUpper(symbol.Authority),
+				})
+			} else {
+				_, err = qtx.UpdateOwnedSymbol(ctx, db.UpdateOwnedSymbolParams{
+					ID: *symbol.Id, Owner: orig.ID, Symbol: strings.ToUpper(symbol.Symbol), Authority: strings.ToUpper(symbol.Authority),
+				})
+				if errors.Is(err, pgx.ErrNoRows) {
+					return UpdateEntry400TextResponse("Symbol ID does not belong to this entry"), nil
+				}
+			}
+			if err != nil {
+				var pge *pgconn.PgError
+				if errors.As(err, &pge) {
+					if pge.SQLState() == "23505" { //unique_violation
+						slog.InfoContext(ctx, "duplicate symbol rejected", "symbol", symbol.Symbol, "authority", symbol.Authority)
+						return UpdateEntry400TextResponse("Duplicate symbol"), nil
+					}
+				}
+				slog.ErrorContext(ctx, "unexpected database error during symbol upsert", "error", err, "symbol", symbol.Symbol, "authority", symbol.Authority)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		}
+	} else if request.Body.Symbols.IsNull() {
+		err = qtx.DeleteAllOwnedSymbols(ctx, orig.ID)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to delete all owned symbols", "error", err, "entry_id", orig.ID)
+			return UpdateEntry500TextResponse("Internal server error"), nil
+		}
+	}
+
+	if request.Body.Endpoints.IsSpecified() && !request.Body.Endpoints.IsNull() {
+		reqeps := request.Body.Endpoints.MustGet()
+		// Delete existing endpoints not present
+		var patchedEndpoints []uuid.UUID
+		for _, endpoint := range reqeps {
+			if endpoint.Id != nil {
+				patchedEndpoints = append(patchedEndpoints, *endpoint.Id)
+			}
+		}
+		if len(patchedEndpoints) > 0 {
+			err = qtx.DeleteOtherOwnedServiceEndpoints(ctx, db.DeleteOtherOwnedServiceEndpointsParams{Entry: orig.ID, Ids: patchedEndpoints})
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to delete other owned service endpoints", "error", err, "entry_id", orig.ID)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		} else {
+			err = qtx.DeleteAllOwnedServiceEndpoints(ctx, orig.ID)
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to delete all owned service endpoints", "error", err, "entry_id", orig.ID)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		}
+
+		// Update/create endpoints
+		for _, endpoint := range reqeps {
+			_, err = qtx.UpsertServiceEndpoint(ctx, db.UpsertServiceEndpointParams{
+				ID:      endpoint.Id,
+				Entry:   orig.ID,
+				Name:    endpoint.Name,
+				Type:    endpoint.Type,
+				Address: endpoint.Address,
+			})
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to upsert service endpoint", "error", err, "name", endpoint.Name, "type", endpoint.Type)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		}
+	} else if request.Body.Endpoints.IsNull() {
+		err = qtx.DeleteAllOwnedServiceEndpoints(ctx, orig.ID)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to delete all owned service endpoints", "error", err, "entry_id", orig.ID)
+			return UpdateEntry500TextResponse("Internal server error"), nil
+		}
+	}
+
+	if request.Body.Addresses.IsSpecified() && !request.Body.Addresses.IsNull() {
+		reqaddrs := request.Body.Addresses.MustGet()
+		// Delete existing addresses not present
+		var patchedAddresses []uuid.UUID
+		for _, address := range reqaddrs {
+			if address.Id != nil {
+				patchedAddresses = append(patchedAddresses, *address.Id)
+			}
+		}
+		if len(patchedAddresses) > 0 {
+			err = qtx.DeleteOtherOwnedAddresses(ctx, db.DeleteOtherOwnedAddressesParams{Entry: orig.ID, Ids: patchedAddresses})
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to delete other owned addresses", "error", err, "entry_id", orig.ID)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		} else {
+			err = qtx.DeleteAllOwnedAddresses(ctx, orig.ID)
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to delete all owned addresses", "error", err, "entry_id", orig.ID)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		}
+
+		// Update/create addresses
+		for _, address := range reqaddrs {
+			insertedAddress, err := qtx.UpsertAddress(ctx, db.UpsertAddressParams{
+				ID:    address.Id,
+				Entry: orig.ID,
+				Type:  string(address.Type),
+			})
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to upsert address", "error", err, "type", address.Type)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+
+			// Handle address components
+			if address.AddressComponents != nil {
+				// Delete all existing components and insert new ones
+				err = qtx.DeleteAllOwnedAddressComponents(ctx, insertedAddress.ID)
+				if err != nil {
+					slog.ErrorContext(ctx, "failed to delete all owned address components", "error", err, "address_id", insertedAddress.ID)
+					return UpdateEntry500TextResponse("Internal server error"), nil
+				}
+
+				// Insert new components
+				for _, component := range *address.AddressComponents {
+					_, err = qtx.CreateAddressComponent(ctx, db.CreateAddressComponentParams{
+						Address: insertedAddress.ID,
+						Seq:     component.Seq,
+						Type:    string(component.Type),
+						Value:   component.Value,
+					})
+					if err != nil {
+						slog.ErrorContext(ctx, "failed to create address component", "error", err, "type", component.Type, "seq", component.Seq)
+						return UpdateEntry500TextResponse("Internal server error"), nil
+					}
+				}
+			}
+		}
+	} else if request.Body.Addresses.IsNull() {
+		err = qtx.DeleteAllOwnedAddresses(ctx, orig.ID)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to delete all owned addresses", "error", err, "entry_id", orig.ID)
+			return UpdateEntry500TextResponse("Internal server error"), nil
+		}
+	}
+
+	if request.Body.LmsConfig.IsSpecified() {
+		if request.Body.LmsConfig.IsNull() {
+			err = qtx.DeleteLMSConfigByEntry(ctx, orig.ID)
+			if err != nil {
+				slog.ErrorContext(ctx, "unexpected database error during lmsConfig delete", "error", err)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		} else {
+			lmsConfig := request.Body.LmsConfig.MustGet()
+			originalLMSConfig, queryErr := qtx.GetLMSConfigByEntry(ctx, orig.ID)
+			if queryErr != nil && !errors.Is(queryErr, pgx.ErrNoRows) {
+				slog.ErrorContext(ctx, "unable to query original lmsConfig", "error", queryErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+
+			_, err = qtx.UpsertLMSConfig(ctx, db.UpsertLMSConfigParams{
+				Entry:                            &orig.ID,
+				Vendor:                           maybeUpdateCol(originalLMSConfig.Vendor, lmsConfig.Vendor),
+				NcipNamespaceEnabled:             maybeUpdateCol(originalLMSConfig.NcipNamespaceEnabled, lmsConfig.NcipNamespaceEnabled),
+				BibIDNormalization:               maybeUpdateCol(originalLMSConfig.BibIDNormalization, lmsConfig.BibIdNormalization),
+				Address:                          derefOrDefault(lmsConfig.Address, originalLMSConfig.Address),
+				FromAgency:                       derefOrDefault(lmsConfig.FromAgency, originalLMSConfig.FromAgency),
+				FromAgencyAuthentication:         maybeUpdateCol(originalLMSConfig.FromAgencyAuthentication, lmsConfig.FromAgencyAuthentication),
+				ToAgency:                         maybeUpdateCol(originalLMSConfig.ToAgency, lmsConfig.ToAgency),
+				LookupUserEnabled:                maybeUpdateCol(originalLMSConfig.LookupUserEnabled, lmsConfig.LookupUserEnabled),
+				AcceptItemEnabled:                maybeUpdateCol(originalLMSConfig.AcceptItemEnabled, lmsConfig.AcceptItemEnabled),
+				CheckinItemEnabled:               maybeUpdateCol(originalLMSConfig.CheckinItemEnabled, lmsConfig.CheckInItemEnabled),
+				CheckoutItemEnabled:              maybeUpdateCol(originalLMSConfig.CheckoutItemEnabled, lmsConfig.CheckOutItemEnabled),
+				ItemLocation:                     maybeUpdateCol(originalLMSConfig.ItemLocation, lmsConfig.ItemLocation),
+				RequestItemRequestType:           maybeUpdateCol(originalLMSConfig.RequestItemRequestType, lmsConfig.RequestItemRequestType),
+				RequestItemScopeType:             maybeUpdateCol(originalLMSConfig.RequestItemScopeType, lmsConfig.RequestItemRequestScopeType),
+				RequestItemBibCode:               maybeUpdateCol(originalLMSConfig.RequestItemBibCode, lmsConfig.RequestItemBibIdCode),
+				RequestItemEnabled:               maybeUpdateCol(originalLMSConfig.RequestItemEnabled, lmsConfig.RequestItemEnabled),
+				RequestItemPickupLocationEnabled: maybeUpdateCol(originalLMSConfig.RequestItemPickupLocationEnabled, lmsConfig.RequestItemPickupLocationEnabled),
+				RequesterPickupLocation:          maybeUpdateCol(originalLMSConfig.RequesterPickupLocation, lmsConfig.RequesterPickupLocation),
+				SupplierPickupLocation:           maybeUpdateCol(originalLMSConfig.SupplierPickupLocation, lmsConfig.SupplierPickupLocation),
+				RequesterPatronPattern:           maybeUpdateCol(originalLMSConfig.RequesterPatronPattern, lmsConfig.RequesterPatronPattern),
+				PatronProfiles:                   maybeUpdatePatronProfiles(originalLMSConfig.PatronProfiles, lmsConfig.PatronProfiles),
+			})
+			if err != nil {
+				slog.ErrorContext(ctx, "unexpected database error during lmsConfig upsert", "error", err)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		}
+	}
+
+	if request.Body.CatalogConfig.IsSpecified() {
+		if request.Body.CatalogConfig.IsNull() {
+			err = qtx.DeleteCatalogConfigByEntry(ctx, orig.ID)
+			if err != nil {
+				slog.ErrorContext(ctx, "unexpected database error during catalogConfig delete", "error", err)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		} else {
+			catalogConfig := request.Body.CatalogConfig.MustGet()
+			originalCatalogConfig, queryErr := qtx.GetCatalogConfigByEntry(ctx, orig.ID)
+			if queryErr != nil && !errors.Is(queryErr, pgx.ErrNoRows) {
+				slog.ErrorContext(ctx, "unable to query original catalogConfig", "error", queryErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+			if validationErr := validateCatalogConfigPatch(catalogConfig, originalCatalogConfig); validationErr != nil {
+				return UpdateEntry400TextResponse(validationErr.Error()), nil
+			}
+			params, mergeErr := catalogConfigPatchToDBParams(orig.ID, catalogConfig, originalCatalogConfig)
+			if mergeErr != nil {
+				slog.ErrorContext(ctx, "unable to merge catalogConfig", "error", mergeErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+			if validationErr := validateCatalogConfigParams(params); validationErr != nil {
+				return UpdateEntry400TextResponse(validationErr.Error()), nil
+			}
+			_, err = qtx.UpsertCatalogConfig(ctx, params)
+			if err != nil {
+				slog.ErrorContext(ctx, "unexpected database error during catalogConfig upsert", "error", err)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		}
+	}
+
+	if request.Body.IllConfig.IsSpecified() {
+		if request.Body.IllConfig.IsNull() {
+			err = qtx.DeleteIllConfigByEntry(ctx, orig.ID)
+			if err != nil {
+				slog.ErrorContext(ctx, "unexpected database error during illConfig delete", "error", err)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		} else {
+			illConfig := request.Body.IllConfig.MustGet()
+			validationMessage, validationErr := validateLendersOfLastResort(ctx, qtx, illConfig.LendersOfLastResort)
+			if validationErr != nil {
+				slog.ErrorContext(ctx, "failed to validate lenders of last resort", "error", validationErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+			if validationMessage != "" {
+				return UpdateEntry400TextResponse(validationMessage), nil
+			}
+			originalIllConfig, queryErr := qtx.GetIllConfigByEntry(ctx, orig.ID)
+			if queryErr != nil && !errors.Is(queryErr, pgx.ErrNoRows) {
+				slog.ErrorContext(ctx, "unable to query original illConfig", "error", queryErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+			_, err = qtx.UpsertIllConfig(ctx, illConfigPatchToDBParams(orig.ID, illConfig, originalIllConfig))
+			if err != nil {
+				slog.ErrorContext(ctx, "unexpected database error during illConfig upsert", "error", err)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		}
+	}
+
+	if request.Body.HoldingsPolicy.IsSpecified() {
+		if request.Body.HoldingsPolicy.IsNull() {
+			err = qtx.DeleteHoldingsPolicyByEntry(ctx, orig.ID)
+			if err != nil {
+				slog.ErrorContext(ctx, "unexpected database error during holdingsPolicy delete", "error", err)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		} else {
+			policyPatch := request.Body.HoldingsPolicy.MustGet()
+			originalPolicy, queryErr := qtx.GetHoldingsPolicyByEntry(ctx, orig.ID)
+			if queryErr != nil && !errors.Is(queryErr, pgx.ErrNoRows) {
+				slog.ErrorContext(ctx, "unable to query original holdingsPolicy", "error", queryErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+			policy, mergeErr := mergeHoldingsPolicy(originalPolicy.Policy, policyPatch)
+			if mergeErr != nil {
+				slog.ErrorContext(ctx, "unable to merge holdingsPolicy", "error", mergeErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+			_, err = qtx.UpsertHoldingsPolicy(ctx, db.UpsertHoldingsPolicyParams{
+				Entry:  orig.ID,
+				Policy: holdingsPolicyJSON(policy),
+			})
+			if err != nil {
+				slog.ErrorContext(ctx, "unexpected database error during holdingsPolicy upsert", "error", err)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		}
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to commit transaction", "error", err)
+		return UpdateEntry500TextResponse("Internal server error"), nil
+	}
+
+	return UpdateEntry204Response{}, nil
+}
+
+func (a ApiImpl) DeleteEntry(ctx context.Context, request DeleteEntryRequestObject) (DeleteEntryResponseObject, error) {
+	authData := auth.GetAuthData(ctx)
+	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole}
+	if !authData.HasRoleFromList(validRoles) {
+		slog.ErrorContext(ctx, "permission denied")
+		return DeleteEntry401TextResponse("Access denied"), nil
+	}
+
+	var err error
+	switch request.Key {
+	case DeleteEntryParamsKeyById:
+		parsedId, perr := uuid.Parse(request.Value)
+		if perr != nil {
+			return DeleteEntry400TextResponse("Error parsing id"), nil
+		}
+		err = a.queries.DeleteEntryById(ctx, parsedId)
+	case DeleteEntryParamsKeyBySymbol:
+		authority, symbol, perr := resolveCombinedSymbol(request.Value)
+		if perr != nil {
+			return DeleteEntry400TextResponse("No delimiter found or other issue parsing symbol"), nil
+		}
+		err = a.queries.DeleteEntryBySymbol(ctx, db.DeleteEntryBySymbolParams{Authority: authority, Symbol: symbol})
+	}
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to delete entry", "error", err)
+		return DeleteEntry500TextResponse("Internal server error"), nil
+	}
+	return DeleteEntry204Response{}, nil
+}

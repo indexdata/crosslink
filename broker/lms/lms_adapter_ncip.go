@@ -2,20 +2,25 @@ package lms
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/indexdata/crosslink/broker/ncipclient"
-	"github.com/indexdata/crosslink/directory"
+	"github.com/indexdata/crosslink/broker/profiles"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/ncip"
 )
 
 type NcipUserElement string
 
 const (
-	NCIPUserId      string = "User Id"
-	NCIPItemBarcode string = "Item Barcode"
+	NCIPUserId                 string = "User Id"
+	NCIPUserPrivilege          string = "User Privilege"
+	NCIPNameInformation        string = "Name Information"
+	NCIPUserAddressInformation string = "User Address Information"
+	NCIPItemBarcode            string = "Item Barcode"
 )
 
 type NcipItemElement string
@@ -30,10 +35,32 @@ const (
 
 type LmsAdapterNcip struct {
 	ncipClient ncipclient.NcipClient
-	config     directory.LmsConfig
+	config     dirapi.LmsConfig
 }
 
-func CreateLmsAdapterNcip(lmsConfig directory.LmsConfig) (LmsAdapter, error) {
+func (l *LmsAdapterNcip) requestItemRequestType() string {
+	if l.config.RequestItemRequestType != nil {
+		return *l.config.RequestItemRequestType
+	}
+	return "Page"
+}
+
+func (l *LmsAdapterNcip) requestItemRequestScopeType() string {
+	if l.config.RequestItemRequestScopeType != nil {
+		return *l.config.RequestItemRequestScopeType
+	}
+	return "Item"
+}
+
+func CreateLmsAdapterNcip(lmsConfig dirapi.LmsConfig) (LmsAdapter, error) {
+	effective, err := profiles.Resolve(dirapi.Entry{LmsConfig: &lmsConfig})
+	if err != nil {
+		return nil, err
+	}
+	return createResolvedLmsAdapterNcip(*effective.LMS)
+}
+
+func createResolvedLmsAdapterNcip(lmsConfig dirapi.LmsConfig) (LmsAdapter, error) {
 	l := &LmsAdapterNcip{config: lmsConfig}
 	toAgency := "default-to-agency"
 	if l.config.ToAgency != nil {
@@ -49,7 +76,8 @@ func CreateLmsAdapterNcip(lmsConfig directory.LmsConfig) (LmsAdapter, error) {
 	if l.config.FromAgency == "" {
 		return nil, fmt.Errorf("missing From Agency in LMS configuration")
 	}
-	l.ncipClient = ncipclient.NewNcipClient(http.DefaultClient, l.config.Address, l.config.FromAgency, toAgency, FromAgencyAuthentication)
+	disableNamespace := l.config.NcipNamespaceEnabled != nil && !*l.config.NcipNamespaceEnabled
+	l.ncipClient = ncipclient.NewNcipClient(http.DefaultClient, l.config.Address, l.config.FromAgency, toAgency, FromAgencyAuthentication, disableNamespace)
 	return l, nil
 }
 
@@ -57,20 +85,26 @@ func (l *LmsAdapterNcip) SetLogFunc(logFunc ncipclient.NcipLogFunc) {
 	l.ncipClient.SetLogFunc(logFunc)
 }
 
-func (l *LmsAdapterNcip) LookupUser(patron string) (string, error) {
+func (l *LmsAdapterNcip) LookupUser(patron string, options LookupUserOptions) (LookupUserResult, error) {
 	if l.config.LookupUserEnabled != nil && !*l.config.LookupUserEnabled {
-		return patron, nil // could even be empty
+		return LookupUserResult{UserID: patron}, nil // could even be empty
 	}
 	if patron == "" {
-		return "", fmt.Errorf("empty patron identifier")
+		return LookupUserResult{}, fmt.Errorf("empty patron identifier")
 	}
 	// first try to check if patron is actually user Id
 	arg := ncip.LookupUser{
-		UserId: &ncip.UserId{UserIdentifierValue: patron},
+		UserId:          &ncip.UserId{UserIdentifierValue: patron},
+		UserElementType: l.getUserElements(false, options),
 	}
-	_, err := l.ncipClient.LookupUser(arg)
+	response, err := l.ncipClient.LookupUser(arg)
 	if err == nil {
-		return patron, nil
+		if options.ValidatePatronProfile {
+			if err = l.validatePatronProfile(response); err != nil {
+				return LookupUserResult{}, err
+			}
+		}
+		return lookupUserResult(patron, response, options.IncludePatronInfo), nil
 	}
 	// then try by user username
 	// a better solution would be that the LookupUser had type argument (eg barcode or PIN)
@@ -80,24 +114,188 @@ func (l *LmsAdapterNcip) LookupUser(patron string) (string, error) {
 		AuthenticationInputType: ncip.SchemeValuePair{Text: "username"},
 		AuthenticationInputData: patron,
 	})
-	userElements := []ncip.SchemeValuePair{{Text: string(NCIPUserId)}}
 	arg = ncip.LookupUser{
 		AuthenticationInput: authenticationInput,
-		UserElementType:     userElements,
+		UserElementType:     l.getUserElements(true, options),
 	}
-	response, err := l.ncipClient.LookupUser(arg)
+	response, err = l.ncipClient.LookupUser(arg)
 	if err != nil {
-		return "", err
+		return LookupUserResult{}, err
 	}
-	if response.UserOptionalFields != nil && len(response.UserOptionalFields.UserId) != 0 {
-		return response.UserOptionalFields.UserId[0].UserIdentifierValue, nil
+	if options.ValidatePatronProfile {
+		if err = l.validatePatronProfile(response); err != nil {
+			return LookupUserResult{}, err
+		}
 	}
-	if response.UserId != nil {
-		return response.UserId.UserIdentifierValue, nil
+	userID := ""
+	if response != nil && response.UserOptionalFields != nil && len(response.UserOptionalFields.UserId) != 0 {
+		userID = response.UserOptionalFields.UserId[0].UserIdentifierValue
+	} else if response != nil && response.UserId != nil {
+		userID = response.UserId.UserIdentifierValue
 	}
-	return "", fmt.Errorf("missing User ID in LookupUser response")
+	if userID == "" {
+		return LookupUserResult{}, fmt.Errorf("missing User ID in LookupUser response")
+	}
+	return lookupUserResult(userID, response, options.IncludePatronInfo), nil
 }
 
+func (l *LmsAdapterNcip) getUserElements(userID bool, options LookupUserOptions) []ncip.SchemeValuePair {
+	var elements []ncip.SchemeValuePair
+	if userID || (options.ValidatePatronProfile && l.config.PatronProfiles != nil && len(*l.config.PatronProfiles) > 0) {
+		elements = append(elements, ncip.SchemeValuePair{Text: NCIPUserId})
+	}
+	if options.ValidatePatronProfile && l.config.PatronProfiles != nil && len(*l.config.PatronProfiles) > 0 {
+		elements = append(elements, ncip.SchemeValuePair{Text: NCIPUserPrivilege})
+	}
+	if options.IncludePatronInfo {
+		elements = append(elements,
+			ncip.SchemeValuePair{Text: NCIPNameInformation},
+			ncip.SchemeValuePair{Text: NCIPUserAddressInformation},
+		)
+	}
+	return elements
+}
+
+func lookupUserResult(userID string, response *ncip.LookupUserResponse, includePatronInfo bool) LookupUserResult {
+	result := LookupUserResult{UserID: userID}
+	if !includePatronInfo || response == nil || response.UserOptionalFields == nil {
+		return result
+	}
+
+	optional := response.UserOptionalFields
+	if optional.NameInformation != nil && optional.NameInformation.PersonalNameInformation != nil {
+		name := optional.NameInformation.PersonalNameInformation.StructuredPersonalUserName
+		if name != nil {
+			result.GivenName = strings.TrimSpace(name.GivenName)
+			result.Surname = strings.TrimSpace(name.Surname)
+		}
+	}
+
+	seen := make(map[string]struct{})
+	for _, address := range optional.UserAddressInformation {
+		email := ncipEmailAddress(address.ElectronicAddress)
+		if email == "" {
+			continue
+		}
+		key := strings.ToLower(email)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result.EmailAddresses = append(result.EmailAddresses, email)
+	}
+	return result
+}
+
+func ncipEmailAddress(address *ncip.ElectronicAddress) string {
+	if address == nil {
+		return ""
+	}
+	data := strings.TrimSpace(address.ElectronicAddressData)
+	if data == "" {
+		return ""
+	}
+	addressType := strings.ToLower(strings.TrimSpace(address.ElectronicAddressType.Text))
+	// Match common NCIP/FOLIO email type variants such as "mailto", "Email", and "electronic mail address".
+	if strings.Contains(addressType, "mail") {
+		return data
+	}
+	return ""
+}
+
+func (l *LmsAdapterNcip) validatePatronProfile(response *ncip.LookupUserResponse) error {
+	if l.config.PatronProfiles == nil {
+		return nil
+	}
+	candidates := patronProfileCandidates(response)
+	if len(candidates) == 0 {
+		// Keep an empty candidate so a rule without a code can
+		// provide the configured default when no profile was returned.
+		candidates = []patronProfileCandidate{{}}
+	}
+	for _, profile := range *l.config.PatronProfiles {
+		for _, candidate := range candidates {
+			codeMatches := profile.Code == nil || strings.EqualFold(strings.TrimSpace(*profile.Code), candidate.code)
+			if codeMatches {
+				if !profile.CanCreateRequests {
+					name := candidate.name
+					if profile.Name != nil {
+						name = *profile.Name
+					}
+					return &PatronProfileIneligibleError{ProfileCode: candidate.code, ProfileName: name}
+				}
+				return nil
+			}
+		}
+	}
+	return nil
+}
+
+type patronProfileCandidate struct {
+	code string
+	name string
+}
+
+func patronProfileCandidates(response *ncip.LookupUserResponse) []patronProfileCandidate {
+	if response == nil || response.UserOptionalFields == nil {
+		return nil
+	}
+	privileges := response.UserOptionalFields.UserPrivilege
+
+	// Most implementations return PROFILE as the privilege type and the
+	// patron profile code as its status value. Treat this explicit discriminator
+	// as authoritative when it is present.
+	var candidates []patronProfileCandidate
+	for _, privilege := range privileges {
+		privilegeType := strings.TrimSpace(privilege.AgencyUserPrivilegeType.Text)
+		status := userPrivilegeStatus(privilege)
+		if strings.EqualFold(privilegeType, "PROFILE") && status != "" {
+			candidates = append(candidates, patronProfileCandidate{
+				code: status,
+				name: strings.TrimSpace(privilege.UserPrivilegeDescription),
+			})
+		}
+	}
+	if len(candidates) > 0 {
+		return candidates
+	}
+
+	// Other implementations put the profile code in the privilege type and
+	// use Active or OK as its status. All such privileges are candidates: NCIP
+	// permits UserPrivilege to repeat and unrelated privileges may come first.
+	for _, privilege := range privileges {
+		privilegeType := strings.TrimSpace(privilege.AgencyUserPrivilegeType.Text)
+		status := userPrivilegeStatus(privilege)
+		if privilegeType != "" && (strings.EqualFold(status, "ACTIVE") || strings.EqualFold(status, "OK")) {
+			candidates = append(candidates, patronProfileCandidate{
+				code: privilegeType,
+				name: strings.TrimSpace(privilege.UserPrivilegeDescription),
+			})
+		}
+	}
+	if len(candidates) > 0 {
+		return candidates
+	}
+
+	// Some implementations return just one privilege containing the profile
+	// code, without a status.
+	if len(privileges) == 1 && userPrivilegeStatus(privileges[0]) == "" {
+		return []patronProfileCandidate{{
+			code: strings.TrimSpace(privileges[0].AgencyUserPrivilegeType.Text),
+			name: strings.TrimSpace(privileges[0].UserPrivilegeDescription),
+		}}
+	}
+	return nil
+}
+
+func userPrivilegeStatus(privilege ncip.UserPrivilege) string {
+	if privilege.UserPrivilegeStatus == nil {
+		return ""
+	}
+	return strings.TrimSpace(privilege.UserPrivilegeStatus.UserPrivilegeStatusType.Text)
+}
+
+// AcceptItem creates a requester LMS item, or reports skipped when disabled.
 func (l *LmsAdapterNcip) AcceptItem(
 	itemId string,
 	requestId string,
@@ -108,9 +306,9 @@ func (l *LmsAdapterNcip) AcceptItem(
 	callNumber string,
 	pickupLocation string,
 	requestedAction string,
-) error {
+) (bool, error) {
 	if l.config.AcceptItemEnabled != nil && !*l.config.AcceptItemEnabled {
-		return nil
+		return false, nil
 	}
 	var bibliographicItemId *ncip.BibliographicItemId
 	if isbn != "" {
@@ -148,15 +346,24 @@ func (l *LmsAdapterNcip) AcceptItem(
 		PickupLocation:      pickupLocationField,
 	}
 	_, err := l.ncipClient.AcceptItem(arg)
-	return err
+	return err == nil, err
 }
 
-func (l *LmsAdapterNcip) DeleteItem(itemId string) error {
+// DeleteItem confirms requester LMS item removal, including an already absent item.
+// It reports skipped when requester item integration is disabled.
+func (l *LmsAdapterNcip) DeleteItem(itemId string) (bool, error) {
+	if l.config.AcceptItemEnabled != nil && !*l.config.AcceptItemEnabled {
+		return false, nil
+	}
 	arg := ncip.DeleteItem{
 		ItemId: ncip.ItemId{ItemIdentifierValue: itemId},
 	}
 	_, err := l.ncipClient.DeleteItem(arg)
-	return err
+	var ncipErr *ncipclient.NcipError
+	if errors.As(err, &ncipErr) && ncipErr.Problem.ProblemType.Text == string(ncip.UnknownItem) {
+		return true, nil
+	}
+	return err == nil, err
 }
 
 func (l *LmsAdapterNcip) RequestItem(
@@ -165,9 +372,15 @@ func (l *LmsAdapterNcip) RequestItem(
 	userId string,
 	pickupLocation string,
 	itemLocation string,
-) (string, string, string, error) {
+) (*RequestedItem, error) {
+	if l.config.RequestItemEnabled != nil && !*l.config.RequestItemEnabled {
+		return nil, nil
+	}
+	if strings.TrimSpace(requestId) == "" {
+		return nil, fmt.Errorf("missing request ID for RequestItem")
+	}
 	var pickupLocationField *ncip.SchemeValuePair
-	if pickupLocation != "" && (l.config.RequestItemPickupLocationEnabled == nil || *l.config.RequestItemPickupLocationEnabled) {
+	if pickupLocation != "" && l.RequestItemUsesPickupLocation() {
 		pickupLocationField = &ncip.SchemeValuePair{Text: pickupLocation}
 	}
 	var userIdField *ncip.UserId
@@ -178,22 +391,19 @@ func (l *LmsAdapterNcip) RequestItem(
 	if l.config.RequestItemBibIdCode != nil {
 		code = *l.config.RequestItemBibIdCode
 	}
+	if l.config.BibIdNormalization != nil && *l.config.BibIdNormalization == "sierra" {
+		itemId = strings.TrimPrefix(itemId, ".b")
+		if len(itemId) > 1 && itemId[len(itemId)-1] >= '0' && itemId[len(itemId)-1] <= '9' {
+			itemId = itemId[:len(itemId)-1]
+		}
+	}
 	bibIdField := ncip.BibliographicId{
 		BibliographicRecordId: &ncip.BibliographicRecordId{
 			BibliographicRecordIdentifier:     itemId,
 			BibliographicRecordIdentifierCode: &ncip.SchemeValuePair{Text: code},
 		}}
-	scopeType := "Item"
-	if l.config.RequestItemRequestScopeType != nil {
-		scopeType = *l.config.RequestItemRequestScopeType
-	}
-	requestScopeTypeField := ncip.SchemeValuePair{Text: scopeType}
-
-	requestType := "Page"
-	if l.config.RequestItemRequestType != nil {
-		requestType = *l.config.RequestItemRequestType
-	}
-	requestTypeField := ncip.SchemeValuePair{Text: requestType}
+	requestScopeTypeField := ncip.SchemeValuePair{Text: l.requestItemRequestScopeType()}
+	requestTypeField := ncip.SchemeValuePair{Text: l.requestItemRequestType()}
 
 	var itemOptionalFields *ncip.ItemOptionalFields
 	if itemLocation != "" {
@@ -213,6 +423,7 @@ func (l *LmsAdapterNcip) RequestItem(
 	}
 	itemElements := []ncip.SchemeValuePair{
 		{Text: string(NCIPBibliographicDescription)},
+		{Text: "Location"},
 	}
 	arg := ncip.RequestItem{
 		RequestId:          &ncip.RequestId{RequestIdentifierValue: requestId},
@@ -226,10 +437,10 @@ func (l *LmsAdapterNcip) RequestItem(
 	}
 	response, err := l.ncipClient.RequestItem(arg)
 	if err != nil {
-		return "", "", "", err
+		return nil, err
 	}
 	if response == nil {
-		return "", "", "", fmt.Errorf("empty response from RequestItem")
+		return nil, fmt.Errorf("empty response from RequestItem")
 	}
 	barcode := ""
 	callNumber := ""
@@ -247,24 +458,68 @@ func (l *LmsAdapterNcip) RequestItem(
 	if response.ItemOptionalFields != nil && response.ItemOptionalFields.BibliographicDescription != nil {
 		title = response.ItemOptionalFields.BibliographicDescription.Title
 	}
-	if barcode == "" {
-		return "", "", "", fmt.Errorf("missing item barcode in RequestItem response")
+	location, shelvingLocation := requestedItemLocations(response.ItemOptionalFields)
+	lmsRequestID := requestId
+	if response.RequestId != nil && strings.TrimSpace(response.RequestId.RequestIdentifierValue) != "" {
+		lmsRequestID = response.RequestId.RequestIdentifierValue
 	}
-	return barcode, callNumber, title, nil
+	return &RequestedItem{
+		RequestID:        lmsRequestID,
+		Barcode:          barcode,
+		CallNumber:       callNumber,
+		Title:            title,
+		Location:         location,
+		ShelvingLocation: shelvingLocation,
+	}, nil
+}
+
+func requestedItemLocations(fields *ncip.ItemOptionalFields) (string, string) {
+	if fields == nil {
+		return "", ""
+	}
+	for _, itemLocation := range fields.Location {
+		names := itemLocation.LocationName.LocationNameInstance
+		var location, shelvingLocation string
+		for _, name := range names {
+			if strings.TrimSpace(name.LocationNameValue) == "" {
+				continue
+			}
+			switch name.LocationNameLevel {
+			case 1:
+				if location == "" {
+					location = strings.TrimSpace(name.LocationNameValue)
+				}
+			case 2:
+				if shelvingLocation == "" {
+					shelvingLocation = strings.TrimSpace(name.LocationNameValue)
+				}
+			}
+		}
+		if shelvingLocation == "" && location != "" && len(names) == 1 {
+			shelvingLocation = location
+		}
+		if location != "" || shelvingLocation != "" {
+			return location, shelvingLocation
+		}
+	}
+	return "", ""
 }
 
 func (l *LmsAdapterNcip) CancelRequestItem(requestId string, userId string) error {
 	arg := ncip.CancelRequestItem{
-		UserId:    &ncip.UserId{UserIdentifierValue: userId},
-		RequestId: &ncip.RequestId{RequestIdentifierValue: requestId},
+		UserId:           &ncip.UserId{UserIdentifierValue: userId},
+		RequestId:        &ncip.RequestId{RequestIdentifierValue: requestId},
+		RequestType:      ncip.SchemeValuePair{Text: l.requestItemRequestType()},
+		RequestScopeType: &ncip.SchemeValuePair{Text: l.requestItemRequestScopeType()},
 	}
 	_, err := l.ncipClient.CancelRequestItem(arg)
 	return err
 }
 
-func (l *LmsAdapterNcip) CheckInItem(itemId string) error {
+// CheckInItem confirms an NCIP check-in, or reports skipped when disabled.
+func (l *LmsAdapterNcip) CheckInItem(itemId string) (bool, error) {
 	if l.config.CheckInItemEnabled != nil && !*l.config.CheckInItemEnabled {
-		return nil
+		return false, nil
 	}
 	itemElements := []ncip.SchemeValuePair{
 		{Text: string(NCIPBibliographicDescription)},
@@ -275,32 +530,37 @@ func (l *LmsAdapterNcip) CheckInItem(itemId string) error {
 	}
 	_, err := l.ncipClient.CheckInItem(arg)
 	// mod-rs does not seem to use the Bibliographic Description in response
-	return err
+	return err == nil, err
 }
 
+// CheckOutItem returns the checkout title and usable due date, or nil when disabled.
 func (l *LmsAdapterNcip) CheckOutItem(
 	requestId string,
 	itemBarcode string,
 	userId string,
 	externalReferenceValue string,
-) (string, error) {
+) (*CheckedOutItem, error) {
 	if l.config.CheckOutItemEnabled != nil && !*l.config.CheckOutItemEnabled {
-		return "", nil
+		return nil, nil
 	}
 	var ext *ncip.Ext
 	if externalReferenceValue != "" {
 		externalId := ncip.RequestId{RequestIdentifierValue: externalReferenceValue}
 		bytes, err := xml.Marshal(externalId)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		ext = &ncip.Ext{XMLContent: bytes}
 	}
 	itemElements := []ncip.SchemeValuePair{
 		{Text: string(NCIPBibliographicDescription)},
 	}
+	var requestID *ncip.RequestId
+	if requestId != "" {
+		requestID = &ncip.RequestId{RequestIdentifierValue: requestId}
+	}
 	arg := ncip.CheckOutItem{
-		RequestId:       &ncip.RequestId{RequestIdentifierValue: requestId},
+		RequestId:       requestID,
 		UserId:          &ncip.UserId{UserIdentifierValue: userId},
 		ItemId:          ncip.ItemId{ItemIdentifierValue: itemBarcode},
 		ItemElementType: itemElements,
@@ -308,16 +568,21 @@ func (l *LmsAdapterNcip) CheckOutItem(
 	}
 	response, err := l.ncipClient.CheckOutItem(arg)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if response == nil {
-		return "", fmt.Errorf("empty response from CheckOutItem")
+		return nil, fmt.Errorf("empty response from CheckOutItem")
 	}
 	title := ""
 	if response.ItemOptionalFields != nil && response.ItemOptionalFields.BibliographicDescription != nil {
 		title = response.ItemOptionalFields.BibliographicDescription.Title
 	}
-	return title, nil
+	result := &CheckedOutItem{Title: title}
+	if response.DateDue != nil && !response.DateDue.IsZero() {
+		due := response.DateDue.Time
+		result.DueDate = &due
+	}
+	return result, nil
 }
 
 func (l *LmsAdapterNcip) CreateUserFiscalTransaction(userId string, itemId string) error {
@@ -355,4 +620,13 @@ func (l *LmsAdapterNcip) RequesterPickupLocation() string {
 		return *l.config.RequesterPickupLocation
 	}
 	return "Main Library"
+}
+
+func (l *LmsAdapterNcip) RequestItemUsesPickupLocation() bool {
+	return (l.config.RequestItemEnabled == nil || *l.config.RequestItemEnabled) &&
+		(l.config.RequestItemPickupLocationEnabled == nil || *l.config.RequestItemPickupLocationEnabled)
+}
+
+func (l *LmsAdapterNcip) AcceptItemUsesPickupLocation() bool {
+	return l.config.AcceptItemEnabled == nil || *l.config.AcceptItemEnabled
 }

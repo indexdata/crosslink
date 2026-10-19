@@ -14,13 +14,14 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/dbutil"
 	test "github.com/indexdata/crosslink/broker/test/utils"
-	"github.com/indexdata/crosslink/directory"
+	dirapi "github.com/indexdata/crosslink/directory/api"
+	"github.com/indexdata/crosslink/testutil"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 )
 
 var illRepo IllRepo
-var dirEntries directory.EntriesResponse
+var dirEntries dirapi.EntriesResponse
 var respBody []byte
 
 func createDirectoryAdapter(urls ...string) adapter.DirectoryLookupAdapter {
@@ -28,9 +29,12 @@ func createDirectoryAdapter(urls ...string) adapter.DirectoryLookupAdapter {
 }
 
 func TestMain(m *testing.M) {
-	ctx, pgc, connStr, err := test.StartPGContainer()
-	connStr = connStr + dbutil.SearchPath("crosslink_broker")
+	ctx := context.Background()
+	pgc, err := testutil.RunPostgres(ctx)
 	test.Expect(err, "failed to start db container")
+	connStr, err := pgc.ConnectionString(ctx, "sslmode=disable")
+	test.Expect(err, "failed to get conn string")
+	connStr = connStr + dbutil.SearchPath("crosslink_broker")
 	pgIllRepo := new(PgIllRepo)
 	pgIllRepo.Pool, err = dbutil.InitDbPool(connStr)
 	test.Expect(err, "failed to create ill repo")
@@ -103,6 +107,75 @@ func TestGetCachedPeersBySymbol(t *testing.T) {
 	assert.Equal(t, len(branchSymbols3), 0)
 }
 
+func TestSkipLocatedSuppliersByIllTransaction(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	requester, err := illRepo.SavePeer(ctx, SavePeerParams{
+		ID:            "skip-rota-requester",
+		Name:          "Skip rota requester",
+		RefreshPolicy: RefreshPolicyTransaction,
+		RefreshTime:   pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Url:           "http://requester.invalid",
+	})
+	assert.NoError(t, err)
+	supplier, err := illRepo.SavePeer(ctx, SavePeerParams{
+		ID:            "skip-rota-supplier",
+		Name:          "Skip rota supplier",
+		RefreshPolicy: RefreshPolicyTransaction,
+		RefreshTime:   pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Url:           "http://supplier.invalid",
+	})
+	assert.NoError(t, err)
+
+	const transactionID = "skip-rota-transaction"
+	_, err = illRepo.SaveIllTransaction(ctx, SaveIllTransactionParams{
+		ID:          transactionID,
+		Timestamp:   pgtype.Timestamp{Time: time.Now(), Valid: true},
+		RequesterID: pgtype.Text{String: requester.ID, Valid: true},
+	})
+	assert.NoError(t, err)
+
+	for ordinal, status := range []pgtype.Text{SupplierStateSelectedPg, SupplierStateNewPg, SupplierStateSkippedPg} {
+		_, err = illRepo.SaveLocatedSupplier(ctx, SaveLocatedSupplierParams{
+			ID:               "skip-rota-supplier-" + status.String,
+			IllTransactionID: transactionID,
+			SupplierID:       supplier.ID,
+			SupplierSymbol:   "ISIL:SKIP-ROTA-" + status.String,
+			Ordinal:          int32(ordinal),
+			SupplierStatus:   status,
+			LastStatus:       pgtype.Text{String: "RetryPossible", Valid: true},
+		})
+		assert.NoError(t, err)
+	}
+
+	err = illRepo.SkipLocatedSuppliersByIllTransaction(ctx, transactionID)
+	assert.NoError(t, err)
+	suppliers, _, err := illRepo.GetLocatedSuppliersByIllTransaction(ctx, transactionID)
+	assert.NoError(t, err)
+	if assert.Len(t, suppliers, 3) {
+		for _, locatedSupplier := range suppliers {
+			assert.Equal(t, SupplierStateSkippedPg, locatedSupplier.SupplierStatus)
+			assert.Equal(t, "RetryPossible", locatedSupplier.LastStatus.String)
+		}
+
+		suppliers[0].SupplierStatus = SupplierStateSelectedPg
+		suppliers[1].SupplierStatus = SupplierStateNewPg
+		for _, locatedSupplier := range suppliers[:2] {
+			_, err = illRepo.SaveLocatedSupplier(ctx, SaveLocatedSupplierParams(locatedSupplier))
+			assert.NoError(t, err)
+		}
+
+		err = illRepo.SkipLocatedSuppliersByIllTransactionAndStatus(ctx, transactionID, SupplierStateNewPg)
+		assert.NoError(t, err)
+		suppliers, _, err = illRepo.GetLocatedSuppliersByIllTransaction(ctx, transactionID)
+		assert.NoError(t, err)
+		if assert.Len(t, suppliers, 3) {
+			assert.Equal(t, SupplierStateSelectedPg, suppliers[0].SupplierStatus)
+			assert.Equal(t, SupplierStateSkippedPg, suppliers[1].SupplierStatus)
+			assert.Equal(t, SupplierStateSkippedPg, suppliers[2].SupplierStatus)
+		}
+	}
+}
+
 func TestUpdateCachedPeersNoRefresh(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
@@ -112,7 +185,13 @@ func TestUpdateCachedPeersNoRefresh(t *testing.T) {
 	defer server.Close()
 	da := createDirectoryAdapter(server.URL)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	peer, err := illRepo.SavePeer(ctx, SavePeerParams{ID: "1234", Name: "Old ISIL:NU peer", Vendor: "Alma", BrokerMode: "opaque", RefreshPolicy: "transaction", RefreshTime: GetPgNow()})
+	// Reuse the symbol's existing local peer instead of leaving an orphaned
+	// directory UUID from an earlier test in this shared database.
+	peerID := "1234"
+	if existing, err := illRepo.GetPeerBySymbol(ctx, "ISIL:AU-NU"); err == nil {
+		peerID = existing.ID
+	}
+	peer, err := illRepo.SavePeer(ctx, SavePeerParams{ID: peerID, Name: "Old ISIL:NU peer", Vendor: "Alma", BrokerMode: "opaque", RefreshPolicy: "transaction", RefreshTime: GetPgNow()})
 	assert.Equal(t, err, nil)
 	_, err = illRepo.SaveSymbol(ctx, SaveSymbolParams{SymbolValue: "ISIL:AU-NU", PeerID: peer.ID})
 	assert.NoError(t, err)
@@ -163,7 +242,13 @@ func TestUpdateCachedPeersWithRefresh(t *testing.T) {
 	defer server.Close()
 	da := createDirectoryAdapter(server.URL)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	peer, err := illRepo.SavePeer(ctx, SavePeerParams{ID: "1234", Name: "Old ISIL:NU peer", Vendor: "Alma", BrokerMode: "opaque", RefreshPolicy: "transaction", RefreshTime: Get10MinsAgo()})
+	// Reuse the symbol's existing local peer instead of leaving an orphaned
+	// directory UUID from an earlier test in this shared database.
+	peerID := "1234"
+	if existing, err := illRepo.GetPeerBySymbol(ctx, "ISIL:AU-NU"); err == nil {
+		peerID = existing.ID
+	}
+	peer, err := illRepo.SavePeer(ctx, SavePeerParams{ID: peerID, Name: "Old ISIL:NU peer", Vendor: "Alma", BrokerMode: "opaque", RefreshPolicy: "transaction", RefreshTime: Get10MinsAgo()})
 	assert.Equal(t, err, nil)
 	_, err = illRepo.SaveSymbol(ctx, SaveSymbolParams{SymbolValue: "ISIL:AU-NU", PeerID: peer.ID})
 	assert.NoError(t, err)

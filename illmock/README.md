@@ -82,6 +82,7 @@ The scenario is used by the supplier to perform a particular workflow. The follo
 |`RETRY:COND_` ...            | Response with `RetryPossible` and ReasonRetry `LoanCondition`                       |
 |`RETRY:COST_` ...            | Response with `RetryPossible` and ReasonRetry+ReasonUnfilled `CostExceedsMaxCost`   |
 |`RETRY:ONLOAN_` ...          | Response with `RetryPossible` and ReasonRetry `OnLoan`                              |
+|`RETRY:NOTFOUNDASCITED`      | Response with `RetryPossible` and ReasonRetry `NotFoundAsCited`                     |
 
 ### Delivery method
 
@@ -105,8 +106,10 @@ The following values are recognized:
   * `#RENEW#` the requester will send a `Renew` request to the supplier upon receiving an `Overdue` message.
   For a sample, refer to `examples/renew-req.xml`.
 
-  * `#RETRYKEEPID` the requester uses existing RequestingAgencyRequestId when sending a retry request. If not
+  * `#RETRYKEEPID#` the requester uses existing RequestingAgencyRequestId when sending a retry request. If not
   given, a new RequestingAgencyRequestId is created (thus being different from RequestingAgencyPreviousRequestId)
+
+  * `#RETRYBIBID:VALUE#` if given and non-empty, VALUE is used as the SupplierUniqueRecordId when sending a Retry request.
 
 # ILL flows
 
@@ -135,6 +138,10 @@ The `rec` prefix refers to the
 
 The identifier value is split by semicolon and each substring generates a holdings record entry
 in the `999#11` field with subfield `$l` set to the local ID and subfield `$s` set to library ISIL.
+The MARCXML record also contains mock bibliographic metadata. Its identifier, title, ISBN, and ISSN
+are derived from the requested record identifier, so repeated requests for the same record are stable
+while different records do not receive matching metadata. The subtitle `Subtitle from SRU mock`,
+author `Author from SRU mock`, and edition `Mock edition` are fixed.
 
 By default each substring is taken verbatim, except for some special cases:
 
@@ -166,10 +173,11 @@ The directory service is accessible from the `/directory/entries` endpoint. For 
 
     curl http://localhost:8081/directory/entries
 
-See [the OpenAPI spec](directory/directory_api.yaml) . The `cql` query parameter is a CQL string.
-This supports index `symbol` with supported relations `any`, `all`, `=` for matching against
-directory entry `symbols`. It also supports index `tenant` with supported relation `=` which matches
-against directory entry `tenant`.
+See [the shared Directory OpenAPI spec](../directory/api.yaml). The endpoint accepts the same `cql`, `limit`, and `offset` query parameters as Directory and returns `items` with `about.count`.
+This supports indexes `symbol` and `parentSymbol` with relations `any`, `=`, `==`, and `exact` for matching
+against an entry's symbols or its immediate parent's symbols. It also supports index `tenant` with
+supported relation `=` which matches against directory entry `tenant`. CQL results contain only
+entries that directly match the query; include `parentSymbol` explicitly when branches are needed.
 
 # NCIP server
 

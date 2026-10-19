@@ -8,10 +8,11 @@ type LmsAdapterManual struct {
 func (l *LmsAdapterManual) SetLogFunc(logFunc ncipclient.NcipLogFunc) {
 }
 
-func (l *LmsAdapterManual) LookupUser(patron string) (string, error) {
-	return patron, nil
+func (l *LmsAdapterManual) LookupUser(patron string, options LookupUserOptions) (LookupUserResult, error) {
+	return LookupUserResult{UserID: patron}, nil
 }
 
+// AcceptItem skips requester LMS item creation in manual workflows.
 func (l *LmsAdapterManual) AcceptItem(
 	itemId string,
 	requestId string,
@@ -22,12 +23,13 @@ func (l *LmsAdapterManual) AcceptItem(
 	callNumber string,
 	pickupLocation string,
 	requestedAction string,
-) error {
-	return nil
+) (bool, error) {
+	return false, nil
 }
 
-func (l *LmsAdapterManual) DeleteItem(itemId string) error {
-	return nil
+// DeleteItem skips requester LMS item deletion in manual workflows.
+func (l *LmsAdapterManual) DeleteItem(itemId string) (bool, error) {
+	return false, nil
 }
 
 func (l *LmsAdapterManual) RequestItem(
@@ -36,25 +38,27 @@ func (l *LmsAdapterManual) RequestItem(
 	userId string,
 	pickupLocation string,
 	itemLocation string,
-) (string, string, string, error) {
-	return "", "", "", nil
+) (*RequestedItem, error) {
+	return nil, nil
 }
 
 func (l *LmsAdapterManual) CancelRequestItem(requestId string, userId string) error {
 	return nil
 }
 
-func (l *LmsAdapterManual) CheckInItem(itemId string) error {
-	return nil
+// CheckInItem records an explicit manual check-in confirmation.
+func (l *LmsAdapterManual) CheckInItem(itemId string) (bool, error) {
+	return true, nil
 }
 
+// CheckOutItem records an explicit manual checkout confirmation without an LMS date.
 func (l *LmsAdapterManual) CheckOutItem(
 	requestId string,
 	itemBarcode string,
 	userId string,
 	externalReferenceValue string,
-) (string, error) {
-	return "", nil
+) (*CheckedOutItem, error) {
+	return &CheckedOutItem{}, nil
 }
 
 func (l *LmsAdapterManual) CreateUserFiscalTransaction(userId string, itemId string) error {
@@ -80,3 +84,6 @@ func (l *LmsAdapterManual) ItemLocation() string {
 func (l *LmsAdapterManual) RequesterPickupLocation() string {
 	return ""
 }
+
+func (l *LmsAdapterManual) RequestItemUsesPickupLocation() bool { return false }
+func (l *LmsAdapterManual) AcceptItemUsesPickupLocation() bool  { return false }

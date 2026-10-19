@@ -1,0 +1,44 @@
+meta {
+  name: Lending side renewed check
+  type: http
+  seq: 16
+}
+
+get {
+  url: {{host}}/patron_requests/{{renewalOmittedLendingPrId}}?side=lending
+  body: none
+  auth: basic
+}
+
+params:query {
+  side: lending
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
+script:post-response {
+  test("State is RENEWED with no due date", () => {
+    expect(res.getStatus()).to.equal(200);
+    const pr = res.getBody();
+    expect(pr.state).to.equal("RENEWED");
+    expect(pr.dueDate ?? null).to.equal(null);
+    expect(pr.needsAttention).to.equal(false);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -1,0 +1,44 @@
+meta {
+  name: Borrowing side renewal-pending check
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{host}}/patron_requests/{{renewalOmittedPrId}}?side=borrowing
+  body: none
+  auth: basic
+}
+
+params:query {
+  side: borrowing
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
+script:post-response {
+  test("State is RENEWAL_PENDING with the expected due date", () => {
+    expect(res.getStatus()).to.equal(200);
+    const pr = res.getBody();
+    expect(pr.state).to.equal("RENEWAL_PENDING");
+    expect(Date.parse(pr.dueDate)).to.equal(Date.parse(bru.getVar("renewalOmittedOriginalDueDate")));
+    expect(pr.needsAttention).to.equal(false);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
