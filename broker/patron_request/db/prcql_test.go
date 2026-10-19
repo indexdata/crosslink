@@ -206,12 +206,12 @@ func TestHandlePatronRequestsQueryItemFieldsUseExists(t *testing.T) {
 		{
 			name:      "item_id exact",
 			cql:       `item_id = "item-123"`,
-			wantWhere: "EXISTS (SELECT 1 FROM item cql_item WHERE cql_item.pr_id = patron_request_search_view.id AND cql_item.item_id = $3)",
+			wantWhere: "EXISTS (SELECT 1 FROM item cql_item WHERE cql_item.pr_id = patron_request_search_view.id AND lower(cql_item.item_id) = lower($3))",
 		},
 		{
 			name:      "barcode wildcard",
 			cql:       `barcode = "abc*"`,
-			wantWhere: "EXISTS (SELECT 1 FROM item cql_item WHERE cql_item.pr_id = patron_request_search_view.id AND cql_item.barcode LIKE $3)",
+			wantWhere: "EXISTS (SELECT 1 FROM item cql_item WHERE cql_item.pr_id = patron_request_search_view.id AND lower(cql_item.barcode) LIKE lower($3))",
 		},
 		{
 			name:      "call_number empty",

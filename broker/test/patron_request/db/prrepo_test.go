@@ -666,9 +666,9 @@ func TestListPatronRequests(t *testing.T) {
 	_, err := prRepo.SaveItem(appCtx, pr_db.SaveItemParams{
 		ID:      firstItemId,
 		PrID:    prIds[0],
-		Barcode: "barcode-123",
+		Barcode: "BarCode-123",
 		CallNumber: pgtype.Text{
-			String: "call-123",
+			String: "Call-123",
 			Valid:  true,
 		},
 		Title: pgtype.Text{
@@ -676,7 +676,7 @@ func TestListPatronRequests(t *testing.T) {
 			Valid:  true,
 		},
 		ItemID: pgtype.Text{
-			String: "item-123",
+			String: "Item-123",
 			Valid:  true,
 		},
 		CreatedAt: pgtype.Timestamp{
@@ -886,6 +886,35 @@ func TestListPatronRequests(t *testing.T) {
 	require.Len(t, list, 1)
 	assert.Equal(t, prIds[0], list[0].ID)
 	assert.Equal(t, int64(1), fullCount)
+
+	for _, field := range []struct {
+		name string
+		term string
+	}{
+		{"item_id", "ITEM-123"},
+		{"barcode", "BARCODE-123"},
+		{"call_number", "CALL-123"},
+	} {
+		for _, relation := range []string{"=", "<>"} {
+			for _, term := range []string{field.term, field.term[:len(field.term)-1] + "*"} {
+				t.Run(field.name+relation+term, func(t *testing.T) {
+					query, err := pr_db.ParsePatronRequestsCql(field.name + " " + relation + ` "` + term + `"`)
+					require.NoError(t, err)
+					list, count, err := prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+						Limit: 10,
+					}, query)
+					require.NoError(t, err)
+					require.Len(t, list, 1)
+					wantID := prIds[0]
+					if relation == "<>" {
+						wantID = prIds[1]
+					}
+					assert.Equal(t, wantID, list[0].ID)
+					assert.Equal(t, int64(1), count)
+				})
+			}
+		}
+	}
 
 	// not found
 	cql = "title = banners"

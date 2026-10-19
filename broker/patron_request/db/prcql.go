@@ -157,9 +157,9 @@ func ParsePatronRequestsCql(cqlString string) (pgcql.Query, error) {
 	def.AddField("issn", NewFieldTextArrayContains("bibliographic_item_identifiers(ill_request, 'ISSN')").WithFunction("norm_isxn"))
 
 	itemCorrelation := "cql_item.pr_id = patron_request_search_view.id"
-	def.AddField("item_id", NewFieldExistsString("item", "cql_item", itemCorrelation, "cql_item.item_id"))
-	def.AddField("barcode", NewFieldExistsString("item", "cql_item", itemCorrelation, "cql_item.barcode"))
-	def.AddField("call_number", NewFieldExistsString("item", "cql_item", itemCorrelation, "cql_item.call_number"))
+	def.AddField("item_id", NewFieldExistsString("item", "cql_item", itemCorrelation, "cql_item.item_id").WithField(pgcql.NewFieldString().WithLikeOps().WithLower()))
+	def.AddField("barcode", NewFieldExistsString("item", "cql_item", itemCorrelation, "cql_item.barcode").WithField(pgcql.NewFieldString().WithLikeOps().WithLower()))
+	def.AddField("call_number", NewFieldExistsString("item", "cql_item", itemCorrelation, "cql_item.call_number").WithField(pgcql.NewFieldString().WithLikeOps().WithLower()))
 
 	f = pgcql.NewFieldString().WithLikeOps()
 	def.AddField("patron", f)
