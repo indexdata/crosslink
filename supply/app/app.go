@@ -80,8 +80,11 @@ func serveListener(ctx context.Context, server *http.Server, listener net.Listen
 		if err != nil {
 			cancelRequests()
 			closeErr := server.Close()
-			<-done
-			return fmt.Errorf("shutdown HTTP: %w", errors.Join(err, closeErr))
+			serveErr := <-done
+			if errors.Is(serveErr, http.ErrServerClosed) {
+				serveErr = nil
+			}
+			return fmt.Errorf("shutdown HTTP: %w", errors.Join(err, closeErr, serveErr))
 		}
 		serveErr := <-done
 		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
