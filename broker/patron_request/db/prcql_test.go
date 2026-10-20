@@ -118,6 +118,42 @@ func TestPatronRequestDuplicateFields(t *testing.T) {
 	assert.Equal(t, []any{"patron-1", "record-1", "A Title", "current-pr"}, query.GetQueryArguments())
 }
 
+func TestHandlePatronRequestsQueryItemFieldsUseExists(t *testing.T) {
+	tests := []struct {
+		name      string
+		cql       string
+		wantWhere string
+	}{
+		{
+			name:      "item_id exact",
+			cql:       `item_id = "item-123"`,
+			wantWhere: "EXISTS (SELECT 1 FROM item cql_item WHERE cql_item.pr_id = patron_request_search_view.id AND lower(cql_item.item_id) = lower($3))",
+		},
+		{
+			name:      "barcode wildcard",
+			cql:       `barcode = "abc*"`,
+			wantWhere: "EXISTS (SELECT 1 FROM item cql_item WHERE cql_item.pr_id = patron_request_search_view.id AND lower(cql_item.barcode) LIKE lower($3))",
+		},
+		{
+			name:      "call_number empty",
+			cql:       `call_number = ""`,
+			wantWhere: "NOT EXISTS (SELECT 1 FROM item cql_item WHERE cql_item.pr_id = patron_request_search_view.id AND cql_item.call_number IS NOT NULL AND cql_item.call_number <> '')",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			query, err := ParsePatronRequestsCql(tc.cql)
+			if err != nil {
+				t.Fatalf("ParsePatronRequestsCql() error = %v", err)
+			}
+			if got := query.GetWhereClause(); got != tc.wantWhere {
+				t.Fatalf("where clause = %q, want %q", got, tc.wantWhere)
+			}
+		})
+	}
+}
+
 func searchClauseForTest(term, relation string) cql.SearchClause {
 	return cql.SearchClause{Term: term, Relation: cql.Relation(relation)}
 }
