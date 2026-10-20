@@ -84,6 +84,9 @@ INSERT INTO crosslink_state_map (legacy_state, side, crosslink_state) VALUES
     ('REQ_BLANK_FORM_REVIEW',            'borrowing', 'NEEDS_REVIEW'),
     ('REQ_DUPLICATE_REVIEW',             'borrowing', 'DUPLICATE'),
     ('REQ_ERROR',                        'borrowing', 'NEEDS_REVIEW'),
+    ('REQ_OVER_LIMIT',                   'borrowing', 'OVER_LIMIT'),
+    ('REQ_UNFILLED',                     'borrowing', 'UNFILLED'),
+    ('REQ_END_OF_ROTA_REVIEWED',         'borrowing', 'UNFILLED'),
     ('SLNP_REQ_IDLE',                    'borrowing', 'NEW'),
     ('SLNP_REQ_ABORTED',                 'borrowing', 'NEEDS_REVIEW'),
     ('SLNP_REQ_ITEM_LOST',               'borrowing', 'NEEDS_REVIEW'),
@@ -93,6 +96,7 @@ INSERT INTO crosslink_state_map (legacy_state, side, crosslink_state) VALUES
     ('RES_NEW_AWAIT_PULL_SLIP',          'lending', 'WILL_SUPPLY'),
     ('RES_COPY_AWAIT_PICKING',           'lending', 'WILL_SUPPLY'),
     ('RES_CANCEL_REQUEST_RECEIVED',      'lending', 'CANCEL_REQUESTED'),
+    ('RES_UNFILLED',                     'lending', 'UNFILLED'),
     ('SLNP_RES_IDLE',                    'lending', 'NEW'),
     ('SLNP_RES_NEW_AWAIT_PULL_SLIP',     'lending', 'WILL_SUPPLY');
 
@@ -151,7 +155,9 @@ VALUES
     ('SLNP_REQ_DOCUMENT_AVAILABLE',  'borrowing', 'CopyOrLoan', 'RECEIVED'),
     ('RES_LOANED_DIGITALLY',           'lending',   'Copy',       'COMPLETED'),
     ('RES_LOANED_DIGITALLY',           'lending',   'Loan',       'SHIPPED'),
-    ('RES_LOANED_DIGITALLY',           'lending',   'CopyOrLoan', 'SHIPPED');
+    ('RES_LOANED_DIGITALLY',           'lending',   'CopyOrLoan', 'SHIPPED'),
+    ('RES_AWAIT_PICKING',              'lending',   'Copy',       'WILL_SUPPLY'),
+    ('RES_AWAIT_PICKING',              'lending',   'CopyOrLoan', 'SEARCHING');
 
 CREATE TEMP VIEW crosslink_request_ids AS
 SELECT
