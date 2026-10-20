@@ -37,18 +37,28 @@ fallbacks remain unchanged.
 
 ## Built-in profiles
 
-The broker embeds one [YAML file per supported profile](../broker/profiles/builtin)
-using Go's `go:embed`. These files use the directory's `lmsConfig` and
-`catalogConfig` structure and are the source of vendor defaults. Vendor files
-contain overrides of Generic defaults; an empty section inherits those defaults.
-`illConfig` remains independent and is not part of a host profile.
+The directory's [OpenAPI schema](api.yaml) defines vendor defaults in
+`x-host-profiles`. This is the sole source of profile values. Each profile uses
+the directory's `lmsConfig` and `catalogConfig` structure; `illConfig` remains
+independent and is not part of a host profile.
+
+Directory's existing API generation embeds the complete specification, including
+`x-host-profiles`, in its Go package. Broker reads that bundled JSON through
+`dirapi.GetSpecJSON()` on the first profile resolution, validates definitions
+against the generated Directory API types, and caches the definitions or error
+for the lifetime of the process. Invalid definitions return a resolution error;
+they do not silently fall back to Generic. No separate profile generation step
+or generated profile table is needed.
+
+Changing a profile requires regenerating Directory sources and rebuilding broker,
+not migrating Directory records. Broker generation prepares Directory sources;
+Docker also generates them inside the build. Broker does not parse profile YAML
+or fetch profiles over HTTP at runtime. WMS and Aleph remain unsupported.
 
 Conditional catalog defaults (query language, parser replacement, and record
-syntax based on the effective parser) remain in Go. The resolver checks YAML
-field names and types against the directory API, retains value origins, and
-applies explicit directory overrides without modifying the embedded defaults.
-Changing a built-in file requires rebuilding the broker, not migrating directory
-records. WMS and Aleph remain unsupported and have no built-in files.
+syntax based on the effective parser) remain in Go. Resolution retains value
+origins and applies explicit directory overrides without modifying the cached
+defaults. Loading bundled definitions preserves existing resolution behavior.
 
 | Profile | Catalog defaults | Circulation defaults |
 | --- | --- | --- |
