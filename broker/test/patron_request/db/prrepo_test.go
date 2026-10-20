@@ -23,6 +23,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var prRepo pr_db.PrRepo
@@ -585,6 +586,7 @@ func TestMarkConditionNotificationsReceipt(t *testing.T) {
 
 func TestListPatronRequests(t *testing.T) {
 	prIds := []string{}
+	itemIds := []string{}
 
 	// Create 2 requests; only the first carries an internal note and cancellation reason
 	for i := 0; i < 2; i++ {
@@ -659,6 +661,48 @@ func TestListPatronRequests(t *testing.T) {
 		})
 		assert.NoError(t, err)
 	}
+	firstItemId := uuid.NewString()
+	itemIds = append(itemIds, firstItemId)
+	_, err := prRepo.SaveItem(appCtx, pr_db.SaveItemParams{
+		ID:      firstItemId,
+		PrID:    prIds[0],
+		Barcode: "BarCode-123",
+		CallNumber: pgtype.Text{
+			String: "Call-123",
+			Valid:  true,
+		},
+		Title: pgtype.Text{
+			String: "Item title",
+			Valid:  true,
+		},
+		ItemID: pgtype.Text{
+			String: "Item-123",
+			Valid:  true,
+		},
+		CreatedAt: pgtype.Timestamp{
+			Time:  time.Now(),
+			Valid: true,
+		},
+	})
+	assert.NoError(t, err)
+
+	secondItemId := uuid.NewString()
+	itemIds = append(itemIds, secondItemId)
+	_, err = prRepo.SaveItem(appCtx, pr_db.SaveItemParams{
+		ID:      secondItemId,
+		PrID:    prIds[0],
+		Barcode: "barcode-456",
+		Title: pgtype.Text{
+			String: "Second item title",
+			Valid:  true,
+		},
+		CreatedAt: pgtype.Timestamp{
+			Time:  time.Now(),
+			Valid: true,
+		},
+	})
+	assert.NoError(t, err)
+
 	cql := "title = Androids"
 	pgcql, err := pr_db.ParsePatronRequestsCql(cql)
 	assert.NoError(t, err)
@@ -759,6 +803,119 @@ func TestListPatronRequests(t *testing.T) {
 	assert.Len(t, list, 2)
 	assert.Equal(t, int64(2), fullCount)
 
+	cql = `item_id = "item-123"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, pgcql)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.Equal(t, prIds[0], list[0].ID)
+	assert.Equal(t, int64(1), fullCount)
+
+	cql = `barcode = "barcode-123"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, pgcql)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.Equal(t, prIds[0], list[0].ID)
+	assert.Equal(t, int64(1), fullCount)
+
+	cql = `barcode = "barcode-*"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, pgcql)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.Equal(t, prIds[0], list[0].ID)
+	assert.Equal(t, int64(1), fullCount)
+
+	cql = `call_number = "call-123"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, pgcql)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.Equal(t, prIds[0], list[0].ID)
+	assert.Equal(t, int64(1), fullCount)
+
+	cql = `barcode <> "barcode-123"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, pgcql)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.Equal(t, prIds[1], list[0].ID)
+	assert.Equal(t, int64(1), fullCount)
+
+	cql = `call_number = ""`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, pgcql)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.Equal(t, prIds[1], list[0].ID)
+	assert.Equal(t, int64(1), fullCount)
+
+	cql = `call_number <> ""`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, pgcql)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.Equal(t, prIds[0], list[0].ID)
+	assert.Equal(t, int64(1), fullCount)
+
+	for _, field := range []struct {
+		name string
+		term string
+	}{
+		{"item_id", "ITEM-123"},
+		{"barcode", "BARCODE-123"},
+		{"call_number", "CALL-123"},
+	} {
+		for _, relation := range []string{"=", "<>"} {
+			for _, term := range []string{field.term, field.term[:len(field.term)-1] + "*"} {
+				t.Run(field.name+relation+term, func(t *testing.T) {
+					query, err := pr_db.ParsePatronRequestsCql(field.name + " " + relation + ` "` + term + `"`)
+					require.NoError(t, err)
+					list, count, err := prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+						Limit: 10,
+					}, query)
+					require.NoError(t, err)
+					require.Len(t, list, 1)
+					wantID := prIds[0]
+					if relation == "<>" {
+						wantID = prIds[1]
+					}
+					assert.Equal(t, wantID, list[0].ID)
+					assert.Equal(t, int64(1), count)
+				})
+			}
+		}
+	}
+
 	// not found
 	cql = "title = banners"
 	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
@@ -811,6 +968,10 @@ func TestListPatronRequests(t *testing.T) {
 		assert.Equal(t, prIds[1], list[0].ID)
 	}
 
+	for _, itemId := range itemIds {
+		err = prRepo.DeleteItemById(appCtx, itemId)
+		assert.NoError(t, err)
+	}
 	for _, prId := range prIds {
 		err = prRepo.DeletePatronRequest(appCtx, prId)
 		assert.NoError(t, err)

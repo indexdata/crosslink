@@ -156,6 +156,11 @@ func ParsePatronRequestsCql(cqlString string) (pgcql.Query, error) {
 	def.AddField("isbn", NewFieldTextArrayContains("bibliographic_item_identifiers(ill_request, 'ISBN')").WithFunction("norm_isxn"))
 	def.AddField("issn", NewFieldTextArrayContains("bibliographic_item_identifiers(ill_request, 'ISSN')").WithFunction("norm_isxn"))
 
+	itemCorrelation := "cql_item.pr_id = patron_request_search_view.id"
+	def.AddField("item_id", pgcql.NewFieldExistsString("item", "cql_item", itemCorrelation, "cql_item.item_id").WithField(pgcql.NewFieldString().WithLikeOps().WithLower()))
+	def.AddField("barcode", pgcql.NewFieldExistsString("item", "cql_item", itemCorrelation, "cql_item.barcode").WithField(pgcql.NewFieldString().WithLikeOps().WithLower()))
+	def.AddField("call_number", pgcql.NewFieldExistsString("item", "cql_item", itemCorrelation, "cql_item.call_number").WithField(pgcql.NewFieldString().WithLikeOps().WithLower()))
+
 	f = pgcql.NewFieldString().WithLikeOps()
 	def.AddField("patron", f)
 

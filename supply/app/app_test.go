@@ -379,6 +379,9 @@ func TestServeLifecycle(t *testing.T) {
 			}
 			select {
 			case err := <-done:
+				if errors.Is(err, http.ErrServerClosed) {
+					t.Fatalf("shutdown returned expected server closure: %v", err)
+				}
 				if force && !errors.Is(err, context.DeadlineExceeded) {
 					t.Fatalf("shutdown: %v", err)
 				}
