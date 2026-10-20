@@ -323,7 +323,7 @@ search or accent normalization.
 
 ### Permissions and Roles
 
-Rather than rely on traditional Okapi 'required' permissions that block requests at the api path level, Directory instead uses the concept of role-based authentication. Under this scheme, the Directory server internally makes decisions on allowed operations based on the role a request comes in with. 
+Rather than rely on Okapi 'required' permissions that block requests at the API path level, Directory uses role-based authorization to decide which operations a request may perform. Directory trusts the `X-Okapi-Permissions` and `X-Okapi-Tenant` headers and does not authenticate callers itself. A trusted gateway must authenticate callers and ensure these headers reflect their granted permissions and tenant, rather than accepting caller-supplied values. Direct access to Directory must be restricted to trusted clients.
 
 The role is determined by reading the X-Okapi-Permissions header, and assigning a role based on the permissions present. These permissions are surfaced in the module descriptor as Okapi desired permissions.
 
