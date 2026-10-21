@@ -584,6 +584,52 @@ func TestMarkConditionNotificationsReceipt(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestListPatronRequestsDateWithin(t *testing.T) {
+	requesterSymbol := uuid.NewString()
+	ids := make([]string, 0, 5)
+	for _, timestamp := range []string{
+		"2026-09-16T23:59:59.999999Z",
+		"2026-09-17T00:00:00Z",
+		"2026-09-17T12:00:00Z",
+		"2026-09-17T23:59:59.999999Z",
+		"2026-09-18T00:00:00Z",
+	} {
+		createdAt, err := time.Parse(time.RFC3339Nano, timestamp)
+		require.NoError(t, err)
+		id := uuid.NewString()
+		_, err = prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+			ID: id, CreatedAt: pgtype.Timestamp{Time: createdAt, Valid: true},
+			RequesterSymbol: pgtype.Text{String: requesterSymbol, Valid: true},
+			Language:        "english", Items: []pr_db.PrItem{},
+		})
+		require.NoError(t, err)
+		t.Cleanup(func() { assert.NoError(t, prRepo.DeletePatronRequest(appCtx, id)) })
+		ids = append(ids, id)
+	}
+	for _, tc := range []struct {
+		name, upper string
+		wantIDs     []string
+	}{
+		{"whole final day", "2026-09-17", ids[1:4]},
+		{"explicit midnight", "2026-09-17T00:00:00Z", ids[1:2]},
+		{"explicit timestamp", "2026-09-17T12:00:00Z", ids[1:3]},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			query, err := pr_db.ParsePatronRequestsCql(`requester_symbol_exact = "` + requesterSymbol +
+				`" and created_at within "2026-09-17 ` + tc.upper + `"`)
+			require.NoError(t, err)
+			list, count, err := prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{Limit: 10}, query)
+			require.NoError(t, err)
+			gotIDs := make([]string, 0, len(list))
+			for _, request := range list {
+				gotIDs = append(gotIDs, request.ID)
+			}
+			assert.ElementsMatch(t, tc.wantIDs, gotIDs)
+			assert.Equal(t, int64(len(tc.wantIDs)), count)
+		})
+	}
+}
+
 func TestListPatronRequests(t *testing.T) {
 	prIds := []string{}
 	itemIds := []string{}
