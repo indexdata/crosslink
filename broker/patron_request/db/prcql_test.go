@@ -13,14 +13,28 @@ import (
 func TestPatronRequestDateWithin(t *testing.T) {
 	for _, field := range []string{"created_at", "updated_at", "needed_at", "due_at"} {
 		t.Run(field, func(t *testing.T) {
-			query, err := ParsePatronRequestsCql(fmt.Sprintf(`%s within "2026-09-01 2026-09-17" and side = borrowing`, field))
-			require.NoError(t, err)
-			assert.Equal(t, fmt.Sprintf("(%s >= $3 AND %s <= $4) AND side = $5", field, field), query.GetWhereClause())
-			assert.Equal(t, []any{
-				time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC),
-				time.Date(2026, 9, 17, 0, 0, 0, 0, time.UTC),
-				"borrowing",
-			}, query.GetQueryArguments())
+			for _, tc := range []struct {
+				name, lower, upper, upperRelation string
+				wantLower, wantUpper              time.Time
+			}{
+				{"date range", "2026-09-01", "2026-09-17", "<",
+					time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC)},
+				{"same day", "2026-09-17", "2026-09-17", "<",
+					time.Date(2026, 9, 17, 0, 0, 0, 0, time.UTC), time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC)},
+				{"month end", "2026-09-01", "2026-09-30", "<",
+					time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)},
+				{"explicit midnight", "2026-09-01", "2026-09-17T00:00:00Z", "<=",
+					time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 9, 17, 0, 0, 0, 0, time.UTC)},
+				{"explicit timestamps", "2026-09-01T09:00:00Z", "2026-09-17T15:30:00Z", "<=",
+					time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC), time.Date(2026, 9, 17, 15, 30, 0, 0, time.UTC)},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					query, err := ParsePatronRequestsCql(fmt.Sprintf(`%s within "%s %s" and side = borrowing`, field, tc.lower, tc.upper))
+					require.NoError(t, err)
+					assert.Equal(t, fmt.Sprintf("(%s >= $3 AND %s %s $4) AND side = $5", field, field, tc.upperRelation), query.GetWhereClause())
+					assert.Equal(t, []any{tc.wantLower, tc.wantUpper, "borrowing"}, query.GetQueryArguments())
+				})
+			}
 		})
 	}
 }
