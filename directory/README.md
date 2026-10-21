@@ -321,6 +321,20 @@ escaping rules apply; no CQL relation modifier is required. Other indexes and
 result ordering retain their existing behavior. This does not add full-text
 search or accent normalization.
 
+### Permissions and Roles
+
+Rather than rely on Okapi 'required' permissions that block requests at the API path level, Directory uses role-based authorization to decide which operations a request may perform. Directory trusts the `X-Okapi-Permissions` and `X-Okapi-Tenant` headers and does not authenticate callers itself. A trusted gateway must authenticate callers and ensure these headers reflect their granted permissions and tenant, rather than accepting caller-supplied values. Direct access to Directory must be restricted to trusted clients.
+
+The role is determined by reading the X-Okapi-Permissions header, and assigning a role based on the permissions present. These permissions are surfaced in the module descriptor as Okapi desired permissions.
+
+The permissions and roles are as follows:
+| Role Name           | Permission Name           | Description |
+|---------------------|---------------------------|-------------|
+| Public User         | directory.public.all      | This is the public facing role, that lets all non-sensitive fields be viewed, but not edited. |
+| System User         | directory.system.all      | This role is primarily granted to system processes. It allows all fields (even sensitive ones) to be viewed. |
+| Institutional Admin | directory.institution.all | This role is for the administrator of a single institution. It grants viewing (including sensitive) and editing of entries for a given tenant. |
+| Consortial Admin    | directory.consortium.all  | This role is for the administrator of the consortium. It allows viewing and editing of all entries for the consortial record, as well as those for consortium's institutions. |
+
 ### Pickup locations
 
 Set `illConfig.isPickupLocation` to `true` to offer an institution or branch in the request form's pickup-location selector. This flag is independent of `lmsConfig.requesterPickupLocation`: manual workflows can offer locations without an LMS code. Migration 012 enables the flag for existing entries whose requester pickup code is non-null (including empty strings), preserving other ILL settings. Other entries remain unselected unless explicitly enabled. Imports can set the flag in `illConfig`.
