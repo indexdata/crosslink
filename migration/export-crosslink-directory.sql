@@ -9,6 +9,7 @@
 --     --set=owner=ISIL:OWNER \
 --     --set=include_consortium=true \
 --     --set=include_tiers_network=true \
+--     --set=tenant=TENANT_ID \
 --     --file=other-scripts/export-crosslink-directory.sql \
 --     --quiet --tuples-only --no-align \
 --     > crosslink-directory.ndjson
@@ -32,6 +33,9 @@
 --     and is omitted.
 --     Configure last-resort lenders after import because references to child
 --     entries cannot be resolved while their parent entry is being imported.
+--   * The owner's tenant is the FOLIO tenant ID: the psql `tenant` variable
+--     when set, otherwise the current schema name without its _mod_rs suffix.
+--     Other entries have a null tenant.
 --   * Each entry's policy.ill.InstitutionalLoanToBorrowRatio custom text
 --     property becomes lendToBorrowRatio unchanged. Missing properties become
 --     null; invalid or multiple values stop export before NDJSON is emitted.
@@ -70,6 +74,11 @@
 \set consortium ''
 \endif
 
+\if :{?tenant}
+\else
+\set tenant ''
+\endif
+
 SELECT
     lower(btrim(:'include_consortium')) IN ('true', 'false')
         AS crosslink_include_consortium_valid,
@@ -89,12 +98,29 @@ SELECT 1 / 0;
 SELECT 1 / 0;
 \endif
 
+SELECT coalesce(
+    nullif(btrim(:'tenant'), ''),
+    substring(current_schema() FROM '^(.+)_mod_rs$'),
+    ''
+) AS tenant
+\gset
+
+SELECT :'tenant' ~ '^[a-z][a-z0-9_]*$' AS crosslink_tenant_valid
+\gset
+
+\if :crosslink_tenant_valid
+\else
+\warn Invalid or missing tenant. Run against a <tenant>_mod_rs schema or pass --set=tenant=TENANT_ID.
+SELECT 1 / 0;
+\endif
+
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 
 CREATE TEMP TABLE crosslink_export_options ON COMMIT DROP AS
 SELECT
     :'include_consortium'::boolean AS include_consortium,
-    :'include_tiers_network'::boolean AS include_tiers_network;
+    :'include_tiers_network'::boolean AS include_tiers_network,
+    :'tenant'::text AS tenant;
 
 SELECT coalesce(
     nullif(btrim(:'consortium'), '')::uuid,
@@ -594,7 +620,7 @@ entry_records AS (
                 'contactName', entry.contact_name,
                 'email', entry.email,
                 'fromEmail', NULL,
-                'tenant', NULL,
+                'tenant', CASE WHEN local_entry.entry_id IS NOT NULL THEN export_options.tenant ELSE NULL END,
                 'vendor', CASE WHEN local_entry.entry_id IS NOT NULL THEN 'ReShare' ELSE NULL END,
                 'phoneNumber', entry.phone_number,
                 'lmsLocationCode', entry.lms_location_code,
