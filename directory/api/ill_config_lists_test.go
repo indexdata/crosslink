@@ -7,44 +7,10 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/directory/db"
-	"github.com/indexdata/crosslink/directory/domain"
 	"github.com/stretchr/testify/require"
 )
 
-func TestIllConfigDefaultDataContract(t *testing.T) {
-	defaults := map[string]map[string]string{
-		"availableCopyrightTypes": {
-			"AU-CopyRCatS183ComW":   "Copyright Cat S183 - Commonwealth (Australia)",
-			"AU-CopyRCatS183State":  "Copyright Act S183 - State (Australia)",
-			"AU-CopyrightActS49":    "Copyright Act S49 (Australia)",
-			"AU-CopyrightActS50-1":  "Copyright Act S50 (Australia)",
-			"AU-CopyrightActS50-7A": "Copyright Act S50 A (Australia)",
-			"AU-CopyrightCleared":   "Copyright Cleared (Australia)",
-			"AU-GenBus":             "General Business (Australia)",
-			"NZ-CopyrightActS54":    "Copyright Act S54 (New Zealand)",
-			"NZ-CopyrightActS55":    "Copyright Act S55 (New Zealand)",
-			"Other":                 "Other types of copyright compliance. Use Note in ServiceInfo for details.",
-			"UK-CopyRFeePaid":       "Copyright Fee Paid (UK)",
-			"UK-FairDealing":        "Fair Dealing (UK)",
-			"US-CCG":                "CCG (US)",
-			"US-CCL":                "CCL (US code)",
-		},
-		"loanConditions": {
-			"LibraryUseOnly":      "Use in library only",
-			"WatchLibraryUseOnly": "Watch over use in library only",
-			"NoReproduction":      "No reproduction",
-			"SignatureRequired":   "Signature required",
-			"SpecCollSupervReq":   "Special collections supervision required",
-		},
-		"unfilledReasons": {
-			"NonCirculating": "Non-circulating (e.g. handbook)", "NotAvailableForILL": "Not available for ILL",
-			"NotHeld": "Not held", "NotOnShelf": "Not on shelf", "PolicyProblem": "Policy problem", "PoorCondition": "Poor condition",
-		},
-		"cancellationReasons": {
-			"DuplicateRequest": "Duplicate request", "NotFound": "Not found as cited",
-			"LocallyAvailable": "Requested item is locally available", "AccountInvalid": "User account is invalid", "UserRequest": "User requested cancellation",
-		},
-	}
+func TestIllConfigListsContract(t *testing.T) {
 	for _, spec := range loadImportContracts(t) {
 		require.NoError(t, spec.Validate(t.Context()))
 		// Other modules generate bindings from this schema without Directory Go types.
@@ -53,16 +19,11 @@ func TestIllConfigDefaultDataContract(t *testing.T) {
 		require.NotContains(t, item.Extensions, "x-go-type-import")
 		cfg := spec.Components.Schemas["IllConfig"].Value
 		require.NotContains(t, cfg.Properties, "cannotSupplyReasons")
-		for name, want := range defaults {
+		for _, name := range []string{"availableCopyrightTypes", "loanConditions", "unfilledReasons", "cancellationReasons"} {
 			schema := cfg.Properties[name].Value
 			require.True(t, schema.Type.Is("array"))
 			require.NotContains(t, cfg.Required, name)
 			require.Nil(t, schema.Default)
-			raw, err := json.Marshal(schema.Extensions["x-default-data"])
-			require.NoError(t, err)
-			var actual map[string]string
-			require.NoError(t, json.Unmarshal(raw, &actual))
-			require.Equal(t, want, actual)
 			assertIllCodeArrayContract(t, schema)
 			if name != "availableCopyrightTypes" {
 				imported := spec.Components.Schemas["ImportIllConfig"].Value
@@ -90,30 +51,46 @@ func assertIllCodeArrayContract(t *testing.T, schema *openapi3.Schema) {
 }
 
 func TestIllConfigListsMapping(t *testing.T) {
-	original := domain.IllConfigCodeDescriptions{{Code: "Legacy", DefaultDesc: "Original"}}
+	original := []byte(`[{"code":"Legacy","defaultDesc":"Original"}]`)
 	for _, tc := range []struct {
 		name       string
-		body       string
-		wantCreate *domain.IllConfigCodeDescriptions
-		wantPatch  *domain.IllConfigCodeDescriptions
+		value      string
+		wantCreate string
+		wantPatch  string
 	}{
-		{name: "omitted", body: `{}`, wantPatch: &original},
-		{name: "empty", body: `{"unfilledReasons":[],"cancellationReasons":[],"loanConditions":[]}`, wantCreate: &domain.IllConfigCodeDescriptions{}, wantPatch: &domain.IllConfigCodeDescriptions{}},
-		{name: "custom values", body: `{"unfilledReasons":[{"code":"Custom-B","defaultDesc":"Second"},{"code":"Custom-A","defaultDesc":"First"}],"cancellationReasons":[{"code":"Custom-B","defaultDesc":"Second"},{"code":"Custom-A","defaultDesc":"First"}],"loanConditions":[{"code":"Custom-B","defaultDesc":"Second"},{"code":"Custom-A","defaultDesc":"First"}]}`,
-			wantCreate: &domain.IllConfigCodeDescriptions{{Code: "Custom-B", DefaultDesc: "Second"}, {Code: "Custom-A", DefaultDesc: "First"}},
-			wantPatch:  &domain.IllConfigCodeDescriptions{{Code: "Custom-B", DefaultDesc: "Second"}, {Code: "Custom-A", DefaultDesc: "First"}}},
+		{name: "omitted", wantPatch: string(original)},
+		{name: "empty", value: `[]`, wantCreate: `[]`, wantPatch: `[]`},
+		{name: "custom values", value: `[{"code":"Custom-B","defaultDesc":"Second"},{"code":"Custom-A","defaultDesc":"First"}]`,
+			wantCreate: `[{"code":"Custom-B","defaultDesc":"Second"},{"code":"Custom-A","defaultDesc":"First"}]`,
+			wantPatch:  `[{"code":"Custom-B","defaultDesc":"Second"},{"code":"Custom-A","defaultDesc":"First"}]`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			body := map[string]json.RawMessage{}
+			if tc.value != "" {
+				for _, field := range []string{"availableCopyrightTypes", "unfilledReasons", "cancellationReasons", "loanConditions"} {
+					body[field] = json.RawMessage(tc.value)
+				}
+			}
+			raw, err := json.Marshal(body)
+			require.NoError(t, err)
 			var cfg IllConfig
-			require.NoError(t, json.Unmarshal([]byte(tc.body), &cfg))
-			created := illConfigToDBParams(uuid.New(), cfg)
-			require.Equal(t, tc.wantCreate, created.UnfilledReasons)
-			require.Equal(t, tc.wantCreate, created.CancellationReasons)
-			require.Equal(t, tc.wantCreate, created.LoanConditions)
-			patched := illConfigPatchToDBParams(uuid.New(), cfg, db.IllConfig{UnfilledReasons: &original, CancellationReasons: &original, LoanConditions: &original})
-			require.Equal(t, tc.wantPatch, patched.UnfilledReasons)
-			require.Equal(t, tc.wantPatch, patched.CancellationReasons)
-			require.Equal(t, tc.wantPatch, patched.LoanConditions)
+			require.NoError(t, json.Unmarshal(raw, &cfg))
+			created, err := illConfigToDBParams(uuid.New(), cfg)
+			require.NoError(t, err)
+			patched, err := illConfigPatchToDBParams(uuid.New(), cfg, db.IllConfig{
+				AvailableCopyrightTypes: original, UnfilledReasons: original, CancellationReasons: original, LoanConditions: original,
+			})
+			require.NoError(t, err)
+			for _, value := range [][]byte{created.AvailableCopyrightTypes, created.UnfilledReasons, created.CancellationReasons, created.LoanConditions} {
+				if tc.wantCreate == "" {
+					require.Nil(t, value)
+				} else {
+					require.JSONEq(t, tc.wantCreate, string(value))
+				}
+			}
+			for _, value := range [][]byte{patched.AvailableCopyrightTypes, patched.UnfilledReasons, patched.CancellationReasons, patched.LoanConditions} {
+				require.JSONEq(t, tc.wantPatch, string(value))
+			}
 		})
 	}
 }

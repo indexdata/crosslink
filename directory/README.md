@@ -343,11 +343,11 @@ The broker accepts the requesting institution's UUID or a descendant's UUID. An 
 
 Filter Directory entries with CQL `isPickupLocation=true` or `isPickupLocation=false`. Missing flags (including entries without ILL configuration) match `false`. The former `requesterPickupLocation` CQL filter is no longer supported.
 
-### ILL reason lists, loan conditions, and reference defaults
+### ILL configuration lists and reference defaults
 
-`illConfig.unfilledReasons`, `illConfig.cancellationReasons`, and
-`illConfig.loanConditions` accept ordered arrays of objects with required string
-fields `code` and `defaultDesc`. Custom
+`illConfig.availableCopyrightTypes`, `illConfig.unfilledReasons`,
+`illConfig.cancellationReasons`, and `illConfig.loanConditions` accept ordered
+arrays of objects with required string fields `code` and `defaultDesc`. Custom
 codes from previous systems are supported and preserved without normalization.
 For example, inside an existing complete NDJSON entry record's `data.illConfig`:
 
@@ -360,19 +360,20 @@ For example, inside an existing complete NDJSON entry record's `data.illConfig`:
 ```
 
 Include the other required ILL configuration fields from `ImportIllConfig` in
-[api.yaml](api.yaml). These three arrays are optional for compatibility with older
-imports. Import replaces configuration: omitted lists become unset, and `[]`
-stores an empty list. Create and PATCH also accept the lists; PATCH omission
+[api.yaml](api.yaml). The three arrays shown above are optional for
+compatibility with older imports. Import replaces configuration: omitted lists
+become unset, and `[]` stores an empty list. Create and PATCH also accept the lists; PATCH omission
 preserves existing values, while `[]` clears a list. Explicit list-level `null`
 is invalid. Entry reads return stored lists in their original order.
 
 The OpenAPI array properties `availableCopyrightTypes`, `unfilledReasons`,
 `cancellationReasons`, and `loanConditions` each carry an `x-default-data` object
-mapping codes to reference descriptions. Other processes can read these mappings from the source
-or served OpenAPI specification. Directory does not apply them automatically,
-and they do not restrict configured codes. `availableCopyrightTypes` is currently
-schema metadata only; storage and import support are limited to the reason lists
-and loan conditions.
+mapping codes to reference descriptions. Other processes can read these mappings
+from the source or served OpenAPI specification. Directory does not apply them automatically,
+and they do not restrict configured codes. All four lists support storage and
+create/read/PATCH operations. `availableCopyrightTypes` is excluded from NDJSON
+imports. Imports replace the entire ILL configuration, leaving copyright types
+unset; configure them through the API after an import.
 
 Legacy exports must be converted to the existing Directory NDJSON format; no
 source-system converter is included.

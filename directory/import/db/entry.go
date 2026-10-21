@@ -490,12 +490,9 @@ func replaceILLConfig(ctx context.Context, queries *db.Queries, entryID uuid.UUI
 		}
 		lenders = append(lenders, lenderSymbol.Authority+":"+lenderSymbol.Symbol)
 	}
-	_, err := queries.UpsertIllConfig(ctx, db.UpsertIllConfigParams{
-		UnfilledReasons:     config.UnfilledReasons,
-		LoanConditions:      config.LoanConditions,
-		CancellationReasons: config.CancellationReasons,
-		IsPickupLocation:    config.IsPickupLocation,
-		Entry:               entryID, Iso18626Url: config.ISO18626URL, Iso18626Vendor: config.ISO18626Vendor, LendersOfLastResort: lenders,
+	params := db.UpsertIllConfigParams{
+		IsPickupLocation: config.IsPickupLocation,
+		Entry:            entryID, Iso18626Url: config.ISO18626URL, Iso18626Vendor: config.ISO18626Vendor, LendersOfLastResort: lenders,
 		IncludeRequestingAgencyInfo: config.IncludeRequestingAgencyInfo, IncludeSupplierInfo: config.IncludeSupplierInfo,
 		IncludeReturnInfo: config.IncludeReturnInfo, IncludeVendorNote: config.IncludeVendorNote, UseOfferedCosts: config.UseOfferedCosts,
 		NoteFieldSeparator: config.NoteFieldSeparator, SupplierPatronPattern: config.SupplierPatronPattern,
@@ -504,7 +501,26 @@ func replaceILLConfig(ctx context.Context, queries *db.Queries, entryID uuid.UUI
 		MaxRequestsPerPatron:      config.MaxRequestsPerPatron,
 		MinimumCost:               config.MinimumCost,
 		LoadBalancingPolicy:       config.LoadBalancingPolicy,
-	})
+	}
+	for _, field := range []struct {
+		name   string
+		codes  *[]model.IllConfigCodeDescription
+		target *[]byte
+	}{
+		{"unfilledReasons", config.UnfilledReasons, &params.UnfilledReasons},
+		{"cancellationReasons", config.CancellationReasons, &params.CancellationReasons},
+		{"loanConditions", config.LoanConditions, &params.LoanConditions},
+	} {
+		if field.codes == nil {
+			continue
+		}
+		data, err := json.Marshal(*field.codes)
+		if err != nil {
+			return fmt.Errorf("encode illConfig.%s: %w", field.name, err)
+		}
+		*field.target = data
+	}
+	_, err := queries.UpsertIllConfig(ctx, params)
 	return err
 }
 

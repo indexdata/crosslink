@@ -3,12 +3,12 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
 
 	"github.com/indexdata/crosslink/directory/db"
-	"github.com/indexdata/crosslink/directory/domain"
 )
 
 func catalogConfigToDBParams(entryID uuid.UUID, cfg CatalogConfig) db.UpsertCatalogConfigParams {
@@ -241,25 +241,33 @@ func mergeHoldingsPolicy(original []byte, patch HoldingsPolicy) (HoldingsPolicy,
 	return merged, nil
 }
 
-// illConfigCodesToDomain preserves the distinction between an omitted list and
-// an explicitly empty list when mapping API models to persistence values.
-func illConfigCodesToDomain(codes *[]IllConfigCodeDescription) *domain.IllConfigCodeDescriptions {
-	if codes == nil {
-		return nil
+// encodeIllConfigLists leaves omitted lists untouched and stores empty lists as [].
+func encodeIllConfigLists(params *db.UpsertIllConfigParams, cfg IllConfig) error {
+	for _, field := range []struct {
+		name   string
+		codes  *[]IllConfigCodeDescription
+		target *[]byte
+	}{
+		{"availableCopyrightTypes", cfg.AvailableCopyrightTypes, &params.AvailableCopyrightTypes},
+		{"unfilledReasons", cfg.UnfilledReasons, &params.UnfilledReasons},
+		{"cancellationReasons", cfg.CancellationReasons, &params.CancellationReasons},
+		{"loanConditions", cfg.LoanConditions, &params.LoanConditions},
+	} {
+		if field.codes == nil {
+			continue
+		}
+		data, err := json.Marshal(*field.codes)
+		if err != nil {
+			return fmt.Errorf("encode illConfig.%s: %w", field.name, err)
+		}
+		*field.target = data
 	}
-	result := make(domain.IllConfigCodeDescriptions, len(*codes))
-	for i, code := range *codes {
-		result[i] = domain.IllConfigCodeDescription{Code: code.Code, DefaultDesc: code.DefaultDesc}
-	}
-	return &result
+	return nil
 }
 
-func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) db.UpsertIllConfigParams {
+func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) (db.UpsertIllConfigParams, error) {
 	params := db.UpsertIllConfigParams{
 		Entry:                       entryID,
-		UnfilledReasons:             illConfigCodesToDomain(cfg.UnfilledReasons),
-		LoanConditions:              illConfigCodesToDomain(cfg.LoanConditions),
-		CancellationReasons:         illConfigCodesToDomain(cfg.CancellationReasons),
 		IsPickupLocation:            cfg.IsPickupLocation,
 		Iso18626Url:                 cfg.Iso18626Url,
 		LendersOfLastResort:         symbolsToFullSymbols(cfg.LendersOfLastResort),
@@ -280,12 +288,16 @@ func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) db.UpsertIllConfigPar
 		vendor := string(*cfg.Iso18626Vendor)
 		params.Iso18626Vendor = &vendor
 	}
-	return params
+	if err := encodeIllConfigLists(&params, cfg); err != nil {
+		return db.UpsertIllConfigParams{}, err
+	}
+	return params, nil
 }
 
-func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllConfig) db.UpsertIllConfigParams {
+func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllConfig) (db.UpsertIllConfigParams, error) {
 	params := db.UpsertIllConfigParams{
 		Entry:                       entryID,
+		AvailableCopyrightTypes:     original.AvailableCopyrightTypes,
 		UnfilledReasons:             original.UnfilledReasons,
 		LoanConditions:              original.LoanConditions,
 		CancellationReasons:         original.CancellationReasons,
@@ -307,15 +319,6 @@ func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllC
 		LoadBalancingPolicy:         original.LoadBalancingPolicy,
 	}
 
-	if cfg.LoanConditions != nil {
-		params.LoanConditions = illConfigCodesToDomain(cfg.LoanConditions)
-	}
-	if cfg.UnfilledReasons != nil {
-		params.UnfilledReasons = illConfigCodesToDomain(cfg.UnfilledReasons)
-	}
-	if cfg.CancellationReasons != nil {
-		params.CancellationReasons = illConfigCodesToDomain(cfg.CancellationReasons)
-	}
 	params.IsPickupLocation = derefOrDefaultPtr(cfg.IsPickupLocation, params.IsPickupLocation)
 	params.Iso18626Url = derefOrDefaultPtr(cfg.Iso18626Url, params.Iso18626Url)
 	if cfg.Iso18626Vendor != nil {
@@ -345,7 +348,10 @@ func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllC
 	if cfg.MinimumCost.IsSpecified() {
 		params.MinimumCost = nullableMinimumCost(cfg)
 	}
-	return params
+	if err := encodeIllConfigLists(&params, cfg); err != nil {
+		return db.UpsertIllConfigParams{}, err
+	}
+	return params, nil
 }
 
 func nullableLoanPeriod(cfg IllConfig) *int32 {

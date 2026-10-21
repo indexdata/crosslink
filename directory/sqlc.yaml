@@ -20,18 +20,3 @@ sql:
               import: "github.com/google/uuid"
               type: "UUID"
               pointer: true
-          - column: "ill_configs.unfilled_reasons"
-            go_type:
-              import: "github.com/indexdata/crosslink/directory/domain"
-              type: "IllConfigCodeDescriptions"
-              pointer: true
-          - column: "ill_configs.cancellation_reasons"
-            go_type:
-              import: "github.com/indexdata/crosslink/directory/domain"
-              type: "IllConfigCodeDescriptions"
-              pointer: true
-          - column: "ill_configs.loan_conditions"
-            go_type:
-              import: "github.com/indexdata/crosslink/directory/domain"
-              type: "IllConfigCodeDescriptions"
-              pointer: true
