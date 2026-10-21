@@ -23,6 +23,7 @@ the trimmed `st_default_value` when necessary.
 | `directory_entry.de_lms_location_code` | `data.lmsLocationCode` | Copied directly. |
 | Entry custom text property `policy.ill.InstitutionalLoanToBorrowRatio` | `data.lendToBorrowRatio` | Copied unchanged for each selected entry; missing properties become `null`. Invalid ratios or multiple matching properties stop export before NDJSON output. |
 | Entry matched by the psql `owner` variable | `data.vendor` | Set to `ReShare` for the matched local entry; otherwise `null`. |
+| psql `tenant` variable, or the current schema name without its `_mod_rs` suffix | `data.tenant` | Set to the FOLIO tenant ID for the matched local entry; otherwise `null`. A missing or invalid tenant ID stops export before NDJSON output. |
 | `directory_entry_tag` joined to `tag.norm_value` | Record inclusion | Entries tagged `deleted`, case-insensitively, are excluded. |
 
 The record discriminator is always `type: entry`. Parent records are emitted
@@ -221,7 +222,6 @@ profile. The exporter supplies the following fixed values.
 | --- | --- |
 | `data.organizationId` | `null` |
 | `data.fromEmail` | `null` |
-| `data.tenant` | `null` |
 | `data.hrid` | `null` |
 | `data.timeZone` | `null` |
 | `data.closures` | `[]` |
