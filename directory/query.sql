@@ -174,13 +174,13 @@ INSERT INTO ill_configs (
   include_requesting_agency_info, include_supplier_info, include_return_info,
   include_vendor_note, use_offered_costs, note_field_separator,
   supplier_patron_pattern, duplicate_check_window_hours, default_loan_period,
-  max_requests_per_patron, minimum_cost, load_balancing_policy
+  max_requests_per_patron, minimum_cost, load_balancing_policy, unfilled_reasons, cancellation_reasons, loan_conditions
 ) VALUES (
   @entry, @is_pickup_location, @iso18626_url, @iso18626_vendor, @lenders_of_last_resort,
   @include_requesting_agency_info, @include_supplier_info, @include_return_info,
   @include_vendor_note, @use_offered_costs, @note_field_separator,
   @supplier_patron_pattern, @duplicate_check_window_hours, @default_loan_period,
-  @max_requests_per_patron, @minimum_cost, @load_balancing_policy
+  @max_requests_per_patron, @minimum_cost, @load_balancing_policy, @unfilled_reasons, @cancellation_reasons, @loan_conditions
 )
 ON CONFLICT (entry) DO UPDATE SET
   is_pickup_location = COALESCE(@is_pickup_location, ill_configs.is_pickup_location),
@@ -198,7 +198,10 @@ ON CONFLICT (entry) DO UPDATE SET
   default_loan_period = @default_loan_period,
   max_requests_per_patron = @max_requests_per_patron,
   minimum_cost = @minimum_cost,
-  load_balancing_policy = @load_balancing_policy
+  load_balancing_policy = @load_balancing_policy,
+  unfilled_reasons = @unfilled_reasons,
+  cancellation_reasons = @cancellation_reasons,
+  loan_conditions = @loan_conditions
 RETURNING *;
 
 -- name: GetIllConfigByEntry :one

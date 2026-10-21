@@ -491,8 +491,11 @@ func replaceILLConfig(ctx context.Context, queries *db.Queries, entryID uuid.UUI
 		lenders = append(lenders, lenderSymbol.Authority+":"+lenderSymbol.Symbol)
 	}
 	_, err := queries.UpsertIllConfig(ctx, db.UpsertIllConfigParams{
-		IsPickupLocation: config.IsPickupLocation,
-		Entry:            entryID, Iso18626Url: config.ISO18626URL, Iso18626Vendor: config.ISO18626Vendor, LendersOfLastResort: lenders,
+		UnfilledReasons:     config.UnfilledReasons,
+		LoanConditions:      config.LoanConditions,
+		CancellationReasons: config.CancellationReasons,
+		IsPickupLocation:    config.IsPickupLocation,
+		Entry:               entryID, Iso18626Url: config.ISO18626URL, Iso18626Vendor: config.ISO18626Vendor, LendersOfLastResort: lenders,
 		IncludeRequestingAgencyInfo: config.IncludeRequestingAgencyInfo, IncludeSupplierInfo: config.IncludeSupplierInfo,
 		IncludeReturnInfo: config.IncludeReturnInfo, IncludeVendorNote: config.IncludeVendorNote, UseOfferedCosts: config.UseOfferedCosts,
 		NoteFieldSeparator: config.NoteFieldSeparator, SupplierPatronPattern: config.SupplierPatronPattern,

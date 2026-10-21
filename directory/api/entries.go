@@ -308,7 +308,10 @@ func buildEntrySQL(whereClause string) string {
 			'defaultLoanPeriod', i.default_loan_period,
 			'maxRequestsPerPatron', i.max_requests_per_patron,
 			'minimumCost', i.minimum_cost,
-			'loadBalancingPolicy', i.load_balancing_policy
+			'loadBalancingPolicy', i.load_balancing_policy,
+			'unfilledReasons', i.unfilled_reasons,
+			'loanConditions', i.loan_conditions,
+			'cancellationReasons', i.cancellation_reasons
 		)) FROM ill_configs i WHERE i.entry = e.id) as ill_config,
 		(
 		SELECT 

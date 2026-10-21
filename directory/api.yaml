@@ -438,7 +438,7 @@ paths:
             text/plain:
               schema:
                 type: string
-    post: 
+    post:
       summary: Add an Entry Tier to a given Entry
       operationId: addTierForEntry
       parameters:
@@ -752,7 +752,7 @@ paths:
       responses:
         '200':
           description: Tier response
-          content: 
+          content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Tier'
@@ -833,7 +833,7 @@ paths:
           in: path
           description: ID of Tier to update
           required: true
-          schema: 
+          schema:
             type: string
             format: uuid
       responses:
@@ -963,7 +963,7 @@ paths:
       responses:
         '200':
           description: Network response
-          content: 
+          content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Network'
@@ -1044,7 +1044,7 @@ paths:
           in: path
           description: ID of Network to update
           required: true
-          schema: 
+          schema:
             type: string
             format: uuid
       responses:
@@ -1158,7 +1158,7 @@ paths:
           in: path
           description: ID of Entry Tier
           required: true
-          schema: 
+          schema:
             type: string
             format: uuid
       responses:
@@ -1200,7 +1200,7 @@ paths:
         in: path
         description: ID of Entry Tier
         required: true
-        schema: 
+        schema:
           type: string
           format: uuid
       responses:
@@ -1314,7 +1314,7 @@ paths:
           in: path
           description: ID of Entry Network
           required: true
-          schema: 
+          schema:
             type: string
             format: uuid
       responses:
@@ -1402,7 +1402,7 @@ paths:
         in: path
         description: ID of Entry Network
         required: true
-        schema: 
+        schema:
           type: string
           format: uuid
       responses:
@@ -1526,7 +1526,7 @@ paths:
       responses:
         '200':
           description: Closure response
-          content: 
+          content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Closure'
@@ -1563,7 +1563,7 @@ paths:
           in: path
           description: ID of Closure to update
           required: true
-          schema: 
+          schema:
             type: string
             format: uuid
       requestBody:
@@ -1608,7 +1608,7 @@ paths:
           in: path
           description: ID of Closure to delete
           required: true
-          schema: 
+          schema:
             type: string
             format: uuid
       responses:
@@ -1997,6 +1997,15 @@ components:
       additionalProperties: false
       required: [iso18626Url, iso18626Vendor, lendersOfLastResort, includeRequestingAgencyInfo, includeSupplierInfo, includeReturnInfo, includeVendorNote, useOfferedCosts, noteFieldSeparator, supplierPatronPattern, duplicateCheckWindowHours]
       properties:
+        loanConditions:
+          type: array
+          items: { $ref: '#/components/schemas/IllConfigCodeDescription' }
+        unfilledReasons:
+          type: array
+          items: { $ref: '#/components/schemas/IllConfigCodeDescription' }
+        cancellationReasons:
+          type: array
+          items: { $ref: '#/components/schemas/IllConfigCodeDescription' }
         isPickupLocation: { type: [boolean, "null"] }
         iso18626Url: { type: [string, "null"] }
         iso18626Vendor:
@@ -2460,9 +2469,74 @@ components:
       enum: [deficit, proportional]
       x-enum-varnames: [LoadBalancingPolicyDeficit, LoadBalancingPolicyProportional]
       description: Algorithm for lender scoring. Deficit prioritizes the largest lending shortfall; proportional prioritizes the lowest actual-to-desired lending ratio.
+    IllConfigCodeDescription:
+      type: object
+      description: A configured ILL code and its default description.
+      additionalProperties: false
+      required: [code, defaultDesc]
+      properties:
+        code:
+          type: string
+        defaultDesc:
+          type: string
+
     IllConfig:
       type: object
       properties:
+        loanConditions:
+          type: array
+          description: Configured loan condition codes and descriptions.
+          items:
+            $ref: '#/components/schemas/IllConfigCodeDescription'
+          x-default-data:
+            LibraryUseOnly: "Use in library only"
+            WatchLibraryUseOnly: "Watch over use in library only"
+            NoReproduction: "No reproduction"
+            SignatureRequired: "Signature required"
+            SpecCollSupervReq: "Special collections supervision required"
+        availableCopyrightTypes:
+          type: array
+          description: Configured codes and descriptions.
+          items:
+            $ref: '#/components/schemas/IllConfigCodeDescription'
+          x-default-data:
+            AU-CopyRCatS183ComW: "Copyright Cat S183 - Commonwealth (Australia)"
+            AU-CopyRCatS183State: "Copyright Act S183 - State (Australia)"
+            AU-CopyrightActS49: "Copyright Act S49 (Australia)"
+            AU-CopyrightActS50-1: "Copyright Act S50 (Australia)"
+            AU-CopyrightActS50-7A: "Copyright Act S50 A (Australia)"
+            AU-CopyrightCleared: "Copyright Cleared (Australia)"
+            AU-GenBus: "General Business (Australia)"
+            NZ-CopyrightActS54: "Copyright Act S54 (New Zealand)"
+            NZ-CopyrightActS55: "Copyright Act S55 (New Zealand)"
+            Other: "Other types of copyright compliance. Use Note in ServiceInfo for details."
+            UK-CopyRFeePaid: "Copyright Fee Paid (UK)"
+            UK-FairDealing: "Fair Dealing (UK)"
+            US-CCG: "CCG (US)"
+            US-CCL: "CCL (US code)"
+        unfilledReasons:
+          type: array
+          description: Configured codes and descriptions.
+          items:
+            $ref: '#/components/schemas/IllConfigCodeDescription'
+          x-default-data:
+            NonCirculating: "Non-circulating (e.g. handbook)"
+            NotAvailableForILL: "Not available for ILL"
+            NotHeld: "Not held"
+            NotOnShelf: "Not on shelf"
+            PolicyProblem: "Policy problem"
+            PoorCondition: "Poor condition"
+        cancellationReasons:
+          type: array
+          description: Configured codes and descriptions.
+          items:
+            $ref: '#/components/schemas/IllConfigCodeDescription'
+          x-default-data:
+            DuplicateRequest: "Duplicate request"
+            NotFound: "Not found as cited"
+            LocallyAvailable: "Requested item is locally available"
+            AccountInvalid: "User account is invalid"
+            UserRequest: "User requested cancellation"
         loadBalancingPolicy:
           anyOf:
             - $ref: '#/components/schemas/LoadBalancingPolicy'

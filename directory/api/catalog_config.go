@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/indexdata/crosslink/directory/db"
+	"github.com/indexdata/crosslink/directory/domain"
 )
 
 func catalogConfigToDBParams(entryID uuid.UUID, cfg CatalogConfig) db.UpsertCatalogConfigParams {
@@ -240,9 +241,25 @@ func mergeHoldingsPolicy(original []byte, patch HoldingsPolicy) (HoldingsPolicy,
 	return merged, nil
 }
 
+// illConfigCodesToDomain preserves the distinction between an omitted list and
+// an explicitly empty list when mapping API models to persistence values.
+func illConfigCodesToDomain(codes *[]IllConfigCodeDescription) *domain.IllConfigCodeDescriptions {
+	if codes == nil {
+		return nil
+	}
+	result := make(domain.IllConfigCodeDescriptions, len(*codes))
+	for i, code := range *codes {
+		result[i] = domain.IllConfigCodeDescription{Code: code.Code, DefaultDesc: code.DefaultDesc}
+	}
+	return &result
+}
+
 func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) db.UpsertIllConfigParams {
 	params := db.UpsertIllConfigParams{
 		Entry:                       entryID,
+		UnfilledReasons:             illConfigCodesToDomain(cfg.UnfilledReasons),
+		LoanConditions:              illConfigCodesToDomain(cfg.LoanConditions),
+		CancellationReasons:         illConfigCodesToDomain(cfg.CancellationReasons),
 		IsPickupLocation:            cfg.IsPickupLocation,
 		Iso18626Url:                 cfg.Iso18626Url,
 		LendersOfLastResort:         symbolsToFullSymbols(cfg.LendersOfLastResort),
@@ -269,6 +286,9 @@ func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) db.UpsertIllConfigPar
 func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllConfig) db.UpsertIllConfigParams {
 	params := db.UpsertIllConfigParams{
 		Entry:                       entryID,
+		UnfilledReasons:             original.UnfilledReasons,
+		LoanConditions:              original.LoanConditions,
+		CancellationReasons:         original.CancellationReasons,
 		IsPickupLocation:            original.IsPickupLocation,
 		Iso18626Url:                 original.Iso18626Url,
 		Iso18626Vendor:              original.Iso18626Vendor,
@@ -287,6 +307,15 @@ func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllC
 		LoadBalancingPolicy:         original.LoadBalancingPolicy,
 	}
 
+	if cfg.LoanConditions != nil {
+		params.LoanConditions = illConfigCodesToDomain(cfg.LoanConditions)
+	}
+	if cfg.UnfilledReasons != nil {
+		params.UnfilledReasons = illConfigCodesToDomain(cfg.UnfilledReasons)
+	}
+	if cfg.CancellationReasons != nil {
+		params.CancellationReasons = illConfigCodesToDomain(cfg.CancellationReasons)
+	}
 	params.IsPickupLocation = derefOrDefaultPtr(cfg.IsPickupLocation, params.IsPickupLocation)
 	params.Iso18626Url = derefOrDefaultPtr(cfg.Iso18626Url, params.Iso18626Url)
 	if cfg.Iso18626Vendor != nil {
