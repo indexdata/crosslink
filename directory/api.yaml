@@ -2500,7 +2500,7 @@ components:
           items:
             $ref: '#/components/schemas/IllConfigCodeDescription'
           x-default-data:
-            AU-CopyRCatS183ComW: "Copyright Cat S183 - Commonwealth (Australia)"
+            AU-CopyRCatS183ComW: "Copyright Act S183 - Commonwealth (Australia)"
             AU-CopyRCatS183State: "Copyright Act S183 - State (Australia)"
             AU-CopyrightActS49: "Copyright Act S49 (Australia)"
             AU-CopyrightActS50-1: "Copyright Act S50 (Australia)"
