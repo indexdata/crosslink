@@ -1,6 +1,7 @@
 package shim
 
 import (
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"regexp"
@@ -88,7 +89,12 @@ func (i *Iso18626DefaultShim) useOfferedCosts() bool {
 }
 
 func (i *Iso18626DefaultShim) ApplyToOutgoingRequest(message *iso18626.ISO18626Message) ([]byte, error) {
-	return xml.Marshal(message)
+	message, err := copyExternalMessage(message)
+	if err != nil {
+		return nil, err
+	}
+
+	return marshalExternalMessage(message)
 }
 
 func (i *Iso18626DefaultShim) ApplyToIncomingResponse(bytes []byte, message *iso18626.ISO18626Message) error {
@@ -154,6 +160,11 @@ func setDuplicateReasonUnfilled(sam *iso18626.SupplyingAgencyMessage) {
 }
 
 func (i *Iso18626AlmaShim) ApplyToOutgoingRequest(message *iso18626.ISO18626Message) ([]byte, error) {
+	message, err := copyExternalMessage(message)
+	if err != nil {
+		return nil, err
+	}
+
 	if message != nil {
 		if message.SupplyingAgencyMessage != nil {
 			suppMsg := message.SupplyingAgencyMessage
@@ -188,7 +199,7 @@ func (i *Iso18626AlmaShim) ApplyToOutgoingRequest(message *iso18626.ISO18626Mess
 			humanizeReShareRequesterNote(reqMsg)
 		}
 	}
-	return xml.Marshal(message)
+	return marshalExternalMessage(message)
 }
 
 type Iso18626ILLiadShim struct {
@@ -200,6 +211,11 @@ func (i *Iso18626ILLiadShim) ApplyToIncomingRequest(message *iso18626.ISO18626Me
 }
 
 func (i *Iso18626ILLiadShim) ApplyToOutgoingRequest(message *iso18626.ISO18626Message) ([]byte, error) {
+	message, err := copyExternalMessage(message)
+	if err != nil {
+		return nil, err
+	}
+
 	if message != nil {
 		if message.SupplyingAgencyMessage != nil {
 			suppMsg := message.SupplyingAgencyMessage
@@ -222,7 +238,7 @@ func (i *Iso18626ILLiadShim) ApplyToOutgoingRequest(message *iso18626.ISO18626Me
 			humanizeReShareRequesterNote(reqMsg)
 		}
 	}
-	return xml.Marshal(message)
+	return marshalExternalMessage(message)
 }
 
 func stripReShareSuppMsgSeqNote(suppMsg *iso18626.SupplyingAgencyMessage) {
@@ -695,11 +711,16 @@ type Iso18626ReShareShim struct {
 }
 
 func (i *Iso18626ReShareShim) ApplyToOutgoingRequest(message *iso18626.ISO18626Message) ([]byte, error) {
+	message, err := copyExternalMessage(message)
+	if err != nil {
+		return nil, err
+	}
+
 	if message.SupplyingAgencyMessage != nil {
 		i.transferDeliveryCostsToOfferedCosts(message.SupplyingAgencyMessage)
 		i.setItemId(message.SupplyingAgencyMessage)
 	}
-	return xml.Marshal(message)
+	return marshalExternalMessage(message)
 }
 
 func (i *Iso18626ReShareShim) transferDeliveryCostsToOfferedCosts(suppMsg *iso18626.SupplyingAgencyMessage) {
@@ -808,4 +829,43 @@ func writeItemValues(sb *strings.Builder, itemId string) {
 		row = common.PackItemNote([]string{itemId})
 	}
 	sb.WriteString(row)
+}
+
+// copyExternalMessage isolates wire transformations from internal events and
+// removes Broker-only cancellation reasons at the external serialization boundary.
+func copyExternalMessage(message *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
+	if message == nil {
+		return nil, nil
+	}
+	data, err := json.Marshal(message)
+	if err != nil {
+		return nil, fmt.Errorf("copy outgoing ISO18626 message: %w", err)
+	}
+	var copied iso18626.ISO18626Message
+	if err := json.Unmarshal(data, &copied); err != nil {
+		return nil, fmt.Errorf("copy outgoing ISO18626 message: %w", err)
+	}
+	stripCancellationReasons(&copied)
+	return &copied, nil
+}
+
+// Strip again after vendor transformations, which can copy other fields into notes.
+func marshalExternalMessage(message *iso18626.ISO18626Message) ([]byte, error) {
+	stripCancellationReasons(message)
+	return xml.Marshal(message)
+}
+
+func stripCancellationReasons(message *iso18626.ISO18626Message) {
+	if message == nil {
+		return
+	}
+	if message.Request != nil && message.Request.ServiceInfo != nil {
+		_, message.Request.ServiceInfo.Note = common.ExtractCancellationReason(message.Request.ServiceInfo.Note)
+	}
+	if message.RequestingAgencyMessage != nil {
+		_, message.RequestingAgencyMessage.Note = common.ExtractCancellationReason(message.RequestingAgencyMessage.Note)
+	}
+	if message.SupplyingAgencyMessage != nil {
+		_, message.SupplyingAgencyMessage.MessageInfo.Note = common.ExtractCancellationReason(message.SupplyingAgencyMessage.MessageInfo.Note)
+	}
 }

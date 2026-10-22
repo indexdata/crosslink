@@ -39,6 +39,9 @@ func TestBuiltInStateModelCapabilities(t *testing.T) {
 	assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
 		return a.Name == string(BorrowerActionSupplyDocument) && slices.Equal(a.Parameters, []string{"note", "deliveryUrl"})
 	}))
+	assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
+		return a.Name == string(BorrowerActionCancelRequest) && slices.Equal(a.Parameters, []string{"note"})
+	}))
 	for _, transitionAction := range []pr_db.PatronRequestAction{
 		BorrowerActionSkipPatronValidation,
 		BorrowerActionSkipMetadataUpdate,

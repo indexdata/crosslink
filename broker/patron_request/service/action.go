@@ -772,7 +772,7 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 	case BorrowerActionShipReturn:
 		return a.shipReturnBorrowingRequest(ctx, eventID, pr, lmsAdapter, illRequest)
 	case BorrowerActionCancelRequest:
-		return a.cancelBorrowingRequest(ctx, eventID, pr)
+		return a.cancelBorrowingRequest(ctx, eventID, pr, params)
 	case BorrowerActionAcceptCondition:
 		return a.acceptConditionBorrowingRequest(ctx, eventID, pr)
 	case BorrowerActionRejectCondition:
@@ -1315,11 +1315,19 @@ func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.Exten
 	return actionResultFromIllSend(ctx, status, result, err, pr)
 }
 
-func (a *PatronRequestActionService) cancelBorrowingRequest(ctx common.ExtendedContext, parentEventID string, pr pr_db.PatronRequest) actionExecutionResult {
+func (a *PatronRequestActionService) cancelBorrowingRequest(ctx common.ExtendedContext, parentEventID string, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
 	// The broker treats a cancel addressed directly to the selected supplier as a
 	// rota continuation, so terminal cancellation must use the configured broker target.
-	status, result, err := a.messageSender.sendRequestingAgencyMessageTo(ctx, parentEventID, pr, iso18626.TypeActionCancel, "", configuredBrokerSymbol)
-	return actionResultFromIllSend(ctx, status, result, err, pr)
+	status, result, err := a.messageSender.sendRequestingAgencyMessageTo(ctx, parentEventID, pr, iso18626.TypeActionCancel, params.Note, configuredBrokerSymbol)
+	execResult := actionResultFromIllSend(ctx, status, result, err, pr)
+	if execResult.status == events.EventStatusSuccess {
+		// Suppliers need not echo the reason in their response. Save it on the
+		// originating request through the existing action finalization transaction.
+		if reason, _ := common.ExtractCancellationReason(params.Note); reason != "" {
+			execResult.pr.CancellationReason = getDbText(reason)
+		}
+	}
+	return execResult
 }
 
 func (a *PatronRequestActionService) acceptConditionBorrowingRequest(ctx common.ExtendedContext, parentEventID string, pr pr_db.PatronRequest) actionExecutionResult {

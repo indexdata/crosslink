@@ -1115,3 +1115,76 @@ func TestGetPeerInfoUsesContactEmail(t *testing.T) {
 	_, _, _, electronicAddress := getPeerInfo(peer, "")
 	assert.Equal(t, contactEmail, electronicAddress.ElectronicAddressData)
 }
+
+func TestCancellationReasonDelivery(t *testing.T) {
+	const note = "#CancellationReason: InvalidUser#keep this note"
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	t.Run("external", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var incoming iso18626.ISO18626Message
+			if !assert.NoError(t, xml.NewDecoder(r.Body).Decode(&incoming)) {
+				return
+			}
+			assert.Equal(t, "keep this note", incoming.SupplyingAgencyMessage.MessageInfo.Note)
+			w.Header().Set("Content-Type", "application/xml")
+			assert.NoError(t, xml.NewEncoder(w).Encode(iso18626.NewISO18626Message()))
+		}))
+		defer server.Close()
+		client := CreateIso18626Client(nil, nil, prservice.PatronRequestMessageHandler{}, 1024*1024, 0)
+		msg := iso18626.NewISO18626Message()
+		msg.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{MessageInfo: iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse, Note: note}, StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled}}
+		_, err := client.HandleIllMessage(ctx, &ill_db.Peer{Url: server.URL, Vendor: string(dirapi.Alma)}, msg)
+		assert.NoError(t, err)
+		assert.Equal(t, note, msg.SupplyingAgencyMessage.MessageInfo.Note)
+	})
+	t.Run("local CrossLink", func(t *testing.T) {
+		repo := &cancellationDeliveryRepo{}
+		bus := &cancellationDeliveryBus{}
+		handler := prservice.CreatePatronRequestMessageHandler(repo, nil, nil, bus)
+		client := CreateIso18626Client(nil, nil, handler, 1024*1024, 0)
+		msg := iso18626.NewISO18626Message()
+		msg.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{Header: iso18626.Header{RequestingAgencyRequestId: "pr"}, MessageInfo: iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse, Note: note}, StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled}}
+		response, err := client.HandleIllMessage(ctx, &ill_db.Peer{Vendor: string(dirapi.CrossLink)}, msg)
+		assert.NoError(t, err)
+		if assert.NotNil(t, response) {
+			assert.Equal(t, iso18626.TypeMessageStatusOK, response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+		}
+		assert.Equal(t, "InvalidUser", repo.saved.CancellationReason.String)
+		assert.Equal(t, "keep this note", repo.notification.Note.String)
+		assert.Equal(t, note, bus.receivedNote)
+		assert.Equal(t, note, msg.SupplyingAgencyMessage.MessageInfo.Note)
+	})
+}
+
+// Only the storage and task operations used by local cancellation delivery are implemented.
+type cancellationDeliveryRepo struct {
+	pr_db.PrRepo
+	saved        pr_db.PatronRequest
+	notification pr_db.Notification
+}
+
+func (r *cancellationDeliveryRepo) GetPatronRequestByIdAndSide(_ common.ExtendedContext, id string, side pr_db.PatronRequestSide) (pr_db.PatronRequest, error) {
+	return pr_db.PatronRequest{ID: id, Side: side, State: prservice.BorrowerStateCancelPending}, nil
+}
+func (r *cancellationDeliveryRepo) UpdatePatronRequest(_ common.ExtendedContext, params pr_db.UpdatePatronRequestParams) (pr_db.PatronRequest, error) {
+	r.saved = pr_db.PatronRequest(params)
+	return r.saved, nil
+}
+func (r *cancellationDeliveryRepo) SaveNotification(_ common.ExtendedContext, params pr_db.SaveNotificationParams) (pr_db.Notification, error) {
+	r.notification = pr_db.Notification(params)
+	return r.notification, nil
+}
+
+type cancellationDeliveryBus struct {
+	events.EventBus
+	receivedNote string
+}
+
+func (b *cancellationDeliveryBus) CreateTask(_ string, _ events.EventName, data events.EventData, _ events.EventDomain, _ *string, _ events.SignalTarget) (string, error) {
+	b.receivedNote = data.IncomingMessage.SupplyingAgencyMessage.MessageInfo.Note
+	return "task", nil
+}
+func (b *cancellationDeliveryBus) ProcessTask(ctx common.ExtendedContext, event events.Event, _ events.SignalTarget, h func(common.ExtendedContext, events.Event) (events.EventStatus, *events.EventResult)) (events.Event, error) {
+	event.EventStatus, _ = h(ctx, event)
+	return event, nil
+}

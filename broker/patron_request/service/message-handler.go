@@ -230,6 +230,14 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 		return unsupportedReason()
 	}
 
+	if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse || sam.StatusInfo.Status == iso18626.TypeStatusCancelled {
+		var reason string
+		reason, sam.MessageInfo.Note = common.ExtractCancellationReason(sam.MessageInfo.Note)
+		if reason != "" {
+			pr.CancellationReason = getDbText(reason)
+		}
+	}
+
 	// Treat placeholder due dates as absent without rejecting the workflow message.
 	if sam.StatusInfo.DueDate != nil && sam.StatusInfo.DueDate.IsZero() {
 		sam.StatusInfo.DueDate = nil
@@ -318,9 +326,6 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 				eventName = SupplierUnfilledLocal
 			}
 		case iso18626.TypeStatusCancelled:
-			if reason := strings.TrimSpace(sam.MessageInfo.Note); reason != "" {
-				pr.CancellationReason = getDbText(reason)
-			}
 			if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse {
 				if sam.MessageInfo.AnswerYesNo != nil && *sam.MessageInfo.AnswerYesNo == iso18626.TypeYesNoN {
 					return contradictoryCancelResponse()
@@ -598,6 +603,11 @@ func (m *PatronRequestMessageHandler) handleRequestingAgencyMessageWithParent(ct
 			return createRAMResponse(ram, iso18626.TypeMessageStatusOK, &ram.Action, nil, nil)
 		}
 	case iso18626.TypeActionCancel:
+		var reason string
+		reason, ram.Note = common.ExtractCancellationReason(ram.Note)
+		if reason != "" {
+			pr.CancellationReason = getDbText(reason)
+		}
 		if strings.Contains(ram.Note, shim.RESHARE_LOAN_CONDITION_REJECT) {
 			eventName = RequesterCondRejected
 		} else {

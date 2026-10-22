@@ -1895,11 +1895,17 @@ func TestHandleInvokeActionCancelRequest(t *testing.T) {
 		for _, tc := range []struct {
 			name        string
 			serviceInfo *iso18626.ServiceInfo
+			note        string
+			reason      string
 		}{
-			{name: "nil ServiceInfo"},
-			{name: "Loan", serviceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}},
-			{name: "Copy", serviceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopy}},
-			{name: "CopyOrLoan", serviceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopyOrLoan}},
+			{name: "nil ServiceInfo", reason: "existing"},
+			{name: "empty marker", reason: "existing", note: "#CancellationReason: #"},
+			{name: "immediate suffix", reason: "InvalidUser", note: "#CancellationReason: InvalidUser#Ref: 123#"},
+			{name: "ordinary note", reason: "existing", note: "  No longer needed.\nPlease cancel.  "},
+			{name: "microformats", reason: "InvalidUser", note: "Please cancel. #CancellationReason: InvalidUser#" + shim.RESHARE_LOAN_CONDITION_REJECT + " Remaining text."},
+			{name: "Loan", reason: "existing", serviceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}},
+			{name: "Copy", reason: "existing", serviceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopy}},
+			{name: "CopyOrLoan", reason: "existing", serviceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopyOrLoan}},
 		} {
 			t.Run(string(state)+"/"+tc.name, func(t *testing.T) {
 				mockPrRepo := new(MockPrRepo)
@@ -1910,17 +1916,24 @@ func TestHandleInvokeActionCancelRequest(t *testing.T) {
 				// Leave the original request target empty to cover requests created before
 				// broker-target normalization was introduced.
 				illRequest := iso18626.Request{ServiceInfo: tc.serviceInfo}
-				mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: state, NeedsAttention: state == BorrowerStateConditionPending, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
+				mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: state, CancellationReason: getDbText("existing"), NeedsAttention: state == BorrowerStateConditionPending, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 				action := BorrowerActionCancelRequest
-				status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+				data := events.EventData{CommonEventData: events.CommonEventData{Action: &action}}
+				if tc.note != "" {
+					data.CustomData = map[string]any{"note": tc.note}
+				}
+				status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: data})
 
 				assert.Equal(t, events.EventStatusSuccess, status)
 				assert.Nil(t, resultData.IncomingMessage)
 				if assert.NotNil(t, mockIso18626Handler.lastRequestingAgencyMessage) {
+					assert.Equal(t, iso18626.TypeActionCancel, mockIso18626Handler.lastRequestingAgencyMessage.Action)
+					assert.Equal(t, tc.note, mockIso18626Handler.lastRequestingAgencyMessage.Note)
 					assert.Equal(t, "ISIL", mockIso18626Handler.lastRequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text)
 					assert.Equal(t, "BROKER", mockIso18626Handler.lastRequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 				}
 				assert.Equal(t, BorrowerStateCancelPending, mockPrRepo.savedPr.State)
+				assert.Equal(t, getDbText(tc.reason), mockPrRepo.savedPr.CancellationReason)
 				assert.False(t, mockPrRepo.savedPr.NeedsAttention)
 				assert.Empty(t, mockPrRepo.markedConditionNotificationsReceipts)
 			})
@@ -1928,11 +1941,35 @@ func TestHandleInvokeActionCancelRequest(t *testing.T) {
 	}
 }
 
+func TestCancelBorrowingRequestFailurePreservesReason(t *testing.T) {
+	previousBrokerSymbol := configuredBrokerSymbol
+	configuredBrokerSymbol = "ISIL:BROKER"
+	t.Cleanup(func() { configuredBrokerSymbol = previousBrokerSymbol })
+	repo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(createLmsAdapterMockFail(), nil)
+	isoHandler := &MockIso18626Handler{failRequestingAgencyMessage: true}
+	service := CreatePatronRequestActionService(repo, new(IllRepoMock), *new(events.EventBus), isoHandler, lmsCreator, new(EmailSenderMock), nil, nil)
+	// Reject the ISO cancellation while allowing the action result to persist.
+	pr := pr_db.PatronRequest{ID: "cancel-failed", Side: SideBorrowing, State: BorrowerStateWillSupply, RequesterSymbol: getDbText("ISIL:REC1"), CancellationReason: getDbText("existing")}
+	repo.On("GetPatronRequestById", pr.ID).Return(pr, nil)
+	action := BorrowerActionCancelRequest
+	status, result := service.handleInvokeAction(appCtx, events.Event{
+		PatronRequestID: pr.ID,
+		EventData:       events.EventData{CommonEventData: events.CommonEventData{Action: &action}, CustomData: map[string]any{"note": "#CancellationReason: InvalidUser#"}},
+	})
+	assert.Equal(t, events.EventStatusProblem, status)
+	require.NotNil(t, result.ActionResult)
+	assert.Equal(t, ActionOutcomeFailure, result.ActionResult.Outcome)
+	assert.Equal(t, BorrowerStateWillSupply, repo.savedPr.State)
+	assert.Equal(t, pr.CancellationReason, repo.savedPr.CancellationReason)
+}
+
 func TestCancelBorrowingRequestMissingRequesterSymbol(t *testing.T) {
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(new(MockPrRepo), new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, nil, new(EmailSenderMock), nil, nil)
 
-	result := prAction.cancelBorrowingRequest(appCtx, "", pr_db.PatronRequest{})
+	result := prAction.cancelBorrowingRequest(appCtx, "", pr_db.PatronRequest{}, actionParams{})
 
 	assert.Equal(t, events.EventStatusError, result.status)
 	assert.Equal(t, "missing requester symbol", result.result.EventError.Message)
@@ -1949,7 +1986,7 @@ func TestCancelBorrowingRequestInvalidBrokerSymbol(t *testing.T) {
 
 	result := prAction.cancelBorrowingRequest(appCtx, "", pr_db.PatronRequest{
 		RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"},
-	})
+	}, actionParams{})
 
 	assert.Equal(t, events.EventStatusError, result.status)
 	assert.Equal(t, "invalid supplier symbol", result.result.EventError.Message)
@@ -5815,6 +5852,7 @@ type MockIso18626Handler struct {
 	lastRequestingAgencyMessage *iso18626.RequestingAgencyMessage
 	lastSupplyingAgencyMessage  *iso18626.SupplyingAgencyMessage
 	failSupplyingAgencyMessage  bool
+	failRequestingAgencyMessage bool
 	requestOptions              []handler.RequestOptions
 }
 
@@ -5851,7 +5889,7 @@ func (h *MockIso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessa
 func (h *MockIso18626Handler) HandleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
 	h.lastRequestingAgencyMessage = illMessage.RequestingAgencyMessage
 	status := iso18626.TypeMessageStatusOK
-	if illMessage.RequestingAgencyMessage.Header.RequestingAgencyRequestId == "error" {
+	if h.failRequestingAgencyMessage || illMessage.RequestingAgencyMessage.Header.RequestingAgencyRequestId == "error" {
 		status = iso18626.TypeMessageStatusERROR
 	}
 	var resmsg = iso18626.NewISO18626Message()

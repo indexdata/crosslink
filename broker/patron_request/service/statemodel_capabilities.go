@@ -229,7 +229,7 @@ func requesterBuiltInActions() []proapi.ActionCapability {
 		},
 		{
 			Name:       string(BorrowerActionCancelRequest),
-			Parameters: []string{},
+			Parameters: []string{"note"},
 		},
 		{
 			Name:       string(BorrowerActionAcceptCondition),
