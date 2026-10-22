@@ -165,16 +165,9 @@ SELECT
     CASE
         WHEN patron_request.pr_is_requester IS NOT TRUE
             THEN patron_request.pr_id
-        WHEN state_model.sm_shortcode IN ('SLNPRequester', 'SLNPResponder',
-                                          'SLNPNonReturnableRequester',
-                                          'SLNPNonReturnableResponder')
-            THEN coalesce(patron_request.pr_hrid, patron_request.pr_id)
         ELSE coalesce(patron_request.pr_hrid, patron_request.pr_id)
-             || '~' || coalesce(patron_request.pr_rota_position::text, 'norota')
     END AS import_id
-FROM patron_request
-JOIN state_model
-  ON state_model.sm_id = patron_request.pr_state_model_fk;
+FROM patron_request;
 
 CREATE TEMP VIEW crosslink_open_requests AS
 SELECT
@@ -210,6 +203,15 @@ SELECT
     CASE
         WHEN patron_request.pr_is_requester IS TRUE
             THEN coalesce(
+                selected_supplier.symbol,
+                nullif(btrim(patron_request.pr_sup_inst_symbol), '')
+            )
+        ELSE patron_request.pr_sup_inst_symbol
+    END AS import_supplier_symbol,
+    CASE
+        WHEN patron_request.pr_is_requester IS TRUE
+            THEN coalesce(
+                selected_supplier.symbol,
                 nullif(btrim(patron_request.pr_sup_inst_symbol), ''),
                 :'broker'
             )
@@ -222,6 +224,17 @@ LEFT JOIN crosslink_request_ids AS next_request_identity
   ON next_request_identity.legacy_id = patron_request.pr_succeeded_by_fk
 LEFT JOIN crosslink_request_ids AS previous_request_identity
   ON previous_request_identity.legacy_id = patron_request.pr_preceded_by_fk
+LEFT JOIN LATERAL (
+    SELECT authority.na_symbol || ':' || symbol.sym_symbol AS symbol
+    FROM patron_request_rota AS rota
+    JOIN symbol
+      ON symbol.sym_id = rota.prr_peer_symbol_fk
+    JOIN naming_authority AS authority
+      ON authority.na_id = symbol.sym_authority_fk
+    WHERE rota.prr_patron_request_fk = patron_request.pr_id
+      AND rota.prr_rota_position = patron_request.pr_rota_position
+) AS selected_supplier
+  ON patron_request.pr_is_requester IS TRUE
 JOIN status
   ON status.st_id = patron_request.pr_state_fk
 JOIN state_model
@@ -465,7 +478,7 @@ request_bundles AS (
                 'side', request.import_side,
                 'patron', request.pr_patron_identifier,
                 'requesterSymbol', request.pr_req_inst_symbol,
-                'supplierSymbol', request.pr_sup_inst_symbol,
+                'supplierSymbol', request.import_supplier_symbol,
                 'requesterRequestId', request.import_requester_request_id,
                 'needsAttention', request.import_needs_attention,
                 'internalNote', request.pr_local_note,
@@ -615,7 +628,7 @@ request_bundles AS (
                         'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
                     ),
                     'requesterSymbol', request.pr_req_inst_symbol,
-                    'supplierSymbol', request.pr_sup_inst_symbol,
+                    'supplierSymbol', request.import_supplier_symbol,
                     'requesterRequestID', request.import_requester_request_id,
                     'supplierRequestID', request.pr_peer_request_identifier,
                     'illTransactionData', jsonb_strip_nulls(jsonb_build_object(
