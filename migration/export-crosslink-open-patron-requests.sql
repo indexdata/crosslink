@@ -32,6 +32,9 @@
 --   * Audit history, protocol audit payloads, batches, and queued jobs are not
 --     represented by CrossLink's patron-request import contract and are omitted.
 --   * mod-rs timestamps are treated as UTC.
+--   * Requester request IDs drop the "~<rota position>" or "~norota" suffix
+--     that mod-rs appends to non-SLNP protocol IDs. Borrowing requests use the
+--     HRID; lending requests strip the suffix from the peer's request ID.
 --
 -- The preflight block runs before any NDJSON is emitted and stops the export if
 -- an open request has an unmapped state or is missing required import data.
@@ -165,16 +168,9 @@ SELECT
     CASE
         WHEN patron_request.pr_is_requester IS NOT TRUE
             THEN patron_request.pr_id
-        WHEN state_model.sm_shortcode IN ('SLNPRequester', 'SLNPResponder',
-                                          'SLNPNonReturnableRequester',
-                                          'SLNPNonReturnableResponder')
-            THEN coalesce(patron_request.pr_hrid, patron_request.pr_id)
         ELSE coalesce(patron_request.pr_hrid, patron_request.pr_id)
-             || '~' || coalesce(patron_request.pr_rota_position::text, 'norota')
     END AS import_id
-FROM patron_request
-JOIN state_model
-  ON state_model.sm_id = patron_request.pr_state_model_fk;
+FROM patron_request;
 
 CREATE TEMP VIEW crosslink_open_requests AS
 SELECT
@@ -199,7 +195,9 @@ SELECT
     cost_currency.rdv_value AS import_cost_currency,
     CASE
         WHEN patron_request.pr_is_requester IS NOT TRUE
-            THEN patron_request.pr_peer_request_identifier
+            THEN regexp_replace(
+                patron_request.pr_peer_request_identifier, '~([0-9]+|norota)$', ''
+            )
         ELSE request_identity.import_id
     END AS import_requester_request_id,
     CASE
