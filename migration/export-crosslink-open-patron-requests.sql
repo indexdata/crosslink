@@ -31,6 +31,10 @@
 --     with pr_selected_item_barcode as barcode, only when it is present.
 --   * Borrowing requests include a synthesized ILL transaction and their rota as
 --     located suppliers. Lending requests must not include an ILL transaction.
+--   * A borrowing request's supplierSymbol is the current lender:
+--     pr_sup_inst_symbol, else the resolved supplier
+--     (pr_resolved_sup_inst_symbol_fk), else the selected rota entry. Requests
+--     not yet sent to a lender have no supplierSymbol.
 --   * Notifications without enough information to identify both parties are
 --     omitted. Loan conditions are exported as condition notifications.
 --   * Audit history, protocol audit payloads, batches, and queued jobs are not
@@ -216,7 +220,28 @@ SELECT
                 :'broker'
             )
         ELSE patron_request.pr_sup_inst_symbol
-    END AS import_supplying_agency_symbol
+    END AS import_supplying_agency_symbol,
+    -- mod-rs rarely sets pr_sup_inst_symbol on standard borrowing requests; the
+    -- current lender is the resolved supplier, or else the selected rota entry.
+    CASE
+        WHEN patron_request.pr_is_requester IS TRUE
+            THEN coalesce(
+                nullif(btrim(patron_request.pr_sup_inst_symbol), ''),
+                resolved_authority.na_symbol || ':' || resolved_symbol.sym_symbol,
+                (
+                    SELECT rota_authority.na_symbol || ':' || rota_symbol.sym_symbol
+                    FROM patron_request_rota AS rota
+                    JOIN symbol AS rota_symbol
+                      ON rota_symbol.sym_id = rota.prr_peer_symbol_fk
+                    JOIN naming_authority AS rota_authority
+                      ON rota_authority.na_id = rota_symbol.sym_authority_fk
+                    WHERE rota.prr_patron_request_fk = patron_request.pr_id
+                      AND rota.prr_rota_position = patron_request.pr_rota_position
+                    LIMIT 1
+                )
+            )
+        ELSE patron_request.pr_sup_inst_symbol
+    END AS import_supplier_symbol
 FROM patron_request
 JOIN crosslink_request_ids AS request_identity
   ON request_identity.legacy_id = patron_request.pr_id
@@ -257,6 +282,10 @@ LEFT JOIN refdata_value AS maximum_cost_currency
   ON maximum_cost_currency.rdv_id = patron_request.pr_maximum_costs_code_fk
 LEFT JOIN refdata_value AS cost_currency
   ON cost_currency.rdv_id = patron_request.pr_cost_currency_fk
+LEFT JOIN symbol AS resolved_symbol
+  ON resolved_symbol.sym_id = patron_request.pr_resolved_sup_inst_symbol_fk
+LEFT JOIN naming_authority AS resolved_authority
+  ON resolved_authority.na_id = resolved_symbol.sym_authority_fk
 WHERE state_model_status.sms_is_terminal IS FALSE;
 
 DO $preflight$
@@ -467,7 +496,7 @@ request_bundles AS (
                 'side', request.import_side,
                 'patron', request.pr_patron_identifier,
                 'requesterSymbol', request.pr_req_inst_symbol,
-                'supplierSymbol', request.pr_sup_inst_symbol,
+                'supplierSymbol', request.import_supplier_symbol,
                 'requesterRequestId', request.import_requester_request_id,
                 'needsAttention', request.import_needs_attention,
                 'internalNote', request.pr_local_note,
@@ -581,13 +610,13 @@ request_bundles AS (
                     CROSS JOIN LATERAL (
                         SELECT CASE
                             WHEN request.import_side = 'borrowing'
-                                THEN request.pr_sup_inst_symbol
+                                THEN request.import_supplier_symbol
                             ELSE request.pr_req_inst_symbol
                         END AS symbol,
                         CASE
                             WHEN request.import_side = 'borrowing'
                                 THEN request.pr_req_inst_symbol
-                            ELSE request.pr_sup_inst_symbol
+                            ELSE request.import_supplier_symbol
                         END AS local_symbol
                     ) AS counterpart
                     WHERE note.prn_patron_request_fk = request.pr_id
@@ -614,9 +643,9 @@ request_bundles AS (
                                 WHEN request.import_side = 'borrowing'
                                     THEN coalesce(
                                         condition.prlc_sup_inst_symbol,
-                                        request.pr_sup_inst_symbol
+                                        request.import_supplier_symbol
                                     )
-                                ELSE request.pr_sup_inst_symbol
+                                ELSE request.import_supplier_symbol
                             END,
                             'toSymbol', request.pr_req_inst_symbol,
                             'direction', CASE
@@ -643,9 +672,9 @@ request_bundles AS (
                           WHEN request.import_side = 'borrowing'
                               THEN coalesce(
                                   condition.prlc_sup_inst_symbol,
-                                  request.pr_sup_inst_symbol
+                                  request.import_supplier_symbol
                               )
-                          ELSE request.pr_sup_inst_symbol
+                          ELSE request.import_supplier_symbol
                       END), '') IS NOT NULL
                 ) AS notification
             ), '[]'::jsonb),
@@ -658,7 +687,7 @@ request_bundles AS (
                         'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
                     ),
                     'requesterSymbol', request.pr_req_inst_symbol,
-                    'supplierSymbol', request.pr_sup_inst_symbol,
+                    'supplierSymbol', request.import_supplier_symbol,
                     'requesterRequestID', request.import_requester_request_id,
                     'supplierRequestID', request.pr_peer_request_identifier,
                     'illTransactionData', jsonb_strip_nulls(jsonb_build_object(
