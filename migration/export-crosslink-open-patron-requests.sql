@@ -180,7 +180,7 @@ SELECT
     END AS import_id
 FROM patron_request;
 
-CREATE TEMP VIEW crosslink_open_requests AS
+CREATE TEMP VIEW crosslink_all_open_requests AS
 SELECT
     patron_request.*,
     request_identity.import_id AS import_patron_request_id,
@@ -195,6 +195,7 @@ SELECT
         ELSE 'lending'
     END AS import_side,
     crosslink_state_map.crosslink_state AS import_state,
+    service_type.rdv_value AS legacy_service_type,
     normalized_service_type.value AS import_service_type,
     service_level.rdv_value AS import_service_level,
     publication_type.rdv_value AS import_publication_type,
@@ -288,6 +289,31 @@ LEFT JOIN naming_authority AS resolved_authority
   ON resolved_authority.na_id = resolved_symbol.sym_authority_fk
 WHERE state_model_status.sms_is_terminal IS FALSE;
 
+-- Requests without a supported service type cannot be imported; skip them.
+CREATE TEMP VIEW crosslink_open_requests AS
+SELECT *
+FROM crosslink_all_open_requests
+WHERE import_service_type IS NOT NULL;
+
+DO $skipped$
+DECLARE
+    skipped TEXT;
+BEGIN
+    SELECT string_agg(
+        'request ' || pr_id || ': unsupported or missing service type ('
+            || coalesce(legacy_service_type, 'missing') || ')',
+        E'\n' ORDER BY pr_id
+    )
+    INTO skipped
+    FROM crosslink_all_open_requests
+    WHERE import_service_type IS NULL;
+
+    IF skipped IS NOT NULL THEN
+        RAISE NOTICE E'Skipping open patron requests:\n%', skipped;
+    END IF;
+END
+$skipped$;
+
 DO $preflight$
 DECLARE
     problems TEXT;
@@ -343,11 +369,6 @@ BEGIN
                         pr_sup_inst_symbol, '^[^:]+:', ''
                     )))
 
-        UNION ALL
-
-        SELECT 'request ' || pr_id || ': unsupported or missing service type'
-        FROM crosslink_open_requests
-        WHERE import_service_type IS NULL
 
         UNION ALL
 

@@ -7,7 +7,15 @@ SOURCE_DIR=${1:-.}
 DIRECTORY_OUTPUT=${DIRECTORY_OUTPUT:-"$SOURCE_DIR/directories.ndjson"}
 DIRECTORY_PREFIX=${DIRECTORY_PREFIX:-directories}
 PATRON_REQUEST_PREFIX=${PATRON_REQUEST_PREFIX:-patron-request}
-PATRON_REQUEST_OUTPUT=${PATRON_REQUEST_OUTPUT:-"$SOURCE_DIR/patron-requests.ndjson"}
+PATRON_REQUEST_DIR=${PATRON_REQUEST_DIR:-"$SOURCE_DIR/patron-requests"}
+PATRON_REQUEST_BATCH_SIZE=${PATRON_REQUEST_BATCH_SIZE:-5000}
+
+case "$PATRON_REQUEST_BATCH_SIZE" in
+    ''|*[!0-9]*|0)
+        echo "PATRON_REQUEST_BATCH_SIZE must be a positive integer: $PATRON_REQUEST_BATCH_SIZE" >&2
+        exit 1
+        ;;
+esac
 
 if [ ! -d "$SOURCE_DIR" ]; then
     echo "Source directory not found: $SOURCE_DIR" >&2
@@ -104,14 +112,40 @@ join_exports() {
                     end
                 )))[]
             ' >"$output"
+        printf '%s\n' "Joined $prefix exports into $output"
     else
         while IFS='	' read -r _ file; do
             cat "$file" >>"$output"
         done <"$sorted_list_file"
     fi
+}
 
-    printf '%s\n' "Joined $prefix exports into $output"
+# Splits the joined patron requests into numbered files of at most
+# PATRON_REQUEST_BATCH_SIZE records. Each NDJSON record is one line.
+split_patron_requests() {
+    input=$1
+
+    mkdir -p "$PATRON_REQUEST_DIR"
+    for file in "$PATRON_REQUEST_DIR"/patron-requests-*.ndjson; do
+        if [ -f "$file" ]; then
+            rm "$file"
+        fi
+    done
+
+    files=$(awk -v dir="$PATRON_REQUEST_DIR" -v size="$PATRON_REQUEST_BATCH_SIZE" '
+        (NR - 1) % size == 0 {
+            if (out != "") close(out)
+            batch++
+            out = sprintf("%s/patron-requests-%04d.ndjson", dir, batch)
+        }
+        { print > out }
+        END { print batch + 0 }
+    ' "$input")
+    records=$(wc -l <"$input" | tr -d ' ')
+
+    printf '%s\n' "Wrote $records patron requests to $files file(s) in $PATRON_REQUEST_DIR"
 }
 
 join_exports "$DIRECTORY_PREFIX" "$DIRECTORY_OUTPUT"
-join_exports "$PATRON_REQUEST_PREFIX" "$PATRON_REQUEST_OUTPUT"
+join_exports "$PATRON_REQUEST_PREFIX" "$TEMP_DIR/patron-requests.ndjson"
+split_patron_requests "$TEMP_DIR/patron-requests.ndjson"
