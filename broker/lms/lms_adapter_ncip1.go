@@ -247,7 +247,7 @@ func (l *LmsAdapterNcip1) RequestItem(requestID, itemID, userID, _, itemLocation
 	}
 	result := &RequestedItem{RequestID: requestID}
 	if response.UniqueRequestId != nil && strings.TrimSpace(response.UniqueRequestId.RequestIdentifierValue) != "" {
-		result.RequestID = response.UniqueRequestId.RequestIdentifierValue
+		result.RequestID = encodeNcip1RequestID(*response.UniqueRequestId)
 	}
 	if f := response.ItemOptionalFields; f != nil {
 		if f.BibliographicDescription != nil {
@@ -285,8 +285,12 @@ func (l *LmsAdapterNcip1) CancelRequestItem(requestID, userID string) error {
 	if err := ncip1Required(requestID, userID); err != nil {
 		return err
 	}
+	request, err := l.savedRequest(requestID)
+	if err != nil {
+		return err
+	}
 	scope := l.requestScope()
-	_, err := l.client.CancelRequestItem(ncip.CancelRequestItem{InitiationHeader: l.header(), UniqueUserId: l.user(userID), UniqueRequestId: l.request(requestID), RequestType: l.requestType(), RequestScopeType: &scope})
+	_, err = l.client.CancelRequestItem(ncip.CancelRequestItem{InitiationHeader: l.header(), UniqueUserId: l.user(userID), UniqueRequestId: request, RequestType: l.requestType(), RequestScopeType: &scope})
 	return err
 }
 func (l *LmsAdapterNcip1) CheckInItem(itemID string) (bool, error) {
@@ -311,7 +315,11 @@ func (l *LmsAdapterNcip1) CheckOutItem(requestID, itemID, userID, externalRefere
 	}
 	arg := ncip.CheckOutItem{InitiationHeader: l.header(), UniqueItemId: l.item(itemID), UniqueUserId: l.user(userID), ItemElementType: ncip1ItemElements("Bibliographic Description")}
 	if requestID != "" {
-		arg.UniqueRequestId = l.request(requestID)
+		request, err := l.savedRequest(requestID)
+		if err != nil {
+			return nil, err
+		}
+		arg.UniqueRequestId = request
 	}
 	response, err := l.client.CheckOutItem(arg)
 	if err != nil {

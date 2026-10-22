@@ -26,6 +26,8 @@ func (e *PatronProfileIneligibleError) Error() string {
 // RequestedItem contains data returned by a performed LMS RequestItem
 // call. A nil response with a nil error means the adapter intentionally skipped
 // the operation, for example because RequestItem is disabled or handled manually.
+// RequestID is an opaque adapter reference; preserve it unchanged for cancellation
+// and checkout. It may include protocol-specific agency information.
 type RequestedItem struct {
 	RequestID        string
 	Barcode          string

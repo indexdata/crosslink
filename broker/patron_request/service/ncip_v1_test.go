@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync/atomic"
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/events"
@@ -148,6 +149,144 @@ func TestIncompleteNcipV1ResponseDoesNotRecordProgress(t *testing.T) {
 			require.Equal(t, events.EventStatusError, result.status)
 			require.Equal(t, item, repo.savedItems[0])
 			require.Nil(t, sender.lastRequestingAgencyMessage)
+		})
+	}
+}
+
+func ncipV1ResponseFixture(t *testing.T, operation string) ncip.NCIPMessage {
+	t.Helper()
+	data, err := os.ReadFile("../../ncipclientv1/testdata/" + operation + "Response.xml")
+	require.NoError(t, err)
+	var message ncip.NCIPMessage
+	require.NoError(t, xml.Unmarshal(data, &message))
+	return message
+}
+
+func TestNcipV1PatronRejection(t *testing.T) {
+	for _, transportFailure := range []bool{false, true} {
+		t.Run(map[bool]string{false: "protocol rejection", true: "HTTP failure"}[transportFailure], func(t *testing.T) {
+			var calls atomic.Int32
+			response := ncipV1ResponseFixture(t, "LookupUser")
+			response.LookupUserResponse.UniqueUserId = nil
+			response.LookupUserResponse.Problem = &ncip.Problem{ProcessingError: []ncip.ProcessingError{{
+				ProcessingErrorType:    ncip.ProcessingErrorType{Scheme: "urn:test:error", Value: "Unknown User"},
+				ProcessingErrorElement: ncip.ProcessingErrorElement{ElementName: "UniqueUserId", ProcessingErrorValue: "secret-password"},
+			}}}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				if transportFailure {
+					w.WriteHeader(http.StatusUnauthorized)
+					_, err := w.Write([]byte("secret-password"))
+					require.NoError(t, err)
+					return
+				}
+				w.Header().Set("Content-Type", "application/xml")
+				require.NoError(t, xml.NewEncoder(w).Encode(response))
+			}))
+			defer server.Close()
+			adapter, err := lms.CreateLmsAdapterNcip1(dirapi.LmsConfig{Address: server.URL, FromAgency: "broker"})
+			require.NoError(t, err)
+			pr := pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateNew, Side: SideBorrowing, RequesterSymbol: getDbText("ISIL:REC1"), Patron: getDbText("patron")}
+			repo := &MockPrRepo{savedPr: pr}
+			bus := new(MockEventBus)
+			creator := new(MockLmsCreator)
+			creator.On("GetAdapter", "ISIL:REC1").Return(adapter, nil)
+			svc := CreatePatronRequestActionService(repo, new(IllRepoMock), bus, new(MockIso18626Handler), creator, new(EmailSenderMock), nil, nil)
+			err = svc.RunAutoActionsOnStateEntry(appCtx, pr, nil, "test-user")
+			expectedStatus := events.EventStatusProblem
+			expectedCalls := int32(2)
+			if transportFailure {
+				require.Error(t, err)
+				require.NotContains(t, err.Error(), "secret-password")
+				expectedStatus, expectedCalls = events.EventStatusError, 1
+				require.Equal(t, BorrowerStateNew, repo.savedPr.State)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, BorrowerStateInvalidPatron, repo.savedPr.State)
+				require.True(t, repo.savedPr.NeedsAttention)
+			}
+			require.Equal(t, expectedCalls, calls.Load())
+			require.Len(t, bus.processedTaskEvents, 1)
+			result := bus.processedTaskEvents[0]
+			require.Equal(t, expectedStatus, result.EventStatus)
+			if !transportFailure {
+				require.Equal(t, ActionOutcomeReview, result.ResultData.ActionResult.Outcome)
+			}
+			require.Len(t, bus.createdNoticeStatus, int(expectedCalls))
+			for _, status := range bus.createdNoticeStatus {
+				require.Equal(t, expectedStatus, status)
+			}
+		})
+	}
+}
+
+func TestNcipV1ReservationAgencySurvivesPersistenceAndCompensation(t *testing.T) {
+	for _, failCommit := range []bool{false, true} {
+		t.Run(map[bool]string{false: "persisted", true: "compensation"}[failCommit], func(t *testing.T) {
+			returnedID := ncip.UniqueRequestId{XMLName: xml.Name{Local: "UniqueRequestId"}, UniqueAgencyId: ncip.UniqueAgencyId{XMLName: xml.Name{Local: "UniqueAgencyId"}, Scheme: "urn:lms:agency:custom", Value: "other-lms"}, RequestIdentifierValue: " lms-request:&/é "}
+			reservation := ncipV1ResponseFixture(t, "RequestItem")
+			reservation.RequestItemResponse.UniqueRequestId = &returnedID
+			reservation.RequestItemResponse.ItemOptionalFields = &ncip.ItemOptionalFields{ItemDescription: &ncip.ItemDescription{CopyNumber: "barcode"}}
+			cancel := ncipV1ResponseFixture(t, "CancelRequestItem")
+			checkout := ncipV1ResponseFixture(t, "CheckOutItem")
+			var requests, cancellations, checkouts atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var message ncip.NCIPMessage
+				require.NoError(t, xml.NewDecoder(r.Body).Decode(&message))
+				var response ncip.NCIPMessage
+				switch {
+				case message.RequestItem != nil:
+					requests.Add(1)
+					require.Equal(t, "broker", message.RequestItem.UniqueRequestId.UniqueAgencyId.Value)
+					require.Equal(t, "req-1", message.RequestItem.UniqueRequestId.RequestIdentifierValue)
+					response = reservation
+				case message.CancelRequestItem != nil:
+					cancellations.Add(1)
+					require.Equal(t, returnedID, *message.CancelRequestItem.UniqueRequestId)
+					response = cancel
+				case message.CheckOutItem != nil:
+					checkouts.Add(1)
+					require.Equal(t, returnedID, *message.CheckOutItem.UniqueRequestId)
+					response = checkout
+				default:
+					t.Error("unexpected NCIP service")
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				w.Header().Set("Content-Type", "application/xml")
+				require.NoError(t, xml.NewEncoder(w).Encode(response))
+			}))
+			defer server.Close()
+			config := dirapi.LmsConfig{Address: server.URL, FromAgency: "broker"}
+			adapter, err := lms.CreateLmsAdapterNcip1(config)
+			require.NoError(t, err)
+			pr := testLoan()
+			pr.RequesterSymbol = getDbText("ISIL:REC1")
+			pr.IllRequest.Header.RequestingAgencyRequestId = "req-1"
+			pr.IllRequest.BibliographicInfo.SupplierUniqueRecordId = "bib"
+			repo := &loanTxRepo{MockPrRepo: &MockPrRepo{savedPr: pr}}
+			if failCommit {
+				repo.failStep = "commit"
+			}
+			svc := &PatronRequestActionService{prRepo: repo}
+			result := svc.requestItemLenderRequest(appCtx, pr, adapter, pr.IllRequest)
+			if failCommit {
+				require.Equal(t, events.EventStatusError, result.status)
+				require.Empty(t, repo.savedItems)
+			} else {
+				require.Equal(t, events.EventStatusSuccess, result.status)
+				require.Len(t, repo.savedItems, 1)
+				require.True(t, repo.savedItems[0].LmsRequestID.Valid)
+				// A fresh adapter must reconstruct the wire identifier using only persisted data.
+				adapter, err = lms.CreateLmsAdapterNcip1(config)
+				require.NoError(t, err)
+				_, err = adapter.CheckOutItem(repo.savedItems[0].LmsRequestID.String, "barcode", "user", "")
+				require.NoError(t, err)
+				require.NoError(t, svc.cancelLenderRequestItems(appCtx, pr, adapter))
+				require.Equal(t, int32(1), checkouts.Load())
+			}
+			require.Equal(t, int32(1), requests.Load())
+			require.Equal(t, int32(1), cancellations.Load())
 		})
 	}
 }

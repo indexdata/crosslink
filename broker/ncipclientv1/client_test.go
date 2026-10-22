@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/indexdata/crosslink/httpclient"
 	ncip "github.com/indexdata/crosslink/ncipv1"
 	"github.com/stretchr/testify/require"
 )
@@ -184,3 +185,28 @@ func TestLoggingAndDefaults(t *testing.T) {
 
 const testResponseHeader = `<ResponseHeader><FromAgencyId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId></FromAgencyId><ToAgencyId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId></ToAgencyId></ResponseHeader>`
 const testResponseUser = `<UniqueUserId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><UserIdentifierValue>canonical</UserIdentifierValue></UniqueUserId>`
+
+// HTTP errors may contain XML, HTML, or plain text echoing a submitted secret.
+// Neither the error string nor its unwrapped typed cause may retain that body.
+func TestHTTPErrorBodiesAreRemoved(t *testing.T) {
+	for _, service := range []string{"LookupUser", "AcceptItem", "RequestItem", "CancelRequestItem", "CheckInItem", "CheckOutItem"} {
+		for _, body := range []string{"secret-password", "<html>secret-password</html>", "<MessagingErrorValue>secret-password</MessagingErrorValue>"} {
+			t.Run(service+"/"+body, func(t *testing.T) {
+				client := New(&http.Client{Transport: roundTrip(func(*http.Request) (*http.Response, error) {
+					return &http.Response{StatusCode: http.StatusUnauthorized, Body: io.NopCloser(strings.NewReader(body))}, nil
+				})}, "https://lms.example/ncip")
+				var logged error
+				client.SetLogFunc(func(_, _ map[string]any, err error) { logged = err })
+				returned := invokeService(client, service)
+				for _, err := range []error{returned, logged} {
+					require.ErrorContains(t, err, "401")
+					require.NotContains(t, err.Error(), "secret-password")
+					var cause *httpclient.HttpError
+					require.ErrorAs(t, err, &cause)
+					require.Equal(t, http.StatusUnauthorized, cause.StatusCode)
+					require.Empty(t, cause.Body)
+				}
+			})
+		}
+	}
+}

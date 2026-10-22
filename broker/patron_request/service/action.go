@@ -22,6 +22,7 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/lms"
 	"github.com/indexdata/crosslink/broker/ncipclient"
+	"github.com/indexdata/crosslink/broker/ncipclientv1"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	"github.com/indexdata/crosslink/broker/service"
@@ -74,7 +75,8 @@ func lmsNoticeStatus(err error) events.EventStatus {
 		return events.EventStatusSuccess
 	}
 	var ncipErr *ncipclient.NcipError
-	if errors.As(err, &ncipErr) {
+	var ncip1Err *ncipclientv1.Error
+	if errors.As(err, &ncipErr) || errors.As(err, &ncip1Err) {
 		return events.EventStatusProblem
 	}
 	return events.EventStatusError
@@ -908,6 +910,12 @@ func (a *PatronRequestActionService) validatePatronBorrowingRequest(ctx common.E
 				problemDetails = ncipErr.Error()
 			}
 			status, result := events.LogProblemAndReturnResult(ctx, problemType, problemDetails, nil)
+			result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeReview}
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		var ncip1Err *ncipclientv1.Error
+		if errors.As(err, &ncip1Err) {
+			status, result := events.LogProblemAndReturnResult(ctx, "LMS LookupUser rejected", ncip1Err.Error(), nil)
 			result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeReview}
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}

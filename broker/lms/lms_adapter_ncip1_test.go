@@ -72,7 +72,7 @@ func TestNcip1Operations(t *testing.T) {
 	a.config.BibIdNormalization = &normalization
 	item, err := a.RequestItem("request", ".b1234", "user", "ignored", "")
 	require.NoError(t, err)
-	require.Equal(t, &RequestedItem{RequestID: "lms-request", Title: "Title", Barcode: "barcode", CallNumber: "call", Location: "Main", ShelvingLocation: "Stacks"}, item)
+	require.Equal(t, &RequestedItem{RequestID: encodeNcip1RequestID(ncip.UniqueRequestId{UniqueAgencyId: ncip.UniqueAgencyId{Scheme: "urn:test:agency", Value: "lms"}, RequestIdentifierValue: "lms-request"}), Title: "Title", Barcode: "barcode", CallNumber: "call", Location: "Main", ShelvingLocation: "Stacks"}, item)
 	a = ncip1TestAdapter(t, `<CancelRequestItemResponse>`+ncip1TestHeader+`<UniqueRequestId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><RequestIdentifierValue>request</RequestIdentifierValue></UniqueRequestId><UniqueUserId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><UserIdentifierValue>user</UserIdentifierValue></UniqueUserId></CancelRequestItemResponse>`, func(m ncip.NCIPMessage) {
 		require.Equal(t, "request", m.CancelRequestItem.UniqueRequestId.RequestIdentifierValue)
 		require.Nil(t, m.CancelRequestItem.UniqueItemId)
@@ -218,7 +218,10 @@ func TestNcip1Configuration(t *testing.T) {
 	a.config.RequestItemBibIdCode = &code
 	item, err := a.RequestItem("request", "bib", "user", "", "")
 	require.NoError(t, err)
-	require.Equal(t, "request", item.RequestID)
+	decoded, err := a.savedRequest(item.RequestID)
+	require.NoError(t, err)
+	require.Equal(t, "request", decoded.RequestIdentifierValue)
+	require.Equal(t, "lms", decoded.UniqueAgencyId.Value)
 	require.Equal(t, "barcode", item.Barcode)
 	require.Equal(t, "Main", item.ShelvingLocation)
 }
@@ -245,3 +248,21 @@ func TestNcip1Failures(t *testing.T) {
 const ncip1TestHeader = `<ResponseHeader><FromAgencyId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId></FromAgencyId><ToAgencyId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId></ToAgencyId></ResponseHeader>`
 const ncip1TestItem = `<UniqueItemId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><ItemIdentifierValue>barcode</ItemIdentifierValue></UniqueItemId>`
 const ncip1TestUser = `<UniqueUserId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><UserIdentifierValue>canonical</UserIdentifierValue></UniqueUserId>`
+
+func TestNcip1SavedRequestReferences(t *testing.T) {
+	a := &LmsAdapterNcip1{config: dirapi.LmsConfig{FromAgency: "broker"}}
+	original := ncip.UniqueRequestId{UniqueAgencyId: ncip.UniqueAgencyId{Scheme: "urn:test:agency/é", Value: "lms.with:punctuation"}, RequestIdentifierValue: " request:&/é "}
+	decoded, err := a.savedRequest(encodeNcip1RequestID(original))
+	require.NoError(t, err)
+	require.Equal(t, original, *decoded)
+	legacy, err := a.savedRequest("legacy-request")
+	require.NoError(t, err)
+	require.Equal(t, "broker", legacy.UniqueAgencyId.Value)
+	require.Equal(t, "legacy-request", legacy.RequestIdentifierValue)
+	for _, id := range []string{"ncip1-request:", "ncip1-request:a.b", "ncip1-request:!.YQ.Yg", "ncip1-request:YQ..Yg", "ncip1-request:YQ.Yg.IA"} {
+		// No client is installed: malformed references must fail before any HTTP call.
+		require.ErrorContains(t, a.CancelRequestItem(id, "user"), "invalid NCIP v1 request reference")
+		_, err := a.CheckOutItem(id, "item", "user", "")
+		require.ErrorContains(t, err, "invalid NCIP v1 request reference")
+	}
+}

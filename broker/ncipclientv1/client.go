@@ -4,6 +4,7 @@ package ncipclientv1
 import (
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -54,12 +55,22 @@ func (e *Error) Error() string {
 	return e.Operation + ": NCIP v1 problem: " + strings.Join(kinds, ", ")
 }
 
+// exchange removes HTTP response bodies before errors reach callers or log callbacks.
+func (c *Client) exchange(outgoing, incoming *ncip.NCIPMessage) error {
+	err := httpclient.NewClient().RequestResponse(c.client, http.MethodPost, []string{"application/xml", "text/xml"}, c.address, outgoing, incoming, xml.Marshal, decode)
+	var httpErr *httpclient.HttpError
+	if errors.As(err, &httpErr) {
+		return &httpclient.HttpError{StatusCode: httpErr.StatusCode}
+	}
+	return err
+}
+
 // LookupUser performs the NCIP 1.0 LookupUser service.
 func (c *Client) LookupUser(arg ncip.LookupUser) (response *ncip.LookupUserResponse, err error) {
 	outgoing := &ncip.NCIPMessage{Version: ncip.NCIP_V1_0_DTD, LookupUser: &arg}
 	incoming := &ncip.NCIPMessage{}
 	defer func() { c.log(outgoing, incoming, err) }()
-	err = httpclient.NewClient().RequestResponse(c.client, http.MethodPost, []string{"application/xml", "text/xml"}, c.address, outgoing, incoming, xml.Marshal, decode)
+	err = c.exchange(outgoing, incoming)
 	if err != nil {
 		return nil, fmt.Errorf("NCIP v1 LookupUser: %w", err)
 	}
@@ -78,7 +89,7 @@ func (c *Client) AcceptItem(arg ncip.AcceptItem) (response *ncip.AcceptItemRespo
 	outgoing := &ncip.NCIPMessage{Version: ncip.NCIP_V1_0_DTD, AcceptItem: &arg}
 	incoming := &ncip.NCIPMessage{}
 	defer func() { c.log(outgoing, incoming, err) }()
-	err = httpclient.NewClient().RequestResponse(c.client, http.MethodPost, []string{"application/xml", "text/xml"}, c.address, outgoing, incoming, xml.Marshal, decode)
+	err = c.exchange(outgoing, incoming)
 	if err != nil {
 		return nil, fmt.Errorf("NCIP v1 AcceptItem: %w", err)
 	}
@@ -97,7 +108,7 @@ func (c *Client) RequestItem(arg ncip.RequestItem) (response *ncip.RequestItemRe
 	outgoing := &ncip.NCIPMessage{Version: ncip.NCIP_V1_0_DTD, RequestItem: &arg}
 	incoming := &ncip.NCIPMessage{}
 	defer func() { c.log(outgoing, incoming, err) }()
-	err = httpclient.NewClient().RequestResponse(c.client, http.MethodPost, []string{"application/xml", "text/xml"}, c.address, outgoing, incoming, xml.Marshal, decode)
+	err = c.exchange(outgoing, incoming)
 	if err != nil {
 		return nil, fmt.Errorf("NCIP v1 RequestItem: %w", err)
 	}
@@ -116,7 +127,7 @@ func (c *Client) CancelRequestItem(arg ncip.CancelRequestItem) (response *ncip.C
 	outgoing := &ncip.NCIPMessage{Version: ncip.NCIP_V1_0_DTD, CancelRequestItem: &arg}
 	incoming := &ncip.NCIPMessage{}
 	defer func() { c.log(outgoing, incoming, err) }()
-	err = httpclient.NewClient().RequestResponse(c.client, http.MethodPost, []string{"application/xml", "text/xml"}, c.address, outgoing, incoming, xml.Marshal, decode)
+	err = c.exchange(outgoing, incoming)
 	if err != nil {
 		return nil, fmt.Errorf("NCIP v1 CancelRequestItem: %w", err)
 	}
@@ -135,7 +146,7 @@ func (c *Client) CheckInItem(arg ncip.CheckInItem) (response *ncip.CheckInItemRe
 	outgoing := &ncip.NCIPMessage{Version: ncip.NCIP_V1_0_DTD, CheckInItem: &arg}
 	incoming := &ncip.NCIPMessage{}
 	defer func() { c.log(outgoing, incoming, err) }()
-	err = httpclient.NewClient().RequestResponse(c.client, http.MethodPost, []string{"application/xml", "text/xml"}, c.address, outgoing, incoming, xml.Marshal, decode)
+	err = c.exchange(outgoing, incoming)
 	if err != nil {
 		return nil, fmt.Errorf("NCIP v1 CheckInItem: %w", err)
 	}
@@ -154,7 +165,7 @@ func (c *Client) CheckOutItem(arg ncip.CheckOutItem) (response *ncip.CheckOutIte
 	outgoing := &ncip.NCIPMessage{Version: ncip.NCIP_V1_0_DTD, CheckOutItem: &arg}
 	incoming := &ncip.NCIPMessage{}
 	defer func() { c.log(outgoing, incoming, err) }()
-	err = httpclient.NewClient().RequestResponse(c.client, http.MethodPost, []string{"application/xml", "text/xml"}, c.address, outgoing, incoming, xml.Marshal, decode)
+	err = c.exchange(outgoing, incoming)
 	if err != nil {
 		return nil, fmt.Errorf("NCIP v1 CheckOutItem: %w", err)
 	}

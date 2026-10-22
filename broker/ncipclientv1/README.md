@@ -11,12 +11,17 @@ rejected before recording LMS progress. Optional metadata is not fully XSD
 validated. Checkout still tolerates unusable DateDue values after a complete
 acknowledgement, returning no due date.
 Problems retain their native messaging/processing errors in `*ncipclientv1.Error`.
+The broker classifies these as protocol rejections (`PROBLEM`); rejected patron
+validation follows the review path to `INVALID_PATRON`. Transport failures remain
+`ERROR` results.
 
 A nil HTTP client uses a 30 second timeout. Responses are limited to 10 MiB
 by the shared HTTP client, and XML nesting to 64 levels. `SetLogFunc` must be
 called before concurrent use; credentials, authentication inputs, names, and
 addresses and echoed MessagingErrorValue/ProcessingErrorValue fields are
-redacted in logged messages, including nested errors.
+redacted in logged messages, including nested errors. Non-200 HTTP response
+bodies are discarded before returning or logging errors; the typed HTTP error
+retains its status code.
 
 Configure `lmsConfig.ncipVersion: "1.0"` in Directory to select this adapter.
 Allowed values are `"1.0"` and `"2.02"`; omission inherits the profile default
@@ -50,6 +55,15 @@ are retained; manual cleanup may still be needed. Transport or protocol errors
 from a supported deletion service still block return shipment, as does failure
 to record the skipped-cleanup notice. Acceptance compensation uses the same
 cleanup handling and still reports the original persistence failure.
+
+Returned RequestItem IDs are stored as opaque `ncip1-request:` references in
+the existing LMS request-ID field. The reference contains three dot-separated,
+unpadded base64url components: agency scheme, agency value, and request value.
+Cancellation and checkout restore all three components, including after a
+restart or during persistence-failure compensation. New broker initiation IDs
+remain literal. Legacy plain stored IDs retain their previous FromAgency
+ownership; the original agency cannot be recovered if it was already discarded.
+Malformed references with the reserved prefix fail before sending an HTTP request.
 
 Requester checkout sends no external reference because the workflow has no
 reference value to supply. The v1 adapter continues to reject actual nonempty
