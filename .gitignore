@@ -11,3 +11,5 @@ go.work
 go.work.sum
 .worktrees/
 .venv/
+# migration schema properties
+migration/schema.properties
