@@ -18,8 +18,6 @@ on:
       - '**/chart/**' #trigger also when chart templates chnage to force republish
       - '.github/**' #trigger when pipeline changes
       - '**/go.mod' #trigger when dependencies change
-      - 'ncipv1/**'
-      - 'broker/ncipclientv1/testdata/**'
       - 'supply/go.sum'
       - 'supply/**/*.sh'
       - 'supply/**/.gitignore'
@@ -40,8 +38,6 @@ on:
       - '**/chart/**' #trigger also when chart templates change to force republish
       - '.github/**' #trigger when pipeline changes
       - '**/go.mod' #trigger when dependencies change
-      - 'ncipv1/**'
-      - 'broker/ncipclientv1/testdata/**'
       - 'supply/go.sum'
       - 'supply/**/*.sh'
       - 'supply/**/.gitignore'
@@ -57,7 +53,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        modules: [broker, directory, illmock, supply, ncipv1]
+        modules: [broker, directory, illmock, supply]
     steps:
     - name: Checkout repository
       uses: actions/checkout@v7
@@ -100,8 +96,6 @@ jobs:
       working-directory: ${{ matrix.modules }}
 
     - name: Check test coverage
-      # ncipv1 contains generated types and constants, with no executable statements.
-      if: ${{ matrix.modules != 'ncipv1' }}
       uses: vladopajic/go-test-coverage@v2
       continue-on-error: true
       with:
