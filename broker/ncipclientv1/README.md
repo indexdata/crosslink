@@ -63,7 +63,16 @@ Cancellation and checkout restore all three components, including after a
 restart or during persistence-failure compensation. New broker initiation IDs
 remain literal. Legacy plain stored IDs retain their previous FromAgency
 ownership; the original agency cannot be recovered if it was already discarded.
-Malformed references with the reserved prefix fail before sending an HTTP request.
+When the response omits the request ID, the broker-owned initiating ID is also
+encoded before persistence, so literal IDs containing the reserved prefix remain
+usable for cancellation and checkout.
+
+Returned unique item IDs use the same three-component encoding with the
+`ncip1-item:` prefix in the existing LMS item-ID field. Lender checkout and
+check-in restore the returned agency and item value; the visible barcode stays
+separate for display and shipment messages. Items without a stored LMS identity
+retain barcode-based behavior. Previously discarded identities cannot be recovered.
+Malformed references with either reserved prefix fail before sending an HTTP request.
 
 Requester checkout sends no external reference because the workflow has no
 reference value to supply. The v1 adapter continues to reject actual nonempty

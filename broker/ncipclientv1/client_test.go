@@ -164,19 +164,20 @@ func TestLoggingAndDefaults(t *testing.T) {
 	require.Equal(t, 30*time.Second, New(nil, "https://example.org").client.Timeout)
 	custom := &http.Client{Timeout: time.Second}
 	require.Same(t, custom, New(custom, "").client)
-	c := testClient(t, `<NCIPMessage><LookupUserResponse>`+testResponseHeader+testResponseUser+`<UserOptionalFields><NameInformation><PersonalNameInformation><UnstructuredPersonalUserName>secret-name</UnstructuredPersonalUserName></PersonalNameInformation></NameInformation><UserAddressInformation><ElectronicAddress><ElectronicAddressData>secret-email</ElectronicAddressData></ElectronicAddress></UserAddressInformation></UserOptionalFields></LookupUserResponse></NCIPMessage>`, nil)
+	c := testClient(t, `<NCIPMessage><LookupUserResponse>`+testResponseHeader+testResponseUser+`<UserOptionalFields><DateOfBirth>1987-06-15T00:00:00Z</DateOfBirth><NameInformation><PersonalNameInformation><UnstructuredPersonalUserName>secret-name</UnstructuredPersonalUserName></PersonalNameInformation></NameInformation><UserAddressInformation><ElectronicAddress><ElectronicAddressData>secret-email</ElectronicAddressData></ElectronicAddress></UserAddressInformation></UserOptionalFields></LookupUserResponse></NCIPMessage>`, nil)
 	c.SetLogFunc(func(out, in map[string]any, err error) {
 		require.NoError(t, err)
 		data, e := json.Marshal([]any{out, in})
 		require.NoError(t, e)
-		for _, secret := range []string{"secret-agency", "secret-password", "secret-name", "secret-email"} {
+		for _, secret := range []string{"secret-agency", "secret-password", "secret-name", "secret-email", "1987-06-15"} {
 			require.NotContains(t, string(data), secret)
 		}
 		require.Contains(t, string(data), "***")
 	})
 	arg := ncip.LookupUser{InitiationHeader: ncip.InitiationHeader{FromAgencyAuthentication: "secret-agency"}, AuthenticationInput: []ncip.AuthenticationInput{{AuthenticationInputData: "secret-password"}}}
-	_, err := c.LookupUser(arg)
+	response, err := c.LookupUser(arg)
 	require.NoError(t, err)
+	require.Equal(t, "1987-06-15", response.UserOptionalFields.DateOfBirth.Format("2006-01-02"))
 	require.Equal(t, "secret-password", arg.AuthenticationInput[0].AuthenticationInputData)
 	c.SetLogFunc(nil)
 	_, err = c.LookupUser(arg)

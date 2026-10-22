@@ -28,8 +28,11 @@ func (e *PatronProfileIneligibleError) Error() string {
 // the operation, for example because RequestItem is disabled or handled manually.
 // RequestID is an opaque adapter reference; preserve it unchanged for cancellation
 // and checkout. It may include protocol-specific agency information.
+// ItemID is an opaque adapter reference for checkout and check-in, separate from
+// the display barcode. An empty ItemID means callers should use Barcode.
 type RequestedItem struct {
 	RequestID        string
+	ItemID           string
 	Barcode          string
 	CallNumber       string
 	Title            string

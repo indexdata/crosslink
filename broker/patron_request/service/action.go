@@ -489,7 +489,7 @@ func (a *PatronRequestActionService) deleteRequesterItemsOnClose(ctx common.Exte
 	}
 	var cleanupErrors []error
 	for _, item := range items {
-		performed, err := a.deleteRequesterLmsItem(pr.ID, eventID, requesterLmsItemID(item), lmsAdapter)
+		performed, err := a.deleteRequesterLmsItem(pr.ID, eventID, lmsItemID(item), lmsAdapter)
 		if err != nil {
 			cleanupErrors = append(cleanupErrors, fmt.Errorf("LMS DeleteItem failed for item %s: %w", item.Barcode, err))
 			continue
@@ -1158,7 +1158,7 @@ func deepCopyISO18626Request(request iso18626.Request) (iso18626.Request, error)
 	return clone, nil
 }
 
-func requesterLmsItemID(item pr_db.Item) string {
+func lmsItemID(item pr_db.Item) string {
 	if item.LmsItemID.Valid && strings.TrimSpace(item.LmsItemID.String) != "" {
 		return item.LmsItemID.String
 	}
@@ -1315,7 +1315,7 @@ func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.Exten
 		if !item.LmsRequestID.Valid || strings.TrimSpace(item.LmsRequestID.String) == "" {
 			continue
 		}
-		itemId := requesterLmsItemID(item)
+		itemId := lmsItemID(item)
 		performed, err := a.deleteRequesterLmsItem(pr.ID, parentEventID, itemId, lmsAdapter)
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "LMS DeleteItem failed", err)
@@ -1633,6 +1633,7 @@ func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.Extended
 			PrID:             pr.ID,
 			ItemID:           getDbText(itemID),
 			LmsRequestID:     getDbText(lmsRequestID),
+			LmsItemID:        getDbText(response.ItemID),
 			Title:            getDbTextPtr(&title),
 			CallNumber:       getDbTextPtr(&callNumber),
 			Location:         getDbTextPtr(&response.Location),
@@ -1902,7 +1903,7 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 		if item.LmsRequestID.Valid {
 			requestId = item.LmsRequestID.String
 		}
-		checkedOutItem, err := lmsAdapter.CheckOutItem(requestId, item.Barcode, userId, externalReferenceValue)
+		checkedOutItem, err := lmsAdapter.CheckOutItem(requestId, lmsItemID(*item), userId, externalReferenceValue)
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
@@ -2041,7 +2042,7 @@ func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.Extend
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	for _, item := range items {
-		performed, err := lmsAdapter.CheckInItem(item.Barcode)
+		performed, err := lmsAdapter.CheckInItem(lmsItemID(item))
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "LMS CheckInItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}

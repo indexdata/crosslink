@@ -245,7 +245,10 @@ func (l *LmsAdapterNcip1) RequestItem(requestID, itemID, userID, _, itemLocation
 	if err != nil {
 		return nil, err
 	}
-	result := &RequestedItem{RequestID: requestID}
+	result := &RequestedItem{RequestID: encodeNcip1RequestID(*l.request(requestID))}
+	if response.UniqueItemId != nil {
+		result.ItemID = encodeNcip1ItemID(*response.UniqueItemId)
+	}
 	if response.UniqueRequestId != nil && strings.TrimSpace(response.UniqueRequestId.RequestIdentifierValue) != "" {
 		result.RequestID = encodeNcip1RequestID(*response.UniqueRequestId)
 	}
@@ -300,7 +303,11 @@ func (l *LmsAdapterNcip1) CheckInItem(itemID string) (bool, error) {
 	if err := ncip1Required(itemID); err != nil {
 		return false, err
 	}
-	_, err := l.client.CheckInItem(ncip.CheckInItem{InitiationHeader: l.header(), UniqueItemId: l.item(itemID)})
+	item, err := l.savedItem(itemID)
+	if err != nil {
+		return false, err
+	}
+	_, err = l.client.CheckInItem(ncip.CheckInItem{InitiationHeader: l.header(), UniqueItemId: item})
 	return err == nil, err
 }
 func (l *LmsAdapterNcip1) CheckOutItem(requestID, itemID, userID, externalReference string) (*CheckedOutItem, error) {
@@ -313,7 +320,11 @@ func (l *LmsAdapterNcip1) CheckOutItem(requestID, itemID, userID, externalRefere
 	if externalReference != "" {
 		return nil, fmt.Errorf("NCIP v1 CheckOutItem does not support an external reference")
 	}
-	arg := ncip.CheckOutItem{InitiationHeader: l.header(), UniqueItemId: l.item(itemID), UniqueUserId: l.user(userID), ItemElementType: ncip1ItemElements("Bibliographic Description")}
+	item, err := l.savedItem(itemID)
+	if err != nil {
+		return nil, err
+	}
+	arg := ncip.CheckOutItem{InitiationHeader: l.header(), UniqueItemId: item, UniqueUserId: l.user(userID), ItemElementType: ncip1ItemElements("Bibliographic Description")}
 	if requestID != "" {
 		request, err := l.savedRequest(requestID)
 		if err != nil {

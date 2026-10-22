@@ -10,11 +10,13 @@ import (
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/lms"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	ncip "github.com/indexdata/crosslink/ncipv1"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -221,15 +223,26 @@ func TestNcipV1PatronRejection(t *testing.T) {
 }
 
 func TestNcipV1ReservationAgencySurvivesPersistenceAndCompensation(t *testing.T) {
-	for _, failCommit := range []bool{false, true} {
-		t.Run(map[bool]string{false: "persisted", true: "compensation"}[failCommit], func(t *testing.T) {
+	for _, tc := range []struct {
+		name                 string
+		failCommit, fallback bool
+	}{{"persisted", false, false}, {"compensation", true, false}, {"fallback persisted", false, true}, {"fallback compensation", true, true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			failCommit := tc.failCommit
+			initiatingID := "ncip1-request:42"
 			returnedID := ncip.UniqueRequestId{XMLName: xml.Name{Local: "UniqueRequestId"}, UniqueAgencyId: ncip.UniqueAgencyId{XMLName: xml.Name{Local: "UniqueAgencyId"}, Scheme: "urn:lms:agency:custom", Value: "other-lms"}, RequestIdentifierValue: " lms-request:&/é "}
 			reservation := ncipV1ResponseFixture(t, "RequestItem")
 			reservation.RequestItemResponse.UniqueRequestId = &returnedID
+			returnedItem := ncip.UniqueItemId{XMLName: xml.Name{Local: "UniqueItemId"}, UniqueAgencyId: returnedID.UniqueAgencyId, ItemIdentifierValue: " internal-item:&/é "}
+			reservation.RequestItemResponse.UniqueItemId = &returnedItem
+			if tc.fallback {
+				reservation.RequestItemResponse.UniqueRequestId = nil
+			}
 			reservation.RequestItemResponse.ItemOptionalFields = &ncip.ItemOptionalFields{ItemDescription: &ncip.ItemDescription{CopyNumber: "barcode"}}
 			cancel := ncipV1ResponseFixture(t, "CancelRequestItem")
 			checkout := ncipV1ResponseFixture(t, "CheckOutItem")
-			var requests, cancellations, checkouts atomic.Int32
+			checkin := ncipV1ResponseFixture(t, "CheckInItem")
+			var requests, cancellations, checkouts, checkins atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				var message ncip.NCIPMessage
 				require.NoError(t, xml.NewDecoder(r.Body).Decode(&message))
@@ -238,7 +251,10 @@ func TestNcipV1ReservationAgencySurvivesPersistenceAndCompensation(t *testing.T)
 				case message.RequestItem != nil:
 					requests.Add(1)
 					require.Equal(t, "broker", message.RequestItem.UniqueRequestId.UniqueAgencyId.Value)
-					require.Equal(t, "req-1", message.RequestItem.UniqueRequestId.RequestIdentifierValue)
+					require.Equal(t, initiatingID, message.RequestItem.UniqueRequestId.RequestIdentifierValue)
+					if tc.fallback {
+						returnedID = *message.RequestItem.UniqueRequestId
+					}
 					response = reservation
 				case message.CancelRequestItem != nil:
 					cancellations.Add(1)
@@ -247,7 +263,12 @@ func TestNcipV1ReservationAgencySurvivesPersistenceAndCompensation(t *testing.T)
 				case message.CheckOutItem != nil:
 					checkouts.Add(1)
 					require.Equal(t, returnedID, *message.CheckOutItem.UniqueRequestId)
+					require.Equal(t, returnedItem, message.CheckOutItem.UniqueItemId)
 					response = checkout
+				case message.CheckInItem != nil:
+					checkins.Add(1)
+					require.Equal(t, returnedItem, message.CheckInItem.UniqueItemId)
+					response = checkin
 				default:
 					t.Error("unexpected NCIP service")
 					w.WriteHeader(http.StatusBadRequest)
@@ -262,13 +283,15 @@ func TestNcipV1ReservationAgencySurvivesPersistenceAndCompensation(t *testing.T)
 			require.NoError(t, err)
 			pr := testLoan()
 			pr.RequesterSymbol = getDbText("ISIL:REC1")
-			pr.IllRequest.Header.RequestingAgencyRequestId = "req-1"
+			pr.IllRequest.Header.RequestingAgencyRequestId = initiatingID
 			pr.IllRequest.BibliographicInfo.SupplierUniqueRecordId = "bib"
 			repo := &loanTxRepo{MockPrRepo: &MockPrRepo{savedPr: pr}}
 			if failCommit {
 				repo.failStep = "commit"
 			}
-			svc := &PatronRequestActionService{prRepo: repo}
+			directory := new(IllRepoMock)
+			directory.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything).Return([]ill_db.Peer{{CustomData: dirapi.Entry{}}}, "", nil)
+			svc := CreatePatronRequestActionService(repo, directory, new(MockEventBus), new(MockIso18626Handler), nil, nil, nil, nil)
 			result := svc.requestItemLenderRequest(appCtx, pr, adapter, pr.IllRequest)
 			if failCommit {
 				require.Equal(t, events.EventStatusError, result.status)
@@ -280,8 +303,15 @@ func TestNcipV1ReservationAgencySurvivesPersistenceAndCompensation(t *testing.T)
 				// A fresh adapter must reconstruct the wire identifier using only persisted data.
 				adapter, err = lms.CreateLmsAdapterNcip1(config)
 				require.NoError(t, err)
-				_, err = adapter.CheckOutItem(repo.savedItems[0].LmsRequestID.String, "barcode", "user", "")
-				require.NoError(t, err)
+				require.True(t, repo.savedItems[0].LmsItemID.Valid)
+				require.Equal(t, "barcode", repo.savedItems[0].Barcode)
+				result = svc.shipLenderRequest(appCtx, "ship", pr, adapter, pr.IllRequest, actionParams{})
+				require.Equal(t, events.EventStatusSuccess, result.status, "%+v", result.result)
+				result = svc.markReceivedLenderRequest(appCtx, "receive", result.pr, adapter)
+				require.Equal(t, events.EventStatusSuccess, result.status, "%+v", result.result)
+				require.Equal(t, pr_db.LmsStatusCheckedIn, repo.savedItems[0].LmsStatus)
+				require.Equal(t, "barcode", repo.savedItems[0].Barcode)
+				require.Equal(t, int32(1), checkins.Load())
 				require.NoError(t, svc.cancelLenderRequestItems(appCtx, pr, adapter))
 				require.Equal(t, int32(1), checkouts.Load())
 			}

@@ -72,7 +72,7 @@ func TestNcip1Operations(t *testing.T) {
 	a.config.BibIdNormalization = &normalization
 	item, err := a.RequestItem("request", ".b1234", "user", "ignored", "")
 	require.NoError(t, err)
-	require.Equal(t, &RequestedItem{RequestID: encodeNcip1RequestID(ncip.UniqueRequestId{UniqueAgencyId: ncip.UniqueAgencyId{Scheme: "urn:test:agency", Value: "lms"}, RequestIdentifierValue: "lms-request"}), Title: "Title", Barcode: "barcode", CallNumber: "call", Location: "Main", ShelvingLocation: "Stacks"}, item)
+	require.Equal(t, &RequestedItem{RequestID: encodeNcip1RequestID(ncip.UniqueRequestId{UniqueAgencyId: ncip.UniqueAgencyId{Scheme: "urn:test:agency", Value: "lms"}, RequestIdentifierValue: "lms-request"}), ItemID: encodeNcip1ItemID(ncip.UniqueItemId{UniqueAgencyId: ncip.UniqueAgencyId{Scheme: "urn:test:agency", Value: "lms"}, ItemIdentifierValue: "internal-id"}), Title: "Title", Barcode: "barcode", CallNumber: "call", Location: "Main", ShelvingLocation: "Stacks"}, item)
 	a = ncip1TestAdapter(t, `<CancelRequestItemResponse>`+ncip1TestHeader+`<UniqueRequestId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><RequestIdentifierValue>request</RequestIdentifierValue></UniqueRequestId><UniqueUserId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><UserIdentifierValue>user</UserIdentifierValue></UniqueUserId></CancelRequestItemResponse>`, func(m ncip.NCIPMessage) {
 		require.Equal(t, "request", m.CancelRequestItem.UniqueRequestId.RequestIdentifierValue)
 		require.Nil(t, m.CancelRequestItem.UniqueItemId)
@@ -264,5 +264,16 @@ func TestNcip1SavedRequestReferences(t *testing.T) {
 		require.ErrorContains(t, a.CancelRequestItem(id, "user"), "invalid NCIP v1 request reference")
 		_, err := a.CheckOutItem(id, "item", "user", "")
 		require.ErrorContains(t, err, "invalid NCIP v1 request reference")
+	}
+}
+
+func TestNcip1MalformedItemReferences(t *testing.T) {
+	a := &LmsAdapterNcip1{}
+	for _, id := range []string{"ncip1-item:", "ncip1-item:a.b", "ncip1-item:!.YQ.Yg", "ncip1-item:YQ..Yg", "ncip1-item:YQ.Yg.IA"} {
+		// No client: these references must fail before sending an HTTP request.
+		_, err := a.CheckOutItem("", id, "user", "")
+		require.ErrorContains(t, err, "invalid NCIP v1 item reference")
+		_, err = a.CheckInItem(id)
+		require.ErrorContains(t, err, "invalid NCIP v1 item reference")
 	}
 }
