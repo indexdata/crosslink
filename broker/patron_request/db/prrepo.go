@@ -106,6 +106,10 @@ func (r *PgPrRepo) GetPatronRequestByIdForUpdate(ctx common.ExtendedContext, id 
 }
 
 func (r *PgPrRepo) GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id string, side PatronRequestSide) (PatronRequest, error) {
+	if side == "borrowing" {
+		row, err := r.queries.GetBorrowingRequestByRequesterReqId(ctx, r.GetConnOrTx(), pgtype.Text{String: id, Valid: true})
+		return row.PatronRequest, err
+	}
 	pr, err := r.GetPatronRequestById(ctx, id)
 	if err != nil {
 		return PatronRequest{}, err

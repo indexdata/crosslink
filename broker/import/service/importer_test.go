@@ -452,19 +452,25 @@ func TestImportPatronRequestRejectsRequesterSymbolMismatches(t *testing.T) {
 	}
 }
 
-func TestImportPatronRequestRejectsBorrowingIDDifferentFromRequesterRequestID(t *testing.T) {
-	repo := &recordingImportRepo{}
-	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+func TestImportPatronRequestPreservesBorrowingIDDifferentFromRequesterRequestID(t *testing.T) {
+	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "requester-peer"}, {ID: "supplier-peer"}}}
 	importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
 	data := mutatePatronBundleData(t, func(bundle map[string]any) {
 		request := bundle["patronRequest"].(map[string]any)
-		request["id"] = "other-request"
+		request["id"] = "local-request"
+		request["requesterRequestId"] = "protocol-request~2"
+		request["illRequest"].(map[string]any)["header"].(map[string]any)["requestingAgencyRequestId"] = "protocol-request~2"
+		bundle["illTransaction"].(map[string]any)["requesterRequestID"] = "protocol-request~2"
 	})
 
 	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:REQ", data)
 
-	require.ErrorContains(t, err, "borrowing patronRequest.id must match requesterRequestId")
-	assert.Zero(t, repo.patronCalls)
+	require.NoError(t, err)
+	assert.Equal(t, "local-request", repo.patron.PatronRequest.ID)
+	assert.Equal(t, pgText("protocol-request~2"), repo.patron.PatronRequest.RequesterReqID)
+	require.NotNil(t, repo.patron.IllTransaction)
+	assert.Equal(t, pgText("protocol-request~2"), repo.patron.IllTransaction.RequesterRequestID)
 }
 
 func TestImportPatronRequestRunsISORequestValidation(t *testing.T) {

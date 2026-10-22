@@ -143,12 +143,13 @@ func TestHandleMessageRequestCreatesTaskBeforeAutoActions(t *testing.T) {
 func TestHandleMessageSupplyingAgencyCreatesTaskBeforeAutoActions(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockEventBus := new(MockEventBus)
+	protocolRequestID := patronRequestId + "~2"
 	mockAutoActionRunner := &MockAutoActionRunner{
 		onRun: func(_ pr_db.PatronRequest) {
 			assert.Len(t, mockEventBus.createdTaskData, 1)
 		},
 	}
-	mockPrRepo.On("GetPatronRequestByIdAndSide", patronRequestId, SideBorrowing).Return(pr_db.PatronRequest{
+	mockPrRepo.On("GetPatronRequestByIdAndSide", protocolRequestID, SideBorrowing).Return(pr_db.PatronRequest{
 		ID:    patronRequestId,
 		Side:  SideBorrowing,
 		State: BorrowerStateSent,
@@ -161,7 +162,7 @@ func TestHandleMessageSupplyingAgencyCreatesTaskBeforeAutoActions(t *testing.T) 
 	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
 		Header: iso18626.Header{
 			Timestamp:                 inTimestamp,
-			RequestingAgencyRequestId: patronRequestId,
+			RequestingAgencyRequestId: protocolRequestID,
 			SupplyingAgencyId: iso18626.TypeAgencyId{
 				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
 				AgencyIdValue: "SUP1",

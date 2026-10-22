@@ -17,6 +17,12 @@ WHERE id = $1
     FOR UPDATE
     LIMIT 1;
 
+-- name: GetBorrowingRequestByRequesterReqId :one
+SELECT sqlc.embed(patron_request)
+FROM patron_request
+WHERE requester_req_id = $1 AND side = 'borrowing'
+LIMIT 1;
+
 -- name: ListPatronRequests :many
 SELECT sqlc.embed(patron_request_search_view), COUNT(*) OVER () as full_count
 FROM patron_request_search_view

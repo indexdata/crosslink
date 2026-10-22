@@ -382,9 +382,6 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 	if apiBundle.IllTransaction != nil && apiBundle.IllTransaction.RequesterSymbol != requesterSymbol {
 		return importdb.PatronRequestBundle{}, nil, errors.New("illTransaction.requesterSymbol must match illRequest.header.requestingAgencyId")
 	}
-	if side == prservice.SideBorrowing && request.Id != request.RequesterRequestId {
-		return importdb.PatronRequestBundle{}, nil, errors.New("borrowing patronRequest.id must match requesterRequestId")
-	}
 	if err := prservice.ValidateIllRequest(request.IllRequest); err != nil {
 		return importdb.PatronRequestBundle{}, nil, fmt.Errorf("invalid illRequest: %w", err)
 	}

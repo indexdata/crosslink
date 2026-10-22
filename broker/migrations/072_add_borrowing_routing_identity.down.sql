@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_patron_request_borrowing_routing_identity;

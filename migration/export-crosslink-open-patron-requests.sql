@@ -166,8 +166,20 @@ SELECT
         WHEN patron_request.pr_is_requester IS NOT TRUE
             THEN patron_request.pr_id
         ELSE coalesce(patron_request.pr_hrid, patron_request.pr_id)
-    END AS import_id
-FROM patron_request;
+    END AS import_id,
+    CASE
+        WHEN patron_request.pr_is_requester IS NOT TRUE
+            THEN patron_request.pr_id
+        WHEN state_model.sm_shortcode IN ('SLNPRequester', 'SLNPResponder',
+                                          'SLNPNonReturnableRequester',
+                                          'SLNPNonReturnableResponder')
+            THEN coalesce(patron_request.pr_hrid, patron_request.pr_id)
+        ELSE coalesce(patron_request.pr_hrid, patron_request.pr_id)
+             || '~' || coalesce(patron_request.pr_rota_position::text, 'norota')
+    END AS protocol_id
+FROM patron_request
+JOIN state_model
+  ON state_model.sm_id = patron_request.pr_state_model_fk;
 
 CREATE TEMP VIEW crosslink_open_requests AS
 SELECT
@@ -193,7 +205,7 @@ SELECT
     CASE
         WHEN patron_request.pr_is_requester IS NOT TRUE
             THEN patron_request.pr_peer_request_identifier
-        ELSE request_identity.import_id
+        ELSE request_identity.protocol_id
     END AS import_requester_request_id,
     CASE
         WHEN patron_request.pr_is_requester IS NOT TRUE

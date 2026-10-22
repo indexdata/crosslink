@@ -640,9 +640,11 @@ func TestListPatronRequests(t *testing.T) {
 		prIds = append(prIds, prId)
 		var internalNote pgtype.Text
 		var cancellationReason pgtype.Text
+		requesterRequestID := "REQ-456"
 		if i == 0 {
 			internalNote = pgtype.Text{String: "staff only", Valid: true}
 			cancellationReason = pgtype.Text{String: "already available", Valid: true}
+			requesterRequestID = "REQ-123"
 		}
 		_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
 			ID:                 prId,
@@ -664,7 +666,7 @@ func TestListPatronRequests(t *testing.T) {
 			State:    prservice.BorrowerStateValidated,
 			Language: "english",
 			RequesterReqID: pgtype.Text{
-				String: "REQ-123",
+				String: requesterRequestID,
 				Valid:  true,
 			},
 			Patron: pgtype.Text{
@@ -783,7 +785,7 @@ func TestListPatronRequests(t *testing.T) {
 	assert.Len(t, list, 2)
 	assert.Equal(t, int64(2), fullCount)
 
-	cql = "requester_req_id = req-123"
+	cql = "requester_req_id = req-*"
 	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
 	assert.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
@@ -1002,7 +1004,7 @@ func TestListPatronRequests(t *testing.T) {
 	}
 
 	// has_internal_note=false selects requests without one
-	cql = `requester_req_id_exact = REQ-123 and has_internal_note=false`
+	cql = `requester_req_id_exact = REQ-456 and has_internal_note=false`
 	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
 	assert.NoError(t, err)
 	list, _, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{

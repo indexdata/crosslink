@@ -12,6 +12,7 @@ import (
 	ill_db "github.com/indexdata/crosslink/broker/ill_db"
 	importdb "github.com/indexdata/crosslink/broker/import/db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/crosslink/testutil"
@@ -67,6 +68,13 @@ func TestImportPatronRequestInsertsAndSynchronizesCompleteBundle(t *testing.T) {
 	assert.Equal(t, 1, queryCount(t, "SELECT count(*) FROM ill_transaction WHERE id=$1", bundle.IllTransaction.ID))
 	assert.Equal(t, 1, queryCount(t, "SELECT count(*) FROM located_supplier WHERE ill_transaction_id=$1", bundle.IllTransaction.ID))
 	assert.Equal(t, 0, queryCount(t, "SELECT count(*) FROM event WHERE patron_request_id=$1", bundle.PatronRequest.ID))
+	routed, err := pr_db.CreatePrRepo(importTestPool, false).GetPatronRequestByIdAndSide(
+		importTestCtx,
+		bundle.PatronRequest.RequesterReqID.String,
+		prservice.SideBorrowing,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, bundle.PatronRequest.ID, routed.ID)
 
 	failResult, err := importTestRepo.ImportPatronRequest(importTestCtx, bundle, importdb.ConflictPolicyFail)
 	assert.Empty(t, failResult.Outcome)
@@ -318,6 +326,14 @@ func TestImportPatronRequestCollisionRollsBackRoot(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, 0, queryCount(t, "SELECT count(*) FROM patron_request WHERE id=$1", second.PatronRequest.ID))
 	assert.Equal(t, 1, queryCount(t, "SELECT count(*) FROM item WHERE id=$1 AND pr_id=$2", first.Items[0].ID, first.PatronRequest.ID))
+
+	duplicateRoutingID := testPatronBundle(prefix+"-duplicate-routing-id", first.PatronRequest.RequesterReqID.String)
+	duplicateRoutingID.IllTransaction = nil
+	duplicateRoutingID.LocatedSuppliers = nil
+	_, err = importTestRepo.ImportPatronRequest(importTestCtx, duplicateRoutingID, importdb.ConflictPolicyFail)
+	var conflict *importdb.ConflictError
+	require.ErrorAs(t, err, &conflict)
+	assert.Equal(t, 0, queryCount(t, "SELECT count(*) FROM patron_request WHERE id=$1", duplicateRoutingID.PatronRequest.ID))
 }
 
 func TestSaveItemDoesNotReparentAfterConcurrentMissingChecks(t *testing.T) {
@@ -465,10 +481,10 @@ func TestImportPatronRequestNewRootCannotReuseExistingIllTransaction(t *testing.
 	prefix := uuid.NewString()
 	original := testPatronBundle(prefix+"-original", prefix+"-request")
 	require.NoError(t, importOnly(original))
-	incoming := testPatronBundle(prefix+"-incoming", prefix+"-request")
+	incoming := testPatronBundle(prefix+"-incoming", prefix+"-incoming-request")
 	incoming.IllTransaction.ID = original.IllTransaction.ID
 	_, err := importTestRepo.ImportPatronRequest(importTestCtx, incoming, importdb.ConflictPolicyUpdate)
-	require.ErrorContains(t, err, "already belongs to a persisted aggregate")
+	require.ErrorContains(t, err, "requester request ID does not match existing transaction")
 	assert.Equal(t, 0, queryCount(t, "SELECT count(*) FROM patron_request WHERE id=$1", incoming.PatronRequest.ID))
 }
 

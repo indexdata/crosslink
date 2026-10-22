@@ -16,6 +16,17 @@ WHERE id = sqlc.arg(id)
 ORDER BY id
 FOR UPDATE;
 
+-- name: LockImportBorrowingPatronRequestMatches :many
+SELECT id
+FROM patron_request
+WHERE id = sqlc.arg(id)
+   OR (
+       side = 'borrowing'
+       AND requester_req_id = sqlc.arg(requester_req_id)
+   )
+ORDER BY id
+FOR UPDATE;
+
 -- name: CreateImportedPatronRequest :exec
 INSERT INTO patron_request (
     id, created_at, ill_request, state, side, patron, requester_symbol,

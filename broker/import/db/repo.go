@@ -68,7 +68,8 @@ func (r *PgImportRepo) ImportPatronRequest(ctx common.ExtendedContext, bundle Pa
 		incomingID := bundle.PatronRequest.ID
 		targetID := incomingID
 		exists := false
-		if bundle.PatronRequest.Side == prservice.SideLending {
+		switch bundle.PatronRequest.Side {
+		case prservice.SideLending:
 			matches, err := r.queries.LockImportLendingPatronRequestMatches(ctx, tx, LockImportLendingPatronRequestMatchesParams{
 				ID:             incomingID,
 				SupplierSymbol: bundle.PatronRequest.SupplierSymbol,
@@ -91,6 +92,34 @@ func (r *PgImportRepo) ImportPatronRequest(ctx common.ExtendedContext, bundle Pa
 					Resource:   "patron request",
 					Identifier: incomingID,
 					Reason:     fmt.Sprintf("local ID matches one aggregate but lending routing identity matches %q", routingIdentityID),
+				}
+			}
+			if routingIdentityID != "" {
+				targetID = routingIdentityID
+			}
+			exists = len(matches) != 0
+		case prservice.SideBorrowing:
+			matches, err := r.queries.LockImportBorrowingPatronRequestMatches(ctx, tx, LockImportBorrowingPatronRequestMatchesParams{
+				ID:             incomingID,
+				RequesterReqID: bundle.PatronRequest.RequesterReqID,
+			})
+			if err != nil {
+				return fmt.Errorf("lock borrowing patron request matches for %q: %w", incomingID, err)
+			}
+			idMatched := false
+			routingIdentityID := ""
+			for _, matchID := range matches {
+				if matchID == incomingID {
+					idMatched = true
+				} else {
+					routingIdentityID = matchID
+				}
+			}
+			if idMatched && routingIdentityID != "" {
+				return &ConflictError{
+					Resource:   "patron request",
+					Identifier: incomingID,
+					Reason:     fmt.Sprintf("local ID matches one aggregate but borrowing routing identity matches %q", routingIdentityID),
 				}
 			}
 			if routingIdentityID != "" {
