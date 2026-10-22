@@ -7,6 +7,32 @@ import (
 	ncip "github.com/indexdata/crosslink/ncipv1"
 )
 
+// acknowledgementSingleton limits occurrence checks to the acknowledgement
+// header and identities, leaving optional metadata's repeated elements alone.
+func acknowledgementSingleton(parent, child string) bool {
+	switch parent {
+	case "ResponseHeader":
+		switch child {
+		case "FromAgencyId", "ToAgencyId", "FromSystemId", "ToSystemId", "FromAgencyAuthentication", "FromSystemAuthentication":
+			return true
+		}
+	case "ResponseHeader/FromAgencyId", "ResponseHeader/ToAgencyId":
+		return child == "UniqueAgencyId"
+	case "UniqueUserId":
+		return child == "UniqueAgencyId" || child == "UserIdentifierValue"
+	case "UniqueItemId":
+		return child == "UniqueAgencyId" || child == "ItemIdentifierValue"
+	case "UniqueRequestId":
+		return child == "UniqueAgencyId" || child == "RequestIdentifierValue"
+	case "ResponseHeader/FromAgencyId/UniqueAgencyId", "ResponseHeader/ToAgencyId/UniqueAgencyId",
+		"ResponseHeader/FromSystemId", "ResponseHeader/ToSystemId",
+		"UniqueUserId/UniqueAgencyId", "UniqueItemId/UniqueAgencyId", "UniqueRequestId/UniqueAgencyId",
+		"RequestType", "RequestScopeType":
+		return child == "Scheme" || child == "Value"
+	}
+	return false
+}
+
 // Validate the acknowledgement structure before treating a response as success.
 // Optional metadata is decoded normally; this is not a general XSD validator.
 func validateResponse(message *ncip.NCIPMessage, fields map[string]int) error {

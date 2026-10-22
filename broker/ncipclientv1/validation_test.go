@@ -143,3 +143,82 @@ func TestRedactEchoedErrorValues(t *testing.T) {
 		})
 	}
 }
+
+// replaceAcknowledgementElement selects an exact path, so tests can distinguish
+// the same element name in the header, returned identities, and optional metadata.
+func replaceAcknowledgementElement(t *testing.T, body string, path []string, replace func(string) string) string {
+	t.Helper()
+	re := regexp.MustCompile("(?s)<" + path[0] + ">.*?</" + path[0] + ">")
+	match := re.FindStringIndex(body)
+	require.NotNil(t, match, "missing test path %v", path)
+	element := body[match[0]:match[1]]
+	if len(path) == 1 {
+		element = replace(element)
+	} else {
+		element = replaceAcknowledgementElement(t, element, path[1:], replace)
+	}
+	return body[:match[0]] + element + body[match[1]:]
+}
+
+func TestDuplicateNestedAcknowledgementFields(t *testing.T) {
+	for _, service := range []string{"LookupUser", "AcceptItem", "RequestItem", "CancelRequestItem", "CheckInItem", "CheckOutItem"} {
+		t.Run(service, func(t *testing.T) {
+			data, err := os.ReadFile("testdata/" + service + "Response.xml")
+			require.NoError(t, err)
+			body := string(data)
+			paths := []string{
+				"ResponseHeader/FromAgencyId", "ResponseHeader/ToAgencyId",
+				"ResponseHeader/FromAgencyId/UniqueAgencyId", "ResponseHeader/ToAgencyId/UniqueAgencyId",
+				"ResponseHeader/FromAgencyId/UniqueAgencyId/Scheme", "ResponseHeader/ToAgencyId/UniqueAgencyId/Value",
+			}
+			for _, identity := range []struct{ name, value string }{
+				{"UniqueUserId", "UserIdentifierValue"},
+				{"UniqueItemId", "ItemIdentifierValue"},
+				{"UniqueRequestId", "RequestIdentifierValue"},
+			} {
+				if strings.Contains(body, "<"+identity.name+">") {
+					paths = append(paths, identity.name+"/UniqueAgencyId", identity.name+"/UniqueAgencyId/Scheme",
+						identity.name+"/UniqueAgencyId/Value", identity.name+"/"+identity.value)
+				}
+			}
+			for _, path := range paths {
+				for _, split := range []bool{false, true} {
+					t.Run(fmt.Sprintf("%s/split=%t", path, split), func(t *testing.T) {
+						broken := replaceAcknowledgementElement(t, body, strings.Split(path, "/"), func(element string) string {
+							if split && strings.Contains(element, "<Scheme>") && strings.Contains(element, "<Value>") {
+								// Neither repeated container holds a complete agency, but
+								// encoding/xml would merge the Scheme and Value fields.
+								withoutScheme := regexp.MustCompile("(?s)<Scheme>.*?</Scheme>").ReplaceAllString(element, "")
+								withoutValue := regexp.MustCompile("(?s)<Value>.*?</Value>").ReplaceAllString(element, "")
+								return withoutValue + withoutScheme
+							}
+							// Conflicting singleton text must not be silently overwritten.
+							conflict := regexp.MustCompile(">[^<]+<").ReplaceAllString(element, ">conflicting<")
+							return element + conflict
+						})
+						var decoded ncip.NCIPMessage
+						require.ErrorContains(t, decode([]byte(broken), &decoded), "duplicate "+path)
+						require.Equal(t, ncip.NCIPMessage{}, decoded, "reject before unmarshalling")
+						client := testClient(t, broken, nil)
+						var logged error
+						client.SetLogFunc(func(_, _ map[string]any, err error) { logged = err })
+						require.ErrorContains(t, invokeService(client, service), "invalid NCIP v1 response")
+						require.ErrorContains(t, logged, "invalid NCIP v1 response")
+					})
+				}
+			}
+		})
+	}
+}
+
+func TestAcknowledgementOccurrenceChecksLeaveMetadataLenient(t *testing.T) {
+	body := "<NCIPMessage><LookupUserResponse>" + testResponseHeader + testResponseUser +
+		"<UserOptionalFields><UserPrivilege><UniqueAgencyId><Scheme>local</Scheme><Value>one</Value></UniqueAgencyId></UserPrivilege>" +
+		"<UserPrivilege><UniqueAgencyId><Scheme>local</Scheme><Value>two</Value></UniqueAgencyId></UserPrivilege></UserOptionalFields>" +
+		"</LookupUserResponse></NCIPMessage>"
+	response, err := testClient(t, body, nil).LookupUser(ncip.LookupUser{})
+	require.NoError(t, err)
+	require.Len(t, response.UserOptionalFields.UserPrivilege, 2)
+	require.Equal(t, "one", response.UserOptionalFields.UserPrivilege[0].UniqueAgencyId.Value)
+	require.Equal(t, "two", response.UserOptionalFields.UserPrivilege[1].UniqueAgencyId.Value)
+}

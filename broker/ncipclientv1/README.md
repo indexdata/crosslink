@@ -93,3 +93,8 @@ be recovered.
 Response decoding failures expose only a generic invalid-response error.
 Parser diagnostics and partially decoded messages are discarded before logging;
 transport error chains remain intact.
+
+Acknowledgement headers and returned identities reject duplicate singleton
+children at their exact XML paths before unmarshalling. Split or conflicting
+agencies and identifier values cannot be merged into a successful acknowledgement;
+optional metadata retains its existing lenient decoding.

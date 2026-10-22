@@ -201,6 +201,8 @@ func decode(data []byte, value any) error {
 	d := xml.NewDecoder(bytes.NewReader(data))
 	depth, roots, services := 0, 0, 0
 	fields := make(map[string]int)
+	var path []string
+	seen := make(map[string]bool)
 	for {
 		token, err := d.Token()
 		if err == io.EOF {
@@ -232,7 +234,18 @@ func decode(data []byte, value any) error {
 			if depth == 3 {
 				fields[t.Name.Local]++
 			}
+			// Count only acknowledgement singletons at their exact paths. A
+			// global name count would reject agencies in separate identities.
+			if depth > 3 && acknowledgementSingleton(strings.Join(path[2:], "/"), t.Name.Local) {
+				key := strings.Join(path[2:], "/") + "/" + t.Name.Local
+				if seen[key] {
+					return fmt.Errorf("invalid NCIP v1 response: duplicate %s", key)
+				}
+				seen[key] = true
+			}
+			path = append(path, t.Name.Local)
 		case xml.EndElement:
+			path = path[:len(path)-1]
 			depth--
 		case xml.CharData:
 			if depth < 2 && strings.TrimSpace(string(t)) != "" {
