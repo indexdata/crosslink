@@ -172,6 +172,9 @@ func Resolve(entry dirapi.Entry) (*Effective, error) {
 
 func (e *Effective) validate() error {
 	if l := e.LMS; l != nil {
+		if l.NcipVersion != nil && *l.NcipVersion != "1.0" && *l.NcipVersion != "2.02" {
+			return fmt.Errorf("LMS profile %s: unsupported ncipVersion %q", e.LMSVendor, *l.NcipVersion)
+		}
 		if (l.Address == "") != (l.FromAgency == "") {
 			return fmt.Errorf("LMS profile %s: lmsConfig.address and fromAgency must both be configured", e.LMSVendor)
 		}

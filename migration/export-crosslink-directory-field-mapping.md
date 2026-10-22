@@ -225,6 +225,7 @@ profile. The exporter supplies the following fixed values.
 | `data.hrid` | `null` |
 | `data.timeZone` | `null` |
 | `data.closures` | `[]` |
+| `data.lmsConfig.ncipVersion` | `null`; inherits the CrossLink profile default (currently `2.02`). Set `1.0` explicitly for supported NCIP v1 HTTP endpoints. |
 | `data.lmsConfig.ncipNamespaceEnabled` | `null`; resolved by the CrossLink host-LMS profile. |
 | `data.lmsConfig.bibIdNormalization` | `null`; resolved by the CrossLink host-LMS profile. |
 | `data.catalogConfig.metadataUpdateMode` | `null`; CrossLink consequently does not update request metadata from catalog records. |

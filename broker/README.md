@@ -9,6 +9,7 @@ CrossLink broker is a system to manage inter-library loans (ILL), specifically i
 * negotiates loans with external suppliers (e.g Alma or ReShare) via ISO18626
 * allows internal requesters and suppliers to manage ILL requests using a convenient JSON API
 * provides ILS integration for internal requesters and suppliers via NCIP
+  ([NCIP 1.0 adapter](ncipclientv1/README.md))
 
 # API
 

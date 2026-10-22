@@ -483,6 +483,8 @@ func TestImportValidatesHostSettings(t *testing.T) {
 		{"unknown vendor", func(l, c map[string]any) { l["vendor"] = "bad" }},
 		{"missing vendor", func(l, c map[string]any) { delete(l, "vendor") }},
 		{"unknown normalization", func(l, c map[string]any) { l["bibIdNormalization"] = "bad" }},
+		{"unknown NCIP version", func(l, c map[string]any) { l["ncipVersion"] = "3.0" }},
+		{"numeric NCIP version", func(l, c map[string]any) { l["ncipVersion"] = 1.0 }},
 		{"namespace type", func(l, c map[string]any) { l["ncipNamespaceEnabled"] = "false" }},
 		{"unknown profile", func(l, c map[string]any) { c["profile"] = "bad" }},
 		{"missing profile", func(l, c map[string]any) { delete(c, "profile") }},

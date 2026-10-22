@@ -26,6 +26,7 @@ x-host-profiles:
           includeTemporaryLocation: true
   Generic:
     lmsConfig:
+      ncipVersion: "2.02"
       ncipNamespaceEnabled: true
       bibIdNormalization: none
       requestItemRequestType: Page
@@ -1832,6 +1833,12 @@ components:
       enum: [Alma, Sierra, Koha, WMS, Aleph, FOLIO, Generic]
       x-go-type: string
 
+    NcipVersion:
+      type: string
+      enum: ["1.0", "2.02"]
+      x-go-type: string
+      description: NCIP wire version. Omission inherits the profile default, currently 2.02. Version 1.0 uses namespace-free XML over HTTP.
+
     BibIdNormalization:
       type: string
       enum: [none, sierra]
@@ -1970,6 +1977,8 @@ components:
       properties:
         vendor:
           anyOf: [{ $ref: '#/components/schemas/HostLmsVendor' }, { type: "null" }]
+        ncipVersion:
+          anyOf: [{ $ref: '#/components/schemas/NcipVersion' }, { type: "null" }]
         ncipNamespaceEnabled: { type: [boolean, "null"] }
         bibIdNormalization:
           anyOf: [{ $ref: '#/components/schemas/BibIdNormalization' }, { type: "null" }]
@@ -2897,7 +2906,10 @@ components:
         be configured to create a circulation adapter.
       type: object
       properties:
+        ncipVersion:
+          $ref: '#/components/schemas/NcipVersion'
         ncipNamespaceEnabled:
+          description: Controls XML namespaces for NCIP 2.02 only; ignored for NCIP 1.0.
           type: boolean
         bibIdNormalization:
           $ref: '#/components/schemas/BibIdNormalization'
@@ -2993,7 +3005,11 @@ components:
     LmsConfigPatch:
       type: object
       properties:
+        ncipVersion:
+          anyOf: [{ $ref: '#/components/schemas/NcipVersion' }, { type: "null" }]
+          description: NCIP wire version. Null removes the override and restores the profile default.
         ncipNamespaceEnabled:
+          description: Controls XML namespaces for NCIP 2.02 only; ignored for NCIP 1.0.
           type: [boolean, "null"]
         bibIdNormalization:
           anyOf:

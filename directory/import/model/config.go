@@ -7,6 +7,7 @@ import (
 )
 
 type LMSConfig struct {
+	NcipVersion                      *string          `json:"ncipVersion"`
 	Vendor                           *string          `json:"vendor"`
 	NcipNamespaceEnabled             *bool            `json:"ncipNamespaceEnabled"`
 	BibIDNormalization               *string          `json:"bibIdNormalization"`

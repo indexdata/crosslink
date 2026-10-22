@@ -338,7 +338,7 @@ INSERT INTO  lms_configs (
   accept_item_enabled, checkin_item_enabled, checkout_item_enabled, item_location, 
   request_item_request_type, request_item_scope_type, request_item_bib_code,
   request_item_enabled, request_item_pickup_location_enabled, requester_pickup_location, supplier_pickup_location,
-  requester_patron_pattern, patron_profiles, vendor, ncip_namespace_enabled, bib_id_normalization
+  requester_patron_pattern, patron_profiles, vendor, ncip_namespace_enabled, ncip_version, bib_id_normalization
 ) VALUES (
   coalesce(sqlc.narg('id'), gen_random_uuid()),
   @entry,
@@ -362,11 +362,13 @@ INSERT INTO  lms_configs (
   @patron_profiles,
   @vendor,
   @ncip_namespace_enabled,
+  @ncip_version,
   @bib_id_normalization
 )
 ON CONFLICT (entry) DO UPDATE SET
   vendor = @vendor,
   ncip_namespace_enabled = @ncip_namespace_enabled,
+  ncip_version = @ncip_version,
   bib_id_normalization = @bib_id_normalization,
   address = @address,
   from_agency = @from_agency,

@@ -68,12 +68,20 @@ func TestImportHostSettingsMatchEntryContract(t *testing.T) {
 				entry := contract.Components.Schemas[name].Value
 				imported := contract.Components.Schemas["Import"+name].Value
 				fields := make([]string, 0, len(entry.Properties))
+				required := make([]string, 0, len(entry.Properties))
 				for field := range entry.Properties {
 					fields = append(fields, field)
+					// The additive version selector remains optional so existing
+					// complete imports continue to inherit NCIP 2.02.
+					if name == "LmsConfig" && field == "ncipVersion" {
+						require.NotContains(t, imported.Required, field)
+					} else {
+						required = append(required, field)
+					}
 					require.Contains(t, imported.Properties, field)
 				}
 				require.Len(t, imported.Properties, len(fields))
-				require.ElementsMatch(t, fields, imported.Required)
+				require.ElementsMatch(t, required, imported.Required)
 				require.NotNil(t, imported.AdditionalProperties.Has)
 				require.False(t, *imported.AdditionalProperties.Has)
 			}
@@ -100,6 +108,8 @@ func TestImportContractReusesDirectoryCreationObjectsAndEnums(t *testing.T) {
 		requirePropertySchemaRef(t, contract, "ImportTierData", "type", "TierType")
 		requirePropertySchemaRef(t, contract, "QueryConfig", "type", "QueryConfigType")
 		requirePropertySchemaRef(t, contract, "ImportQueryConfig", "type", "QueryConfigType")
+		requirePropertySchemaRef(t, contract, "LmsConfig", "ncipVersion", "NcipVersion")
+		requirePropertySchemaRef(t, contract, "ImportLmsConfig", "ncipVersion", "NcipVersion")
 		requirePropertySchemaRef(t, contract, "LmsConfig", "vendor", "HostLmsVendor")
 		requirePropertySchemaRef(t, contract, "ImportLmsConfig", "vendor", "HostLmsVendor")
 		requirePropertySchemaRef(t, contract, "LmsConfig", "bibIdNormalization", "BibIdNormalization")

@@ -9,6 +9,7 @@ require (
 	github.com/indexdata/crosslink/iso18626 v0.0.0
 	github.com/indexdata/crosslink/marcxml v0.0.0
 	github.com/indexdata/crosslink/ncip v0.0.0
+	github.com/indexdata/crosslink/ncipv1 v0.0.0
 	github.com/indexdata/crosslink/sru v0.0.0
 	github.com/indexdata/crosslink/testutil v0.0.0
 	github.com/indexdata/crosslink/zoom v0.0.0
@@ -21,6 +22,7 @@ replace (
 	github.com/indexdata/crosslink/iso18626 => ../iso18626
 	github.com/indexdata/crosslink/marcxml => ../marcxml
 	github.com/indexdata/crosslink/ncip => ../ncip
+	github.com/indexdata/crosslink/ncipv1 => ../ncipv1
 	github.com/indexdata/crosslink/sru => ../sru
 	github.com/indexdata/crosslink/testutil => ../testutil
 	github.com/indexdata/crosslink/zoom => ../zoom

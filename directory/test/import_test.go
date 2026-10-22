@@ -268,6 +268,7 @@ func TestImportHostSettingsRoundTrip(t *testing.T) {
 	record := entryImportRecord(symbolObject("ISIL", "HOST"), "Host settings", nil, "Consortium")
 	data := record["data"].(map[string]any)
 	lms := data["lmsConfig"].(map[string]any)
+	lms["ncipVersion"] = "1.0"
 	lms["vendor"], lms["ncipNamespaceEnabled"], lms["bibIdNormalization"] = "Sierra", false, "none"
 	// Selecting a profile without enabling NCIP is a valid complete import.
 	lms["address"], lms["fromAgency"] = "", ""
@@ -293,10 +294,11 @@ func TestImportHostSettingsRoundTrip(t *testing.T) {
 			require.Empty(t, result.Errors)
 			require.Equal(t, int32(1), result.Entries.Imported)
 			id := importedEntryID(t, "ISIL", "HOST")
-			var vendor, normalization, profile string
+			var vendor, normalization, profile, version string
 			var namespace bool
 			var raw []byte
-			require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT vendor, ncip_namespace_enabled, bib_id_normalization FROM lms_configs WHERE entry=$1`, id).Scan(&vendor, &namespace, &normalization))
+			require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT vendor, ncip_namespace_enabled, bib_id_normalization, ncip_version FROM lms_configs WHERE entry=$1`, id).Scan(&vendor, &namespace, &normalization, &version))
+			require.Equal(t, "1.0", version)
 			require.Equal(t, "Sierra", vendor)
 			require.False(t, namespace)
 			require.Equal(t, "none", normalization)
@@ -307,6 +309,7 @@ func TestImportHostSettingsRoundTrip(t *testing.T) {
 			require.Equal(t, http.StatusOK, res.StatusCode, body)
 			var saved struct {
 				LmsConfig struct {
+					NcipVersion          string
 					Vendor               string
 					NcipNamespaceEnabled *bool
 					BibIdNormalization   string
@@ -317,6 +320,7 @@ func TestImportHostSettingsRoundTrip(t *testing.T) {
 				}
 			}
 			require.NoError(t, json.Unmarshal([]byte(body), &saved))
+			require.Equal(t, "1.0", saved.LmsConfig.NcipVersion)
 			require.Equal(t, "Sierra", saved.LmsConfig.Vendor)
 			require.NotNil(t, saved.LmsConfig.NcipNamespaceEnabled)
 			require.False(t, *saved.LmsConfig.NcipNamespaceEnabled)
@@ -325,13 +329,14 @@ func TestImportHostSettingsRoundTrip(t *testing.T) {
 			require.JSONEq(t, tc.expected, string(saved.CatalogConfig.HoldingsFormat))
 		})
 	}
+	lms["ncipVersion"] = nil
 	lms["vendor"], lms["ncipNamespaceEnabled"], lms["bibIdNormalization"] = nil, nil, nil
 	catalog["profile"], catalog["holdingsFormat"] = nil, nil
 	_, result := importRequest(t, []any{record}, "update", standardHeaders)
 	require.Empty(t, result.Errors)
 	id := importedEntryID(t, "ISIL", "HOST")
 	var cleared bool
-	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT vendor IS NULL AND ncip_namespace_enabled IS NULL AND bib_id_normalization IS NULL FROM lms_configs WHERE entry=$1`, id).Scan(&cleared))
+	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT ncip_version IS NULL AND vendor IS NULL AND ncip_namespace_enabled IS NULL AND bib_id_normalization IS NULL FROM lms_configs WHERE entry=$1`, id).Scan(&cleared))
 	require.True(t, cleared)
 	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT profile IS NULL AND holdings_config IS NULL FROM catalog_configs WHERE entry=$1`, id).Scan(&cleared))
 	require.True(t, cleared)
