@@ -13,3 +13,4 @@ go.work.sum
 .venv/
 # migration schema properties
 migration/schema.properties
+*.ndjson
