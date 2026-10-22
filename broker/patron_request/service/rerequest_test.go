@@ -23,8 +23,10 @@ func TestRerequest(t *testing.T) {
 			repo.On("GetPatronRequestById", "REQ1-2").Return(pr_db.PatronRequest{State: BorrowerStateValidated}, nil)
 			service := CreatePatronRequestActionService(repo, new(MockIllRepo), bus, new(MockIso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
 			requestType := iso18626.TypeRequestTypeRetry
+			originalProtocolID := "REQ1-1~2"
 			original := pr_db.PatronRequest{
 				ID: "REQ1-1", Side: SideBorrowing, State: state, TerminalState: true,
+				RequesterReqID:  getDbText(originalProtocolID),
 				RequesterSymbol: getDbText("ISIL:REQ1"), SupplierSymbol: getDbText("ISIL:SUP1"),
 				Patron: getDbText("patron"), Tenant: getDbText("tenant"), StateModel: "default",
 				IllRequest: iso18626.Request{
@@ -63,7 +65,7 @@ func TestRerequest(t *testing.T) {
 			assert.Empty(t, next.Items)
 			assert.Nil(t, next.RetryBibInfo)
 			assert.Equal(t, iso18626.TypeRequestTypeNew, *next.IllRequest.ServiceInfo.RequestType)
-			assert.Equal(t, original.ID, next.IllRequest.ServiceInfo.RequestingAgencyPreviousRequestId)
+			assert.Equal(t, originalProtocolID, next.IllRequest.ServiceInfo.RequestingAgencyPreviousRequestId)
 			assert.Empty(t, next.IllRequest.Header.SupplyingAgencyRequestId)
 			assert.Equal(t, iso18626.TypeRequestTypeRetry, *original.IllRequest.ServiceInfo.RequestType)
 			assert.NotEmpty(t, bus.createdTaskData)
@@ -73,7 +75,7 @@ func TestRerequest(t *testing.T) {
 			require.Equal(t, events.EventStatusSuccess, status)
 			outgoing := sent.OutgoingMessage.Request
 			assert.Equal(t, iso18626.TypeRequestTypeNew, *outgoing.ServiceInfo.RequestType)
-			assert.Equal(t, original.ID, outgoing.ServiceInfo.RequestingAgencyPreviousRequestId)
+			assert.Equal(t, originalProtocolID, outgoing.ServiceInfo.RequestingAgencyPreviousRequestId)
 			assert.Equal(t, next.ID, outgoing.Header.RequestingAgencyRequestId)
 		})
 	}
@@ -95,14 +97,15 @@ func TestRerequestAvailability(t *testing.T) {
 func TestSendLinkedRetryRequest(t *testing.T) {
 	sender := PatronRequestMessageSender{eventBus: new(MockEventBus), iso18626Handler: new(MockIso18626Handler)}
 	requestType := iso18626.TypeRequestTypeRetry
-	request := iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{RequestType: &requestType}}
+	request := iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{RequestType: &requestType, RequestingAgencyPreviousRequestId: "previous~2"}}
 	status, result, err := sender.sendBorrowingRequest(appCtx, "send", pr_db.PatronRequest{
-		ID: "successor", RequesterSymbol: getDbText("ISIL:REQ1"), PrevReqID: getDbText("previous"),
+		ID: "successor", RequesterReqID: getDbText("successor~3"), RequesterSymbol: getDbText("ISIL:REQ1"), PrevReqID: getDbText("previous"),
 	}, request)
 	require.NoError(t, err)
 	require.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, iso18626.TypeRequestTypeRetry, *result.OutgoingMessage.Request.ServiceInfo.RequestType)
-	assert.Equal(t, "previous", result.OutgoingMessage.Request.ServiceInfo.RequestingAgencyPreviousRequestId)
+	assert.Equal(t, "successor~3", result.OutgoingMessage.Request.Header.RequestingAgencyRequestId)
+	assert.Equal(t, "previous~2", result.OutgoingMessage.Request.ServiceInfo.RequestingAgencyPreviousRequestId)
 	assert.Equal(t, iso18626.TypeRequestTypeRetry, *request.ServiceInfo.RequestType)
 }
 
@@ -202,10 +205,12 @@ func TestSendRequestDuplicateCheckBypass(t *testing.T) {
 				isoHandler := new(MockIso18626Handler)
 				sender := PatronRequestMessageSender{eventBus: new(MockEventBus), iso18626Handler: isoHandler}
 				pr := pr_db.PatronRequest{ID: "successor", RequesterSymbol: getDbText("ISIL:REQ1")}
+				persistedPrevious := "stale"
 				if linked {
 					pr.PrevReqID = getDbText("previous")
+					persistedPrevious = "previous~2"
 				}
-				request := iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{RequestType: &requestType, RequestingAgencyPreviousRequestId: "stale"}}
+				request := iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{RequestType: &requestType, RequestingAgencyPreviousRequestId: persistedPrevious}}
 				status, result, err := sender.sendBorrowingRequest(appCtx, "send", pr, request)
 				require.NoError(t, err)
 				require.Equal(t, events.EventStatusSuccess, status)
@@ -214,14 +219,14 @@ func TestSendRequestDuplicateCheckBypass(t *testing.T) {
 				expectedType := iso18626.TypeRequestTypeNew
 				expectedPrevious := ""
 				if linked {
-					expectedPrevious = "previous"
+					expectedPrevious = "previous~2"
 					if requestType == iso18626.TypeRequestTypeRetry {
 						expectedType = iso18626.TypeRequestTypeRetry
 					}
 				}
 				assert.Equal(t, expectedType, *result.OutgoingMessage.Request.ServiceInfo.RequestType)
 				assert.Equal(t, expectedPrevious, result.OutgoingMessage.Request.ServiceInfo.RequestingAgencyPreviousRequestId)
-				assert.Equal(t, "stale", request.ServiceInfo.RequestingAgencyPreviousRequestId)
+				assert.Equal(t, persistedPrevious, request.ServiceInfo.RequestingAgencyPreviousRequestId)
 			})
 		}
 	}

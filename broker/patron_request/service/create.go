@@ -35,6 +35,10 @@ func CreateBorrowingRequest(ctx common.ExtendedContext, repo pr_db.PrRepo, reque
 		if previous.NextReqID.Valid {
 			return fmt.Errorf("%w: request already has a successor", ErrInvalidPredecessor)
 		}
+		if request.IllRequest.ServiceInfo == nil {
+			request.IllRequest.ServiceInfo = &iso18626.ServiceInfo{}
+		}
+		request.IllRequest.ServiceInfo.RequestingAgencyPreviousRequestId = protocolRequesterRequestID(previous)
 		created, err = txRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(request))
 		if err != nil {
 			return fmt.Errorf("create successor: %w", err)

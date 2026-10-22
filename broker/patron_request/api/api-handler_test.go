@@ -881,7 +881,7 @@ func TestParseAndValidateIllRequestAndBuildDbPatronRequest(t *testing.T) {
 		Patron:          &patron,
 	}
 
-	illRequest, requesterReqID, err := handler.parseAndValidateIllRequest(ctx, reqWithID, creationTime)
+	illRequest, requesterReqID, err := handler.parseAndValidateIllRequest(ctx, reqWithID, creationTime, "")
 	assert.NoError(t, err)
 	assert.Equal(t, id, requesterReqID)
 	pr := buildDbPatronRequest(reqWithID, nil, pgtype.Timestamp{Valid: true, Time: creationTime}, requesterReqID, illRequest, prservice.BorrowerStateNew, "default")
@@ -895,7 +895,7 @@ func TestParseAndValidateIllRequestAndBuildDbPatronRequest(t *testing.T) {
 	assert.Equal(t, "default", pr.StateModel)
 
 	reqWithoutID := &proapi.CreatePatronRequest{RequesterSymbol: &symbol}
-	_, _, err = handler.parseAndValidateIllRequest(ctx, reqWithoutID, creationTime)
+	_, _, err = handler.parseAndValidateIllRequest(ctx, reqWithoutID, creationTime, "")
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, errInvalidPatronRequest))
 }
@@ -905,7 +905,7 @@ func TestParseAndValidateIllRequestInvalidRequesterSymbol(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	invalidSymbol := "REQ"
 
-	_, _, err := handler.parseAndValidateIllRequest(ctx, &proapi.CreatePatronRequest{RequesterSymbol: &invalidSymbol}, time.Now())
+	_, _, err := handler.parseAndValidateIllRequest(ctx, &proapi.CreatePatronRequest{RequesterSymbol: &invalidSymbol}, time.Now(), "")
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, errInvalidPatronRequest))
 }
@@ -922,7 +922,7 @@ func TestParseAndValidateIllRequestInvalidBrokerSymbol(t *testing.T) {
 	_, _, err := handler.parseAndValidateIllRequest(ctx, &proapi.CreatePatronRequest{
 		RequesterSymbol: &symbol,
 		IllRequest:      validIllRequest(),
-	}, time.Now())
+	}, time.Now(), "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid BROKER_SYMBOL")
 }
@@ -1603,6 +1603,7 @@ type PrRepoUpdateCapture struct {
 	lastUpdateParams *pr_db.UpdatePatronRequestParams
 	state            pr_db.PatronRequestState
 	pickupLocationID pgtype.UUID
+	requesterReqID   pgtype.Text
 }
 
 func (r *PrRepoUpdateCapture) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
@@ -1611,7 +1612,7 @@ func (r *PrRepoUpdateCapture) GetPatronRequestById(ctx common.ExtendedContext, i
 		if state == "" {
 			state = prservice.BorrowerStateNeedsReview
 		}
-		return pr_db.PatronRequest{ID: id, RequesterPickupLocationID: r.pickupLocationID, State: state, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, InternalNote: pgtype.Text{String: "original note", Valid: true}, Patron: pgtype.Text{String: "original patron", Valid: true}}, nil
+		return pr_db.PatronRequest{ID: id, RequesterReqID: r.requesterReqID, RequesterPickupLocationID: r.pickupLocationID, State: state, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, InternalNote: pgtype.Text{String: "original note", Valid: true}, Patron: pgtype.Text{String: "original patron", Valid: true}}, nil
 	}
 	return r.PrRepoError.GetPatronRequestById(ctx, id)
 }
@@ -1740,6 +1741,9 @@ func TestPutPatronRequestsIdMissingId(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	if assert.NotNil(t, repo.lastUpdateParams) {
 		assert.Equal(t, "3", repo.lastUpdateParams.ID)
+		assert.True(t, repo.lastUpdateParams.RequesterReqID.Valid)
+		assert.Equal(t, "3", repo.lastUpdateParams.RequesterReqID.String)
+		assert.Equal(t, "3", repo.lastUpdateParams.IllRequest.Header.RequestingAgencyRequestId)
 	}
 }
 
@@ -1858,7 +1862,7 @@ func TestPutPatronRequestsIdPreservesCreatedAt(t *testing.T) {
 }
 
 func TestPutPatronRequestsIdOK(t *testing.T) {
-	repo := new(PrRepoUpdateCapture)
+	repo := &PrRepoUpdateCapture{requesterReqID: pgtype.Text{String: "3~2", Valid: true}}
 	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
 	id := "3"
 	patron := "user-1"
@@ -1876,6 +1880,8 @@ func TestPutPatronRequestsIdOK(t *testing.T) {
 	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
 	assert.Equal(t, http.StatusOK, rr.Code)
 	if assert.NotNil(t, repo.lastUpdateParams) {
+		assert.Equal(t, "3~2", repo.lastUpdateParams.RequesterReqID.String)
+		assert.Equal(t, "3~2", repo.lastUpdateParams.IllRequest.Header.RequestingAgencyRequestId)
 		assert.Equal(t, validIllRequest().BibliographicInfo.Title, repo.lastUpdateParams.IllRequest.BibliographicInfo.Title)
 		assert.True(t, repo.lastUpdateParams.Patron.Valid)
 		assert.Equal(t, patron, repo.lastUpdateParams.Patron.String)

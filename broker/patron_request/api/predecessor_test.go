@@ -81,6 +81,7 @@ func TestPostPatronRequestsPredecessor(t *testing.T) {
 			repo := &predecessorRepo{previous: pr_db.PatronRequest{
 				ID: "previous", Side: prservice.SideBorrowing,
 				RequesterSymbol: pgtype.Text{String: symbol, Valid: true},
+				RequesterReqID:  pgtype.Text{String: "previous~2", Valid: true},
 			}}
 			if tc.setup != nil {
 				tc.setup(repo)
@@ -97,6 +98,7 @@ func TestPostPatronRequestsPredecessor(t *testing.T) {
 			require.Equal(t, tc.status, rr.Code, rr.Body.String())
 			if tc.status == http.StatusCreated {
 				assert.Equal(t, "previous", repo.created.PrevReqID.String)
+				assert.Equal(t, "previous~2", repo.created.IllRequest.ServiceInfo.RequestingAgencyPreviousRequestId)
 				assert.Equal(t, id, repo.updated.NextReqID.String)
 				assert.Contains(t, rr.Body.String(), `"prevReqId":"previous"`)
 			} else if tc.name != "update error" {

@@ -23,6 +23,13 @@ type PatronRequestMessageSender struct {
 
 var configuredBrokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 
+func protocolRequesterRequestID(pr pr_db.PatronRequest) string {
+	if pr.RequesterReqID.Valid && pr.RequesterReqID.String != "" {
+		return pr.RequesterReqID.String
+	}
+	return pr.ID
+}
+
 func (ms *PatronRequestMessageSender) sendSupplyingAgencyMessage(ctx common.ExtendedContext, parentEventID string, pr pr_db.PatronRequest, messageInfo iso18626.MessageInfo, statusInfo iso18626.StatusInfo, deliveryInfo *iso18626.DeliveryInfo) (events.EventStatus, *events.EventResult, error) {
 	reqAuthority, reqSymbol, err := common.SplitSymbol(pr.RequesterSymbol.String)
 	if err != nil {
@@ -115,7 +122,7 @@ func (ms *PatronRequestMessageSender) sendRequestingAgencyMessageTo(ctx common.E
 				AgencyIdValue: supSymbol,
 			},
 			Timestamp:                 utils.XSDDateTime{Time: time.Now()},
-			RequestingAgencyRequestId: pr.ID,
+			RequestingAgencyRequestId: protocolRequesterRequestID(pr),
 		},
 		Action: action,
 		Note:   note,
@@ -148,7 +155,7 @@ func (ms *PatronRequestMessageSender) sendBorrowingRequest(ctx common.ExtendedCo
 		},
 		AgencyIdValue: reqSymbol,
 	}
-	illRequest.Header.RequestingAgencyRequestId = pr.ID
+	illRequest.Header.RequestingAgencyRequestId = protocolRequesterRequestID(pr)
 	illRequest.Header.Timestamp = utils.XSDDateTime{Time: time.Now()}
 	if illRequest.PatronInfo == nil {
 		illRequest.PatronInfo = &iso18626.PatronInfo{}
@@ -158,12 +165,15 @@ func (ms *PatronRequestMessageSender) sendBorrowingRequest(ctx common.ExtendedCo
 		illRequest.ServiceInfo = &iso18626.ServiceInfo{}
 	}
 	requestType := iso18626.TypeRequestTypeNew
-	illRequest.ServiceInfo.RequestingAgencyPreviousRequestId = ""
 	if pr.PrevReqID.Valid {
-		illRequest.ServiceInfo.RequestingAgencyPreviousRequestId = pr.PrevReqID.String
+		if illRequest.ServiceInfo.RequestingAgencyPreviousRequestId == "" {
+			illRequest.ServiceInfo.RequestingAgencyPreviousRequestId = pr.PrevReqID.String
+		}
 		if illRequest.ServiceInfo.RequestType != nil && *illRequest.ServiceInfo.RequestType == iso18626.TypeRequestTypeRetry {
 			requestType = iso18626.TypeRequestTypeRetry
 		}
+	} else {
+		illRequest.ServiceInfo.RequestingAgencyPreviousRequestId = ""
 	}
 	illRequest.ServiceInfo.RequestType = &requestType
 

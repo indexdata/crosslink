@@ -308,7 +308,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 	newPr.RequesterSymbol = &symbol
 	creationTime := pgtype.Timestamp{Valid: true, Time: time.Now()}
-	illRequest, requesterReqId, err := a.parseAndValidateIllRequest(ctx, &newPr, creationTime.Time)
+	illRequest, requesterReqId, err := a.parseAndValidateIllRequest(ctx, &newPr, creationTime.Time, "")
 	if err != nil {
 		if errors.Is(err, errInvalidPatronRequest) {
 			api.AddBadRequestError(ctx, w, err)
@@ -541,7 +541,11 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 		patron := existingPr.Patron.String
 		newPr.Patron = &patron
 	}
-	illRequest, requesterReqId, err := a.parseAndValidateIllRequest(ctx, &newPr, creationTime)
+	requesterReqId := existingPr.ID
+	if existingPr.RequesterReqID.Valid && existingPr.RequesterReqID.String != "" {
+		requesterReqId = existingPr.RequesterReqID.String
+	}
+	illRequest, requesterReqId, err := a.parseAndValidateIllRequest(ctx, &newPr, creationTime, requesterReqId)
 	if err != nil {
 		if errors.Is(err, errInvalidPatronRequest) {
 			api.AddBadRequestError(ctx, w, err)
@@ -1397,6 +1401,7 @@ func (a *PatronRequestApiHandler) parseAndValidateIllRequest(
 	ctx common.ExtendedContext,
 	request *proapi.CreatePatronRequest,
 	creationTime time.Time,
+	requesterReqId string,
 ) (iso18626.Request, string, error) {
 	if request.RequesterSymbol == nil || *request.RequesterSymbol == "" {
 		return iso18626.Request{}, "", fmt.Errorf("%w: requesterSymbol must be specified", errInvalidPatronRequest)
@@ -1405,10 +1410,9 @@ func (a *PatronRequestApiHandler) parseAndValidateIllRequest(
 	if err != nil {
 		return iso18626.Request{}, "", fmt.Errorf("%w: requesterSymbol: %w", errInvalidPatronRequest, err)
 	}
-	var requesterReqId string
-	if request.Id != nil {
+	if requesterReqId == "" && request.Id != nil {
 		requesterReqId = *request.Id
-	} else {
+	} else if requesterReqId == "" {
 		hrid, err := a.prRepo.GetNextHrid(ctx, reqSymbolValue)
 		if err != nil {
 			return iso18626.Request{}, "", err

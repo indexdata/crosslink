@@ -2008,7 +2008,8 @@ func TestHandleInvokeActionRejectCondition(t *testing.T) {
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{}
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateConditionPending, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
+	protocolRequestID := patronRequestId + "~2"
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, RequesterReqID: getDbText(protocolRequestID), IllRequest: illRequest, State: BorrowerStateConditionPending, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 	action := BorrowerActionRejectCondition
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
@@ -2017,6 +2018,7 @@ func TestHandleInvokeActionRejectCondition(t *testing.T) {
 	if assert.NotNil(t, mockIso18626Handler.lastRequestingAgencyMessage) {
 		assert.Equal(t, iso18626.TypeActionCancel, mockIso18626Handler.lastRequestingAgencyMessage.Action)
 		assert.Equal(t, shim.RESHARE_LOAN_CONDITION_REJECT, mockIso18626Handler.lastRequestingAgencyMessage.Note)
+		assert.Equal(t, protocolRequestID, mockIso18626Handler.lastRequestingAgencyMessage.Header.RequestingAgencyRequestId)
 		assert.Equal(t, "SUP1", mockIso18626Handler.lastRequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 		assert.False(t, mockIso18626Handler.lastRequestingAgencyMessage.Header.Timestamp.IsZero())
 	}
@@ -2065,6 +2067,7 @@ func TestSendBorrowingRequestZeroValueIllRequest(t *testing.T) {
 
 	status, _, err := prAction.messageSender.sendBorrowingRequest(appCtx, "", pr_db.PatronRequest{
 		ID:              patronRequestId,
+		RequesterReqID:  getDbText(patronRequestId),
 		State:           BorrowerStateValidated,
 		Side:            SideBorrowing,
 		Patron:          pgtype.Text{Valid: true, String: "patron1"},
@@ -2119,8 +2122,10 @@ func TestSendBorrowingRequestPreservesIllRequestFields(t *testing.T) {
 		},
 	}
 
+	protocolRequestID := patronRequestId + "~2"
 	status, _, err := prAction.messageSender.sendBorrowingRequest(appCtx, "", pr_db.PatronRequest{
 		ID:              patronRequestId,
+		RequesterReqID:  getDbText(protocolRequestID),
 		State:           BorrowerStateValidated,
 		Side:            SideBorrowing,
 		Patron:          pgtype.Text{Valid: true, String: "patron1"},
@@ -2135,7 +2140,7 @@ func TestSendBorrowingRequestPreservesIllRequestFields(t *testing.T) {
 		request := mockEventBus.createdNoticeData[0].OutgoingMessage.Request
 		assert.Equal(t, "ISIL", request.Header.RequestingAgencyId.AgencyIdType.Text)
 		assert.Equal(t, "REC1", request.Header.RequestingAgencyId.AgencyIdValue)
-		assert.Equal(t, patronRequestId, request.Header.RequestingAgencyRequestId)
+		assert.Equal(t, protocolRequestID, request.Header.RequestingAgencyRequestId)
 		if assert.NotNil(t, request.PatronInfo) {
 			assert.Equal(t, "patron1", request.PatronInfo.PatronId)
 			assert.Equal(t, "Doe", request.PatronInfo.Surname)
