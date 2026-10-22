@@ -19,6 +19,7 @@ on:
       - '.github/**' #trigger when pipeline changes
       - '**/go.mod' #trigger when dependencies change
       - 'ncipv1/**'
+      - 'broker/ncipclientv1/testdata/**'
       - 'supply/go.sum'
       - 'supply/**/*.sh'
       - 'supply/**/.gitignore'
@@ -40,6 +41,7 @@ on:
       - '.github/**' #trigger when pipeline changes
       - '**/go.mod' #trigger when dependencies change
       - 'ncipv1/**'
+      - 'broker/ncipclientv1/testdata/**'
       - 'supply/go.sum'
       - 'supply/**/*.sh'
       - 'supply/**/.gitignore'

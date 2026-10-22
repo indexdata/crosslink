@@ -681,9 +681,9 @@ func TestRequesterHelpersRepeatAllItemsWithoutChangingLoanState(t *testing.T) {
 		repo.savedPr.State = state
 		adapter := new(mockLmsAdapter)
 		patronDue := time.Now().Add(time.Hour)
-		adapter.On("CheckOutItem", "loan", "a", "", "externalReferenceValue").Return(&lms.CheckedOutItem{DueDate: &patronDue}, nil).Twice()
-		adapter.On("CheckOutItem", "loan", "b", "", "externalReferenceValue").Return(nil, errors.New("failed")).Once()
-		adapter.On("CheckOutItem", "loan", "b", "", "externalReferenceValue").Return(&lms.CheckedOutItem{}, nil).Once()
+		adapter.On("CheckOutItem", "loan", "a", "", "").Return(&lms.CheckedOutItem{DueDate: &patronDue}, nil).Twice()
+		adapter.On("CheckOutItem", "loan", "b", "", "").Return(nil, errors.New("failed")).Once()
+		adapter.On("CheckOutItem", "loan", "b", "", "").Return(&lms.CheckedOutItem{}, nil).Once()
 		creator := new(MockLmsCreator)
 		creator.On("GetAdapter", "ISIL:REQ").Return(adapter, nil)
 		svc := CreatePatronRequestActionService(repo, nil, new(MockEventBus), new(MockIso18626Handler), creator, nil, nil, nil)

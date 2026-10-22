@@ -174,6 +174,7 @@ func (c *Client) CheckOutItem(arg ncip.CheckOutItem) (response *ncip.CheckOutIte
 func decode(data []byte, value any) error {
 	d := xml.NewDecoder(bytes.NewReader(data))
 	depth, roots, services := 0, 0, 0
+	fields := make(map[string]int)
 	for {
 		token, err := d.Token()
 		if err == io.EOF {
@@ -202,6 +203,9 @@ func decode(data []byte, value any) error {
 			if depth == 2 {
 				services++
 			}
+			if depth == 3 {
+				fields[t.Name.Local]++
+			}
 		case xml.EndElement:
 			depth--
 		case xml.CharData:
@@ -213,7 +217,14 @@ func decode(data []byte, value any) error {
 	if roots != 1 || services != 1 {
 		return fmt.Errorf("NCIP v1 requires one response service")
 	}
-	return xml.Unmarshal(data, value)
+	if err := xml.Unmarshal(data, value); err != nil {
+		return err
+	}
+	message, ok := value.(*ncip.NCIPMessage)
+	if !ok {
+		return fmt.Errorf("NCIP v1 response target must be NCIPMessage")
+	}
+	return validateResponse(message, fields)
 }
 
 func (c *Client) log(out, in *ncip.NCIPMessage, err error) {
@@ -237,7 +248,7 @@ func redact(value any) {
 	case map[string]any:
 		for k, f := range v {
 			switch k {
-			case "FromAgencyAuthentication", "FromSystemAuthentication", "AuthenticationInputData", "NameInformation", "UserAddressInformation":
+			case "FromAgencyAuthentication", "FromSystemAuthentication", "AuthenticationInputData", "NameInformation", "UserAddressInformation", "MessagingErrorValue", "ProcessingErrorValue":
 				v[k] = "***"
 			default:
 				redact(f)

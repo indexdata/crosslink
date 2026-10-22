@@ -1,11 +1,16 @@
 package lms
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/indexdata/crosslink/broker/ncipclient"
 )
+
+// ErrDeleteItemUnsupported means the LMS protocol has no item deletion service.
+// Callers may skip cleanup, but must not record a confirmed deletion.
+var ErrDeleteItemUnsupported = errors.New("LMS DeleteItem is not supported")
 
 // PatronProfileIneligibleError indicates that a patron was found in the LMS,
 // but their configured profile does not permit creating ILL requests.

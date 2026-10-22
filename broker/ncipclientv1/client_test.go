@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -95,7 +96,12 @@ func TestServices(t *testing.T) {
 					if mode == "missing" {
 						service = "LookupItemResponse"
 					}
-					body := "<NCIPMessage><" + service + ">" + problem + "</" + service + "></NCIPMessage>"
+					body := "<NCIPMessage><" + service + ">" + testResponseHeader + problem + "</" + service + "></NCIPMessage>"
+					if mode == "success" {
+						data, err := os.ReadFile("testdata/" + service + ".xml")
+						require.NoError(t, err)
+						body = string(data)
+					}
 					c := testClient(t, body, func(request string) { require.Contains(t, request, "<"+op.name+">") })
 					sentinel := errors.New("transport failed")
 					if mode == "transport" {
@@ -150,14 +156,14 @@ func TestDecode(t *testing.T) {
 		require.Error(t, decode([]byte(body), &ncip.NCIPMessage{}), body)
 	}
 	for _, version := range []string{"", ncip.NCIP_V1_0_DTD} {
-		require.NoError(t, decode([]byte(`<NCIPMessage version="`+version+`"><LookupUserResponse/></NCIPMessage>`), &ncip.NCIPMessage{}))
+		require.NoError(t, decode([]byte(`<NCIPMessage version="`+version+`"><LookupUserResponse>`+testResponseHeader+testResponseUser+`</LookupUserResponse></NCIPMessage>`), &ncip.NCIPMessage{}))
 	}
 }
 func TestLoggingAndDefaults(t *testing.T) {
 	require.Equal(t, 30*time.Second, New(nil, "https://example.org").client.Timeout)
 	custom := &http.Client{Timeout: time.Second}
 	require.Same(t, custom, New(custom, "").client)
-	c := testClient(t, `<NCIPMessage><LookupUserResponse><UserOptionalFields><NameInformation><PersonalNameInformation><UnstructuredPersonalUserName>secret-name</UnstructuredPersonalUserName></PersonalNameInformation></NameInformation><UserAddressInformation><ElectronicAddress><ElectronicAddressData>secret-email</ElectronicAddressData></ElectronicAddress></UserAddressInformation></UserOptionalFields></LookupUserResponse></NCIPMessage>`, nil)
+	c := testClient(t, `<NCIPMessage><LookupUserResponse>`+testResponseHeader+testResponseUser+`<UserOptionalFields><NameInformation><PersonalNameInformation><UnstructuredPersonalUserName>secret-name</UnstructuredPersonalUserName></PersonalNameInformation></NameInformation><UserAddressInformation><ElectronicAddress><ElectronicAddressData>secret-email</ElectronicAddressData></ElectronicAddress></UserAddressInformation></UserOptionalFields></LookupUserResponse></NCIPMessage>`, nil)
 	c.SetLogFunc(func(out, in map[string]any, err error) {
 		require.NoError(t, err)
 		data, e := json.Marshal([]any{out, in})
@@ -175,3 +181,6 @@ func TestLoggingAndDefaults(t *testing.T) {
 	_, err = c.LookupUser(arg)
 	require.NoError(t, err)
 }
+
+const testResponseHeader = `<ResponseHeader><FromAgencyId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId></FromAgencyId><ToAgencyId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId></ToAgencyId></ResponseHeader>`
+const testResponseUser = `<UniqueUserId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><UserIdentifierValue>canonical</UserIdentifierValue></UniqueUserId>`

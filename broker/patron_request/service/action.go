@@ -487,7 +487,7 @@ func (a *PatronRequestActionService) deleteRequesterItemsOnClose(ctx common.Exte
 	}
 	var cleanupErrors []error
 	for _, item := range items {
-		performed, err := lmsAdapter.DeleteItem(requesterLmsItemID(item))
+		performed, err := a.deleteRequesterLmsItem(pr.ID, eventID, requesterLmsItemID(item), lmsAdapter)
 		if err != nil {
 			cleanupErrors = append(cleanupErrors, fmt.Errorf("LMS DeleteItem failed for item %s: %w", item.Barcode, err))
 			continue
@@ -1222,7 +1222,7 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 			})
 		})
 		if err != nil {
-			if deleted, deleteErr := lmsAdapter.DeleteItem(itemId); deleteErr != nil {
+			if deleted, deleteErr := a.deleteRequesterLmsItem(pr.ID, parentEventID, itemId, lmsAdapter); deleteErr != nil {
 				err = errors.Join(err, fmt.Errorf("LMS DeleteItem compensation failed: %w", deleteErr))
 			} else if statusErr := a.recordItemLmsStatus(ctx, item, pr_db.LmsStatusDeleted, deleted, nil); statusErr != nil {
 				err = errors.Join(err, fmt.Errorf("failed to record LMS DeleteItem compensation: %w", statusErr))
@@ -1248,7 +1248,7 @@ func (a *PatronRequestActionService) checkoutBorrowingRequest(ctx common.Extende
 	for _, item := range items {
 		itemId := item.Barcode
 		borrowerBarcode := patron
-		checkedOutItem, err := lmsAdapter.CheckOutItem(pr.ID, itemId, borrowerBarcode, "externalReferenceValue")
+		checkedOutItem, err := lmsAdapter.CheckOutItem(pr.ID, itemId, borrowerBarcode, "")
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
@@ -1280,6 +1280,23 @@ func (a *PatronRequestActionService) checkinBorrowingRequest(ctx common.Extended
 	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
 }
 
+// deleteRequesterLmsItem records unsupported cleanup without confirming deletion.
+// Transport and protocol failures from supported services still block progress.
+func (a *PatronRequestActionService) deleteRequesterLmsItem(prID, parentEventID, itemID string, adapter lms.LmsAdapter) (bool, error) {
+	performed, err := adapter.DeleteItem(itemID)
+	if !errors.Is(err, lms.ErrDeleteItemUnsupported) {
+		return performed, err
+	}
+	data := events.EventData{CustomData: map[string]any{
+		"operation": "DeleteItem", "outcome": "skipped", "reason": "unsupported", "itemId": itemID,
+	}}
+	_, err = a.eventBus.CreateNoticeWithParent(prID, events.EventNameLmsRequesterMessage, data, events.EventStatusProblem, events.EventDomainPatronRequest, &parentEventID, events.SignalConsumers)
+	if err != nil {
+		return false, fmt.Errorf("failed to record skipped LMS cleanup: %w", err)
+	}
+	return false, nil
+}
+
 func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.ExtendedContext, parentEventID string, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
 	items, err := a.getItems(ctx, pr)
 	if err != nil {
@@ -1291,7 +1308,7 @@ func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.Exten
 			continue
 		}
 		itemId := requesterLmsItemID(item)
-		performed, err := lmsAdapter.DeleteItem(itemId)
+		performed, err := a.deleteRequesterLmsItem(pr.ID, parentEventID, itemId, lmsAdapter)
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "LMS DeleteItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}

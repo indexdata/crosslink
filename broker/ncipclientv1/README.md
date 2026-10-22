@@ -4,13 +4,19 @@
 It supports LookupUser, AcceptItem, RequestItem, CancelRequestItem, CheckInItem,
 and CheckOutItem. Callers supply initiation headers and identifier agencies.
 The client writes namespace-free XML with the NCIP 1.0 DTD version identifier;
-it does not load the DTD. Responses must contain a single response service.
+it does not load the DTD. Responses must contain a single response service,
+a complete response header, and either a well-formed Problem or the required
+success identifiers and service fields. Empty or mixed acknowledgements are
+rejected before recording LMS progress. Optional metadata is not fully XSD
+validated. Checkout still tolerates unusable DateDue values after a complete
+acknowledgement, returning no due date.
 Problems retain their native messaging/processing errors in `*ncipclientv1.Error`.
 
 A nil HTTP client uses a 30 second timeout. Responses are limited to 10 MiB
 by the shared HTTP client, and XML nesting to 64 levels. `SetLogFunc` must be
 called before concurrent use; credentials, authentication inputs, names, and
-addresses are redacted in logged messages.
+addresses and echoed MessagingErrorValue/ProcessingErrorValue fields are
+redacted in logged messages, including nested errors.
 
 Configure `lmsConfig.ncipVersion: "1.0"` in Directory to select this adapter.
 Allowed values are `"1.0"` and `"2.02"`; omission inherits the profile default
@@ -31,11 +37,23 @@ The adapter handles only fields used by the broker:
 | CancelRequestItem | Cancels by request ID and user ID. |
 | CheckInItem | Sends the LMS item ID; honors the enabled flag. |
 | CheckOutItem | Sends user/item and optional request ID. Returns title and a usable due date. External references are unsupported and return an error. |
-| DeleteItem | Not part of v1; returns an error unless requester item integration is disabled. |
+| DeleteItem | Not part of v1; returns `lms.ErrDeleteItemUnsupported` unless requester item integration is disabled. Requester cleanup records this as skipped and allows return shipment without claiming deletion. |
 | CreateUserFiscalTransaction | Returns an error: the LMS interface lacks the action, type, currency and amount required by v1. |
 
 Disabled operations retain the existing skipped-result semantics. Unsupported
 operations never report success. No v1/v2 model conversion is used.
+
+Requester return and local-close cleanup record unsupported DeleteItem as an
+LMS requester `PROBLEM` notice with `operation: DeleteItem`, `outcome: skipped`,
+`reason: unsupported`, and the item identifier. The LMS status and identifiers
+are retained; manual cleanup may still be needed. Transport or protocol errors
+from a supported deletion service still block return shipment, as does failure
+to record the skipped-cleanup notice. Acceptance compensation uses the same
+cleanup handling and still reports the original persistence failure.
+
+Requester checkout sends no external reference because the workflow has no
+reference value to supply. The v1 adapter continues to reject actual nonempty
+external references.
 
 Run `make -C ncipv1 generate` and `make -C broker generate` before Go tests.
 From `broker`, run `go test ./ncipclientv1 ./lms`. Adapter tests also validate

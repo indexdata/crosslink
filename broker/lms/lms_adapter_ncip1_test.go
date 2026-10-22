@@ -43,7 +43,7 @@ func ncip1TestAdapter(t *testing.T, response string, check func(ncip.NCIPMessage
 }
 
 func TestNcip1Operations(t *testing.T) {
-	a := ncip1TestAdapter(t, `<AcceptItemResponse/>`, func(m ncip.NCIPMessage) {
+	a := ncip1TestAdapter(t, `<AcceptItemResponse>`+ncip1TestHeader+`<UniqueRequestId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><RequestIdentifierValue>request</RequestIdentifierValue></UniqueRequestId></AcceptItemResponse>`, func(m ncip.NCIPMessage) {
 		r := m.AcceptItem
 		require.NotNil(t, r)
 		require.Equal(t, "pickup", r.InitiationHeader.ToAgencyId.UniqueAgencyId.Value)
@@ -61,7 +61,7 @@ func TestNcip1Operations(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, performed)
 	require.Equal(t, 1, logged)
-	a = ncip1TestAdapter(t, `<RequestItemResponse><UniqueRequestId><RequestIdentifierValue>lms-request</RequestIdentifierValue></UniqueRequestId><UniqueItemId><ItemIdentifierValue>internal-id</ItemIdentifierValue></UniqueItemId><ItemOptionalFields><BibliographicDescription><Title>Title</Title></BibliographicDescription><ItemDescription><VisibleItemId><VisibleItemIdentifierType><Value>Item Barcode</Value></VisibleItemIdentifierType><VisibleItemIdentifier>barcode</VisibleItemIdentifier></VisibleItemId><CallNumber>call</CallNumber><CopyNumber>copy</CopyNumber></ItemDescription><Location><LocationName><LocationNameInstance><LocationNameLevel>1</LocationNameLevel><LocationNameValue>Main</LocationNameValue></LocationNameInstance><LocationNameInstance><LocationNameLevel>2</LocationNameLevel><LocationNameValue>Stacks</LocationNameValue></LocationNameInstance></LocationName></Location></ItemOptionalFields></RequestItemResponse>`, func(m ncip.NCIPMessage) {
+	a = ncip1TestAdapter(t, `<RequestItemResponse>`+ncip1TestHeader+`<UniqueRequestId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><RequestIdentifierValue>lms-request</RequestIdentifierValue></UniqueRequestId><UniqueItemId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><ItemIdentifierValue>internal-id</ItemIdentifierValue></UniqueItemId><UniqueUserId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><UserIdentifierValue>user</UserIdentifierValue></UniqueUserId><RequestType><Scheme>urn:test:type</Scheme><Value>Page</Value></RequestType><RequestScopeType><Scheme>urn:test:scope</Scheme><Value>Item</Value></RequestScopeType><ItemOptionalFields><BibliographicDescription><Title>Title</Title></BibliographicDescription><ItemDescription><VisibleItemId><VisibleItemIdentifierType><Value>Item Barcode</Value></VisibleItemIdentifierType><VisibleItemIdentifier>barcode</VisibleItemIdentifier></VisibleItemId><CallNumber>call</CallNumber><CopyNumber>copy</CopyNumber></ItemDescription><Location><LocationName><LocationNameInstance><LocationNameLevel>1</LocationNameLevel><LocationNameValue>Main</LocationNameValue></LocationNameInstance><LocationNameInstance><LocationNameLevel>2</LocationNameLevel><LocationNameValue>Stacks</LocationNameValue></LocationNameInstance></LocationName></Location></ItemOptionalFields></RequestItemResponse>`, func(m ncip.NCIPMessage) {
 		r := m.RequestItem
 		require.NotNil(t, r)
 		require.Equal(t, "123", r.UniqueBibliographicId.BibliographicRecordId.BibliographicRecordIdentifier)
@@ -73,17 +73,17 @@ func TestNcip1Operations(t *testing.T) {
 	item, err := a.RequestItem("request", ".b1234", "user", "ignored", "")
 	require.NoError(t, err)
 	require.Equal(t, &RequestedItem{RequestID: "lms-request", Title: "Title", Barcode: "barcode", CallNumber: "call", Location: "Main", ShelvingLocation: "Stacks"}, item)
-	a = ncip1TestAdapter(t, `<CancelRequestItemResponse/>`, func(m ncip.NCIPMessage) {
+	a = ncip1TestAdapter(t, `<CancelRequestItemResponse>`+ncip1TestHeader+`<UniqueRequestId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><RequestIdentifierValue>request</RequestIdentifierValue></UniqueRequestId><UniqueUserId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><UserIdentifierValue>user</UserIdentifierValue></UniqueUserId></CancelRequestItemResponse>`, func(m ncip.NCIPMessage) {
 		require.Equal(t, "request", m.CancelRequestItem.UniqueRequestId.RequestIdentifierValue)
 		require.Nil(t, m.CancelRequestItem.UniqueItemId)
 	})
 	require.NoError(t, a.CancelRequestItem("request", "user"))
-	a = ncip1TestAdapter(t, `<CheckInItemResponse/>`, func(m ncip.NCIPMessage) { require.Equal(t, "lms", m.CheckInItem.UniqueItemId.UniqueAgencyId.Value) })
+	a = ncip1TestAdapter(t, `<CheckInItemResponse>`+ncip1TestHeader+`<UniqueItemId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><ItemIdentifierValue>barcode</ItemIdentifierValue></UniqueItemId></CheckInItemResponse>`, func(m ncip.NCIPMessage) { require.Equal(t, "lms", m.CheckInItem.UniqueItemId.UniqueAgencyId.Value) })
 	performed, err = a.CheckInItem("barcode")
 	require.NoError(t, err)
 	require.True(t, performed)
 	for _, date := range []string{"2026-12-01T12:00:00Z", "bad", "0000-01-01T00:00:00Z", ""} {
-		a = ncip1TestAdapter(t, `<CheckOutItemResponse><DateDue>`+date+`</DateDue><ItemOptionalFields><BibliographicDescription><Title>Title</Title></BibliographicDescription></ItemOptionalFields></CheckOutItemResponse>`, func(m ncip.NCIPMessage) {
+		a = ncip1TestAdapter(t, `<CheckOutItemResponse>`+ncip1TestHeader+ncip1TestItem+ncip1TestUser+`<DateDue>`+date+`</DateDue><ItemOptionalFields><BibliographicDescription><Title>Title</Title></BibliographicDescription></ItemOptionalFields></CheckOutItemResponse>`, func(m ncip.NCIPMessage) {
 			require.Equal(t, "request", m.CheckOutItem.UniqueRequestId.RequestIdentifierValue)
 			require.Equal(t, "barcode", m.CheckOutItem.UniqueItemId.ItemIdentifierValue)
 		})
@@ -99,7 +99,7 @@ func TestNcip1Operations(t *testing.T) {
 }
 
 func TestNcip1Lookup(t *testing.T) {
-	response := `<LookupUserResponse><UniqueUserId><UserIdentifierValue>canonical</UserIdentifierValue></UniqueUserId><UserOptionalFields><NameInformation><PersonalNameInformation><StructuredPersonalUserName><GivenName> First </GivenName><Surname> Last </Surname></StructuredPersonalUserName></PersonalNameInformation></NameInformation><UserAddressInformation><ElectronicAddress><ElectronicAddressType><Value>Email</Value></ElectronicAddressType><ElectronicAddressData>a@example.org</ElectronicAddressData></ElectronicAddress></UserAddressInformation><UserAddressInformation><ElectronicAddress><ElectronicAddressType><Value>mailto</Value></ElectronicAddressType><ElectronicAddressData>A@example.org</ElectronicAddressData></ElectronicAddress></UserAddressInformation><UserPrivilege><AgencyUserPrivilegeType><Value>PROFILE</Value></AgencyUserPrivilegeType><UserPrivilegeStatus><UserPrivilegeStatusType><Value>STAFF</Value></UserPrivilegeStatusType></UserPrivilegeStatus></UserPrivilege></UserOptionalFields></LookupUserResponse>`
+	response := `<LookupUserResponse>` + ncip1TestHeader + `<UniqueUserId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><UserIdentifierValue>canonical</UserIdentifierValue></UniqueUserId><UserOptionalFields><NameInformation><PersonalNameInformation><StructuredPersonalUserName><GivenName> First </GivenName><Surname> Last </Surname></StructuredPersonalUserName></PersonalNameInformation></NameInformation><UserAddressInformation><ElectronicAddress><ElectronicAddressType><Value>Email</Value></ElectronicAddressType><ElectronicAddressData>a@example.org</ElectronicAddressData></ElectronicAddress></UserAddressInformation><UserAddressInformation><ElectronicAddress><ElectronicAddressType><Value>mailto</Value></ElectronicAddressType><ElectronicAddressData>A@example.org</ElectronicAddressData></ElectronicAddress></UserAddressInformation><UserPrivilege><AgencyUserPrivilegeType><Value>PROFILE</Value></AgencyUserPrivilegeType><UserPrivilegeStatus><UserPrivilegeStatusType><Value>STAFF</Value></UserPrivilegeStatusType></UserPrivilegeStatus></UserPrivilege></UserOptionalFields></LookupUserResponse>`
 	a := ncip1TestAdapter(t, response, func(m ncip.NCIPMessage) {
 		require.Equal(t, "user", m.LookupUser.UniqueUserId.UserIdentifierValue)
 		require.Len(t, m.LookupUser.UserElementType, 4)
@@ -114,7 +114,7 @@ func TestNcip1Lookup(t *testing.T) {
 	var denied *PatronProfileIneligibleError
 	require.ErrorAs(t, err, &denied)
 	require.Equal(t, "STAFF", denied.ProfileCode)
-	a = ncip1TestAdapter(t, `<LookupUserResponse/>`, nil)
+	a = ncip1TestAdapter(t, `<LookupUserResponse>`+ncip1TestHeader+`<UniqueUserId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><UserIdentifierValue>user</UserIdentifierValue></UniqueUserId></LookupUserResponse>`, nil)
 	result, err = a.LookupUser("user", LookupUserOptions{})
 	require.NoError(t, err)
 	require.Equal(t, "user", result.UserID)
@@ -126,7 +126,7 @@ func TestNcip1Lookup(t *testing.T) {
 		require.Equal(t, "Barcode Id", m.LookupUser.AuthenticationInput[0].AuthenticationInputType.Value)
 	})
 	success := a.client
-	reject := ncip1TestAdapter(t, `<LookupUserResponse><Problem><ProcessingError><ProcessingErrorType><Value>Unknown User</Value></ProcessingErrorType></ProcessingError></Problem></LookupUserResponse>`, func(ncip.NCIPMessage) { a.client = success })
+	reject := ncip1TestAdapter(t, `<LookupUserResponse>`+ncip1TestHeader+`<Problem><ProcessingError><ProcessingErrorType><Scheme>urn:test:error</Scheme><Value>Unknown User</Value></ProcessingErrorType><ProcessingErrorElement><ElementName>UniqueUserId</ElementName></ProcessingErrorElement></ProcessingError></Problem></LookupUserResponse>`, func(ncip.NCIPMessage) { a.client = success })
 	a.client = reject.client
 	result, err = a.LookupUser("barcode", LookupUserOptions{})
 	require.NoError(t, err)
@@ -137,7 +137,7 @@ func TestNcip1Lookup(t *testing.T) {
 func TestNcip1UnsupportedAndDisabled(t *testing.T) {
 	a := ncip1TestAdapter(t, "", func(ncip.NCIPMessage) { t.Fatal("unexpected request") })
 	performed, err := a.DeleteItem("item")
-	require.ErrorContains(t, err, "not supported")
+	require.ErrorIs(t, err, ErrDeleteItemUnsupported)
 	require.False(t, performed)
 	require.Error(t, a.CreateUserFiscalTransaction("user", "item"))
 	_, err = a.RequestItem("request", "bib", "user", "", "location")
@@ -208,7 +208,7 @@ func TestNcip1Configuration(t *testing.T) {
 	require.Equal(t, "P-US-TEST", a.InstitutionalPatron("us-test"))
 	require.Equal(t, auth, a.header().FromAgencyAuthentication)
 	requestType, scope, code := "Hold", "Bibliographic Item", "local"
-	a = ncip1TestAdapter(t, `<RequestItemResponse><ItemOptionalFields><ItemDescription><CopyNumber>barcode</CopyNumber></ItemDescription><Location><LocationName><LocationNameInstance><LocationNameLevel>1</LocationNameLevel><LocationNameValue>Main</LocationNameValue></LocationNameInstance></LocationName></Location></ItemOptionalFields></RequestItemResponse>`, func(m ncip.NCIPMessage) {
+	a = ncip1TestAdapter(t, `<RequestItemResponse>`+ncip1TestHeader+`<UniqueRequestId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><RequestIdentifierValue>request</RequestIdentifierValue></UniqueRequestId><UniqueUserId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><UserIdentifierValue>user</UserIdentifierValue></UniqueUserId><RequestType><Scheme>urn:test:type</Scheme><Value>Page</Value></RequestType><RequestScopeType><Scheme>urn:test:scope</Scheme><Value>Item</Value></RequestScopeType><ItemOptionalFields><ItemDescription><CopyNumber>barcode</CopyNumber></ItemDescription><Location><LocationName><LocationNameInstance><LocationNameLevel>1</LocationNameLevel><LocationNameValue>Main</LocationNameValue></LocationNameInstance></LocationName></Location></ItemOptionalFields></RequestItemResponse>`, func(m ncip.NCIPMessage) {
 		require.Equal(t, requestType, m.RequestItem.RequestType.Value)
 		require.Equal(t, scope, m.RequestItem.RequestScopeType.Value)
 		require.Equal(t, code, m.RequestItem.UniqueBibliographicId.BibliographicRecordId.BibliographicRecordIdentifierCode.Value)
@@ -224,20 +224,24 @@ func TestNcip1Configuration(t *testing.T) {
 }
 
 func TestNcip1Failures(t *testing.T) {
-	problem := `<Problem><ProcessingError><ProcessingErrorType><Value>Rejected</Value></ProcessingErrorType></ProcessingError></Problem>`
-	a := ncip1TestAdapter(t, `<LookupUserResponse>`+problem+`</LookupUserResponse>`, nil)
+	problem := `<Problem><ProcessingError><ProcessingErrorType><Scheme>urn:test:error</Scheme><Value>Rejected</Value></ProcessingErrorType><ProcessingErrorElement><ElementName>UniqueUserId</ElementName></ProcessingErrorElement></ProcessingError></Problem>`
+	a := ncip1TestAdapter(t, `<LookupUserResponse>`+ncip1TestHeader+``+problem+`</LookupUserResponse>`, nil)
 	_, err := a.LookupUser("user", LookupUserOptions{})
 	require.Error(t, err)
-	a = ncip1TestAdapter(t, `<RequestItemResponse>`+problem+`</RequestItemResponse>`, nil)
+	a = ncip1TestAdapter(t, `<RequestItemResponse>`+ncip1TestHeader+``+problem+`</RequestItemResponse>`, nil)
 	item, err := a.RequestItem("request", "bib", "user", "", "")
 	require.Error(t, err)
 	require.Nil(t, item)
-	a = ncip1TestAdapter(t, `<CheckOutItemResponse>`+problem+`</CheckOutItemResponse>`, nil)
+	a = ncip1TestAdapter(t, `<CheckOutItemResponse>`+ncip1TestHeader+``+problem+`</CheckOutItemResponse>`, nil)
 	checkout, err := a.CheckOutItem("", "item", "user", "")
 	require.Error(t, err)
 	require.Nil(t, checkout)
-	a = ncip1TestAdapter(t, `<AcceptItemResponse>`+problem+`</AcceptItemResponse>`, nil)
+	a = ncip1TestAdapter(t, `<AcceptItemResponse>`+ncip1TestHeader+``+problem+`</AcceptItemResponse>`, nil)
 	performed, err := a.AcceptItem("item", "request", "user", "", "", "", "", "", "")
 	require.Error(t, err)
 	require.False(t, performed)
 }
+
+const ncip1TestHeader = `<ResponseHeader><FromAgencyId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId></FromAgencyId><ToAgencyId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId></ToAgencyId></ResponseHeader>`
+const ncip1TestItem = `<UniqueItemId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><ItemIdentifierValue>barcode</ItemIdentifierValue></UniqueItemId>`
+const ncip1TestUser = `<UniqueUserId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><UserIdentifierValue>canonical</UserIdentifierValue></UniqueUserId>`

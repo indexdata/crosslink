@@ -202,7 +202,7 @@ func (l *LmsAdapterNcip1) DeleteItem(string) (bool, error) {
 	if l.config.AcceptItemEnabled != nil && !*l.config.AcceptItemEnabled {
 		return false, nil
 	}
-	return false, fmt.Errorf("DeleteItem is not supported by NCIP 1.0")
+	return false, fmt.Errorf("NCIP 1.0: %w", ErrDeleteItemUnsupported)
 }
 
 func (l *LmsAdapterNcip1) RequestItem(requestID, itemID, userID, _, itemLocation string) (*RequestedItem, error) {

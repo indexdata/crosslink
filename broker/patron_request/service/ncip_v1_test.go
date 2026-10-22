@@ -1,0 +1,153 @@
+package prservice
+
+import (
+	"encoding/xml"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"testing"
+
+	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/lms"
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	dirapi "github.com/indexdata/crosslink/directory/api"
+	"github.com/indexdata/crosslink/iso18626"
+	ncip "github.com/indexdata/crosslink/ncipv1"
+	"github.com/stretchr/testify/require"
+)
+
+func TestNcipV1RequesterLifecycle(t *testing.T) {
+	operations := make(chan string, 3)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var message ncip.NCIPMessage
+		require.NoError(t, xml.NewDecoder(r.Body).Decode(&message))
+		operation := ""
+		switch {
+		case message.AcceptItem != nil:
+			operation = "AcceptItem"
+		case message.CheckOutItem != nil:
+			operation = "CheckOutItem"
+			require.Equal(t, "patron", message.CheckOutItem.UniqueUserId.UserIdentifierValue)
+		case message.CheckInItem != nil:
+			operation = "CheckInItem"
+		default:
+			t.Errorf("unexpected v1 service")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		operations <- operation
+		data, err := os.ReadFile("../../ncipclientv1/testdata/" + operation + "Response.xml")
+		require.NoError(t, err)
+		w.Header().Set("Content-Type", "application/xml")
+		_, err = w.Write(data)
+		require.NoError(t, err)
+	}))
+	defer server.Close()
+	version := "1.0"
+	adapter, err := lms.CreateLmsAdapterNcip(dirapi.LmsConfig{Address: server.URL, FromAgency: "broker", NcipVersion: &version})
+	require.NoError(t, err)
+	pr := testLoan()
+	pr.Side = SideBorrowing
+	pr.State = BorrowerStateShipped
+	pr.Patron = getDbText("patron")
+	repo := &MockPrRepo{savedPr: pr, savedItems: []pr_db.Item{{ID: "item", PrID: pr.ID, Barcode: "barcode", LmsStatus: pr_db.LmsStatusUnknown}}}
+	bus := new(MockEventBus)
+	sender := new(MockIso18626Handler)
+	creator := new(MockLmsCreator)
+	creator.On("GetAdapter", pr.RequesterSymbol.String).Return(adapter, nil)
+	svc := CreatePatronRequestActionService(repo, new(IllRepoMock), bus, sender, creator, nil, nil, nil)
+	adapter, err = svc.createRequesterLmsAdapter(appCtx, "receive", pr)
+	require.NoError(t, err)
+	result := svc.receiveBorrowingRequest(appCtx, "receive", pr, adapter, pr.IllRequest)
+	require.Equal(t, events.EventStatusSuccess, result.status, "%+v", result.result)
+	require.Equal(t, pr_db.LmsStatusAccepted, repo.savedItems[0].LmsStatus)
+	require.True(t, repo.savedItems[0].LmsRequestID.Valid)
+	result = svc.checkoutBorrowingRequest(appCtx, pr, adapter, pr.IllRequest)
+	require.Equal(t, events.EventStatusSuccess, result.status, "%+v", result.result)
+	require.Equal(t, pr_db.LmsStatusCheckedOut, repo.savedItems[0].LmsStatus)
+	result = svc.checkinBorrowingRequest(appCtx, pr, adapter, pr.IllRequest)
+	require.Equal(t, events.EventStatusSuccess, result.status, "%+v", result.result)
+	require.Equal(t, pr_db.LmsStatusCheckedIn, repo.savedItems[0].LmsStatus)
+	before := repo.savedItems[0]
+	result = svc.shipReturnBorrowingRequest(appCtx, "return", pr, adapter, pr.IllRequest)
+	require.Equal(t, events.EventStatusSuccess, result.status, "%+v", result.result)
+	require.Equal(t, iso18626.TypeActionShippedReturn, sender.lastRequestingAgencyMessage.Action)
+	require.Equal(t, before, repo.savedItems[0], "unsupported cleanup must retain status and LMS IDs")
+	// Local-close cleanup uses the same unsupported-service handling.
+	require.NoError(t, svc.deleteRequesterItemsOnClose(appCtx, "close", pr))
+	require.Equal(t, before, repo.savedItems[0])
+	require.Equal(t, []string{"AcceptItem", "CheckOutItem", "CheckInItem"}, []string{<-operations, <-operations, <-operations})
+	skipped := 0
+	for i, data := range bus.createdNoticeData {
+		if data.CustomData["outcome"] != "skipped" {
+			continue
+		}
+		skipped++
+		require.Equal(t, events.EventNameLmsRequesterMessage, bus.createdNoticeNames[i])
+		require.Equal(t, events.EventStatusProblem, bus.createdNoticeStatus[i])
+		require.Equal(t, map[string]any{"operation": "DeleteItem", "outcome": "skipped", "reason": "unsupported", "itemId": "barcode"}, data.CustomData)
+		require.Contains(t, []string{"return", "close"}, bus.createdNoticeParent[i])
+	}
+	require.Equal(t, 2, skipped)
+}
+
+func TestRequesterCleanupFailuresStillBlockReturn(t *testing.T) {
+	for _, unsupported := range []bool{false, true} {
+		t.Run(map[bool]string{false: "deletion failure", true: "audit failure"}[unsupported], func(t *testing.T) {
+			pr := testLoan()
+			pr.Side = SideBorrowing
+			item := pr_db.Item{ID: "item", PrID: pr.ID, Barcode: "barcode", LmsRequestID: getDbText("request"), LmsItemID: getDbText("barcode"), LmsStatus: pr_db.LmsStatusCheckedIn}
+			repo := &MockPrRepo{savedPr: pr, savedItems: []pr_db.Item{item}}
+			bus := new(MockEventBus)
+			sender := new(MockIso18626Handler)
+			adapter := new(mockLmsAdapter)
+			failure := errors.New("LMS unavailable")
+			if unsupported {
+				failure = lms.ErrDeleteItemUnsupported
+				bus.On("CreateNoticeWithParent", "return").Return("", errors.New("audit unavailable"))
+			}
+			adapter.On("DeleteItem", "barcode").Return(failure).Once()
+			svc := CreatePatronRequestActionService(repo, new(IllRepoMock), bus, sender, nil, nil, nil, nil)
+			result := svc.shipReturnBorrowingRequest(appCtx, "return", pr, adapter, pr.IllRequest)
+			require.Equal(t, events.EventStatusError, result.status)
+			require.Nil(t, sender.lastRequestingAgencyMessage)
+			require.Equal(t, item, repo.savedItems[0])
+			adapter.AssertExpectations(t)
+		})
+	}
+}
+
+func TestIncompleteNcipV1ResponseDoesNotRecordProgress(t *testing.T) {
+	for _, operation := range []string{"AcceptItem", "CheckOutItem", "CheckInItem"} {
+		t.Run(operation, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/xml")
+				_, err := w.Write([]byte("<NCIPMessage><" + operation + "Response/></NCIPMessage>"))
+				require.NoError(t, err)
+			}))
+			defer server.Close()
+			adapter, err := lms.CreateLmsAdapterNcip1(dirapi.LmsConfig{Address: server.URL, FromAgency: "broker"})
+			require.NoError(t, err)
+			pr := testLoan()
+			pr.Side = SideBorrowing
+			pr.Patron = getDbText("patron")
+			item := pr_db.Item{ID: "item", PrID: pr.ID, Barcode: "barcode", LmsStatus: pr_db.LmsStatusUnknown}
+			repo := &MockPrRepo{savedPr: pr, savedItems: []pr_db.Item{item}}
+			sender := new(MockIso18626Handler)
+			svc := CreatePatronRequestActionService(repo, new(IllRepoMock), new(MockEventBus), sender, nil, nil, nil, nil)
+			var result actionExecutionResult
+			switch operation {
+			case "AcceptItem":
+				result = svc.receiveBorrowingRequest(appCtx, "receive", pr, adapter, pr.IllRequest)
+			case "CheckOutItem":
+				result = svc.checkoutBorrowingRequest(appCtx, pr, adapter, pr.IllRequest)
+			case "CheckInItem":
+				result = svc.checkinBorrowingRequest(appCtx, pr, adapter, pr.IllRequest)
+			}
+			require.Equal(t, events.EventStatusError, result.status)
+			require.Equal(t, item, repo.savedItems[0])
+			require.Nil(t, sender.lastRequestingAgencyMessage)
+		})
+	}
+}
