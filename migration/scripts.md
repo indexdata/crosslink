@@ -48,6 +48,11 @@ Blank lines and lines beginning with `#` are ignored. The first schema exports
 the consortium entry. Its consortium UUID is then reused by all later
 directory exports. The final schema exports the generated tiers and network.
 
+Directory exports include the selected local owner's cancellation reasons,
+unfilled reasons (from mod-rs `cannotSupplyReasons`), and loan conditions.
+See the [ILL configuration field mappings](export-crosslink-directory-field-mapping.md#ill-configuration)
+for source fields, label fallbacks, ordering, and missing-list behavior.
+
 Environment variables:
 
 | Variable | Default | Description |

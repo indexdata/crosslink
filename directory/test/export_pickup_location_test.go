@@ -23,6 +23,7 @@ func TestDirectoryExportPickupLocations(t *testing.T) {
 	projection, _, found = strings.Cut(projection, ") AS ill_config ON true")
 	require.True(t, found)
 	query := `WITH
+		crosslink_ill_lists AS (SELECT '{}'::jsonb AS item),
 		entry AS (SELECT $1::uuid AS entry_id, $6::uuid AS parent_id, $2::text AS lms_location_code),
 		crosslink_local_entry AS (SELECT CASE WHEN $3::boolean THEN $1::uuid ELSE $6::uuid END AS entry_id),
 		local_entry AS (SELECT entry_id FROM crosslink_local_entry),

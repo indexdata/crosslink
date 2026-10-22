@@ -67,6 +67,15 @@ text property to `lendToBorrowRatio`, preserving the ratio string. Missing
 properties export as null. Invalid ratios or multiple matching properties stop
 the export before NDJSON output; the error identifies the affected entries.
 
+The export also populates the selected local owner's `illConfig.cancellationReasons`,
+`unfilledReasons`, and `loanConditions` from the mod-rs reference-data vocabularies
+`cancellationReasons`, `cannotSupplyReasons`, and `loanConditions`, respectively.
+Values become codes and labels become default descriptions. Unfilled reasons and
+loan conditions use the value when the label is null, empty, or whitespace-only.
+Missing or empty vocabularies are omitted, leaving the lists unset on import.
+See the [directory field mappings](../migration/export-crosslink-directory-field-mapping.md#ill-configuration)
+for ordering and ownership details.
+
 The optional `lendToBorrowRatio` field expresses desired loans:borrows (for
 example, `50:2`). Each component must be positive, with one to four integer
 digits and at most two decimal places (`0.01` through `9999.99`). Leading zeros
