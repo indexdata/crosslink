@@ -24,7 +24,11 @@
 --   * The ISO18626 request is reconstructed from normalized mod-rs columns.
 --     Unsourced borrowing requests use the configured CrossLink broker symbol
 --     as the required supplying agency without acquiring a supplier assignment.
---   * A selected item is emitted only when pr_selected_item_barcode is present.
+--   * Borrowing items come from request_volume: barcode is the temporary item
+--     barcode in the requester LMS and itemId is the supplier's barcode. A
+--     borrowing request without volumes falls back to pr_selected_item_barcode
+--     as itemId with the request ID as barcode. Lending requests emit one item
+--     with pr_selected_item_barcode as barcode, only when it is present.
 --   * Borrowing requests include a synthesized ILL transaction and their rota as
 --     located suppliers. Lending requests must not include an ILL transaction.
 --   * Notifications without enough information to identify both parties are
@@ -470,7 +474,49 @@ request_bundles AS (
                 'nextReqId', request.import_next_request_id,
                 'prevReqId', request.import_previous_request_id
             )),
+            -- Borrowing items follow CrossLink's requester convention: barcode is
+            -- the temporary item in the requester LMS (used for NCIP) and itemId
+            -- is the supplier's barcode.
             'items', CASE
+                WHEN request.import_side = 'borrowing' THEN coalesce(
+                    (
+                        SELECT jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+                            'id', volume.rv_id,
+                            'barcode', coalesce(
+                                nullif(btrim(volume.rv_temporary_item_barcode), ''),
+                                request.import_patron_request_id
+                            ),
+                            'callNumber', coalesce(
+                                volume.rv_call_number, request.pr_local_call_number
+                            ),
+                            'title', coalesce(volume.rv_name, request.pr_title),
+                            'itemId', nullif(btrim(volume.rv_item_id), ''),
+                            'lmsRequestId', request.pr_external_hold_request_id,
+                            'createdAt', to_char(
+                                coalesce(volume.rv_date_created, request.pr_date_created),
+                                'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+                            )
+                        )) ORDER BY volume.rv_date_created, volume.rv_id)
+                        FROM request_volume AS volume
+                        WHERE volume.rv_patron_request_fk = request.pr_id
+                    ),
+                    CASE
+                        WHEN nullif(btrim(request.pr_selected_item_barcode), '') IS NULL
+                            THEN '[]'::jsonb
+                        ELSE jsonb_build_array(jsonb_strip_nulls(jsonb_build_object(
+                            'id', request.pr_id || ':selected-item',
+                            'barcode', request.import_patron_request_id,
+                            'callNumber', request.pr_local_call_number,
+                            'title', request.pr_title,
+                            'itemId', request.pr_selected_item_barcode,
+                            'lmsRequestId', request.pr_external_hold_request_id,
+                            'createdAt', to_char(
+                                request.pr_date_created,
+                                'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+                            )
+                        )))
+                    END
+                )
                 WHEN nullif(btrim(request.pr_selected_item_barcode), '') IS NULL
                     THEN '[]'::jsonb
                 ELSE jsonb_build_array(jsonb_strip_nulls(jsonb_build_object(
@@ -478,7 +524,6 @@ request_bundles AS (
                     'barcode', request.pr_selected_item_barcode,
                     'callNumber', request.pr_local_call_number,
                     'title', request.pr_title,
-                    'itemId', request.pr_system_instance_id,
                     'lmsRequestId', request.pr_external_hold_request_id,
                     'createdAt', to_char(
                         request.pr_date_created,
