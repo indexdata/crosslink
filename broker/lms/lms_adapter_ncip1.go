@@ -288,6 +288,10 @@ func (l *LmsAdapterNcip1) requestScope() ncip.RequestScopeType {
 	if l.config.RequestItemRequestScopeType != nil {
 		value = *l.config.RequestItemRequestScopeType
 	}
+	// Shared profiles use the v2 title-level term; v1 names this scope differently.
+	if value == "Title" {
+		value = "Bibliographic Item"
+	}
 	return ncip.RequestScopeType{Scheme: ncip1Scheme + "imp1/schemes/requestscopetype/requestscopetype.scm", Value: value}
 }
 func (l *LmsAdapterNcip1) CancelRequestItem(requestID, userID string) error {

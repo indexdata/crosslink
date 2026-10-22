@@ -2,6 +2,7 @@ package lms
 
 import (
 	"bytes"
+	"encoding/json"
 	"encoding/xml"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/ncipclientv1"
+	"github.com/indexdata/crosslink/broker/profiles"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	ncip "github.com/indexdata/crosslink/ncipv1"
 	"github.com/stretchr/testify/require"
@@ -276,4 +278,39 @@ func TestNcip1MalformedItemReferences(t *testing.T) {
 		_, err = a.CheckInItem(id)
 		require.ErrorContains(t, err, "invalid NCIP v1 item reference")
 	}
+}
+
+func TestNcip1ResolvedSierraRequestScope(t *testing.T) {
+	var entry dirapi.Entry
+	require.NoError(t, json.Unmarshal([]byte(`{"lmsConfig":{"vendor":"Sierra","ncipVersion":"1.0","address":"https://lms.example/ncip","fromAgency":"broker"},"catalogConfig":{"zoom":{"address":"catalog:210"}}}`), &entry))
+	effective, err := profiles.Resolve(entry)
+	require.NoError(t, err)
+	require.Equal(t, "Sierra", effective.Origins["lmsConfig.requestItemRequestScopeType"])
+	require.Equal(t, "Title", *effective.LMS.RequestItemRequestScopeType)
+	adapter, err := CreateLmsAdapterNcip(*effective.LMS)
+	require.NoError(t, err)
+	a, ok := adapter.(*LmsAdapterNcip1)
+	require.True(t, ok)
+	expected := ncip.RequestScopeType{Scheme: ncip1Scheme + "imp1/schemes/requestscopetype/requestscopetype.scm", Value: "Bibliographic Item"}
+	requestID := `<UniqueRequestId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><RequestIdentifierValue>request</RequestIdentifierValue></UniqueRequestId>`
+	request := ncip1TestAdapter(t, "<RequestItemResponse>"+ncip1TestHeader+requestID+ncip1TestUser+
+		`<RequestType><Scheme>urn:test:type</Scheme><Value>Hold</Value></RequestType><RequestScopeType><Scheme>urn:test:scope</Scheme><Value>Bibliographic Item</Value></RequestScopeType></RequestItemResponse>`, func(m ncip.NCIPMessage) {
+		require.NotNil(t, m.RequestItem)
+		require.Equal(t, expected.Scheme, m.RequestItem.RequestScopeType.Scheme)
+		require.Equal(t, expected.Value, m.RequestItem.RequestScopeType.Value)
+	})
+	a.client = request.client
+	item, err := a.RequestItem("request", "bib", "user", "", "")
+	require.NoError(t, err)
+	require.NotNil(t, item)
+	cancel := ncip1TestAdapter(t, "<CancelRequestItemResponse>"+ncip1TestHeader+requestID+ncip1TestUser+"</CancelRequestItemResponse>", func(m ncip.NCIPMessage) {
+		require.NotNil(t, m.CancelRequestItem)
+		require.NotNil(t, m.CancelRequestItem.RequestScopeType)
+		require.Equal(t, expected.Scheme, m.CancelRequestItem.RequestScopeType.Scheme)
+		require.Equal(t, expected.Value, m.CancelRequestItem.RequestScopeType.Value)
+	})
+	a.client = cancel.client
+	require.NoError(t, a.CancelRequestItem(item.RequestID, "user"))
+	require.Equal(t, "Title", *effective.LMS.RequestItemRequestScopeType, "translation must not mutate shared profile values")
+	require.Equal(t, "Title", (&LmsAdapterNcip{config: *effective.LMS}).requestItemRequestScopeType())
 }

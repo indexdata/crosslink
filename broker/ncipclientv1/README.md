@@ -98,3 +98,7 @@ Acknowledgement headers and returned identities reject duplicate singleton
 children at their exact XML paths before unmarshalling. Split or conflicting
 agencies and identifier values cannot be merged into a successful acknowledgement;
 optional metadata retains its existing lenient decoding.
+
+The v1 adapter translates the shared request scope `Title` (including the Sierra
+profile default) to `Bibliographic Item` for both RequestItem and CancelRequestItem.
+Explicit v1 scope values and shared profile configuration remain unchanged.
