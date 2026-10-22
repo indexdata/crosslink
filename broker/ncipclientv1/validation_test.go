@@ -73,9 +73,11 @@ func TestIncompleteAcknowledgements(t *testing.T) {
 			empty := "<NCIPMessage><" + tc.service + "Response/></NCIPMessage>"
 			require.Error(t, invokeService(testClient(t, empty, nil), tc.service))
 			mixed := strings.Replace(body, "</"+tc.service+"Response>", "<Problem/>"+"</"+tc.service+"Response>", 1)
-			require.ErrorContains(t, invokeService(testClient(t, mixed, nil), tc.service), "Problem mixed")
+			require.ErrorContains(t, decode([]byte(mixed), &ncip.NCIPMessage{}), "Problem mixed")
+			require.ErrorContains(t, invokeService(testClient(t, mixed, nil), tc.service), "invalid NCIP v1 response")
 			repeated := strings.Replace(body, "</"+tc.service+"Response>", "<ResponseHeader/>"+"</"+tc.service+"Response>", 1)
-			require.ErrorContains(t, invokeService(testClient(t, repeated, nil), tc.service), "duplicate ResponseHeader")
+			require.ErrorContains(t, decode([]byte(repeated), &ncip.NCIPMessage{}), "duplicate ResponseHeader")
+			require.ErrorContains(t, invokeService(testClient(t, repeated, nil), tc.service), "invalid NCIP v1 response")
 		})
 	}
 }
@@ -96,7 +98,8 @@ func TestResponseChoices(t *testing.T) {
 		require.NoError(t, invokeService(testClient(t, body, nil), "CheckOutItem"))
 	}
 	mixed := strings.Replace(string(data), "<IndeterminateLoanPeriodFlag />", "<IndeterminateLoanPeriodFlag/><NonReturnableFlag/>", 1)
-	require.ErrorContains(t, invokeService(testClient(t, mixed, nil), "CheckOutItem"), "one loan period")
+	require.ErrorContains(t, decode([]byte(mixed), &ncip.NCIPMessage{}), "one loan period")
+	require.ErrorContains(t, invokeService(testClient(t, mixed, nil), "CheckOutItem"), "invalid NCIP v1 response")
 }
 
 func TestMalformedProblems(t *testing.T) {

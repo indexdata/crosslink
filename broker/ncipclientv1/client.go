@@ -55,14 +55,29 @@ func (e *Error) Error() string {
 	return e.Operation + ": NCIP v1 problem: " + strings.Join(kinds, ", ")
 }
 
-// exchange removes HTTP response bodies before errors reach callers or log callbacks.
+// exchange sanitizes response failures before errors reach callers or log callbacks.
 func (c *Client) exchange(outgoing, incoming *ncip.NCIPMessage) error {
-	err := httpclient.NewClient().RequestResponse(c.client, http.MethodPost, []string{"application/xml", "text/xml"}, c.address, outgoing, incoming, xml.Marshal, decode)
+	err := httpclient.NewClient().RequestResponse(c.client, http.MethodPost, []string{"application/xml", "text/xml"}, c.address, outgoing, incoming, xml.Marshal, decodeResponse)
 	var httpErr *httpclient.HttpError
 	if errors.As(err, &httpErr) {
 		return &httpclient.HttpError{StatusCode: httpErr.StatusCode}
 	}
 	return err
+}
+
+// decodeResponse discards parser diagnostics and partially decoded data: both may
+// contain credentials echoed by the LMS. Transport failures never enter this boundary.
+func decodeResponse(data []byte, value any) error {
+	var message ncip.NCIPMessage
+	if err := decode(data, &message); err != nil {
+		return errors.New("invalid NCIP v1 response")
+	}
+	target, ok := value.(*ncip.NCIPMessage)
+	if !ok {
+		return errors.New("NCIP v1 response target must be NCIPMessage")
+	}
+	*target = message
+	return nil
 }
 
 // LookupUser performs the NCIP 1.0 LookupUser service.

@@ -169,12 +169,12 @@ func (l *LmsAdapterNcip1) LookupUser(patron string, options LookupUserOptions) (
 	return result, nil
 }
 
-func (l *LmsAdapterNcip1) AcceptItem(itemID, requestID, userID, author, title, isbn, callNumber, pickup, action string) (bool, error) {
+func (l *LmsAdapterNcip1) AcceptItem(itemID, requestID, userID, author, title, isbn, callNumber, pickup, action string) (*AcceptedItem, error) {
 	if l.config.AcceptItemEnabled != nil && !*l.config.AcceptItemEnabled {
-		return false, nil
+		return nil, nil
 	}
 	if err := ncip1Required(itemID, requestID, userID); err != nil {
-		return false, err
+		return nil, err
 	}
 	if action == "" {
 		action = "Hold For Pickup"
@@ -192,10 +192,16 @@ func (l *LmsAdapterNcip1) AcceptItem(itemID, requestID, userID, author, title, i
 	if callNumber != "" {
 		fields.ItemDescription = &ncip.ItemDescription{CallNumber: callNumber}
 	}
-	_, err := l.client.AcceptItem(ncip.AcceptItem{InitiationHeader: header, UniqueRequestId: *l.request(requestID), UniqueUserId: l.user(userID), UniqueItemId: &item,
+	response, err := l.client.AcceptItem(ncip.AcceptItem{InitiationHeader: header, UniqueRequestId: *l.request(requestID), UniqueUserId: l.user(userID), UniqueItemId: &item,
 		RequestedActionType:         ncip.RequestedActionType{Scheme: ncip1Scheme + "imp1/schemes/requestedactiontype/requestedactiontype.scm", Value: action},
 		IndeterminateLoanPeriodFlag: &ncip.IndeterminateLoanPeriodFlag{}, ItemOptionalFields: fields})
-	return err == nil, err
+	if err != nil {
+		return nil, err
+	}
+	if response.UniqueItemId != nil {
+		item = *response.UniqueItemId
+	}
+	return &AcceptedItem{ItemID: encodeNcip1ItemID(item)}, nil
 }
 
 func (l *LmsAdapterNcip1) DeleteItem(string) (bool, error) {

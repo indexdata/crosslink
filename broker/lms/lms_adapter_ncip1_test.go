@@ -57,9 +57,9 @@ func TestNcip1Operations(t *testing.T) {
 	})
 	logged := 0
 	a.SetLogFunc(func(map[string]any, map[string]any, error) { logged++ })
-	performed, err := a.AcceptItem("item", "request", "user", "author", "title", "isbn", "call", "pickup", "")
+	accepted, err := a.AcceptItem("item", "request", "user", "author", "title", "isbn", "call", "pickup", "")
 	require.NoError(t, err)
-	require.True(t, performed)
+	require.NotNil(t, accepted)
 	require.Equal(t, 1, logged)
 	a = ncip1TestAdapter(t, `<RequestItemResponse>`+ncip1TestHeader+`<UniqueRequestId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><RequestIdentifierValue>lms-request</RequestIdentifierValue></UniqueRequestId><UniqueItemId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><ItemIdentifierValue>internal-id</ItemIdentifierValue></UniqueItemId><UniqueUserId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><UserIdentifierValue>user</UserIdentifierValue></UniqueUserId><RequestType><Scheme>urn:test:type</Scheme><Value>Page</Value></RequestType><RequestScopeType><Scheme>urn:test:scope</Scheme><Value>Item</Value></RequestScopeType><ItemOptionalFields><BibliographicDescription><Title>Title</Title></BibliographicDescription><ItemDescription><VisibleItemId><VisibleItemIdentifierType><Value>Item Barcode</Value></VisibleItemIdentifierType><VisibleItemIdentifier>barcode</VisibleItemIdentifier></VisibleItemId><CallNumber>call</CallNumber><CopyNumber>copy</CopyNumber></ItemDescription><Location><LocationName><LocationNameInstance><LocationNameLevel>1</LocationNameLevel><LocationNameValue>Main</LocationNameValue></LocationNameInstance><LocationNameInstance><LocationNameLevel>2</LocationNameLevel><LocationNameValue>Stacks</LocationNameValue></LocationNameInstance></LocationName></Location></ItemOptionalFields></RequestItemResponse>`, func(m ncip.NCIPMessage) {
 		r := m.RequestItem
@@ -79,7 +79,7 @@ func TestNcip1Operations(t *testing.T) {
 	})
 	require.NoError(t, a.CancelRequestItem("request", "user"))
 	a = ncip1TestAdapter(t, `<CheckInItemResponse>`+ncip1TestHeader+`<UniqueItemId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><ItemIdentifierValue>barcode</ItemIdentifierValue></UniqueItemId></CheckInItemResponse>`, func(m ncip.NCIPMessage) { require.Equal(t, "lms", m.CheckInItem.UniqueItemId.UniqueAgencyId.Value) })
-	performed, err = a.CheckInItem("barcode")
+	performed, err := a.CheckInItem("barcode")
 	require.NoError(t, err)
 	require.True(t, performed)
 	for _, date := range []string{"2026-12-01T12:00:00Z", "bad", "0000-01-01T00:00:00Z", ""} {
@@ -161,9 +161,9 @@ func TestNcip1UnsupportedAndDisabled(t *testing.T) {
 	a.config.LookupUserEnabled = &disabled
 	a.config.CheckInItemEnabled = &disabled
 	a.config.CheckOutItemEnabled = &disabled
-	performed, err = a.AcceptItem("", "", "", "", "", "", "", "", "")
+	accepted, err := a.AcceptItem("", "", "", "", "", "", "", "", "")
 	require.NoError(t, err)
-	require.False(t, performed)
+	require.Nil(t, accepted)
 	performed, err = a.DeleteItem("")
 	require.NoError(t, err)
 	require.False(t, performed)
@@ -240,9 +240,9 @@ func TestNcip1Failures(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, checkout)
 	a = ncip1TestAdapter(t, `<AcceptItemResponse>`+ncip1TestHeader+``+problem+`</AcceptItemResponse>`, nil)
-	performed, err := a.AcceptItem("item", "request", "user", "", "", "", "", "", "")
+	accepted, err := a.AcceptItem("item", "request", "user", "", "", "", "", "", "")
 	require.Error(t, err)
-	require.False(t, performed)
+	require.Nil(t, accepted)
 }
 
 const ncip1TestHeader = `<ResponseHeader><FromAgencyId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId></FromAgencyId><ToAgencyId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId></ToAgencyId></ResponseHeader>`

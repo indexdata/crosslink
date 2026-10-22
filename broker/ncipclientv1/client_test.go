@@ -2,7 +2,9 @@ package ncipclientv1
 
 import (
 	"encoding/json"
+	"encoding/xml"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -210,4 +212,49 @@ func TestHTTPErrorBodiesAreRemoved(t *testing.T) {
 			})
 		}
 	}
+}
+
+// Malformed response diagnostics must not retain response text anywhere in the
+// returned/logged error chain, or leak partially decoded fields to the callback.
+func TestResponseDecodeErrorsAreSanitized(t *testing.T) {
+	for _, service := range []string{"LookupUser", "AcceptItem", "RequestItem", "CancelRequestItem", "CheckInItem", "CheckOutItem"} {
+		for _, body := range []string{
+			"<NCIPMessage><LookupUserResponse><ProcessingErrorValue>&secret-password;</ProcessingErrorValue></LookupUserResponse></NCIPMessage>",
+			"<NCIPMessage version=\"secret-password\"><LookupUserResponse/></NCIPMessage>",
+			"<NCIPMessage><secret-password></wrong></NCIPMessage>",
+			"<NCIPMessage><CheckOutItemResponse>" + testResponseHeader + strings.ReplaceAll(testResponseUser, "canonical", "secret-password") + "<RenewalCount>secret-password</RenewalCount></CheckOutItemResponse></NCIPMessage>",
+		} {
+			t.Run(service+"/"+body, func(t *testing.T) {
+				client := testClient(t, body, nil)
+				var logged error
+				client.SetLogFunc(func(_, incoming map[string]any, err error) {
+					logged = err
+					data, marshalErr := json.Marshal(incoming)
+					require.NoError(t, marshalErr)
+					require.NotContains(t, string(data), "secret-password")
+				})
+				returned := invokeService(client, service)
+				for _, err := range []error{returned, logged} {
+					require.ErrorContains(t, err, "invalid NCIP v1 response")
+					for cause := err; cause != nil; cause = errors.Unwrap(cause) {
+						require.NotContains(t, cause.Error(), "secret-password")
+						require.NotContains(t, fmt.Sprintf("%+v", cause), "secret-password")
+					}
+					var syntaxError *xml.SyntaxError
+					require.False(t, errors.As(err, &syntaxError))
+				}
+			})
+		}
+	}
+}
+
+func TestTransportErrorChainIsPreserved(t *testing.T) {
+	sentinel := errors.New("transport failed")
+	client := New(&http.Client{Transport: roundTrip(func(*http.Request) (*http.Response, error) {
+		return nil, sentinel
+	})}, "https://lms.example/ncip")
+	var logged error
+	client.SetLogFunc(func(_, _ map[string]any, err error) { logged = err })
+	require.ErrorIs(t, invokeService(client, "LookupUser"), sentinel)
+	require.ErrorIs(t, logged, sentinel)
 }

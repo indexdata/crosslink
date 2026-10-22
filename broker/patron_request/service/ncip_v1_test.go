@@ -21,78 +21,107 @@ import (
 )
 
 func TestNcipV1RequesterLifecycle(t *testing.T) {
-	operations := make(chan string, 3)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var message ncip.NCIPMessage
-		require.NoError(t, xml.NewDecoder(r.Body).Decode(&message))
-		operation := ""
-		switch {
-		case message.AcceptItem != nil:
-			operation = "AcceptItem"
-		case message.CheckOutItem != nil:
-			operation = "CheckOutItem"
-			require.Equal(t, "patron", message.CheckOutItem.UniqueUserId.UserIdentifierValue)
-		case message.CheckInItem != nil:
-			operation = "CheckInItem"
-		default:
-			t.Errorf("unexpected v1 service")
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		operations <- operation
-		data, err := os.ReadFile("../../ncipclientv1/testdata/" + operation + "Response.xml")
-		require.NoError(t, err)
-		w.Header().Set("Content-Type", "application/xml")
-		_, err = w.Write(data)
-		require.NoError(t, err)
-	}))
-	defer server.Close()
-	version := "1.0"
-	adapter, err := lms.CreateLmsAdapterNcip(dirapi.LmsConfig{Address: server.URL, FromAgency: "broker", NcipVersion: &version})
-	require.NoError(t, err)
-	pr := testLoan()
-	pr.Side = SideBorrowing
-	pr.State = BorrowerStateShipped
-	pr.Patron = getDbText("patron")
-	repo := &MockPrRepo{savedPr: pr, savedItems: []pr_db.Item{{ID: "item", PrID: pr.ID, Barcode: "barcode", LmsStatus: pr_db.LmsStatusUnknown}}}
-	bus := new(MockEventBus)
-	sender := new(MockIso18626Handler)
-	creator := new(MockLmsCreator)
-	creator.On("GetAdapter", pr.RequesterSymbol.String).Return(adapter, nil)
-	svc := CreatePatronRequestActionService(repo, new(IllRepoMock), bus, sender, creator, nil, nil, nil)
-	adapter, err = svc.createRequesterLmsAdapter(appCtx, "receive", pr)
-	require.NoError(t, err)
-	result := svc.receiveBorrowingRequest(appCtx, "receive", pr, adapter, pr.IllRequest)
-	require.Equal(t, events.EventStatusSuccess, result.status, "%+v", result.result)
-	require.Equal(t, pr_db.LmsStatusAccepted, repo.savedItems[0].LmsStatus)
-	require.True(t, repo.savedItems[0].LmsRequestID.Valid)
-	result = svc.checkoutBorrowingRequest(appCtx, pr, adapter, pr.IllRequest)
-	require.Equal(t, events.EventStatusSuccess, result.status, "%+v", result.result)
-	require.Equal(t, pr_db.LmsStatusCheckedOut, repo.savedItems[0].LmsStatus)
-	result = svc.checkinBorrowingRequest(appCtx, pr, adapter, pr.IllRequest)
-	require.Equal(t, events.EventStatusSuccess, result.status, "%+v", result.result)
-	require.Equal(t, pr_db.LmsStatusCheckedIn, repo.savedItems[0].LmsStatus)
-	before := repo.savedItems[0]
-	result = svc.shipReturnBorrowingRequest(appCtx, "return", pr, adapter, pr.IllRequest)
-	require.Equal(t, events.EventStatusSuccess, result.status, "%+v", result.result)
-	require.Equal(t, iso18626.TypeActionShippedReturn, sender.lastRequestingAgencyMessage.Action)
-	require.Equal(t, before, repo.savedItems[0], "unsupported cleanup must retain status and LMS IDs")
-	// Local-close cleanup uses the same unsupported-service handling.
-	require.NoError(t, svc.deleteRequesterItemsOnClose(appCtx, "close", pr))
-	require.Equal(t, before, repo.savedItems[0])
-	require.Equal(t, []string{"AcceptItem", "CheckOutItem", "CheckInItem"}, []string{<-operations, <-operations, <-operations})
-	skipped := 0
-	for i, data := range bus.createdNoticeData {
-		if data.CustomData["outcome"] != "skipped" {
-			continue
-		}
-		skipped++
-		require.Equal(t, events.EventNameLmsRequesterMessage, bus.createdNoticeNames[i])
-		require.Equal(t, events.EventStatusProblem, bus.createdNoticeStatus[i])
-		require.Equal(t, map[string]any{"operation": "DeleteItem", "outcome": "skipped", "reason": "unsupported", "itemId": "barcode"}, data.CustomData)
-		require.Contains(t, []string{"return", "close"}, bus.createdNoticeParent[i])
+	for _, returned := range []bool{false, true} {
+		t.Run(map[bool]string{false: "sent identity", true: "returned identity"}[returned], func(t *testing.T) {
+			operations := make(chan string, 3)
+			var expectedItem ncip.UniqueItemId
+			acceptance := ncipV1ResponseFixture(t, "AcceptItem")
+			acceptance.AcceptItemResponse.UniqueItemId = nil
+			if returned {
+				expectedItem = ncip.UniqueItemId{XMLName: xml.Name{Local: "UniqueItemId"}, UniqueAgencyId: ncip.UniqueAgencyId{XMLName: xml.Name{Local: "UniqueAgencyId"}, Scheme: "urn:lms:custom", Value: "another-agency"}, ItemIdentifierValue: " internal-item:/é "}
+				acceptance.AcceptItemResponse.UniqueItemId = &expectedItem
+			}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var message ncip.NCIPMessage
+				require.NoError(t, xml.NewDecoder(r.Body).Decode(&message))
+				operation := ""
+				switch {
+				case message.AcceptItem != nil:
+					operation = "AcceptItem"
+					require.Equal(t, "broker", message.AcceptItem.UniqueItemId.UniqueAgencyId.Value)
+					require.Equal(t, "barcode", message.AcceptItem.UniqueItemId.ItemIdentifierValue)
+					if !returned {
+						expectedItem = *message.AcceptItem.UniqueItemId
+					}
+				case message.CheckOutItem != nil:
+					operation = "CheckOutItem"
+					require.Equal(t, expectedItem, message.CheckOutItem.UniqueItemId)
+					require.Equal(t, "patron", message.CheckOutItem.UniqueUserId.UserIdentifierValue)
+				case message.CheckInItem != nil:
+					operation = "CheckInItem"
+					require.Equal(t, expectedItem, message.CheckInItem.UniqueItemId)
+				default:
+					t.Errorf("unexpected v1 service")
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				operations <- operation
+				if operation == "AcceptItem" {
+					w.Header().Set("Content-Type", "application/xml")
+					require.NoError(t, xml.NewEncoder(w).Encode(acceptance))
+					return
+				}
+				data, err := os.ReadFile("../../ncipclientv1/testdata/" + operation + "Response.xml")
+				require.NoError(t, err)
+				w.Header().Set("Content-Type", "application/xml")
+				_, err = w.Write(data)
+				require.NoError(t, err)
+			}))
+			defer server.Close()
+			version := "1.0"
+			to := "lms"
+			config := dirapi.LmsConfig{Address: server.URL, FromAgency: "broker", ToAgency: &to, NcipVersion: &version}
+			adapter, err := lms.CreateLmsAdapterNcip(config)
+			require.NoError(t, err)
+			pr := testLoan()
+			pr.Side = SideBorrowing
+			pr.State = BorrowerStateShipped
+			pr.Patron = getDbText("patron")
+			repo := &MockPrRepo{savedPr: pr, savedItems: []pr_db.Item{{ID: "item", PrID: pr.ID, Barcode: "barcode", LmsStatus: pr_db.LmsStatusUnknown}}}
+			bus := new(MockEventBus)
+			sender := new(MockIso18626Handler)
+			creator := new(MockLmsCreator)
+			creator.On("GetAdapter", pr.RequesterSymbol.String).Return(adapter, nil)
+			svc := CreatePatronRequestActionService(repo, new(IllRepoMock), bus, sender, creator, nil, nil, nil)
+			adapter, err = svc.createRequesterLmsAdapter(appCtx, "receive", pr)
+			require.NoError(t, err)
+			result := svc.receiveBorrowingRequest(appCtx, "receive", pr, adapter, pr.IllRequest)
+			require.Equal(t, events.EventStatusSuccess, result.status, "%+v", result.result)
+			require.Equal(t, pr_db.LmsStatusAccepted, repo.savedItems[0].LmsStatus)
+			require.True(t, repo.savedItems[0].LmsRequestID.Valid)
+			require.True(t, repo.savedItems[0].LmsItemID.Valid)
+			require.Equal(t, "barcode", repo.savedItems[0].Barcode)
+			adapter, err = lms.CreateLmsAdapterNcip(config)
+			require.NoError(t, err)
+			result = svc.checkoutBorrowingRequest(appCtx, pr, adapter, pr.IllRequest)
+			require.Equal(t, events.EventStatusSuccess, result.status, "%+v", result.result)
+			require.Equal(t, pr_db.LmsStatusCheckedOut, repo.savedItems[0].LmsStatus)
+			result = svc.checkinBorrowingRequest(appCtx, pr, adapter, pr.IllRequest)
+			require.Equal(t, events.EventStatusSuccess, result.status, "%+v", result.result)
+			require.Equal(t, pr_db.LmsStatusCheckedIn, repo.savedItems[0].LmsStatus)
+			before := repo.savedItems[0]
+			result = svc.shipReturnBorrowingRequest(appCtx, "return", pr, adapter, pr.IllRequest)
+			require.Equal(t, events.EventStatusSuccess, result.status, "%+v", result.result)
+			require.Equal(t, iso18626.TypeActionShippedReturn, sender.lastRequestingAgencyMessage.Action)
+			require.Equal(t, before, repo.savedItems[0], "unsupported cleanup must retain status and LMS IDs")
+			// Local-close cleanup uses the same unsupported-service handling.
+			require.NoError(t, svc.deleteRequesterItemsOnClose(appCtx, "close", pr))
+			require.Equal(t, before, repo.savedItems[0])
+			require.Equal(t, []string{"AcceptItem", "CheckOutItem", "CheckInItem"}, []string{<-operations, <-operations, <-operations})
+			skipped := 0
+			for i, data := range bus.createdNoticeData {
+				if data.CustomData["outcome"] != "skipped" {
+					continue
+				}
+				skipped++
+				require.Equal(t, events.EventNameLmsRequesterMessage, bus.createdNoticeNames[i])
+				require.Equal(t, events.EventStatusProblem, bus.createdNoticeStatus[i])
+				require.Equal(t, map[string]any{"operation": "DeleteItem", "outcome": "skipped", "reason": "unsupported", "itemId": before.LmsItemID.String}, data.CustomData)
+				require.Contains(t, []string{"return", "close"}, bus.createdNoticeParent[i])
+			}
+			require.Equal(t, 2, skipped)
+		})
 	}
-	require.Equal(t, 2, skipped)
 }
 
 func TestRequesterCleanupFailuresStillBlockReturn(t *testing.T) {

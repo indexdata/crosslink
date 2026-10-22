@@ -1212,14 +1212,15 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 		requestedAction := "Hold For Pickup"
 		// Persist the same identifier sent to the requester LMS after acceptance.
 		requestID := pr.ID
-		performed, err := lmsAdapter.AcceptItem(itemId, requestID, patron, author, title, isbn, callNumber, pickupLocation, requestedAction)
+		accepted, err := lmsAdapter.AcceptItem(itemId, requestID, patron, author, title, isbn, callNumber, pickupLocation, requestedAction)
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "LMS AcceptItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
-		if !performed {
+		if accepted == nil {
 			continue
 		}
+		itemId = accepted.ItemID
 		// Commit the acceptance and retry identifiers together, after the LMS call.
 		err = a.prRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
 			if err := repo.SetItemLmsStatus(ctx, pr_db.SetItemLmsStatusParams{ID: item.ID, LmsStatus: pr_db.LmsStatusAccepted, LmsDueDate: item.LmsDueDate}); err != nil {
@@ -1254,7 +1255,7 @@ func (a *PatronRequestActionService) checkoutBorrowingRequest(ctx common.Extende
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	for _, item := range items {
-		itemId := item.Barcode
+		itemId := lmsItemID(item)
 		borrowerBarcode := patron
 		checkedOutItem, err := lmsAdapter.CheckOutItem(pr.ID, itemId, borrowerBarcode, "")
 		if err != nil {
@@ -1275,7 +1276,7 @@ func (a *PatronRequestActionService) checkinBorrowingRequest(ctx common.Extended
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	for _, item := range items {
-		itemId := item.Barcode
+		itemId := lmsItemID(item)
 		performed, err := lmsAdapter.CheckInItem(itemId)
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "LMS CheckInItem failed", err)

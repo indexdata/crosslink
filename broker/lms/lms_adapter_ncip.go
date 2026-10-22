@@ -310,9 +310,9 @@ func (l *LmsAdapterNcip) AcceptItem(
 	callNumber string,
 	pickupLocation string,
 	requestedAction string,
-) (bool, error) {
+) (*AcceptedItem, error) {
 	if l.config.AcceptItemEnabled != nil && !*l.config.AcceptItemEnabled {
-		return false, nil
+		return nil, nil
 	}
 	var bibliographicItemId *ncip.BibliographicItemId
 	if isbn != "" {
@@ -350,7 +350,10 @@ func (l *LmsAdapterNcip) AcceptItem(
 		PickupLocation:      pickupLocationField,
 	}
 	_, err := l.ncipClient.AcceptItem(arg)
-	return err == nil, err
+	if err != nil {
+		return nil, err
+	}
+	return &AcceptedItem{ItemID: itemId}, nil
 }
 
 // DeleteItem confirms requester LMS item removal, including an already absent item.

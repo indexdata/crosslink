@@ -40,6 +40,13 @@ type RequestedItem struct {
 	ShelvingLocation string
 }
 
+// AcceptedItem identifies the item created or acknowledged by AcceptItem.
+// ItemID is an opaque adapter reference for subsequent circulation and cleanup.
+// A nil result with no error means acceptance was skipped.
+type AcceptedItem struct {
+	ItemID string
+}
+
 // CheckedOutItem contains data returned by a confirmed checkout, including
 // explicit manual confirmation. A nil result with a nil error means skipped.
 type CheckedOutItem struct {
@@ -68,8 +75,7 @@ type LmsAdapter interface {
 
 	LookupUser(patron string, options LookupUserOptions) (LookupUserResult, error)
 
-	// Operations without a response payload return performed=false when skipped.
-	// Errors never confirm progress; explicit manual confirmations do.
+	// AcceptItem returns the acknowledged item identity, or nil when skipped.
 	AcceptItem(
 		itemId string,
 		requestId string,
@@ -80,8 +86,10 @@ type LmsAdapter interface {
 		callNumber string,
 		pickupLocation string,
 		requestedAction string,
-	) (performed bool, err error)
+	) (*AcceptedItem, error)
 
+	// Operations without a response payload return performed=false when skipped.
+	// Errors never confirm progress; explicit manual confirmations do.
 	DeleteItem(itemId string) (performed bool, err error)
 
 	RequestItem(

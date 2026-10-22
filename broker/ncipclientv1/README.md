@@ -82,3 +82,14 @@ Run `make -C ncipv1 generate` and `make -C broker generate` before Go tests.
 From `broker`, run `go test ./ncipclientv1 ./lms`. Adapter tests also validate
 outgoing requests against the bundled v1 XSD when `xmllint` is available.
 Live vendor compatibility and socket-based NCIP transports are outside this adapter.
+
+Requester acceptance returns an opaque item reference. The broker persists the
+LMS-returned unique item identity, or the sent broker-owned identity if the
+acknowledgement omits it, and reuses it for checkout, check-in, and cleanup.
+The visible barcode remains separate. Legacy stored plain identifiers retain
+their existing agency fallback; previously discarded agency information cannot
+be recovered.
+
+Response decoding failures expose only a generic invalid-response error.
+Parser diagnostics and partially decoded messages are discarded before logging;
+transport error chains remain intact.
