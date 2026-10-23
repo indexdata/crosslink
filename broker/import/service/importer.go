@@ -533,7 +533,7 @@ func (i Importer) importBatchAction(ctx common.ExtendedContext, policy importdb.
 		paramsMap = *create.ActionParams
 	}
 	now := pgtype.Timestamptz{Time: i.clock(), Valid: true}
-	result, err := i.repo.ImportBatchAction(ctx, sched_db.SaveScheduledTaskParams{ID: taskID, EventName: events.EventNameInvokeBatchAction, Schedule: create.Schedule, ActionData: events.EventData{CommonEventData: events.CommonEventData{BatchActionData: &events.BatchActionData{ActionName: string(create.ActionName), Selector: create.BatchQuery, TaskId: taskID, Owner: owner}}, CustomData: paramsMap}, Title: pgTextFromPtr(create.Title), RunAt: nextRun, Status: sched_db.ScheduledTaskStatusPending, Owner: owner, CreatedAt: now, UpdatedAt: now}, policy)
+	result, err := i.repo.ImportBatchAction(ctx, sched_db.SaveScheduledTaskParams{ID: taskID, EventName: events.EventNameInvokeBatchAction, Schedule: create.Schedule, ActionData: events.EventData{CommonEventData: events.CommonEventData{BatchActionData: &events.BatchActionData{ActionName: string(create.ActionName), Selector: create.BatchQuery, TaskId: taskID, Owner: owner}}, CustomData: paramsMap}, Title: pgTextFromPtr(create.Title), RunAt: nextRun, Status: sched_db.ScheduledTaskStatusStopped, Owner: owner, CreatedAt: now, UpdatedAt: now}, policy)
 	return create.Title, result, err
 }
 

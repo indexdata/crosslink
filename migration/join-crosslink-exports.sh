@@ -6,6 +6,8 @@ umask 077
 SOURCE_DIR=${1:-.}
 DIRECTORY_OUTPUT=${DIRECTORY_OUTPUT:-"$SOURCE_DIR/directories.ndjson"}
 DIRECTORY_PREFIX=${DIRECTORY_PREFIX:-directories}
+CONFIG_OUTPUT=${CONFIG_OUTPUT:-"$SOURCE_DIR/config.ndjson"}
+CONFIG_PREFIX=${CONFIG_PREFIX:-config}
 PATRON_REQUEST_PREFIX=${PATRON_REQUEST_PREFIX:-patron-request}
 PATRON_REQUEST_DIR=${PATRON_REQUEST_DIR:-"$SOURCE_DIR/patron-requests"}
 PATRON_REQUEST_BATCH_SIZE=${PATRON_REQUEST_BATCH_SIZE:-1000}
@@ -147,5 +149,6 @@ split_patron_requests() {
 }
 
 join_exports "$DIRECTORY_PREFIX" "$DIRECTORY_OUTPUT"
+join_exports "$CONFIG_PREFIX" "$CONFIG_OUTPUT"
 join_exports "$PATRON_REQUEST_PREFIX" "$TEMP_DIR/patron-requests.ndjson"
 split_patron_requests "$TEMP_DIR/patron-requests.ndjson"

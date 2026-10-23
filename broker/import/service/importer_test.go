@@ -847,6 +847,19 @@ func TestImporterForwardsPolicyToBatchAction(t *testing.T) {
 	assert.Equal(t, pgText("Daily aging"), repo.batch.Title)
 }
 
+func TestImportBatchActionCreatesInactiveTask(t *testing.T) {
+	repo := &recordingImportRepo{batchResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+	importer := newImporter(repo, cache, nil, nil, fixedClock)
+
+	_, _, err := importer.importBatchAction(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", validBatchActionData())
+
+	require.NoError(t, err)
+	assert.Equal(t, sched_db.ScheduledTaskStatusStopped, repo.batch.Status)
+	assert.Equal(t, "FREQ=DAILY;BYHOUR=6;BYMINUTE=0", repo.batch.Schedule)
+	assert.True(t, repo.batch.RunAt.Valid)
+}
+
 func TestImportBatchActionRejectsMissingOrEmptyRequiredValues(t *testing.T) {
 	tests := []struct {
 		name string
