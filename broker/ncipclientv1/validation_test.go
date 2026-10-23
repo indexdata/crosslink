@@ -2,6 +2,7 @@ package ncipclientv1
 
 import (
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"os"
 	"regexp"
@@ -113,6 +114,61 @@ func TestMalformedProblems(t *testing.T) {
 	} {
 		body := `<NCIPMessage><LookupUserResponse>` + testResponseHeader + `<Problem>` + problem + `</Problem></LookupUserResponse></NCIPMessage>`
 		require.ErrorContains(t, invokeService(testClient(t, body, nil), "LookupUser"), "invalid NCIP v1 response")
+	}
+}
+
+func TestRedactShippingAddresses(t *testing.T) {
+	fixture, err := os.ReadFile("testdata/RequestItemResponse.xml")
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name     string
+		secret   string
+		shipping ncip.ShippingInformation
+	}{
+		{
+			name: "PhysicalAddress", secret: "123 Private Street",
+			shipping: ncip.ShippingInformation{PhysicalAddress: &ncip.PhysicalAddress{
+				UnstructuredAddress: &ncip.UnstructuredAddress{
+					UnstructuredAddressType: ncip.UnstructuredAddressType{Scheme: "local", Value: "Postal"},
+					UnstructuredAddressData: "123 Private Street",
+				},
+				PhysicalAddressType: ncip.PhysicalAddressType{Scheme: "local", Value: "Home"},
+			}},
+		},
+		{
+			name: "ElectronicAddress", secret: "private@example.org",
+			shipping: ncip.ShippingInformation{ElectronicAddress: &ncip.ElectronicAddress{
+				ElectronicAddressType: ncip.ElectronicAddressType{Scheme: "local", Value: "Email"},
+				ElectronicAddressData: "private@example.org",
+			}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var message ncip.NCIPMessage
+			require.NoError(t, xml.Unmarshal(fixture, &message))
+			message.RequestItemResponse.ShippingInformation = &tc.shipping
+			body, err := xml.Marshal(message)
+			require.NoError(t, err)
+			c := testClient(t, string(body), nil)
+			logged := 0
+			c.SetLogFunc(func(out, in map[string]any, err error) {
+				logged++
+				require.NoError(t, err)
+				data, err := json.Marshal([]any{out, in})
+				require.NoError(t, err)
+				require.NotContains(t, string(data), tc.secret)
+				response := in["RequestItemResponse"].(map[string]any)
+				shipping := response["ShippingInformation"].(map[string]any)
+				require.Equal(t, "***", shipping[tc.name])
+			})
+			response, err := c.RequestItem(ncip.RequestItem{})
+			require.NoError(t, err)
+			require.Equal(t, 1, logged)
+			// Redaction must not change the response available to the caller.
+			data, err := json.Marshal(response.ShippingInformation)
+			require.NoError(t, err)
+			require.Contains(t, string(data), tc.secret)
+		})
 	}
 }
 

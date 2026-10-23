@@ -287,7 +287,7 @@ func redact(value any) {
 	case map[string]any:
 		for k, f := range v {
 			switch k {
-			case "FromAgencyAuthentication", "FromSystemAuthentication", "AuthenticationInputData", "NameInformation", "UserAddressInformation", "DateOfBirth", "MessagingErrorValue", "ProcessingErrorValue":
+			case "FromAgencyAuthentication", "FromSystemAuthentication", "AuthenticationInputData", "NameInformation", "UserAddressInformation", "PhysicalAddress", "ElectronicAddress", "DateOfBirth", "MessagingErrorValue", "ProcessingErrorValue":
 				v[k] = "***"
 			default:
 				redact(f)
