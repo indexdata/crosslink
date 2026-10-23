@@ -35,7 +35,8 @@
 --     entries cannot be resolved while their parent entry is being imported.
 --   * The owner's tenant is the FOLIO tenant ID: the psql `tenant` variable
 --     when set, otherwise the current schema name without its _mod_rs suffix.
---     Other entries have a null tenant.
+--     The owner's direct branches get the same tenant so that CrossLink treats
+--     them as owned entries. Other entries have a null tenant.
 --   * Each entry's policy.ill.InstitutionalLoanToBorrowRatio custom text
 --     property becomes lendToBorrowRatio unchanged. Missing properties become
 --     null; invalid or multiple values stop export before NDJSON is emitted.
@@ -620,7 +621,12 @@ entry_records AS (
                 'contactName', entry.contact_name,
                 'email', entry.email,
                 'fromEmail', NULL,
-                'tenant', CASE WHEN local_entry.entry_id IS NOT NULL THEN export_options.tenant ELSE NULL END,
+                'tenant', CASE
+                    WHEN local_entry.entry_id IS NOT NULL
+                      OR entry.parent_id IN (SELECT entry_id FROM crosslink_local_entry)
+                    THEN export_options.tenant
+                    ELSE NULL
+                END,
                 'vendor', CASE WHEN local_entry.entry_id IS NOT NULL THEN 'ReShare' ELSE NULL END,
                 'phoneNumber', entry.phone_number,
                 'lmsLocationCode', entry.lms_location_code,
