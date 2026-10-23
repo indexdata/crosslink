@@ -430,7 +430,7 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 		IllRequest: request.IllRequest, IllResponse: responseValue, DueAt: dueAt,
 		State: pr_db.PatronRequestState(request.State), Side: side,
 		Patron: pgTextFromPtr(request.Patron), RequesterSymbol: pgTextFromString(request.RequesterSymbol),
-		SupplierSymbol: pgTextFromPtr(request.SupplierSymbol), Tenant: pgTextFromString(owner),
+		SupplierSymbol: pgTextFromPtr(request.SupplierSymbol), Tenant: pgTextFromPtr(request.Tenant),
 		RequesterReqID: pgTextFromString(request.RequesterRequestId), NeedsAttention: request.NeedsAttention,
 		LastAction: pgTextFromPtr(request.LastAction), LastActionOutcome: pgTextFromPtr(request.LastActionOutcome),
 		LastActionResult: pgTextFromPtr(request.LastActionResult), Language: pr_db.LANGUAGE,
