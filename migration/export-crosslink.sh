@@ -138,3 +138,8 @@ if [ "$index" -eq 0 ]; then
     echo "No schema entries found in $PROPERTIES_FILE" >&2
     exit 1
 fi
+
+DIRECTORY_OUTPUT="$DIRECTORY_OUTPUT" \
+DIRECTORY_PREFIX="$DIRECTORY_PREFIX" \
+PATRON_REQUEST_PREFIX="$PATRON_REQUEST_PREFIX" \
+"$SCRIPT_DIR/join-crosslink-exports.sh" .
