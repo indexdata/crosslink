@@ -178,6 +178,150 @@ func TestValidatedRequestNotificationAutoAction(t *testing.T) {
 	}
 }
 
+func TestDefaultCheckLimitCountedStatesExcludeShippedReturned(t *testing.T) {
+	model, err := LoadStateModelByName("default")
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	actions := checkLimitActions(t, model)
+	if !assert.Len(t, actions, 2) {
+		return
+	}
+	for _, action := range actions {
+		states := countedStatesFromParams(t, action.Params)
+		assert.NotEmpty(t, states)
+		assert.Contains(t, states, string(BorrowerStateValidated))
+		assert.NotContains(t, states, string(BorrowerStateShippedReturned))
+		assert.NotContains(t, states, string(BorrowerStateCompleted))
+	}
+}
+
+func TestValidateStateModelCheckLimitCountedStates(t *testing.T) {
+	tests := []struct {
+		name      string
+		configure func(t *testing.T, actions []*proapi.ModelAction)
+		errorText string
+	}{
+		{
+			name: "missing",
+			configure: func(t *testing.T, actions []*proapi.ModelAction) {
+				actions[0].Params = nil
+			},
+			errorText: "action check-limit in state VALIDATED must define non-empty params.countedStates",
+		},
+		{
+			name: "empty",
+			configure: func(t *testing.T, actions []*proapi.ModelAction) {
+				setCountedStates(t, actions[0], []string{})
+			},
+			errorText: "action check-limit in state VALIDATED must define non-empty params.countedStates",
+		},
+		{
+			name: "duplicate",
+			configure: func(t *testing.T, actions []*proapi.ModelAction) {
+				setCountedStates(t, actions[0], []string{string(BorrowerStateNew), string(BorrowerStateNew)})
+			},
+			errorText: "action check-limit in state VALIDATED params.countedStates contains duplicate requester state NEW",
+		},
+		{
+			name: "unknown",
+			configure: func(t *testing.T, actions []*proapi.ModelAction) {
+				setCountedStates(t, actions[0], []string{"MISSING"})
+			},
+			errorText: "action check-limit in state VALIDATED params.countedStates contains unknown requester state MISSING",
+		},
+		{
+			name: "inconsistent declarations",
+			configure: func(t *testing.T, actions []*proapi.ModelAction) {
+				setCountedStates(t, actions[0], []string{string(BorrowerStateNew)})
+				setCountedStates(t, actions[1], []string{string(BorrowerStateValidated)})
+			},
+			errorText: "all check-limit actions must define the same params.countedStates",
+		},
+		{
+			name: "accepts the same set in a different order",
+			configure: func(t *testing.T, actions []*proapi.ModelAction) {
+				states := countedStatesFromParams(t, actions[1].Params)
+				slices.Reverse(states)
+				setCountedStates(t, actions[1], states)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model, err := LoadStateModelByName("default")
+			if !assert.NoError(t, err) {
+				return
+			}
+			actions := checkLimitActions(t, model)
+			if !assert.Len(t, actions, 2) {
+				return
+			}
+			tt.configure(t, actions)
+
+			err = ValidateStateModel(model)
+			if tt.errorText == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.EqualError(t, err, tt.errorText)
+			}
+		})
+	}
+}
+
+func checkLimitActions(t *testing.T, model *proapi.StateModel) []*proapi.ModelAction {
+	t.Helper()
+	actions := make([]*proapi.ModelAction, 0, 2)
+	for stateIndex := range model.States {
+		state := &model.States[stateIndex]
+		if state.Side != proapi.REQUESTER || state.Actions == nil {
+			continue
+		}
+		for actionIndex := range *state.Actions {
+			action := &(*state.Actions)[actionIndex]
+			if action.Name == string(BorrowerActionCheckLimit) {
+				actions = append(actions, action)
+			}
+		}
+	}
+	return actions
+}
+
+func setCountedStates(t *testing.T, action *proapi.ModelAction, states []string) {
+	t.Helper()
+	data, err := json.Marshal(struct {
+		CountedStates []string `json:"countedStates"`
+	}{CountedStates: states})
+	if !assert.NoError(t, err) {
+		return
+	}
+	var params proapi.ModelAction_Params
+	if !assert.NoError(t, json.Unmarshal(data, &params)) {
+		return
+	}
+	action.Params = &params
+}
+
+func countedStatesFromParams(t *testing.T, params *proapi.ModelAction_Params) []string {
+	t.Helper()
+	if params == nil {
+		return nil
+	}
+	data, err := json.Marshal(params)
+	if !assert.NoError(t, err) {
+		return nil
+	}
+	var decoded struct {
+		CountedStates []string `json:"countedStates"`
+	}
+	if !assert.NoError(t, json.Unmarshal(data, &decoded)) {
+		return nil
+	}
+	return decoded.CountedStates
+}
+
 func TestDocumentDeliveredNotificationTemplate(t *testing.T) {
 	templates := GetStateModelTemplateDefaults()
 	idx := slices.IndexFunc(templates, func(template proapi.TemplateProperties) bool {

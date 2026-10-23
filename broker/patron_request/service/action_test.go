@@ -55,8 +55,8 @@ func TestCheckLimitBorrowingRequestUsesActiveRequestCount(t *testing.T) {
 		count   int64
 		outcome string
 	}{
-		{name: "at limit", count: 2},
-		{name: "over limit", count: 3, outcome: ActionOutcomeReview},
+		{name: "below limit", count: 1},
+		{name: "at limit", count: 2, outcome: ActionOutcomeReview},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			config := &dirapi.IllConfig{}
@@ -76,7 +76,7 @@ func TestCheckLimitBorrowingRequestUsesActiveRequestCount(t *testing.T) {
 				Patron:          getDbText("patron-1"),
 			}
 
-			got := actionService.checkLimitBorrowingRequest(appCtx, pr)
+			got := actionService.checkLimitBorrowingRequest(appCtx, pr, checkLimitParams(BorrowerStateValidated, BorrowerStateReceived))
 
 			assert.Equal(t, events.EventStatusSuccess, got.status)
 			if tc.outcome == "" {
@@ -88,12 +88,15 @@ func TestCheckLimitBorrowingRequestUsesActiveRequestCount(t *testing.T) {
 			assert.Contains(t, where, "side")
 			assert.Contains(t, where, "requester_symbol")
 			assert.Contains(t, where, "patron")
-			assert.Contains(t, where, "terminal_state")
+			assert.Contains(t, where, "state IN")
+			assert.Contains(t, where, "id NOT IN")
 			args := prRepo.lastListQuery.GetQueryArguments()
 			assert.Contains(t, args, "borrowing")
 			assert.Contains(t, args, "ISIL:REQ")
 			assert.Contains(t, args, "patron-1")
-			assert.Contains(t, args, false)
+			assert.Contains(t, args, string(BorrowerStateValidated))
+			assert.Contains(t, args, string(BorrowerStateReceived))
+			assert.Contains(t, args, "current-pr")
 			prRepo.AssertExpectations(t)
 			illRepo.AssertExpectations(t)
 		})
@@ -113,12 +116,41 @@ func TestCheckLimitBorrowingRequestTreatsZeroAsUnlimited(t *testing.T) {
 
 	got := actionService.checkLimitBorrowingRequest(appCtx, pr_db.PatronRequest{
 		RequesterSymbol: getDbText("ISIL:REQ"),
-	})
+	}, checkLimitParams(BorrowerStateValidated))
 
 	assert.Equal(t, events.EventStatusSuccess, got.status)
 	assert.Nil(t, got.result.ActionResult)
 	prRepo.AssertNotCalled(t, "ListPatronRequests", mock.Anything, mock.Anything)
 	illRepo.AssertExpectations(t)
+}
+
+func TestCheckLimitBorrowingRequestRequiresCountedStates(t *testing.T) {
+	limit := int32(1)
+	config := &dirapi.IllConfig{}
+	config.MaxRequestsPerPatron.Set(limit)
+	illRepo := new(IllRepoMock)
+	illRepo.On("GetCachedPeersBySymbols", []string{"ISIL:REQ"}, mock.Anything).Return([]ill_db.Peer{{
+		CustomData: dirapi.Entry{IllConfig: config},
+	}}, "", nil)
+	actionService := CreatePatronRequestActionService(new(MockPrRepo), illRepo, new(MockEventBus), new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
+
+	got := actionService.checkLimitBorrowingRequest(appCtx, pr_db.PatronRequest{
+		ID:              "current-pr",
+		RequesterSymbol: getDbText("ISIL:REQ"),
+		Patron:          getDbText("patron-1"),
+	}, nil)
+
+	assert.Equal(t, events.EventStatusError, got.status)
+	assert.Equal(t, "check-limit action has no countedStates configuration", got.result.EventError.Message)
+	illRepo.AssertExpectations(t)
+}
+
+func checkLimitParams(states ...pr_db.PatronRequestState) *proapi.ModelAction_Params {
+	values := make([]string, len(states))
+	for i, state := range states {
+		values[i] = string(state)
+	}
+	return &proapi.ModelAction_Params{CountedStates: &values}
 }
 
 func TestHandleInvokeCheckLimitTransitionsToOverLimit(t *testing.T) {
@@ -154,6 +186,10 @@ func TestHandleInvokeCheckLimitTransitionsToOverLimit(t *testing.T) {
 	assert.Equal(t, BorrowerStateOverLimit, prRepo.savedPr.State)
 	assert.True(t, prRepo.savedPr.NeedsAttention)
 	assert.Equal(t, string(BorrowerActionCheckLimit), prRepo.savedPr.LastAction.String)
+	queryArgs := prRepo.lastListQuery.GetQueryArguments()
+	assert.Contains(t, queryArgs, string(BorrowerStateValidated))
+	assert.NotContains(t, queryArgs, string(BorrowerStateShippedReturned))
+	assert.Contains(t, queryArgs, pr.ID)
 	prRepo.AssertExpectations(t)
 	illRepo.AssertExpectations(t)
 }

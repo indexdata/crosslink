@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/indexdata/cql-go/cql"
 	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/catalog"
@@ -239,7 +240,13 @@ func (a *PatronRequestActionService) executeAction(ctx common.ExtendedContext, e
 		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execResult)
 	}
 	if pr.Side == SideBorrowing && action == BorrowerActionCheckLimit {
-		execResult := a.checkLimitBorrowingRequest(ctx, pr)
+		var params actionParams
+		if err := common.MapToStruct(event.EventData.CustomData, &params); err != nil {
+			status, result := logActionErrorAndReturnResult(ctx, "failed to unmarshal action parameters", err)
+			execResult := actionExecutionResult{status: status, result: result, pr: pr}
+			return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execResult)
+		}
+		execResult := a.checkLimitBorrowingRequest(ctx, pr, params.StaticActionParams)
 		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execResult)
 	}
 	if a.lmsCreator == nil {
@@ -273,7 +280,7 @@ func withStaticActionParams(customData map[string]any, params *proapi.ModelActio
 	return data
 }
 
-func (a *PatronRequestActionService) checkLimitBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
+func (a *PatronRequestActionService) checkLimitBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params *proapi.ModelAction_Params) actionExecutionResult {
 	success := func() actionExecutionResult {
 		return actionExecutionResult{status: events.EventStatusSuccess, result: &events.EventResult{}, pr: pr}
 	}
@@ -309,12 +316,16 @@ func (a *PatronRequestActionService) checkLimitBorrowingRequest(ctx common.Exten
 	if !pr.Patron.Valid || pr.Patron.String == "" {
 		return failure("missing patron for patron limit check", nil)
 	}
+	if params == nil || params.CountedStates == nil || len(*params.CountedStates) == 0 {
+		return failure("check-limit action has no countedStates configuration", nil)
+	}
 
 	query, err := cqlbuilder.NewQuery().
 		Search("side").Term(string(SideBorrowing)).
 		And().Search("requester_symbol_exact").Term(pr.RequesterSymbol.String).
 		And().Search("patron_exact").Term(pr.Patron.String).
-		And().Search("terminal_state").Term("false").
+		And().Search("state").Rel(cql.ANY).Term(strings.Join(*params.CountedStates, " ")).
+		And().Search("id").Rel(cql.NE).Term(pr.ID).
 		Build()
 	if err != nil {
 		return failure("failed to build patron limit query", err)
@@ -329,7 +340,7 @@ func (a *PatronRequestActionService) checkLimitBorrowingRequest(ctx common.Exten
 	}
 
 	result := success()
-	if activeCount > int64(limit) {
+	if activeCount >= int64(limit) {
 		result.result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeReview}
 	}
 	return result
