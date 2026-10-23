@@ -22,10 +22,12 @@ func TestDefaultLoanPeriodPatch(t *testing.T) {
 	} {
 		var config IllConfig
 		require.NoError(t, json.Unmarshal([]byte(tc.body), &config))
-		result := illConfigPatchToDBParams(uuid.New(), config, db.IllConfig{DefaultLoanPeriod: &original})
+		result, err := illConfigPatchToDBParams(uuid.New(), config, db.IllConfig{DefaultLoanPeriod: &original})
+		require.NoError(t, err)
 		assert.Equal(t, tc.want, result.DefaultLoanPeriod)
 	}
-	result := illConfigToDBParams(uuid.New(), IllConfig{})
+	result, err := illConfigToDBParams(uuid.New(), IllConfig{})
+	require.NoError(t, err)
 	assert.Nil(t, result.DefaultLoanPeriod, "no implicit default")
 	var config IllConfig
 	assert.Error(t, json.Unmarshal([]byte(`{"defaultLoanPeriod":1.5}`), &config))
@@ -44,11 +46,13 @@ func TestMaxRequestsPerPatronPatch(t *testing.T) {
 	} {
 		var config IllConfig
 		require.NoError(t, json.Unmarshal([]byte(tc.body), &config))
-		result := illConfigPatchToDBParams(uuid.New(), config, db.IllConfig{MaxRequestsPerPatron: &original})
+		result, err := illConfigPatchToDBParams(uuid.New(), config, db.IllConfig{MaxRequestsPerPatron: &original})
+		require.NoError(t, err)
 		assert.Equal(t, tc.want, result.MaxRequestsPerPatron)
 	}
 
-	result := illConfigToDBParams(uuid.New(), IllConfig{})
+	result, err := illConfigToDBParams(uuid.New(), IllConfig{})
+	require.NoError(t, err)
 	assert.Nil(t, result.MaxRequestsPerPatron, "no implicit default")
 }
 
@@ -65,11 +69,13 @@ func TestMinimumCostPatch(t *testing.T) {
 	} {
 		var config IllConfig
 		require.NoError(t, json.Unmarshal([]byte(tc.body), &config))
-		result := illConfigPatchToDBParams(uuid.New(), config, db.IllConfig{MinimumCost: &original})
+		result, err := illConfigPatchToDBParams(uuid.New(), config, db.IllConfig{MinimumCost: &original})
+		require.NoError(t, err)
 		assert.Equal(t, tc.want, result.MinimumCost)
 	}
 
-	result := illConfigToDBParams(uuid.New(), IllConfig{})
+	result, err := illConfigToDBParams(uuid.New(), IllConfig{})
+	require.NoError(t, err)
 	assert.Nil(t, result.MinimumCost, "no implicit default")
 }
 

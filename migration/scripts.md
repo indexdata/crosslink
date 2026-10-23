@@ -21,14 +21,15 @@ For a multi-schema migration:
 DATABASE_URL='postgres://user:password@host/database' \
 ./migration/export-crosslink.sh
 
-./migration/join-crosslink-exports.sh
-
 CROSSLINK_HOST='http://localhost:8086' \
 ./migration/import-crosslink-directory.sh
 
 CROSSLINK_BROKER_HOST='http://localhost:8081' \
 ./migration/import-crosslink-patron-requests.sh
 ```
+
+`export-crosslink.sh` exports every schema and then joins the results, producing
+`directories.ndjson` and a `patron-requests/` directory of batch files.
 
 Import the directory data before patron requests because patron requests refer
 to directory entries and symbols.
@@ -48,6 +49,11 @@ Blank lines and lines beginning with `#` are ignored. The first schema exports
 the consortium entry. Its consortium UUID is then reused by all later
 directory exports. The final schema exports the generated tiers and network.
 
+Directory exports include the selected local owner's cancellation reasons,
+unfilled reasons (from mod-rs `cannotSupplyReasons`), and loan conditions.
+See the [ILL configuration field mappings](export-crosslink-directory-field-mapping.md#ill-configuration)
+for source fields, label fallbacks, ordering, and missing-list behavior.
+
 Environment variables:
 
 | Variable | Default | Description |
@@ -58,8 +64,11 @@ Environment variables:
 | `PATRON_REQUEST_EXPORT` | `migration/export-crosslink-open-patron-requests.sql` | Patron-request export SQL file. |
 | `DIRECTORY_PREFIX` | `directories` | Prefix for per-schema directory files. |
 | `PATRON_REQUEST_PREFIX` | `patron-request` | Prefix for per-schema patron-request files. |
+| `DIRECTORY_OUTPUT` | `directories.ndjson` | Joined directory output. |
+| `PATRON_REQUEST_DIR` | `patron-requests` | Directory for joined patron-request batch files. |
+| `PATRON_REQUEST_BATCH_SIZE` | `5000` | Maximum records per patron-request batch file. |
 
-Output files are named like:
+Per-schema output files are named like:
 
 ```text
 directories-<schema>-<number>.ndjson
@@ -67,10 +76,14 @@ patron-request-<schema>-<number>.ndjson
 ```
 
 Existing files matching the configured prefixes are removed before export.
+After all schemas are exported, the script runs `join-crosslink-exports.sh` on
+the current directory.
 
 ## `join-crosslink-exports.sh`
 
 Combines the per-schema NDJSON files produced by `export-crosslink.sh`.
+`export-crosslink.sh` runs it automatically; run it directly only to re-join
+existing shards.
 
 For directory records it also:
 
@@ -80,7 +93,11 @@ For directory records it also:
 - assigns all non-consortium entries to generated tiers;
 - assigns sequential network priorities.
 
-Patron-request files are concatenated in numeric export order.
+Patron-request files are concatenated in numeric export order and written to
+`PATRON_REQUEST_DIR` as `patron-requests-0001.ndjson`,
+`patron-requests-0002.ndjson`, and so on, each holding at most
+`PATRON_REQUEST_BATCH_SIZE` records. Existing `patron-requests-*.ndjson` files
+in that directory are removed first.
 
 Usage:
 
@@ -95,7 +112,8 @@ Environment variables:
 | `DIRECTORY_OUTPUT` | `<SOURCE_DIR>/directories.ndjson` | Joined directory output. |
 | `DIRECTORY_PREFIX` | `directories` | Prefix used to find directory shards. |
 | `PATRON_REQUEST_PREFIX` | `patron-request` | Prefix used to find patron-request shards. |
-| `PATRON_REQUEST_OUTPUT` | `<SOURCE_DIR>/patron-requests.ndjson` | Joined patron-request output. |
+| `PATRON_REQUEST_DIR` | `<SOURCE_DIR>/patron-requests` | Directory for patron-request batch files. |
+| `PATRON_REQUEST_BATCH_SIZE` | `5000` | Maximum records per patron-request batch file. |
 
 The script requires at least one shard of each configured type.
 
@@ -127,28 +145,33 @@ JSON responses also cause a failure.
 
 ## `import-crosslink-patron-requests.sh`
 
-POSTs patron-request NDJSON to the CrossLink broker import endpoint.
+POSTs each `patron-requests-*.ndjson` batch file in `PATRON_REQUEST_DIR`, in
+name order, to the CrossLink broker import endpoint.
 
 Environment variables:
 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `CROSSLINK_BROKER_HOST` | required | CrossLink broker base URL, for example `http://localhost:8081`. |
-| `PATRON_REQUEST_FILE` | `patron-requests.ndjson` | Patron-request NDJSON file to upload. |
+| `PATRON_REQUEST_DIR` | `patron-requests` | Directory of patron-request batch files to upload. |
+| `PATRON_REQUEST_FILE` | unset | Upload only this NDJSON file instead of the directory. |
 | `CONFLICT_POLICY` | `fail` | Import conflict policy passed as the query parameter. |
 
 Example:
 
 ```sh
 CROSSLINK_BROKER_HOST='http://localhost:8081' \
-PATRON_REQUEST_FILE=patron-requests.ndjson \
+PATRON_REQUEST_DIR=patron-requests \
 CONFLICT_POLICY=fail \
 ./migration/import-crosslink-patron-requests.sh
 ```
 
-The script prints the API response and exits nonzero if any of
-`.patronRequests.failed`, `.batchActions.failed`, or `.templates.failed` is
-nonzero. Invalid JSON responses also cause a failure.
+The script prints each API response and stops with a nonzero exit at the first
+file whose response has a nonzero `.patronRequests.failed`,
+`.batchActions.failed`, or `.templates.failed`. Invalid JSON responses also
+cause a failure. Earlier files have already been imported at that point, so
+re-run with `CONFLICT_POLICY=skip` or `update` to continue, or use
+`PATRON_REQUEST_FILE` to retry a single batch.
 
 All import scripts use `curl --fail-with-body`, so HTTP failures return a
 nonzero exit status while preserving the server response body in the output.

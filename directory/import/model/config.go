@@ -36,23 +36,32 @@ type PatronProfile struct {
 	CanCreateRequests bool    `json:"canCreateRequests"`
 }
 
+// IllConfigCodeDescription is an imported ILL code and its default description.
+type IllConfigCodeDescription struct {
+	Code        string `json:"code"`
+	DefaultDesc string `json:"defaultDesc"`
+}
+
 type ILLConfig struct {
-	LoadBalancingPolicy         *string     `json:"loadBalancingPolicy"`
-	IsPickupLocation            *bool       `json:"isPickupLocation"`
-	DefaultLoanPeriod           *int32      `json:"defaultLoanPeriod"`
-	MaxRequestsPerPatron        *int32      `json:"maxRequestsPerPatron"`
-	MinimumCost                 *float64    `json:"minimumCost"`
-	ISO18626URL                 *string     `json:"iso18626Url"`
-	ISO18626Vendor              *string     `json:"iso18626Vendor"`
-	LendersOfLastResort         []uuid.UUID `json:"lendersOfLastResort"`
-	IncludeRequestingAgencyInfo *bool       `json:"includeRequestingAgencyInfo"`
-	IncludeSupplierInfo         *bool       `json:"includeSupplierInfo"`
-	IncludeReturnInfo           *bool       `json:"includeReturnInfo"`
-	IncludeVendorNote           *bool       `json:"includeVendorNote"`
-	UseOfferedCosts             *bool       `json:"useOfferedCosts"`
-	NoteFieldSeparator          *string     `json:"noteFieldSeparator"`
-	SupplierPatronPattern       *string     `json:"supplierPatronPattern"`
-	DuplicateCheckWindowHours   *int32      `json:"duplicateCheckWindowHours"`
+	LoanConditions              *[]IllConfigCodeDescription `json:"loanConditions"`
+	UnfilledReasons             *[]IllConfigCodeDescription `json:"unfilledReasons"`
+	CancellationReasons         *[]IllConfigCodeDescription `json:"cancellationReasons"`
+	LoadBalancingPolicy         *string                     `json:"loadBalancingPolicy"`
+	IsPickupLocation            *bool                       `json:"isPickupLocation"`
+	DefaultLoanPeriod           *int32                      `json:"defaultLoanPeriod"`
+	MaxRequestsPerPatron        *int32                      `json:"maxRequestsPerPatron"`
+	MinimumCost                 *float64                    `json:"minimumCost"`
+	ISO18626URL                 *string                     `json:"iso18626Url"`
+	ISO18626Vendor              *string                     `json:"iso18626Vendor"`
+	LendersOfLastResort         []uuid.UUID                 `json:"lendersOfLastResort"`
+	IncludeRequestingAgencyInfo *bool                       `json:"includeRequestingAgencyInfo"`
+	IncludeSupplierInfo         *bool                       `json:"includeSupplierInfo"`
+	IncludeReturnInfo           *bool                       `json:"includeReturnInfo"`
+	IncludeVendorNote           *bool                       `json:"includeVendorNote"`
+	UseOfferedCosts             *bool                       `json:"useOfferedCosts"`
+	NoteFieldSeparator          *string                     `json:"noteFieldSeparator"`
+	SupplierPatronPattern       *string                     `json:"supplierPatronPattern"`
+	DuplicateCheckWindowHours   *int32                      `json:"duplicateCheckWindowHours"`
 }
 
 type CatalogConfig struct {

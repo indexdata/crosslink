@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -240,7 +241,31 @@ func mergeHoldingsPolicy(original []byte, patch HoldingsPolicy) (HoldingsPolicy,
 	return merged, nil
 }
 
-func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) db.UpsertIllConfigParams {
+// encodeIllConfigLists leaves omitted lists untouched and stores empty lists as [].
+func encodeIllConfigLists(params *db.UpsertIllConfigParams, cfg IllConfig) error {
+	for _, field := range []struct {
+		name   string
+		codes  *[]IllConfigCodeDescription
+		target *[]byte
+	}{
+		{"availableCopyrightTypes", cfg.AvailableCopyrightTypes, &params.AvailableCopyrightTypes},
+		{"unfilledReasons", cfg.UnfilledReasons, &params.UnfilledReasons},
+		{"cancellationReasons", cfg.CancellationReasons, &params.CancellationReasons},
+		{"loanConditions", cfg.LoanConditions, &params.LoanConditions},
+	} {
+		if field.codes == nil {
+			continue
+		}
+		data, err := json.Marshal(*field.codes)
+		if err != nil {
+			return fmt.Errorf("encode illConfig.%s: %w", field.name, err)
+		}
+		*field.target = data
+	}
+	return nil
+}
+
+func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) (db.UpsertIllConfigParams, error) {
 	params := db.UpsertIllConfigParams{
 		Entry:                       entryID,
 		IsPickupLocation:            cfg.IsPickupLocation,
@@ -263,12 +288,19 @@ func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) db.UpsertIllConfigPar
 		vendor := string(*cfg.Iso18626Vendor)
 		params.Iso18626Vendor = &vendor
 	}
-	return params
+	if err := encodeIllConfigLists(&params, cfg); err != nil {
+		return db.UpsertIllConfigParams{}, err
+	}
+	return params, nil
 }
 
-func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllConfig) db.UpsertIllConfigParams {
+func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllConfig) (db.UpsertIllConfigParams, error) {
 	params := db.UpsertIllConfigParams{
 		Entry:                       entryID,
+		AvailableCopyrightTypes:     original.AvailableCopyrightTypes,
+		UnfilledReasons:             original.UnfilledReasons,
+		LoanConditions:              original.LoanConditions,
+		CancellationReasons:         original.CancellationReasons,
 		IsPickupLocation:            original.IsPickupLocation,
 		Iso18626Url:                 original.Iso18626Url,
 		Iso18626Vendor:              original.Iso18626Vendor,
@@ -316,7 +348,10 @@ func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllC
 	if cfg.MinimumCost.IsSpecified() {
 		params.MinimumCost = nullableMinimumCost(cfg)
 	}
-	return params
+	if err := encodeIllConfigLists(&params, cfg); err != nil {
+		return db.UpsertIllConfigParams{}, err
+	}
+	return params, nil
 }
 
 func nullableLoanPeriod(cfg IllConfig) *int32 {
