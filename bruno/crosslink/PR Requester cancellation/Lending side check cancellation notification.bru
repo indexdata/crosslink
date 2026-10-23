@@ -1,0 +1,50 @@
+meta {
+  name: Lending side check cancellation notification
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{host}}/patron_requests/{{cancellationLendingPrId}}/notifications?side=lending&kind=note
+  body: none
+  auth: basic
+}
+
+params:query {
+  side: lending
+  kind: note
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")))
+}
+
+script:post-response {
+  test("HTTP request succeeds", () => {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("cancellation marker is removed and surrounding text is preserved", () => {
+    const body = res.getBody();
+    expect(body.about.count).to.equal(1);
+    expect(body.items).to.be.an("array").with.lengthOf(1);
+    const notification = body.items[0];
+    expect(notification.kind).to.equal("note");
+    expect(notification.direction).to.equal("received");
+    expect(notification.note).to.equal("Please cancel. Ref: 123#");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

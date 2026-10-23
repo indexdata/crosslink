@@ -10,6 +10,45 @@ CrossLink broker is a system to manage inter-library loans (ILL), specifically i
 * allows internal requesters and suppliers to manage ILL requests using a convenient JSON API
 * provides ILS integration for internal requesters and suppliers via NCIP
 
+# Cancellation reasons in ISO18626 notes
+
+Incoming requester `Cancel` messages and supplier `CancelResponse` messages (including
+rejections), plus supported supplier `Cancelled` status messages, can carry
+`#CancellationReason: <reason>#` in their note. The reason is arbitrary nonblank
+text, for example `InvalidUser` or `Duplicate Request`, and cannot contain `#`.
+The prefix is case-sensitive. Surrounding whitespace in the value is trimmed.
+
+The first nonblank reason is stored in the patron request's `cancellationReason`;
+all complete nonblank reason markers are removed from the working note. Other
+text, whitespace, and microformats remain intact for normal processing. The first
+`#` after `CancellationReason:` closes the reason, regardless of following text.
+For example, `#CancellationReason: InvalidUser#Ref: 123#` stores `InvalidUser` and
+leaves `Ref: 123#`. Adjacent microformats require separate closing and opening
+hashes, such as `#CancellationReason: InvalidUser##ReShareLoanConditionRejectResponse#`;
+hashes cannot be shared between markers or escaped inside a reason. Empty markers
+and prefixes without a closing hash remain ordinary note text. Existing
+notification-history cleanup of condition and item markers still applies.
+
+Plain notes no longer populate `cancellationReason`. A message without a valid
+reason marker leaves the stored reason unchanged; a later valid reason replaces
+it. This does not change cancellation routing or state transitions.
+
+External vendor shims strip these markers from outgoing requester, supplier, and
+request-service notes before serialization, using a copy so internal messages
+retain their data. Local CrossLink delivery retains markers for extraction. Original
+received messages remain in the event audit trail.
+
+The requester `cancel-request` action accepts an optional `actionParams.note` and
+forwards it unchanged in the internal requester `Cancel` message, addressed to
+the configured Broker symbol. Omitting the note sends an empty note. Callers may
+include a cancellation-reason microformat in the note; the action does not generate
+one automatically. When cancellation is successfully sent, the extracted reason is
+saved on the originating borrowing request along with its action result and state.
+A failed send or a note without a valid reason leaves the stored reason unchanged.
+A supplier response without a reason marker preserves that value, including when
+cancellation is accepted. Existing incoming extraction and external-shim cleanup
+apply on delivery.
+
 # API
 
 The broker exposes a JSON API that addresses two use cases:
