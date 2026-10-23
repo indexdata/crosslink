@@ -9,6 +9,7 @@
 --     --set=ON_ERROR_STOP=1 \
 --     --set=owner='ISIL:US-RS1' \
 --     --set=broker='ISIL:BROKER' \
+--     [--set=tenant=TENANT_ID] \
 --     --file=migration/export-crosslink-open-patron-requests.sql \
 --     --quiet --tuples-only --no-align \
 --     > crosslink-open-patron-requests.ndjson
@@ -43,6 +44,9 @@
 --   * Requester request IDs drop the "~<rota position>" or "~norota" suffix
 --     that mod-rs appends to non-SLNP protocol IDs. Borrowing requests use the
 --     HRID; lending requests strip the suffix from the peer's request ID.
+--   * Borrowing requests carry the FOLIO tenant ID: the psql `tenant` variable
+--     when set, otherwise the current schema name without its _mod_rs suffix.
+--     Lending requests carry no tenant, matching requests CrossLink receives.
 --
 -- The preflight block runs before any NDJSON is emitted and stops the export if
 -- an open request has an unmapped state or is missing required import data.
@@ -63,6 +67,27 @@ SELECT :'broker' = btrim(:'broker')
 \if :crosslink_broker_symbol_valid
 \else
 \warn Invalid or missing broker symbol. Re-run with --set=broker=AUTHORITY:VALUE.
+SELECT 1 / 0;
+\endif
+
+\if :{?tenant}
+\else
+\set tenant ''
+\endif
+
+SELECT coalesce(
+    nullif(btrim(:'tenant'), ''),
+    substring(current_schema() FROM '^(.+)_mod_rs$'),
+    ''
+) AS tenant
+\gset
+
+SELECT :'tenant' ~ '^[a-z][a-z0-9_]*$' AS crosslink_tenant_valid
+\gset
+
+\if :crosslink_tenant_valid
+\else
+\warn Invalid or missing tenant. Run against a <tenant>_mod_rs schema or pass --set=tenant=TENANT_ID.
 SELECT 1 / 0;
 \endif
 
@@ -515,6 +540,7 @@ request_bundles AS (
                 'state', request.import_state,
                 'stateModel', 'default',
                 'side', request.import_side,
+                'tenant', CASE WHEN request.import_side = 'borrowing' THEN :'tenant' END,
                 'patron', request.pr_patron_identifier,
                 'requesterSymbol', request.pr_req_inst_symbol,
                 'supplierSymbol', request.import_supplier_symbol,

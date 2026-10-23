@@ -48,7 +48,7 @@ func TestImportPatronRequestNormalizesCompleteBundle(t *testing.T) {
 	assert.Equal(t, importdb.OutcomeImported, result.Outcome)
 	assert.Equal(t, importdb.ConflictPolicyUpdate, repo.patronPolicy)
 	assert.Equal(t, "pr-1", repo.patron.PatronRequest.ID)
-	assert.Equal(t, pgText("ISIL:REQ"), repo.patron.PatronRequest.Tenant)
+	assert.Equal(t, pgtype.Text{}, repo.patron.PatronRequest.Tenant)
 	assert.Equal(t, prservice.SideBorrowing, repo.patron.PatronRequest.Side)
 	assert.Equal(t, pr_db.PatronRequestState("SENT"), repo.patron.PatronRequest.State)
 	assert.True(t, repo.patron.PatronRequest.TerminalState)
@@ -67,6 +67,20 @@ func TestImportPatronRequestNormalizesCompleteBundle(t *testing.T) {
 	assert.Equal(t, []string{"ISIL:REQ", "ISIL:SUP"}, cache.symbols)
 	assert.Equal(t, "default", validator.model)
 	assert.Equal(t, proapi.Loan, validator.serviceType)
+}
+
+func TestImportPatronRequestStoresTenant(t *testing.T) {
+	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "peer-requester"}, {ID: "peer-supplier"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{terminal: true}, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		bundle["patronRequest"].(map[string]any)["tenant"] = "anokacounty"
+	})
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyUpdate, "ISIL:REQ", data)
+
+	require.NoError(t, err)
+	assert.Equal(t, pgText("anokacounty"), repo.patron.PatronRequest.Tenant)
 }
 
 func TestImportPatronRequestLocatedSupplierUnfilledReasonAndNote(t *testing.T) {
