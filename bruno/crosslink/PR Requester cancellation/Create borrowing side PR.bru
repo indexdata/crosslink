@@ -1,0 +1,56 @@
+meta {
+  name: Create borrowing side PR
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{host}}/patron_requests
+  body: json
+  auth: basic
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+body:json {
+  {
+      "illRequest": {
+        "bibliographicInfo": {
+          "supplierUniqueRecordId": "return-{{supplierSymbol}}::{{itemId}}",
+          "title" : "Requester cancellation reason regression"
+        },
+        "serviceInfo" : {
+          "serviceType": "Loan"
+        }
+      },
+      "patron": "{{requesterPatron}}",
+      "side": "borrowing",
+      "state": "NEW",
+      "requesterSymbol": "{{requesterSymbol}}"
+  }
+}
+
+script:post-response {
+  test("HTTP request succeeds", () => {
+    expect(res.getStatus()).to.equal(201);
+  });
+  const responseData = res.getBody();
+
+  test("Capture patron request id", () => {
+      expect(responseData.id).to.be.a("string").and.not.empty;
+      bru.setVar("cancellationPrId", responseData.id);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
