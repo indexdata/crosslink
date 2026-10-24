@@ -153,7 +153,7 @@ circulation with a nonempty local location. Sierra evaluates each holding's
 public note even when no circulation elements are present.
 
 LMS overrides include existing operation enablement, RequestItem type, scope,
-bib-ID code and pickup behavior, plus `ncipNamespaceEnabled` and
+bib-ID code and pickup behavior, plus `ncipVersion`, `ncipNamespaceEnabled` and
 `bibIdNormalization` (`none` or `sierra`). Sierra normalization strips a leading
 `.b` and removes a trailing digit when more than one character remains, matching
 mod-rs. Set `none` for an endpoint accepting the original bibliographic ID.
@@ -184,3 +184,21 @@ excluded. The same representation is available internally through
 Generated Go API models and embedded schemas are rebuilt with
 `make -C directory generate`; generated files remain ignored according to the
 repository convention.
+
+### NCIP version selection
+
+Set `lmsConfig.ncipVersion` to `"1.0"` or `"2.02"`. All current profiles default
+to `"2.02"`; an explicit value overrides the profile. Existing records retain
+this behavior without a stored version. POST/GET preserve explicit settings;
+PATCH with `null` removes the override, while omission leaves it unchanged.
+`ncipNamespaceEnabled` affects v2 only: v1 always uses namespace-free XML.
+
+```json
+{"lmsConfig":{"ncipVersion":"1.0"}}
+```
+
+NCIP 1.0 currently supports HTTP. Its supported operations and differences are
+listed in the [adapter documentation](../broker/ncipclientv1/README.md).
+Apply Directory migration `020_ncip_version` before running the updated
+Directory service. Enable v1 after the updated broker is deployed; older
+brokers do not interpret the version field.

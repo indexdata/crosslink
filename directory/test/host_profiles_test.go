@@ -141,3 +141,42 @@ func TestHoldingsParserConflicts(t *testing.T) {
 		}
 	}
 }
+
+func TestNcipVersionPersistence(t *testing.T) {
+	resetDb()
+	headers := map[string]string{"X-Okapi-Tenant": "ANINST", "X-Okapi-Permissions": `["directory.consortium.all"]`}
+	res, data := jsonReq(t, http.MethodPost, "/entries", `{"name":"NCIP v1","type":"Institution","lmsConfig":{"ncipVersion":"1.0"}}`, headers)
+	require.Equal(t, http.StatusCreated, res.StatusCode, data)
+	var created struct{ Id string }
+	require.NoError(t, json.Unmarshal([]byte(data), &created))
+	path := "/entries/by-id/" + created.Id
+	get := func() map[string]any {
+		res, data := jsonReq(t, http.MethodGet, path, "", headers)
+		require.Equal(t, http.StatusOK, res.StatusCode, data)
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal([]byte(data), &entry))
+		return entry["lmsConfig"].(map[string]any)
+	}
+	require.Equal(t, "1.0", get()["ncipVersion"])
+	res, data = jsonReq(t, http.MethodPatch, path, `{"lmsConfig":{"toAgency":"other"}}`, headers)
+	require.Equal(t, http.StatusNoContent, res.StatusCode, data)
+	require.Equal(t, "1.0", get()["ncipVersion"])
+	for _, bad := range []string{`"3.0"`, `""`, `1.0`} {
+		for _, method := range []string{http.MethodPost, http.MethodPatch} {
+			endpoint, body := path, `{"lmsConfig":{"ncipVersion":`+bad+`}}`
+			if method == http.MethodPost {
+				endpoint = "/entries"
+				body = `{"name":"Bad NCIP","type":"Institution","lmsConfig":{"ncipVersion":` + bad + `}}`
+			}
+			res, data = jsonReq(t, method, endpoint, body, headers)
+			require.Equal(t, http.StatusBadRequest, res.StatusCode, data)
+		}
+	}
+	require.Equal(t, "1.0", get()["ncipVersion"])
+	res, data = jsonReq(t, http.MethodPatch, path, `{"lmsConfig":{"ncipVersion":"2.02"}}`, headers)
+	require.Equal(t, http.StatusNoContent, res.StatusCode, data)
+	require.Equal(t, "2.02", get()["ncipVersion"])
+	res, data = jsonReq(t, http.MethodPatch, path, `{"lmsConfig":{"ncipVersion":null}}`, headers)
+	require.Equal(t, http.StatusNoContent, res.StatusCode, data)
+	require.NotContains(t, get(), "ncipVersion")
+}

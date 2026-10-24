@@ -6048,8 +6048,8 @@ func (l *MockLmsAdapterFail) AcceptItem(
 	callNumber string,
 	pickupLocation string,
 	requestedAction string,
-) (bool, error) {
-	return false, errors.New("AcceptItem failed")
+) (*lms.AcceptedItem, error) {
+	return nil, errors.New("AcceptItem failed")
 }
 
 func (l *MockLmsAdapterFail) DeleteItem(itemId string) (bool, error) {
@@ -6167,9 +6167,12 @@ func (m *mockLmsAdapter) AcceptItem(
 	callNumber string,
 	pickupLocation string,
 	requestedAction string,
-) (bool, error) {
+) (*lms.AcceptedItem, error) {
 	args := m.Called(itemId, requestId, userId, author, title, isbn, callNumber, pickupLocation, requestedAction)
-	return args.Error(0) == nil, args.Error(0)
+	if err := args.Error(0); err != nil {
+		return nil, err
+	}
+	return &lms.AcceptedItem{ItemID: itemId}, nil
 }
 
 func (m *mockLmsAdapter) DeleteItem(itemId string) (bool, error) {

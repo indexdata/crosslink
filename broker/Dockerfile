@@ -12,6 +12,7 @@ COPY httpclient/go.mod httpclient/go.sum ./httpclient/
 COPY iso18626/go.mod iso18626/go.sum ./iso18626/
 COPY marcxml/go.mod marcxml/go.sum ./marcxml/
 COPY ncip/go.mod ncip/go.sum ./ncip/
+COPY ncipv1/go.mod ncipv1/go.sum ./ncipv1/
 COPY sru/go.mod sru/go.sum ./sru/
 COPY testutil/go.mod testutil/go.sum ./testutil/
 COPY zoom/go.mod zoom/go.sum ./zoom/
@@ -24,6 +25,7 @@ RUN go work init \
     ./iso18626 \
     ./marcxml \
     ./ncip \
+    ./ncipv1 \
     ./sru \
     ./testutil \
     ./zoom
@@ -43,6 +45,7 @@ COPY marcxml/ ./marcxml
 COPY sru/ ./sru
 COPY iso18626/ ./iso18626
 COPY ncip/ ./ncip
+COPY ncipv1/ ./ncipv1
 COPY zoom/ ./zoom
 COPY testutil/ ./testutil
 

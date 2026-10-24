@@ -319,6 +319,7 @@ func buildEntrySQL(whereClause string) string {
 			json_strip_nulls(json_build_object(
 				'vendor', l.vendor,
 				'ncipNamespaceEnabled', l.ncip_namespace_enabled,
+				'ncipVersion', l.ncip_version,
 				'bibIdNormalization', l.bib_id_normalization,
 				'acceptItemEnabled', l.accept_item_enabled,
 				'address', NULLIF(l.address, ''),
@@ -860,6 +861,7 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 			Entry:                            &insertedEntry.ID,
 			Vendor:                           maybeUpdateCol[string](nil, lmsConfig.Vendor),
 			NcipNamespaceEnabled:             lmsConfig.NcipNamespaceEnabled,
+			NcipVersion:                      lmsConfig.NcipVersion,
 			BibIDNormalization:               lmsConfig.BibIdNormalization,
 			Address:                          lmsConfig.Address,
 			FromAgency:                       lmsConfig.FromAgency,
@@ -1260,6 +1262,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 				Entry:                            &orig.ID,
 				Vendor:                           maybeUpdateCol(originalLMSConfig.Vendor, lmsConfig.Vendor),
 				NcipNamespaceEnabled:             maybeUpdateCol(originalLMSConfig.NcipNamespaceEnabled, lmsConfig.NcipNamespaceEnabled),
+				NcipVersion:                      maybeUpdateCol(originalLMSConfig.NcipVersion, lmsConfig.NcipVersion),
 				BibIDNormalization:               maybeUpdateCol(originalLMSConfig.BibIDNormalization, lmsConfig.BibIdNormalization),
 				Address:                          derefOrDefault(lmsConfig.Address, originalLMSConfig.Address),
 				FromAgency:                       derefOrDefault(lmsConfig.FromAgency, originalLMSConfig.FromAgency),

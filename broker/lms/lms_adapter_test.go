@@ -384,9 +384,9 @@ func TestAcceptItem(t *testing.T) {
 		config:     dirapi.LmsConfig{AcceptItemEnabled: &b},
 		ncipClient: mock,
 	}
-	performed, err := ad.AcceptItem("item1", "req1", "testuser", "author", "title", "isbn", "callnum", "loc", "action")
+	accepted, err := ad.AcceptItem("item1", "req1", "testuser", "author", "title", "isbn", "callnum", "loc", "action")
 	assert.NoError(t, err)
-	assert.True(t, performed)
+	assert.Equal(t, &AcceptedItem{ItemID: "item1"}, accepted)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.AcceptItem)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
 	assert.Equal(t, "item1", req.ItemId.ItemIdentifierValue)
@@ -414,9 +414,9 @@ func TestAcceptItem(t *testing.T) {
 
 	b = false
 	mock.(*ncipClientMock).lastRequest = nil
-	performed, err = ad.AcceptItem("", "", "", "", "", "", "", "", "")
+	accepted, err = ad.AcceptItem("", "", "", "", "", "", "", "", "")
 	assert.NoError(t, err)
-	assert.False(t, performed)
+	assert.Nil(t, accepted)
 	assert.Nil(t, mock.(*ncipClientMock).lastRequest)
 }
 
@@ -677,10 +677,10 @@ func TestCheckOutItem(t *testing.T) {
 
 func TestManualOperationOutcomes(t *testing.T) {
 	ad := &LmsAdapterManual{}
-	performed, err := ad.AcceptItem("item", "request", "patron", "", "", "", "", "", "")
+	accepted, err := ad.AcceptItem("item", "request", "patron", "", "", "", "", "", "")
 	assert.NoError(t, err)
-	assert.False(t, performed)
-	performed, err = ad.DeleteItem("item")
+	assert.Nil(t, accepted)
+	performed, err := ad.DeleteItem("item")
 	assert.NoError(t, err)
 	assert.False(t, performed)
 	requested, err := ad.RequestItem("request", "item", "patron", "", "")

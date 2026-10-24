@@ -1,0 +1,35 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+  <!DOCTYPE NCIPMessage PUBLIC "-//NISO//NCIP DTD Version 1//EN" "http://www.niso.org/ncip/v1_0/imp1/dtd/ncip_v1_0.dtd">
+    <NCIPMessage version="http://www.niso.org/ncip/v1_0/imp1/dtd/ncip_v1_0.dtd">
+      <CheckInItemResponse>
+        <ResponseHeader>
+          <FromAgencyId>
+            <UniqueAgencyId>
+              <Scheme>http://www.niso.org/ncip/v1_0/schemes/agency.scm</Scheme>
+              <Value>TNS</Value>
+            </UniqueAgencyId>
+          </FromAgencyId>
+          <ToAgencyId>
+            <UniqueAgencyId>
+              <Scheme>http://www.niso.org/ncip/v1_0/schemes/agency.scm</Scheme>
+              <Value>RSH</Value>
+            </UniqueAgencyId>
+          </ToAgencyId>
+        </ResponseHeader>
+        <Problem>
+          <ProcessingError>
+            <ProcessingErrorType>
+              <Scheme>http://www.niso.org/ncip/v1_0/schemes/processingerrortype/checkinitemprocessingerror.scm</Scheme>
+              <Value>Item Not Checked Out</Value>
+            </ProcessingErrorType>
+            <ProcessingErrorElement>
+              <ElementName>UniqueItemId</ElementName>
+              <ProcessingErrorElement>
+                <ElementName>ItemIdentifierValue</ElementName>
+                <ProcessingErrorValue>Item not on loan.</ProcessingErrorValue>
+              </ProcessingErrorElement>
+            </ProcessingErrorElement>
+          </ProcessingError>
+        </Problem>
+      </CheckInItemResponse>
+    </NCIPMessage>

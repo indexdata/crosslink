@@ -398,7 +398,7 @@ func replaceEntryConfigs(ctx context.Context, queries *db.Queries, entryID uuid.
 			patronProfiles, _ = json.Marshal(cfg.PatronProfiles)
 		}
 		if _, err := queries.UpsertLMSConfig(ctx, db.UpsertLMSConfigParams{
-			Vendor: cfg.Vendor, NcipNamespaceEnabled: cfg.NcipNamespaceEnabled, BibIDNormalization: cfg.BibIDNormalization,
+			NcipVersion: cfg.NcipVersion, Vendor: cfg.Vendor, NcipNamespaceEnabled: cfg.NcipNamespaceEnabled, BibIDNormalization: cfg.BibIDNormalization,
 			Entry: &entryID, Address: cfg.Address, FromAgency: cfg.FromAgency, FromAgencyAuthentication: cfg.FromAgencyAuthentication,
 			ToAgency: cfg.ToAgency, LookupUserEnabled: cfg.LookupUserEnabled, AcceptItemEnabled: cfg.AcceptItemEnabled,
 			CheckinItemEnabled: cfg.CheckInItemEnabled, CheckoutItemEnabled: cfg.CheckOutItemEnabled, ItemLocation: cfg.ItemLocation,

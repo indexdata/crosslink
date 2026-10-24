@@ -221,3 +221,27 @@ func TestDiagnosticsProtectCredentials(t *testing.T) {
 	require.NotContains(t, string(diagnostics), "secret-")
 	require.Contains(t, string(diagnostics), "Sierra")
 }
+
+func TestNcipVersionDefaultsAndOverrides(t *testing.T) {
+	for _, vendor := range []string{"Generic", "Alma", "Sierra", "Koha", "FOLIO"} {
+		for _, version := range []string{"", "1.0", "2.02"} {
+			raw := `{"lmsConfig":{"vendor":"` + vendor + `"`
+			if version != "" {
+				raw += `,"ncipVersion":"` + version + `"`
+			}
+			raw += `}}`
+			input := entry(t, raw)
+			effective, err := Resolve(input)
+			require.NoError(t, err)
+			expected, origin := "2.02", "Generic"
+			if version != "" {
+				expected, origin = version, "directory"
+			} else {
+				require.Nil(t, input.LmsConfig.NcipVersion)
+			}
+			require.Equal(t, expected, *effective.LMS.NcipVersion)
+			require.Equal(t, origin, effective.Origins["lmsConfig.ncipVersion"])
+			require.Equal(t, expected, effective.Diagnostics()["lmsConfig"].(object)["ncipVersion"])
+		}
+	}
+}

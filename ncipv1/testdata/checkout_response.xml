@@ -1,0 +1,48 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+  <!DOCTYPE NCIPMessage PUBLIC "-//NISO//NCIP DTD Version 1//EN" "http://www.niso.org/ncip/v1_0/imp1/dtd/ncip_v1_0.dtd">
+    <NCIPMessage version="http://www.niso.org/ncip/v1_0/imp1/dtd/ncip_v1_0.dtd">
+      <CheckOutItemResponse>
+        <ResponseHeader>
+          <FromAgencyId>
+            <UniqueAgencyId>
+              <Scheme>http://www.niso.org/ncip/v1_0/schemes/agency.scm</Scheme>
+              <Value>TNS</Value>
+            </UniqueAgencyId>
+          </FromAgencyId>
+          <ToAgencyId>
+            <UniqueAgencyId>
+              <Scheme>http://www.niso.org/ncip/v1_0/schemes/agency.scm</Scheme>
+              <Value>EZB</Value>
+            </UniqueAgencyId>
+          </ToAgencyId>
+        </ResponseHeader>
+        <UniqueItemId>
+          <UniqueAgencyId>
+            <Scheme>NCIP Unique Agency Id</Scheme>
+            <Value>TNS</Value>
+          </UniqueAgencyId>
+          <ItemIdentifierValue>5555555025805</ItemIdentifierValue>
+        </UniqueItemId>
+        <UniqueUserId>
+          <UniqueAgencyId>
+            <Scheme>NCIP Unique Agency Id</Scheme>
+            <Value>TNS</Value>
+          </UniqueAgencyId>
+          <UserIdentifierValue>TNSNOTREAL</UserIdentifierValue>
+        </UniqueUserId>
+        <DateDue>2021-06-30T16:45:00Z</DateDue>
+        <UserOptionalFields>
+          <VisibleUserId>
+            <UniqueAgencyId>
+              <Scheme>NCIP Unique Agency Id</Scheme>
+              <Value>TNS</Value>
+            </UniqueAgencyId>
+            <VisibleUserIdentifierType>
+              <Scheme>NCIP Visible User Identifier Type Scheme</Scheme>
+              <Value>Institution Id Number</Value>
+            </VisibleUserIdentifierType>
+            <VisibleUserIdentifier>TNSNOTREAL</VisibleUserIdentifier>
+          </VisibleUserId>
+        </UserOptionalFields>
+      </CheckOutItemResponse>
+    </NCIPMessage>

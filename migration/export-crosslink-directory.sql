@@ -770,6 +770,7 @@ entry_records AS (
                 WHEN 'aleph' THEN 'Aleph'
                 ELSE 'Generic'
             END,
+            'ncipVersion', NULL,
             'ncipNamespaceEnabled', NULL,
             'bibIdNormalization', NULL,
             'address', tenant_settings.ncip_server_address,

@@ -1,11 +1,16 @@
 package lms
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/indexdata/crosslink/broker/ncipclient"
 )
+
+// ErrDeleteItemUnsupported means the LMS protocol has no item deletion service.
+// Callers may skip cleanup, but must not record a confirmed deletion.
+var ErrDeleteItemUnsupported = errors.New("LMS DeleteItem is not supported")
 
 // PatronProfileIneligibleError indicates that a patron was found in the LMS,
 // but their configured profile does not permit creating ILL requests.
@@ -21,13 +26,25 @@ func (e *PatronProfileIneligibleError) Error() string {
 // RequestedItem contains data returned by a performed LMS RequestItem
 // call. A nil response with a nil error means the adapter intentionally skipped
 // the operation, for example because RequestItem is disabled or handled manually.
+// RequestID is an opaque adapter reference; preserve it unchanged for cancellation
+// and checkout. It may include protocol-specific agency information.
+// ItemID is an opaque adapter reference for checkout and check-in, separate from
+// the display barcode. An empty ItemID means callers should use Barcode.
 type RequestedItem struct {
 	RequestID        string
+	ItemID           string
 	Barcode          string
 	CallNumber       string
 	Title            string
 	Location         string
 	ShelvingLocation string
+}
+
+// AcceptedItem identifies the item created or acknowledged by AcceptItem.
+// ItemID is an opaque adapter reference for subsequent circulation and cleanup.
+// A nil result with no error means acceptance was skipped.
+type AcceptedItem struct {
+	ItemID string
 }
 
 // CheckedOutItem contains data returned by a confirmed checkout, including
@@ -58,8 +75,7 @@ type LmsAdapter interface {
 
 	LookupUser(patron string, options LookupUserOptions) (LookupUserResult, error)
 
-	// Operations without a response payload return performed=false when skipped.
-	// Errors never confirm progress; explicit manual confirmations do.
+	// AcceptItem returns the acknowledged item identity, or nil when skipped.
 	AcceptItem(
 		itemId string,
 		requestId string,
@@ -70,8 +86,10 @@ type LmsAdapter interface {
 		callNumber string,
 		pickupLocation string,
 		requestedAction string,
-	) (performed bool, err error)
+	) (*AcceptedItem, error)
 
+	// Operations without a response payload return performed=false when skipped.
+	// Errors never confirm progress; explicit manual confirmations do.
 	DeleteItem(itemId string) (performed bool, err error)
 
 	RequestItem(
