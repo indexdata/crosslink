@@ -20,10 +20,16 @@ func TestLoadBalancingPolicyPatch(t *testing.T) {
 	} {
 		var cfg IllConfig
 		require.NoError(t, json.Unmarshal([]byte(tc.body), &cfg))
-		assert.Equal(t, tc.want, illConfigPatchToDBParams(uuid.New(), cfg, db.IllConfig{LoadBalancingPolicy: &original}).LoadBalancingPolicy)
+		result, err := illConfigPatchToDBParams(uuid.New(), cfg, db.IllConfig{LoadBalancingPolicy: &original})
+		require.NoError(t, err)
+		assert.Equal(t, tc.want, result.LoadBalancingPolicy)
 	}
-	assert.Nil(t, illConfigToDBParams(uuid.New(), IllConfig{}).LoadBalancingPolicy)
+	result, err := illConfigToDBParams(uuid.New(), IllConfig{})
+	require.NoError(t, err)
+	assert.Nil(t, result.LoadBalancingPolicy)
 	var cfg IllConfig
 	require.NoError(t, json.Unmarshal([]byte(`{"loadBalancingPolicy":"proportional"}`), &cfg))
-	assert.Equal(t, &original, illConfigToDBParams(uuid.New(), cfg).LoadBalancingPolicy)
+	result, err = illConfigToDBParams(uuid.New(), cfg)
+	require.NoError(t, err)
+	assert.Equal(t, &original, result.LoadBalancingPolicy)
 }

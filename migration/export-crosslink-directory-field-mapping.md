@@ -23,7 +23,7 @@ the trimmed `st_default_value` when necessary.
 | `directory_entry.de_lms_location_code` | `data.lmsLocationCode` | Copied directly. |
 | Entry custom text property `policy.ill.InstitutionalLoanToBorrowRatio` | `data.lendToBorrowRatio` | Copied unchanged for each selected entry; missing properties become `null`. Invalid ratios or multiple matching properties stop export before NDJSON output. |
 | Entry matched by the psql `owner` variable | `data.vendor` | Set to `ReShare` for the matched local entry; otherwise `null`. |
-| psql `tenant` variable, or the current schema name without its `_mod_rs` suffix | `data.tenant` | Set to the FOLIO tenant ID for the matched local entry; otherwise `null`. A missing or invalid tenant ID stops export before NDJSON output. |
+| psql `tenant` variable, or the current schema name without its `_mod_rs` suffix | `data.tenant` | Set to the FOLIO tenant ID for the matched local entry and its direct branches; otherwise `null`. A missing or invalid tenant ID stops export before NDJSON output. |
 | `directory_entry_tag` joined to `tag.norm_value` | Record inclusion | Entries tagged `deleted`, case-insensitively, are excluded. |
 
 The record discriminator is always `type: entry`. Parent records are emitted
@@ -149,6 +149,24 @@ retain their exported defaults.
 | Unsupported mod-rs agency-information behavior | `data.illConfig.includeSupplierInfo` | Set to `false`; mod-rs does not populate supplier information. |
 | Unsupported mod-rs directory-derived return information | `data.illConfig.includeReturnInfo` | Set to `false`; mod-rs does not automatically populate return information from the supplier directory entry. |
 | Unsupported mod-rs vendor-note behavior | `data.illConfig.includeVendorNote` | Set to `false`; mod-rs does not prepend the supplier vendor to generated notes. |
+
+The following reference-data vocabularies are exported only on the selected local
+owner. Join `refdata_value.rdv_owner` to `refdata_category.rdc_id` and select
+categories by `rdc_description`.
+
+| mod-rs vocabulary | CrossLink field | Mapping |
+| --- | --- | --- |
+| `cancellationReasons` | `data.illConfig.cancellationReasons` | `rdv_value` becomes `code`; `rdv_label` becomes `defaultDesc`. |
+| `cannotSupplyReasons` | `data.illConfig.unfilledReasons` | `rdv_value` becomes `code`; `rdv_label` becomes `defaultDesc`, falling back to `rdv_value` when the label is null, empty, or whitespace-only. |
+| `loanConditions` | `data.illConfig.loanConditions` | `rdv_value` becomes `code`; `rdv_label` becomes `defaultDesc`, with the same value fallback as unfilled reasons. |
+
+Nonblank labels and all values are preserved unchanged. Lists are ordered by
+source label, value, and ID, with null labels last. Missing or empty vocabularies
+are omitted rather than exported as empty arrays or nulls, leaving those lists
+unset on import. Non-local pickup entries do not receive these tenant-local
+lists. For example, the seeded cannot-supply value `unavailable` and label
+`No longer available` become
+`{"code":"unavailable","defaultDesc":"No longer available"}` in `unfilledReasons`.
 
 `app_setting.last_resort_lenders` is the mod-rs source for
 `data.illConfig.lendersOfLastResort`, but the primary export emits an empty

@@ -308,7 +308,11 @@ func buildEntrySQL(whereClause string) string {
 			'defaultLoanPeriod', i.default_loan_period,
 			'maxRequestsPerPatron', i.max_requests_per_patron,
 			'minimumCost', i.minimum_cost,
-			'loadBalancingPolicy', i.load_balancing_policy
+			'loadBalancingPolicy', i.load_balancing_policy,
+			'availableCopyrightTypes', i.available_copyright_types,
+			'unfilledReasons', i.unfilled_reasons,
+			'loanConditions', i.loan_conditions,
+			'cancellationReasons', i.cancellation_reasons
 		)) FROM ill_configs i WHERE i.entry = e.id) as ill_config,
 		(
 		SELECT 
@@ -905,7 +909,12 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		if validationMessage != "" {
 			return AddEntry400TextResponse(validationMessage), nil
 		}
-		_, err := qtx.UpsertIllConfig(ctx, illConfigToDBParams(insertedEntry.ID, *request.Body.IllConfig))
+		params, encodeErr := illConfigToDBParams(insertedEntry.ID, *request.Body.IllConfig)
+		if encodeErr != nil {
+			slog.ErrorContext(ctx, "failed to encode illConfig", "error", encodeErr)
+			return AddEntry500TextResponse("Internal server error"), nil
+		}
+		_, err := qtx.UpsertIllConfig(ctx, params)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to create illConfig component", "error", err)
 			return AddEntry500TextResponse("Internal server error"), nil
@@ -1336,7 +1345,12 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 				slog.ErrorContext(ctx, "unable to query original illConfig", "error", queryErr)
 				return UpdateEntry500TextResponse("Internal server error"), nil
 			}
-			_, err = qtx.UpsertIllConfig(ctx, illConfigPatchToDBParams(orig.ID, illConfig, originalIllConfig))
+			params, encodeErr := illConfigPatchToDBParams(orig.ID, illConfig, originalIllConfig)
+			if encodeErr != nil {
+				slog.ErrorContext(ctx, "failed to encode illConfig", "error", encodeErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+			_, err = qtx.UpsertIllConfig(ctx, params)
 			if err != nil {
 				slog.ErrorContext(ctx, "unexpected database error during illConfig upsert", "error", err)
 				return UpdateEntry500TextResponse("Internal server error"), nil

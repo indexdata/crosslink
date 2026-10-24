@@ -985,7 +985,7 @@ func TestHandleSupplyingAgencyMessageCancelled(t *testing.T) {
 		},
 		MessageInfo: iso18626.MessageInfo{
 			ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
-			Note:             "  Item no longer needed  ",
+			Note:             "#CancellationReason: Item no longer needed#",
 		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled},
 	}, pr_db.PatronRequest{State: BorrowerStateCancelPending, Side: SideBorrowing})
@@ -2249,5 +2249,125 @@ func TestCreateLendingRequestWithoutPredecessor(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, created.PrevReqID.Valid)
 		assert.Equal(t, "next", created.ID)
+	}
+}
+
+func TestCancellationReasonRequester(t *testing.T) {
+	for _, tt := range []struct {
+		name, note, reason, remainder string
+		condition, invalid            bool
+	}{
+		{name: "reason and note", note: "before #CancellationReason: InvalidUser# after", reason: "InvalidUser", remainder: "before  after"},
+		{name: "reason only", note: "#CancellationReason: Duplicate Request#", reason: "Duplicate Request"},
+		{name: "immediate suffix", note: "#CancellationReason: InvalidUser#Ref: 123#", reason: "InvalidUser", remainder: "Ref: 123#"},
+		{name: "plain note preserves reason", note: "ordinary note", reason: "existing", remainder: "ordinary note"},
+		{name: "empty marker preserves reason", note: "#CancellationReason: #", reason: "existing", remainder: "#CancellationReason: #"},
+		{name: "condition rejection", note: "#CancellationReason: InvalidUser#" + shim.RESHARE_LOAN_CONDITION_REJECT + "explanation", reason: "InvalidUser", remainder: "explanation", condition: true},
+		{name: "invalid transition", note: "#CancellationReason: InvalidUser#", invalid: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := new(MockPrRepo)
+			handler := CreatePatronRequestMessageHandler(repo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+			runner := &MockAutoActionRunner{}
+			handler.SetAutoActionRunner(runner)
+			state := LenderStateWillSupply
+			if tt.condition {
+				state = LenderStateConditionPending
+			}
+			if tt.invalid {
+				state = LenderStateCompleted
+			}
+			pr := pr_db.PatronRequest{ID: patronRequestId, State: state, Side: SideLending, CancellationReason: getDbText("existing")}
+			ram := iso18626.RequestingAgencyMessage{Action: iso18626.TypeActionCancel, Note: tt.note}
+			status, _, err := handler.handleRequestingAgencyMessage(appCtx, ram, pr)
+			if tt.invalid {
+				assert.Error(t, err)
+				assert.NotEqual(t, events.EventStatusSuccess, status)
+				assert.Empty(t, repo.savedPr.ID)
+				assert.Empty(t, repo.savedNotifications)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, events.EventStatusSuccess, status)
+			assert.Equal(t, LenderStateCancelRequested, repo.savedPr.State)
+			assert.Equal(t, tt.reason, repo.savedPr.CancellationReason.String)
+			if runner.callCount > 0 {
+				assert.Equal(t, tt.reason, runner.lastPr.CancellationReason.String)
+			}
+			if tt.remainder == "" {
+				assert.Empty(t, repo.savedNotifications)
+			} else {
+				require.Len(t, repo.savedNotifications, 1)
+				assert.Equal(t, tt.remainder, repo.savedNotifications[0].Note.String)
+			}
+			assert.Equal(t, tt.note, ram.Note)
+			if tt.condition {
+				require.Len(t, repo.markedConditionNotificationsReceipts, 1)
+			}
+		})
+	}
+}
+
+func TestCancellationReasonSupplier(t *testing.T) {
+	for _, tt := range []struct {
+		name, note, reason, remainder string
+		rejected, local, invalid      bool
+	}{
+		{name: "accepted", note: "before #CancellationReason: InvalidUser# after", reason: "InvalidUser", remainder: "before  after"},
+		{name: "reason only", note: "#CancellationReason: Duplicate Request#", reason: "Duplicate Request"},
+		{name: "immediate suffix", note: "#CancellationReason: InvalidUser#Ref: 123#", reason: "InvalidUser", remainder: "Ref: 123#"},
+		{name: "plain note preserves reason", note: "ordinary note", reason: "existing", remainder: "ordinary note"},
+		{name: "absent preserves reason", reason: "existing"},
+		{name: "rejected", note: "#CancellationReason: Still needed#explanation", reason: "Still needed", remainder: "explanation", rejected: true},
+		{name: "local", note: "#CancellationReason: InvalidUser#local note", reason: "InvalidUser", remainder: "local note", local: true},
+		{name: "contradictory", note: "#CancellationReason: InvalidUser#", invalid: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := new(MockPrRepo)
+			handler := CreatePatronRequestMessageHandler(repo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+			runner := &MockAutoActionRunner{}
+			handler.SetAutoActionRunner(runner)
+			yes, no := iso18626.TypeYesNoY, iso18626.TypeYesNoN
+			pr := pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateCancelPending, Side: SideBorrowing, CancellationReason: getDbText("existing")}
+			sam := iso18626.SupplyingAgencyMessage{MessageInfo: iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse, AnswerYesNo: &yes, Note: tt.note}, StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled}}
+			expectedState := BorrowerStateCancelled
+			if tt.rejected {
+				sam.StatusInfo.Status = iso18626.TypeStatusWillSupply
+				sam.MessageInfo.AnswerYesNo = &no
+				expectedState = BorrowerStateWillSupply
+			}
+			if tt.invalid {
+				sam.MessageInfo.AnswerYesNo = &no
+			}
+			if tt.local {
+				pr.State = BorrowerStateLocalSupply
+				pr.RequesterSymbol = getDbText("ISIL:REQ")
+				sam.Header.SupplyingAgencyId = iso18626.TypeAgencyId{AgencyIdType: iso18626.TypeSchemeValuePair{Text: "ISIL"}, AgencyIdValue: "REQ"}
+				sam.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
+				expectedState = BorrowerStateLocalSupply
+			}
+			status, _, err := handler.handleSupplyingAgencyMessage(appCtx, sam, pr)
+			if tt.invalid {
+				assert.Error(t, err)
+				assert.NotEqual(t, events.EventStatusSuccess, status)
+				assert.Empty(t, repo.savedPr.ID)
+				assert.Empty(t, repo.savedNotifications)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, events.EventStatusSuccess, status)
+			assert.Equal(t, expectedState, repo.savedPr.State)
+			assert.Equal(t, tt.reason, repo.savedPr.CancellationReason.String)
+			if runner.callCount > 0 {
+				assert.Equal(t, tt.reason, runner.lastPr.CancellationReason.String)
+			}
+			if tt.remainder == "" {
+				assert.Empty(t, repo.savedNotifications)
+			} else {
+				require.Len(t, repo.savedNotifications, 1)
+				assert.Equal(t, tt.remainder, repo.savedNotifications[0].Note.String)
+			}
+			assert.Equal(t, tt.note, sam.MessageInfo.Note)
+		})
 	}
 }

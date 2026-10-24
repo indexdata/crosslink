@@ -969,9 +969,12 @@ func TestReShareShimUsesConfiguredOfferedCosts(t *testing.T) {
 	assert.Nil(t, disabledMessage.SupplyingAgencyMessage.MessageInfo.OfferedCosts)
 
 	enabledMessage := newMessage()
-	_, err = GetShimWithConfig(string(dirapi.ReShare), ", ", true).ApplyToOutgoingRequest(enabledMessage)
+	data, err := GetShimWithConfig(string(dirapi.ReShare), ", ", true).ApplyToOutgoingRequest(enabledMessage)
 	assert.NoError(t, err)
-	assert.NotNil(t, enabledMessage.SupplyingAgencyMessage.MessageInfo.OfferedCosts)
+	var result iso18626.ISO18626Message
+	assert.NoError(t, xml.Unmarshal(data, &result))
+	assert.NotNil(t, result.SupplyingAgencyMessage.MessageInfo.OfferedCosts)
+	assert.Nil(t, enabledMessage.SupplyingAgencyMessage.MessageInfo.OfferedCosts)
 }
 
 func TestAlmaShimUsesConfiguredNoteFieldSeparator(t *testing.T) {
@@ -1337,4 +1340,65 @@ func TestSetItemIdFromItemsNoteMultipleItemsAlma(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "1|23\\,1|24\\,1|25\\", resmsg.SupplyingAgencyMessage.DeliveryInfo.ItemId)
 	assert.Equal(t, "send multiple items", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+}
+
+func TestOutgoingCancellationReason(t *testing.T) {
+	const original = "before #CancellationReason: InvalidUser#Ref: 123# #OtherMarker# #CancellationReason: Duplicate Request#"
+	const remainder = "before Ref: 123# #OtherMarker# "
+	for _, vendor := range []string{string(dirapi.Alma), string(dirapi.ILLiad), string(dirapi.ReShare), "unknown"} {
+		for _, kind := range []string{"request", "requester", "supplier"} {
+			t.Run(vendor+"/"+kind, func(t *testing.T) {
+				msg := iso18626.NewISO18626Message()
+				switch kind {
+				case "request":
+					msg.Request = &iso18626.Request{ServiceInfo: &iso18626.ServiceInfo{Note: original}}
+				case "requester":
+					msg.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{Action: iso18626.TypeActionCancel, Note: original}
+				case "supplier":
+					msg.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{MessageInfo: iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse, Note: original}, StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled}}
+				}
+				before, err := xml.Marshal(msg)
+				if !assert.NoError(t, err) {
+					return
+				}
+				data, err := GetShim(vendor).ApplyToOutgoingRequest(msg)
+				if !assert.NoError(t, err) {
+					return
+				}
+				var result iso18626.ISO18626Message
+				if !assert.NoError(t, xml.Unmarshal(data, &result)) {
+					return
+				}
+				switch kind {
+				case "request":
+					assert.Equal(t, remainder, result.Request.ServiceInfo.Note)
+				case "requester":
+					assert.Equal(t, remainder, result.RequestingAgencyMessage.Note)
+				case "supplier":
+					assert.Equal(t, remainder, result.SupplyingAgencyMessage.MessageInfo.Note)
+				}
+				after, err := xml.Marshal(msg)
+				assert.NoError(t, err)
+				assert.Equal(t, string(before), string(after), "wire transformations must not mutate the source")
+			})
+		}
+	}
+}
+
+func TestAlmaStripsCancellationReasonFromGeneratedNote(t *testing.T) {
+	msg := newSAM(&iso18626.SupplyingAgencyMessage{
+		MessageInfo:  iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange},
+		StatusInfo:   iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
+		DeliveryInfo: &iso18626.DeliveryInfo{LoanCondition: &iso18626.TypeSchemeValuePair{Text: "Library use #CancellationReason: InvalidUser#only"}},
+	})
+	data, err := GetShim(string(dirapi.Alma)).ApplyToOutgoingRequest(msg)
+	if !assert.NoError(t, err) {
+		return
+	}
+	var result iso18626.ISO18626Message
+	if !assert.NoError(t, xml.Unmarshal(data, &result)) {
+		return
+	}
+	assert.Equal(t, "Condition: Library use only", result.SupplyingAgencyMessage.MessageInfo.Note)
+	assert.Equal(t, "Library use #CancellationReason: InvalidUser#only", msg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition.Text)
 }

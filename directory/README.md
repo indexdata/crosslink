@@ -67,6 +67,15 @@ text property to `lendToBorrowRatio`, preserving the ratio string. Missing
 properties export as null. Invalid ratios or multiple matching properties stop
 the export before NDJSON output; the error identifies the affected entries.
 
+The export also populates the selected local owner's `illConfig.cancellationReasons`,
+`unfilledReasons`, and `loanConditions` from the mod-rs reference-data vocabularies
+`cancellationReasons`, `cannotSupplyReasons`, and `loanConditions`, respectively.
+Values become codes and labels become default descriptions. Unfilled reasons and
+loan conditions use the value when the label is null, empty, or whitespace-only.
+Missing or empty vocabularies are omitted, leaving the lists unset on import.
+See the [directory field mappings](../migration/export-crosslink-directory-field-mapping.md#ill-configuration)
+for ordering and ownership details.
+
 The optional `lendToBorrowRatio` field expresses desired loans:borrows (for
 example, `50:2`). Each component must be positive, with one to four integer
 digits and at most two decimal places (`0.01` through `9999.99`). Leading zeros
@@ -348,3 +357,38 @@ Set `illConfig.isPickupLocation` to `true` to offer an institution or branch in 
 The broker accepts the requesting institution's UUID or a descendant's UUID. An explicit selection supplies that entry's shipping address and, when needed, its LMS pickup code. Omitting the selection retains existing defaults. LMS operations that consume a pickup code still require one for explicit selections.
 
 Filter Directory entries with CQL `isPickupLocation=true` or `isPickupLocation=false`. Missing flags (including entries without ILL configuration) match `false`. The former `requesterPickupLocation` CQL filter is no longer supported.
+
+### ILL configuration lists and reference defaults
+
+`illConfig.availableCopyrightTypes`, `illConfig.unfilledReasons`,
+`illConfig.cancellationReasons`, and `illConfig.loanConditions` accept ordered
+arrays of objects with required string fields `code` and `defaultDesc`. Custom
+codes from previous systems are supported and preserved without normalization.
+For example, inside an existing complete NDJSON entry record's `data.illConfig`:
+
+```json
+{
+  "unfilledReasons": [{"code": "LegacyNotHeld", "defaultDesc": "Not held locally"}],
+  "cancellationReasons": [{"code": "LegacyDuplicate", "defaultDesc": "Duplicate request"}],
+  "loanConditions": [{"code": "LegacySupervised", "defaultDesc": "Supervised use only"}]
+}
+```
+
+Include the other required ILL configuration fields from `ImportIllConfig` in
+[api.yaml](api.yaml). The three arrays shown above are optional for
+compatibility with older imports. Import replaces configuration: omitted lists
+become unset, and `[]` stores an empty list. Create and PATCH also accept the lists; PATCH omission
+preserves existing values, while `[]` clears a list. Explicit list-level `null`
+is invalid. Entry reads return stored lists in their original order.
+
+The OpenAPI array properties `availableCopyrightTypes`, `unfilledReasons`,
+`cancellationReasons`, and `loanConditions` each carry an `x-default-data` object
+mapping codes to reference descriptions. Other processes can read these mappings
+from the source or served OpenAPI specification. Directory does not apply them automatically,
+and they do not restrict configured codes. All four lists support storage and
+create/read/PATCH operations. `availableCopyrightTypes` is excluded from NDJSON
+imports. Imports replace the entire ILL configuration, leaving copyright types
+unset; configure them through the API after an import.
+
+Legacy exports must be converted to the existing Directory NDJSON format; no
+source-system converter is included.

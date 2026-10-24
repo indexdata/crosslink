@@ -69,6 +69,31 @@ provide `secondSupplierSymbol` and `OkapiTenantSup2` for RS2. The scenario uses
 separate request variables from the happy flow. Continuation must succeed before
 this scenario can verify exhaustion.
 
+## Requester cancellation regression
+
+The `PR Requester cancellation` folder creates a Loan with one supplier and invokes
+requester `cancel-request` with a note containing `#CancellationReason: InvalidUser#`.
+It checks borrowing `CANCEL_PENDING` and lending `CANCEL_REQUESTED`, and verifies
+that the supplier's received note is exactly `Please cancel. Ref: 123#`: the reason
+marker is removed while surrounding text is preserved. The supplier then accepts
+cancellation without a note, and both requests must reach terminal `CANCELLED`.
+
+The patron-request JSON API does not expose the stored `cancellationReason`, so
+this scenario checks observable note processing and cancellation behavior. The Go
+API regression `TestRequesterCancellationReasonPersistsThroughSupplierAcceptance`
+checks stored-reason persistence. External vendor serialization cleanup and
+malformed-marker cases remain outside this scenario.
+
+Run it with the same stack and environment:
+
+```sh
+cd crosslink
+npx --yes @usebruno/cli@3.5.2 run "PR Requester cancellation" --env LocalDev --env-var userPassword=dummy
+```
+
+The scenario uses dedicated request variables and is included automatically in the
+existing CI collection run.
+
 ## Reservoir (incomplete)
 
 This is similar to the E2E test with the twist that it uses holdings SRU lookup.
