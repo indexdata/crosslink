@@ -79,7 +79,9 @@ Example:
 
 ### Batch actions
 
-Required `data` fields are `schedule`, `actionName`, `title`, and `batchQuery`. `schedule` is an RRULE expression and `batchQuery` is a CQL query. Supported action names are `email-pullslips` and `request-aging`.
+Required `data` fields are `schedule`, `actionName`, `title`, and `batchQuery`. `schedule` is an RRULE expression and `batchQuery` is a CQL query. Supported action names are `email-pullslips`, `request-aging`, and `overdue`.
+
+Imported batch actions are created inactive, including updates to matching actions. Review the migrated schedule, query, and parameters, then enable the action through the batch-action API when it is ready to run.
 
 For `request-aging`, `actionParams.interval` is required by the action and uses a Go duration such as `24h` or `168h`.
 

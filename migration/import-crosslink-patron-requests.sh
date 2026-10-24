@@ -5,13 +5,14 @@ umask 077
 
 : "${CROSSLINK_BROKER_HOST:?CROSSLINK_BROKER_HOST must be set, for example http://localhost:8081}"
 
+CONFIG_FILE=${CONFIG_FILE:-config.ndjson}
 PATRON_REQUEST_DIR=${PATRON_REQUEST_DIR:-patron-requests}
 PATRON_REQUEST_FILE=${PATRON_REQUEST_FILE:-}
 CONFLICT_POLICY=${CONFLICT_POLICY:-fail}
 CROSSLINK_BASE_URL=${CROSSLINK_BROKER_HOST%/}
 
 if ! command -v jq >/dev/null 2>&1; then
-    echo "jq is required to inspect the patron-request import response" >&2
+    echo "jq is required to inspect the import response" >&2
     exit 1
 fi
 
@@ -48,41 +49,57 @@ import_file() {
         or any($response.errors[]?; .type == null)
         | if . then "true" else "false" end
     ' "$response_file") || {
-        echo "Patron-request import response is not valid JSON" >&2
+        echo "Import response is not valid JSON" >&2
         return 1
     }
 
     if [ "$failed" = true ]; then
-        echo "Patron-request import reported failed records" >&2
+        echo "Import reported failed records" >&2
         return 1
     fi
 }
+
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Combined config file not found: $CONFIG_FILE" >&2
+    exit 1
+fi
 
 if [ -n "$PATRON_REQUEST_FILE" ]; then
     if [ ! -f "$PATRON_REQUEST_FILE" ]; then
         echo "Patron request export file not found: $PATRON_REQUEST_FILE" >&2
         exit 1
     fi
+else
+    if [ ! -d "$PATRON_REQUEST_DIR" ]; then
+        echo "Patron request export directory not found: $PATRON_REQUEST_DIR" >&2
+        exit 1
+    fi
+
+    total=0
+    for file in "$PATRON_REQUEST_DIR"/patron-requests-*.ndjson; do
+        if [ -f "$file" ]; then
+            total=$((total + 1))
+        fi
+    done
+
+    if [ "$total" -eq 0 ]; then
+        echo "No patron-requests-*.ndjson files found in $PATRON_REQUEST_DIR" >&2
+        exit 1
+    fi
+fi
+
+printf '%s\n' "Importing combined config $CONFIG_FILE"
+config_status=0
+import_file "$CONFIG_FILE" || config_status=$?
+if [ "$config_status" -ne 0 ]; then
+    echo "Configuration import stopped at $CONFIG_FILE; no patron requests were imported." >&2
+    exit "$config_status"
+fi
+
+if [ -n "$PATRON_REQUEST_FILE" ]; then
     printf '%s\n' "Importing $PATRON_REQUEST_FILE"
     import_file "$PATRON_REQUEST_FILE"
     exit 0
-fi
-
-if [ ! -d "$PATRON_REQUEST_DIR" ]; then
-    echo "Patron request export directory not found: $PATRON_REQUEST_DIR" >&2
-    exit 1
-fi
-
-total=0
-for file in "$PATRON_REQUEST_DIR"/patron-requests-*.ndjson; do
-    if [ -f "$file" ]; then
-        total=$((total + 1))
-    fi
-done
-
-if [ "$total" -eq 0 ]; then
-    echo "No patron-requests-*.ndjson files found in $PATRON_REQUEST_DIR" >&2
-    exit 1
 fi
 
 count=0

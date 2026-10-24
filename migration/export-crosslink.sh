@@ -6,9 +6,12 @@ umask 077
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROPERTIES_FILE=${PROPERTIES_FILE:-"$SCRIPT_DIR/schema.properties"}
 DIRECTORY_EXPORT=${DIRECTORY_EXPORT:-"$SCRIPT_DIR/export-crosslink-directory.sql"}
+CONFIG_EXPORT=${CONFIG_EXPORT:-"$SCRIPT_DIR/export-crosslink-config.sql"}
 PATRON_REQUEST_EXPORT=${PATRON_REQUEST_EXPORT:-"$SCRIPT_DIR/export-crosslink-open-patron-requests.sql"}
 DIRECTORY_OUTPUT=${DIRECTORY_OUTPUT:-directories.ndjson}
 DIRECTORY_PREFIX=${DIRECTORY_PREFIX:-directories}
+CONFIG_PREFIX=${CONFIG_PREFIX:-config}
+CONFIG_OUTPUT=${CONFIG_OUTPUT:-config.ndjson}
 PATRON_REQUEST_PREFIX=${PATRON_REQUEST_PREFIX:-patron-request}
 
 : "${DATABASE_URL:?DATABASE_URL must be set}"
@@ -23,6 +26,11 @@ if [ ! -f "$DIRECTORY_EXPORT" ]; then
     exit 1
 fi
 
+if [ ! -f "$CONFIG_EXPORT" ]; then
+    echo "Config export SQL file not found: $CONFIG_EXPORT" >&2
+    exit 1
+fi
+
 if [ ! -f "$PATRON_REQUEST_EXPORT" ]; then
     echo "Patron request export SQL file not found: $PATRON_REQUEST_EXPORT" >&2
     exit 1
@@ -33,7 +41,8 @@ if ! command -v jq >/dev/null 2>&1; then
     exit 1
 fi
 
-for file in "$DIRECTORY_PREFIX"-*.ndjson "$PATRON_REQUEST_PREFIX"-*.ndjson; do
+for file in "$DIRECTORY_PREFIX"-*.ndjson "$CONFIG_PREFIX"-*.ndjson \
+    "$PATRON_REQUEST_PREFIX"-*.ndjson; do
     if [ -f "$file" ]; then
         rm "$file"
     fi
@@ -122,6 +131,16 @@ while IFS= read -r line || [ -n "$line" ]; do
         ' "$directory_output")
     fi
 
+    config_output=${CONFIG_PREFIX}-${schema}-${index}.ndjson
+    printf '%s\n' "Exporting config for schema $schema to $config_output"
+    psql "$DATABASE_URL" \
+        --command="SET search_path TO \"$schema\";" \
+        --set="owner=$owner_symbol" \
+        --set=ON_ERROR_STOP=1 \
+        --file="$CONFIG_EXPORT" \
+        --quiet --tuples-only --no-align \
+        >"$config_output"
+
     patron_output=${PATRON_REQUEST_PREFIX}-${schema}-${index}.ndjson
     printf '%s\n' "Exporting patron requests for schema $schema to $patron_output"
     psql "$DATABASE_URL" \
@@ -141,5 +160,7 @@ fi
 
 DIRECTORY_OUTPUT="$DIRECTORY_OUTPUT" \
 DIRECTORY_PREFIX="$DIRECTORY_PREFIX" \
+CONFIG_OUTPUT="$CONFIG_OUTPUT" \
+CONFIG_PREFIX="$CONFIG_PREFIX" \
 PATRON_REQUEST_PREFIX="$PATRON_REQUEST_PREFIX" \
 "$SCRIPT_DIR/join-crosslink-exports.sh" .
