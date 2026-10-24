@@ -199,6 +199,6 @@ PATCH with `null` removes the override, while omission leaves it unchanged.
 
 NCIP 1.0 currently supports HTTP. Its supported operations and differences are
 listed in the [adapter documentation](../broker/ncipclientv1/README.md).
-Apply Directory migration `019_ncip_version` before running the updated
+Apply Directory migration `020_ncip_version` before running the updated
 Directory service. Enable v1 after the updated broker is deployed; older
 brokers do not interpret the version field.
