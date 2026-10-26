@@ -109,25 +109,35 @@ raw_english_templates AS (
     WHERE lower(localized_template.ltm_locality) = 'en'
       AND nullif(btrim(template.tm_template_body), '') IS NOT NULL
 ),
-placeholder_mappings(step, legacy_path, crosslink_path) AS (
+-- CrossLink does not carry across mod-rs's location filters, so its
+-- comma-separated locations placeholder is replaced with "all locations".
+-- ActualCount is exposed to batch email templates and can remain selected.
+placeholder_mappings(
+    step,
+    legacy_path,
+    crosslink_path,
+    available_to_batch_email
+) AS (
     VALUES
-        (1, 'request.id', '.ReqId'),
-        (2, 'request.cancellationReason', '.CancellationReason'),
-        (3, 'request.pickupLocation', '.PickupLocation'),
-        (4, 'request.pickupURL', '.PickupURL'),
-        (5, 'item.title', '.Title'),
-        (6, 'item.titleOfComponent', '.TitleOfComponent'),
-        (7, 'item.author', '.Author'),
-        (8, 'item.authorOfComponent', '.AuthorOfComponent'),
-        (9, 'item.materialType', '.MaterialType'),
-        (10, 'item.volume', '.Volume'),
-        (11, 'item.issue', '.Issue'),
-        (12, 'item.pages', '.Pages'),
-        (13, 'item.location', '.Location'),
-        (14, 'item.shelvingLocation', '.ShelvingLocation'),
-        (15, 'user.givenName', '.PatronGivenName'),
-        (16, 'user.surname', '.PatronSurname'),
-        (17, 'user.patronProfile', '.PatronProfile')
+        (1, 'request.id', '.ReqId', false),
+        (2, 'request.cancellationReason', '.CancellationReason', false),
+        (3, 'request.pickupLocation', '.PickupLocation', false),
+        (4, 'request.pickupURL', '.PickupURL', false),
+        (5, 'item.title', '.Title', false),
+        (6, 'item.titleOfComponent', '.TitleOfComponent', false),
+        (7, 'item.author', '.Author', false),
+        (8, 'item.authorOfComponent', '.AuthorOfComponent', false),
+        (9, 'item.materialType', '.MaterialType', false),
+        (10, 'item.volume', '.Volume', false),
+        (11, 'item.issue', '.Issue', false),
+        (12, 'item.pages', '.Pages', false),
+        (13, 'item.location', '.Location', false),
+        (14, 'item.shelvingLocation', '.ShelvingLocation', false),
+        (15, 'user.givenName', '.PatronGivenName', false),
+        (16, 'user.surname', '.PatronSurname', false),
+        (17, 'user.patronProfile', '.PatronProfile', false),
+        (18, 'locations', NULL, true),
+        (19, 'numRequests', '.ActualCount', true)
 ),
 converted_templates AS (
     SELECT
@@ -150,7 +160,10 @@ converted_templates AS (
             '[{][{][[:space:]]*'
                 || replace(placeholder_mappings.legacy_path, '.', '[.]')
                 || '[[:space:]]*[}][}]',
-            '{{' || placeholder_mappings.crosslink_path || '}}',
+            coalesce(
+                '{{' || placeholder_mappings.crosslink_path || '}}',
+                'all locations'
+            ),
             'g'
         ),
         regexp_replace(
@@ -158,7 +171,10 @@ converted_templates AS (
             '[{][{][[:space:]]*'
                 || replace(placeholder_mappings.legacy_path, '.', '[.]')
                 || '[[:space:]]*[}][}]',
-            '{{' || placeholder_mappings.crosslink_path || '}}',
+            coalesce(
+                '{{' || placeholder_mappings.crosslink_path || '}}',
+                'all locations'
+            ),
             'g'
         ),
         placeholder_mappings.step
@@ -177,24 +193,28 @@ english_templates AS (
         AND NOT EXISTS (
             SELECT 1
             FROM placeholder_mappings
-            WHERE converted_templates.subject ~ (
-                    '[{][{][^}]*'
-                    || replace(
-                        placeholder_mappings.crosslink_path,
-                        '.',
-                        '[.]'
-                    )
-                    || '([^[:alnum:]_]|[}])'
-                )
-               OR converted_templates.body ~ (
-                    '[{][{][^}]*'
-                    || replace(
-                        placeholder_mappings.crosslink_path,
-                        '.',
-                        '[.]'
-                    )
-                    || '([^[:alnum:]_]|[}])'
-                )
+            WHERE placeholder_mappings.crosslink_path IS NOT NULL
+              AND NOT placeholder_mappings.available_to_batch_email
+              AND (
+                  converted_templates.subject ~ (
+                      '[{][{][^}]*'
+                      || replace(
+                          placeholder_mappings.crosslink_path,
+                          '.',
+                          '[.]'
+                      )
+                      || '([^[:alnum:]_]|[}])'
+                  )
+                  OR converted_templates.body ~ (
+                      '[{][{][^}]*'
+                      || replace(
+                          placeholder_mappings.crosslink_path,
+                          '.',
+                          '[.]'
+                      )
+                      || '([^[:alnum:]_]|[}])'
+                  )
+              )
         ) AS batch_compatible
     FROM converted_templates
     WHERE converted_templates.step = (
@@ -288,8 +308,8 @@ aging_levels AS (
         VALUES
             (
                 'all',
-                'Request aging of all requests',
-                'side = lending and (state = VALIDATED or state = ITEM_PENDING or state = WILL_SUPPLY_PENDING or state = WILL_SUPPLY or state = CONDITION_PENDING or state = SEARCHING)',
+                'Request aging of default requests',
+                'side = lending and (state = VALIDATED or state = ITEM_PENDING or state = WILL_SUPPLY_PENDING or state = WILL_SUPPLY or state = CONDITION_PENDING or state = SEARCHING) and ((cql.allRecords = 1 not service_level = "") or (service_level <> Rush and service_level <> Express))',
                 export_settings.stale_request_days,
                 24
             ),
