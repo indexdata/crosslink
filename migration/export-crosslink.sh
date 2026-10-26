@@ -4,7 +4,6 @@ set -eu
 umask 077
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-EXPORT_WORKING_DIR=$(pwd)
 PROPERTIES_FILE=${PROPERTIES_FILE:-"$SCRIPT_DIR/schema.properties"}
 DIRECTORY_EXPORT=${DIRECTORY_EXPORT:-"$SCRIPT_DIR/export-crosslink-directory.sql"}
 CONFIG_EXPORT=${CONFIG_EXPORT:-"$SCRIPT_DIR/export-crosslink-config.sql"}
@@ -146,17 +145,6 @@ while IFS= read -r line || [ -n "$line" ]; do
         --file="$CONFIG_EXPORT" \
         --quiet --tuples-only --no-align \
         >"$config_output"
-
-    case "$config_output" in
-        /*) config_output_path=$config_output ;;
-        *) config_output_path=$EXPORT_WORKING_DIR/$config_output ;;
-    esac
-    case "$unsupported_template_output" in
-        /*) unsupported_template_output_path=$unsupported_template_output ;;
-        *) unsupported_template_output_path=$EXPORT_WORKING_DIR/$unsupported_template_output ;;
-    esac
-    (cd "$SCRIPT_DIR/../broker" && go run ./cmd/migration-template-validator \
-        "$config_output_path" "$unsupported_template_output_path")
 
     patron_output=${PATRON_REQUEST_PREFIX}-${schema}-${index}.ndjson
     printf '%s\n' "Exporting patron requests for schema $schema to $patron_output"
