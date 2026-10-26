@@ -29,6 +29,10 @@
 --   * The consortium, the owner identified by the psql `owner` variable, and
 --     the owner's direct children are exported. Tenant-local NCIP, Z39.50
 --     target, ILL, and holdings settings are attached to the selected owner.
+--     The owner's direct children with an LMS location code get an lmsConfig
+--     that carries only that code as requesterPickupLocation, plus the NCIP
+--     address and from agency the import contract requires. CrossLink reads a
+--     selected pickup location's code from that entry's own lmsConfig.
 --     The legacy HTTP Z39.50 proxy is deployment-level CrossLink configuration
 --     and is omitted.
 --     Configure last-resort lenders after import because references to child
@@ -763,7 +767,7 @@ entry_records AS (
                 'endpoints', coalesce(endpoints.items, '[]'::jsonb),
                 'addresses', coalesce(addresses.items, '[]'::jsonb),
                 'closures', '[]'::jsonb,
-                'lmsConfig', lms_config.item,
+                'lmsConfig', coalesce(lms_config.item, branch_lms_config.item),
                 'catalogConfig', catalog_config.item,
                 'illConfig', ill_config.item,
                 'holdingsPolicy', holdings_policy.item
@@ -918,6 +922,36 @@ entry_records AS (
            AND tenant_settings.ncip_server_address IS NOT NULL
           AND tenant_settings.ncip_from_agency IS NOT NULL
     ) AS lms_config ON true
+    LEFT JOIN LATERAL (
+        SELECT jsonb_build_object(
+            'vendor', NULL,
+            'ncipVersion', NULL,
+            'ncipNamespaceEnabled', NULL,
+            'bibIdNormalization', NULL,
+            'address', tenant_settings.ncip_server_address,
+            'fromAgency', tenant_settings.ncip_from_agency,
+            'fromAgencyAuthentication', NULL,
+            'toAgency', NULL,
+            'lookupUserEnabled', NULL,
+            'acceptItemEnabled', NULL,
+            'checkInItemEnabled', NULL,
+            'checkOutItemEnabled', NULL,
+            'itemLocation', NULL,
+            'requestItemRequestType', NULL,
+            'requestItemRequestScopeType', NULL,
+            'requestItemBibIdCode', NULL,
+            'requestItemEnabled', NULL,
+            'requestItemPickupLocationEnabled', true,
+            'requesterPickupLocation', entry.lms_location_code,
+            'supplierPickupLocation', NULL,
+            'requesterPatronPattern', NULL,
+            'patronProfiles', NULL
+        ) AS item
+        WHERE entry.parent_id IN (SELECT entry_id FROM crosslink_local_entry)
+          AND nullif(btrim(entry.lms_location_code), '') IS NOT NULL
+          AND tenant_settings.ncip_server_address IS NOT NULL
+          AND tenant_settings.ncip_from_agency IS NOT NULL
+    ) AS branch_lms_config ON true
     LEFT JOIN LATERAL (
         SELECT jsonb_build_object(
             'profile', CASE lower(tenant_settings.host_lms_integration)

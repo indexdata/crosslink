@@ -108,8 +108,20 @@ the consortium and adds them to the generated tiers and network.
 
 ## LMS and NCIP configuration
 
-`data.lmsConfig` is emitted only for the selected local entry when both
-`ncip_server_address` and `ncip_from_agency` are present.
+`data.lmsConfig` is emitted for the selected local entry when both
+`ncip_server_address` and `ncip_from_agency` are present, with the mappings
+below.
+
+Under the same conditions, each of the local entry's direct children with a
+non-blank `directory_entry.de_lms_location_code` gets a pickup-code-only
+`data.lmsConfig`, because CrossLink reads a selected pickup location's LMS code
+from that entry's own `lmsConfig.requesterPickupLocation`. It contains the
+branch's code as `requesterPickupLocation`, `requestItemPickupLocationEnabled`
+set to `true`, and the tenant's `address` and `fromAgency`, which the import
+contract requires. Every other field is `null`, including `vendor` and
+`fromAgencyAuthentication`, so the NCIP credential and the tenant's NCIP
+settings are not copied to branches. CrossLink builds LMS connections only from
+entries found by symbol, and branches have no symbols.
 
 | mod-rs source | CrossLink field | Mapping |
 | --- | --- | --- |
@@ -124,7 +136,7 @@ the consortium and adds them to the generated tiers and network.
 | `app_setting.check_out_item` | `data.lmsConfig.checkOutItemEnabled` | `true` when the value equals `ncip`, case-insensitively; otherwise `false`. |
 | `app_setting.use_request_item` | `data.lmsConfig.requestItemEnabled` | `true` when the value equals `ncip`, case-insensitively; otherwise `false`. |
 | `directory_entry.de_lms_location_code` | `data.lmsConfig.requestItemPickupLocationEnabled` | `true` when the value is not `null`; otherwise `false`. |
-| `directory_entry.de_lms_location_code` | `data.lmsConfig.requesterPickupLocation` | Copied directly. |
+| `directory_entry.de_lms_location_code` | `data.lmsConfig.requesterPickupLocation` | Copied directly from the entry itself, so each branch carries its own code. |
 | `app_setting.ncip_request_item_pickup_location` | `data.lmsConfig.supplierPickupLocation` | Copied directly. |
 | Local entry custom property `folio_location_filter` | `data.lmsConfig.itemLocation` | Copied when present; otherwise `null`. mod-rs passes this value as the item location in NCIP RequestItem messages. |
 | `app_setting.host_lms_integration` and host-LMS adapter behavior | `data.lmsConfig.requestItemRequestType` | `sierra` becomes `Hold`; `folio` becomes `Page`; all other values become `Loan`. |
