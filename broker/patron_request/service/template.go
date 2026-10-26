@@ -83,27 +83,29 @@ func ValidateTemplateRenderingForContext(purpose proapi.TemplatePurpose, content
 		err = email.ValidateTextTemplate(data, labels, body)
 	}
 	if err != nil {
-		return &templateContentError{part: "body", err: err}
+		return &TemplateContentError{Part: "body", Err: err}
 	}
 	if subject != nil {
 		if err := email.ValidateTextTemplate(data, labels, *subject); err != nil {
-			return &templateContentError{part: "subject", err: err}
+			return &TemplateContentError{Part: "subject", Err: err}
 		}
 	}
 	return nil
 }
 
-type templateContentError struct {
-	part string
-	err  error
+// TemplateContentError says which part of a template, its body or its
+// subject, an error is in.
+type TemplateContentError struct {
+	Part string
+	Err  error
 }
 
-func (e *templateContentError) Error() string {
-	return fmt.Sprintf("template %s: %v", e.part, e.err)
+func (e *TemplateContentError) Error() string {
+	return fmt.Sprintf("template %s: %v", e.Part, e.Err)
 }
 
-func (e *templateContentError) Unwrap() error {
-	return e.err
+func (e *TemplateContentError) Unwrap() error {
+	return e.Err
 }
 
 type templateRenderError struct {

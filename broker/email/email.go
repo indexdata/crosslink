@@ -13,9 +13,12 @@ import (
 	"net/textproto"
 	"net/url"
 	"reflect"
+	"regexp"
+	"strconv"
 	"strings"
 	text_template "text/template"
 	"text/template/parse"
+	"unicode/utf8"
 
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/iso18626"
@@ -363,63 +366,139 @@ func firstTemplateLabel(labels []string) string {
 	return labels[0]
 }
 
+// An error from RenderHtmlTemplate is a *TemplateError.
 func RenderHtmlTemplate(data any, labels []string, templateBody string) (string, error) {
 	label := firstTemplateLabel(labels)
 	tmpl, err := template.New(label).Parse(templateBody)
 	if err != nil {
-		return "", err
+		return "", asTemplateError(err, label, templateBody)
 	}
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", err
+		return "", asTemplateError(err, label, templateBody)
 	}
 	return buf.String(), nil
 }
 
+// An error from RenderTextTemplate is a *TemplateError.
 func RenderTextTemplate(data any, labels []string, templateBody string) (string, error) {
 	label := firstTemplateLabel(labels)
 	tmpl, err := text_template.New(label).Parse(templateBody)
 	if err != nil {
-		return "", err
+		return "", asTemplateError(err, label, templateBody)
 	}
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", err
+		return "", asTemplateError(err, label, templateBody)
 	}
 	return buf.String(), nil
 }
 
+// An error from ValidateHtmlTemplate is a *TemplateError.
 func ValidateHtmlTemplate(data any, labels []string, templateBody string) error {
 	label := firstTemplateLabel(labels)
 	tmpl, err := template.New(label).Parse(templateBody)
 	if err != nil {
-		return err
+		return asTemplateError(err, label, templateBody)
 	}
 	for _, defined := range tmpl.Templates() {
-		if err := validateTemplateFields(defined.Tree.Root, data); err != nil {
+		if err := validateTemplateFields(defined.Tree, data, templateBody); err != nil {
 			return err
 		}
 	}
 	var buf bytes.Buffer
-	return tmpl.Execute(&buf, data)
+	return asTemplateError(tmpl.Execute(&buf, data), label, templateBody)
 }
 
+// ValidateTextTemplate is ValidateHtmlTemplate for a text template.
 func ValidateTextTemplate(data any, labels []string, templateBody string) error {
 	label := firstTemplateLabel(labels)
 	tmpl, err := text_template.New(label).Parse(templateBody)
 	if err != nil {
-		return err
+		return asTemplateError(err, label, templateBody)
 	}
 	for _, defined := range tmpl.Templates() {
-		if err := validateTemplateFields(defined.Root, data); err != nil {
+		if err := validateTemplateFields(defined.Tree, data, templateBody); err != nil {
 			return err
 		}
 	}
 	var buf bytes.Buffer
-	return tmpl.Execute(&buf, data)
+	return asTemplateError(tmpl.Execute(&buf, data), label, templateBody)
 }
 
-func validateTemplateFields(node parse.Node, data any) error {
+// TemplateError is an error in a template's source: it does not parse, uses a
+// field or function its data lacks, or fails while rendering. Line is the
+// 1-based line and Column the 1-based character column of the failing node
+// in the source; either is zero when the error has no position. Message is
+// the error without its location. The error text keeps the form Go's template
+// packages print, with the column as a 0-based byte offset.
+type TemplateError struct {
+	Name    string
+	Line    int
+	Column  int
+	Message string
+	text    string
+}
+
+func (e *TemplateError) Error() string {
+	return e.text
+}
+
+func asTemplateError(err error, name, source string) error {
+	if err == nil {
+		return nil
+	}
+	var templateErr *TemplateError
+	if errors.As(err, &templateErr) {
+		return templateErr
+	}
+	result := &TemplateError{Name: name, Message: err.Error(), text: err.Error()}
+	var escapeErr *template.Error
+	if errors.As(err, &escapeErr) {
+		result.Message = escapeErr.Description
+		if escapeErr.Node != nil {
+			result.Line, result.Column = sourceLocation(source, int(escapeErr.Node.Position()))
+		} else {
+			result.Line = escapeErr.Line
+		}
+		return result
+	}
+	// Parse and execution errors read "template: name:line: msg" or
+	// "template: name:line:col: msg", with col a 0-based byte offset.
+	location := regexp.MustCompile(`(?s)^template: ` + regexp.QuoteMeta(name) + `:(\d+)(?::(\d+))?: (.*)$`)
+	match := location.FindStringSubmatch(err.Error())
+	if match == nil {
+		return result
+	}
+	result.Line, _ = strconv.Atoi(match[1])
+	result.Message = match[3]
+	if match[2] != "" {
+		byteColumn, _ := strconv.Atoi(match[2])
+		line := sourceLine(source, result.Line)
+		result.Column = 1 + utf8.RuneCountInString(line[:min(byteColumn, len(line))])
+	}
+	return result
+}
+
+// sourceLocation maps a byte offset to a 1-based line and character column.
+func sourceLocation(source string, offset int) (line, column int) {
+	before := source[:min(offset, len(source))]
+	line = 1 + strings.Count(before, "\n")
+	column = 1 + utf8.RuneCountInString(before[strings.LastIndex(before, "\n")+1:])
+	return line, column
+}
+
+func sourceLine(source string, line int) string {
+	lines := strings.SplitN(source, "\n", line+1)
+	if line < 1 || line > len(lines) {
+		return ""
+	}
+	return lines[line-1]
+}
+
+// An error from validateTemplateFields is a *TemplateError located at the
+// node that failed.
+func validateTemplateFields(tree *parse.Tree, data any, source string) error {
 	rootType := reflect.TypeOf(data)
 	if rootType == nil {
 		return errors.New("template validation data is nil")
@@ -807,7 +886,26 @@ func validateTemplateFields(node parse.Node, data any) error {
 	}
 
 	var walk func(parse.Node, reflect.Type, templateVariables) error
+	var walkNode func(parse.Node, reflect.Type, templateVariables) error
+	// walk locates an error at the innermost node that produced it; enclosing
+	// nodes pass a located error through unchanged.
 	walk = func(node parse.Node, dotType reflect.Type, variables templateVariables) error {
+		err := walkNode(node, dotType, variables)
+		var located *TemplateError
+		if err == nil || errors.As(err, &located) {
+			return err
+		}
+		location, _ := tree.ErrorContext(node)
+		line, column := sourceLocation(source, int(node.Position()))
+		return &TemplateError{
+			Name:    tree.ParseName,
+			Line:    line,
+			Column:  column,
+			Message: err.Error(),
+			text:    fmt.Sprintf("template: %s: %v", location, err),
+		}
+	}
+	walkNode = func(node parse.Node, dotType reflect.Type, variables templateVariables) error {
 		if node == nil {
 			return nil
 		}
@@ -918,7 +1016,7 @@ func validateTemplateFields(node parse.Node, data any) error {
 		return nil
 	}
 
-	return walk(node, rootType, templateVariables{"$": rootType})
+	return walk(tree.Root, rootType, templateVariables{"$": rootType})
 }
 
 func getStaffNotes(noteList []pr_db.Notification) string {

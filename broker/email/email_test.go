@@ -170,6 +170,59 @@ func TestValidateTextTemplateRejectsUnsupportedFieldInUnexecutedBranch(t *testin
 	assert.ErrorContains(t, err, "Unsupported")
 }
 
+func TestValidateTemplateErrorsCarryLocation(t *testing.T) {
+	body := "<p>{{.Title}}</p>\n{{if .Title}}\n  {{with .Author}}{{.Unsupported}}{{end}}\n{{end}}"
+	err := ValidateHtmlTemplate(PullSlipData{}, []string{"pullslip-pdf"}, body)
+	require.Error(t, err)
+	assert.Equal(t, "template: pullslip-pdf:3:20: can't evaluate field Unsupported in type string", err.Error())
+	var templateErr *TemplateError
+	require.ErrorAs(t, err, &templateErr)
+	assert.Equal(t, &TemplateError{Name: "pullslip-pdf", Line: 3, Column: 21, Message: "can't evaluate field Unsupported in type string", text: err.Error()}, templateErr)
+
+	err = ValidateTextTemplate(PullSlipData{}, nil, "Hello\n{{.Nope}}")
+	require.Error(t, err)
+	assert.Equal(t, "template: template:2:2: unknown field Nope", err.Error())
+}
+
+func TestTemplateErrorsLocateGoTemplateErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want TemplateError
+	}{
+		{
+			name: "parse error has a line and no column",
+			err:  ValidateTextTemplate(PullSlipData{}, nil, "<p>\n{{.Title}\n</p>"),
+			want: TemplateError{Name: "template", Line: 2, Message: "bad character U+007D '}'"},
+		},
+		{
+			name: "execution error keeps Go's context in the message",
+			err: func() error {
+				_, err := RenderTextTemplate(PullSlipData{Title: "x"}, []string{"a:b"}, "<p>\n{{index .Title 40}}</p>")
+				return err
+			}(),
+			want: TemplateError{Name: "a:b", Line: 2, Column: 3, Message: `executing "a:b" at <index .Title 40>: error calling index: index out of range: 40`},
+		},
+		{
+			name: "column counts characters, not bytes",
+			err:  ValidateTextTemplate(PullSlipData{}, nil, "éé {{.Nope}}"),
+			want: TemplateError{Name: "template", Line: 1, Column: 6, Message: "unknown field Nope"},
+		},
+		{
+			name: "escaping error is located at its node",
+			err:  ValidateHtmlTemplate(PullSlipData{}, nil, "<p>\n{{if .Title}}<a href=\"{{end}}x\">"),
+			want: TemplateError{Name: "template", Line: 2, Column: 6, Message: `{{if}} branches end in different contexts: {stateURL delimDoubleQuote urlPartNone jsCtxRegexp [] attrURL elementNone <nil>}, {stateText delimNone urlPartNone jsCtxRegexp [] attrNone elementNone <nil>}`},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var templateErr *TemplateError
+			require.ErrorAs(t, tc.err, &templateErr)
+			tc.want.text = tc.err.Error()
+			assert.Equal(t, &tc.want, templateErr)
+		})
+	}
+}
+
 func TestValidateTextTemplateRejectsInvalidCommandInUnexecutedBranch(t *testing.T) {
 	for _, testCase := range []struct {
 		name         string

@@ -22,6 +22,7 @@ import (
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
+	psservice "github.com/indexdata/crosslink/broker/pullslip/service"
 	"github.com/indexdata/crosslink/broker/tenant"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
@@ -1171,6 +1172,78 @@ func (a *PatronRequestApiHandler) GetTemplatesPlaceholders(w http.ResponseWriter
 	})
 }
 
+func (a *PatronRequestApiHandler) PostTemplatesPreview(w http.ResponseWriter, r *http.Request, params proapi.PostTemplatesPreviewParams) {
+	logParams := map[string]string{"method": "PostTemplatesPreview"}
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	var preview proapi.TemplatePreviewRequest
+	if err := decodeRequiredBody(r, &preview); err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	if err := prservice.ValidateTemplateRenderingForContext(proapi.Pullslip, proapi.Html, preview.Body, nil, nil, prservice.PatronRequestTemplateContext); err != nil {
+		writeTemplateError(ctx, w, err, prservice.TemplateSample{})
+		return
+	}
+
+	var samples []prservice.TemplateSample
+	if preview.RequestIds == nil || len(*preview.RequestIds) == 0 {
+		var err error
+		samples, err = prservice.GetTemplateSamples()
+		if err != nil {
+			api.AddInternalError(ctx, w, err)
+			return
+		}
+	} else {
+		if len(*preview.RequestIds) > maxPreviewRequests {
+			api.AddBadRequestError(ctx, w, fmt.Errorf("at most %d requestIds can be previewed at once", maxPreviewRequests))
+			return
+		}
+		for _, id := range *preview.RequestIds {
+			pr := a.getOwnedPatronRequest(w, ctx, id, nil, tenant)
+			if pr == nil {
+				return
+			}
+			notes, _, err := a.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{Limit: 100, Offset: 0, PrID: pr.ID, Kind: string(pr_db.NotificationKindNote)})
+			if err != nil {
+				api.AddInternalError(ctx, w, err)
+				return
+			}
+			conditions, _, err := a.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{Limit: 100, Offset: 0, PrID: pr.ID, Kind: string(pr_db.NotificationKindCondition)})
+			if err != nil {
+				api.AddInternalError(ctx, w, err)
+				return
+			}
+			samples = append(samples, prservice.TemplateSample{RequestID: pr.ID, Request: *pr, Notes: notes, Conditions: conditions})
+		}
+	}
+	pdfs := make([][]byte, 0, len(samples))
+	for _, sample := range samples {
+		pdf, err := psservice.RenderPdfPullSlip(sample.Request, sample.Notes, sample.Conditions, nil, preview.Body)
+		if err != nil {
+			var templateErr *email.TemplateError
+			if errors.As(err, &templateErr) {
+				err = &prservice.TemplateContentError{Part: "body", Err: err}
+			}
+			writeTemplateError(ctx, w, err, sample)
+			return
+		}
+		pdfs = append(pdfs, pdf)
+	}
+	pdf, err := psservice.MergePdfs(pdfs)
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/pdf")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(pdf) // #nosec G705 -- content is a generated PDF binary; Content-Type is set to application/pdf
+}
+
 func (a *PatronRequestApiHandler) PostTemplates(w http.ResponseWriter, r *http.Request, params proapi.PostTemplatesParams) {
 	logParams := map[string]string{"method": "PostTemplates"}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
@@ -1191,7 +1264,7 @@ func (a *PatronRequestApiHandler) PostTemplates(w http.ResponseWriter, r *http.R
 		return
 	}
 	if err := prservice.ValidateTemplateRendering(template.Purpose, template.ContentType, template.Body, template.Subject, template.Labels); err != nil {
-		api.AddBadRequestError(ctx, w, err)
+		writeTemplateError(ctx, w, err, prservice.TemplateSample{})
 		return
 	}
 	tem, err := a.prRepo.SaveTemplate(ctx, pr_db.SaveTemplateParams{
@@ -1256,7 +1329,7 @@ func (a *PatronRequestApiHandler) PutTemplatesId(w http.ResponseWriter, r *http.
 	tem.Audience = getDbText((*string)(updated.Audience))
 	tem.Subject = getDbText(updated.Subject)
 	if err := prservice.ValidateTemplateRendering(proapi.TemplatePurpose(tem.Purpose), updated.ContentType, updated.Body, updated.Subject, updated.Labels); err != nil {
-		api.AddBadRequestError(ctx, w, err)
+		writeTemplateError(ctx, w, err, prservice.TemplateSample{})
 		return
 	}
 	template, err := a.prRepo.SaveTemplate(ctx, pr_db.SaveTemplateParams(*tem))
@@ -1265,6 +1338,45 @@ func (a *PatronRequestApiHandler) PutTemplatesId(w http.ResponseWriter, r *http.
 		return
 	}
 	api.WriteJsonResponse(w, toApiTemplate(template))
+}
+
+// Patron requests a preview renders at once, so a request body cannot ask for
+// a PDF of a whole queue.
+const maxPreviewRequests = 20
+
+// When the error lies in the template source, the 400 response locates it so
+// an editor can mark the line. sample is the preview sample the template
+// failed on, or the zero value. A rejected template is the caller's mistake,
+// so it is logged for troubleshooting only.
+func writeTemplateError(ctx common.ExtendedContext, w http.ResponseWriter, err error, sample prservice.TemplateSample) {
+	switch {
+	case sample.Name != "":
+		err = fmt.Errorf("sample %s: %w", sample.Name, err)
+	case sample.RequestID != "":
+		err = fmt.Errorf("request %s: %w", sample.RequestID, err)
+	}
+	ctx.Logger().Debug("template rejected", "error", err.Error())
+	message := err.Error()
+	resp := proapi.Error{Error: &message}
+	var templateErr *email.TemplateError
+	var contentErr *prservice.TemplateContentError
+	if errors.As(err, &templateErr) && errors.As(err, &contentErr) {
+		details := proapi.TemplateError{Part: proapi.TemplateErrorPart(contentErr.Part), Message: templateErr.Message}
+		if sample.Name != "" {
+			details.Sample = &sample.Name
+		}
+		if sample.RequestID != "" {
+			details.RequestId = &sample.RequestID
+		}
+		if templateErr.Line > 0 {
+			details.Line = &templateErr.Line
+		}
+		if templateErr.Column > 0 {
+			details.Column = &templateErr.Column
+		}
+		resp.Template = &details
+	}
+	api.WriteJsonResponseWithStatus(w, resp, http.StatusBadRequest)
 }
 
 func writeTemplateSaveError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {

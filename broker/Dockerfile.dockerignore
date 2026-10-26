@@ -24,6 +24,9 @@ broker/**/*_test.go
 # Include statemodels
 !broker/patron_request/service/statemodels
 
+# Include template samples
+!broker/patron_request/service/templatesamples
+
 # Directory sources are generated inside the build.
 directory/api/directory.gen.go
 directory/db/db.go

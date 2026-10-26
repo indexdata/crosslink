@@ -1,0 +1,156 @@
+{
+  "request": {
+    "ID": "sample-long",
+    "CreatedAt": "2026-07-01T09:30:00Z",
+    "State": "WILL_SUPPLY",
+    "Side": "lending",
+    "RequesterSymbol": "ISIL:US-REQ-CONSORTIUM-MEMBER-0042",
+    "SupplierSymbol": "ISIL:US-SUP-REGIONAL-DEPOSITORY",
+    "RequesterReqID": "US-REQ-CONSORTIUM-2026-0000419",
+    "StateModel": "default",
+    "DueAt": "2026-10-31T00:00:00Z",
+    "IllRequest": {
+      "header": {
+        "requestingAgencyId": {"agencyIdType": {"#text": "ISIL"}, "agencyIdValue": "US-REQ-CONSORTIUM-MEMBER-0042"},
+        "supplyingAgencyId": {"agencyIdType": {"#text": "ISIL"}, "agencyIdValue": "US-SUP-REGIONAL-DEPOSITORY"},
+        "multipleItemRequestId": "",
+        "timestamp": "2026-07-01T09:30:00Z",
+        "requestingAgencyRequestId": "US-REQ-CONSORTIUM-2026-0000419"
+      },
+      "bibliographicInfo": {
+        "supplierUniqueRecordId": "in00000000000000004218-regional-depository-catalogue",
+        "title": "Proceedings of the International Symposium on the History, Preservation and Digitisation of Mediaeval and Early Modern Manuscripts, Incunabula and Printed Ephemera Held in Regional, Municipal and Ecclesiastical Collections Across Northern and Central Europe",
+        "subtitle": "Papers Presented at the Twenty-Seventh Annual Meeting, Held Jointly with the Society for the Study of Bookbinding Structures",
+        "author": "Abercrombie-Fitzwilliam, Henrietta Margaret; van der Westhuizen-Oppenheimer, Johannes Cornelis; Kowalczyk-Przybyszewska, Agnieszka; et al.",
+        "titleOfComponent": "Iron-Gall Ink Corrosion in Fifteenth-Century Account Books: A Comparative Study of Conservation Treatments Applied Between 1950 and 2020",
+        "authorOfComponent": "Montgomery-Hargreaves, Philippa Rosalind and Delacroix-Beaumont, Jean-Baptiste Emmanuel",
+        "edition": "Second revised and substantially expanded edition, with a new introduction and supplementary bibliography",
+        "volume": "27, part 3 of 4",
+        "issue": "Supplementary issue 2 (conference proceedings)",
+        "pagesRequested": "1187-1243",
+        "estimatedNoPages": "2,416 pages in four physical volumes with folding plates",
+        "bibliographicItemId": [
+          {"bibliographicItemIdentifier": "9781234567897", "bibliographicItemIdentifierCode": {"#text": "ISBN"}},
+          {"bibliographicItemIdentifier": "1234-5679", "bibliographicItemIdentifierCode": {"#text": "ISSN"}}
+        ],
+        "bibliographicRecordId": [
+          {"bibliographicRecordIdentifier": "1098765432", "bibliographicRecordIdentifierCode": {"#text": "OCLC"}}
+        ]
+      },
+      "publicationInfo": {
+        "publisher": "Published for the International Association of Manuscript and Rare Book Conservators by the University Press of the Low Countries",
+        "publicationType": {"#text": "Conference proceedings"},
+        "publicationDate": "2019",
+        "placeOfPublication": "Leuven; Amsterdam; Kraków"
+      },
+      "serviceInfo": {
+        "serviceType": "Loan",
+        "serviceLevel": {"#text": "Standard (extended loan period requested for research use)"},
+        "needBeforeDate": "2026-09-15T00:00:00Z",
+        "note": "Only volume 27 part 3 is needed. If part 3 cannot be lent separately, please send the whole set and we will return the other parts unopened. The patron is happy to use the material in the reading room only."
+      },
+      "requestedDeliveryInfo": [
+        {
+          "sortOrder": 1,
+          "address": {
+            "physicalAddress": {
+              "line1": "Special Collections and University Archives Reading Room, Third Floor, North Wing",
+              "line2": "Margaret Abercrombie-Fitzwilliam Memorial Library, 1500 Chancellor Boulevard, Building 14",
+              "locality": "Saint-Jean-sur-Richelieu",
+              "postalCode": "J3B 6Y7",
+              "region": {"#text": "QC"},
+              "country": {"#text": "CA"}
+            }
+          }
+        }
+      ],
+      "requestingAgencyInfo": {
+        "name": "Consortium of Academic and Research Libraries, Member Institution 42: Faculty of Arts and Humanities Library"
+      },
+      "patronInfo": {
+        "patronId": "P-2026-000000000731-RESEARCH",
+        "givenName": "Maximiliana Theodora Evangeline",
+        "surname": "Wolfeschlegelsteinhausenberger-Abercrombie",
+        "patronType": {"#text": "Visiting research fellow (external, sponsored)"}
+      }
+    },
+    "IllResponse": {
+      "header": {
+        "requestingAgencyId": {"agencyIdType": {"#text": "ISIL"}, "agencyIdValue": "US-REQ-CONSORTIUM-MEMBER-0042"},
+        "supplyingAgencyId": {"agencyIdType": {"#text": "ISIL"}, "agencyIdValue": "US-SUP-REGIONAL-DEPOSITORY"},
+        "multipleItemRequestId": "",
+        "timestamp": "2026-07-02T14:05:00Z",
+        "requestingAgencyRequestId": "US-REQ-CONSORTIUM-2026-0000419"
+      },
+      "messageInfo": {"reasonForMessage": "StatusChange"},
+      "statusInfo": {"status": "WillSupply", "lastChange": "2026-07-02T14:05:00Z"},
+      "returnInfo": {
+        "name": "Regional Depository Library, Interlibrary Loan and Document Delivery Services",
+        "physicalAddress": {
+          "line1": "Interlibrary Loan and Document Delivery Services, Loading Dock B (deliveries Monday to Thursday only)",
+          "line2": "Regional Depository Library Annex, 27500 Industrial Park Road, Unit 12",
+          "locality": "Shelbyville",
+          "postalCode": "62565-0042",
+          "region": {"#text": "IL"},
+          "country": {"#text": "US"}
+        }
+      }
+    },
+    "Items": [
+      {
+        "id": "sample-long-item-1",
+        "barcode": "31234000567890123",
+        "call_number": "Z 105.5 .I58 2019 v.27 pt.1 FOLIO OVERSIZE",
+        "location": "Regional Depository Annex, High-Density Storage Module 4",
+        "shelving_location": "Row 118, Ladder 7, Shelf 3, Tray 0042 (retrieval requires 24 hours notice)",
+        "title": "Proceedings, v.27 pt.1",
+        "item_id": "it00009917",
+        "lms_status": "REQUESTED",
+        "created_at": "2026-07-02T14:05:00Z"
+      },
+      {
+        "id": "sample-long-item-2",
+        "barcode": "31234000567890124",
+        "call_number": "Z 105.5 .I58 2019 v.27 pt.2 FOLIO OVERSIZE",
+        "location": "Regional Depository Annex, High-Density Storage Module 4",
+        "shelving_location": "Row 118, Ladder 7, Shelf 3, Tray 0042",
+        "title": "Proceedings, v.27 pt.2",
+        "item_id": "it00009918",
+        "lms_status": "REQUESTED",
+        "created_at": "2026-07-02T14:05:00Z"
+      },
+      {
+        "id": "sample-long-item-3",
+        "barcode": "31234000567890125",
+        "call_number": "Z 105.5 .I58 2019 v.27 pt.3 FOLIO OVERSIZE",
+        "location": "Regional Depository Annex, High-Density Storage Module 4",
+        "shelving_location": "Row 118, Ladder 7, Shelf 4, Tray 0043",
+        "title": "Proceedings, v.27 pt.3",
+        "item_id": "it00009919",
+        "lms_status": "REQUESTED",
+        "created_at": "2026-07-02T14:05:00Z"
+      },
+      {
+        "id": "sample-long-item-4",
+        "barcode": "31234000567890126",
+        "call_number": "Z 105.5 .I58 2019 v.27 pt.4 FOLIO OVERSIZE suppl. plates",
+        "location": "Regional Depository Annex, High-Density Storage Module 4",
+        "shelving_location": "Row 118, Ladder 7, Shelf 4, Tray 0043",
+        "title": "Proceedings, v.27 pt.4",
+        "item_id": "it00009920",
+        "lms_status": "REQUESTED",
+        "created_at": "2026-07-02T14:05:00Z"
+      }
+    ]
+  },
+  "notes": [
+    "Volumes are shelved in high-density storage; allow an extra day for retrieval.",
+    "Part 4 contains loose folding plates in a pocket at the back. Check that all twelve plates are present before shipping and again on return.",
+    "Ship in a padded box, not an envelope. The bindings are fragile and the spines must not be flexed."
+  ],
+  "conditions": [
+    "Library use only",
+    "No photocopying or scanning of the folding plates",
+    "Return by insured courier"
+  ]
+}

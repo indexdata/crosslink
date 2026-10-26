@@ -386,6 +386,16 @@
         },
         {
           "methods": [
+            "POST"
+          ],
+          "pathPattern": "/broker/templates/preview",
+          "permissionsRequired": [
+            "broker.templates.preview.post",
+            "broker.patron_requests.item.get"
+          ]
+        },
+        {
+          "methods": [
             "GET"
           ],
           "pathPattern": "/broker/templates/{id}",
@@ -614,6 +624,11 @@
       "permissionName": "broker.templates.post"
     },
     {
+      "description": "Render a template preview against built-in samples or a patron request",
+      "displayName": "Broker - preview template",
+      "permissionName": "broker.templates.preview.post"
+    },
+    {
       "description": "Read a template",
       "displayName": "Broker - read template",
       "permissionName": "broker.templates.item.get"
@@ -635,7 +650,8 @@
       "visible": true,
       "subPermissions": [
         "broker.templates.get",
-        "broker.templates.item.get"
+        "broker.templates.item.get",
+        "broker.templates.preview.post"
       ]
     },
     {
@@ -809,7 +825,8 @@
         "broker.templates.post",
         "broker.templates.item.get",
         "broker.templates.item.put",
-        "broker.templates.item.delete"
+        "broker.templates.item.delete",
+        "broker.templates.preview.post"
       ]
     }
   ]

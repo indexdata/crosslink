@@ -2233,9 +2233,9 @@ func (a *PatronRequestActionService) createAndSendEmail(ctx common.ExtendedConte
 		template.Labels,
 		PatronRequestTemplateContext,
 	); err != nil {
-		var contentErr *templateContentError
+		var contentErr *TemplateContentError
 		if errors.As(err, &contentErr) {
-			return &templateRenderError{templateID: template.ID, label: label, audience: audience, part: contentErr.part, err: contentErr.err}
+			return &templateRenderError{templateID: template.ID, label: label, audience: audience, part: contentErr.Part, err: contentErr.Err}
 		}
 		return fmt.Errorf("validate email template %q (label %q, audience %s): %w", template.ID, label, audience, err)
 	}
