@@ -225,12 +225,7 @@ func (l *LmsAdapterNcip1) RequestItem(requestID, itemID, userID, _, itemLocation
 	if l.config.RequestItemBibIdCode != nil {
 		code = *l.config.RequestItemBibIdCode
 	}
-	if l.config.BibIdNormalization != nil && *l.config.BibIdNormalization == "sierra" {
-		itemID = strings.TrimPrefix(itemID, ".b")
-		if len(itemID) > 1 && itemID[len(itemID)-1] >= '0' && itemID[len(itemID)-1] <= '9' {
-			itemID = itemID[:len(itemID)-1]
-		}
-	}
+	itemID = normalizeBibIdentifier(itemID, l.config.BibIdNormalization)
 	response, err := l.client.RequestItem(ncip.RequestItem{
 		InitiationHeader: l.header(),
 		UniqueUserId:     l.user(userID),

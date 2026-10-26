@@ -398,12 +398,7 @@ func (l *LmsAdapterNcip) RequestItem(
 	if l.config.RequestItemBibIdCode != nil {
 		code = *l.config.RequestItemBibIdCode
 	}
-	if l.config.BibIdNormalization != nil && *l.config.BibIdNormalization == "sierra" {
-		itemId = strings.TrimPrefix(itemId, ".b")
-		if len(itemId) > 1 && itemId[len(itemId)-1] >= '0' && itemId[len(itemId)-1] <= '9' {
-			itemId = itemId[:len(itemId)-1]
-		}
-	}
+	itemId = normalizeBibIdentifier(itemId, l.config.BibIdNormalization)
 	bibIdField := ncip.BibliographicId{
 		BibliographicRecordId: &ncip.BibliographicRecordId{
 			BibliographicRecordIdentifier:     itemId,

@@ -110,3 +110,47 @@ func TestHostProfilesMigrationPreservesLegacyHoldings(t *testing.T) {
 		})
 	}
 }
+
+func TestCatalogIdentifierOptionsMigration(t *testing.T) {
+	ctx := context.Background()
+	tx, err := dbpool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	exec := func(sql string, args ...any) {
+		t.Helper()
+		_, err := tx.Exec(ctx, sql, args...)
+		require.NoError(t, err)
+	}
+	exec("CREATE SCHEMA identifier_options_migration_test; SET LOCAL search_path TO identifier_options_migration_test")
+	// Use the real preceding schema, preserving pre-existing query overrides.
+	for version := 1; version <= 20; version++ {
+		paths, err := filepath.Glob(fmt.Sprintf("../migrations/%03d_*.up.sql", version))
+		require.NoError(t, err)
+		require.Len(t, paths, 1)
+		data, err := os.ReadFile(paths[0])
+		require.NoError(t, err)
+		exec(string(data))
+	}
+	id := uuid.New()
+	exec("INSERT INTO entries(id,name,type) VALUES ($1,'Existing','Institution')", id)
+	exec("INSERT INTO catalog_configs(entry,query_identifier) VALUES ($1,'old query')", id)
+	up, err := os.ReadFile("../migrations/021_catalog_identifier_options.up.sql")
+	require.NoError(t, err)
+	exec(string(up))
+	var normalization, prefix *string
+	var query string
+	require.NoError(t, tx.QueryRow(ctx, "SELECT query_identifier,query_identifier_normalization,query_identifier_prefix FROM catalog_configs WHERE entry=$1", id).Scan(&query, &normalization, &prefix))
+	require.Equal(t, "old query", query)
+	require.Nil(t, normalization)
+	require.Nil(t, prefix)
+	exec("UPDATE catalog_configs SET query_identifier_normalization='stripLeadingLetters',query_identifier_prefix='^C' WHERE entry=$1", id)
+	down, err := os.ReadFile("../migrations/021_catalog_identifier_options.down.sql")
+	require.NoError(t, err)
+	exec(string(down))
+	require.NoError(t, tx.QueryRow(ctx, "SELECT query_identifier FROM catalog_configs WHERE entry=$1", id).Scan(&query))
+	require.Equal(t, "old query", query)
+	exec(string(up))
+	require.NoError(t, tx.QueryRow(ctx, "SELECT query_identifier_normalization,query_identifier_prefix FROM catalog_configs WHERE entry=$1", id).Scan(&normalization, &prefix))
+	require.Nil(t, normalization)
+	require.Nil(t, prefix)
+}

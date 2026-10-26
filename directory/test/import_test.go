@@ -341,3 +341,44 @@ func TestImportHostSettingsRoundTrip(t *testing.T) {
 	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT profile IS NULL AND holdings_config IS NULL FROM catalog_configs WHERE entry=$1`, id).Scan(&cleared))
 	require.True(t, cleared)
 }
+
+func TestImportAdditionalProfileOptions(t *testing.T) {
+	resetImportState(t)
+	record := entryImportRecord(symbolObject("ISIL", "EXTRA-HOST"), "Additional host options", nil, "Consortium")
+	data := record["data"].(map[string]any)
+	lms := data["lmsConfig"].(map[string]any)
+	lms["vendor"] = "Symphony"
+	lms["bibIdNormalization"] = "stripLeadingNonDigits"
+	var catalog map[string]any
+	require.NoError(t, json.Unmarshal([]byte(`{"profile":"Horizon","metadataUpdateMode":null,"sru":null,"zoom":null,"metadataFormat":null,"queryConfig":{"type":null,"identifier":null,"isbn":null,"issn":null,"title":null,"identifierNormalization":"stripLeadingLetters","identifierPrefix":"^C"},"holdingsFormat":{"marc":null,"opac":{"availabilityRule":null,"availablePublicNotes":null,"requireLocalLocation":null,"shelvingLocationSource":null,"includeItemId":null,"includeItemLoanPolicy":null,"includeTemporaryLocation":null,"allCirculations":null,"excludedLocations":["Internet"],"itemLoanPolicySources":["shelvingData","temporaryLocation"],"requireItemLoanPolicy":true},"reservoir":null,"marc21plus1":null}}`), &catalog))
+	data["catalogConfig"] = catalog
+	response, result := importRequest(t, []any{record}, "update", standardHeaders)
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	require.Empty(t, result.Errors)
+	id := importedEntryID(t, "ISIL", "EXTRA-HOST")
+	get := func() map[string]any {
+		res, body := jsonReq(t, http.MethodGet, "/entries/by-id/"+id.String(), "", standardHeaders)
+		require.Equal(t, http.StatusOK, res.StatusCode, body)
+		var saved map[string]any
+		require.NoError(t, json.Unmarshal([]byte(body), &saved))
+		return saved["catalogConfig"].(map[string]any)
+	}
+	saved := get()
+	require.Equal(t, map[string]any{"identifierNormalization": "stripLeadingLetters", "identifierPrefix": "^C"}, saved["queryConfig"])
+	require.Equal(t, []any{"shelvingData", "temporaryLocation"}, saved["holdingsFormat"].(map[string]any)["opac"].(map[string]any)["itemLoanPolicySources"])
+	var holdings map[string]any
+	require.NoError(t, json.Unmarshal([]byte(`{"marc":{"mainField":"926","locationSubField":"a","shelvingLocationSubField":"b","callNumberSubField":"c","itemIdSubField":null,"restrictedSubField":null,"itemLoanPolicySubField":"d","availability":[{"subField":"b","operator":"present","value":null},{"subField":"b","operator":"notIn","values":["MISSING"],"value":null}]},"opac":null,"reservoir":null,"marc21plus1":null}`), &holdings))
+	catalog["holdingsFormat"] = holdings
+	response, result = importRequest(t, []any{record}, "update", standardHeaders)
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	require.Empty(t, result.Errors)
+	require.Equal(t, "d", get()["holdingsFormat"].(map[string]any)["marc"].(map[string]any)["itemLoanPolicySubField"])
+	// Omission of additive fields in complete imports clears stored overrides.
+	q := catalog["queryConfig"].(map[string]any)
+	delete(q, "identifierNormalization")
+	delete(q, "identifierPrefix")
+	response, result = importRequest(t, []any{record}, "update", standardHeaders)
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	require.Empty(t, result.Errors)
+	require.NotContains(t, get(), "queryConfig")
+}

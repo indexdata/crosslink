@@ -314,3 +314,29 @@ func TestNcip1ResolvedSierraRequestScope(t *testing.T) {
 	require.Equal(t, "Title", *effective.LMS.RequestItemRequestScopeType, "translation must not mutate shared profile values")
 	require.Equal(t, "Title", (&LmsAdapterNcip{config: *effective.LMS}).requestItemRequestScopeType())
 }
+
+func TestAdditionalProfileNcip1Request(t *testing.T) {
+	for _, vendor := range []string{"Horizon", "Polaris", "Symphony"} {
+		t.Run(vendor, func(t *testing.T) {
+			a := ncip1TestAdapter(t, `<RequestItemResponse>`+ncip1TestHeader+`<UniqueRequestId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><RequestIdentifierValue>request</RequestIdentifierValue></UniqueRequestId>`+ncip1TestUser+`<RequestType><Scheme>urn:test:type</Scheme><Value>Loan</Value></RequestType><RequestScopeType><Scheme>urn:test:scope</Scheme><Value>Bibliographic Item</Value></RequestScopeType></RequestItemResponse>`, func(m ncip.NCIPMessage) {
+				require.NotNil(t, m.RequestItem)
+				r := m.RequestItem
+				want := ".b12345"
+				if vendor == "Symphony" {
+					want = "12345"
+				}
+				require.Equal(t, want, r.UniqueBibliographicId.BibliographicRecordId.BibliographicRecordIdentifier)
+				require.Equal(t, "SYSNUMBER", r.UniqueBibliographicId.BibliographicRecordId.BibliographicRecordIdentifierCode.Value)
+				require.Equal(t, "Loan", r.RequestType.Value)
+				require.Equal(t, "Bibliographic Item", r.RequestScopeType.Value)
+			})
+			var entry dirapi.Entry
+			require.NoError(t, json.Unmarshal([]byte(`{"lmsConfig":{"vendor":"`+vendor+`","address":"https://lms.example/ncip","fromAgency":"broker","toAgency":"lms"}}`), &entry))
+			e, err := profiles.Resolve(entry)
+			require.NoError(t, err)
+			a.config = *e.LMS
+			_, err = a.RequestItem("request", ".b12345", "user", "ignored", "")
+			require.NoError(t, err)
+		})
+	}
+}

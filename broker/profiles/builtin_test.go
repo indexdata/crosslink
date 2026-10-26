@@ -15,8 +15,8 @@ import (
 func TestBuiltinDefinitions(t *testing.T) {
 	builtins, err := loadBuiltins()
 	require.NoError(t, err)
-	require.Len(t, builtins, 5)
-	for _, name := range []string{"Generic", "Alma", "Sierra", "Koha", "FOLIO"} {
+	require.Len(t, builtins, 9)
+	for _, name := range []string{"Generic", "Alma", "Sierra", "Koha", "FOLIO", "Evergreen", "Horizon", "Polaris", "Symphony"} {
 		require.Contains(t, builtins, name)
 	}
 	before := asObject(builtins)
@@ -161,7 +161,7 @@ func TestConcurrentProfileResolution(t *testing.T) {
 	// Parallel subtests finish before the parent resumes, so the final comparison
 	// checks the shared definitions after all concurrent overrides have resolved.
 	t.Run("concurrent overrides", func(t *testing.T) {
-		for _, name := range []string{"Generic", "Alma", "Sierra", "Koha", "FOLIO"} {
+		for _, name := range []string{"Generic", "Alma", "Sierra", "Koha", "FOLIO", "Evergreen", "Horizon", "Polaris", "Symphony"} {
 			t.Run(name, func(t *testing.T) {
 				t.Parallel()
 				for range 10 {

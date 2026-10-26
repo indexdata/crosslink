@@ -1,0 +1,133 @@
+<?xml version="1.0"?>
+<zs:searchRetrieveResponse xmlns:zs="http://docs.oasis-open.org/ns/search-ws/sruResponse"><zs:numberOfRecords>1</zs:numberOfRecords><zs:records><zs:record><zs:recordSchema/><zs:recordXMLEscaping>xml</zs:recordXMLEscaping><zs:recordData><opacRecord>
+  <bibliographicRecord>
+<record xmlns="http://www.loc.gov/MARC21/slim">
+  <leader>01149Cam a22003378a 4500</leader>
+  <controlfield tag="005">19971227090300.0</controlfield>
+  <controlfield tag="008">911205s1992    bcc      b    000 0 eng d</controlfield>
+  <datafield tag="010" ind1=" " ind2=" ">
+    <subfield code="a">cn 92091009 </subfield>
+  </datafield>
+  <datafield tag="015" ind1=" " ind2=" ">
+    <subfield code="a">C92-91009-2</subfield>
+  </datafield>
+  <datafield tag="020" ind1=" " ind2=" ">
+    <subfield code="a">1551100177 :</subfield>
+    <subfield code="c">$15.95</subfield>
+  </datafield>
+  <datafield tag="035" ind1=" " ind2=" ">
+    <subfield code="a">920189</subfield>
+  </datafield>
+  <datafield tag="035" ind1=" " ind2=" ">
+    <subfield code="a">AEQ8063EI</subfield>
+  </datafield>
+  <datafield tag="035" ind1=" " ind2=" ">
+    <subfield code="a">(OCoLC)25091565</subfield>
+  </datafield>
+  <datafield tag="040" ind1=" " ind2=" ">
+    <subfield code="a">CaBVAU</subfield>
+    <subfield code="b">eng</subfield>
+    <subfield code="c">NLC</subfield>
+    <subfield code="d">MdBJ</subfield>
+  </datafield>
+  <datafield tag="043" ind1=" " ind2=" ">
+    <subfield code="a">n-cn-bc</subfield>
+  </datafield>
+  <datafield tag="049" ind1=" " ind2=" ">
+    <subfield code="a">JHEE</subfield>
+  </datafield>
+  <datafield tag="055" ind1=" " ind2="3">
+    <subfield code="a">SH349</subfield>
+  </datafield>
+  <datafield tag="082" ind1="0" ind2=" ">
+    <subfield code="a">639.2/755</subfield>
+    <subfield code="2">20</subfield>
+  </datafield>
+  <datafield tag="100" ind1="1" ind2=" ">
+    <subfield code="a">McKervill, Hugh W.</subfield>
+  </datafield>
+  <datafield tag="245" ind1="1" ind2="4">
+    <subfield code="a">The salmon people /</subfield>
+    <subfield code="c">Hugh W. McKervill.</subfield>
+  </datafield>
+  <datafield tag="250" ind1=" " ind2=" ">
+    <subfield code="a">25th anniversary special ed.</subfield>
+  </datafield>
+  <datafield tag="260" ind1=" " ind2=" ">
+    <subfield code="a">Vancouver, B.C. :</subfield>
+    <subfield code="b">Whitecap Books,</subfield>
+    <subfield code="c">1992.</subfield>
+  </datafield>
+  <datafield tag="263" ind1=" " ind2=" ">
+    <subfield code="a">9202</subfield>
+  </datafield>
+  <datafield tag="300" ind1=" " ind2=" ">
+    <subfield code="a">xiv, 198 p. ;</subfield>
+    <subfield code="c">22 cm.</subfield>
+  </datafield>
+  <datafield tag="504" ind1=" " ind2=" ">
+    <subfield code="a">Includes bibliographical references (p. 192-198)</subfield>
+  </datafield>
+  <datafield tag="650" ind1=" " ind2="0">
+    <subfield code="a">Pacific salmon fisheries</subfield>
+    <subfield code="z">British Columbia</subfield>
+    <subfield code="x">History.</subfield>
+  </datafield>
+  <datafield tag="650" ind1=" " ind2="0">
+    <subfield code="a">Salmon canning industry</subfield>
+    <subfield code="z">British Columbia</subfield>
+    <subfield code="x">History.</subfield>
+  </datafield>
+  <datafield tag="650" ind1=" " ind2="0">
+    <subfield code="a">Salmon industry</subfield>
+    <subfield code="z">British Columbia</subfield>
+    <subfield code="x">History.</subfield>
+  </datafield>
+  <datafield tag="910" ind1=" " ind2=" ">
+    <subfield code="a">920189</subfield>
+    <subfield code="b">Horizon bib#</subfield>
+  </datafield>
+  <datafield tag="998" ind1="0" ind2=" ">
+    <subfield code="a">DT</subfield>
+  </datafield>
+  <datafield tag="999" ind1="1" ind2=" ">
+    <subfield code="l">main</subfield>
+    <subfield code="n">elc</subfield>
+    <subfield code="s">1</subfield>
+    <subfield code="w">i</subfield>
+    <subfield code="a">SH 349</subfield>
+    <subfield code="b">.M34 1992</subfield>
+    <subfield code="m">c. 1</subfield>
+    <subfield code="6">1</subfield>
+    <subfield code="4">gift; ub</subfield>
+    <subfield code="t">norm</subfield>
+    <subfield code="c">3</subfield>
+    <subfield code="1">07/23/1992</subfield>
+    <subfield code="2">12/19/1997</subfield>
+    <subfield code="7">12/19/1997</subfield>
+    <subfield code="i">31151007660842</subfield>
+    <subfield code="z">NCC:L</subfield>
+    <subfield code="x">emsel</subfield>
+    <subfield code="h">enorm</subfield>
+    <subfield code="g">emain</subfield>
+  </datafield>
+</record>
+  </bibliographicRecord>
+<holdings>
+ <holding>
+  <localLocation>Eisenhower</localLocation>
+  <callNumber>SH 349 .M34 1992</callNumber>
+  <shelvingData>MSEL Books</shelvingData>
+  <copyNumber>c. 1</copyNumber>
+  <circulations>
+   <circulation>
+    <availableNow value="1"/>
+    <availableThru>Available</availableThru>
+    <itemId> </itemId>
+    <renewable value="1"/>
+    <onHold value="0"/>
+   </circulation>
+  </circulations>
+ </holding>
+</holdings>
+</opacRecord></zs:recordData><zs:recordPosition>1</zs:recordPosition></zs:record></zs:records><zs:echoedSearchRetrieveRequest><zs:version>2.0</zs:version><zs:queryType>pqf</zs:queryType><zs:query>@attr 1=100 920189 </zs:query><zs:maximumRecords>1</zs:maximumRecords><zs:recordXMLEscaping>xml</zs:recordXMLEscaping><zs:extraRequestData><zs:target>http://hip.library.jhu.edu:210/Ipac2</zs:target></zs:extraRequestData></zs:echoedSearchRetrieveRequest></zs:searchRetrieveResponse>

@@ -25,6 +25,9 @@ func NewQueryBuilderGen(queryConfig *dirapi.QueryConfig) (LookupQueryBuilder, er
 	if queryConfig != nil {
 		config = *queryConfig
 	}
+	if config.IdentifierNormalization != nil && *config.IdentifierNormalization != "none" && *config.IdentifierNormalization != "stripLeadingLetters" {
+		return nil, fmt.Errorf("unsupported identifier normalization: %s", *config.IdentifierNormalization)
+	}
 	if config.Type == nil || *config.Type == dirapi.QueryConfigTypePqf {
 		if config.Identifier == nil {
 			config.Identifier = NewString("@attr 1=12 {term}")
@@ -94,8 +97,20 @@ func (s *QueryBuilderGen) Build(params LookupParams) (cql []string, pqf []string
 		name    string
 	}
 
+	identifier := params.Identifier
+	if identifier != "" {
+		if s.config.IdentifierNormalization != nil && *s.config.IdentifierNormalization == "stripLeadingLetters" {
+			stripped := strings.TrimLeftFunc(identifier, func(r rune) bool { return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' })
+			if stripped != "" {
+				identifier = stripped
+			}
+		}
+		if s.config.IdentifierPrefix != nil {
+			identifier = *s.config.IdentifierPrefix + identifier
+		}
+	}
 	paramMappings := []paramMapping{
-		{params.Identifier, s.config.Identifier, "identifier"},
+		{identifier, s.config.Identifier, "identifier"},
 		{params.Isbn, s.config.Isbn, "isbn"},
 		{params.Issn, s.config.Issn, "issn"},
 		{params.Title, s.config.Title, "title"},
