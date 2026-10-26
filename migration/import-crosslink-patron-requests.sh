@@ -64,6 +64,7 @@ if [ ! -f "$CONFIG_FILE" ]; then
     exit 1
 fi
 
+total=0
 if [ -n "$PATRON_REQUEST_FILE" ]; then
     if [ ! -f "$PATRON_REQUEST_FILE" ]; then
         echo "Patron request export file not found: $PATRON_REQUEST_FILE" >&2
@@ -75,17 +76,11 @@ else
         exit 1
     fi
 
-    total=0
     for file in "$PATRON_REQUEST_DIR"/patron-requests-*.ndjson; do
         if [ -f "$file" ]; then
             total=$((total + 1))
         fi
     done
-
-    if [ "$total" -eq 0 ]; then
-        echo "No patron-requests-*.ndjson files found in $PATRON_REQUEST_DIR" >&2
-        exit 1
-    fi
 fi
 
 if [ -s "$CONFIG_FILE" ]; then
@@ -98,6 +93,11 @@ if [ -s "$CONFIG_FILE" ]; then
     fi
 else
     printf '%s\n' "Combined config $CONFIG_FILE is empty; skipping configuration import"
+fi
+
+if [ -z "$PATRON_REQUEST_FILE" ] && [ "$total" -eq 0 ]; then
+    printf '%s\n' "No patron-request batch files found in $PATRON_REQUEST_DIR; configuration import complete"
+    exit 0
 fi
 
 if [ -n "$PATRON_REQUEST_FILE" ]; then

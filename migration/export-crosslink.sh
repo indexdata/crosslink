@@ -12,6 +12,8 @@ DIRECTORY_OUTPUT=${DIRECTORY_OUTPUT:-directories.ndjson}
 DIRECTORY_PREFIX=${DIRECTORY_PREFIX:-directories}
 CONFIG_PREFIX=${CONFIG_PREFIX:-config}
 CONFIG_OUTPUT=${CONFIG_OUTPUT:-config.ndjson}
+UNSUPPORTED_TEMPLATE_PREFIX=${UNSUPPORTED_TEMPLATE_PREFIX:-unsupported-templates}
+UNSUPPORTED_TEMPLATE_OUTPUT=${UNSUPPORTED_TEMPLATE_OUTPUT:-unsupported-templates.ndjson}
 PATRON_REQUEST_PREFIX=${PATRON_REQUEST_PREFIX:-patron-request}
 
 : "${DATABASE_URL:?DATABASE_URL must be set}"
@@ -42,6 +44,7 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 for file in "$DIRECTORY_PREFIX"-*.ndjson "$CONFIG_PREFIX"-*.ndjson \
+    "$UNSUPPORTED_TEMPLATE_PREFIX"-*.ndjson \
     "$PATRON_REQUEST_PREFIX"-*.ndjson; do
     if [ -f "$file" ]; then
         rm "$file"
@@ -132,10 +135,12 @@ while IFS= read -r line || [ -n "$line" ]; do
     fi
 
     config_output=${CONFIG_PREFIX}-${schema}-${index}.ndjson
+    unsupported_template_output=${UNSUPPORTED_TEMPLATE_PREFIX}-${schema}-${index}.ndjson
     printf '%s\n' "Exporting config for schema $schema to $config_output"
     psql "$DATABASE_URL" \
         --command="SET search_path TO \"$schema\";" \
         --set="owner=$owner_symbol" \
+        --set="unsupported_template_output=$unsupported_template_output" \
         --set=ON_ERROR_STOP=1 \
         --file="$CONFIG_EXPORT" \
         --quiet --tuples-only --no-align \
@@ -162,5 +167,7 @@ DIRECTORY_OUTPUT="$DIRECTORY_OUTPUT" \
 DIRECTORY_PREFIX="$DIRECTORY_PREFIX" \
 CONFIG_OUTPUT="$CONFIG_OUTPUT" \
 CONFIG_PREFIX="$CONFIG_PREFIX" \
+UNSUPPORTED_TEMPLATE_OUTPUT="$UNSUPPORTED_TEMPLATE_OUTPUT" \
+UNSUPPORTED_TEMPLATE_PREFIX="$UNSUPPORTED_TEMPLATE_PREFIX" \
 PATRON_REQUEST_PREFIX="$PATRON_REQUEST_PREFIX" \
 "$SCRIPT_DIR/join-crosslink-exports.sh" .

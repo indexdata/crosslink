@@ -29,8 +29,9 @@ CROSSLINK_BROKER_HOST='http://localhost:8081' \
 ```
 
 `export-crosslink.sh` exports every schema and then joins the results, producing
-`directories.ndjson`, `config.ndjson`, and a `patron-requests/` directory of
-batch files.
+`directories.ndjson`, `config.ndjson`, `unsupported-templates.ndjson`, and a
+`patron-requests/` directory of batch files. The unsupported-template file is a
+review artifact and must not be passed to the broker import endpoint.
 
 Import the directory data first because configuration and patron requests refer
 to directory entries and symbols. The broker import wrapper then imports
@@ -68,9 +69,11 @@ Environment variables:
 | `PATRON_REQUEST_EXPORT` | `migration/export-crosslink-open-patron-requests.sql` | Patron-request export SQL file. |
 | `DIRECTORY_PREFIX` | `directories` | Prefix for per-schema directory files. |
 | `CONFIG_PREFIX` | `config` | Prefix for per-schema configuration files. |
+| `UNSUPPORTED_TEMPLATE_PREFIX` | `unsupported-templates` | Prefix for per-schema template review files. |
 | `PATRON_REQUEST_PREFIX` | `patron-request` | Prefix for per-schema patron-request files. |
 | `DIRECTORY_OUTPUT` | `directories.ndjson` | Joined directory output. |
 | `CONFIG_OUTPUT` | `config.ndjson` | Joined configuration output. |
+| `UNSUPPORTED_TEMPLATE_OUTPUT` | `unsupported-templates.ndjson` | Joined review output for templates excluded from import. |
 | `PATRON_REQUEST_DIR` | `patron-requests` | Directory for joined patron-request batch files. |
 | `PATRON_REQUEST_BATCH_SIZE` | `5000` | Maximum records per patron-request batch file. |
 
@@ -79,6 +82,7 @@ Per-schema output files are named like:
 ```text
 directories-<schema>-<number>.ndjson
 config-<schema>-<number>.ndjson
+unsupported-templates-<schema>-<number>.ndjson
 patron-request-<schema>-<number>.ndjson
 ```
 
@@ -86,10 +90,17 @@ Existing files matching the configured prefixes are removed before export.
 After all schemas are exported, the script runs `join-crosslink-exports.sh` on
 the current directory.
 
-Configured legacy pull-slip templates are retained in the configuration export.
-A `PrintPullSlips` schedule selects one only when both its converted subject and
-body are compatible with batch-email data. Otherwise, the schedule uses the
-generated `pullslip-email` fallback template.
+Known Handlebars placeholders, `#if` blocks, and triple-brace placeholders are
+converted to CrossLink Go-template syntax. Triple-brace values use CrossLink's
+normal HTML escaping. A converted template is included in `config.ndjson` only
+when it is valid for either patron-request or batch-email data. Templates with
+residual Handlebars actions or a mixture of both data contexts are preserved in
+`unsupported-templates.ndjson` with their source, converted content, and review
+reason.
+
+A `PrintPullSlips` schedule selects a migrated template only when its converted
+subject and body are importable and compatible with batch-email data. Otherwise,
+the schedule uses the generated `pullslip-email` fallback template.
 
 ## `join-crosslink-exports.sh`
 
@@ -105,9 +116,10 @@ For directory records it also:
 - assigns all non-consortium entries to generated tiers;
 - assigns sequential network priorities.
 
-Configuration files are concatenated in numeric export order into
-`CONFIG_OUTPUT`. Patron-request files are concatenated in numeric export order
-and written to `PATRON_REQUEST_DIR` as `patron-requests-0001.ndjson`,
+Configuration and unsupported-template review files are concatenated in numeric
+export order into `CONFIG_OUTPUT` and `UNSUPPORTED_TEMPLATE_OUTPUT`,
+respectively. Patron-request files are concatenated in numeric export order and
+written to `PATRON_REQUEST_DIR` as `patron-requests-0001.ndjson`,
 `patron-requests-0002.ndjson`, and so on, each holding at most
 `PATRON_REQUEST_BATCH_SIZE` records. Existing `patron-requests-*.ndjson` files
 in that directory are removed first.
@@ -126,12 +138,15 @@ Environment variables:
 | `DIRECTORY_PREFIX` | `directories` | Prefix used to find directory shards. |
 | `CONFIG_OUTPUT` | `<SOURCE_DIR>/config.ndjson` | Joined configuration output. |
 | `CONFIG_PREFIX` | `config` | Prefix used to find configuration shards. |
+| `UNSUPPORTED_TEMPLATE_OUTPUT` | `<SOURCE_DIR>/unsupported-templates.ndjson` | Joined template review output. |
+| `UNSUPPORTED_TEMPLATE_PREFIX` | `unsupported-templates` | Prefix used to find template review shards. |
 | `PATRON_REQUEST_PREFIX` | `patron-request` | Prefix used to find patron-request shards. |
 | `PATRON_REQUEST_DIR` | `<SOURCE_DIR>/patron-requests` | Directory for patron-request batch files. |
 | `PATRON_REQUEST_BATCH_SIZE` | `5000` | Maximum records per patron-request batch file. |
 
 The script requires at least one directory, configuration, and patron-request
-shard.
+shard. Template review shards are optional so exports created before this review
+output was added can still be re-joined; their joined review output is empty.
 
 ## `import-crosslink-directory.sh`
 
@@ -165,7 +180,8 @@ POSTs a non-empty combined `CONFIG_FILE` to the CrossLink broker import
 endpoint, then POSTs each `patron-requests-*.ndjson` batch file in
 `PATRON_REQUEST_DIR`, in name order. An existing empty configuration file is a
 successful no-op; otherwise configuration must succeed before any patron
-requests are sent.
+requests are sent. When the directory contains no batch files, the script
+imports non-empty configuration and then exits successfully.
 
 Environment variables:
 
@@ -186,9 +202,11 @@ CONFLICT_POLICY=fail \
 ./migration/import-crosslink-patron-requests.sh
 ```
 
-The script preflights the configuration and patron-request inputs before making
-any request. It prints each API response and stops with a nonzero exit at the
-first file whose response has a nonzero `.patronRequests.failed`,
+The script preflights the configuration file, patron-request directory, or
+explicit patron-request file before making any request. An existing empty
+patron-request directory is valid for a configuration-only import. It prints
+each API response and stops with a nonzero exit at the first file whose response
+has a nonzero `.patronRequests.failed`,
 `.batchActions.failed`, or `.templates.failed`. Invalid JSON responses also
 cause a failure. A configuration failure prevents all patron-request imports.
 Earlier successful files remain imported, so re-run with

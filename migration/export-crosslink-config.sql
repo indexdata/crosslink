@@ -8,6 +8,7 @@
 --   psql "$DATABASE_URL" \
 --     --set=ON_ERROR_STOP=1 \
 --     --set=owner='ISIL:US-RS1' \
+--     --set=unsupported_template_output='unsupported-templates.ndjson' \
 --     --file=migration/export-crosslink-config.sql \
 --     --quiet --tuples-only --no-align \
 --     > crosslink-import.ndjson
@@ -29,6 +30,11 @@
 --   * Only English localized templates are exported because CrossLink templates
 --     do not have a locale field. Known mod-rs Handlebars placeholders are
 --     converted to their CrossLink Go-template equivalents in subject and body.
+--     Known #if blocks are converted to Go if/end blocks, and triple-brace
+--     placeholders are converted to CrossLink's safely escaped placeholders.
+--     Templates with residual Handlebars actions or a mixture of patron-request
+--     and batch-only placeholders are written to unsupported_template_output
+--     for review instead of being included in the import stream.
 --   * Template labels are stable and take the form "mod-rs-template-<UUID>",
 --     using the localized-template UUID so multiple English templates in one
 --     legacy container remain distinct.
@@ -41,6 +47,11 @@
 --     controlled by includePdf.
 
 \set ON_ERROR_STOP on
+
+\if :{?unsupported_template_output}
+\else
+\set unsupported_template_output 'unsupported-templates.ndjson'
+\endif
 
 BEGIN;
 
@@ -57,6 +68,65 @@ EXCEPTION
         RETURN NULL;
 END
 $try_parse_jsonb$;
+
+-- Converts one known mod-rs Handlebars placeholder at a time. CrossLink uses
+-- html/template for HTML bodies, so triple-brace values deliberately become
+-- escaped Go-template fields instead of retaining Handlebars' unescaped output.
+CREATE OR REPLACE FUNCTION pg_temp.convert_handlebars_placeholder(
+    source TEXT,
+    legacy_path TEXT,
+    crosslink_path TEXT
+)
+    RETURNS TEXT
+    LANGUAGE plpgsql
+    IMMUTABLE
+AS $convert_handlebars_placeholder$
+DECLARE
+    converted TEXT;
+    legacy_path_pattern TEXT := replace(legacy_path, '.', '[.]');
+    field_replacement TEXT := coalesce(
+        '{{' || crosslink_path || '}}',
+        'all locations'
+    );
+    if_replacement TEXT := coalesce(
+        '{{if ' || crosslink_path || '}}',
+        '{{if true}}'
+    );
+BEGIN
+    IF source IS NULL THEN
+        RETURN NULL;
+    END IF;
+
+    converted := regexp_replace(
+        source,
+        '[{][{][[:space:]]*/if[[:space:]]*[}][}]',
+        '{{end}}',
+        'g'
+    );
+    converted := regexp_replace(
+        converted,
+        '[{][{][{][[:space:]]*' || legacy_path_pattern
+            || '[[:space:]]*[}][}][}]',
+        field_replacement,
+        'g'
+    );
+    converted := regexp_replace(
+        converted,
+        '[{][{][[:space:]]*#if[[:space:]]+' || legacy_path_pattern
+            || '[[:space:]]*[}][}]',
+        if_replacement,
+        'g'
+    );
+
+    RETURN regexp_replace(
+        converted,
+        '[{][{][[:space:]]*' || legacy_path_pattern
+            || '[[:space:]]*[}][}]',
+        field_replacement,
+        'g'
+    );
+END
+$convert_handlebars_placeholder$;
 
 CREATE TEMP TABLE crosslink_config_records ON COMMIT DROP AS
 WITH RECURSIVE
@@ -144,6 +214,8 @@ converted_templates AS (
         raw_english_templates.container_id,
         raw_english_templates.localized_template_id,
         raw_english_templates.title,
+        raw_english_templates.subject AS source_subject,
+        raw_english_templates.body AS source_body,
         raw_english_templates.subject,
         raw_english_templates.body,
         0 AS step
@@ -155,48 +227,74 @@ converted_templates AS (
         converted_templates.container_id,
         converted_templates.localized_template_id,
         converted_templates.title,
-        regexp_replace(
+        converted_templates.source_subject,
+        converted_templates.source_body,
+        pg_temp.convert_handlebars_placeholder(
             converted_templates.subject,
-            '[{][{][[:space:]]*'
-                || replace(placeholder_mappings.legacy_path, '.', '[.]')
-                || '[[:space:]]*[}][}]',
-            coalesce(
-                '{{' || placeholder_mappings.crosslink_path || '}}',
-                'all locations'
-            ),
-            'g'
+            placeholder_mappings.legacy_path,
+            placeholder_mappings.crosslink_path
         ),
-        regexp_replace(
+        pg_temp.convert_handlebars_placeholder(
             converted_templates.body,
-            '[{][{][[:space:]]*'
-                || replace(placeholder_mappings.legacy_path, '.', '[.]')
-                || '[[:space:]]*[}][}]',
-            coalesce(
-                '{{' || placeholder_mappings.crosslink_path || '}}',
-                'all locations'
-            ),
-            'g'
+            placeholder_mappings.legacy_path,
+            placeholder_mappings.crosslink_path
         ),
         placeholder_mappings.step
     FROM converted_templates
     JOIN placeholder_mappings
       ON placeholder_mappings.step = converted_templates.step + 1
 ),
-english_templates AS (
+template_action_patterns AS (
+    SELECT
+        '[{][{][[:space:]]*((if[[:space:]]+)?('
+            || string_agg(
+                replace(placeholder_mappings.crosslink_path, '.', '[.]'),
+                '|' ORDER BY placeholder_mappings.step
+            )
+            || ')|if[[:space:]]+true|else|end)[[:space:]]*[}][}]'
+            AS supported_action_pattern
+    FROM placeholder_mappings
+    WHERE placeholder_mappings.crosslink_path IS NOT NULL
+),
+converted_english_templates AS (
     SELECT
         converted_templates.container_id,
         converted_templates.localized_template_id,
         converted_templates.title,
+        converted_templates.source_subject,
+        converted_templates.source_body,
         converted_templates.subject,
-        converted_templates.body,
-        nullif(btrim(converted_templates.subject), '') IS NOT NULL
-        AND NOT EXISTS (
+        converted_templates.body
+    FROM converted_templates
+    WHERE converted_templates.step = (
+        SELECT count(*)
+        FROM placeholder_mappings
+    )
+),
+template_characteristics AS (
+    SELECT
+        converted_english_templates.*,
+        NOT (
+            regexp_replace(
+                coalesce(converted_english_templates.subject, ''),
+                template_action_patterns.supported_action_pattern,
+                '',
+                'g'
+            ) ~ '[{][{]'
+            OR regexp_replace(
+                converted_english_templates.body,
+                template_action_patterns.supported_action_pattern,
+                '',
+                'g'
+            ) ~ '[{][{]'
+        ) AS syntax_compatible,
+        NOT EXISTS (
             SELECT 1
             FROM placeholder_mappings
             WHERE placeholder_mappings.crosslink_path IS NOT NULL
-              AND NOT placeholder_mappings.available_to_batch_email
+              AND placeholder_mappings.available_to_batch_email
               AND (
-                  converted_templates.subject ~ (
+                  coalesce(converted_english_templates.subject, '') ~ (
                       '[{][{][^}]*'
                       || replace(
                           placeholder_mappings.crosslink_path,
@@ -205,7 +303,7 @@ english_templates AS (
                       )
                       || '([^[:alnum:]_]|[}])'
                   )
-                  OR converted_templates.body ~ (
+                  OR converted_english_templates.body ~ (
                       '[{][{][^}]*'
                       || replace(
                           placeholder_mappings.crosslink_path,
@@ -215,12 +313,61 @@ english_templates AS (
                       || '([^[:alnum:]_]|[}])'
                   )
               )
-        ) AS batch_compatible
-    FROM converted_templates
-    WHERE converted_templates.step = (
-        SELECT count(*)
-        FROM placeholder_mappings
-    )
+        ) AS patron_compatible,
+        NOT EXISTS (
+            SELECT 1
+            FROM placeholder_mappings
+            WHERE placeholder_mappings.crosslink_path IS NOT NULL
+              AND NOT placeholder_mappings.available_to_batch_email
+              AND (
+                  coalesce(converted_english_templates.subject, '') ~ (
+                      '[{][{][^}]*'
+                      || replace(
+                          placeholder_mappings.crosslink_path,
+                          '.',
+                          '[.]'
+                      )
+                      || '([^[:alnum:]_]|[}])'
+                  )
+                  OR converted_english_templates.body ~ (
+                      '[{][{][^}]*'
+                      || replace(
+                          placeholder_mappings.crosslink_path,
+                          '.',
+                          '[.]'
+                      )
+                      || '([^[:alnum:]_]|[}])'
+                  )
+              )
+        ) AS batch_data_compatible
+    FROM converted_english_templates
+    CROSS JOIN template_action_patterns
+),
+english_templates AS (
+    SELECT
+        template_characteristics.*,
+        template_characteristics.syntax_compatible
+            AND (
+                template_characteristics.patron_compatible
+                OR template_characteristics.batch_data_compatible
+            ) AS import_compatible,
+        template_characteristics.syntax_compatible
+            AND nullif(btrim(template_characteristics.subject), '') IS NOT NULL
+            AND template_characteristics.batch_data_compatible
+            AS batch_compatible,
+        concat_ws(
+            '; ',
+            CASE
+                WHEN NOT template_characteristics.syntax_compatible THEN
+                    'unsupported template action remains after conversion'
+            END,
+            CASE
+                WHEN NOT template_characteristics.patron_compatible
+                 AND NOT template_characteristics.batch_data_compatible THEN
+                    'mixes patron-request and batch-only placeholders'
+            END
+        ) AS incompatibility_reason
+    FROM template_characteristics
 ),
 compatible_timers AS (
     SELECT
@@ -375,6 +522,7 @@ export_records AS (
         'template'::TEXT AS record_type,
         'mod-rs-template-'
             || english_templates.localized_template_id AS record_id,
+        true AS importable,
         jsonb_build_object(
             'type', 'template',
             'owner', :'owner',
@@ -397,6 +545,37 @@ export_records AS (
         ) AS record
     FROM english_templates
     CROSS JOIN export_settings
+    WHERE english_templates.import_compatible
+
+    UNION ALL
+
+    SELECT
+        1 AS record_type_order,
+        english_templates.localized_template_id::TEXT AS record_order,
+        'unsupportedTemplate'::TEXT AS record_type,
+        english_templates.localized_template_id::TEXT AS record_id,
+        false AS importable,
+        jsonb_build_object(
+            'type', 'unsupportedTemplate',
+            'owner', :'owner',
+            'data', jsonb_strip_nulls(jsonb_build_object(
+                'containerId', english_templates.container_id,
+                'localizedTemplateId',
+                    english_templates.localized_template_id,
+                'title', english_templates.title,
+                'reason', english_templates.incompatibility_reason,
+                'source', jsonb_strip_nulls(jsonb_build_object(
+                    'subject', english_templates.source_subject,
+                    'body', english_templates.source_body
+                )),
+                'converted', jsonb_strip_nulls(jsonb_build_object(
+                    'subject', english_templates.subject,
+                    'body', english_templates.body
+                ))
+            ))
+        ) AS record
+    FROM english_templates
+    WHERE NOT english_templates.import_compatible
 
     UNION ALL
 
@@ -405,6 +584,7 @@ export_records AS (
         'pullslip-email' AS record_order,
         'template'::TEXT AS record_type,
         'pullslip-email'::TEXT AS record_id,
+        true AS importable,
         jsonb_build_object(
             'type', 'template',
             'owner', :'owner',
@@ -437,6 +617,7 @@ export_records AS (
         overdue_actions.timer_id::TEXT AS record_order,
         'batchAction'::TEXT AS record_type,
         overdue_actions.timer_id::TEXT AS record_id,
+        true AS importable,
         jsonb_build_object(
             'type', 'batchAction',
             'owner', :'owner',
@@ -457,6 +638,7 @@ export_records AS (
         pull_slip_timers.timer_id::TEXT AS record_order,
         'batchAction'::TEXT AS record_type,
         pull_slip_timers.timer_id::TEXT AS record_id,
+        true AS importable,
         jsonb_build_object(
             'type', 'batchAction',
             'owner', :'owner',
@@ -488,6 +670,7 @@ export_records AS (
         'batchAction'::TEXT AS record_type,
         request_aging_actions.timer_id || '-'
             || request_aging_actions.level AS record_id,
+        true AS importable,
         jsonb_build_object(
             'type', 'batchAction',
             'owner', :'owner',
@@ -518,7 +701,8 @@ BEGIN
     )
     INTO problems
     FROM crosslink_config_records
-    WHERE octet_length(record::TEXT) > 1048576;
+    WHERE importable
+      AND octet_length(record::TEXT) > 1048576;
 
     IF problems IS NOT NULL THEN
         RAISE EXCEPTION
@@ -530,6 +714,13 @@ $record_size_preflight$;
 
 SELECT record::TEXT
 FROM crosslink_config_records
+WHERE NOT importable
+ORDER BY record_type_order, record_order
+\g :unsupported_template_output
+
+SELECT record::TEXT
+FROM crosslink_config_records
+WHERE importable
 ORDER BY record_type_order, record_order;
 
 ROLLBACK;
