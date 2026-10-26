@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<zs:searchRetrieveResponse xmlns:zs="http://docs.oasis-open.org/ns/search-ws/sruResponse"><zs:numberOfRecords>1</zs:numberOfRecords><zs:records><zs:record><zs:recordSchema>marcxml</zs:recordSchema><zs:recordXMLEscaping>xml</zs:recordXMLEscaping><zs:recordData><record xmlns="http://www.loc.gov/MARC21/slim">
+  <leader>01995cam a2200469 i 4500</leader>
+  <datafield tag="852" ind1=" " ind2=" ">
+    <subfield code="a">Main Library</subfield>
+    <subfield code="b">Juvenile nonfiction shelves</subfield>
+    <subfield code="h">j574.92 Sill</subfield>
+    <subfield code="o">3</subfield>
+    <subfield code="p">31256015853493</subfield>
+    <subfield code="r">In</subfield>
+    <subfield code="w">Hardcover</subfield>
+    <subfield code="y">1</subfield>
+    <subfield code="1">Aug 24 2023 </subfield>
+    <subfield code="7">True</subfield>
+    <subfield code="9">0</subfield>
+  </datafield>
+</record></zs:recordData><zs:recordPosition>1</zs:recordPosition></zs:record></zs:records><zs:echoedSearchRetrieveRequest><zs:version>2.0</zs:version><zs:queryType>pqf</zs:queryType><zs:query>@attr 1=12 651857</zs:query><zs:maximumRecords>1</zs:maximumRecords><zs:recordXMLEscaping>xml</zs:recordXMLEscaping><zs:recordSchema>marcxml</zs:recordSchema><zs:extraRequestData><zs:target>http://catalog.duluthlibrary.org:210/PAC</zs:target></zs:extraRequestData></zs:echoedSearchRetrieveRequest></zs:searchRetrieveResponse>

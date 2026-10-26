@@ -180,3 +180,46 @@ func TestNcipVersionPersistence(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, res.StatusCode, data)
 	require.NotContains(t, get(), "ncipVersion")
 }
+
+func TestAdditionalHostProfilePersistence(t *testing.T) {
+	resetDb()
+	headers := map[string]string{"X-Okapi-Tenant": "ANINST", "X-Okapi-Permissions": `["directory.consortium.all"]`}
+	for _, vendor := range []string{"Evergreen", "Horizon", "Polaris", "Symphony"} {
+		res, data := jsonReq(t, http.MethodPost, "/entries", `{"name":"`+vendor+`","type":"Institution","lmsConfig":{"vendor":"`+vendor+`","bibIdNormalization":"stripLeadingNonDigits"},"catalogConfig":{"profile":"`+vendor+`","queryConfig":{"identifierNormalization":"stripLeadingLetters","identifierPrefix":"^C"},"holdingsFormat":{"marc":{"itemLoanPolicySubField":"d","availability":[{"subField":"b","operator":"present"},{"subField":"b","operator":"notIn","values":["MISSING"]}]}}}}`, headers)
+		require.Equal(t, http.StatusCreated, res.StatusCode, data)
+		var created struct{ Id string }
+		require.NoError(t, json.Unmarshal([]byte(data), &created))
+		path := "/entries/by-id/" + created.Id
+		get := func() map[string]any {
+			res, data := jsonReq(t, http.MethodGet, path, "", headers)
+			require.Equal(t, http.StatusOK, res.StatusCode, data)
+			var entry map[string]any
+			require.NoError(t, json.Unmarshal([]byte(data), &entry))
+			return entry
+		}
+		entry := get()
+		cfg := entry["catalogConfig"].(map[string]any)
+		require.Equal(t, map[string]any{"identifierNormalization": "stripLeadingLetters", "identifierPrefix": "^C"}, cfg["queryConfig"])
+		require.Equal(t, vendor, entry["lmsConfig"].(map[string]any)["vendor"])
+		require.NotContains(t, entry["lmsConfig"], "ncipVersion") // Persist overrides, not defaults.
+		require.Equal(t, "d", cfg["holdingsFormat"].(map[string]any)["marc"].(map[string]any)["itemLoanPolicySubField"])
+		res, data = jsonReq(t, http.MethodPatch, path, `{"catalogConfig":{"queryConfig":{"title":"local.title = {term}"}}}`, headers)
+		require.Equal(t, http.StatusNoContent, res.StatusCode, data)
+		require.Equal(t, "^C", get()["catalogConfig"].(map[string]any)["queryConfig"].(map[string]any)["identifierPrefix"])
+		res, data = jsonReq(t, http.MethodPatch, path, `{"catalogConfig":{"queryConfig":{"identifierNormalization":"none","identifierPrefix":""},"holdingsFormat":{"opac":{"excludedLocations":["Internet"],"itemLoanPolicySources":["shelvingData","temporaryLocation"],"requireItemLoanPolicy":true}}}}`, headers)
+		require.Equal(t, http.StatusNoContent, res.StatusCode, data)
+		cfg = get()["catalogConfig"].(map[string]any)
+		require.Equal(t, "", cfg["queryConfig"].(map[string]any)["identifierPrefix"])
+		opac := cfg["holdingsFormat"].(map[string]any)["opac"].(map[string]any)
+		require.Equal(t, []any{"shelvingData", "temporaryLocation"}, opac["itemLoanPolicySources"])
+		res, data = jsonReq(t, http.MethodPatch, path, `{"catalogConfig":{"holdingsFormat":{"opac":{"excludedLocations":[],"itemLoanPolicySources":[],"requireItemLoanPolicy":false}}}}`, headers)
+		require.Equal(t, http.StatusNoContent, res.StatusCode, data)
+		opac = get()["catalogConfig"].(map[string]any)["holdingsFormat"].(map[string]any)["opac"].(map[string]any)
+		require.Equal(t, []any{}, opac["itemLoanPolicySources"])
+		require.Equal(t, false, opac["requireItemLoanPolicy"])
+		for _, invalid := range []string{`{"queryConfig":{"identifierNormalization":"bad"}}`, `{"holdingsFormat":{"opac":{"itemLoanPolicySources":["bad"]}}}`, `{"holdingsFormat":{"marc":{"availability":[{"subField":"b","operator":"notIn"}]}}}`} {
+			res, data = jsonReq(t, http.MethodPatch, path, `{"catalogConfig":`+invalid+`}`, headers)
+			require.Equal(t, http.StatusBadRequest, res.StatusCode, data)
+		}
+	}
+}
