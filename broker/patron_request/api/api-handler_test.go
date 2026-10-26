@@ -641,7 +641,7 @@ func TestPostPatronRequestsIdActionRejectsStaticActionParamsOverride(t *testing.
 	handler.SetActionTaskProcessor(&MockActionTaskProcessor{})
 
 	req := httptest.NewRequest(http.MethodPost, "/broker/patron_requests/3/action", strings.NewReader(
-		`{"action":"`+string(prservice.BorrowerActionCheckDuplicate)+`","actionParams":{"staticActionParams":{"countedStates":["NOT_A_STATE"]}}}`,
+		`{"action":"`+string(prservice.BorrowerActionCheckLimit)+`","actionParams":{"staticactionparams":{"countedStates":["NOT_A_STATE"]}}}`,
 	))
 	req.Header.Set("X-Okapi-Tenant", "tenant1")
 	rr := httptest.NewRecorder()

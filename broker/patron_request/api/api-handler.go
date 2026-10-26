@@ -733,9 +733,11 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 		return
 	}
 	if action.ActionParams != nil {
-		if _, reserved := (*action.ActionParams)["staticActionParams"]; reserved {
-			api.AddBadRequestError(ctx, w, errors.New("actionParams.staticActionParams is reserved"))
-			return
+		for key := range *action.ActionParams {
+			if strings.EqualFold(key, "staticActionParams") {
+				api.AddBadRequestError(ctx, w, errors.New("actionParams.staticActionParams is reserved"))
+				return
+			}
 		}
 	}
 
