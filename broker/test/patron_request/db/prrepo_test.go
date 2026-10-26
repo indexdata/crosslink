@@ -630,6 +630,44 @@ func TestListPatronRequestsDateWithin(t *testing.T) {
 	}
 }
 
+func TestListPatronRequestsStateAny(t *testing.T) {
+	requesterSymbol := uuid.NewString()
+	wantIDs := make([]string, 0, 2)
+	for _, state := range []pr_db.PatronRequestState{
+		prservice.BorrowerStateValidated,
+		prservice.BorrowerStateShippedReturned,
+		prservice.BorrowerStateCompleted,
+	} {
+		id := uuid.NewString()
+		_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+			ID:              id,
+			CreatedAt:       pgtype.Timestamp{Time: time.Now(), Valid: true},
+			Side:            prservice.SideBorrowing,
+			State:           state,
+			RequesterSymbol: pgtype.Text{String: requesterSymbol, Valid: true},
+			Language:        "english",
+			Items:           []pr_db.PrItem{},
+		})
+		require.NoError(t, err)
+		t.Cleanup(func() { assert.NoError(t, prRepo.DeletePatronRequest(appCtx, id)) })
+		if state != prservice.BorrowerStateShippedReturned {
+			wantIDs = append(wantIDs, id)
+		}
+	}
+
+	query, err := pr_db.ParsePatronRequestsCql(`requester_symbol_exact = "` + requesterSymbol +
+		`" and state any "VALIDATED COMPLETED"`)
+	require.NoError(t, err)
+	list, count, err := prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{Limit: 10}, query)
+	require.NoError(t, err)
+	gotIDs := make([]string, 0, len(list))
+	for _, request := range list {
+		gotIDs = append(gotIDs, request.ID)
+	}
+	assert.ElementsMatch(t, wantIDs, gotIDs)
+	assert.Equal(t, int64(2), count)
+}
+
 func TestListPatronRequests(t *testing.T) {
 	prIds := []string{}
 	itemIds := []string{}

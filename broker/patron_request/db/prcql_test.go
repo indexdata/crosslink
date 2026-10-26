@@ -155,6 +155,13 @@ func TestPatronRequestDuplicateFields(t *testing.T) {
 	assert.Equal(t, []any{"patron-1", "record-1", "A Title", "current-pr"}, query.GetQueryArguments())
 }
 
+func TestPatronRequestStateAny(t *testing.T) {
+	query, err := ParsePatronRequestsCql(`state any "VALIDATED RECEIVED" and id <> "current-pr"`)
+	require.NoError(t, err)
+	assert.Equal(t, "state IN($3, $4) AND id NOT IN($5)", query.GetWhereClause())
+	assert.Equal(t, []any{"VALIDATED", "RECEIVED", "current-pr"}, query.GetQueryArguments())
+}
+
 func TestHandlePatronRequestsQueryItemFieldsUseExists(t *testing.T) {
 	tests := []struct {
 		name      string

@@ -191,6 +191,9 @@ func ValidateStateModel(stateModel *proapi.StateModel) error {
 	if stateModel == nil {
 		return fmt.Errorf("state model is nil")
 	}
+	if err := validateCheckLimitCountedStates(stateModel); err != nil {
+		return err
+	}
 	serviceTypes, contextualErrors, err := validateApplicability(stateModel)
 	if err != nil {
 		return err
@@ -201,6 +204,50 @@ func ValidateStateModel(stateModel *proapi.StateModel) error {
 				return err
 			}
 			return fmt.Errorf("state model is invalid for service type %s: %w", serviceType, err)
+		}
+	}
+	return nil
+}
+
+func validateCheckLimitCountedStates(stateModel *proapi.StateModel) error {
+	requesterStates := make(map[string]struct{})
+	for _, state := range stateModel.States {
+		if state.Side == proapi.REQUESTER {
+			requesterStates[state.Name] = struct{}{}
+		}
+	}
+
+	var expected []string
+	for _, state := range stateModel.States {
+		if state.Side != proapi.REQUESTER || state.Actions == nil {
+			continue
+		}
+		for _, action := range *state.Actions {
+			if action.Name != string(BorrowerActionCheckLimit) {
+				continue
+			}
+			if action.Params == nil || action.Params.CountedStates == nil || len(*action.Params.CountedStates) == 0 {
+				return fmt.Errorf("action check-limit in state %s must define non-empty params.countedStates", state.Name)
+			}
+
+			seen := make(map[string]struct{}, len(*action.Params.CountedStates))
+			for _, countedState := range *action.Params.CountedStates {
+				if _, duplicate := seen[countedState]; duplicate {
+					return fmt.Errorf("action check-limit in state %s params.countedStates contains duplicate requester state %s", state.Name, countedState)
+				}
+				seen[countedState] = struct{}{}
+				if _, ok := requesterStates[countedState]; !ok {
+					return fmt.Errorf("action check-limit in state %s params.countedStates contains unknown requester state %s", state.Name, countedState)
+				}
+			}
+
+			normalized := slices.Clone(*action.Params.CountedStates)
+			slices.Sort(normalized)
+			if expected == nil {
+				expected = normalized
+			} else if !slices.Equal(expected, normalized) {
+				return fmt.Errorf("all check-limit actions must define the same params.countedStates")
+			}
 		}
 	}
 	return nil

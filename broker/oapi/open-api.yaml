@@ -1415,6 +1415,13 @@ components:
             templateLabel:
               type: string
               description: Template label for this action. The template selector is used to select the appropriate template for generating messages.
+            countedStates:
+              type: array
+              minItems: 1
+              uniqueItems: true
+              description: Requester states counted by the check-limit action toward maxRequestsPerPatron.
+              items:
+                type: string
       required:
         - name
 
