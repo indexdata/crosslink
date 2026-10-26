@@ -207,7 +207,9 @@ placeholder_mappings(
         (16, 'user.surname', '.PatronSurname', false),
         (17, 'user.patronProfile', '.PatronProfile', false),
         (18, 'locations', NULL, true),
-        (19, 'numRequests', '.ActualCount', true)
+        (19, 'numRequests', '.ActualCount', true),
+        (20, 'user.id', '.PatronId', false),
+        (21, 'request.neededBy', '.NeededBy', false)
 ),
 converted_templates AS (
     SELECT
