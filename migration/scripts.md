@@ -91,12 +91,17 @@ After all schemas are exported, the script runs `join-crosslink-exports.sh` on
 the current directory.
 
 Known Handlebars placeholders, `#if` blocks, and triple-brace placeholders are
-converted to CrossLink Go-template syntax. Triple-brace values use CrossLink's
-normal HTML escaping. A converted template is included in `config.ndjson` only
-when it is valid for either patron-request or batch-email data. Templates with
-residual Handlebars actions or a mixture of both data contexts are preserved in
+converted to CrossLink Go-template syntax. Converted `#if` blocks compare their
+field against the `n/a` missing-value sentinel, so absent optional values follow
+the Handlebars `else` branch. Triple-brace values use CrossLink's normal HTML
+escaping. A converted template is included in `config.ndjson` only when it is
+valid for either patron-request or batch-email data. Templates with residual
+Handlebars actions or a mixture of both data contexts are preserved in
 `unsupported-templates.ndjson` with their source, converted content, and review
-reason.
+reason. Config templates are also checked with the broker's import rendering
+validators for the matching data contexts and HTML escaping rules. Templates
+that fail validation are removed from `config.ndjson` and appended to the review
+artifact with their converted subject and body and the validator error.
 
 A `PrintPullSlips` schedule selects a migrated template only when its converted
 subject and body are importable and compatible with batch-email data. Otherwise,
