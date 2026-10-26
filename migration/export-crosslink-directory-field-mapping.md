@@ -99,7 +99,7 @@ tenant exports.
 | `Institution` entries with an ISIL symbol and no symbol in `tenant_symbols`, plus their direct branches | Record inclusion | Institutions without symbols are excluded. |
 | First ISIL symbol of the institution, by symbol priority | `data.tenant` | The country prefix is removed and the rest lowercased: `ISIL:US-MNALETI` becomes `mnaleti`. Branches take their institution's tenant. Invalid or duplicate tenants stop export before NDJSON output. |
 | Selected institution | `data.vendor` | Set to `ReShare`. |
-| First `service.se_address` whose normalized service type is `ISO18626` | `data.illConfig.iso18626Url` | Emitted with `iso18626Vendor` `ReShare` so that CrossLink can reach the institution. Tenant policy values are `null`. |
+| First `service.se_address` whose normalized service type is `ISO18626` | `data.illConfig.iso18626Url` | Emitted with `iso18626Vendor` `ReShare` so that CrossLink can reach the institution. Tenant policy values and ILL lists are not included. |
 
 `lmsConfig`, `catalogConfig`, and `holdingsPolicy` are `null` for these
 entries. Run the mode with `include_consortium=false` and
@@ -170,6 +170,24 @@ retain their exported defaults.
 | Unsupported mod-rs agency-information behavior | `data.illConfig.includeSupplierInfo` | Set to `false`; mod-rs does not populate supplier information. |
 | Unsupported mod-rs directory-derived return information | `data.illConfig.includeReturnInfo` | Set to `false`; mod-rs does not automatically populate return information from the supplier directory entry. |
 | Unsupported mod-rs vendor-note behavior | `data.illConfig.includeVendorNote` | Set to `false`; mod-rs does not prepend the supplier vendor to generated notes. |
+
+The following reference-data vocabularies are exported only on the selected local
+owner. Join `refdata_value.rdv_owner` to `refdata_category.rdc_id` and select
+categories by `rdc_description`.
+
+| mod-rs vocabulary | CrossLink field | Mapping |
+| --- | --- | --- |
+| `cancellationReasons` | `data.illConfig.cancellationReasons` | `rdv_value` becomes `code`; `rdv_label` becomes `defaultDesc`. |
+| `cannotSupplyReasons` | `data.illConfig.unfilledReasons` | `rdv_value` becomes `code`; `rdv_label` becomes `defaultDesc`, falling back to `rdv_value` when the label is null, empty, or whitespace-only. |
+| `loanConditions` | `data.illConfig.loanConditions` | `rdv_value` becomes `code`; `rdv_label` becomes `defaultDesc`, with the same value fallback as unfilled reasons. |
+
+Nonblank labels and all values are preserved unchanged. Lists are ordered by
+source label, value, and ID, with null labels last. Missing or empty vocabularies
+are omitted rather than exported as empty arrays or nulls, leaving those lists
+unset on import. Non-local pickup entries do not receive these tenant-local
+lists. For example, the seeded cannot-supply value `unavailable` and label
+`No longer available` become
+`{"code":"unavailable","defaultDesc":"No longer available"}` in `unfilledReasons`.
 
 `app_setting.last_resort_lenders` is the mod-rs source for
 `data.illConfig.lendersOfLastResort`, but the primary export emits an empty
@@ -246,6 +264,7 @@ profile. The exporter supplies the following fixed values.
 | `data.hrid` | `null` |
 | `data.timeZone` | `null` |
 | `data.closures` | `[]` |
+| `data.lmsConfig.ncipVersion` | `null`; inherits the CrossLink profile default (currently `2.02`). Set `1.0` explicitly for supported NCIP v1 HTTP endpoints. |
 | `data.lmsConfig.ncipNamespaceEnabled` | `null`; resolved by the CrossLink host-LMS profile. |
 | `data.lmsConfig.bibIdNormalization` | `null`; resolved by the CrossLink host-LMS profile. |
 | `data.catalogConfig.metadataUpdateMode` | `null`; CrossLink consequently does not update request metadata from catalog records. |

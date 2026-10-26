@@ -42,6 +42,10 @@
 --     null; invalid or multiple values stop export before NDJSON is emitted.
 --   * The directory pickup tag marks an entry as a pickup location,
 --     independently of its LMS location code or NCIP/ISO endpoints.
+--   * Reference-data cancellationReasons, cannotSupplyReasons, and loanConditions
+--     become owner-only ILL cancellationReasons, unfilledReasons, and loanConditions.
+--     Values become codes; labels become descriptions. Unfilled reasons and loan
+--     conditions fall back to values for absent labels. Empty lists are omitted.
 --   * default_service_level and minimum_cost seed loan and copy default tiers.
 --     Missing settings become standard and 0. The automatic-fee
 --     request_service_type setting does not describe routing capabilities.
@@ -61,7 +65,7 @@
 --     a tenant made from its first ISIL symbol without the country prefix,
 --     lowercased (ISIL:US-MNALETI becomes mnaleti), vendor ReShare, and an
 --     illConfig carrying its ISO18626 endpoint. Tenant-local LMS, catalog,
---     holdings, and ILL policy settings are not attached. Run it with
+--     holdings, ILL policy, and ILL list settings are not attached. Run it with
 --     include_consortium=false and include_tiers_network=false and let
 --     join-crosslink-exports.sh place the entries under the consortium.
 --
@@ -305,6 +309,30 @@ SELECT
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
         FILTER (WHERE st_key = 'check_duplicate_time') AS duplicate_check_window_hours
 FROM app_setting;
+
+-- Collect tenant-local reason and condition vocabularies once for all entries.
+CREATE TEMP TABLE crosslink_ill_lists ON COMMIT DROP AS
+SELECT coalesce(jsonb_object_agg(field, items), '{}'::jsonb) AS item
+FROM (
+    SELECT
+        CASE category.rdc_description
+            WHEN 'cannotSupplyReasons' THEN 'unfilledReasons'
+            ELSE category.rdc_description
+        END AS field,
+        jsonb_agg(jsonb_build_object(
+            'code', value.rdv_value,
+            'defaultDesc', CASE
+                WHEN category.rdc_description <> 'cancellationReasons'
+                 AND (value.rdv_label IS NULL OR value.rdv_label ~ '^[[:space:]]*$')
+                THEN value.rdv_value
+                ELSE value.rdv_label
+            END
+        ) ORDER BY value.rdv_label, value.rdv_value, value.rdv_id) AS items
+    FROM refdata_category AS category
+    JOIN refdata_value AS value ON value.rdv_owner = category.rdc_id
+    WHERE category.rdc_description IN ('cancellationReasons', 'cannotSupplyReasons', 'loanConditions')
+    GROUP BY category.rdc_description
+) AS lists;
 
 CREATE TEMP TABLE crosslink_local_entry ON COMMIT DROP AS
 SELECT DISTINCT symbol.entry_id
@@ -842,6 +870,7 @@ entry_records AS (
                 WHEN 'aleph' THEN 'Aleph'
                 ELSE 'Generic'
             END,
+            'ncipVersion', NULL,
             'ncipNamespaceEnabled', NULL,
             'bibIdNormalization', NULL,
             'address', tenant_settings.ncip_server_address,
@@ -939,7 +968,10 @@ entry_records AS (
                 THEN tenant_settings.max_requests_per_patron::integer
                 ELSE NULL
             END
-        ) AS item
+        ) || CASE WHEN local_entry.entry_id IS NOT NULL
+            THEN (SELECT item FROM crosslink_ill_lists)
+            ELSE '{}'::jsonb
+        END AS item
         FROM (
             SELECT EXISTS (
                 SELECT 1
