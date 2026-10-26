@@ -391,6 +391,9 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 	if side != prservice.SideBorrowing && apiBundle.IllTransaction != nil {
 		return importdb.PatronRequestBundle{}, nil, errors.New("illTransaction is only allowed for borrowing patron requests")
 	}
+	if side != prservice.SideBorrowing && request.RequesterPickupLocationId != nil {
+		return importdb.PatronRequestBundle{}, nil, errors.New("requesterPickupLocationId is only allowed for borrowing patron requests")
+	}
 	if request.SupplierSymbol != nil && strings.TrimSpace(*request.SupplierSymbol) == "" {
 		request.SupplierSymbol = nil
 	}
@@ -436,6 +439,7 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 		LastActionResult: pgTextFromPtr(request.LastActionResult), Language: pr_db.LANGUAGE,
 		TerminalState: terminal, InternalNote: pgTextFromPtr(request.InternalNote), NextReqID: pgTextFromPtr(request.NextReqId),
 		PrevReqID: pgTextFromPtr(request.PrevReqId), RetryBibInfo: request.RetryBibInfo, StateModel: request.StateModel,
+		RequesterPickupLocationID: pgUUIDFromPtr(request.RequesterPickupLocationId),
 	}}
 
 	seenItems := make(map[string]struct{}, len(apiBundle.Items))
@@ -589,6 +593,12 @@ func (i Importer) resolveOwner(ctx common.ExtendedContext, owner string) (ill_db
 	return peers[0], nil
 }
 
+func pgUUIDFromPtr(value *uuid.UUID) pgtype.UUID {
+	if value == nil {
+		return pgtype.UUID{}
+	}
+	return pgtype.UUID{Bytes: *value, Valid: true}
+}
 func pgTextFromPtr(value *string) pgtype.Text {
 	if value == nil {
 		return pgtype.Text{}

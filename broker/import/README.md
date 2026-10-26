@@ -108,6 +108,7 @@ Important validation rules include:
 - `requesterRequestId` must equal `illRequest.header.requestingAgencyRequestId`.
 - `requesterSymbol` must match the requesting-agency symbol in the ISO 18626 header.
 - `tenant` is optional and is stored as the request's FOLIO tenant ID; omit it to store no tenant. The envelope `owner` still identifies the owning institution.
+- `requesterPickupLocationId` is optional and allowed only for borrowing requests. It is stored as the request's pickup location without being checked against the directory, so it must be the UUID of the requesting institution or one of its branches.
 - For a borrowing request, `id` must equal `requesterRequestId`, and the requester must be the envelope owner or one of its branches.
 - For a lending request, `supplierSymbol` is required, must match the supplying-agency symbol in the ISO 18626 header, and must be the envelope owner or one of its branches.
 - An `illTransaction`, when supplied, must use the same requester symbol and requester request ID. `locatedSuppliers` require an `illTransaction`.
