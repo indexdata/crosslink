@@ -86,6 +86,11 @@ Existing files matching the configured prefixes are removed before export.
 After all schemas are exported, the script runs `join-crosslink-exports.sh` on
 the current directory.
 
+Configured legacy pull-slip templates are retained in the configuration export.
+A `PrintPullSlips` schedule selects one only when both its converted subject and
+body are compatible with batch-email data. Otherwise, the schedule uses the
+generated `pullslip-email` fallback template.
+
 ## `join-crosslink-exports.sh`
 
 Combines the per-schema NDJSON files produced by `export-crosslink.sh`.
@@ -156,16 +161,18 @@ JSON responses also cause a failure.
 
 ## `import-crosslink-patron-requests.sh`
 
-POSTs the combined `CONFIG_FILE` to the CrossLink broker import endpoint, then
-POSTs each `patron-requests-*.ndjson` batch file in `PATRON_REQUEST_DIR`, in
-name order. Configuration must succeed before any patron requests are sent.
+POSTs a non-empty combined `CONFIG_FILE` to the CrossLink broker import
+endpoint, then POSTs each `patron-requests-*.ndjson` batch file in
+`PATRON_REQUEST_DIR`, in name order. An existing empty configuration file is a
+successful no-op; otherwise configuration must succeed before any patron
+requests are sent.
 
 Environment variables:
 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `CROSSLINK_BROKER_HOST` | required | CrossLink broker base URL, for example `http://localhost:8081`. |
-| `CONFIG_FILE` | `config.ndjson` | Combined configuration file uploaded before patron requests. |
+| `CONFIG_FILE` | `config.ndjson` | Combined configuration file uploaded before patron requests when non-empty. |
 | `PATRON_REQUEST_DIR` | `patron-requests` | Directory of patron-request batch files to upload. |
 | `PATRON_REQUEST_FILE` | unset | Upload only this patron-request NDJSON file instead of the directory, after configuration. |
 | `CONFLICT_POLICY` | `fail` | Import conflict policy passed as the query parameter. |
@@ -186,8 +193,8 @@ first file whose response has a nonzero `.patronRequests.failed`,
 cause a failure. A configuration failure prevents all patron-request imports.
 Earlier successful files remain imported, so re-run with
 `CONFLICT_POLICY=skip` or `update` to continue, or use `PATRON_REQUEST_FILE` to
-retry a single batch. Retry runs import `CONFIG_FILE` again using the selected
-conflict policy before the patron-request file.
+retry a single batch. Retry runs import a non-empty `CONFIG_FILE` again using
+the selected conflict policy before the patron-request file.
 
 All import scripts use `curl --fail-with-body`, so HTTP failures return a
 nonzero exit status while preserving the server response body in the output.

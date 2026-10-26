@@ -88,12 +88,16 @@ else
     fi
 fi
 
-printf '%s\n' "Importing combined config $CONFIG_FILE"
-config_status=0
-import_file "$CONFIG_FILE" || config_status=$?
-if [ "$config_status" -ne 0 ]; then
-    echo "Configuration import stopped at $CONFIG_FILE; no patron requests were imported." >&2
-    exit "$config_status"
+if [ -s "$CONFIG_FILE" ]; then
+    printf '%s\n' "Importing combined config $CONFIG_FILE"
+    config_status=0
+    import_file "$CONFIG_FILE" || config_status=$?
+    if [ "$config_status" -ne 0 ]; then
+        echo "Configuration import stopped at $CONFIG_FILE; no patron requests were imported." >&2
+        exit "$config_status"
+    fi
+else
+    printf '%s\n' "Combined config $CONFIG_FILE is empty; skipping configuration import"
 fi
 
 if [ -n "$PATRON_REQUEST_FILE" ]; then

@@ -33,9 +33,10 @@
 --     using the localized-template UUID so multiple English templates in one
 --     legacy container remain distinct.
 --     A pull-slip timer uses the template selected by pull_slip_template_id when
---     an eligible English template is exported, choosing the lowest localized-
---     template UUID if legacy data contains multiple English children;
---     otherwise CrossLink's default pullslip-email template is exported and used.
+--     an eligible, batch-compatible English template is exported, choosing the
+--     lowest localized-template UUID if legacy data contains multiple English
+--     children; otherwise CrossLink's default pullslip-email template is exported
+--     and used. Migrated templates are retained even when they are not selected.
 --   * The attached pull-slip PDF is rendered separately in both systems and is
 --     controlled by includePdf.
 
@@ -108,25 +109,25 @@ raw_english_templates AS (
     WHERE lower(localized_template.ltm_locality) = 'en'
       AND nullif(btrim(template.tm_template_body), '') IS NOT NULL
 ),
-placeholder_mappings(step, legacy_placeholder, crosslink_placeholder) AS (
+placeholder_mappings(step, legacy_path, crosslink_path) AS (
     VALUES
-        (1, '{{request.id}}', '{{.ReqId}}'),
-        (2, '{{request.cancellationReason}}', '{{.CancellationReason}}'),
-        (3, '{{request.pickupLocation}}', '{{.PickupLocation}}'),
-        (4, '{{request.pickupURL}}', '{{.PickupURL}}'),
-        (5, '{{item.title}}', '{{.Title}}'),
-        (6, '{{item.titleOfComponent}}', '{{.TitleOfComponent}}'),
-        (7, '{{item.author}}', '{{.Author}}'),
-        (8, '{{item.authorOfComponent}}', '{{.AuthorOfComponent}}'),
-        (9, '{{item.materialType}}', '{{.MaterialType}}'),
-        (10, '{{item.volume}}', '{{.Volume}}'),
-        (11, '{{item.issue}}', '{{.Issue}}'),
-        (12, '{{item.pages}}', '{{.Pages}}'),
-        (13, '{{item.location}}', '{{.Location}}'),
-        (14, '{{item.shelvingLocation}}', '{{.ShelvingLocation}}'),
-        (15, '{{user.givenName}}', '{{.PatronGivenName}}'),
-        (16, '{{user.surname}}', '{{.PatronSurname}}'),
-        (17, '{{user.patronProfile}}', '{{.PatronProfile}}')
+        (1, 'request.id', '.ReqId'),
+        (2, 'request.cancellationReason', '.CancellationReason'),
+        (3, 'request.pickupLocation', '.PickupLocation'),
+        (4, 'request.pickupURL', '.PickupURL'),
+        (5, 'item.title', '.Title'),
+        (6, 'item.titleOfComponent', '.TitleOfComponent'),
+        (7, 'item.author', '.Author'),
+        (8, 'item.authorOfComponent', '.AuthorOfComponent'),
+        (9, 'item.materialType', '.MaterialType'),
+        (10, 'item.volume', '.Volume'),
+        (11, 'item.issue', '.Issue'),
+        (12, 'item.pages', '.Pages'),
+        (13, 'item.location', '.Location'),
+        (14, 'item.shelvingLocation', '.ShelvingLocation'),
+        (15, 'user.givenName', '.PatronGivenName'),
+        (16, 'user.surname', '.PatronSurname'),
+        (17, 'user.patronProfile', '.PatronProfile')
 ),
 converted_templates AS (
     SELECT
@@ -144,15 +145,21 @@ converted_templates AS (
         converted_templates.container_id,
         converted_templates.localized_template_id,
         converted_templates.title,
-        replace(
+        regexp_replace(
             converted_templates.subject,
-            placeholder_mappings.legacy_placeholder,
-            placeholder_mappings.crosslink_placeholder
+            '[{][{][[:space:]]*'
+                || replace(placeholder_mappings.legacy_path, '.', '[.]')
+                || '[[:space:]]*[}][}]',
+            '{{' || placeholder_mappings.crosslink_path || '}}',
+            'g'
         ),
-        replace(
+        regexp_replace(
             converted_templates.body,
-            placeholder_mappings.legacy_placeholder,
-            placeholder_mappings.crosslink_placeholder
+            '[{][{][[:space:]]*'
+                || replace(placeholder_mappings.legacy_path, '.', '[.]')
+                || '[[:space:]]*[}][}]',
+            '{{' || placeholder_mappings.crosslink_path || '}}',
+            'g'
         ),
         placeholder_mappings.step
     FROM converted_templates
@@ -165,7 +172,30 @@ english_templates AS (
         converted_templates.localized_template_id,
         converted_templates.title,
         converted_templates.subject,
-        converted_templates.body
+        converted_templates.body,
+        nullif(btrim(converted_templates.subject), '') IS NOT NULL
+        AND NOT EXISTS (
+            SELECT 1
+            FROM placeholder_mappings
+            WHERE converted_templates.subject ~ (
+                    '[{][{][^}]*'
+                    || replace(
+                        placeholder_mappings.crosslink_path,
+                        '.',
+                        '[.]'
+                    )
+                    || '([^[:alnum:]_]|[}])'
+                )
+               OR converted_templates.body ~ (
+                    '[{][{][^}]*'
+                    || replace(
+                        placeholder_mappings.crosslink_path,
+                        '.',
+                        '[.]'
+                    )
+                    || '([^[:alnum:]_]|[}])'
+                )
+        ) AS batch_compatible
     FROM converted_templates
     WHERE converted_templates.step = (
         SELECT count(*)
@@ -218,8 +248,11 @@ pull_slip_timers AS (
         END AS email_addresses,
         coalesce(
             (
-                SELECT 'mod-rs-template-'
-                    || english_templates.localized_template_id
+                SELECT CASE
+                    WHEN english_templates.batch_compatible THEN
+                        'mod-rs-template-'
+                            || english_templates.localized_template_id
+                END
                 FROM english_templates
                 WHERE english_templates.container_id::TEXT =
                     export_settings.pull_slip_template_id
