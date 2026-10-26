@@ -636,12 +636,14 @@ func TestPostPatronRequestsIdActionStoresTenantUserInInvokeTask(t *testing.T) {
 
 func TestPostPatronRequestsIdActionRejectsStaticActionParamsOverride(t *testing.T) {
 	eventBus := new(MockEventBusCapture)
-	handler := NewPrApiHandler(new(PrRepoOkapiOwner), eventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	tenantResolver := tenant.NewResolver().WithTenantToSymbol("ISIL:DK-{tenant}")
+	handler := NewPrApiHandler(new(PrRepoOkapiOwner), eventBus, mockEventRepo, tenantResolver, nil, 10)
 	handler.SetActionTaskProcessor(&MockActionTaskProcessor{})
 
 	req := httptest.NewRequest(http.MethodPost, "/broker/patron_requests/3/action", strings.NewReader(
 		`{"action":"`+string(prservice.BorrowerActionCheckDuplicate)+`","actionParams":{"staticActionParams":{"countedStates":["NOT_A_STATE"]}}}`,
 	))
+	req.Header.Set("X-Okapi-Tenant", "tenant1")
 	rr := httptest.NewRecorder()
 	handler.PostPatronRequestsIdAction(rr, req, "3", proapi.PostPatronRequestsIdActionParams{Side: &proapiBorrowingSide})
 
