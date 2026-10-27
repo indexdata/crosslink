@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	ill_db "github.com/indexdata/crosslink/broker/ill_db"
@@ -49,6 +50,7 @@ func TestImportPatronRequestNormalizesCompleteBundle(t *testing.T) {
 	assert.Equal(t, importdb.ConflictPolicyUpdate, repo.patronPolicy)
 	assert.Equal(t, "pr-1", repo.patron.PatronRequest.ID)
 	assert.Equal(t, pgtype.Text{}, repo.patron.PatronRequest.Tenant)
+	assert.False(t, repo.patron.PatronRequest.RequesterPickupLocationID.Valid)
 	assert.Equal(t, prservice.SideBorrowing, repo.patron.PatronRequest.Side)
 	assert.Equal(t, pr_db.PatronRequestState("SENT"), repo.patron.PatronRequest.State)
 	assert.True(t, repo.patron.PatronRequest.TerminalState)
@@ -81,6 +83,21 @@ func TestImportPatronRequestStoresTenant(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, pgText("anokacounty"), repo.patron.PatronRequest.Tenant)
+}
+
+func TestImportPatronRequestStoresPickupLocation(t *testing.T) {
+	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "peer-requester"}, {ID: "peer-supplier"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{terminal: true}, fixedClock)
+	pickupLocation := uuid.MustParse("7aa9fd5b-7291-407c-b344-17af27e20629")
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		bundle["patronRequest"].(map[string]any)["requesterPickupLocationId"] = pickupLocation.String()
+	})
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyUpdate, "ISIL:REQ", data)
+
+	require.NoError(t, err)
+	assert.Equal(t, pgtype.UUID{Bytes: pickupLocation, Valid: true}, repo.patron.PatronRequest.RequesterPickupLocationID)
 }
 
 func TestImportPatronRequestLocatedSupplierUnfilledReasonAndNote(t *testing.T) {
@@ -394,6 +411,25 @@ func TestImportPatronRequestRejectsMissingOrBlankSupplierSymbolForLending(t *tes
 			assert.Zero(t, repo.patronCalls)
 		})
 	}
+}
+
+func TestImportPatronRequestRejectsPickupLocationForLendingRequest(t *testing.T) {
+	repo := &recordingImportRepo{}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		request := bundle["patronRequest"].(map[string]any)
+		request["side"] = "lending"
+		request["supplierSymbol"] = "ISIL:SUP"
+		request["requesterPickupLocationId"] = "7aa9fd5b-7291-407c-b344-17af27e20629"
+		delete(bundle, "illTransaction")
+		bundle["locatedSuppliers"] = []any{}
+	})
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:SUP", data)
+
+	require.ErrorContains(t, err, "requesterPickupLocationId is only allowed for borrowing patron requests")
+	assert.Zero(t, repo.patronCalls)
 }
 
 func TestImportPatronRequestRejectsSupplierSymbolDifferentFromISOHeaderForLending(t *testing.T) {

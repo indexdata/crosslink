@@ -114,6 +114,20 @@ func TestImportPatronRequestUpdatePreservesStoredItemLocations(t *testing.T) {
 	assert.Equal(t, pgtype.Text{String: "Stacks", Valid: true}, shelvingLocation)
 }
 
+func TestImportPatronRequestPersistsPickupLocation(t *testing.T) {
+	prefix := uuid.NewString()
+	bundle := testPatronBundle(prefix, prefix+"-request")
+	first, second := uuid.New(), uuid.New()
+	bundle.PatronRequest.RequesterPickupLocationID = pgtype.UUID{Bytes: first, Valid: true}
+	require.NoError(t, importOnly(bundle))
+	assert.Equal(t, pgtype.UUID{Bytes: first, Valid: true}, pickupLocationValue(t, bundle.PatronRequest.ID))
+
+	bundle.PatronRequest.RequesterPickupLocationID = pgtype.UUID{Bytes: second, Valid: true}
+	_, err := importTestRepo.ImportPatronRequest(importTestCtx, bundle, importdb.ConflictPolicyUpdate)
+	require.NoError(t, err)
+	assert.Equal(t, pgtype.UUID{Bytes: second, Valid: true}, pickupLocationValue(t, bundle.PatronRequest.ID))
+}
+
 func TestImportPatronRequestPersistsDueDate(t *testing.T) {
 	prefix := uuid.NewString()
 	bundle := testPatronBundle(prefix, prefix+"-request")
@@ -502,6 +516,13 @@ func patronValue(t *testing.T, id string) string {
 	var patron string
 	require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT patron FROM patron_request WHERE id=$1", id).Scan(&patron))
 	return patron
+}
+
+func pickupLocationValue(t *testing.T, id string) pgtype.UUID {
+	t.Helper()
+	var pickupLocation pgtype.UUID
+	require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT requester_pickup_location_id FROM patron_request WHERE id=$1", id).Scan(&pickupLocation))
+	return pickupLocation
 }
 
 func insertPeer(symbol, id string) {

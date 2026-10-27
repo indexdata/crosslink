@@ -22,8 +22,8 @@ the trimmed `st_default_value` when necessary.
 | `directory_entry.de_phone_number` | `data.phoneNumber` | Copied directly. |
 | `directory_entry.de_lms_location_code` | `data.lmsLocationCode` | Copied directly. |
 | Entry custom text property `policy.ill.InstitutionalLoanToBorrowRatio` | `data.lendToBorrowRatio` | Copied unchanged for each selected entry; missing properties become `null`. Invalid ratios or multiple matching properties stop export before NDJSON output. |
-| Entry matched by the psql `owner` variable | `data.vendor` | Set to `ReShare` for the matched local entry; otherwise `null`. |
-| psql `tenant` variable, or the current schema name without its `_mod_rs` suffix | `data.tenant` | Set to the FOLIO tenant ID for the matched local entry and its direct branches; otherwise `null`. A missing or invalid tenant ID stops export before NDJSON output. |
+| Entry matched by the psql `owner` variable | `data.vendor` | Set to `ReShare` for the matched local entry, and for mpals institutions in `mode=mpals`; otherwise `null`. |
+| psql `tenant` variable, or the current schema name without its `_mod_rs` suffix | `data.tenant` | Set to the FOLIO tenant ID for the matched local entry and its direct branches; otherwise `null`. A missing or invalid tenant ID stops export before NDJSON output. In `mode=mpals`, see [Institutions without a tenant](#institutions-without-a-tenant-mpals). |
 | `directory_entry_tag` joined to `tag.norm_value` | Record inclusion | Entries tagged `deleted`, case-insensitively, are excluded. |
 
 The record discriminator is always `type: entry`. Parent records are emitted
@@ -86,10 +86,42 @@ the wrapper emits the consortium entry in the first shard and tier/network
 templates in the final shard. The join script consolidates all shard entry
 keys into those final tier and network records.
 
+## Institutions without a tenant (mpals)
+
+`mode=mpals` exports the institutions that have no mod-rs tenant of their own,
+instead of a local entry. Pass the owner symbols of every tenant as the
+whitespace-separated `tenant_symbols` variable; `owner` is not used.
+`export-crosslink.sh` runs this mode once, against `MPALS_SCHEMA`, after the
+tenant exports.
+
+| mod-rs source | CrossLink field | Mapping |
+| --- | --- | --- |
+| `Institution` entries with an ISIL symbol and no symbol in `tenant_symbols`, plus their direct branches | Record inclusion | Institutions without symbols are excluded. |
+| First ISIL symbol of the institution, by symbol priority | `data.tenant` | The country prefix is removed and the rest lowercased: `ISIL:US-MNALETI` becomes `mnaleti`. Branches take their institution's tenant. Invalid or duplicate tenants stop export before NDJSON output. |
+| Selected institution | `data.vendor` | Set to `ReShare`. |
+| First `service.se_address` whose normalized service type is `ISO18626` | `data.illConfig.iso18626Url` | Emitted with `iso18626Vendor` `ReShare` so that CrossLink can reach the institution. Tenant policy values and ILL lists are not included. |
+
+`lmsConfig`, `catalogConfig`, and `holdingsPolicy` are `null` for these
+entries. Run the mode with `include_consortium=false` and
+`include_tiers_network=false`; the join script places the institutions under
+the consortium and adds them to the generated tiers and network.
+
 ## LMS and NCIP configuration
 
-`data.lmsConfig` is emitted only for the selected local entry when both
-`ncip_server_address` and `ncip_from_agency` are present.
+`data.lmsConfig` is emitted for the selected local entry when both
+`ncip_server_address` and `ncip_from_agency` are present, with the mappings
+below.
+
+Under the same conditions, each of the local entry's direct children with a
+non-blank `directory_entry.de_lms_location_code` gets a pickup-code-only
+`data.lmsConfig`, because CrossLink reads a selected pickup location's LMS code
+from that entry's own `lmsConfig.requesterPickupLocation`. It contains the
+branch's code as `requesterPickupLocation`, `requestItemPickupLocationEnabled`
+set to `true`, and the tenant's `address` and `fromAgency`, which the import
+contract requires. Every other field is `null`, including `vendor` and
+`fromAgencyAuthentication`, so the NCIP credential and the tenant's NCIP
+settings are not copied to branches. CrossLink builds LMS connections only from
+entries found by symbol, and branches have no symbols.
 
 | mod-rs source | CrossLink field | Mapping |
 | --- | --- | --- |
@@ -104,7 +136,7 @@ keys into those final tier and network records.
 | `app_setting.check_out_item` | `data.lmsConfig.checkOutItemEnabled` | `true` when the value equals `ncip`, case-insensitively; otherwise `false`. |
 | `app_setting.use_request_item` | `data.lmsConfig.requestItemEnabled` | `true` when the value equals `ncip`, case-insensitively; otherwise `false`. |
 | `directory_entry.de_lms_location_code` | `data.lmsConfig.requestItemPickupLocationEnabled` | `true` when the value is not `null`; otherwise `false`. |
-| `directory_entry.de_lms_location_code` | `data.lmsConfig.requesterPickupLocation` | Copied directly. |
+| `directory_entry.de_lms_location_code` | `data.lmsConfig.requesterPickupLocation` | Copied directly from the entry itself, so each branch carries its own code. |
 | `app_setting.ncip_request_item_pickup_location` | `data.lmsConfig.supplierPickupLocation` | Copied directly. |
 | Local entry custom property `folio_location_filter` | `data.lmsConfig.itemLocation` | Copied when present; otherwise `null`. mod-rs passes this value as the item location in NCIP RequestItem messages. |
 | `app_setting.host_lms_integration` and host-LMS adapter behavior | `data.lmsConfig.requestItemRequestType` | `sierra` becomes `Hold`; `folio` becomes `Page`; all other values become `Loan`. |
@@ -132,7 +164,8 @@ is not exported.
 ## ILL configuration
 
 `data.illConfig` is emitted for the entry selected by the `owner` variable even
-when no ISO18626 endpoint is configured. It is also emitted for non-local
+when no ISO18626 endpoint is configured, and for mpals institutions in
+`mode=mpals`. It is also emitted for non-local
 entries tagged as pickup locations so that `isPickupLocation` is preserved.
 The owner's direct branches inherit the tenant policy values when they are
 exported as pickup locations. Other non-local pickup entries have `null` for

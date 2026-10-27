@@ -47,6 +47,11 @@
 --   * Borrowing requests carry the FOLIO tenant ID: the psql `tenant` variable
 --     when set, otherwise the current schema name without its _mod_rs suffix.
 --     Lending requests carry no tenant, matching requests CrossLink receives.
+--   * A borrowing request's requesterPickupLocationId is its
+--     pr_resolved_pickup_location_fk, the directory entry ID that the directory
+--     export keeps as the CrossLink entry key. It is emitted only when that
+--     entry is the requesting institution or one of its direct branches and is
+--     not tagged deleted; other values are omitted and listed in a NOTICE.
 --
 -- The preflight block runs before any NDJSON is emitted and stops the export if
 -- an open request has an unmapped state or is missing required import data.
@@ -222,6 +227,7 @@ SELECT
     crosslink_state_map.crosslink_state AS import_state,
     service_type.rdv_value AS legacy_service_type,
     normalized_service_type.value AS import_service_type,
+    pickup_location.id AS import_pickup_location_id,
     service_level.rdv_value AS import_service_level,
     publication_type.rdv_value AS import_publication_type,
     copyright_type.rdv_value AS import_copyright_type,
@@ -312,6 +318,30 @@ LEFT JOIN symbol AS resolved_symbol
   ON resolved_symbol.sym_id = patron_request.pr_resolved_sup_inst_symbol_fk
 LEFT JOIN naming_authority AS resolved_authority
   ON resolved_authority.na_id = resolved_symbol.sym_authority_fk
+-- The same entries the directory export emits for the requester: the
+-- institution itself and its direct branches.
+LEFT JOIN LATERAL (
+    SELECT pickup.de_id AS id
+    FROM directory_entry AS pickup
+    WHERE patron_request.pr_is_requester IS TRUE
+      AND pickup.de_id = patron_request.pr_resolved_pickup_location_fk
+      AND NOT EXISTS (
+          SELECT 1
+          FROM directory_entry_tag
+          JOIN tag ON tag.id = directory_entry_tag.tag_id
+          WHERE directory_entry_tag.directory_entry_tags_id = pickup.de_id
+            AND lower(btrim(tag.norm_value)) = 'deleted'
+      )
+      AND EXISTS (
+          SELECT 1
+          FROM symbol AS requester_symbol
+          JOIN naming_authority AS requester_authority
+            ON requester_authority.na_id = requester_symbol.sym_authority_fk
+          WHERE requester_authority.na_symbol || ':' || requester_symbol.sym_symbol
+                = patron_request.pr_req_inst_symbol
+            AND requester_symbol.sym_owner_fk IN (pickup.de_id, pickup.de_parent)
+      )
+) AS pickup_location ON true
 WHERE state_model_status.sms_is_terminal IS FALSE;
 
 -- Requests without a supported service type cannot be imported; skip them.
@@ -338,6 +368,27 @@ BEGIN
     END IF;
 END
 $skipped$;
+
+DO $pickup_omitted$
+DECLARE
+    omitted TEXT;
+BEGIN
+    SELECT string_agg(
+        'request ' || pr_id || ': pickup location ' || pr_resolved_pickup_location_fk
+            || ' is not the requester or one of its branches',
+        E'\n' ORDER BY pr_id
+    )
+    INTO omitted
+    FROM crosslink_open_requests
+    WHERE import_side = 'borrowing'
+      AND pr_resolved_pickup_location_fk IS NOT NULL
+      AND import_pickup_location_id IS NULL;
+
+    IF omitted IS NOT NULL THEN
+        RAISE NOTICE E'Omitting pickup locations:\n%', omitted;
+    END IF;
+END
+$pickup_omitted$;
 
 DO $preflight$
 DECLARE
@@ -541,6 +592,7 @@ request_bundles AS (
                 'stateModel', 'default',
                 'side', request.import_side,
                 'tenant', CASE WHEN request.import_side = 'borrowing' THEN :'tenant' END,
+                'requesterPickupLocationId', request.import_pickup_location_id,
                 'patron', request.pr_patron_identifier,
                 'requesterSymbol', request.pr_req_inst_symbol,
                 'supplierSymbol', request.import_supplier_symbol,
