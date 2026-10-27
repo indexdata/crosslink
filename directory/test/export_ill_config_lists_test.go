@@ -30,12 +30,13 @@ func TestDirectoryExportIllConfigLists(t *testing.T) {
  entry AS (SELECT $1::uuid AS entry_id, NULL::uuid AS parent_id),
  crosslink_local_entry AS (SELECT $1::uuid AS entry_id WHERE $2::boolean),
  local_entry AS (SELECT $1::uuid AS entry_id WHERE $2::boolean),
+ mpals_entry AS (SELECT NULL::uuid AS entry_id WHERE false),
  tenant_settings AS (SELECT NULL::text AS max_requests_per_patron, NULL::text AS duplicate_check_window_hours),
  service AS (SELECT 1 AS se_id, 'iso'::text AS se_type_fk, NULL::text AS se_address WHERE false),
  service_account AS (SELECT 1 AS sa_service, $1::uuid AS sa_account_holder),
  tag AS (SELECT 1 AS id, 'pickup'::text AS norm_value),
  directory_entry_tag AS (SELECT 1 AS tag_id, $1::uuid AS directory_entry_tags_id)
- SELECT ill_config.item FROM entry LEFT JOIN local_entry ON true CROSS JOIN tenant_settings
+ SELECT ill_config.item FROM entry LEFT JOIN local_entry ON true LEFT JOIN mpals_entry ON mpals_entry.entry_id = entry.entry_id CROSS JOIN tenant_settings
  ` + projection + ") AS ill_config ON true"
 
 	// These rows mirror mod-rs RefdataValueData, with additional fallback and

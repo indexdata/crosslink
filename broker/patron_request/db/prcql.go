@@ -85,7 +85,7 @@ func ParsePatronRequestsCql(cqlString string) (pgcql.Query, error) {
 	fa := &FieldAllRecords{}
 	def.AddField("cql.allRecords", fa)
 
-	f := pgcql.NewFieldString().WithExact()
+	f := pgcql.NewFieldString().WithSplit().WithExact()
 	def.AddField("state", f)
 
 	f = pgcql.NewFieldString().WithExact()

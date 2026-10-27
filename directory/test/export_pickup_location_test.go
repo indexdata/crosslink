@@ -27,13 +27,14 @@ func TestDirectoryExportPickupLocations(t *testing.T) {
 		entry AS (SELECT $1::uuid AS entry_id, $6::uuid AS parent_id, $2::text AS lms_location_code),
 		crosslink_local_entry AS (SELECT CASE WHEN $3::boolean THEN $1::uuid ELSE $6::uuid END AS entry_id),
 		local_entry AS (SELECT entry_id FROM crosslink_local_entry),
+		mpals_entry AS (SELECT NULL::uuid AS entry_id WHERE false),
 		tenant_settings AS (SELECT '5'::text AS max_requests_per_patron, '7'::text AS duplicate_check_window_hours),
 		service AS (SELECT 1 AS se_id, 1 AS se_type_fk, $4::text AS se_address WHERE $4::text IS NOT NULL),
 		service_account AS (SELECT 1 AS sa_service, $1::uuid AS sa_account_holder),
 		refdata_value AS (SELECT 1 AS rdv_id, 'ISO18626'::text AS rdv_value),
 		tag AS (SELECT * FROM unnest($5::text[]) WITH ORDINALITY AS tags(norm_value, id)),
 		directory_entry_tag AS (SELECT id AS tag_id, $1::uuid AS directory_entry_tags_id FROM tag)
-		SELECT ill_config.item FROM entry CROSS JOIN local_entry CROSS JOIN tenant_settings
+		SELECT ill_config.item FROM entry CROSS JOIN local_entry LEFT JOIN mpals_entry ON mpals_entry.entry_id = entry.entry_id CROSS JOIN tenant_settings
 	` + projection + ") AS ill_config ON true"
 
 	resetImportState(t)

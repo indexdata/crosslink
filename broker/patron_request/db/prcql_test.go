@@ -51,6 +51,29 @@ func TestHandlePatronRequestsQueryKeepsOwnerRestrictionGrouped(t *testing.T) {
 	}
 }
 
+func TestDefaultAgingCqlIncludesMissingServiceLevel(t *testing.T) {
+	cql := `side = lending and (state = VALIDATED or state = ITEM_PENDING or state = WILL_SUPPLY_PENDING or state = WILL_SUPPLY or state = CONDITION_PENDING or state = SEARCHING) and ((cql.allRecords = 1 not service_level = "") or (service_level <> Rush and service_level <> Express))`
+
+	query, err := ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
+	assert.Contains(
+		t,
+		query.GetWhereClause(),
+		`(TRUE AND NOT service_level IS NOT NULL) OR (service_level <> $10 AND service_level <> $11)`,
+	)
+	assert.Equal(t, []any{
+		"lending",
+		"VALIDATED",
+		"ITEM_PENDING",
+		"WILL_SUPPLY_PENDING",
+		"WILL_SUPPLY",
+		"CONDITION_PENDING",
+		"SEARCHING",
+		"Rush",
+		"Express",
+	}, query.GetQueryArguments())
+}
+
 func TestFieldTextArrayContainsGenerate(t *testing.T) {
 	f := NewFieldTextArrayContains("bibliographic_item_identifiers(ill_request, 'ISBN')").WithFunction("norm_isxn")
 
@@ -130,6 +153,13 @@ func TestPatronRequestDuplicateFields(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "((patron = $3 AND ill_request->'bibliographicInfo'->>'supplierUniqueRecordId' = $4) AND lower(ill_request->'bibliographicInfo'->>'title') = lower($5)) AND id NOT IN($6)", query.GetWhereClause())
 	assert.Equal(t, []any{"patron-1", "record-1", "A Title", "current-pr"}, query.GetQueryArguments())
+}
+
+func TestPatronRequestStateAny(t *testing.T) {
+	query, err := ParsePatronRequestsCql(`state any "VALIDATED RECEIVED" and id <> "current-pr"`)
+	require.NoError(t, err)
+	assert.Equal(t, "state IN($3, $4) AND id NOT IN($5)", query.GetWhereClause())
+	assert.Equal(t, []any{"VALIDATED", "RECEIVED", "current-pr"}, query.GetQueryArguments())
 }
 
 func TestHandlePatronRequestsQueryItemFieldsUseExists(t *testing.T) {

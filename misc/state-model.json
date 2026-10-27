@@ -270,6 +270,15 @@
                         "templateLabel": {
                             "type": "string",
                             "description": "Label of the notification template to be used for this action."
+                        },
+                        "countedStates": {
+                            "type": "array",
+                            "minItems": 1,
+                            "uniqueItems": true,
+                            "description": "Requester states counted by the check-limit action toward maxRequestsPerPatron.",
+                            "items": {
+                                "type": "string"
+                            }
                         }
                     }
                 }

@@ -6,6 +6,10 @@ umask 077
 SOURCE_DIR=${1:-.}
 DIRECTORY_OUTPUT=${DIRECTORY_OUTPUT:-"$SOURCE_DIR/directories.ndjson"}
 DIRECTORY_PREFIX=${DIRECTORY_PREFIX:-directories}
+CONFIG_OUTPUT=${CONFIG_OUTPUT:-"$SOURCE_DIR/config.ndjson"}
+CONFIG_PREFIX=${CONFIG_PREFIX:-config}
+UNSUPPORTED_TEMPLATE_OUTPUT=${UNSUPPORTED_TEMPLATE_OUTPUT:-"$SOURCE_DIR/unsupported-templates.ndjson"}
+UNSUPPORTED_TEMPLATE_PREFIX=${UNSUPPORTED_TEMPLATE_PREFIX:-unsupported-templates}
 PATRON_REQUEST_PREFIX=${PATRON_REQUEST_PREFIX:-patron-request}
 PATRON_REQUEST_DIR=${PATRON_REQUEST_DIR:-"$SOURCE_DIR/patron-requests"}
 PATRON_REQUEST_BATCH_SIZE=${PATRON_REQUEST_BATCH_SIZE:-1000}
@@ -33,6 +37,7 @@ trap 'rm -rf "$TEMP_DIR"' EXIT HUP INT TERM
 join_exports() {
     prefix=$1
     output=$2
+    required=${3:-true}
     list_file="$TEMP_DIR/$prefix.list"
     sorted_list_file="$TEMP_DIR/$prefix.sorted.list"
     found=false
@@ -58,6 +63,13 @@ join_exports() {
     done
 
     if [ "$found" = false ]; then
+        if [ "$required" = false ]; then
+            : >"$output"
+            chmod 600 "$output"
+            printf '%s\n' "No $prefix export files found; wrote empty $output"
+            return
+        fi
+
         echo "No $prefix export files found in $SOURCE_DIR" >&2
         exit 1
     fi
@@ -147,5 +159,7 @@ split_patron_requests() {
 }
 
 join_exports "$DIRECTORY_PREFIX" "$DIRECTORY_OUTPUT"
+join_exports "$CONFIG_PREFIX" "$CONFIG_OUTPUT"
+join_exports "$UNSUPPORTED_TEMPLATE_PREFIX" "$UNSUPPORTED_TEMPLATE_OUTPUT" false
 join_exports "$PATRON_REQUEST_PREFIX" "$TEMP_DIR/patron-requests.ndjson"
 split_patron_requests "$TEMP_DIR/patron-requests.ndjson"

@@ -3,7 +3,7 @@ stateModels:
     type: StateModel
     name: CrossLink State Model
     desc: "Requester/Supplier workflow for returnable loans and non-returnable copies over ISO18626."
-    version: 3.10.0
+    version: 3.11.0
     pullslipPdfTemplateLabel: pullslip-pdf
     selector:
       serviceType: [Copy, Loan, CopyOrLoan]
@@ -76,6 +76,30 @@ stateModels:
           - name: check-limit
             desc: Check the patron's active-request limit
             trigger: auto
+            params:
+              countedStates: &patron-limit-counted-states
+                - NEW
+                - INVALID_PATRON
+                - VALIDATED
+                - OVER_LIMIT
+                - LIMIT_CHECKED
+                - METADATA_UPDATED
+                - NEEDS_REVIEW
+                - READY_TO_SEND
+                - DUPLICATE
+                - LOCAL_SUPPLY
+                - SENT
+                - SUPPLIER_LOCATED
+                - CONDITION_PENDING
+                - RETRY_PENDING
+                - WILL_SUPPLY
+                - SHIPPED
+                - RECEIVED
+                - RENEWED
+                - OVERDUE
+                - RENEWAL_PENDING
+                - RECALLED
+                - CANCEL_PENDING
             transitions:
               success: LIMIT_CHECKED
               review: OVER_LIMIT
@@ -95,6 +119,8 @@ stateModels:
         actions:
           - name: check-limit
             desc: Recheck whether the patron now has capacity
+            params:
+              countedStates: *patron-limit-counted-states
             transitions:
               success: LIMIT_CHECKED
               review: OVER_LIMIT

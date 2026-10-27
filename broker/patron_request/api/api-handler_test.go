@@ -634,6 +634,24 @@ func TestPostPatronRequestsIdActionStoresTenantUserInInvokeTask(t *testing.T) {
 	assert.Equal(t, "okapi-subject", eventBus.lastData.User)
 }
 
+func TestPostPatronRequestsIdActionRejectsStaticActionParamsOverride(t *testing.T) {
+	eventBus := new(MockEventBusCapture)
+	tenantResolver := tenant.NewResolver().WithTenantToSymbol("ISIL:DK-{tenant}")
+	handler := NewPrApiHandler(new(PrRepoOkapiOwner), eventBus, mockEventRepo, tenantResolver, nil, 10)
+	handler.SetActionTaskProcessor(&MockActionTaskProcessor{})
+
+	req := httptest.NewRequest(http.MethodPost, "/broker/patron_requests/3/action", strings.NewReader(
+		`{"action":"`+string(prservice.BorrowerActionCheckLimit)+`","actionParams":{"staticactionparams":{"countedStates":["NOT_A_STATE"]}}}`,
+	))
+	req.Header.Set("X-Okapi-Tenant", "tenant1")
+	rr := httptest.NewRecorder()
+	handler.PostPatronRequestsIdAction(rr, req, "3", proapi.PostPatronRequestsIdActionParams{Side: &proapiBorrowingSide})
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "actionParams.staticActionParams is reserved")
+	assert.Empty(t, eventBus.lastEventName)
+}
+
 func TestPostPatronRequestsIdActionReturnsExclusiveTaskError(t *testing.T) {
 	eventBus := new(MockEventBusCapture)
 	handler := NewPrApiHandler(new(PrRepoOkapiOwner), eventBus, mockEventRepo, tenant.NewResolver(), nil, 10)

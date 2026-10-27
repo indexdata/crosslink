@@ -79,7 +79,9 @@ Example:
 
 ### Batch actions
 
-Required `data` fields are `schedule`, `actionName`, `title`, and `batchQuery`. `schedule` is an RRULE expression and `batchQuery` is a CQL query. Supported action names are `email-pullslips` and `request-aging`.
+Required `data` fields are `schedule`, `actionName`, `title`, and `batchQuery`. `schedule` is an RRULE expression and `batchQuery` is a CQL query. Supported action names are `email-pullslips`, `request-aging`, and `overdue`.
+
+Imported batch actions are created inactive, including updates to matching actions. Review the migrated schedule, query, and parameters, then enable the action through the batch-action API when it is ready to run.
 
 For `request-aging`, `actionParams.interval` is required by the action and uses a Go duration such as `24h` or `168h`.
 
@@ -106,6 +108,7 @@ Important validation rules include:
 - `requesterRequestId` must equal `illRequest.header.requestingAgencyRequestId`.
 - `requesterSymbol` must match the requesting-agency symbol in the ISO 18626 header.
 - `tenant` is optional and is stored as the request's FOLIO tenant ID; omit it to store no tenant. The envelope `owner` still identifies the owning institution.
+- `requesterPickupLocationId` is optional and allowed only for borrowing requests. It is stored as the request's pickup location without being checked against the directory, so it must be the UUID of the requesting institution or one of its branches.
 - For a borrowing request, `id` must equal `requesterRequestId`, and the requester must be the envelope owner or one of its branches.
 - For a lending request, `supplierSymbol` is required, must match the supplying-agency symbol in the ISO 18626 header, and must be the envelope owner or one of its branches.
 - An `illTransaction`, when supplied, must use the same requester symbol and requester request ID. `locatedSuppliers` require an `illTransaction`.
