@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -56,6 +57,24 @@ func TestRequesterCancellationReasonPersistsThroughSupplierAcceptance(t *testing
 
 	supplierID := supplier.ID
 
+	assertAPIReason := func(id, side, symbol string) {
+		t.Helper()
+		params := "?side=" + side + "&symbol=" + symbol
+		response := httpRequest(t, http.MethodGet, basePath+"/"+id+params, nil, http.StatusOK)
+		var request proapi.PatronRequest
+		require.NoError(t, json.Unmarshal(response, &request))
+		require.NotNil(t, request.CancellationReason)
+		assert.Equal(t, "InvalidUser", *request.CancellationReason)
+
+		response = httpRequest(t, http.MethodGet, basePath+params+"&cql="+url.QueryEscape(`id = "`+id+`"`), nil, http.StatusOK)
+		var requests proapi.PatronRequests
+		require.NoError(t, json.Unmarshal(response, &requests))
+		require.Len(t, requests.Items, 1)
+		assert.Equal(t, id, requests.Items[0].Id)
+		require.NotNil(t, requests.Items[0].CancellationReason)
+		assert.Equal(t, "InvalidUser", *requests.Items[0].CancellationReason)
+	}
+
 	invokeAction := func(path, action string, params map[string]any) {
 		t.Helper()
 		body, err := json.Marshal(proapi.ExecuteAction{Action: action, ActionParams: &params})
@@ -80,6 +99,8 @@ func TestRequesterCancellationReasonPersistsThroughSupplierAcceptance(t *testing
 		return err == nil && supplier.State == prservice.LenderStateCancelRequested
 	}), "supplier should receive cancellation")
 	assert.Equal(t, "InvalidUser", supplier.CancellationReason.String)
+	assertAPIReason(requester.Id, "borrowing", requesterSymbol)
+	assertAPIReason(supplierID, "lending", supplierSymbol)
 	notes, _, err := prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{PrID: supplierID, Kind: string(pr_db.NotificationKindNote), Limit: 100})
 	require.NoError(t, err)
 	require.Len(t, notes, 1)
@@ -94,4 +115,6 @@ func TestRequesterCancellationReasonPersistsThroughSupplierAcceptance(t *testing
 	}), "borrowing request should reach CANCELLED")
 	assert.True(t, borrowing.CancellationReason.Valid)
 	assert.Equal(t, "InvalidUser", borrowing.CancellationReason.String)
+	assertAPIReason(requester.Id, "borrowing", requesterSymbol)
+	assertAPIReason(supplierID, "lending", supplierSymbol)
 }
