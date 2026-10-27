@@ -135,6 +135,38 @@ func TestToApiPatronRequestSurfacesInternalNote(t *testing.T) {
 	}
 }
 
+func TestToApiPatronRequestCancellationReason(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		reason pgtype.Text
+	}{
+		{name: "populated", reason: pgtype.Text{String: "InvalidUser", Valid: true}},
+		{name: "null", reason: pgtype.Text{}},
+		{name: "empty", reason: pgtype.Text{String: "", Valid: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/patron_requests/pr-1", nil)
+			pr := pr_db.PatronRequest{ID: "pr-1", CancellationReason: tc.reason}
+			apiPr := toApiPatronRequest(req, patronRequestSearchViewFromPatronRequest(pr, false))
+			body, err := json.Marshal(apiPr)
+			require.NoError(t, err)
+			var payload map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(body, &payload))
+			if !tc.reason.Valid {
+				assert.Nil(t, apiPr.CancellationReason)
+				assert.NotContains(t, payload, "cancellationReason")
+				return
+			}
+			require.NotNil(t, apiPr.CancellationReason)
+			assert.Equal(t, tc.reason.String, *apiPr.CancellationReason)
+			require.Contains(t, payload, "cancellationReason")
+			var reason string
+			require.NoError(t, json.Unmarshal(payload["cancellationReason"], &reason))
+			assert.Equal(t, tc.reason.String, reason)
+		})
+	}
+}
+
 func patronRequestSearchViewFromPatronRequest(pr pr_db.PatronRequest, hasCost bool) pr_db.PatronRequestSearchView {
 	return pr_db.PatronRequestSearchView{
 		ID:                        pr.ID,
@@ -156,6 +188,7 @@ func patronRequestSearchViewFromPatronRequest(pr pr_db.PatronRequest, hasCost bo
 		TerminalState:             pr.TerminalState,
 		UpdatedAt:                 pr.UpdatedAt,
 		IllResponse:               pr.IllResponse,
+		CancellationReason:        pr.CancellationReason,
 		InternalNote:              pr.InternalNote,
 		StateModel:                pr.StateModel,
 		RequesterPickupLocationID: pr.RequesterPickupLocationID,

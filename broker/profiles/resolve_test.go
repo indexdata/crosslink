@@ -245,3 +245,23 @@ func TestNcipVersionDefaultsAndOverrides(t *testing.T) {
 		}
 	}
 }
+
+func TestAdditionalProfileValidationAndOverrides(t *testing.T) {
+	for _, config := range []string{
+		`{"queryConfig":{"identifierNormalization":"bad"}}`,
+		`{"holdingsFormat":{"opac":{"itemLoanPolicySources":["bad"]}}}`,
+		`{"holdingsFormat":{"marc":{"availability":[{"subField":"b","operator":"notIn"}]}}}`,
+	} {
+		_, err := Resolve(entry(t, `{"catalogConfig":`+config+`}`))
+		require.Error(t, err)
+	}
+	e, err := Resolve(entry(t, `{"lmsConfig":{"vendor":"Symphony","ncipVersion":"2.02","bibIdNormalization":"none"},"catalogConfig":{"profile":"Horizon","holdingsFormat":{"opac":{"itemLoanPolicySources":[],"requireItemLoanPolicy":false,"trimWhitespace":false}}}}`))
+	require.NoError(t, err)
+	require.Equal(t, "2.02", *e.LMS.NcipVersion)
+	require.Equal(t, "none", *e.LMS.BibIdNormalization)
+	require.Empty(t, *e.Catalog.HoldingsFormat.Opac.ItemLoanPolicySources)
+	require.False(t, *e.Catalog.HoldingsFormat.Opac.RequireItemLoanPolicy)
+	require.False(t, *e.Catalog.HoldingsFormat.Opac.TrimWhitespace)
+	require.Equal(t, "directory", e.Origins["lmsConfig.ncipVersion"])
+	require.Equal(t, "directory", e.Origins["catalogConfig.holdingsFormat.opac.itemLoanPolicySources"])
+}

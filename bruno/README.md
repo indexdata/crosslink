@@ -78,11 +78,12 @@ that the supplier's received note is exactly `Please cancel. Ref: 123#`: the rea
 marker is removed while surrounding text is preserved. The supplier then accepts
 cancellation without a note, and both requests must reach terminal `CANCELLED`.
 
-The patron-request JSON API does not expose the stored `cancellationReason`, so
-this scenario checks observable note processing and cancellation behavior. The Go
-API regression `TestRequesterCancellationReasonPersistsThroughSupplierAcceptance`
-checks stored-reason persistence. External vendor serialization cleanup and
-malformed-marker cases remain outside this scenario.
+The scenario checks that the patron-request JSON API returns
+`cancellationReason: "InvalidUser"` on both sides while cancellation is pending
+and after acceptance, proving the reason survives acceptance without a note.
+The Go API regression `TestRequesterCancellationReasonPersistsThroughSupplierAcceptance`
+also checks stored-reason persistence and API retrieval. External vendor
+serialization cleanup and malformed-marker cases remain outside this scenario.
 
 Run it with the same stack and environment:
 

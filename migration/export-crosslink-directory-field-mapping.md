@@ -125,7 +125,10 @@ entries found by symbol, and branches have no symbols.
 
 | mod-rs source | CrossLink field | Mapping |
 | --- | --- | --- |
-| `app_setting.host_lms_integration` | `data.lmsConfig.vendor` | `alma` becomes `Alma`; `sierra` becomes `Sierra`; `koha` becomes `Koha`; `folio` becomes `FOLIO`; `wms` and `wms2` become `WMS`; `aleph` becomes `Aleph`; any other or missing value becomes `Generic`. |
+| `app_setting.host_lms_integration` | `data.lmsConfig.vendor` | `alma` becomes `Alma`; `sierra` becomes `Sierra`; `koha` becomes `Koha`; `folio` becomes `FOLIO`; `evergreen` becomes `Evergreen`; `horizon` becomes `Horizon`; `polaris` becomes `Polaris`; `symphony` becomes `Symphony`; `wms` and `wms2` become `WMS`; `aleph` becomes `Aleph`; any other or missing value becomes `Generic`. |
+| `app_setting.host_lms_integration` | `data.lmsConfig.ncipVersion` | `horizon`, `polaris`, and `symphony` become `1.0`; all other or missing values become `2.02`. |
+| `app_setting.host_lms_integration` | `data.lmsConfig.ncipNamespaceEnabled` | `false` for `koha`; otherwise `true`. NCIP v1 always uses namespace-free XML. |
+| `app_setting.host_lms_integration` | `data.lmsConfig.bibIdNormalization` | `sierra` becomes `sierra`; `symphony` becomes `stripLeadingNonDigits`; otherwise `none`. |
 | `app_setting.ncip_server_address` | `data.lmsConfig.address` | Copied directly. |
 | `app_setting.ncip_from_agency` | `data.lmsConfig.fromAgency` | Copied directly. |
 | `app_setting.ncip_from_agency_authentication` | `data.lmsConfig.fromAgencyAuthentication` | Copied directly. This value can contain credentials and must be handled as sensitive migration data. |
@@ -135,7 +138,7 @@ entries found by symbol, and branches have no symbols.
 | `app_setting.check_in_item` | `data.lmsConfig.checkInItemEnabled` | `true` when the value equals `ncip`, case-insensitively; otherwise `false`. |
 | `app_setting.check_out_item` | `data.lmsConfig.checkOutItemEnabled` | `true` when the value equals `ncip`, case-insensitively; otherwise `false`. |
 | `app_setting.use_request_item` | `data.lmsConfig.requestItemEnabled` | `true` when the value equals `ncip`, case-insensitively; otherwise `false`. |
-| `directory_entry.de_lms_location_code` | `data.lmsConfig.requestItemPickupLocationEnabled` | `true` when the value is not `null`; otherwise `false`. |
+| `app_setting.host_lms_integration` and `directory_entry.de_lms_location_code` | `data.lmsConfig.requestItemPickupLocationEnabled` | `false` for Evergreen, Horizon, Polaris and Symphony, matching their circulation profiles. For other profiles, `true` when the location code is not `null`; otherwise `false`. Branch pickup-code-only configurations retain `true`. |
 | `directory_entry.de_lms_location_code` | `data.lmsConfig.requesterPickupLocation` | Copied directly from the entry itself, so each branch carries its own code. |
 | `app_setting.ncip_request_item_pickup_location` | `data.lmsConfig.supplierPickupLocation` | Copied directly. |
 | Local entry custom property `folio_location_filter` | `data.lmsConfig.itemLocation` | Copied when present; otherwise `null`. mod-rs passes this value as the item location in NCIP RequestItem messages. |
@@ -285,9 +288,6 @@ profile. The exporter supplies the following fixed values.
 | `data.hrid` | `null` |
 | `data.timeZone` | `null` |
 | `data.closures` | `[]` |
-| `data.lmsConfig.ncipVersion` | `null`; inherits the CrossLink profile default (currently `2.02`). Set `1.0` explicitly for supported NCIP v1 HTTP endpoints. |
-| `data.lmsConfig.ncipNamespaceEnabled` | `null`; resolved by the CrossLink host-LMS profile. |
-| `data.lmsConfig.bibIdNormalization` | `null`; resolved by the CrossLink host-LMS profile. |
 | `data.catalogConfig.metadataUpdateMode` | `null`; CrossLink consequently does not update request metadata from catalog records. |
 | `data.catalogConfig.sru` | `null` |
 | `data.catalogConfig.zoom.options` | `null`; resolved from the holdings format by the CrossLink host-LMS profile. |

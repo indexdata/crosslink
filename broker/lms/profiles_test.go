@@ -44,3 +44,47 @@ func TestSierraNormalizationAndExplicitOverrides(t *testing.T) {
 		require.Equal(t, "Title", arg.RequestScopeType.Text)
 	}
 }
+
+func TestAdditionalLmsProfiles(t *testing.T) {
+	for _, vendor := range []string{"Evergreen", "Horizon", "Polaris", "Symphony"} {
+		for _, version := range []string{"", "1.0", "2.02"} {
+			t.Run(vendor+version, func(t *testing.T) {
+				var cfg dirapi.LmsConfig
+				require.NoError(t, json.Unmarshal([]byte(`{"vendor":"`+vendor+`","address":"https://ncip","fromAgency":"agency"}`), &cfg))
+				if version != "" {
+					cfg.NcipVersion = &version
+				}
+				adapter, err := CreateLmsAdapterNcip(cfg)
+				require.NoError(t, err)
+				wantVersion := version
+				if wantVersion == "" {
+					wantVersion = "1.0"
+					if vendor == "Evergreen" {
+						wantVersion = "2.02"
+					}
+				}
+				if wantVersion == "1.0" {
+					a, ok := adapter.(*LmsAdapterNcip1)
+					require.True(t, ok)
+					require.Equal(t, "Loan", *a.config.RequestItemRequestType)
+					require.Equal(t, "Bibliographic Item", *a.config.RequestItemRequestScopeType)
+				} else {
+					a, ok := adapter.(*LmsAdapterNcip)
+					require.True(t, ok)
+					require.Equal(t, "Loan", a.requestItemRequestType())
+					require.Equal(t, "Bibliographic Item", a.requestItemRequestScopeType())
+				}
+				require.False(t, adapter.RequestItemUsesPickupLocation())
+			})
+		}
+	}
+}
+
+func TestCirculationIdentifierNormalization(t *testing.T) {
+	mode := "stripLeadingNonDigits"
+	for _, tc := range []struct{ raw, want string }{
+		{".b13088889", "13088889"}, {"cowcow4949", "4949"}, {"cow4949cow", "4949cow"}, {"12345", "12345"}, {"boogaboogabooga", "boogaboogabooga"}, {"", ""},
+	} {
+		require.Equal(t, tc.want, normalizeBibIdentifier(tc.raw, &mode))
+	}
+}

@@ -87,12 +87,14 @@ type ZoomConfig struct {
 }
 
 type QueryConfig struct {
-	Type       *string `json:"type"`
-	Identifier *string `json:"identifier"`
-	ISBN       *string `json:"isbn"`
-	ISSN       *string `json:"issn"`
-	Title      *string `json:"title"`
-	Year       *string `json:"year,omitempty"`
+	IdentifierNormalization *string `json:"identifierNormalization,omitempty"`
+	IdentifierPrefix        *string `json:"identifierPrefix,omitempty"`
+	Type                    *string `json:"type"`
+	Identifier              *string `json:"identifier"`
+	ISBN                    *string `json:"isbn"`
+	ISSN                    *string `json:"issn"`
+	Title                   *string `json:"title"`
+	Year                    *string `json:"year,omitempty"`
 }
 
 type HoldingsParserConfig struct {
@@ -103,6 +105,7 @@ type HoldingsParserConfig struct {
 }
 
 type MarcHoldingsParserConfig struct {
+	ItemLoanPolicySubField   *string                      `json:"itemLoanPolicySubField,omitempty"`
 	Availability             *[]MarcAvailabilityPredicate `json:"availability,omitempty"`
 	CallNumberSubField       *string                      `json:"callNumberSubField,omitempty"`
 	ItemIDSubField           *string                      `json:"itemIdSubField,omitempty"`
@@ -113,12 +116,17 @@ type MarcHoldingsParserConfig struct {
 }
 
 type MarcAvailabilityPredicate struct {
-	SubField string  `json:"subField"`
-	Operator string  `json:"operator"`
-	Value    *string `json:"value,omitempty"`
+	Values   *[]string `json:"values,omitempty"`
+	SubField string    `json:"subField"`
+	Operator string    `json:"operator"`
+	Value    *string   `json:"value,omitempty"`
 }
 
 type OpacHoldingsParserConfig struct {
+	TrimWhitespace           *bool     `json:"trimWhitespace,omitempty"`
+	ExcludedLocations        *[]string `json:"excludedLocations,omitempty"`
+	ItemLoanPolicySources    *[]string `json:"itemLoanPolicySources,omitempty"`
+	RequireItemLoanPolicy    *bool     `json:"requireItemLoanPolicy,omitempty"`
 	AvailabilityRule         *string   `json:"availabilityRule,omitempty"`
 	AvailablePublicNotes     *[]string `json:"availablePublicNotes,omitempty"`
 	RequireLocalLocation     *bool     `json:"requireLocalLocation,omitempty"`
@@ -172,15 +180,18 @@ type HoldingsItemLoanPolicy struct {
 
 func validateConfigEnums(lms *LMSConfig, catalog *CatalogConfig, ill *ILLConfig) error {
 	if lms != nil {
-		if lms.Vendor != nil && !oneOf(*lms.Vendor, "Generic", "Alma", "Sierra", "Koha", "FOLIO", "WMS", "Aleph") {
+		if lms.Vendor != nil && !oneOf(*lms.Vendor, "Generic", "Alma", "Sierra", "Koha", "FOLIO", "WMS", "Aleph", "Evergreen", "Horizon", "Polaris", "Symphony") {
 			return fmt.Errorf("invalid lmsConfig.vendor")
 		}
-		if lms.BibIDNormalization != nil && !oneOf(*lms.BibIDNormalization, "none", "sierra") {
+		if lms.BibIDNormalization != nil && !oneOf(*lms.BibIDNormalization, "none", "sierra", "stripLeadingNonDigits") {
 			return fmt.Errorf("invalid lmsConfig.bibIdNormalization")
 		}
 	}
 	if catalog != nil {
-		if catalog.Profile != nil && !oneOf(*catalog.Profile, "Generic", "Alma", "Sierra", "Koha", "FOLIO", "WMS", "Aleph") {
+		if q := catalog.Query; q != nil && q.IdentifierNormalization != nil && !oneOf(*q.IdentifierNormalization, "none", "stripLeadingLetters") {
+			return fmt.Errorf("invalid catalogConfig.queryConfig.identifierNormalization")
+		}
+		if catalog.Profile != nil && !oneOf(*catalog.Profile, "Generic", "Alma", "Sierra", "Koha", "FOLIO", "WMS", "Aleph", "Evergreen", "Horizon", "Polaris", "Symphony") {
 			return fmt.Errorf("invalid catalogConfig.profile")
 		}
 		if catalog.SRU != nil && catalog.Zoom != nil {
@@ -198,12 +209,19 @@ func validateConfigEnums(lms *LMSConfig, catalog *CatalogConfig, ill *ILLConfig)
 			}
 			if h.Marc != nil && h.Marc.Availability != nil {
 				for _, predicate := range *h.Marc.Availability {
-					if predicate.SubField == "" || !oneOf(predicate.Operator, "equals", "absent") || (predicate.Operator == "equals" && predicate.Value == nil) {
+					if predicate.SubField == "" || !oneOf(predicate.Operator, "equals", "absent", "present", "notIn") || (predicate.Operator == "equals" && predicate.Value == nil) || (predicate.Operator == "notIn" && predicate.Values == nil) {
 						return fmt.Errorf("invalid catalogConfig.holdingsFormat.marc.availability predicate")
 					}
 				}
 			}
 			if h.OPAC != nil {
+				if h.OPAC.ItemLoanPolicySources != nil {
+					for _, source := range *h.OPAC.ItemLoanPolicySources {
+						if !oneOf(source, "availableThru", "shelvingData", "temporaryLocation") {
+							return fmt.Errorf("invalid catalogConfig.holdingsFormat.opac.itemLoanPolicySources")
+						}
+					}
+				}
 				if h.OPAC.AvailabilityRule != nil && !oneOf(*h.OPAC.AvailabilityRule, "availableNow", "publicNote") {
 					return fmt.Errorf("invalid catalogConfig.holdingsFormat.opac.availabilityRule")
 				}

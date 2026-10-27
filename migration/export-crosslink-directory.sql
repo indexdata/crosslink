@@ -906,14 +906,27 @@ entry_records AS (
                 WHEN 'sierra' THEN 'Sierra'
                 WHEN 'koha' THEN 'Koha'
                 WHEN 'folio' THEN 'FOLIO'
+                WHEN 'evergreen' THEN 'Evergreen'
+                WHEN 'horizon' THEN 'Horizon'
+                WHEN 'polaris' THEN 'Polaris'
+                WHEN 'symphony' THEN 'Symphony'
                 WHEN 'wms' THEN 'WMS'
                 WHEN 'wms2' THEN 'WMS'
                 WHEN 'aleph' THEN 'Aleph'
                 ELSE 'Generic'
             END,
-            'ncipVersion', NULL,
-            'ncipNamespaceEnabled', NULL,
-            'bibIdNormalization', NULL,
+            'ncipVersion', CASE lower(tenant_settings.host_lms_integration)
+                WHEN 'horizon' THEN '1.0'
+                WHEN 'polaris' THEN '1.0'
+                WHEN 'symphony' THEN '1.0'
+                ELSE '2.02'
+            END,
+            'ncipNamespaceEnabled', lower(tenant_settings.host_lms_integration) IS DISTINCT FROM 'koha',
+            'bibIdNormalization', CASE lower(tenant_settings.host_lms_integration)
+                WHEN 'sierra' THEN 'sierra'
+                WHEN 'symphony' THEN 'stripLeadingNonDigits'
+                ELSE 'none'
+            END,
             'address', tenant_settings.ncip_server_address,
             'fromAgency', tenant_settings.ncip_from_agency,
             'fromAgencyAuthentication', tenant_settings.ncip_from_agency_authentication,
@@ -941,7 +954,11 @@ entry_records AS (
                 ELSE 'SYSNUMBER'
             END,
             'requestItemEnabled', lower(tenant_settings.use_request_item) = 'ncip'IS TRUE,
-            'requestItemPickupLocationEnabled', entry.lms_location_code IS NOT NULL,
+            'requestItemPickupLocationEnabled', CASE
+                WHEN lower(tenant_settings.host_lms_integration) IN ('evergreen', 'horizon', 'polaris', 'symphony')
+                    THEN false
+                ELSE entry.lms_location_code IS NOT NULL
+            END,
             'requesterPickupLocation', entry.lms_location_code,
             'supplierPickupLocation', tenant_settings.supplier_pickup_location,
             'requesterPatronPattern', tenant_settings.default_institutional_patron_id,
@@ -996,6 +1013,10 @@ entry_records AS (
                 WHEN 'sierra' THEN 'Sierra'
                 WHEN 'koha' THEN 'Koha'
                 WHEN 'folio' THEN 'FOLIO'
+                WHEN 'evergreen' THEN 'Evergreen'
+                WHEN 'horizon' THEN 'Horizon'
+                WHEN 'polaris' THEN 'Polaris'
+                WHEN 'symphony' THEN 'Symphony'
                 WHEN 'wms' THEN 'WMS'
                 WHEN 'wms2' THEN 'WMS'
                 WHEN 'aleph' THEN 'Aleph'

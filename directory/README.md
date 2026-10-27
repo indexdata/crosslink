@@ -150,7 +150,7 @@ Explicit `false` and empty arrays are preserved. Imports replace stored
 configuration, so include all overrides when restoring an entry. Configure at
 most one SRU/ZOOM endpoint and at most one holdings parser.
 
-`lmsConfig.ncipVersion` selects `"1.0"` or `"2.02"` (profile default: `"2.02"`).
+`lmsConfig.ncipVersion` selects `"1.0"` or `"2.02"` (profile default: `"1.0"` for Horizon, Polaris and Symphony, otherwise `"2.02"`).
 It is optional in import records for compatibility with older exports; omission
 or `null` clears the stored version override during full replacement. For REST
 PATCH, omission preserves it and `null` clears it. See

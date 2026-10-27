@@ -31,6 +31,9 @@ func (p *OpacHoldingsParser) Parse(record []byte, params LookupParams) ([]Holdin
 	}
 	var result []Holding
 	for _, holding := range opacRecord.Holdings.Holding {
+		if p.config.ExcludedLocations != nil && slices.Contains(*p.config.ExcludedLocations, strings.TrimSpace(holding.LocalLocation)) {
+			continue
+		}
 		if enabled(p.config.RequireLocalLocation, false) && strings.TrimSpace(holding.LocalLocation) == "" {
 			continue
 		}
@@ -38,8 +41,13 @@ func (p *OpacHoldingsParser) Parse(record []byte, params LookupParams) ([]Holdin
 		if p.config.ShelvingLocationSource != nil && *p.config.ShelvingLocationSource == "localLocation" {
 			base.ShelvingLocation = holding.LocalLocation
 		}
+		if enabled(p.config.TrimWhitespace, false) {
+			base.Location = strings.TrimSpace(base.Location)
+			base.ShelvingLocation = strings.TrimSpace(base.ShelvingLocation)
+			base.CallNumber = strings.TrimSpace(base.CallNumber)
+		}
 		if p.config.AvailabilityRule != nil && *p.config.AvailabilityRule == "publicNote" {
-			if p.config.AvailablePublicNotes != nil && slices.Contains(*p.config.AvailablePublicNotes, holding.PublicNote) {
+			if !enabled(p.config.RequireItemLoanPolicy, false) && p.config.AvailablePublicNotes != nil && slices.Contains(*p.config.AvailablePublicNotes, holding.PublicNote) {
 				result = append(result, base)
 			}
 			continue
@@ -54,9 +62,9 @@ func (p *OpacHoldingsParser) Parse(record []byte, params LookupParams) ([]Holdin
 			h := base
 			if enabled(p.config.IncludeItemId, true) {
 				h.ItemId = circ.ItemId
-			}
-			if enabled(p.config.IncludeItemLoanPolicy, true) {
-				h.ItemLoanPolicy = strings.TrimSpace(circ.AvailableThru)
+				if enabled(p.config.TrimWhitespace, false) {
+					h.ItemId = strings.TrimSpace(h.ItemId)
+				}
 			}
 			if enabled(p.config.IncludeTemporaryLocation, false) {
 				// Supplier policy and ordering consume the effective shelving location.
@@ -64,8 +72,35 @@ func (p *OpacHoldingsParser) Parse(record []byte, params LookupParams) ([]Holdin
 					h.ShelvingLocation = temporaryLocation
 				}
 			}
-			result = append(result, h)
-			if !enabled(p.config.AllCirculations, false) {
+			// Sources produce separate candidates; they are not a fallback chain.
+			sources := []string{"availableThru"}
+			if p.config.ItemLoanPolicySources != nil {
+				sources = *p.config.ItemLoanPolicySources
+			}
+			emitted := false
+			if enabled(p.config.IncludeItemLoanPolicy, true) {
+				for _, source := range sources {
+					var policy string
+					switch source {
+					case "availableThru":
+						policy = circ.AvailableThru
+					case "shelvingData":
+						policy = holding.ShelvingData
+					case "temporaryLocation":
+						policy = circ.TemporaryLocation
+					}
+					if policy = strings.TrimSpace(policy); policy != "" {
+						h.ItemLoanPolicy = policy
+						result = append(result, h)
+						emitted = true
+					}
+				}
+			}
+			if !emitted && !enabled(p.config.RequireItemLoanPolicy, false) {
+				result = append(result, h)
+				emitted = true
+			}
+			if emitted && !enabled(p.config.AllCirculations, false) {
 				break
 			}
 		}
