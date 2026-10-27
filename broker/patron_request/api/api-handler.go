@@ -1377,6 +1377,7 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequestSearchView) 
 		IllTransactionLink:        illTransactionLink,
 		EventsLink:                eventsLink,
 		TerminalState:             request.TerminalState,
+		CancellationReason:        toString(request.CancellationReason),
 		InternalNote:              toString(request.InternalNote),
 		RequesterName:             toString(request.RequesterName),
 		SupplierName:              toString(request.SupplierName),

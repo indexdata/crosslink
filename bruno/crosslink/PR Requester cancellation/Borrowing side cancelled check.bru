@@ -34,6 +34,7 @@ script:post-response {
   });
   test("requester cancellation completes", function() {
     const pr = res.getBody();
+    expect(pr.cancellationReason).to.equal("InvalidUser");
     expect(pr.state).to.equal("CANCELLED");
     expect(pr.terminalState).to.equal(true);
   });

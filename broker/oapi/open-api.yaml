@@ -964,6 +964,9 @@ components:
         illResponse:
           type: object
           description: JSON of ISO18626 supplying agency message
+        cancellationReason:
+          type: string
+          description: Recorded reason for cancellation; absent when no reason is stored
         internalNote:
           type: string
           description: Staff-only internal note, local to this request and never shared with peers

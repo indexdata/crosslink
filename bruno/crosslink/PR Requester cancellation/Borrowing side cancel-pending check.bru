@@ -34,6 +34,7 @@ script:post-response {
   });
   test("requester waits for supplier cancellation", function() {
     const pr = res.getBody();
+    expect(pr.cancellationReason).to.equal("InvalidUser");
     expect(pr.state).to.equal("CANCEL_PENDING")
   });
 }
