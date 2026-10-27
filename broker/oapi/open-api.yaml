@@ -262,6 +262,13 @@ components:
           description: >-
             FOLIO tenant ID stored as the request's tenant. Omit for no tenant, as
             CrossLink does for lending requests it receives.
+        requesterPickupLocationId:
+          type: string
+          format: uuid
+          description: >-
+            Directory entry UUID of the requester's pickup location: the requesting
+            institution or one of its branches. Omit for none. Borrowing requests
+            only; not checked against the directory during import.
         patron:
           type: string
         requesterSymbol:

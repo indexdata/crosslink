@@ -15,6 +15,9 @@ CONFIG_OUTPUT=${CONFIG_OUTPUT:-config.ndjson}
 UNSUPPORTED_TEMPLATE_PREFIX=${UNSUPPORTED_TEMPLATE_PREFIX:-unsupported-templates}
 UNSUPPORTED_TEMPLATE_OUTPUT=${UNSUPPORTED_TEMPLATE_OUTPUT:-unsupported-templates.ndjson}
 PATRON_REQUEST_PREFIX=${PATRON_REQUEST_PREFIX:-patron-request}
+# Schema whose directory supplies the institutions without their own tenant
+# (the mpals libraries). Set it to an empty value to skip that export.
+MPALS_SCHEMA=${MPALS_SCHEMA-minitex_mod_rs}
 
 : "${DATABASE_URL:?DATABASE_URL must be set}"
 
@@ -59,6 +62,7 @@ total_entries=$(awk '
 
 index=0
 consortium_uuid=
+tenant_symbols=
 
 while IFS= read -r line || [ -n "$line" ]; do
     trimmed_line=${line#"${line%%[![:space:]]*}"}
@@ -103,6 +107,7 @@ while IFS= read -r line || [ -n "$line" ]; do
     fi
 
     index=$((index + 1))
+    tenant_symbols="$tenant_symbols $owner_symbol"
     include_consortium=false
     include_tiers_network=false
     if [ "$index" -eq 1 ]; then
@@ -161,6 +166,39 @@ done <"$PROPERTIES_FILE"
 if [ "$index" -eq 0 ]; then
     echo "No schema entries found in $PROPERTIES_FILE" >&2
     exit 1
+fi
+
+if [ -n "$MPALS_SCHEMA" ]; then
+    case "$MPALS_SCHEMA" in
+        *[!A-Za-z0-9_]*|[0-9]*)
+            echo "Invalid MPALS_SCHEMA identifier: $MPALS_SCHEMA" >&2
+            exit 1
+            ;;
+    esac
+
+    mpals_schema_exists=$(echo "SELECT count(*) FROM pg_namespace WHERE nspname = :'schema';" |
+        psql "$DATABASE_URL" \
+            --set=ON_ERROR_STOP=1 \
+            --set="schema=$MPALS_SCHEMA" \
+            --quiet --tuples-only --no-align)
+    if [ "$mpals_schema_exists" != 1 ]; then
+        echo "MPALS_SCHEMA not found: $MPALS_SCHEMA" >&2
+        exit 1
+    fi
+
+    mpals_output=${DIRECTORY_PREFIX}-mpals-$((index + 1)).ndjson
+    printf '%s\n' "Exporting institutions without a tenant from schema $MPALS_SCHEMA to $mpals_output"
+    psql "$DATABASE_URL" \
+        --command="SET search_path TO \"$MPALS_SCHEMA\";" \
+        --set=mode=mpals \
+        --set="tenant_symbols=$tenant_symbols" \
+        --set=include_consortium=false \
+        --set=include_tiers_network=false \
+        --set="consortium=$consortium_uuid" \
+        --set=ON_ERROR_STOP=1 \
+        --file="$DIRECTORY_EXPORT" \
+        --quiet --tuples-only --no-align \
+        >"$mpals_output"
 fi
 
 DIRECTORY_OUTPUT="$DIRECTORY_OUTPUT" \
