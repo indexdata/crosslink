@@ -1930,6 +1930,11 @@ components:
         body:
           type: string
           description: HTML template body, as in a pullslip template
+        labels:
+          type: array
+          description: Labels for the template. The first label sets the Go template name for both previewing and printing, so a matching {{define}} block renders correctly.
+          items:
+            type: string
         requestIds:
           type: array
           maxItems: 20

@@ -1375,12 +1375,9 @@ func postTemplatesPreview(t *testing.T, body string) *httptest.ResponseRecorder 
 	return rr
 }
 
-func TestPostTemplatesPreviewPullslipRendersEverySampleInOrder(t *testing.T) {
-	rr := postTemplatesPreview(t, `{"body":"<p>SLIP {{.ReqId}}</p>"}`)
-
-	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-	assert.Equal(t, "application/pdf", rr.Header().Get("Content-Type"))
-	parsed, err := reader.Parse(rr.Body.Bytes())
+func pdfPages(t *testing.T, pdf []byte) []string {
+	t.Helper()
+	parsed, err := reader.Parse(pdf)
 	require.NoError(t, err)
 	var pages []string
 	for i := range parsed.PageCount() {
@@ -1390,12 +1387,28 @@ func TestPostTemplatesPreviewPullslipRendersEverySampleInOrder(t *testing.T) {
 		require.NoError(t, err)
 		pages = append(pages, strings.TrimSpace(text))
 	}
+	return pages
+}
+
+func TestPostTemplatesPreviewPullslipRendersEverySampleInOrder(t *testing.T) {
+	rr := postTemplatesPreview(t, `{"body":"<p>SLIP {{.ReqId}}</p>"}`)
+
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, "application/pdf", rr.Header().Get("Content-Type"))
 	assert.Equal(t, []string{
 		"SLIP REQ-2026-00417",
 		"SLIP US-REQ-CONSORTIUM-2026-0000419",
 		"SLIP REQ-7",
 		"SLIP REQ-2026-00418",
-	}, pages)
+	}, pdfPages(t, rr.Body.Bytes()))
+}
+
+func TestPostTemplatesPreviewUsesFirstLabelAsTemplateName(t *testing.T) {
+	body := `{"labels":["pullslip-pdf"],"body":"{{define \"pullslip-pdf\"}}<p>SLIP {{.ReqId}}</p>{{end}}"}`
+	rr := postTemplatesPreview(t, body)
+
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, "SLIP REQ-2026-00417", pdfPages(t, rr.Body.Bytes())[0])
 }
 
 func TestPostTemplatesPreviewRequiresTenantWithoutRequestIds(t *testing.T) {

@@ -1185,7 +1185,11 @@ func (a *PatronRequestApiHandler) PostTemplatesPreview(w http.ResponseWriter, r 
 		api.AddBadRequestError(ctx, w, err)
 		return
 	}
-	if err := prservice.ValidateTemplateRenderingForContext(proapi.Pullslip, proapi.Html, preview.Body, nil, nil, prservice.PatronRequestTemplateContext); err != nil {
+	var labels []string
+	if preview.Labels != nil {
+		labels = *preview.Labels
+	}
+	if err := prservice.ValidateTemplateRenderingForContext(proapi.Pullslip, proapi.Html, preview.Body, nil, labels, prservice.PatronRequestTemplateContext); err != nil {
 		writeTemplateError(ctx, w, err, prservice.TemplateSample{})
 		return
 	}
@@ -1223,7 +1227,7 @@ func (a *PatronRequestApiHandler) PostTemplatesPreview(w http.ResponseWriter, r 
 	}
 	pdfs := make([][]byte, 0, len(samples))
 	for _, sample := range samples {
-		pdf, err := psservice.RenderPdfPullSlip(sample.Request, sample.Notes, sample.Conditions, nil, preview.Body)
+		pdf, err := psservice.RenderPdfPullSlip(sample.Request, sample.Notes, sample.Conditions, labels, preview.Body)
 		if err != nil {
 			var templateErr *email.TemplateError
 			if errors.As(err, &templateErr) {
