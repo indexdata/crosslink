@@ -1,5 +1,10 @@
 # Unreleased
 
+- Add configurable Evergreen, Horizon, Polaris and Symphony host profiles, including
+  catalog identifier transformations and MARC/OPAC availability and loan-policy
+  options. Apply Directory migration `021_catalog_identifier_options` and deploy
+  the updated broker before enabling the new profiles. NCIP transport remains HTTP(S).
+
 - Added independent host LMS and catalog profiles for Alma, Sierra, Koha, FOLIO
   and Generic. WMS and Aleph are reserved and report unsupported-profile errors.
 - Added Sierra OPAC availability, Koha MARC value/absence predicates, namespace-free

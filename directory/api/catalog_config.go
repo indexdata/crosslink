@@ -41,6 +41,8 @@ func catalogConfigToDBParams(entryID uuid.UUID, cfg CatalogConfig) db.UpsertCata
 		params.QueryIssn = cfg.QueryConfig.Issn
 		params.QueryTitle = cfg.QueryConfig.Title
 		params.QueryYear = cfg.QueryConfig.Year
+		params.QueryIdentifierNormalization = cfg.QueryConfig.IdentifierNormalization
+		params.QueryIdentifierPrefix = cfg.QueryConfig.IdentifierPrefix
 	}
 	if cfg.HoldingsFormat != nil {
 		params.HoldingsConfig, _ = json.Marshal(cfg.HoldingsFormat)
@@ -86,6 +88,13 @@ func validateCatalogConfigParams(params db.UpsertCatalogConfigParams) error {
 				count++
 			}
 		}
+		if m := holdings.Marc; m != nil && m.Availability != nil {
+			for _, rule := range *m.Availability {
+				if (rule.Operator == "equals" && rule.Value == nil) || (rule.Operator == "notIn" && rule.Values == nil) {
+					return errors.New("catalogConfig.holdingsFormat.marc.availability requires value for equals and values for notIn")
+				}
+			}
+		}
 		if count > 1 {
 			return errors.New("catalogConfig.holdingsFormat must set at most one of marc, opac, reservoir, or marc21plus1")
 		}
@@ -119,6 +128,8 @@ func catalogConfigPatchToDBParams(entryID uuid.UUID, cfg CatalogConfigPatch, ori
 		QueryIssn:                            original.QueryIssn,
 		QueryTitle:                           original.QueryTitle,
 		QueryYear:                            original.QueryYear,
+		QueryIdentifierNormalization:         original.QueryIdentifierNormalization,
+		QueryIdentifierPrefix:                original.QueryIdentifierPrefix,
 		HoldingsMarcCallNumberSubfield:       original.HoldingsMarcCallNumberSubfield,
 		HoldingsMarcItemIDSubfield:           original.HoldingsMarcItemIDSubfield,
 		HoldingsMarcLocationSubfield:         original.HoldingsMarcLocationSubfield,
@@ -181,6 +192,8 @@ func catalogConfigPatchToDBParams(entryID uuid.UUID, cfg CatalogConfigPatch, ori
 		params.QueryIssn = derefOrDefaultPtr(cfg.QueryConfig.Issn, params.QueryIssn)
 		params.QueryTitle = derefOrDefaultPtr(cfg.QueryConfig.Title, params.QueryTitle)
 		params.QueryYear = derefOrDefaultPtr(cfg.QueryConfig.Year, params.QueryYear)
+		params.QueryIdentifierNormalization = derefOrDefaultPtr(cfg.QueryConfig.IdentifierNormalization, params.QueryIdentifierNormalization)
+		params.QueryIdentifierPrefix = derefOrDefaultPtr(cfg.QueryConfig.IdentifierPrefix, params.QueryIdentifierPrefix)
 	}
 	if cfg.HoldingsFormat != nil {
 		var mergeErr error

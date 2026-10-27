@@ -1,0 +1,185 @@
+<?xml version="1.0"?>
+<zs:searchRetrieveResponse xmlns:zs="http://docs.oasis-open.org/ns/search-ws/sruResponse"><zs:numberOfRecords>1</zs:numberOfRecords><zs:records><zs:record><zs:recordSchema>marcxml</zs:recordSchema><zs:recordXMLEscaping>xml</zs:recordXMLEscaping><zs:recordData><record xmlns="http://www.loc.gov/MARC21/slim">
+  <leader>05345pam a2200529 i 4500</leader>
+  <controlfield tag="001">a12145126</controlfield>
+  <controlfield tag="003">SIRSI</controlfield>
+  <controlfield tag="008">170407t20172017nyu           000 0 eng  </controlfield>
+  <datafield tag="010" ind1=" " ind2=" ">
+    <subfield code="a">  2017005190</subfield>
+  </datafield>
+  <datafield tag="020" ind1=" " ind2=" ">
+    <subfield code="a">9781476796253</subfield>
+    <subfield code="q">(hardback)</subfield>
+  </datafield>
+  <datafield tag="020" ind1=" " ind2=" ">
+    <subfield code="a">1476796254</subfield>
+    <subfield code="q">(hardback)</subfield>
+  </datafield>
+  <datafield tag="020" ind1=" " ind2=" ">
+    <subfield code="a">9781476796260</subfield>
+    <subfield code="q">(trade paperback)</subfield>
+  </datafield>
+  <datafield tag="020" ind1=" " ind2=" ">
+    <subfield code="a">1476796262</subfield>
+    <subfield code="q">(trade paperback)</subfield>
+  </datafield>
+  <datafield tag="020" ind1=" " ind2=" ">
+    <subfield code="z">9781476796277</subfield>
+    <subfield code="q">(ebook)</subfield>
+  </datafield>
+  <datafield tag="040" ind1=" " ind2=" ">
+    <subfield code="a">DLC</subfield>
+    <subfield code="e">rda</subfield>
+    <subfield code="c">DLC</subfield>
+    <subfield code="d">YDX</subfield>
+    <subfield code="d">BTCTA</subfield>
+    <subfield code="d">BDX</subfield>
+    <subfield code="d">GK8</subfield>
+    <subfield code="d">OCLCO</subfield>
+    <subfield code="d">JQR</subfield>
+    <subfield code="d">CaONFJC</subfield>
+  </datafield>
+  <datafield tag="042" ind1=" " ind2=" ">
+    <subfield code="a">pcc</subfield>
+  </datafield>
+  <datafield tag="043" ind1=" " ind2=" ">
+    <subfield code="a">n-us-ia</subfield>
+    <subfield code="a">n-usc--</subfield>
+  </datafield>
+  <datafield tag="050" ind1="0" ind2="0">
+    <subfield code="a">HV6534.V55</subfield>
+    <subfield code="b">J36 2017</subfield>
+  </datafield>
+  <datafield tag="082" ind1="0" ind2="0">
+    <subfield code="a">364.152/3209777</subfield>
+    <subfield code="2">23</subfield>
+  </datafield>
+  <datafield tag="084" ind1=" " ind2=" ">
+    <subfield code="a">HIS036060</subfield>
+    <subfield code="a">SOC004000</subfield>
+    <subfield code="a">TRU002010</subfield>
+    <subfield code="2">bisacsh</subfield>
+  </datafield>
+  <datafield tag="100" ind1="1" ind2=" ">
+    <subfield code="a">James, Bill,</subfield>
+    <subfield code="d">1949-</subfield>
+    <subfield code="e">author.</subfield>
+    <subfield code="0">http://id.loc.gov/authorities/names/n82087559</subfield>
+  </datafield>
+  <datafield tag="245" ind1="1" ind2="4">
+    <subfield code="a">The man from the train :</subfield>
+    <subfield code="b">the solving of a century-old serial killer mystery /</subfield>
+    <subfield code="c">Bill James and Rachel McCarthy James.</subfield>
+  </datafield>
+  <datafield tag="250" ind1=" " ind2=" ">
+    <subfield code="a">First Scribner hardcover edition.</subfield>
+  </datafield>
+  <datafield tag="264" ind1=" " ind2="1">
+    <subfield code="a">New York, NY :</subfield>
+    <subfield code="b">Scribner, an imprint of Simon &amp; Schuster, Inc.,</subfield>
+    <subfield code="c">2017.</subfield>
+  </datafield>
+  <datafield tag="264" ind1=" " ind2="4">
+    <subfield code="c">&#xA9;2017</subfield>
+  </datafield>
+  <datafield tag="300" ind1=" " ind2=" ">
+    <subfield code="a">xi, 464 pages ;</subfield>
+    <subfield code="c">24 cm</subfield>
+  </datafield>
+  <datafield tag="336" ind1=" " ind2=" ">
+    <subfield code="a">text</subfield>
+    <subfield code="b">txt</subfield>
+    <subfield code="2">rdacontent</subfield>
+  </datafield>
+  <datafield tag="337" ind1=" " ind2=" ">
+    <subfield code="a">unmediated</subfield>
+    <subfield code="b">n</subfield>
+    <subfield code="2">rdamedia</subfield>
+  </datafield>
+  <datafield tag="338" ind1=" " ind2=" ">
+    <subfield code="a">volume</subfield>
+    <subfield code="b">nc</subfield>
+    <subfield code="2">rdacarrier</subfield>
+  </datafield>
+  <datafield tag="520" ind1=" " ind2=" ">
+    <subfield code="a">"Using unprecedented, dramatically compelling sleuthing techniques, legendary statistician and baseball writer Bill James applies his analytical acumen to crack an unsolved century-old mystery surrounding one of the deadliest serial killers in American history. Between 1898 and 1912, families across the country were bludgeoned in their sleep with the blunt side of an axe. Jewelry and valuables were left in plain sight, bodies were piled together, faces covered with cloth. Some of these cases, like the infamous Villasca, Iowa, murders, received national attention. But few people believed the crimes were related. And fewer still would realize that all of these families lived within walking distance to a train station. When celebrated baseball statistician and true crime expert Bill James first learned about these horrors, he began to investigate others that might fit the same pattern. Applying the same know-how he brings to his legendary baseball analysis, he empirically determined which crimes were committed by the same person. Then after sifting through thousands of local newspapers, court transcripts, and public records, he and his daughter Rachel made an astonishing discovery: they learned the true identity of this monstrous criminal. In turn, they uncovered one of the deadliest serial killers in America. Riveting and immersive, with writing as sharp as the cold side of an axe, The Man from the Train paints a vivid, psychologically perceptive portrait of America at the dawn of the twentieth century, when crime was regarded as a local problem, and opportunistic private detectives exploited a dysfunctional judicial system. James shows how these cultural factors enabled such an unspeakable series of crimes to occur, and his groundbreaking approach to true crime will convince skeptics, amaze aficionados, and change the way we view criminal history"--</subfield>
+    <subfield code="c">Provided by publisher.</subfield>
+  </datafield>
+  <datafield tag="520" ind1=" " ind2=" ">
+    <subfield code="a">"Between 1898 and 1912, families across the country were bludgeoned in their sleep with the blunt side of an axe. Jewelry and valuables were left in plain sight, bodies were piled together, faces covered with cloth. Some of these cases, like the infamous Villasca, Iowa murders, received national attention. But few people believed the crimes were related. And fewer still would realize that all of these families lived within walking distance to a train station. When celebrated baseball statistician and true crime expert Bill James first learned about these crimes, he began to investigate others that might fit the same pattern. Applying the analytical acumen he brings to baseball analysis, he empirically determined which crimes were committed by the same person. Then after sifting through thousands of local newspapers, court transcripts and public records, he and his daughter Rachel made an astonishing discovery. They learned the true identity of this monstrous criminal, and in turn, uncovered one of the deadliest serial killers in American history. Riveting and immersive, with writing as sharp as the cold side of an axe, The Man From the Train is a groundbreaking approach to true crime that will convince skeptics, delight aficionados, and change the way we view criminal history"--</subfield>
+    <subfield code="c">Provided by publisher.</subfield>
+  </datafield>
+  <datafield tag="650" ind1=" " ind2="0">
+    <subfield code="a">Serial murderers</subfield>
+    <subfield code="z">Iowa</subfield>
+    <subfield code="z">Villisca</subfield>
+    <subfield code="x">History.</subfield>
+  </datafield>
+  <datafield tag="650" ind1=" " ind2="0">
+    <subfield code="a">Mass murder investigation</subfield>
+    <subfield code="z">Iowa</subfield>
+    <subfield code="z">Villisca</subfield>
+    <subfield code="x">History.</subfield>
+  </datafield>
+  <datafield tag="650" ind1=" " ind2="0">
+    <subfield code="a">Mass murder</subfield>
+    <subfield code="z">Iowa</subfield>
+    <subfield code="z">Villisca</subfield>
+    <subfield code="x">History.</subfield>
+  </datafield>
+  <datafield tag="650" ind1=" " ind2="0">
+    <subfield code="a">Serial murderers</subfield>
+    <subfield code="z">Middle West</subfield>
+    <subfield code="x">History.</subfield>
+  </datafield>
+  <datafield tag="650" ind1=" " ind2="0">
+    <subfield code="a">Mass murder</subfield>
+    <subfield code="z">Middle West</subfield>
+    <subfield code="x">History.</subfield>
+  </datafield>
+  <datafield tag="650" ind1=" " ind2="0">
+    <subfield code="a">Mass murder investigation</subfield>
+    <subfield code="z">Middle West</subfield>
+    <subfield code="x">History.</subfield>
+  </datafield>
+  <datafield tag="655" ind1=" " ind2="7">
+    <subfield code="a">True crime stories.</subfield>
+    <subfield code="2">lcgft</subfield>
+    <subfield code="0">http://id.loc.gov/authorities/genreForms/gf2014026203</subfield>
+  </datafield>
+  <datafield tag="700" ind1="1" ind2=" ">
+    <subfield code="a">James, Rachel McCarthy,</subfield>
+    <subfield code="e">author.</subfield>
+    <subfield code="0">http://id.loc.gov/authorities/names/n2017019994</subfield>
+  </datafield>
+  <datafield tag="776" ind1="0" ind2="8">
+    <subfield code="i">Online version:</subfield>
+    <subfield code="a">James, Bill, 1949- author.</subfield>
+    <subfield code="t">Man from the train</subfield>
+    <subfield code="d">New York : Scribner, 2017</subfield>
+    <subfield code="z">9781476796277</subfield>
+    <subfield code="w">(DLC)  2017023689</subfield>
+  </datafield>
+  <controlfield tag="001">cis36915247</controlfield>
+  <controlfield tag="001">cis36915247</controlfield>
+  <datafield tag="035" ind1=" " ind2=" ">
+    <subfield code="a">(CaONFJC)62047064</subfield>
+  </datafield>
+  <datafield tag="999" ind1=" " ind2=" ">
+    <subfield code="c">0</subfield>
+    <subfield code="h">SAL3-H</subfield>
+  </datafield>
+  <datafield tag="035" ind1=" " ind2=" ">
+    <subfield code="a">(OCoLC-M)962016034</subfield>
+  </datafield>
+  <datafield tag="918" ind1=" " ind2=" ">
+    <subfield code="a">12145126</subfield>
+  </datafield>
+  <datafield tag="926" ind1=" " ind2=" ">
+    <subfield code="a">SAL3</subfield>
+    <subfield code="b">STACKS</subfield>
+    <subfield code="c">HV6534 .V55 J36 2017</subfield>
+    <subfield code="d">STKS-MONO</subfield>
+    <subfield code="f">1</subfield>
+  </datafield>
+</record></zs:recordData><zs:recordPosition>1</zs:recordPosition></zs:record></zs:records><zs:echoedSearchRetrieveRequest><zs:version>2.0</zs:version><zs:queryType>pqf</zs:queryType><zs:query>@attr 1=1016 a12145126</zs:query><zs:maximumRecords>1</zs:maximumRecords><zs:recordXMLEscaping>xml</zs:recordXMLEscaping><zs:recordSchema>marcxml</zs:recordSchema><zs:extraRequestData><zs:target>http://symphony-app-prod-1.stanford.edu:2200/Unicorn</zs:target></zs:extraRequestData></zs:echoedSearchRetrieveRequest></zs:searchRetrieveResponse>
