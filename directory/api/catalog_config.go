@@ -241,8 +241,18 @@ func mergeHoldingsPolicy(original []byte, patch HoldingsPolicy) (HoldingsPolicy,
 	return merged, nil
 }
 
-// encodeIllConfigLists leaves omitted lists untouched and stores empty lists as [].
-func encodeIllConfigLists(params *db.UpsertIllConfigParams, cfg IllConfig) error {
+// encodeIllConfigCodes preserves omitted fields, stores empty lists as [], and clears a null default.
+func encodeIllConfigCodes(params *db.UpsertIllConfigParams, cfg IllConfig) error {
+	if cfg.DefaultCopyrightType.IsSpecified() {
+		params.DefaultCopyrightType = nil
+		if value, err := cfg.DefaultCopyrightType.Get(); err == nil {
+			data, err := json.Marshal(value)
+			if err != nil {
+				return fmt.Errorf("encode illConfig.defaultCopyrightType: %w", err)
+			}
+			params.DefaultCopyrightType = data
+		}
+	}
 	for _, field := range []struct {
 		name   string
 		codes  *[]IllConfigCodeDescription
@@ -288,7 +298,7 @@ func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) (db.UpsertIllConfigPa
 		vendor := string(*cfg.Iso18626Vendor)
 		params.Iso18626Vendor = &vendor
 	}
-	if err := encodeIllConfigLists(&params, cfg); err != nil {
+	if err := encodeIllConfigCodes(&params, cfg); err != nil {
 		return db.UpsertIllConfigParams{}, err
 	}
 	return params, nil
@@ -297,6 +307,7 @@ func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) (db.UpsertIllConfigPa
 func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllConfig) (db.UpsertIllConfigParams, error) {
 	params := db.UpsertIllConfigParams{
 		Entry:                       entryID,
+		DefaultCopyrightType:        original.DefaultCopyrightType,
 		AvailableCopyrightTypes:     original.AvailableCopyrightTypes,
 		UnfilledReasons:             original.UnfilledReasons,
 		LoanConditions:              original.LoanConditions,
@@ -348,7 +359,7 @@ func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllC
 	if cfg.MinimumCost.IsSpecified() {
 		params.MinimumCost = nullableMinimumCost(cfg)
 	}
-	if err := encodeIllConfigLists(&params, cfg); err != nil {
+	if err := encodeIllConfigCodes(&params, cfg); err != nil {
 		return db.UpsertIllConfigParams{}, err
 	}
 	return params, nil

@@ -502,6 +502,13 @@ func replaceILLConfig(ctx context.Context, queries *db.Queries, entryID uuid.UUI
 		MinimumCost:               config.MinimumCost,
 		LoadBalancingPolicy:       config.LoadBalancingPolicy,
 	}
+	if config.DefaultCopyrightType != nil {
+		data, err := json.Marshal(config.DefaultCopyrightType)
+		if err != nil {
+			return fmt.Errorf("encode illConfig.defaultCopyrightType: %w", err)
+		}
+		params.DefaultCopyrightType = data
+	}
 	for _, field := range []struct {
 		name   string
 		codes  *[]model.IllConfigCodeDescription

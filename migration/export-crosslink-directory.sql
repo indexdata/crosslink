@@ -50,6 +50,9 @@
 --     become owner-only ILL cancellationReasons, unfilledReasons, and loanConditions.
 --     Values become codes; labels become descriptions. Unfilled reasons and loan
 --     conditions fall back to values for absent labels. Empty lists are omitted.
+--   * default_copyright_type selects one copyrightType refdata value for the
+--     owner's defaultCopyrightType object. Missing settings are omitted;
+--     unresolved or ambiguous settings stop export before NDJSON is emitted.
 --   * default_service_level and minimum_cost seed loan and copy default tiers.
 --     Missing settings become standard and 0. The automatic-fee
 --     request_service_type setting does not describe routing capabilities.
@@ -311,8 +314,42 @@ SELECT
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
         FILTER (WHERE st_key = 'max_requests') AS max_requests_per_patron,
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-        FILTER (WHERE st_key = 'check_duplicate_time') AS duplicate_check_window_hours
+        FILTER (WHERE st_key = 'check_duplicate_time') AS duplicate_check_window_hours,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'default_copyright_type') AS default_copyright_type
 FROM app_setting;
+
+-- Resolve the selected default through the tenant-local copyright vocabulary.
+CREATE TEMP TABLE crosslink_default_copyright_type ON COMMIT DROP AS
+SELECT settings.default_copyright_type AS code,
+    count(value.rdv_id) AS matches,
+    CASE WHEN settings.default_copyright_type IS NULL THEN '{}'::jsonb
+    ELSE jsonb_build_object('defaultCopyrightType',
+        (jsonb_agg(jsonb_build_object(
+            'code', value.rdv_value,
+            'defaultDesc', CASE
+                WHEN value.rdv_label IS NULL OR value.rdv_label ~ '^[[:space:]]*$'
+                THEN value.rdv_value
+                ELSE value.rdv_label
+            END
+        )) FILTER (WHERE value.rdv_id IS NOT NULL))->0)
+    END AS item
+FROM crosslink_tenant_settings AS settings
+LEFT JOIN refdata_category AS category ON category.rdc_description = 'copyrightType'
+LEFT JOIN refdata_value AS value ON value.rdv_owner = category.rdc_id
+    AND value.rdv_value = settings.default_copyright_type
+GROUP BY settings.default_copyright_type;
+
+DO $$
+DECLARE
+    problem text;
+BEGIN
+    SELECT code INTO problem FROM crosslink_default_copyright_type
+    WHERE code IS NOT NULL AND matches <> 1;
+    IF problem IS NOT NULL THEN
+        RAISE EXCEPTION 'default_copyright_type must resolve to exactly one copyrightType refdata value: %', problem;
+    END IF;
+END $$;
 
 -- Collect tenant-local reason and condition vocabularies once for all entries.
 CREATE TEMP TABLE crosslink_ill_lists ON COMMIT DROP AS
@@ -592,7 +629,7 @@ BEGIN
             'accept_item', 'check_in_item', 'check_out_item', 'use_request_item',
             'ncip_request_item_pickup_location', 'ncip_use_title_request_type',
             'default_institutional_patron_id', 'z3950_server_address',
-            'max_requests', 'check_duplicate_time'
+            'max_requests', 'check_duplicate_time', 'default_copyright_type'
         )
         GROUP BY st_key
         HAVING count(*) > 1
@@ -1003,7 +1040,7 @@ entry_records AS (
                 ELSE NULL
             END
         ) || CASE WHEN local_entry.entry_id IS NOT NULL
-            THEN (SELECT item FROM crosslink_ill_lists)
+            THEN (SELECT item FROM crosslink_ill_lists) || (SELECT item FROM crosslink_default_copyright_type)
             ELSE '{}'::jsonb
         END AS item
         FROM (

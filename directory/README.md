@@ -360,6 +360,17 @@ Filter Directory entries with CQL `isPickupLocation=true` or `isPickupLocation=f
 
 ### ILL configuration lists and reference defaults
 
+`illConfig.defaultCopyrightType` is the default copyright type to use for copy
+requests. It accepts a single object with required string fields `code` and
+`defaultDesc`, for example `{"code":"US-CCG","defaultDesc":"CCG (US)"}`.
+Create, read, PATCH, and NDJSON import support this field. PATCH omission
+preserves the value; an object replaces it and `null` clears it. Unset values
+are omitted from entry reads. Import replaces the entire ILL configuration, so
+an omitted or null default leaves it unset. Custom codes are accepted independently
+of `availableCopyrightTypes`. Its `x-default-data` mapping matches that list's
+reference mapping and does not automatically set a default. Directory stores
+this setting; the broker does not yet apply it to copy requests.
+
 `illConfig.availableCopyrightTypes`, `illConfig.unfilledReasons`,
 `illConfig.cancellationReasons`, and `illConfig.loanConditions` accept ordered
 arrays of objects with required string fields `code` and `defaultDesc`. Custom

@@ -178,10 +178,19 @@ retain their exported defaults.
 | Presence of the ISO18626 endpoint | `data.illConfig.iso18626Vendor` | Set to `ReShare`. |
 | `app_setting.max_requests` | `data.illConfig.maxRequestsPerPatron` | Cast to an integer for the selected local entry and its direct branches. Values must be from 0 through 2147483647; the value is `null` for other non-local pickup entries. |
 | `app_setting.check_duplicate_time` | `data.illConfig.duplicateCheckWindowHours` | Cast to an integer number of hours for the selected local entry and its direct branches. Values must be from 0 through 2147483647; the value is `null` for other non-local pickup entries. |
+| `app_setting.default_copyright_type` resolved through `copyrightType` refdata | `data.illConfig.defaultCopyrightType` | Exported only on the selected local owner as a single object: `rdv_value` becomes `code`, and `rdv_label` becomes `defaultDesc`, falling back to the code for a null or whitespace-only label. |
 | Unsupported mod-rs agency-information behavior | `data.illConfig.includeRequestingAgencyInfo` | Set to `false`; mod-rs does not populate requesting-agency information. |
 | Unsupported mod-rs agency-information behavior | `data.illConfig.includeSupplierInfo` | Set to `false`; mod-rs does not populate supplier information. |
 | Unsupported mod-rs directory-derived return information | `data.illConfig.includeReturnInfo` | Set to `false`; mod-rs does not automatically populate return information from the supplier directory entry. |
 | Unsupported mod-rs vendor-note behavior | `data.illConfig.includeVendorNote` | Set to `false`; mod-rs does not prepend the supplier vendor to generated notes. |
+
+The default copyright setting uses the nonblank `st_value`, falling back to the
+nonblank `st_default_value`, with surrounding spaces trimmed. An unset setting
+omits `defaultCopyrightType`. A configured setting must match exactly one
+`refdata_value.rdv_value` in the `copyrightType` category; unresolved or ambiguous
+values fail the export before any records are emitted. Codes and nonblank labels
+are preserved without normalization. Direct branches and other non-local entries
+do not receive the default.
 
 The following reference-data vocabularies are exported only on the selected local
 owner. Join `refdata_value.rdv_owner` to `refdata_category.rdc_id` and select
