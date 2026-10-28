@@ -510,14 +510,14 @@ WITH request_payloads AS (
                     CASE WHEN nullif(btrim(request.pr_isbn), '') IS NOT NULL
                         THEN jsonb_build_array(jsonb_build_object(
                             'bibliographicItemIdentifierCode',
-                                jsonb_build_object('#text', 'isbn'),
+                                jsonb_build_object('#text', 'ISBN'),
                             'bibliographicItemIdentifier', request.pr_isbn
                         )) ELSE '[]'::jsonb END
                     ||
                     CASE WHEN nullif(btrim(request.pr_issn), '') IS NOT NULL
                         THEN jsonb_build_array(jsonb_build_object(
                             'bibliographicItemIdentifierCode',
-                                jsonb_build_object('#text', 'issn'),
+                                jsonb_build_object('#text', 'ISSN'),
                             'bibliographicItemIdentifier', request.pr_issn
                         )) ELSE '[]'::jsonb END
             )),
