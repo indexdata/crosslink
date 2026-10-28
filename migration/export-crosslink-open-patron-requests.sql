@@ -40,6 +40,11 @@
 --     omitted. Loan conditions are exported as condition notifications.
 --   * Audit history, protocol audit payloads, batches, and queued jobs are not
 --     represented by CrossLink's patron-request import contract and are omitted.
+--   * The ILL due date (pr_parsed_due_date_rs) becomes
+--     illResponse.statusInfo.dueDate, from which CrossLink sets the request's
+--     due date. It is emitted only for loan states (shipped through returned),
+--     with status Overdue for OVERDUE and Loaned otherwise; due dates left on
+--     requests in earlier states are omitted.
 --   * mod-rs timestamps are treated as UTC.
 --   * Requester request IDs drop the "~<rota position>" or "~norota" suffix
 --     that mod-rs appends to non-SLNP protocol IDs. Borrowing requests use the
@@ -588,6 +593,27 @@ request_bundles AS (
                     'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
                 ),
                 'illRequest', request.ill_request,
+                'illResponse', CASE
+                    WHEN request.pr_parsed_due_date_rs IS NOT NULL
+                     AND request.import_state IN (
+                         'SHIPPED', 'RECEIVED', 'OVERDUE',
+                         'SHIPPED_RETURNED', 'SHIPPED_RETURN'
+                     )
+                    THEN jsonb_build_object('statusInfo', jsonb_build_object(
+                        'status', CASE request.import_state
+                            WHEN 'OVERDUE' THEN 'Overdue'
+                            ELSE 'Loaned'
+                        END,
+                        'lastChange', to_char(
+                            request.pr_last_updated,
+                            'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
+                        ),
+                        'dueDate', to_char(
+                            request.pr_parsed_due_date_rs,
+                            'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
+                        )
+                    ))
+                END,
                 'state', request.import_state,
                 'stateModel', 'default',
                 'side', request.import_side,
