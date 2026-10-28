@@ -45,6 +45,9 @@
 --     due date. It is emitted only for loan states (shipped through returned),
 --     with status Overdue for OVERDUE and Loaned otherwise; due dates left on
 --     requests in earlier states are omitted.
+--   * copyrightType values become their ISO18626 CopyrightCompliance codes
+--     (us-ccl becomes US-CCL), matched case-insensitively. Values that match no
+--     ISO code are exported unchanged.
 --   * mod-rs timestamps are treated as UTC.
 --   * Requester request IDs drop the "~<rota position>" or "~norota" suffix
 --     that mod-rs appends to non-SLNP protocol IDs. Borrowing requests use the
@@ -205,6 +208,18 @@ VALUES
     ('RES_AWAIT_PICKING',              'lending',   'Copy',       'WILL_SUPPLY'),
     ('RES_AWAIT_PICKING',              'lending',   'CopyOrLoan', 'SEARCHING');
 
+-- ISO18626 CopyrightCompliance codes. mod-rs copyrightType values are these
+-- codes lowercased, so they are matched case-insensitively.
+CREATE TEMP TABLE crosslink_copyright_compliance ON COMMIT DROP AS
+SELECT code
+FROM (VALUES
+    ('AU-CopyRCatS183ComW'), ('AU-CopyRCatS183State'), ('AU-CopyrightActS49'),
+    ('AU-CopyrightActS50-1'), ('AU-CopyrightActS50-7A'), ('AU-CopyrightActS50-7B'),
+    ('AU-CopyrightCleared'), ('AU-GenBus'), ('NZ-CopyrightActS54'),
+    ('NZ-CopyrightActS55'), ('Other'), ('UK-CopyRFeePaid'), ('UK-FairDealing'),
+    ('US-CCG'), ('US-CCL')
+) AS codes(code);
+
 CREATE TEMP VIEW crosslink_request_ids AS
 SELECT
     patron_request.pr_id AS legacy_id,
@@ -235,7 +250,7 @@ SELECT
     pickup_location.id AS import_pickup_location_id,
     service_level.rdv_value AS import_service_level,
     publication_type.rdv_value AS import_publication_type,
-    copyright_type.rdv_value AS import_copyright_type,
+    coalesce(copyright_code.code, copyright_type.rdv_value) AS import_copyright_type,
     maximum_cost_currency.rdv_value AS import_maximum_cost_currency,
     cost_currency.rdv_value AS import_cost_currency,
     CASE
@@ -315,6 +330,8 @@ LEFT JOIN refdata_value AS publication_type
   ON publication_type.rdv_id = patron_request.pr_pub_type_fk
 LEFT JOIN refdata_value AS copyright_type
   ON copyright_type.rdv_id = patron_request.pr_copyright_type_fk
+LEFT JOIN crosslink_copyright_compliance AS copyright_code
+  ON lower(copyright_code.code) = lower(copyright_type.rdv_value)
 LEFT JOIN refdata_value AS maximum_cost_currency
   ON maximum_cost_currency.rdv_id = patron_request.pr_maximum_costs_code_fk
 LEFT JOIN refdata_value AS cost_currency
