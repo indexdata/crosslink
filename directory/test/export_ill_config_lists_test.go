@@ -27,6 +27,7 @@ func TestDirectoryExportIllConfigLists(t *testing.T) {
 	projection, _, found = strings.Cut(projection, ") AS ill_config ON true")
 	require.True(t, found)
 	query := `WITH
+ crosslink_default_copyright_type AS (SELECT '{}'::jsonb AS item),
  entry AS (SELECT $1::uuid AS entry_id, NULL::uuid AS parent_id),
  crosslink_local_entry AS (SELECT $1::uuid AS entry_id WHERE $2::boolean),
  local_entry AS (SELECT $1::uuid AS entry_id WHERE $2::boolean),

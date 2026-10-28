@@ -55,8 +55,12 @@ directory exports. The final schema exports the generated tiers and network.
 
 Directory exports include the selected local owner's cancellation reasons,
 unfilled reasons (from mod-rs `cannotSupplyReasons`), and loan conditions.
+It also exports the selected local owner's `defaultCopyrightType`, resolving the
+`default_copyright_type` setting through the `copyrightType` refdata vocabulary.
+An unset setting is omitted; a configured value without a unique refdata match
+fails the export.
 See the [ILL configuration field mappings](export-crosslink-directory-field-mapping.md#ill-configuration)
-for source fields, label fallbacks, ordering, and missing-list behavior.
+for source fields, setting and label fallbacks, ordering, and missing-list behavior.
 
 Environment variables:
 

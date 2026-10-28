@@ -2096,6 +2096,10 @@ components:
       additionalProperties: false
       required: [iso18626Url, iso18626Vendor, lendersOfLastResort, includeRequestingAgencyInfo, includeSupplierInfo, includeReturnInfo, includeVendorNote, useOfferedCosts, noteFieldSeparator, supplierPatronPattern, duplicateCheckWindowHours]
       properties:
+        defaultCopyrightType:
+          anyOf:
+            - $ref: '#/components/schemas/IllConfigCodeDescription'
+            - type: "null"
         loanConditions:
           type: array
           items: { $ref: '#/components/schemas/IllConfigCodeDescription' }
@@ -2613,6 +2617,26 @@ components:
             NoReproduction: "No reproduction"
             SignatureRequired: "Signature required"
             SpecCollSupervReq: "Special collections supervision required"
+        defaultCopyrightType:
+          anyOf:
+            - $ref: '#/components/schemas/IllConfigCodeDescription'
+            - type: "null"
+          description: The default copyright type to use for copy requests
+          x-default-data:
+            AU-CopyRCatS183ComW: "Copyright Act S183 - Commonwealth (Australia)"
+            AU-CopyRCatS183State: "Copyright Act S183 - State (Australia)"
+            AU-CopyrightActS49: "Copyright Act S49 (Australia)"
+            AU-CopyrightActS50-1: "Copyright Act S50 (Australia)"
+            AU-CopyrightActS50-7A: "Copyright Act S50 A (Australia)"
+            AU-CopyrightCleared: "Copyright Cleared (Australia)"
+            AU-GenBus: "General Business (Australia)"
+            NZ-CopyrightActS54: "Copyright Act S54 (New Zealand)"
+            NZ-CopyrightActS55: "Copyright Act S55 (New Zealand)"
+            Other: "Other types of copyright compliance. Use Note in ServiceInfo for details."
+            UK-CopyRFeePaid: "Copyright Fee Paid (UK)"
+            UK-FairDealing: "Fair Dealing (UK)"
+            US-CCG: "CCG (US)"
+            US-CCL: "CCL (US code)"
         availableCopyrightTypes:
           type: array
           description: Configured codes and descriptions.

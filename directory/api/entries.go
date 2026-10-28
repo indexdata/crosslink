@@ -309,6 +309,7 @@ func buildEntrySQL(whereClause string) string {
 			'maxRequestsPerPatron', i.max_requests_per_patron,
 			'minimumCost', i.minimum_cost,
 			'loadBalancingPolicy', i.load_balancing_policy,
+			'defaultCopyrightType', i.default_copyright_type,
 			'availableCopyrightTypes', i.available_copyright_types,
 			'unfilledReasons', i.unfilled_reasons,
 			'loanConditions', i.loan_conditions,

@@ -44,6 +44,7 @@ type IllConfigCodeDescription struct {
 }
 
 type ILLConfig struct {
+	DefaultCopyrightType        *IllConfigCodeDescription   `json:"defaultCopyrightType"`
 	LoanConditions              *[]IllConfigCodeDescription `json:"loanConditions"`
 	UnfilledReasons             *[]IllConfigCodeDescription `json:"unfilledReasons"`
 	CancellationReasons         *[]IllConfigCodeDescription `json:"cancellationReasons"`
