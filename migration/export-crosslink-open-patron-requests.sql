@@ -45,6 +45,11 @@
 --     due date. It is emitted only for loan states (shipped through returned),
 --     with status Overdue for OVERDUE and Loaned otherwise; due dates left on
 --     requests in earlier states are omitted.
+--   * A borrowing request's pr_patron_email becomes patronInfo Email addresses,
+--     one per comma- or semicolon-separated part that looks like an address
+--     (x@y.z). Other parts, such as "none" or "N/A", are omitted and listed in
+--     a NOTICE. CrossLink shows the first address and sends patron
+--     notifications to all of them.
 --   * copyrightType values become their ISO18626 CopyrightCompliance codes
 --     (us-ccl becomes US-CCL), matched case-insensitively. Values that match no
 --     ISO code are exported unchanged.
@@ -293,7 +298,9 @@ SELECT
                 )
             )
         ELSE patron_request.pr_sup_inst_symbol
-    END AS import_supplier_symbol
+    END AS import_supplier_symbol,
+    patron_email.addresses AS import_patron_addresses,
+    patron_email.rejected AS import_rejected_patron_emails
 FROM patron_request
 JOIN crosslink_request_ids AS request_identity
   ON request_identity.legacy_id = patron_request.pr_id
@@ -364,6 +371,28 @@ LEFT JOIN LATERAL (
             AND requester_symbol.sym_owner_fk IN (pickup.de_id, pickup.de_parent)
       )
 ) AS pickup_location ON true
+-- pr_patron_email can hold a comma- or semicolon-separated list and
+-- placeholders such as "none"; each part that looks like an address becomes
+-- an ISO18626 Email address.
+LEFT JOIN LATERAL (
+    SELECT
+        jsonb_agg(jsonb_build_object('electronicAddress', jsonb_build_object(
+            'electronicAddressType', jsonb_build_object('#text', 'Email'),
+            'electronicAddressData', part.email
+        )) ORDER BY part.ordinality) FILTER (WHERE part.valid) AS addresses,
+        string_agg(part.email, ', ' ORDER BY part.ordinality)
+            FILTER (WHERE NOT part.valid) AS rejected
+    FROM (
+        SELECT
+            split.ordinality,
+            btrim(split.value) AS email,
+            btrim(split.value) ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' AS valid
+        FROM regexp_split_to_table(patron_request.pr_patron_email, '[,;]')
+            WITH ORDINALITY AS split(value, ordinality)
+        WHERE patron_request.pr_is_requester IS TRUE
+          AND btrim(split.value) <> ''
+    ) AS part
+) AS patron_email ON true
 WHERE state_model_status.sms_is_terminal IS FALSE;
 
 -- Requests without a supported service type cannot be imported; skip them.
@@ -411,6 +440,24 @@ BEGIN
     END IF;
 END
 $pickup_omitted$;
+
+DO $patron_email_omitted$
+DECLARE
+    omitted TEXT;
+BEGIN
+    SELECT string_agg(
+        'request ' || pr_id || ': ' || import_rejected_patron_emails,
+        E'\n' ORDER BY pr_id
+    )
+    INTO omitted
+    FROM crosslink_open_requests
+    WHERE import_rejected_patron_emails IS NOT NULL;
+
+    IF omitted IS NOT NULL THEN
+        RAISE NOTICE E'Omitting patron email values that are not addresses:\n%', omitted;
+    END IF;
+END
+$patron_email_omitted$;
 
 DO $preflight$
 DECLARE
@@ -578,7 +625,8 @@ WITH request_payloads AS (
                 'sendToPatron', CASE
                     WHEN request.pr_send_to_patron IS TRUE THEN 'Y'
                     WHEN request.pr_send_to_patron IS FALSE THEN 'N'
-                END
+                END,
+                'address', request.import_patron_addresses
             )),
             'billingInfo', jsonb_strip_nulls(jsonb_build_object(
                 'maximumCosts', CASE
