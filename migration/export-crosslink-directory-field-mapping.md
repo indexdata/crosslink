@@ -216,12 +216,22 @@ lists. For example, the seeded cannot-supply value `unavailable` and label
 `No longer available` become
 `{"code":"unavailable","defaultDesc":"No longer available"}` in `unfilledReasons`.
 
-`app_setting.last_resort_lenders` is the mod-rs source for
-`data.illConfig.lendersOfLastResort`, but the primary export emits an empty
-array. CrossLink imports NDJSON records sequentially, so a local parent entry
-cannot reference child entries that have not yet been imported. Parse and
-configure the setting in a second import or post-import update after all
-directory entries exist.
+`app_setting.last_resort_lenders` becomes the selected local owner's
+`data.illConfig.lendersOfLastResort`. Like mod-rs, the export reads the nonblank
+`st_value`, falling back to `st_default_value`, and splits it on commas into
+trimmed `AUTHORITY:SYMBOL` values, ignoring empty parts. Each value is matched
+case-insensitively against the symbols of non-deleted directory entries, and the
+list holds the matching entry IDs in setting order without duplicates. For
+example, `ISIL:US-MNMPUMNX` becomes the Minitex entry's ID. A value without an
+authority, or one that matches no entry or several entries, fails the export
+before any records are emitted. All other entries, including the owner's
+branches, get an empty list.
+
+CrossLink imports NDJSON records sequentially and requires each lender to exist
+already, so `join-crosslink-exports.sh` emits the institutions that are listed
+as lenders, with their branches, before the other institutions. It fails if an
+entry still lists a lender that is not an earlier entry, such as an unexported
+entry or the entry itself.
 
 ## Holdings policy
 

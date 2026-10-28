@@ -126,6 +126,9 @@ For directory records it also:
 
 - combines all entry records;
 - assigns the first exported consortium to root institutions without a parent;
+- emits institutions listed as lenders of last resort, with their branches,
+  before the other institutions, because the import requires each lender to
+  exist already; it fails if a listed lender is not an earlier entry;
 - combines tier and network metadata;
 - assigns all non-consortium entries to generated tiers;
 - assigns sequential network priorities.
