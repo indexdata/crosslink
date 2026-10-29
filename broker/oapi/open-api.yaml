@@ -1901,6 +1901,10 @@ components:
             {{.PatronSurname}}, {{.PatronId}}, {{.PatronProfile}} and batch templates include
             {{.FullCount}}, {{.ActualCount}}, {{.BatchQuery}}. {{.PatronName}} remains
             supported as a backwards-compatible alias for {{.PatronGivenName}}.
+            To render each item associated with a patron request, use
+            {{range .Items}}{{.Title}}: {{.Barcode}}{{end}}. Inside the range,
+            item fields are {{.Title}}, {{.Barcode}}, {{.CallNumber}},
+            {{.Location}}, and {{.ShelvingLocation}}. An empty item list renders nothing.
         contentType:
           $ref: '#/components/schemas/TemplateContentType'
         labels:

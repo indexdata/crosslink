@@ -122,6 +122,22 @@ func TestRenderPullSlipHTML_UsesProvidedTemplate(t *testing.T) {
 	assert.Equal(t, "<main>REQ-1</main>", html)
 }
 
+func TestRenderPullSlipHTML_RangesOverItems(t *testing.T) {
+	title := "First <book>"
+	secondTitle := "Second book"
+	data := GetPullSlipData(pr_db.PatronRequest{Items: []pr_db.PrItem{
+		{Title: &title, Barcode: "A-1"},
+		{Title: &secondTitle, Barcode: "B-2"},
+	}}, nil, nil, "")
+	templateBody := `{{range .Items}}<p>{{.Title}}: {{.Barcode}}</p>{{end}}`
+
+	assert.NoError(t, ValidateHtmlTemplate(PullSlipData{}, []string{"pullslip-pdf"}, templateBody))
+	assert.NoError(t, ValidateHtmlTemplate(data, []string{"pullslip-pdf"}, templateBody))
+	html, err := RenderHtmlTemplate(data, []string{"pullslip-pdf"}, templateBody)
+	assert.NoError(t, err)
+	assert.Equal(t, "<p>First &lt;book&gt;: A-1</p><p>Second book: B-2</p>", html)
+}
+
 func TestGetPullSlipDataUsesCanonicalDueDate(t *testing.T) {
 	legacy := utils.XSDDateTime{Time: time.Date(2026, 8, 15, 9, 30, 0, 0, time.UTC)}
 	for _, tc := range []struct {
@@ -438,13 +454,14 @@ func TestGetPullSlipData_PopulatesAllAvailableFields(t *testing.T) {
 	callNumber := "QA76.73.G63"
 	location := "Main Library"
 	shelvingLocation := "Stacks"
+	itemTitle := "Item title"
 	cancellationReason := "Requested item is locally available"
 	dueDate := utils.XSDDateTime{Time: time.Date(2026, 8, 15, 9, 30, 0, 0, time.UTC)}
 	pr := pr_db.PatronRequest{
 		RequesterReqID:     pgtype.Text{String: "REQ-123", Valid: true},
 		CancellationReason: pgtype.Text{String: cancellationReason, Valid: true},
 		DueAt:              pgtype.Timestamptz{Time: dueDate.Time, Valid: true},
-		Items:              []pr_db.PrItem{{ID: "item-1", CallNumber: &callNumber, Location: &location, ShelvingLocation: &shelvingLocation}},
+		Items:              []pr_db.PrItem{{ID: "item-1", Title: &itemTitle, Barcode: "item-barcode", CallNumber: &callNumber, Location: &location, ShelvingLocation: &shelvingLocation}},
 		IllRequest: iso18626.Request{
 			BibliographicInfo: iso18626.BibliographicInfo{
 				Author:                 "Jane Doe",
@@ -542,7 +559,28 @@ func TestGetPullSlipData_PopulatesAllAvailableFields(t *testing.T) {
 		PatronSurname:      "Reader",
 		PatronId:           "P-789",
 		PatronProfile:      "Faculty",
+		Items: []PullSlipItem{{
+			Title:            itemTitle,
+			Barcode:          "item-barcode",
+			CallNumber:       callNumber,
+			Location:         location,
+			ShelvingLocation: shelvingLocation,
+		}},
 	}, data)
+}
+
+func TestGetPullSlipData_ItemsUseDefaultsForMissingOptionalFields(t *testing.T) {
+	data := GetPullSlipData(pr_db.PatronRequest{
+		Items: []pr_db.PrItem{{Barcode: "item-barcode"}},
+	}, nil, nil, "")
+
+	assert.Equal(t, []PullSlipItem{{
+		Title:            DEFAULT_FOR_NO_VALUE,
+		Barcode:          "item-barcode",
+		CallNumber:       DEFAULT_FOR_NO_VALUE,
+		Location:         DEFAULT_FOR_NO_VALUE,
+		ShelvingLocation: DEFAULT_FOR_NO_VALUE,
+	}}, data.Items)
 }
 
 func TestGetPullSlipData_UsesDefaultsWhenOptionalFieldsAreMissing(t *testing.T) {
@@ -889,6 +927,11 @@ func TestGetTemplatePlaceholdersReturnsFieldsWithDescriptions(t *testing.T) {
 		{Placeholder: "{{.PatronSurname}}", Description: "Patron's surname"},
 		{Placeholder: "{{.PatronId}}", Description: "Patron identifier"},
 		{Placeholder: "{{.PatronProfile}}", Description: "Patron profile"},
+		{Placeholder: "{{range .Items}}{{.Title}}{{end}}", Description: "Title of the item"},
+		{Placeholder: "{{range .Items}}{{.Barcode}}{{end}}", Description: "Barcode of the item"},
+		{Placeholder: "{{range .Items}}{{.CallNumber}}{{end}}", Description: "Library call number of the item"},
+		{Placeholder: "{{range .Items}}{{.Location}}{{end}}", Description: "Library location of the item"},
+		{Placeholder: "{{range .Items}}{{.ShelvingLocation}}{{end}}", Description: "Shelving location of the item"},
 	}
 	wantBatchEmail := []TemplatePlaceholder{
 		{Placeholder: "{{.FullCount}}", Description: "Total number of requests matched by the batch query"},
