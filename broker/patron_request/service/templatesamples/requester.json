@@ -1,0 +1,101 @@
+{
+  "request": {
+    "ID": "sample-requester",
+    "CreatedAt": "2026-07-01T09:30:00Z",
+    "State": "RECEIVED",
+    "Side": "borrowing",
+    "RequesterSymbol": "ISIL:US-REQ",
+    "SupplierSymbol": "ISIL:US-SUP",
+    "RequesterReqID": "REQ-2026-00418",
+    "Patron": "P-000552",
+    "StateModel": "default",
+    "DueAt": "2026-09-01T00:00:00Z",
+    "IllRequest": {
+      "header": {
+        "requestingAgencyId": {"agencyIdType": {"#text": "ISIL"}, "agencyIdValue": "US-REQ"},
+        "supplyingAgencyId": {"agencyIdType": {"#text": "ISIL"}, "agencyIdValue": "US-SUP"},
+        "multipleItemRequestId": "",
+        "timestamp": "2026-07-01T09:30:00Z",
+        "requestingAgencyRequestId": "REQ-2026-00418"
+      },
+      "bibliographicInfo": {
+        "title": "Silent Spring",
+        "author": "Carson, Rachel",
+        "bibliographicItemId": [
+          {"bibliographicItemIdentifier": "9780618249060", "bibliographicItemIdentifierCode": {"#text": "ISBN"}}
+        ]
+      },
+      "publicationInfo": {
+        "publisher": "Houghton Mifflin",
+        "publicationType": {"#text": "Book"},
+        "publicationDate": "2002"
+      },
+      "serviceInfo": {
+        "serviceType": "Loan",
+        "serviceLevel": {"#text": "Rush"},
+        "needBeforeDate": "2026-07-20T00:00:00Z",
+        "note": "Needed for a class presentation."
+      },
+      "requestedDeliveryInfo": [
+        {
+          "sortOrder": 1,
+          "address": {
+            "physicalAddress": {
+              "line1": "Science Library, Hold Shelf",
+              "line2": "5 College Green",
+              "locality": "Springfield",
+              "postalCode": "62703",
+              "region": {"#text": "IL"},
+              "country": {"#text": "US"}
+            }
+          }
+        }
+      ],
+      "patronInfo": {
+        "patronId": "P-000552",
+        "givenName": "Grace",
+        "surname": "Hopper",
+        "patronType": {"#text": "Graduate student"}
+      }
+    },
+    "IllResponse": {
+      "header": {
+        "requestingAgencyId": {"agencyIdType": {"#text": "ISIL"}, "agencyIdValue": "US-REQ"},
+        "supplyingAgencyId": {"agencyIdType": {"#text": "ISIL"}, "agencyIdValue": "US-SUP"},
+        "multipleItemRequestId": "",
+        "timestamp": "2026-07-05T11:20:00Z",
+        "requestingAgencyRequestId": "REQ-2026-00418",
+        "supplyingAgencyRequestId": "SUP-88213"
+      },
+      "messageInfo": {"reasonForMessage": "StatusChange"},
+      "statusInfo": {"status": "Loaned", "dueDate": "2026-09-01T00:00:00Z", "lastChange": "2026-07-05T11:20:00Z"},
+      "deliveryInfo": {
+        "dateSent": "2026-07-05T11:20:00Z",
+        "itemId": "39876001234567",
+        "sentVia": {"#text": "Mail"},
+        "loanCondition": {"#text": "NoReproduction"}
+      },
+      "returnInfo": {
+        "name": "Shelbyville Public Library",
+        "physicalAddress": {
+          "line1": "Interlibrary Loan Office",
+          "line2": "42 Elm Street",
+          "locality": "Shelbyville",
+          "postalCode": "62565",
+          "region": {"#text": "IL"},
+          "country": {"#text": "US"}
+        }
+      }
+    },
+    "Items": [
+      {
+        "id": "sample-requester-item-1",
+        "barcode": "39876001234567",
+        "lms_status": "ACCEPTED",
+        "created_at": "2026-07-06T10:00:00Z"
+      }
+    ]
+  },
+  "notes": ["Patron has been notified by email."],
+  "conditions": ["No reproduction"]
+}
