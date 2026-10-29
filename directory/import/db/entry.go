@@ -470,6 +470,10 @@ func replaceCatalogConfig(ctx context.Context, queries *db.Queries, entryID uuid
 	}
 	if config.MetadataFormat != nil && config.MetadataFormat.Marc21 != nil {
 		marc := config.MetadataFormat.Marc21
+		params.MetadataMarc21Publisher = marc.Publisher
+		params.MetadataMarc21PublicationDate = marc.PublicationDate
+		params.MetadataMarc21PlaceOfPublication = marc.PlaceOfPublication
+
 		params.MetadataMarc21Author, params.MetadataMarc21Edition, params.MetadataMarc21Identifier = marc.Author, marc.Edition, marc.Identifier
 		params.MetadataMarc21Isbn, params.MetadataMarc21Issn, params.MetadataMarc21Subtitle, params.MetadataMarc21Title = marc.ISBN, marc.ISSN, marc.Subtitle, marc.Title
 	}

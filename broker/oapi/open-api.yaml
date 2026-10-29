@@ -1769,6 +1769,38 @@ components:
           description: CQL search for patron requests to create pull slips for
           type: string
 
+    PatronRequestPrefill:
+      type: object
+      description: Catalog metadata for form prefill. Empty sections are omitted; serviceInfo is present only when serviceType was supplied.
+      properties:
+        bibliographicInfo:
+          $ref: '#/components/schemas/BibliographicInfo'
+        publicationInfo:
+          $ref: '#/components/schemas/PrefillPublicationInfo'
+        serviceInfo:
+          $ref: '#/components/schemas/PrefillServiceInfo'
+    PrefillPublicationInfo:
+      type: object
+      properties:
+        publisher:
+          type: string
+        publicationDate:
+          type: string
+        placeOfPublication:
+          type: string
+        publicationType:
+          type: object
+          properties:
+            '#text':
+              type: string
+    PrefillServiceInfo:
+      type: object
+      required: [serviceType]
+      properties:
+        serviceType:
+          type: string
+          enum: [Loan, Copy, CopyOrLoan]
+
     BibliographicInfo:
       type: object
       description: Bibliographic information for an ILL request item, as defined in ISO18626
@@ -2571,6 +2603,95 @@ paths:
                 $ref: '#/components/schemas/Error'
         '500':
           description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /patron_requests/prefill:
+    get:
+      summary: Retrieve catalog metadata for patron request form prefill
+      description: |
+        Requires at least one nonblank identifier, isbn, or issn. ISBN/ISSN syntax
+        is checked (spaces and hyphens are accepted), but checksums are not checked.
+        Lookup values are passed to the configured catalog query builder. The general
+        builder tries identifier, ISBN, then ISSN; these are fallback queries, not an AND.
+        Existing adapter selection is preserved: the first record supplies metadata,
+        and holdings determine whether further fallback queries are attempted.
+        Records without holdings can still supply metadata. Empty sections are omitted.
+        serviceType is a caller choice, passed to lookup and returned in serviceInfo;
+        no service type is inferred or defaulted. No patron request is created or modified.
+        Uses requester/consortium/global catalog configuration regardless of metadataUpdateMode.
+        The unprefixed endpoint requires symbol; the /broker endpoint resolves the tenant
+        and validates any explicit symbol using the existing tenant rules.
+      tags:
+        - patron-requests-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+        - name: identifier
+          in: query
+          description: Catalog record identifier
+          schema:
+            type: string
+            maxLength: 1024
+        - name: isbn
+          in: query
+          description: ISBN-10 or ISBN-13; spaces and hyphens accepted
+          schema:
+            type: string
+            maxLength: 1024
+        - name: issn
+          in: query
+          description: ISSN; spaces and hyphens accepted
+          schema:
+            type: string
+            maxLength: 1024
+        - name: serviceType
+          in: query
+          description: Optional patron service choice; does not replace the required lookup identifier.
+          schema:
+            type: string
+            enum: [Loan, Copy, CopyOrLoan]
+            x-enum-varnames: [PrefillLoan, PrefillCopy, PrefillCopyOrLoan]
+      responses:
+        '200':
+          description: Record found; available metadata only (possibly an empty object).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatronRequestPrefill'
+              example:
+                bibliographicInfo:
+                  title: Example title
+                  supplierUniqueRecordId: '12345'
+                publicationInfo:
+                  publisher: Example publisher
+                  publicationDate: '2025'
+                  publicationType:
+                    '#text': Book
+                serviceInfo:
+                  serviceType: Loan
+        '400':
+          description: Invalid parameters or requester context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: No catalog record found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Catalog or Directory lookup failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: No catalog configured for this requester
           content:
             application/json:
               schema:

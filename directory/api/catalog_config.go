@@ -67,6 +67,9 @@ func catalogConfigToDBParams(entryID uuid.UUID, cfg CatalogConfig) db.UpsertCata
 		params.MetadataMarc21Isbn = marc.Isbn
 		params.MetadataMarc21Issn = marc.Issn
 		params.MetadataMarc21Subtitle = marc.Subtitle
+		params.MetadataMarc21Publisher = marc.Publisher
+		params.MetadataMarc21PublicationDate = marc.PublicationDate
+		params.MetadataMarc21PlaceOfPublication = marc.PlaceOfPublication
 		params.MetadataMarc21Title = marc.Title
 	}
 
@@ -145,6 +148,9 @@ func catalogConfigPatchToDBParams(entryID uuid.UUID, cfg CatalogConfigPatch, ori
 		MetadataMarc21Isbn:                   original.MetadataMarc21Isbn,
 		MetadataMarc21Issn:                   original.MetadataMarc21Issn,
 		MetadataMarc21Subtitle:               original.MetadataMarc21Subtitle,
+		MetadataMarc21Publisher:              original.MetadataMarc21Publisher,
+		MetadataMarc21PublicationDate:        original.MetadataMarc21PublicationDate,
+		MetadataMarc21PlaceOfPublication:     original.MetadataMarc21PlaceOfPublication,
 		MetadataMarc21Title:                  original.MetadataMarc21Title,
 	}
 
@@ -228,6 +234,9 @@ func catalogConfigPatchToDBParams(entryID uuid.UUID, cfg CatalogConfigPatch, ori
 		params.MetadataMarc21Isbn = derefOrDefaultPtr(marc.Isbn, params.MetadataMarc21Isbn)
 		params.MetadataMarc21Issn = derefOrDefaultPtr(marc.Issn, params.MetadataMarc21Issn)
 		params.MetadataMarc21Subtitle = derefOrDefaultPtr(marc.Subtitle, params.MetadataMarc21Subtitle)
+		params.MetadataMarc21Publisher = derefOrDefaultPtr(marc.Publisher, params.MetadataMarc21Publisher)
+		params.MetadataMarc21PublicationDate = derefOrDefaultPtr(marc.PublicationDate, params.MetadataMarc21PublicationDate)
+		params.MetadataMarc21PlaceOfPublication = derefOrDefaultPtr(marc.PlaceOfPublication, params.MetadataMarc21PlaceOfPublication)
 		params.MetadataMarc21Title = derefOrDefaultPtr(marc.Title, params.MetadataMarc21Title)
 	}
 

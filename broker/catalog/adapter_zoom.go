@@ -3,7 +3,10 @@
 package catalog
 
 import (
+	"context"
 	"fmt"
+	"strconv"
+	"time"
 
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/zoom"
@@ -12,6 +15,7 @@ import (
 func cgoEnabled() bool { return true }
 
 type ZoomLookupAdapter struct {
+	lookupContext  context.Context
 	zurl           string
 	options        zoom.Options
 	holdingsParser HoldingsParser
@@ -20,9 +24,10 @@ type ZoomLookupAdapter struct {
 }
 
 type ZoomLookupResult struct {
-	query    string
-	holdings []Holding
-	metadata *Metadata
+	recordFound bool
+	query       string
+	holdings    []Holding
+	metadata    *Metadata
 }
 
 func NewZoomLookupAdapter(config dirapi.ZoomConfig, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser, metadataParser MetadataParser) (LookupAdapter, error) {
@@ -55,6 +60,11 @@ func (a *ZoomLookupAdapter) searchRetrieve(conn *zoom.Connection, query *zoom.Qu
 	var found bool
 	limit := min(set.Count(), 100) // safety limit to avoid processing too many records
 	for i := 0; i < limit; i++ {
+		if a.lookupContext != nil {
+			if err := a.lookupContext.Err(); err != nil {
+				return false, err
+			}
+		}
 		rec, err := set.GetRecord(i)
 		if err != nil {
 			return false, err
@@ -82,6 +92,11 @@ func (a *ZoomLookupAdapter) iterateQueries(
 	params LookupParams,
 	processRecord func([]byte) (bool, error),
 ) (string, error) {
+	if a.lookupContext != nil {
+		if err := a.lookupContext.Err(); err != nil {
+			return "", err
+		}
+	}
 	conn := zoom.NewConnection(a.options)
 	defer conn.Close()
 	var pqfList []string
@@ -98,6 +113,11 @@ func (a *ZoomLookupAdapter) iterateQueries(
 		return "", fmt.Errorf("no valid query parameters provided")
 	}
 	for _, pqf := range pqfList {
+		if a.lookupContext != nil {
+			if err := a.lookupContext.Err(); err != nil {
+				return "", err
+			}
+		}
 		query, err := zoom.NewPqfQuery(pqf)
 		if err != nil {
 			return pqf, fmt.Errorf("failed to create PQF query: %w", err)
@@ -112,6 +132,11 @@ func (a *ZoomLookupAdapter) iterateQueries(
 		}
 	}
 	for _, cql := range cqlList {
+		if a.lookupContext != nil {
+			if err := a.lookupContext.Err(); err != nil {
+				return "", err
+			}
+		}
 		query, err := zoom.NewCqlQuery(cql)
 		if err != nil {
 			return cql, fmt.Errorf("failed to create CQL query: %w", err)
@@ -135,6 +160,7 @@ func (a *ZoomLookupAdapter) Lookup(params LookupParams) (LookupResult, error) {
 	var result ZoomLookupResult
 	var err error
 	result.query, err = a.iterateQueries(params, func(xmlBuffer []byte) (bool, error) {
+		result.recordFound = true
 		h, err := a.holdingsParser.Parse(xmlBuffer, params)
 		if err != nil {
 			return false, fmt.Errorf("failed to parse holdings from ZOOM record: %w", err)
@@ -168,4 +194,33 @@ func (r *ZoomLookupResult) GetMetadata() (Metadata, error) {
 		return Metadata{}, nil
 	}
 	return *r.metadata, nil
+}
+
+func (r *ZoomLookupResult) HasRecord() bool { return r.recordFound }
+
+// LookupContext bounds native ZOOM operations and observes cancellation between them.
+// A synchronous native call can only stop when its configured timeout expires.
+func (a *ZoomLookupAdapter) LookupContext(ctx context.Context, params LookupParams) (LookupResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	copyAdapter := *a
+	copyAdapter.lookupContext = ctx
+	copyAdapter.options = make(zoom.Options, len(a.options)+1)
+	for key, value := range a.options {
+		copyAdapter.options[key] = value
+	}
+	timeout := 10
+	if value, err := strconv.Atoi(a.options["timeout"]); err == nil && value > 0 {
+		timeout = min(timeout, value)
+	}
+	if deadline, ok := ctx.Deadline(); ok {
+		timeout = max(1, min(timeout, int(time.Until(deadline).Seconds())))
+	}
+	copyAdapter.options["timeout"] = strconv.Itoa(timeout)
+	result, err := copyAdapter.Lookup(params)
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	return result, err
 }

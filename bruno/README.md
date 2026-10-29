@@ -118,3 +118,14 @@ Start Bruno and load the `LocalDev` environment.
 
 Select the `Reservoir` folder in Bruno. Only the first parts of the Happy flow is currently in this holder. This
 is merely to test that SRU lookup is operational.
+
+## Catalog prefill
+
+`PR Prefill` exercises metadata retrieval with and without a caller-selected
+service type, missing records, and missing lookup parameters. It uses the standard
+local stack's shared mock catalog and creates no patron requests.
+
+```sh
+cd crosslink
+npx --yes @usebruno/cli@3.5.2 run "PR Prefill" --env LocalDev --env-var userPassword=dummy
+```

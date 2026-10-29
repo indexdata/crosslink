@@ -449,3 +449,40 @@ to 1:1. An omitted or null policy, missing `illConfig`, or unset
 `CONSORTIUM_SYMBOL` uses proportional, regardless of requester settings.
 Locality, cost, network priority, and holdings preferences retain precedence over the score; last-resort lenders remain at the end.
 Rota diagnostics include the selected `loadBalancingPolicy` and raw scores.
+
+## Catalog prefill
+
+`GET /patron_requests/prefill` retrieves metadata without creating or modifying a
+patron request. Supply at least one of `identifier`, `isbn`, or `issn`, and a
+requester `symbol`. On `/broker/patron_requests/prefill`, `X-Okapi-Tenant` resolves
+the requester; an optional `symbol` must belong to that tenant. The existing
+requester/consortium/global catalog selection applies, independently of
+`metadataUpdateMode`.
+
+Optional `serviceType=Loan|Copy|CopyOrLoan` is passed to catalog lookup and echoed
+in `serviceInfo.serviceType`. Omit it to leave the service choice unset. No other
+service fields are inferred. ISBN/ISSN syntax accepts spaces and hyphens; checksums
+are not validated. Values are passed unchanged after trimming outer whitespace.
+
+The response uses ISO 18626 JSON sections `bibliographicInfo`, `publicationInfo`,
+and `serviceInfo`, omitting empty sections. A returned record with no mapped
+fields yields `{}` (or just the supplied service type). The general query builder
+tries identifier, ISBN, then ISSN. Existing holdings-driven fallback and first-record
+metadata selection are retained; metadata does not require available holdings.
+
+Responses are `400` for invalid input or requester context, `404` for no record,
+`502` for lookup failures, and `503` when no catalog is configured. Prefill has a
+30-second deadline; SRU/metaproxy requests honor cancellation. Native ZOOM calls
+check cancellation between operations, with individual calls limited to at most
+10 seconds (or a shorter configured timeout).
+
+Publication extraction defaults to MARC 264 with second indicator 1, falling back
+to 260 (`$a` place, `$b` publisher, `$c` date). Dates retain the catalog's text.
+The three extraction specifications can be overridden in
+`catalogConfig.metadataFormat.marc21` using `placeOfPublication`, `publisher`, and
+`publicationDate`; an explicit empty string disables a field. An asterisk in the first
+indicator in a five-character field selector matches any first indicator.
+Publication type uses conservative leader mappings: language monographs to Book,
+monographic components to Chapter, serial components to Article, manuscript text
+to Manuscript, notated music to MusicScore, maps to Map, nonmusical sound to
+SoundRecording, and musical sound to MusicRecording. Other types are omitted.

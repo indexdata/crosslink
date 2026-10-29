@@ -23,3 +23,13 @@ actions:
       x-go-type: iso18626.BibliographicInfo
       x-go-type-import:
         path: github.com/indexdata/crosslink/iso18626
+  - target: $.components.schemas.PrefillPublicationInfo
+    update:
+      x-go-type: iso18626.PublicationInfo
+      x-go-type-import:
+        path: github.com/indexdata/crosslink/iso18626
+  - target: $.components.schemas.PrefillServiceInfo
+    update:
+      x-go-type: iso18626.ServiceInfo
+      x-go-type-import:
+        path: github.com/indexdata/crosslink/iso18626

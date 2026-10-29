@@ -142,13 +142,16 @@ type MetadataParserConfig struct {
 }
 
 type MarcMetadataParserConfig struct {
-	Author     *string `json:"author"`
-	Edition    *string `json:"edition"`
-	Identifier *string `json:"identifier"`
-	ISBN       *string `json:"isbn"`
-	ISSN       *string `json:"issn"`
-	Subtitle   *string `json:"subtitle"`
-	Title      *string `json:"title"`
+	Publisher          *string `json:"publisher,omitempty"`
+	PublicationDate    *string `json:"publicationDate,omitempty"`
+	PlaceOfPublication *string `json:"placeOfPublication,omitempty"`
+	Author             *string `json:"author"`
+	Edition            *string `json:"edition"`
+	Identifier         *string `json:"identifier"`
+	ISBN               *string `json:"isbn"`
+	ISSN               *string `json:"issn"`
+	Subtitle           *string `json:"subtitle"`
+	Title              *string `json:"title"`
 }
 
 type HoldingsPolicy struct {

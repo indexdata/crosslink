@@ -27,6 +27,8 @@ type LookupAdapter interface {
 }
 
 type LookupResult interface {
+	// HasRecord reports whether a catalog record was returned, even without metadata or holdings.
+	HasRecord() bool
 	GetQuery() string
 	GetHoldings() ([]Holding, error)
 	GetMetadata() (Metadata, error)
@@ -66,11 +68,15 @@ type MetadataParser interface {
 }
 
 type Metadata struct {
-	Identifier string
-	Title      string
-	Subtitle   string
-	Author     string
-	Edition    string
-	Isbn       string
-	Issn       string
+	Publisher          string
+	PublicationDate    string
+	PlaceOfPublication string
+	PublicationType    string
+	Identifier         string
+	Title              string
+	Subtitle           string
+	Author             string
+	Edition            string
+	Isbn               string
+	Issn               string
 }

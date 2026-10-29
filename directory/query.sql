@@ -250,7 +250,8 @@ INSERT INTO catalog_configs (
   holdings_marc_main_field, holdings_marc_restricted_subfield, holdings_marc_shelving_location_subfield,
   holdings_marc21plus1_enabled, holdings_opac_enabled, holdings_reservoir_enabled,
   metadata_marc21_author, metadata_marc21_edition, metadata_marc21_identifier, metadata_marc21_isbn,
-  metadata_marc21_issn, metadata_marc21_subtitle, metadata_marc21_title, profile, holdings_config
+  metadata_marc21_issn, metadata_marc21_subtitle, metadata_marc21_title,
+  metadata_marc21_publisher, metadata_marc21_publication_date, metadata_marc21_place_of_publication, profile, holdings_config
 ) VALUES (
   coalesce(sqlc.narg('id'), gen_random_uuid()),
   @entry,
@@ -283,6 +284,9 @@ INSERT INTO catalog_configs (
   @metadata_marc21_issn,
   @metadata_marc21_subtitle,
   @metadata_marc21_title,
+  @metadata_marc21_publisher,
+  @metadata_marc21_publication_date,
+  @metadata_marc21_place_of_publication,
   @profile,
   @holdings_config
 )
@@ -317,7 +321,10 @@ ON CONFLICT (entry) DO UPDATE SET
   metadata_marc21_isbn = @metadata_marc21_isbn,
   metadata_marc21_issn = @metadata_marc21_issn,
   metadata_marc21_subtitle = @metadata_marc21_subtitle,
-  metadata_marc21_title = @metadata_marc21_title
+  metadata_marc21_title = @metadata_marc21_title,
+  metadata_marc21_publisher = @metadata_marc21_publisher,
+  metadata_marc21_publication_date = @metadata_marc21_publication_date,
+  metadata_marc21_place_of_publication = @metadata_marc21_place_of_publication
 WHERE catalog_configs.entry = sqlc.narg('entry')
 RETURNING *;
 

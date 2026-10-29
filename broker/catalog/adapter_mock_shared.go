@@ -83,3 +83,5 @@ func (m *MockLookupSharedResult) GetHoldings() ([]Holding, error) {
 func (m *MockLookupSharedResult) GetQuery() string {
 	return m.query
 }
+
+func (m *MockLookupSharedResult) HasRecord() bool { return len(m.holdings) > 0 }

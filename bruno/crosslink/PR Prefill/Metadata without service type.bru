@@ -1,0 +1,28 @@
+meta {
+  name: Metadata without service type
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{host}}/patron_requests/prefill?identifier=prefill-record
+  body: none
+  auth: basic
+}
+
+headers {
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+  X-Okapi-User-Id: {{userName}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+tests {
+  test("Prefill response", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody()).not.to.have.property("serviceInfo");
+  });
+}

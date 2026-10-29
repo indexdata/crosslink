@@ -247,3 +247,16 @@ imports. Omitted or null new fields in a complete import clear stored overrides;
 PATCH omission preserves them. Query PATCHes follow existing query-field semantics:
 use `none` and an empty prefix to disable transforms. Empty holdings arrays and
 explicit false values override profile defaults.
+
+### Publication metadata extraction
+
+`catalogConfig.metadataFormat.marc21` accepts `publisher`, `publicationDate`, and
+`placeOfPublication` extraction specifications, in addition to the existing
+bibliographic fields. Omitted values use broker defaults: `264*1$b/260$b`,
+`264*1$c/260$c`, and `264*1$a/260$a`, respectively. The asterisk in the first indicator in
+these selectors matches any first indicator; the second indicator must be `1`
+(publication). An empty string disables extraction. Publication dates remain
+catalog text. These optional settings are supported by create, patch, reads, and
+imports; existing import payloads remain valid. Directory migration 023 adds
+nullable columns without rewriting existing data. Deploy the Directory migration
+and service before configuring the new fields.

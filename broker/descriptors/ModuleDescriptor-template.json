@@ -100,6 +100,15 @@
           "methods": [
             "GET"
           ],
+          "pathPattern": "/broker/patron_requests/prefill",
+          "permissionsRequired": [
+            "broker.patron_requests.prefill.get"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
           "pathPattern": "/broker/patron_requests",
           "permissionsRequired": [
             "broker.patron_requests.get"
@@ -489,6 +498,11 @@
       "permissionName": "broker.peers.get"
     },
     {
+      "description": "Retrieve catalog prefill metadata",
+      "displayName": "Broker - retrieve catalog prefill metadata",
+      "permissionName": "broker.patron_requests.prefill.get"
+    },
+    {
       "description": "List patron requests",
       "displayName": "Broker - read patron requests (list)",
       "permissionName": "broker.patron_requests.get"
@@ -716,6 +730,7 @@
       "visible": true,
       "subPermissions": [
         "broker.patron_requests.get",
+        "broker.patron_requests.prefill.get",
         "broker.patron_requests.item.get",
         "broker.patron_requests.item.actions.get",
         "broker.patron_requests.item.events.get",
@@ -793,6 +808,7 @@
         "broker.peers.get",
         "broker.sse.events.get",
         "broker.patron_requests.get",
+        "broker.patron_requests.prefill.get",
         "broker.patron_requests.post",
         "broker.patron_requests.item.get",
         "broker.patron_requests.item.put",
