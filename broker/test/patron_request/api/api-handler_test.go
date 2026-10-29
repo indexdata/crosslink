@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/carlos7ags/folio/reader"
 	"io"
 	"net/http"
 	"net/url"
@@ -1757,4 +1758,124 @@ func TestTemplateLabelConflictsReturn409(t *testing.T) {
 	require.NoError(t, err)
 	conflictBody = httpRequest(t, http.MethodPut, "/templates/"+created.Id+"?symbol="+url.QueryEscape(symbol), updateBytes, http.StatusConflict)
 	assert.Contains(t, string(conflictBody), "template labels already exist")
+}
+
+func TestTemplatePreview(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	symbol := "ISIL:PREV" + uuid.NewString()
+	apptest.CreatePeerWithModeAndVendor(t, illRepo, symbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink, dirapi.Entry{}, symbol)
+	otherSymbol := "ISIL:OTHER" + uuid.NewString()
+	apptest.CreatePeerWithModeAndVendor(t, illRepo, otherSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink, dirapi.Entry{}, otherSymbol)
+
+	prId := uuid.NewString()
+	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID:              prId,
+		CreatedAt:       pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Side:            prservice.SideLending,
+		RequesterSymbol: pgtype.Text{String: otherSymbol, Valid: true},
+		SupplierSymbol:  pgtype.Text{String: symbol, Valid: true},
+		State:           prservice.LenderStateWillSupply,
+		Language:        "english",
+		RequesterReqID:  pgtype.Text{String: "REQ-PREVIEW", Valid: true},
+		IllRequest: iso18626.Request{
+			BibliographicInfo: iso18626.BibliographicInfo{Title: "Preview Title"},
+		},
+		Items: []pr_db.PrItem{},
+	})
+	require.NoError(t, err)
+	_, err = prRepo.SaveItem(appCtx, pr_db.SaveItemParams{
+		ID:         uuid.NewString(),
+		PrID:       prId,
+		Barcode:    "BAR-PREVIEW",
+		CallNumber: pgtype.Text{String: "CALL-PREVIEW", Valid: true},
+		CreatedAt:  pgtype.Timestamp{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = prRepo.SaveNotification(appCtx, pr_db.SaveNotificationParams{
+		ID: uuid.NewString(), PrID: prId, FromSymbol: symbol, ToSymbol: otherSymbol,
+		Direction: pr_db.NotificationDirectionSent, Kind: pr_db.NotificationKindNote,
+		Note:      pgtype.Text{String: "Preview note", Valid: true},
+		CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+
+	previewPath := func(symbol string) string {
+		return "/templates/preview?symbol=" + url.QueryEscape(symbol)
+	}
+	secondPrId := uuid.NewString()
+	_, err = prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID:              secondPrId,
+		CreatedAt:       pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Side:            prservice.SideLending,
+		RequesterSymbol: pgtype.Text{String: otherSymbol, Valid: true},
+		SupplierSymbol:  pgtype.Text{String: symbol, Valid: true},
+		State:           prservice.LenderStateWillSupply,
+		Language:        "english",
+		RequesterReqID:  pgtype.Text{String: "REQ-PREVIEW-2", Valid: true},
+		IllRequest: iso18626.Request{
+			BibliographicInfo: iso18626.BibliographicInfo{Title: "Second Title"},
+		},
+		Items: []pr_db.PrItem{},
+	})
+	require.NoError(t, err)
+
+	pdfText := func(pdf []byte) string {
+		parsed, err := reader.Parse(pdf)
+		require.NoError(t, err)
+		var text strings.Builder
+		for i := range parsed.PageCount() {
+			page, err := parsed.Page(i)
+			require.NoError(t, err)
+			pageText, err := page.ExtractText()
+			require.NoError(t, err)
+			text.WriteString(pageText)
+			text.WriteString("\n")
+		}
+		return text.String()
+	}
+	previewBody := func(body string, requestIds ...string) []byte {
+		request := proapi.TemplatePreviewRequest{Body: body}
+		if len(requestIds) > 0 {
+			request.RequestIds = &requestIds
+		}
+		bytes, err := json.Marshal(request)
+		require.NoError(t, err)
+		return bytes
+	}
+	slip := "<p>{{.Title}}|{{.CallNumber}}|{{.StaffNotes}}</p>"
+
+	// The supplier owns the lending requests and sees their data, one slip each in the order asked for.
+	hres, respBytes := httpRequest2(t, http.MethodPost, previewPath(symbol), previewBody(slip, secondPrId, prId), http.StatusOK)
+	assert.Equal(t, "application/pdf", hres.Header.Get("Content-Type"))
+	text := pdfText(respBytes)
+	first := strings.Index(text, "Second Title|")
+	second := strings.Index(text, "Preview Title|CALL-PREVIEW|Preview note")
+	require.GreaterOrEqual(t, first, 0, text)
+	require.Greater(t, second, first, text)
+
+	// The requester symbol on the request does not own the lending side.
+	httpRequest(t, http.MethodPost, previewPath(otherSymbol), previewBody(slip, prId), http.StatusNotFound)
+	httpRequest(t, http.MethodPost, previewPath(symbol), previewBody(slip, prId, uuid.NewString()), http.StatusNotFound)
+	tooMany := make([]string, 21)
+	for i := range tooMany {
+		tooMany[i] = prId
+	}
+	httpRequest(t, http.MethodPost, previewPath(symbol), previewBody(slip, tooMany...), http.StatusBadRequest)
+
+	preset, err := prservice.GetStateModelTemplateDefault(proapi.Pullslip, proapi.TemplateAudienceStaff, "pullslip-pdf")
+	require.NoError(t, err)
+	respBytes = httpRequest(t, http.MethodPost, previewPath(symbol), previewBody(preset.Body), http.StatusOK)
+	assert.True(t, bytes.HasPrefix(respBytes, []byte("%PDF")))
+
+	respBytes = httpRequest(t, http.MethodPost, previewPath(symbol), previewBody("<p>\n{{.Missing}}</p>", prId), http.StatusBadRequest)
+	var errResp proapi.Error
+	require.NoError(t, json.Unmarshal(respBytes, &errResp))
+	assert.Contains(t, *errResp.Error, "template:2:")
+	require.NotNil(t, errResp.Template)
+	assert.Equal(t, proapi.Body, errResp.Template.Part)
+	assert.Nil(t, errResp.Template.Sample)
+	assert.Nil(t, errResp.Template.RequestId)
+	assert.Equal(t, 2, *errResp.Template.Line)
+	assert.Equal(t, 3, *errResp.Template.Column)
+	assert.Equal(t, "unknown field Missing", errResp.Template.Message)
 }

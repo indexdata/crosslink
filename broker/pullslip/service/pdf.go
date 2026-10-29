@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"image/png"
 
 	"github.com/boombuler/barcode"
@@ -35,7 +36,7 @@ func NewPdfService(prRepo pr_db.PrRepo) PdfService {
 }
 
 func (p *PdfServiceImpl) GeneratePdfPullSlipForPrs(ctx common.ExtendedContext, prs []pr_db.PatronRequest) ([]byte, error) {
-	pdfs := []*reader.PdfReader{}
+	pdfs := [][]byte{}
 	for _, pr := range prs {
 		notes, _, err := p.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{Limit: 100, Offset: 0, PrID: pr.ID, Kind: string(pr_db.NotificationKindNote)})
 		if err != nil {
@@ -49,13 +50,21 @@ func (p *PdfServiceImpl) GeneratePdfPullSlipForPrs(ctx common.ExtendedContext, p
 		if err != nil {
 			return []byte{}, err
 		}
+		pdfs = append(pdfs, pdf)
+	}
+	return MergePdfs(pdfs)
+}
+
+func MergePdfs(pdfs [][]byte) ([]byte, error) {
+	readers := make([]*reader.PdfReader, 0, len(pdfs))
+	for _, pdf := range pdfs {
 		pdfReader, err := reader.Parse(pdf)
 		if err != nil {
-			return []byte{}, err
+			return nil, err
 		}
-		pdfs = append(pdfs, pdfReader)
+		readers = append(readers, pdfReader)
 	}
-	merged, err := reader.Merge(pdfs...)
+	merged, err := reader.Merge(readers...)
 	if err != nil {
 		return nil, err
 	}
@@ -67,29 +76,39 @@ func (p *PdfServiceImpl) GeneratePdfPullSlipForPrs(ctx common.ExtendedContext, p
 }
 
 func (p *PdfServiceImpl) GeneratePdfPullSlip(ctx common.ExtendedContext, pr pr_db.PatronRequest, notes []pr_db.Notification, conditions []pr_db.Notification) ([]byte, error) {
-	barcodeData, err := getBarcodeBase64(pr.RequesterReqID.String)
-	if err != nil {
-		return nil, err
-	}
 	pdfTemplate, err := p.getTemplateForPatronRequest(ctx, pr)
 	if err != nil {
 		return []byte{}, err
+	}
+	return RenderPdfPullSlip(pr, notes, conditions, pdfTemplate.Labels, pdfTemplate.Body)
+}
+
+// RenderPdfPullSlip is what printing and template previews both render
+// through. It does no I/O. A template error is a *email.TemplateError; an
+// error from encoding the request ID as a barcode or from building the PDF
+// names that stage instead.
+func RenderPdfPullSlip(pr pr_db.PatronRequest, notes []pr_db.Notification, conditions []pr_db.Notification, labels []string, templateBody string) ([]byte, error) {
+	barcodeData, err := getBarcodeBase64(pr.RequesterReqID.String)
+	if err != nil {
+		return nil, fmt.Errorf("barcode: %w", err)
 	}
 
 	doc := document.NewDocument(document.PageSizeA4)
 
 	data := email.GetPullSlipData(pr, notes, conditions, barcodeData)
-	html, err := email.RenderHtmlTemplate(data, pdfTemplate.Labels, pdfTemplate.Body)
+	html, err := email.RenderHtmlTemplate(data, labels, templateBody)
 	if err != nil {
 		return nil, err
 	}
 
-	err = doc.AddHTML(html, nil)
-	if err != nil {
-		return nil, err
+	if err := doc.AddHTML(html, nil); err != nil {
+		return nil, fmt.Errorf("pdf: %w", err)
 	}
-
-	return doc.ToBytes()
+	pdf, err := doc.ToBytes()
+	if err != nil {
+		return nil, fmt.Errorf("pdf: %w", err)
+	}
+	return pdf, nil
 }
 
 func (p *PdfServiceImpl) getTemplateForPatronRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (pr_db.Template, error) {

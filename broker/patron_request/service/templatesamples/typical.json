@@ -1,0 +1,110 @@
+{
+  "request": {
+    "ID": "sample-typical",
+    "CreatedAt": "2026-07-01T09:30:00Z",
+    "State": "WILL_SUPPLY",
+    "Side": "lending",
+    "RequesterSymbol": "ISIL:US-REQ",
+    "SupplierSymbol": "ISIL:US-SUP",
+    "RequesterReqID": "REQ-2026-00417",
+    "StateModel": "default",
+    "DueAt": "2026-08-15T00:00:00Z",
+    "IllRequest": {
+      "header": {
+        "requestingAgencyId": {"agencyIdType": {"#text": "ISIL"}, "agencyIdValue": "US-REQ"},
+        "supplyingAgencyId": {"agencyIdType": {"#text": "ISIL"}, "agencyIdValue": "US-SUP"},
+        "multipleItemRequestId": "",
+        "timestamp": "2026-07-01T09:30:00Z",
+        "requestingAgencyRequestId": "REQ-2026-00417"
+      },
+      "bibliographicInfo": {
+        "supplierUniqueRecordId": "in00004218",
+        "title": "The Art of Computer Programming",
+        "subtitle": "Fundamental Algorithms",
+        "author": "Knuth, Donald E.",
+        "edition": "3rd ed.",
+        "volume": "1",
+        "estimatedNoPages": "650",
+        "bibliographicItemId": [
+          {"bibliographicItemIdentifier": "9780201896831", "bibliographicItemIdentifierCode": {"#text": "ISBN"}}
+        ],
+        "bibliographicRecordId": [
+          {"bibliographicRecordIdentifier": "36457383", "bibliographicRecordIdentifierCode": {"#text": "OCLC"}}
+        ]
+      },
+      "publicationInfo": {
+        "publisher": "Addison-Wesley",
+        "publicationType": {"#text": "Book"},
+        "publicationDate": "1997",
+        "placeOfPublication": "Reading, Mass."
+      },
+      "serviceInfo": {
+        "serviceType": "Loan",
+        "serviceLevel": {"#text": "Standard"},
+        "needBeforeDate": "2026-08-01T00:00:00Z",
+        "note": "Any edition is fine."
+      },
+      "requestedDeliveryInfo": [
+        {
+          "sortOrder": 1,
+          "address": {
+            "physicalAddress": {
+              "line1": "Main Library, Circulation Desk",
+              "line2": "100 University Avenue",
+              "locality": "Springfield",
+              "postalCode": "62701",
+              "region": {"#text": "IL"},
+              "country": {"#text": "US"}
+            }
+          }
+        }
+      ],
+      "requestingAgencyInfo": {
+        "name": "Springfield University Library"
+      },
+      "patronInfo": {
+        "patronId": "P-000731",
+        "givenName": "Ada",
+        "surname": "Lovelace",
+        "patronType": {"#text": "Faculty"}
+      }
+    },
+    "IllResponse": {
+      "header": {
+        "requestingAgencyId": {"agencyIdType": {"#text": "ISIL"}, "agencyIdValue": "US-REQ"},
+        "supplyingAgencyId": {"agencyIdType": {"#text": "ISIL"}, "agencyIdValue": "US-SUP"},
+        "multipleItemRequestId": "",
+        "timestamp": "2026-07-02T14:05:00Z",
+        "requestingAgencyRequestId": "REQ-2026-00417"
+      },
+      "messageInfo": {"reasonForMessage": "StatusChange"},
+      "statusInfo": {"status": "WillSupply", "lastChange": "2026-07-02T14:05:00Z"},
+      "returnInfo": {
+        "name": "Shelbyville Public Library",
+        "physicalAddress": {
+          "line1": "Interlibrary Loan Office",
+          "line2": "42 Elm Street",
+          "locality": "Shelbyville",
+          "postalCode": "62565",
+          "region": {"#text": "IL"},
+          "country": {"#text": "US"}
+        }
+      }
+    },
+    "Items": [
+      {
+        "id": "sample-typical-item-1",
+        "barcode": "31234000567890",
+        "call_number": "QA76.6 .K64 1997 v.1",
+        "location": "Main Library",
+        "shelving_location": "Stacks, Level 3",
+        "title": "The Art of Computer Programming, v.1",
+        "item_id": "it00009917",
+        "lms_status": "REQUESTED",
+        "created_at": "2026-07-02T14:05:00Z"
+      }
+    ]
+  },
+  "notes": ["Please pull by Friday."],
+  "conditions": ["Library use only"]
+}

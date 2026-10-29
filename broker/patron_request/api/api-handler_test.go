@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/carlos7ags/folio/reader"
 	"github.com/google/uuid"
 	"github.com/indexdata/cql-go/pgcql"
 	"github.com/indexdata/crosslink/broker/common"
@@ -1344,10 +1345,11 @@ func TestValidateTemplateRendering(t *testing.T) {
 
 func TestTemplateSaveEndpointsRejectRenderingErrorsBeforeSave(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		call func(PatronRequestApiHandler, *httptest.ResponseRecorder, *http.Request)
-		body string
-		want string
+		name     string
+		call     func(PatronRequestApiHandler, *httptest.ResponseRecorder, *http.Request)
+		body     string
+		want     string
+		template templateErrorDetails
 	}{
 		{
 			name: "create",
@@ -1355,7 +1357,8 @@ func TestTemplateSaveEndpointsRejectRenderingErrorsBeforeSave(t *testing.T) {
 			call: func(handler PatronRequestApiHandler, rr *httptest.ResponseRecorder, req *http.Request) {
 				handler.PostTemplates(rr, req, proapi.PostTemplatesParams{Symbol: &symbol})
 			},
-			want: "Unsupported",
+			want:     "Unsupported",
+			template: templateErrorDetails{part: "body", line: 1, column: 3, message: "unknown field Unsupported"},
 		},
 		{
 			name: "update",
@@ -1363,7 +1366,8 @@ func TestTemplateSaveEndpointsRejectRenderingErrorsBeforeSave(t *testing.T) {
 			call: func(handler PatronRequestApiHandler, rr *httptest.ResponseRecorder, req *http.Request) {
 				handler.PutTemplatesId(rr, req, "template-1", proapi.PutTemplatesIdParams{Symbol: &symbol})
 			},
-			want: "Unsupported",
+			want:     "Unsupported",
+			template: templateErrorDetails{part: "subject", line: 1, column: 3, message: "unknown field Unsupported"},
 		},
 		{
 			name: "batch template with patron request placeholder",
@@ -1371,7 +1375,8 @@ func TestTemplateSaveEndpointsRejectRenderingErrorsBeforeSave(t *testing.T) {
 			call: func(handler PatronRequestApiHandler, rr *httptest.ResponseRecorder, req *http.Request) {
 				handler.PostTemplates(rr, req, proapi.PostTemplatesParams{Symbol: &symbol})
 			},
-			want: "ReqId",
+			want:     "ReqId",
+			template: templateErrorDetails{part: "body", line: 1, column: 11, message: "unknown field ReqId"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1388,7 +1393,118 @@ func TestTemplateSaveEndpointsRejectRenderingErrorsBeforeSave(t *testing.T) {
 
 			assert.Equal(t, http.StatusBadRequest, rr.Code)
 			assert.Contains(t, rr.Body.String(), tc.want)
+			assertTemplateErrorDetails(t, rr.Body.Bytes(), &tc.template)
 			assert.Zero(t, repo.saveCalls)
+		})
+	}
+}
+
+func postTemplatesPreview(t *testing.T, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req := httptest.NewRequest(http.MethodPost, "/templates/preview", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	handler.PostTemplatesPreview(rr, req, proapi.PostTemplatesPreviewParams{Symbol: &symbol})
+	return rr
+}
+
+func pdfPages(t *testing.T, pdf []byte) []string {
+	t.Helper()
+	parsed, err := reader.Parse(pdf)
+	require.NoError(t, err)
+	var pages []string
+	for i := range parsed.PageCount() {
+		page, err := parsed.Page(i)
+		require.NoError(t, err)
+		text, err := page.ExtractText()
+		require.NoError(t, err)
+		pages = append(pages, strings.TrimSpace(text))
+	}
+	return pages
+}
+
+func TestPostTemplatesPreviewPullslipRendersEverySampleInOrder(t *testing.T) {
+	rr := postTemplatesPreview(t, `{"body":"<p>SLIP {{.ReqId}}</p>"}`)
+
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, "application/pdf", rr.Header().Get("Content-Type"))
+	assert.Equal(t, []string{
+		"SLIP REQ-2026-00417",
+		"SLIP US-REQ-CONSORTIUM-2026-0000419",
+		"SLIP REQ-7",
+		"SLIP REQ-2026-00418",
+	}, pdfPages(t, rr.Body.Bytes()))
+}
+
+func TestPostTemplatesPreviewUsesFirstLabelAsTemplateName(t *testing.T) {
+	body := `{"labels":["pullslip-pdf"],"body":"{{define \"pullslip-pdf\"}}<p>SLIP {{.ReqId}}</p>{{end}}"}`
+	rr := postTemplatesPreview(t, body)
+
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, "SLIP REQ-2026-00417", pdfPages(t, rr.Body.Bytes())[0])
+}
+
+func TestPostTemplatesPreviewRequiresTenantWithoutRequestIds(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver().WithTenantToSymbol("ISIL:DK-{tenant}"), nil, 10)
+	body := `{"body":"<p>{{.ReqId}}</p>"}`
+	req := httptest.NewRequest(http.MethodPost, "/broker/templates/preview", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	handler.PostTemplatesPreview(rr, req, proapi.PostTemplatesPreviewParams{})
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), tenant.OkapiTenantHeader+" must be specified")
+}
+
+type templateErrorDetails struct {
+	part, sample, message string
+	line, column          int
+}
+
+func assertTemplateErrorDetails(t *testing.T, body []byte, want *templateErrorDetails) {
+	t.Helper()
+	var resp proapi.Error
+	require.NoError(t, json.Unmarshal(body, &resp))
+	if want == nil {
+		assert.Nil(t, resp.Template)
+		return
+	}
+	require.NotNil(t, resp.Template)
+	got := templateErrorDetails{part: string(resp.Template.Part), message: resp.Template.Message}
+	if resp.Template.Sample != nil {
+		got.sample = *resp.Template.Sample
+	}
+	if resp.Template.Line != nil {
+		got.line = *resp.Template.Line
+	}
+	if resp.Template.Column != nil {
+		got.column = *resp.Template.Column
+	}
+	assert.Equal(t, *want, got)
+}
+
+func TestPostTemplatesPreviewRejectsBadRequests(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		body     string
+		want     string
+		template *templateErrorDetails
+	}{
+		{"no body", ``, "body is required", nil},
+		{"parse error with line", `{"body":"<p>\n{{.Title}\n</p>"}`, "template:2:",
+			&templateErrorDetails{part: "body", line: 2, message: "bad character U+007D '}'"}},
+		{"unknown field with line", `{"body":"<p>\n\n{{.Nope}}</p>"}`, "template:3:",
+			&templateErrorDetails{part: "body", line: 3, column: 3, message: "unknown field Nope"}},
+		{"batch placeholder", `{"body":"{{.FullCount}}"}`, "FullCount",
+			&templateErrorDetails{part: "body", line: 1, column: 3, message: "unknown field FullCount"}},
+		{"fails on one sample", `{"body":"<p>{{if ne .Title \"n/a\"}}{{index .Title 40}}{{end}}</p>"}`, "sample typical: template body:",
+			&templateErrorDetails{part: "body", sample: "typical", line: 1, column: 28, message: `executing "template" at <index .Title 40>: error calling index: index out of range: 40`}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rr := postTemplatesPreview(t, tc.body)
+
+			assert.Equal(t, http.StatusBadRequest, rr.Code)
+			assert.Contains(t, rr.Body.String(), tc.want)
+			assertTemplateErrorDetails(t, rr.Body.Bytes(), tc.template)
 		})
 	}
 }

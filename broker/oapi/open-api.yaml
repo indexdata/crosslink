@@ -489,6 +489,37 @@ components:
         error:
           type: string
           description: Error message
+        template:
+          $ref: '#/components/schemas/TemplateError'
+    TemplateError:
+      type: object
+      title: Template Error
+      description: Where an error lies in a template, for responses that reject a template body or subject
+      required:
+        - part
+        - message
+      properties:
+        part:
+          type: string
+          description: Which part of the template failed
+          enum:
+            - body
+            - subject
+        sample:
+          type: string
+          description: Name of the built-in preview sample the template failed on, absent when it fails on every sample or on a patron request
+        requestId:
+          type: string
+          description: ID of the patron request the template failed on, when previewing patron requests
+        line:
+          type: integer
+          description: 1-based line in the part's source, absent when the error has no position
+        column:
+          type: integer
+          description: 1-based character column within that line, absent when the error has no column
+        message:
+          type: string
+          description: The error without its location
     StatusMessage:
       type: object
       properties:
@@ -1898,6 +1929,28 @@ components:
           description: Placeholders available to templates rendered for a batch of patron request records
           items:
             $ref: '#/components/schemas/TemplatePlaceholder'
+
+    TemplatePreviewRequest:
+      type: object
+      title: Template Preview Request
+      description: A pull slip template to render without saving it, and optionally the patron requests to render it with
+      required:
+        - body
+      properties:
+        body:
+          type: string
+          description: HTML template body, as in a pullslip template
+        labels:
+          type: array
+          description: Labels for the template. The first label sets the Go template name for both previewing and printing, so a matching {{define}} block renders correctly.
+          items:
+            type: string
+        requestIds:
+          type: array
+          maxItems: 20
+          description: IDs of patron requests owned by the caller to render the template with, in this order. Omit it to render against every built-in sample.
+          items:
+            type: string
 
     CreateTemplate:
       x-go-type: Template
@@ -3677,7 +3730,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Template'
         '400':
-          description: Bad Request. Invalid input.
+          description: Bad Request. Invalid input, or the template does not render. When the error lies in the template, `template` locates it.
           content:
             application/json:
               schema:
@@ -3708,6 +3761,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TemplatePlaceholders'
+
+  /templates/preview:
+    post:
+      summary: Render a pull slip template without saving it
+      description: |
+        Renders a pull slip template body against the caller's patron requests named by requestIds, or without them against every built-in
+        sample, through the same rendering as printed pull slips. The samples are fixed data embedded in the broker and are never stored. In
+        order they are typical, a lending request with every field filled; long, with long values and several items; sparse, with nearly
+        everything missing; and requester, the borrowing side of a request. The response is one PDF holding the slips in that order, so a
+        slip longer than a page moves the slips after it.
+      tags:
+        - templates-api
+        - patron-requests-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplatePreviewRequest'
+      responses:
+        '200':
+          description: Rendered pull slips
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Bad Request. Invalid input, or the template does not render. When the error lies in the template, `template` locates it and names the sample it failed on.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Patron request not found for the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /templates/{id}:
     get:
@@ -3771,7 +3872,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Template'
         '400':
-          description: Bad Request. Invalid input.
+          description: Bad Request. Invalid input, or the template does not render. When the error lies in the template, `template` locates it.
           content:
             application/json:
               schema:
