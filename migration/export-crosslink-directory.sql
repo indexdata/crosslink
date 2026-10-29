@@ -35,8 +35,12 @@
 --     selected pickup location's code from that entry's own lmsConfig.
 --     The legacy HTTP Z39.50 proxy is deployment-level CrossLink configuration
 --     and is omitted.
---     Configure last-resort lenders after import because references to child
---     entries cannot be resolved while their parent entry is being imported.
+--   * The last_resort_lenders setting, a comma-separated AUTHORITY:SYMBOL list,
+--     becomes the owner's lendersOfLastResort as the matching entry IDs, in
+--     setting order without duplicates. Other entries get an empty list. A
+--     value that does not resolve to exactly one entry stops export before
+--     NDJSON is emitted. join-crosslink-exports.sh orders entries so that each
+--     lender is imported before the entries that list it.
 --   * The owner's tenant is the FOLIO tenant ID: the psql `tenant` variable
 --     when set, otherwise the current schema name without its _mod_rs suffix.
 --     The owner's direct branches get the same tenant so that CrossLink treats
@@ -53,6 +57,8 @@
 --   * default_copyright_type selects one copyrightType refdata value for the
 --     owner's defaultCopyrightType object. Missing settings are omitted;
 --     unresolved or ambiguous settings stop export before NDJSON is emitted.
+--     The code is the value's ISO18626 CopyrightCompliance code (us-ccg
+--     becomes US-CCG), matched case-insensitively; other values are unchanged.
 --   * default_service_level and minimum_cost seed loan and copy default tiers.
 --     Missing settings become standard and 0. The automatic-fee
 --     request_service_type setting does not describe routing capabilities.
@@ -316,8 +322,22 @@ SELECT
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
         FILTER (WHERE st_key = 'check_duplicate_time') AS duplicate_check_window_hours,
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-        FILTER (WHERE st_key = 'default_copyright_type') AS default_copyright_type
+        FILTER (WHERE st_key = 'default_copyright_type') AS default_copyright_type,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'last_resort_lenders') AS last_resort_lenders
 FROM app_setting;
+
+-- ISO18626 CopyrightCompliance codes. mod-rs copyrightType values are these
+-- codes lowercased, so they are matched case-insensitively.
+CREATE TEMP TABLE crosslink_copyright_compliance ON COMMIT DROP AS
+SELECT code
+FROM (VALUES
+    ('AU-CopyRCatS183ComW'), ('AU-CopyRCatS183State'), ('AU-CopyrightActS49'),
+    ('AU-CopyrightActS50-1'), ('AU-CopyrightActS50-7A'), ('AU-CopyrightActS50-7B'),
+    ('AU-CopyrightCleared'), ('AU-GenBus'), ('NZ-CopyrightActS54'),
+    ('NZ-CopyrightActS55'), ('Other'), ('UK-CopyRFeePaid'), ('UK-FairDealing'),
+    ('US-CCG'), ('US-CCL')
+) AS codes(code);
 
 -- Resolve the selected default through the tenant-local copyright vocabulary.
 CREATE TEMP TABLE crosslink_default_copyright_type ON COMMIT DROP AS
@@ -326,7 +346,7 @@ SELECT settings.default_copyright_type AS code,
     CASE WHEN settings.default_copyright_type IS NULL THEN '{}'::jsonb
     ELSE jsonb_build_object('defaultCopyrightType',
         (jsonb_agg(jsonb_build_object(
-            'code', value.rdv_value,
+            'code', coalesce(iso.code, value.rdv_value),
             'defaultDesc', CASE
                 WHEN value.rdv_label IS NULL OR value.rdv_label ~ '^[[:space:]]*$'
                 THEN value.rdv_value
@@ -338,6 +358,8 @@ FROM crosslink_tenant_settings AS settings
 LEFT JOIN refdata_category AS category ON category.rdc_description = 'copyrightType'
 LEFT JOIN refdata_value AS value ON value.rdv_owner = category.rdc_id
     AND value.rdv_value = settings.default_copyright_type
+LEFT JOIN crosslink_copyright_compliance AS iso
+    ON lower(iso.code) = lower(value.rdv_value)
 GROUP BY settings.default_copyright_type;
 
 DO $$
@@ -381,6 +403,47 @@ FROM crosslink_symbols AS symbol
 CROSS JOIN crosslink_tenant_settings AS settings
 WHERE :'mode' = 'tenant'
   AND symbol.authority || ':' || symbol.symbol = :'owner';
+
+-- Resolve the comma-separated AUTHORITY:SYMBOL list in last_resort_lenders, as
+-- mod-rs parses it, to directory entry IDs. Only the owner receives the list.
+CREATE TEMP TABLE crosslink_last_resort_lender_symbols ON COMMIT DROP AS
+SELECT
+    part.ordinality,
+    btrim(part.value) AS value,
+    count(DISTINCT symbol.entry_id) AS matches,
+    min(symbol.entry_id::text)::uuid AS entry_id
+FROM crosslink_tenant_settings AS settings
+CROSS JOIN LATERAL regexp_split_to_table(settings.last_resort_lenders, ',')
+    WITH ORDINALITY AS part(value, ordinality)
+LEFT JOIN crosslink_symbols AS symbol
+  ON symbol.authority = upper(btrim(split_part(btrim(part.value), ':', 1)))
+ AND symbol.symbol = upper(btrim(substr(btrim(part.value),
+         strpos(btrim(part.value), ':') + 1)))
+ AND strpos(btrim(part.value), ':') > 1
+WHERE :'mode' = 'tenant'
+  AND btrim(part.value) <> ''
+GROUP BY part.ordinality, part.value;
+
+DO $$
+DECLARE
+    problem text;
+BEGIN
+    SELECT value INTO problem FROM crosslink_last_resort_lender_symbols
+    WHERE matches <> 1
+    ORDER BY ordinality
+    LIMIT 1;
+    IF problem IS NOT NULL THEN
+        RAISE EXCEPTION 'last_resort_lenders must list AUTHORITY:SYMBOL values that each resolve to exactly one directory entry: %', problem;
+    END IF;
+END $$;
+
+CREATE TEMP TABLE crosslink_last_resort_lenders ON COMMIT DROP AS
+SELECT coalesce(jsonb_agg(entry_id ORDER BY ordinality), '[]'::jsonb) AS item
+FROM (
+    SELECT DISTINCT ON (entry_id) entry_id, ordinality
+    FROM crosslink_last_resort_lender_symbols
+    ORDER BY entry_id, ordinality
+) AS lenders;
 
 CREATE TEMP TABLE crosslink_mpals_entry ON COMMIT DROP AS
 SELECT DISTINCT ON (entry.entry_id)
@@ -1040,7 +1103,10 @@ entry_records AS (
             'isPickupLocation', pickup.is_pickup_location,
             'iso18626Url', iso_endpoint.address,
             'iso18626Vendor', CASE WHEN iso_endpoint.address IS NULL THEN NULL ELSE 'ReShare' END,
-            'lendersOfLastResort', '[]'::jsonb,
+            'lendersOfLastResort', CASE WHEN local_entry.entry_id IS NOT NULL
+                THEN (SELECT item FROM crosslink_last_resort_lenders)
+                ELSE '[]'::jsonb
+            END,
             'includeRequestingAgencyInfo', false,
             'includeSupplierInfo', false,
             'includeReturnInfo', false,

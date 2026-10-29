@@ -181,7 +181,7 @@ retain their exported defaults.
 | Presence of the ISO18626 endpoint | `data.illConfig.iso18626Vendor` | Set to `ReShare`. |
 | `app_setting.max_requests` | `data.illConfig.maxRequestsPerPatron` | Cast to an integer for the selected local entry and its direct branches. Values must be from 0 through 2147483647; the value is `null` for other non-local pickup entries. |
 | `app_setting.check_duplicate_time` | `data.illConfig.duplicateCheckWindowHours` | Cast to an integer number of hours for the selected local entry and its direct branches. Values must be from 0 through 2147483647; the value is `null` for other non-local pickup entries. |
-| `app_setting.default_copyright_type` resolved through `copyrightType` refdata | `data.illConfig.defaultCopyrightType` | Exported only on the selected local owner as a single object: `rdv_value` becomes `code`, and `rdv_label` becomes `defaultDesc`, falling back to the code for a null or whitespace-only label. |
+| `app_setting.default_copyright_type` resolved through `copyrightType` refdata | `data.illConfig.defaultCopyrightType` | Exported only on the selected local owner as a single object: `rdv_value` becomes `code` as its ISO18626 CopyrightCompliance code, and `rdv_label` becomes `defaultDesc`, falling back to the code for a null or whitespace-only label. |
 | Unsupported mod-rs agency-information behavior | `data.illConfig.includeRequestingAgencyInfo` | Set to `false`; mod-rs does not populate requesting-agency information. |
 | Unsupported mod-rs agency-information behavior | `data.illConfig.includeSupplierInfo` | Set to `false`; mod-rs does not populate supplier information. |
 | Unsupported mod-rs directory-derived return information | `data.illConfig.includeReturnInfo` | Set to `false`; mod-rs does not automatically populate return information from the supplier directory entry. |
@@ -191,9 +191,12 @@ The default copyright setting uses the nonblank `st_value`, falling back to the
 nonblank `st_default_value`, with surrounding spaces trimmed. An unset setting
 omits `defaultCopyrightType`. A configured setting must match exactly one
 `refdata_value.rdv_value` in the `copyrightType` category; unresolved or ambiguous
-values fail the export before any records are emitted. Codes and nonblank labels
-are preserved without normalization. Direct branches and other non-local entries
-do not receive the default.
+values fail the export before any records are emitted. mod-rs stores the ISO18626
+CopyrightCompliance codes lowercased, so the code is the ISO code that matches
+`rdv_value` case-insensitively (`us-ccg` becomes `US-CCG`); a value that matches
+no ISO code is exported unchanged. Nonblank labels are preserved without
+normalization. Direct branches and other non-local entries do not receive the
+default.
 
 The following reference-data vocabularies are exported only on the selected local
 owner. Join `refdata_value.rdv_owner` to `refdata_category.rdc_id` and select
@@ -213,12 +216,22 @@ lists. For example, the seeded cannot-supply value `unavailable` and label
 `No longer available` become
 `{"code":"unavailable","defaultDesc":"No longer available"}` in `unfilledReasons`.
 
-`app_setting.last_resort_lenders` is the mod-rs source for
-`data.illConfig.lendersOfLastResort`, but the primary export emits an empty
-array. CrossLink imports NDJSON records sequentially, so a local parent entry
-cannot reference child entries that have not yet been imported. Parse and
-configure the setting in a second import or post-import update after all
-directory entries exist.
+`app_setting.last_resort_lenders` becomes the selected local owner's
+`data.illConfig.lendersOfLastResort`. Like mod-rs, the export reads the nonblank
+`st_value`, falling back to `st_default_value`, and splits it on commas into
+trimmed `AUTHORITY:SYMBOL` values, ignoring empty parts. Each value is matched
+case-insensitively against the symbols of non-deleted directory entries, and the
+list holds the matching entry IDs in setting order without duplicates. For
+example, `ISIL:US-MNMPUMNX` becomes the Minitex entry's ID. A value without an
+authority, or one that matches no entry or several entries, fails the export
+before any records are emitted. All other entries, including the owner's
+branches, get an empty list.
+
+CrossLink imports NDJSON records sequentially and requires each lender to exist
+already, so `join-crosslink-exports.sh` emits the institutions that are listed
+as lenders, with their branches, before the other institutions. It fails if an
+entry still lists a lender that is not an earlier entry, such as an unexported
+entry or the entry itself.
 
 ## Holdings policy
 

@@ -29,6 +29,7 @@ func TestDirectoryExportDefaultCopyrightType(t *testing.T) {
 	projection := strings.TrimPrefix(section(") AS catalog_config ON true", ") AS ill_config ON true"), ") AS catalog_config ON true")
 	query := `WITH
  crosslink_ill_lists AS (SELECT '{}'::jsonb AS item),
+ crosslink_last_resort_lenders AS (SELECT '[]'::jsonb AS item),
  entry AS (SELECT $1::uuid AS entry_id, $3::uuid AS parent_id),
  crosslink_local_entry AS (SELECT CASE WHEN $2::boolean THEN $1::uuid ELSE $3::uuid END AS entry_id),
  local_entry AS (SELECT $1::uuid AS entry_id WHERE $2::boolean),
@@ -48,6 +49,7 @@ func TestDirectoryExportDefaultCopyrightType(t *testing.T) {
 	require.Empty(t, result.Errors)
 	for i, tc := range []struct {
 		name, setting, fallback string
+		value, wantCode         string
 		label                   *string
 		local, branch           bool
 		cleanup, wantError      string
@@ -55,6 +57,7 @@ func TestDirectoryExportDefaultCopyrightType(t *testing.T) {
 	}{
 		{name: "configured", setting: code, fallback: "ignored", label: &label, local: true, want: true},
 		{name: "fallback", setting: "  ", fallback: " " + code + " ", label: &label, local: true, want: true},
+		{name: "ISO code", setting: "us-ccl", value: "us-ccl", wantCode: "US-CCL", label: &label, local: true, want: true},
 		{name: "unset", local: true},
 		{name: "missing setting", local: true, cleanup: "DELETE FROM app_setting;"},
 		{name: "null label", setting: code, local: true, want: true},
@@ -78,7 +81,11 @@ func TestDirectoryExportDefaultCopyrightType(t *testing.T) {
 			require.NoError(t, err)
 			_, err = tx.Exec(ctx, "INSERT INTO app_setting VALUES ('default_copyright_type', $1, $2)", tc.setting, tc.fallback)
 			require.NoError(t, err)
-			_, err = tx.Exec(ctx, "INSERT INTO refdata_value VALUES ('1', 'copyright', $1, $2), ('2', 'other', $1, 'Wrong category')", code, tc.label)
+			value, wantCode := code, code
+			if tc.value != "" {
+				value, wantCode = tc.value, tc.wantCode
+			}
+			_, err = tx.Exec(ctx, "INSERT INTO refdata_value VALUES ('1', 'copyright', $1, $2), ('2', 'other', $1, 'Wrong category')", value, tc.label)
 			require.NoError(t, err)
 			_, err = tx.Exec(ctx, tc.cleanup+duplicatesSQL+settingsSQL)
 			if tc.wantError != "" {
@@ -97,11 +104,11 @@ func TestDirectoryExportDefaultCopyrightType(t *testing.T) {
 			require.NoError(t, json.Unmarshal(raw, &config))
 			var want map[string]any
 			if tc.want {
-				description := code
+				description := value
 				if tc.label != nil && *tc.label != "" {
 					description = *tc.label
 				}
-				want = map[string]any{"code": code, "defaultDesc": description}
+				want = map[string]any{"code": wantCode, "defaultDesc": description}
 				require.Equal(t, want, config["defaultCopyrightType"])
 			} else {
 				require.NotContains(t, config, "defaultCopyrightType")
