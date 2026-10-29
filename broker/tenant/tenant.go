@@ -17,6 +17,10 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 )
 
+// ErrResolutionBackend identifies a failed backend operation during tenant or symbol resolution.
+// The wrapped error preserves the underlying Directory or repository failure.
+var ErrResolutionBackend = errors.New("tenant resolution backend failed")
+
 const OKAPI_PATH_PREFIX = "/broker"
 const OkapiTenantHeader = "X-Okapi-Tenant"
 
@@ -103,7 +107,7 @@ func (s *TenantResolver) mapTenantToSymbols(ctx common.ExtendedContext, tenant s
 	}
 	entries, _, err := s.directoryLookupAdapter.Lookup(ctx, adapter.DirectoryLookupParams{Tenant: tenant})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", ErrResolutionBackend, err)
 	}
 	var symbols []string
 	for _, entry := range entries {
@@ -124,13 +128,13 @@ func (s *TenantResolver) getBranchSymbols(ctx common.ExtendedContext, mainSymbol
 	}
 	peers, _, err := s.illRepo.GetCachedPeersBySymbols(ctx, mainSymbols, s.directoryLookupAdapter)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", ErrResolutionBackend, err)
 	}
 	var symbols []string
 	for _, peer := range peers {
 		branchSymbols, err := s.illRepo.GetBranchSymbolsByPeerId(ctx, peer.ID)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", ErrResolutionBackend, err)
 		}
 		for _, branchSymbol := range branchSymbols {
 			symbols = append(symbols, branchSymbol.SymbolValue)
