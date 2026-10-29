@@ -13,6 +13,7 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
+	"github.com/indexdata/crosslink/broker/tenant"
 )
 
 // PrefillProvider supplies catalog metadata for the authorized requester.
@@ -72,6 +73,10 @@ func (a *PatronRequestApiHandler) GetPatronRequestsPrefill(w http.ResponseWriter
 	}
 	symbol, err := a.getRequestSymbol(ctx, r, params.Symbol)
 	if err != nil {
+		if errors.Is(err, tenant.ErrResolutionBackend) {
+			api.WriteJsonErrorResponse(w, errors.New("requester resolution failed"), http.StatusBadGateway)
+			return
+		}
 		api.WriteJsonErrorResponse(w, errors.New("invalid requester tenant or symbol"), http.StatusBadRequest)
 		return
 	}

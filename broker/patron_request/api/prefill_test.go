@@ -1,7 +1,11 @@
 package prapi
 
 import (
+	"context"
 	"errors"
+	"github.com/indexdata/crosslink/broker/adapter"
+	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/httpclient"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -111,4 +115,84 @@ func TestPrefillErrors(t *testing.T) {
 		assert.Equal(t, tc.status, response.Code)
 		assert.NotContains(t, response.Body.String(), "secret")
 	}
+}
+
+type prefillDirectory struct {
+	adapter.DirectoryLookupAdapter
+	entries []adapter.DirectoryEntry
+	err     error
+}
+
+func (d prefillDirectory) Lookup(_ common.ExtendedContext, _ adapter.DirectoryLookupParams) ([]adapter.DirectoryEntry, string, error) {
+	return d.entries, "", d.err
+}
+
+type prefillTenantRepo struct {
+	ill_db.IllRepo
+	peerErr   error
+	branchErr error
+}
+
+func (r prefillTenantRepo) GetCachedPeersBySymbols(_ common.ExtendedContext, _ []string, _ adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string, error) {
+	return []ill_db.Peer{{ID: "requester"}}, "", r.peerErr
+}
+
+func (r prefillTenantRepo) GetBranchSymbolsByPeerId(_ common.ExtendedContext, _ string) ([]ill_db.BranchSymbol, error) {
+	return nil, r.branchErr
+}
+
+func TestPrefillTenantResolutionErrors(t *testing.T) {
+	entries := []adapter.DirectoryEntry{{Symbols: []string{"ISIL:REQ"}}}
+	for _, tc := range []struct {
+		name         string
+		header       string
+		symbol       string
+		entries      []adapter.DirectoryEntry
+		directoryErr error
+		peerErr      error
+		branchErr    error
+		status       int
+	}{
+		{name: "Directory timeout", header: "req", directoryErr: context.DeadlineExceeded, status: 502},
+		{name: "Directory HTTP failure", header: "req", directoryErr: &httpclient.HttpError{StatusCode: 503, Body: []byte("private backend details")}, status: 502},
+		{name: "branch peer lookup failure", header: "req", symbol: "ISIL:OTHER", entries: entries, peerErr: context.DeadlineExceeded, status: 502},
+		{name: "branch lookup failure", header: "req", symbol: "ISIL:OTHER", entries: entries, branchErr: errors.New("private database details"), status: 502},
+		{name: "missing tenant header", entries: entries, status: 400},
+		{name: "unknown tenant", header: "unknown", status: 400},
+		{name: "symbol not owned", header: "req", symbol: "ISIL:OTHER", entries: entries, status: 400},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resolver := tenant.NewResolver().WithTenantToSymbol(tenant.MapToSymbolDirectory).
+				WithLookupAdapter(prefillDirectory{entries: tc.entries, err: tc.directoryErr}).
+				WithIllRepo(prefillTenantRepo{peerErr: tc.peerErr, branchErr: tc.branchErr})
+			handler := &PatronRequestApiHandler{tenantResolver: resolver}
+			handler.SetPrefillProvider(prefillFunc(func(common.ExtendedContext, string, catalog.LookupParams) (prservice.Prefill, error) {
+				t.Fatal("resolution failure reached catalog")
+				return prservice.Prefill{}, nil
+			}))
+			mux := http.NewServeMux()
+			proapi.HandlerFromMuxWithBaseURL(handler, mux, "/broker")
+			req := httptest.NewRequest(http.MethodGet, "/broker/patron_requests/prefill?identifier=record&symbol="+tc.symbol, nil)
+			req.Header.Set(tenant.OkapiTenantHeader, tc.header)
+			response := httptest.NewRecorder()
+			mux.ServeHTTP(response, req)
+			require.Equal(t, tc.status, response.Code, response.Body.String())
+			if tc.status == 502 {
+				assert.JSONEq(t, `{"error":"requester resolution failed"}`, response.Body.String())
+			} else {
+				assert.JSONEq(t, `{"error":"invalid requester tenant or symbol"}`, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestPrefillTenantResolutionPreservesCause(t *testing.T) {
+	resolver := tenant.NewResolver().WithTenantToSymbol(tenant.MapToSymbolDirectory).
+		WithLookupAdapter(prefillDirectory{err: context.DeadlineExceeded})
+	req := httptest.NewRequest(http.MethodGet, "/broker/patron_requests/prefill?identifier=record", nil)
+	req.Header.Set(tenant.OkapiTenantHeader, "req")
+	handler := &PatronRequestApiHandler{tenantResolver: resolver}
+	_, err := handler.getRequestSymbol(common.CreateExtCtxWithArgs(context.Background(), nil), req, nil)
+	require.ErrorIs(t, err, tenant.ErrResolutionBackend)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 }
