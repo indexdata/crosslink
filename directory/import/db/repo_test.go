@@ -155,6 +155,11 @@ func TestImportEntryCreatesCompleteAggregateWithGeneratedIDs(t *testing.T) {
 	var queryYear string
 	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT query_year FROM catalog_configs WHERE entry=$1`, entryID).Scan(&queryYear))
 	require.Equal(t, "dc.date = {term}", queryYear)
+	var publisher, publicationDate, placeOfPublication string
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT metadata_marc21_publisher, metadata_marc21_publication_date, metadata_marc21_place_of_publication FROM catalog_configs WHERE entry=$1`, entryID).Scan(&publisher, &publicationDate, &placeOfPublication))
+	require.Equal(t, "264*1$b/260$b", publisher)
+	require.Equal(t, "264*1$c/260$c", publicationDate)
+	require.Equal(t, "264*1$a/260$a", placeOfPublication)
 	var zoomOptions map[string]string
 	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT zoom_options FROM catalog_configs WHERE entry=$1`, entryID).Scan(&zoomOptions))
 	require.Equal(t, map[string]string{"user": "private"}, zoomOptions)
@@ -1397,7 +1402,7 @@ func completeEntryAggregate(symbol string) model.EntryAggregate {
 		Zoom:               &model.ZoomConfig{Address: "example.test:210", Options: &map[string]string{"user": "private"}},
 		Query:              &model.QueryConfig{Identifier: &text, Year: stringPointer("dc.date = {term}")},
 		HoldingsFormat:     &model.HoldingsParserConfig{Marc: &model.MarcHoldingsParserConfig{MainField: &text}},
-		MetadataFormat:     &model.MetadataParserConfig{Marc21: &model.MarcMetadataParserConfig{Title: &text}},
+		MetadataFormat:     &model.MetadataParserConfig{Marc21: &model.MarcMetadataParserConfig{Title: &text, Publisher: stringPointer("264*1$b/260$b"), PublicationDate: stringPointer("264*1$c/260$c"), PlaceOfPublication: stringPointer("264*1$a/260$a")}},
 	}
 
 	aggregate.Data.ILLConfig = &model.ILLConfig{IsPickupLocation: &truth, ISO18626URL: &text, LendersOfLastResort: []uuid.UUID{}, IncludeSupplierInfo: &truth, MaxRequestsPerPatron: &zero, MinimumCost: &minimumCost}

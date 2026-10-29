@@ -1,0 +1,29 @@
+meta {
+  name: Metadata with service type
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{host}}/patron_requests/prefill?identifier=prefill-record&serviceType=Copy
+  body: none
+  auth: basic
+}
+
+headers {
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+  X-Okapi-User-Id: {{userName}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+tests {
+  test("Prefill response", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().bibliographicInfo.supplierUniqueRecordId).to.equal("prefill-record");
+  expect(res.getBody().serviceInfo.serviceType).to.equal("Copy");
+  });
+}

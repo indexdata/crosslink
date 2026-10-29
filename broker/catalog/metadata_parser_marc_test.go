@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"github.com/indexdata/crosslink/marcxml"
 	"testing"
 
 	dirapi "github.com/indexdata/crosslink/directory/api"
@@ -123,4 +124,42 @@ func TestMetadataParserBadXml(t *testing.T) {
 	marcXML := []byte(`<xrecord`)
 	_, err := parser.Parse(marcXML)
 	assert.ErrorContains(t, err, "failed to unmarshal MARC XML")
+}
+
+func TestMetadataPublication(t *testing.T) {
+	parser := NewMetadataParserMarc(dirapi.MarcMetadataParserConfig{})
+	record := []byte(`<record xmlns="http://www.loc.gov/MARC21/slim"><leader>00000nam a2200000 a 4500</leader>
+ <datafield tag="264" ind1=" " ind2="4"><subfield code="c">copyright date</subfield></datafield>
+ <datafield tag="260" ind1=" " ind2=" "><subfield code="a">Old place</subfield><subfield code="b">Old publisher</subfield><subfield code="c">1999</subfield></datafield>
+ <datafield tag="264" ind1="3" ind2="1"><subfield code="a">Place</subfield><subfield code="b">Publisher</subfield><subfield code="c">[2025]</subfield></datafield></record>`)
+	metadata, err := parser.Parse(record)
+	assert.NoError(t, err)
+	assert.Equal(t, "Publisher", metadata.Publisher)
+	assert.Equal(t, "Place", metadata.PlaceOfPublication)
+	assert.Equal(t, "[2025]", metadata.PublicationDate)
+	assert.Equal(t, "Book", metadata.PublicationType)
+	empty := ""
+	parser = NewMetadataParserMarc(dirapi.MarcMetadataParserConfig{Publisher: NewString("260$b"), PublicationDate: &empty})
+	metadata, err = parser.Parse(record)
+	assert.NoError(t, err)
+	assert.Equal(t, "Old publisher", metadata.Publisher)
+	assert.Empty(t, metadata.PublicationDate)
+	metadata, err = parser.Parse([]byte(`<record><datafield tag="260"><subfield code="b">Legacy publisher</subfield></datafield></record>`))
+	assert.NoError(t, err)
+	assert.Equal(t, "Legacy publisher", metadata.Publisher)
+	assert.Empty(t, metadata.PublicationType)
+}
+
+func TestPublicationTypeLeaderMapping(t *testing.T) {
+	for _, tc := range []struct{ leader, want string }{
+		{"00000nam", "Book"}, {"00000naa", "Chapter"}, {"00000nab", "Article"}, {"00000nas", ""},
+		{"00000ntm", "Manuscript"}, {"00000ncm", "MusicScore"}, {"00000ndm", "MusicScore"},
+		{"00000nem", "Map"}, {"00000nfm", "Map"}, {"00000nim", "SoundRecording"}, {"00000njm", "MusicRecording"},
+		{"00000nkm", ""}, {"short", ""},
+	} {
+		t.Run(tc.leader, func(t *testing.T) {
+			record := marcxml.Record{RecordType: marcxml.RecordType{Leader: &marcxml.LeaderFieldType{Text: marcxml.LeaderDataType(tc.leader)}}}
+			assert.Equal(t, tc.want, marcPublicationType(record))
+		})
+	}
 }

@@ -25,9 +25,10 @@ type SruLookupAdapter struct {
 }
 
 type SruLookupResult struct {
-	query    string
-	holdings []Holding
-	metadata *Metadata
+	recordFound bool
+	query       string
+	holdings    []Holding
+	metadata    *Metadata
 }
 
 func CreateSruLookupAdapter(client *http.Client, sruUrl []string, xTarget string, queryBuilder LookupQueryBuilder, parser HoldingsParser, metadataParser MetadataParser, recordSchema string) LookupAdapter {
@@ -140,6 +141,7 @@ func (s *SruLookupAdapter) Lookup(params LookupParams) (LookupResult, error) {
 	for _, sruUrl := range s.sruUrl {
 		var err error
 		found, query, err := s.lookupServer(sruUrl, params, func(xmlBuffer []byte) (bool, error) {
+			result.recordFound = true
 			h, err := s.holdingsParser.Parse(xmlBuffer, params)
 			if err != nil {
 				return false, err
@@ -182,3 +184,5 @@ func (s *SruLookupResult) GetMetadata() (Metadata, error) {
 	}
 	return *s.metadata, nil
 }
+
+func (s *SruLookupResult) HasRecord() bool { return s.recordFound }

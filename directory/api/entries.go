@@ -389,6 +389,9 @@ func buildEntrySQL(whereClause string) string {
 					AND h.metadata_marc21_isbn IS NULL
 					AND h.metadata_marc21_issn IS NULL
 					AND h.metadata_marc21_subtitle IS NULL
+					AND h.metadata_marc21_publisher IS NULL
+					AND h.metadata_marc21_publication_date IS NULL
+					AND h.metadata_marc21_place_of_publication IS NULL
 					AND h.metadata_marc21_title IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
 						'marc21', json_strip_nulls(json_build_object(
 							'author', h.metadata_marc21_author,
@@ -397,6 +400,9 @@ func buildEntrySQL(whereClause string) string {
 							'isbn', h.metadata_marc21_isbn,
 							'issn', h.metadata_marc21_issn,
 							'subtitle', h.metadata_marc21_subtitle,
+							'publisher', h.metadata_marc21_publisher,
+							'publicationDate', h.metadata_marc21_publication_date,
+							'placeOfPublication', h.metadata_marc21_place_of_publication,
 							'title', h.metadata_marc21_title
 						))
 					)) END

@@ -948,7 +948,10 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 					"isbn":"020$a",
 					"issn":"022$a",
 					"edition":"250$a",
-					"subtitle":"245$b"
+					"subtitle":"245$b",
+                    "publisher":"264*1$b/260$b",
+                    "publicationDate":"264*1$c/260$c",
+                    "placeOfPublication":"264*1$a/260$a"
 				}
 			}
 		},
@@ -1045,7 +1048,7 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 		t.Fatalf("catalogConfig queryConfig did not round-trip: %#v", queryConfig)
 	}
 	metadataMarc := holdings["metadataFormat"].(map[string]any)["marc21"].(map[string]any)
-	if metadataMarc["title"] != "245$a" || metadataMarc["author"] != "100$a" {
+	if metadataMarc["title"] != "245$a" || metadataMarc["author"] != "100$a" || metadataMarc["publisher"] != "264*1$b/260$b" || metadataMarc["publicationDate"] != "264*1$c/260$c" || metadataMarc["placeOfPublication"] != "264*1$a/260$a" {
 		t.Fatalf("catalogConfig metadataFormat did not round-trip: %#v", metadataMarc)
 	}
 
@@ -1054,7 +1057,7 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 			"zoom":{"options":{"count":"50","emptyValue":"","customOption":null,"missingOption":null}},
 			"queryConfig":{"title":"new title query"},
 			"holdingsFormat":{"marc":{"mainField":"998"}},
-			"metadataFormat":{"marc21":{"title":"246$a"}}
+			"metadataFormat":{"marc21":{"title":"246$a","publisher":"260$b","publicationDate":""}}
 		}
 	}`, headers)
 	if res.StatusCode != http.StatusNoContent {
@@ -1078,7 +1081,7 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 		options["count"] != "50" || options["preferredRecordSyntax"] != "usmarc" || options["emptyValue"] != "" ||
 		queryConfig["title"] != "new title query" || queryConfig["identifier"] != "rec.id = {term}" || queryConfig["year"] != "dc.date = {term}" ||
 		marcHoldings["mainField"] != "998" || marcHoldings["locationSubField"] != "l" ||
-		metadataMarc["title"] != "246$a" || metadataMarc["author"] != "100$a" {
+		metadataMarc["title"] != "246$a" || metadataMarc["author"] != "100$a" || metadataMarc["publisher"] != "260$b" || metadataMarc["publicationDate"] != "" || metadataMarc["placeOfPublication"] != "264*1$a/260$a" {
 		t.Fatalf("partial catalogConfig PATCH did not recursively merge fields: %#v", holdings)
 	}
 	if _, ok := options["customOption"]; ok {

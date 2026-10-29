@@ -35,6 +35,15 @@ func NewMetadataParserMarc(config dirapi.MarcMetadataParserConfig) MetadataParse
 	if config.Edition == nil {
 		config.Edition = NewString("250$a")
 	}
+	if config.Publisher == nil {
+		config.Publisher = NewString("264*1$b/260$b")
+	}
+	if config.PublicationDate == nil {
+		config.PublicationDate = NewString("264*1$c/260$c")
+	}
+	if config.PlaceOfPublication == nil {
+		config.PlaceOfPublication = NewString("264*1$a/260$a")
+	}
 	return &MetadataParserMarc{
 		config: config,
 	}
@@ -65,6 +74,9 @@ func (p *MetadataParserMarc) Parse(record []byte) (Metadata, error) {
 		configField *string
 		store       *string
 	}{
+		{name: "Publisher", configField: p.config.Publisher, store: &metadata.Publisher},
+		{name: "PublicationDate", configField: p.config.PublicationDate, store: &metadata.PublicationDate},
+		{name: "PlaceOfPublication", configField: p.config.PlaceOfPublication, store: &metadata.PlaceOfPublication},
 		{name: "Identifier", configField: p.config.Identifier, store: &metadata.Identifier},
 		{name: "Title", configField: p.config.Title, store: &metadata.Title},
 		{name: "Subtitle", configField: p.config.Subtitle, store: &metadata.Subtitle},
@@ -86,6 +98,7 @@ func (p *MetadataParserMarc) Parse(record []byte) (Metadata, error) {
 			}
 		}
 	}
+	metadata.PublicationType = marcPublicationType(marcRecord)
 	return metadata, nil
 }
 
@@ -113,7 +126,7 @@ func find(marcRecord marcxml.Record, spec string) string {
 		if field.Tag != matchField {
 			continue
 		}
-		if ind1 != "" && field.Ind1 != ind1 {
+		if ind1 != "" && ind1 != "*" && field.Ind1 != ind1 {
 			continue
 		}
 		if ind2 != "" && field.Ind2 != ind2 {
@@ -136,6 +149,39 @@ func find(marcRecord marcxml.Record, spec string) string {
 		if len(values) > 0 {
 			return strings.Join(values, " ")
 		}
+	}
+	return ""
+}
+
+// marcPublicationType uses only unambiguous leader categories; unknown types stay absent.
+func marcPublicationType(record marcxml.Record) string {
+	if record.Leader == nil {
+		return ""
+	}
+	leader := string(record.Leader.Text)
+	if len(leader) < 8 {
+		return ""
+	}
+	switch leader[6] {
+	case 'a':
+		switch leader[7] {
+		case 'm':
+			return "Book"
+		case 'a':
+			return "Chapter"
+		case 'b':
+			return "Article"
+		}
+	case 't':
+		return "Manuscript"
+	case 'c', 'd':
+		return "MusicScore"
+	case 'e', 'f':
+		return "Map"
+	case 'i':
+		return "SoundRecording"
+	case 'j':
+		return "MusicRecording"
 	}
 	return ""
 }

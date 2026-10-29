@@ -47,6 +47,7 @@ var errDuplicateTemplateLabel = errors.New("one or more template labels already 
 const templateLabelUniqueConstraint = "template_owner_purpose_audience_labels_unique"
 
 type PatronRequestApiHandler struct {
+	prefillProvider         PrefillProvider
 	pickupLocationValidator PickupLocationValidator
 	limitDefault            int32
 	prRepo                  pr_db.PrRepo

@@ -4,8 +4,10 @@ package catalog
 
 import (
 	"context"
+	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
+	"time"
 
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	zoomtestutil "github.com/indexdata/crosslink/testutil"
@@ -203,4 +205,25 @@ func TestConnectFailure(t *testing.T) {
 	_, err = aa.Lookup(params)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to connect to Z39.50 server")
+}
+
+func TestPrefillZoomContext(t *testing.T) {
+	for _, timeout := range []string{"2", "invalid"} {
+		t.Run(timeout, func(t *testing.T) {
+			builder, err := NewQueryBuilderGen(nil)
+			require.NoError(t, err)
+			adapter, err := NewZoomLookupAdapter(dirapi.ZoomConfig{Address: containerHost + ":" + mappedPort + "/marc", Options: &map[string]string{"timeout": timeout}}, builder, NewMarcHoldingsParser(dirapi.MarcHoldingsParserConfig{}), NewMetadataParserMarc(dirapi.MarcMetadataParserConfig{}))
+			require.NoError(t, err)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			result, err := LookupContext(ctx, adapter, LookupParams{Title: "computer"})
+			require.NoError(t, err)
+			require.True(t, result.HasRecord())
+			assert.Equal(t, timeout, adapter.(*ZoomLookupAdapter).options["timeout"], "per-call timeout must not mutate a shared adapter")
+			cancelled, stop := context.WithCancel(context.Background())
+			stop()
+			_, err = adapter.(*ZoomLookupAdapter).LookupContext(cancelled, LookupParams{Title: "computer"})
+			require.ErrorIs(t, err, context.Canceled)
+		})
+	}
 }

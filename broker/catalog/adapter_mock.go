@@ -8,6 +8,7 @@ import (
 )
 
 type MockLookupAdapter struct {
+	RecordFound bool
 	Err         error
 	HoldingsErr error
 	Holdings    []Holding
@@ -69,4 +70,8 @@ func (a *MockLookupResult) GetMetadata() (Metadata, error) {
 
 func (a *MockLookupResult) GetQuery() string {
 	return ""
+}
+
+func (a *MockLookupResult) HasRecord() bool {
+	return a.parent.RecordFound || a.parent.Metadata != (Metadata{}) || len(a.parent.Holdings) > 0
 }
