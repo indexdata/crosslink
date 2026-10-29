@@ -1896,7 +1896,7 @@ components:
             {{.Title}}, {{.TitleOfComponent}}, {{.Author}}, {{.AuthorOfComponent}},
             {{.MaterialType}}, {{.DueDate}}, {{.ReturnAddress}}, {{.BarcodeBase64}},
             {{.ServiceType}}, {{.ServiceLevel}}, {{.SystemIdentifier}},
-            {{.Publisher}}, {{.Volume}}, {{.Issue}}, {{.Pages}}, {{.StaffNotes}},
+            {{.Publisher}}, {{.Volume}}, {{.Issue}}, {{.Pages}}, {{.PagesRequested}}, {{.StaffNotes}},
             {{.CallNumber}}, {{.Location}}, {{.ShelvingLocation}}, {{.LoanConditions}}, {{.PatronGivenName}}, {{.PatronName}},
             {{.PatronSurname}}, {{.PatronId}}, {{.PatronProfile}} and batch templates include
             {{.FullCount}}, {{.ActualCount}}, {{.BatchQuery}}. {{.PatronName}} remains

@@ -200,7 +200,7 @@ placeholder_mappings(
         (9, 'item.materialType', '.MaterialType', false),
         (10, 'item.volume', '.Volume', false),
         (11, 'item.issue', '.Issue', false),
-        (12, 'item.pages', '.Pages', false),
+        (12, 'item.pages', '.PagesRequested', false),
         (13, 'item.location', '.Location', false),
         (14, 'item.shelvingLocation', '.ShelvingLocation', false),
         (15, 'user.givenName', '.PatronGivenName', false),
