@@ -101,6 +101,9 @@ join_exports() {
             --slurpfile entries "$entry_records" \
             --slurpfile metadata "$metadata_records" \
             '
+                # An institution and its branches form a group; branches are
+                # never nested.
+                def group_key: if .data.type == "Branch" then .data.parent else .key end;
                 ($entries | map(select(.data.type == "Consortium") | .key) | first) as $consortium_key |
                 ($entries | map(
                     if $consortium_key != null
@@ -114,7 +117,32 @@ join_exports() {
                 )) as $entries_with_parents |
                 ($entries_with_parents | map(select(.data.type != "Consortium") | .key)) as $member_keys |
                 ($member_keys | to_entries | map({entry: .value, priority: (.key + 1)})) as $network_members |
-                (($entries_with_parents) + ($metadata | map(
+                # The import resolves lenders of last resort against entries
+                # already imported, so groups holding a lender go first. Tier
+                # and network membership keep the export order.
+                ($entries_with_parents
+                    | map(.data.illConfig.lendersOfLastResort // [] | .[])
+                    | unique) as $lender_keys |
+                ($entries_with_parents
+                    | map(select(.key | IN($lender_keys[])) | group_key)
+                    | unique) as $lender_groups |
+                ($entries_with_parents | map(select(.data.type == "Consortium"))
+                    + map(select(.data.type != "Consortium"
+                        and (group_key | IN($lender_groups[]))))
+                    + map(select(.data.type != "Consortium"
+                        and (group_key | IN($lender_groups[]) | not)))
+                ) as $ordered_entries |
+                (reduce $ordered_entries[] as $entry ({seen: {}, problems: []};
+                    .seen as $seen
+                    | .problems += [
+                        ($entry.data.illConfig.lendersOfLastResort // [])[]
+                        | select($seen[.] != true)
+                        | "\($entry.data.name) (\($entry.key)) lists lender of last resort \(.), which is not an earlier directory entry"
+                    ]
+                    | .seen[$entry.key] = true
+                ) | .problems) as $problems |
+                if $problems != [] then error($problems | join("\n")) else . end |
+                (($ordered_entries) + ($metadata | map(
                     if .type == "tier" then
                         .data.entries = $member_keys
                     elif .type == "network" then

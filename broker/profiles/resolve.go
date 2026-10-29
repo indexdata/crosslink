@@ -62,7 +62,7 @@ func selected(m object, key, fallback string) string {
 }
 func supported(name, setting string) error {
 	switch name {
-	case "Generic", "Alma", "Sierra", "Koha", "FOLIO":
+	case "Generic", "Alma", "Sierra", "Koha", "FOLIO", "Evergreen", "Horizon", "Polaris", "Symphony":
 		return nil
 	case "WMS", "Aleph":
 		return fmt.Errorf("%s profile %s is not yet supported", setting, name)
@@ -114,6 +114,16 @@ func Resolve(entry dirapi.Entry) (*Effective, error) {
 	// including the legacy MARC defaults for Generic.
 	if h, ok := rawC["holdingsFormat"].(object); ok && len(h) == 0 {
 		delete(rawC, "holdingsFormat")
+	}
+	// Profile query templates are PQF unless the profile specifies otherwise.
+	// A language override must not leave inherited templates in the old language.
+	if q, ok := rawC["queryConfig"].(object); ok {
+		if defaults, ok := c["queryConfig"].(object); ok && selected(q, "type", selected(defaults, "type", "pqf")) != selected(defaults, "type", "pqf") {
+			for _, key := range []string{"identifier", "isbn", "issn", "title", "year"} {
+				delete(defaults, key)
+				delete(e.Origins, "catalogConfig.queryConfig."+key)
+			}
+		}
 	}
 	merge(c, rawC, "catalogConfig", "directory", e.Origins)
 	if z, ok := c["zoom"].(object); ok {
@@ -178,11 +188,14 @@ func (e *Effective) validate() error {
 		if (l.Address == "") != (l.FromAgency == "") {
 			return fmt.Errorf("LMS profile %s: lmsConfig.address and fromAgency must both be configured", e.LMSVendor)
 		}
-		if l.BibIdNormalization != nil && *l.BibIdNormalization != "none" && *l.BibIdNormalization != "sierra" {
+		if l.BibIdNormalization != nil && *l.BibIdNormalization != "none" && *l.BibIdNormalization != "sierra" && *l.BibIdNormalization != "stripLeadingNonDigits" {
 			return fmt.Errorf("LMS profile %s: unsupported bibIdNormalization", e.LMSVendor)
 		}
 	}
 	if c := e.Catalog; c != nil {
+		if q := c.QueryConfig; q != nil && q.IdentifierNormalization != nil && *q.IdentifierNormalization != "none" && *q.IdentifierNormalization != "stripLeadingLetters" {
+			return fmt.Errorf("catalog profile %s: invalid queryConfig.identifierNormalization", e.CatalogProfile)
+		}
 		bad := func(setting string) error {
 			return fmt.Errorf("catalog profile %s: invalid %s", e.CatalogProfile, setting)
 		}
@@ -220,12 +233,19 @@ func (e *Effective) validate() error {
 			}
 			if m := h.Marc; m != nil && m.Availability != nil {
 				for _, r := range *m.Availability {
-					if r.SubField == "" || (r.Operator != "equals" && r.Operator != "absent") || (r.Operator == "equals" && r.Value == nil) {
+					if r.SubField == "" || (r.Operator != "equals" && r.Operator != "absent" && r.Operator != "present" && r.Operator != "notIn") || (r.Operator == "equals" && r.Value == nil) || (r.Operator == "notIn" && r.Values == nil) {
 						return bad("holdingsFormat.marc.availability")
 					}
 				}
 			}
 			if o := h.Opac; o != nil {
+				if o.ItemLoanPolicySources != nil {
+					for _, source := range *o.ItemLoanPolicySources {
+						if source != "availableThru" && source != "shelvingData" && source != "temporaryLocation" {
+							return bad("holdingsFormat.opac.itemLoanPolicySources")
+						}
+					}
+				}
 				if o.AvailabilityRule != nil && *o.AvailabilityRule != "availableNow" && *o.AvailabilityRule != "publicNote" {
 					return bad("holdingsFormat.opac.availabilityRule")
 				}

@@ -3,6 +3,85 @@ info:
   version: 1.0.0
   title: Directory API
 x-host-profiles:
+  Evergreen:
+    lmsConfig:
+      ncipVersion: "2.02"
+      requestItemRequestType: Loan
+      requestItemRequestScopeType: Bibliographic Item
+      requestItemPickupLocationEnabled: false
+      requestItemBibIdCode: BibID
+    catalogConfig:
+      queryConfig:
+        identifier: '@attr 1=1016 {term}'
+      holdingsFormat:
+        marc:
+          mainField: "852"
+          locationSubField: b
+          shelvingLocationSubField: a
+          callNumberSubField: c
+          itemIdSubField: g
+          availability:
+            - subField: n
+              operator: equals
+              value: Available
+  Horizon:
+    lmsConfig:
+      ncipVersion: "1.0"
+      requestItemRequestType: Loan
+      requestItemRequestScopeType: Bibliographic Item
+      requestItemPickupLocationEnabled: false
+    catalogConfig:
+      holdingsFormat:
+        opac:
+          requireLocalLocation: true
+          excludedLocations: [Internet]
+          trimWhitespace: true
+          itemLoanPolicySources: [shelvingData, temporaryLocation]
+          requireItemLoanPolicy: true
+          allCirculations: true
+  Polaris:
+    lmsConfig:
+      ncipVersion: "1.0"
+      requestItemRequestType: Loan
+      requestItemRequestScopeType: Bibliographic Item
+      requestItemPickupLocationEnabled: false
+    catalogConfig:
+      holdingsFormat:
+        marc:
+          mainField: "852"
+          locationSubField: b
+          shelvingLocationSubField: a
+          callNumberSubField: h
+          itemIdSubField: p
+          availability:
+            - subField: r
+              operator: equals
+              value: In
+  Symphony:
+    lmsConfig:
+      ncipVersion: "1.0"
+      requestItemRequestType: Loan
+      requestItemRequestScopeType: Bibliographic Item
+      requestItemPickupLocationEnabled: false
+      bibIdNormalization: stripLeadingNonDigits
+    catalogConfig:
+      queryConfig:
+        identifier: '@attr 1=1016 {term}'
+        identifierNormalization: stripLeadingLetters
+        identifierPrefix: '^C'
+      holdingsFormat:
+        marc:
+          mainField: "926"
+          locationSubField: a
+          shelvingLocationSubField: b
+          callNumberSubField: c
+          itemLoanPolicySubField: d
+          availability:
+            - subField: b
+              operator: present
+            - subField: b
+              operator: notIn
+              values: [RESERVES, CHECKEDOUT, MISSING, DISCARD]
   Alma:
     lmsConfig: {}
     catalogConfig:
@@ -1830,18 +1909,29 @@ components:
 
     HostLmsVendor:
       type: string
-      enum: [Alma, Sierra, Koha, WMS, Aleph, FOLIO, Generic]
+      enum: [Alma, Sierra, Koha, WMS, Aleph, FOLIO, Generic, Evergreen, Horizon, Polaris, Symphony]
       x-go-type: string
 
     NcipVersion:
       type: string
       enum: ["1.0", "2.02"]
       x-go-type: string
-      description: NCIP wire version. Omission inherits the profile default, currently 2.02. Version 1.0 uses namespace-free XML over HTTP.
+      description: NCIP wire version. Omission inherits the selected profile default (1.0 for Horizon, Polaris and Symphony; 2.02 otherwise). Version 1.0 uses namespace-free XML over HTTP.
 
     BibIdNormalization:
       type: string
-      enum: [none, sierra]
+      enum: [none, sierra, stripLeadingNonDigits]
+      x-go-type: string
+
+    IdentifierNormalization:
+      type: string
+      enum: [none, stripLeadingLetters]
+      x-go-type: string
+      description: Strip leading ASCII letters only when a non-letter suffix remains; otherwise retain the identifier.
+
+    ItemLoanPolicySource:
+      type: string
+      enum: [availableThru, shelvingData, temporaryLocation]
       x-go-type: string
 
     AddressType:
@@ -1854,7 +1944,7 @@ components:
 
     MarcAvailabilityOperator:
       type: string
-      enum: [equals, absent]
+      enum: [equals, absent, present, notIn]
       x-go-type: string
 
     OpacAvailabilityRule:
@@ -2006,6 +2096,10 @@ components:
       additionalProperties: false
       required: [iso18626Url, iso18626Vendor, lendersOfLastResort, includeRequestingAgencyInfo, includeSupplierInfo, includeReturnInfo, includeVendorNote, useOfferedCosts, noteFieldSeparator, supplierPatronPattern, duplicateCheckWindowHours]
       properties:
+        defaultCopyrightType:
+          anyOf:
+            - $ref: '#/components/schemas/IllConfigCodeDescription'
+            - type: "null"
         loanConditions:
           type: array
           items: { $ref: '#/components/schemas/IllConfigCodeDescription' }
@@ -2081,6 +2175,9 @@ components:
       additionalProperties: false
       required: [type, identifier, isbn, issn, title]
       properties:
+        identifierNormalization:
+          anyOf: [{ $ref: '#/components/schemas/IdentifierNormalization' }, { type: "null" }]
+        identifierPrefix: { type: [string, "null"] }
         type:
           anyOf: [{ $ref: '#/components/schemas/QueryConfigType' }, { type: "null" }]
         identifier: { type: [string, "null"] }
@@ -2106,6 +2203,7 @@ components:
       additionalProperties: false
       required: [availability, callNumberSubField, itemIdSubField, locationSubField, mainField, restrictedSubField, shelvingLocationSubField]
       properties:
+        itemLoanPolicySubField: { type: [string, "null"] }
         availability:
           type: [array, "null"]
           items: { $ref: '#/components/schemas/ImportMarcAvailabilityPredicate' }
@@ -2121,6 +2219,9 @@ components:
       additionalProperties: false
       required: [subField, operator, value]
       properties:
+        values:
+          type: [array, "null"]
+          items: { type: string }
         subField: { type: string, minLength: 1 }
         operator: { $ref: '#/components/schemas/MarcAvailabilityOperator' }
         value: { type: [string, "null"] }
@@ -2130,6 +2231,19 @@ components:
       additionalProperties: false
       required: [availabilityRule, availablePublicNotes, requireLocalLocation, shelvingLocationSource, includeItemId, includeItemLoanPolicy, includeTemporaryLocation, allCirculations]
       properties:
+        trimWhitespace:
+          type: [boolean, "null"]
+          description: Trim location, shelving location, call number and item identifiers. Defaults to false.
+        excludedLocations:
+          type: [array, "null"]
+          items: { type: string }
+        itemLoanPolicySources:
+          type: [array, "null"]
+          description: Emit one candidate per nonempty source in order. Omission uses availableThru; an empty list extracts no policy.
+          items: { $ref: '#/components/schemas/ItemLoanPolicySource' }
+        requireItemLoanPolicy:
+          type: [boolean, "null"]
+          description: Exclude candidates without a loan policy, including when policy extraction is disabled.
         availabilityRule:
           anyOf: [{ $ref: '#/components/schemas/OpacAvailabilityRule' }, { type: "null" }]
         availablePublicNotes:
@@ -2503,6 +2617,26 @@ components:
             NoReproduction: "No reproduction"
             SignatureRequired: "Signature required"
             SpecCollSupervReq: "Special collections supervision required"
+        defaultCopyrightType:
+          anyOf:
+            - $ref: '#/components/schemas/IllConfigCodeDescription'
+            - type: "null"
+          description: The default copyright type to use for copy requests
+          x-default-data:
+            AU-CopyRCatS183ComW: "Copyright Act S183 - Commonwealth (Australia)"
+            AU-CopyRCatS183State: "Copyright Act S183 - State (Australia)"
+            AU-CopyrightActS49: "Copyright Act S49 (Australia)"
+            AU-CopyrightActS50-1: "Copyright Act S50 (Australia)"
+            AU-CopyrightActS50-7A: "Copyright Act S50 A (Australia)"
+            AU-CopyrightCleared: "Copyright Cleared (Australia)"
+            AU-GenBus: "General Business (Australia)"
+            NZ-CopyrightActS54: "Copyright Act S54 (New Zealand)"
+            NZ-CopyrightActS55: "Copyright Act S55 (New Zealand)"
+            Other: "Other types of copyright compliance. Use Note in ServiceInfo for details."
+            UK-CopyRFeePaid: "Copyright Fee Paid (UK)"
+            UK-FairDealing: "Fair Dealing (UK)"
+            US-CCG: "CCG (US)"
+            US-CCL: "CCL (US code)"
         availableCopyrightTypes:
           type: array
           description: Configured codes and descriptions.
@@ -2709,6 +2843,11 @@ components:
     QueryConfig:
       type: object
       properties:
+        identifierNormalization:
+          $ref: '#/components/schemas/IdentifierNormalization'
+        identifierPrefix:
+          type: string
+          description: Prefix applied after normalization to nonempty identifier searches only.
         type:
           $ref: '#/components/schemas/QueryConfigType'
         title:
@@ -2763,9 +2902,10 @@ components:
     MarcHoldingsParserConfig:
       type: object
       properties:
+        itemLoanPolicySubField: { type: string }
         availability:
           type: array
-          description: All predicates must match a candidate item. Equals requires a present matching subfield; absent rejects any occurrence.
+          description: All predicates must match a candidate item. Equals requires a present matching subfield; absent rejects any occurrence; present requires an occurrence (including empty); notIn rejects any occurrence matching values and permits absence. Comparisons use exact untrimmed values.
           items:
             $ref: '#/components/schemas/MarcAvailabilityPredicate'
         mainField: { type: string }
@@ -2779,6 +2919,9 @@ components:
       type: object
       required: [subField, operator]
       properties:
+        values:
+          type: array
+          items: { type: string }
         subField: { type: string, minLength: 1 }
         operator:
           $ref: '#/components/schemas/MarcAvailabilityOperator'
@@ -2787,6 +2930,19 @@ components:
     OpacHoldingsParserConfig:
       type: object
       properties:
+        trimWhitespace:
+          type: boolean
+          description: Trim location, shelving location, call number and item identifiers. Defaults to false.
+        excludedLocations:
+          type: array
+          items: { type: string }
+        itemLoanPolicySources:
+          type: array
+          description: Emit one candidate per nonempty source in order. Omission uses availableThru; an empty list extracts no policy.
+          items: { $ref: '#/components/schemas/ItemLoanPolicySource' }
+        requireItemLoanPolicy:
+          type: boolean
+          description: Exclude candidates without a loan policy, including when policy extraction is disabled.
         availabilityRule:
           $ref: '#/components/schemas/OpacAvailabilityRule'
         availablePublicNotes:

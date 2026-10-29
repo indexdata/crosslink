@@ -41,6 +41,8 @@ func catalogConfigToDBParams(entryID uuid.UUID, cfg CatalogConfig) db.UpsertCata
 		params.QueryIssn = cfg.QueryConfig.Issn
 		params.QueryTitle = cfg.QueryConfig.Title
 		params.QueryYear = cfg.QueryConfig.Year
+		params.QueryIdentifierNormalization = cfg.QueryConfig.IdentifierNormalization
+		params.QueryIdentifierPrefix = cfg.QueryConfig.IdentifierPrefix
 	}
 	if cfg.HoldingsFormat != nil {
 		params.HoldingsConfig, _ = json.Marshal(cfg.HoldingsFormat)
@@ -86,6 +88,13 @@ func validateCatalogConfigParams(params db.UpsertCatalogConfigParams) error {
 				count++
 			}
 		}
+		if m := holdings.Marc; m != nil && m.Availability != nil {
+			for _, rule := range *m.Availability {
+				if (rule.Operator == "equals" && rule.Value == nil) || (rule.Operator == "notIn" && rule.Values == nil) {
+					return errors.New("catalogConfig.holdingsFormat.marc.availability requires value for equals and values for notIn")
+				}
+			}
+		}
 		if count > 1 {
 			return errors.New("catalogConfig.holdingsFormat must set at most one of marc, opac, reservoir, or marc21plus1")
 		}
@@ -119,6 +128,8 @@ func catalogConfigPatchToDBParams(entryID uuid.UUID, cfg CatalogConfigPatch, ori
 		QueryIssn:                            original.QueryIssn,
 		QueryTitle:                           original.QueryTitle,
 		QueryYear:                            original.QueryYear,
+		QueryIdentifierNormalization:         original.QueryIdentifierNormalization,
+		QueryIdentifierPrefix:                original.QueryIdentifierPrefix,
 		HoldingsMarcCallNumberSubfield:       original.HoldingsMarcCallNumberSubfield,
 		HoldingsMarcItemIDSubfield:           original.HoldingsMarcItemIDSubfield,
 		HoldingsMarcLocationSubfield:         original.HoldingsMarcLocationSubfield,
@@ -181,6 +192,8 @@ func catalogConfigPatchToDBParams(entryID uuid.UUID, cfg CatalogConfigPatch, ori
 		params.QueryIssn = derefOrDefaultPtr(cfg.QueryConfig.Issn, params.QueryIssn)
 		params.QueryTitle = derefOrDefaultPtr(cfg.QueryConfig.Title, params.QueryTitle)
 		params.QueryYear = derefOrDefaultPtr(cfg.QueryConfig.Year, params.QueryYear)
+		params.QueryIdentifierNormalization = derefOrDefaultPtr(cfg.QueryConfig.IdentifierNormalization, params.QueryIdentifierNormalization)
+		params.QueryIdentifierPrefix = derefOrDefaultPtr(cfg.QueryConfig.IdentifierPrefix, params.QueryIdentifierPrefix)
 	}
 	if cfg.HoldingsFormat != nil {
 		var mergeErr error
@@ -241,8 +254,18 @@ func mergeHoldingsPolicy(original []byte, patch HoldingsPolicy) (HoldingsPolicy,
 	return merged, nil
 }
 
-// encodeIllConfigLists leaves omitted lists untouched and stores empty lists as [].
-func encodeIllConfigLists(params *db.UpsertIllConfigParams, cfg IllConfig) error {
+// encodeIllConfigCodes preserves omitted fields, stores empty lists as [], and clears a null default.
+func encodeIllConfigCodes(params *db.UpsertIllConfigParams, cfg IllConfig) error {
+	if cfg.DefaultCopyrightType.IsSpecified() {
+		params.DefaultCopyrightType = nil
+		if value, err := cfg.DefaultCopyrightType.Get(); err == nil {
+			data, err := json.Marshal(value)
+			if err != nil {
+				return fmt.Errorf("encode illConfig.defaultCopyrightType: %w", err)
+			}
+			params.DefaultCopyrightType = data
+		}
+	}
 	for _, field := range []struct {
 		name   string
 		codes  *[]IllConfigCodeDescription
@@ -288,7 +311,7 @@ func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) (db.UpsertIllConfigPa
 		vendor := string(*cfg.Iso18626Vendor)
 		params.Iso18626Vendor = &vendor
 	}
-	if err := encodeIllConfigLists(&params, cfg); err != nil {
+	if err := encodeIllConfigCodes(&params, cfg); err != nil {
 		return db.UpsertIllConfigParams{}, err
 	}
 	return params, nil
@@ -297,6 +320,7 @@ func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) (db.UpsertIllConfigPa
 func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllConfig) (db.UpsertIllConfigParams, error) {
 	params := db.UpsertIllConfigParams{
 		Entry:                       entryID,
+		DefaultCopyrightType:        original.DefaultCopyrightType,
 		AvailableCopyrightTypes:     original.AvailableCopyrightTypes,
 		UnfilledReasons:             original.UnfilledReasons,
 		LoanConditions:              original.LoanConditions,
@@ -348,7 +372,7 @@ func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllC
 	if cfg.MinimumCost.IsSpecified() {
 		params.MinimumCost = nullableMinimumCost(cfg)
 	}
-	if err := encodeIllConfigLists(&params, cfg); err != nil {
+	if err := encodeIllConfigCodes(&params, cfg); err != nil {
 		return db.UpsertIllConfigParams{}, err
 	}
 	return params, nil

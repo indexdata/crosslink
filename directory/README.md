@@ -150,7 +150,7 @@ Explicit `false` and empty arrays are preserved. Imports replace stored
 configuration, so include all overrides when restoring an entry. Configure at
 most one SRU/ZOOM endpoint and at most one holdings parser.
 
-`lmsConfig.ncipVersion` selects `"1.0"` or `"2.02"` (profile default: `"2.02"`).
+`lmsConfig.ncipVersion` selects `"1.0"` or `"2.02"` (profile default: `"1.0"` for Horizon, Polaris and Symphony, otherwise `"2.02"`).
 It is optional in import records for compatibility with older exports; omission
 or `null` clears the stored version override during full replacement. For REST
 PATCH, omission preserves it and `null` clears it. See
@@ -359,6 +359,17 @@ The broker accepts the requesting institution's UUID or a descendant's UUID. An 
 Filter Directory entries with CQL `isPickupLocation=true` or `isPickupLocation=false`. Missing flags (including entries without ILL configuration) match `false`. The former `requesterPickupLocation` CQL filter is no longer supported.
 
 ### ILL configuration lists and reference defaults
+
+`illConfig.defaultCopyrightType` is the default copyright type to use for copy
+requests. It accepts a single object with required string fields `code` and
+`defaultDesc`, for example `{"code":"US-CCG","defaultDesc":"CCG (US)"}`.
+Create, read, PATCH, and NDJSON import support this field. PATCH omission
+preserves the value; an object replaces it and `null` clears it. Unset values
+are omitted from entry reads. Import replaces the entire ILL configuration, so
+an omitted or null default leaves it unset. Custom codes are accepted independently
+of `availableCopyrightTypes`. Its `x-default-data` mapping matches that list's
+reference mapping and does not automatically set a default. Directory stores
+this setting; the broker does not yet apply it to copy requests.
 
 `illConfig.availableCopyrightTypes`, `illConfig.unfilledReasons`,
 `illConfig.cancellationReasons`, and `illConfig.loanConditions` accept ordered

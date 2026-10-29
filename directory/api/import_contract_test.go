@@ -71,9 +71,8 @@ func TestImportHostSettingsMatchEntryContract(t *testing.T) {
 				required := make([]string, 0, len(entry.Properties))
 				for field := range entry.Properties {
 					fields = append(fields, field)
-					// The additive version selector remains optional so existing
-					// complete imports continue to inherit NCIP 2.02.
-					if name == "LmsConfig" && field == "ncipVersion" {
+					// Additive options remain optional for existing complete imports.
+					if (name == "LmsConfig" && field == "ncipVersion") || (name == "MarcHoldingsParserConfig" && field == "itemLoanPolicySubField") || (name == "MarcAvailabilityPredicate" && field == "values") || (name == "OpacHoldingsParserConfig" && slices.Contains([]string{"trimWhitespace", "excludedLocations", "itemLoanPolicySources", "requireItemLoanPolicy"}, field)) {
 						require.NotContains(t, imported.Required, field)
 					} else {
 						required = append(required, field)

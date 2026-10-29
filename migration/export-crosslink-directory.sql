@@ -29,10 +29,18 @@
 --   * The consortium, the owner identified by the psql `owner` variable, and
 --     the owner's direct children are exported. Tenant-local NCIP, Z39.50
 --     target, ILL, and holdings settings are attached to the selected owner.
+--     The owner's direct children with an LMS location code get an lmsConfig
+--     that carries only that code as requesterPickupLocation, plus the NCIP
+--     address and from agency the import contract requires. CrossLink reads a
+--     selected pickup location's code from that entry's own lmsConfig.
 --     The legacy HTTP Z39.50 proxy is deployment-level CrossLink configuration
 --     and is omitted.
---     Configure last-resort lenders after import because references to child
---     entries cannot be resolved while their parent entry is being imported.
+--   * The last_resort_lenders setting, a comma-separated AUTHORITY:SYMBOL list,
+--     becomes the owner's lendersOfLastResort as the matching entry IDs, in
+--     setting order without duplicates. Other entries get an empty list. A
+--     value that does not resolve to exactly one entry stops export before
+--     NDJSON is emitted. join-crosslink-exports.sh orders entries so that each
+--     lender is imported before the entries that list it.
 --   * The owner's tenant is the FOLIO tenant ID: the psql `tenant` variable
 --     when set, otherwise the current schema name without its _mod_rs suffix.
 --     The owner's direct branches get the same tenant so that CrossLink treats
@@ -46,6 +54,11 @@
 --     become owner-only ILL cancellationReasons, unfilledReasons, and loanConditions.
 --     Values become codes; labels become descriptions. Unfilled reasons and loan
 --     conditions fall back to values for absent labels. Empty lists are omitted.
+--   * default_copyright_type selects one copyrightType refdata value for the
+--     owner's defaultCopyrightType object. Missing settings are omitted;
+--     unresolved or ambiguous settings stop export before NDJSON is emitted.
+--     The code is the value's ISO18626 CopyrightCompliance code (us-ccg
+--     becomes US-CCG), matched case-insensitively; other values are unchanged.
 --   * default_service_level and minimum_cost seed loan and copy default tiers.
 --     Missing settings become standard and 0. The automatic-fee
 --     request_service_type setting does not describe routing capabilities.
@@ -58,6 +71,16 @@
 --     exporting generated tiers and the network for later consolidation.
 --   * Fields with no mod-rs equivalent are emitted as explicit nulls or empty
 --     arrays because the CrossLink import contract requires every field.
+--   * mode=mpals exports the institutions that have no tenant of their own
+--     instead of an owner: every Institution with an ISIL symbol, none of whose
+--     symbols appear in tenant_symbols (the whitespace-separated owner symbols
+--     of all tenants), plus their direct branches. owner is not used. Each gets
+--     a tenant made from its first ISIL symbol without the country prefix,
+--     lowercased (ISIL:US-MNALETI becomes mnaleti), vendor ReShare, and an
+--     illConfig carrying its ISO18626 endpoint. Tenant-local LMS, catalog,
+--     holdings, ILL policy, and ILL list settings are not attached. Run it with
+--     include_consortium=false and include_tiers_network=false and let
+--     join-crosslink-exports.sh place the entries under the consortium.
 --
 -- The output can contain tenant credentials such as NCIP authentication data.
 -- Store and transfer it as sensitive migration material.
@@ -77,6 +100,38 @@
 \if :{?consortium}
 \else
 \set consortium ''
+\endif
+
+\if :{?owner}
+\else
+\set owner ''
+\endif
+
+\if :{?mode}
+\else
+\set mode 'tenant'
+\endif
+
+\if :{?tenant_symbols}
+\else
+\set tenant_symbols ''
+\endif
+
+SELECT
+    :'mode' IN ('tenant', 'mpals') AS crosslink_mode_valid,
+    :'mode' <> 'mpals' OR btrim(:'tenant_symbols') <> '' AS crosslink_tenant_symbols_valid
+\gset
+
+\if :crosslink_mode_valid
+\else
+\warn Invalid mode value. Use tenant or mpals.
+SELECT 1 / 0;
+\endif
+
+\if :crosslink_tenant_symbols_valid
+\else
+\warn mode=mpals requires tenant_symbols, the whitespace-separated owner symbols of all tenants.
+SELECT 1 / 0;
 \endif
 
 \if :{?tenant}
@@ -125,7 +180,8 @@ CREATE TEMP TABLE crosslink_export_options ON COMMIT DROP AS
 SELECT
     :'include_consortium'::boolean AS include_consortium,
     :'include_tiers_network'::boolean AS include_tiers_network,
-    :'tenant'::text AS tenant;
+    :'tenant'::text AS tenant,
+    :'mode'::text AS mode;
 
 SELECT coalesce(
     nullif(btrim(:'consortium'), '')::uuid,
@@ -264,8 +320,58 @@ SELECT
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
         FILTER (WHERE st_key = 'max_requests') AS max_requests_per_patron,
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-        FILTER (WHERE st_key = 'check_duplicate_time') AS duplicate_check_window_hours
+        FILTER (WHERE st_key = 'check_duplicate_time') AS duplicate_check_window_hours,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'default_copyright_type') AS default_copyright_type,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'last_resort_lenders') AS last_resort_lenders
 FROM app_setting;
+
+-- ISO18626 CopyrightCompliance codes. mod-rs copyrightType values are these
+-- codes lowercased, so they are matched case-insensitively.
+CREATE TEMP TABLE crosslink_copyright_compliance ON COMMIT DROP AS
+SELECT code
+FROM (VALUES
+    ('AU-CopyRCatS183ComW'), ('AU-CopyRCatS183State'), ('AU-CopyrightActS49'),
+    ('AU-CopyrightActS50-1'), ('AU-CopyrightActS50-7A'), ('AU-CopyrightActS50-7B'),
+    ('AU-CopyrightCleared'), ('AU-GenBus'), ('NZ-CopyrightActS54'),
+    ('NZ-CopyrightActS55'), ('Other'), ('UK-CopyRFeePaid'), ('UK-FairDealing'),
+    ('US-CCG'), ('US-CCL')
+) AS codes(code);
+
+-- Resolve the selected default through the tenant-local copyright vocabulary.
+CREATE TEMP TABLE crosslink_default_copyright_type ON COMMIT DROP AS
+SELECT settings.default_copyright_type AS code,
+    count(value.rdv_id) AS matches,
+    CASE WHEN settings.default_copyright_type IS NULL THEN '{}'::jsonb
+    ELSE jsonb_build_object('defaultCopyrightType',
+        (jsonb_agg(jsonb_build_object(
+            'code', coalesce(iso.code, value.rdv_value),
+            'defaultDesc', CASE
+                WHEN value.rdv_label IS NULL OR value.rdv_label ~ '^[[:space:]]*$'
+                THEN value.rdv_value
+                ELSE value.rdv_label
+            END
+        )) FILTER (WHERE value.rdv_id IS NOT NULL))->0)
+    END AS item
+FROM crosslink_tenant_settings AS settings
+LEFT JOIN refdata_category AS category ON category.rdc_description = 'copyrightType'
+LEFT JOIN refdata_value AS value ON value.rdv_owner = category.rdc_id
+    AND value.rdv_value = settings.default_copyright_type
+LEFT JOIN crosslink_copyright_compliance AS iso
+    ON lower(iso.code) = lower(value.rdv_value)
+GROUP BY settings.default_copyright_type;
+
+DO $$
+DECLARE
+    problem text;
+BEGIN
+    SELECT code INTO problem FROM crosslink_default_copyright_type
+    WHERE code IS NOT NULL AND matches <> 1;
+    IF problem IS NOT NULL THEN
+        RAISE EXCEPTION 'default_copyright_type must resolve to exactly one copyrightType refdata value: %', problem;
+    END IF;
+END $$;
 
 -- Collect tenant-local reason and condition vocabularies once for all entries.
 CREATE TEMP TABLE crosslink_ill_lists ON COMMIT DROP AS
@@ -295,7 +401,69 @@ CREATE TEMP TABLE crosslink_local_entry ON COMMIT DROP AS
 SELECT DISTINCT symbol.entry_id
 FROM crosslink_symbols AS symbol
 CROSS JOIN crosslink_tenant_settings AS settings
-WHERE symbol.authority || ':' || symbol.symbol = :'owner';
+WHERE :'mode' = 'tenant'
+  AND symbol.authority || ':' || symbol.symbol = :'owner';
+
+-- Resolve the comma-separated AUTHORITY:SYMBOL list in last_resort_lenders, as
+-- mod-rs parses it, to directory entry IDs. Only the owner receives the list.
+CREATE TEMP TABLE crosslink_last_resort_lender_symbols ON COMMIT DROP AS
+SELECT
+    part.ordinality,
+    btrim(part.value) AS value,
+    count(DISTINCT symbol.entry_id) AS matches,
+    min(symbol.entry_id::text)::uuid AS entry_id
+FROM crosslink_tenant_settings AS settings
+CROSS JOIN LATERAL regexp_split_to_table(settings.last_resort_lenders, ',')
+    WITH ORDINALITY AS part(value, ordinality)
+LEFT JOIN crosslink_symbols AS symbol
+  ON symbol.authority = upper(btrim(split_part(btrim(part.value), ':', 1)))
+ AND symbol.symbol = upper(btrim(substr(btrim(part.value),
+         strpos(btrim(part.value), ':') + 1)))
+ AND strpos(btrim(part.value), ':') > 1
+WHERE :'mode' = 'tenant'
+  AND btrim(part.value) <> ''
+GROUP BY part.ordinality, part.value;
+
+DO $$
+DECLARE
+    problem text;
+BEGIN
+    SELECT value INTO problem FROM crosslink_last_resort_lender_symbols
+    WHERE matches <> 1
+    ORDER BY ordinality
+    LIMIT 1;
+    IF problem IS NOT NULL THEN
+        RAISE EXCEPTION 'last_resort_lenders must list AUTHORITY:SYMBOL values that each resolve to exactly one directory entry: %', problem;
+    END IF;
+END $$;
+
+CREATE TEMP TABLE crosslink_last_resort_lenders ON COMMIT DROP AS
+SELECT coalesce(jsonb_agg(entry_id ORDER BY ordinality), '[]'::jsonb) AS item
+FROM (
+    SELECT DISTINCT ON (entry_id) entry_id, ordinality
+    FROM crosslink_last_resort_lender_symbols
+    ORDER BY entry_id, ordinality
+) AS lenders;
+
+CREATE TEMP TABLE crosslink_mpals_entry ON COMMIT DROP AS
+SELECT DISTINCT ON (entry.entry_id)
+    entry.entry_id,
+    lower(regexp_replace(symbol.symbol, '^[A-Z]{2}-', '')) AS tenant
+FROM crosslink_entry_base AS entry
+JOIN crosslink_symbols AS symbol
+  ON symbol.entry_id = entry.entry_id
+ AND symbol.authority = 'ISIL'
+WHERE :'mode' = 'mpals'
+  AND entry.entry_type = 'Institution'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM crosslink_symbols AS tenant_symbol
+      WHERE tenant_symbol.entry_id = entry.entry_id
+        AND tenant_symbol.authority || ':' || tenant_symbol.symbol IN (
+            SELECT regexp_split_to_table(upper(btrim(:'tenant_symbols')), '\s+')
+        )
+  )
+ORDER BY entry.entry_id, symbol.key_order;
 
 CREATE TEMP TABLE crosslink_export_entry_ids ON COMMIT DROP AS
 WITH selected_entries AS (
@@ -314,6 +482,18 @@ WITH selected_entries AS (
     FROM crosslink_entry_base AS child
     JOIN crosslink_local_entry AS local_entry
       ON local_entry.entry_id = child.parent_id
+
+    UNION
+
+    SELECT mpals_entry.entry_id
+    FROM crosslink_mpals_entry AS mpals_entry
+
+    UNION
+
+    SELECT child.entry_id
+    FROM crosslink_entry_base AS child
+    JOIN crosslink_mpals_entry AS mpals_entry
+      ON mpals_entry.entry_id = child.parent_id
 )
 SELECT entry_id
 FROM selected_entries;
@@ -512,7 +692,7 @@ BEGIN
             'accept_item', 'check_in_item', 'check_out_item', 'use_request_item',
             'ncip_request_item_pickup_location', 'ncip_use_title_request_type',
             'default_institutional_patron_id', 'z3950_server_address',
-            'max_requests', 'check_duplicate_time'
+            'max_requests', 'check_duplicate_time', 'default_copyright_type'
         )
         GROUP BY st_key
         HAVING count(*) > 1
@@ -601,9 +781,27 @@ BEGIN
         RAISE EXCEPTION 'NCIP export requires both ncip_server_address and ncip_from_agency when NCIP configuration is present';
     END IF;
 
-    SELECT count(*) INTO local_entry_count FROM crosslink_local_entry;
-    IF local_entry_count <> 1 THEN
-        RAISE EXCEPTION 'owner must identify exactly one exported directory entry; found %', local_entry_count;
+    IF (SELECT mode FROM crosslink_export_options) = 'tenant' THEN
+        SELECT count(*) INTO local_entry_count FROM crosslink_local_entry;
+        IF local_entry_count <> 1 THEN
+            RAISE EXCEPTION 'owner must identify exactly one exported directory entry; found %', local_entry_count;
+        END IF;
+    ELSE
+        IF NOT EXISTS (SELECT 1 FROM crosslink_mpals_entry) THEN
+            RAISE EXCEPTION 'mode=mpals found no institutions outside tenant_symbols';
+        END IF;
+
+        SELECT string_agg(mpals_entry.entry_id || ' (' || entry.name || ': ' || mpals_entry.tenant || ')', ', ' ORDER BY mpals_entry.entry_id)
+        INTO problem
+        FROM crosslink_mpals_entry AS mpals_entry
+        JOIN crosslink_entry_base AS entry ON entry.entry_id = mpals_entry.entry_id
+        WHERE mpals_entry.tenant !~ '^[a-z][a-z0-9_]*$'
+           OR mpals_entry.tenant IN (
+               SELECT tenant FROM crosslink_mpals_entry GROUP BY tenant HAVING count(*) > 1
+           );
+        IF problem IS NOT NULL THEN
+            RAISE EXCEPTION 'mpals entries have invalid or duplicate tenants derived from their ISIL symbols: %', problem;
+        END IF;
     END IF;
 
 END
@@ -653,9 +851,13 @@ entry_records AS (
                     WHEN local_entry.entry_id IS NOT NULL
                       OR entry.parent_id IN (SELECT entry_id FROM crosslink_local_entry)
                     THEN export_options.tenant
+                    ELSE coalesce(mpals_entry.tenant, mpals_parent.tenant)
+                END,
+                'vendor', CASE
+                    WHEN local_entry.entry_id IS NOT NULL OR mpals_entry.entry_id IS NOT NULL
+                    THEN 'ReShare'
                     ELSE NULL
                 END,
-                'vendor', CASE WHEN local_entry.entry_id IS NOT NULL THEN 'ReShare' ELSE NULL END,
                 'phoneNumber', entry.phone_number,
                 'lmsLocationCode', entry.lms_location_code,
                 'lendToBorrowRatio', entry.lend_to_borrow_ratio,
@@ -665,7 +867,7 @@ entry_records AS (
                 'endpoints', coalesce(endpoints.items, '[]'::jsonb),
                 'addresses', coalesce(addresses.items, '[]'::jsonb),
                 'closures', '[]'::jsonb,
-                'lmsConfig', lms_config.item,
+                'lmsConfig', coalesce(lms_config.item, branch_lms_config.item),
                 'catalogConfig', catalog_config.item,
                 'illConfig', ill_config.item,
                 'holdingsPolicy', holdings_policy.item
@@ -757,6 +959,8 @@ entry_records AS (
         ) AS entry_addresses
     ) AS addresses ON true
     LEFT JOIN crosslink_local_entry AS local_entry ON local_entry.entry_id = entry.entry_id
+    LEFT JOIN crosslink_mpals_entry AS mpals_entry ON mpals_entry.entry_id = entry.entry_id
+    LEFT JOIN crosslink_mpals_entry AS mpals_parent ON mpals_parent.entry_id = entry.parent_id
     CROSS JOIN crosslink_tenant_settings AS tenant_settings
     LEFT JOIN LATERAL (
         SELECT jsonb_build_object(
@@ -765,14 +969,27 @@ entry_records AS (
                 WHEN 'sierra' THEN 'Sierra'
                 WHEN 'koha' THEN 'Koha'
                 WHEN 'folio' THEN 'FOLIO'
+                WHEN 'evergreen' THEN 'Evergreen'
+                WHEN 'horizon' THEN 'Horizon'
+                WHEN 'polaris' THEN 'Polaris'
+                WHEN 'symphony' THEN 'Symphony'
                 WHEN 'wms' THEN 'WMS'
                 WHEN 'wms2' THEN 'WMS'
                 WHEN 'aleph' THEN 'Aleph'
                 ELSE 'Generic'
             END,
-            'ncipVersion', NULL,
-            'ncipNamespaceEnabled', NULL,
-            'bibIdNormalization', NULL,
+            'ncipVersion', CASE lower(tenant_settings.host_lms_integration)
+                WHEN 'horizon' THEN '1.0'
+                WHEN 'polaris' THEN '1.0'
+                WHEN 'symphony' THEN '1.0'
+                ELSE '2.02'
+            END,
+            'ncipNamespaceEnabled', lower(tenant_settings.host_lms_integration) IS DISTINCT FROM 'koha',
+            'bibIdNormalization', CASE lower(tenant_settings.host_lms_integration)
+                WHEN 'sierra' THEN 'sierra'
+                WHEN 'symphony' THEN 'stripLeadingNonDigits'
+                ELSE 'none'
+            END,
             'address', tenant_settings.ncip_server_address,
             'fromAgency', tenant_settings.ncip_from_agency,
             'fromAgencyAuthentication', tenant_settings.ncip_from_agency_authentication,
@@ -800,7 +1017,11 @@ entry_records AS (
                 ELSE 'SYSNUMBER'
             END,
             'requestItemEnabled', lower(tenant_settings.use_request_item) = 'ncip'IS TRUE,
-            'requestItemPickupLocationEnabled', entry.lms_location_code IS NOT NULL,
+            'requestItemPickupLocationEnabled', CASE
+                WHEN lower(tenant_settings.host_lms_integration) IN ('evergreen', 'horizon', 'polaris', 'symphony')
+                    THEN false
+                ELSE entry.lms_location_code IS NOT NULL
+            END,
             'requesterPickupLocation', entry.lms_location_code,
             'supplierPickupLocation', tenant_settings.supplier_pickup_location,
             'requesterPatronPattern', tenant_settings.default_institutional_patron_id,
@@ -820,11 +1041,45 @@ entry_records AS (
     ) AS lms_config ON true
     LEFT JOIN LATERAL (
         SELECT jsonb_build_object(
+            'vendor', NULL,
+            'ncipVersion', NULL,
+            'ncipNamespaceEnabled', NULL,
+            'bibIdNormalization', NULL,
+            'address', tenant_settings.ncip_server_address,
+            'fromAgency', tenant_settings.ncip_from_agency,
+            'fromAgencyAuthentication', NULL,
+            'toAgency', NULL,
+            'lookupUserEnabled', NULL,
+            'acceptItemEnabled', NULL,
+            'checkInItemEnabled', NULL,
+            'checkOutItemEnabled', NULL,
+            'itemLocation', NULL,
+            'requestItemRequestType', NULL,
+            'requestItemRequestScopeType', NULL,
+            'requestItemBibIdCode', NULL,
+            'requestItemEnabled', NULL,
+            'requestItemPickupLocationEnabled', true,
+            'requesterPickupLocation', entry.lms_location_code,
+            'supplierPickupLocation', NULL,
+            'requesterPatronPattern', NULL,
+            'patronProfiles', NULL
+        ) AS item
+        WHERE entry.parent_id IN (SELECT entry_id FROM crosslink_local_entry)
+          AND nullif(btrim(entry.lms_location_code), '') IS NOT NULL
+          AND tenant_settings.ncip_server_address IS NOT NULL
+          AND tenant_settings.ncip_from_agency IS NOT NULL
+    ) AS branch_lms_config ON true
+    LEFT JOIN LATERAL (
+        SELECT jsonb_build_object(
             'profile', CASE lower(tenant_settings.host_lms_integration)
                 WHEN 'alma' THEN 'Alma'
                 WHEN 'sierra' THEN 'Sierra'
                 WHEN 'koha' THEN 'Koha'
                 WHEN 'folio' THEN 'FOLIO'
+                WHEN 'evergreen' THEN 'Evergreen'
+                WHEN 'horizon' THEN 'Horizon'
+                WHEN 'polaris' THEN 'Polaris'
+                WHEN 'symphony' THEN 'Symphony'
                 WHEN 'wms' THEN 'WMS'
                 WHEN 'wms2' THEN 'WMS'
                 WHEN 'aleph' THEN 'Aleph'
@@ -848,7 +1103,10 @@ entry_records AS (
             'isPickupLocation', pickup.is_pickup_location,
             'iso18626Url', iso_endpoint.address,
             'iso18626Vendor', CASE WHEN iso_endpoint.address IS NULL THEN NULL ELSE 'ReShare' END,
-            'lendersOfLastResort', '[]'::jsonb,
+            'lendersOfLastResort', CASE WHEN local_entry.entry_id IS NOT NULL
+                THEN (SELECT item FROM crosslink_last_resort_lenders)
+                ELSE '[]'::jsonb
+            END,
             'includeRequestingAgencyInfo', false,
             'includeSupplierInfo', false,
             'includeReturnInfo', false,
@@ -869,7 +1127,7 @@ entry_records AS (
                 ELSE NULL
             END
         ) || CASE WHEN local_entry.entry_id IS NOT NULL
-            THEN (SELECT item FROM crosslink_ill_lists)
+            THEN (SELECT item FROM crosslink_ill_lists) || (SELECT item FROM crosslink_default_copyright_type)
             ELSE '{}'::jsonb
         END AS item
         FROM (
@@ -887,12 +1145,14 @@ entry_records AS (
             JOIN service ON service.se_id = service_account.sa_service
             JOIN refdata_value AS service_type ON service_type.rdv_id = service.se_type_fk
             WHERE service_account.sa_account_holder = entry.entry_id
-              AND local_entry.entry_id IS NOT NULL
+              AND (local_entry.entry_id IS NOT NULL OR mpals_entry.entry_id IS NOT NULL)
               AND upper(btrim(service_type.rdv_value)) = 'ISO18626'
             ORDER BY service.se_id
             LIMIT 1
         ) AS iso_endpoint ON true
-        WHERE local_entry.entry_id IS NOT NULL OR pickup.is_pickup_location
+        WHERE local_entry.entry_id IS NOT NULL
+           OR mpals_entry.entry_id IS NOT NULL
+           OR pickup.is_pickup_location
     ) AS ill_config ON true
     LEFT JOIN LATERAL (
         SELECT jsonb_build_object(

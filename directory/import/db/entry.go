@@ -449,6 +449,8 @@ func replaceCatalogConfig(ctx context.Context, queries *db.Queries, entryID uuid
 	if config.Query != nil {
 		params.QueryType, params.QueryIdentifier, params.QueryIsbn, params.QueryIssn, params.QueryTitle = config.Query.Type, config.Query.Identifier, config.Query.ISBN, config.Query.ISSN, config.Query.Title
 		params.QueryYear = config.Query.Year
+		params.QueryIdentifierNormalization = config.Query.IdentifierNormalization
+		params.QueryIdentifierPrefix = config.Query.IdentifierPrefix
 	}
 	if config.HoldingsFormat != nil {
 		var err error
@@ -501,6 +503,13 @@ func replaceILLConfig(ctx context.Context, queries *db.Queries, entryID uuid.UUI
 		MaxRequestsPerPatron:      config.MaxRequestsPerPatron,
 		MinimumCost:               config.MinimumCost,
 		LoadBalancingPolicy:       config.LoadBalancingPolicy,
+	}
+	if config.DefaultCopyrightType != nil {
+		data, err := json.Marshal(config.DefaultCopyrightType)
+		if err != nil {
+			return fmt.Errorf("encode illConfig.defaultCopyrightType: %w", err)
+		}
+		params.DefaultCopyrightType = data
 	}
 	for _, field := range []struct {
 		name   string

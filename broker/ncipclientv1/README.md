@@ -25,7 +25,7 @@ retains its status code.
 
 Configure `lmsConfig.ncipVersion: "1.0"` in Directory to select this adapter.
 Allowed values are `"1.0"` and `"2.02"`; omission inherits the profile default
-(currently `"2.02"` for every supported vendor). Explicit configuration wins over
+(`"1.0"` for Horizon, Polaris and Symphony; `"2.02"` for the others). Explicit configuration wins over
 profile defaults. `ncipNamespaceEnabled` applies only to v2; v1 always uses
 namespace-free XML. The Dockerfile already includes `ncipv1`.
 

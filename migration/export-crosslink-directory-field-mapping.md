@@ -22,8 +22,8 @@ the trimmed `st_default_value` when necessary.
 | `directory_entry.de_phone_number` | `data.phoneNumber` | Copied directly. |
 | `directory_entry.de_lms_location_code` | `data.lmsLocationCode` | Copied directly. |
 | Entry custom text property `policy.ill.InstitutionalLoanToBorrowRatio` | `data.lendToBorrowRatio` | Copied unchanged for each selected entry; missing properties become `null`. Invalid ratios or multiple matching properties stop export before NDJSON output. |
-| Entry matched by the psql `owner` variable | `data.vendor` | Set to `ReShare` for the matched local entry; otherwise `null`. |
-| psql `tenant` variable, or the current schema name without its `_mod_rs` suffix | `data.tenant` | Set to the FOLIO tenant ID for the matched local entry and its direct branches; otherwise `null`. A missing or invalid tenant ID stops export before NDJSON output. |
+| Entry matched by the psql `owner` variable | `data.vendor` | Set to `ReShare` for the matched local entry, and for mpals institutions in `mode=mpals`; otherwise `null`. |
+| psql `tenant` variable, or the current schema name without its `_mod_rs` suffix | `data.tenant` | Set to the FOLIO tenant ID for the matched local entry and its direct branches; otherwise `null`. A missing or invalid tenant ID stops export before NDJSON output. In `mode=mpals`, see [Institutions without a tenant](#institutions-without-a-tenant-mpals). |
 | `directory_entry_tag` joined to `tag.norm_value` | Record inclusion | Entries tagged `deleted`, case-insensitively, are excluded. |
 
 The record discriminator is always `type: entry`. Parent records are emitted
@@ -86,14 +86,49 @@ the wrapper emits the consortium entry in the first shard and tier/network
 templates in the final shard. The join script consolidates all shard entry
 keys into those final tier and network records.
 
-## LMS and NCIP configuration
+## Institutions without a tenant (mpals)
 
-`data.lmsConfig` is emitted only for the selected local entry when both
-`ncip_server_address` and `ncip_from_agency` are present.
+`mode=mpals` exports the institutions that have no mod-rs tenant of their own,
+instead of a local entry. Pass the owner symbols of every tenant as the
+whitespace-separated `tenant_symbols` variable; `owner` is not used.
+`export-crosslink.sh` runs this mode once, against `MPALS_SCHEMA`, after the
+tenant exports.
 
 | mod-rs source | CrossLink field | Mapping |
 | --- | --- | --- |
-| `app_setting.host_lms_integration` | `data.lmsConfig.vendor` | `alma` becomes `Alma`; `sierra` becomes `Sierra`; `koha` becomes `Koha`; `folio` becomes `FOLIO`; `wms` and `wms2` become `WMS`; `aleph` becomes `Aleph`; any other or missing value becomes `Generic`. |
+| `Institution` entries with an ISIL symbol and no symbol in `tenant_symbols`, plus their direct branches | Record inclusion | Institutions without symbols are excluded. |
+| First ISIL symbol of the institution, by symbol priority | `data.tenant` | The country prefix is removed and the rest lowercased: `ISIL:US-MNALETI` becomes `mnaleti`. Branches take their institution's tenant. Invalid or duplicate tenants stop export before NDJSON output. |
+| Selected institution | `data.vendor` | Set to `ReShare`. |
+| First `service.se_address` whose normalized service type is `ISO18626` | `data.illConfig.iso18626Url` | Emitted with `iso18626Vendor` `ReShare` so that CrossLink can reach the institution. Tenant policy values and ILL lists are not included. |
+
+`lmsConfig`, `catalogConfig`, and `holdingsPolicy` are `null` for these
+entries. Run the mode with `include_consortium=false` and
+`include_tiers_network=false`; the join script places the institutions under
+the consortium and adds them to the generated tiers and network.
+
+## LMS and NCIP configuration
+
+`data.lmsConfig` is emitted for the selected local entry when both
+`ncip_server_address` and `ncip_from_agency` are present, with the mappings
+below.
+
+Under the same conditions, each of the local entry's direct children with a
+non-blank `directory_entry.de_lms_location_code` gets a pickup-code-only
+`data.lmsConfig`, because CrossLink reads a selected pickup location's LMS code
+from that entry's own `lmsConfig.requesterPickupLocation`. It contains the
+branch's code as `requesterPickupLocation`, `requestItemPickupLocationEnabled`
+set to `true`, and the tenant's `address` and `fromAgency`, which the import
+contract requires. Every other field is `null`, including `vendor` and
+`fromAgencyAuthentication`, so the NCIP credential and the tenant's NCIP
+settings are not copied to branches. CrossLink builds LMS connections only from
+entries found by symbol, and branches have no symbols.
+
+| mod-rs source | CrossLink field | Mapping |
+| --- | --- | --- |
+| `app_setting.host_lms_integration` | `data.lmsConfig.vendor` | `alma` becomes `Alma`; `sierra` becomes `Sierra`; `koha` becomes `Koha`; `folio` becomes `FOLIO`; `evergreen` becomes `Evergreen`; `horizon` becomes `Horizon`; `polaris` becomes `Polaris`; `symphony` becomes `Symphony`; `wms` and `wms2` become `WMS`; `aleph` becomes `Aleph`; any other or missing value becomes `Generic`. |
+| `app_setting.host_lms_integration` | `data.lmsConfig.ncipVersion` | `horizon`, `polaris`, and `symphony` become `1.0`; all other or missing values become `2.02`. |
+| `app_setting.host_lms_integration` | `data.lmsConfig.ncipNamespaceEnabled` | `false` for `koha`; otherwise `true`. NCIP v1 always uses namespace-free XML. |
+| `app_setting.host_lms_integration` | `data.lmsConfig.bibIdNormalization` | `sierra` becomes `sierra`; `symphony` becomes `stripLeadingNonDigits`; otherwise `none`. |
 | `app_setting.ncip_server_address` | `data.lmsConfig.address` | Copied directly. |
 | `app_setting.ncip_from_agency` | `data.lmsConfig.fromAgency` | Copied directly. |
 | `app_setting.ncip_from_agency_authentication` | `data.lmsConfig.fromAgencyAuthentication` | Copied directly. This value can contain credentials and must be handled as sensitive migration data. |
@@ -103,8 +138,8 @@ keys into those final tier and network records.
 | `app_setting.check_in_item` | `data.lmsConfig.checkInItemEnabled` | `true` when the value equals `ncip`, case-insensitively; otherwise `false`. |
 | `app_setting.check_out_item` | `data.lmsConfig.checkOutItemEnabled` | `true` when the value equals `ncip`, case-insensitively; otherwise `false`. |
 | `app_setting.use_request_item` | `data.lmsConfig.requestItemEnabled` | `true` when the value equals `ncip`, case-insensitively; otherwise `false`. |
-| `directory_entry.de_lms_location_code` | `data.lmsConfig.requestItemPickupLocationEnabled` | `true` when the value is not `null`; otherwise `false`. |
-| `directory_entry.de_lms_location_code` | `data.lmsConfig.requesterPickupLocation` | Copied directly. |
+| `app_setting.host_lms_integration` and `directory_entry.de_lms_location_code` | `data.lmsConfig.requestItemPickupLocationEnabled` | `false` for Evergreen, Horizon, Polaris and Symphony, matching their circulation profiles. For other profiles, `true` when the location code is not `null`; otherwise `false`. Branch pickup-code-only configurations retain `true`. |
+| `directory_entry.de_lms_location_code` | `data.lmsConfig.requesterPickupLocation` | Copied directly from the entry itself, so each branch carries its own code. |
 | `app_setting.ncip_request_item_pickup_location` | `data.lmsConfig.supplierPickupLocation` | Copied directly. |
 | Local entry custom property `folio_location_filter` | `data.lmsConfig.itemLocation` | Copied when present; otherwise `null`. mod-rs passes this value as the item location in NCIP RequestItem messages. |
 | `app_setting.host_lms_integration` and host-LMS adapter behavior | `data.lmsConfig.requestItemRequestType` | `sierra` becomes `Hold`; `folio` becomes `Page`; all other values become `Loan`. |
@@ -132,7 +167,8 @@ is not exported.
 ## ILL configuration
 
 `data.illConfig` is emitted for the entry selected by the `owner` variable even
-when no ISO18626 endpoint is configured. It is also emitted for non-local
+when no ISO18626 endpoint is configured, and for mpals institutions in
+`mode=mpals`. It is also emitted for non-local
 entries tagged as pickup locations so that `isPickupLocation` is preserved.
 The owner's direct branches inherit the tenant policy values when they are
 exported as pickup locations. Other non-local pickup entries have `null` for
@@ -145,10 +181,22 @@ retain their exported defaults.
 | Presence of the ISO18626 endpoint | `data.illConfig.iso18626Vendor` | Set to `ReShare`. |
 | `app_setting.max_requests` | `data.illConfig.maxRequestsPerPatron` | Cast to an integer for the selected local entry and its direct branches. Values must be from 0 through 2147483647; the value is `null` for other non-local pickup entries. |
 | `app_setting.check_duplicate_time` | `data.illConfig.duplicateCheckWindowHours` | Cast to an integer number of hours for the selected local entry and its direct branches. Values must be from 0 through 2147483647; the value is `null` for other non-local pickup entries. |
+| `app_setting.default_copyright_type` resolved through `copyrightType` refdata | `data.illConfig.defaultCopyrightType` | Exported only on the selected local owner as a single object: `rdv_value` becomes `code` as its ISO18626 CopyrightCompliance code, and `rdv_label` becomes `defaultDesc`, falling back to the code for a null or whitespace-only label. |
 | Unsupported mod-rs agency-information behavior | `data.illConfig.includeRequestingAgencyInfo` | Set to `false`; mod-rs does not populate requesting-agency information. |
 | Unsupported mod-rs agency-information behavior | `data.illConfig.includeSupplierInfo` | Set to `false`; mod-rs does not populate supplier information. |
 | Unsupported mod-rs directory-derived return information | `data.illConfig.includeReturnInfo` | Set to `false`; mod-rs does not automatically populate return information from the supplier directory entry. |
 | Unsupported mod-rs vendor-note behavior | `data.illConfig.includeVendorNote` | Set to `false`; mod-rs does not prepend the supplier vendor to generated notes. |
+
+The default copyright setting uses the nonblank `st_value`, falling back to the
+nonblank `st_default_value`, with surrounding spaces trimmed. An unset setting
+omits `defaultCopyrightType`. A configured setting must match exactly one
+`refdata_value.rdv_value` in the `copyrightType` category; unresolved or ambiguous
+values fail the export before any records are emitted. mod-rs stores the ISO18626
+CopyrightCompliance codes lowercased, so the code is the ISO code that matches
+`rdv_value` case-insensitively (`us-ccg` becomes `US-CCG`); a value that matches
+no ISO code is exported unchanged. Nonblank labels are preserved without
+normalization. Direct branches and other non-local entries do not receive the
+default.
 
 The following reference-data vocabularies are exported only on the selected local
 owner. Join `refdata_value.rdv_owner` to `refdata_category.rdc_id` and select
@@ -168,12 +216,22 @@ lists. For example, the seeded cannot-supply value `unavailable` and label
 `No longer available` become
 `{"code":"unavailable","defaultDesc":"No longer available"}` in `unfilledReasons`.
 
-`app_setting.last_resort_lenders` is the mod-rs source for
-`data.illConfig.lendersOfLastResort`, but the primary export emits an empty
-array. CrossLink imports NDJSON records sequentially, so a local parent entry
-cannot reference child entries that have not yet been imported. Parse and
-configure the setting in a second import or post-import update after all
-directory entries exist.
+`app_setting.last_resort_lenders` becomes the selected local owner's
+`data.illConfig.lendersOfLastResort`. Like mod-rs, the export reads the nonblank
+`st_value`, falling back to `st_default_value`, and splits it on commas into
+trimmed `AUTHORITY:SYMBOL` values, ignoring empty parts. Each value is matched
+case-insensitively against the symbols of non-deleted directory entries, and the
+list holds the matching entry IDs in setting order without duplicates. For
+example, `ISIL:US-MNMPUMNX` becomes the Minitex entry's ID. A value without an
+authority, or one that matches no entry or several entries, fails the export
+before any records are emitted. All other entries, including the owner's
+branches, get an empty list.
+
+CrossLink imports NDJSON records sequentially and requires each lender to exist
+already, so `join-crosslink-exports.sh` emits the institutions that are listed
+as lenders, with their branches, before the other institutions. It fails if an
+entry still lists a lender that is not an earlier entry, such as an unexported
+entry or the entry itself.
 
 ## Holdings policy
 
@@ -243,9 +301,6 @@ profile. The exporter supplies the following fixed values.
 | `data.hrid` | `null` |
 | `data.timeZone` | `null` |
 | `data.closures` | `[]` |
-| `data.lmsConfig.ncipVersion` | `null`; inherits the CrossLink profile default (currently `2.02`). Set `1.0` explicitly for supported NCIP v1 HTTP endpoints. |
-| `data.lmsConfig.ncipNamespaceEnabled` | `null`; resolved by the CrossLink host-LMS profile. |
-| `data.lmsConfig.bibIdNormalization` | `null`; resolved by the CrossLink host-LMS profile. |
 | `data.catalogConfig.metadataUpdateMode` | `null`; CrossLink consequently does not update request metadata from catalog records. |
 | `data.catalogConfig.sru` | `null` |
 | `data.catalogConfig.zoom.options` | `null`; resolved from the holdings format by the CrossLink host-LMS profile. |

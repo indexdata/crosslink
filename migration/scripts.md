@@ -55,8 +55,12 @@ directory exports. The final schema exports the generated tiers and network.
 
 Directory exports include the selected local owner's cancellation reasons,
 unfilled reasons (from mod-rs `cannotSupplyReasons`), and loan conditions.
+It also exports the selected local owner's `defaultCopyrightType`, resolving the
+`default_copyright_type` setting through the `copyrightType` refdata vocabulary.
+An unset setting is omitted; a configured value without a unique refdata match
+fails the export.
 See the [ILL configuration field mappings](export-crosslink-directory-field-mapping.md#ill-configuration)
-for source fields, label fallbacks, ordering, and missing-list behavior.
+for source fields, setting and label fallbacks, ordering, and missing-list behavior.
 
 Environment variables:
 
@@ -76,15 +80,23 @@ Environment variables:
 | `UNSUPPORTED_TEMPLATE_OUTPUT` | `unsupported-templates.ndjson` | Joined review output for templates excluded from import. |
 | `PATRON_REQUEST_DIR` | `patron-requests` | Directory for joined patron-request batch files. |
 | `PATRON_REQUEST_BATCH_SIZE` | `5000` | Maximum records per patron-request batch file. |
+| `MPALS_SCHEMA` | `minitex_mod_rs` | Schema whose directory supplies the institutions without their own tenant (the mpals libraries). Set it to an empty value to skip that export. |
 
 Per-schema output files are named like:
 
 ```text
 directories-<schema>-<number>.ndjson
+directories-mpals-<number>.ndjson
 config-<schema>-<number>.ndjson
 unsupported-templates-<schema>-<number>.ndjson
 patron-request-<schema>-<number>.ndjson
 ```
+
+After the tenant schemas, the script exports the institutions without a
+tenant from `MPALS_SCHEMA` with `mode=mpals`, passing every owner symbol from
+the properties file as `tenant_symbols`. Each such institution gets a tenant
+made from its ISIL symbol, for example `mnaleti` for `ISIL:US-MNALETI`. See
+`export-crosslink-directory-field-mapping.md`.
 
 Existing files matching the configured prefixes are removed before export.
 After all schemas are exported, the script runs `join-crosslink-exports.sh` on
@@ -114,6 +126,9 @@ For directory records it also:
 
 - combines all entry records;
 - assigns the first exported consortium to root institutions without a parent;
+- emits institutions listed as lenders of last resort, with their branches,
+  before the other institutions, because the import requires each lender to
+  exist already; it fails if a listed lender is not an earlier entry;
 - combines tier and network metadata;
 - assigns all non-consortium entries to generated tiers;
 - assigns sequential network priorities.

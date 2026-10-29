@@ -40,6 +40,19 @@
 --     omitted. Loan conditions are exported as condition notifications.
 --   * Audit history, protocol audit payloads, batches, and queued jobs are not
 --     represented by CrossLink's patron-request import contract and are omitted.
+--   * The ILL due date (pr_parsed_due_date_rs) becomes
+--     illResponse.statusInfo.dueDate, from which CrossLink sets the request's
+--     due date. It is emitted only for loan states (shipped through returned),
+--     with status Overdue for OVERDUE and Loaned otherwise; due dates left on
+--     requests in earlier states are omitted.
+--   * A borrowing request's pr_patron_email becomes patronInfo Email addresses,
+--     one per comma- or semicolon-separated part that looks like an address
+--     (x@y.z). Other parts, such as "none" or "N/A", are omitted and listed in
+--     a NOTICE. CrossLink shows the first address and sends patron
+--     notifications to all of them.
+--   * copyrightType values become their ISO18626 CopyrightCompliance codes
+--     (us-ccl becomes US-CCL), matched case-insensitively. Values that match no
+--     ISO code are exported unchanged.
 --   * mod-rs timestamps are treated as UTC.
 --   * Requester request IDs drop the "~<rota position>" or "~norota" suffix
 --     that mod-rs appends to non-SLNP protocol IDs. Borrowing requests use the
@@ -47,6 +60,11 @@
 --   * Borrowing requests carry the FOLIO tenant ID: the psql `tenant` variable
 --     when set, otherwise the current schema name without its _mod_rs suffix.
 --     Lending requests carry no tenant, matching requests CrossLink receives.
+--   * A borrowing request's requesterPickupLocationId is its
+--     pr_resolved_pickup_location_fk, the directory entry ID that the directory
+--     export keeps as the CrossLink entry key. It is emitted only when that
+--     entry is the requesting institution or one of its direct branches and is
+--     not tagged deleted; other values are omitted and listed in a NOTICE.
 --
 -- The preflight block runs before any NDJSON is emitted and stops the export if
 -- an open request has an unmapped state or is missing required import data.
@@ -195,6 +213,18 @@ VALUES
     ('RES_AWAIT_PICKING',              'lending',   'Copy',       'WILL_SUPPLY'),
     ('RES_AWAIT_PICKING',              'lending',   'CopyOrLoan', 'SEARCHING');
 
+-- ISO18626 CopyrightCompliance codes. mod-rs copyrightType values are these
+-- codes lowercased, so they are matched case-insensitively.
+CREATE TEMP TABLE crosslink_copyright_compliance ON COMMIT DROP AS
+SELECT code
+FROM (VALUES
+    ('AU-CopyRCatS183ComW'), ('AU-CopyRCatS183State'), ('AU-CopyrightActS49'),
+    ('AU-CopyrightActS50-1'), ('AU-CopyrightActS50-7A'), ('AU-CopyrightActS50-7B'),
+    ('AU-CopyrightCleared'), ('AU-GenBus'), ('NZ-CopyrightActS54'),
+    ('NZ-CopyrightActS55'), ('Other'), ('UK-CopyRFeePaid'), ('UK-FairDealing'),
+    ('US-CCG'), ('US-CCL')
+) AS codes(code);
+
 CREATE TEMP VIEW crosslink_request_ids AS
 SELECT
     patron_request.pr_id AS legacy_id,
@@ -222,9 +252,10 @@ SELECT
     crosslink_state_map.crosslink_state AS import_state,
     service_type.rdv_value AS legacy_service_type,
     normalized_service_type.value AS import_service_type,
+    pickup_location.id AS import_pickup_location_id,
     service_level.rdv_value AS import_service_level,
     publication_type.rdv_value AS import_publication_type,
-    copyright_type.rdv_value AS import_copyright_type,
+    coalesce(copyright_code.code, copyright_type.rdv_value) AS import_copyright_type,
     maximum_cost_currency.rdv_value AS import_maximum_cost_currency,
     cost_currency.rdv_value AS import_cost_currency,
     CASE
@@ -267,7 +298,9 @@ SELECT
                 )
             )
         ELSE patron_request.pr_sup_inst_symbol
-    END AS import_supplier_symbol
+    END AS import_supplier_symbol,
+    patron_email.addresses AS import_patron_addresses,
+    patron_email.rejected AS import_rejected_patron_emails
 FROM patron_request
 JOIN crosslink_request_ids AS request_identity
   ON request_identity.legacy_id = patron_request.pr_id
@@ -304,6 +337,8 @@ LEFT JOIN refdata_value AS publication_type
   ON publication_type.rdv_id = patron_request.pr_pub_type_fk
 LEFT JOIN refdata_value AS copyright_type
   ON copyright_type.rdv_id = patron_request.pr_copyright_type_fk
+LEFT JOIN crosslink_copyright_compliance AS copyright_code
+  ON lower(copyright_code.code) = lower(copyright_type.rdv_value)
 LEFT JOIN refdata_value AS maximum_cost_currency
   ON maximum_cost_currency.rdv_id = patron_request.pr_maximum_costs_code_fk
 LEFT JOIN refdata_value AS cost_currency
@@ -312,6 +347,52 @@ LEFT JOIN symbol AS resolved_symbol
   ON resolved_symbol.sym_id = patron_request.pr_resolved_sup_inst_symbol_fk
 LEFT JOIN naming_authority AS resolved_authority
   ON resolved_authority.na_id = resolved_symbol.sym_authority_fk
+-- The same entries the directory export emits for the requester: the
+-- institution itself and its direct branches.
+LEFT JOIN LATERAL (
+    SELECT pickup.de_id AS id
+    FROM directory_entry AS pickup
+    WHERE patron_request.pr_is_requester IS TRUE
+      AND pickup.de_id = patron_request.pr_resolved_pickup_location_fk
+      AND NOT EXISTS (
+          SELECT 1
+          FROM directory_entry_tag
+          JOIN tag ON tag.id = directory_entry_tag.tag_id
+          WHERE directory_entry_tag.directory_entry_tags_id = pickup.de_id
+            AND lower(btrim(tag.norm_value)) = 'deleted'
+      )
+      AND EXISTS (
+          SELECT 1
+          FROM symbol AS requester_symbol
+          JOIN naming_authority AS requester_authority
+            ON requester_authority.na_id = requester_symbol.sym_authority_fk
+          WHERE requester_authority.na_symbol || ':' || requester_symbol.sym_symbol
+                = patron_request.pr_req_inst_symbol
+            AND requester_symbol.sym_owner_fk IN (pickup.de_id, pickup.de_parent)
+      )
+) AS pickup_location ON true
+-- pr_patron_email can hold a comma- or semicolon-separated list and
+-- placeholders such as "none"; each part that looks like an address becomes
+-- an ISO18626 Email address.
+LEFT JOIN LATERAL (
+    SELECT
+        jsonb_agg(jsonb_build_object('electronicAddress', jsonb_build_object(
+            'electronicAddressType', jsonb_build_object('#text', 'Email'),
+            'electronicAddressData', part.email
+        )) ORDER BY part.ordinality) FILTER (WHERE part.valid) AS addresses,
+        string_agg(part.email, ', ' ORDER BY part.ordinality)
+            FILTER (WHERE NOT part.valid) AS rejected
+    FROM (
+        SELECT
+            split.ordinality,
+            btrim(split.value) AS email,
+            btrim(split.value) ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' AS valid
+        FROM regexp_split_to_table(patron_request.pr_patron_email, '[,;]')
+            WITH ORDINALITY AS split(value, ordinality)
+        WHERE patron_request.pr_is_requester IS TRUE
+          AND btrim(split.value) <> ''
+    ) AS part
+) AS patron_email ON true
 WHERE state_model_status.sms_is_terminal IS FALSE;
 
 -- Requests without a supported service type cannot be imported; skip them.
@@ -338,6 +419,45 @@ BEGIN
     END IF;
 END
 $skipped$;
+
+DO $pickup_omitted$
+DECLARE
+    omitted TEXT;
+BEGIN
+    SELECT string_agg(
+        'request ' || pr_id || ': pickup location ' || pr_resolved_pickup_location_fk
+            || ' is not the requester or one of its branches',
+        E'\n' ORDER BY pr_id
+    )
+    INTO omitted
+    FROM crosslink_open_requests
+    WHERE import_side = 'borrowing'
+      AND pr_resolved_pickup_location_fk IS NOT NULL
+      AND import_pickup_location_id IS NULL;
+
+    IF omitted IS NOT NULL THEN
+        RAISE NOTICE E'Omitting pickup locations:\n%', omitted;
+    END IF;
+END
+$pickup_omitted$;
+
+DO $patron_email_omitted$
+DECLARE
+    omitted TEXT;
+BEGIN
+    SELECT string_agg(
+        'request ' || pr_id || ': ' || import_rejected_patron_emails,
+        E'\n' ORDER BY pr_id
+    )
+    INTO omitted
+    FROM crosslink_open_requests
+    WHERE import_rejected_patron_emails IS NOT NULL;
+
+    IF omitted IS NOT NULL THEN
+        RAISE NOTICE E'Omitting patron email values that are not addresses:\n%', omitted;
+    END IF;
+END
+$patron_email_omitted$;
 
 DO $preflight$
 DECLARE
@@ -459,14 +579,14 @@ WITH request_payloads AS (
                     CASE WHEN nullif(btrim(request.pr_isbn), '') IS NOT NULL
                         THEN jsonb_build_array(jsonb_build_object(
                             'bibliographicItemIdentifierCode',
-                                jsonb_build_object('#text', 'isbn'),
+                                jsonb_build_object('#text', 'ISBN'),
                             'bibliographicItemIdentifier', request.pr_isbn
                         )) ELSE '[]'::jsonb END
                     ||
                     CASE WHEN nullif(btrim(request.pr_issn), '') IS NOT NULL
                         THEN jsonb_build_array(jsonb_build_object(
                             'bibliographicItemIdentifierCode',
-                                jsonb_build_object('#text', 'issn'),
+                                jsonb_build_object('#text', 'ISSN'),
                             'bibliographicItemIdentifier', request.pr_issn
                         )) ELSE '[]'::jsonb END
             )),
@@ -505,7 +625,8 @@ WITH request_payloads AS (
                 'sendToPatron', CASE
                     WHEN request.pr_send_to_patron IS TRUE THEN 'Y'
                     WHEN request.pr_send_to_patron IS FALSE THEN 'N'
-                END
+                END,
+                'address', request.import_patron_addresses
             )),
             'billingInfo', jsonb_strip_nulls(jsonb_build_object(
                 'maximumCosts', CASE
@@ -537,10 +658,32 @@ request_bundles AS (
                     'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
                 ),
                 'illRequest', request.ill_request,
+                'illResponse', CASE
+                    WHEN request.pr_parsed_due_date_rs IS NOT NULL
+                     AND request.import_state IN (
+                         'SHIPPED', 'RECEIVED', 'OVERDUE',
+                         'SHIPPED_RETURNED', 'SHIPPED_RETURN'
+                     )
+                    THEN jsonb_build_object('statusInfo', jsonb_build_object(
+                        'status', CASE request.import_state
+                            WHEN 'OVERDUE' THEN 'Overdue'
+                            ELSE 'Loaned'
+                        END,
+                        'lastChange', to_char(
+                            request.pr_last_updated,
+                            'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
+                        ),
+                        'dueDate', to_char(
+                            request.pr_parsed_due_date_rs,
+                            'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
+                        )
+                    ))
+                END,
                 'state', request.import_state,
                 'stateModel', 'default',
                 'side', request.import_side,
                 'tenant', CASE WHEN request.import_side = 'borrowing' THEN :'tenant' END,
+                'requesterPickupLocationId', request.import_pickup_location_id,
                 'patron', request.pr_patron_identifier,
                 'requesterSymbol', request.pr_req_inst_symbol,
                 'supplierSymbol', request.import_supplier_symbol,
