@@ -195,39 +195,48 @@ func joinAddresses(addrs []string) string {
 	return result
 }
 
-// Only string fields are allowed
+type PullSlipItem struct {
+	Title            string `description:"Title of the item"`
+	Barcode          string `description:"Barcode of the item"`
+	CallNumber       string `description:"Library call number of the item"`
+	Location         string `description:"Library location of the item"`
+	ShelvingLocation string `description:"Shelving location of the item"`
+}
+
+// PullSlipData contains the request and item fields available in pull-slip templates.
 type PullSlipData struct {
-	ReqId              string `description:"Requester request identifier"`
-	CancellationReason string `description:"Reason the request was cancelled"`
-	PickupLocation     string `description:"Pickup location for the requested item"`
-	PickupURL          string `description:"URL where the requested item can be accessed"`
-	NeededBy           string `description:"Date by which the patron needs the item"`
-	Title              string `description:"Title of the requested item"`
-	TitleOfComponent   string `description:"Title of the requested component, such as an article or chapter"`
-	Author             string `description:"Author of the requested item"`
-	AuthorOfComponent  string `description:"Author of the requested component, such as an article or chapter"`
-	DueDate            string `description:"Date by which the item must be returned"`
-	ReturnAddress      string `description:"Address to which the item must be returned"`
-	BarcodeBase64      string `description:"Base64-encoded barcode image"`
-	ServiceType        string `description:"Requested ISO 18626 service type"`
-	ServiceLevel       string `description:"Requested ISO 18626 service level"`
-	SystemIdentifier   string `description:"System identifier of the requested item"`
-	Publisher          string `description:"Publisher of the requested item"`
-	MaterialType       string `description:"Material type of the requested item"`
-	Volume             string `description:"Volume of the requested item"`
-	Issue              string `description:"Issue of the requested item"`
-	Pages              string `description:"Pages of the requested item"`
-	PagesRequested     string `description:"Specific pages requested from the item"`
-	StaffNotes         string `description:"Notes intended for staff"`
-	CallNumber         string `description:"Library call number of the requested item"`
-	Location           string `description:"Library location of the requested item"`
-	ShelvingLocation   string `description:"Shelving location of the requested item"`
-	LoanConditions     string `description:"Conditions that apply to the loan"`
-	PatronGivenName    string `description:"Patron's given name"`
-	PatronName         string `description:"Patron's given name (legacy alias)"`
-	PatronSurname      string `description:"Patron's surname"`
-	PatronId           string `description:"Patron identifier"`
-	PatronProfile      string `description:"Patron profile"`
+	ReqId              string         `description:"Requester request identifier"`
+	CancellationReason string         `description:"Reason the request was cancelled"`
+	PickupLocation     string         `description:"Pickup location for the requested item"`
+	PickupURL          string         `description:"URL where the requested item can be accessed"`
+	NeededBy           string         `description:"Date by which the patron needs the item"`
+	Title              string         `description:"Title of the requested item"`
+	TitleOfComponent   string         `description:"Title of the requested component, such as an article or chapter"`
+	Author             string         `description:"Author of the requested item"`
+	AuthorOfComponent  string         `description:"Author of the requested component, such as an article or chapter"`
+	DueDate            string         `description:"Date by which the item must be returned"`
+	ReturnAddress      string         `description:"Address to which the item must be returned"`
+	BarcodeBase64      string         `description:"Base64-encoded barcode image"`
+	ServiceType        string         `description:"Requested ISO 18626 service type"`
+	ServiceLevel       string         `description:"Requested ISO 18626 service level"`
+	SystemIdentifier   string         `description:"System identifier of the requested item"`
+	Publisher          string         `description:"Publisher of the requested item"`
+	MaterialType       string         `description:"Material type of the requested item"`
+	Volume             string         `description:"Volume of the requested item"`
+	Issue              string         `description:"Issue of the requested item"`
+	Pages              string         `description:"Pages of the requested item"`
+	PagesRequested     string         `description:"Specific pages requested from the item"`
+	StaffNotes         string         `description:"Notes intended for staff"`
+	CallNumber         string         `description:"Library call number of the requested item"`
+	Location           string         `description:"Library location of the requested item"`
+	ShelvingLocation   string         `description:"Shelving location of the requested item"`
+	LoanConditions     string         `description:"Conditions that apply to the loan"`
+	PatronGivenName    string         `description:"Patron's given name"`
+	PatronName         string         `description:"Patron's given name (legacy alias)"`
+	PatronSurname      string         `description:"Patron's surname"`
+	PatronId           string         `description:"Patron identifier"`
+	PatronProfile      string         `description:"Patron profile"`
+	Items              []PullSlipItem `description:"Items associated with the request"`
 }
 
 // Only string fields are allowed
@@ -254,6 +263,17 @@ func getTemplatePlaceholders(dataType reflect.Type) []TemplatePlaceholder {
 	placeholders := make([]TemplatePlaceholder, 0, dataType.NumField())
 	for i := range dataType.NumField() {
 		field := dataType.Field(i)
+		if field.Type.Kind() == reflect.Slice && field.Type.Elem().Kind() == reflect.Struct {
+			itemType := field.Type.Elem()
+			for j := range itemType.NumField() {
+				itemField := itemType.Field(j)
+				placeholders = append(placeholders, TemplatePlaceholder{
+					Placeholder: "{{range ." + field.Name + "}}{{." + itemField.Name + "}}{{end}}",
+					Description: itemField.Tag.Get("description"),
+				})
+			}
+			continue
+		}
 		placeholders = append(placeholders, TemplatePlaceholder{
 			Placeholder: "{{." + field.Name + "}}",
 			Description: field.Tag.Get("description"),
@@ -295,6 +315,15 @@ func GetPullSlipData(pr pr_db.PatronRequest, notes []pr_db.Notification, conditi
 		PatronSurname:      DEFAULT_FOR_NO_VALUE,
 		PatronId:           DEFAULT_FOR_NO_VALUE,
 		PatronProfile:      DEFAULT_FOR_NO_VALUE,
+	}
+	for _, item := range pr.Items {
+		data.Items = append(data.Items, PullSlipItem{
+			Title:            optionalItemValue(item.Title),
+			Barcode:          item.Barcode,
+			CallNumber:       optionalItemValue(item.CallNumber),
+			Location:         optionalItemValue(item.Location),
+			ShelvingLocation: optionalItemValue(item.ShelvingLocation),
+		})
 	}
 	if pr.IllRequest.BibliographicInfo.Author != "" {
 		data.Author = pr.IllRequest.BibliographicInfo.Author
@@ -362,6 +391,13 @@ func GetPullSlipData(pr pr_db.PatronRequest, notes []pr_db.Notification, conditi
 		}
 	}
 	return data
+}
+
+func optionalItemValue(value *string) string {
+	if value == nil || *value == "" {
+		return DEFAULT_FOR_NO_VALUE
+	}
+	return *value
 }
 
 func firstTemplateLabel(labels []string) string {
