@@ -33,8 +33,11 @@
 --   * Borrowing requests include a synthesized ILL transaction and their rota as
 --     located suppliers. A rota entry without a peer symbol uses its directory
 --     reference directly when it is a symbol; otherwise it uses the first symbol
---     of that directory entry in directory export order. Entries without a usable
---     symbol stop the export. Lending requests must not include an ILL transaction.
+--     of that directory entry in directory export order. The selected entry
+--     prefers the current supplier's symbol when that directory entry owns it,
+--     including when the directory reference is another symbol of that entry.
+--     Entries without a usable symbol stop the export. Lending requests must
+--     not include an ILL transaction.
 --   * A borrowing request's supplierSymbol is the current lender:
 --     pr_sup_inst_symbol, else the resolved supplier
 --     (pr_resolved_sup_inst_symbol_fk), else the selected rota entry. Requests
@@ -338,6 +341,10 @@ SELECT
                     || upper(btrim(peer_symbol.sym_symbol))
         END,
         CASE
+            WHEN directory_symbol.is_current_supplier
+                THEN directory_symbol.supplier_symbol
+        END,
+        CASE
             WHEN btrim(rota.prr_directory_id_fk) ~ '^[^[:space:]:]+:[^[:space:]]+$'
              AND upper(split_part(btrim(rota.prr_directory_id_fk), ':', 2))
                     NOT LIKE 'DELETED-%'
@@ -346,19 +353,51 @@ SELECT
         directory_symbol.supplier_symbol
     ) AS supplier_symbol
 FROM patron_request_rota AS rota
+LEFT JOIN patron_request AS current_request
+  ON current_request.pr_id = rota.prr_patron_request_fk
 LEFT JOIN symbol AS peer_symbol
   ON peer_symbol.sym_id = rota.prr_peer_symbol_fk
 LEFT JOIN naming_authority AS peer_authority
   ON peer_authority.na_id = peer_symbol.sym_authority_fk
 LEFT JOIN LATERAL (
     SELECT upper(btrim(authority.na_symbol)) || ':'
-        || upper(btrim(symbol.sym_symbol)) AS supplier_symbol
+        || upper(btrim(symbol.sym_symbol)) AS supplier_symbol,
+        coalesce(
+            rota.prr_rota_position = current_request.pr_rota_position
+            AND current_request.pr_is_requester IS TRUE
+            AND (
+                upper(btrim(authority.na_symbol)) || ':'
+                    || upper(btrim(symbol.sym_symbol))
+                    = nullif(upper(btrim(current_request.pr_sup_inst_symbol)), '')
+                OR (
+                    nullif(btrim(current_request.pr_sup_inst_symbol), '') IS NULL
+                    AND symbol.sym_id = current_request.pr_resolved_sup_inst_symbol_fk
+                )
+            ), false
+        ) AS is_current_supplier
     FROM directory_entry AS entry
     JOIN symbol
       ON symbol.sym_owner_fk = entry.de_id
     JOIN naming_authority AS authority
       ON authority.na_id = symbol.sym_authority_fk
-    WHERE entry.de_id = rota.prr_directory_id_fk
+    WHERE (
+          entry.de_id = rota.prr_directory_id_fk
+          OR (
+              rota.prr_rota_position = current_request.pr_rota_position
+              AND current_request.pr_is_requester IS TRUE
+              AND position(':' IN rota.prr_directory_id_fk) > 0
+              AND EXISTS (
+                  SELECT 1
+                  FROM symbol AS reference_symbol
+                  JOIN naming_authority AS reference_authority
+                    ON reference_authority.na_id = reference_symbol.sym_authority_fk
+                  WHERE reference_symbol.sym_owner_fk = entry.de_id
+                    AND upper(btrim(reference_authority.na_symbol)) || ':'
+                        || upper(btrim(reference_symbol.sym_symbol))
+                        = upper(btrim(rota.prr_directory_id_fk))
+              )
+          )
+      )
       AND nullif(btrim(authority.na_symbol), '') IS NOT NULL
       AND nullif(btrim(symbol.sym_symbol), '') IS NOT NULL
       AND upper(btrim(symbol.sym_symbol)) NOT LIKE 'DELETED-%'
@@ -369,7 +408,8 @@ LEFT JOIN LATERAL (
           WHERE directory_entry_tag.directory_entry_tags_id = entry.de_id
             AND lower(btrim(tag.norm_value)) = 'deleted'
       )
-    ORDER BY symbol.sym_priority NULLS LAST,
+    ORDER BY is_current_supplier DESC,
+             symbol.sym_priority NULLS LAST,
              upper(btrim(authority.na_symbol)),
              upper(btrim(symbol.sym_symbol)),
              symbol.sym_id
