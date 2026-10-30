@@ -424,7 +424,7 @@ SELECT
     CASE
         WHEN patron_request.pr_is_requester IS TRUE
             THEN coalesce(
-                nullif(btrim(patron_request.pr_sup_inst_symbol), ''),
+                nullif(upper(btrim(patron_request.pr_sup_inst_symbol)), ''),
                 :'broker'
             )
         ELSE patron_request.pr_sup_inst_symbol
@@ -434,8 +434,9 @@ SELECT
     CASE
         WHEN patron_request.pr_is_requester IS TRUE
             THEN coalesce(
-                nullif(btrim(patron_request.pr_sup_inst_symbol), ''),
-                resolved_authority.na_symbol || ':' || resolved_symbol.sym_symbol,
+                nullif(upper(btrim(patron_request.pr_sup_inst_symbol)), ''),
+                upper(btrim(resolved_authority.na_symbol)) || ':'
+                    || upper(btrim(resolved_symbol.sym_symbol)),
                 (
                     SELECT rota.supplier_symbol
                     FROM crosslink_rota_suppliers AS rota
