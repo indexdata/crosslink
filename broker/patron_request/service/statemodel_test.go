@@ -178,6 +178,35 @@ func TestValidatedRequestNotificationAutoAction(t *testing.T) {
 	}
 }
 
+func TestOverLimitNotificationAutoAction(t *testing.T) {
+	service := &StateModelService{}
+	for _, serviceType := range []proapi.StateModelServiceType{proapi.Copy, proapi.CopyOrLoan, proapi.Loan} {
+		t.Run(string(serviceType), func(t *testing.T) {
+			mapping, err := service.GetActionMapping("default", serviceType)
+			if !assert.NoError(t, err) {
+				return
+			}
+			actions := mapping.GetAutoActionsForState(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateOverLimit})
+			if !assert.Len(t, actions, 1) {
+				return
+			}
+			notification := actions[0]
+			assert.Equal(t, string(BorrowerActionSendNotification), notification.Name)
+			if assert.NotNil(t, notification.Params) {
+				if assert.NotNil(t, notification.Params.TemplateLabel) {
+					assert.Equal(t, "over-limit-notification", *notification.Params.TemplateLabel)
+				}
+				if assert.NotNil(t, notification.Params.SendTo) {
+					assert.Equal(t, []proapi.ModelActionParamsSendTo{proapi.ModelActionParamsSendToPatron}, *notification.Params.SendTo)
+				}
+			}
+			if assert.NotNil(t, notification.ContinueOn) {
+				assert.ElementsMatch(t, []proapi.ModelActionContinueOn{proapi.PROBLEM, proapi.ERROR}, *notification.ContinueOn)
+			}
+		})
+	}
+}
+
 func TestDefaultCheckLimitCountedStatesExcludeShippedReturned(t *testing.T) {
 	model, err := LoadStateModelByName("default")
 	if !assert.NoError(t, err) {
@@ -366,6 +395,30 @@ func TestPatronRequestProcessingNotificationTemplate(t *testing.T) {
 	body, err := email.RenderTextTemplate(email.PullSlipData{ReqId: "REQ-123", Title: "Requested article"}, template.Labels, template.Body)
 	assert.NoError(t, err)
 	assert.Equal(t, "Your request is now being processed.\n\nRequest number: REQ-123\nItem title: Requested article\n\nWe’ll notify you when there is an update.\n", body)
+}
+
+func TestOverLimitNotificationTemplate(t *testing.T) {
+	template, err := GetStateModelTemplateDefault(proapi.Email, proapi.TemplateAudiencePatron, "over-limit-notification")
+	if !assert.NoError(t, err) {
+		return
+	}
+	assert.Equal(t, "Request exceeds active limit", template.Title)
+	assert.Equal(t, "Interlibrary loan request: Active request limit reached", template.Subject.String)
+	assert.Equal(t, string(proapi.Html), template.ContentType)
+	body, err := email.RenderHtmlTemplate(email.PullSlipData{
+		PatronGivenName: "Ann", PatronSurname: "Reader", ReqId: "REQ-123",
+		Title: "Requested article", MaterialType: "JournalArticle",
+	}, template.Labels, template.Body)
+	if assert.NoError(t, err) {
+		assert.Contains(t, body, "Ann Reader")
+		assert.Contains(t, body, "REQ-123")
+		assert.Contains(t, body, "Requested article")
+		assert.Contains(t, body, "JournalArticle")
+		assert.Contains(t, body, "awaiting library review")
+		assert.Contains(t, body, "You do not need to place another request")
+		assert.NotContains(t, body, "canceled")
+		assert.NotContains(t, body, "cancelled")
+	}
 }
 
 func TestLegacyReturnablesStateModelAlias(t *testing.T) {
@@ -1397,6 +1450,6 @@ func TestDefaultStateModelContinuationPoliciesAndRecoveryTransition(t *testing.T
 			}
 		}
 	}
-	assert.Equal(t, 12, policyCount)
+	assert.Equal(t, 13, policyCount)
 	assert.Equal(t, 1, failureCount)
 }

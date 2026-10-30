@@ -117,6 +117,14 @@ stateModels:
         primaryAction: check-limit
         closingAction: close-request
         actions:
+          - name: send-notification
+            continueOn: [PROBLEM, ERROR]
+            desc: Notify the patron that the request exceeds the active-request limit and needs staff review
+            trigger: auto
+            params:
+              sendTo:
+                - patron
+              templateLabel: over-limit-notification
           - name: check-limit
             desc: Recheck whether the patron now has capacity
             params:
@@ -1236,6 +1244,22 @@ templateDefaults:
     purpose: email
     body: |
       Your request has been cancelled.
+
+  - title: Request exceeds active limit
+    labels:
+      - over-limit-notification
+    subject: "Interlibrary loan request: Active request limit reached"
+    contentType: html
+    audience: patron
+    purpose: email
+    body: |
+      <p>Interlibrary loan request: Active request limit reached</p>
+      <p>{{.PatronGivenName}} {{.PatronSurname}}<br>
+      {{.ReqId}}<br>
+      {{.Title}}<br>
+      {{.MaterialType}}</p>
+      <p>Your interlibrary loan request exceeds the current limit of active requests and is awaiting library review. Library staff can recheck the limit or approve an override. You do not need to place another request.</p>
+      <p>Please contact your local library if you have any questions about your interlibrary loan requests.</p>
 
   - title: New supply request notification
     labels:
