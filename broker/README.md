@@ -486,3 +486,84 @@ Publication type uses conservative leader mappings: language monographs to Book,
 monographic components to Chapter, serial components to Article, manuscript text
 to Manuscript, notated music to MusicScore, maps to Map, nonmusical sound to
 SoundRecording, and musical sound to MusicRecording. Other types are omitted.
+
+## Holdings policy and request identifiers
+
+Holdings policy runs after the supplier availability lookup when the supplier's
+resolved catalog configuration contains an SRU or Z39.50 (ZOOM) endpoint. Otherwise
+it runs after the central holdings lookup. A profile, parser, or metadata setting
+alone does not enable availability lookup. No additional policy-stage setting is
+needed; invalid configuration is reported as an error. OPAC parsing always returns
+all available circulation candidates before policy filtering and ranking, for
+both central and supplier lookups. Availability and other parser filters still
+apply. The deprecated `allCirculations` setting is accepted for compatibility but
+has no effect, including when explicitly set to false.
+
+An eligible holding selected by a configured holdings policy supplies the located
+supplier's nullable `ItemID`. The central bibliographic `LocalID` remains unchanged.
+Reevaluation through a configured availability endpoint replaces or clears the
+selected item, including when lookup fails.
+Suppliers without eligible holdings are skipped. A failed lookup with deferred
+policy leaves that policy unresolved and does not send the request through the
+availability-error fallback or announce `ExpectToSupply` to the requester.
+`holdingsPolicyResolved` persists readiness separately from `ItemID`: an eligible
+holding without an item ID still resolves the policy. Deferred-policy reevaluation
+first revokes readiness; a successful retry restores it. Unresolved selections cannot send a
+new supply request or run `fill-locally`, including requests already in
+`LOCAL_SUPPLY`. Legacy rows without readiness are accepted only when the supplier
+has no holdings policy; otherwise they require a successful policy check (or new
+supplier discovery for a central policy). Availability updates lock and re-read the selected
+supplier in short transactions, preserving concurrent protocol updates. If the
+selection or lookup identity changes during a check, its result is recorded as
+`superseded` and schedules no follow-up workflow tasks. Catalog lookup runs
+outside these transactions. Each availability attempt (including a retry of the
+same task) receives a fresh persisted token. Starting another attempt atomically
+supersedes older writes and results. Configured or invalid availability lookups
+revoke readiness; valid configurations without an availability endpoint preserve
+the discovery decision and selected item across overlapping checks and restarts.
+An unresolved central-policy selection still requires supplier discovery, including
+rows whose readiness was erased by an earlier broker version. Follow-up messages and
+rota selection carry the token and revalidate it before acting; successful
+reselection invalidates it. An exhausted rota retains the token for its requester
+notification. Tokens are transient coordination state, not imported/exported
+request data. Checks run without holding database locks during catalog or message
+I/O. Local fill also snapshots the selection and attempt under these locks, then
+revalidates both and policy readiness after pickup resolution, immediately before
+NCIP RequestItem. A message already dispatched cannot be recalled by a later reevaluation.
+During deployment, drain old broker workers before relying on token enforcement;
+older binaries do not perform these checks.
+
+ISO18626 requests put `LocalID` in `bibliographicInfo.supplierUniqueRecordId`
+and a nonempty selected `ItemID` in
+`supplierInfo.bibliographicRecordId.bibliographicRecordIdentifier`. Internal
+CrossLink delivery uses the same fields. Transparent local fulfillment
+(`fill-locally`) passes the same persisted bibliographic and item identifiers to
+the LMS adapter. It requires a selected local supplier belonging to the borrowing
+request and preserves the original request's bibliographic identifier.
+Catalog parsing or availability lookup without a holdings policy does not select
+an item ID.
+
+For both NCIP versions, `requestItemRequestScopeType` controls identifier selection:
+
+- `auto` is the Generic default. A supplied item ID selects `Item` scope; otherwise
+  `supplierUniqueRecordId` supplies the bibliographic ID with `Bibliographic Item`
+  scope. Item identifiers are not normalized; bibliographic identifiers are.
+- `Title` or `Bibliographic Item` uses the bibliographic identifier with
+  `requestItemBibIdCode` and bibliographic normalization. NCIP v1 translates
+  `Title` to `Bibliographic Item`.
+- `Item` uses the supplied item ID, falling back to `supplierUniqueRecordId` for
+  compatibility with existing item-scoped integrations, without normalization.
+
+Named vendor profiles retain their existing scopes. Explicit per-library scopes
+also override the Generic default. Unsupported scopes, empty required identifiers,
+and conflicting item IDs in supplierInfo are rejected before NCIP is sent.
+A supplied item ID requires `Item` or `auto` scope, including on incoming
+ISO18626 requests. Both NCIP adapters reject item IDs under bibliographic scopes
+before sending, so a reservation cannot silently broaden the selected copy.
+Cancellation in `auto` uses the saved request ID and omits the optional NCIP scope;
+`auto` is never sent on the wire.
+
+**Compatibility:** Generic configurations without a scope override now interpret
+`supplierUniqueRecordId` as a bibliographic ID. Integrations that put item IDs in
+that field must retain an explicit `Item` setting or move the item ID into
+`supplierInfo.bibliographicRecordId`. The scope is not inferred from ID contents.

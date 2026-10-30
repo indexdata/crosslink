@@ -646,30 +646,36 @@ func ToApiEvent(event events.Event, illId string, prId *string) oapi.Event {
 
 func toApiLocatedSupplier(r *http.Request, row ill_db.GetLocatedSuppliersWithPeerByIllTransactionRow) oapi.LocatedSupplier {
 	sup := row.LocatedSupplier
+	var policyResolved *bool
+	if sup.HoldingsPolicyResolved.Valid {
+		policyResolved = &sup.HoldingsPolicyResolved.Bool
+	}
 	var directoryEntryId *string
 	if row.DirectoryEntryID != "" {
 		directoryEntryId = &row.DirectoryEntryID
 	}
 	return oapi.LocatedSupplier{
-		Id:                sup.ID,
-		IllTransactionID:  sup.IllTransactionID,
-		SupplierID:        sup.SupplierID,
-		SupplierSymbol:    sup.SupplierSymbol,
-		Ordinal:           sup.Ordinal,
-		SupplierStatus:    toLocatedSupplierStatus(sup.SupplierStatus),
-		PrevAction:        toString(sup.PrevAction),
-		PrevStatus:        toString(sup.PrevStatus),
-		LastAction:        toString(sup.LastAction),
-		LastStatus:        toString(sup.LastStatus),
-		LocalID:           toString(sup.LocalID),
-		PrevReason:        toString(sup.PrevReason),
-		LastReason:        toString(sup.LastReason),
-		SupplierRequestID: toString(sup.SupplierRequestID),
-		SupplierName:      &row.SupplierName,
-		DirectoryEntryId:  directoryEntryId,
-		ReasonUnfilled:    toString(sup.ReasonUnfilled),
-		Note:              toString(sup.Note),
-		SupplierPeerLink:  Link(r, Path(PEERS_PATH, sup.SupplierID), nil),
+		Id:                     sup.ID,
+		IllTransactionID:       sup.IllTransactionID,
+		SupplierID:             sup.SupplierID,
+		SupplierSymbol:         sup.SupplierSymbol,
+		Ordinal:                sup.Ordinal,
+		SupplierStatus:         toLocatedSupplierStatus(sup.SupplierStatus),
+		PrevAction:             toString(sup.PrevAction),
+		PrevStatus:             toString(sup.PrevStatus),
+		LastAction:             toString(sup.LastAction),
+		LastStatus:             toString(sup.LastStatus),
+		LocalID:                toString(sup.LocalID),
+		ItemID:                 toString(sup.ItemID),
+		HoldingsPolicyResolved: policyResolved,
+		PrevReason:             toString(sup.PrevReason),
+		LastReason:             toString(sup.LastReason),
+		SupplierRequestID:      toString(sup.SupplierRequestID),
+		SupplierName:           &row.SupplierName,
+		DirectoryEntryId:       directoryEntryId,
+		ReasonUnfilled:         toString(sup.ReasonUnfilled),
+		Note:                   toString(sup.Note),
+		SupplierPeerLink:       Link(r, Path(PEERS_PATH, sup.SupplierID), nil),
 	}
 }
 

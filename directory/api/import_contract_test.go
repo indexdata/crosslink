@@ -67,12 +67,16 @@ func TestImportHostSettingsMatchEntryContract(t *testing.T) {
 			for _, contract := range []*openapi3.T{source, spec} {
 				entry := contract.Components.Schemas[name].Value
 				imported := contract.Components.Schemas["Import"+name].Value
+				if name == "OpacHoldingsParserConfig" {
+					require.True(t, entry.Properties["allCirculations"].Value.Deprecated)
+					require.True(t, imported.Properties["allCirculations"].Value.Deprecated)
+				}
 				fields := make([]string, 0, len(entry.Properties))
 				required := make([]string, 0, len(entry.Properties))
 				for field := range entry.Properties {
 					fields = append(fields, field)
-					// Additive options remain optional for existing complete imports.
-					if (name == "LmsConfig" && field == "ncipVersion") || (name == "MarcHoldingsParserConfig" && field == "itemLoanPolicySubField") || (name == "MarcAvailabilityPredicate" && field == "values") || (name == "OpacHoldingsParserConfig" && slices.Contains([]string{"trimWhitespace", "excludedLocations", "itemLoanPolicySources", "requireItemLoanPolicy"}, field)) {
+					// Additive options and the deprecated circulation limit are optional in imports.
+					if (name == "LmsConfig" && field == "ncipVersion") || (name == "MarcHoldingsParserConfig" && field == "itemLoanPolicySubField") || (name == "MarcAvailabilityPredicate" && field == "values") || (name == "OpacHoldingsParserConfig" && slices.Contains([]string{"trimWhitespace", "excludedLocations", "itemLoanPolicySources", "requireItemLoanPolicy", "allCirculations"}, field)) {
 						require.NotContains(t, imported.Required, field)
 					} else {
 						required = append(required, field)

@@ -433,6 +433,12 @@ components:
           type: string
         localID:
           type: string
+        itemID:
+          type: string
+          description: Item identifier selected by holdings policy, absent when no item was selected
+        holdingsPolicyResolved:
+          type: boolean
+          description: Whether policy passed or is not required. False blocks fulfillment; absence denotes legacy unknown readiness.
         prevReason:
           type: string
         lastReason:
@@ -874,7 +880,13 @@ components:
           description: Latest supplier transaction status
         localID:
           type: string
-          description: Item local ID
+          description: Local bibliographic identifier from holdings lookup
+        itemID:
+          type: string
+          description: Item identifier selected by holdings policy, absent when no item was selected
+        holdingsPolicyResolved:
+          type: boolean
+          description: Whether policy passed or is not required. False blocks fulfillment; absence denotes legacy unknown readiness.
         prevReason:
           type: string
           description: ISO 18626 reasonForMessage from the previously processed supplying-agency message

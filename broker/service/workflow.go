@@ -63,20 +63,34 @@ func (w *WorkflowManager) OnCheckAvailabilityComplete(ctx common.ExtendedContext
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	common.Must(ctx, func() (string, error) {
 		availabilityValue, hasAvailabilityResult := event.ResultData.CustomData[AvailabilityKey].(string)
-		if event.EventStatus != events.EventStatusSuccess && !hasAvailabilityResult {
-			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+		if Availability(availabilityValue) == AvailabilitySuperseded {
+			return "", nil
+		}
+		unresolved, _ := event.ResultData.CustomData["holdingsPolicyUnresolved"].(bool)
+		if unresolved || (event.EventStatus != events.EventStatusSuccess && !hasAvailabilityResult) {
+			// The failed task records the error. A normal requester message can
+			// synthesize ExpectToSupply and must wait for a successful check.
+			return "", nil
 		}
 		if !hasAvailabilityResult {
 			return "", fmt.Errorf("failed to detect supplier availability")
 		}
+		current, err := ill_db.CheckAvailabilityCurrent(ctx, w.illRepo, event.IllTransactionID, event.ResultData.CustomData)
+		if err != nil || !current {
+			return "", err
+		}
+		data := events.EventData{}
+		if token, tagged := event.ResultData.CustomData[ill_db.AvailabilityTokenKey]; tagged {
+			data.CustomData = map[string]any{ill_db.AvailabilityTokenKey: token, ill_db.AvailabilitySupplierStateKey: event.ResultData.CustomData[ill_db.AvailabilitySupplierStateKey]}
+		}
 		availability := Availability(availabilityValue)
 		if availability == AvailabilityUnavailable {
-			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, data, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 		}
 		if availability != AvailabilityAvailable && availability != AvailabilityUnknown {
 			return "", fmt.Errorf("unexpected supplier availability %q", availability)
 		}
-		id, err := w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+		id, err := w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, data, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 		if err != nil {
 			return id, err
 		}
@@ -87,15 +101,22 @@ func (w *WorkflowManager) OnCheckAvailabilityComplete(ctx common.ExtendedContext
 		if local {
 			return "", nil
 		}
-		return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+		return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, data, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 	}, "")
 }
 
 func (w *WorkflowManager) OnSelectSupplierComplete(ctx common.ExtendedContext, event events.Event) {
+	if event.ResultData.CustomData[AvailabilityKey] == string(AvailabilitySuperseded) {
+		return
+	}
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	common.Must(ctx, func() (string, error) {
 		if event.EventStatus != events.EventStatusSuccess {
-			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+			data := event.EventData.CustomData
+			if _, tagged := event.ResultData.CustomData[ill_db.AvailabilityTokenKey]; tagged {
+				data = event.ResultData.CustomData
+			}
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{CustomData: data}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 		}
 		return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameCheckAvailability, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 	}, "")
@@ -163,7 +184,11 @@ func (w *WorkflowManager) OnMessageSupplierComplete(ctx common.ExtendedContext, 
 	} else if event.EventStatus != events.EventStatusSuccess {
 		// if the last requester action was Request and messaging supplier failed, we try next supplier
 		common.Must(ctx, func() (string, error) {
-			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+			current, err := ill_db.CheckAvailabilityCurrent(ctx, w.illRepo, event.IllTransactionID, event.EventData.CustomData)
+			if err != nil || !current {
+				return "", err
+			}
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{CustomData: event.EventData.CustomData}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 		}, "")
 	}
 }

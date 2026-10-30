@@ -211,11 +211,11 @@ func (l *LmsAdapterNcip1) DeleteItem(string) (bool, error) {
 	return false, fmt.Errorf("NCIP 1.0: %w", ErrDeleteItemUnsupported)
 }
 
-func (l *LmsAdapterNcip1) RequestItem(requestID, itemID, userID, _, itemLocation string) (*RequestedItem, error) {
+func (l *LmsAdapterNcip1) RequestItem(requestID string, identifier RequestItemIdentifier, userID, _, itemLocation string) (*RequestedItem, error) {
 	if l.config.RequestItemEnabled != nil && !*l.config.RequestItemEnabled {
 		return nil, nil
 	}
-	if err := ncip1Required(requestID, itemID, userID); err != nil {
+	if err := ncip1Required(requestID, userID); err != nil {
 		return nil, err
 	}
 	if itemLocation != "" {
@@ -225,8 +225,14 @@ func (l *LmsAdapterNcip1) RequestItem(requestID, itemID, userID, _, itemLocation
 	if l.config.RequestItemBibIdCode != nil {
 		code = *l.config.RequestItemBibIdCode
 	}
-	itemID = normalizeBibIdentifier(itemID, l.config.BibIdNormalization)
-	response, err := l.client.RequestItem(ncip.RequestItem{
+	itemID, scopeValue, err := identifier.resolve(l.requestScope().Value, l.config.BibIdNormalization)
+	itemScope := scopeValue == "Item"
+	scope := l.requestScope()
+	scope.Value = scopeValue
+	if err != nil {
+		return nil, err
+	}
+	arg := ncip.RequestItem{
 		InitiationHeader: l.header(),
 		UniqueUserId:     l.user(userID),
 		UniqueRequestId:  l.request(requestID),
@@ -240,9 +246,15 @@ func (l *LmsAdapterNcip1) RequestItem(requestID, itemID, userID, _, itemLocation
 			},
 		},
 		RequestType:      l.requestType(),
-		RequestScopeType: l.requestScope(),
+		RequestScopeType: scope,
 		ItemElementType:  ncip1ItemElements("Bibliographic Description", "Item Description", "Location"),
-	})
+	}
+	if itemScope {
+		arg.UniqueBibliographicId = nil
+		item := l.item(itemID)
+		arg.UniqueItemId = &item
+	}
+	response, err := l.client.RequestItem(arg)
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +291,7 @@ func (l *LmsAdapterNcip1) requestType() ncip.RequestType {
 	return ncip.RequestType{Scheme: ncip1Scheme + "imp1/schemes/requesttype/requesttype.scm", Value: value}
 }
 func (l *LmsAdapterNcip1) requestScope() ncip.RequestScopeType {
-	value := "Item"
+	value := "auto"
 	if l.config.RequestItemRequestScopeType != nil {
 		value = *l.config.RequestItemRequestScopeType
 	}
@@ -298,7 +310,11 @@ func (l *LmsAdapterNcip1) CancelRequestItem(requestID, userID string) error {
 		return err
 	}
 	scope := l.requestScope()
-	_, err = l.client.CancelRequestItem(ncip.CancelRequestItem{InitiationHeader: l.header(), UniqueUserId: l.user(userID), UniqueRequestId: request, RequestType: l.requestType(), RequestScopeType: &scope})
+	var cancelScope *ncip.RequestScopeType
+	if scope.Value != "auto" {
+		cancelScope = &scope
+	}
+	_, err = l.client.CancelRequestItem(ncip.CancelRequestItem{InitiationHeader: l.header(), UniqueUserId: l.user(userID), UniqueRequestId: request, RequestType: l.requestType(), RequestScopeType: cancelScope})
 	return err
 }
 func (l *LmsAdapterNcip1) CheckInItem(itemID string) (bool, error) {

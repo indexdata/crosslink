@@ -148,13 +148,22 @@ availability predicates, and OPAC parser options. These fields are required in
 their respective non-null configuration objects; use `null` to inherit defaults.
 Explicit `false` and empty arrays are preserved. Imports replace stored
 configuration, so include all overrides when restoring an entry. Configure at
-most one SRU/ZOOM endpoint and at most one holdings parser.
+most one SRU/ZOOM endpoint and at most one holdings parser. The deprecated OPAC
+`allCirculations` field is optional and accepted for compatibility, but ignored:
+OPAC parsing always returns all available circulation candidates.
 
 `lmsConfig.ncipVersion` selects `"1.0"` or `"2.02"` (profile default: `"1.0"` for Horizon, Polaris and Symphony, otherwise `"2.02"`).
 It is optional in import records for compatibility with older exports; omission
 or `null` clears the stored version override during full replacement. For REST
 PATCH, omission preserves it and `null` clears it. See
 [NCIP version selection](host-profiles.md#ncip-version-selection).
+
+`lmsConfig.requestItemRequestScopeType` accepts `auto`, `Item`, `Title`, or
+`Bibliographic Item`. Generic defaults to `auto`: an ISO18626 item identifier in
+`supplierInfo.bibliographicRecordId` selects Item scope; otherwise
+`bibliographicInfo.supplierUniqueRecordId` selects Bibliographic Item scope.
+Named vendor profiles keep their previous scope defaults. Explicit library
+settings override the profile.
 
 ### Import with curl
 

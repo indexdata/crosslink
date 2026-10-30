@@ -502,7 +502,7 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 			}
 			selectedSupplierSeen = true
 		}
-		bundle.LocatedSuppliers = append(bundle.LocatedSuppliers, ill_db.SaveLocatedSupplierParams{ID: supplier.Id, SupplierSymbol: supplier.SupplierSymbol, Ordinal: supplier.Ordinal, SupplierStatus: pgTextFromString(string(supplier.SupplierStatus)), PrevAction: pgTextFromPtr(supplier.PrevAction), PrevStatus: pgTextFromPtr(supplier.PrevStatus), LastAction: pgTextFromPtr(supplier.LastAction), LastStatus: pgTextFromPtr(supplier.LastStatus), LocalID: pgTextFromPtr(supplier.LocalID), PrevReason: pgTextFromPtr(supplier.PrevReason), LastReason: pgTextFromPtr(supplier.LastReason), SupplierRequestID: pgTextFromPtr(supplier.SupplierRequestID), LocalSupplier: supplier.LocalSupplier, ReasonUnfilled: pgTextFromPtr(supplier.ReasonUnfilled), Note: pgTextFromPtr(supplier.Note)})
+		bundle.LocatedSuppliers = append(bundle.LocatedSuppliers, ill_db.SaveLocatedSupplierParams{ID: supplier.Id, SupplierSymbol: supplier.SupplierSymbol, Ordinal: supplier.Ordinal, SupplierStatus: pgTextFromString(string(supplier.SupplierStatus)), PrevAction: pgTextFromPtr(supplier.PrevAction), PrevStatus: pgTextFromPtr(supplier.PrevStatus), LastAction: pgTextFromPtr(supplier.LastAction), LastStatus: pgTextFromPtr(supplier.LastStatus), LocalID: pgTextFromPtr(supplier.LocalID), ItemID: pgTextFromPtr(supplier.ItemID), HoldingsPolicyResolved: pgBoolFromPtr(supplier.HoldingsPolicyResolved), PrevReason: pgTextFromPtr(supplier.PrevReason), LastReason: pgTextFromPtr(supplier.LastReason), SupplierRequestID: pgTextFromPtr(supplier.SupplierRequestID), LocalSupplier: supplier.LocalSupplier, ReasonUnfilled: pgTextFromPtr(supplier.ReasonUnfilled), Note: pgTextFromPtr(supplier.Note)})
 		symbols = appendStableUnique(symbols, supplier.SupplierSymbol)
 	}
 	return bundle, symbols, nil
@@ -709,4 +709,11 @@ func importItemType(itemType string) importoapi.ImportItemType {
 	default:
 		return ""
 	}
+}
+
+func pgBoolFromPtr(value *bool) pgtype.Bool {
+	if value == nil {
+		return pgtype.Bool{}
+	}
+	return pgtype.Bool{Bool: *value, Valid: true}
 }

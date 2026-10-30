@@ -31,6 +31,7 @@ import (
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -801,7 +802,7 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 	case BorrowerActionCannotSupplyLocally:
 		return a.cannotSupplyLocallyBorrowingRequest(ctx, eventID, pr, params)
 	case BorrowerActionFillLocally:
-		return a.fillLocallyBorrowingRequest(ctx, eventID, pr, lmsAdapter, illRequest, params)
+		return a.fillLocallyBorrowingRequest(ctx, eventID, pr, lmsAdapter, params)
 	case BorrowerActionSupplyDocument:
 		return a.supplyDocumentRequest(ctx, eventID, pr, params)
 	default:
@@ -1511,7 +1512,86 @@ func (a *PatronRequestActionService) cannotSupplyLocallyBorrowingRequest(ctx com
 	return actionResultFromIllSend(ctx, sendStatus, sendResult, sendErr, pr)
 }
 
-func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.ExtendedContext, parentEventID string, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
+// localFillSnapshot binds the local selection to its availability attempt.
+// A zero attempt represents legacy selections that have not been reevaluated.
+type localFillSnapshot struct {
+	ill_db.LocatedSupplier
+	attempt ill_db.AvailabilityAttempt
+}
+
+func (a *PatronRequestActionService) localFillSupplier(ctx common.ExtendedContext, pr pr_db.PatronRequest) (localFillSnapshot, error) {
+	var snapshot localFillSnapshot
+	err := a.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		service := *a
+		service.illRepo = repo
+		selected, err := service.localFillSupplierLocked(ctx, pr)
+		if err != nil {
+			return err
+		}
+		snapshot.LocatedSupplier = selected
+		attempt, err := repo.GetAvailabilityAttempt(ctx, selected.IllTransactionID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("get local fill availability attempt: %w", err)
+		}
+		if attempt.LocatedSupplierID != selected.ID || attempt.Token == "" {
+			return fmt.Errorf("local fill availability attempt does not match selection")
+		}
+		snapshot.attempt = attempt
+		return nil
+	})
+	return snapshot, err
+}
+
+// localFillSupplierLocked resolves the selection through the borrowing request's own
+// broker request ID, rather than a supplier ID supplied by the action caller.
+func (a *PatronRequestActionService) localFillSupplierLocked(ctx common.ExtendedContext, pr pr_db.PatronRequest) (ill_db.LocatedSupplier, error) {
+	trans, err := a.illRepo.GetIllTransactionByRequesterRequestIdForUpdate(ctx, pgtype.Text{String: pr.ID, Valid: true})
+	if err != nil {
+		return ill_db.LocatedSupplier{}, fmt.Errorf("get ILL transaction for local fill: %w", err)
+	}
+	if trans.ID == "" || !pr.RequesterSymbol.Valid || trans.RequesterSymbol != pr.RequesterSymbol {
+		return ill_db.LocatedSupplier{}, fmt.Errorf("local fill transaction does not match requester")
+	}
+	selected, err := a.illRepo.GetSelectedSupplierForIllTransaction(ctx, trans.ID)
+	if err != nil {
+		return ill_db.LocatedSupplier{}, fmt.Errorf("get selected supplier for local fill: %w", err)
+	}
+	selected, err = a.illRepo.GetLocatedSupplierByIdForUpdate(ctx, selected.ID)
+	if err != nil {
+		return ill_db.LocatedSupplier{}, fmt.Errorf("lock local fill supplier: %w", err)
+	}
+	if selected.IllTransactionID != trans.ID || selected.SupplierStatus != ill_db.SupplierStateSelectedPg || !selected.LocalSupplier || selected.SupplierSymbol != pr.RequesterSymbol.String {
+		return ill_db.LocatedSupplier{}, fmt.Errorf("selected supplier does not represent local supply for requester")
+	}
+	var entry dirapi.Entry
+	if !selected.HoldingsPolicyResolved.Valid {
+		peer, err := a.illRepo.GetPeerById(ctx, selected.SupplierID)
+		if err != nil {
+			return ill_db.LocatedSupplier{}, fmt.Errorf("get local supplier policy: %w", err)
+		}
+		entry = peer.CustomData
+	}
+	if err := selected.ValidateHoldingsPolicy(entry); err != nil {
+		return ill_db.LocatedSupplier{}, err
+	}
+	return selected, nil
+}
+
+func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.ExtendedContext, parentEventID string, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, params actionParams) actionExecutionResult {
+	selected, err := a.localFillSupplier(ctx, pr)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "Local supplier lookup failed", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	if selected.ItemID.Valid && selected.ItemID.String != "" {
+		if err := lms.ValidateSelectedItemScopeForAdapter(lmsAdapter); err != nil {
+			status, result := logActionErrorAndReturnResult(ctx, "Invalid selected item scope", err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+	}
 	requestID := pr.ID
 	userID := pr.Patron.String
 	pickupLocation, err := a.requesterPickupCode(ctx, pr, lmsAdapter, lmsAdapter.RequestItemUsesPickupLocation())
@@ -1519,9 +1599,22 @@ func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.Exte
 		status, result := logActionErrorAndReturnResult(ctx, "Pickup location lookup failed", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
+	// Directory pickup resolution may have overlapped another availability
+	// attempt. Release database locks before NCIP I/O, but validate at dispatch.
+	current, err := a.localFillSupplier(ctx, pr)
+	if err == nil && (current.attempt != selected.attempt ||
+		current.ID != selected.ID || current.IllTransactionID != selected.IllTransactionID ||
+		current.SupplierID != selected.SupplierID ||
+		current.LocalID != selected.LocalID || current.ItemID != selected.ItemID) {
+		err = fmt.Errorf("local fill selection was superseded")
+	}
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "Local supplier selection changed", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
 	requestedItem, err := lmsAdapter.RequestItem(
 		requestID,
-		illRequest.BibliographicInfo.SupplierUniqueRecordId,
+		lms.RequestItemIdentifier{BibliographicID: selected.LocalID.String, ItemID: selected.ItemID.String},
 		userID,
 		pickupLocation,
 		lmsAdapter.ItemLocation(),
@@ -1604,11 +1697,14 @@ func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.Extended
 			}
 		}
 	}
-	itemID := illRequest.BibliographicInfo.SupplierUniqueRecordId
+	identifier, err := requestItemIdentifierFromISO(illRequest)
+	if err != nil {
+		return pr, "Invalid request identifiers", err
+	}
 	userID := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
 	response, err := lmsAdapter.RequestItem(
 		requestID,
-		itemID,
+		identifier,
 		userID,
 		lmsAdapter.SupplierPickupLocation(),
 		lmsAdapter.ItemLocation(),
@@ -1645,6 +1741,10 @@ func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.Extended
 		title = illRequest.BibliographicInfo.Title
 	}
 	callNumber := response.CallNumber
+	itemID := identifier.ItemID
+	if itemID == "" {
+		itemID = identifier.BibliographicID
+	}
 	// Commit the reservation identifier and LMS status together, after the LMS call.
 	err = a.prRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
 		savedItem, err := repo.SaveItem(ctx, pr_db.SaveItemParams{

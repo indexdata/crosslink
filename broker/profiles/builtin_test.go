@@ -133,7 +133,7 @@ func TestDecodeBuiltinsPreservesExplicitValues(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, object{"ncipNamespaceEnabled": false, "requestItemRequestType": ""}, profiles["Koha"].LMS)
 	require.Equal(t, object{"holdingsFormat": object{"marc": object{"mainField": "952", "availability": []any{}}}}, profiles["Koha"].Catalog)
-	require.Empty(t, profiles["Alma"].LMS)
+	require.Equal(t, object{"requestItemRequestScopeType": "Item"}, profiles["Alma"].LMS)
 }
 
 func TestResolveReturnsCachedBuiltinError(t *testing.T) {

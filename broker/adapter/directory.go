@@ -68,20 +68,25 @@ type SupplierOrdering interface {
 }
 
 type Supplier struct {
-	LocalIdentifier    string
-	PeerId             string
-	CustomData         dirapi.Entry
-	Symbol             string
-	Priority           int
-	Cost               float64
-	Local              bool
-	LoadBalancingScore float64
-	SupplierStatus     pgtype.Text
-	Location           string
-	ShelvingLocation   string
-	ItemLoanPolicy     string
-	LocationPreference int
-	ShelvingPreference int
+	// HoldingItemID is raw catalog data; ItemID is populated only by policy selection.
+	HoldingItemID string
+	ItemID        string
+	// DeferHoldingsPolicy postpones selection until supplier availability lookup.
+	DeferHoldingsPolicy bool
+	LocalIdentifier     string
+	PeerId              string
+	CustomData          dirapi.Entry
+	Symbol              string
+	Priority            int
+	Cost                float64
+	Local               bool
+	LoadBalancingScore  float64
+	SupplierStatus      pgtype.Text
+	Location            string
+	ShelvingLocation    string
+	ItemLoanPolicy      string
+	LocationPreference  int
+	ShelvingPreference  int
 }
 
 func (s Supplier) GetSymbol() string              { return s.Symbol }

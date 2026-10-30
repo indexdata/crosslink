@@ -530,6 +530,11 @@ func TestOnCheckAvailabilityComplete(t *testing.T) {
 		expectedTasks []events.EventName
 	}{
 		{
+			name:       "superseded",
+			status:     events.EventStatusSuccess,
+			customData: map[string]any{AvailabilityKey: string(AvailabilitySuperseded)},
+		},
+		{
 			name:          "available",
 			status:        events.EventStatusSuccess,
 			customData:    map[string]any{AvailabilityKey: string(AvailabilityAvailable), "localSupplier": false},
@@ -548,6 +553,16 @@ func TestOnCheckAvailabilityComplete(t *testing.T) {
 			expectedTasks: []events.EventName{events.EventNameMessageRequester, events.EventNameMessageSupplier},
 		},
 		{
+			name:       "deferred policy lookup failed",
+			status:     events.EventStatusError,
+			customData: map[string]any{AvailabilityKey: string(AvailabilityUnknown), "localSupplier": false, "holdingsPolicyUnresolved": true},
+		},
+		{
+			name:       "local deferred policy lookup failed",
+			status:     events.EventStatusError,
+			customData: map[string]any{AvailabilityKey: string(AvailabilityUnknown), "localSupplier": true, "holdingsPolicyUnresolved": true},
+		},
+		{
 			name:          "unavailable",
 			status:        events.EventStatusSuccess,
 			customData:    map[string]any{AvailabilityKey: string(AvailabilityUnavailable), "localSupplier": false},
@@ -560,9 +575,8 @@ func TestOnCheckAvailabilityComplete(t *testing.T) {
 			expectedTasks: []events.EventName{events.EventNameMessageRequester},
 		},
 		{
-			name:          "fatal error without availability result",
-			status:        events.EventStatusError,
-			expectedTasks: []events.EventName{events.EventNameMessageRequester},
+			name:   "fatal error without availability result",
+			status: events.EventStatusError,
 		},
 	}
 

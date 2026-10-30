@@ -209,8 +209,8 @@ WHERE ill_transaction_id = $1
 INSERT INTO located_supplier (id, ill_transaction_id, supplier_id, supplier_symbol, ordinal, supplier_status,
                               prev_action, prev_status,
                               last_action, last_status, local_id, prev_reason, last_reason, supplier_request_id, local_supplier,
-                              reason_unfilled, note)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                              reason_unfilled, note, item_id, holdings_policy_resolved)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 ON CONFLICT (id) DO UPDATE
     SET supplier_id         = EXCLUDED.supplier_id,
         supplier_symbol     = EXCLUDED.supplier_symbol,
@@ -226,7 +226,9 @@ ON CONFLICT (id) DO UPDATE
         supplier_request_id = EXCLUDED.supplier_request_id,
         local_supplier      = EXCLUDED.local_supplier,
         reason_unfilled     = EXCLUDED.reason_unfilled,
-        note                = EXCLUDED.note
+        note                = EXCLUDED.note,
+        item_id             = EXCLUDED.item_id,
+        holdings_policy_resolved = EXCLUDED.holdings_policy_resolved
     WHERE located_supplier.ill_transaction_id = EXCLUDED.ill_transaction_id
 RETURNING sqlc.embed(located_supplier);
 
@@ -295,3 +297,15 @@ SELECT EXISTS (
       AND (e.event_data #>> '{incomingMessage,requestingAgencyMessage,header,supplyingAgencyId,agencyIdType,#text}') || ':' ||
           (e.event_data #>> '{incomingMessage,requestingAgencyMessage,header,supplyingAgencyId,agencyIdValue}') = sqlc.arg(broker_symbol)::text
 ) AS cancelled;
+
+-- name: SaveAvailabilityAttempt :exec
+INSERT INTO availability_attempt (ill_transaction_id, token, located_supplier_id)
+VALUES ($1, $2, $3)
+ON CONFLICT (ill_transaction_id) DO UPDATE
+SET token = EXCLUDED.token, located_supplier_id = EXCLUDED.located_supplier_id;
+
+-- name: GetAvailabilityAttempt :one
+SELECT * FROM availability_attempt WHERE ill_transaction_id = $1;
+
+-- name: DeleteAvailabilityAttempt :exec
+DELETE FROM availability_attempt WHERE ill_transaction_id = $1;

@@ -38,7 +38,6 @@ x-host-profiles:
           trimWhitespace: true
           itemLoanPolicySources: [shelvingData, temporaryLocation]
           requireItemLoanPolicy: true
-          allCirculations: true
   Polaris:
     lmsConfig:
       ncipVersion: "1.0"
@@ -83,7 +82,8 @@ x-host-profiles:
               operator: notIn
               values: [RESERVES, CHECKEDOUT, MISSING, DISCARD]
   Alma:
-    lmsConfig: {}
+    lmsConfig:
+      requestItemRequestScopeType: Item
     catalogConfig:
       holdingsFormat:
         opac:
@@ -91,9 +91,9 @@ x-host-profiles:
           requireLocalLocation: true
           includeItemId: true
           includeItemLoanPolicy: true
-          allCirculations: true
   FOLIO:
-    lmsConfig: {}
+    lmsConfig:
+      requestItemRequestScopeType: Item
     catalogConfig:
       holdingsFormat:
         opac:
@@ -101,7 +101,6 @@ x-host-profiles:
           requireLocalLocation: true
           includeItemId: true
           includeItemLoanPolicy: true
-          allCirculations: true
           includeTemporaryLocation: true
   Generic:
     lmsConfig:
@@ -109,7 +108,7 @@ x-host-profiles:
       ncipNamespaceEnabled: true
       bibIdNormalization: none
       requestItemRequestType: Page
-      requestItemRequestScopeType: Item
+      requestItemRequestScopeType: auto
       requestItemBibIdCode: SYSNUMBER
       requestItemPickupLocationEnabled: true
       lookupUserEnabled: true
@@ -120,6 +119,7 @@ x-host-profiles:
     catalogConfig: {}
   Koha:
     lmsConfig:
+      requestItemRequestScopeType: Item
       ncipNamespaceEnabled: false
     catalogConfig:
       holdingsFormat:
@@ -2229,7 +2229,7 @@ components:
     ImportOpacHoldingsParserConfig:
       type: object
       additionalProperties: false
-      required: [availabilityRule, availablePublicNotes, requireLocalLocation, shelvingLocationSource, includeItemId, includeItemLoanPolicy, includeTemporaryLocation, allCirculations]
+      required: [availabilityRule, availablePublicNotes, requireLocalLocation, shelvingLocationSource, includeItemId, includeItemLoanPolicy, includeTemporaryLocation]
       properties:
         trimWhitespace:
           type: [boolean, "null"]
@@ -2255,7 +2255,10 @@ components:
         includeItemId: { type: [boolean, "null"] }
         includeItemLoanPolicy: { type: [boolean, "null"] }
         includeTemporaryLocation: { type: [boolean, "null"] }
-        allCirculations: { type: [boolean, "null"] }
+        allCirculations:
+          type: [boolean, "null"]
+          deprecated: true
+          description: Accepted for compatibility but ignored. OPAC parsing always returns all available circulation candidates, subject to the other parser filters.
 
     ImportMetadataParserConfig:
       type: object
@@ -2961,7 +2964,10 @@ components:
         includeItemId: { type: boolean }
         includeItemLoanPolicy: { type: boolean }
         includeTemporaryLocation: { type: boolean }
-        allCirculations: { type: boolean }
+        allCirculations:
+          type: boolean
+          deprecated: true
+          description: Accepted for compatibility but ignored. OPAC parsing always returns all available circulation candidates, subject to the other parser filters.
       additionalProperties: false
     EntryPatch:
       type: object
@@ -3194,7 +3200,7 @@ components:
           description: For Request Item requests, the type of request to create
         requestItemRequestScopeType:
           type: string
-          description: For Request Item requests, the scope type of request to create
+          description: Scope for NCIP RequestItem. auto (the generic default) uses Item when an item identifier is supplied, otherwise Bibliographic Item. Explicit Item, Title, and Bibliographic Item override automatic selection. Named vendor profiles retain their scope defaults.
         requestItemBibIdCode:
           type: string
           description: For Request Item requests, the code indicating how to interpret the bib id

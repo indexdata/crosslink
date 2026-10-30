@@ -1,6 +1,8 @@
 package ill_db
 
 import (
+	"fmt"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"time"
 
 	"github.com/indexdata/crosslink/iso18626"
@@ -55,3 +57,16 @@ const RequestAction = iso18626.TypeAction("Request")
 
 var PEER_REFRESH_INTERVAL = utils.GetEnv("PEER_REFRESH_INTERVAL", "5m")
 var PeerRefreshInterval = utils.Must(time.ParseDuration(PEER_REFRESH_INTERVAL))
+
+// ValidateHoldingsPolicy prevents fulfillment of an unresolved selection. Legacy
+// rows have unknown readiness and are accepted only when no policy is configured.
+func (s LocatedSupplier) ValidateHoldingsPolicy(entry dirapi.Entry) error {
+	if s.HoldingsPolicyResolved.Valid {
+		if s.HoldingsPolicyResolved.Bool {
+			return nil
+		}
+	} else if entry.HoldingsPolicy == nil {
+		return nil
+	}
+	return fmt.Errorf("holdings policy is unresolved for selected supplier")
+}

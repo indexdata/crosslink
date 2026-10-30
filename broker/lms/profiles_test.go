@@ -22,6 +22,11 @@ func TestLmsProfileDefaults(t *testing.T) {
 			require.Equal(t, "Title", a.requestItemRequestScopeType())
 		} else {
 			require.Equal(t, "Page", a.requestItemRequestType())
+			if vendor == "Generic" {
+				require.Equal(t, "auto", a.requestItemRequestScopeType())
+			} else {
+				require.Equal(t, "Item", a.requestItemRequestScopeType())
+			}
 		}
 	}
 }
@@ -35,7 +40,7 @@ func TestSierraNormalizationAndExplicitOverrides(t *testing.T) {
 		client := new(ncipClientMock)
 		a.ncipClient = client
 
-		_, err = a.RequestItem("request", tc.id, "user", "pickup", "")
+		_, err = a.RequestItem("request", RequestItemIdentifier{BibliographicID: tc.id}, "user", "pickup", "")
 		require.NoError(t, err)
 		arg := client.lastRequest.(ncip.RequestItem)
 		require.Equal(t, tc.want, arg.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)

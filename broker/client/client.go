@@ -16,6 +16,7 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/lms"
 	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
@@ -549,6 +550,10 @@ func (c *Iso18626Client) readTransactionContext(ctx common.ExtendedContext, even
 }
 
 func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+	if status, result := c.checkAvailabilityAttempt(ctx, event); result != nil {
+		return status, result
+	}
+
 	trCtx, err := c.readTransactionContext(ctx, event, false)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, FailedToGetTrCtx, err)
@@ -620,6 +625,9 @@ func handleSelectedSupplier(trCtx transactionContext) (*messageTarget, error) {
 	}
 
 	if !lastReceivedStatus.Valid {
+		if err := trCtx.selectedSupplier.ValidateHoldingsPolicy(trCtx.selectedSupplierPeer.CustomData); err != nil {
+			return nil, err
+		}
 		// Send first ExpectToSupply message when supplier has confirmed
 		return &messageTarget{supplier: trCtx.selectedSupplier, peer: trCtx.selectedSupplierPeer, status: BrokerInfoStatus, brokerInfoMessage: true}, nil
 	}
@@ -694,6 +702,10 @@ func prependSupplierSymbolNote(trCtx transactionContext, target *messageTarget, 
 }
 
 func (c *Iso18626Client) sendAndUpdateStatus(ctx common.ExtendedContext, trCtx transactionContext, message *iso18626.ISO18626Message) (events.EventStatus, *events.EventResult) {
+	if status, result := c.checkAvailabilityAttempt(ctx, trCtx.event); result != nil {
+		return status, result
+	}
+
 	resData := &events.EventResult{}
 	resData.OutgoingMessage = message
 
@@ -726,6 +738,10 @@ func (c *Iso18626Client) sendAndUpdateStatus(ctx common.ExtendedContext, trCtx t
 }
 
 func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+	if status, result := c.checkAvailabilityAttempt(ctx, event); result != nil {
+		return status, result
+	}
+
 	trCtx, err := c.readTransactionContext(ctx, event, true)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, FailedToGetTrCtx, err)
@@ -737,6 +753,14 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx commo
 	var message *iso18626.ISO18626Message
 	var action iso18626.TypeAction
 	if isRequest {
+		if err := trCtx.selectedSupplier.ValidateHoldingsPolicy(trCtx.selectedSupplierPeer.CustomData); err != nil {
+			return events.LogErrorAndReturnResult(ctx, "unresolved holdings policy", err)
+		}
+		if trCtx.selectedSupplier.ItemID.Valid && trCtx.selectedSupplier.ItemID.String != "" {
+			if err := lms.ValidateSelectedItemScope(trCtx.selectedSupplierPeer.CustomData); err != nil {
+				return events.LogErrorAndReturnResult(ctx, "invalid selected item scope", err)
+			}
+		}
 		message, action = createRequestMessage(trCtx)
 	} else {
 		message, action, err = createRequestingAgencyMessage(trCtx)
@@ -770,6 +794,21 @@ func createRequestMessage(trCtx transactionContext) (*iso18626.ISO18626Message, 
 		supplierName, suppAgencyId, supplierAddress, _ := getPeerInfo(trCtx.selectedSupplierPeer, trCtx.selectedSupplier.SupplierSymbol)
 		populateSupplierInfo(message, supplierName, suppAgencyId, supplierAddress)
 	}
+	// Copy before replacing supplier-specific IDs so the stored request and other
+	// rota candidates cannot inherit this selection's item ID.
+	message.Request.SupplierInfo = append([]iso18626.SupplierInfo(nil), message.Request.SupplierInfo...)
+	for i := range message.Request.SupplierInfo {
+		message.Request.SupplierInfo[i].BibliographicRecordId = nil
+	}
+	if trCtx.selectedSupplier.ItemID.Valid && trCtx.selectedSupplier.ItemID.String != "" {
+		if len(message.Request.SupplierInfo) == 0 {
+			message.Request.SupplierInfo = []iso18626.SupplierInfo{{}}
+		}
+		message.Request.SupplierInfo[0].BibliographicRecordId = &iso18626.BibliographicRecordId{
+			BibliographicRecordIdentifierCode: iso18626.TypeSchemeValuePair{Text: "Local"},
+			BibliographicRecordIdentifier:     trCtx.selectedSupplier.ItemID.String,
+		}
+	}
 	return message, ill_db.RequestAction
 }
 
@@ -792,6 +831,10 @@ func createRequestingAgencyMessage(trCtx transactionContext) (*iso18626.ISO18626
 }
 
 func (c *Iso18626Client) sendAndUpdateSupplier(ctx common.ExtendedContext, trCtx transactionContext, message *iso18626.ISO18626Message, action iso18626.TypeAction) (events.EventStatus, *events.EventResult) {
+	if status, result := c.checkAvailabilityAttempt(ctx, trCtx.event); result != nil {
+		return status, result
+	}
+
 	eventStatus := events.EventStatusSuccess
 	resData := events.EventResult{}
 	resData.OutgoingMessage = message
@@ -830,4 +873,17 @@ func blockUnfilled(trCtx transactionContext) bool {
 		return false
 	}
 	return trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage != iso18626.TypeReasonForMessageNotification
+}
+
+// checkAvailabilityAttempt returns a terminal result only for stale or invalid
+// tagged tasks. Recheck immediately before delivery after loading message context.
+func (c *Iso18626Client) checkAvailabilityAttempt(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+	current, err := ill_db.CheckAvailabilityCurrent(ctx, c.illRepo, event.IllTransactionID, event.EventData.CustomData)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to validate availability attempt", err)
+	}
+	if !current {
+		return events.EventStatusSuccess, &events.EventResult{CustomData: map[string]any{"availability": "superseded"}}
+	}
+	return "", nil
 }

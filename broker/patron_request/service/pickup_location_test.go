@@ -199,7 +199,9 @@ func TestFillLocallyRejectsInvalidPickupSelection(t *testing.T) {
 			service := PatronRequestActionService{illRepo: pickupRepo}
 			lmsAdapter := &mockLmsAdapter{requesterPickupLocation: "default"}
 			pr := pr_db.PatronRequest{RequesterSymbol: pgtype.Text{String: "ISIL:MAIN", Valid: true}, Tenant: pgtype.Text{String: "tenant-a", Valid: true}, RequesterPickupLocationID: pgtype.UUID{Bytes: id, Valid: true}}
-			result := service.fillLocallyBorrowingRequest(appCtx, "", pr, lmsAdapter, iso18626.Request{}, actionParams{})
+			pr.ID = "pickup-local-fill"
+			expectLocalFillSelection(pickupRepo, pr.ID, pr.RequesterSymbol.String, localFillSelection(pr.ID, pr.RequesterSymbol.String))
+			result := service.fillLocallyBorrowingRequest(appCtx, "", pr, lmsAdapter, actionParams{})
 			require.Equal(t, events.EventStatusError, result.status)
 			lmsAdapter.AssertNotCalled(t, "RequestItem", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 			pickupRepo.AssertExpectations(t)
