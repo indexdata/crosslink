@@ -45,3 +45,31 @@ func TestOpacHoldingsParserReadsItemLoanPolicy(t *testing.T) {
 		assert.Equal(t, "NORMAL", holdings[0].ItemLoanPolicy)
 	}
 }
+
+func TestOpacDeprecatedAllCirculationsIgnored(t *testing.T) {
+	record := []byte(`<opacRecord><holdings><holding><localLocation>MAIN</localLocation><circulations>
+ <circulation><availableNow value="1"/><itemId>first</itemId></circulation>
+ <circulation><availableNow value="0"/><itemId>unavailable</itemId></circulation>
+ <circulation><availableNow value="1"/><itemId>second</itemId></circulation>
+ </circulations></holding>
+ <holding><localLocation>EXCLUDED</localLocation><circulations>
+ <circulation><availableNow value="1"/><itemId>excluded</itemId></circulation>
+ </circulations></holding></holdings></opacRecord>`)
+	for _, tc := range []struct {
+		name       string
+		configured *bool
+	}{
+		{"default", nil}, {"legacy false", new(false)}, {"legacy true", new(true)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			parser := NewOpacHoldingsParser(dirapi.OpacHoldingsParserConfig{AllCirculations: tc.configured, ExcludedLocations: &[]string{"EXCLUDED"}})
+			holdings, err := parser.Parse(record, LookupParams{})
+			require.NoError(t, err)
+			ids := make([]string, 0, len(holdings))
+			for _, h := range holdings {
+				ids = append(ids, h.ItemId)
+			}
+			require.Equal(t, []string{"first", "second"}, ids)
+		})
+	}
+}

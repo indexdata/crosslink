@@ -24,7 +24,7 @@ func enabled(value *bool, fallback bool) bool {
 	return fallback
 }
 
-func (p *OpacHoldingsParser) Parse(record []byte, params LookupParams) ([]Holding, error) {
+func (p *OpacHoldingsParser) Parse(record []byte, _ LookupParams) ([]Holding, error) {
 	var opacRecord marcxml.OpacRecord
 	if err := xml.Unmarshal(record, &opacRecord); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal OPAC XML: %w", err)
@@ -98,10 +98,6 @@ func (p *OpacHoldingsParser) Parse(record []byte, params LookupParams) ([]Holdin
 			}
 			if !emitted && !enabled(p.config.RequireItemLoanPolicy, false) {
 				result = append(result, h)
-				emitted = true
-			}
-			if emitted && !enabled(p.config.AllCirculations, false) {
-				break
 			}
 		}
 	}

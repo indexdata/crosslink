@@ -101,7 +101,7 @@ func TestSupplierRequestItemPersistenceIsAtomic(t *testing.T) {
 			pr.IllRequest.Header.RequestingAgencyRequestId = "req-1"
 			repo := &loanTxRepo{MockPrRepo: &MockPrRepo{savedPr: pr, saveItemFail: step == "item"}, failStep: step}
 			adapter := new(mockLmsAdapter)
-			adapter.On("RequestItem", "req-1", "", "", "", "").Return(&lms.RequestedItem{RequestID: "lms-req-1", Barcode: "barcode"}, nil).Twice()
+			adapter.On("RequestItem", "req-1", lms.RequestItemIdentifier{BibliographicID: ""}, "", "", "").Return(&lms.RequestedItem{RequestID: "lms-req-1", Barcode: "barcode"}, nil).Twice()
 			adapter.On("CancelRequestItem", "lms-req-1", "").Return(nil).Once()
 			svc := &PatronRequestActionService{prRepo: repo}
 

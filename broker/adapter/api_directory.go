@@ -200,7 +200,7 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 		rotaInfo.Request.Cost = utils.FormatDecimal(billingInfo.MaximumCosts.MonetaryValue.Base, billingInfo.MaximumCosts.MonetaryValue.Exp) + curSuffix
 	}
 	for _, sup := range entries {
-		applyHoldingsPolicy(&sup)
+		holdingsMatch := EvaluateHoldingsPolicy(&sup)
 		var supMatch SupplierMatch
 		supMatch.Symbol = sup.Symbol
 		supMatch.Location = sup.Location
@@ -297,7 +297,7 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 				}
 				return cmp.Compare(a.Name, b.Name)
 			})
-			if cost < math.MaxFloat64 && holdingMatchesPolicy(sup) {
+			if cost < math.MaxFloat64 && holdingsMatch {
 				supMatch.Match = true
 				supMatch.Cost = fmt.Sprintf("%.2f", cost)
 				sup.Cost = cost
@@ -389,6 +389,23 @@ func CompareSuppliers(a, b SupplierOrdering, policy dirapi.LoadBalancingPolicy) 
 		return sort
 	}
 	return cmp.Compare(a.GetSymbol(), b.GetSymbol())
+}
+
+// EvaluateHoldingsPolicy replaces the holding selection and preferences for a supplier.
+// Deferred or absent policies do not select an item, even if catalog data has one.
+func EvaluateHoldingsPolicy(supplier *Supplier) bool {
+	supplier.ItemID = ""
+	supplier.LocationPreference = 0
+	supplier.ShelvingPreference = 0
+	if supplier.DeferHoldingsPolicy {
+		return true
+	}
+	applyHoldingsPolicy(supplier)
+	eligible := holdingMatchesPolicy(*supplier)
+	if eligible && supplier.CustomData.HoldingsPolicy != nil {
+		supplier.ItemID = supplier.HoldingItemID
+	}
+	return eligible
 }
 
 func applyHoldingsPolicy(supplier *Supplier) {

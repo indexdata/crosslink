@@ -32,8 +32,7 @@ A profile alone does not enable an adapter. NCIP requires both `address` and
 `fromAgency`; omit both for a catalog-only institution. A partially configured
 NCIP connection fails broker validation. Catalog lookup requires an SRU or ZOOM
 address. Profiles never supply endpoints, credentials, agencies, databases, patron
-identifiers, pickup codes, or lending policies. Existing Generic circulation
-fallbacks remain unchanged.
+identifiers, pickup codes, or lending policies.
 
 ## Built-in profiles
 
@@ -62,10 +61,10 @@ defaults. Loading bundled definitions preserves existing resolution behavior.
 
 | Profile | Catalog defaults | Circulation defaults |
 | --- | --- | --- |
-| Generic | Existing MARC parser (852: location b, shelving c, call number h, item p, restricted r); existing PQF or configured CQL queries | Existing NCIP 2 behavior: Page, Item scope, pickup enabled |
-| Alma | OPAC; nonempty local location and availableNow value 1; item ID and availableThru loan policy | NCIP 2 |
+| Generic | Existing MARC parser (852: location b, shelving c, call number h, item p, restricted r); existing PQF or configured CQL queries | NCIP 2: Page, auto scope (Item when an item ID is supplied, otherwise Bibliographic Item), pickup enabled |
+| Alma | OPAC; nonempty local location and availableNow value 1; item ID and availableThru loan policy | NCIP 2; Item scope |
 | Sierra | OPAC; publicNote exactly AVAILABLE, CHECK SHELVES, or CHECK SHELF; localLocation supplies both location and shelving; no item ID or loan policy | NCIP 2; Hold, Title scope; Sierra bib-ID normalization |
-| Koha | MARC holdings (ZOOM requests `usmarc`, converted to XML for parsing); one candidate per 952; b location, c shelving, o call number; 7 must equal 0 and q must be absent; no item ID | NCIP 2 with XML namespace disabled |
+| Koha | MARC holdings (ZOOM requests `usmarc`, converted to XML for parsing); one candidate per 952; b location, c shelving, o call number; 7 must equal 0 and q must be absent; no item ID | NCIP 2 with XML namespace disabled; Item scope |
 | FOLIO | Alma OPAC mappings plus temporaryLocation as temporary shelving location | NCIP 2; Page; Item scope (Title can be configured); pickup enabled when a location is supplied |
 | Evergreen | MARC 852: b location, a shelving, c call number, g item; n must equal Available; identifier index 1016 | NCIP 2; Loan, Bibliographic Item scope, pickup disabled; BibID code |
 | Horizon | OPAC: nonempty location, availableNow=1, Internet locations excluded; one candidate per nonempty shelvingData/temporaryLocation loan policy; trim whitespace | NCIP 1; Loan, Bibliographic Item scope, pickup disabled |
@@ -156,15 +155,14 @@ OPAC overrides include:
 - `shelvingLocationSource`: `shelvingLocation` or `localLocation`.
 - `includeItemId`, `includeItemLoanPolicy`: circulation mappings.
 - `includeTemporaryLocation`: use a nonempty, trimmed circulation temporary location as the effective shelving location for holdings policy and supplier ordering; otherwise retain the permanent shelving location. Enabled by default for FOLIO.
-- `allCirculations`: emit every eligible circulation, instead of the first per holding.
+- `allCirculations` (deprecated): accepted and preserved for compatibility, but ignored. All available circulation candidates are returned regardless of this value. It can be omitted from new configurations and imports.
 - `excludedLocations`: reject holdings whose trimmed local location exactly matches an entry; `[]` clears exclusions. Filtering applies per holding, preserving other holdings and records.
 - `itemLoanPolicySources`: ordered list of `availableThru`, `shelvingData`, or `temporaryLocation`. Each nonempty trimmed value produces a separate candidate, even when source values coincide. Omission uses `availableThru`; `[]` extracts no policy. `includeItemLoanPolicy: false` disables extraction.
 - `requireItemLoanPolicy`: exclude candidates without a policy (default false). Horizon enables this, so available circulations with no configured policy value are omitted. It also applies when policy extraction is disabled. The public-note availability mode does not extract circulation policies.
 - `trimWhitespace`: trim location, shelving location, call number and item ID (default false; enabled for Horizon).
 
-Generic OPAC retains its previous first-available-circulation behavior and does
-not require a local location. Alma and FOLIO emit every technically available
-circulation with a nonempty local location. Sierra evaluates each holding's
+OPAC parsing returns all technically available circulations. Generic OPAC does
+not require a local location; Alma and FOLIO require a nonempty local location. Sierra evaluates each holding's
 public note even when no circulation elements are present.
 
 LMS overrides include existing operation enablement, RequestItem type, scope,

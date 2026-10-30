@@ -1081,3 +1081,21 @@ func validTemplateData() json.RawMessage {
 func validBatchActionData() json.RawMessage {
 	return json.RawMessage(`{"actionName":"request-aging","batchQuery":"state==NEW","schedule":"FREQ=DAILY;BYHOUR=6;BYMINUTE=0","title":"Daily aging"}`)
 }
+
+func TestImportLocatedSupplierSelectedItem(t *testing.T) {
+	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "peer-requester"}, {ID: "peer-supplier"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{terminal: true}, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		supplier := bundle["locatedSuppliers"].([]any)[0].(map[string]any)
+		supplier["localID"] = "bib-1"
+		supplier["itemID"] = "copy-2"
+		supplier["holdingsPolicyResolved"] = true
+	})
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyUpdate, "ISIL:REQ", data)
+	require.NoError(t, err)
+	require.Len(t, repo.patron.LocatedSuppliers, 1)
+	assert.Equal(t, pgText("bib-1"), repo.patron.LocatedSuppliers[0].LocalID)
+	assert.Equal(t, pgText("copy-2"), repo.patron.LocatedSuppliers[0].ItemID)
+	assert.Equal(t, pgtype.Bool{Valid: true, Bool: true}, repo.patron.LocatedSuppliers[0].HoldingsPolicyResolved)
+}

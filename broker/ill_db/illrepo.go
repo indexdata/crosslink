@@ -17,6 +17,9 @@ import (
 )
 
 type IllRepo interface {
+	SaveAvailabilityAttempt(ctx common.ExtendedContext, params SaveAvailabilityAttemptParams) error
+	GetAvailabilityAttempt(ctx common.ExtendedContext, transactionID string) (AvailabilityAttempt, error)
+	DeleteAvailabilityAttempt(ctx common.ExtendedContext, transactionID string) error
 	SaveRotaAudit(ctx common.ExtendedContext, transactionID string, name, user string, data map[string]any) error
 	RotaRequestClosed(ctx common.ExtendedContext, transactionID string) (bool, error)
 	RotaRequestCancelled(ctx common.ExtendedContext, transactionID, brokerSymbol string) (bool, error)

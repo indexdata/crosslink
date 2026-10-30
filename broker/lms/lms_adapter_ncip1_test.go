@@ -72,12 +72,15 @@ func TestNcip1Operations(t *testing.T) {
 	})
 	normalization := "sierra"
 	a.config.BibIdNormalization = &normalization
-	item, err := a.RequestItem("request", ".b1234", "user", "ignored", "")
+	titleScope := "Title"
+	a.config.RequestItemRequestScopeType = &titleScope
+	item, err := a.RequestItem("request", RequestItemIdentifier{BibliographicID: ".b1234"}, "user", "ignored", "")
 	require.NoError(t, err)
 	require.Equal(t, &RequestedItem{RequestID: encodeNcip1RequestID(ncip.UniqueRequestId{UniqueAgencyId: ncip.UniqueAgencyId{Scheme: "urn:test:agency", Value: "lms"}, RequestIdentifierValue: "lms-request"}), ItemID: encodeNcip1ItemID(ncip.UniqueItemId{UniqueAgencyId: ncip.UniqueAgencyId{Scheme: "urn:test:agency", Value: "lms"}, ItemIdentifierValue: "internal-id"}), Title: "Title", Barcode: "barcode", CallNumber: "call", Location: "Main", ShelvingLocation: "Stacks"}, item)
 	a = ncip1TestAdapter(t, `<CancelRequestItemResponse>`+ncip1TestHeader+`<UniqueRequestId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><RequestIdentifierValue>request</RequestIdentifierValue></UniqueRequestId><UniqueUserId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><UserIdentifierValue>user</UserIdentifierValue></UniqueUserId></CancelRequestItemResponse>`, func(m ncip.NCIPMessage) {
 		require.Equal(t, "request", m.CancelRequestItem.UniqueRequestId.RequestIdentifierValue)
 		require.Nil(t, m.CancelRequestItem.UniqueItemId)
+		require.Nil(t, m.CancelRequestItem.RequestScopeType)
 	})
 	require.NoError(t, a.CancelRequestItem("request", "user"))
 	a = ncip1TestAdapter(t, `<CheckInItemResponse>`+ncip1TestHeader+`<UniqueItemId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><ItemIdentifierValue>barcode</ItemIdentifierValue></UniqueItemId></CheckInItemResponse>`, func(m ncip.NCIPMessage) { require.Equal(t, "lms", m.CheckInItem.UniqueItemId.UniqueAgencyId.Value) })
@@ -142,7 +145,7 @@ func TestNcip1UnsupportedAndDisabled(t *testing.T) {
 	require.ErrorIs(t, err, ErrDeleteItemUnsupported)
 	require.False(t, performed)
 	require.Error(t, a.CreateUserFiscalTransaction("user", "item"))
-	_, err = a.RequestItem("request", "bib", "user", "", "location")
+	_, err = a.RequestItem("request", RequestItemIdentifier{BibliographicID: "bib"}, "user", "", "location")
 	require.Error(t, err)
 	_, err = a.CheckOutItem("request", "item", "user", "external")
 	require.Error(t, err)
@@ -150,7 +153,7 @@ func TestNcip1UnsupportedAndDisabled(t *testing.T) {
 	require.Error(t, err)
 	_, err = a.AcceptItem("", "request", "user", "", "", "", "", "", "")
 	require.Error(t, err)
-	_, err = a.RequestItem("", "bib", "user", "", "")
+	_, err = a.RequestItem("", RequestItemIdentifier{BibliographicID: "bib"}, "user", "", "")
 	require.Error(t, err)
 	_, err = a.CheckOutItem("", "", "user", "")
 	require.Error(t, err)
@@ -172,7 +175,7 @@ func TestNcip1UnsupportedAndDisabled(t *testing.T) {
 	performed, err = a.CheckInItem("")
 	require.NoError(t, err)
 	require.False(t, performed)
-	item, err := a.RequestItem("", "", "", "", "")
+	item, err := a.RequestItem("", RequestItemIdentifier{BibliographicID: ""}, "", "", "")
 	require.NoError(t, err)
 	require.Nil(t, item)
 	checkout, err := a.CheckOutItem("", "", "", "")
@@ -218,7 +221,7 @@ func TestNcip1Configuration(t *testing.T) {
 	a.config.RequestItemRequestType = &requestType
 	a.config.RequestItemRequestScopeType = &scope
 	a.config.RequestItemBibIdCode = &code
-	item, err := a.RequestItem("request", "bib", "user", "", "")
+	item, err := a.RequestItem("request", RequestItemIdentifier{BibliographicID: "bib"}, "user", "", "")
 	require.NoError(t, err)
 	decoded, err := a.savedRequest(item.RequestID)
 	require.NoError(t, err)
@@ -234,7 +237,7 @@ func TestNcip1Failures(t *testing.T) {
 	_, err := a.LookupUser("user", LookupUserOptions{})
 	require.Error(t, err)
 	a = ncip1TestAdapter(t, `<RequestItemResponse>`+ncip1TestHeader+``+problem+`</RequestItemResponse>`, nil)
-	item, err := a.RequestItem("request", "bib", "user", "", "")
+	item, err := a.RequestItem("request", RequestItemIdentifier{BibliographicID: "bib"}, "user", "", "")
 	require.Error(t, err)
 	require.Nil(t, item)
 	a = ncip1TestAdapter(t, `<CheckOutItemResponse>`+ncip1TestHeader+``+problem+`</CheckOutItemResponse>`, nil)
@@ -300,7 +303,7 @@ func TestNcip1ResolvedSierraRequestScope(t *testing.T) {
 		require.Equal(t, expected.Value, m.RequestItem.RequestScopeType.Value)
 	})
 	a.client = request.client
-	item, err := a.RequestItem("request", "bib", "user", "", "")
+	item, err := a.RequestItem("request", RequestItemIdentifier{BibliographicID: "bib"}, "user", "", "")
 	require.NoError(t, err)
 	require.NotNil(t, item)
 	cancel := ncip1TestAdapter(t, "<CancelRequestItemResponse>"+ncip1TestHeader+requestID+ncip1TestUser+"</CancelRequestItemResponse>", func(m ncip.NCIPMessage) {
@@ -335,7 +338,7 @@ func TestAdditionalProfileNcip1Request(t *testing.T) {
 			e, err := profiles.Resolve(entry)
 			require.NoError(t, err)
 			a.config = *e.LMS
-			_, err = a.RequestItem("request", ".b12345", "user", "ignored", "")
+			_, err = a.RequestItem("request", RequestItemIdentifier{BibliographicID: ".b12345"}, "user", "ignored", "")
 			require.NoError(t, err)
 		})
 	}

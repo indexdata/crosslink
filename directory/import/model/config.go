@@ -134,7 +134,8 @@ type OpacHoldingsParserConfig struct {
 	IncludeItemID            *bool     `json:"includeItemId,omitempty"`
 	IncludeItemLoanPolicy    *bool     `json:"includeItemLoanPolicy,omitempty"`
 	IncludeTemporaryLocation *bool     `json:"includeTemporaryLocation,omitempty"`
-	AllCirculations          *bool     `json:"allCirculations,omitempty"`
+	// Deprecated: accepted for compatibility; all available circulations are returned.
+	AllCirculations *bool `json:"allCirculations,omitempty"`
 }
 
 type MetadataParserConfig struct {
