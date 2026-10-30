@@ -217,6 +217,7 @@ type PullSlipData struct {
 	Volume             string `description:"Volume of the requested item"`
 	Issue              string `description:"Issue of the requested item"`
 	Pages              string `description:"Pages of the requested item"`
+	PagesRequested     string `description:"Specific pages requested from the item"`
 	StaffNotes         string `description:"Notes intended for staff"`
 	CallNumber         string `description:"Library call number of the requested item"`
 	Location           string `description:"Library location of the requested item"`
@@ -283,6 +284,7 @@ func GetPullSlipData(pr pr_db.PatronRequest, notes []pr_db.Notification, conditi
 		Volume:             DEFAULT_FOR_NO_VALUE,
 		Issue:              DEFAULT_FOR_NO_VALUE,
 		Pages:              DEFAULT_FOR_NO_VALUE,
+		PagesRequested:     DEFAULT_FOR_NO_VALUE,
 		StaffNotes:         getStaffNotes(notes),
 		CallNumber:         getCallNumber(pr),
 		Location:           getItemLocation(pr, func(item pr_db.PrItem) *string { return item.Location }),
@@ -314,6 +316,9 @@ func GetPullSlipData(pr pr_db.PatronRequest, notes []pr_db.Notification, conditi
 	}
 	if pr.IllRequest.BibliographicInfo.EstimatedNoPages != "" {
 		data.Pages = pr.IllRequest.BibliographicInfo.EstimatedNoPages
+	}
+	if pr.IllRequest.BibliographicInfo.PagesRequested != "" {
+		data.PagesRequested = pr.IllRequest.BibliographicInfo.PagesRequested
 	}
 	if pr.IllRequest.BibliographicInfo.SupplierUniqueRecordId != "" {
 		data.SystemIdentifier = pr.IllRequest.BibliographicInfo.SupplierUniqueRecordId

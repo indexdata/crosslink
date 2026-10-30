@@ -1209,7 +1209,7 @@ func TestGetTemplatesPlaceholders(t *testing.T) {
 	assert.NotContains(t, responseFields, "batchEmail")
 	var placeholders proapi.TemplatePlaceholders
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &placeholders))
-	require.Len(t, placeholders.SingleRecord, 30)
+	require.Len(t, placeholders.SingleRecord, 31)
 	assert.Equal(t, proapi.TemplatePlaceholder{
 		Placeholder: "{{.ReqId}}",
 		Description: "Requester request identifier",
