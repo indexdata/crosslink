@@ -873,10 +873,17 @@ func TestCopySupplyDocumentCompletesRequesterAndSupplier(t *testing.T) {
 		ActionParams: &actionParams,
 	})
 	require.NoError(t, err)
-	responseBytes = httpRequest(t, "POST", supplierPath+"/action"+supplierParams, actionBytes, http.StatusOK)
 	var actionResult proapi.ActionResult
-	require.NoError(t, json.Unmarshal(responseBytes, &actionResult))
-	assert.Equal(t, string(events.EventStatusSuccess), actionResult.Result)
+	// The action can become available before the previous invoke-action task
+	// completes. Retry only the exclusivity rejection, which did not execute it.
+	require.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		responseBytes = httpRequest(t, "POST", supplierPath+"/action"+supplierParams, actionBytes, http.StatusOK)
+		actionResult = proapi.ActionResult{}
+		require.NoError(t, json.Unmarshal(responseBytes, &actionResult))
+		return actionResult.Result != string(events.EventStatusError) ||
+			actionResult.Message == nil || *actionResult.Message != "another invoke-action task in progress"
+	}), "timed out waiting for supply-document to run without task conflict")
+	require.Equal(t, string(events.EventStatusSuccess), actionResult.Result)
 
 	require.True(t, test.WaitForPredicateToBeTrue(func() bool {
 		responseBytes = httpRequest(t, "GET", requesterPath+requesterParams, nil, http.StatusOK)
