@@ -58,6 +58,8 @@ CREATE TABLE located_supplier
     local_supplier      BOOLEAN NOT NULL DEFAULT false,
     reason_unfilled     VARCHAR,
     note                VARCHAR,
+    item_id             VARCHAR,
+    holdings_policy_resolved BOOLEAN,
     FOREIGN KEY (ill_transaction_id) REFERENCES ill_transaction (id) ON DELETE CASCADE,
     FOREIGN KEY (supplier_id) REFERENCES peer (id)
 );
@@ -68,3 +70,11 @@ CREATE TABLE branch_symbol
     peer_id VARCHAR   NOT NULL,
     FOREIGN KEY (peer_id) REFERENCES peer (id)
 );
+
+CREATE TABLE availability_attempt (
+    ill_transaction_id VARCHAR PRIMARY KEY REFERENCES ill_transaction(id) ON DELETE CASCADE,
+    token VARCHAR NOT NULL,
+    located_supplier_id VARCHAR NOT NULL REFERENCES located_supplier(id) ON DELETE CASCADE
+);
+
+CREATE INDEX availability_attempt_supplier_idx ON availability_attempt(located_supplier_id);

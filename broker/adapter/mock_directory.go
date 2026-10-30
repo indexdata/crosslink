@@ -130,8 +130,7 @@ func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx common.ExtendedContext, e
 	rotaInfo.Suppliers = make([]SupplierMatch, 0, len(entries))
 	filtered := make([]Supplier, 0, len(entries))
 	for _, sup := range entries {
-		applyHoldingsPolicy(&sup)
-		match := holdingMatchesPolicy(sup)
+		match := EvaluateHoldingsPolicy(&sup)
 		if match {
 			filtered = append(filtered, sup)
 		}

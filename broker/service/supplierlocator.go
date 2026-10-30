@@ -18,7 +18,9 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/profiles"
 	dirapi "github.com/indexdata/crosslink/directory/api"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -40,6 +42,8 @@ const (
 	AvailabilityAvailable   Availability = "available"
 	AvailabilityUnavailable Availability = "unavailable"
 	AvailabilityUnknown     Availability = "unknown"
+	// AvailabilitySuperseded means the checked selection changed; no workflow action is needed.
+	AvailabilitySuperseded Availability = "superseded"
 )
 
 type SupplierLocator struct {
@@ -212,6 +216,10 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if len(peers) > 0 { //even with lookup error we may have locally cached peers
 		var dirEntriesLog = []any{}
 		for _, peer := range peers {
+			availabilityConfigured, err := supplierAvailabilityConfigured(peer.CustomData)
+			if err != nil {
+				return events.LogErrorAndReturnResult(ctx, "invalid supplier configuration", err)
+			}
 			loadBalancingScore, err := getLoadBalancingScore(peer, policy)
 			if err != nil {
 				return events.LogErrorAndReturnResult(ctx, "failed to calculate supplier load balancing score", err)
@@ -255,16 +263,18 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 					}
 					for _, holding := range holdings {
 						supplier := adapter.Supplier{
-							PeerId:             peer.ID,
-							CustomData:         peer.CustomData,
-							LocalIdentifier:    holding.LocalIdentifier,
-							LoadBalancingScore: loadBalancingScore,
-							Symbol:             sym,
-							Local:              local,
-							SupplierStatus:     supplierStatus,
-							Location:           holding.Location,
-							ShelvingLocation:   holding.ShelvingLocation,
-							ItemLoanPolicy:     holding.ItemLoanPolicy,
+							PeerId:              peer.ID,
+							CustomData:          peer.CustomData,
+							LocalIdentifier:     holding.LocalIdentifier,
+							HoldingItemID:       holding.ItemId,
+							DeferHoldingsPolicy: availabilityConfigured,
+							LoadBalancingScore:  loadBalancingScore,
+							Symbol:              sym,
+							Local:               local,
+							SupplierStatus:      supplierStatus,
+							Location:            holding.Location,
+							ShelvingLocation:    holding.ShelvingLocation,
+							ItemLoanPolicy:      holding.ItemLoanPolicy,
 						}
 						potentialSuppliers = append(potentialSuppliers, supplier)
 					}
@@ -368,12 +378,14 @@ func (s *SupplierLocator) addLocatedSupplier(ctx common.ExtendedContext, transId
 			String: supplier.LocalIdentifier,
 			Valid:  true,
 		},
-		LocalSupplier: supplier.Local,
+		LocalSupplier:          supplier.Local,
+		ItemID:                 pgtype.Text{String: supplier.ItemID, Valid: supplier.ItemID != ""},
+		HoldingsPolicyResolved: pgtype.Bool{Bool: supplier.CustomData.HoldingsPolicy == nil || !supplier.DeferHoldingsPolicy, Valid: true},
 	})
 	return &sup, err
 }
 
-func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event events.Event) (status events.EventStatus, outcome *events.EventResult) {
 	suppliers, err := s.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
 		IllTransactionID: event.IllTransactionID,
 		SupplierStatus:   ill_db.SupplierStateSelectedPg,
@@ -388,6 +400,43 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "multiple selected suppliers", map[string]any{"supplierCount": len(suppliers)})
 	}
 	sup := suppliers[0]
+	token := uuid.NewString()
+	sup, current, err := s.beginAvailability(ctx, sup, token)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "could not start availability attempt", err)
+	}
+	if !current {
+		return supersededAvailabilityResult()
+	}
+	var selectedItem *pgtype.Text
+	var policyResolved *pgtype.Bool
+	var skip bool
+	// Revalidate every outcome, including lookup errors and unconfigured lookups,
+	// before the workflow can act on it. Merge only after a successful lookup.
+	defer func() {
+		if status != events.EventStatusSuccess {
+			selectedItem, policyResolved, skip = nil, nil, false
+		}
+		current, err := s.updateAvailabilitySupplier(ctx, sup, token, selectedItem, policyResolved, skip)
+		if err != nil {
+			status, outcome = events.LogErrorAndReturnResult(ctx, "could not commit availability result", err)
+		} else if !current {
+			status, outcome = supersededAvailabilityResult()
+		} else {
+			if outcome == nil {
+				outcome = &events.EventResult{}
+			}
+			if outcome.CustomData == nil {
+				outcome.CustomData = map[string]any{}
+			}
+			outcome.CustomData[ill_db.AvailabilityTokenKey] = token
+			state := ill_db.SupplierStateSelectedPg.String
+			if skip {
+				state = ill_db.SupplierStateSkippedPg.String
+			}
+			outcome.CustomData[ill_db.AvailabilitySupplierStateKey] = state
+		}
+	}()
 	eventData := map[string]any{
 		AvailabilityKey: string(AvailabilityUnknown),
 		"localSupplier": sup.LocalSupplier,
@@ -397,11 +446,53 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not get peer", err)
 	}
+	configured, configErr := supplierAvailabilityConfigured(peer.CustomData)
+	if configured || configErr != nil {
+		// Clear on a locked, freshly read row, even if the initial snapshot had
+		// no item: another completed check may have selected one in the meantime.
+		// Revoke readiness too if configuration gained an endpoint since the claim.
+		current, err := s.updateAvailabilitySupplier(ctx, sup, token, &pgtype.Text{}, &pgtype.Bool{Valid: true}, false)
+		if err != nil {
+			return events.LogErrorAndReturnResult(ctx, "could not clear selected item", err)
+		}
+		if !current {
+			return supersededAvailabilityResult()
+		}
+		sup.ItemID = pgtype.Text{}
+	}
+	if configErr != nil {
+		return events.LogErrorAndReturnResult(ctx, "invalid supplier configuration", configErr)
+	}
+	deferred := configured && peer.CustomData.HoldingsPolicy != nil
+	if !deferred {
+		// No policy needs no evaluation. A central policy must already have
+		// succeeded at discovery; legacy/manual unresolved selections need relocalization.
+		if err := sup.ValidateHoldingsPolicy(peer.CustomData); err != nil && peer.CustomData.HoldingsPolicy != nil {
+			eventData["holdingsPolicyUnresolved"] = true
+			return events.LogErrorAndReturnExistingResult(ctx, "holdings policy requires supplier discovery", err, result)
+		}
+		current, err := s.updateAvailabilitySupplier(ctx, sup, token, nil, &pgtype.Bool{Bool: true, Valid: true}, false)
+		if err != nil {
+			return events.LogErrorAndReturnResult(ctx, "could not restore policy readiness", err)
+		}
+		if !current {
+			return supersededAvailabilityResult()
+		}
+	}
+
+	if deferred {
+		// The workflow must not bypass unresolved policy through its
+		// availability-error fallback.
+		eventData["holdingsPolicyUnresolved"] = true
+	}
 	aa, err := s.lookupAdapterFactory.GetAdapterSupplier(ctx, peer)
 	if err != nil {
 		return events.LogErrorAndReturnExistingResult(ctx, "could not create availability adapter", err, result)
 	}
 	if aa == nil {
+		if deferred {
+			return events.LogErrorAndReturnExistingResult(ctx, "missing configured availability adapter", fmt.Errorf("holdings policy remains unresolved"), result)
+		}
 		ctx.Logger().Debug("skipping availability check for supplier without availability config", "supplierSymbol", sup.SupplierSymbol)
 		return events.EventStatusSuccess, result
 	}
@@ -420,19 +511,85 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	if err != nil {
 		return events.LogErrorAndReturnExistingResult(ctx, "failed to get holdings for availability lookup", err, result)
 	}
+	if deferred {
+		var selected *adapter.Supplier
+		for _, holding := range holdingsResults {
+			candidate := adapter.Supplier{
+				CustomData:       peer.CustomData,
+				HoldingItemID:    holding.ItemId,
+				Location:         holding.Location,
+				ShelvingLocation: holding.ShelvingLocation,
+				ItemLoanPolicy:   holding.ItemLoanPolicy,
+			}
+			if adapter.EvaluateHoldingsPolicy(&candidate) && (selected == nil || adapter.CompareSuppliers(candidate, *selected, dirapi.LoadBalancingPolicyProportional) < 0) {
+				selected = &candidate
+			}
+		}
+		if selected == nil {
+			holdingsResults = nil
+		} else {
+			sup.ItemID = pgtype.Text{String: selected.ItemID, Valid: selected.ItemID != ""}
+		}
+		selectedItem = &sup.ItemID
+		policyResolved = &pgtype.Bool{Bool: selected != nil, Valid: true}
+		eventData["holdingsPolicyUnresolved"] = false
+	}
 	if len(holdingsResults) == 0 {
 		ctx.Logger().Debug("availability lookup returned no results for supplier, skipping", "supplierSymbol", sup.SupplierSymbol)
 		eventData[AvailabilityKey] = string(AvailabilityUnavailable)
-		sup.SupplierStatus = ill_db.SupplierStateSkippedPg
-		_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(sup))
-		if err != nil {
-			return events.LogErrorAndReturnResult(ctx, "could not save located supplier", err)
-		}
+		skip = true
 	} else {
 		ctx.Logger().Debug("availability lookup returned results for supplier, not skipping", "supplierSymbol", sup.SupplierSymbol)
 		eventData[AvailabilityKey] = string(AvailabilityAvailable)
 	}
 	return events.EventStatusSuccess, result
+}
+
+func supersededAvailabilityResult() (events.EventStatus, *events.EventResult) {
+	return events.EventStatusSuccess, &events.EventResult{CustomData: map[string]any{AvailabilityKey: string(AvailabilitySuperseded)}}
+}
+
+// updateAvailabilitySupplier follows the transaction-then-supplier lock order of
+// rota selection. Lookup I/O must stay outside this short transaction. A false
+// result means the original selection disappeared or its lookup identity changed.
+func (s *SupplierLocator) updateAvailabilitySupplier(ctx common.ExtendedContext, expected ill_db.LocatedSupplier, token string, item *pgtype.Text, resolved *pgtype.Bool, skip bool) (bool, error) {
+	current := false
+	err := s.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		supplier, matches, err := lockAvailabilitySupplier(ctx, repo, expected, token)
+		if err != nil || !matches {
+			return err
+		}
+		current = true
+		changed := false
+		if item != nil && supplier.ItemID != *item {
+			supplier.ItemID = *item
+			changed = true
+		}
+		if resolved != nil && supplier.HoldingsPolicyResolved != *resolved {
+			supplier.HoldingsPolicyResolved = *resolved
+			changed = true
+		}
+		if skip {
+			supplier.SupplierStatus = ill_db.SupplierStateSkippedPg
+			changed = true
+		}
+		if changed {
+			if _, err := repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(supplier)); err != nil {
+				return fmt.Errorf("save availability supplier: %w", err)
+			}
+		}
+		return nil
+	})
+	return current, err
+}
+
+func supplierAvailabilityConfigured(entry dirapi.Entry) (bool, error) {
+	effective, err := profiles.Resolve(entry)
+	if err != nil {
+		return false, err
+	}
+	cfg := effective.Catalog
+	return cfg != nil && (cfg.Sru != nil || cfg.Zoom != nil), nil
 }
 
 func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
@@ -453,11 +610,31 @@ func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event event
 		if _, err := repo.GetIllTransactionByIdForUpdate(ctx, event.IllTransactionID); err != nil {
 			return err
 		}
+		current, err := ill_db.AvailabilityCurrent(ctx, repo, event.IllTransactionID, event.EventData.CustomData)
+		if err != nil {
+			return err
+		}
+		if !current {
+			status, result = supersededAvailabilityResult()
+			return nil
+		}
 		locator := *s
 		locator.illRepo = repo
 		status, result = locator.selectSupplierLocked(ctx, event)
 		if status == events.EventStatusError {
 			return errors.New("supplier selection failed")
+		}
+		if status == events.EventStatusSuccess {
+			return repo.DeleteAvailabilityAttempt(ctx, event.IllTransactionID)
+		}
+		// Exhaustion still needs a requester notification. Retain the attempt
+		// until a new check or successful selection supersedes that notification.
+		if token, tagged := event.EventData.CustomData[ill_db.AvailabilityTokenKey]; tagged {
+			if result.CustomData == nil {
+				result.CustomData = map[string]any{}
+			}
+			result.CustomData[ill_db.AvailabilityTokenKey] = token
+			result.CustomData[ill_db.AvailabilitySupplierStateKey] = ill_db.SupplierStateSkippedPg.String
 		}
 		return nil
 	})
@@ -634,4 +811,68 @@ func getLoadBalancingScore(peer ill_db.Peer, policy dirapi.LoadBalancingPolicy) 
 type SkippedSupplier struct {
 	Symbol string `json:"symbol"`
 	Reason string `json:"reason"`
+}
+
+// beginAvailability atomically replaces the previous attempt. Readiness is revoked
+// for configured or invalid lookups. Without an endpoint, preserve discovery
+// evidence in the database so overlapping checks and interrupted attempts cannot
+// destroy a central-policy decision that availability cannot reevaluate.
+func (s *SupplierLocator) beginAvailability(ctx common.ExtendedContext, expected ill_db.LocatedSupplier, token string) (ill_db.LocatedSupplier, bool, error) {
+	var snapshot ill_db.LocatedSupplier
+	current := false
+	err := s.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		supplier, matches, err := lockAvailabilitySupplier(ctx, repo, expected, "")
+		if err != nil || !matches {
+			return err
+		}
+		snapshot = supplier
+		if err := repo.SaveAvailabilityAttempt(ctx, ill_db.SaveAvailabilityAttemptParams{IllTransactionID: supplier.IllTransactionID, Token: token, LocatedSupplierID: supplier.ID}); err != nil {
+			return fmt.Errorf("save availability attempt: %w", err)
+		}
+		// This is a database-only read under the selection lock. Missing or
+		// invalid configuration must fail closed, just like a configured lookup.
+		peer, peerErr := repo.GetPeerById(ctx, supplier.SupplierID)
+		configured, configErr := supplierAvailabilityConfigured(peer.CustomData)
+		if peerErr != nil || configErr != nil || configured {
+			supplier.HoldingsPolicyResolved = pgtype.Bool{Valid: true}
+			if _, err := repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(supplier)); err != nil {
+				return fmt.Errorf("mark policy pending: %w", err)
+			}
+		}
+		current = true
+		return nil
+	})
+	return snapshot, current, err
+}
+
+// Lock in transaction-then-supplier order. An empty token is only used to start
+// an attempt; all later writes must prove they still own the current attempt.
+func lockAvailabilitySupplier(ctx common.ExtendedContext, repo ill_db.IllRepo, expected ill_db.LocatedSupplier, token string) (ill_db.LocatedSupplier, bool, error) {
+	if _, err := repo.GetIllTransactionByIdForUpdate(ctx, expected.IllTransactionID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ill_db.LocatedSupplier{}, false, nil
+		}
+		return ill_db.LocatedSupplier{}, false, fmt.Errorf("lock availability transaction: %w", err)
+	}
+	if token != "" {
+		attempt, err := repo.GetAvailabilityAttempt(ctx, expected.IllTransactionID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ill_db.LocatedSupplier{}, false, nil
+		}
+		if err != nil {
+			return ill_db.LocatedSupplier{}, false, fmt.Errorf("read availability attempt: %w", err)
+		}
+		if attempt.Token != token || attempt.LocatedSupplierID != expected.ID {
+			return ill_db.LocatedSupplier{}, false, nil
+		}
+	}
+	supplier, err := repo.GetLocatedSupplierByIdForUpdate(ctx, expected.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ill_db.LocatedSupplier{}, false, nil
+	}
+	if err != nil {
+		return ill_db.LocatedSupplier{}, false, fmt.Errorf("lock availability supplier: %w", err)
+	}
+	matches := supplier.IllTransactionID == expected.IllTransactionID && supplier.SupplierStatus == ill_db.SupplierStateSelectedPg && supplier.SupplierID == expected.SupplierID && supplier.SupplierSymbol == expected.SupplierSymbol && supplier.LocalID == expected.LocalID && supplier.LocalSupplier == expected.LocalSupplier
+	return supplier, matches, nil
 }

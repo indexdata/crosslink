@@ -75,11 +75,12 @@ func TestOpacProfiles(t *testing.T) {
 		}
 		require.Equal(t, "STACKS", h[1].ShelvingLocation)
 	}
-	// An explicitly selected generic OPAC parser keeps the old first-circulation behavior.
+	// Generic OPAC also returns all available copies, including holdings without a location.
 	h, err := NewOpacHoldingsParser(dirapi.OpacHoldingsParserConfig{}).Parse([]byte(record), LookupParams{})
 	require.NoError(t, err)
-	require.Len(t, h, 2)
-	require.Empty(t, h[1].Location)
+	require.Len(t, h, 3)
+	require.Equal(t, "2", h[1].ItemId)
+	require.Empty(t, h[2].Location)
 }
 func TestFolioEffectiveShelvingLocation(t *testing.T) {
 	for _, tc := range []struct {

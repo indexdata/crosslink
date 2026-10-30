@@ -48,7 +48,7 @@ func (l *LmsAdapterNcip) requestItemRequestScopeType() string {
 	if l.config.RequestItemRequestScopeType != nil {
 		return *l.config.RequestItemRequestScopeType
 	}
-	return "Item"
+	return "auto"
 }
 
 func createResolvedLmsAdapterNcip2(lmsConfig dirapi.LmsConfig) (LmsAdapter, error) {
@@ -375,7 +375,7 @@ func (l *LmsAdapterNcip) DeleteItem(itemId string) (bool, error) {
 
 func (l *LmsAdapterNcip) RequestItem(
 	requestId string,
-	itemId string,
+	identifier RequestItemIdentifier,
 	userId string,
 	pickupLocation string,
 	itemLocation string,
@@ -398,13 +398,17 @@ func (l *LmsAdapterNcip) RequestItem(
 	if l.config.RequestItemBibIdCode != nil {
 		code = *l.config.RequestItemBibIdCode
 	}
-	itemId = normalizeBibIdentifier(itemId, l.config.BibIdNormalization)
+	itemId, scope, err := identifier.resolve(l.requestItemRequestScopeType(), l.config.BibIdNormalization)
+	itemScope := scope == "Item"
+	if err != nil {
+		return nil, err
+	}
 	bibIdField := ncip.BibliographicId{
 		BibliographicRecordId: &ncip.BibliographicRecordId{
 			BibliographicRecordIdentifier:     itemId,
 			BibliographicRecordIdentifierCode: &ncip.SchemeValuePair{Text: code},
 		}}
-	requestScopeTypeField := ncip.SchemeValuePair{Text: l.requestItemRequestScopeType()}
+	requestScopeTypeField := ncip.SchemeValuePair{Text: scope}
 	requestTypeField := ncip.SchemeValuePair{Text: l.requestItemRequestType()}
 
 	var itemOptionalFields *ncip.ItemOptionalFields
@@ -436,6 +440,10 @@ func (l *LmsAdapterNcip) RequestItem(
 		RequestScopeType:   requestScopeTypeField,
 		ItemOptionalFields: itemOptionalFields,
 		ItemElementType:    itemElements,
+	}
+	if itemScope {
+		arg.BibliographicId = nil
+		arg.ItemId = []ncip.ItemId{{ItemIdentifierValue: itemId}}
 	}
 	response, err := l.ncipClient.RequestItem(arg)
 	if err != nil {
@@ -513,6 +521,10 @@ func (l *LmsAdapterNcip) CancelRequestItem(requestId string, userId string) erro
 		RequestId:        &ncip.RequestId{RequestIdentifierValue: requestId},
 		RequestType:      ncip.SchemeValuePair{Text: l.requestItemRequestType()},
 		RequestScopeType: &ncip.SchemeValuePair{Text: l.requestItemRequestScopeType()},
+	}
+	// Scope is optional for cancellation by request ID; auto is not an NCIP value.
+	if l.requestItemRequestScopeType() == "auto" {
+		arg.RequestScopeType = nil
 	}
 	_, err := l.ncipClient.CancelRequestItem(arg)
 	return err

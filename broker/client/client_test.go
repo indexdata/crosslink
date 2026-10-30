@@ -1188,3 +1188,97 @@ func (b *cancellationDeliveryBus) ProcessTask(ctx common.ExtendedContext, event 
 	event.EventStatus, _ = h(ctx, event)
 	return event, nil
 }
+
+func TestCreateRequestMessageSelectedItem(t *testing.T) {
+	for _, vendor := range []string{string(dirapi.Alma), string(dirapi.CrossLink)} {
+		for _, tc := range []struct {
+			name string
+			item pgtype.Text
+			want string
+		}{
+			{"selected", getPgText("copy-1"), "bib-1"},
+			{"empty", getPgText(""), "bib-1"},
+			{"absent", pgtype.Text{}, "bib-1"},
+		} {
+			t.Run(vendor+"/"+tc.name, func(t *testing.T) {
+				sup := &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP", LocalID: getPgText("bib-1"), ItemID: tc.item}
+				peer := &ill_db.Peer{Name: "supplier", Vendor: vendor}
+				ctx := createTransactionContext(events.Event{}, sup, peer, common.BrokerModeTransparent)
+				msg, _ := createRequestMessage(ctx)
+				assert.Equal(t, tc.want, msg.Request.BibliographicInfo.SupplierUniqueRecordId)
+				if tc.item.Valid && tc.item.String != "" {
+					if assert.NotEmpty(t, msg.Request.SupplierInfo) {
+						assert.Equal(t, tc.item.String, msg.Request.SupplierInfo[0].BibliographicRecordId.BibliographicRecordIdentifier)
+					}
+				} else {
+					for _, info := range msg.Request.SupplierInfo {
+						assert.Nil(t, info.BibliographicRecordId)
+					}
+				}
+				assert.Equal(t, "bib-1", sup.LocalID.String)
+			})
+		}
+	}
+}
+
+type selectedItemScopeRepo struct {
+	mocks.MockIllRepositorySuccess
+	vendor string
+}
+
+func (r *selectedItemScopeRepo) GetSelectedSupplierForIllTransaction(common.ExtendedContext, string) (ill_db.LocatedSupplier, error) {
+	return ill_db.LocatedSupplier{SupplierID: "supplier", SupplierSymbol: "ISIL:SUP", ItemID: getPgText("selected-copy"), LocalID: getPgText("bib")}, nil
+}
+func (r *selectedItemScopeRepo) GetPeerById(_ common.ExtendedContext, id string) (ill_db.Peer, error) {
+	scope := "Title"
+	return ill_db.Peer{ID: id, Vendor: r.vendor, CustomData: dirapi.Entry{LmsConfig: &dirapi.LmsConfig{Address: "https://lms.example/ncip", FromAgency: "broker", RequestItemRequestScopeType: &scope}}}, nil
+}
+func TestSelectedItemTitleScopeRejectedBeforeISO(t *testing.T) {
+	for _, vendor := range []string{string(dirapi.CrossLink), string(dirapi.Alma)} {
+		t.Run(vendor, func(t *testing.T) {
+			repo := &selectedItemScopeRepo{vendor: vendor}
+			client := CreateIso18626Client(new(events.PostgresEventBus), repo, *new(prservice.PatronRequestMessageHandler), 1, 0)
+			ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+			status, result := client.createAndSendRequestOrRequestingAgencyMessage(ctx, events.Event{IllTransactionID: "ill"})
+			assert.Equal(t, events.EventStatusError, status)
+			assert.Nil(t, result.OutgoingMessage)
+			if assert.NotNil(t, result.EventError) {
+				assert.Contains(t, result.EventError.Cause, "policy-selected item requires NCIP Item scope")
+			}
+		})
+	}
+}
+
+func TestSelectedSupplierPolicyReadinessBeforeExpectToSupply(t *testing.T) {
+	for _, ready := range []bool{false, true} {
+		supplier := &ill_db.LocatedSupplier{LocalSupplier: true, HoldingsPolicyResolved: pgtype.Bool{Valid: true, Bool: ready}}
+		peer := &ill_db.Peer{CustomData: dirapi.Entry{HoldingsPolicy: &dirapi.HoldingsPolicy{}}}
+		target, err := handleSelectedSupplier(transactionContext{selectedSupplier: supplier, selectedSupplierPeer: peer})
+		if ready {
+			assert.NoError(t, err)
+			if assert.NotNil(t, target) {
+				assert.Equal(t, iso18626.TypeStatusExpectToSupply, target.status)
+			}
+		} else {
+			assert.ErrorContains(t, err, "unresolved")
+			assert.Nil(t, target)
+		}
+	}
+}
+
+func TestRequestItemMappingClearsStaleSupplierCopy(t *testing.T) {
+	old := &iso18626.BibliographicRecordId{BibliographicRecordIdentifier: "old-copy"}
+	sup := &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP", LocalID: getPgText("bib"), ItemID: getPgText("new-copy")}
+	ctx := createTransactionContext(events.Event{}, sup, &ill_db.Peer{}, common.BrokerModeTransparent)
+	ctx.transaction.IllTransactionData.SupplierInfo = []iso18626.SupplierInfo{{BibliographicRecordId: old}, {BibliographicRecordId: old}}
+	message, _ := createRequestMessage(ctx)
+	assert.Equal(t, "new-copy", message.Request.SupplierInfo[0].BibliographicRecordId.BibliographicRecordIdentifier)
+	assert.Nil(t, message.Request.SupplierInfo[1].BibliographicRecordId)
+	assert.Equal(t, "old-copy", ctx.transaction.IllTransactionData.SupplierInfo[0].BibliographicRecordId.BibliographicRecordIdentifier)
+	sup.ItemID = pgtype.Text{}
+	message, _ = createRequestMessage(ctx)
+	for _, info := range message.Request.SupplierInfo {
+		assert.Nil(t, info.BibliographicRecordId)
+	}
+	assert.Equal(t, "bib", message.Request.BibliographicInfo.SupplierUniqueRecordId)
+}

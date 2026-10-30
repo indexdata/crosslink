@@ -94,7 +94,7 @@ type LmsAdapter interface {
 
 	RequestItem(
 		requestId string,
-		itemId string,
+		identifier RequestItemIdentifier,
 		userId string,
 		pickupLocation string,
 		itemLocation string,

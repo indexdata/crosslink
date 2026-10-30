@@ -2483,7 +2483,7 @@ func TestHandleInvokeLenderActionValidateToleratesWillSupplyProblem(t *testing.T
 	mockEventBus.runTaskHandler = true
 	lmsCreator := new(MockLmsCreator)
 	lmsAdapter := new(mockLmsAdapter)
-	lmsAdapter.On("RequestItem", "req-1", "", "", "", "").Return(&lms.RequestedItem{Barcode: "item-1"}, nil).Once()
+	lmsAdapter.On("RequestItem", "req-1", lms.RequestItemIdentifier{BibliographicID: ""}, "", "", "").Return(&lms.RequestedItem{Barcode: "item-1"}, nil).Once()
 	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lmsAdapter, nil)
 	mockIso18626Handler := &MockIso18626Handler{failSupplyingAgencyMessage: true}
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
@@ -2777,7 +2777,7 @@ func TestHandleInvokeLenderActionRequestItemSaveItemFailed(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
 	lmsAdapter := new(mockLmsAdapter)
-	lmsAdapter.On("RequestItem", "req-1", "", "", "", "").Return(&lms.RequestedItem{RequestID: "lms-req-1", Barcode: "item-1"}, nil)
+	lmsAdapter.On("RequestItem", "req-1", lms.RequestItemIdentifier{BibliographicID: ""}, "", "", "").Return(&lms.RequestedItem{RequestID: "lms-req-1", Barcode: "item-1"}, nil)
 	lmsAdapter.On("CancelRequestItem", "lms-req-1", "").Return(nil)
 	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lmsAdapter, nil)
 	mockIso18626Handler := new(MockIso18626Handler)
@@ -2799,7 +2799,7 @@ func TestHandleInvokeLenderActionRequestItemRejectsEmptyBarcode(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
 	lmsAdapter := new(mockLmsAdapter)
-	lmsAdapter.On("RequestItem", "req-1", "", "", "", "").Return(&lms.RequestedItem{RequestID: "lms-req-1"}, nil)
+	lmsAdapter.On("RequestItem", "req-1", lms.RequestItemIdentifier{BibliographicID: ""}, "", "", "").Return(&lms.RequestedItem{RequestID: "lms-req-1"}, nil)
 	lmsAdapter.On("CancelRequestItem", "lms-req-1", "").Return(nil)
 	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lmsAdapter, nil)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(MockIso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
@@ -3935,7 +3935,7 @@ func TestHandleInvokeLenderActionShipCopyOrLoanCreatesDeferredLmsItem(t *testing
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
 	lmsAdapter := new(mockLmsAdapter)
-	lmsAdapter.On("RequestItem", mock.Anything, "item-1", mock.Anything, mock.Anything, mock.Anything).
+	lmsAdapter.On("RequestItem", mock.Anything, lms.RequestItemIdentifier{BibliographicID: "item-1"}, mock.Anything, mock.Anything, mock.Anything).
 		Return(&lms.RequestedItem{Barcode: "barcode-1", CallNumber: "call-1", Title: "title-1"}, nil).Once()
 	lmsAdapter.On("CheckOutItem", "request-1", "barcode-1", mock.Anything, mock.Anything).Return("", nil).Once()
 	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lmsAdapter, nil)
@@ -3964,7 +3964,7 @@ func TestHandleInvokeLenderActionShipCopyOrLoanCreatesDeferredLmsItemAlongsideMa
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
 	lmsAdapter := new(mockLmsAdapter)
-	lmsAdapter.On("RequestItem", "request-1", "item-1", mock.Anything, mock.Anything, mock.Anything).
+	lmsAdapter.On("RequestItem", "request-1", lms.RequestItemIdentifier{BibliographicID: "item-1"}, mock.Anything, mock.Anything, mock.Anything).
 		Return(&lms.RequestedItem{Barcode: "requested-barcode", CallNumber: "call-1", Title: "title-1"}, nil).Once()
 	lmsAdapter.On("CheckOutItem", "", "manual-barcode", mock.Anything, mock.Anything).Return("", nil).Once()
 	lmsAdapter.On("CheckOutItem", "request-1", "requested-barcode", mock.Anything, mock.Anything).Return("", nil).Once()
@@ -5209,11 +5209,14 @@ func TestHandleInvokeBorrowerActionFillLocally(t *testing.T) {
 		manualAdapter       bool
 		disabledRequestItem bool
 		selected            bool
+		itemID              pgtype.Text
 		expectedStatus      iso18626.TypeStatus
 	}{
-		{name: "manual selected pickup without lookup", selected: true, manualAdapter: true, serviceType: iso18626.TypeServiceTypeLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
-		{name: "disabled RequestItem selected pickup without lookup", selected: true, disabledRequestItem: true, serviceType: iso18626.TypeServiceTypeLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
+		{name: "manual selected pickup without lookup", selected: true, manualAdapter: true, itemID: getDbText("selected-copy"), serviceType: iso18626.TypeServiceTypeLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
+		{name: "disabled RequestItem selected pickup without lookup", selected: true, disabledRequestItem: true, itemID: getDbText("selected-copy"), serviceType: iso18626.TypeServiceTypeLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
 		{name: "selected pickup", selected: true, serviceType: iso18626.TypeServiceTypeLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
+		{name: "selected item", itemID: getDbText("selected-copy"), serviceType: iso18626.TypeServiceTypeLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
+		{name: "empty item fallback", itemID: getDbText(""), serviceType: iso18626.TypeServiceTypeLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
 		{name: "loan", serviceType: iso18626.TypeServiceTypeLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
 		{name: "copy or loan", serviceType: iso18626.TypeServiceTypeCopyOrLoan, expectedStatus: iso18626.TypeStatusLoanCompleted},
 		{name: "NCIP disabled", serviceType: iso18626.TypeServiceTypeLoan, manualAdapter: true, expectedStatus: iso18626.TypeStatusLoanCompleted},
@@ -5241,6 +5244,9 @@ func TestHandleInvokeBorrowerActionFillLocally(t *testing.T) {
 			}
 
 			pickupRepo := new(IllRepoMock)
+			selected := localFillSelection(pr.ID, pr.RequesterSymbol.String)
+			selected.ItemID = tt.itemID
+			expectLocalFillSelection(pickupRepo, pr.ID, pr.RequesterSymbol.String, selected)
 			expectedPickup := "pickup-1"
 			if tt.selected {
 				id := uuid.New()
@@ -5267,7 +5273,7 @@ func TestHandleInvokeBorrowerActionFillLocally(t *testing.T) {
 					requesterPickupLocation: "pickup-1",
 					itemLocation:            "item-location-1",
 				}
-				adapterMock.On("RequestItem", patronRequestId, "local-record-1", "patron-1", expectedPickup, "item-location-1").
+				adapterMock.On("RequestItem", patronRequestId, lms.RequestItemIdentifier{BibliographicID: selected.LocalID.String, ItemID: tt.itemID.String}, "patron-1", expectedPickup, "item-location-1").
 					Return(&lms.RequestedItem{Barcode: "item-barcode"}, nil)
 				lmsAdapter = adapterMock
 			}
@@ -5292,6 +5298,7 @@ func TestHandleInvokeBorrowerActionFillLocally(t *testing.T) {
 			assert.Equal(t, BorrowerStateCompleted, mockPrRepo.savedPr.State)
 			assert.True(t, mockPrRepo.savedPr.TerminalState)
 			assert.False(t, mockPrRepo.savedPr.NeedsAttention)
+			assert.Equal(t, "local-record-1", mockPrRepo.savedPr.IllRequest.BibliographicInfo.SupplierUniqueRecordId)
 			if tt.serviceType == iso18626.TypeServiceTypeCopyOrLoan {
 				if assert.Len(t, mockEventBus.createdTaskData, 1) {
 					assert.Equal(t, BorrowerActionSendNotification, *mockEventBus.createdTaskData[0].Action)
@@ -5315,12 +5322,14 @@ func TestHandleInvokeBorrowerActionFillLocallyCancelsRequestItemWithoutBarcode(t
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
 	lmsAdapter := new(mockLmsAdapter)
-	lmsAdapter.On("RequestItem", patronRequestId, "local-record-1", "patron-1", "", "").
+	lmsAdapter.On("RequestItem", patronRequestId, lms.RequestItemIdentifier{BibliographicID: "located-bib"}, "patron-1", "", "").
 		Return(&lms.RequestedItem{RequestID: "lms-req-1"}, nil).Once()
 	lmsAdapter.On("CancelRequestItem", "lms-req-1", "patron-1").Return(nil).Once()
 	lmsCreator.On("GetAdapter", "ISIL:REQ1").Return(lmsAdapter, nil)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	repo := new(IllRepoMock)
+	expectLocalFillSelection(repo, patronRequestId, "ISIL:REQ1", localFillSelection(patronRequestId, "ISIL:REQ1"))
+	prAction := CreatePatronRequestActionService(mockPrRepo, repo, *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{
 		BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "local-record-1"},
 		ServiceInfo:       &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan},
@@ -6016,7 +6025,7 @@ func (l *MockLmsAdapterLog) LookupUser(patron string, options lms.LookupUserOpti
 
 func (l *MockLmsAdapterLog) RequestItem(
 	requestId string,
-	itemId string,
+	identifier lms.RequestItemIdentifier,
 	userId string,
 	pickupLocation string,
 	itemLocation string,
@@ -6100,7 +6109,7 @@ func (l *MockLmsAdapterFail) DeleteItem(itemId string) (bool, error) {
 
 func (l *MockLmsAdapterFail) RequestItem(
 	requestId string,
-	itemId string,
+	identifier lms.RequestItemIdentifier,
 	borrowerBarcode string,
 	pickupLocation string,
 	itemLocation string,
@@ -6189,12 +6198,12 @@ func (m *mockLmsAdapter) CheckOutItem(
 
 func (m *mockLmsAdapter) RequestItem(
 	requestId string,
-	itemId string,
+	identifier lms.RequestItemIdentifier,
 	userId string,
 	pickupLocation string,
 	itemLocation string,
 ) (*lms.RequestedItem, error) {
-	args := m.Called(requestId, itemId, userId, pickupLocation, itemLocation)
+	args := m.Called(requestId, identifier, userId, pickupLocation, itemLocation)
 	requestedItem, _ := args.Get(0).(*lms.RequestedItem)
 	return requestedItem, args.Error(1)
 }

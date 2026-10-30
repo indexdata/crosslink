@@ -145,7 +145,7 @@ func TestGetDateWithTimezone(t *testing.T) {
 }
 
 func TestCheckAvailabilityWithoutConfiguration(t *testing.T) {
-	mockRepo := new(mocks.MockIllRepositorySuccess)
+	mockRepo := &availabilityPolicyRepo{supplier: ill_db.LocatedSupplier{ID: "selected", IllTransactionID: "ill-1", SupplierStatus: ill_db.SupplierStateSelectedPg}}
 	factory := NewLookupAdapterFactory(
 		mockRepo,
 		new(adapter.MockDirectoryLookupAdapter),
