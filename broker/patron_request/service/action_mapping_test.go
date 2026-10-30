@@ -17,7 +17,7 @@ func TestNewDefaultLoanActionMapping(t *testing.T) {
 		BorrowerStateNew:              {{actionName: BorrowerActionValidatePatron, auto: true}, {actionName: BorrowerActionSkipPatronValidation}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateInvalidPatron:    {{actionName: BorrowerActionValidatePatron}, {actionName: BorrowerActionSkipPatronValidation}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateValidated:        {{actionName: BorrowerActionSendNotification, auto: true}, {actionName: BorrowerActionCheckLimit, auto: true}, {actionName: BorrowerActionCloseRequest}},
-		BorrowerStateOverLimit:        {{actionName: BorrowerActionCheckLimit}, {actionName: BorrowerActionOverrideLimit}, {actionName: BorrowerActionCloseRequest}},
+		BorrowerStateOverLimit:        {{actionName: BorrowerActionSendNotification, auto: true}, {actionName: BorrowerActionCheckLimit}, {actionName: BorrowerActionOverrideLimit}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateLimitChecked:     {{actionName: BorrowerActionUpdateMetadata, auto: true}, {actionName: BorrowerActionSkipMetadataUpdate}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateMetadataUpdated:  {{actionName: BorrowerActionCheckDuplicate, auto: true}, {actionName: BorrowerActionCloseRequest}},
 		BorrowerStateNeedsReview:      {{actionName: BorrowerActionUpdateMetadata}, {actionName: BorrowerActionCheckDuplicate}, {actionName: BorrowerActionCloseRequest}},

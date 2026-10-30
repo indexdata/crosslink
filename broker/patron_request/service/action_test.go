@@ -175,7 +175,9 @@ func TestHandleInvokeCheckLimitTransitionsToOverLimit(t *testing.T) {
 	prRepo.On("GetPatronRequestById", pr.ID).Return(pr, nil)
 	prRepo.On("ListPatronRequests", pr_db.ListPatronRequestsParams{Limit: 1, Offset: 0}, mock.Anything).
 		Return([]pr_db.PatronRequest{{ID: pr.ID}}, int64(2), nil)
-	actionService := CreatePatronRequestActionService(prRepo, illRepo, new(MockEventBus), new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
+	eventBus := new(MockEventBus)
+	eventBus.On("ProcessExclusiveTask", pr.ID+"-task-1").Return(events.Event{EventStatus: events.EventStatusSuccess}, nil).Once()
+	actionService := CreatePatronRequestActionService(prRepo, illRepo, eventBus, new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
 	action := BorrowerActionCheckLimit
 
 	status, result := actionService.handleInvokeAction(appCtx, events.Event{PatronRequestID: pr.ID, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
@@ -190,6 +192,10 @@ func TestHandleInvokeCheckLimitTransitionsToOverLimit(t *testing.T) {
 	assert.Contains(t, queryArgs, string(BorrowerStateValidated))
 	assert.NotContains(t, queryArgs, string(BorrowerStateShippedReturned))
 	assert.Contains(t, queryArgs, pr.ID)
+	if assert.Len(t, eventBus.createdTaskData, 1) {
+		assert.Equal(t, BorrowerActionSendNotification, *eventBus.createdTaskData[0].Action)
+	}
+	eventBus.AssertExpectations(t)
 	prRepo.AssertExpectations(t)
 	illRepo.AssertExpectations(t)
 }
