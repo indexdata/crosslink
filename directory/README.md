@@ -412,3 +412,12 @@ unset; configure them through the API after an import.
 
 Legacy exports must be converted to the existing Directory NDJSON format; no
 source-system converter is included.
+
+### NCIP bibliographic scope name
+
+`lmsConfig.bibItemScopeName` overrides the bibliographic scope name used by
+`requestItemRequestScopeType: auto` when no item ID is supplied. The broker's
+code default is `Bibliographic Item`; Sierra and FOLIO profiles use `Title`.
+The setting supports creation, GET, PATCH, and import. Omission preserves a
+stored override during PATCH; `null` clears it to resume profile inheritance.
+See [automatic NCIP request scope](host-profiles.md#automatic-ncip-request-scope).

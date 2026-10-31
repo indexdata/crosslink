@@ -93,6 +93,7 @@ x-host-profiles:
           includeItemLoanPolicy: true
   FOLIO:
     lmsConfig:
+      bibItemScopeName: Title
       requestItemRequestScopeType: Item
     catalogConfig:
       holdingsFormat:
@@ -136,6 +137,7 @@ x-host-profiles:
               operator: absent
   Sierra:
     lmsConfig:
+      bibItemScopeName: Title
       requestItemRequestType: Hold
       requestItemRequestScopeType: Title
       bibIdNormalization: sierra
@@ -2083,6 +2085,7 @@ components:
         itemLocation: { type: [string, "null"] }
         requestItemRequestType: { type: [string, "null"] }
         requestItemRequestScopeType: { type: [string, "null"] }
+        bibItemScopeName: { type: [string, "null"] }
         requestItemBibIdCode: { type: [string, "null"] }
         requestItemEnabled: { type: [boolean, "null"] }
         requestItemPickupLocationEnabled: { type: [boolean, "null"] }
@@ -3200,7 +3203,10 @@ components:
           description: For Request Item requests, the type of request to create
         requestItemRequestScopeType:
           type: string
-          description: Scope for NCIP RequestItem. auto (the generic default) uses Item when an item identifier is supplied, otherwise Bibliographic Item. Explicit Item, Title, and Bibliographic Item override automatic selection. Named vendor profiles retain their scope defaults.
+          description: Scope for NCIP RequestItem. auto (the generic default) uses Item when an item identifier is supplied, otherwise bibItemScopeName (Bibliographic Item by default). Explicit Item, Title, and Bibliographic Item override automatic selection. Named vendor profiles retain their scope defaults.
+        bibItemScopeName:
+          type: string
+          description: Bibliographic-level NCIP scope name used by auto when no item identifier is supplied. Defaults to Bibliographic Item; Sierra and FOLIO profiles use Title.
         requestItemBibIdCode:
           type: string
           description: For Request Item requests, the code indicating how to interpret the bib id
@@ -3286,6 +3292,8 @@ components:
         requestItemRequestType:
           type: [string, "null"]
         requestItemRequestScopeType:
+          type: [string, "null"]
+        bibItemScopeName:
           type: [string, "null"]
         requestItemBibIdCode:
           type: [string, "null"]

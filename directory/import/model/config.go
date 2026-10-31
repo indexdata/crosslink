@@ -22,6 +22,7 @@ type LMSConfig struct {
 	ItemLocation                     *string          `json:"itemLocation"`
 	RequestItemRequestType           *string          `json:"requestItemRequestType"`
 	RequestItemRequestScopeType      *string          `json:"requestItemRequestScopeType"`
+	BibItemScopeName                 *string          `json:"bibItemScopeName"`
 	RequestItemBibIDCode             *string          `json:"requestItemBibIdCode"`
 	RequestItemEnabled               *bool            `json:"requestItemEnabled"`
 	RequestItemPickupLocationEnabled *bool            `json:"requestItemPickupLocationEnabled"`
