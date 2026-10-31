@@ -294,10 +294,10 @@ func TestNcip1ResolvedSierraRequestScope(t *testing.T) {
 	require.NoError(t, err)
 	a, ok := adapter.(*LmsAdapterNcip1)
 	require.True(t, ok)
-	expected := ncip.RequestScopeType{Scheme: ncip1Scheme + "imp1/schemes/requestscopetype/requestscopetype.scm", Value: "Bibliographic Item"}
+	expected := ncip.RequestScopeType{Scheme: ncip1Scheme + "imp1/schemes/requestscopetype/requestscopetype.scm", Value: "Title"}
 	requestID := `<UniqueRequestId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><RequestIdentifierValue>request</RequestIdentifierValue></UniqueRequestId>`
 	request := ncip1TestAdapter(t, "<RequestItemResponse>"+ncip1TestHeader+requestID+ncip1TestUser+
-		`<RequestType><Scheme>urn:test:type</Scheme><Value>Hold</Value></RequestType><RequestScopeType><Scheme>urn:test:scope</Scheme><Value>Bibliographic Item</Value></RequestScopeType></RequestItemResponse>`, func(m ncip.NCIPMessage) {
+		`<RequestType><Scheme>urn:test:type</Scheme><Value>Hold</Value></RequestType><RequestScopeType><Scheme>urn:test:scope</Scheme><Value>Title</Value></RequestScopeType></RequestItemResponse>`, func(m ncip.NCIPMessage) {
 		require.NotNil(t, m.RequestItem)
 		require.Equal(t, expected.Scheme, m.RequestItem.RequestScopeType.Scheme)
 		require.Equal(t, expected.Value, m.RequestItem.RequestScopeType.Value)
@@ -314,7 +314,7 @@ func TestNcip1ResolvedSierraRequestScope(t *testing.T) {
 	})
 	a.client = cancel.client
 	require.NoError(t, a.CancelRequestItem(item.RequestID, "user"))
-	require.Equal(t, "Title", *effective.LMS.RequestItemRequestScopeType, "translation must not mutate shared profile values")
+	require.Equal(t, "Title", *effective.LMS.RequestItemRequestScopeType, "delivery must not mutate shared profile values")
 	require.Equal(t, "Title", (&LmsAdapterNcip{config: *effective.LMS}).requestItemRequestScopeType())
 }
 

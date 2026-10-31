@@ -61,11 +61,11 @@ defaults. Loading bundled definitions preserves existing resolution behavior.
 
 | Profile | Catalog defaults | Circulation defaults |
 | --- | --- | --- |
-| Generic | Existing MARC parser (852: location b, shelving c, call number h, item p, restricted r); existing PQF or configured CQL queries | NCIP 2: Page, auto scope (Item when an item ID is supplied, otherwise Bibliographic Item), pickup enabled |
+| Generic | Existing MARC parser (852: location b, shelving c, call number h, item p, restricted r); existing PQF or configured CQL queries | NCIP 2: Page, auto scope (Item when an item ID is supplied, otherwise bibItemScopeName, defaulting to Bibliographic Item), pickup enabled |
 | Alma | OPAC; nonempty local location and availableNow value 1; item ID and availableThru loan policy | NCIP 2; Item scope |
-| Sierra | OPAC; publicNote exactly AVAILABLE, CHECK SHELVES, or CHECK SHELF; localLocation supplies both location and shelving; no item ID or loan policy | NCIP 2; Hold, Title scope; Sierra bib-ID normalization |
+| Sierra | OPAC; publicNote exactly AVAILABLE, CHECK SHELVES, or CHECK SHELF; localLocation supplies both location and shelving; no item ID or loan policy | NCIP 2; Hold, Title scope; bibItemScopeName Title; Sierra bib-ID normalization |
 | Koha | MARC holdings (ZOOM requests `usmarc`, converted to XML for parsing); one candidate per 952; b location, c shelving, o call number; 7 must equal 0 and q must be absent; no item ID | NCIP 2 with XML namespace disabled; Item scope |
-| FOLIO | Alma OPAC mappings plus temporaryLocation as temporary shelving location | NCIP 2; Page; Item scope (Title can be configured); pickup enabled when a location is supplied |
+| FOLIO | Alma OPAC mappings plus temporaryLocation as temporary shelving location | NCIP 2; Page; Item scope (Title can be configured); bibItemScopeName Title; pickup enabled when a location is supplied |
 | Evergreen | MARC 852: b location, a shelving, c call number, g item; n must equal Available; identifier index 1016 | NCIP 2; Loan, Bibliographic Item scope, pickup disabled; BibID code |
 | Horizon | OPAC: nonempty location, availableNow=1, Internet locations excluded; one candidate per nonempty shelvingData/temporaryLocation loan policy; trim whitespace | NCIP 1; Loan, Bibliographic Item scope, pickup disabled |
 | Polaris | MARC 852: b location, a shelving, h call number, p item; r must equal In; no restricted subfield | NCIP 1; Loan, Bibliographic Item scope, pickup disabled |
@@ -258,3 +258,18 @@ catalog text. These optional settings are supported by create, patch, reads, and
 imports; existing import payloads remain valid. Directory migration 023 adds
 nullable columns without rewriting existing data. Deploy the Directory migration
 and service before configuring the new fields.
+
+### Automatic NCIP request scope
+
+With `lmsConfig.requestItemRequestScopeType: auto`, a supplied item ID selects
+`Item` scope. Otherwise the broker uses `lmsConfig.bibItemScopeName`, defaulting
+in code to `Bibliographic Item`. Only Sierra and FOLIO profiles override that
+name to `Title`. Library overrides take precedence over the profile. Explicit
+request scopes retain their existing behavior; changing `bibItemScopeName`
+does not enable `auto` or change an explicit scope. Both NCIP versions send
+the configured scope name unchanged.
+
+The optional `bibItemScopeName` setting is stored as an override. PATCH with
+`null` clears it and resumes profile inheritance; omission preserves it.
+Apply Directory migration `024_bib_item_scope_name` before running the updated
+Directory service. Existing rows remain unset and inherit their profile values.

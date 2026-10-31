@@ -265,3 +265,27 @@ func TestAdditionalProfileValidationAndOverrides(t *testing.T) {
 	require.Equal(t, "directory", e.Origins["lmsConfig.ncipVersion"])
 	require.Equal(t, "directory", e.Origins["catalogConfig.holdingsFormat.opac.itemLoanPolicySources"])
 }
+
+func TestBibItemScopeName(t *testing.T) {
+	for _, tc := range []struct{ vendor, want string }{{"Generic", ""}, {"Sierra", "Title"}, {"FOLIO", "Title"}, {"Alma", ""}} {
+		t.Run(tc.vendor, func(t *testing.T) {
+			e, err := Resolve(entry(t, `{"lmsConfig":{"vendor":"`+tc.vendor+`"}}`))
+			require.NoError(t, err)
+			if tc.want == "" {
+				require.Nil(t, e.LMS.BibItemScopeName)
+			} else {
+				require.Equal(t, tc.want, *e.LMS.BibItemScopeName)
+				require.Equal(t, tc.vendor, e.Origins["lmsConfig.bibItemScopeName"])
+			}
+			e, err = Resolve(entry(t, `{"lmsConfig":{"vendor":"`+tc.vendor+`","bibItemScopeName":"Record"}}`))
+			require.NoError(t, err)
+			require.Equal(t, "Record", *e.LMS.BibItemScopeName)
+			require.Equal(t, "directory", e.Origins["lmsConfig.bibItemScopeName"])
+			require.Equal(t, "Record", e.Diagnostics()["lmsConfig"].(object)["bibItemScopeName"])
+		})
+	}
+	for _, value := range []string{"", "  ", "Item", "auto"} {
+		_, err := Resolve(entry(t, `{"lmsConfig":{"bibItemScopeName":"`+value+`"}}`))
+		require.ErrorContains(t, err, "bibItemScopeName")
+	}
+}

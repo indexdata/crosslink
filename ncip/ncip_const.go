@@ -13,3 +13,13 @@ const (
 	UnknownUser               ProblemTypeMessage = "Unknown User"
 	UnknownItem               ProblemTypeMessage = "Unknown Item"
 )
+
+// RequestScope identifies the level at which an NCIP request is placed.
+type RequestScope string
+
+const (
+	// BibliographicItem requests any copy of a bibliographic record.
+	BibliographicItem RequestScope = "Bibliographic Item"
+	// Item requests a specific copy.
+	Item RequestScope = "Item"
+)
