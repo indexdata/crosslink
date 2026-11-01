@@ -6,6 +6,7 @@ import (
 
 	"github.com/indexdata/crosslink/broker/profiles"
 	dirapi "github.com/indexdata/crosslink/directory/api"
+	"github.com/indexdata/crosslink/ncip"
 )
 
 // RequestItemIdentifier preserves the distinction needed by automatic scope.
@@ -15,27 +16,37 @@ type RequestItemIdentifier struct {
 	ItemID          string
 }
 
-func (id RequestItemIdentifier) resolve(scope string, normalization *string) (string, string, error) {
-	if scope == "auto" {
-		scope = "Bibliographic Item"
+const autoRequestScope = "auto"
+
+func (id RequestItemIdentifier) resolve(config dirapi.LmsConfig) (string, string, error) {
+	scope := autoRequestScope
+	if config.RequestItemRequestScopeType != nil {
+		scope = *config.RequestItemRequestScopeType
+	}
+	bibScope := string(ncip.BibliographicItem)
+	if config.BibItemScopeName != nil {
+		bibScope = *config.BibItemScopeName
+	}
+	if scope == autoRequestScope {
+		scope = bibScope
 		if id.ItemID != "" {
-			scope = "Item"
+			scope = string(ncip.Item)
 		}
 	}
 	value := id.BibliographicID
-	if scope == "Item" && id.ItemID != "" {
-		value = id.ItemID
-	}
-	// Only bibliographic identifiers are normalized, regardless of their format.
-	switch scope {
-	case "Item":
-	case "Title", "Bibliographic Item":
+	if scope == string(ncip.Item) {
+		if id.ItemID != "" {
+			value = id.ItemID
+		}
+	} else {
+		if scope != bibScope && scope != string(ncip.BibliographicItem) && scope != "Title" {
+			return "", "", fmt.Errorf("unsupported RequestItem scope %q", scope)
+		}
 		if id.ItemID != "" {
 			return "", "", fmt.Errorf("selected item requires NCIP Item scope, configured scope is %q", scope)
 		}
-		value = normalizeBibIdentifier(value, normalization)
-	default:
-		return "", "", fmt.Errorf("unsupported RequestItem scope %q", scope)
+		// Only bibliographic identifiers are normalized, regardless of their format.
+		value = normalizeBibIdentifier(value, config.BibIdNormalization)
 	}
 	if strings.TrimSpace(value) == "" {
 		return "", "", fmt.Errorf("missing identifier for RequestItem scope %q", scope)
@@ -62,11 +73,11 @@ func validateSelectedItemScope(cfg dirapi.LmsConfig) error {
 	if cfg.RequestItemEnabled != nil && !*cfg.RequestItemEnabled {
 		return nil
 	}
-	scope := "auto"
+	scope := autoRequestScope
 	if cfg.RequestItemRequestScopeType != nil {
 		scope = *cfg.RequestItemRequestScopeType
 	}
-	if scope != "Item" && scope != "auto" {
+	if scope != string(ncip.Item) && scope != autoRequestScope {
 		return fmt.Errorf("policy-selected item requires NCIP Item scope, configured scope is %q", scope)
 	}
 	return nil

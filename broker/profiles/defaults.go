@@ -60,7 +60,7 @@ func (e *Effective) Diagnostics() object {
 	if e.LMS != nil {
 		raw := asObject(e.LMS)
 		safe := object{}
-		for _, key := range []string{"ncipVersion", "ncipNamespaceEnabled", "bibIdNormalization", "requestItemRequestType", "requestItemRequestScopeType", "requestItemBibIdCode", "requestItemPickupLocationEnabled", "lookupUserEnabled", "acceptItemEnabled", "checkInItemEnabled", "checkOutItemEnabled", "requestItemEnabled"} {
+		for _, key := range []string{"ncipVersion", "ncipNamespaceEnabled", "bibIdNormalization", "requestItemRequestType", "requestItemRequestScopeType", "bibItemScopeName", "requestItemBibIdCode", "requestItemPickupLocationEnabled", "lookupUserEnabled", "acceptItemEnabled", "checkInItemEnabled", "checkOutItemEnabled", "requestItemEnabled"} {
 			safe[key] = raw[key]
 		}
 		result["lmsConfig"] = safe

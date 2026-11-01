@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	dirapi "github.com/indexdata/crosslink/directory/api"
+	"github.com/indexdata/crosslink/ncip"
 )
 
 // Effective holds resolved LMS and catalog configurations and their setting origins.
@@ -182,6 +183,9 @@ func Resolve(entry dirapi.Entry) (*Effective, error) {
 
 func (e *Effective) validate() error {
 	if l := e.LMS; l != nil {
+		if l.BibItemScopeName != nil && (strings.TrimSpace(*l.BibItemScopeName) == "" || *l.BibItemScopeName == string(ncip.Item) || *l.BibItemScopeName == "auto") {
+			return fmt.Errorf("LMS profile %s: bibItemScopeName must name a bibliographic scope", e.LMSVendor)
+		}
 		if l.NcipVersion != nil && *l.NcipVersion != "1.0" && *l.NcipVersion != "2.02" {
 			return fmt.Errorf("LMS profile %s: unsupported ncipVersion %q", e.LMSVendor, *l.NcipVersion)
 		}

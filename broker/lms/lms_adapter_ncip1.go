@@ -9,6 +9,7 @@ import (
 	"github.com/indexdata/crosslink/broker/ncipclientv1"
 	"github.com/indexdata/crosslink/broker/profiles"
 	dirapi "github.com/indexdata/crosslink/directory/api"
+	ncip2 "github.com/indexdata/crosslink/ncip"
 	ncip "github.com/indexdata/crosslink/ncipv1"
 )
 
@@ -225,20 +226,20 @@ func (l *LmsAdapterNcip1) RequestItem(requestID string, identifier RequestItemId
 	if l.config.RequestItemBibIdCode != nil {
 		code = *l.config.RequestItemBibIdCode
 	}
-	itemID, scopeValue, err := identifier.resolve(l.requestScope().Value, l.config.BibIdNormalization)
-	itemScope := scopeValue == "Item"
-	scope := l.requestScope()
-	scope.Value = scopeValue
+	identifierValue, scopeValue, err := identifier.resolve(l.config)
 	if err != nil {
 		return nil, err
 	}
+	itemScope := scopeValue == string(ncip2.Item)
+	scope := l.requestScope()
+	scope.Value = scopeValue
 	arg := ncip.RequestItem{
 		InitiationHeader: l.header(),
 		UniqueUserId:     l.user(userID),
 		UniqueRequestId:  l.request(requestID),
 		UniqueBibliographicId: &ncip.UniqueBibliographicId{
 			BibliographicRecordId: &ncip.BibliographicRecordId{
-				BibliographicRecordIdentifier: itemID,
+				BibliographicRecordIdentifier: identifierValue,
 				BibliographicRecordIdentifierCode: &ncip.BibliographicRecordIdentifierCode{
 					Scheme: ncip1Scheme + "imp1/schemes/bibliographicrecordidentifiercode/bibliographicrecordidentifiercode.scm",
 					Value:  code,
@@ -251,7 +252,7 @@ func (l *LmsAdapterNcip1) RequestItem(requestID string, identifier RequestItemId
 	}
 	if itemScope {
 		arg.UniqueBibliographicId = nil
-		item := l.item(itemID)
+		item := l.item(identifierValue)
 		arg.UniqueItemId = &item
 	}
 	response, err := l.client.RequestItem(arg)
@@ -291,13 +292,9 @@ func (l *LmsAdapterNcip1) requestType() ncip.RequestType {
 	return ncip.RequestType{Scheme: ncip1Scheme + "imp1/schemes/requesttype/requesttype.scm", Value: value}
 }
 func (l *LmsAdapterNcip1) requestScope() ncip.RequestScopeType {
-	value := "auto"
+	value := autoRequestScope
 	if l.config.RequestItemRequestScopeType != nil {
 		value = *l.config.RequestItemRequestScopeType
-	}
-	// Shared profiles use the v2 title-level term; v1 names this scope differently.
-	if value == "Title" {
-		value = "Bibliographic Item"
 	}
 	return ncip.RequestScopeType{Scheme: ncip1Scheme + "imp1/schemes/requestscopetype/requestscopetype.scm", Value: value}
 }
@@ -311,7 +308,7 @@ func (l *LmsAdapterNcip1) CancelRequestItem(requestID, userID string) error {
 	}
 	scope := l.requestScope()
 	var cancelScope *ncip.RequestScopeType
-	if scope.Value != "auto" {
+	if scope.Value != autoRequestScope {
 		cancelScope = &scope
 	}
 	_, err = l.client.CancelRequestItem(ncip.CancelRequestItem{InitiationHeader: l.header(), UniqueUserId: l.user(userID), UniqueRequestId: request, RequestType: l.requestType(), RequestScopeType: cancelScope})
