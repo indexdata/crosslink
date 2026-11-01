@@ -546,11 +546,13 @@ an item ID.
 For both NCIP versions, `requestItemRequestScopeType` controls identifier selection:
 
 - `auto` is the Generic default. A supplied item ID selects `Item` scope; otherwise
-  `supplierUniqueRecordId` supplies the bibliographic ID with `Bibliographic Item`
-  scope. Item identifiers are not normalized; bibliographic identifiers are.
+  `supplierUniqueRecordId` supplies the bibliographic ID with `bibItemScopeName`
+  scope. The code default is `Bibliographic Item`; Sierra and FOLIO profiles
+  override the name to `Title`. Libraries can override `lmsConfig.bibItemScopeName`.
+  Item identifiers are not normalized; bibliographic identifiers are.
 - `Title` or `Bibliographic Item` uses the bibliographic identifier with
-  `requestItemBibIdCode` and bibliographic normalization. NCIP v1 translates
-  `Title` to `Bibliographic Item`.
+  `requestItemBibIdCode` and bibliographic normalization. Both NCIP versions send
+  the configured scope name unchanged.
 - `Item` uses the supplied item ID, falling back to `supplierUniqueRecordId` for
   compatibility with existing item-scoped integrations, without normalization.
 

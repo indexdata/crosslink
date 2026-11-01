@@ -76,7 +76,7 @@ func TestImportHostSettingsMatchEntryContract(t *testing.T) {
 				for field := range entry.Properties {
 					fields = append(fields, field)
 					// Additive options and the deprecated circulation limit are optional in imports.
-					if (name == "LmsConfig" && field == "ncipVersion") || (name == "MarcHoldingsParserConfig" && field == "itemLoanPolicySubField") || (name == "MarcAvailabilityPredicate" && field == "values") || (name == "OpacHoldingsParserConfig" && slices.Contains([]string{"trimWhitespace", "excludedLocations", "itemLoanPolicySources", "requireItemLoanPolicy", "allCirculations"}, field)) {
+					if (name == "LmsConfig" && slices.Contains([]string{"ncipVersion", "bibItemScopeName"}, field)) || (name == "MarcHoldingsParserConfig" && field == "itemLoanPolicySubField") || (name == "MarcAvailabilityPredicate" && field == "values") || (name == "OpacHoldingsParserConfig" && slices.Contains([]string{"trimWhitespace", "excludedLocations", "itemLoanPolicySources", "requireItemLoanPolicy", "allCirculations"}, field)) {
 						require.NotContains(t, imported.Required, field)
 					} else {
 						required = append(required, field)

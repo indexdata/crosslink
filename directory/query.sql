@@ -352,7 +352,7 @@ RETURNING *;
 INSERT INTO  lms_configs (
   id, entry, address, from_agency, from_agency_authentication, to_agency, lookup_user_enabled,
   accept_item_enabled, checkin_item_enabled, checkout_item_enabled, item_location, 
-  request_item_request_type, request_item_scope_type, request_item_bib_code,
+  request_item_request_type, request_item_scope_type, bib_item_scope_name, request_item_bib_code,
   request_item_enabled, request_item_pickup_location_enabled, requester_pickup_location, supplier_pickup_location,
   requester_patron_pattern, patron_profiles, vendor, ncip_namespace_enabled, ncip_version, bib_id_normalization
 ) VALUES (
@@ -369,6 +369,7 @@ INSERT INTO  lms_configs (
   @item_location,
   @request_item_request_type,
   @request_item_scope_type,
+  @bib_item_scope_name,
   @request_item_bib_code,
   @request_item_enabled,
   @request_item_pickup_location_enabled,
@@ -397,6 +398,7 @@ ON CONFLICT (entry) DO UPDATE SET
   item_location = @item_location,
   request_item_request_type = @request_item_request_type,
   request_item_scope_type = @request_item_scope_type,
+  bib_item_scope_name = @bib_item_scope_name,
   request_item_bib_code = @request_item_bib_code,
   request_item_enabled = @request_item_enabled,
   request_item_pickup_location_enabled = @request_item_pickup_location_enabled,
