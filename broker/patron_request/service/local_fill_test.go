@@ -2,6 +2,9 @@ package prservice
 
 import (
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/common"
@@ -80,24 +83,33 @@ func TestLocalFillRejectsInvalidSelection(t *testing.T) {
 	}
 }
 
-func TestLocalFillRejectsSelectedItemWithTitleScope(t *testing.T) {
+func TestLocalFillHonorsBibliographicScopeWithSelectedItem(t *testing.T) {
 	for _, version := range []string{"1.0", "2.02"} {
-		t.Run(version, func(t *testing.T) {
-			repo := new(IllRepoMock)
-			pr := pr_db.PatronRequest{ID: "pr", RequesterSymbol: getDbText("ISIL:REQ")}
-			selected := localFillSelection(pr.ID, pr.RequesterSymbol.String)
-			selected.ItemID = getDbText("selected-copy")
-			expectLocalFillSelection(repo, pr.ID, pr.RequesterSymbol.String, selected)
-			// No HTTP server exists: rejection must happen before RequestItem is sent.
-			adapter, err := lms.CreateLmsAdapterNcip(dirapi.LmsConfig{Address: "https://unused.invalid/ncip", FromAgency: "broker", NcipVersion: &version, RequestItemRequestScopeType: new("Title")})
-			require.NoError(t, err)
-			service := PatronRequestActionService{illRepo: repo}
-			result := service.fillLocallyBorrowingRequest(appCtx, "", pr, adapter, actionParams{})
-			require.Equal(t, events.EventStatusError, result.status)
-			require.Equal(t, "Invalid selected item scope", result.result.EventError.Message)
-			require.Contains(t, result.result.EventError.Cause, "policy-selected item requires NCIP Item scope")
-			repo.AssertExpectations(t)
-		})
+		for _, scope := range []string{"Title", "Bibliographic Item"} {
+			t.Run(version+"/"+scope, func(t *testing.T) {
+				var calls atomic.Int32
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					calls.Add(1)
+					assertBibliographicNcipRequest(t, r, version, scope, "located-bib")
+					w.WriteHeader(http.StatusInternalServerError)
+				}))
+				defer server.Close()
+				repo := new(IllRepoMock)
+				pr := pr_db.PatronRequest{ID: "pr", RequesterSymbol: getDbText("ISIL:REQ"), Patron: getDbText("patron")}
+				selected := localFillSelection(pr.ID, pr.RequesterSymbol.String)
+				selected.ItemID = getDbText("selected-copy")
+				expectLocalFillSelection(repo, pr.ID, pr.RequesterSymbol.String, selected)
+				adapter, err := lms.CreateLmsAdapterNcip(dirapi.LmsConfig{Address: server.URL, FromAgency: "broker", NcipVersion: &version, RequestItemRequestScopeType: &scope})
+				require.NoError(t, err)
+				service := PatronRequestActionService{illRepo: repo}
+				result := service.fillLocallyBorrowingRequest(appCtx, "", pr, adapter, actionParams{})
+				require.Equal(t, events.EventStatusError, result.status)
+				require.Equal(t, "LMS RequestItem failed", result.result.EventError.Message)
+				require.Equal(t, int32(1), calls.Load())
+				repo.AssertNumberOfCalls(t, "GetSelectedSupplierForIllTransaction", 2)
+				repo.AssertExpectations(t)
+			})
+		}
 	}
 }
 

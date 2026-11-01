@@ -16,7 +16,6 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/indexdata/crosslink/broker/lms"
 	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
@@ -755,11 +754,6 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx commo
 	if isRequest {
 		if err := trCtx.selectedSupplier.ValidateHoldingsPolicy(trCtx.selectedSupplierPeer.CustomData); err != nil {
 			return events.LogErrorAndReturnResult(ctx, "unresolved holdings policy", err)
-		}
-		if trCtx.selectedSupplier.ItemID.Valid && trCtx.selectedSupplier.ItemID.String != "" {
-			if err := lms.ValidateSelectedItemScope(trCtx.selectedSupplierPeer.CustomData); err != nil {
-				return events.LogErrorAndReturnResult(ctx, "invalid selected item scope", err)
-			}
 		}
 		message, action = createRequestMessage(trCtx)
 	} else {

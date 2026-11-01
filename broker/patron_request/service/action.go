@@ -1586,12 +1586,6 @@ func (a *PatronRequestActionService) fillLocallyBorrowingRequest(ctx common.Exte
 		status, result := logActionErrorAndReturnResult(ctx, "Local supplier lookup failed", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	if selected.ItemID.Valid && selected.ItemID.String != "" {
-		if err := lms.ValidateSelectedItemScopeForAdapter(lmsAdapter); err != nil {
-			status, result := logActionErrorAndReturnResult(ctx, "Invalid selected item scope", err)
-			return actionExecutionResult{status: status, result: result, pr: pr}
-		}
-	}
 	requestID := pr.ID
 	userID := pr.Patron.String
 	pickupLocation, err := a.requesterPickupCode(ctx, pr, lmsAdapter, lmsAdapter.RequestItemUsesPickupLocation())

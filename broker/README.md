@@ -551,17 +551,17 @@ For both NCIP versions, `requestItemRequestScopeType` controls identifier select
   override the name to `Title`. Libraries can override `lmsConfig.bibItemScopeName`.
   Item identifiers are not normalized; bibliographic identifiers are.
 - `Title` or `Bibliographic Item` uses the bibliographic identifier with
-  `requestItemBibIdCode` and bibliographic normalization. Both NCIP versions send
-  the configured scope name unchanged.
+  `requestItemBibIdCode` and bibliographic normalization, even when a selected
+  item ID is supplied. Both NCIP versions send the configured scope name unchanged.
 - `Item` uses the supplied item ID, falling back to `supplierUniqueRecordId` for
   compatibility with existing item-scoped integrations, without normalization.
 
 Named vendor profiles retain their existing scopes. Explicit per-library scopes
 also override the Generic default. Unsupported scopes, empty required identifiers,
 and conflicting item IDs in supplierInfo are rejected before NCIP is sent.
-A supplied item ID requires `Item` or `auto` scope, including on incoming
-ISO18626 requests. Both NCIP adapters reject item IDs under bibliographic scopes
-before sending, so a reservation cannot silently broaden the selected copy.
+Explicit bibliographic scopes take precedence over supplied item IDs for incoming
+ISO18626 requests and local fulfillment. The LMS may select another copy of the
+requested title. A missing bibliographic ID still fails before NCIP is sent.
 Cancellation in `auto` uses the saved request ID and omits the optional NCIP scope;
 `auto` is never sent on the wire.
 

@@ -1,6 +1,7 @@
 package prservice
 
 import (
+	"encoding/xml"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -11,6 +12,8 @@ import (
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/indexdata/crosslink/ncip"
+	ncip1 "github.com/indexdata/crosslink/ncipv1"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,14 +47,15 @@ func TestRequestItemIdentifierFromISO(t *testing.T) {
 	}
 }
 
-func TestIncomingSelectedItemRejectsBibliographicScope(t *testing.T) {
+func TestIncomingSelectedItemHonorsBibliographicScope(t *testing.T) {
 	for _, version := range []string{"1.0", "2.02"} {
 		for _, scope := range []string{"Title", "Bibliographic Item"} {
 			for _, bib := range []string{"", "bib"} {
 				t.Run(version+"/"+scope+"/"+bib, func(t *testing.T) {
 					var calls atomic.Int32
-					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 						calls.Add(1)
+						assertBibliographicNcipRequest(t, r, version, scope, bib)
 						w.WriteHeader(http.StatusInternalServerError)
 					}))
 					defer server.Close()
@@ -69,11 +73,40 @@ func TestIncomingSelectedItemRejectsBibliographicScope(t *testing.T) {
 					result := svc.requestItemLenderRequest(appCtx, pr, adapter, request)
 					require.Equal(t, events.EventStatusError, result.status)
 					require.NotNil(t, result.result.EventError)
-					require.Contains(t, result.result.EventError.Cause, "selected item requires NCIP Item scope")
-					require.Zero(t, calls.Load(), "a selected copy must not be broadened into a title reservation")
+					if bib == "" {
+						require.Contains(t, result.result.EventError.Cause, "missing identifier")
+						require.Zero(t, calls.Load())
+					} else {
+						require.Equal(t, "LMS RequestItem failed", result.result.EventError.Message)
+						require.Equal(t, int32(1), calls.Load())
+					}
 					repo.AssertExpectations(t)
 				})
 			}
 		}
+	}
+}
+
+// assertBibliographicNcipRequest checks identifiers before the server injects an error.
+func assertBibliographicNcipRequest(t *testing.T, r *http.Request, version, scope, bib string) {
+	t.Helper()
+	if version == "1.0" {
+		var message ncip1.NCIPMessage
+		require.NoError(t, xml.NewDecoder(r.Body).Decode(&message))
+		req := message.RequestItem
+		require.NotNil(t, req)
+		require.Equal(t, scope, req.RequestScopeType.Value)
+		require.Nil(t, req.UniqueItemId)
+		require.NotNil(t, req.UniqueBibliographicId)
+		require.Equal(t, bib, req.UniqueBibliographicId.BibliographicRecordId.BibliographicRecordIdentifier)
+	} else {
+		var message ncip.NCIPMessage
+		require.NoError(t, xml.NewDecoder(r.Body).Decode(&message))
+		req := message.RequestItem
+		require.NotNil(t, req)
+		require.Equal(t, scope, req.RequestScopeType.Text)
+		require.Empty(t, req.ItemId)
+		require.Len(t, req.BibliographicId, 1)
+		require.Equal(t, bib, req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
 	}
 }

@@ -14,64 +14,71 @@ import (
 
 func TestRequestItemScopeEncoding(t *testing.T) {
 	normalization, code := "sierra", "LOCAL"
-	for _, scope := range []string{"Item", "Title", "Bibliographic Item", "unsupported"} {
-		for _, version := range []string{"1.0", "2.02"} {
-			t.Run(version+"/"+scope, func(t *testing.T) {
-				check1 := func(m ncip1.NCIPMessage) {
-					r := m.RequestItem
-					require.NotNil(t, r)
-					require.Equal(t, scope, r.RequestScopeType.Value)
-					if scope == "Item" {
-						require.Nil(t, r.UniqueBibliographicId)
-						require.NotNil(t, r.UniqueItemId)
-						require.Equal(t, ".b1234", r.UniqueItemId.ItemIdentifierValue)
-						require.Equal(t, "lms", r.UniqueItemId.UniqueAgencyId.Value)
-					} else {
-						require.Nil(t, r.UniqueItemId)
-						require.Equal(t, "123", r.UniqueBibliographicId.BibliographicRecordId.BibliographicRecordIdentifier)
-						require.Equal(t, code, r.UniqueBibliographicId.BibliographicRecordId.BibliographicRecordIdentifierCode.Value)
+	for _, itemID := range []string{"", ".b5678"} {
+		wantItemID := ".b1234"
+		if itemID != "" {
+			wantItemID = itemID
+		}
+		for _, scope := range []string{"Item", "Title", "Bibliographic Item", "Record", "unsupported"} {
+			for _, version := range []string{"1.0", "2.02"} {
+				t.Run(version+"/"+scope+"/"+itemID, func(t *testing.T) {
+					check1 := func(m ncip1.NCIPMessage) {
+						r := m.RequestItem
+						require.NotNil(t, r)
+						require.Equal(t, scope, r.RequestScopeType.Value)
+						if scope == "Item" {
+							require.Nil(t, r.UniqueBibliographicId)
+							require.NotNil(t, r.UniqueItemId)
+							require.Equal(t, wantItemID, r.UniqueItemId.ItemIdentifierValue)
+							require.Equal(t, "lms", r.UniqueItemId.UniqueAgencyId.Value)
+						} else {
+							require.Nil(t, r.UniqueItemId)
+							require.Equal(t, "123", r.UniqueBibliographicId.BibliographicRecordId.BibliographicRecordIdentifier)
+							require.Equal(t, code, r.UniqueBibliographicId.BibliographicRecordId.BibliographicRecordIdentifierCode.Value)
+						}
 					}
-				}
-				if version == "1.0" {
-					called := false
-					a := ncip1TestAdapter(t, `<RequestItemResponse>`+ncip1TestHeader+`<UniqueRequestId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><RequestIdentifierValue>request</RequestIdentifierValue></UniqueRequestId>`+ncip1TestUser+`<RequestType><Scheme>urn:test:type</Scheme><Value>Loan</Value></RequestType><RequestScopeType><Scheme>urn:test:scope</Scheme><Value>Item</Value></RequestScopeType></RequestItemResponse>`, func(m ncip1.NCIPMessage) { called = true; check1(m) })
-					a.config.RequestItemRequestScopeType = &scope
-					a.config.BibItemScopeName = new("Record")
-					a.config.BibIdNormalization = &normalization
-					a.config.RequestItemBibIdCode = &code
-					_, err := a.RequestItem("request", RequestItemIdentifier{BibliographicID: ".b1234"}, "user", "", "")
-					if scope == "unsupported" {
-						require.ErrorContains(t, err, "unsupported")
-						require.False(t, called)
+					if version == "1.0" {
+						called := false
+						a := ncip1TestAdapter(t, `<RequestItemResponse>`+ncip1TestHeader+`<UniqueRequestId><UniqueAgencyId><Scheme>urn:test:agency</Scheme><Value>lms</Value></UniqueAgencyId><RequestIdentifierValue>request</RequestIdentifierValue></UniqueRequestId>`+ncip1TestUser+`<RequestType><Scheme>urn:test:type</Scheme><Value>Loan</Value></RequestType><RequestScopeType><Scheme>urn:test:scope</Scheme><Value>Item</Value></RequestScopeType></RequestItemResponse>`, func(m ncip1.NCIPMessage) { called = true; check1(m) })
+						a.config.RequestItemRequestScopeType = &scope
+						a.config.BibItemScopeName = new("Record")
+						a.config.BibIdNormalization = &normalization
+						a.config.RequestItemBibIdCode = &code
+						_, err := a.RequestItem("request", RequestItemIdentifier{BibliographicID: ".b1234", ItemID: itemID}, "user", "", "")
+						if scope == "unsupported" {
+							require.ErrorContains(t, err, "unsupported")
+							require.False(t, called)
+						} else {
+							require.NoError(t, err)
+							require.True(t, called)
+						}
 					} else {
+						mock := new(ncipClientMock)
+						a := &LmsAdapterNcip{config: dirapi.LmsConfig{RequestItemRequestScopeType: &scope, BibItemScopeName: new("Record"), BibIdNormalization: &normalization, RequestItemBibIdCode: &code}, ncipClient: mock}
+						_, err := a.RequestItem("request", RequestItemIdentifier{BibliographicID: ".b1234", ItemID: itemID}, "user", "", "")
+						if scope == "unsupported" {
+							require.ErrorContains(t, err, "unsupported")
+							require.Nil(t, mock.lastRequest)
+							return
+						}
 						require.NoError(t, err)
-						require.True(t, called)
+						data, err := xml.Marshal(mock.lastRequest)
+						require.NoError(t, err)
+						var r ncip.RequestItem
+						require.NoError(t, xml.Unmarshal(data, &r))
+						require.Equal(t, scope, r.RequestScopeType.Text)
+						if scope == "Item" {
+							require.Empty(t, r.BibliographicId)
+							require.Len(t, r.ItemId, 1)
+							require.Equal(t, wantItemID, r.ItemId[0].ItemIdentifierValue)
+						} else {
+							require.Empty(t, r.ItemId)
+							require.Equal(t, "123", r.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
+							require.Equal(t, code, r.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifierCode.Text)
+						}
 					}
-				} else {
-					mock := new(ncipClientMock)
-					a := &LmsAdapterNcip{config: dirapi.LmsConfig{RequestItemRequestScopeType: &scope, BibItemScopeName: new("Record"), BibIdNormalization: &normalization, RequestItemBibIdCode: &code}, ncipClient: mock}
-					_, err := a.RequestItem("request", RequestItemIdentifier{BibliographicID: ".b1234"}, "user", "", "")
-					if scope == "unsupported" {
-						require.ErrorContains(t, err, "unsupported")
-						require.Nil(t, mock.lastRequest)
-						return
-					}
-					require.NoError(t, err)
-					data, err := xml.Marshal(mock.lastRequest)
-					require.NoError(t, err)
-					var r ncip.RequestItem
-					require.NoError(t, xml.Unmarshal(data, &r))
-					if scope == "Item" {
-						require.Empty(t, r.BibliographicId)
-						require.Len(t, r.ItemId, 1)
-						require.Equal(t, ".b1234", r.ItemId[0].ItemIdentifierValue)
-					} else {
-						require.Empty(t, r.ItemId)
-						require.Equal(t, "123", r.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
-						require.Equal(t, code, r.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifierCode.Text)
-					}
-				}
-			})
+				})
+			}
 		}
 	}
 }
@@ -87,52 +94,15 @@ func TestRequestItemRejectsEmptyIdentifier(t *testing.T) {
 				cfg := dirapi.LmsConfig{RequestItemRequestScopeType: &scope, BibIdNormalization: &normalization}
 				mock := new(ncipClientMock)
 				a := &LmsAdapterNcip{config: cfg, ncipClient: mock}
-				_, err := a.RequestItem("request", RequestItemIdentifier{BibliographicID: id}, "user", "", "")
+				_, err := a.RequestItem("request", RequestItemIdentifier{BibliographicID: id, ItemID: id}, "user", "", "")
 				require.Error(t, err)
 				require.Nil(t, mock.lastRequest)
 				a1 := &LmsAdapterNcip1{config: cfg}
-				_, err = a1.RequestItem("request", RequestItemIdentifier{BibliographicID: id}, "user", "", "")
+				_, err = a1.RequestItem("request", RequestItemIdentifier{BibliographicID: id, ItemID: id}, "user", "", "")
 				require.Error(t, err) // nil client would panic if validation sent a message
 			})
 		}
 	}
-}
-
-func TestValidateSelectedItemScope(t *testing.T) {
-	for _, scope := range []string{"auto", "Item", "Title", "Bibliographic Item", "unsupported"} {
-		for _, version := range []string{"1.0", "2.02"} {
-			t.Run(version+"/"+scope, func(t *testing.T) {
-				entry := dirapi.Entry{LmsConfig: &dirapi.LmsConfig{Address: "https://lms.example/ncip", FromAgency: "broker", RequestItemRequestScopeType: &scope, NcipVersion: &version}}
-				err := ValidateSelectedItemScope(entry)
-				if scope == "Item" || scope == "auto" {
-					require.NoError(t, err)
-				} else {
-					require.Error(t, err)
-				}
-				disabled := false
-				entry.LmsConfig.RequestItemEnabled = &disabled
-				require.NoError(t, ValidateSelectedItemScope(entry))
-			})
-		}
-	}
-	require.NoError(t, ValidateSelectedItemScope(dirapi.Entry{}))
-}
-
-func TestValidateSelectedItemScopeForAdapter(t *testing.T) {
-	for _, scope := range []string{"auto", "Item", "Title", "Bibliographic Item", "unsupported"} {
-		for _, enabled := range []bool{false, true} {
-			cfg := dirapi.LmsConfig{RequestItemRequestScopeType: &scope, RequestItemEnabled: &enabled}
-			for _, adapter := range []LmsAdapter{&LmsAdapterNcip{config: cfg}, &LmsAdapterNcip1{config: cfg}} {
-				err := ValidateSelectedItemScopeForAdapter(adapter)
-				if !enabled || scope == "Item" || scope == "auto" {
-					require.NoError(t, err)
-				} else {
-					require.Error(t, err)
-				}
-			}
-		}
-	}
-	require.NoError(t, ValidateSelectedItemScopeForAdapter(&LmsAdapterManual{}))
 }
 
 func TestAutomaticRequestScope(t *testing.T) {
