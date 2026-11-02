@@ -3203,7 +3203,7 @@ components:
           description: For Request Item requests, the type of request to create
         requestItemRequestScopeType:
           type: string
-          description: Scope for NCIP RequestItem. auto (the generic default) uses Item when an item identifier is supplied, otherwise bibItemScopeName (Bibliographic Item by default). Explicit Item, Title, and Bibliographic Item override automatic selection. Named vendor profiles retain their scope defaults.
+          description: Scope for NCIP RequestItem. auto (the generic default) uses Item when an item identifier is supplied, otherwise bibItemScopeName (Bibliographic Item by default). Explicit Item, Title, and Bibliographic Item override automatic selection. Explicit bibliographic scopes use the bibliographic identifier even when an item identifier is supplied. Named vendor profiles retain their scope defaults.
         bibItemScopeName:
           type: string
           description: Bibliographic-level NCIP scope name used by auto when no item identifier is supplied. Defaults to Bibliographic Item; Sierra and FOLIO profiles use Title.
