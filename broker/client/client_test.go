@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1223,28 +1224,41 @@ func TestCreateRequestMessageSelectedItem(t *testing.T) {
 
 type selectedItemScopeRepo struct {
 	mocks.MockIllRepositorySuccess
-	vendor string
+	scope, url string
 }
 
 func (r *selectedItemScopeRepo) GetSelectedSupplierForIllTransaction(common.ExtendedContext, string) (ill_db.LocatedSupplier, error) {
-	return ill_db.LocatedSupplier{SupplierID: "supplier", SupplierSymbol: "ISIL:SUP", ItemID: getPgText("selected-copy"), LocalID: getPgText("bib")}, nil
+	return ill_db.LocatedSupplier{ID: "selected", SupplierID: "supplier", SupplierSymbol: "ISIL:SUP", ItemID: getPgText("selected-copy"), LocalID: getPgText("bib")}, nil
 }
 func (r *selectedItemScopeRepo) GetPeerById(_ common.ExtendedContext, id string) (ill_db.Peer, error) {
-	scope := "Title"
-	return ill_db.Peer{ID: id, Vendor: r.vendor, CustomData: dirapi.Entry{LmsConfig: &dirapi.LmsConfig{Address: "https://lms.example/ncip", FromAgency: "broker", RequestItemRequestScopeType: &scope}}}, nil
+	return ill_db.Peer{ID: id, Url: r.url, CustomData: dirapi.Entry{LmsConfig: &dirapi.LmsConfig{Address: "https://lms.example/ncip", FromAgency: "broker", RequestItemRequestScopeType: &r.scope}}}, nil
 }
-func TestSelectedItemTitleScopeRejectedBeforeISO(t *testing.T) {
-	for _, vendor := range []string{string(dirapi.CrossLink), string(dirapi.Alma)} {
-		t.Run(vendor, func(t *testing.T) {
-			repo := &selectedItemScopeRepo{vendor: vendor}
-			client := CreateIso18626Client(new(events.PostgresEventBus), repo, *new(prservice.PatronRequestMessageHandler), 1, 0)
+func TestSelectedItemBibliographicScopeSentOverISO(t *testing.T) {
+	for _, scope := range []string{"Title", "Bibliographic Item"} {
+		t.Run(scope, func(t *testing.T) {
+			var calls atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				var message iso18626.ISO18626Message
+				if !assert.NoError(t, xml.NewDecoder(r.Body).Decode(&message)) || !assert.NotNil(t, message.Request) {
+					return
+				}
+				assert.Equal(t, "bib", message.Request.BibliographicInfo.SupplierUniqueRecordId)
+				if assert.NotEmpty(t, message.Request.SupplierInfo) && assert.NotNil(t, message.Request.SupplierInfo[0].BibliographicRecordId) {
+					assert.Equal(t, "selected-copy", message.Request.SupplierInfo[0].BibliographicRecordId.BibliographicRecordIdentifier)
+				}
+				w.Header().Set("Content-Type", "application/xml")
+				assert.NoError(t, xml.NewEncoder(w).Encode(iso18626.NewISO18626Message()))
+			}))
+			defer server.Close()
+			repo := &selectedItemScopeRepo{scope: scope, url: server.URL}
+			client := CreateIso18626Client(new(events.PostgresEventBus), repo, *new(prservice.PatronRequestMessageHandler), 1<<20, 0)
 			ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 			status, result := client.createAndSendRequestOrRequestingAgencyMessage(ctx, events.Event{IllTransactionID: "ill"})
-			assert.Equal(t, events.EventStatusError, status)
-			assert.Nil(t, result.OutgoingMessage)
-			if assert.NotNil(t, result.EventError) {
-				assert.Contains(t, result.EventError.Cause, "policy-selected item requires NCIP Item scope")
-			}
+			assert.Equal(t, events.EventStatusSuccess, status)
+			assert.Nil(t, result.EventError)
+			assert.NotNil(t, result.OutgoingMessage)
+			assert.Equal(t, int32(1), calls.Load())
 		})
 	}
 }

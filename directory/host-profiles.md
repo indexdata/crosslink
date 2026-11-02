@@ -265,7 +265,8 @@ With `lmsConfig.requestItemRequestScopeType: auto`, a supplied item ID selects
 `Item` scope. Otherwise the broker uses `lmsConfig.bibItemScopeName`, defaulting
 in code to `Bibliographic Item`. Only Sierra and FOLIO profiles override that
 name to `Title`. Library overrides take precedence over the profile. Explicit
-request scopes retain their existing behavior; changing `bibItemScopeName`
+bibliographic request scopes use the bibliographic ID even when a selected item
+ID is supplied; the LMS may choose another copy. Changing `bibItemScopeName`
 does not enable `auto` or change an explicit scope. Both NCIP versions send
 the configured scope name unchanged.
 
