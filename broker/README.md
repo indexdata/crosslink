@@ -533,6 +533,43 @@ NCIP RequestItem. A message already dispatched cannot be recalled by a later ree
 During deployment, drain old broker workers before relying on token enforcement;
 older binaries do not perform these checks.
 
+The `check-availability` transaction event includes `availabilityLookup` and
+`holdingsPolicy` diagnostics in `resultData.customData`. Lookup diagnostics record
+the supplier, bibliographic ID, attempt token, configured protocol and sanitized
+target, actual query, lookup/parsing duration in milliseconds, record presence,
+available-holding count and outcome. Targets omit URL credentials, query parameters
+and fragments; ZOOM options and complete Directory configuration are never copied.
+Counts describe holdings returned by the parser after availability filters, not
+every inventory item. Outcomes distinguish no record, no available holdings and
+lookup/parsing failures. Policy diagnostics report whether policy was absent,
+previously applied at discovery, still pending, or evaluated here; they include
+eligibility/exclusion counts, effective location and shelving preferences, rejection
+reasons, the selected copy and its selection reason. Tied preferences retain the
+first returned eligible holding, matching selection behavior.
+
+Candidate details are limited to the first 50 holdings, with total and omitted
+counts; the selected holding is always included separately even if it lies beyond
+that limit. Diagnostic text fields are bounded to 2048 bytes plus a truncation
+marker. `availabilityLookup.resultApplied` and `holdingsPolicy.applied` are set only
+after a current result commits successfully. Superseded attempts and commit failures
+retain their diagnostic decisions but never claim to have applied them. Existing
+availability outcomes, coordination fields and workflow decisions are unchanged.
+
+The central `locate-suppliers` event uses the same lookup summary under
+`resultData.customData.holdingsLookup`, alongside its existing query, holdings and
+`rotaInfo` data. It records lookup/parsing time, record presence, available-holding
+counts and failures, including on unsuccessful discovery. `configurationSource`
+distinguishes global adapters from Directory configuration. A global override does
+not report the overridden Directory endpoint as its target.
+Each `rotaInfo.suppliers` candidate includes its raw catalog `itemId`,
+`holdingsPolicyStatus` (`not-configured`, `deferred`, `evaluated`, or `applied`),
+and, for evaluated policies, `holdingsPolicyEligible` and any
+`holdingsPolicyReason`. Deferred candidates do not claim policy eligibility.
+Policy status becomes `applied` only after successful rota persistence; a failed
+save retains the evaluated decisions and reports `holdingsLookup.resultApplied`
+as false. These fields describe holdings policy separately from the existing
+overall candidate `match`, which also includes network, tier and other filters.
+
 ISO18626 requests put `LocalID` in `bibliographicInfo.supplierUniqueRecordId`
 and a nonempty selected `ItemID` in
 `supplierInfo.bibliographicRecordId.bibliographicRecordIdentifier`. Internal

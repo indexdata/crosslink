@@ -135,19 +135,37 @@ type TierMatch struct {
 }
 
 type SupplierMatch struct {
-	Match              bool           `json:"match"`
-	Networks           []NetworkMatch `json:"networks"`
-	Tiers              []TierMatch    `json:"tiers"`
-	Symbol             string         `json:"symbol"`
-	Priority           int            `json:"priority"`
-	Cost               string         `json:"cost"`
-	Local              bool           `json:"local"`
-	LoadBalancingScore float64        `json:"loadBalancingScore"`
-	Location           string         `json:"location,omitempty"`
-	ShelvingLocation   string         `json:"shelvingLocation,omitempty"`
-	ItemLoanPolicy     string         `json:"itemLoanPolicy,omitempty"`
-	LocationPreference int            `json:"locationPreference"`
-	ShelvingPreference int            `json:"shelvingPreference"`
+	ItemID                 string         `json:"itemId,omitempty"`
+	HoldingsPolicyStatus   string         `json:"holdingsPolicyStatus"`
+	HoldingsPolicyEligible *bool          `json:"holdingsPolicyEligible,omitempty"`
+	HoldingsPolicyReason   string         `json:"holdingsPolicyReason,omitempty"`
+	Match                  bool           `json:"match"`
+	Networks               []NetworkMatch `json:"networks"`
+	Tiers                  []TierMatch    `json:"tiers"`
+	Symbol                 string         `json:"symbol"`
+	Priority               int            `json:"priority"`
+	Cost                   string         `json:"cost"`
+	Local                  bool           `json:"local"`
+	LoadBalancingScore     float64        `json:"loadBalancingScore"`
+	Location               string         `json:"location,omitempty"`
+	ShelvingLocation       string         `json:"shelvingLocation,omitempty"`
+	ItemLoanPolicy         string         `json:"itemLoanPolicy,omitempty"`
+	LocationPreference     int            `json:"locationPreference"`
+	ShelvingPreference     int            `json:"shelvingPreference"`
+}
+
+func (m *SupplierMatch) recordHoldingsPolicy(supplier Supplier, eligible bool, reason string) {
+	m.ItemID = supplier.HoldingItemID
+	switch {
+	case supplier.CustomData.HoldingsPolicy == nil:
+		m.HoldingsPolicyStatus = "not-configured"
+	case supplier.DeferHoldingsPolicy:
+		m.HoldingsPolicyStatus = "deferred"
+	default:
+		m.HoldingsPolicyStatus = "evaluated"
+		m.HoldingsPolicyEligible = new(eligible)
+		m.HoldingsPolicyReason = reason
+	}
 }
 
 func (s SupplierMatch) GetSymbol() string { return s.Symbol }

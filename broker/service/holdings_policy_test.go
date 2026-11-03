@@ -168,8 +168,27 @@ func TestLocateSuppliersPolicyStage(t *testing.T) {
 			directory := new(adapter.MockDirectoryLookupAdapter)
 			factory := NewLookupAdapterFactory(repo, directory, "", lookup, nil)
 			locator := CreateSupplierLocator(new(events.PostgresEventBus), repo, directory, factory)
-			status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill"})
+			status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill"})
 			require.Equal(t, events.EventStatusSuccess, status)
+			rota := result.CustomData[ROTA_INFO_KEY].(adapter.RotaInfo)
+			require.Len(t, rota.Suppliers, 2)
+			for _, candidate := range rota.Suppliers {
+				if deferred {
+					require.Equal(t, "deferred", candidate.HoldingsPolicyStatus)
+					require.Nil(t, candidate.HoldingsPolicyEligible)
+					require.Empty(t, candidate.HoldingsPolicyReason)
+				} else {
+					require.Equal(t, "applied", candidate.HoldingsPolicyStatus)
+					require.NotNil(t, candidate.HoldingsPolicyEligible)
+					if candidate.ItemID == "blocked-item" {
+						require.False(t, *candidate.HoldingsPolicyEligible)
+						require.Equal(t, "location-excluded", candidate.HoldingsPolicyReason)
+					} else {
+						require.Equal(t, "eligible-item", candidate.ItemID)
+						require.True(t, *candidate.HoldingsPolicyEligible)
+					}
+				}
+			}
 			require.Len(t, repo.savedLocatedSuppliers, 1)
 			selected := repo.savedLocatedSuppliers[0]
 			if deferred {

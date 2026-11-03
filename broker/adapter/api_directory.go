@@ -200,8 +200,9 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 		rotaInfo.Request.Cost = utils.FormatDecimal(billingInfo.MaximumCosts.MonetaryValue.Base, billingInfo.MaximumCosts.MonetaryValue.Exp) + curSuffix
 	}
 	for _, sup := range entries {
-		holdingsMatch := EvaluateHoldingsPolicy(&sup)
+		holdingsMatch, holdingsReason := EvaluateHoldingsPolicyWithReason(&sup)
 		var supMatch SupplierMatch
+		supMatch.recordHoldingsPolicy(sup, holdingsMatch, holdingsReason)
 		supMatch.Symbol = sup.Symbol
 		supMatch.Location = sup.Location
 		supMatch.ShelvingLocation = sup.ShelvingLocation
@@ -394,18 +395,26 @@ func CompareSuppliers(a, b SupplierOrdering, policy dirapi.LoadBalancingPolicy) 
 // EvaluateHoldingsPolicy replaces the holding selection and preferences for a supplier.
 // Deferred or absent policies do not select an item, even if catalog data has one.
 func EvaluateHoldingsPolicy(supplier *Supplier) bool {
+	eligible, _ := EvaluateHoldingsPolicyWithReason(supplier)
+	return eligible
+}
+
+// EvaluateHoldingsPolicyWithReason evaluates the same policy as EvaluateHoldingsPolicy
+// and returns a stable exclusion reason, or an empty reason for an eligible holding.
+func EvaluateHoldingsPolicyWithReason(supplier *Supplier) (bool, string) {
 	supplier.ItemID = ""
 	supplier.LocationPreference = 0
 	supplier.ShelvingPreference = 0
 	if supplier.DeferHoldingsPolicy {
-		return true
+		return true, ""
 	}
 	applyHoldingsPolicy(supplier)
-	eligible := holdingMatchesPolicy(*supplier)
+	reason := holdingPolicyExclusionReason(*supplier)
+	eligible := reason == ""
 	if eligible && supplier.CustomData.HoldingsPolicy != nil {
 		supplier.ItemID = supplier.HoldingItemID
 	}
-	return eligible
+	return eligible, reason
 }
 
 func applyHoldingsPolicy(supplier *Supplier) {
@@ -452,23 +461,26 @@ func applyHoldingsPolicy(supplier *Supplier) {
 	}
 }
 
-func holdingMatchesPolicy(sup Supplier) bool {
-	if sup.LocationPreference < 0 || sup.ShelvingPreference < 0 {
-		return false
+func holdingPolicyExclusionReason(sup Supplier) string {
+	if sup.LocationPreference < 0 {
+		return "location-excluded"
+	}
+	if sup.ShelvingPreference < 0 {
+		return "shelving-location-excluded"
 	}
 	policy := sup.CustomData.HoldingsPolicy
 	if policy == nil {
-		return true
+		return ""
 	}
 	if policy.ItemLoanPolicies == nil {
-		return true
+		return ""
 	}
 	for _, itemPolicy := range *policy.ItemLoanPolicies {
 		if itemPolicy.Code == sup.ItemLoanPolicy && !itemPolicy.Lendable {
-			return false
+			return "item-loan-policy-excluded"
 		}
 	}
-	return true
+	return ""
 }
 
 func getPeerNetworks(peerData dirapi.Entry) map[string]Network {
