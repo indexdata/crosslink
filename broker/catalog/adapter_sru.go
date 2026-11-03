@@ -144,7 +144,7 @@ func (s *SruLookupAdapter) Lookup(params LookupParams) (LookupResult, error) {
 			result.recordFound = true
 			h, err := s.holdingsParser.Parse(xmlBuffer, params)
 			if err != nil {
-				return false, err
+				return false, fmt.Errorf("%w: %w", ErrHoldingsParse, err)
 			}
 			if result.metadata == nil && s.metadataParser != nil {
 				metadata, err := s.metadataParser.Parse(xmlBuffer)

@@ -77,7 +77,7 @@ func (s *SupplierLocator) CheckAvailability(ctx common.ExtendedContext, event ev
 	_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.checkAvailability)
 }
 
-func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event events.Event) (status events.EventStatus, outcome *events.EventResult) {
 	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
@@ -94,6 +94,34 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		return events.LogErrorAndReturnResult(ctx, "failed to update existing located supplier status", err)
 	}
 	lookupParams := catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.PublicationInfo)
+	lookupDetails := &availabilityLookupDetails{BibliographicID: diagnosticText(lookupParams.Identifier), Outcome: "not-started"}
+	var policyRota *adapter.RotaInfo
+	defer func() {
+		lookupDetails.ResultApplied = status == events.EventStatusSuccess
+		if outcome == nil {
+			outcome = &events.EventResult{}
+		}
+		if outcome.CustomData == nil {
+			outcome.CustomData = map[string]any{}
+		}
+		outcome.CustomData["holdingsLookup"] = lookupDetails
+		if policyRota != nil {
+			if lookupDetails.ResultApplied {
+				for i := range policyRota.Suppliers {
+					if policyRota.Suppliers[i].HoldingsPolicyStatus == "evaluated" {
+						policyRota.Suppliers[i].HoldingsPolicyStatus = "applied"
+					}
+				}
+			}
+			outcome.CustomData[ROTA_INFO_KEY] = *policyRota
+		}
+		if outcome.Note == "" {
+			outcome.Note = strings.TrimSpace(lookupDetails.discoverySummary() + " " + centralPolicySummary(policyRota))
+			if policyRota != nil && status == events.EventStatusError {
+				outcome.Note += " Rota update failed; policy decisions were not applied."
+			}
+		}
+	}()
 
 	requester, err := s.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
 	if err != nil {
@@ -105,10 +133,18 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	}
 
 	lookupAdapter, configPeer, err := s.lookupAdapterFactory.GetAdapterRequester(ctx, requester)
+	if s.lookupAdapterFactory.globalLookupAdapter != nil {
+		lookupDetails.ConfigurationSource = "global"
+	} else {
+		lookupDetails.ConfigurationSource = "directory"
+		lookupDetails.configure(configPeer)
+	}
 	if err != nil {
+		lookupDetails.Outcome = "adapter-failed"
 		return events.LogErrorAndReturnResult(ctx, "failed to get lookup adapter for locating suppliers", err)
 	}
 	if lookupAdapter == nil {
+		lookupDetails.Outcome = "not-configured"
 		return events.LogErrorAndReturnResult(ctx, "no lookup adapter available for locating suppliers", fmt.Errorf("no adapter found"))
 	}
 
@@ -123,7 +159,9 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	}
 
 	var query string
+	lookupStarted := time.Now()
 	lookupResult, err := lookupAdapter.Lookup(lookupParams)
+	lookupDetails.recordLookup(lookupStarted, lookupResult, err)
 	if lookupResult != nil {
 		query = lookupResult.GetQuery() // get the query even if there was an error, for logging purposes
 	}
@@ -134,9 +172,13 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 			return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, fmt.Sprintf("failed to perform lookup: %s", err.Error()), nil)
 		}
 	}
+	if lookupResult == nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to perform lookup", fmt.Errorf("empty lookup result"))
+	}
 
 	// holdings before metadata, so that transaction is only saved if both holdings and metadata are successfully retrieved and updated
 	holdingsResult, err := lookupResult.GetHoldings()
+	lookupDetails.recordHoldings(lookupStarted, holdingsResult, err)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, fmt.Sprintf("failed to get holdings for query '%s'", query), err)
 	}
@@ -290,6 +332,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	var rotaInfo adapter.RotaInfo
 	potentialSuppliers, rotaInfo = s.dirAdapter.FilterAndSort(ctx, potentialSuppliers, requester.CustomData,
 		illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.BillingInfo, policy)
+	policyRota = &rotaInfo
 	// A located supplier is symbol-level, so keep the best eligible holding for each symbol after sorting.
 	potentialSuppliers = firstSupplierPerSymbol(potentialSuppliers)
 	if len(potentialSuppliers) == 0 {
@@ -400,7 +443,36 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "multiple selected suppliers", map[string]any{"supplierCount": len(suppliers)})
 	}
 	sup := suppliers[0]
+	lookupDetails := newAvailabilityLookupDetails(sup)
+	policyDetails := &availabilityPolicyDetails{Status: "not-evaluated"}
+	resultApplied := false
+	defer func() {
+		lookupDetails.ResultApplied = resultApplied
+		if resultApplied && policyDetails.Status == "evaluated" {
+			policyDetails.Status = "applied"
+		}
+		if outcome == nil {
+			outcome = &events.EventResult{}
+		}
+		if outcome.CustomData == nil {
+			outcome.CustomData = map[string]any{}
+		}
+		if outcome.CustomData[ill_db.AvailabilityTokenKey] == lookupDetails.AttemptToken {
+			lookupDetails.AttemptToken = ""
+		}
+		outcome.CustomData["availabilityLookup"] = lookupDetails
+		outcome.CustomData["holdingsPolicy"] = policyDetails
+		if outcome.Note == "" {
+			outcome.Note = strings.TrimSpace(lookupDetails.summary() + " " + policyDetails.summary())
+			if outcome.CustomData[AvailabilityKey] == string(AvailabilitySuperseded) {
+				outcome.Note += " Result superseded; policy decision was not applied."
+			} else if policyDetails.Status == "evaluated" && !resultApplied {
+				outcome.Note += " Policy decision was not applied because the result could not be saved."
+			}
+		}
+	}()
 	token := uuid.NewString()
+	lookupDetails.AttemptToken = token
 	sup, current, err := s.beginAvailability(ctx, sup, token)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not start availability attempt", err)
@@ -423,6 +495,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 		} else if !current {
 			status, outcome = supersededAvailabilityResult()
 		} else {
+			resultApplied = status == events.EventStatusSuccess
 			if outcome == nil {
 				outcome = &events.EventResult{}
 			}
@@ -444,8 +517,10 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	result := &events.EventResult{CustomData: eventData}
 	peer, err := s.illRepo.GetPeerById(ctx, sup.SupplierID)
 	if err != nil {
+		lookupDetails.Outcome = "peer-lookup-failed"
 		return events.LogErrorAndReturnResult(ctx, "could not get peer", err)
 	}
+	lookupDetails.configure(peer.CustomData)
 	configured, configErr := supplierAvailabilityConfigured(peer.CustomData)
 	if configured || configErr != nil {
 		// Clear on a locked, freshly read row, even if the initial snapshot had
@@ -461,13 +536,22 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 		sup.ItemID = pgtype.Text{}
 	}
 	if configErr != nil {
+		lookupDetails.Outcome = "invalid-configuration"
 		return events.LogErrorAndReturnResult(ctx, "invalid supplier configuration", configErr)
 	}
 	deferred := configured && peer.CustomData.HoldingsPolicy != nil
+	if peer.CustomData.HoldingsPolicy == nil {
+		policyDetails.Status = "not-configured"
+	} else if deferred {
+		policyDetails.Status = "pending"
+	} else {
+		policyDetails.Status = "applied-at-discovery"
+	}
 	if !deferred {
 		// No policy needs no evaluation. A central policy must already have
 		// succeeded at discovery; legacy/manual unresolved selections need relocalization.
 		if err := sup.ValidateHoldingsPolicy(peer.CustomData); err != nil && peer.CustomData.HoldingsPolicy != nil {
+			policyDetails.Status = "requires-discovery"
 			eventData["holdingsPolicyUnresolved"] = true
 			return events.LogErrorAndReturnExistingResult(ctx, "holdings policy requires supplier discovery", err, result)
 		}
@@ -487,44 +571,42 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	}
 	aa, err := s.lookupAdapterFactory.GetAdapterSupplier(ctx, peer)
 	if err != nil {
+		lookupDetails.Outcome = "adapter-failed"
 		return events.LogErrorAndReturnExistingResult(ctx, "could not create availability adapter", err, result)
 	}
 	if aa == nil {
 		if deferred {
+			lookupDetails.Outcome = "adapter-missing"
 			return events.LogErrorAndReturnExistingResult(ctx, "missing configured availability adapter", fmt.Errorf("holdings policy remains unresolved"), result)
 		}
 		ctx.Logger().Debug("skipping availability check for supplier without availability config", "supplierSymbol", sup.SupplierSymbol)
+		lookupDetails.Outcome = "not-configured"
 		return events.EventStatusSuccess, result
 	}
 
 	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
+		lookupDetails.Outcome = "transaction-read-failed"
 		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
 	}
 	lookupParams := catalog.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.PublicationInfo)
 	lookupParams.Identifier = sup.LocalID.String
+	lookupStarted := time.Now()
 	lookupResult, err := aa.Lookup(lookupParams)
+	lookupDetails.recordLookup(lookupStarted, lookupResult, err)
 	if err != nil {
 		return events.LogErrorAndReturnExistingResult(ctx, "failed to perform availability lookup", err, result)
 	}
+	if lookupResult == nil {
+		return events.LogErrorAndReturnExistingResult(ctx, "failed to perform availability lookup", fmt.Errorf("empty lookup result"), result)
+	}
 	holdingsResults, err := lookupResult.GetHoldings()
+	lookupDetails.recordHoldings(lookupStarted, holdingsResults, err)
 	if err != nil {
 		return events.LogErrorAndReturnExistingResult(ctx, "failed to get holdings for availability lookup", err, result)
 	}
 	if deferred {
-		var selected *adapter.Supplier
-		for _, holding := range holdingsResults {
-			candidate := adapter.Supplier{
-				CustomData:       peer.CustomData,
-				HoldingItemID:    holding.ItemId,
-				Location:         holding.Location,
-				ShelvingLocation: holding.ShelvingLocation,
-				ItemLoanPolicy:   holding.ItemLoanPolicy,
-			}
-			if adapter.EvaluateHoldingsPolicy(&candidate) && (selected == nil || adapter.CompareSuppliers(candidate, *selected, dirapi.LoadBalancingPolicyProportional) < 0) {
-				selected = &candidate
-			}
-		}
+		selected := policyDetails.evaluate(peer.CustomData, holdingsResults)
 		if selected == nil {
 			holdingsResults = nil
 		} else {

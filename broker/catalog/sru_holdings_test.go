@@ -310,7 +310,8 @@ func TestSruMarcxmlBadMarc(t *testing.T) {
 	}
 	result, err := ad.Lookup(p)
 	assert.NotEmpty(t, result.GetQuery())
-	assert.ErrorContains(t, err, "failed to parse holdings from SRU record: decoding")
+	assert.ErrorContains(t, err, "failed to parse holdings from SRU record: holdings parsing failed: decoding")
+	assert.ErrorIs(t, err, ErrHoldingsParse)
 }
 
 func TestSruMarcxmlWithFallbackHoldings(t *testing.T) {

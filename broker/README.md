@@ -561,6 +561,60 @@ NCIP RequestItem. A message already dispatched cannot be recalled by a later ree
 During deployment, drain old broker workers before relying on token enforcement;
 older binaries do not perform these checks.
 
+The `check-availability` transaction event includes `availabilityLookup` and
+`holdingsPolicy` diagnostics in `resultData.customData`. Lookup diagnostics record
+the supplier, bibliographic ID, configured protocol and sanitized
+target, actual query, lookup/parsing duration in milliseconds,
+available-holding count and outcome. Targets omit URL credentials, query parameters
+and fragments; ZOOM options and complete Directory configuration are never copied.
+Counts describe holdings returned by the parser after availability filters, not
+every inventory item. Outcomes distinguish no record, no available holdings and
+lookup/parsing failures. SRU and Z39.50 holdings-parser failures report
+`holdings-failed`, including when parsing occurs inside `Lookup`.
+Connection, search and retrieval errors retain `lookup-failed`.
+Policy diagnostics report whether policy was absent,
+previously applied at discovery, still pending, or evaluated here; they include
+eligibility/exclusion counts, effective location and shelving preferences, rejection
+reasons, the selected copy and its selection reason. Tied preferences retain the
+first returned eligible holding, matching selection behavior.
+
+Candidate details are limited to 50 holdings, including the winner marked
+`selected: true`. If necessary, the winner replaces the last displayed candidate.
+Eligible and excluded counts describe all parsed candidates; `candidatesTruncated`
+is included only when holdings are omitted. Reasons are included only for exclusions.
+The winner is not repeated in a separate object. Diagnostic text fields are bounded
+to 2048 bytes plus a truncation marker. Policy `status` becomes `applied` only after
+a current result commits successfully; superseded attempts and commit failures
+retain `evaluated` status. `availabilityLookup.resultApplied` records whether the
+lookup decision committed. The normal event uses its existing availability token;
+a nested attempt token is included only when that token is absent from the result.
+Existing availability outcomes, coordination fields and workflow decisions are unchanged.
+
+Both event types include a short operator summary in `resultData.note`, explaining
+the lookup outcome and policy decision. For example: "Found 2 available items.
+Holdings policy selected RS3-CL-000008-POPULAR at Popular Reading Collection:
+shelving preference 20, compared with Main Library's 10." Superseded and failed
+saves explicitly state that the evaluated decision was not applied.
+
+The central `locate-suppliers` event uses the same lookup summary under
+`resultData.customData.holdingsLookup`, alongside its existing query, holdings and
+`rotaInfo` data. It records lookup/parsing time, returned-holding
+counts and failures, including on unsuccessful discovery. The discovery note says
+"Found N holdings" because these results may identify supplier holdings without
+identifying individual items or confirming current circulation availability.
+The existing `availableHoldings` field counts those parsed holdings.
+`configurationSource`
+distinguishes global adapters from Directory configuration. A global override does
+not report the overridden Directory endpoint as its target.
+Each `rotaInfo.suppliers` candidate includes its raw catalog `itemId`,
+`holdingsPolicyStatus` (`not-configured`, `deferred`, `evaluated`, or `applied`),
+and, for evaluated policies, `holdingsPolicyEligible` and any
+`holdingsPolicyReason`. Deferred candidates do not claim policy eligibility.
+Policy status becomes `applied` only after successful rota persistence; a failed
+save retains the evaluated decisions and reports `holdingsLookup.resultApplied`
+as false. These fields describe holdings policy separately from the existing
+overall candidate `match`, which also includes network, tier and other filters.
+
 ISO18626 requests put `LocalID` in `bibliographicInfo.supplierUniqueRecordId`
 and a nonempty selected `ItemID` in
 `supplierInfo.bibliographicRecordId.bibliographicRecordIdentifier`. Internal

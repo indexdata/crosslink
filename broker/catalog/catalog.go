@@ -6,6 +6,10 @@ import "errors"
 // because none of the parameters supported by its query builder are present.
 var ErrMissingLookupParameters = errors.New("missing lookup parameters")
 
+// ErrHoldingsParse identifies a holdings-parser failure for a catalog record.
+// Connection, search and retrieval errors do not use it.
+var ErrHoldingsParse = errors.New("holdings parsing failed")
+
 type missingLookupParametersError struct {
 	message string
 }
