@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"net/url"
 	"strings"
 	"time"
@@ -26,7 +27,7 @@ type availabilityLookupDetails struct {
 	Target              string `json:"target,omitempty"`
 	Query               string `json:"query,omitempty"`
 	DurationMS          int64  `json:"durationMs"`
-	RecordFound         *bool  `json:"recordFound,omitempty"`
+	recordFound         *bool
 	AvailableHoldings   *int   `json:"availableHoldings,omitempty"`
 	Outcome             string `json:"outcome"`
 	ResultApplied       bool   `json:"resultApplied"`
@@ -38,7 +39,7 @@ func (d *availabilityLookupDetails) recordLookup(started time.Time, result catal
 	if result != nil {
 		d.Query = diagnosticText(result.GetQuery())
 		if err == nil {
-			d.RecordFound = new(result.HasRecord())
+			d.recordFound = new(result.HasRecord())
 		}
 	}
 }
@@ -51,7 +52,7 @@ func (d *availabilityLookupDetails) recordHoldings(started time.Time, holdings [
 	}
 	d.AvailableHoldings = new(len(holdings))
 	switch {
-	case d.RecordFound != nil && !*d.RecordFound:
+	case d.recordFound != nil && !*d.recordFound:
 		d.Outcome = "no-record"
 	case len(holdings) == 0:
 		d.Outcome = "no-available-holdings"
@@ -68,20 +69,19 @@ type availabilityHoldingDetails struct {
 	LocationPreference int    `json:"locationPreference"`
 	ShelvingPreference int    `json:"shelvingPreference"`
 	Eligible           bool   `json:"eligible"`
-	Reason             string `json:"reason"`
-	Selected           bool   `json:"selected"`
+	Reason             string `json:"reason,omitempty"`
+	Selected           bool   `json:"selected,omitempty"`
 }
 
 type availabilityPolicyDetails struct {
 	Status              string                       `json:"status"`
-	Applied             bool                         `json:"applied"`
-	CandidateCount      int                          `json:"candidateCount"`
 	EligibleCount       int                          `json:"eligibleCount"`
 	ExcludedCount       int                          `json:"excludedCount"`
-	CandidatesTruncated int                          `json:"candidatesTruncated"`
+	CandidatesTruncated int                          `json:"candidatesTruncated,omitempty"`
 	Candidates          []availabilityHoldingDetails `json:"candidates,omitempty"`
-	Selected            *availabilityHoldingDetails  `json:"selected,omitempty"`
 	SelectionReason     string                       `json:"selectionReason,omitempty"`
+	selected            *availabilityHoldingDetails
+	runnerUp            *availabilityHoldingDetails
 }
 
 func newAvailabilityLookupDetails(supplier ill_db.LocatedSupplier) *availabilityLookupDetails {
@@ -129,9 +129,6 @@ func diagnosticTarget(address string) string {
 }
 
 func holdingDetails(supplier adapter.Supplier, eligible bool, reason string) availabilityHoldingDetails {
-	if eligible {
-		reason = "eligible"
-	}
 	return availabilityHoldingDetails{
 		ItemID:             diagnosticText(supplier.HoldingItemID),
 		Location:           diagnosticText(supplier.Location),
@@ -146,7 +143,6 @@ func holdingDetails(supplier adapter.Supplier, eligible bool, reason string) ava
 // evaluate records decisions while preserving catalog order and the existing comparator.
 func (d *availabilityPolicyDetails) evaluate(entry dirapi.Entry, holdings []catalog.Holding) *adapter.Supplier {
 	d.Status = "evaluated"
-	d.CandidateCount = len(holdings)
 	var selected, runnerUp *adapter.Supplier
 	selectedIndex := -1
 	for i, holding := range holdings {
@@ -178,9 +174,17 @@ func (d *availabilityPolicyDetails) evaluate(entry dirapi.Entry, holdings []cata
 	}
 	detail := holdingDetails(*selected, true, "")
 	detail.Selected = true
-	d.Selected = &detail
 	if selectedIndex < len(d.Candidates) {
-		d.Candidates[selectedIndex].Selected = true
+		d.Candidates[selectedIndex] = detail
+	} else {
+		// Reserve the last displayed slot for the winner, keeping the same cap.
+		selectedIndex = len(d.Candidates) - 1
+		d.Candidates[selectedIndex] = detail
+	}
+	d.selected = &d.Candidates[selectedIndex]
+	if runnerUp != nil {
+		other := holdingDetails(*runnerUp, true, "")
+		d.runnerUp = &other
 	}
 	switch {
 	case runnerUp == nil:
@@ -193,4 +197,119 @@ func (d *availabilityPolicyDetails) evaluate(entry dirapi.Entry, holdings []cata
 		d.SelectionReason = "equal-preference-first-returned"
 	}
 	return selected
+}
+
+func itemCount(n int, noun string) string {
+	if n != 1 {
+		noun += "s"
+	}
+	return fmt.Sprintf("%d %s", n, noun)
+}
+
+func (d *availabilityLookupDetails) summary() string {
+	switch d.Outcome {
+	case "available-holdings":
+		return "Found " + itemCount(*d.AvailableHoldings, "available item") + "."
+	case "no-record":
+		return "No bibliographic record found."
+	case "no-available-holdings":
+		return "Record found with no available holdings."
+	case "lookup-failed":
+		return "Holdings lookup failed."
+	case "holdings-failed":
+		return "Could not parse holdings lookup results."
+	case "not-configured":
+		return "Holdings lookup is not configured."
+	case "invalid-configuration", "peer-lookup-failed", "adapter-failed", "adapter-missing":
+		return "Could not prepare the holdings lookup."
+	case "transaction-read-failed":
+		return "Could not read the request for holdings lookup."
+	default:
+		return "Holdings lookup was not started."
+	}
+}
+
+func holdingName(holding *availabilityHoldingDetails) string {
+	if holding.ShelvingLocation != "" {
+		return holding.ShelvingLocation
+	}
+	if holding.Location != "" {
+		return holding.Location
+	}
+	return "unspecified location"
+}
+
+func (d *availabilityPolicyDetails) summary() string {
+	switch d.Status {
+	case "not-configured":
+		return "No holdings policy configured."
+	case "applied-at-discovery":
+		return "Holdings policy was applied during discovery."
+	case "pending":
+		return "Holdings policy remains unresolved."
+	case "requires-discovery":
+		return "Holdings policy requires a new discovery lookup."
+	case "applied", "evaluated":
+		if d.selected == nil {
+			if d.ExcludedCount > 0 {
+				verb := "excluded"
+				if d.Status == "evaluated" {
+					verb = "would exclude"
+				}
+				return "Holdings policy " + verb + " all " + itemCount(d.ExcludedCount, "available item") + "."
+			}
+			return "No available holdings to evaluate."
+		}
+	default:
+		return ""
+	}
+	selected := d.selected
+	copyName := selected.ItemID
+	if copyName == "" {
+		copyName = "an available holding"
+	}
+	verb := "selected"
+	if d.Status == "evaluated" {
+		verb = "would select"
+	}
+	text := "Holdings policy " + verb + " " + copyName + " at " + holdingName(selected)
+	switch d.SelectionReason {
+	case "higher-location-preference":
+		return fmt.Sprintf("%s: location preference %d, compared with %s's %d.", text,
+			selected.LocationPreference, holdingName(d.runnerUp), d.runnerUp.LocationPreference)
+	case "higher-shelving-preference":
+		return fmt.Sprintf("%s: shelving preference %d, compared with %s's %d.", text,
+			selected.ShelvingPreference, holdingName(d.runnerUp), d.runnerUp.ShelvingPreference)
+	case "only-eligible-holding":
+		return text + ": it was the only eligible holding."
+	default:
+		return text + ": preferences tied, so the first returned eligible holding was retained."
+	}
+}
+
+func centralPolicySummary(rota *adapter.RotaInfo) string {
+	if rota == nil {
+		return ""
+	}
+	counts := map[string]int{}
+	excluded := 0
+	for _, candidate := range rota.Suppliers {
+		counts[candidate.HoldingsPolicyStatus]++
+		if candidate.HoldingsPolicyEligible != nil && !*candidate.HoldingsPolicyEligible {
+			excluded++
+		}
+	}
+	var parts []string
+	for _, status := range []string{"applied", "evaluated"} {
+		if n := counts[status]; n > 0 {
+			parts = append(parts, fmt.Sprintf("Holdings policy %s for %s (%d excluded).", status, itemCount(n, "candidate"), excluded))
+		}
+	}
+	if n := counts["deferred"]; n > 0 {
+		parts = append(parts, "Holdings policy deferred to supplier availability for "+itemCount(n, "candidate")+".")
+	}
+	if n := counts["not-configured"]; n > 0 {
+		parts = append(parts, "No holdings policy configured for "+itemCount(n, "candidate")+".")
+	}
+	return strings.Join(parts, " ")
 }

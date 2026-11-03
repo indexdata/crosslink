@@ -535,8 +535,8 @@ older binaries do not perform these checks.
 
 The `check-availability` transaction event includes `availabilityLookup` and
 `holdingsPolicy` diagnostics in `resultData.customData`. Lookup diagnostics record
-the supplier, bibliographic ID, attempt token, configured protocol and sanitized
-target, actual query, lookup/parsing duration in milliseconds, record presence,
+the supplier, bibliographic ID, configured protocol and sanitized
+target, actual query, lookup/parsing duration in milliseconds,
 available-holding count and outcome. Targets omit URL credentials, query parameters
 and fragments; ZOOM options and complete Directory configuration are never copied.
 Counts describe holdings returned by the parser after availability filters, not
@@ -547,17 +547,27 @@ eligibility/exclusion counts, effective location and shelving preferences, rejec
 reasons, the selected copy and its selection reason. Tied preferences retain the
 first returned eligible holding, matching selection behavior.
 
-Candidate details are limited to the first 50 holdings, with total and omitted
-counts; the selected holding is always included separately even if it lies beyond
-that limit. Diagnostic text fields are bounded to 2048 bytes plus a truncation
-marker. `availabilityLookup.resultApplied` and `holdingsPolicy.applied` are set only
-after a current result commits successfully. Superseded attempts and commit failures
-retain their diagnostic decisions but never claim to have applied them. Existing
-availability outcomes, coordination fields and workflow decisions are unchanged.
+Candidate details are limited to 50 holdings, including the winner marked
+`selected: true`. If necessary, the winner replaces the last displayed candidate.
+Eligible and excluded counts describe all parsed candidates; `candidatesTruncated`
+is included only when holdings are omitted. Reasons are included only for exclusions.
+The winner is not repeated in a separate object. Diagnostic text fields are bounded
+to 2048 bytes plus a truncation marker. Policy `status` becomes `applied` only after
+a current result commits successfully; superseded attempts and commit failures
+retain `evaluated` status. `availabilityLookup.resultApplied` records whether the
+lookup decision committed. The normal event uses its existing availability token;
+a nested attempt token is included only when that token is absent from the result.
+Existing availability outcomes, coordination fields and workflow decisions are unchanged.
+
+Both event types include a short operator summary in `resultData.note`, explaining
+the lookup outcome and policy decision. For example: "Found 2 available items.
+Holdings policy selected RS3-CL-000008-POPULAR at Popular Reading Collection:
+shelving preference 20, compared with Main Library's 10." Superseded and failed
+saves explicitly state that the evaluated decision was not applied.
 
 The central `locate-suppliers` event uses the same lookup summary under
 `resultData.customData.holdingsLookup`, alongside its existing query, holdings and
-`rotaInfo` data. It records lookup/parsing time, record presence, available-holding
+`rotaInfo` data. It records lookup/parsing time, available-holding
 counts and failures, including on unsuccessful discovery. `configurationSource`
 distinguishes global adapters from Directory configuration. A global override does
 not report the overridden Directory endpoint as its target.

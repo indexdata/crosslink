@@ -111,10 +111,10 @@ func TestAvailabilityAttemptOverlap(t *testing.T) {
 					encoded, err := json.Marshal(bus.completed.ResultData.CustomData["holdingsPolicy"])
 					require.NoError(t, err)
 					var details struct {
-						Applied bool `json:"applied"`
+						Status string `json:"status"`
 					}
 					require.NoError(t, json.Unmarshal(encoded, &details))
-					require.Equal(t, i == 1 && tc.newResult != "error", details.Applied,
+					require.Equal(t, i == 1 && tc.newResult != "error", details.Status == "applied",
 						"superseded or failed attempts must not claim their policy decision was applied")
 				}
 				workflow := service.CreateWorkflowManager(buses[0], illRepo, service.WorkflowConfig{})
