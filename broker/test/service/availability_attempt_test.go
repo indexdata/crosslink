@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -106,6 +107,16 @@ func TestAvailabilityAttemptOverlap(t *testing.T) {
 				barriers[1-first].resume()
 				waitAvailabilityAttempt(t, base, done[1-first])
 				require.Equal(t, string(service.AvailabilitySuperseded), buses[0].completed.ResultData.CustomData[service.AvailabilityKey])
+				for i, bus := range buses {
+					encoded, err := json.Marshal(bus.completed.ResultData.CustomData["holdingsPolicy"])
+					require.NoError(t, err)
+					var details struct {
+						Applied bool `json:"applied"`
+					}
+					require.NoError(t, json.Unmarshal(encoded, &details))
+					require.Equal(t, i == 1 && tc.newResult != "error", details.Applied,
+						"superseded or failed attempts must not claim their policy decision was applied")
+				}
 				workflow := service.CreateWorkflowManager(buses[0], illRepo, service.WorkflowConfig{})
 				workflow.OnCheckAvailabilityComplete(ctx, buses[0].completed)
 				require.Empty(t, buses[0].tasks)
