@@ -110,6 +110,64 @@ Note on FOLIO integration: selected API endpoints are available under the base p
 This enables the broker to operate as a FOLIO/Okapi module with authentication/authorization and multi-tenancy support;
 see the [ModuleDescriptor](./descriptors/ModuleDescriptor-template.json) for details.
 
+## Archiving patron requests
+
+Create a scheduled `archive-borrowing-requests` or `archive-lending-requests` batch action through
+`POST /batch_actions` (or `/broker/batch_actions` in Okapi). An owner symbol is
+required. `batchQuery` selects eligible patron-request states and may include
+other patron-request CQL filters. `actionParams.interval` is a positive Go duration
+measured from `patron_request.updated_at`; `anonymize` defaults to `false`.
+Borrowing actions are restricted to `requester_symbol`, and lending actions to
+`supplier_symbol`, matching the action's owner.
+
+```json
+{
+  "title": "Archive closed borrowing requests",
+  "schedule": "FREQ=DAILY;BYHOUR=3",
+  "actionName": "archive-borrowing-requests",
+  "batchQuery": "terminal_state = true",
+  "actionParams": {"interval": "720h", "anonymize": false}
+}
+```
+
+The lending default uses the same schedule, CQL selector, and action parameters,
+with `actionName: "archive-lending-requests"` and title
+`"Archive closed lending requests"`. Defaults are offered through the state-model
+API as starting points for tenant-owned scheduled actions.
+
+Each run archives up to 100 matching requests. It scans pages of 100 candidates
+in creation-time/ID order, continuing past skipped and failed requests until the
+archive limit is reached or all matches have been examined. CQL `sortBy` does not
+change this scan order. Counts and up to 100 per-request failures are recorded in
+the batch-action event history. Requests with changed state/timestamps or active
+events are skipped for a later run. The archive is in
+`archived_resource`, keyed by resource type and ID, with owner, timestamp,
+schema version, anonymization metadata, and one JSONB bundle. The bundle holds
+the selected request, its events, items, notifications, and notes. Borrowing
+archives additionally include the associated ILL transaction, transaction events,
+and located suppliers. Lending archives store only the supplier PR's data and
+preserve the transaction, located suppliers, borrowing PR, and their events.
+Resource types are `borrowing-patron-request` and `lending-patron-request`.
+Each archive insertion and deletion of the corresponding live records is atomic.
+The request's
+`internal_note` and other notes are included in their owning rows. With
+`anonymize: true`, an explicit allowlist retains operational states, actions,
+outcomes, timestamps, institution symbols, service/request types, item LMS status,
+and notification amounts/currency. Personal fields, record identifiers inside the
+bundle, bibliographic/free-text fields, notes, embedded messages, error payloads,
+and custom data are omitted. Unknown keys and structured values in scalar fields
+are discarded, so numeric personal identifiers and personal JSON keys cannot
+survive through unstructured data. Archive owner/resource metadata remains for
+identification, and `anonymization_method` records `operational-allowlist-v1`.
+Import and restoration are not supported.
+
+The legacy `archive` binary, `POST /archive_ill_transactions`, and
+`call_archive.sh` archive transactions only; they do not archive patron
+requests or their related records. Replace any job intended to archive patron
+requests with a batch action and stop calling that endpoint/script for those
+requests. The legacy path remains for transaction-only jobs until the separate
+`archive-ill-transactions` action is implemented.
+
 # Compatibility with external peers
 
 ISO18626 is designed as a peer-to-peer protocol and, as such, does not include any specific provisions (e.g., message types or statuses) for broker-based operations.
@@ -260,7 +318,7 @@ make
 This will build the following binaries:
 
 * `broker` — the main program for the ILL service
-* `archive` — a utility for archiving old ILL transactions
+* `archive` — the legacy utility for archiving old ILL transactions
 
 You can also run included tests with:
 

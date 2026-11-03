@@ -24,6 +24,18 @@ WHERE ill_request IS NOT NULL
 ORDER BY created_at
 LIMIT $1 OFFSET $2;
 
+-- name: ListPatronRequestArchiveCandidates :many
+-- Two base arguments keep CQL placeholders starting at $3. Cursor contains a
+-- zone-free created_at timestamp and ID. CQL sorting is intentionally ignored
+-- so concurrent deletions and skipped records cannot move the scan backwards.
+SELECT id, created_at, state, updated_at
+FROM patron_request_search_view
+WHERE ill_request IS NOT NULL
+  AND (sqlc.arg(cursor)::text[] IS NULL OR (created_at, id) >
+       ((sqlc.arg(cursor)::text[])[1]::timestamp, (sqlc.arg(cursor)::text[])[2]))
+ORDER BY created_at, id
+LIMIT $1;
+
 -- name: GetPatronRequestsFacets :many
 -- TEMPLATE: 'requester_symbol' (value) and 'requester_name' (label) are placeholder
 -- column names. This query is not meant to be called directly; use
