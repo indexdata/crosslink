@@ -116,7 +116,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 			outcome.CustomData[ROTA_INFO_KEY] = *policyRota
 		}
 		if outcome.Note == "" {
-			outcome.Note = strings.TrimSpace(lookupDetails.summary() + " " + centralPolicySummary(policyRota))
+			outcome.Note = strings.TrimSpace(lookupDetails.discoverySummary() + " " + centralPolicySummary(policyRota))
 			if policyRota != nil && status == events.EventStatusError {
 				outcome.Note += " Rota update failed; policy decisions were not applied."
 			}

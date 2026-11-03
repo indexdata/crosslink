@@ -17,16 +17,19 @@ import (
 
 func TestCentralHoldingsLookupDiagnostics(t *testing.T) {
 	for _, tc := range []struct {
-		name, outcome string
-		status        events.EventStatus
-		configure     func(*diagnosticLookup)
+		name, outcome, summary string
+		status                 events.EventStatus
+		configure              func(*diagnosticLookup)
 	}{
-		{"holdings found", "available-holdings", events.EventStatusSuccess, func(*diagnosticLookup) {}},
-		{"no record", "no-record", events.EventStatusProblem, func(l *diagnosticLookup) { l.Holdings = nil }},
-		{"record with no available holdings", "no-available-holdings", events.EventStatusProblem, func(l *diagnosticLookup) { l.Holdings = nil; l.RecordFound = true }},
-		{"lookup failure", "lookup-failed", events.EventStatusError, func(l *diagnosticLookup) { l.err = errors.New("lookup failed") }},
-		{"parser failure", "holdings-failed", events.EventStatusError, func(l *diagnosticLookup) { l.HoldingsErr = errors.New("parser failed") }},
-		{"nil result", "lookup-failed", events.EventStatusError, func(l *diagnosticLookup) { l.nilResult = true }},
+		{"holdings found", "available-holdings", "Found 1 holding.", events.EventStatusSuccess, func(*diagnosticLookup) {}},
+		{"multiple holdings", "available-holdings", "Found 2 holdings.", events.EventStatusSuccess, func(l *diagnosticLookup) {
+			l.Holdings = append(l.Holdings, catalog.Holding{Symbol: "ISIL:SUP1", LocalIdentifier: "bib", ItemId: "second-copy"})
+		}},
+		{"no record", "no-record", "No bibliographic record found.", events.EventStatusProblem, func(l *diagnosticLookup) { l.Holdings = nil }},
+		{"record without returned holdings", "no-available-holdings", "Record found with no holdings returned.", events.EventStatusProblem, func(l *diagnosticLookup) { l.Holdings = nil; l.RecordFound = true }},
+		{"lookup failure", "lookup-failed", "Holdings lookup failed.", events.EventStatusError, func(l *diagnosticLookup) { l.err = errors.New("lookup failed") }},
+		{"parser failure", "holdings-failed", "Could not parse holdings lookup results.", events.EventStatusError, func(l *diagnosticLookup) { l.HoldingsErr = errors.New("parser failed") }},
+		{"nil result", "lookup-failed", "Holdings lookup failed.", events.EventStatusError, func(l *diagnosticLookup) { l.nilResult = true }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := metadataTestRepo(ill_db.IllTransaction{ID: "ill", RequesterID: pgtype.Text{String: "requester", Valid: true},
@@ -41,7 +44,7 @@ func TestCentralHoldingsLookupDiagnostics(t *testing.T) {
 			locator := CreateSupplierLocator(new(events.PostgresEventBus), repo, directory, factory)
 			status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill"})
 			require.Equal(t, tc.status, status)
-			require.NotEmpty(t, result.Note)
+			require.Contains(t, result.Note, tc.summary)
 			details := result.CustomData["holdingsLookup"].(*availabilityLookupDetails)
 			require.Equal(t, tc.outcome, details.Outcome)
 			require.Equal(t, "bib", details.BibliographicID)
@@ -51,7 +54,7 @@ func TestCentralHoldingsLookupDiagnostics(t *testing.T) {
 				require.Equal(t, lookup.query, details.Query)
 			}
 			if status == events.EventStatusSuccess {
-				require.Equal(t, 1, *details.AvailableHoldings)
+				require.Equal(t, len(lookup.Holdings), *details.AvailableHoldings)
 				rota := result.CustomData[ROTA_INFO_KEY].(adapter.RotaInfo)
 				require.Equal(t, "copy", rota.Suppliers[0].ItemID)
 				require.Equal(t, "not-configured", rota.Suppliers[0].HoldingsPolicyStatus)
@@ -76,6 +79,7 @@ func TestCentralLookupUsesConfiguredTargetOnlyWithoutGlobalOverride(t *testing.T
 		locator := CreateSupplierLocator(new(events.PostgresEventBus), repo, directory, factory)
 		status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill"})
 		require.Equal(t, events.EventStatusSuccess, status)
+		require.Contains(t, result.Note, "Found 1 holding.", "discovery need not identify an individual item")
 		details := result.CustomData["holdingsLookup"].(*availabilityLookupDetails)
 		if global {
 			require.Equal(t, "global", details.ConfigurationSource)
