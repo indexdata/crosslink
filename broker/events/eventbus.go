@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/indexdata/crosslink/broker/common"
@@ -173,12 +174,18 @@ func (p *PostgresEventBus) handleNotify(data NotifyData) {
 			}
 			return
 		}
-		triggerHandlers(p.getEventContext(&claimedEvent), claimedEvent, p.getHandlers(data.Signal, HandlerRoleConsumer, claimedEvent.EventName), data.Signal)
+		completed := triggerHandlers(p.getEventContext(&claimedEvent), claimedEvent, p.getHandlers(data.Signal, HandlerRoleConsumer, claimedEvent.EventName), data.Signal)
+		if completed && p.ctx.Err() == nil {
+			if err := p.repo.CompleteConsumerSignal(p.ctx, data.Event, data.Signal); err != nil {
+				p.ctx.Logger().Error("failure completing consumer signal", "error", err, "eventId", data.Event, "signal", data.Signal)
+			}
+		}
 	}
 }
 
-func triggerHandlers(eventCtx common.ExtendedContext, event Event, handlers []func(ctx common.ExtendedContext, event Event), signal Signal) {
+func triggerHandlers(eventCtx common.ExtendedContext, event Event, handlers []func(ctx common.ExtendedContext, event Event), signal Signal) bool {
 	var wg sync.WaitGroup
+	var failed atomic.Bool
 	if len(handlers) > 0 {
 		eventCtx.Logger().Debug("found handlers for event", "count", len(handlers), "eventName", event.EventName, "signal", signal)
 		for _, handler := range handlers {
@@ -187,6 +194,7 @@ func triggerHandlers(eventCtx common.ExtendedContext, event Event, handlers []fu
 				defer wg.Done()
 				defer func() {
 					if r := recover(); r != nil {
+						failed.Store(true)
 						eventCtx.Logger().Error("event handler panicked", "panic", r, "eventName", event.EventName, "signal", signal)
 					}
 				}()
@@ -198,6 +206,7 @@ func triggerHandlers(eventCtx common.ExtendedContext, event Event, handlers []fu
 	}
 	wg.Wait() // Wait for all goroutines to finish
 	eventCtx.Logger().Debug("all handlers finished", "eventName", event.EventName, "signal", signal)
+	return !failed.Load()
 }
 
 func (p *PostgresEventBus) CreateTask(classId string, eventName EventName, data EventData, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error) {

@@ -1,3 +1,18 @@
+-- A record survives the consumer claim until all handlers finish their handoff.
+-- Claimed records are deliberately retained on interruption; do not replay them
+-- automatically because a handler may already have performed external effects.
+CREATE TABLE event_consumer_work (
+    event_id VARCHAR NOT NULL REFERENCES event(id) ON DELETE CASCADE,
+    signal VARCHAR NOT NULL,
+    claimed BOOLEAN NOT NULL DEFAULT FALSE,
+    PRIMARY KEY (event_id, signal)
+);
+
+-- Older publishers did not persist the signal target. Conservatively protect
+-- their outstanding signals, including any whose observer-only target is unknown.
+INSERT INTO event_consumer_work (event_id, signal)
+SELECT id, last_signal FROM event WHERE last_signal <> '';
+
 CREATE INDEX idx_pr_borrowing_archive_cursor
     ON patron_request (requester_symbol, created_at, id)
     WHERE side = 'borrowing' AND ill_request IS NOT NULL;
@@ -133,10 +148,53 @@ BEGIN
          FOR UPDATE;
     END IF;
 
+    -- Skip active workflows and unfinished consumer handoffs before child locks.
+    -- Recheck after locking events in case their activity changes meanwhile.
+    IF EXISTS (
+        SELECT 1 FROM event
+         WHERE (patron_request_id = p_id OR ill_transaction_id = v_transaction_id)
+           AND (event_status IN ('NEW', 'PROCESSING')
+                OR EXISTS (SELECT 1 FROM event_consumer_work w WHERE w.event_id = event.id))
+    ) THEN
+        RETURN FALSE;
+    END IF;
+
+    IF v_transaction_id IS NOT NULL THEN
+        -- Retry reuses this transaction until its requester ID is advanced to
+        -- the successor. Lending messages also resolve it by requester ID.
+        -- Lock related requests without waiting: their workflows may update
+        -- the transaction or this request while holding their own request lock.
+        BEGIN
+            PERFORM 1 FROM patron_request
+             WHERE requester_symbol = p_owner
+               AND ((id = v_pr.next_req_id AND side = 'borrowing'
+                     AND ill_request #>> '{serviceInfo,requestType}' = 'Retry')
+                    OR (side = 'lending' AND requester_req_id = v_pr.requester_req_id))
+             ORDER BY id FOR UPDATE NOWAIT;
+        EXCEPTION WHEN lock_not_available THEN
+            RETURN FALSE;
+        END;
+        IF EXISTS (
+            SELECT 1 FROM patron_request
+             WHERE requester_symbol = p_owner AND NOT terminal_state
+               AND ((id = v_pr.next_req_id AND side = 'borrowing'
+                     AND ill_request #>> '{serviceInfo,requestType}' = 'Retry')
+                    OR (side = 'lending' AND requester_req_id = v_pr.requester_req_id))
+        ) THEN
+            RETURN FALSE;
+        END IF;
+    END IF;
+
     -- Parent row locks block new FK children; child locks block changes to
     -- existing rows while their snapshots are assembled.
     PERFORM 1 FROM event WHERE patron_request_id = p_id ORDER BY id FOR UPDATE;
-    PERFORM 1 FROM item WHERE pr_id = p_id ORDER BY id FOR UPDATE;
+    -- Item updates lock the item before their trigger updates this request.
+    -- Never wait for them while holding the request lock: skip the candidate.
+    BEGIN
+        PERFORM 1 FROM item WHERE pr_id = p_id ORDER BY id FOR UPDATE NOWAIT;
+    EXCEPTION WHEN lock_not_available THEN
+        RETURN FALSE;
+    END;
     PERFORM 1 FROM notification WHERE pr_id = p_id ORDER BY id FOR UPDATE;
     IF v_transaction_id IS NOT NULL THEN
         PERFORM 1 FROM event WHERE ill_transaction_id = v_transaction_id ORDER BY id FOR UPDATE;
@@ -145,7 +203,8 @@ BEGIN
     IF EXISTS (
         SELECT 1 FROM event
          WHERE (patron_request_id = p_id OR ill_transaction_id = v_transaction_id)
-           AND event_status IN ('NEW', 'PROCESSING')
+           AND (event_status IN ('NEW', 'PROCESSING')
+                OR EXISTS (SELECT 1 FROM event_consumer_work w WHERE w.event_id = event.id))
     ) THEN
         RETURN FALSE;
     END IF;
@@ -209,12 +268,29 @@ BEGIN
         RETURN FALSE;
     END IF;
 
+    -- Skip active workflows and unfinished consumer handoffs before child locks.
+    -- Recheck with events locked.
+    IF EXISTS (
+        SELECT 1 FROM event WHERE patron_request_id = p_id
+          AND (event_status IN ('NEW', 'PROCESSING')
+                OR EXISTS (SELECT 1 FROM event_consumer_work w WHERE w.event_id = event.id))
+    ) THEN
+        RETURN FALSE;
+    END IF;
+
     PERFORM 1 FROM event WHERE patron_request_id = p_id ORDER BY id FOR UPDATE;
-    PERFORM 1 FROM item WHERE pr_id = p_id ORDER BY id FOR UPDATE;
+    -- Item updates lock the item before their trigger updates this request.
+    -- Never wait for them while holding the request lock: skip the candidate.
+    BEGIN
+        PERFORM 1 FROM item WHERE pr_id = p_id ORDER BY id FOR UPDATE NOWAIT;
+    EXCEPTION WHEN lock_not_available THEN
+        RETURN FALSE;
+    END;
     PERFORM 1 FROM notification WHERE pr_id = p_id ORDER BY id FOR UPDATE;
     IF EXISTS (
         SELECT 1 FROM event WHERE patron_request_id = p_id
-          AND event_status IN ('NEW', 'PROCESSING')
+          AND (event_status IN ('NEW', 'PROCESSING')
+                OR EXISTS (SELECT 1 FROM event_consumer_work w WHERE w.event_id = event.id))
     ) THEN
         RETURN FALSE;
     END IF;
