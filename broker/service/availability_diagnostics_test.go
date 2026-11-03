@@ -85,14 +85,13 @@ func TestAvailabilityEventExplainsPolicySelection(t *testing.T) {
 	require.Equal(t, lookup.query, availability.Query)
 	require.Equal(t, "sru", availability.Protocol)
 	require.Equal(t, "https://catalog.example/sru", availability.Target)
-	require.True(t, *availability.RecordFound)
+	require.True(t, *availability.recordFound)
 	require.Equal(t, 3, *availability.AvailableHoldings)
 	require.True(t, availability.ResultApplied)
-	require.Equal(t, result.CustomData[ill_db.AvailabilityTokenKey], availability.AttemptToken)
+	require.NotEmpty(t, result.CustomData[ill_db.AvailabilityTokenKey])
+	require.Empty(t, availability.AttemptToken)
 	policy := result.CustomData["holdingsPolicy"].(*availabilityPolicyDetails)
 	require.Equal(t, "applied", policy.Status)
-	require.True(t, policy.Applied)
-	require.Equal(t, 3, policy.CandidateCount)
 	require.Equal(t, 2, policy.EligibleCount)
 	require.Equal(t, 1, policy.ExcludedCount)
 	require.Len(t, policy.Candidates, 3)
@@ -100,15 +99,26 @@ func TestAvailabilityEventExplainsPolicySelection(t *testing.T) {
 	require.Equal(t, 20, policy.Candidates[1].ShelvingPreference)
 	require.Equal(t, "shelving-location-excluded", policy.Candidates[2].Reason)
 	require.True(t, policy.Candidates[1].Selected)
-	require.Equal(t, "POPULAR", policy.Selected.ItemID)
+	require.Equal(t, "POPULAR", policy.selected.ItemID)
 	require.Equal(t, "higher-shelving-preference", policy.SelectionReason)
-	require.Equal(t, policy.Selected.ItemID, repo.supplier.ItemID.String)
+	require.Equal(t, policy.selected.ItemID, repo.supplier.ItemID.String)
 	encoded, err := json.Marshal(result)
 	require.NoError(t, err)
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal(encoded, &decoded))
 	custom := decoded["customData"].(map[string]any)
-	require.Equal(t, true, custom["holdingsPolicy"].(map[string]any)["applied"])
+	policyJSON := custom["holdingsPolicy"].(map[string]any)
+	require.NotContains(t, policyJSON, "applied")
+	require.NotContains(t, policyJSON, "candidateCount")
+	require.NotContains(t, policyJSON, "selected")
+	require.NotContains(t, policyJSON, "candidatesTruncated")
+	require.NotContains(t, custom["availabilityLookup"].(map[string]any), "recordFound")
+	require.NotContains(t, custom["availabilityLookup"].(map[string]any), "attemptToken")
+	candidates := policyJSON["candidates"].([]any)
+	require.NotContains(t, candidates[0].(map[string]any), "reason")
+	require.NotContains(t, candidates[0].(map[string]any), "selected")
+	require.Contains(t, result.Note, "Found 3 available items.")
+	require.Contains(t, result.Note, "Holdings policy selected POPULAR at Popular Reading Collection: shelving preference 20, compared with Main Library's 10.")
 	require.Equal(t, float64(3), custom["availabilityLookup"].(map[string]any)["availableHoldings"])
 }
 
@@ -146,10 +156,13 @@ func TestAvailabilityEventOutcomes(t *testing.T) {
 			require.Equal(t, tc.lookupOutcome, availability.Outcome)
 			require.Equal(t, tc.applied, availability.ResultApplied)
 			require.Equal(t, tc.policyStatus, policy.Status)
-			require.Equal(t, tc.applied && tc.policyStatus == "applied", policy.Applied)
+			require.NotEmpty(t, result.Note)
 			if tc.name == "superseded result" {
 				require.Equal(t, "superseded", result.CustomData[AvailabilityKey])
-				require.NotNil(t, policy.Selected, "retain diagnostics without claiming the decision was applied")
+				require.NotNil(t, policy.selected, "retain diagnostics without claiming the decision was applied")
+				require.Contains(t, result.Note, "Result superseded")
+				require.Contains(t, result.Note, "not applied")
+				require.NotEmpty(t, availability.AttemptToken)
 			}
 			if tc.name == "all excluded" {
 				require.Equal(t, "unavailable", result.CustomData[AvailabilityKey])
@@ -159,7 +172,7 @@ func TestAvailabilityEventOutcomes(t *testing.T) {
 			}
 			if tc.name == "lookup error keeps query" {
 				require.Equal(t, lookup.query, availability.Query)
-				require.Nil(t, availability.RecordFound)
+				require.Nil(t, availability.recordFound)
 			}
 		})
 	}
@@ -172,7 +185,7 @@ func TestAvailabilityEventWithoutLookup(t *testing.T) {
 	require.Equal(t, events.EventStatusSuccess, status)
 	require.Equal(t, "not-configured", result.CustomData["availabilityLookup"].(*availabilityLookupDetails).Outcome)
 	require.Equal(t, "applied-at-discovery", result.CustomData["holdingsPolicy"].(*availabilityPolicyDetails).Status)
-	require.False(t, result.CustomData["holdingsPolicy"].(*availabilityPolicyDetails).Applied)
+	require.Contains(t, result.Note, "Holdings policy was applied during discovery.")
 }
 
 func TestAvailabilityPolicyDiagnosticsBoundedAndDeterministic(t *testing.T) {
@@ -186,10 +199,18 @@ func TestAvailabilityPolicyDiagnosticsBoundedAndDeterministic(t *testing.T) {
 	selected := details.evaluate(entry, holdings)
 	require.Len(t, details.Candidates, availabilityCandidateLogLimit)
 	require.Equal(t, 10, details.CandidatesTruncated)
-	require.Equal(t, len(holdings), details.CandidateCount)
+	require.Equal(t, len(holdings), details.EligibleCount+details.ExcludedCount)
 	require.Equal(t, len(holdings), details.EligibleCount)
-	require.Equal(t, selected.ItemID, details.Selected.ItemID)
-	require.True(t, details.Selected.Selected)
+	require.Equal(t, selected.ItemID, details.selected.ItemID)
+	require.True(t, details.selected.Selected)
+	require.Equal(t, selected.ItemID, details.Candidates[len(details.Candidates)-1].ItemID)
+	selectedCount := 0
+	for _, candidate := range details.Candidates {
+		if candidate.Selected {
+			selectedCount++
+		}
+	}
+	require.Equal(t, 1, selectedCount)
 	require.Equal(t, "higher-shelving-preference", details.SelectionReason)
 	details = new(availabilityPolicyDetails)
 	selected = details.evaluate(entry, holdings[:2])
@@ -212,4 +233,28 @@ func TestAvailabilityDiagnosticRedactionAndTextBounds(t *testing.T) {
 	require.True(t, utf8.ValidString(text))
 	require.LessOrEqual(t, len(text), availabilityDiagnosticTextLimit+len("…"))
 	require.True(t, strings.HasSuffix(text, "…"))
+}
+
+func TestOperatorPolicySummary(t *testing.T) {
+	entry := diagnosticRepo().peer.CustomData
+	entry.HoldingsPolicy.Locations = &[]dirapi.HoldingsLocation{{Code: "Preferred", SupplyPreference: 5}}
+	for _, tc := range []struct {
+		name         string
+		holdings     []catalog.Holding
+		status, want string
+	}{
+		{"location preference", []catalog.Holding{{ItemId: "other", ShelvingLocation: "Main Library"}, {ItemId: "winner", Location: "Preferred", ShelvingLocation: "Main Library"}}, "applied", "location preference 5"},
+		{"tie", []catalog.Holding{{ItemId: "first"}, {ItemId: "second"}}, "applied", "preferences tied"},
+		{"no item ID", []catalog.Holding{{Location: "Preferred"}}, "applied", "selected an available holding at Preferred"},
+		{"unspecified location", []catalog.Holding{{ItemId: "copy"}}, "applied", "at unspecified location"},
+		{"failed save", []catalog.Holding{{ItemId: "copy"}}, "evaluated", "would select copy"},
+		{"rejected", []catalog.Holding{{ShelvingLocation: "Annex"}}, "evaluated", "would exclude all 1 available item"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := new(availabilityPolicyDetails)
+			d.evaluate(entry, tc.holdings)
+			d.Status = tc.status
+			require.Contains(t, d.summary(), tc.want)
+		})
+	}
 }

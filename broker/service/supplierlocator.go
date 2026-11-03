@@ -115,6 +115,12 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 			}
 			outcome.CustomData[ROTA_INFO_KEY] = *policyRota
 		}
+		if outcome.Note == "" {
+			outcome.Note = strings.TrimSpace(lookupDetails.summary() + " " + centralPolicySummary(policyRota))
+			if policyRota != nil && status == events.EventStatusError {
+				outcome.Note += " Rota update failed; policy decisions were not applied."
+			}
+		}
 	}()
 
 	requester, err := s.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
@@ -442,8 +448,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	resultApplied := false
 	defer func() {
 		lookupDetails.ResultApplied = resultApplied
-		policyDetails.Applied = resultApplied && policyDetails.Status == "evaluated"
-		if policyDetails.Applied {
+		if resultApplied && policyDetails.Status == "evaluated" {
 			policyDetails.Status = "applied"
 		}
 		if outcome == nil {
@@ -452,8 +457,19 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 		if outcome.CustomData == nil {
 			outcome.CustomData = map[string]any{}
 		}
+		if outcome.CustomData[ill_db.AvailabilityTokenKey] == lookupDetails.AttemptToken {
+			lookupDetails.AttemptToken = ""
+		}
 		outcome.CustomData["availabilityLookup"] = lookupDetails
 		outcome.CustomData["holdingsPolicy"] = policyDetails
+		if outcome.Note == "" {
+			outcome.Note = strings.TrimSpace(lookupDetails.summary() + " " + policyDetails.summary())
+			if outcome.CustomData[AvailabilityKey] == string(AvailabilitySuperseded) {
+				outcome.Note += " Result superseded; policy decision was not applied."
+			} else if policyDetails.Status == "evaluated" && !resultApplied {
+				outcome.Note += " Policy decision was not applied because the result could not be saved."
+			}
+		}
 	}()
 	token := uuid.NewString()
 	lookupDetails.AttemptToken = token
