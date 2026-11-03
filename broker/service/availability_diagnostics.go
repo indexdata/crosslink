@@ -275,8 +275,15 @@ func (d *availabilityPolicyDetails) summary() string {
 	text := "Holdings policy " + verb + " " + copyName + " at " + holdingName(selected)
 	switch d.SelectionReason {
 	case "higher-location-preference":
-		return fmt.Sprintf("%s: location preference %d, compared with %s's %d.", text,
-			selected.LocationPreference, holdingName(d.runnerUp), d.runnerUp.LocationPreference)
+		location, otherLocation := selected.Location, d.runnerUp.Location
+		if location == "" {
+			location = "unspecified location"
+		}
+		if otherLocation == "" {
+			otherLocation = "unspecified location"
+		}
+		return fmt.Sprintf("%s: location preference %d for %s, compared with %s's %d.", text,
+			selected.LocationPreference, location, otherLocation, d.runnerUp.LocationPreference)
 	case "higher-shelving-preference":
 		return fmt.Sprintf("%s: shelving preference %d, compared with %s's %d.", text,
 			selected.ShelvingPreference, holdingName(d.runnerUp), d.runnerUp.ShelvingPreference)

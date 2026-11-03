@@ -243,7 +243,8 @@ func TestOperatorPolicySummary(t *testing.T) {
 		holdings     []catalog.Holding
 		status, want string
 	}{
-		{"location preference", []catalog.Holding{{ItemId: "other", ShelvingLocation: "Main Library"}, {ItemId: "winner", Location: "Preferred", ShelvingLocation: "Main Library"}}, "applied", "location preference 5"},
+		{"location preference with identical shelving names", []catalog.Holding{{ItemId: "other", Location: "Other", ShelvingLocation: "Main Library"}, {ItemId: "winner", Location: "Preferred", ShelvingLocation: "Main Library"}}, "applied", "Holdings policy selected winner at Main Library: location preference 5 for Preferred, compared with Other's 0."},
+		{"location preference with missing location", []catalog.Holding{{ItemId: "other", ShelvingLocation: "Main Library"}, {ItemId: "winner", Location: "Preferred", ShelvingLocation: "Main Library"}}, "applied", "location preference 5 for Preferred, compared with unspecified location's 0."},
 		{"tie", []catalog.Holding{{ItemId: "first"}, {ItemId: "second"}}, "applied", "preferences tied"},
 		{"no item ID", []catalog.Holding{{Location: "Preferred"}}, "applied", "selected an available holding at Preferred"},
 		{"unspecified location", []catalog.Holding{{ItemId: "copy"}}, "applied", "at unspecified location"},
