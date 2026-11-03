@@ -144,8 +144,8 @@ SET lms_request_id = $2,
 WHERE id = $1;
 
 -- name: SaveNotification :one
-INSERT INTO notification (id, pr_id, from_symbol, to_symbol, direction, kind, note, cost, currency, condition, receipt, created_at, acknowledged_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+INSERT INTO notification (id, pr_id, from_symbol, to_symbol, direction, kind, note, cost, currency, code, code_description, receipt, created_at, acknowledged_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 ON CONFLICT (id) DO UPDATE
     SET from_symbol     = EXCLUDED.from_symbol,
         to_symbol       = EXCLUDED.to_symbol,
@@ -154,7 +154,8 @@ ON CONFLICT (id) DO UPDATE
         note            = EXCLUDED.note,
         cost            = EXCLUDED.cost,
         currency        = EXCLUDED.currency,
-        condition       = EXCLUDED.condition,
+        code            = EXCLUDED.code,
+        code_description = EXCLUDED.code_description,
         receipt         = EXCLUDED.receipt,
         created_at      = EXCLUDED.created_at,
         acknowledged_at = EXCLUDED.acknowledged_at
@@ -172,6 +173,7 @@ SELECT sqlc.embed(notification), COUNT(*) OVER () as full_count
 FROM notification
 WHERE pr_id = $3
   AND (sqlc.arg(kind)::text = '' OR kind = sqlc.arg(kind)::text)
+  AND (sqlc.arg(exclude_kind)::text = '' OR kind <> sqlc.arg(exclude_kind)::text)
 ORDER BY created_at
 LIMIT $1 OFFSET $2;
 

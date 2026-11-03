@@ -1077,8 +1077,8 @@ func getStaffNotes(noteList []pr_db.Notification) string {
 func getLoanConditions(conditionList []pr_db.Notification) string {
 	conditionStrings := []string{}
 	for _, note := range conditionList {
-		if note.Condition.Valid {
-			conditionStrings = append(conditionStrings, note.Condition.String)
+		if note.Code.Valid {
+			conditionStrings = append(conditionStrings, note.Code.String)
 		}
 	}
 	conditions := strings.Join(conditionStrings, "\n")

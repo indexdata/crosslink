@@ -471,7 +471,7 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 		if notification.Receipt != nil {
 			receipt = pr_db.NotificationReceipt(*notification.Receipt)
 		}
-		bundle.Notifications = append(bundle.Notifications, pr_db.SaveNotificationParams{ID: notification.Id, FromSymbol: notification.FromSymbol, ToSymbol: notification.ToSymbol, Direction: pr_db.NotificationDirection(notification.Direction), Kind: pr_db.NotificationKind(notification.Kind), Note: pgTextFromPtr(notification.Note), Cost: cost, Currency: pgTextFromPtr(notification.Currency), Condition: pgTextFromPtr(notification.Condition), Receipt: receipt, CreatedAt: pgTimestamp(notification.CreatedAt), AcknowledgedAt: pgTimestampFromPtr(notification.AcknowledgedAt)})
+		bundle.Notifications = append(bundle.Notifications, pr_db.SaveNotificationParams{ID: notification.Id, FromSymbol: notification.FromSymbol, ToSymbol: notification.ToSymbol, Direction: pr_db.NotificationDirection(notification.Direction), Kind: pr_db.NotificationKind(notification.Kind), Note: pgTextFromPtr(notification.Note), Cost: cost, Currency: pgTextFromPtr(notification.Currency), Code: pgTextFromPtr(notification.Code), CodeDescription: pgTextFromPtr(notification.CodeDescription), Receipt: receipt, CreatedAt: pgTimestamp(notification.CreatedAt), AcknowledgedAt: pgTimestampFromPtr(notification.AcknowledgedAt)})
 	}
 
 	if apiBundle.IllTransaction == nil {

@@ -52,7 +52,7 @@ func (m *MockPrRepo) ListPatronRequests(ctx common.ExtendedContext, params pr_db
 }
 
 func (m *MockPrRepo) GetNotificationsByPrId(ctx common.ExtendedContext, params pr_db.GetNotificationsByPrIdParams) ([]pr_db.Notification, int64, error) {
-	args := m.Called(params.PrID, params.Kind)
+	args := m.Called(params.PrID, params.Kind, params.ExcludeKind)
 	return args.Get(0).([]pr_db.Notification), args.Get(1).(int64), args.Error(2)
 }
 
@@ -238,8 +238,8 @@ func TestPostPullslips_OK(t *testing.T) {
 
 	prRepo.On("ListPatronRequests", withOwnerRestriction()).Return([]pr_db.PatronRequest{pr}, int64(1), nil)
 
-	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindNote)).Return([]pr_db.Notification{{Note: pgtype.Text{String: "Be careful with item"}}}, int64(1), nil)
-	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{{Condition: pgtype.Text{String: "Library use only"}}}, int64(1), nil)
+	prRepo.On("GetNotificationsByPrId", "pr-1", "", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{{Kind: pr_db.NotificationKindNote, Note: pgtype.Text{String: "Be careful with item"}}}, int64(1), nil)
+	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindCondition), "").Return([]pr_db.Notification{{Kind: pr_db.NotificationKindCondition, Code: pgtype.Text{String: "Library use only"}}}, int64(1), nil)
 
 	psRepo := new(MockPsRepo)
 	psRepo.On("SavePullSlip", mock.AnythingOfType("ps_db.SavePullSlipParams")).
@@ -308,8 +308,8 @@ func TestPostPullslips_SaveError(t *testing.T) {
 
 	prRepo := new(MockPrRepo)
 	prRepo.On("ListPatronRequests", withOwnerRestriction()).Return([]pr_db.PatronRequest{pr}, int64(1), nil)
-	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindNote)).Return([]pr_db.Notification{{Note: pgtype.Text{String: "Be careful with item"}}}, int64(1), nil)
-	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{{Condition: pgtype.Text{String: "Library use only"}}}, int64(1), nil)
+	prRepo.On("GetNotificationsByPrId", "pr-1", "", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{{Kind: pr_db.NotificationKindNote, Note: pgtype.Text{String: "Be careful with item"}}}, int64(1), nil)
+	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindCondition), "").Return([]pr_db.Notification{{Kind: pr_db.NotificationKindCondition, Code: pgtype.Text{String: "Library use only"}}}, int64(1), nil)
 
 	psRepo := new(MockPsRepo)
 	psRepo.On("SavePullSlip", mock.AnythingOfType("ps_db.SavePullSlipParams")).
@@ -354,8 +354,8 @@ func TestPostPullslips_CqlBased_OK(t *testing.T) {
 	pr := patronRequest("pr-cql", sym)
 	prRepo := new(MockPrRepo)
 	prRepo.On("ListPatronRequests", withOwnerRestriction()).Return([]pr_db.PatronRequest{pr}, int64(1), nil)
-	prRepo.On("GetNotificationsByPrId", "pr-cql", string(pr_db.NotificationKindNote)).Return([]pr_db.Notification{}, int64(0), nil)
-	prRepo.On("GetNotificationsByPrId", "pr-cql", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{}, int64(0), nil)
+	prRepo.On("GetNotificationsByPrId", "pr-cql", "", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{}, int64(0), nil)
+	prRepo.On("GetNotificationsByPrId", "pr-cql", string(pr_db.NotificationKindCondition), "").Return([]pr_db.Notification{}, int64(0), nil)
 
 	psRepo := new(MockPsRepo)
 	psRepo.On("SavePullSlip", mock.AnythingOfType("ps_db.SavePullSlipParams")).Return(ps_db.PullSlip{}, nil)
@@ -393,8 +393,8 @@ func TestPostPullslipsIdRegenerate_OK(t *testing.T) {
 	pr := patronRequest("pr-1", sym)
 	prRepo := new(MockPrRepo)
 	prRepo.On("ListPatronRequests", withOwnerRestriction()).Return([]pr_db.PatronRequest{pr}, int64(1), nil)
-	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindNote)).Return([]pr_db.Notification{}, int64(0), nil)
-	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{}, int64(0), nil)
+	prRepo.On("GetNotificationsByPrId", "pr-1", "", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{}, int64(0), nil)
+	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindCondition), "").Return([]pr_db.Notification{}, int64(0), nil)
 
 	psRepo := new(MockPsRepo)
 	psRepo.On("GetPullSlipByIdAndOwner", "ps-1", sym).Return(slip, nil)
@@ -454,8 +454,8 @@ func TestPostPullslipsIdRegenerate_SaveError(t *testing.T) {
 	pr := patronRequest("pr-1", sym)
 	prRepo := new(MockPrRepo)
 	prRepo.On("ListPatronRequests", withOwnerRestriction()).Return([]pr_db.PatronRequest{pr}, int64(1), nil)
-	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindNote)).Return([]pr_db.Notification{}, int64(0), nil)
-	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{}, int64(0), nil)
+	prRepo.On("GetNotificationsByPrId", "pr-1", "", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{}, int64(0), nil)
+	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindCondition), "").Return([]pr_db.Notification{}, int64(0), nil)
 
 	psRepo := new(MockPsRepo)
 	psRepo.On("GetPullSlipByIdAndOwner", "ps-saveerr", sym).Return(slip, nil)

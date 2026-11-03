@@ -1,0 +1,51 @@
+meta {
+  name: Borrowing side check sent cancellation notification
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{host}}/patron_requests/{{cancellationPrId}}/notifications?side=borrowing&kind=cancellation_reason
+  body: none
+  auth: basic
+}
+
+params:query {
+  side: borrowing
+  kind: cancellation_reason
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")))
+}
+
+script:post-response {
+  test("HTTP request succeeds", () => {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("requester keeps a sent copy of the cancellation reason", () => {
+    const body = res.getBody();
+    expect(body.about.count).to.equal(1);
+    const notification = body.items[0];
+    expect(notification.kind).to.equal("cancellation_reason");
+    expect(notification.direction).to.equal("sent");
+    expect(notification.receipt).to.equal("SENT");
+    expect(notification.code).to.equal("InvalidUser");
+    expect(notification.note).to.equal("Please cancel. Ref: 123#");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

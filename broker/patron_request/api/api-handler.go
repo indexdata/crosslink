@@ -1213,12 +1213,7 @@ func (a *PatronRequestApiHandler) PostTemplatesPreview(w http.ResponseWriter, r 
 			if pr == nil {
 				return
 			}
-			notes, _, err := a.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{Limit: 100, Offset: 0, PrID: pr.ID, Kind: string(pr_db.NotificationKindNote)})
-			if err != nil {
-				api.AddInternalError(ctx, w, err)
-				return
-			}
-			conditions, _, err := a.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{Limit: 100, Offset: 0, PrID: pr.ID, Kind: string(pr_db.NotificationKindCondition)})
+			notes, conditions, err := pr_db.GetTemplateNotifications(ctx, a.prRepo, pr.ID)
 			if err != nil {
 				api.AddInternalError(ctx, w, err)
 				return
@@ -1704,18 +1699,19 @@ func toApiNotification(notification pr_db.Notification) (proapi.PrNotification, 
 		receipt = &r
 	}
 	return proapi.PrNotification{
-		Id:             notification.ID,
-		FromSymbol:     notification.FromSymbol,
-		ToSymbol:       notification.ToSymbol,
-		Direction:      proapi.NotificationDirection(notification.Direction),
-		Kind:           proapi.NotificationKind(notification.Kind),
-		Note:           toString(notification.Note),
-		Cost:           cost,
-		Currency:       toString(notification.Currency),
-		Condition:      toString(notification.Condition),
-		Receipt:        receipt,
-		CreatedAt:      notification.CreatedAt.Time,
-		AcknowledgedAt: ackAt,
+		Id:              notification.ID,
+		FromSymbol:      notification.FromSymbol,
+		ToSymbol:        notification.ToSymbol,
+		Direction:       proapi.NotificationDirection(notification.Direction),
+		Kind:            proapi.NotificationKind(notification.Kind),
+		Note:            toString(notification.Note),
+		Cost:            cost,
+		Currency:        toString(notification.Currency),
+		Code:            toString(notification.Code),
+		CodeDescription: toString(notification.CodeDescription),
+		Receipt:         receipt,
+		CreatedAt:       notification.CreatedAt.Time,
+		AcknowledgedAt:  ackAt,
 	}, nil
 }
 

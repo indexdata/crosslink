@@ -34,6 +34,33 @@ Plain notes no longer populate `cancellationReason`. A message without a valid
 reason marker leaves the stored reason unchanged; a later valid reason replaces
 it. This does not change cancellation routing or state transitions.
 
+The extracted reason is also recorded as a notification of kind
+`cancellation_reason`, with the reason in `code` and the remaining note text, if
+any, in `note`. Requesters keep a `sent` copy when their `cancel-request` action
+succeeds; the receiving side stores a `received` copy.
+
+# Notification codes
+
+A notification's `code` is interpreted by its `kind`: the loan condition for
+`condition`, the reason for `cancellation_reason` and `unfilled_reason`, and
+absent for `note`. Libraries define their own codes, so `code` is free text owned
+by the sender (`fromSymbol`). When the sender's cached Directory entry lists the
+code under `loanConditions`, `cancellationReasons` or `unfilledReasons`, its
+description is copied into `codeDescription` when the notification is stored;
+otherwise `codeDescription` is absent. Behind an opaque broker, received
+notifications come from the broker's symbol, so the sender's vocabulary is not
+visible and they carry only `code`; sent copies are always described from the
+sender's own entry. Unfilled reasons come from ISO18626
+`reasonUnfilled`, both on incoming supplier messages and on this broker's
+`cannot-supply` action. A message is stored as one notification; when it carries
+several coded values, a condition (or cost) takes precedence over an unfilled
+reason, which takes precedence over a cancellation reason.
+
+Email and pull-slip templates render conditions through `{{.LoanConditions}}`;
+the note text of every other notification kind, including reason
+notifications, appears in `{{.StaffNotes}}`. Reason codes are not staff notes:
+cancellation reasons render through `{{.CancellationReason}}`.
+
 External vendor shims strip these markers from outgoing requester, supplier, and
 request-service notes before serialization, using a copy so internal messages
 retain their data. Local CrossLink delivery retains markers for extraction. Original

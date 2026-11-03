@@ -369,7 +369,7 @@ func TestNotification(t *testing.T) {
 			String: "EUR",
 			Valid:  true,
 		},
-		Condition: pgtype.Text{
+		Code: pgtype.Text{
 			String: "c123",
 			Valid:  true,
 		},
@@ -392,7 +392,7 @@ func TestNotification(t *testing.T) {
 	assert.Equal(t, pr_db.NotificationDirectionReceived, notification.Direction)
 	assert.Equal(t, "n123", notification.Note.String)
 	assert.Equal(t, "EUR", notification.Currency.String)
-	assert.Equal(t, "c123", notification.Condition.String)
+	assert.Equal(t, "c123", notification.Code.String)
 	assert.Equal(t, pr_db.NotificationSeen, notification.Receipt)
 	cost, err := notification.Cost.Float64Value()
 	assert.NoError(t, err)
@@ -421,7 +421,7 @@ func TestNotification(t *testing.T) {
 			String: "USD",
 			Valid:  true,
 		},
-		Condition: pgtype.Text{
+		Code: pgtype.Text{
 			String: "c12",
 			Valid:  true,
 		},
@@ -444,7 +444,7 @@ func TestNotification(t *testing.T) {
 	assert.Equal(t, pr_db.NotificationDirectionSent, notification.Direction)
 	assert.Equal(t, "n12", notification.Note.String)
 	assert.Equal(t, "USD", notification.Currency.String)
-	assert.Equal(t, "c12", notification.Condition.String)
+	assert.Equal(t, "c12", notification.Code.String)
 	assert.Equal(t, pr_db.NotificationAccepted, notification.Receipt)
 	cost, err = notification.Cost.Float64Value()
 	assert.NoError(t, err)
@@ -464,6 +464,35 @@ func TestNotification(t *testing.T) {
 	assert.Len(t, notifications, 1)
 	assert.Equal(t, notificaitonId, notifications[0].ID)
 	assert.Equal(t, int64(1), fullCount)
+
+	// Reason kinds store their code and description and filter by kind
+	reason, err := prRepo.SaveNotification(appCtx, pr_db.SaveNotificationParams{
+		ID:              uuid.NewString(),
+		PrID:            prId,
+		FromSymbol:      "ISIL:REQ",
+		ToSymbol:        "ISIL:SUP",
+		Direction:       pr_db.NotificationDirectionReceived,
+		Kind:            pr_db.NotificationKindCancellationReason,
+		Code:            pgtype.Text{String: "LocalCode", Valid: true},
+		CodeDescription: pgtype.Text{String: "Library-defined reason", Valid: true},
+		CreatedAt:       pgtype.Timestamp{Time: time.Now(), Valid: true},
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, "Library-defined reason", reason.CodeDescription.String)
+	notifications, fullCount, err = prRepo.GetNotificationsByPrId(appCtx, pr_db.GetNotificationsByPrIdParams{PrID: prId, Limit: 10, Offset: 0, Kind: string(pr_db.NotificationKindCancellationReason)})
+	assert.NoError(t, err)
+	if assert.Len(t, notifications, 1) {
+		assert.Equal(t, reason.ID, notifications[0].ID)
+		assert.Equal(t, "LocalCode", notifications[0].Code.String)
+		assert.Equal(t, "Library-defined reason", notifications[0].CodeDescription.String)
+	}
+	assert.Equal(t, int64(1), fullCount)
+	notifications, _, err = prRepo.GetNotificationsByPrId(appCtx, pr_db.GetNotificationsByPrIdParams{PrID: prId, Limit: 10, Offset: 0, Kind: string(pr_db.NotificationKindCondition)})
+	assert.NoError(t, err)
+	if assert.Len(t, notifications, 1) {
+		assert.Equal(t, notificaitonId, notifications[0].ID)
+		assert.False(t, notifications[0].CodeDescription.Valid)
+	}
 
 	err = prRepo.DeletePatronRequest(appCtx, prId)
 	assert.NoError(t, err)
@@ -1081,4 +1110,53 @@ func TestRequesterPickupLocationPersistence(t *testing.T) {
 	if assert.NoError(t, err) {
 		assert.Equal(t, pr.RequesterPickupLocationID, updated.RequesterPickupLocationID)
 	}
+}
+
+func TestGetTemplateNotificationsKeepsConditionsBehindManyNotes(t *testing.T) {
+	prId := uuid.NewString()
+	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID:            prId,
+		CreatedAt:     pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Language:      "english",
+		Items:         []pr_db.PrItem{},
+		TerminalState: false,
+	})
+	require.NoError(t, err)
+	save := func(kind pr_db.NotificationKind, at time.Time) string {
+		id := uuid.NewString()
+		_, err := prRepo.SaveNotification(appCtx, pr_db.SaveNotificationParams{
+			ID: id, PrID: prId, FromSymbol: "ISIL:SUP", ToSymbol: "ISIL:REQ",
+			Direction: pr_db.NotificationDirectionReceived, Kind: kind,
+			Note:      pgtype.Text{String: string(kind), Valid: true},
+			CreatedAt: pgtype.Timestamp{Time: at, Valid: true},
+		})
+		require.NoError(t, err)
+		return id
+	}
+	// More notes than either category's limit, all older than the only condition.
+	start := time.Now().Add(-time.Hour)
+	reasonID := save(pr_db.NotificationKindCancellationReason, start)
+	for i := range 250 {
+		save(pr_db.NotificationKindNote, start.Add(time.Duration(i+1)*time.Second))
+	}
+	conditionID := save(pr_db.NotificationKindCondition, start.Add(time.Hour))
+
+	notes, conditions, err := pr_db.GetTemplateNotifications(appCtx, prRepo, prId)
+
+	require.NoError(t, err)
+	require.Len(t, conditions, 1)
+	assert.Equal(t, conditionID, conditions[0].ID)
+	assert.Len(t, notes, 100)
+	assert.Equal(t, reasonID, notes[0].ID, "reason notifications count as staff notes")
+	for _, n := range notes {
+		assert.NotEqual(t, pr_db.NotificationKindCondition, n.Kind)
+	}
+
+	// exclude_kind composes with the other filters and reports its own full count.
+	_, fullCount, err := prRepo.GetNotificationsByPrId(appCtx, pr_db.GetNotificationsByPrIdParams{Limit: 1, PrID: prId, ExcludeKind: string(pr_db.NotificationKindCondition)})
+	require.NoError(t, err)
+	assert.Equal(t, int64(251), fullCount)
+	_, fullCount, err = prRepo.GetNotificationsByPrId(appCtx, pr_db.GetNotificationsByPrIdParams{Limit: 1, PrID: prId})
+	require.NoError(t, err)
+	assert.Equal(t, int64(252), fullCount)
 }

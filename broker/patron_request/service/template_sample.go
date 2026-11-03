@@ -71,9 +71,9 @@ func getTemplateSample(name string) (TemplateSample, error) {
 	}
 	for _, condition := range file.Conditions {
 		sample.Conditions = append(sample.Conditions, pr_db.Notification{
-			PrID:      file.Request.ID,
-			Kind:      pr_db.NotificationKindCondition,
-			Condition: pgtype.Text{String: condition, Valid: true},
+			PrID: file.Request.ID,
+			Kind: pr_db.NotificationKindCondition,
+			Code: pgtype.Text{String: condition, Valid: true},
 		})
 	}
 	return sample, nil

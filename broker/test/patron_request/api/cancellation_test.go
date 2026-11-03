@@ -28,7 +28,10 @@ func TestRequesterCancellationReasonPersistsThroughSupplierAcceptance(t *testing
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	requesterSymbol := "ISIL:REQ" + uuid.NewString()
 	supplierSymbol := "ISIL:SUP" + uuid.NewString()
-	apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink, dirapi.Entry{}, requesterSymbol)
+	// The requester owns the cancellation vocabulary. Its sent copy is described
+	// from its own entry; behind an opaque broker the supplier cannot see the owner.
+	cancellationReasons := []dirapi.IllConfigCodeDescription{{Code: "InvalidUser", DefaultDesc: "User account is invalid"}}
+	apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink, dirapi.Entry{IllConfig: &dirapi.IllConfig{CancellationReasons: &cancellationReasons}}, requesterSymbol)
 	apptest.CreatePeerWithModeAndVendor(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink, dirapi.Entry{}, supplierSymbol)
 	patron := "p1"
 	body, err := json.Marshal(proapi.CreatePatronRequest{
@@ -101,10 +104,23 @@ func TestRequesterCancellationReasonPersistsThroughSupplierAcceptance(t *testing
 	assert.Equal(t, "InvalidUser", supplier.CancellationReason.String)
 	assertAPIReason(requester.Id, "borrowing", requesterSymbol)
 	assertAPIReason(supplierID, "lending", supplierSymbol)
-	notes, _, err := prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{PrID: supplierID, Kind: string(pr_db.NotificationKindNote), Limit: 100})
-	require.NoError(t, err)
-	require.Len(t, notes, 1)
-	assert.Equal(t, "Please cancel. Ref: 123#", notes[0].Note.String)
+	assertReasonNotification := func(prID string, direction pr_db.NotificationDirection, fromSymbol, description string) {
+		t.Helper()
+		reasons, _, err := prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{PrID: prID, Kind: string(pr_db.NotificationKindCancellationReason), Limit: 100})
+		require.NoError(t, err)
+		require.Len(t, reasons, 1)
+		assert.Equal(t, direction, reasons[0].Direction)
+		assert.Equal(t, fromSymbol, reasons[0].FromSymbol)
+		assert.Equal(t, "InvalidUser", reasons[0].Code.String)
+		assert.Equal(t, description, reasons[0].CodeDescription.String)
+		assert.Equal(t, description != "", reasons[0].CodeDescription.Valid)
+		assert.Equal(t, "Please cancel. Ref: 123#", reasons[0].Note.String)
+		notes, _, err := prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{PrID: prID, Kind: string(pr_db.NotificationKindNote), Limit: 100})
+		require.NoError(t, err)
+		assert.Empty(t, notes, "the reason's note text is stored once, on the cancellation_reason notification")
+	}
+	assertReasonNotification(supplierID, pr_db.NotificationDirectionReceived, "ISIL:BROKER", "")
+	assertReasonNotification(requester.Id, pr_db.NotificationDirectionSent, requesterSymbol, "User account is invalid")
 
 	// accept-cancel generates no note: the borrowing request must retain its reason
 	// without relying on the supplier to echo the microformat.

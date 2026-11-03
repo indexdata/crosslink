@@ -38,11 +38,7 @@ func NewPdfService(prRepo pr_db.PrRepo) PdfService {
 func (p *PdfServiceImpl) GeneratePdfPullSlipForPrs(ctx common.ExtendedContext, prs []pr_db.PatronRequest) ([]byte, error) {
 	pdfs := [][]byte{}
 	for _, pr := range prs {
-		notes, _, err := p.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{Limit: 100, Offset: 0, PrID: pr.ID, Kind: string(pr_db.NotificationKindNote)})
-		if err != nil {
-			return []byte{}, err
-		}
-		conditions, _, err := p.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{Limit: 100, Offset: 0, PrID: pr.ID, Kind: string(pr_db.NotificationKindCondition)})
+		notes, conditions, err := pr_db.GetTemplateNotifications(ctx, p.prRepo, pr.ID)
 		if err != nil {
 			return []byte{}, err
 		}
