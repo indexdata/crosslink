@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/indexdata/cql-go/pgcql"
 	"github.com/indexdata/crosslink/broker/common"
@@ -46,6 +47,34 @@ type PrRepo interface {
 	GetTemplatesByOwner(ctx common.ExtendedContext, params GetTemplatesByOwnerParams) ([]Template, int64, error)
 	GetTemplateByPurposeAudienceLabelAndOwner(ctx common.ExtendedContext, params GetTemplateByPurposeAudienceLabelAndOwnerParams) (Template, error)
 	DeleteTemplateByIdAndOwner(ctx common.ExtendedContext, id string, owner string) error
+}
+
+// ArchiveBorrowingRequest stores and removes one unchanged, owner-matched borrowing
+// request and its transaction in a single database statement/transaction.
+func (r *PgPrRepo) ArchiveBorrowingRequest(ctx common.ExtendedContext, pr PatronRequest, owner string, cutoff time.Time, anonymize bool) (bool, error) {
+	var archived bool
+	err := r.GetConnOrTx().QueryRow(ctx,
+		"SELECT archive_borrowing_request($1, $2, $3, $4, $5, $6)",
+		pr.ID, owner, string(pr.State), pr.UpdatedAt.Time, cutoff, anonymize,
+	).Scan(&archived)
+	if err != nil {
+		return false, fmt.Errorf("archive borrowing request %s: %w", pr.ID, err)
+	}
+	return archived, nil
+}
+
+// ArchiveLendingRequest atomically stores and removes one unchanged,
+// supplier-owned lending request and its children, preserving the transaction.
+func (r *PgPrRepo) ArchiveLendingRequest(ctx common.ExtendedContext, pr PatronRequest, owner string, cutoff time.Time, anonymize bool) (bool, error) {
+	var archived bool
+	err := r.GetConnOrTx().QueryRow(ctx,
+		"SELECT archive_lending_request($1, $2, $3, $4, $5, $6)",
+		pr.ID, owner, string(pr.State), pr.UpdatedAt.Time, cutoff, anonymize,
+	).Scan(&archived)
+	if err != nil {
+		return false, fmt.Errorf("archive lending request %s: %w", pr.ID, err)
+	}
+	return archived, nil
 }
 
 var ErrUnsupportedFacet = errors.New("unsupported facet field")
