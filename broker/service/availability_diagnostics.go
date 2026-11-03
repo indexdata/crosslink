@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -36,6 +37,9 @@ type availabilityLookupDetails struct {
 func (d *availabilityLookupDetails) recordLookup(started time.Time, result catalog.LookupResult, err error) {
 	d.DurationMS = time.Since(started).Milliseconds()
 	d.Outcome = "lookup-failed"
+	if errors.Is(err, catalog.ErrHoldingsParse) {
+		d.Outcome = "holdings-failed"
+	}
 	if result != nil {
 		d.Query = diagnosticText(result.GetQuery())
 		if err == nil {

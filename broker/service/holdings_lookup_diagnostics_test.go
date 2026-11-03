@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/adapter"
@@ -28,7 +29,8 @@ func TestCentralHoldingsLookupDiagnostics(t *testing.T) {
 		{"no record", "no-record", "No bibliographic record found.", events.EventStatusProblem, func(l *diagnosticLookup) { l.Holdings = nil }},
 		{"record without returned holdings", "no-available-holdings", "Record found with no holdings returned.", events.EventStatusProblem, func(l *diagnosticLookup) { l.Holdings = nil; l.RecordFound = true }},
 		{"lookup failure", "lookup-failed", "Holdings lookup failed.", events.EventStatusError, func(l *diagnosticLookup) { l.err = errors.New("lookup failed") }},
-		{"parser failure", "holdings-failed", "Could not parse holdings lookup results.", events.EventStatusError, func(l *diagnosticLookup) { l.HoldingsErr = errors.New("parser failed") }},
+		{"parser failure during lookup", "holdings-failed", "Could not parse holdings lookup results.", events.EventStatusError, func(l *diagnosticLookup) { l.err = fmt.Errorf("record parsing: %w", catalog.ErrHoldingsParse) }},
+		{"holdings failure", "holdings-failed", "Could not parse holdings lookup results.", events.EventStatusError, func(l *diagnosticLookup) { l.HoldingsErr = errors.New("parser failed") }},
 		{"nil result", "lookup-failed", "Holdings lookup failed.", events.EventStatusError, func(l *diagnosticLookup) { l.nilResult = true }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
