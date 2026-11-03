@@ -206,6 +206,18 @@ func itemCount(n int, noun string) string {
 	return fmt.Sprintf("%d %s", n, noun)
 }
 
+// Discovery holdings can identify suppliers without identifying available items.
+func (d *availabilityLookupDetails) discoverySummary() string {
+	switch d.Outcome {
+	case "available-holdings":
+		return "Found " + itemCount(*d.AvailableHoldings, "holding") + "."
+	case "no-available-holdings":
+		return "Record found with no holdings returned."
+	default:
+		return d.summary()
+	}
+}
+
 func (d *availabilityLookupDetails) summary() string {
 	switch d.Outcome {
 	case "available-holdings":

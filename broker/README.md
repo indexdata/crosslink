@@ -567,8 +567,12 @@ saves explicitly state that the evaluated decision was not applied.
 
 The central `locate-suppliers` event uses the same lookup summary under
 `resultData.customData.holdingsLookup`, alongside its existing query, holdings and
-`rotaInfo` data. It records lookup/parsing time, available-holding
-counts and failures, including on unsuccessful discovery. `configurationSource`
+`rotaInfo` data. It records lookup/parsing time, returned-holding
+counts and failures, including on unsuccessful discovery. The discovery note says
+"Found N holdings" because these results may identify supplier holdings without
+identifying individual items or confirming current circulation availability.
+The existing `availableHoldings` field counts those parsed holdings.
+`configurationSource`
 distinguishes global adapters from Directory configuration. A global override does
 not report the overridden Directory endpoint as its target.
 Each `rotaInfo.suppliers` candidate includes its raw catalog `itemId`,
