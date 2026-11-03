@@ -53,10 +53,39 @@ ORDER BY event.timestamp, event.id
 LIMIT 1;
 
 -- name: ClaimEventForSignal :one
-UPDATE event
-SET last_signal = ''
-WHERE last_signal = $2 AND event.id = $1
-RETURNING sqlc.embed(event);
+-- Lock the event first, matching archival's event lock. Claim and protection
+-- become visible atomically, before handlers can create any follow-up work.
+WITH claimed_event AS (
+    UPDATE event
+    SET last_signal = ''
+    WHERE last_signal = sqlc.arg(signal)::varchar AND event.id = sqlc.arg(event_id)::varchar
+      AND EXISTS (SELECT 1 FROM event_consumer_work w
+                  WHERE w.event_id = event.id AND w.signal = sqlc.arg(signal)::varchar AND NOT w.claimed)
+    RETURNING event.*
+), claimed_work AS (
+    UPDATE event_consumer_work SET claimed = TRUE
+    WHERE event_id = sqlc.arg(event_id)::varchar AND signal = sqlc.arg(signal)::varchar AND NOT claimed
+      AND EXISTS (SELECT 1 FROM claimed_event)
+    RETURNING event_id
+)
+SELECT sqlc.embed(event) FROM claimed_event AS event
+JOIN claimed_work ON claimed_work.event_id = event.id;
+
+-- name: PrepareConsumerSignal :exec
+INSERT INTO event_consumer_work (event_id, signal)
+SELECT id, sqlc.arg(signal)::varchar FROM event
+WHERE id = sqlc.arg(event_id)::varchar AND last_signal = sqlc.arg(signal)::varchar
+ON CONFLICT (event_id, signal) DO NOTHING;
+
+-- name: RetireSupersededConsumerSignals :exec
+-- Lifecycle updates already superseded these unclaimed signals. Running
+-- handlers retain their separate records even when the next signal is emitted.
+DELETE FROM event_consumer_work
+WHERE event_id = sqlc.arg(event_id)::varchar AND signal <> sqlc.arg(signal)::varchar AND NOT claimed;
+
+-- name: CompleteConsumerSignal :exec
+DELETE FROM event_consumer_work
+WHERE event_id = $1 AND signal = $2 AND claimed;
 
 -- name: GetIllTransactionEvents :many
 SELECT sqlc.embed(event), COUNT(*) OVER () as full_count

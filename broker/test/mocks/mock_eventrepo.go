@@ -151,3 +151,11 @@ func (r *MockEventRepositoryError) GetLatestRequestEventByAction(ctx common.Exte
 func (r *MockEventRepositoryError) GetPatronRequestEvents(ctx common.ExtendedContext, id string) ([]events.Event, error) {
 	return []events.Event{}, errors.New("DB error")
 }
+
+func (r *MockEventRepositorySuccess) CompleteConsumerSignal(ctx common.ExtendedContext, id string, signal events.Signal) error {
+	return nil
+}
+
+func (r *MockEventRepositoryError) CompleteConsumerSignal(ctx common.ExtendedContext, id string, signal events.Signal) error {
+	return errors.New("DB error")
+}

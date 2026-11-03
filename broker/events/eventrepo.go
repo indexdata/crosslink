@@ -15,7 +15,10 @@ type EventRepo interface {
 	GetEvent(ctx common.ExtendedContext, id string) (Event, error)
 	GetEventForUpdate(ctx common.ExtendedContext, id string) (Event, error)
 	GetOlderIncompleteEvent(ctx common.ExtendedContext, event Event) (Event, error)
+	// ClaimEventForSignal claims one pending lifecycle signal, retaining archive protection.
 	ClaimEventForSignal(ctx common.ExtendedContext, id string, signal Signal) (Event, error)
+	// CompleteConsumerSignal releases protection after every consumer handler returns.
+	CompleteConsumerSignal(ctx common.ExtendedContext, id string, signal Signal) error
 	Notify(ctx common.ExtendedContext, eventId string, signal Signal, target SignalTarget) error
 	GetIllTransactionEvents(ctx common.ExtendedContext, id string) ([]Event, int64, error)
 	GetBatchActionEvents(ctx common.ExtendedContext, taskID string) ([]Event, error)
@@ -69,8 +72,8 @@ func (r *PgEventRepo) GetOlderIncompleteEvent(ctx common.ExtendedContext, event 
 
 func (r *PgEventRepo) ClaimEventForSignal(ctx common.ExtendedContext, id string, signal Signal) (Event, error) {
 	params := ClaimEventForSignalParams{
-		ID:         id,
-		LastSignal: string(signal),
+		EventID: id,
+		Signal:  string(signal),
 	}
 	row, err := r.queries.ClaimEventForSignal(ctx, r.GetConnOrTx(), params)
 	return row.Event, err
@@ -81,16 +84,50 @@ func (r *PgEventRepo) UpdateEventLifecycle(ctx common.ExtendedContext, params Up
 	return row.Event, err
 }
 
-func (r *PgEventRepo) Notify(ctx common.ExtendedContext, eventId string, signal Signal, target SignalTarget) error {
-	data := NotifyData{
-		Event:  eventId,
-		Signal: signal,
-		Target: target,
+// CompleteConsumerSignal finishes only this lifecycle signal; overlapping
+// dispatches retain their own archive protection.
+func (r *PgEventRepo) CompleteConsumerSignal(ctx common.ExtendedContext, id string, signal Signal) error {
+	if err := r.queries.CompleteConsumerSignal(ctx, r.GetConnOrTx(), CompleteConsumerSignalParams{
+		EventID: id, Signal: string(signal),
+	}); err != nil {
+		return fmt.Errorf("complete consumer signal: %w", err)
 	}
-	jsonData, _ := json.Marshal(data)
-	sql := fmt.Sprintf("NOTIFY crosslink_channel, '%s'", jsonData)
-	_, err := r.GetConnOrTx().Exec(ctx, sql)
-	return err
+	return nil
+}
+
+func (r *PgEventRepo) Notify(ctx common.ExtendedContext, eventId string, signal Signal, target SignalTarget) error {
+	// Persist consumer work and publish atomically, including standalone callers.
+	if r.Tx == nil {
+		return r.WithTxFunc(ctx, func(txRepo EventRepo) error {
+			return txRepo.Notify(ctx, eventId, signal, target)
+		})
+	}
+	// Use the same event-before-work lock order as claims and archival.
+	event, err := r.GetEventForUpdate(ctx, eventId)
+	if err != nil {
+		return fmt.Errorf("lock event for notification: %w", err)
+	}
+	if err := r.queries.RetireSupersededConsumerSignals(ctx, r.GetConnOrTx(), RetireSupersededConsumerSignalsParams{
+		EventID: eventId, Signal: event.LastSignal,
+	}); err != nil {
+		return fmt.Errorf("retire superseded consumer signals: %w", err)
+	}
+	if target == SignalConsumers || target == SignalAll {
+		if err := r.queries.PrepareConsumerSignal(ctx, r.GetConnOrTx(), PrepareConsumerSignalParams{
+			EventID: eventId, Signal: string(signal),
+		}); err != nil {
+			return fmt.Errorf("prepare consumer signal: %w", err)
+		}
+	}
+	data := NotifyData{Event: eventId, Signal: signal, Target: target}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("encode event notification: %w", err)
+	}
+	if _, err = r.GetConnOrTx().Exec(ctx, "SELECT pg_notify($1, $2)", EVENT_BUS_CHANNEL, string(jsonData)); err != nil {
+		return fmt.Errorf("publish event notification: %w", err)
+	}
+	return nil
 }
 
 func (r *PgEventRepo) GetIllTransactionEvents(ctx common.ExtendedContext, id string) ([]Event, int64, error) {

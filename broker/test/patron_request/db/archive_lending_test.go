@@ -240,6 +240,14 @@ func TestArchiveLendingRequestConcurrentExecution(t *testing.T) {
 			}
 			expected := 1
 			if bothSides {
+				// Borrowing can skip while lending holds its request lock.
+				// Retrying after lending completes must archive the borrower too.
+				if count == 1 {
+					stored, err := repo.ArchiveBorrowingRequest(appCtx, archiveFixtureRequest(f.borrowingArchiveFixture), f.owner, time.Now(), false)
+					require.NoError(t, err)
+					require.True(t, stored)
+					count++
+				}
 				expected = 2
 			}
 			require.Equal(t, expected, count)

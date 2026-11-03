@@ -22,3 +22,13 @@ CREATE TABLE event
     FOREIGN KEY (patron_request_id) REFERENCES patron_request (id) ON DELETE CASCADE,
     FOREIGN KEY (event_name) REFERENCES event_config (event_name)
 );
+
+-- A record survives the consumer claim until all handlers finish their handoff.
+-- Claimed records are deliberately retained on interruption; do not replay them
+-- automatically because a handler may already have performed external effects.
+CREATE TABLE event_consumer_work (
+    event_id VARCHAR NOT NULL REFERENCES event(id) ON DELETE CASCADE,
+    signal VARCHAR NOT NULL,
+    claimed BOOLEAN NOT NULL DEFAULT FALSE,
+    PRIMARY KEY (event_id, signal)
+);

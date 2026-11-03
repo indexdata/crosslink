@@ -43,8 +43,8 @@ func createBorrowingArchiveFixture(t *testing.T) borrowingArchiveFixture {
 		'{"serviceInfo":{"serviceType":"Loan"},"patronInfo":{"patronId":987654321,"surname":"Jane"}}'::jsonb,true)`, f.pr, f.owner, reqID, old)
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `INSERT INTO patron_request
-		(id,state,side,requester_symbol,supplier_symbol,requester_req_id,updated_at)
-		VALUES ($1,'CLOSED','lending',$2,$3,$4,$5)`, f.lending, f.owner, "ISIL:OTHER", reqID, old)
+		(id,state,side,requester_symbol,supplier_symbol,requester_req_id,updated_at,terminal_state)
+		VALUES ($1,'CLOSED','lending',$2,$3,$4,$5,true)`, f.lending, f.owner, "ISIL:OTHER", reqID, old)
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `INSERT INTO ill_transaction
 		(id,timestamp,requester_symbol,requester_request_id,ill_transaction_data)
@@ -88,7 +88,7 @@ func archiveFixtureRequest(f borrowingArchiveFixture) pr_db.PatronRequest {
 	return pr_db.PatronRequest{ID: f.pr, State: "CLOSED", UpdatedAt: pgtype.Timestamp{Time: f.updatedAt, Valid: true}}
 }
 
-func TestArchiveBorrowingRequestPreservesLendingSide(t *testing.T) {
+func TestArchiveBorrowingRequestPreservesTerminalLendingSide(t *testing.T) {
 	f := createBorrowingArchiveFixture(t)
 	pool := prRepo.(*pr_db.PgPrRepo).Pool
 	for _, tc := range []struct {
