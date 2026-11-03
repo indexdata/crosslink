@@ -541,7 +541,10 @@ available-holding count and outcome. Targets omit URL credentials, query paramet
 and fragments; ZOOM options and complete Directory configuration are never copied.
 Counts describe holdings returned by the parser after availability filters, not
 every inventory item. Outcomes distinguish no record, no available holdings and
-lookup/parsing failures. Policy diagnostics report whether policy was absent,
+lookup/parsing failures. SRU and Z39.50 holdings-parser failures report
+`holdings-failed`, including when parsing occurs inside `Lookup`.
+Connection, search and retrieval errors retain `lookup-failed`.
+Policy diagnostics report whether policy was absent,
 previously applied at discovery, still pending, or evaluated here; they include
 eligibility/exclusion counts, effective location and shelving preferences, rejection
 reasons, the selected copy and its selection reason. Tied preferences retain the

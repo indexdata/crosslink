@@ -134,7 +134,10 @@ func TestAvailabilityEventOutcomes(t *testing.T) {
 		{"all excluded", "available-holdings", "applied", func(_ *availabilityPolicyRepo, l *diagnosticLookup) { l.Holdings[0].ShelvingLocation = "Annex" }, events.EventStatusSuccess, true},
 		{"no policy", "available-holdings", "not-configured", func(r *availabilityPolicyRepo, _ *diagnosticLookup) { r.peer.CustomData.HoldingsPolicy = nil }, events.EventStatusSuccess, true},
 		{"lookup error keeps query", "lookup-failed", "pending", func(_ *availabilityPolicyRepo, l *diagnosticLookup) { l.err = errors.New("lookup failed") }, events.EventStatusError, false},
-		{"parser error", "holdings-failed", "pending", func(_ *availabilityPolicyRepo, l *diagnosticLookup) { l.HoldingsErr = errors.New("bad record") }, events.EventStatusError, false},
+		{"parser error during lookup", "holdings-failed", "pending", func(_ *availabilityPolicyRepo, l *diagnosticLookup) {
+			l.err = fmt.Errorf("record parsing: %w", catalog.ErrHoldingsParse)
+		}, events.EventStatusError, false},
+		{"holdings error", "holdings-failed", "pending", func(_ *availabilityPolicyRepo, l *diagnosticLookup) { l.HoldingsErr = errors.New("bad record") }, events.EventStatusError, false},
 		{"empty result", "lookup-failed", "pending", func(_ *availabilityPolicyRepo, l *diagnosticLookup) { l.nilResult = true }, events.EventStatusError, false},
 		{"commit failure", "available-holdings", "evaluated", func(r *availabilityPolicyRepo, l *diagnosticLookup) {
 			l.onLookup = func() { r.commitErr = errors.New("commit failed") }
@@ -157,6 +160,9 @@ func TestAvailabilityEventOutcomes(t *testing.T) {
 			require.Equal(t, tc.applied, availability.ResultApplied)
 			require.Equal(t, tc.policyStatus, policy.Status)
 			require.NotEmpty(t, result.Note)
+			if tc.lookupOutcome == "holdings-failed" {
+				require.Contains(t, result.Note, "Could not parse holdings lookup results.")
+			}
 			if tc.name == "superseded result" {
 				require.Equal(t, "superseded", result.CustomData[AvailabilityKey])
 				require.NotNil(t, policy.selected, "retain diagnostics without claiming the decision was applied")

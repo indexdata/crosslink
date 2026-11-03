@@ -163,7 +163,7 @@ func (a *ZoomLookupAdapter) Lookup(params LookupParams) (LookupResult, error) {
 		result.recordFound = true
 		h, err := a.holdingsParser.Parse(xmlBuffer, params)
 		if err != nil {
-			return false, fmt.Errorf("failed to parse holdings from ZOOM record: %w", err)
+			return false, fmt.Errorf("failed to parse holdings from ZOOM record: %w: %w", ErrHoldingsParse, err)
 		}
 		if result.metadata == nil && a.metadataParser != nil {
 			newMetadata, err := a.metadataParser.Parse(xmlBuffer)
