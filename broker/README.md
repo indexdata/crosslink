@@ -58,8 +58,9 @@ reason, which takes precedence over a cancellation reason.
 
 Email and pull-slip templates render conditions through `{{.LoanConditions}}`;
 the note text of every other notification kind, including reason
-notifications, appears in `{{.StaffNotes}}`. Reason codes are not staff notes:
-cancellation reasons render through `{{.CancellationReason}}`.
+notifications, appears in `{{.StaffNotes}}`; notifications without note text
+are skipped. Reason codes are not staff notes: cancellation reasons render
+through `{{.CancellationReason}}`.
 
 External vendor shims strip these markers from outgoing requester, supplier, and
 request-service notes before serialization, using a copy so internal messages

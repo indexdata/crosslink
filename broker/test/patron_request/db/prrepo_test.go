@@ -1160,3 +1160,54 @@ func TestGetTemplateNotificationsKeepsConditionsBehindManyNotes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(252), fullCount)
 }
+
+func TestGetTemplateNotificationsKeepsNotesBehindManyReasonOnlyRows(t *testing.T) {
+	prId := uuid.NewString()
+	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID:            prId,
+		CreatedAt:     pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Language:      "english",
+		Items:         []pr_db.PrItem{},
+		TerminalState: false,
+	})
+	require.NoError(t, err)
+	save := func(kind pr_db.NotificationKind, code, note pgtype.Text, at time.Time) string {
+		id := uuid.NewString()
+		_, err := prRepo.SaveNotification(appCtx, pr_db.SaveNotificationParams{
+			ID: id, PrID: prId, FromSymbol: "ISIL:SUP", ToSymbol: "ISIL:REQ",
+			Direction: pr_db.NotificationDirectionReceived, Kind: kind, Code: code, Note: note,
+			CreatedAt: pgtype.Timestamp{Time: at, Valid: true},
+		})
+		require.NoError(t, err)
+		return id
+	}
+	// More reason-only rows than the staff-note limit, all older than the only notes.
+	start := time.Now().Add(-time.Hour)
+	for i := range 150 {
+		kind := pr_db.NotificationKindUnfilledReason
+		if i%2 == 0 {
+			kind = pr_db.NotificationKindCancellationReason
+		}
+		save(kind, pgtype.Text{String: "Code", Valid: true}, pgtype.Text{}, start.Add(time.Duration(i)*time.Second))
+	}
+	save(pr_db.NotificationKindNote, pgtype.Text{}, pgtype.Text{String: "", Valid: true}, start.Add(30*time.Minute))
+	reasonNoteID := save(pr_db.NotificationKindUnfilledReason, pgtype.Text{String: "NotOnShelf", Valid: true}, pgtype.Text{String: "Searched the shelf", Valid: true}, start.Add(40*time.Minute))
+	noteID := save(pr_db.NotificationKindNote, pgtype.Text{}, pgtype.Text{String: "Please call the patron", Valid: true}, start.Add(time.Hour))
+
+	notes, _, err := pr_db.GetTemplateNotifications(appCtx, prRepo, prId)
+
+	require.NoError(t, err)
+	noteIDs := []string{}
+	for _, n := range notes {
+		noteIDs = append(noteIDs, n.ID)
+	}
+	assert.Equal(t, []string{reasonNoteID, noteID}, noteIDs, "reason-only and blank rows must not use up the staff-note limit")
+
+	// Without with_note, reason-only rows are still listed, e.g. for the chat timeline.
+	_, fullCount, err := prRepo.GetNotificationsByPrId(appCtx, pr_db.GetNotificationsByPrIdParams{Limit: 1, PrID: prId})
+	require.NoError(t, err)
+	assert.Equal(t, int64(153), fullCount)
+	_, fullCount, err = prRepo.GetNotificationsByPrId(appCtx, pr_db.GetNotificationsByPrIdParams{Limit: 1, PrID: prId, WithNote: true})
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), fullCount)
+}

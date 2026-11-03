@@ -174,6 +174,7 @@ FROM notification
 WHERE pr_id = $3
   AND (sqlc.arg(kind)::text = '' OR kind = sqlc.arg(kind)::text)
   AND (sqlc.arg(exclude_kind)::text = '' OR kind <> sqlc.arg(exclude_kind)::text)
+  AND (NOT sqlc.arg(with_note)::boolean OR (note IS NOT NULL AND note <> ''))
 ORDER BY created_at
 LIMIT $1 OFFSET $2;
 

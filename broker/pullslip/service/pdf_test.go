@@ -247,7 +247,8 @@ func (m *mockPrRepo) GetNotificationsByPrId(_ common.ExtendedContext, params pr_
 	m.notificationReq = append(m.notificationReq, params)
 	matched := []pr_db.Notification{}
 	for _, n := range m.notifications {
-		if (params.Kind == "" || string(n.Kind) == params.Kind) && (params.ExcludeKind == "" || string(n.Kind) != params.ExcludeKind) {
+		if (params.Kind == "" || string(n.Kind) == params.Kind) && (params.ExcludeKind == "" || string(n.Kind) != params.ExcludeKind) &&
+			(!params.WithNote || (n.Note.Valid && n.Note.String != "")) {
 			matched = append(matched, n)
 		}
 	}
@@ -312,6 +313,7 @@ func TestGeneratePdfPullSlipForPrs_LoadsNotesAndConditionsSeparately(t *testing.
 	// Staff notes include every non-condition kind; each category has its own limit.
 	require.Len(t, repo.notificationReq, 2)
 	assert.Equal(t, string(pr_db.NotificationKindCondition), repo.notificationReq[0].ExcludeKind)
+	assert.True(t, repo.notificationReq[0].WithNote, "staff notes skip rows without note text")
 	assert.Equal(t, string(pr_db.NotificationKindCondition), repo.notificationReq[1].Kind)
 }
 

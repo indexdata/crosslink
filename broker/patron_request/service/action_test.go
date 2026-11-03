@@ -5907,6 +5907,9 @@ func (r *MockPrRepo) GetNotificationsByPrId(ctx common.ExtendedContext, params p
 		if params.ExcludeKind != "" && string(notification.Kind) == params.ExcludeKind {
 			continue
 		}
+		if params.WithNote && (!notification.Note.Valid || notification.Note.String == "") {
+			continue
+		}
 		notifications = append(notifications, notification)
 	}
 	fullCount := int64(len(notifications))

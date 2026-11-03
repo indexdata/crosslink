@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,6 +34,9 @@ func (r *notificationListRepo) GetNotificationsByPrId(_ common.ExtendedContext, 
 		if params.ExcludeKind != "" && string(n.Kind) == params.ExcludeKind {
 			continue
 		}
+		if params.WithNote && (!n.Note.Valid || n.Note.String == "") {
+			continue
+		}
 		matched = append(matched, n)
 	}
 	full := int64(len(matched))
@@ -40,6 +44,10 @@ func (r *notificationListRepo) GetNotificationsByPrId(_ common.ExtendedContext, 
 		matched = matched[:params.Limit]
 	}
 	return matched, full, nil
+}
+
+func text(s string) pgtype.Text {
+	return pgtype.Text{String: s, Valid: true}
 }
 
 func ids(list []Notification) []string {
@@ -53,17 +61,18 @@ func ids(list []Notification) []string {
 func TestGetTemplateNotifications(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	repo := &notificationListRepo{notifications: []Notification{
-		{ID: "note", Kind: NotificationKindNote},
+		{ID: "note", Kind: NotificationKindNote, Note: text("note")},
 		{ID: "condition", Kind: NotificationKindCondition},
-		{ID: "cancel", Kind: NotificationKindCancellationReason},
-		{ID: "unfilled", Kind: NotificationKindUnfilledReason},
+		{ID: "cancel", Kind: NotificationKindCancellationReason, Note: text("cancel note")},
+		{ID: "unfilled", Kind: NotificationKindUnfilledReason, Note: text("unfilled note")},
+		{ID: "reason-only", Kind: NotificationKindUnfilledReason, Code: text("NotOnShelf")},
 	}}
 
 	notes, conditions, err := GetTemplateNotifications(ctx, repo, "pr-1")
 
 	require.NoError(t, err)
 	assert.Equal(t, []GetNotificationsByPrIdParams{
-		{Limit: templateNotificationLimit, PrID: "pr-1", ExcludeKind: string(NotificationKindCondition)},
+		{Limit: templateNotificationLimit, PrID: "pr-1", ExcludeKind: string(NotificationKindCondition), WithNote: true},
 		{Limit: templateNotificationLimit, PrID: "pr-1", Kind: string(NotificationKindCondition)},
 	}, repo.params)
 	assert.Equal(t, []string{"note", "cancel", "unfilled"}, ids(notes))
@@ -74,7 +83,7 @@ func TestGetTemplateNotificationsNotesCannotCrowdOutConditions(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	repo := &notificationListRepo{}
 	for i := range templateNotificationLimit + 1 {
-		repo.notifications = append(repo.notifications, Notification{ID: fmt.Sprintf("note-%d", i), Kind: NotificationKindNote})
+		repo.notifications = append(repo.notifications, Notification{ID: fmt.Sprintf("note-%d", i), Kind: NotificationKindNote, Note: text("note")})
 	}
 	repo.notifications = append(repo.notifications, Notification{ID: "late-condition", Kind: NotificationKindCondition})
 
@@ -83,6 +92,27 @@ func TestGetTemplateNotificationsNotesCannotCrowdOutConditions(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, notes, templateNotificationLimit)
 	assert.Equal(t, []string{"late-condition"}, ids(conditions))
+}
+
+func TestGetTemplateNotificationsReasonOnlyRowsCannotCrowdOutNotes(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	repo := &notificationListRepo{}
+	for i := range templateNotificationLimit + 1 {
+		kind := NotificationKindUnfilledReason
+		if i%2 == 0 {
+			kind = NotificationKindCancellationReason
+		}
+		repo.notifications = append(repo.notifications, Notification{ID: fmt.Sprintf("reason-%d", i), Kind: kind, Code: text("Code")})
+	}
+	repo.notifications = append(repo.notifications,
+		Notification{ID: "blank-note", Kind: NotificationKindNote, Note: text("")},
+		Notification{ID: "late-note", Kind: NotificationKindNote, Note: text("Please call the patron")},
+	)
+
+	notes, _, err := GetTemplateNotifications(ctx, repo, "pr-1")
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"late-note"}, ids(notes))
 }
 
 func TestGetTemplateNotificationsErrors(t *testing.T) {
