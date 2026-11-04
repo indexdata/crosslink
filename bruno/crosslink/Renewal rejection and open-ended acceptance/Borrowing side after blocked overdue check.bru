@@ -1,12 +1,12 @@
 meta {
-  name: Borrowing side open-ended check
+  name: Borrowing side after blocked overdue check
   type: http
-  seq: 7
+  seq: 23
 }
 
 get {
-  url: {{host}}/patron_requests/{{recallPrId}}?side=borrowing
-  body: json
+  url: {{host}}/patron_requests/{{renewalOmittedPrId}}?side=borrowing
+  body: none
   auth: basic
 }
 
@@ -29,12 +29,12 @@ script:pre-request {
 }
 
 script:post-response {
-  test("for ship", function() {
+  test("State is RENEWAL_REJECTED without a due date", () => {
+    expect(res.getStatus()).to.equal(200);
     const pr = res.getBody();
-    expect(pr.lastActionResult).to.equal("SUCCESS")
-    expect(pr.state).to.equal("SHIPPED");
-    expect(pr.dueDate).to.not.exist;
-    expect(pr.illResponse.statusInfo.dueDate).to.not.exist;
+    expect(pr.state).to.equal("RENEWAL_REJECTED");
+    expect(pr.dueDate ?? null).to.equal(null);
+    expect(pr.needsAttention).to.equal(false);
   });
 }
 

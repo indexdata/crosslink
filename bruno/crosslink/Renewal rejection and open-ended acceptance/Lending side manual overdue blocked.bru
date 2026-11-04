@@ -1,5 +1,5 @@
 meta {
-  name: Lending side overdue
+  name: Lending side manual overdue blocked
   type: http
   seq: 21
 }
@@ -35,10 +35,9 @@ script:pre-request {
 }
 
 script:post-response {
-  test("Action succeeds", () => {
-    expect(res.getStatus()).to.equal(200);
-    const pr = res.getBody();
-    expect(pr.result).to.equal("SUCCESS");
+  test("Manual overdue execution is rejected", () => {
+    expect(res.getStatus()).to.equal(400);
+    expect(JSON.stringify(res.getBody())).to.include("not allowed");
   });
 }
 

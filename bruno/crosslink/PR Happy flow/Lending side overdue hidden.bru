@@ -1,12 +1,12 @@
 meta {
-  name: Lending side overdue
+  name: Lending side overdue hidden
   type: http
-  seq: 9
+  seq: 26
 }
 
-post {
-  url: {{host}}/patron_requests/{{recallLendingPrId}}/action?side=lending
-  body: json
+get {
+  url: {{host}}/patron_requests/{{lendingPrId}}/actions?side=lending
+  body: none
   auth: basic
 }
 
@@ -24,21 +24,14 @@ auth:basic {
   password: {{userPassword}}
 }
 
-body:json {
-  {
-    "action": "overdue"
-  }
-}
-
 script:pre-request {
   bru.sleep(Number(bru.getEnvVar("sleepDelay")));
 }
 
 script:post-response {
-  test("Action succeeds", () => {
+  test("Overdue is hidden from staff actions", () => {
     expect(res.getStatus()).to.equal(200);
-    const pr = res.getBody();
-    expect(pr.result).to.equal("SUCCESS");
+    expect(res.getBody().actions.map(action => action.name)).not.to.include("overdue");
   });
 }
 
