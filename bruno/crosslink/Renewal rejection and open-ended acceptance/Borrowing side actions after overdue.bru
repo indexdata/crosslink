@@ -1,0 +1,46 @@
+meta {
+  name: Borrowing side actions after overdue
+  type: http
+  seq: 24
+}
+
+get {
+  url: {{host}}/patron_requests/{{renewalOmittedPrId}}/actions?side=borrowing
+  body: none
+  auth: basic
+}
+
+params:query {
+  side: borrowing
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
+script:post-response {
+  test("Return and circulation actions remain available with renewal", () => {
+    expect(res.getStatus()).to.equal(200);
+    const actions = res.getBody().actions.map(action => action.name);
+    expect(actions).to.include("renew");
+    expect(res.getBody().actions.find(action => action.name === "renew").available).to.equal(true);
+    expect(actions).to.include("ship-return");
+    expect(actions).to.include("check-in");
+    expect(actions).to.include("check-out");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -711,8 +711,8 @@ func TestActionsToCompleteState(t *testing.T) {
 		return strings.Contains(string(respBytes), "\"name\":\""+string(prservice.BorrowerActionShipReturn)+"\"")
 	})
 
-	// Circulation helpers leave the request state unchanged. Renew the overdue
-	// loan through the actual broker relay before returning it.
+	// Circulation helpers leave the request state unchanged. Exercise early and
+	// overdue renewals through the actual broker relay before returning the loan.
 	invokeLoanAction := func(path, query, name string, params map[string]any) {
 		if params == nil {
 			params = map[string]any{}
@@ -734,12 +734,24 @@ func TestActionsToCompleteState(t *testing.T) {
 	}
 	waitLoanState(requesterPrPath, queryParams, "RECEIVED")
 	waitLoanState(supplierPrPath, supQueryParams, "RECEIVED")
+	invokeLoanAction(requesterPrPath, queryParams, "renew", nil)
+	waitLoanState(supplierPrPath, supQueryParams, "RENEWAL_PENDING")
+	waitLoanState(requesterPrPath, queryParams, "RENEWAL_PENDING")
+	invokeLoanAction(supplierPrPath, supQueryParams, "accept-renewal", nil)
+	waitLoanState(supplierPrPath, supQueryParams, "RENEWED")
+	waitLoanState(requesterPrPath, queryParams, "RENEWED")
 	invokeLoanAction(supplierPrPath, supQueryParams, "overdue", nil)
 	waitLoanState(requesterPrPath, queryParams, "OVERDUE")
 	invokeLoanAction(requesterPrPath, queryParams, "renew", nil)
 	waitLoanState(supplierPrPath, supQueryParams, "RENEWAL_PENDING")
 	invokeLoanAction(supplierPrPath, supQueryParams, "accept-renewal", map[string]any{"dueDate": time.Now().UTC().AddDate(0, 0, 14).Format(time.RFC3339)})
 	waitLoanState(requesterPrPath, queryParams, "RENEWED")
+	invokeLoanAction(requesterPrPath, queryParams, "renew", nil)
+	waitLoanState(supplierPrPath, supQueryParams, "RENEWAL_PENDING")
+	waitLoanState(requesterPrPath, queryParams, "RENEWAL_PENDING")
+	invokeLoanAction(supplierPrPath, supQueryParams, "reject-renewal", nil)
+	waitLoanState(supplierPrPath, supQueryParams, "RENEWAL_REJECTED")
+	waitLoanState(requesterPrPath, queryParams, "RENEWAL_REJECTED")
 	// Ship return
 	action = proapi.ExecuteAction{
 		Action: string(prservice.BorrowerActionShipReturn),
