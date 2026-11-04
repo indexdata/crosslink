@@ -70,7 +70,7 @@ func TestRecallAction(t *testing.T) {
 func TestIncomingRecallAndLateMessages(t *testing.T) {
 	old := pgtype.Timestamptz{Time: time.Now().UTC().Add(time.Hour), Valid: true}
 	date := &utils.XSDDateTime{Time: time.Now().UTC().Add(24 * time.Hour)}
-	for _, state := range []pr_db.PatronRequestState{BorrowerStateReceived, BorrowerStateRenewed, BorrowerStateOverdue, BorrowerStateRenewalPending, BorrowerStateRecalled, BorrowerStateShippedReturned} {
+	for _, state := range []pr_db.PatronRequestState{BorrowerStateReceived, BorrowerStateRenewed, BorrowerStateOverdue, BorrowerStateRenewalPending, BorrowerStateRenewalRejected, BorrowerStateRecalled, BorrowerStateShippedReturned} {
 		for _, due := range []*utils.XSDDateTime{nil, date} {
 			t.Run(string(state)+"/"+string(iso18626.TypeStatusRecalled), func(t *testing.T) {
 				pr := testLoan()
@@ -124,10 +124,10 @@ func TestIncomingRecallAndLateMessages(t *testing.T) {
 
 func TestRecallCapabilities(t *testing.T) {
 	mapping := mustActionMapping(t)
-	for _, state := range []pr_db.PatronRequestState{LenderStateReceived, LenderStateRenewed, LenderStateOverdue, LenderStateRenewalPending, LenderStateShipped, LenderStateRecalled, LenderStateShippedReturn} {
+	for _, state := range []pr_db.PatronRequestState{LenderStateReceived, LenderStateRenewed, LenderStateOverdue, LenderStateRenewalPending, LenderStateRenewalRejected, LenderStateShipped, LenderStateRecalled, LenderStateShippedReturn} {
 		pr := testLoan()
 		pr.State = state
-		assert.Equal(t, state == LenderStateReceived || state == LenderStateRenewed || state == LenderStateOverdue || state == LenderStateRenewalPending, mapping.IsActionSupported(pr, LenderActionRecall))
+		assert.Equal(t, state != LenderStateShipped && state != LenderStateRecalled && state != LenderStateShippedReturn, mapping.IsActionSupported(pr, LenderActionRecall))
 		pr.IllRequest.ServiceInfo.ServiceType = iso18626.TypeServiceTypeCopy
 		copyMapping, err := actionMappingService.GetActionMapping(pr.IllRequest)
 		require.NoError(t, err)

@@ -41,6 +41,7 @@ const (
 	BorrowerStateOverdue          pr_db.PatronRequestState = "OVERDUE"
 	BorrowerStateRenewed          pr_db.PatronRequestState = "RENEWED"
 	BorrowerStateRenewalPending   pr_db.PatronRequestState = "RENEWAL_PENDING"
+	BorrowerStateRenewalRejected  pr_db.PatronRequestState = "RENEWAL_REJECTED"
 	BorrowerStateShippedReturned  pr_db.PatronRequestState = "SHIPPED_RETURNED"
 	BorrowerStateCancelPending    pr_db.PatronRequestState = "CANCEL_PENDING"
 	BorrowerStateCompleted        pr_db.PatronRequestState = "COMPLETED"
@@ -65,6 +66,7 @@ const (
 	LenderStateOverdue            pr_db.PatronRequestState = "OVERDUE"
 	LenderStateRenewed            pr_db.PatronRequestState = "RENEWED"
 	LenderStateRenewalPending     pr_db.PatronRequestState = "RENEWAL_PENDING"
+	LenderStateRenewalRejected    pr_db.PatronRequestState = "RENEWAL_REJECTED"
 	LenderStateShippedReturn      pr_db.PatronRequestState = "SHIPPED_RETURN"
 	LenderStateCancelRequested    pr_db.PatronRequestState = "CANCEL_REQUESTED"
 	LenderStateCompleted          pr_db.PatronRequestState = "COMPLETED"
@@ -169,6 +171,7 @@ func requesterBuiltInStates() []string {
 		string(BorrowerStateShipped),
 		string(BorrowerStateReceived),
 		string(BorrowerStateRecalled), string(BorrowerStateOverdue), string(BorrowerStateRenewed), string(BorrowerStateRenewalPending),
+		string(BorrowerStateRenewalRejected),
 		string(BorrowerStateShippedReturned),
 		string(BorrowerStateCancelPending),
 		string(BorrowerStateCompleted),
@@ -194,6 +197,7 @@ func supplierBuiltInStates() []string {
 		string(LenderStateSearching),
 		string(LenderStateShipped),
 		string(LenderStateReceived), string(LenderStateRecalled), string(LenderStateOverdue), string(LenderStateRenewed), string(LenderStateRenewalPending),
+		string(LenderStateRenewalRejected),
 		string(LenderStateShippedReturn),
 		string(LenderStateCancelRequested),
 		string(LenderStateCompleted),

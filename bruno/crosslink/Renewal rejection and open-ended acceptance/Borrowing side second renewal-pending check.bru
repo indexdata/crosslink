@@ -1,12 +1,12 @@
 meta {
-  name: Borrowing side renew again
+  name: Borrowing side second renewal-pending check
   type: http
-  seq: 14
+  seq: 16
 }
 
-post {
-  url: {{host}}/patron_requests/{{renewalOmittedPrId}}/action?side=borrowing
-  body: json
+get {
+  url: {{host}}/patron_requests/{{renewalOmittedPrId}}?side=borrowing
+  body: none
   auth: basic
 }
 
@@ -24,21 +24,17 @@ auth:basic {
   password: {{userPassword}}
 }
 
-body:json {
-  {
-    "action": "renew"
-  }
-}
-
 script:pre-request {
   bru.sleep(Number(bru.getEnvVar("sleepDelay")));
 }
 
 script:post-response {
-  test("Action succeeds", () => {
+  test("State is RENEWAL_PENDING without a due date", () => {
     expect(res.getStatus()).to.equal(200);
     const pr = res.getBody();
-    expect(pr.result).to.equal("SUCCESS");
+    expect(pr.state).to.equal("RENEWAL_PENDING");
+    expect(pr.dueDate ?? null).to.equal(null);
+    expect(pr.needsAttention).to.equal(false);
   });
 }
 

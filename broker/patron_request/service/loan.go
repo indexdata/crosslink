@@ -217,7 +217,11 @@ func (a *PatronRequestActionService) renewalLenderRequest(ctx common.ExtendedCon
 			return loanActionError(ctx, pr, err)
 		}
 	}
-	answer, status := iso18626.TypeYesNoN, iso18626.TypeStatusOverdue
+	answer, status := iso18626.TypeYesNoN, iso18626.TypeStatusLoaned
+	if !accept {
+		// Declining a renewal preserves the supplier's current loan status.
+		status = pr.IllResponse.StatusInfo.Status
+	}
 	due := pr.DueAt
 	if accept {
 		due = pgtype.Timestamptz{}

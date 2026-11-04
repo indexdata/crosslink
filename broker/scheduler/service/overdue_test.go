@@ -16,7 +16,7 @@ func TestOverdueDefaultFiltersStatesInDatabase(t *testing.T) {
 		if defaults.ActionName != "overdue" {
 			continue
 		}
-		require.Equal(t, "side = lending and (state = RECEIVED or state = RENEWED)", defaults.BatchQuery)
+		require.Equal(t, "side = lending and (state = RECEIVED or state = RENEWED or state = RENEWAL_REJECTED)", defaults.BatchQuery)
 		repo := new(mockEmailPrRepo)
 		svc := NewBatchActionService(new(mockBatchActionEventBus), repo, new(mockBatchActionCleanupRepo), nil)
 		event := batchActionEvent("overdue")
@@ -70,6 +70,8 @@ func TestOverdueBatchUsesStateModelAvailability(t *testing.T) {
 		{ID: "unsupported", Side: prservice.SideLending, State: prservice.LenderStateShipped, IllRequest: loan},
 		{ID: "already-overdue", Side: prservice.SideLending, State: prservice.LenderStateOverdue, IllRequest: loan},
 		{ID: "pending", Side: prservice.SideLending, State: prservice.LenderStateRenewalPending, IllRequest: loan},
+		{ID: "rejected", Side: prservice.SideLending, State: prservice.LenderStateRenewalRejected, IllRequest: loan},
+		{ID: "rejected-already-overdue", Side: prservice.SideLending, State: prservice.LenderStateRenewalRejected, IllRequest: loan, IllResponse: iso18626.SupplyingAgencyMessage{StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusOverdue}}},
 	}}
 	bus := new(mockBatchActionEventBus)
 	svc := NewBatchActionService(bus, repo, new(mockBatchActionCleanupRepo), nil)
@@ -84,8 +86,10 @@ func TestOverdueBatchUsesStateModelAvailability(t *testing.T) {
 	}
 	status, result := svc.batchAction(testCtx, batchActionEvent("overdue"))
 	require.Equal(t, events.EventStatusSuccess, status, "%+v", result)
-	require.Len(t, bus.createTaskCalls, 1)
+	require.Len(t, bus.createTaskCalls, 3)
 	assert.Equal(t, "custom", bus.createTaskCalls[0].id)
-	assert.Equal(t, "queued overdue actions for 1 loans", result.Note)
+	assert.Equal(t, "rejected", bus.createTaskCalls[1].id)
+	assert.Equal(t, "rejected-already-overdue", bus.createTaskCalls[2].id)
+	assert.Equal(t, "queued overdue actions for 3 loans", result.Note)
 	assert.NotContains(t, repo.gotQuery.GetWhereClause(), "state")
 }

@@ -32,7 +32,14 @@ The happy path ships with a past due date, receives the item, explicitly invokes
 
 The separate `Open-ended loan` folder ships without a date and completes receipt and return, checking that neither side has a due date. This requires the local mock's undated checkout responses and absent `defaultLoanPeriod`.
 
-`Renewal rejection and open-ended acceptance` checks that rejection returns both sides to `OVERDUE` with the original date, then requests renewal again and accepts without a date. It verifies that acceptance clears the date on each side and completes the return workflow. Go tests cover explicit `dueDate: null` versus omission.
+`Renewal rejection and open-ended acceptance` ships with a future due date,
+requests renewal from `RECEIVED`, and accepts it without a date. It then
+requests another renewal from `RENEWED` and rejects it. Both sides enter
+`RENEWAL_REJECTED`, retain the open-ended loan, and offer no renewal. A supplier
+overdue action then moves both sides to `OVERDUE`, making renewal available
+again. The normal return workflow still completes. Go tests also cover rejection
+before the due date and preservation of dated or overdue loans; the happy path retains
+overdue renewal acceptance coverage.
 
 `Recall` prints a pull slip, checks `SEARCHING`, ships and receives an
 open-ended loan, marks it overdue, requests and accepts renewal, recalls it with a due date, verifies

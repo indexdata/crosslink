@@ -1,7 +1,7 @@
 meta {
   name: Lending side rejection check
   type: http
-  seq: 12
+  seq: 18
 }
 
 get {
@@ -29,11 +29,11 @@ script:pre-request {
 }
 
 script:post-response {
-  test("State is OVERDUE with the expected due date", () => {
+  test("State is RENEWAL_REJECTED without a due date", () => {
     expect(res.getStatus()).to.equal(200);
     const pr = res.getBody();
-    expect(pr.state).to.equal("OVERDUE");
-    expect(Date.parse(pr.dueDate)).to.equal(Date.parse(bru.getVar("renewalOmittedOriginalDueDate")));
+    expect(pr.state).to.equal("RENEWAL_REJECTED");
+    expect(pr.dueDate ?? null).to.equal(null);
     expect(pr.needsAttention).to.equal(false);
   });
 }

@@ -397,10 +397,26 @@ intend to tolerate failures; binding an outcome no longer suppresses them.
 Email sending remains synchronous; successful sends and skipped recipients retain
 their existing behavior.
 
+## Loan renewal
+
+Borrowers can invoke `renew` from `RECEIVED`, `RENEWED`, and `OVERDUE` for
+`Loan` and `CopyOrLoan`, including loans with a future due date or no due date.
+Both sides enter `RENEWAL_PENDING`. Acceptance moves both sides to `RENEWED`;
+rejection moves them to `RENEWAL_REJECTED`, preserving the due date and the
+supplier's current ISO18626 loan status (`Loaned` or `Overdue`).
+
+`RENEWAL_REJECTED` is an active loan state with checkout/check-in, return, and
+recall available, but no renewal action. When the supplier marks the loan
+overdue, both sides move to `OVERDUE` and renewal becomes available again. The
+overdue batch includes rejected loans; after transition, `OVERDUE` is excluded
+from subsequent batches. This also applies to rejection of an already-overdue
+loan. Receipt notifications remain configured only on entry into `RECEIVED`.
+
 ## Loan recall
 
-Lenders can invoke `recall` from `RECEIVED`, `RENEWED`, `OVERDUE`, or
-`RENEWAL_PENDING` for `Loan` and `CopyOrLoan`. Optional action parameters are
+Lenders can invoke `recall` from `RECEIVED`, `RENEWED`, `OVERDUE`,
+`RENEWAL_PENDING`, or `RENEWAL_REJECTED` for `Loan` and `CopyOrLoan`. Optional
+action parameters are
 `note` and `dueDate` (a date or RFC3339 timestamp). An omitted or null date
 preserves the current deadline, including an open-ended loan; a date without
 a time means the end of the supplier's calendar day. Blank or invalid dates
