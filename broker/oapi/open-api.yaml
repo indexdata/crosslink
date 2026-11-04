@@ -81,7 +81,7 @@ components:
     NotificationKind:
       name: kind
       in: query
-      description: Notification kind, valid values "note" and "condition"
+      description: Notification kind, valid values "note", "condition", "cancellation_reason" and "unfilled_reason"
       schema:
         $ref: '#/components/schemas/NotificationKind'
     PatronRequestId:
@@ -125,7 +125,7 @@ components:
       type: string
       description: Kind of patron request notification
       minLength: 1
-      enum: [note, condition]
+      enum: [note, condition, cancellation_reason, unfilled_reason]
     NotificationReceipt:
       type: string
       description: Receipt status of a patron request notification
@@ -356,9 +356,12 @@ components:
         currency:
           type: string
           description: Currency symbol
-        condition:
+        code:
           type: string
-          description: Condition of notification
+          description: Coded value interpreted per kind; the loan condition, cancellation reason or unfilled reason. Codes come from the sender's own vocabulary.
+        codeDescription:
+          type: string
+          description: Description of code from the sender's Directory configuration, when known at the time the notification was stored
         receipt:
           $ref: '#/components/schemas/NotificationReceipt'
         createdAt:

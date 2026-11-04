@@ -521,8 +521,8 @@ func TestGetPullSlipData_PopulatesAllAvailableFields(t *testing.T) {
 		{Note: pgtype.Text{String: "second note", Valid: true}},
 	}
 	conditions := []pr_db.Notification{
-		{Condition: pgtype.Text{String: "library use only", Valid: true}},
-		{Condition: pgtype.Text{String: "no renewal", Valid: true}},
+		{Code: pgtype.Text{String: "library use only", Valid: true}},
+		{Code: pgtype.Text{String: "no renewal", Valid: true}},
 	}
 
 	data := GetPullSlipData(pr, notes, conditions, "barcode-base64")
@@ -700,16 +700,16 @@ func TestGetLoanConditions_Empty(t *testing.T) {
 
 func TestGetLoanConditions_InvalidSkipped(t *testing.T) {
 	conditions := []pr_db.Notification{
-		{Condition: pgtype.Text{String: "library use only", Valid: true}},
-		{Condition: pgtype.Text{String: "ignored", Valid: false}},
+		{Code: pgtype.Text{String: "library use only", Valid: true}},
+		{Code: pgtype.Text{String: "ignored", Valid: false}},
 	}
 	assert.Equal(t, "library use only", getLoanConditions(conditions))
 }
 
 func TestGetLoanConditions_Multiple(t *testing.T) {
 	conditions := []pr_db.Notification{
-		{Condition: pgtype.Text{String: "no photocopying", Valid: true}},
-		{Condition: pgtype.Text{String: "in-library use", Valid: true}},
+		{Code: pgtype.Text{String: "no photocopying", Valid: true}},
+		{Code: pgtype.Text{String: "in-library use", Valid: true}},
 	}
 	assert.Equal(t, "no photocopying\nin-library use", getLoanConditions(conditions))
 }

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1939,12 +1940,13 @@ func TestHandleInvokeActionCancelRequest(t *testing.T) {
 			serviceInfo *iso18626.ServiceInfo
 			note        string
 			reason      string
+			sentNote    string
 		}{
 			{name: "nil ServiceInfo", reason: "existing"},
 			{name: "empty marker", reason: "existing", note: "#CancellationReason: #"},
-			{name: "immediate suffix", reason: "InvalidUser", note: "#CancellationReason: InvalidUser#Ref: 123#"},
+			{name: "immediate suffix", reason: "InvalidUser", note: "#CancellationReason: InvalidUser#Ref: 123#", sentNote: "Ref: 123#"},
 			{name: "ordinary note", reason: "existing", note: "  No longer needed.\nPlease cancel.  "},
-			{name: "microformats", reason: "InvalidUser", note: "Please cancel. #CancellationReason: InvalidUser#" + shim.RESHARE_LOAN_CONDITION_REJECT + " Remaining text."},
+			{name: "microformats", reason: "InvalidUser", note: "Please cancel. #CancellationReason: InvalidUser#" + shim.RESHARE_LOAN_CONDITION_REJECT + " Remaining text.", sentNote: "Please cancel.  Remaining text."},
 			{name: "Loan", reason: "existing", serviceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan}},
 			{name: "Copy", reason: "existing", serviceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopy}},
 			{name: "CopyOrLoan", reason: "existing", serviceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopyOrLoan}},
@@ -1978,6 +1980,19 @@ func TestHandleInvokeActionCancelRequest(t *testing.T) {
 				assert.Equal(t, getDbText(tc.reason), mockPrRepo.savedPr.CancellationReason)
 				assert.False(t, mockPrRepo.savedPr.NeedsAttention)
 				assert.Empty(t, mockPrRepo.markedConditionNotificationsReceipts)
+				if tc.reason == "existing" {
+					assert.Empty(t, mockPrRepo.savedNotifications)
+				} else if assert.Len(t, mockPrRepo.savedNotifications, 1) {
+					n := mockPrRepo.savedNotifications[0]
+					assert.Equal(t, pr_db.NotificationKindCancellationReason, n.Kind)
+					assert.Equal(t, pr_db.NotificationDirectionSent, n.Direction)
+					assert.Equal(t, pr_db.NotificationSent, n.Receipt)
+					assert.True(t, n.AcknowledgedAt.Valid)
+					assert.Equal(t, "ISIL:REC1", n.FromSymbol)
+					assert.Equal(t, "ISIL:SUP1", n.ToSymbol)
+					assert.Equal(t, tc.reason, n.Code.String)
+					assert.Equal(t, tc.sentNote, n.Note.String)
+				}
 			})
 		}
 	}
@@ -2005,6 +2020,7 @@ func TestCancelBorrowingRequestFailurePreservesReason(t *testing.T) {
 	assert.Equal(t, ActionOutcomeFailure, result.ActionResult.Outcome)
 	assert.Equal(t, BorrowerStateWillSupply, repo.savedPr.State)
 	assert.Equal(t, pr.CancellationReason, repo.savedPr.CancellationReason)
+	assert.Empty(t, repo.savedNotifications)
 }
 
 func TestCancelBorrowingRequestMissingRequesterSymbol(t *testing.T) {
@@ -2998,6 +3014,7 @@ func TestHandleInvokeLenderActionCannotSupply(t *testing.T) {
 		assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage.DeliveryInfo)
 		assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.ReasonUnfilled)
 	}
+	assert.Empty(t, mockPrRepo.savedNotifications)
 }
 
 func TestHandleInvokeLenderActionCannotSupplyWithReason(t *testing.T) {
@@ -3005,7 +3022,9 @@ func TestHandleInvokeLenderActionCannotSupplyWithReason(t *testing.T) {
 	lmsCreator := new(MockLmsCreator)
 	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lms.CreateLmsAdapterMockOK(), nil)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	illRepo := new(IllRepoMock)
+	illRepo.On("GetPeerBySymbol", "ISIL:SUP1").Return(peerWithCodes(nil, map[string]string{"my reason": "Our own reason"}, nil), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, illRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, nil)
@@ -3031,6 +3050,38 @@ func TestHandleInvokeLenderActionCannotSupplyWithReason(t *testing.T) {
 			assert.Equal(t, "my reason", mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.ReasonUnfilled.Text)
 		}
 	}
+	if assert.Len(t, mockPrRepo.savedNotifications, 1) {
+		n := mockPrRepo.savedNotifications[0]
+		assert.Equal(t, pr_db.NotificationKindUnfilledReason, n.Kind)
+		assert.Equal(t, pr_db.NotificationDirectionSent, n.Direction)
+		assert.Equal(t, pr_db.NotificationSent, n.Receipt)
+		assert.Equal(t, "ISIL:SUP1", n.FromSymbol)
+		assert.Equal(t, "ISIL:REQ1", n.ToSymbol)
+		assert.Equal(t, "my reason", n.Code.String)
+		assert.Equal(t, "Our own reason", n.CodeDescription.String)
+		assert.Equal(t, "my note", n.Note.String)
+	}
+}
+
+func TestHandleInvokeLenderActionCannotSupplySucceedsWhenReasonNotificationFails(t *testing.T) {
+	mockPrRepo := &MockPrRepo{saveNotificationFail: true}
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lms.CreateLmsAdapterMockOK(), nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock), nil, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, nil)
+	action := LenderActionCannotSupply
+
+	status, _ := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{
+		CommonEventData: events.CommonEventData{Action: &action},
+		CustomData:      map[string]any{"reasonUnfilled": "NotOnShelf"},
+	}})
+
+	// The unfilled message has already been sent, so recording it is best effort.
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, LenderStateUnfilled, mockPrRepo.savedPr.State)
+	assert.Len(t, mockPrRepo.savedNotifications, 1)
 }
 
 func TestHandleInvokeLenderActionCannotSupplyContinuesWhenCancelRequestItemFails(t *testing.T) {
@@ -3079,9 +3130,11 @@ func TestHandleInvokeLenderActionCannotSupplyIsoFailureStillBlocksTransition(t *
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{
 		CommonEventData: events.CommonEventData{Action: &action},
+		CustomData:      map[string]any{"reasonUnfilled": "NotOnShelf"},
 	}})
 
 	assert.Equal(t, events.EventStatusProblem, status)
+	assert.Empty(t, mockPrRepo.savedNotifications)
 	assert.Equal(t, LenderStateValidated, mockPrRepo.savedPr.State)
 	assert.False(t, mockPrRepo.savedPr.TerminalState)
 	compensation, ok := resultData.CustomData[compensationResultKey].(actionCompensationResult)
@@ -3390,7 +3443,7 @@ func TestHandleInvokeLenderActionAddConditionOK(t *testing.T) {
 		assert.Equal(t, "ISIL:SUP1", n.FromSymbol)
 		assert.Equal(t, "ISIL:REQ1", n.ToSymbol)
 		assert.False(t, n.Note.Valid)
-		assert.Equal(t, "my condition", n.Condition.String)
+		assert.Equal(t, "my condition", n.Code.String)
 	}
 }
 
@@ -3824,7 +3877,7 @@ func TestHandleInvokeLenderActionAddConditionWithCurrency(t *testing.T) {
 		assert.Equal(t, "ISIL:SUP1", n.FromSymbol)
 		assert.Equal(t, "ISIL:REQ1", n.ToSymbol)
 		assert.Equal(t, "Condition note", n.Note.String)
-		assert.Equal(t, "my condition", n.Condition.String)
+		assert.Equal(t, "my condition", n.Code.String)
 		assert.Equal(t, "DKK", n.Currency.String)
 		cost, err := n.Cost.Float64Value()
 		assert.NoError(t, err)
@@ -5851,6 +5904,12 @@ func (r *MockPrRepo) GetNotificationsByPrId(ctx common.ExtendedContext, params p
 		if params.Kind != "" && string(notification.Kind) != params.Kind {
 			continue
 		}
+		if params.ExcludeKind != "" && string(notification.Kind) == params.ExcludeKind {
+			continue
+		}
+		if params.WithNote && (!notification.Note.Valid || notification.Note.String == "") {
+			continue
+		}
 		notifications = append(notifications, notification)
 	}
 	fullCount := int64(len(notifications))
@@ -6249,6 +6308,10 @@ type IllRepoMock struct {
 }
 
 func (i *IllRepoMock) GetPeerBySymbol(ctx common.ExtendedContext, symbol string) (ill_db.Peer, error) {
+	// Tests that don't care about peer config get a cache miss.
+	if !slices.ContainsFunc(i.ExpectedCalls, func(call *mock.Call) bool { return call.Method == "GetPeerBySymbol" }) {
+		return ill_db.Peer{}, pgx.ErrNoRows
+	}
 	args := i.Called(symbol)
 	return args.Get(0).(ill_db.Peer), args.Error(1)
 }

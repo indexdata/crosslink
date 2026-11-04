@@ -1361,9 +1361,12 @@ func (a *PatronRequestActionService) cancelBorrowingRequest(ctx common.ExtendedC
 	if execResult.status == events.EventStatusSuccess {
 		// Suppliers need not echo the reason in their response. Save it on the
 		// originating request through the existing action finalization transaction.
-		if reason, _ := common.ExtractCancellationReason(params.Note); reason != "" {
+		reason, remainder := common.ExtractCancellationReason(params.Note)
+		if reason != "" {
 			execResult.pr.CancellationReason = getDbText(reason)
 		}
+		a.saveSentReasonNotification(ctx, pr, pr.RequesterSymbol.String, pr.SupplierSymbol.String,
+			pr_db.NotificationKindCancellationReason, reason, strings.TrimSpace(shim.StripReShareConditionMarkers(remainder)))
 	}
 	return execResult
 }
@@ -1900,6 +1903,10 @@ func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.Extend
 		iso18626.StatusInfo{Status: iso18626.TypeStatusUnfilled},
 		nil)
 	execResult := actionResultFromIllSend(ctx, sendStatus, sendResult, sendErr, pr)
+	if execResult.status == events.EventStatusSuccess {
+		a.saveSentReasonNotification(ctx, pr, pr.SupplierSymbol.String, pr.RequesterSymbol.String,
+			pr_db.NotificationKindUnfilledReason, strings.TrimSpace(params.ReasonUnfilled), params.Note)
+	}
 	return withCompensationFailure(execResult, "CancelRequestItem", compensationErr)
 }
 
@@ -2311,13 +2318,9 @@ func (a *PatronRequestActionService) createAndSendEmail(ctx common.ExtendedConte
 	if err != nil {
 		return fmt.Errorf("load email template with label %q for %s: %w", label, audience, err)
 	}
-	notes, _, err := a.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{Limit: 100, Offset: 0, PrID: pr.ID, Kind: string(pr_db.NotificationKindNote)})
+	notes, conditions, err := pr_db.GetTemplateNotifications(ctx, a.prRepo, pr.ID)
 	if err != nil {
-		return fmt.Errorf("load email staff notes: %w", err)
-	}
-	conditions, _, err := a.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{Limit: 100, Offset: 0, PrID: pr.ID, Kind: string(pr_db.NotificationKindCondition)})
-	if err != nil {
-		return fmt.Errorf("load email loan conditions: %w", err)
+		return fmt.Errorf("load email notifications: %w", err)
 	}
 	if err := ValidateTemplateRenderingForContext(
 		proapi.Email,
@@ -2455,19 +2458,51 @@ func (a *PatronRequestActionService) saveLendingAddConditionNotification(ctx com
 		return nil
 	}
 
-	_, err := a.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
-		ID:         uuid.NewString(),
+	return a.saveSentNotification(ctx, pr_db.SaveNotificationParams{
 		PrID:       pr.ID,
 		FromSymbol: pr.SupplierSymbol.String,
 		ToSymbol:   pr.RequesterSymbol.String,
-		Direction:  pr_db.NotificationDirectionSent,
 		Kind:       pr_db.NotificationKindCondition,
 		Note:       note,
-		Condition:  condition,
+		Code:       condition,
 		Cost:       cost,
 		Currency:   currency,
-		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
 	})
+}
+
+// saveSentReasonNotification records a cancellation or unfilled reason this
+// broker has already sent. The ISO message has gone out, so a failure to
+// record it is logged rather than failing the action.
+func (a *PatronRequestActionService) saveSentReasonNotification(ctx common.ExtendedContext, pr pr_db.PatronRequest, fromSymbol, toSymbol string, kind pr_db.NotificationKind, reason, note string) {
+	if reason == "" {
+		return
+	}
+	now := pgtype.Timestamp{Valid: true, Time: time.Now()}
+	err := a.saveSentNotification(ctx, pr_db.SaveNotificationParams{
+		PrID:           pr.ID,
+		FromSymbol:     fromSymbol,
+		ToSymbol:       toSymbol,
+		Kind:           kind,
+		Note:           getDbTextPtr(&note),
+		Code:           getDbText(reason),
+		Receipt:        pr_db.NotificationSent,
+		AcknowledgedAt: now,
+	})
+	if err != nil {
+		ctx.Logger().Error("failed to save sent reason notification", "pr_id", pr.ID, "kind", kind, "error", err)
+	}
+}
+
+// saveSentNotification stores n as a new sent notification, snapshotting the
+// code description from the sender's own Directory entry.
+func (a *PatronRequestActionService) saveSentNotification(ctx common.ExtendedContext, n pr_db.SaveNotificationParams) error {
+	n.ID = uuid.NewString()
+	n.Direction = pr_db.NotificationDirectionSent
+	n.CodeDescription = notificationCodeDescription(ctx, a.illRepo, n.FromSymbol, n.Kind, n.Code)
+	if !n.CreatedAt.Valid {
+		n.CreatedAt = pgtype.Timestamp{Valid: true, Time: time.Now()}
+	}
+	_, err := a.prRepo.SaveNotification(ctx, n)
 	return err
 }
 

@@ -216,7 +216,7 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	switch sam.MessageInfo.ReasonForMessage {
 	case iso18626.TypeReasonForMessageNotification:
 		// Notifications are acknowledged but must not drive state transitions.
-		notErr := m.extractSamNotifications(ctx, pr, sam)
+		notErr := m.extractSamNotifications(ctx, pr, sam, "")
 		if notErr != nil {
 			ctx.Logger().Error("failed to save sam notifications", "error", notErr)
 		}
@@ -230,11 +230,11 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 		return unsupportedReason()
 	}
 
+	var cancellationReason string
 	if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse || sam.StatusInfo.Status == iso18626.TypeStatusCancelled {
-		var reason string
-		reason, sam.MessageInfo.Note = common.ExtractCancellationReason(sam.MessageInfo.Note)
-		if reason != "" {
-			pr.CancellationReason = getDbText(reason)
+		cancellationReason, sam.MessageInfo.Note = common.ExtractCancellationReason(sam.MessageInfo.Note)
+		if cancellationReason != "" {
+			pr.CancellationReason = getDbText(cancellationReason)
 		}
 	}
 
@@ -389,10 +389,10 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	if retryBibInfo != nil {
 		updatedPr.RetryBibInfo = retryBibInfo
 	}
-	return m.updatePatronRequestAndCreateSamResponse(ctx, updatedPr, sam, stateChanged, parentEventID)
+	return m.updatePatronRequestAndCreateSamResponse(ctx, updatedPr, sam, cancellationReason, stateChanged, parentEventID)
 }
 
-func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage, stateChanged bool, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
+func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage, cancellationReason string, stateChanged bool, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	_, err := m.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(pr))
 	if err != nil {
 		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
@@ -400,7 +400,7 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ct
 			ErrorValue: err.Error(),
 		}, err)
 	}
-	err = m.extractSamNotifications(ctx, pr, sam)
+	err = m.extractSamNotifications(ctx, pr, sam, cancellationReason)
 	if err != nil {
 		ctx.Logger().Error("failed to save sam notifications", "error", err)
 	}
@@ -590,23 +590,23 @@ func (m *PatronRequestMessageHandler) handleRequestingAgencyMessageWithParent(ct
 	}
 
 	eventName := MessageEvent("")
+	var cancellationReason string
 	switch ram.Action {
 	case iso18626.TypeActionNotification:
 		if strings.Contains(ram.Note, shim.RESHARE_LOAN_CONDITION_AGREE) {
 			eventName = RequesterCondAccepted
 		} else {
 			// Notifications are acknowledged but must not drive state transitions.
-			notErr := m.extractRamNotifications(ctx, pr, ram)
+			notErr := m.extractRamNotifications(ctx, pr, ram, "")
 			if notErr != nil {
 				ctx.Logger().Error("failed to save ram notifications", "error", notErr)
 			}
 			return createRAMResponse(ram, iso18626.TypeMessageStatusOK, &ram.Action, nil, nil)
 		}
 	case iso18626.TypeActionCancel:
-		var reason string
-		reason, ram.Note = common.ExtractCancellationReason(ram.Note)
-		if reason != "" {
-			pr.CancellationReason = getDbText(reason)
+		cancellationReason, ram.Note = common.ExtractCancellationReason(ram.Note)
+		if cancellationReason != "" {
+			pr.CancellationReason = getDbText(cancellationReason)
 		}
 		if strings.Contains(ram.Note, shim.RESHARE_LOAN_CONDITION_REJECT) {
 			eventName = RequesterCondRejected
@@ -636,7 +636,7 @@ func (m *PatronRequestMessageHandler) handleRequestingAgencyMessageWithParent(ct
 	if !eventDefined {
 		return unsupported()
 	}
-	return m.updatePatronRequestAndCreateRamResponse(ctx, updatedPr, ram, &ram.Action, stateChanged, parentEventID, eventName)
+	return m.updatePatronRequestAndCreateRamResponse(ctx, updatedPr, ram, cancellationReason, &ram.Action, stateChanged, parentEventID, eventName)
 }
 
 func createRAMResponse(ram iso18626.RequestingAgencyMessage, messageStatus iso18626.TypeMessageStatus, action *iso18626.TypeAction, errorData *iso18626.ErrorData, err error) (events.EventStatus, *iso18626.ISO18626Message, error) {
@@ -660,7 +660,7 @@ func createRAMResponse(ram iso18626.RequestingAgencyMessage, messageStatus iso18
 	return eventStatus, message, err
 }
 
-func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, ram iso18626.RequestingAgencyMessage, action *iso18626.TypeAction, stateChanged bool, parentEventID *string, eventName MessageEvent) (events.EventStatus, *iso18626.ISO18626Message, error) {
+func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, ram iso18626.RequestingAgencyMessage, cancellationReason string, action *iso18626.TypeAction, stateChanged bool, parentEventID *string, eventName MessageEvent) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	_, err := m.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(pr))
 	if err != nil {
 		return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, action, &iso18626.ErrorData{
@@ -686,7 +686,7 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ct
 			ctx.Logger().Error("failed to mark condition notifications rejected", "pr_id", pr.ID, "error", err)
 		}
 	}
-	err = m.extractRamNotifications(ctx, pr, ram)
+	err = m.extractRamNotifications(ctx, pr, ram, cancellationReason)
 	if err != nil {
 		ctx.Logger().Error("failed to save ram notifications", "error", err)
 	}
@@ -740,17 +740,25 @@ func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId 
 	return err
 }
 
-func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) error {
+// extractSamNotifications stores the note, coded value and cost a supplier
+// message carries as one received notification. cancellationReason is the
+// reason already extracted from the note, if any.
+func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage, cancellationReason string) error {
 	supSymbol, reqSymbol := getSymbolsFromHeader(sam.Header)
 	var note pgtype.Text
 	noteText := shim.StripReShareConditionMarkers(common.StripItemsNotePayload(sam.MessageInfo.Note))
 	if noteText != "" {
 		note = getDbText(noteText)
 	}
-	var condition pgtype.Text
+	var condition, unfilledReason pgtype.Text
 	if sam.DeliveryInfo != nil && sam.DeliveryInfo.LoanCondition != nil {
 		if value := strings.TrimSpace(sam.DeliveryInfo.LoanCondition.Text); value != "" {
 			condition = getDbText(value)
+		}
+	}
+	if sam.MessageInfo.ReasonUnfilled != nil {
+		if value := strings.TrimSpace(sam.MessageInfo.ReasonUnfilled.Text); value != "" {
+			unfilledReason = getDbText(value)
 		}
 	}
 
@@ -770,21 +778,23 @@ func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.Extende
 		}
 	}
 
-	if !note.Valid && !condition.Valid && !cost.Valid {
+	kind, code := inferNotificationKindAndCode(condition, cost.Valid, unfilledReason, getDbTextPtr(&cancellationReason))
+	if !note.Valid && !code.Valid && !cost.Valid {
 		return nil
 	}
 
 	_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
-		ID:         uuid.NewString(),
-		PrID:       pr.ID,
-		Note:       note,
-		FromSymbol: supSymbol,
-		ToSymbol:   reqSymbol,
-		Direction:  pr_db.NotificationDirectionReceived,
-		Kind:       inferNotificationKind(note.Valid, condition.Valid, cost.Valid),
-		Condition:  condition,
-		Currency:   currency,
-		Cost:       cost,
+		ID:              uuid.NewString(),
+		PrID:            pr.ID,
+		Note:            note,
+		FromSymbol:      supSymbol,
+		ToSymbol:        reqSymbol,
+		Direction:       pr_db.NotificationDirectionReceived,
+		Kind:            kind,
+		Code:            code,
+		CodeDescription: notificationCodeDescription(ctx, m.illRepo, supSymbol, kind, code),
+		Currency:        currency,
+		Cost:            cost,
 		CreatedAt: pgtype.Timestamp{
 			Valid: true,
 			Time:  time.Now(),
@@ -793,20 +803,30 @@ func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.Extende
 	return err
 }
 
-func (m *PatronRequestMessageHandler) extractRamNotifications(ctx common.ExtendedContext, pr pr_db.PatronRequest, ram iso18626.RequestingAgencyMessage) error {
+// extractRamNotifications stores a requester message's note as a received
+// notification. A non-empty cancellationReason, already extracted from the
+// note, makes it a cancellation_reason notification even when no other note
+// text remains.
+func (m *PatronRequestMessageHandler) extractRamNotifications(ctx common.ExtendedContext, pr pr_db.PatronRequest, ram iso18626.RequestingAgencyMessage, cancellationReason string) error {
 	noteText := shim.StripReShareConditionMarkers(ram.Note)
-	if noteText == "" {
+	if noteText == "" && cancellationReason == "" {
 		return nil
+	}
+	kind, code := pr_db.NotificationKindNote, pgtype.Text{}
+	if cancellationReason != "" {
+		kind, code = pr_db.NotificationKindCancellationReason, getDbText(cancellationReason)
 	}
 	supSymbol, reqSymbol := getSymbolsFromHeader(ram.Header)
 	_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
-		ID:         uuid.NewString(),
-		PrID:       pr.ID,
-		Note:       getDbText(noteText),
-		FromSymbol: reqSymbol,
-		ToSymbol:   supSymbol,
-		Direction:  pr_db.NotificationDirectionReceived,
-		Kind:       pr_db.NotificationKindNote,
+		ID:              uuid.NewString(),
+		PrID:            pr.ID,
+		Note:            getDbTextPtr(&noteText),
+		FromSymbol:      reqSymbol,
+		ToSymbol:        supSymbol,
+		Direction:       pr_db.NotificationDirectionReceived,
+		Kind:            kind,
+		Code:            code,
+		CodeDescription: notificationCodeDescription(ctx, m.illRepo, reqSymbol, kind, code),
 		CreatedAt: pgtype.Timestamp{
 			Valid: true,
 			Time:  time.Now(),
@@ -866,11 +886,21 @@ func (m *PatronRequestMessageHandler) extractRequestNotifications(ctx common.Ext
 	return err
 }
 
-func inferNotificationKind(hasNote bool, hasCondition bool, hasCost bool) pr_db.NotificationKind {
-	if hasCondition || hasCost {
-		return pr_db.NotificationKindCondition
+// inferNotificationKindAndCode picks the kind for a message that may carry
+// several coded values. A message is stored as one notification, so the most
+// actionable value wins: a condition (code or cost), then an unfilled reason,
+// then a cancellation reason; otherwise it is a plain note.
+func inferNotificationKindAndCode(condition pgtype.Text, hasCost bool, unfilledReason pgtype.Text, cancellationReason pgtype.Text) (pr_db.NotificationKind, pgtype.Text) {
+	switch {
+	case condition.Valid || hasCost:
+		return pr_db.NotificationKindCondition, condition
+	case unfilledReason.Valid:
+		return pr_db.NotificationKindUnfilledReason, unfilledReason
+	case cancellationReason.Valid:
+		return pr_db.NotificationKindCancellationReason, cancellationReason
+	default:
+		return pr_db.NotificationKindNote, pgtype.Text{}
 	}
-	return pr_db.NotificationKindNote
 }
 
 func getSymbolsFromHeader(header iso18626.Header) (string, string) {

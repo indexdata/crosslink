@@ -1099,3 +1099,40 @@ func TestImportLocatedSupplierSelectedItem(t *testing.T) {
 	assert.Equal(t, pgText("copy-2"), repo.patron.LocatedSuppliers[0].ItemID)
 	assert.Equal(t, pgtype.Bool{Valid: true, Bool: true}, repo.patron.LocatedSuppliers[0].HoldingsPolicyResolved)
 }
+
+func TestImportNotificationCode(t *testing.T) {
+	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "peer-requester"}, {ID: "peer-supplier"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{terminal: true}, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		notification := bundle["notifications"].([]any)[0].(map[string]any)
+		notification["kind"] = "cancellation_reason"
+		notification["code"] = "LocalCode"
+		notification["codeDescription"] = "Library-defined reason"
+	})
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyUpdate, "ISIL:REQ", data)
+
+	require.NoError(t, err)
+	require.Len(t, repo.patron.Notifications, 1)
+	n := repo.patron.Notifications[0]
+	assert.Equal(t, pr_db.NotificationKindCancellationReason, n.Kind)
+	assert.Equal(t, pgText("LocalCode"), n.Code)
+	assert.Equal(t, pgText("Library-defined reason"), n.CodeDescription)
+}
+
+func TestImportNotificationRejectsLegacyCondition(t *testing.T) {
+	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "peer-requester"}, {ID: "peer-supplier"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{terminal: true}, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		notification := bundle["notifications"].([]any)[0].(map[string]any)
+		notification["kind"] = "condition"
+		notification["condition"] = "NoReproduction"
+	})
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyUpdate, "ISIL:REQ", data)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "condition")
+}

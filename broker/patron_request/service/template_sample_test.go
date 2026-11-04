@@ -22,7 +22,7 @@ func TestGetTemplateSamplesLoadsEverySampleInOrder(t *testing.T) {
 		}
 		for _, condition := range sample.Conditions {
 			assert.Equal(t, pr_db.NotificationKindCondition, condition.Kind)
-			assert.True(t, condition.Condition.Valid)
+			assert.True(t, condition.Code.Valid)
 		}
 		want := SideLending
 		if sample.Name == "requester" {

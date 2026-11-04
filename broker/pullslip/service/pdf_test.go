@@ -162,7 +162,7 @@ func TestGeneratePdfPullSlip_FullData(t *testing.T) {
 		{Note: pgtype.Text{String: "Rush request", Valid: true}},
 	}
 	conditions := []pr_db.Notification{
-		{Condition: pgtype.Text{String: "No photocopying", Valid: true}},
+		{Code: pgtype.Text{String: "No photocopying", Valid: true}},
 	}
 
 	pdfBytes, err := svc.GeneratePdfPullSlip(appCtx, pr, notes, conditions)
@@ -237,18 +237,22 @@ func TestGeneratePdfPullSlip_TemplateDbError(t *testing.T) {
 // ── GeneratePdfPullSlipForPrs ─────────────────────────────────────────────────
 
 type mockPrRepo struct {
-	pr_db.PrRepo // embed to satisfy the full interface
-	notes        []pr_db.Notification
-	conditions   []pr_db.Notification
-	noteErr      error
-	condErr      error
+	pr_db.PrRepo    // embed to satisfy the full interface
+	notifications   []pr_db.Notification
+	notificationErr error
+	notificationReq []pr_db.GetNotificationsByPrIdParams
 }
 
 func (m *mockPrRepo) GetNotificationsByPrId(_ common.ExtendedContext, params pr_db.GetNotificationsByPrIdParams) ([]pr_db.Notification, int64, error) {
-	if params.Kind == string(pr_db.NotificationKindNote) {
-		return m.notes, int64(len(m.notes)), m.noteErr
+	m.notificationReq = append(m.notificationReq, params)
+	matched := []pr_db.Notification{}
+	for _, n := range m.notifications {
+		if (params.Kind == "" || string(n.Kind) == params.Kind) && (params.ExcludeKind == "" || string(n.Kind) != params.ExcludeKind) &&
+			(!params.WithNote || (n.Note.Valid && n.Note.String != "")) {
+			matched = append(matched, n)
+		}
 	}
-	return m.conditions, int64(len(m.conditions)), m.condErr
+	return matched, int64(len(matched)), m.notificationErr
 }
 
 func (m *mockPrRepo) GetTemplateByPurposeAudienceLabelAndOwner(_ common.ExtendedContext, params pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams) (pr_db.Template, error) {
@@ -292,20 +296,25 @@ func TestGeneratePdfPullSlipForPrs_Multiple(t *testing.T) {
 	assert.True(t, len(pdfBytes) > 0)
 }
 
-func TestGeneratePdfPullSlipForPrs_NoteError(t *testing.T) {
-	repo := &mockPrRepo{noteErr: errors.New("note db error")}
+func TestGeneratePdfPullSlipForPrs_NotificationError(t *testing.T) {
+	repo := &mockPrRepo{notificationErr: errors.New("notification db error")}
 	svc := newSvcWithMock(repo)
 	pr := pr_db.PatronRequest{ID: "pr-1", RequesterReqID: pgtype.Text{String: "REQ-1", Valid: true}}
 	_, err := svc.GeneratePdfPullSlipForPrs(appCtx, []pr_db.PatronRequest{pr})
-	assert.Error(t, err)
+	assert.ErrorContains(t, err, "notification db error")
 }
 
-func TestGeneratePdfPullSlipForPrs_ConditionError(t *testing.T) {
-	repo := &mockPrRepo{condErr: errors.New("condition db error")}
+func TestGeneratePdfPullSlipForPrs_LoadsNotesAndConditionsSeparately(t *testing.T) {
+	repo := &mockPrRepo{}
 	svc := newSvcWithMock(repo)
 	pr := pr_db.PatronRequest{ID: "pr-1", RequesterReqID: pgtype.Text{String: "REQ-1", Valid: true}}
 	_, err := svc.GeneratePdfPullSlipForPrs(appCtx, []pr_db.PatronRequest{pr})
-	assert.Error(t, err)
+	require.NoError(t, err)
+	// Staff notes include every non-condition kind; each category has its own limit.
+	require.Len(t, repo.notificationReq, 2)
+	assert.Equal(t, string(pr_db.NotificationKindCondition), repo.notificationReq[0].ExcludeKind)
+	assert.True(t, repo.notificationReq[0].WithNote, "staff notes skip rows without note text")
+	assert.Equal(t, string(pr_db.NotificationKindCondition), repo.notificationReq[1].Kind)
 }
 
 // ── ServiceInfo edge cases ────────────────────────────────────────────────────
