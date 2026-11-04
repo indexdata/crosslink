@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/stretchr/testify/require"
 )
@@ -155,5 +156,44 @@ func TestArchiveBorrowingRequestSkipsContendedDependencies(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, stored)
 		})
+	}
+}
+
+func TestArchiveBorrowingRequestWaitsForRelatedLendingTask(t *testing.T) {
+	for _, status := range []events.EventStatus{events.EventStatusNew, events.EventStatusProcessing} {
+		for _, scope := range []string{"related", "other-requester", "other-request"} {
+			t.Run(string(status)+"/"+scope, func(t *testing.T) {
+				f := createBorrowingArchiveFixture(t)
+				repo := prRepo.(*pr_db.PgPrRepo)
+				// The related request is terminal, but its notification task can
+				// still need the transaction when sending its ISO message.
+				_, err := repo.Pool.Exec(appCtx, `UPDATE event
+					SET ill_transaction_id=$2,event_name=$3,event_status=$4 WHERE id=$1`,
+					f.lendingEvent, events.DEFAULT_ILL_TRANSACTION_ID, events.EventNameSendNotification, status)
+				require.NoError(t, err)
+				if scope != "related" {
+					t.Cleanup(func() { _, _ = repo.Pool.Exec(appCtx, `DELETE FROM patron_request WHERE id=$1`, f.lending) })
+					_, err = repo.Pool.Exec(appCtx, `UPDATE patron_request
+						SET requester_symbol=CASE WHEN $2 THEN 'ISIL:UNRELATED' ELSE requester_symbol END,
+						requester_req_id=CASE WHEN $3 THEN $1 ELSE requester_req_id END WHERE id=$1`,
+						f.lending, scope == "other-requester", scope == "other-request")
+					require.NoError(t, err)
+				}
+				stored, err := repo.ArchiveBorrowingRequest(appCtx, archiveFixtureRequest(f), f.owner, time.Now(), false)
+				require.NoError(t, err)
+				require.Equal(t, scope != "related", stored)
+				if scope == "related" {
+					requireUnarchivedTransaction(t, f)
+					_, err = repo.Pool.Exec(appCtx, `UPDATE event SET event_status='SUCCESS' WHERE id=$1`, f.lendingEvent)
+					require.NoError(t, err)
+					stored, err = repo.ArchiveBorrowingRequest(appCtx, archiveFixtureRequest(f), f.owner, time.Now(), false)
+					require.NoError(t, err)
+					require.True(t, stored, "the completed notification permits archival")
+				}
+				remaining, err := eventRepo.GetEvent(appCtx, f.lendingEvent)
+				require.NoError(t, err, "lending tasks survive borrowing archival")
+				require.Equal(t, events.DEFAULT_ILL_TRANSACTION_ID, remaining.IllTransactionID)
+			})
+		}
 	}
 }

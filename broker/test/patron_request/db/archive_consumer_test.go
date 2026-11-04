@@ -20,6 +20,7 @@ func TestArchiveRequestProtectsConsumerHandoff(t *testing.T) {
 		{"borrowing", "request"},
 		{"borrowing", "transaction"},
 		{"borrowing", "other-request"},
+		{"borrowing", "related-request"},
 		{"lending", "request"},
 	} {
 		side := tc.side
@@ -34,6 +35,11 @@ func TestArchiveRequestProtectsConsumerHandoff(t *testing.T) {
 					eventID = f.borrowerEvent
 				case "other-request":
 					eventID = f.lendingEvent
+				case "related-request":
+					eventID = f.lendingEvent
+					_, err := repo.Pool.Exec(appCtx, `UPDATE event SET ill_transaction_id=$2,event_name=$3 WHERE id=$1`,
+						eventID, events.DEFAULT_ILL_TRANSACTION_ID, events.EventNameSendNotification)
+					require.NoError(t, err)
 				}
 				if side == "lending" {
 					request, owner, eventID = lendingFixtureRequest(f), f.supplierOwner, f.lendingEvent
@@ -88,11 +94,22 @@ func TestArchiveRequestProtectsConsumerHandoff(t *testing.T) {
 }
 
 func TestArchiveRequestRechecksConsumerWorkAfterEventLock(t *testing.T) {
-	for _, side := range []string{"borrowing", "lending"} {
-		t.Run(side, func(t *testing.T) {
+	for _, tc := range []struct{ side, scope string }{
+		{"borrowing", "transaction"},
+		{"borrowing", "related-request"},
+		{"lending", "request"},
+	} {
+		side := tc.side
+		t.Run(side+"/"+tc.scope, func(t *testing.T) {
 			f := createLendingArchiveFixture(t)
 			repo := prRepo.(*pr_db.PgPrRepo)
 			request, owner, eventID := archiveFixtureRequest(f.borrowingArchiveFixture), f.owner, f.transactionEvent
+			if tc.scope == "related-request" {
+				eventID = f.lendingEvent
+				_, err := repo.Pool.Exec(appCtx, `UPDATE event SET ill_transaction_id=$2,event_name=$3 WHERE id=$1`,
+					eventID, events.DEFAULT_ILL_TRANSACTION_ID, events.EventNameSendNotification)
+				require.NoError(t, err)
+			}
 			if side == "lending" {
 				request, owner, eventID = lendingFixtureRequest(f), f.supplierOwner, f.lendingEvent
 			}

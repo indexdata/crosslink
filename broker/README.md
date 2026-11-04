@@ -144,7 +144,7 @@ events, pending consumer signals, or running consumer handlers are skipped for a
 later run. Consumer work remains protected until all handlers finish creating
 follow-up work. Panicking or interrupted dispatches retain their records in
 `event_consumer_work` across restarts; investigate them before resolving their
-records, since replay could repeat external effects. Migration 072 conservatively
+records, since replay could repeat external effects. Migration 075 conservatively
 protects existing nonempty signals because older records do not identify their
 target. Historical observer-only signals may therefore need investigation and
 resolution before their requests can be archived. New observer-only signals do
@@ -157,8 +157,10 @@ the selected request, its events, items, notifications, and notes.
 
 Borrowing archival also waits for nonterminal lending requests with the same
 requester symbol and request ID, and for a nonterminal Retry successor while the
-transaction still belongs to its predecessor. New rerequests use independent
-transactions and do not defer predecessor archival. Contention on related request
+transaction still belongs to its predecessor. Activity checks and event locks
+include related lending requests' patron-request-domain tasks, including tasks
+on terminal requests that use the synthetic transaction ID. New rerequests use
+independent transactions and do not defer predecessor archival. Contention on related request
 rows skips the candidate for a later run. Borrowing archives additionally include
 the associated ILL transaction, transaction events,
 and located suppliers. Lending archives store only the supplier PR's data and

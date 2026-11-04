@@ -152,7 +152,11 @@ BEGIN
     -- Recheck after locking events in case their activity changes meanwhile.
     IF EXISTS (
         SELECT 1 FROM event
-         WHERE (patron_request_id = p_id OR ill_transaction_id = v_transaction_id)
+         WHERE (patron_request_id = p_id OR ill_transaction_id = v_transaction_id
+                OR (v_transaction_id IS NOT NULL AND patron_request_id IN (
+                    SELECT id FROM patron_request
+                     WHERE side = 'lending' AND requester_symbol = p_owner
+                       AND requester_req_id = v_pr.requester_req_id)))
            AND (event_status IN ('NEW', 'PROCESSING')
                 OR EXISTS (SELECT 1 FROM event_consumer_work w WHERE w.event_id = event.id))
     ) THEN
@@ -187,7 +191,15 @@ BEGIN
 
     -- Parent row locks block new FK children; child locks block changes to
     -- existing rows while their snapshots are assembled.
-    PERFORM 1 FROM event WHERE patron_request_id = p_id ORDER BY id FOR UPDATE;
+    -- Related lending tasks use the synthetic transaction ID, so lock and
+    -- check their events by request ID even when the lending request is terminal.
+    PERFORM 1 FROM event
+     WHERE patron_request_id = p_id
+        OR (v_transaction_id IS NOT NULL AND patron_request_id IN (
+            SELECT id FROM patron_request
+             WHERE side = 'lending' AND requester_symbol = p_owner
+               AND requester_req_id = v_pr.requester_req_id))
+     ORDER BY id FOR UPDATE;
     -- Item updates lock the item before their trigger updates this request.
     -- Never wait for them while holding the request lock: skip the candidate.
     BEGIN
@@ -202,7 +214,11 @@ BEGIN
     END IF;
     IF EXISTS (
         SELECT 1 FROM event
-         WHERE (patron_request_id = p_id OR ill_transaction_id = v_transaction_id)
+         WHERE (patron_request_id = p_id OR ill_transaction_id = v_transaction_id
+                OR (v_transaction_id IS NOT NULL AND patron_request_id IN (
+                    SELECT id FROM patron_request
+                     WHERE side = 'lending' AND requester_symbol = p_owner
+                       AND requester_req_id = v_pr.requester_req_id)))
            AND (event_status IN ('NEW', 'PROCESSING')
                 OR EXISTS (SELECT 1 FROM event_consumer_work w WHERE w.event_id = event.id))
     ) THEN
