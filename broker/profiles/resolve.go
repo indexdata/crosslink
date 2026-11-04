@@ -76,6 +76,11 @@ func supported(name, setting string) error {
 // validated effective LMS and catalog configurations without mutating entry.
 func Resolve(entry dirapi.Entry) (*Effective, error) {
 	rawL, rawC := asObject(entry.LmsConfig), asObject(entry.CatalogConfig)
+	// Directory omits ncipVersion "default" from resolved entries; drop it
+	// here too, before merging, so the selected profile's version applies.
+	if rawL["ncipVersion"] == "default" {
+		delete(rawL, "ncipVersion")
+	}
 	vendor := selected(rawL, "vendor", "Generic")
 	profile := selected(rawC, "profile", vendor)
 	if err := supported(vendor, "lmsConfig.vendor"); err != nil {

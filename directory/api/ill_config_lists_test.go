@@ -59,6 +59,7 @@ func TestIllConfigListsMapping(t *testing.T) {
 		wantPatch  string
 	}{
 		{name: "omitted", wantPatch: string(original)},
+		{name: "null clears the local list", value: `null`},
 		{name: "empty", value: `[]`, wantCreate: `[]`, wantPatch: `[]`},
 		{name: "custom values", value: `[{"code":"Custom-B","defaultDesc":"Second"},{"code":"Custom-A","defaultDesc":"First"}]`,
 			wantCreate: `[{"code":"Custom-B","defaultDesc":"Second"},{"code":"Custom-A","defaultDesc":"First"}]`,
@@ -77,7 +78,9 @@ func TestIllConfigListsMapping(t *testing.T) {
 			require.NoError(t, json.Unmarshal(raw, &cfg))
 			created, err := illConfigToDBParams(uuid.New(), cfg)
 			require.NoError(t, err)
-			patched, err := illConfigPatchToDBParams(uuid.New(), cfg, db.IllConfig{
+			var patch IllConfigPatch
+			require.NoError(t, json.Unmarshal(raw, &patch))
+			patched, err := illConfigPatchToDBParams(uuid.New(), patch, db.IllConfig{
 				AvailableCopyrightTypes: original, UnfilledReasons: original, CancellationReasons: original, LoanConditions: original,
 			})
 			require.NoError(t, err)
@@ -89,7 +92,11 @@ func TestIllConfigListsMapping(t *testing.T) {
 				}
 			}
 			for _, value := range [][]byte{patched.AvailableCopyrightTypes, patched.UnfilledReasons, patched.CancellationReasons, patched.LoanConditions} {
-				require.JSONEq(t, tc.wantPatch, string(value))
+				if tc.wantPatch == "" {
+					require.Nil(t, value)
+				} else {
+					require.JSONEq(t, tc.wantPatch, string(value))
+				}
 			}
 		})
 	}

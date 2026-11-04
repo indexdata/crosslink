@@ -44,7 +44,9 @@ func maybeUpdateEntryVendor(cur *string, patch nullable.Nullable[EntryVendor]) *
 	return &value
 }
 
-func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
+// scanEntryRow scans one entry. It also returns the entry's stored
+// configuration containers as projected JSON, keyed by API property name.
+func scanEntryRow(rows pgx.Rows) (Entry, storedConfigs, int, error) {
 	var (
 		id                 uuid.UUID
 		name               string
@@ -78,56 +80,56 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 	if err := rows.Scan(&id, &name, &description, &organizationId, &contactName, &email, &fromEmail, &tenant, &vendor, &phoneNumber,
 		&lmsLocationCode, &lendToBorrowRatio, &illConfigJSON, &lmsConfigJSON, &catalogConfigJSON, &holdingsPolicyJSON, &hrid, &timeZone, &entryType, &parent, &symbolsJSON, &endpointsJSON,
 		&addressesJSON, &tiersJSON, &networksJSON, &closuresJSON, &totalCount); err != nil {
-		return Entry{}, 0, err
+		return Entry{}, nil, 0, err
 	}
 
 	symbols, err := unmarshalJSONArray[Symbol](symbolsJSON)
 	if err != nil {
-		return Entry{}, 0, fmt.Errorf("unmarshalling symbols: %w", err)
+		return Entry{}, nil, 0, fmt.Errorf("unmarshalling symbols: %w", err)
 	}
 
 	endpoints, err := unmarshalJSONArray[ServiceEndpoint](endpointsJSON)
 	if err != nil {
-		return Entry{}, 0, fmt.Errorf("unmarshalling endpoints: %w", err)
+		return Entry{}, nil, 0, fmt.Errorf("unmarshalling endpoints: %w", err)
 	}
 
 	addresses, err := unmarshalJSONArray[Address](addressesJSON)
 	if err != nil {
-		return Entry{}, 0, fmt.Errorf("unmarshalling addresses: %w", err)
+		return Entry{}, nil, 0, fmt.Errorf("unmarshalling addresses: %w", err)
 	}
 
 	closures, err := unmarshalJSONArray[Closure](closuresJSON)
 	if err != nil {
-		return Entry{}, 0, fmt.Errorf("unmarshalling closures: %w", err)
+		return Entry{}, nil, 0, fmt.Errorf("unmarshalling closures: %w", err)
 	}
 
 	lmsConfig, err := unmarshalJSONObject[LmsConfig](lmsConfigJSON)
 	if err != nil {
-		return Entry{}, 0, fmt.Errorf("unmarshalling lms config: %w", err)
+		return Entry{}, nil, 0, fmt.Errorf("unmarshalling lms config: %w", err)
 	}
 
 	catalogConfig, err := unmarshalJSONObject[CatalogConfig](catalogConfigJSON)
 	if err != nil {
-		return Entry{}, 0, fmt.Errorf("unmarshalling holdings config: %w", err)
+		return Entry{}, nil, 0, fmt.Errorf("unmarshalling holdings config: %w", err)
 	}
 	holdingsPolicy, err := unmarshalJSONObject[HoldingsPolicy](holdingsPolicyJSON)
 	if err != nil {
-		return Entry{}, 0, fmt.Errorf("failed to parse holdings policy: %w", err)
+		return Entry{}, nil, 0, fmt.Errorf("failed to parse holdings policy: %w", err)
 	}
 
 	tiers, err := unmarshalJSONArray[Tier](tiersJSON)
 	if err != nil {
-		return Entry{}, 0, fmt.Errorf("unmarshalling tiers: %w", err)
+		return Entry{}, nil, 0, fmt.Errorf("unmarshalling tiers: %w", err)
 	}
 
 	networks, err := unmarshalJSONArray[EntryNetworkDetails](networksJSON)
 	if err != nil {
-		return Entry{}, 0, fmt.Errorf("unmarshalling networks config: %w", err)
+		return Entry{}, nil, 0, fmt.Errorf("unmarshalling networks config: %w", err)
 	}
 
 	illConfig, err := unmarshalJSONObject[IllConfig](illConfigJSON)
 	if err != nil {
-		return Entry{}, 0, fmt.Errorf("unmarshalling ill config: %w", err)
+		return Entry{}, nil, 0, fmt.Errorf("unmarshalling ill config: %w", err)
 	}
 
 	// Use nil for empty arrays so they're omitted in JSON (omitempty)
@@ -165,6 +167,15 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 
 	typeValue := EntryType(*entryType)
 
+	configs := storedConfigs{}
+	for name, value := range map[string][]byte{
+		"illConfig": illConfigJSON, "lmsConfig": lmsConfigJSON, "catalogConfig": catalogConfigJSON, "holdingsPolicy": holdingsPolicyJSON,
+	} {
+		if value != nil {
+			configs[name] = value
+		}
+	}
+
 	return Entry{
 		Id:                &id,
 		Name:              name,
@@ -192,7 +203,7 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 		Networks:          networksPtr,
 		TimeZone:          timeZone,
 		Vendor:            (*EntryVendor)(vendor),
-	}, totalCount, nil
+	}, configs, totalCount, nil
 }
 
 const defaultEntryOrder = "ORDER BY e.name, e.id"
@@ -268,35 +279,22 @@ func (f *fieldEntrySymbol) Generate(sc cql.SearchClause, queryArgumentIndex int)
 	}
 }
 
-// buildEntrySQL builds the base SQL query for entries with nested subresources
-func buildEntrySQL(whereClause string) string {
-	baseQuery := `
-	
-	SELECT
-		e.id,
-		e.name,
-		e.description,
-		e.organization_id,
-		e.contact_name,
-		e.email,
-		e.from_email,
-		e.tenant,
-		e.vendor,
-		e.phone_number,
-		e.lms_location_code,
-		e.lend_to_borrow_ratio,
+// entryConfigColumns projects an entry's stored ill_config, lms_config,
+// catalog_config and holdings_policy as JSON objects, in that order.
+const entryConfigColumns = `
 		(
 		SELECT json_strip_nulls(json_build_object(
 			'isPickupLocation', i.is_pickup_location,
 			'iso18626Url', i.iso18626_url,
 			'iso18626Vendor', i.iso18626_vendor,
-			'lendersOfLastResort', CASE WHEN i.lenders_of_last_resort IS NULL THEN NULL ELSE (
+			-- json_agg over no rows is NULL; keep a stored empty list as [] so it blocks inheritance.
+			'lendersOfLastResort', CASE WHEN i.lenders_of_last_resort IS NULL THEN NULL ELSE COALESCE((
 				SELECT json_agg(json_build_object(
 					'authority', split_part(value, ':', 1),
 					'symbol', substring(value from position(':' in value) + 1)
 				))
 				FROM unnest(i.lenders_of_last_resort) value
-			) END,
+			), '[]'::json) END,
 			'includeRequestingAgencyInfo', i.include_requesting_agency_info,
 			'includeSupplierInfo', i.include_supplier_info,
 			'includeReturnInfo', i.include_return_info,
@@ -410,7 +408,26 @@ func buildEntrySQL(whereClause string) string {
 				)
 			)
 		from catalog_configs h WHERE h.entry = e.id) as catalog_config,
-		(SELECT hp.policy FROM holdings_policies hp WHERE hp.entry = e.id) as holdings_policy,
+		(SELECT hp.policy FROM holdings_policies hp WHERE hp.entry = e.id) as holdings_policy`
+
+// buildEntrySQL builds the base SQL query for entries with nested subresources
+func buildEntrySQL(whereClause string) string {
+	baseQuery := `
+
+	SELECT
+		e.id,
+		e.name,
+		e.description,
+		e.organization_id,
+		e.contact_name,
+		e.email,
+		e.from_email,
+		e.tenant,
+		e.vendor,
+		e.phone_number,
+		e.lms_location_code,
+		e.lend_to_borrow_ratio,
+		` + entryConfigColumns + `,
 		e.hrid,
 		e.time_zone,
 		e.type,
@@ -520,37 +537,67 @@ func buildEntryListQuery(cqlString *string, limit *Limit, offset *Offset, baseWh
 	return query, args, nil
 }
 
-func (a ApiImpl) queryEntryList(ctx context.Context, query string, args []any, transform func(*Entry) error) (EntriesResponse, error) {
-	rows, err := a.pool.Query(ctx, query, args...)
-	if err != nil {
-		return EntriesResponse{}, fmt.Errorf("querying entries: %w", err)
+// readEntries runs an entry query, merges inherited configuration when
+// resolve is true, and sanitizes protected fields for the caller.
+//
+// When resolving, the entries and their ancestors are read in one read-only
+// REPEATABLE READ transaction so that both come from the same snapshot.
+func (a ApiImpl) readEntries(ctx context.Context, query string, args []any, authData *auth.AuthData, resolve bool) ([]Entry, int, error) {
+	var q querier = a.pool
+	resolve = resolve && a.inheritance != nil
+	if resolve {
+		tx, err := a.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+		if err != nil {
+			return nil, 0, fmt.Errorf("begin entry read transaction: %w", err)
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		q = tx
 	}
-	defer rows.Close()
 
+	rows, err := q.Query(ctx, query, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("querying entries: %w", err)
+	}
 	// Initialise items as explicitly zero length because a nil slice is
 	// JSON-encoded as null rather than [].
 	items := make([]Entry, 0)
+	var configs []storedConfigs
 	var totalCount int
-
 	for rows.Next() {
-		entry, count, err := scanEntryRow(rows)
+		entry, stored, count, err := scanEntryRow(rows)
 		if err != nil {
-			return EntriesResponse{}, fmt.Errorf("scanning entry row: %w", err)
+			rows.Close()
+			return nil, 0, fmt.Errorf("scanning entry row: %w", err)
 		}
-		if transform != nil {
-			if err := transform(&entry); err != nil {
-				return EntriesResponse{}, fmt.Errorf("transforming entry: %w", err)
-			}
-		}
-
 		items = append(items, entry)
+		configs = append(configs, stored)
 		totalCount = count
 	}
-
+	rows.Close()
 	if err := rows.Err(); err != nil {
-		return EntriesResponse{}, fmt.Errorf("iterating entry rows: %w", err)
+		return nil, 0, fmt.Errorf("iterating entry rows: %w", err)
 	}
 
+	if resolve {
+		if err := a.resolveInheritance(ctx, q, authData, items, configs); err != nil {
+			return nil, 0, err
+		}
+	}
+	for i := range items {
+		if !canSeeSensitiveEntry(authData, items[i].Tenant) {
+			if err := sanitizeEntry(&items[i]); err != nil {
+				return nil, 0, fmt.Errorf("sanitizing entry: %w", err)
+			}
+		}
+	}
+	return items, totalCount, nil
+}
+
+func (a ApiImpl) queryEntryList(ctx context.Context, query string, args []any, authData *auth.AuthData, resolve bool) (EntriesResponse, error) {
+	items, totalCount, err := a.readEntries(ctx, query, args, authData, resolve)
+	if err != nil {
+		return EntriesResponse{}, err
+	}
 	return EntriesResponse{
 		Items: items,
 		About: About{Count: int64(totalCount)},
@@ -571,12 +618,7 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 		return GetEntries400TextResponse(fmt.Sprintf("CQL parse error: %v", err)), nil
 	}
 
-	response, err := a.queryEntryList(ctx, query, args, func(entry *Entry) error {
-		if !canSeeSensitiveEntry(authData, entry.Tenant) {
-			return sanitizeEntry(entry)
-		}
-		return nil
-	})
+	response, err := a.queryEntryList(ctx, query, args, authData, resolveInheritParam(request.Params.ResolveInherit))
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to read entries", "error", err)
 		return GetEntries500TextResponse("Internal server error"), nil
@@ -609,12 +651,7 @@ func (a ApiImpl) GetOwnedEntries(ctx context.Context, request GetOwnedEntriesReq
 		return GetOwnedEntries400TextResponse(fmt.Sprintf("CQL parse error: %v", err)), nil
 	}
 
-	response, err := a.queryEntryList(ctx, query, args, func(entry *Entry) error {
-		if !canSeeSensitiveEntry(authData, entry.Tenant) {
-			return sanitizeEntry(entry)
-		}
-		return nil
-	})
+	response, err := a.queryEntryList(ctx, query, args, authData, resolveInheritParam(request.Params.ResolveInherit))
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to read owned entries", "error", err)
 		return GetOwnedEntries500TextResponse("Internal server error"), nil
@@ -656,32 +693,16 @@ func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (G
 		args = []interface{}{authority, symbol}
 	}
 
-	rows, err := a.pool.Query(ctx, query, args...)
+	entries, _, err := a.readEntries(ctx, query, args, authData, resolveInheritParam(request.Params.ResolveInherit))
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to query entry", "error", err)
+		slog.ErrorContext(ctx, "failed to read entry", "error", err)
 		return GetEntry500TextResponse("Internal server error"), nil
 	}
-	defer rows.Close()
-
-	if !rows.Next() {
+	if len(entries) == 0 {
 		return GetEntry404TextResponse("Entry not found"), nil
 	}
 
-	entry, _, err := scanEntryRow(rows)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to scan entry row", "error", err)
-		return GetEntry500TextResponse("Internal server error"), nil
-	}
-
-	if !canSeeSensitiveEntry(authData, entry.Tenant) {
-		err := sanitizeEntry(&entry)
-		if err != nil {
-			slog.ErrorContext(ctx, "error sanitizing protected fields", "error", err)
-			return GetEntry500TextResponse("Internal server error"), nil
-		}
-	}
-
-	return GetEntry200JSONResponse(entry), nil
+	return GetEntry200JSONResponse(entries[0]), nil
 }
 
 func sanitizeEntry(entry *Entry) error {
@@ -773,6 +794,15 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		if !validParent {
 			return AddEntry400TextResponse("Invalid entry for parent: " + reason), nil
 		}
+	}
+
+	violation, err := a.checkConfigWrite(string(entryType), request.Body, nil)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to check configuration editability", "error", err)
+		return AddEntry500TextResponse("Internal server error"), nil
+	}
+	if violation != "" {
+		return AddEntry400TextResponse(violation), nil
 	}
 
 	toInsert := db.CreateEntryParams{
@@ -1045,6 +1075,29 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		}
 	}
 
+	// A branch inherits its parent's configuration, including protected
+	// values, so only consortial administrators may place a branch under an
+	// institution that the caller's tenant does not own.
+	parentChanged := (parent == nil) != (orig.Parent == nil) || parent != nil && *parent != *orig.Parent
+	if parent != nil && resultingType == string(EntryTypeBranch) && (parentChanged || resultingType != orig.Type) &&
+		!authData.HasRoleFromList(writeRoles) && !isOwnedEntry(authData, parentEntry.Tenant) {
+		return UpdateEntry400TextResponse("A branch's parent must be an institution owned by your tenant"), nil
+	}
+
+	localConfigs, err := loadLocalConfigs(ctx, tx, orig.ID)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to load stored configuration", "error", err)
+		return UpdateEntry500TextResponse("Internal server error"), nil
+	}
+	violation, err := a.checkConfigWrite(resultingType, request.Body, localConfigs)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to check configuration editability", "error", err)
+		return UpdateEntry500TextResponse("Internal server error"), nil
+	}
+	if violation != "" {
+		return UpdateEntry400TextResponse(violation), nil
+	}
+
 	if resultingType == "Consortium" || orig.Type == "Consortium" {
 		if err := qtx.LockConsortiumEntryChanges(ctx); err != nil {
 			slog.ErrorContext(ctx, "failed to lock consortium entry changes", "error", err)
@@ -1269,14 +1322,15 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 				return UpdateEntry500TextResponse("Internal server error"), nil
 			}
 
+			// address and from_agency are NOT NULL; an empty string is the unset encoding.
 			_, err = qtx.UpsertLMSConfig(ctx, db.UpsertLMSConfigParams{
 				Entry:                            &orig.ID,
 				Vendor:                           maybeUpdateCol(originalLMSConfig.Vendor, lmsConfig.Vendor),
 				NcipNamespaceEnabled:             maybeUpdateCol(originalLMSConfig.NcipNamespaceEnabled, lmsConfig.NcipNamespaceEnabled),
 				NcipVersion:                      maybeUpdateCol(originalLMSConfig.NcipVersion, lmsConfig.NcipVersion),
 				BibIDNormalization:               maybeUpdateCol(originalLMSConfig.BibIDNormalization, lmsConfig.BibIdNormalization),
-				Address:                          derefOrDefault(lmsConfig.Address, originalLMSConfig.Address),
-				FromAgency:                       derefOrDefault(lmsConfig.FromAgency, originalLMSConfig.FromAgency),
+				Address:                          derefOrDefault(maybeUpdateCol(&originalLMSConfig.Address, lmsConfig.Address), ""),
+				FromAgency:                       derefOrDefault(maybeUpdateCol(&originalLMSConfig.FromAgency, lmsConfig.FromAgency), ""),
 				FromAgencyAuthentication:         maybeUpdateCol(originalLMSConfig.FromAgencyAuthentication, lmsConfig.FromAgencyAuthentication),
 				ToAgency:                         maybeUpdateCol(originalLMSConfig.ToAgency, lmsConfig.ToAgency),
 				LookupUserEnabled:                maybeUpdateCol(originalLMSConfig.LookupUserEnabled, lmsConfig.LookupUserEnabled),
@@ -1344,7 +1398,8 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 			}
 		} else {
 			illConfig := request.Body.IllConfig.MustGet()
-			validationMessage, validationErr := validateLendersOfLastResort(ctx, qtx, illConfig.LendersOfLastResort)
+			lenders, _ := patchValue(illConfig.LendersOfLastResort)
+			validationMessage, validationErr := validateLendersOfLastResort(ctx, qtx, lenders)
 			if validationErr != nil {
 				slog.ErrorContext(ctx, "failed to validate lenders of last resort", "error", validationErr)
 				return UpdateEntry500TextResponse("Internal server error"), nil

@@ -20,7 +20,7 @@ func TestIllConfigListsPersistence(t *testing.T) {
 	path := "/entries/by-id/" + entry["id"].(string)
 	read := func() map[string]any {
 		t.Helper()
-		response, body := jsonReq(t, http.MethodGet, path, "", headers)
+		response, body := jsonReq(t, http.MethodGet, path+"?resolve-inherit=false", "", headers)
 		require.Equal(t, http.StatusOK, response.StatusCode, body)
 		require.NoError(t, json.Unmarshal([]byte(body), &entry))
 		return entry["illConfig"].(map[string]any)
@@ -40,7 +40,7 @@ func TestIllConfigListsPersistence(t *testing.T) {
 	require.Equal(t, original["cancellationReasons"], current["cancellationReasons"])
 	require.Equal(t, original["loanConditions"], current["loanConditions"])
 	for _, field := range []string{"availableCopyrightTypes", "unfilledReasons", "cancellationReasons", "loanConditions"} {
-		for _, invalid := range []string{`null`, `"invalid"`, `[null]`, `[{"code":"A"}]`, `[{"code":"A","defaultDesc":2}]`, `[{"code":"A","defaultDesc":"B","extra":true}]`} {
+		for _, invalid := range []string{`"invalid"`, `[null]`, `[{"code":"A"}]`, `[{"code":"A","defaultDesc":2}]`, `[{"code":"A","defaultDesc":"B","extra":true}]`} {
 			response, body = jsonReq(t, http.MethodPatch, path, `{"illConfig":{"`+field+`":`+invalid+`}}`, headers)
 			require.Equal(t, http.StatusBadRequest, response.StatusCode, body)
 			require.Equal(t, current, read(), "rejected PATCH preserves configuration")
@@ -56,6 +56,11 @@ func TestIllConfigListsPersistence(t *testing.T) {
 		current[field] = []any{}
 		require.Equal(t, current, read(), "clearing one list preserves the others")
 	}
+	// Null removes the local list, so an inherited list would apply.
+	response, body = jsonReq(t, http.MethodPatch, path, `{"illConfig":{"loanConditions":null}}`, headers)
+	require.Equal(t, http.StatusNoContent, response.StatusCode, body)
+	delete(current, "loanConditions")
+	require.Equal(t, current, read(), "null removes only the supplied list")
 	response, body = jsonReq(t, http.MethodPatch, path, `{"illConfig":null}`, headers)
 	require.Equal(t, http.StatusNoContent, response.StatusCode, body)
 	var count int

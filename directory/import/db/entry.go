@@ -31,6 +31,9 @@ func (r *PgImportRepo) ImportEntry(ctx context.Context, aggregate model.EntryAgg
 	if err := aggregate.NormalizeAndValidate(); err != nil {
 		return model.RepoResult{}, err
 	}
+	if err := r.checkConfigPolicy(aggregate.Data); err != nil {
+		return model.RepoResult{}, err
+	}
 	return runImportEntryAttempts(ctx, aggregate.Key.String(), func() (model.RepoResult, error) {
 		return r.importEntryAttempt(ctx, aggregate, policy)
 	})
@@ -399,7 +402,7 @@ func replaceEntryConfigs(ctx context.Context, queries *db.Queries, entryID uuid.
 		}
 		if _, err := queries.UpsertLMSConfig(ctx, db.UpsertLMSConfigParams{
 			NcipVersion: cfg.NcipVersion, Vendor: cfg.Vendor, NcipNamespaceEnabled: cfg.NcipNamespaceEnabled, BibIDNormalization: cfg.BibIDNormalization,
-			Entry: &entryID, Address: cfg.Address, FromAgency: cfg.FromAgency, FromAgencyAuthentication: cfg.FromAgencyAuthentication,
+			Entry: &entryID, Address: stringOrEmpty(cfg.Address), FromAgency: stringOrEmpty(cfg.FromAgency), FromAgencyAuthentication: cfg.FromAgencyAuthentication,
 			ToAgency: cfg.ToAgency, LookupUserEnabled: cfg.LookupUserEnabled, AcceptItemEnabled: cfg.AcceptItemEnabled,
 			CheckinItemEnabled: cfg.CheckInItemEnabled, CheckoutItemEnabled: cfg.CheckOutItemEnabled, ItemLocation: cfg.ItemLocation,
 			RequestItemRequestType: cfg.RequestItemRequestType, RequestItemScopeType: cfg.RequestItemRequestScopeType,
@@ -485,7 +488,12 @@ func replaceILLConfig(ctx context.Context, queries *db.Queries, entryID uuid.UUI
 	if err := queries.DeleteIllConfigByEntry(ctx, entryID); err != nil || config == nil {
 		return err
 	}
-	lenders := make([]string, 0, len(config.LendersOfLastResort))
+	// A null list is stored as NULL so that an inherited list applies; an
+	// empty list is stored as an empty array, which blocks inheritance.
+	var lenders []string
+	if config.LendersOfLastResort != nil {
+		lenders = make([]string, 0, len(config.LendersOfLastResort))
+	}
 	for _, lenderID := range config.LendersOfLastResort {
 		lenderSymbol, err := queries.FirstSymbolByOwner(ctx, lenderID)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -538,3 +546,12 @@ func replaceILLConfig(ctx context.Context, queries *db.Queries, entryID uuid.UUI
 }
 
 func boolPointer(value bool) *bool { return &value }
+
+// stringOrEmpty encodes an unset LMS address or agency as the empty string
+// that the NOT NULL columns use for "unset".
+func stringOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}

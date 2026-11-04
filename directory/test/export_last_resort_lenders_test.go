@@ -33,7 +33,7 @@ func TestDirectoryExportLastResortLenders(t *testing.T) {
 	projection := strings.TrimPrefix(section(") AS catalog_config ON true", ") AS ill_config ON true"), ") AS catalog_config ON true")
 	query := `WITH
  crosslink_ill_lists AS (SELECT '{}'::jsonb AS item),
- entry AS (SELECT $1::uuid AS entry_id, $3::uuid AS parent_id),
+ entry AS (SELECT $1::uuid AS entry_id, $3::uuid AS parent_id, 'Institution'::text AS entry_type),
  crosslink_local_entry AS (SELECT CASE WHEN $2::boolean THEN $1::uuid ELSE $3::uuid END AS entry_id),
  local_entry AS (SELECT $1::uuid AS entry_id WHERE $2::boolean),
  mpals_entry AS (SELECT NULL::uuid AS entry_id WHERE false),

@@ -29,9 +29,11 @@ func TestDirectoryExportBranchLmsConfig(t *testing.T) {
 	resetImportState(t)
 	consortium := symbolObject("ISIL", "CON")
 	institution := symbolObject("ISIL", "INST")
+	institutionRecord := entryImportRecord(institution, "Institution", consortium, "Institution")
+	institutionRecord["data"].(map[string]any)["lmsConfig"] = importLmsConfig()
 	response, result := importRequest(t, []any{
 		entryImportRecord(consortium, "Consortium", nil, "Consortium"),
-		entryImportRecord(institution, "Institution", consortium, "Institution"),
+		institutionRecord,
 	}, "", standardHeaders)
 	require.Equal(t, http.StatusOK, response.StatusCode)
 	require.Empty(t, result.Errors)
@@ -60,12 +62,14 @@ func TestDirectoryExportBranchLmsConfig(t *testing.T) {
 			var config map[string]any
 			require.NoError(t, json.Unmarshal(exported, &config))
 			require.Len(t, config, 22)
-			require.Equal(t, code, config["requesterPickupLocation"])
-			require.Equal(t, true, config["requestItemPickupLocationEnabled"])
-			require.Equal(t, ncipAddress, config["address"])
-			require.Equal(t, "FROM", config["fromAgency"])
-			require.Nil(t, config["fromAgencyAuthentication"])
-			require.Nil(t, config["vendor"])
+			// Branches export only their pickup code and inherit the rest.
+			for name, value := range config {
+				if name == "requesterPickupLocation" {
+					require.Equal(t, code, value)
+				} else {
+					require.Nil(t, value, name)
+				}
+			}
 
 			key := symbolObject("ISIL", "BRANCH")
 			record := entryImportRecord(key, "Branch", institution, "Branch")
@@ -86,6 +90,17 @@ func TestDirectoryExportBranchLmsConfig(t *testing.T) {
 				require.Equal(t, code, pickupLocation)
 				require.Nil(t, authentication)
 			}
+
+			response, body := jsonReq(t, http.MethodGet, "/entries/by-symbol/ISIL:BRANCH", "", map[string]string{"X-Okapi-Permissions": `["directory.system.all"]`})
+			require.Equal(t, http.StatusOK, response.StatusCode, body)
+			var merged struct {
+				LmsConfig map[string]any `json:"lmsConfig"`
+			}
+			require.NoError(t, json.Unmarshal([]byte(body), &merged))
+			require.Equal(t, map[string]any{
+				"address": "https://example.test/ncip", "fromAgency": "FROM", "fromAgencyAuthentication": "credential-value",
+				"requesterPickupLocation": code,
+			}, merged.LmsConfig, "the branch inherits its institution's NCIP connection and keeps its own pickup code")
 		})
 	}
 }

@@ -63,11 +63,12 @@ func defaultLoanDate(entry dirapi.Entry, now time.Time) (*time.Time, error) {
 		return nil, nil
 	}
 	days, err := entry.IllConfig.DefaultLoanPeriod.Get()
-	if err != nil {
+	// 0 is the Directory's explicit "off" value; it blocks an inherited period.
+	if err != nil || days == 0 {
 		return nil, nil
 	}
-	if days < 1 {
-		return nil, fmt.Errorf("defaultLoanPeriod must be a positive integer")
+	if days < 0 {
+		return nil, fmt.Errorf("defaultLoanPeriod must not be negative")
 	}
 	loc, err := supplierLocation(entry)
 	if err != nil {
