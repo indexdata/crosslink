@@ -1063,7 +1063,7 @@ request_bundles AS (
                             'note', condition.prlc_note,
                             'cost', condition.prlc_cost,
                             'currency', condition_currency.rdv_value,
-                            'condition', condition.prlc_code,
+                            'code', condition.prlc_code,
                             'createdAt', to_char(
                                 condition.prlc_date_created,
                                 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
