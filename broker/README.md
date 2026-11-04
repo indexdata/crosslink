@@ -397,6 +397,22 @@ intend to tolerate failures; binding an outcome no longer suppresses them.
 Email sending remains synchronous; successful sends and skipped recipients retain
 their existing behavior.
 
+## Action triggers
+
+The state model supports three action triggers:
+
+| Trigger | Runs on state entry | Staff execution |
+| --- | --- | --- |
+| `manual` (default) | No | Available through the normal staff action API |
+| `auto` | Yes | Existing manual retry behavior after failure |
+| `background` | No | Hidden and rejected by the staff action API, including after failure |
+
+Background jobs may invoke any action supported in the current state. The
+trigger does not bypass state checks or cause background actions to run on state
+entry. The default supplier `overdue` actions use `trigger: background` and run
+through the scheduled overdue batch. Existing saved batch selectors must include
+the desired loan states, including `RENEWAL_REJECTED` when applicable.
+
 ## Loan renewal
 
 Borrowers can invoke `renew` from `RECEIVED`, `RENEWED`, and `OVERDUE` for

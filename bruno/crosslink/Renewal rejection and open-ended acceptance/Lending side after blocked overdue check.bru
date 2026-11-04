@@ -1,22 +1,22 @@
 meta {
-  name: Borrowing side overdue after rejection check
+  name: Lending side after blocked overdue check
   type: http
-  seq: 23
+  seq: 22
 }
 
 get {
-  url: {{host}}/patron_requests/{{renewalOmittedPrId}}?side=borrowing
+  url: {{host}}/patron_requests/{{renewalOmittedLendingPrId}}?side=lending
   body: none
   auth: basic
 }
 
 params:query {
-  side: borrowing
+  side: lending
 }
 
 headers {
   X-Okapi-User-Id: {{userName}}
-  X-Okapi-Tenant: {{OkapiTenantReq}}
+  X-Okapi-Tenant: {{OkapiTenantSup}}
 }
 
 auth:basic {
@@ -29,10 +29,10 @@ script:pre-request {
 }
 
 script:post-response {
-  test("State is OVERDUE without a due date", () => {
+  test("State is RENEWAL_REJECTED without a due date", () => {
     expect(res.getStatus()).to.equal(200);
     const pr = res.getBody();
-    expect(pr.state).to.equal("OVERDUE");
+    expect(pr.state).to.equal("RENEWAL_REJECTED");
     expect(pr.dueDate ?? null).to.equal(null);
     expect(pr.needsAttention).to.equal(false);
   });

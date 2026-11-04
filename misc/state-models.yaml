@@ -3,7 +3,7 @@ stateModels:
     type: StateModel
     name: CrossLink State Model
     desc: "Requester/Supplier workflow for returnable loans and non-returnable copies over ISO18626."
-    version: 3.12.0
+    version: 3.13.0
     pullslipPdfTemplateLabel: pullslip-pdf
     selector:
       serviceType: [Copy, Loan, CopyOrLoan]
@@ -1041,6 +1041,7 @@ stateModels:
             transitions:
               success: RECALLED
           - name: overdue
+            trigger: background
             desc: Notify requester that the loan is overdue
             transitions:
               success: OVERDUE
@@ -1062,6 +1063,7 @@ stateModels:
             transitions:
               success: RECALLED
           - name: overdue
+            trigger: background
             desc: Notify requester that the loan is overdue
             transitions:
               success: OVERDUE
@@ -1124,6 +1126,7 @@ stateModels:
             transitions:
               success: RECALLED
           - name: overdue
+            trigger: background
             desc: Notify requester that the loan is overdue
             transitions:
               success: OVERDUE

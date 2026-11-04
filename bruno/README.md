@@ -30,21 +30,21 @@ The local stack has no SMTP service. Notification actions therefore record
 checks the notification problem and its details separately from successful
 fulfillment actions.
 
-The happy path ships with a past due date, receives the item, explicitly invokes supplier `overdue`, requests renewal, and accepts it with a future date before completing checkout/check-in and return. It checks `OVERDUE`, `RENEWAL_PENDING`, `RENEWED`, and due dates on both sides without waiting for the scheduler. Dates are calculated relative to the run time.
+The happy path ships with a past due date, receives the item, schedules a supplier overdue batch scoped to that request, requests renewal, and accepts it with a future date before completing checkout/check-in and return. It checks `OVERDUE`, `RENEWAL_PENDING`, `RENEWED`, and due dates on both sides through the actual scheduler and background action path. The regression batch runs every second, is disabled after the overdue checks, and is deleted after the event assertions. Dates are calculated relative to the run time.
 
 The separate `Open-ended loan` folder ships without a date and completes receipt and return, checking that neither side has a due date. This requires the local mock's undated checkout responses and absent `defaultLoanPeriod`.
 
 `Renewal rejection and open-ended acceptance` ships with a future due date,
 requests renewal from `RECEIVED`, and accepts it without a date. It then
 requests another renewal from `RENEWED` and rejects it. Both sides enter
-`RENEWAL_REJECTED`, retain the open-ended loan, and offer no renewal. A supplier
-overdue action then moves both sides to `OVERDUE`, making renewal available
-again. The normal return workflow still completes. Go tests also cover rejection
-before the due date and preservation of dated or overdue loans; the happy path retains
-overdue renewal acceptance coverage.
+`RENEWAL_REJECTED`, retain the open-ended loan, and offer no renewal. A direct
+staff call to `overdue` is rejected and leaves both sides unchanged. The normal
+return workflow still completes. Go integration tests cover scheduled overdue
+processing after rejection of a dated loan, which enables renewal again. The
+happy path retains overdue renewal acceptance coverage.
 
 `Recall` prints a pull slip, checks `SEARCHING`, ships and receives an
-open-ended loan, marks it overdue, requests and accepts renewal, recalls it with a due date, verifies
+loan with a past due date, schedules an overdue batch, requests and accepts renewal, recalls it with a due date, verifies
 `RECALLED` and the deadline on both sides, then completes return and checks
 both requests are `COMPLETED`.
 

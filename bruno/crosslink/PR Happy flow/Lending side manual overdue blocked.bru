@@ -1,0 +1,47 @@
+meta {
+  name: Lending side manual overdue blocked
+  type: http
+  seq: 27
+}
+
+post {
+  url: {{host}}/patron_requests/{{lendingPrId}}/action?side=lending
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: lending
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+body:json {
+  {
+    "action": "overdue"
+  }
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
+script:post-response {
+  test("Manual overdue execution is rejected", () => {
+    expect(res.getStatus()).to.equal(400);
+    expect(JSON.stringify(res.getBody())).to.include("not allowed");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

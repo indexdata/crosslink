@@ -737,11 +737,39 @@ func TestActionsToCompleteState(t *testing.T) {
 	invokeLoanAction(requesterPrPath, queryParams, "renew", nil)
 	waitLoanState(supplierPrPath, supQueryParams, "RENEWAL_PENDING")
 	waitLoanState(requesterPrPath, queryParams, "RENEWAL_PENDING")
-	invokeLoanAction(supplierPrPath, supQueryParams, "accept-renewal", nil)
-	waitLoanState(supplierPrPath, supQueryParams, "RENEWED")
-	waitLoanState(requesterPrPath, queryParams, "RENEWED")
-	invokeLoanAction(supplierPrPath, supQueryParams, "overdue", nil)
+	invokeLoanAction(supplierPrPath, supQueryParams, "reject-renewal", nil)
+	waitLoanState(supplierPrPath, supQueryParams, "RENEWAL_REJECTED")
+	waitLoanState(requesterPrPath, queryParams, "RENEWAL_REJECTED")
+	var allowed proapi.AllowedActions
+	require.NoError(t, json.Unmarshal(httpRequest(t, "GET", supplierPrPath+"/actions"+supQueryParams, nil, 200), &allowed))
+	assert.False(t, slices.ContainsFunc(allowed.Actions, func(action proapi.AllowedAction) bool { return action.Name == "overdue" }))
+	for _, payload := range []string{`{"action":"overdue"}`, `{"action":"overdue","actionParams":{"trigger":"manual"}}`} {
+		response := httpRequest(t, "POST", supplierPrPath+"/action"+supQueryParams, []byte(payload), 400)
+		assert.Contains(t, string(response), "not allowed")
+	}
+	// Use the scheduler's real background action path; the staff API cannot
+	// invoke overdue, even when its state-model declaration supports it.
+	batchBody, err := json.Marshal(map[string]any{
+		"title": "Overdue " + supPr.ID, "actionName": "overdue",
+		"schedule": "FREQ=SECONDLY;INTERVAL=1", "batchQuery": "id = \"" + supPr.ID + "\"",
+	})
+	require.NoError(t, err)
+	batchQuery := "?symbol=" + url.QueryEscape(supplierSymbol)
+	var batch struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(httpRequest(t, "POST", "/batch_actions"+batchQuery, batchBody, 201), &batch))
+	require.NotEmpty(t, batch.ID)
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("overdue batch: %s", httpRequest(t, "GET", "/batch_actions/"+batch.ID+batchQuery, nil, 200))
+			t.Logf("overdue batch events: %s", httpRequest(t, "GET", "/batch_actions/"+batch.ID+"/events"+batchQuery, nil, 200))
+		}
+		httpRequest(t, "DELETE", "/batch_actions/"+batch.ID+batchQuery, nil, 204)
+	})
+	waitLoanState(supplierPrPath, supQueryParams, "OVERDUE")
 	waitLoanState(requesterPrPath, queryParams, "OVERDUE")
+	httpRequest(t, "POST", "/batch_actions/"+batch.ID+"/disable"+batchQuery, nil, 204)
 	invokeLoanAction(requesterPrPath, queryParams, "renew", nil)
 	waitLoanState(supplierPrPath, supQueryParams, "RENEWAL_PENDING")
 	invokeLoanAction(supplierPrPath, supQueryParams, "accept-renewal", map[string]any{"dueDate": time.Now().UTC().AddDate(0, 0, 14).Format(time.RFC3339)})
