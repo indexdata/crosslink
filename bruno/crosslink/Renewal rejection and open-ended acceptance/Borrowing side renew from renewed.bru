@@ -1,11 +1,11 @@
 meta {
-  name: Borrowing side open-ended check
+  name: Borrowing side renew from renewed
   type: http
-  seq: 7
+  seq: 14
 }
 
-get {
-  url: {{host}}/patron_requests/{{recallPrId}}?side=borrowing
+post {
+  url: {{host}}/patron_requests/{{renewalOmittedPrId}}/action?side=borrowing
   body: json
   auth: basic
 }
@@ -24,17 +24,21 @@ auth:basic {
   password: {{userPassword}}
 }
 
+body:json {
+  {
+    "action": "renew"
+  }
+}
+
 script:pre-request {
   bru.sleep(Number(bru.getEnvVar("sleepDelay")));
 }
 
 script:post-response {
-  test("for ship", function() {
+  test("Action succeeds", () => {
+    expect(res.getStatus()).to.equal(200);
     const pr = res.getBody();
-    expect(pr.lastActionResult).to.equal("SUCCESS")
-    expect(pr.state).to.equal("SHIPPED");
-    expect(pr.dueDate).to.not.exist;
-    expect(pr.illResponse.statusInfo.dueDate).to.not.exist;
+    expect(pr.result).to.equal("SUCCESS");
   });
 }
 

@@ -1,12 +1,12 @@
 meta {
-  name: Lending side overdue
+  name: Lending side received check
   type: http
   seq: 7
 }
 
-post {
-  url: {{host}}/patron_requests/{{renewalOmittedLendingPrId}}/action?side=lending
-  body: json
+get {
+  url: {{host}}/patron_requests/{{renewalOmittedLendingPrId}}?side=lending
+  body: none
   auth: basic
 }
 
@@ -24,21 +24,17 @@ auth:basic {
   password: {{userPassword}}
 }
 
-body:json {
-  {
-    "action": "overdue"
-  }
-}
-
 script:pre-request {
   bru.sleep(Number(bru.getEnvVar("sleepDelay")));
 }
 
 script:post-response {
-  test("Action succeeds", () => {
+  test("State is RECEIVED with the expected due date", () => {
     expect(res.getStatus()).to.equal(200);
     const pr = res.getBody();
-    expect(pr.result).to.equal("SUCCESS");
+    expect(pr.state).to.equal("RECEIVED");
+    expect(Date.parse(pr.dueDate)).to.equal(Date.parse(bru.getVar("renewalOmittedOriginalDueDate")));
+    expect(pr.needsAttention).to.equal(false);
   });
 }
 

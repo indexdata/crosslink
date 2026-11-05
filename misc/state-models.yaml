@@ -3,7 +3,7 @@ stateModels:
     type: StateModel
     name: CrossLink State Model
     desc: "Requester/Supplier workflow for returnable loans and non-returnable copies over ISO18626."
-    version: 3.11.0
+    version: 3.13.0
     pullslipPdfTemplateLabel: pullslip-pdf
     selector:
       serviceType: [Copy, Loan, CopyOrLoan]
@@ -98,6 +98,7 @@ stateModels:
                 - RENEWED
                 - OVERDUE
                 - RENEWAL_PENDING
+                - RENEWAL_REJECTED
                 - RECALLED
                 - CANCEL_PENDING
             transitions:
@@ -498,6 +499,10 @@ stateModels:
             desc: Send ISO ShippedReturn and delete temporary LMS items
             transitions:
               success: SHIPPED_RETURNED
+          - name: renew
+            desc: Request renewal from supplier
+            transitions:
+              success: RENEWAL_PENDING
           - name: send-notification
             continueOn: [PROBLEM, ERROR]
             desc: Send email notification when the item is received
@@ -528,6 +533,10 @@ stateModels:
             desc: Send ISO ShippedReturn and delete temporary LMS items
             transitions:
               success: SHIPPED_RETURNED
+          - name: renew
+            desc: Request renewal from supplier
+            transitions:
+              success: RENEWAL_PENDING
 
       - name: OVERDUE
         display: Overdue
@@ -568,7 +577,30 @@ stateModels:
           - name: renewal-accepted
             transition: RENEWED
           - name: renewal-rejected
+            transition: RENEWAL_REJECTED
+        actions:
+          - name: check-out
+            desc: Check out all items
+          - name: check-in
+            desc: Check in all items
+          - name: ship-return
+            desc: Send ISO ShippedReturn and delete temporary LMS items
+            transitions:
+              success: SHIPPED_RETURNED
+
+      - name: RENEWAL_REJECTED
+        display: Renewal rejected
+        desc: Renewal declined; another renewal becomes available when the supplier marks the loan overdue
+        side: REQUESTER
+        appliesTo:
+          serviceTypes: [Loan, CopyOrLoan]
+        primaryAction: ship-return
+        events:
+          - name: recalled
+            transition: RECALLED
+          - name: overdue
             transition: OVERDUE
+          - name: renewal-rejected
         actions:
           - name: check-out
             desc: Check out all items
@@ -1001,12 +1033,15 @@ stateModels:
         events:
           - name: shipped-return
             transition: SHIPPED_RETURN
+          - name: renew
+            transition: RENEWAL_PENDING
         actions:
           - name: recall
             desc: Recall the loan with an optional dueDate and note
             transitions:
               success: RECALLED
           - name: overdue
+            trigger: background
             desc: Notify requester that the loan is overdue
             transitions:
               success: OVERDUE
@@ -1020,12 +1055,15 @@ stateModels:
         events:
           - name: shipped-return
             transition: SHIPPED_RETURN
+          - name: renew
+            transition: RENEWAL_PENDING
         actions:
           - name: recall
             desc: Recall the loan with an optional dueDate and note
             transitions:
               success: RECALLED
           - name: overdue
+            trigger: background
             desc: Notify requester that the loan is overdue
             transitions:
               success: OVERDUE
@@ -1070,6 +1108,26 @@ stateModels:
               success: RENEWED
           - name: reject-renewal
             desc: Reject renewal
+            transitions:
+              success: RENEWAL_REJECTED
+
+      - name: RENEWAL_REJECTED
+        display: Renewal rejected
+        desc: Renewal declined; another renewal becomes available after marking the loan overdue
+        side: SUPPLIER
+        appliesTo:
+          serviceTypes: [Loan, CopyOrLoan]
+        events:
+          - name: shipped-return
+            transition: SHIPPED_RETURN
+        actions:
+          - name: recall
+            desc: Recall the loan with an optional dueDate and note
+            transitions:
+              success: RECALLED
+          - name: overdue
+            trigger: background
+            desc: Notify requester that the loan is overdue
             transitions:
               success: OVERDUE
 
@@ -1147,7 +1205,7 @@ batchActionDefaults:
   - actionName: overdue
     titleKey: overdue
     title: Overdue loans
-    batchQuery: "side = lending and (state = RECEIVED or state = RENEWED)"
+    batchQuery: "side = lending and (state = RECEIVED or state = RENEWED or state = RENEWAL_REJECTED)"
     schedule: "FREQ=MINUTELY;INTERVAL=15"
 
   - actionName: email-pullslips

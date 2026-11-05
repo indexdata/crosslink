@@ -25,15 +25,15 @@ auth:basic {
 }
 
 script:pre-request {
-  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+  bru.sleep(Math.max(2000, Number(bru.getEnvVar("sleepDelay"))));
 }
 
 script:post-response {
-  test("State is OVERDUE without a due date", () => {
+  test("State is OVERDUE with the original due date", () => {
     expect(res.getStatus()).to.equal(200);
     const pr = res.getBody();
     expect(pr.state).to.equal("OVERDUE");
-    expect(pr.dueDate == null).to.equal(true);
+    expect(Date.parse(pr.dueDate)).to.equal(Date.parse(bru.getVar("recallOriginalDueDate")));
     expect(pr.needsAttention).to.equal(false);
   });
 }

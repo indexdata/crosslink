@@ -1411,10 +1411,15 @@ components:
           description: Description of the action
         trigger:
           type: string
-          description: Trigger for the action
+          description: >-
+            Manual (the default) allows staff initiation. Auto runs on state entry and
+            retains manual retry after failure. Background runs only through background
+            execution, never on state entry or through the staff action API, even after
+            failure. Background jobs may invoke any action supported in the current state.
           enum:
             - auto
             - manual
+            - background
           default: manual
         appliesTo:
           $ref: '#/components/schemas/AppliesTo'

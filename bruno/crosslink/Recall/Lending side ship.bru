@@ -26,11 +26,13 @@ auth:basic {
 
 body:json {
   {
-      "action": "ship"
+      "action": "ship",
+      "actionParams": {"dueDate": "{{recallOriginalDueDate}}"}
   }
 }
 
 script:pre-request {
+  bru.setVar("recallOriginalDueDate", new Date(Date.now() - 86400000).toISOString());
   bru.sleep(Number(bru.getEnvVar("sleepDelay")))
 }
 
