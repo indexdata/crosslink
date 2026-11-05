@@ -31,9 +31,6 @@ func (r *PgImportRepo) ImportEntry(ctx context.Context, aggregate model.EntryAgg
 	if err := aggregate.NormalizeAndValidate(); err != nil {
 		return model.RepoResult{}, err
 	}
-	if err := r.checkConfigPolicy(aggregate.Data); err != nil {
-		return model.RepoResult{}, err
-	}
 	return runImportEntryAttempts(ctx, aggregate.Key.String(), func() (model.RepoResult, error) {
 		return r.importEntryAttempt(ctx, aggregate, policy)
 	})
@@ -130,8 +127,13 @@ func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.E
 	if err != nil {
 		return model.RepoResult{}, fmt.Errorf("lock entry hierarchy: %w", err)
 	}
+	var existingID *uuid.UUID
 	if exists {
 		existing = lockedEntries[existing.ID]
+		existingID = &existing.ID
+	}
+	if err := r.checkConfigPolicy(ctx, tx, queries, aggregate.Data, existingID); err != nil {
+		return model.RepoResult{}, err
 	}
 	if err := validateImportSymbolOwnership(ctx, queries, aggregate.Data.Symbols, aggregate.Key); err != nil {
 		return model.RepoResult{}, err
@@ -495,14 +497,11 @@ func replaceILLConfig(ctx context.Context, queries *db.Queries, entryID uuid.UUI
 		lenders = make([]string, 0, len(config.LendersOfLastResort))
 	}
 	for _, lenderID := range config.LendersOfLastResort {
-		lenderSymbol, err := queries.FirstSymbolByOwner(ctx, lenderID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("lender of last resort %s has no symbol", lenderID)
-		}
+		symbol, err := lenderSymbol(ctx, queries, lenderID)
 		if err != nil {
-			return fmt.Errorf("resolve lender of last resort %s symbol: %w", lenderID, err)
+			return err
 		}
-		lenders = append(lenders, lenderSymbol.Authority+":"+lenderSymbol.Symbol)
+		lenders = append(lenders, symbol)
 	}
 	params := db.UpsertIllConfigParams{
 		IsPickupLocation: config.IsPickupLocation,

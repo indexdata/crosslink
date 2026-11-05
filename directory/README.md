@@ -150,7 +150,7 @@ their respective non-null configuration objects; use `null` to inherit defaults.
 Explicit `false` and empty arrays are preserved. Imports replace stored
 configuration, so include all overrides when restoring an entry. A `null`
 clears a stored value; a non-null value in a field the record's entry type may not
-set fails that record (see [configuration inheritance](#configuration-inheritance)). Configure at
+set fails that record unless it equals the value already stored (see [configuration inheritance](#configuration-inheritance)). Configure at
 most one SRU/ZOOM endpoint and at most one holdings parser. The deprecated OPAC
 `allCirculations` field is optional and accepted for compatibility, but ignored:
 OPAC parsing always returns all available circulation candidates.

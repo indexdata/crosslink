@@ -12,6 +12,8 @@
   entry type may not set return HTTP 400 (for example, `illConfig.loadBalancingPolicy`
   is consortium-only, and branches may set only pickup codes and `isPickupLocation`).
   Imports report these as per-record errors, and import nulls clear legacy values.
+  On PATCH and update imports, resubmitting a value the entry already stores is
+  accepted.
   Only consortial administrators may change an entry's `parent` or `type`;
   institutional administrators get HTTP 401 (resending the stored values is still
   accepted). A stored empty `lendersOfLastResort` now reads as `[]`

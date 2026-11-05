@@ -6,69 +6,20 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"github.com/indexdata/crosslink/directory/auth"
 	"github.com/indexdata/crosslink/directory/policy"
+	"github.com/indexdata/crosslink/directory/storedconfig"
 )
-
-// storedConfigs maps a configuration container's API property name, such as
-// lmsConfig, to the JSON object an entry stores locally.
-type storedConfigs map[string]json.RawMessage
-
-// querier is satisfied by both the connection pool and a transaction.
-type querier interface {
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-}
 
 // maxAncestorDepth bounds the parent chain: a branch's grandparent is the
 // consortium, the top of the entry hierarchy.
 const maxAncestorDepth = 2
 
-const storedConfigsSQL = `SELECT e.id, e.type, e.parent, e.tenant,` + entryConfigColumns + `
-	FROM entries e WHERE e.id = ANY($1)`
-
-type storedEntry struct {
-	entryType string
-	parent    *uuid.UUID
-	tenant    *string
-	configs   storedConfigs
-}
-
-func loadStoredEntries(ctx context.Context, q querier, ids []uuid.UUID) (map[uuid.UUID]storedEntry, error) {
-	rows, err := q.Query(ctx, storedConfigsSQL, ids)
-	if err != nil {
-		return nil, fmt.Errorf("query stored entry configuration: %w", err)
-	}
-	defer rows.Close()
-	result := make(map[uuid.UUID]storedEntry, len(ids))
-	for rows.Next() {
-		var (
-			id                                     uuid.UUID
-			entry                                  storedEntry
-			illConfig, lmsConfig, catalog, holding []byte
-		)
-		if err := rows.Scan(&id, &entry.entryType, &entry.parent, &entry.tenant, &illConfig, &lmsConfig, &catalog, &holding); err != nil {
-			return nil, fmt.Errorf("scan stored entry configuration: %w", err)
-		}
-		entry.configs = storedConfigs{}
-		for name, value := range map[string][]byte{"illConfig": illConfig, "lmsConfig": lmsConfig, "catalogConfig": catalog, "holdingsPolicy": holding} {
-			if value != nil {
-				entry.configs[name] = value
-			}
-		}
-		result[id] = entry
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate stored entry configuration: %w", err)
-	}
-	return result, nil
-}
-
 // loadAncestors loads the stored configuration of the parents and
 // grandparents of entries, with one query per level.
-func loadAncestors(ctx context.Context, q querier, entries []Entry) (map[uuid.UUID]storedEntry, error) {
-	ancestors := map[uuid.UUID]storedEntry{}
+func loadAncestors(ctx context.Context, q storedconfig.Querier, entries []Entry) (map[uuid.UUID]storedconfig.Entry, error) {
+	ancestors := map[uuid.UUID]storedconfig.Entry{}
 	var pending []uuid.UUID
 	queued := map[uuid.UUID]bool{}
 	queue := func(id *uuid.UUID) {
@@ -81,14 +32,14 @@ func loadAncestors(ctx context.Context, q querier, entries []Entry) (map[uuid.UU
 		queue(entries[i].Parent)
 	}
 	for depth := 0; depth < maxAncestorDepth && len(pending) > 0; depth++ {
-		loaded, err := loadStoredEntries(ctx, q, pending)
+		loaded, err := storedconfig.Load(ctx, q, pending)
 		if err != nil {
 			return nil, err
 		}
 		pending = nil
 		for id, entry := range loaded {
 			ancestors[id] = entry
-			queue(entry.parent)
+			queue(entry.Parent)
 		}
 	}
 	return ancestors, nil
@@ -100,7 +51,7 @@ func loadAncestors(ctx context.Context, q querier, entries []Entry) (map[uuid.UU
 // A protected value stored on an ancestor is resolved as "" unless the caller
 // may see sensitive data on that ancestor. The caller must still sanitize each
 // entry for the requested entry's own visibility.
-func (a ApiImpl) resolveInheritance(ctx context.Context, q querier, authData *auth.AuthData, entries []Entry, configs []storedConfigs) error {
+func (a ApiImpl) resolveInheritance(ctx context.Context, q storedconfig.Querier, authData *auth.AuthData, entries []Entry, configs []storedconfig.Configs) error {
 	if a.inheritance == nil || len(entries) == 0 {
 		return nil
 	}
@@ -120,12 +71,12 @@ func (a ApiImpl) resolveInheritance(ctx context.Context, q querier, authData *au
 				break
 			}
 			chain = append(chain, policy.Level{
-				Type:    ancestor.entryType,
-				Tenant:  ancestor.tenant,
-				Configs: ancestor.configs,
-				Redact:  !canSeeSensitiveEntry(authData, ancestor.tenant),
+				Type:    ancestor.Type,
+				Tenant:  ancestor.Tenant,
+				Configs: ancestor.Configs,
+				Redact:  !canSeeSensitiveEntry(authData, ancestor.Tenant),
 			})
-			parent = ancestor.parent
+			parent = ancestor.Parent
 		}
 		resolved, err := a.inheritance.Resolve(chain)
 		if err != nil {
@@ -158,7 +109,7 @@ func applyConfigs(entry *Entry, configs map[string]json.RawMessage) error {
 // checkConfigWrite returns a client-facing message when body sets
 // configuration that entryType may not store. stored is the entry's current
 // local configuration, or nil for a new entry.
-func (a ApiImpl) checkConfigWrite(entryType string, body any, stored storedConfigs) (string, error) {
+func (a ApiImpl) checkConfigWrite(entryType string, body any, stored storedconfig.Configs) (string, error) {
 	if a.inheritance == nil {
 		return "", nil
 	}
@@ -175,15 +126,6 @@ func (a ApiImpl) checkConfigWrite(entryType string, body any, stored storedConfi
 		return "", err
 	}
 	return policy.ViolationMessage(violations), nil
-}
-
-// loadLocalConfigs returns an entry's stored configuration containers.
-func loadLocalConfigs(ctx context.Context, q querier, id uuid.UUID) (storedConfigs, error) {
-	entries, err := loadStoredEntries(ctx, q, []uuid.UUID{id})
-	if err != nil {
-		return nil, err
-	}
-	return entries[id].configs, nil
 }
 
 // resolveInheritParam reports whether a GET should return merged values.

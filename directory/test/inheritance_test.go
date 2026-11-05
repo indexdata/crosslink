@@ -347,6 +347,16 @@ func TestImportInheritanceRules(t *testing.T) {
 	require.Len(t, result.Errors, 1)
 	require.Equal(t, "lmsConfig.address is not editable on Branch; lmsConfig.fromAgency is not editable on Branch; lmsConfig.fromAgencyAuthentication is not editable on Branch", result.Errors[0].Error)
 
+	// Resubmitting the stored legacy values is not a change, so it is accepted.
+	legacy := importLmsConfig()
+	legacy["address"], legacy["fromAgency"], legacy["fromAgencyAuthentication"] = "https://legacy.example", "BR", nil
+	legacy["requesterPickupLocation"] = "BR1"
+	data["lmsConfig"] = legacy
+	response, result = importRequest(t, []any{record}, "update", standardHeaders)
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	require.Empty(t, result.Errors)
+	require.Equal(t, "https://legacy.example", getEntryJSON(t, entryPath(branchID), systemHeaders)["lmsConfig"].(map[string]any)["address"])
+
 	data["lmsConfig"] = lms
 	response, result = importRequest(t, []any{record}, "update", standardHeaders)
 	require.Equal(t, http.StatusOK, response.StatusCode)
@@ -357,6 +367,65 @@ func TestImportInheritanceRules(t *testing.T) {
 	merged := getEntryJSON(t, entryPath(branchID), systemHeaders)["lmsConfig"].(map[string]any)
 	require.Equal(t, "https://ncip.example", merged["address"])
 	require.Equal(t, "BR1", merged["requesterPickupLocation"])
+}
+
+// TestImportResubmitsStoredConfiguration imports a fully configured
+// institution, then re-imports the same record as a branch. Every value the
+// branch may not set must compare equal to what is stored, so the import
+// succeeds; changing one of them fails the record.
+func TestImportResubmitsStoredConfiguration(t *testing.T) {
+	tree := setupInheritanceTree(t)
+	key := symbolObject("ISIL", "ROUND-TRIP")
+	record := institutionImportRecord(key, "Round trip")
+	data := record["data"].(map[string]any)
+	data["parent"] = fixtureConsortium
+	data["tenant"] = "INHERIT"
+	lms := data["lmsConfig"].(map[string]any)
+	lms["vendor"], lms["ncipVersion"], lms["ncipNamespaceEnabled"] = "Sierra", "2.02", false
+	lms["requesterPickupLocation"] = "RT"
+	lms["patronProfiles"] = []any{map[string]any{"code": "STAFF", "name": "Staff", "canCreateRequests": true}}
+	data["illConfig"] = map[string]any{
+		"iso18626Url": "https://round-trip.example/iso", "iso18626Vendor": nil, "lendersOfLastResort": []any{tree.institution},
+		"includeRequestingAgencyInfo": true, "includeSupplierInfo": false, "includeReturnInfo": nil,
+		"includeVendorNote": nil, "useOfferedCosts": nil, "noteFieldSeparator": " / ",
+		"supplierPatronPattern": nil, "duplicateCheckWindowHours": 0, "defaultLoanPeriod": 0, "maxRequestsPerPatron": 5,
+		"minimumCost": 0, "isPickupLocation": true,
+		"defaultCopyrightType": map[string]any{"code": "US_CCG", "defaultDesc": "US copyright guidelines"},
+		"loanConditions":       []any{map[string]any{"code": "LibraryUseOnly", "defaultDesc": "Library use only"}},
+		"unfilledReasons":      []any{}, "cancellationReasons": nil,
+	}
+	var catalog map[string]any
+	require.NoError(t, json.Unmarshal([]byte(`{"profile":"Koha","metadataUpdateMode":"merge",
+		"sru":{"address":"https://round-trip.example/sru","recordSchema":null},"zoom":null,
+		"queryConfig":{"type":"cql","identifier":null,"isbn":"isbn={term}","issn":null,"title":null},
+		"holdingsFormat":{"marc":{"mainField":"999","callNumberSubField":null,"itemIdSubField":null,"locationSubField":null,"restrictedSubField":null,"shelvingLocationSubField":null,"availability":[{"subField":"7","operator":"equals","value":"0"},{"subField":"q","operator":"absent","value":null}]},"opac":null,"reservoir":null,"marc21plus1":null},
+		"metadataFormat":{"marc21":{"author":"100","edition":null,"identifier":null,"isbn":null,"issn":null,"subtitle":null,"title":"245"}}}`), &catalog))
+	data["catalogConfig"] = catalog
+	data["holdingsPolicy"] = map[string]any{
+		"locations":         []any{map[string]any{"code": "MAIN", "name": "Main", "supplyPreference": 5}},
+		"shelvingLocations": []any{}, "locationPolicies": []any{},
+		"itemLoanPolicies": []any{map[string]any{"code": "NORMAL", "name": "Normal", "lendable": true}},
+	}
+	_, result := importRequest(t, []any{record}, "fail", standardHeaders)
+	require.Empty(t, result.Errors)
+	path := "/entries/by-id/" + importEntryUUID(key).String() + "?resolve-inherit=false"
+	stored := getEntryJSON(t, path, systemHeaders)
+
+	data["type"], data["parent"] = "Branch", tree.institution
+	_, result = importRequest(t, []any{record}, "update", standardHeaders)
+	require.Empty(t, result.Errors, "unchanged values compare equal to the stored configuration")
+	branch := getEntryJSON(t, path, systemHeaders)
+	require.Equal(t, "Branch", branch["type"])
+	for _, container := range []string{"lmsConfig", "illConfig", "catalogConfig", "holdingsPolicy"} {
+		require.Equal(t, stored[container], branch[container], container)
+	}
+
+	data["illConfig"].(map[string]any)["maxRequestsPerPatron"] = 6
+	data["illConfig"].(map[string]any)["lendersOfLastResort"] = []any{}
+	_, result = importRequest(t, []any{record}, "update", standardHeaders)
+	require.Len(t, result.Errors, 1)
+	require.Equal(t, "illConfig.lendersOfLastResort is not editable on Branch; illConfig.maxRequestsPerPatron is not editable on Branch", result.Errors[0].Error)
+	require.Equal(t, stored["illConfig"], getEntryJSON(t, path, systemHeaders)["illConfig"], "a rejected record changes nothing")
 }
 
 func TestInheritanceOffValueMigration(t *testing.T) {
