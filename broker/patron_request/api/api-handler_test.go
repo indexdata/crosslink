@@ -860,6 +860,48 @@ func TestGetPatronRequestsIdNotificationsErrorGettingEvents(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "DB error")
 }
 
+func TestGetPatronRequestsIdNotificationsCancellationReason(t *testing.T) {
+	repo := &PrRepoNotificationsCapture{
+		notifications: []pr_db.Notification{{
+			ID:              "n-cancel-1",
+			PrID:            "3",
+			FromSymbol:      "ISIL:SUP",
+			ToSymbol:        "ISIL:REQ",
+			Direction:       pr_db.NotificationDirectionReceived,
+			Kind:            pr_db.NotificationKindCancellationReason,
+			Code:            pgtype.Text{String: "LocalCode", Valid: true},
+			CodeDescription: pgtype.Text{String: "Library-defined reason", Valid: true},
+			CreatedAt:       pgtype.Timestamp{Time: time.Now(), Valid: true},
+		}},
+		fullCount: 1,
+	}
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+
+	kind := proapi.NotificationKind("cancellation_reason")
+	handler.GetPatronRequestsIdNotifications(rr, req, "3", proapi.GetPatronRequestsIdNotificationsParams{
+		Symbol: &symbol,
+		Side:   &proapiBorrowingSide,
+		Kind:   &kind,
+	})
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	if assert.NotNil(t, repo.lastParams) {
+		assert.Equal(t, "cancellation_reason", repo.lastParams.Kind)
+	}
+	assert.NotContains(t, rr.Body.String(), `"condition"`)
+	var response proapi.PrNotifications
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &response))
+	if assert.Len(t, response.Items, 1) {
+		item := response.Items[0]
+		assert.Equal(t, proapi.NotificationKind("cancellation_reason"), item.Kind)
+		assert.Equal(t, "LocalCode", *item.Code)
+		assert.Equal(t, "Library-defined reason", *item.CodeDescription)
+		assert.Nil(t, item.Note)
+	}
+}
+
 func TestGetPatronRequestsIdNotificationsWithKindFilter(t *testing.T) {
 	repo := &PrRepoNotificationsCapture{
 		notifications: []pr_db.Notification{
@@ -870,7 +912,7 @@ func TestGetPatronRequestsIdNotificationsWithKindFilter(t *testing.T) {
 				ToSymbol:   "ISIL:REQ",
 				Direction:  pr_db.NotificationDirectionReceived,
 				Kind:       pr_db.NotificationKindCondition,
-				Condition: pgtype.Text{
+				Code: pgtype.Text{
 					String: "NoReproduction",
 					Valid:  true,
 				},
@@ -914,7 +956,7 @@ func TestGetPatronRequestsIdNotificationsWithKindFilter(t *testing.T) {
 	assert.NoError(t, err)
 	if assert.Len(t, response.Items, 1) {
 		assert.Equal(t, proapi.NotificationKind("condition"), response.Items[0].Kind)
-		assert.Equal(t, "NoReproduction", *response.Items[0].Condition)
+		assert.Equal(t, "NoReproduction", *response.Items[0].Code)
 		assert.Equal(t, "please do not copy", *response.Items[0].Note)
 	}
 	assert.Equal(t, int64(1), response.About.Count)

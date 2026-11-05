@@ -37,7 +37,7 @@ script:post-response {
     const conditionNotification = body.items.find((n) => n.note === "please do not copy");
     expect(conditionNotification).to.not.equal(undefined);
     expect(conditionNotification.direction).to.equal("received");
-    expect(conditionNotification.condition).to.equal("NoReproduction");
+    expect(conditionNotification.code).to.equal("NoReproduction");
   
     const postAcceptNotification = body.items.find((n) => n.note === "thanks for accepting condition but I will need to ask for payment too");
     expect(postAcceptNotification).to.not.equal(undefined);

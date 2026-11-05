@@ -39,8 +39,10 @@ const (
 	NotificationDirectionSent     NotificationDirection = "sent"
 	NotificationDirectionReceived NotificationDirection = "received"
 
-	NotificationKindNote      NotificationKind = "note"
-	NotificationKindCondition NotificationKind = "condition"
+	NotificationKindNote               NotificationKind = "note"
+	NotificationKindCondition          NotificationKind = "condition"
+	NotificationKindCancellationReason NotificationKind = "cancellation_reason"
+	NotificationKindUnfilledReason     NotificationKind = "unfilled_reason"
 )
 
 type PrItem struct {

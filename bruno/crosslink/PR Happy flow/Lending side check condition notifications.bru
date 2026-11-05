@@ -35,7 +35,7 @@ script:post-response {
     const conditionNote = body.items.find((n) => n.note === "please do not copy");
     expect(conditionNote).to.not.equal(undefined);
     expect(conditionNote.kind).to.equal("condition");
-    expect(conditionNote.condition).to.equal("NoReproduction");
+    expect(conditionNote.code).to.equal("NoReproduction");
     expect(conditionNote.direction).to.equal("sent");
   
     const costCondition = body.items.find((n) => n.cost === 20 && n.currency === "USD");

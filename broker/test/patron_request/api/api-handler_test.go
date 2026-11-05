@@ -1825,6 +1825,15 @@ func TestTemplatePreview(t *testing.T) {
 		Items: []pr_db.PrItem{},
 	})
 	require.NoError(t, err)
+	// A reason notification's explanation is a staff note too; its code is not.
+	_, err = prRepo.SaveNotification(appCtx, pr_db.SaveNotificationParams{
+		ID: uuid.NewString(), PrID: secondPrId, FromSymbol: symbol, ToSymbol: otherSymbol,
+		Direction: pr_db.NotificationDirectionSent, Kind: pr_db.NotificationKindUnfilledReason,
+		Note:      pgtype.Text{String: "Searched the shelf", Valid: true},
+		Code:      pgtype.Text{String: "NotOnShelf", Valid: true},
+		CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
 
 	pdfText := func(pdf []byte) string {
 		parsed, err := reader.Parse(pdf)
@@ -1859,6 +1868,9 @@ func TestTemplatePreview(t *testing.T) {
 	second := strings.Index(text, "Preview Title|CALL-PREVIEW|Preview note")
 	require.GreaterOrEqual(t, first, 0, text)
 	require.Greater(t, second, first, text)
+	reasonNote := strings.Index(text, "Searched the shelf")
+	assert.True(t, reasonNote > first && reasonNote < second, text)
+	assert.NotContains(t, text, "NotOnShelf")
 
 	// The requester symbol on the request does not own the lending side.
 	httpRequest(t, http.MethodPost, previewPath(otherSymbol), previewBody(slip, prId), http.StatusNotFound)

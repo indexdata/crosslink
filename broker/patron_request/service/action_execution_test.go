@@ -467,3 +467,33 @@ func (r *actionHistoryRepo) UpdatePatronRequest(ctx common.ExtendedContext, para
 func (r *actionHistoryRepo) WithTxFunc(ctx common.ExtendedContext, fn func(pr_db.PrRepo) error) error {
 	return fn(r)
 }
+
+// Reason notifications keep their explanation text visible to staff even though
+// the reason itself is stored as the notification's code.
+func TestEmailStaffNotesIncludeReasonNotificationText(t *testing.T) {
+	pr := prWithPatronEmail(testPatronTo)
+	pr.ID, pr.Side, pr.State = patronRequestId, SideBorrowing, BorrowerStateReceived
+	note := func(kind pr_db.NotificationKind, text, code string) pr_db.Notification {
+		return pr_db.Notification{PrID: pr.ID, Kind: kind, Note: getDbTextPtr(&text), Code: getDbTextPtr(&code)}
+	}
+	repo := &MockPrRepo{savedPr: pr, savedNotifications: []pr_db.Notification{
+		note(pr_db.NotificationKindNote, "plain note", ""),
+		note(pr_db.NotificationKindCancellationReason, "please cancel", "InvalidUser"),
+		note(pr_db.NotificationKindUnfilledReason, "searched the shelf", "NotOnShelf"),
+		note(pr_db.NotificationKindCancellationReason, "", "Duplicate"),
+		note(pr_db.NotificationKindCondition, "condition note", "NoReproduction"),
+	}}
+	repo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).
+		Return(pr_db.Template{Body: "notes: [{{.StaffNotes}}] conditions: [{{.LoanConditions}}]", Subject: getDbText("Notification"), ContentType: "text"}, nil)
+	sender := &notificationRetryEmailRecorder{ready: true}
+	svc := CreatePatronRequestActionService(repo, new(IllRepoMock), new(MockEventBus), new(MockIso18626Handler), new(MockLmsCreator), sender, nil, nil)
+
+	err := svc.createAndSendEmail(appCtx, pr, testSymbol, testFrom, []string{testPatronTo}, "received-notification", proapi.ModelActionParamsSendToPatron)
+
+	require.NoError(t, err)
+	// Quoted-printable bodies use CRLF line breaks.
+	body := string(sender.raw)
+	assert.Contains(t, body, "notes: [plain note\r\nplease cancel\r\nsearched the shelf]")
+	assert.Contains(t, body, "conditions: [NoReproduction]")
+	assert.NotContains(t, body, "InvalidUser", "reason codes render through their own placeholders")
+}

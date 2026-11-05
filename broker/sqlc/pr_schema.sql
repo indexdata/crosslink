@@ -76,7 +76,8 @@ CREATE TABLE notification
     note            VARCHAR,
     cost            NUMERIC(19, 4),
     currency        VARCHAR,
-    condition       VARCHAR,
+    code            VARCHAR,
+    code_description VARCHAR,
     receipt         VARCHAR,
     created_at      TIMESTAMP NOT NULL DEFAULT now(),
     acknowledged_at TIMESTAMP
