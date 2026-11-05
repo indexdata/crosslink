@@ -69,7 +69,7 @@ func (w *WorkflowManager) OnCheckAvailabilityComplete(ctx common.ExtendedContext
 		unresolved, _ := event.ResultData.CustomData["holdingsPolicyUnresolved"].(bool)
 		if unresolved || (event.EventStatus != events.EventStatusSuccess && !hasAvailabilityResult) {
 			// The failed task records the error. A normal requester message can
-			// synthesize ExpectToSupply and must wait for a successful check.
+			// synthesize ExpectToSupply and must wait until policy readiness commits.
 			return "", nil
 		}
 		if !hasAvailabilityResult {

@@ -83,18 +83,19 @@ func TestAvailabilityPolicyReevaluation(t *testing.T) {
 		holdings                                    []catalog.Holding
 		lookupErr, holdingsErr, adapterErr, saveErr bool
 		noPolicy                                    bool
-		invalidConfig, unconfigured                 bool
+		missingAdapter, invalidConfig, unconfigured bool
 		want                                        string
-		skipped, unresolved                         bool
+		skipped                                     bool
 	}{
 		{name: "select best eligible", holdings: []catalog.Holding{{ItemId: "blocked", Location: "blocked"}, {ItemId: "ordinary"}, {ItemId: "best", Location: "preferred"}}, want: "best"},
 		{name: "eligible without item clears selection", holdings: []catalog.Holding{{Location: "preferred"}}},
 		{name: "all excluded", holdings: []catalog.Holding{{ItemId: "blocked", Location: "blocked"}}, skipped: true},
 		{name: "no holdings", skipped: true},
 		{name: "no policy lookup failure retains fallback", noPolicy: true, lookupErr: true},
-		{name: "lookup failure", lookupErr: true, unresolved: true},
-		{name: "parser failure", holdingsErr: true, unresolved: true},
-		{name: "adapter failure", adapterErr: true, unresolved: true},
+		{name: "lookup failure", lookupErr: true},
+		{name: "parser failure", holdingsErr: true},
+		{name: "adapter failure", adapterErr: true},
+		{name: "missing adapter", missingAdapter: true},
 		{name: "save failure", saveErr: true},
 		{name: "invalid configuration clears selection", invalidConfig: true},
 		{name: "central selection survives absent availability", unconfigured: true, want: "stale"},
@@ -122,6 +123,9 @@ func TestAvailabilityPolicyReevaluation(t *testing.T) {
 				repo.peer.CustomData.CatalogConfig = nil
 				creator.lookup = nil
 			}
+			if tc.missingAdapter {
+				creator.lookup = nil
+			}
 			if tc.adapterErr {
 				creator.err = errors.New("adapter failed")
 			}
@@ -131,7 +135,7 @@ func TestAvailabilityPolicyReevaluation(t *testing.T) {
 			factory := NewLookupAdapterFactory(repo, new(adapter.MockDirectoryLookupAdapter), "", nil, creator)
 			locator := CreateSupplierLocator(new(events.PostgresEventBus), repo, new(adapter.MockDirectoryLookupAdapter), factory)
 			status, result := locator.checkAvailability(appCtx, events.Event{IllTransactionID: "ill"})
-			if tc.unresolved || tc.saveErr || tc.invalidConfig || tc.lookupErr {
+			if tc.saveErr || tc.invalidConfig || tc.lookupErr || tc.holdingsErr || tc.adapterErr || tc.missingAdapter {
 				require.Equal(t, events.EventStatusError, status)
 			} else {
 				require.Equal(t, events.EventStatusSuccess, status)
@@ -140,13 +144,13 @@ func TestAvailabilityPolicyReevaluation(t *testing.T) {
 				return
 			}
 			require.True(t, repo.supplier.HoldingsPolicyResolved.Valid)
-			require.Equal(t, !tc.unresolved && !tc.invalidConfig && !tc.skipped, repo.supplier.HoldingsPolicyResolved.Bool)
+			require.Equal(t, !tc.invalidConfig && !tc.skipped, repo.supplier.HoldingsPolicyResolved.Bool)
 			require.Equal(t, tc.want, repo.supplier.ItemID.String)
 			require.Equal(t, tc.want != "", repo.supplier.ItemID.Valid)
 			require.Equal(t, "bib", repo.supplier.LocalID.String)
 			require.Equal(t, tc.skipped, repo.supplier.SupplierStatus == ill_db.SupplierStateSkippedPg)
 			if !tc.noPolicy && !tc.invalidConfig && !tc.unconfigured {
-				require.Equal(t, tc.unresolved, result.CustomData["holdingsPolicyUnresolved"])
+				require.Equal(t, false, result.CustomData["holdingsPolicyUnresolved"])
 			}
 		})
 	}

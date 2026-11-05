@@ -216,7 +216,7 @@ func testAvailabilityConcurrentUpdate(t *testing.T, phase, change string, lookup
 }
 
 // Readiness must survive repository round trips independently of ItemID. A
-// failed reevaluation must also revoke a previously successful local selection.
+// failed reevaluation skips policy and lets the workflow continue.
 func TestLocalPolicyReadinessRetry(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	peer, err := illRepo.SavePeer(ctx, ill_db.SavePeerParams{ID: uuid.NewString(), Name: "local policy retry", Url: "https://supplier.invalid", RefreshPolicy: ill_db.RefreshPolicyNever, RefreshTime: pgtype.Timestamp{Time: time.Now(), Valid: true}, CustomData: dirapi.Entry{
@@ -244,13 +244,13 @@ func TestLocalPolicyReadinessRetry(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, rows, 1)
 		selected := rows[0]
-		require.Equal(t, pgtype.Bool{Bool: !fails, Valid: true}, selected.HoldingsPolicyResolved)
+		require.Equal(t, pgtype.Bool{Bool: true, Valid: true}, selected.HoldingsPolicyResolved)
 		require.False(t, selected.ItemID.Valid)
 		require.Equal(t, "bib", selected.LocalID.String)
 		if fails {
 			require.Equal(t, events.EventStatusError, bus.completed.EventStatus)
-			require.Empty(t, bus.tasks, "failed policy must not announce local supply")
-			require.Error(t, selected.ValidateHoldingsPolicy(peer.CustomData))
+			require.Equal(t, []events.EventName{events.EventNameMessageRequester}, bus.tasks)
+			require.NoError(t, selected.ValidateHoldingsPolicy(peer.CustomData))
 		} else {
 			require.Equal(t, events.EventStatusSuccess, bus.completed.EventStatus)
 			require.NotEmpty(t, bus.tasks, "successful retry must resume workflow")

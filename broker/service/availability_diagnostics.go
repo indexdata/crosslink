@@ -261,6 +261,8 @@ func (d *availabilityPolicyDetails) summary() string {
 		return "No holdings policy configured."
 	case "applied-at-discovery":
 		return "Holdings policy was applied during discovery."
+	case "skipped-lookup-failure":
+		return "Holdings policy skipped because the availability lookup failed."
 	case "pending":
 		return "Holdings policy remains unresolved."
 	case "requires-discovery":
