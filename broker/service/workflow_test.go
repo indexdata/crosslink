@@ -553,12 +553,12 @@ func TestOnCheckAvailabilityComplete(t *testing.T) {
 			expectedTasks: []events.EventName{events.EventNameMessageRequester, events.EventNameMessageSupplier},
 		},
 		{
-			name:       "deferred policy lookup failed",
+			name:       "deferred policy still unresolved",
 			status:     events.EventStatusError,
 			customData: map[string]any{AvailabilityKey: string(AvailabilityUnknown), "localSupplier": false, "holdingsPolicyUnresolved": true},
 		},
 		{
-			name:       "local deferred policy lookup failed",
+			name:       "local deferred policy still unresolved",
 			status:     events.EventStatusError,
 			customData: map[string]any{AvailabilityKey: string(AvailabilityUnknown), "localSupplier": true, "holdingsPolicyUnresolved": true},
 		},

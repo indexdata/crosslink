@@ -483,10 +483,11 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	var selectedItem *pgtype.Text
 	var policyResolved *pgtype.Bool
 	var skip bool
+	var skipPolicyOnLookupFailure bool
 	// Revalidate every outcome, including lookup errors and unconfigured lookups,
-	// before the workflow can act on it. Merge only after a successful lookup.
+	// before the workflow can act on it, including a policy bypass after lookup failure.
 	defer func() {
-		if status != events.EventStatusSuccess {
+		if status != events.EventStatusSuccess && !skipPolicyOnLookupFailure {
 			selectedItem, policyResolved, skip = nil, nil, false
 		}
 		current, err := s.updateAvailabilitySupplier(ctx, sup, token, selectedItem, policyResolved, skip)
@@ -495,7 +496,10 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 		} else if !current {
 			status, outcome = supersededAvailabilityResult()
 		} else {
-			resultApplied = status == events.EventStatusSuccess
+			resultApplied = status == events.EventStatusSuccess || skipPolicyOnLookupFailure
+			if skipPolicyOnLookupFailure {
+				policyDetails.Status = "skipped-lookup-failure"
+			}
 			if outcome == nil {
 				outcome = &events.EventResult{}
 			}
@@ -565,19 +569,28 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	}
 
 	if deferred {
-		// The workflow must not bypass unresolved policy through its
-		// availability-error fallback.
+		// Keep policy unresolved until a lookup result or failure is committed.
 		eventData["holdingsPolicyUnresolved"] = true
+	}
+	lookupFailure := func(message string, err error) (events.EventStatus, *events.EventResult) {
+		if deferred {
+			// A failed lookup cannot evaluate policy. Allow fulfillment without an
+			// item, but only after the attempt-guarded readiness update commits.
+			skipPolicyOnLookupFailure = true
+			policyResolved = &pgtype.Bool{Bool: true, Valid: true}
+			eventData["holdingsPolicyUnresolved"] = false
+		}
+		return events.LogErrorAndReturnExistingResult(ctx, message, err, result)
 	}
 	aa, err := s.lookupAdapterFactory.GetAdapterSupplier(ctx, peer)
 	if err != nil {
 		lookupDetails.Outcome = "adapter-failed"
-		return events.LogErrorAndReturnExistingResult(ctx, "could not create availability adapter", err, result)
+		return lookupFailure("could not create availability adapter", err)
 	}
 	if aa == nil {
 		if deferred {
 			lookupDetails.Outcome = "adapter-missing"
-			return events.LogErrorAndReturnExistingResult(ctx, "missing configured availability adapter", fmt.Errorf("holdings policy remains unresolved"), result)
+			return lookupFailure("missing configured availability adapter", fmt.Errorf("configured availability adapter is unavailable"))
 		}
 		ctx.Logger().Debug("skipping availability check for supplier without availability config", "supplierSymbol", sup.SupplierSymbol)
 		lookupDetails.Outcome = "not-configured"
@@ -595,15 +608,15 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	lookupResult, err := aa.Lookup(lookupParams)
 	lookupDetails.recordLookup(lookupStarted, lookupResult, err)
 	if err != nil {
-		return events.LogErrorAndReturnExistingResult(ctx, "failed to perform availability lookup", err, result)
+		return lookupFailure("failed to perform availability lookup", err)
 	}
 	if lookupResult == nil {
-		return events.LogErrorAndReturnExistingResult(ctx, "failed to perform availability lookup", fmt.Errorf("empty lookup result"), result)
+		return lookupFailure("failed to perform availability lookup", fmt.Errorf("empty lookup result"))
 	}
 	holdingsResults, err := lookupResult.GetHoldings()
 	lookupDetails.recordHoldings(lookupStarted, holdingsResults, err)
 	if err != nil {
-		return events.LogErrorAndReturnExistingResult(ctx, "failed to get holdings for availability lookup", err, result)
+		return lookupFailure("failed to get holdings for availability lookup", err)
 	}
 	if deferred {
 		selected := policyDetails.evaluate(peer.CustomData, holdingsResults)

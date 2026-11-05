@@ -133,12 +133,20 @@ func TestAvailabilityEventOutcomes(t *testing.T) {
 		{"record without available holdings", "no-available-holdings", "applied", func(_ *availabilityPolicyRepo, l *diagnosticLookup) { l.Holdings = nil; l.RecordFound = true }, events.EventStatusSuccess, true},
 		{"all excluded", "available-holdings", "applied", func(_ *availabilityPolicyRepo, l *diagnosticLookup) { l.Holdings[0].ShelvingLocation = "Annex" }, events.EventStatusSuccess, true},
 		{"no policy", "available-holdings", "not-configured", func(r *availabilityPolicyRepo, _ *diagnosticLookup) { r.peer.CustomData.HoldingsPolicy = nil }, events.EventStatusSuccess, true},
-		{"lookup error keeps query", "lookup-failed", "pending", func(_ *availabilityPolicyRepo, l *diagnosticLookup) { l.err = errors.New("lookup failed") }, events.EventStatusError, false},
-		{"parser error during lookup", "holdings-failed", "pending", func(_ *availabilityPolicyRepo, l *diagnosticLookup) {
+		{"lookup error keeps query", "lookup-failed", "skipped-lookup-failure", func(_ *availabilityPolicyRepo, l *diagnosticLookup) { l.err = errors.New("lookup failed") }, events.EventStatusError, true},
+		{"parser error during lookup", "holdings-failed", "skipped-lookup-failure", func(_ *availabilityPolicyRepo, l *diagnosticLookup) {
 			l.err = fmt.Errorf("record parsing: %w", catalog.ErrHoldingsParse)
+		}, events.EventStatusError, true},
+		{"holdings error", "holdings-failed", "skipped-lookup-failure", func(_ *availabilityPolicyRepo, l *diagnosticLookup) { l.HoldingsErr = errors.New("bad record") }, events.EventStatusError, true},
+		{"empty result", "lookup-failed", "skipped-lookup-failure", func(_ *availabilityPolicyRepo, l *diagnosticLookup) { l.nilResult = true }, events.EventStatusError, true},
+		{"lookup failure cannot commit bypass", "lookup-failed", "pending", func(r *availabilityPolicyRepo, l *diagnosticLookup) {
+			l.err = errors.New("lookup failed")
+			l.onLookup = func() { r.commitErr = errors.New("commit failed") }
 		}, events.EventStatusError, false},
-		{"holdings error", "holdings-failed", "pending", func(_ *availabilityPolicyRepo, l *diagnosticLookup) { l.HoldingsErr = errors.New("bad record") }, events.EventStatusError, false},
-		{"empty result", "lookup-failed", "pending", func(_ *availabilityPolicyRepo, l *diagnosticLookup) { l.nilResult = true }, events.EventStatusError, false},
+		{"lookup failure superseded", "lookup-failed", "pending", func(r *availabilityPolicyRepo, l *diagnosticLookup) {
+			l.err = errors.New("lookup failed")
+			l.onLookup = func() { r.supplier.SupplierStatus = ill_db.SupplierStateSkippedPg }
+		}, events.EventStatusSuccess, false},
 		{"commit failure", "available-holdings", "evaluated", func(r *availabilityPolicyRepo, l *diagnosticLookup) {
 			l.onLookup = func() { r.commitErr = errors.New("commit failed") }
 		}, events.EventStatusError, false},
@@ -160,6 +168,23 @@ func TestAvailabilityEventOutcomes(t *testing.T) {
 			require.Equal(t, tc.applied, availability.ResultApplied)
 			require.Equal(t, tc.policyStatus, policy.Status)
 			require.NotEmpty(t, result.Note)
+			if tc.policyStatus == "skipped-lookup-failure" {
+				require.NotNil(t, result.EventError)
+				require.Equal(t, string(AvailabilityUnknown), result.CustomData[AvailabilityKey])
+				require.Equal(t, false, result.CustomData["holdingsPolicyUnresolved"])
+				require.True(t, repo.supplier.HoldingsPolicyResolved.Bool)
+				require.False(t, repo.supplier.ItemID.Valid)
+				require.Contains(t, result.Note, "Holdings policy skipped because the availability lookup failed.")
+			}
+			if tc.name == "lookup failure cannot commit bypass" {
+				require.Contains(t, result.EventError.Cause, "commit failed")
+				require.NotContains(t, result.CustomData, AvailabilityKey)
+			}
+			if tc.name == "lookup failure superseded" {
+				require.Equal(t, string(AvailabilitySuperseded), result.CustomData[AvailabilityKey])
+				require.False(t, repo.supplier.HoldingsPolicyResolved.Bool)
+			}
+
 			if tc.lookupOutcome == "holdings-failed" {
 				require.Contains(t, result.Note, "Could not parse holdings lookup results.")
 			}
