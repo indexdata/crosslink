@@ -412,8 +412,10 @@ whole `holdingsPolicy`. Other fields, including whole `queryConfig`,
 `holdingsFormat` and `metadataFormat` objects, resolve on their own. Arrays are
 replaced, never combined.
 
-Writes: on create, PATCH and import, omission keeps a stored value, `null` removes
-it so that an inherited value applies, and a value stores a local override. A value
+Writes: create stores the supplied configuration; PATCH omission preserves a stored
+value. Imports replace the local configuration, so omitted optional fields remove
+their stored overrides. On PATCH and import, `null` removes a local value so that an
+inherited value applies, and a non-null value stores a local override. A value
 in a field the entry type may not set is rejected with HTTP 400 naming the field
 (for example `lmsConfig.address is not editable on Branch`), and the request
 changes nothing. Resubmitting the value already stored is accepted. `null` is
