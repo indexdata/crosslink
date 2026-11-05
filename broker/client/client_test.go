@@ -1282,17 +1282,21 @@ func TestSelectedSupplierPolicyReadinessBeforeExpectToSupply(t *testing.T) {
 
 func TestRequestItemMappingClearsStaleSupplierCopy(t *testing.T) {
 	old := &iso18626.BibliographicRecordId{BibliographicRecordIdentifier: "old-copy"}
-	sup := &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP", LocalID: getPgText("bib"), ItemID: getPgText("new-copy")}
+	sup := &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP", LocalID: getPgText("bib"), ItemID: getPgText("new-copy"), CallNumber: getPgText("QA 76")}
 	ctx := createTransactionContext(events.Event{}, sup, &ill_db.Peer{}, common.BrokerModeTransparent)
-	ctx.transaction.IllTransactionData.SupplierInfo = []iso18626.SupplierInfo{{BibliographicRecordId: old}, {BibliographicRecordId: old}}
+	ctx.transaction.IllTransactionData.SupplierInfo = []iso18626.SupplierInfo{{BibliographicRecordId: old, CallNumber: "old call"}, {BibliographicRecordId: old, CallNumber: "other call"}}
 	message, _ := createRequestMessage(ctx)
 	assert.Equal(t, "new-copy", message.Request.SupplierInfo[0].BibliographicRecordId.BibliographicRecordIdentifier)
+	assert.Equal(t, "QA 76", message.Request.SupplierInfo[0].CallNumber)
+	assert.Empty(t, message.Request.SupplierInfo[1].CallNumber)
+	assert.Equal(t, "old call", ctx.transaction.IllTransactionData.SupplierInfo[0].CallNumber)
 	assert.Nil(t, message.Request.SupplierInfo[1].BibliographicRecordId)
 	assert.Equal(t, "old-copy", ctx.transaction.IllTransactionData.SupplierInfo[0].BibliographicRecordId.BibliographicRecordIdentifier)
 	sup.ItemID = pgtype.Text{}
 	message, _ = createRequestMessage(ctx)
 	for _, info := range message.Request.SupplierInfo {
 		assert.Nil(t, info.BibliographicRecordId)
+		assert.Empty(t, info.CallNumber)
 	}
 	assert.Equal(t, "bib", message.Request.BibliographicInfo.SupplierUniqueRecordId)
 }

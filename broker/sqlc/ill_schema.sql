@@ -60,6 +60,7 @@ CREATE TABLE located_supplier
     note                VARCHAR,
     item_id             VARCHAR,
     holdings_policy_resolved BOOLEAN,
+    call_number         VARCHAR,
     FOREIGN KEY (ill_transaction_id) REFERENCES ill_transaction (id) ON DELETE CASCADE,
     FOREIGN KEY (supplier_id) REFERENCES peer (id)
 );
