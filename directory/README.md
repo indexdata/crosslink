@@ -359,7 +359,7 @@ The permissions and roles are as follows:
 |---------------------|---------------------------|-------------|
 | Public User         | directory.public.all      | This is the public facing role, that lets all non-sensitive fields be viewed, but not edited. |
 | System User         | directory.system.all      | This role is primarily granted to system processes. It allows all fields (even sensitive ones) to be viewed. |
-| Institutional Admin | directory.institution.all | This role is for the administrator of a single institution. It grants viewing (including sensitive) and editing of entries for a given tenant. |
+| Institutional Admin | directory.institution.all | This role is for the administrator of a single institution. It grants viewing (including sensitive) and editing of entries for a given tenant, except an entry's `parent` and `type`. |
 | Consortial Admin    | directory.consortium.all  | This role is for the administrator of the consortium. It allows viewing and editing of all entries for the consortial record, as well as those for consortium's institutions. |
 
 ### Configuration inheritance
@@ -438,8 +438,8 @@ values back to null.
 Protected values: `fromAgencyAuthentication` is never inherited from an entry with
 a different tenant. A protected value is shown only to callers who may see
 sensitive fields on both the entry that stores it and the entry being read;
-others see `""`, as before. Only consortial administrators may place a branch
-under an institution that the caller's tenant does not own.
+others see `""`, as before. Only consortial administrators may change an entry's
+parent or type.
 
 The broker serves Directory entries from its peer cache, so a parent change
 reaches ILL processing after the cache refreshes. Host-profile defaults still

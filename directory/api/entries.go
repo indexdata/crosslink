@@ -1039,6 +1039,12 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 	resultingType := string(*maybeUpdateCol(&origTypeEntryPatch, request.Body.Type))
 	var parentEntry db.Entry
 	parent := maybeUpdateCol(orig.Parent, request.Body.Parent)
+	// An entry's parent and type decide what it inherits, so only consortial
+	// administrators may change them. Resending the stored values is allowed.
+	parentChanged := (parent == nil) != (orig.Parent == nil) || parent != nil && *parent != *orig.Parent
+	if (parentChanged || resultingType != orig.Type) && !authData.HasRoleFromList(writeRoles) {
+		return UpdateEntry401TextResponse("Only consortial administrators may change an entry's parent or type"), nil
+	}
 	if parent != nil {
 		if *parent == orig.ID {
 			return UpdateEntry400TextResponse("An entry cannot be its own parent"), nil
@@ -1073,15 +1079,6 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 				return UpdateEntry400TextResponse("Entry type is invalid for existing child: " + reason), nil
 			}
 		}
-	}
-
-	// A branch inherits its parent's configuration, including protected
-	// values, so only consortial administrators may place a branch under an
-	// institution that the caller's tenant does not own.
-	parentChanged := (parent == nil) != (orig.Parent == nil) || parent != nil && *parent != *orig.Parent
-	if parent != nil && resultingType == string(EntryTypeBranch) && (parentChanged || resultingType != orig.Type) &&
-		!authData.HasRoleFromList(writeRoles) && !isOwnedEntry(authData, parentEntry.Tenant) {
-		return UpdateEntry400TextResponse("A branch's parent must be an institution owned by your tenant"), nil
 	}
 
 	localConfigs, err := loadLocalConfigs(ctx, tx, orig.ID)

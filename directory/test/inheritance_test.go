@@ -268,8 +268,8 @@ func TestInheritanceProtectedValuesAndReparenting(t *testing.T) {
 
 	reparent := fmt.Sprintf(`{"parent":"%s"}`, other)
 	response, body := jsonReq(t, http.MethodPatch, branchPath, reparent, ownerHeaders)
-	require.Equal(t, http.StatusBadRequest, response.StatusCode)
-	require.Equal(t, "A branch's parent must be an institution owned by your tenant", body)
+	require.Equal(t, http.StatusUnauthorized, response.StatusCode)
+	require.Equal(t, hierarchyDenied, body)
 	require.Equal(t, tree.institution.String(), getEntryJSON(t, branchPath, systemHeaders)["parent"])
 
 	response, body = jsonReq(t, http.MethodPatch, branchPath, reparent, consortialHeaders)
@@ -277,6 +277,53 @@ func TestInheritanceProtectedValuesAndReparenting(t *testing.T) {
 	lms := getEntryJSON(t, branchPath, systemHeaders)["lmsConfig"].(map[string]any)
 	require.Equal(t, "https://other.example", lms["address"], "reparenting changes inherited values on the next read")
 	require.NotContains(t, lms, "fromAgencyAuthentication", "protected values never cross a tenant boundary")
+}
+
+const hierarchyDenied = "Only consortial administrators may change an entry's parent or type"
+
+// TestOnlyConsortialAdminsChangeHierarchy checks that institutional admins
+// can't change an entry's parent or type, even within their own tenant, but
+// may resend the stored values.
+func TestOnlyConsortialAdminsChangeHierarchy(t *testing.T) {
+	tree := setupInheritanceTree(t)
+	owned := uuid.New()
+	sqlExec(t, `INSERT INTO entries (id, name, type, parent, tenant) VALUES ($1, 'Second institution', 'Institution', $2, 'INHERIT')`, owned, fixtureConsortium)
+	branchPath := entryPath(tree.branch)
+	requireHierarchy := func(parent, entryType string, msg string) {
+		t.Helper()
+		local := getEntryJSON(t, branchPath+"?resolve-inherit=false", systemHeaders)
+		require.Equal(t, parent, local["parent"], msg)
+		require.Equal(t, entryType, local["type"], msg)
+	}
+
+	for _, tc := range []struct{ name, path, body string }{
+		{"move between owned institutions", branchPath, fmt.Sprintf(`{"parent":"%s"}`, owned)},
+		{"move by symbol", "/entries/by-symbol/ISIL:INHERIT-BRANCH", fmt.Sprintf(`{"parent":"%s"}`, owned)},
+		{"detach", branchPath, `{"parent":null}`},
+		{"change type only", branchPath, `{"type":"Institution"}`},
+		{"change type and parent", branchPath, `{"type":"Institution","parent":"` + fixtureConsortium + `"}`},
+		{"change type and detach", branchPath, `{"type":"Institution","parent":null}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			response, body := jsonReq(t, http.MethodPatch, tc.path, tc.body, ownerHeaders)
+			require.Equal(t, http.StatusUnauthorized, response.StatusCode, body)
+			require.Equal(t, hierarchyDenied, body)
+			requireHierarchy(tree.institution.String(), "Branch", "a rejected request changes nothing")
+		})
+	}
+
+	resend := fmt.Sprintf(`{"name":"Renamed branch","type":"Branch","parent":"%s"}`, tree.institution)
+	response, body := jsonReq(t, http.MethodPatch, branchPath, resend, ownerHeaders)
+	require.Equal(t, http.StatusNoContent, response.StatusCode, body)
+	require.Equal(t, "Renamed branch", getEntryJSON(t, branchPath, systemHeaders)["name"], "stored parent and type may be resent")
+	requireHierarchy(tree.institution.String(), "Branch", "resending keeps the hierarchy")
+
+	response, body = jsonReq(t, http.MethodPatch, branchPath, fmt.Sprintf(`{"parent":"%s"}`, owned), consortialHeaders)
+	require.Equal(t, http.StatusNoContent, response.StatusCode, body)
+	requireHierarchy(owned.String(), "Branch", "consortial admins may move a branch")
+	response, body = jsonReq(t, http.MethodPatch, branchPath, `{"type":"Institution","parent":"`+fixtureConsortium+`"}`, consortialHeaders)
+	require.Equal(t, http.StatusNoContent, response.StatusCode, body)
+	requireHierarchy(fixtureConsortium, "Institution", "consortial admins may change the type")
 }
 
 func TestImportInheritanceRules(t *testing.T) {

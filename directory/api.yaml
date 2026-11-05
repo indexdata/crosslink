@@ -3108,10 +3108,12 @@ components:
           type: string
           minLength: 1
         type:
+          description: Only consortial administrators may change this value; sending the stored value is accepted.
           anyOf:
             - $ref: '#/components/schemas/EntryType'
             - type: "null"
         parent:
+          description: Only consortial administrators may change this value; sending the stored value is accepted.
           type: [string, "null"]
           format: uuid
         description:

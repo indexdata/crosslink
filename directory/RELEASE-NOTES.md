@@ -12,8 +12,9 @@
   entry type may not set return HTTP 400 (for example, `illConfig.loadBalancingPolicy`
   is consortium-only, and branches may set only pickup codes and `isPickupLocation`).
   Imports report these as per-record errors, and import nulls clear legacy values.
-  Institutional administrators may no longer place a branch under an institution
-  their tenant does not own. A stored empty `lendersOfLastResort` now reads as `[]`
+  Only consortial administrators may change an entry's `parent` or `type`;
+  institutional administrators get HTTP 401 (resending the stored values is still
+  accepted). A stored empty `lendersOfLastResort` now reads as `[]`
   instead of being omitted.
 - Use `defaultLoanPeriod: 0` and `ncipVersion: "default"` to switch these settings
   off locally. Apply migration `025_inheritance_off_values` first; its down migration
