@@ -20,7 +20,9 @@ docker compose up
 
 4. Run all steps in the Bruno runner in the `PR Happy Flow` folder. All HTTP response codes and validations should be green.
 
-The loan scenarios generate a supplier pull slip before shipping; this queues `pullslip-printed` and moves the supplier to `SEARCHING`.
+The loan scenarios generate a supplier pull slip before shipping; this queues `pullslip-printed` and moves the supplier to `SEARCHING`. The state checks poll for up to five seconds because PDF generation returns before that action completes. Polls retain the request tenant and the collection's Basic credentials, with HTTP calls bounded by the remaining deadline.
+
+Run the helper regression tests with `node --test crosslink/scripts/wait-for-state.test.js` from this directory.
 
 The local stack has no SMTP service. Notification actions therefore record
 `PROBLEM` with outcome `failure` and set `needsAttention`, while their configured
