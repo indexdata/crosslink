@@ -2131,13 +2131,16 @@ components:
             - $ref: '#/components/schemas/IllConfigCodeDescription'
             - type: "null"
         loanConditions:
-          type: array
+          type: [array, "null"]
+          description: Null or omitted inherits the parent's list; an empty list stores no entries locally.
           items: { $ref: '#/components/schemas/IllConfigCodeDescription' }
         unfilledReasons:
-          type: array
+          type: [array, "null"]
+          description: Null or omitted inherits the parent's list; an empty list stores no entries locally.
           items: { $ref: '#/components/schemas/IllConfigCodeDescription' }
         cancellationReasons:
-          type: array
+          type: [array, "null"]
+          description: Null or omitted inherits the parent's list; an empty list stores no entries locally.
           items: { $ref: '#/components/schemas/IllConfigCodeDescription' }
         isPickupLocation: { type: [boolean, "null"] }
         iso18626Url: { type: [string, "null"] }

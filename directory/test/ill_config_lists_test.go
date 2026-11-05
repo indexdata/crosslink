@@ -98,20 +98,23 @@ func TestImportIllConfigLists(t *testing.T) {
 	require.Equal(t, config["unfilledReasons"], read()["unfilledReasons"])
 	require.Equal(t, config["cancellationReasons"], read()["cancellationReasons"])
 	require.Equal(t, config["loanConditions"], read()["loanConditions"])
+	lists := []string{"unfilledReasons", "cancellationReasons", "loanConditions"}
+	consortiumLists := map[string]any{}
+	for _, field := range lists {
+		consortiumLists[field] = config[field]
+	}
 	// Malformed replacement records must leave all previously imported data intact.
-	for _, field := range []string{"unfilledReasons", "cancellationReasons", "loanConditions"} {
+	for _, field := range lists {
 		original := config[field]
-		for _, invalid := range []any{nil, []any{map[string]any{"code": "MissingDescription"}}} {
-			config[field] = invalid
-			data["name"] = "Invalid replacement"
-			_, result = importRequest(t, []any{record}, "update", standardHeaders)
-			require.EqualValues(t, 1, result.Entries.Failed)
-			require.NotEmpty(t, result.Errors)
-			require.Equal(t, original, read()[field])
-			var storedName string
-			require.NoError(t, dbpool.QueryRow(context.Background(), "SELECT name FROM entries WHERE id=$1", importEntryUUID(consortium)).Scan(&storedName))
-			require.Equal(t, "Consortium", storedName)
-		}
+		config[field] = []any{map[string]any{"code": "MissingDescription"}}
+		data["name"] = "Invalid replacement"
+		_, result = importRequest(t, []any{record}, "update", standardHeaders)
+		require.EqualValues(t, 1, result.Entries.Failed)
+		require.NotEmpty(t, result.Errors)
+		require.Equal(t, original, read()[field])
+		var storedName string
+		require.NoError(t, dbpool.QueryRow(context.Background(), "SELECT name FROM entries WHERE id=$1", importEntryUUID(consortium)).Scan(&storedName))
+		require.Equal(t, "Consortium", storedName)
 		config[field] = original
 	}
 	config["availableCopyrightTypes"] = []any{map[string]any{"code": "UnsupportedImport", "defaultDesc": "Not importable"}}
@@ -139,6 +142,15 @@ func TestImportIllConfigLists(t *testing.T) {
 	require.Equal(t, []any{}, read()["cancellationReasons"])
 	require.Equal(t, []any{}, read()["loanConditions"])
 	require.NotContains(t, read(), "availableCopyrightTypes", "import replaces the whole ILL configuration")
+	// Null clears a stored list, so the entry inherits again.
+	for _, field := range lists {
+		config[field] = nil
+	}
+	_, result = importRequest(t, []any{record}, "update", standardHeaders)
+	require.Empty(t, result.Errors)
+	for _, field := range lists {
+		require.NotContains(t, read(), field, "null clears %s", field)
+	}
 	// Older complete configuration records remain valid and replace the lists with unset values.
 	delete(config, "unfilledReasons")
 	delete(config, "cancellationReasons")
@@ -152,4 +164,36 @@ func TestImportIllConfigLists(t *testing.T) {
 	var name string
 	require.NoError(t, dbpool.QueryRow(context.Background(), "SELECT name FROM entries WHERE id=$1", importEntryUUID(consortium)).Scan(&name))
 	require.Equal(t, "Consortium", name)
+
+	// An institution importing null inherits the consortium's lists; [] blocks them.
+	for field, value := range consortiumLists {
+		config[field] = value
+	}
+	_, result = importRequest(t, []any{record}, "update", standardHeaders)
+	require.Empty(t, result.Errors)
+	institutionKey := symbolObject("ISIL", "LISTS-INST")
+	institution := entryImportRecord(institutionKey, "Lists institution", consortium, "Institution")
+	institutionConfig := map[string]any{}
+	for key, value := range config {
+		institutionConfig[key] = value
+	}
+	institution["data"].(map[string]any)["illConfig"] = institutionConfig
+	institutionPath := "/entries/by-id/" + importEntryUUID(institutionKey).String()
+	for _, tc := range []struct {
+		local any
+		want  func(field string) any
+	}{
+		{nil, func(field string) any { return consortiumLists[field] }},
+		{[]any{}, func(string) any { return []any{} }},
+	} {
+		for _, field := range lists {
+			institutionConfig[field] = tc.local
+		}
+		_, result = importRequest(t, []any{institution}, "update", standardHeaders)
+		require.Empty(t, result.Errors)
+		merged := getEntryJSON(t, institutionPath, standardHeaders)["illConfig"].(map[string]any)
+		for _, field := range lists {
+			require.Equal(t, tc.want(field), merged[field], "institution %s imported as %v", field, tc.local)
+		}
+	}
 }

@@ -482,8 +482,9 @@ For example, inside an existing complete NDJSON entry record's `data.illConfig`:
 
 Include the other required ILL configuration fields from `ImportIllConfig` in
 [api.yaml](api.yaml). The three arrays shown above are optional for
-compatibility with older imports. Import replaces configuration: omitted lists
-become unset, and `[]` stores an empty list. Create and PATCH also accept the lists; PATCH omission
+compatibility with older imports. Import replaces configuration: omitted or `null`
+lists become unset so that an inherited list applies, and `[]` stores an empty
+list that blocks inheritance. Create and PATCH also accept the lists; PATCH omission
 preserves existing values, `[]` stores an empty list, and `null` removes the local
 list so that an inherited list applies. Entry reads return lists in their original order.
 

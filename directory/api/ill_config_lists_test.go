@@ -24,11 +24,12 @@ func TestIllConfigListsContract(t *testing.T) {
 			require.True(t, schema.Type.Is("array"))
 			require.NotContains(t, cfg.Required, name)
 			require.Nil(t, schema.Default)
-			assertIllCodeArrayContract(t, schema)
+			assertIllCodeArrayContract(t, schema, false)
 			if name != "availableCopyrightTypes" {
 				imported := spec.Components.Schemas["ImportIllConfig"].Value
 				require.NotContains(t, imported.Required, name)
-				assertIllCodeArrayContract(t, imported.Properties[name].Value)
+				// Import null clears the local list so that an inherited list applies.
+				assertIllCodeArrayContract(t, imported.Properties[name].Value, true)
 			}
 		}
 		require.NoError(t, cfg.VisitJSON(map[string]any{}))
@@ -36,7 +37,7 @@ func TestIllConfigListsContract(t *testing.T) {
 	}
 }
 
-func assertIllCodeArrayContract(t *testing.T, schema *openapi3.Schema) {
+func assertIllCodeArrayContract(t *testing.T, schema *openapi3.Schema, nullable bool) {
 	t.Helper()
 	item := schema.Items.Value
 	require.ElementsMatch(t, []string{"code", "defaultDesc"}, item.Required)
@@ -45,7 +46,12 @@ func assertIllCodeArrayContract(t *testing.T, schema *openapi3.Schema) {
 	require.True(t, item.Properties["defaultDesc"].Value.Type.Is("string"))
 	require.NoError(t, schema.VisitJSON([]any{}))
 	require.NoError(t, schema.VisitJSON([]any{map[string]any{"code": "Legacy-Custom", "defaultDesc": "Legacy description"}}))
-	for _, invalid := range []any{nil, "code", []any{nil}, []any{map[string]any{"code": "A"}}, []any{map[string]any{"defaultDesc": "A"}}, []any{map[string]any{"code": 1, "defaultDesc": "A"}}, []any{map[string]any{"code": "A", "defaultDesc": "B", "extra": true}}} {
+	if nullable {
+		require.NoError(t, schema.VisitJSON(nil))
+	} else {
+		require.Error(t, schema.VisitJSON(nil))
+	}
+	for _, invalid := range []any{"code", []any{nil}, []any{map[string]any{"code": "A"}}, []any{map[string]any{"defaultDesc": "A"}}, []any{map[string]any{"code": 1, "defaultDesc": "A"}}, []any{map[string]any{"code": "A", "defaultDesc": "B", "extra": true}}} {
 		require.Error(t, schema.VisitJSON(invalid))
 	}
 }
