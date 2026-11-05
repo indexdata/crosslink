@@ -151,7 +151,7 @@ func (d *availabilityPolicyDetails) evaluate(entry dirapi.Entry, holdings []cata
 	selectedIndex := -1
 	for i, holding := range holdings {
 		candidate := adapter.Supplier{CustomData: entry, HoldingItemID: holding.ItemId,
-			Location: holding.Location, ShelvingLocation: holding.ShelvingLocation,
+			Location: holding.Location, ShelvingLocation: holding.ShelvingLocation, CallNumber: holding.CallNumber,
 			ItemLoanPolicy: holding.ItemLoanPolicy}
 		eligible, reason := adapter.EvaluateHoldingsPolicyWithReason(&candidate)
 		if eligible {

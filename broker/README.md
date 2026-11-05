@@ -659,7 +659,18 @@ CrossLink delivery uses the same fields. Transparent local fulfillment
 the LMS adapter. It requires a selected local supplier belonging to the borrowing
 request and preserves the original request's bibliographic identifier.
 Catalog parsing or availability lookup without a holdings policy does not select
-an item ID.
+an item ID. The selected holding's call number, when available, is persisted
+with its item ID and sent in `supplierInfo.callNumber`. Both fields are cleared
+when a new availability lookup invalidates the previous selection.
+
+When supplier Request Item is disabled (including manual LMS workflows), a
+Loan automatically attaches the selected copy as a volume before proceeding to
+`WILL_SUPPLY`. The volume uses the selected item ID as its barcode, the request
+title, and the supplied call number; it has no LMS reservation. Existing volumes
+are preserved on retries so staff can add or replace copies. Without a selected
+copy, the workflow continues without an automatically attached volume. Location
+fields are not carried by this mapping. CopyOrLoan retains its deferred item
+attachment at shipping; Copy does not attach a loan volume.
 
 For both NCIP versions, `requestItemRequestScopeType` controls identifier selection:
 

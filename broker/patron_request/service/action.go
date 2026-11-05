@@ -1710,6 +1710,15 @@ func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.Extended
 		return pr, "LMS RequestItem failed", err
 	}
 	if response == nil {
+		if requestID == "" {
+			items, err = a.prRepo.GetItemsByPrId(ctx, pr.ID)
+			if err != nil {
+				return pr, "failed to get existing items", err
+			}
+		}
+		if err := a.attachSelectedLenderItem(ctx, pr, illRequest, identifier.ItemID, items); err != nil {
+			return pr, "failed to save selected item", err
+		}
 		return pr, "", nil
 	}
 	lmsRequestID := strings.TrimSpace(response.RequestID)
@@ -1769,6 +1778,33 @@ func (a *PatronRequestActionService) ensureLenderRequestItem(ctx common.Extended
 		return pr, "failed to save item", err
 	}
 	return pr, "", nil
+}
+
+// attachSelectedLenderItem uses the policy-selected copy when the LMS skips
+// RequestItem. Existing volumes take precedence, including staff replacements.
+// No LMS reservation or requested status is recorded for this manual item.
+func (a *PatronRequestActionService) attachSelectedLenderItem(ctx common.ExtendedContext, pr pr_db.PatronRequest, request iso18626.Request, itemID string, items []pr_db.Item) error {
+	barcode := strings.TrimSpace(itemID)
+	if barcode == "" || len(items) != 0 {
+		return nil
+	}
+	var callNumber string
+	for _, supplier := range request.SupplierInfo {
+		if supplier.BibliographicRecordId != nil && supplier.BibliographicRecordId.BibliographicRecordIdentifier == itemID {
+			callNumber = strings.TrimSpace(supplier.CallNumber)
+			break
+		}
+	}
+	_, err := a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
+		ID:         uuid.NewString(),
+		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
+		PrID:       pr.ID,
+		ItemID:     getDbText(itemID),
+		Barcode:    barcode,
+		Title:      getDbText(request.BibliographicInfo.Title),
+		CallNumber: getDbText(callNumber),
+	})
+	return err
 }
 
 func (a *PatronRequestActionService) addItemLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {

@@ -85,9 +85,10 @@ func TestAvailabilityPolicyReevaluation(t *testing.T) {
 		noPolicy                                    bool
 		missingAdapter, invalidConfig, unconfigured bool
 		want                                        string
+		wantCall                                    string
 		skipped                                     bool
 	}{
-		{name: "select best eligible", holdings: []catalog.Holding{{ItemId: "blocked", Location: "blocked"}, {ItemId: "ordinary"}, {ItemId: "best", Location: "preferred"}}, want: "best"},
+		{name: "select best eligible", holdings: []catalog.Holding{{ItemId: "blocked", Location: "blocked"}, {ItemId: "ordinary", CallNumber: "ordinary call"}, {ItemId: "best", Location: "preferred", CallNumber: "best call"}}, want: "best", wantCall: "best call"},
 		{name: "eligible without item clears selection", holdings: []catalog.Holding{{Location: "preferred"}}},
 		{name: "all excluded", holdings: []catalog.Holding{{ItemId: "blocked", Location: "blocked"}}, skipped: true},
 		{name: "no holdings", skipped: true},
@@ -98,13 +99,13 @@ func TestAvailabilityPolicyReevaluation(t *testing.T) {
 		{name: "missing adapter", missingAdapter: true},
 		{name: "save failure", saveErr: true},
 		{name: "invalid configuration clears selection", invalidConfig: true},
-		{name: "central selection survives absent availability", unconfigured: true, want: "stale"},
+		{name: "central selection survives absent availability", unconfigured: true, want: "stale", wantCall: "stale call"},
 		{name: "no policy does not select", noPolicy: true, holdings: []catalog.Holding{{ItemId: "raw"}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var entry dirapi.Entry
 			require.NoError(t, json.Unmarshal([]byte(`{"catalogConfig":{"sru":{"address":"https://catalog.example/sru"}},"holdingsPolicy":{"locations":[{"code":"blocked","supplyPreference":-1},{"code":"preferred","supplyPreference":5}]}}`), &entry))
-			repo := &availabilityPolicyRepo{peer: ill_db.Peer{CustomData: entry}, supplier: ill_db.LocatedSupplier{ID: "sup", SupplierID: "peer", IllTransactionID: "ill", SupplierStatus: ill_db.SupplierStateSelectedPg, LocalID: pgtype.Text{String: "bib", Valid: true}, ItemID: pgtype.Text{String: "stale", Valid: true}, HoldingsPolicyResolved: pgtype.Bool{Bool: true, Valid: true}}}
+			repo := &availabilityPolicyRepo{peer: ill_db.Peer{CustomData: entry}, supplier: ill_db.LocatedSupplier{ID: "sup", SupplierID: "peer", IllTransactionID: "ill", SupplierStatus: ill_db.SupplierStateSelectedPg, LocalID: pgtype.Text{String: "bib", Valid: true}, ItemID: pgtype.Text{String: "stale", Valid: true}, CallNumber: pgtype.Text{String: "stale call", Valid: true}, HoldingsPolicyResolved: pgtype.Bool{Bool: true, Valid: true}}}
 			if tc.noPolicy {
 				repo.peer.CustomData.HoldingsPolicy = nil
 			}
@@ -146,6 +147,8 @@ func TestAvailabilityPolicyReevaluation(t *testing.T) {
 			require.True(t, repo.supplier.HoldingsPolicyResolved.Valid)
 			require.Equal(t, !tc.invalidConfig && !tc.skipped, repo.supplier.HoldingsPolicyResolved.Bool)
 			require.Equal(t, tc.want, repo.supplier.ItemID.String)
+			require.Equal(t, tc.wantCall, repo.supplier.CallNumber.String)
+			require.Equal(t, tc.wantCall != "", repo.supplier.CallNumber.Valid)
 			require.Equal(t, tc.want != "", repo.supplier.ItemID.Valid)
 			require.Equal(t, "bib", repo.supplier.LocalID.String)
 			require.Equal(t, tc.skipped, repo.supplier.SupplierStatus == ill_db.SupplierStateSkippedPg)
@@ -166,8 +169,8 @@ func TestLocateSuppliersPolicyStage(t *testing.T) {
 			}
 			repo.peers[0].CustomData = entry
 			lookup := &catalog.MockLookupAdapter{Holdings: []catalog.Holding{
-				{Symbol: "ISIL:SUP1", LocalIdentifier: "first-bib", ItemId: "blocked-item", Location: "blocked"},
-				{Symbol: "ISIL:SUP1", LocalIdentifier: "second-bib", ItemId: "eligible-item"},
+				{Symbol: "ISIL:SUP1", LocalIdentifier: "first-bib", ItemId: "blocked-item", Location: "blocked", CallNumber: "blocked call"},
+				{Symbol: "ISIL:SUP1", LocalIdentifier: "second-bib", ItemId: "eligible-item", CallNumber: "eligible call"},
 			}}
 			directory := new(adapter.MockDirectoryLookupAdapter)
 			factory := NewLookupAdapterFactory(repo, directory, "", lookup, nil)
@@ -198,9 +201,11 @@ func TestLocateSuppliersPolicyStage(t *testing.T) {
 			if deferred {
 				require.Equal(t, "first-bib", selected.LocalID.String)
 				require.False(t, selected.ItemID.Valid)
+				require.False(t, selected.CallNumber.Valid)
 			} else {
 				require.Equal(t, "second-bib", selected.LocalID.String)
 				require.Equal(t, "eligible-item", selected.ItemID.String)
+				require.Equal(t, "eligible call", selected.CallNumber.String)
 			}
 		})
 	}

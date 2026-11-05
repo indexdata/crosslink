@@ -309,6 +309,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 							CustomData:          peer.CustomData,
 							LocalIdentifier:     holding.LocalIdentifier,
 							HoldingItemID:       holding.ItemId,
+							CallNumber:          holding.CallNumber,
 							DeferHoldingsPolicy: availabilityConfigured,
 							LoadBalancingScore:  loadBalancingScore,
 							Symbol:              sym,
@@ -423,6 +424,7 @@ func (s *SupplierLocator) addLocatedSupplier(ctx common.ExtendedContext, transId
 		},
 		LocalSupplier:          supplier.Local,
 		ItemID:                 pgtype.Text{String: supplier.ItemID, Valid: supplier.ItemID != ""},
+		CallNumber:             pgtype.Text{String: supplier.CallNumber, Valid: supplier.ItemID != "" && supplier.CallNumber != ""},
 		HoldingsPolicyResolved: pgtype.Bool{Bool: supplier.CustomData.HoldingsPolicy == nil || !supplier.DeferHoldingsPolicy, Valid: true},
 	})
 	return &sup, err
@@ -480,7 +482,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	if !current {
 		return supersededAvailabilityResult()
 	}
-	var selectedItem *pgtype.Text
+	var selectedItem *catalog.Holding
 	var policyResolved *pgtype.Bool
 	var skip bool
 	var skipPolicyOnLookupFailure bool
@@ -530,7 +532,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 		// Clear on a locked, freshly read row, even if the initial snapshot had
 		// no item: another completed check may have selected one in the meantime.
 		// Revoke readiness too if configuration gained an endpoint since the claim.
-		current, err := s.updateAvailabilitySupplier(ctx, sup, token, &pgtype.Text{}, &pgtype.Bool{Valid: true}, false)
+		current, err := s.updateAvailabilitySupplier(ctx, sup, token, &catalog.Holding{}, &pgtype.Bool{Valid: true}, false)
 		if err != nil {
 			return events.LogErrorAndReturnResult(ctx, "could not clear selected item", err)
 		}
@@ -538,6 +540,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 			return supersededAvailabilityResult()
 		}
 		sup.ItemID = pgtype.Text{}
+		sup.CallNumber = pgtype.Text{}
 	}
 	if configErr != nil {
 		lookupDetails.Outcome = "invalid-configuration"
@@ -624,8 +627,9 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 			holdingsResults = nil
 		} else {
 			sup.ItemID = pgtype.Text{String: selected.ItemID, Valid: selected.ItemID != ""}
+			sup.CallNumber = pgtype.Text{String: selected.CallNumber, Valid: selected.ItemID != "" && selected.CallNumber != ""}
 		}
-		selectedItem = &sup.ItemID
+		selectedItem = &catalog.Holding{ItemId: sup.ItemID.String, CallNumber: sup.CallNumber.String}
 		policyResolved = &pgtype.Bool{Bool: selected != nil, Valid: true}
 		eventData["holdingsPolicyUnresolved"] = false
 	}
@@ -647,7 +651,7 @@ func supersededAvailabilityResult() (events.EventStatus, *events.EventResult) {
 // updateAvailabilitySupplier follows the transaction-then-supplier lock order of
 // rota selection. Lookup I/O must stay outside this short transaction. A false
 // result means the original selection disappeared or its lookup identity changed.
-func (s *SupplierLocator) updateAvailabilitySupplier(ctx common.ExtendedContext, expected ill_db.LocatedSupplier, token string, item *pgtype.Text, resolved *pgtype.Bool, skip bool) (bool, error) {
+func (s *SupplierLocator) updateAvailabilitySupplier(ctx common.ExtendedContext, expected ill_db.LocatedSupplier, token string, item *catalog.Holding, resolved *pgtype.Bool, skip bool) (bool, error) {
 	current := false
 	err := s.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
 		supplier, matches, err := lockAvailabilitySupplier(ctx, repo, expected, token)
@@ -656,9 +660,13 @@ func (s *SupplierLocator) updateAvailabilitySupplier(ctx common.ExtendedContext,
 		}
 		current = true
 		changed := false
-		if item != nil && supplier.ItemID != *item {
-			supplier.ItemID = *item
-			changed = true
+		if item != nil {
+			itemID := pgtype.Text{String: item.ItemId, Valid: item.ItemId != ""}
+			callNumber := pgtype.Text{String: item.CallNumber, Valid: item.ItemId != "" && item.CallNumber != ""}
+			if supplier.ItemID != itemID || supplier.CallNumber != callNumber {
+				supplier.ItemID, supplier.CallNumber = itemID, callNumber
+				changed = true
+			}
 		}
 		if resolved != nil && supplier.HoldingsPolicyResolved != *resolved {
 			supplier.HoldingsPolicyResolved = *resolved

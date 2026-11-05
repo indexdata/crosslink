@@ -115,11 +115,11 @@ func testAvailabilityConcurrentUpdate(t *testing.T, phase, change string, lookup
 	require.NoError(t, err)
 	trans, err := illRepo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams{ID: uuid.NewString(), Timestamp: pgtype.Timestamp{Time: time.Now(), Valid: true}})
 	require.NoError(t, err)
-	supplier, err := illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams{ID: uuid.NewString(), IllTransactionID: trans.ID, SupplierID: peer.ID, SupplierSymbol: "ISIL:CONCURRENT", SupplierStatus: ill_db.SupplierStateSelectedPg, LocalID: getPgText("bib"), ItemID: getPgText("old-item")})
+	supplier, err := illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams{ID: uuid.NewString(), IllTransactionID: trans.ID, SupplierID: peer.ID, SupplierSymbol: "ISIL:CONCURRENT", SupplierStatus: ill_db.SupplierStateSelectedPg, LocalID: getPgText("bib"), ItemID: getPgText("old-item"), CallNumber: getPgText("old call")})
 	require.NoError(t, err)
 	barrier := newAvailabilityBarrier()
 	defer barrier.resume()
-	lookup := &pausedAvailabilityLookup{ctx: baseCtx, MockLookupAdapter: catalog.MockLookupAdapter{Holdings: []catalog.Holding{{ItemId: "new-item"}}}}
+	lookup := &pausedAvailabilityLookup{ctx: baseCtx, MockLookupAdapter: catalog.MockLookupAdapter{Holdings: []catalog.Holding{{ItemId: "new-item", CallNumber: "new call"}}}}
 	if lookupFails {
 		lookup.Err = errors.New("lookup failed")
 	}
@@ -191,6 +191,7 @@ func testAvailabilityConcurrentUpdate(t *testing.T, phase, change string, lookup
 		case "protocol response":
 			require.Equal(t, ill_db.SupplierStateSelectedPg, current.SupplierStatus)
 			require.Equal(t, "new-item", current.ItemID.String)
+			require.Equal(t, "new call", current.CallNumber.String)
 			require.Equal(t, "WillSupply", current.LastStatus.String)
 			require.Equal(t, "ExpectToSupply", current.PrevStatus.String)
 			require.Equal(t, "RequestResponse", current.LastReason.String)
@@ -200,8 +201,10 @@ func testAvailabilityConcurrentUpdate(t *testing.T, phase, change string, lookup
 		if change != "protocol response" {
 			if phase == "before clearing" {
 				require.Equal(t, "old-item", current.ItemID.String)
+				require.Equal(t, "old call", current.CallNumber.String)
 			} else {
 				require.False(t, current.ItemID.Valid)
+				require.False(t, current.CallNumber.Valid)
 			}
 		}
 	}
