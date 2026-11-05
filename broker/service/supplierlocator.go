@@ -309,6 +309,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 							CustomData:          peer.CustomData,
 							LocalIdentifier:     holding.LocalIdentifier,
 							HoldingItemID:       holding.ItemId,
+							CallNumber:          holding.CallNumber,
 							DeferHoldingsPolicy: availabilityConfigured,
 							LoadBalancingScore:  loadBalancingScore,
 							Symbol:              sym,
@@ -423,6 +424,7 @@ func (s *SupplierLocator) addLocatedSupplier(ctx common.ExtendedContext, transId
 		},
 		LocalSupplier:          supplier.Local,
 		ItemID:                 pgtype.Text{String: supplier.ItemID, Valid: supplier.ItemID != ""},
+		CallNumber:             pgtype.Text{String: supplier.CallNumber, Valid: supplier.ItemID != "" && supplier.CallNumber != ""},
 		HoldingsPolicyResolved: pgtype.Bool{Bool: supplier.CustomData.HoldingsPolicy == nil || !supplier.DeferHoldingsPolicy, Valid: true},
 	})
 	return &sup, err
@@ -480,13 +482,14 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	if !current {
 		return supersededAvailabilityResult()
 	}
-	var selectedItem *pgtype.Text
+	var selectedItem *catalog.Holding
 	var policyResolved *pgtype.Bool
 	var skip bool
+	var skipPolicyOnLookupFailure bool
 	// Revalidate every outcome, including lookup errors and unconfigured lookups,
-	// before the workflow can act on it. Merge only after a successful lookup.
+	// before the workflow can act on it, including a policy bypass after lookup failure.
 	defer func() {
-		if status != events.EventStatusSuccess {
+		if status != events.EventStatusSuccess && !skipPolicyOnLookupFailure {
 			selectedItem, policyResolved, skip = nil, nil, false
 		}
 		current, err := s.updateAvailabilitySupplier(ctx, sup, token, selectedItem, policyResolved, skip)
@@ -495,7 +498,10 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 		} else if !current {
 			status, outcome = supersededAvailabilityResult()
 		} else {
-			resultApplied = status == events.EventStatusSuccess
+			resultApplied = status == events.EventStatusSuccess || skipPolicyOnLookupFailure
+			if skipPolicyOnLookupFailure {
+				policyDetails.Status = "skipped-lookup-failure"
+			}
 			if outcome == nil {
 				outcome = &events.EventResult{}
 			}
@@ -526,7 +532,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 		// Clear on a locked, freshly read row, even if the initial snapshot had
 		// no item: another completed check may have selected one in the meantime.
 		// Revoke readiness too if configuration gained an endpoint since the claim.
-		current, err := s.updateAvailabilitySupplier(ctx, sup, token, &pgtype.Text{}, &pgtype.Bool{Valid: true}, false)
+		current, err := s.updateAvailabilitySupplier(ctx, sup, token, &catalog.Holding{}, &pgtype.Bool{Valid: true}, false)
 		if err != nil {
 			return events.LogErrorAndReturnResult(ctx, "could not clear selected item", err)
 		}
@@ -534,6 +540,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 			return supersededAvailabilityResult()
 		}
 		sup.ItemID = pgtype.Text{}
+		sup.CallNumber = pgtype.Text{}
 	}
 	if configErr != nil {
 		lookupDetails.Outcome = "invalid-configuration"
@@ -565,19 +572,28 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	}
 
 	if deferred {
-		// The workflow must not bypass unresolved policy through its
-		// availability-error fallback.
+		// Keep policy unresolved until a lookup result or failure is committed.
 		eventData["holdingsPolicyUnresolved"] = true
+	}
+	lookupFailure := func(message string, err error) (events.EventStatus, *events.EventResult) {
+		if deferred {
+			// A failed lookup cannot evaluate policy. Allow fulfillment without an
+			// item, but only after the attempt-guarded readiness update commits.
+			skipPolicyOnLookupFailure = true
+			policyResolved = &pgtype.Bool{Bool: true, Valid: true}
+			eventData["holdingsPolicyUnresolved"] = false
+		}
+		return events.LogErrorAndReturnExistingResult(ctx, message, err, result)
 	}
 	aa, err := s.lookupAdapterFactory.GetAdapterSupplier(ctx, peer)
 	if err != nil {
 		lookupDetails.Outcome = "adapter-failed"
-		return events.LogErrorAndReturnExistingResult(ctx, "could not create availability adapter", err, result)
+		return lookupFailure("could not create availability adapter", err)
 	}
 	if aa == nil {
 		if deferred {
 			lookupDetails.Outcome = "adapter-missing"
-			return events.LogErrorAndReturnExistingResult(ctx, "missing configured availability adapter", fmt.Errorf("holdings policy remains unresolved"), result)
+			return lookupFailure("missing configured availability adapter", fmt.Errorf("configured availability adapter is unavailable"))
 		}
 		ctx.Logger().Debug("skipping availability check for supplier without availability config", "supplierSymbol", sup.SupplierSymbol)
 		lookupDetails.Outcome = "not-configured"
@@ -595,15 +611,15 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	lookupResult, err := aa.Lookup(lookupParams)
 	lookupDetails.recordLookup(lookupStarted, lookupResult, err)
 	if err != nil {
-		return events.LogErrorAndReturnExistingResult(ctx, "failed to perform availability lookup", err, result)
+		return lookupFailure("failed to perform availability lookup", err)
 	}
 	if lookupResult == nil {
-		return events.LogErrorAndReturnExistingResult(ctx, "failed to perform availability lookup", fmt.Errorf("empty lookup result"), result)
+		return lookupFailure("failed to perform availability lookup", fmt.Errorf("empty lookup result"))
 	}
 	holdingsResults, err := lookupResult.GetHoldings()
 	lookupDetails.recordHoldings(lookupStarted, holdingsResults, err)
 	if err != nil {
-		return events.LogErrorAndReturnExistingResult(ctx, "failed to get holdings for availability lookup", err, result)
+		return lookupFailure("failed to get holdings for availability lookup", err)
 	}
 	if deferred {
 		selected := policyDetails.evaluate(peer.CustomData, holdingsResults)
@@ -611,8 +627,9 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 			holdingsResults = nil
 		} else {
 			sup.ItemID = pgtype.Text{String: selected.ItemID, Valid: selected.ItemID != ""}
+			sup.CallNumber = pgtype.Text{String: selected.CallNumber, Valid: selected.ItemID != "" && selected.CallNumber != ""}
 		}
-		selectedItem = &sup.ItemID
+		selectedItem = &catalog.Holding{ItemId: sup.ItemID.String, CallNumber: sup.CallNumber.String}
 		policyResolved = &pgtype.Bool{Bool: selected != nil, Valid: true}
 		eventData["holdingsPolicyUnresolved"] = false
 	}
@@ -634,7 +651,7 @@ func supersededAvailabilityResult() (events.EventStatus, *events.EventResult) {
 // updateAvailabilitySupplier follows the transaction-then-supplier lock order of
 // rota selection. Lookup I/O must stay outside this short transaction. A false
 // result means the original selection disappeared or its lookup identity changed.
-func (s *SupplierLocator) updateAvailabilitySupplier(ctx common.ExtendedContext, expected ill_db.LocatedSupplier, token string, item *pgtype.Text, resolved *pgtype.Bool, skip bool) (bool, error) {
+func (s *SupplierLocator) updateAvailabilitySupplier(ctx common.ExtendedContext, expected ill_db.LocatedSupplier, token string, item *catalog.Holding, resolved *pgtype.Bool, skip bool) (bool, error) {
 	current := false
 	err := s.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
 		supplier, matches, err := lockAvailabilitySupplier(ctx, repo, expected, token)
@@ -643,9 +660,13 @@ func (s *SupplierLocator) updateAvailabilitySupplier(ctx common.ExtendedContext,
 		}
 		current = true
 		changed := false
-		if item != nil && supplier.ItemID != *item {
-			supplier.ItemID = *item
-			changed = true
+		if item != nil {
+			itemID := pgtype.Text{String: item.ItemId, Valid: item.ItemId != ""}
+			callNumber := pgtype.Text{String: item.CallNumber, Valid: item.ItemId != "" && item.CallNumber != ""}
+			if supplier.ItemID != itemID || supplier.CallNumber != callNumber {
+				supplier.ItemID, supplier.CallNumber = itemID, callNumber
+				changed = true
+			}
 		}
 		if resolved != nil && supplier.HoldingsPolicyResolved != *resolved {
 			supplier.HoldingsPolicyResolved = *resolved

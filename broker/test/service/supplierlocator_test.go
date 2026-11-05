@@ -1146,3 +1146,30 @@ func TestCheckAvailability_HoldingsErrorFailsOpen(t *testing.T) {
 	assert.Equal(t, string(service.AvailabilityUnknown), found.ResultData.CustomData[service.AvailabilityKey])
 	waitForTransactionEvent(t, illTrId, events.EventNameMessageSupplier, events.EventStatusSuccess)
 }
+
+func TestCheckAvailability_FailureSkipsHoldingsPolicy(t *testing.T) {
+	for _, failure := range []string{"lookup-error", "holdings-error"} {
+		t.Run(failure, func(t *testing.T) {
+			ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+			entry := dirapi.Entry{
+				CatalogConfig: &dirapi.CatalogConfig{Zoom: &dirapi.ZoomConfig{
+					Address: "a", Options: &map[string]string{failure: "true"},
+				}},
+				HoldingsPolicy: &dirapi.HoldingsPolicy{},
+			}
+			symbol := "ISIL:POLICY-" + failure
+			peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, symbol, adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), dirapi.CrossLink, entry, symbol)
+			illTrID := createIllTransaction(t, illRepo, failure)
+			apptest.CreateLocatedSupplier(t, illRepo, illTrID, peer.ID, symbol, "")
+			eventID := apptest.GetEventId(t, eventRepo, illTrID, events.EventTypeTask, events.EventStatusNew, events.EventNameCheckAvailability)
+			require.NoError(t, eventRepo.Notify(ctx, eventID, events.SignalTaskCreated, events.SignalConsumers))
+
+			found := waitForTransactionEvent(t, illTrID, events.EventNameCheckAvailability, events.EventStatusError)
+			require.NotNil(t, found.ResultData.EventError)
+			require.Equal(t, string(service.AvailabilityUnknown), found.ResultData.CustomData[service.AvailabilityKey])
+			require.Equal(t, false, found.ResultData.CustomData["holdingsPolicyUnresolved"])
+			require.Contains(t, found.ResultData.Note, "Holdings policy skipped")
+			waitForTransactionEvent(t, illTrID, events.EventNameMessageSupplier, events.EventStatusSuccess)
+		})
+	}
+}

@@ -209,8 +209,8 @@ WHERE ill_transaction_id = $1
 INSERT INTO located_supplier (id, ill_transaction_id, supplier_id, supplier_symbol, ordinal, supplier_status,
                               prev_action, prev_status,
                               last_action, last_status, local_id, prev_reason, last_reason, supplier_request_id, local_supplier,
-                              reason_unfilled, note, item_id, holdings_policy_resolved)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+                              reason_unfilled, note, item_id, holdings_policy_resolved, call_number)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 ON CONFLICT (id) DO UPDATE
     SET supplier_id         = EXCLUDED.supplier_id,
         supplier_symbol     = EXCLUDED.supplier_symbol,
@@ -228,7 +228,8 @@ ON CONFLICT (id) DO UPDATE
         reason_unfilled     = EXCLUDED.reason_unfilled,
         note                = EXCLUDED.note,
         item_id             = EXCLUDED.item_id,
-        holdings_policy_resolved = EXCLUDED.holdings_policy_resolved
+        holdings_policy_resolved = EXCLUDED.holdings_policy_resolved,
+        call_number = EXCLUDED.call_number
     WHERE located_supplier.ill_transaction_id = EXCLUDED.ill_transaction_id
 RETURNING sqlc.embed(located_supplier);
 

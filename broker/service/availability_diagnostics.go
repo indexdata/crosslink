@@ -151,7 +151,7 @@ func (d *availabilityPolicyDetails) evaluate(entry dirapi.Entry, holdings []cata
 	selectedIndex := -1
 	for i, holding := range holdings {
 		candidate := adapter.Supplier{CustomData: entry, HoldingItemID: holding.ItemId,
-			Location: holding.Location, ShelvingLocation: holding.ShelvingLocation,
+			Location: holding.Location, ShelvingLocation: holding.ShelvingLocation, CallNumber: holding.CallNumber,
 			ItemLoanPolicy: holding.ItemLoanPolicy}
 		eligible, reason := adapter.EvaluateHoldingsPolicyWithReason(&candidate)
 		if eligible {
@@ -261,6 +261,8 @@ func (d *availabilityPolicyDetails) summary() string {
 		return "No holdings policy configured."
 	case "applied-at-discovery":
 		return "Holdings policy was applied during discovery."
+	case "skipped-lookup-failure":
+		return "Holdings policy skipped because the availability lookup failed."
 	case "pending":
 		return "Holdings policy remains unresolved."
 	case "requires-discovery":

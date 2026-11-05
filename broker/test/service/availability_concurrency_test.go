@@ -115,11 +115,11 @@ func testAvailabilityConcurrentUpdate(t *testing.T, phase, change string, lookup
 	require.NoError(t, err)
 	trans, err := illRepo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams{ID: uuid.NewString(), Timestamp: pgtype.Timestamp{Time: time.Now(), Valid: true}})
 	require.NoError(t, err)
-	supplier, err := illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams{ID: uuid.NewString(), IllTransactionID: trans.ID, SupplierID: peer.ID, SupplierSymbol: "ISIL:CONCURRENT", SupplierStatus: ill_db.SupplierStateSelectedPg, LocalID: getPgText("bib"), ItemID: getPgText("old-item")})
+	supplier, err := illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams{ID: uuid.NewString(), IllTransactionID: trans.ID, SupplierID: peer.ID, SupplierSymbol: "ISIL:CONCURRENT", SupplierStatus: ill_db.SupplierStateSelectedPg, LocalID: getPgText("bib"), ItemID: getPgText("old-item"), CallNumber: getPgText("old call")})
 	require.NoError(t, err)
 	barrier := newAvailabilityBarrier()
 	defer barrier.resume()
-	lookup := &pausedAvailabilityLookup{ctx: baseCtx, MockLookupAdapter: catalog.MockLookupAdapter{Holdings: []catalog.Holding{{ItemId: "new-item"}}}}
+	lookup := &pausedAvailabilityLookup{ctx: baseCtx, MockLookupAdapter: catalog.MockLookupAdapter{Holdings: []catalog.Holding{{ItemId: "new-item", CallNumber: "new call"}}}}
 	if lookupFails {
 		lookup.Err = errors.New("lookup failed")
 	}
@@ -191,6 +191,7 @@ func testAvailabilityConcurrentUpdate(t *testing.T, phase, change string, lookup
 		case "protocol response":
 			require.Equal(t, ill_db.SupplierStateSelectedPg, current.SupplierStatus)
 			require.Equal(t, "new-item", current.ItemID.String)
+			require.Equal(t, "new call", current.CallNumber.String)
 			require.Equal(t, "WillSupply", current.LastStatus.String)
 			require.Equal(t, "ExpectToSupply", current.PrevStatus.String)
 			require.Equal(t, "RequestResponse", current.LastReason.String)
@@ -200,8 +201,10 @@ func testAvailabilityConcurrentUpdate(t *testing.T, phase, change string, lookup
 		if change != "protocol response" {
 			if phase == "before clearing" {
 				require.Equal(t, "old-item", current.ItemID.String)
+				require.Equal(t, "old call", current.CallNumber.String)
 			} else {
 				require.False(t, current.ItemID.Valid)
+				require.False(t, current.CallNumber.Valid)
 			}
 		}
 	}
@@ -216,7 +219,7 @@ func testAvailabilityConcurrentUpdate(t *testing.T, phase, change string, lookup
 }
 
 // Readiness must survive repository round trips independently of ItemID. A
-// failed reevaluation must also revoke a previously successful local selection.
+// failed reevaluation skips policy and lets the workflow continue.
 func TestLocalPolicyReadinessRetry(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	peer, err := illRepo.SavePeer(ctx, ill_db.SavePeerParams{ID: uuid.NewString(), Name: "local policy retry", Url: "https://supplier.invalid", RefreshPolicy: ill_db.RefreshPolicyNever, RefreshTime: pgtype.Timestamp{Time: time.Now(), Valid: true}, CustomData: dirapi.Entry{
@@ -244,13 +247,13 @@ func TestLocalPolicyReadinessRetry(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, rows, 1)
 		selected := rows[0]
-		require.Equal(t, pgtype.Bool{Bool: !fails, Valid: true}, selected.HoldingsPolicyResolved)
+		require.Equal(t, pgtype.Bool{Bool: true, Valid: true}, selected.HoldingsPolicyResolved)
 		require.False(t, selected.ItemID.Valid)
 		require.Equal(t, "bib", selected.LocalID.String)
 		if fails {
 			require.Equal(t, events.EventStatusError, bus.completed.EventStatus)
-			require.Empty(t, bus.tasks, "failed policy must not announce local supply")
-			require.Error(t, selected.ValidateHoldingsPolicy(peer.CustomData))
+			require.Equal(t, []events.EventName{events.EventNameMessageRequester}, bus.tasks)
+			require.NoError(t, selected.ValidateHoldingsPolicy(peer.CustomData))
 		} else {
 			require.Equal(t, events.EventStatusSuccess, bus.completed.EventStatus)
 			require.NotEmpty(t, bus.tasks, "successful retry must resume workflow")

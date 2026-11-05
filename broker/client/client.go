@@ -793,11 +793,13 @@ func createRequestMessage(trCtx transactionContext) (*iso18626.ISO18626Message, 
 	message.Request.SupplierInfo = append([]iso18626.SupplierInfo(nil), message.Request.SupplierInfo...)
 	for i := range message.Request.SupplierInfo {
 		message.Request.SupplierInfo[i].BibliographicRecordId = nil
+		message.Request.SupplierInfo[i].CallNumber = ""
 	}
 	if trCtx.selectedSupplier.ItemID.Valid && trCtx.selectedSupplier.ItemID.String != "" {
 		if len(message.Request.SupplierInfo) == 0 {
 			message.Request.SupplierInfo = []iso18626.SupplierInfo{{}}
 		}
+		message.Request.SupplierInfo[0].CallNumber = trCtx.selectedSupplier.CallNumber.String
 		message.Request.SupplierInfo[0].BibliographicRecordId = &iso18626.BibliographicRecordId{
 			BibliographicRecordIdentifierCode: iso18626.TypeSchemeValuePair{Text: "Local"},
 			BibliographicRecordIdentifier:     trCtx.selectedSupplier.ItemID.String,

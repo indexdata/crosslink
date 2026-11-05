@@ -563,15 +563,18 @@ An eligible holding selected by a configured holdings policy supplies the locate
 supplier's nullable `ItemID`. The central bibliographic `LocalID` remains unchanged.
 Reevaluation through a configured availability endpoint replaces or clears the
 selected item, including when lookup fails.
-Suppliers without eligible holdings are skipped. A failed lookup with deferred
-policy leaves that policy unresolved and does not send the request through the
-availability-error fallback or announce `ExpectToSupply` to the requester.
+Suppliers without eligible holdings are skipped. If availability lookup or holdings
+parsing fails, the error is recorded and deferred holdings policy is skipped. The
+workflow continues with unknown availability, sending the request to the supplier
+(or continuing local supply) without a selected item. Adapter creation failures
+use the same fallback; invalid configuration and database errors still stop processing.
 `holdingsPolicyResolved` persists readiness separately from `ItemID`: an eligible
 holding without an item ID still resolves the policy. Deferred-policy reevaluation
-first revokes readiness; a successful retry restores it. Unresolved selections cannot send a
-new supply request or run `fill-locally`, including requests already in
+first revokes readiness; a successful check or a committed lookup-failure bypass
+restores it. Unresolved selections cannot send a new supply request or run
+`fill-locally`, including requests already in
 `LOCAL_SUPPLY`. Legacy rows without readiness are accepted only when the supplier
-has no holdings policy; otherwise they require a successful policy check (or new
+has no holdings policy; otherwise they require an availability check (or new
 supplier discovery for a central policy). Availability updates lock and re-read the selected
 supplier in short transactions, preserving concurrent protocol updates. If the
 selection or lookup identity changes during a check, its result is recorded as
@@ -605,8 +608,8 @@ lookup/parsing failures. SRU and Z39.50 holdings-parser failures report
 `holdings-failed`, including when parsing occurs inside `Lookup`.
 Connection, search and retrieval errors retain `lookup-failed`.
 Policy diagnostics report whether policy was absent,
-previously applied at discovery, still pending, or evaluated here; they include
-eligibility/exclusion counts, effective location and shelving preferences, rejection
+previously applied at discovery, still pending, skipped after lookup failure, or
+evaluated here; they include eligibility/exclusion counts, effective location and shelving preferences, rejection
 reasons, the selected copy and its selection reason. Tied preferences retain the
 first returned eligible holding, matching selection behavior.
 
@@ -618,9 +621,10 @@ The winner is not repeated in a separate object. Diagnostic text fields are boun
 to 2048 bytes plus a truncation marker. Policy `status` becomes `applied` only after
 a current result commits successfully; superseded attempts and commit failures
 retain `evaluated` status. `availabilityLookup.resultApplied` records whether the
-lookup decision committed. The normal event uses its existing availability token;
-a nested attempt token is included only when that token is absent from the result.
-Existing availability outcomes, coordination fields and workflow decisions are unchanged.
+lookup decision or lookup-failure bypass committed. A committed bypass reports
+policy status `skipped-lookup-failure` and retains the lookup error. The normal
+event uses its existing availability token; a nested attempt token is included
+only when that token is absent from the result.
 
 Both event types include a short operator summary in `resultData.note`, explaining
 the lookup outcome and policy decision. For example: "Found 2 available items.
@@ -655,7 +659,18 @@ CrossLink delivery uses the same fields. Transparent local fulfillment
 the LMS adapter. It requires a selected local supplier belonging to the borrowing
 request and preserves the original request's bibliographic identifier.
 Catalog parsing or availability lookup without a holdings policy does not select
-an item ID.
+an item ID. The selected holding's call number, when available, is persisted
+with its item ID and sent in `supplierInfo.callNumber`. Both fields are cleared
+when a new availability lookup invalidates the previous selection.
+
+When supplier Request Item is disabled (including manual LMS workflows), a
+Loan automatically attaches the selected copy as a volume before proceeding to
+`WILL_SUPPLY`. The volume uses the selected item ID as its barcode, the request
+title, and the supplied call number; it has no LMS reservation. Existing volumes
+are preserved on retries so staff can add or replace copies. Without a selected
+copy, the workflow continues without an automatically attached volume. Location
+fields are not carried by this mapping. CopyOrLoan retains its deferred item
+attachment at shipping; Copy does not attach a loan volume.
 
 For both NCIP versions, `requestItemRequestScopeType` controls identifier selection:
 

@@ -124,9 +124,9 @@ func TestAvailabilityAttemptOverlap(t *testing.T) {
 				require.NoError(t, err)
 				require.Len(t, rows, 1)
 				current := rows[0]
-				ready := tc.newResult != "" && tc.newResult != "error"
+				ready := tc.newResult != ""
 				require.Equal(t, pgtype.Bool{Valid: true, Bool: ready}, current.HoldingsPolicyResolved)
-				if ready {
+				if ready && tc.newResult != "error" {
 					require.Equal(t, tc.newResult, current.ItemID.String)
 				} else {
 					require.False(t, current.ItemID.Valid)
@@ -136,7 +136,7 @@ func TestAvailabilityAttemptOverlap(t *testing.T) {
 				workflow.OnCheckAvailabilityComplete(ctx, buses[1].completed)
 				if tc.newResult == "error" {
 					require.Equal(t, events.EventStatusError, buses[1].completed.EventStatus)
-					require.Empty(t, buses[1].tasks)
+					require.Equal(t, []events.EventName{events.EventNameMessageRequester, events.EventNameMessageSupplier}, buses[1].tasks)
 				} else {
 					require.Equal(t, events.EventStatusSuccess, buses[1].completed.EventStatus)
 					require.NotEmpty(t, buses[1].tasks)
@@ -190,7 +190,7 @@ func TestAvailabilityAttemptGuardsDelayedWork(t *testing.T) {
 	current, err := illRepo.GetSelectedSupplierForIllTransaction(ctx, supplier.IllTransactionID)
 	require.NoError(t, err)
 	require.Equal(t, supplier.ID, current.ID)
-	require.False(t, current.HoldingsPolicyResolved.Bool)
+	require.True(t, current.HoldingsPolicyResolved.Bool)
 }
 
 func TestAvailabilityAttemptCannotClearNewerSelection(t *testing.T) {

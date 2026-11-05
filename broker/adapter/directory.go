@@ -70,6 +70,7 @@ type SupplierOrdering interface {
 type Supplier struct {
 	// HoldingItemID is raw catalog data; ItemID is populated only by policy selection.
 	HoldingItemID string
+	CallNumber    string
 	ItemID        string
 	// DeferHoldingsPolicy postpones selection until supplier availability lookup.
 	DeferHoldingsPolicy bool
