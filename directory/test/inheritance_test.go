@@ -40,7 +40,7 @@ func setupInheritanceTree(t *testing.T) inheritanceTree {
 	// Fixture loading deletes entries without cascading, so clear their
 	// configuration explicitly.
 	ids := []uuid.UUID{tree.institution, tree.branch, uuid.MustParse(fixtureConsortium)}
-	for _, table := range []string{"ill_configs", "lms_configs", "symbols"} {
+	for _, table := range []string{"ill_configs", "lms_configs", "catalog_configs", "symbols"} {
 		column := "entry"
 		if table == "symbols" {
 			column = "owner"
@@ -49,7 +49,10 @@ func setupInheritanceTree(t *testing.T) inheritanceTree {
 	}
 	// The fixture consortium outlives this test; keep its settings from
 	// leaking into other tests' merged reads.
-	t.Cleanup(func() { sqlExec(t, `DELETE FROM ill_configs WHERE entry = $1`, fixtureConsortium) })
+	t.Cleanup(func() {
+		sqlExec(t, `DELETE FROM ill_configs WHERE entry = $1`, fixtureConsortium)
+		sqlExec(t, `DELETE FROM catalog_configs WHERE entry = $1`, fixtureConsortium)
+	})
 	sqlExec(t, `INSERT INTO entries (id, name, type, parent, tenant) VALUES ($1, 'Inherit institution', 'Institution', $3, 'INHERIT'), ($2, 'Inherit branch', 'Branch', $1, 'INHERIT')`,
 		tree.institution, tree.branch, fixtureConsortium)
 	sqlExec(t, `INSERT INTO symbols (owner, authority, symbol) VALUES ($1, 'ISIL', 'INHERIT-INST'), ($2, 'ISIL', 'INHERIT-BRANCH')`, tree.institution, tree.branch)
@@ -141,6 +144,67 @@ func TestInheritanceOverridesOffValuesAndEmptyArrays(t *testing.T) {
 	require.Equal(t, float64(10), illConfig["maxRequestsPerPatron"], "null restores inheritance")
 	require.Equal(t, float64(30), illConfig["defaultLoanPeriod"])
 	require.Len(t, illConfig["lendersOfLastResort"], 1)
+}
+
+// TestInheritanceCatalogNullClears checks that null on a catalog sub-object
+// clears only that sub-object, including legacy holdings columns, and that the
+// branch's merged view follows the institution.
+func TestInheritanceCatalogNullClears(t *testing.T) {
+	tree := setupInheritanceTree(t)
+	// The consortium's catalog settings never flow to institutions.
+	sqlExec(t, `INSERT INTO catalog_configs (entry, sru_address, query_title, metadata_marc21_title)
+		VALUES ($1, 'https://consortium.example/sru', 'consortium={term}', '246')`, fixtureConsortium)
+	// The institution's holdings are stored in both representations. Reads
+	// prefer the JSON, so leftover JSON or legacy columns show after a clear.
+	sqlExec(t, `INSERT INTO catalog_configs (entry, profile, metadata_update_mode, sru_address, sru_record_schema,
+		query_type, query_title, holdings_config, holdings_marc_main_field, holdings_marc_call_number_subfield, metadata_marc21_author)
+		VALUES ($1, 'Koha', 'merge', 'https://institution.example/sru', 'marcxml', 'cql', 'title={term}',
+		'{"marc":{"mainField":"999"}}', '852', 'h', '100')`, tree.institution)
+	path := entryPath(tree.institution)
+	catalog := func(id uuid.UUID, query string) any {
+		return getEntryJSON(t, entryPath(id)+query, systemHeaders)["catalogConfig"]
+	}
+	patch := func(body string, status int) {
+		t.Helper()
+		response, data := jsonReq(t, http.MethodPatch, path, `{"catalogConfig":`+body+`}`, consortialHeaders)
+		require.Equal(t, status, response.StatusCode, data)
+	}
+	requireViews := func(want map[string]any, msg string) {
+		t.Helper()
+		require.Equal(t, want, catalog(tree.institution, "?resolve-inherit=false"), msg)
+		require.Equal(t, want, catalog(tree.institution, ""), msg+": institution merged view")
+		require.Equal(t, want, catalog(tree.branch, ""), msg+": branch merged view")
+	}
+	want := map[string]any{
+		"profile":            "Koha",
+		"metadataUpdateMode": "merge",
+		"sru":                map[string]any{"address": "https://institution.example/sru", "recordSchema": "marcxml"},
+		"queryConfig":        map[string]any{"type": "cql", "title": "title={term}"},
+		"holdingsFormat":     map[string]any{"marc": map[string]any{"mainField": "999"}},
+		"metadataFormat":     map[string]any{"marc21": map[string]any{"author": "100"}},
+	}
+	requireViews(want, "the branch inherits the institution's catalog settings")
+	require.Nil(t, catalog(tree.branch, "?resolve-inherit=false"))
+
+	// Switching endpoints needs null: SRU and ZOOM can't both be stored.
+	patch(`{"zoom":{"address":"z3950.institution.example:210/db"}}`, http.StatusBadRequest)
+	patch(`{"sru":null,"zoom":{"address":"z3950.institution.example:210/db"}}`, http.StatusNoContent)
+	delete(want, "sru")
+	want["zoom"] = map[string]any{"address": "z3950.institution.example:210/db"}
+	requireViews(want, "null clears sru and keeps the other settings")
+
+	patch(`{"queryConfig":null,"holdingsFormat":null,"metadataFormat":null,"metadataUpdateMode":null}`, http.StatusNoContent)
+	want = map[string]any{"profile": "Koha", "zoom": want["zoom"]}
+	requireViews(want, "null clears each sub-object, including both holdings representations; consortium values stay out")
+
+	// A new holdings parser doesn't merge with the cleared one.
+	patch(`{"holdingsFormat":{"opac":{}}}`, http.StatusNoContent)
+	want["holdingsFormat"] = map[string]any{"opac": map[string]any{}}
+	requireViews(want, "holdings set after a clear start empty")
+
+	patch(`{"zoom":null}`, http.StatusNoContent)
+	delete(want, "zoom")
+	requireViews(want, "null clears zoom")
 }
 
 func TestInheritanceEditability(t *testing.T) {
