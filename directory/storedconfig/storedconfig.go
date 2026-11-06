@@ -141,7 +141,7 @@ const Columns = `
 				)
 			)
 		from catalog_configs h WHERE h.entry = e.id) as catalog_config,
-		(SELECT hp.policy FROM holdings_policies hp WHERE hp.entry = e.id) as holdings_policy`
+		(SELECT jsonb_strip_nulls(hp.policy) FROM holdings_policies hp WHERE hp.entry = e.id) as holdings_policy`
 
 // Configs maps a configuration container's API property name, such as
 // lmsConfig, to the JSON object an entry stores locally.
