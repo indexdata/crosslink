@@ -1,18 +1,3 @@
--- A record survives the consumer claim until all handlers finish their handoff.
--- Claimed records are deliberately retained on interruption; do not replay them
--- automatically because a handler may already have performed external effects.
-CREATE TABLE event_consumer_work (
-    event_id VARCHAR NOT NULL REFERENCES event(id) ON DELETE CASCADE,
-    signal VARCHAR NOT NULL,
-    claimed BOOLEAN NOT NULL DEFAULT FALSE,
-    PRIMARY KEY (event_id, signal)
-);
-
--- Older publishers did not persist the signal target. Conservatively protect
--- their outstanding signals, including any whose observer-only target is unknown.
-INSERT INTO event_consumer_work (event_id, signal)
-SELECT id, last_signal FROM event WHERE last_signal <> '';
-
 CREATE INDEX idx_pr_borrowing_archive_cursor
     ON patron_request (requester_symbol, created_at, id)
     WHERE side = 'borrowing' AND ill_request IS NOT NULL;
@@ -148,7 +133,7 @@ BEGIN
          FOR UPDATE;
     END IF;
 
-    -- Skip active workflows and unfinished consumer handoffs before child locks.
+    -- Skip active workflows and pending signals before child locks.
     -- Recheck after locking events in case their activity changes meanwhile.
     IF EXISTS (
         SELECT 1 FROM event
@@ -158,7 +143,7 @@ BEGIN
                      WHERE side = 'lending' AND requester_symbol = p_owner
                        AND requester_req_id = v_pr.requester_req_id)))
            AND (event_status IN ('NEW', 'PROCESSING')
-                OR EXISTS (SELECT 1 FROM event_consumer_work w WHERE w.event_id = event.id))
+                OR last_signal <> '')
     ) THEN
         RETURN FALSE;
     END IF;
@@ -220,7 +205,7 @@ BEGIN
                      WHERE side = 'lending' AND requester_symbol = p_owner
                        AND requester_req_id = v_pr.requester_req_id)))
            AND (event_status IN ('NEW', 'PROCESSING')
-                OR EXISTS (SELECT 1 FROM event_consumer_work w WHERE w.event_id = event.id))
+                OR last_signal <> '')
     ) THEN
         RETURN FALSE;
     END IF;
@@ -284,12 +269,12 @@ BEGIN
         RETURN FALSE;
     END IF;
 
-    -- Skip active workflows and unfinished consumer handoffs before child locks.
+    -- Skip active workflows and pending signals before child locks.
     -- Recheck with events locked.
     IF EXISTS (
         SELECT 1 FROM event WHERE patron_request_id = p_id
           AND (event_status IN ('NEW', 'PROCESSING')
-                OR EXISTS (SELECT 1 FROM event_consumer_work w WHERE w.event_id = event.id))
+                OR last_signal <> '')
     ) THEN
         RETURN FALSE;
     END IF;
@@ -306,7 +291,7 @@ BEGIN
     IF EXISTS (
         SELECT 1 FROM event WHERE patron_request_id = p_id
           AND (event_status IN ('NEW', 'PROCESSING')
-                OR EXISTS (SELECT 1 FROM event_consumer_work w WHERE w.event_id = event.id))
+                OR last_signal <> '')
     ) THEN
         RETURN FALSE;
     END IF;
