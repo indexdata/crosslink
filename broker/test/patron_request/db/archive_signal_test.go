@@ -7,10 +7,50 @@ import (
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
+
+func TestArchiveBorrowingRequestIgnoresRotaAuditSignals(t *testing.T) {
+	for _, name := range []events.EventName{events.EventNameSupplierAdded, events.EventNameSupplierMoved} {
+		t.Run(string(name), func(t *testing.T) {
+			f := createBorrowingArchiveFixture(t)
+			repo := prRepo.(*pr_db.PgPrRepo)
+			illRepo := ill_db.CreateIllRepo(repo.Pool)
+			require.NoError(t, illRepo.WithTxFunc(appCtx, func(txRepo ill_db.IllRepo) error {
+				return txRepo.SaveRotaAudit(appCtx, f.transaction, string(name), "staff", nil)
+			}))
+			var auditID, signal string
+			require.NoError(t, repo.Pool.QueryRow(appCtx, `SELECT id,last_signal FROM event
+				WHERE ill_transaction_id=$1 AND event_name=$2`, f.transaction, name).Scan(&auditID, &signal))
+			require.Equal(t, string(events.SignalNoticeCreated), signal, "observer dispatch leaves the audit signal intact")
+
+			// A consumer notice must still block archival alongside the audit.
+			pending, err := eventRepo.GetEvent(appCtx, f.transactionEvent)
+			require.NoError(t, err)
+			pending.EventType = events.EventTypeNotice
+			pending.EventName = events.EventNameRequesterMsgReceived
+			pending.LastSignal = string(events.SignalNoticeCreated)
+			_, err = eventRepo.SaveEvent(appCtx, events.SaveEventParams(pending))
+			require.NoError(t, err)
+			stored, err := repo.ArchiveBorrowingRequest(appCtx, archiveFixtureRequest(f), f.owner, time.Now(), false)
+			require.NoError(t, err)
+			require.False(t, stored)
+
+			_, err = eventRepo.ClaimEventForSignal(appCtx, pending.ID, events.SignalNoticeCreated)
+			require.NoError(t, err)
+			stored, err = repo.ArchiveBorrowingRequest(appCtx, archiveFixtureRequest(f), f.owner, time.Now(), false)
+			require.NoError(t, err)
+			require.True(t, stored, "an observer-only rota audit must not block archival")
+			require.NoError(t, repo.Pool.QueryRow(appCtx, `SELECT audit->>'last_signal'
+				FROM archived_resource, jsonb_array_elements(bundle->'illTransactionEvents') AS audit
+				WHERE resource_id=$1 AND audit->>'id'=$2`, f.pr, auditID).Scan(&signal))
+			require.Equal(t, string(events.SignalNoticeCreated), signal, "the unchanged audit is included in the archive")
+		})
+	}
+}
 
 func TestArchiveRequestSkipsPendingSignal(t *testing.T) {
 	for _, tc := range []struct{ side, scope string }{
