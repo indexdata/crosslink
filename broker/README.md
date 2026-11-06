@@ -142,6 +142,8 @@ change this scan order. Counts and up to 100 per-request failures are recorded i
 the batch-action event history. Requests with changed state/timestamps or active
 events or pending signals are skipped for a later run. Pending signals are
 checked through `event.last_signal`, which consumers clear when claiming them.
+Borrowing checks exclude observer-only `supplier-added` and `supplier-moved`
+rota audit notices, whose signals remain set; these notices are still archived.
 Archiving does not track handlers through completion, so an old terminal request
 can be archived during the handoff from a claimed signal to follow-up work.
 The archive is in

@@ -135,6 +135,7 @@ BEGIN
 
     -- Skip active workflows and pending signals before child locks.
     -- Recheck after locking events in case their activity changes meanwhile.
+    -- Rota audit notices target only observers, which never clear their signal.
     IF EXISTS (
         SELECT 1 FROM event
          WHERE (patron_request_id = p_id OR ill_transaction_id = v_transaction_id
@@ -143,7 +144,9 @@ BEGIN
                      WHERE side = 'lending' AND requester_symbol = p_owner
                        AND requester_req_id = v_pr.requester_req_id)))
            AND (event_status IN ('NEW', 'PROCESSING')
-                OR last_signal <> '')
+                OR (last_signal <> '' AND NOT (
+                    event_type = 'NOTICE' AND last_signal = 'notice_created'
+                    AND event_name IN ('supplier-added', 'supplier-moved'))))
     ) THEN
         RETURN FALSE;
     END IF;
@@ -205,7 +208,9 @@ BEGIN
                      WHERE side = 'lending' AND requester_symbol = p_owner
                        AND requester_req_id = v_pr.requester_req_id)))
            AND (event_status IN ('NEW', 'PROCESSING')
-                OR last_signal <> '')
+                OR (last_signal <> '' AND NOT (
+                    event_type = 'NOTICE' AND last_signal = 'notice_created'
+                    AND event_name IN ('supplier-added', 'supplier-moved'))))
     ) THEN
         RETURN FALSE;
     END IF;
