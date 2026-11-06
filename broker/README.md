@@ -140,17 +140,11 @@ in creation-time/ID order, continuing past skipped and failed requests until the
 archive limit is reached or all matches have been examined. CQL `sortBy` does not
 change this scan order. Counts and up to 100 per-request failures are recorded in
 the batch-action event history. Requests with changed state/timestamps or active
-events, pending consumer signals, or running consumer handlers are skipped for a
-later run. Consumer work remains protected until all handlers finish creating
-follow-up work. Panicking or interrupted dispatches retain their records in
-`event_consumer_work` across restarts; investigate them before resolving their
-records, since replay could repeat external effects. Migration 075 conservatively
-protects existing nonempty signals because older records do not identify their
-target. Historical observer-only signals may therefore need investigation and
-resolution before their requests can be archived. New observer-only signals do
-not create consumer-work records. Enable archive actions after all event-bus
-publishers and consumers have been upgraded, since older replicas do not maintain
-these records. The archive is in
+events or pending signals are skipped for a later run. Pending signals are
+checked through `event.last_signal`, which consumers clear when claiming them.
+Archiving does not track handlers through completion, so an old terminal request
+can be archived during the handoff from a claimed signal to follow-up work.
+The archive is in
 `archived_resource`, keyed by resource type and ID, with owner, timestamp,
 schema version, anonymization metadata, and one JSONB bundle. The bundle holds
 the selected request, its events, items, notifications, and notes.

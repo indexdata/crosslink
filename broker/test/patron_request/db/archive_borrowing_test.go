@@ -68,7 +68,7 @@ func createBorrowingArchiveFixture(t *testing.T) borrowingArchiveFixture {
 	} {
 		_, err = pool.Exec(ctx, `INSERT INTO event
 			(id,timestamp,ill_transaction_id,patron_request_id,event_type,event_name,event_status,last_signal,event_data,result_data)
-			VALUES ($1,$2,$3,$4,'TASK','invoke-action','SUCCESS','TASK_COMPLETE',
+			VALUES ($1,$2,$3,$4,'TASK','invoke-action','SUCCESS','',
 			'{"action":"close","note":"Jane message","user":"Jane","incomingMessage":{"patronInfo":{"patronId":987654321}},"outgoingMessage":{"note":"Jane"},"customData":{"patronId":987654321,"Jane@example.org":true}}'::jsonb,
 			'{"actionResult":{"outcome":"success","toState":"CLOSED","childActionError":"Jane"},"customData":{"patronId":987654321,"Jane@example.org":true},"eventError":{"Message":"Jane"}}'::jsonb)`,
 			e.id, old, e.transaction, e.pr)
