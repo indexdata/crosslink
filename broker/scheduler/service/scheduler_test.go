@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // ---------------------------------------------------------------------------
@@ -38,18 +39,22 @@ func stuckUpdatedAt() pgtype.Timestamptz {
 
 type mockSchedRepo struct {
 	sched_db.PgSchedRepo
-	claimResults  []sched_db.ScheduledTask
-	claimErrors   []error
-	claimIndex    int
-	savedTasks    []sched_db.SaveScheduledTaskParams
-	saveError     error
-	nextRunAt     pgtype.Timestamptz
-	nextRunAtErr  error
-	stuckTasks    []sched_db.ScheduledTask
-	stuckTasksErr error
-	stuckAfter    time.Duration
-	lockedTasks   map[string]sched_db.ScheduledTask
-	lockErrors    map[string]error
+	claimResults           []sched_db.ScheduledTask
+	claimErrors            []error
+	claimIndex             int
+	savedTasks             []sched_db.SaveScheduledTaskParams
+	saveError              error
+	nextRunAt              pgtype.Timestamptz
+	nextRunAtErr           error
+	stuckTasks             []sched_db.ScheduledTask
+	stuckTasksErr          error
+	stuckAfter             time.Duration
+	lockedTasks            map[string]sched_db.ScheduledTask
+	lockErrors             map[string]error
+	activeBatchActions     map[string]bool
+	activeBatchActionError error
+	queuedBatchActions     []sched_db.ScheduledTask
+	queueBatchActionError  error
 }
 
 func (m *mockSchedRepo) WithTxFunc(ctx common.ExtendedContext, fn func(sched_db.SchedRepo) error) error {
@@ -72,6 +77,15 @@ func (m *mockSchedRepo) ClaimNextScheduledTask(_ common.ExtendedContext) (sched_
 func (m *mockSchedRepo) SaveScheduledTask(_ common.ExtendedContext, p sched_db.SaveScheduledTaskParams) (sched_db.ScheduledTask, error) {
 	m.savedTasks = append(m.savedTasks, p)
 	return sched_db.ScheduledTask(p), m.saveError
+}
+
+func (m *mockSchedRepo) HasActiveBatchActionEvents(_ common.ExtendedContext, taskID string) (bool, error) {
+	return m.activeBatchActions[taskID], m.activeBatchActionError
+}
+
+func (m *mockSchedRepo) QueueBatchActionRun(_ common.ExtendedContext, task sched_db.ScheduledTask) error {
+	m.queuedBatchActions = append(m.queuedBatchActions, task)
+	return m.queueBatchActionError
 }
 
 func (m *mockSchedRepo) GetNextRunAt(_ common.ExtendedContext) (pgtype.Timestamptz, error) {
@@ -379,6 +393,75 @@ func TestRunDueTasks_CreateTaskError_RollsBack(t *testing.T) {
 	// Transaction rolled back → no explicit reschedule, task stays pending via rollback.
 	assert.False(t, progress)
 	assert.Empty(t, repo.savedTasks)
+}
+
+func TestRunDueTasks_ActiveBatchActionDefersWithoutBlockingOtherTasks(t *testing.T) {
+	batch := sched_db.ScheduledTask{ID: "batch", EventName: events.EventNameInvokeBatchAction, Schedule: "FREQ=DAILY"}
+	repo := &mockSchedRepo{
+		claimResults:       []sched_db.ScheduledTask{batch, {ID: "other", EventName: events.EventNameSendNotification}},
+		activeBatchActions: map[string]bool{batch.ID: true},
+	}
+	bus := &mockEventBus{}
+	svc := &SchedulerService{schedRepo: repo, eventBus: bus}
+	before := time.Now()
+
+	require.True(t, svc.runDueTasks(testCtx))
+
+	require.Empty(t, repo.queuedBatchActions)
+	require.Equal(t, []events.EventName{events.EventNameSendNotification}, bus.createdTaskNames)
+	require.Len(t, repo.savedTasks, 2)
+	deferred := repo.savedTasks[0]
+	require.Equal(t, batch.ID, deferred.ID)
+	require.Equal(t, batch.Schedule, deferred.Schedule)
+	require.Equal(t, sched_db.ScheduledTaskStatusPending, deferred.Status)
+	require.True(t, deferred.RunAt.Valid)
+	require.False(t, deferred.RunAt.Time.Before(before.Add(SCHEDULER_RETRY_DELAY)))
+	require.False(t, deferred.RunAt.Time.After(time.Now().Add(SCHEDULER_RETRY_DELAY)))
+}
+
+func TestRunDueTasks_BatchActionQueuesInTransaction(t *testing.T) {
+	batch := sched_db.ScheduledTask{ID: "batch", EventName: events.EventNameInvokeBatchAction, Schedule: "FREQ=DAILY"}
+	repo := &mockSchedRepo{claimResults: []sched_db.ScheduledTask{batch}}
+	// A batch run must use the transaction-backed repository rather than the bus.
+	svc := &SchedulerService{schedRepo: repo}
+
+	require.True(t, svc.runDueTasks(testCtx))
+
+	require.Equal(t, []sched_db.ScheduledTask{batch}, repo.queuedBatchActions)
+	require.Len(t, repo.savedTasks, 1)
+	require.Equal(t, sched_db.ScheduledTaskStatusPending, repo.savedTasks[0].Status)
+	require.True(t, repo.savedTasks[0].RunAt.Time.After(time.Now()))
+}
+
+func TestRunDueTasks_BatchActionErrorsStopDispatch(t *testing.T) {
+	for _, failure := range []string{"active check", "queue", "defer save", "schedule save"} {
+		t.Run(failure, func(t *testing.T) {
+			batch := sched_db.ScheduledTask{ID: "batch", EventName: events.EventNameInvokeBatchAction, Schedule: "FREQ=DAILY"}
+			repo := &mockSchedRepo{claimResults: []sched_db.ScheduledTask{batch}}
+			switch failure {
+			case "active check":
+				repo.activeBatchActionError = errors.New("active check failed")
+			case "queue":
+				repo.queueBatchActionError = errors.New("queue failed")
+			case "defer save":
+				repo.activeBatchActions = map[string]bool{batch.ID: true}
+				repo.saveError = errors.New("save failed")
+			case "schedule save":
+				repo.saveError = errors.New("save failed")
+			}
+			bus := &mockEventBus{}
+			svc := &SchedulerService{schedRepo: repo, eventBus: bus}
+
+			require.False(t, svc.runDueTasks(testCtx))
+			require.Empty(t, bus.createdTaskNames)
+			if failure == "active check" || failure == "queue" {
+				require.Empty(t, repo.savedTasks)
+			}
+			if failure == "active check" || failure == "defer save" {
+				require.Empty(t, repo.queuedBatchActions)
+			}
+		})
+	}
 }
 
 func TestRunDueTasks_MultipleTasks_ProcessedInOrder(t *testing.T) {

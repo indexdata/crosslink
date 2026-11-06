@@ -158,7 +158,7 @@ func (s *SchedulerService) schedulerLoop(ctx common.ExtendedContext) {
 }
 
 // runDueTasks processes all currently claimable tasks.
-// Returns true if at least one task was successfully claimed and dispatched.
+// Returns true if at least one task was dispatched or deferred behind an active run.
 func (s *SchedulerService) runDueTasks(ctx common.ExtendedContext) bool {
 	madeProgress := false
 	for {
@@ -168,9 +168,25 @@ func (s *SchedulerService) runDueTasks(ctx common.ExtendedContext) bool {
 				return txErr
 			}
 
-			// Publish the event. If this fails the transaction rolls back,
-			// the claim is undone, and the task stays 'pending' for the next cycle.
-			_, txErr = s.eventBus.CreateTask(events.DEFAULT_ILL_TRANSACTION_ID, task.EventName, task.ActionData, events.EventDomainScheduler, nil, events.SignalConsumers)
+			if task.EventName == events.EventNameInvokeBatchAction {
+				// The claim holds the same task lock used by manual runs. Recheck
+				// activity after acquiring it, including outstanding child actions.
+				active, err := txRepo.HasActiveBatchActionEvents(ctx, task.ID)
+				if err != nil {
+					return fmt.Errorf("check active batch action runs: %w", err)
+				}
+				if active {
+					// Keep the due run pending without blocking other due tasks.
+					task.Status = sched_db.ScheduledTaskStatusPending
+					task.RunAt = pgtype.Timestamptz{Time: time.Now().UTC().Add(SCHEDULER_RETRY_DELAY), Valid: true}
+					_, txErr = txRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
+					return txErr
+				}
+				// Commit the run and next schedule atomically under the task lock.
+				txErr = txRepo.QueueBatchActionRun(ctx, task)
+			} else {
+				_, txErr = s.eventBus.CreateTask(events.DEFAULT_ILL_TRANSACTION_ID, task.EventName, task.ActionData, events.EventDomainScheduler, nil, events.SignalConsumers)
+			}
 			if txErr != nil {
 				return txErr
 			}

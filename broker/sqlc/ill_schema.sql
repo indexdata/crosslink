@@ -79,3 +79,8 @@ CREATE TABLE availability_attempt (
 );
 
 CREATE INDEX availability_attempt_supplier_idx ON availability_attempt(located_supplier_id);
+
+CREATE INDEX idx_ill_archive_owner_cursor ON ill_transaction (requester_symbol, id);
+
+CREATE INDEX idx_ill_archive_previous_request ON ill_transaction (requester_symbol, prev_requester_request_id)
+    WHERE prev_requester_request_id IS NOT NULL;

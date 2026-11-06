@@ -1,6 +1,8 @@
 package sched_db
 
 import (
+	"fmt"
+	"github.com/google/uuid"
 	"time"
 
 	"github.com/indexdata/crosslink/broker/common"
@@ -13,6 +15,7 @@ import (
 const SchedulerChannel = "crosslink_sched_channel"
 
 type SchedRepo interface {
+	QueueBatchActionRun(common.ExtendedContext, ScheduledTask) error
 	repo.Transactional[SchedRepo]
 	SaveScheduledTask(ctx common.ExtendedContext, params SaveScheduledTaskParams) (ScheduledTask, error)
 	ClaimNextScheduledTask(ctx common.ExtendedContext) (ScheduledTask, error)
@@ -157,4 +160,27 @@ func (r *PgSchedRepo) GetScheduledTasks(ctx common.ExtendedContext, params GetSc
 		}
 	}
 	return tasks, fullCount, err
+}
+
+// QueueBatchActionRun persists the run and consumer notification in the caller's
+// transaction. The caller holds the scheduled-task lock and checks active runs.
+func (r *PgSchedRepo) QueueBatchActionRun(ctx common.ExtendedContext, task ScheduledTask) error {
+	if r.Tx == nil {
+		return fmt.Errorf("queue batch action run requires a transaction")
+	}
+	eventRepo := &events.PgEventRepo{PgBaseRepo: repo.PgBaseRepo[events.EventRepo]{Pool: r.Pool, Tx: r.Tx}}
+	id := uuid.NewString()
+	_, err := eventRepo.SaveEvent(ctx, events.SaveEventParams{
+		ID: id, IllTransactionID: events.DEFAULT_ILL_TRANSACTION_ID, PatronRequestID: events.DEFAULT_PATRON_REQUEST_ID,
+		Timestamp: pgtype.Timestamp{Time: time.Now().UTC(), Valid: true}, EventType: events.EventTypeTask,
+		EventName: events.EventNameInvokeBatchAction, EventStatus: events.EventStatusNew,
+		EventData: task.ActionData, LastSignal: string(events.SignalTaskCreated),
+	})
+	if err != nil {
+		return fmt.Errorf("queue batch action run: %w", err)
+	}
+	if err = eventRepo.Notify(ctx, id, events.SignalTaskCreated, events.SignalConsumers); err != nil {
+		return fmt.Errorf("notify batch action run: %w", err)
+	}
+	return nil
 }

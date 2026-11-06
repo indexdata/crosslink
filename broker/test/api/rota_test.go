@@ -386,11 +386,10 @@ func TestManualRotaAuditNotification(t *testing.T) {
 func TestManualRotaArchived(t *testing.T) {
 	f := newRotaFixture(t, "new")
 
-	// Create this archived fixture independently of the shared archiver's
-	// session advisory lock, which other tests in this suite also exercise.
+	// Construct a historical bundle independently of archive eligibility.
 	require.NoError(t, illRepo.WithTxFunc(f.ctx, func(repo ill_db.IllRepo) error {
 		_, err := repo.(*ill_db.PgIllRepo).GetConnOrTx().Exec(f.ctx,
-			"INSERT INTO archived_ill_transactions (ill_transaction, events, located_suppliers) SELECT to_jsonb(t), '[]'::jsonb, '[]'::jsonb FROM ill_transaction t WHERE id=$1", f.id)
+			"INSERT INTO archived_resource (owner,resource_type,resource_id,schema_version,anonymized,bundle) SELECT COALESCE(requester_symbol,''),'ill-transaction',id,1,false,jsonb_build_object('illTransaction',to_jsonb(t),'illTransactionEvents','[]'::jsonb,'locatedSuppliers','[]'::jsonb) FROM ill_transaction t WHERE id=$1", f.id)
 		if err != nil {
 			return err
 		}

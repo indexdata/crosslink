@@ -46,20 +46,6 @@ components:
       schema:
         type: integer
         format: int32
-    ArchiveDelay:
-      name: archive_delay
-      in: query
-      description: How old ILL Transaction to archive, for example "48h"
-      required: true
-      schema:
-        type: string
-    ArchiveStatus:
-      name: archive_status
-      in: query
-      description: Comma separated list of statuses to archive, for example "LoanCompleted,CopyCompleted,Unfilled"
-      required: true
-      schema:
-        type: string
     Cql:
       name: cql
       in: query
@@ -535,14 +521,6 @@ components:
         message:
           type: string
           description: The error without its location
-    StatusMessage:
-      type: object
-      properties:
-        status:
-          type: string
-          description: Process status
-      required:
-        - status
     IllTransactions:
       type: object
       required:
@@ -1663,6 +1641,7 @@ components:
         - overdue
         - archive-borrowing-requests
         - archive-lending-requests
+        - archive-ill-transactions
 
     BatchAction:
       type: object
@@ -1737,10 +1716,10 @@ components:
         batchQuery:
           type: string
           minLength: 1
-          description: Batch action selection query in CQL format
+          description: Batch action selection query in CQL format. archive-ill-transactions uses ILL-transaction fields; other actions use patron-request fields. Archive actions require an owner symbol and restrict selection to that owner.
         actionParams:
           type: object
-          description: Parameters for the batch action. For request-aging, archive-borrowing-requests, and archive-lending-requests, interval is required and must be a positive Go duration string such as "720h". Both archive actions accept an optional anonymize boolean (default false). For email-pullslips, templateLabel is required and must be a non-empty string naming an email template for staff. Other parameters are passed to generated patron-request background actions.
+          description: Parameters for the batch action. For request-aging, archive-borrowing-requests, archive-lending-requests, and archive-ill-transactions, interval is required and must be a positive Go duration string such as "720h". All archive actions accept an optional anonymize boolean (default false). For email-pullslips, templateLabel is required and must be a non-empty string naming an email template for staff. Other parameters are passed to generated patron-request background actions.
           additionalProperties: true
 
     BatchActions:
@@ -2541,31 +2520,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LocatedSuppliers'
-        '400':
-          description: Bad Request. Invalid query parameters.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-  /archive_ill_transactions:
-    post:
-      summary: Trigger ILL Transaction archive process
-      parameters:
-        - $ref: '#/components/parameters/ArchiveDelay'
-        - $ref: '#/components/parameters/ArchiveStatus'
-      responses:
-        '200':
-          description: Process started successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StatusMessage'
         '400':
           description: Bad Request. Invalid query parameters.
           content:
@@ -3422,6 +3376,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '403':
+          description: Consortium permission required for archive-ill-transactions mutations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal Server Error
           content:
@@ -3502,6 +3462,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '403':
+          description: Consortium permission required for archive-ill-transactions mutations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Batch action not found
           content:
@@ -3538,6 +3504,12 @@ paths:
           description: Batch action deleted successfully (No Content)
         '400':
           description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Consortium permission required for archive-ill-transactions mutations
           content:
             application/json:
               schema:
@@ -3624,6 +3596,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '403':
+          description: Consortium permission required for archive-ill-transactions mutations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Batch action not found
           content:
@@ -3656,6 +3634,61 @@ paths:
           description: Batch action enabled successfully (No Content)
         '400':
           description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Consortium permission required for archive-ill-transactions mutations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Batch action not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /batch_actions/{id}/run:
+    post:
+      summary: Queue a manual batch action run
+      description: Queues one run without changing the schedule or enabled state. Requires the normal run permission and, for archive-ill-transactions, broker.consortium.all. Returns a conflict if a run is already active.
+      tags:
+        - scheduler-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the batch action to run
+      responses:
+        '202':
+          description: Batch action run queued
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Batch action already has an active run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Consortium permission required for archive-ill-transactions mutations
           content:
             application/json:
               schema:

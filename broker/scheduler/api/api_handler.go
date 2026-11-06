@@ -25,9 +25,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+var errConsortiumRequired = errors.New("broker.consortium.all is required for archive-ill-transactions")
+
 var errDuplicateBatchActionTitle = errors.New("a batch action with this owner and title already exists")
 var errInvalidBatchEmailTemplate = errors.New("invalid batch email template")
-var errInvalidArchiveConfig = errors.New("invalid patron request archive configuration")
+var errInvalidArchiveConfig = errors.New("invalid archive configuration")
 
 // SchedulerApiHandler implements schedoapi.ServerInterface.
 type SchedulerApiHandler struct {
@@ -140,11 +142,15 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	owner, ok := h.resolveBatchActionOwner(ctx, w, r, params.Symbol)
+	owner, canManageConsortium, ok := h.resolveBatchActionOwner(ctx, w, r, params.Symbol)
 	if !ok {
 		return
 	}
 
+	if err := authorizeBatchAction(string(create.ActionName), canManageConsortium); err != nil {
+		brokerapi.WriteJsonErrorResponse(w, err, http.StatusForbidden)
+		return
+	}
 	next, err := sched_service.NextScheduleTime(create.Schedule)
 	if err != nil {
 		brokerapi.AddBadRequestError(ctx, w, err)
@@ -185,7 +191,7 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 		brokerapi.AddBadRequestError(ctx, w, err)
 		return
 	}
-	if err := sched_service.ValidatePatronRequestArchiveConfig(string(create.ActionName), owner, create.BatchQuery, paramsMap); err != nil {
+	if err := sched_service.ValidateArchiveConfig(string(create.ActionName), owner, create.BatchQuery, paramsMap); err != nil {
 		brokerapi.AddBadRequestError(ctx, w, err)
 		return
 	}
@@ -240,7 +246,7 @@ func (h SchedulerApiHandler) DeleteBatchActionsId(w http.ResponseWriter, r *http
 	logParams := map[string]string{"method": "DeleteBatchActionsId", "id": id}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
-	owners, ok := h.resolveOwnerScope(ctx, w, r, params.Symbol)
+	owners, canManageConsortium, ok := h.resolveMutationScope(ctx, w, r, params.Symbol)
 	if !ok {
 		return
 	}
@@ -251,6 +257,9 @@ func (h SchedulerApiHandler) DeleteBatchActionsId(w http.ResponseWriter, r *http
 			return inErr
 		}
 		if inErr = validateBatchActionTask(task); inErr != nil {
+			return inErr
+		}
+		if inErr = authorizeBatchAction(task.ActionData.BatchActionData.ActionName, canManageConsortium); inErr != nil {
 			return inErr
 		}
 		active, inErr := schedRepo.HasActiveBatchActionEvents(ctx, task.ID)
@@ -266,6 +275,10 @@ func (h SchedulerApiHandler) DeleteBatchActionsId(w http.ResponseWriter, r *http
 		return schedRepo.DeleteScheduledTask(ctx, task.ID, owners)
 	})
 	if err != nil {
+		if errors.Is(err, errConsortiumRequired) {
+			brokerapi.WriteJsonErrorResponse(w, err, http.StatusForbidden)
+			return
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			brokerapi.AddNotFoundError(w)
 			return
@@ -286,7 +299,7 @@ func (h SchedulerApiHandler) PutBatchActionsId(w http.ResponseWriter, r *http.Re
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "PutBatchActionsId", "id": id},
 	})
-	owners, ok := h.resolveOwnerScope(ctx, w, r, params.Symbol)
+	owners, canManageConsortium, ok := h.resolveMutationScope(ctx, w, r, params.Symbol)
 	if !ok {
 		return
 	}
@@ -336,7 +349,7 @@ func (h SchedulerApiHandler) PutBatchActionsId(w http.ResponseWriter, r *http.Re
 			return
 		}
 	}
-	task, err := h.mutateScheduledTask(ctx, id, owners, func(task *sched_db.ScheduledTask) {
+	task, err := h.mutateScheduledTask(ctx, id, owners, canManageConsortium, func(task *sched_db.ScheduledTask) {
 		task.Schedule = update.Schedule
 		task.RunAt = next
 		task.ActionData.BatchActionData.Selector = update.BatchQuery
@@ -350,7 +363,7 @@ func (h SchedulerApiHandler) PutBatchActionsId(w http.ResponseWriter, r *http.Re
 		if task.ActionData.BatchActionData == nil {
 			return nil
 		}
-		if err := sched_service.ValidatePatronRequestArchiveConfig(task.ActionData.BatchActionData.ActionName, task.Owner, task.ActionData.BatchActionData.Selector, task.ActionData.CustomData); err != nil {
+		if err := sched_service.ValidateArchiveConfig(task.ActionData.BatchActionData.ActionName, task.Owner, task.ActionData.BatchActionData.Selector, task.ActionData.CustomData); err != nil {
 			return fmt.Errorf("%w: %w", errInvalidArchiveConfig, err)
 		}
 		return nil
@@ -367,11 +380,11 @@ func (h SchedulerApiHandler) PostBatchActionsIdDisable(w http.ResponseWriter, r 
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "PostBatchActionsIdDisable", "id": id},
 	})
-	owners, ok := h.resolveOwnerScope(ctx, w, r, params.Symbol)
+	owners, canManageConsortium, ok := h.resolveMutationScope(ctx, w, r, params.Symbol)
 	if !ok {
 		return
 	}
-	_, err := h.mutateScheduledTask(ctx, id, owners, func(task *sched_db.ScheduledTask) {
+	_, err := h.mutateScheduledTask(ctx, id, owners, canManageConsortium, func(task *sched_db.ScheduledTask) {
 		task.Status = sched_db.ScheduledTaskStatusStopped
 	})
 	if err != nil {
@@ -385,11 +398,11 @@ func (h SchedulerApiHandler) PostBatchActionsIdEnable(w http.ResponseWriter, r *
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "PostBatchActionsIdEnable", "id": id},
 	})
-	owners, ok := h.resolveOwnerScope(ctx, w, r, params.Symbol)
+	owners, canManageConsortium, ok := h.resolveMutationScope(ctx, w, r, params.Symbol)
 	if !ok {
 		return
 	}
-	_, err := h.mutateScheduledTask(ctx, id, owners, func(task *sched_db.ScheduledTask) {
+	_, err := h.mutateScheduledTask(ctx, id, owners, canManageConsortium, func(task *sched_db.ScheduledTask) {
 		task.Status = sched_db.ScheduledTaskStatusPending
 	})
 	if err != nil {
@@ -403,6 +416,7 @@ func (h SchedulerApiHandler) mutateScheduledTask(
 	ctx common.ExtendedContext,
 	id string,
 	owners []string,
+	canManageConsortium bool,
 	mutate func(*sched_db.ScheduledTask),
 	validators ...func(sched_db.ScheduledTask) error,
 ) (sched_db.ScheduledTask, error) {
@@ -414,6 +428,9 @@ func (h SchedulerApiHandler) mutateScheduledTask(
 			return inErr
 		}
 		if inErr = validateBatchActionTask(task); inErr != nil {
+			return inErr
+		}
+		if inErr = authorizeBatchAction(task.ActionData.BatchActionData.ActionName, canManageConsortium); inErr != nil {
 			return inErr
 		}
 		mutate(&task)
@@ -491,6 +508,10 @@ func validateBatchActionTask(task sched_db.ScheduledTask) error {
 }
 
 func (h SchedulerApiHandler) writeScheduledTaskMutationError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
+	if errors.Is(err, errConsortiumRequired) {
+		brokerapi.WriteJsonErrorResponse(w, err, http.StatusForbidden)
+		return
+	}
 	if errors.Is(err, errInvalidArchiveConfig) {
 		brokerapi.AddBadRequestError(ctx, w, err)
 		return
@@ -529,18 +550,18 @@ func (h SchedulerApiHandler) resolveOwnerScope(ctx common.ExtendedContext, w htt
 
 // resolveBatchActionOwner resolves the owner for a new batch action. An empty
 // owner represents unrestricted master access.
-func (h SchedulerApiHandler) resolveBatchActionOwner(ctx common.ExtendedContext, w http.ResponseWriter, r *http.Request, symbol *string) (string, bool) {
+func (h SchedulerApiHandler) resolveBatchActionOwner(ctx common.ExtendedContext, w http.ResponseWriter, r *http.Request, symbol *string) (string, bool, bool) {
 	t, err := h.tenantResolver.Resolve(ctx, r, symbol)
 	if err != nil {
 		brokerapi.AddBadRequestError(ctx, w, err)
-		return "", false
+		return "", false, false
 	}
 	owner, err := t.GetRequestSymbol()
 	if err != nil {
 		brokerapi.AddBadRequestError(ctx, w, err)
-		return "", false
+		return "", false, false
 	}
-	return owner, true
+	return owner, t.CanManageConsortium(), true
 }
 
 func toBatchAction(r *http.Request, task sched_db.ScheduledTask) schedoapi.BatchAction {
@@ -589,4 +610,68 @@ func toPgText(text *string) pgtype.Text {
 		return pgtype.Text{Valid: false}
 	}
 	return pgtype.Text{String: *text, Valid: true}
+}
+
+func authorizeBatchAction(actionName string, canManageConsortium bool) error {
+	if actionName == string(schedoapi.ArchiveIllTransactions) && !canManageConsortium {
+		return errConsortiumRequired
+	}
+	return nil
+}
+
+func (h SchedulerApiHandler) resolveMutationScope(ctx common.ExtendedContext, w http.ResponseWriter, r *http.Request, symbol *string) ([]string, bool, bool) {
+	t, err := h.tenantResolver.Resolve(ctx, r, symbol)
+	if err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return nil, false, false
+	}
+	owners, err := t.GetOwnedSymbols()
+	if err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return nil, false, false
+	}
+	return owners, t.CanManageConsortium(), true
+}
+
+// PostBatchActionsIdRun queues one durable run without changing the saved schedule
+// or enabled status. The task lock serializes manual runs and task mutations.
+func (h SchedulerApiHandler) PostBatchActionsIdRun(w http.ResponseWriter, r *http.Request, id string, params schedoapi.PostBatchActionsIdRunParams) {
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: map[string]string{"method": "PostBatchActionsIdRun", "id": id}})
+	owners, canManage, ok := h.resolveMutationScope(ctx, w, r, params.Symbol)
+	if !ok {
+		return
+	}
+	err := h.schedRepo.WithTxFunc(ctx, func(repo sched_db.SchedRepo) error {
+		task, err := repo.GetScheduledTaskByIdForUpdate(ctx, id, owners)
+		if err != nil {
+			return err
+		}
+		if err = validateBatchActionTask(task); err != nil {
+			return err
+		}
+		data := task.ActionData.BatchActionData
+		if err = authorizeBatchAction(data.ActionName, canManage); err != nil {
+			return err
+		}
+		if err = sched_service.ValidateArchiveConfig(data.ActionName, task.Owner, data.Selector, task.ActionData.CustomData); err != nil {
+			return fmt.Errorf("%w: %w", errInvalidArchiveConfig, err)
+		}
+		active, err := repo.HasActiveBatchActionEvents(ctx, id)
+		if err != nil {
+			return err
+		}
+		if active {
+			return errBatchActionInProgress
+		}
+		return repo.QueueBatchActionRun(ctx, task)
+	})
+	if err != nil {
+		if errors.Is(err, errBatchActionInProgress) {
+			brokerapi.WriteJsonErrorResponse(w, err, http.StatusConflict)
+		} else {
+			h.writeScheduledTaskMutationError(ctx, w, err)
+		}
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
 }
