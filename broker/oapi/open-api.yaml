@@ -1642,6 +1642,8 @@ components:
         - email-pullslips
         - request-aging
         - overdue
+        - archive-borrowing-requests
+        - archive-lending-requests
 
     BatchAction:
       type: object
@@ -1719,7 +1721,7 @@ components:
           description: Batch action selection query in CQL format
         actionParams:
           type: object
-          description: Parameters for the batch action. For request-aging, interval is required and must be a Go duration string such as "24h" or "168h". For email-pullslips, templateLabel is required and must be a non-empty string naming an email template for staff. Additional parameters are passed to the generated patron-request background action.
+          description: Parameters for the batch action. For request-aging, archive-borrowing-requests, and archive-lending-requests, interval is required and must be a positive Go duration string such as "720h". Both archive actions accept an optional anonymize boolean (default false). For email-pullslips, templateLabel is required and must be a non-empty string naming an email template for staff. Other parameters are passed to generated patron-request background actions.
           additionalProperties: true
 
     BatchActions:

@@ -470,6 +470,47 @@ func TestPostBatchActions_MasterWithoutSymbolCreatesUnrestrictedAction(t *testin
 	repo.AssertExpectations(t)
 }
 
+func TestPostBatchActions_PatronRequestArchiveRequiresOwnerAndInterval(t *testing.T) {
+	h := newHandler(new(MockSchedRepo))
+	for _, action := range []string{"archive-borrowing-requests", "archive-lending-requests"} {
+		for _, tc := range []struct {
+			name, body string
+			symbol     *string
+		}{
+			{"owner", `{"actionName":"archive-borrowing-requests","batchQuery":"state==CLOSED","schedule":"FREQ=DAILY","title":"Archive","actionParams":{"interval":"720h"}}`, nil},
+			{"interval", `{"actionName":"archive-borrowing-requests","batchQuery":"state==CLOSED","schedule":"FREQ=DAILY","title":"Archive"}`, symPtr(testSymbol)},
+			{"anonymize", `{"actionName":"archive-borrowing-requests","batchQuery":"state==CLOSED","schedule":"FREQ=DAILY","title":"Archive","actionParams":{"interval":"720h","anonymize":"true"}}`, symPtr(testSymbol)},
+		} {
+			t.Run(action+"/"+tc.name, func(t *testing.T) {
+				rr := httptest.NewRecorder()
+				body := strings.ReplaceAll(tc.body, "archive-borrowing-requests", action)
+				h.PostBatchActions(rr, newReq(http.MethodPost, body), schedoapi.PostBatchActionsParams{Symbol: tc.symbol})
+				assertErrorStatus(t, rr, http.StatusBadRequest)
+			})
+		}
+	}
+}
+
+func TestPostBatchActions_LendingArchivePersistsTenantOwner(t *testing.T) {
+	const owner = "ISIL:DK-DIKU"
+	repo := new(MockSchedRepo)
+	repo.On("SaveScheduledTask", mock.MatchedBy(func(p sched_db.SaveScheduledTaskParams) bool {
+		return p.Owner == owner && p.ActionData.BatchActionData.Owner == owner &&
+			p.ActionData.BatchActionData.ActionName == "archive-lending-requests" &&
+			p.ActionData.CustomData["interval"] == "720h"
+	})).Return(saveScheduledTaskReturn, nil)
+	resolver := tenant.NewResolver().WithTenantToSymbol("ISIL:DK-{tenant}").
+		WithIllRepo(new(testmocks.MockIllRepositorySuccess))
+	h := NewSchedulerApiHandler(10, repo, nil, resolver, nil)
+	req := httptest.NewRequest(http.MethodPost, "/broker/batch_actions", strings.NewReader(
+		`{"actionName":"archive-lending-requests","title":"Archive closed lending requests","schedule":"FREQ=DAILY;BYHOUR=3","batchQuery":"terminal_state=true","actionParams":{"interval":"720h","anonymize":false}}`))
+	req.Header.Set(tenant.OkapiTenantHeader, "diku")
+	rr := httptest.NewRecorder()
+	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{})
+	assert.Equal(t, http.StatusCreated, rr.Code)
+	repo.AssertExpectations(t)
+}
+
 func TestPostBatchActions_OkapiWithoutSymbolUsesPrimaryMappedOwner(t *testing.T) {
 	const mappedOwner = "ISIL:DK-DIKU"
 	repo := new(MockSchedRepo)

@@ -1202,6 +1202,24 @@ stateModels:
         manualClose: true
 
 batchActionDefaults:
+  - actionName: archive-borrowing-requests
+    titleKey: archive-borrowing-requests
+    title: Archive closed borrowing requests
+    batchQuery: "terminal_state = true"
+    schedule: "FREQ=DAILY;BYHOUR=3"
+    actionParams:
+      interval: 720h
+      anonymize: false
+
+  - actionName: archive-lending-requests
+    titleKey: archive-lending-requests
+    title: Archive closed lending requests
+    batchQuery: "terminal_state = true"
+    schedule: "FREQ=DAILY;BYHOUR=3"
+    actionParams:
+      interval: 720h
+      anonymize: false
+
   - actionName: overdue
     titleKey: overdue
     title: Overdue loans
