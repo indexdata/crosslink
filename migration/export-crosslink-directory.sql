@@ -1041,12 +1041,14 @@ entry_records AS (
     ) AS lms_config ON true
     LEFT JOIN LATERAL (
         SELECT jsonb_build_object(
+            -- Branches store only their pickup code and inherit every other
+            -- circulation setting from their institution.
             'vendor', NULL,
             'ncipVersion', NULL,
             'ncipNamespaceEnabled', NULL,
             'bibIdNormalization', NULL,
-            'address', tenant_settings.ncip_server_address,
-            'fromAgency', tenant_settings.ncip_from_agency,
+            'address', NULL,
+            'fromAgency', NULL,
             'fromAgencyAuthentication', NULL,
             'toAgency', NULL,
             'lookupUserEnabled', NULL,
@@ -1058,7 +1060,7 @@ entry_records AS (
             'requestItemRequestScopeType', NULL,
             'requestItemBibIdCode', NULL,
             'requestItemEnabled', NULL,
-            'requestItemPickupLocationEnabled', true,
+            'requestItemPickupLocationEnabled', NULL,
             'requesterPickupLocation', entry.lms_location_code,
             'supplierPickupLocation', NULL,
             'requesterPatronPattern', NULL,
@@ -1128,6 +1130,23 @@ entry_records AS (
             END
         ) || CASE WHEN local_entry.entry_id IS NOT NULL
             THEN (SELECT item FROM crosslink_ill_lists) || (SELECT item FROM crosslink_default_copyright_type)
+            ELSE '{}'::jsonb
+        END || CASE WHEN entry.entry_type = 'Branch'
+            -- Branches store only isPickupLocation and inherit the rest from their institution.
+            THEN jsonb_build_object(
+                'iso18626Url', NULL,
+                'iso18626Vendor', NULL,
+                'lendersOfLastResort', NULL,
+                'includeRequestingAgencyInfo', NULL,
+                'includeSupplierInfo', NULL,
+                'includeReturnInfo', NULL,
+                'includeVendorNote', NULL,
+                'useOfferedCosts', NULL,
+                'noteFieldSeparator', NULL,
+                'supplierPatronPattern', NULL,
+                'duplicateCheckWindowHours', NULL,
+                'maxRequestsPerPatron', NULL
+            )
             ELSE '{}'::jsonb
         END AS item
         FROM (

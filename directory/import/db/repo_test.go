@@ -134,7 +134,7 @@ func TestEntryImportAdvisoryLockDistinguishesAmbiguousSymbolRefs(t *testing.T) {
 
 func TestImportEntryCreatesCompleteAggregateWithGeneratedIDs(t *testing.T) {
 	resetImportDatabase(t)
-	repo := importdb.New(testPool)
+	repo := importdb.New(testPool, nil)
 	aggregate := completeEntryAggregate("CON")
 
 	result, err := repo.ImportEntry(context.Background(), aggregate, model.ConflictPolicyFail)
@@ -176,7 +176,7 @@ func TestImportEntryCreatesCompleteAggregateWithGeneratedIDs(t *testing.T) {
 
 func TestImportEntryConflictPoliciesAndUpdateFullSynchronization(t *testing.T) {
 	resetImportDatabase(t)
-	repo := importdb.New(testPool)
+	repo := importdb.New(testPool, nil)
 	aggregate := completeEntryAggregate("CON")
 	_, err := repo.ImportEntry(context.Background(), aggregate, model.ConflictPolicyFail)
 	require.NoError(t, err)
@@ -219,7 +219,7 @@ func TestImportEntryConflictPoliciesAndUpdateFullSynchronization(t *testing.T) {
 
 func TestImportEntryUpdateReplacesLMSPatronProfiles(t *testing.T) {
 	resetImportDatabase(t)
-	repo := importdb.New(testPool)
+	repo := importdb.New(testPool, nil)
 	aggregate := completeEntryAggregate("CON")
 	initialProfiles := []model.PatronProfile{{Code: stringPointer("STAFF"), CanCreateRequests: true}}
 	aggregate.Data.LMSConfig.PatronProfiles = &initialProfiles
@@ -238,7 +238,7 @@ func TestImportEntryUpdateReplacesLMSPatronProfiles(t *testing.T) {
 
 func TestImportEntryPersistsLenderUUIDAsDirectorySymbol(t *testing.T) {
 	resetImportDatabase(t)
-	repo := importdb.New(testPool)
+	repo := importdb.New(testPool, nil)
 	lender := minimalEntryAggregate("LENDER", "Institution")
 	lender.Data.Symbols = append(lender.Data.Symbols, model.SymbolRef{Authority: "ALT", Symbol: "ALIAS"})
 	_, err := repo.ImportEntry(context.Background(), lender, model.ConflictPolicyFail)
@@ -257,7 +257,7 @@ func TestImportEntryPersistsLenderUUIDAsDirectorySymbol(t *testing.T) {
 
 func TestImportEntryRejectsLenderWithoutSymbol(t *testing.T) {
 	resetImportDatabase(t)
-	repo := importdb.New(testPool)
+	repo := importdb.New(testPool, nil)
 	lender := minimalEntryAggregate("LENDER", "Institution")
 	lender.Data.Symbols = []model.SymbolRef{}
 	_, err := repo.ImportEntry(context.Background(), lender, model.ConflictPolicyFail)
@@ -273,7 +273,7 @@ func TestImportEntryRejectsLenderWithoutSymbol(t *testing.T) {
 
 func TestImportEntryRejectsLenderWithoutSerializableSymbol(t *testing.T) {
 	resetImportDatabase(t)
-	repo := importdb.New(testPool)
+	repo := importdb.New(testPool, nil)
 	lender := minimalEntryAggregate("LENDER", "Institution")
 	lender.Data.Symbols = []model.SymbolRef{{Authority: "A:B", Symbol: "C"}}
 	_, err := repo.ImportEntry(context.Background(), lender, model.ConflictPolicyFail)
@@ -334,7 +334,7 @@ func TestImportEntryLocksAndRevalidatesSecondarySymbols(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	repo := importdb.New(testPool)
+	repo := importdb.New(testPool, nil)
 	owner := minimalEntryAggregate("OWNER", "Institution")
 	_, err := repo.ImportEntry(ctx, owner, model.ConflictPolicyFail)
 	require.NoError(t, err)
@@ -400,7 +400,7 @@ func TestConcurrentImportEntryOpposingParentsDoNotDeadlock(t *testing.T) {
 		pairs[index] = importPair{first: first, second: second}
 	}
 
-	repo := importdb.New(testPool)
+	repo := importdb.New(testPool, nil)
 	start := make(chan struct{})
 	errs := make([][2]error, pairCount)
 	var waitGroup sync.WaitGroup
@@ -468,7 +468,7 @@ func TestConcurrentImportEntryOpposingLendersDoNotDeadlock(t *testing.T) {
 		pairs[index] = importPair{first: first, second: second}
 	}
 
-	repo := importdb.New(testPool)
+	repo := importdb.New(testPool, nil)
 	start := make(chan struct{})
 	errs := make([][2]error, pairCount)
 	var waitGroup sync.WaitGroup
@@ -597,7 +597,7 @@ func TestImportEntryRejectsSymbolCreatedByAPIDuringImport(t *testing.T) {
 			}
 			importDone := make(chan importOutcome, 1)
 			go func() {
-				result, importErr := importdb.New(testPool).ImportEntry(ctx, aggregate, policy)
+				result, importErr := importdb.New(testPool, nil).ImportEntry(ctx, aggregate, policy)
 				importDone <- importOutcome{result: result, err: importErr}
 			}()
 			waitForDatabaseLockWaiters(t, ctx, 1)
@@ -626,7 +626,7 @@ func TestImportEntryRejectsSymbolCreatedByAPIDuringImport(t *testing.T) {
 
 func TestImportEntryRejectsInvalidHierarchy(t *testing.T) {
 	resetImportDatabase(t)
-	repo := importdb.New(testPool)
+	repo := importdb.New(testPool, nil)
 	consortium := minimalEntryAggregate("CON", "Consortium")
 	_, err := repo.ImportEntry(context.Background(), consortium, model.ConflictPolicyFail)
 	require.NoError(t, err)
@@ -642,7 +642,7 @@ func TestImportEntryRejectsInvalidHierarchy(t *testing.T) {
 func TestImportEntryRejectsCycle(t *testing.T) {
 	resetImportDatabase(t)
 	ctx := context.Background()
-	repo := importdb.New(testPool)
+	repo := importdb.New(testPool, nil)
 	branchID, institutionID := uuid.New(), uuid.New()
 	_, err := testPool.Exec(ctx, `INSERT INTO entries (id,name,type,parent) VALUES ($1,'Branch','Branch',NULL),($2,'Institution','Institution',$1)`, branchID, institutionID)
 	require.NoError(t, err)
@@ -659,7 +659,7 @@ func TestImportEntryRejectsCycle(t *testing.T) {
 
 func TestImportEntryRejectsMissingParentWithoutWriting(t *testing.T) {
 	resetImportDatabase(t)
-	repo := importdb.New(testPool)
+	repo := importdb.New(testPool, nil)
 	aggregate := minimalEntryAggregate("LIB", "Institution")
 	missingParentID := uuid.New()
 	aggregate.Data.Parent = &missingParentID
@@ -672,7 +672,7 @@ func TestImportEntryRejectsMissingParentWithoutWriting(t *testing.T) {
 
 func TestImportEntryRollsBackAfterLateSymbolConflict(t *testing.T) {
 	resetImportDatabase(t)
-	repo := importdb.New(testPool)
+	repo := importdb.New(testPool, nil)
 	consortium := completeEntryAggregate("CON")
 	_, err := repo.ImportEntry(context.Background(), consortium, model.ConflictPolicyFail)
 	require.NoError(t, err)
@@ -688,7 +688,7 @@ func TestImportEntryRollsBackAfterLateSymbolConflict(t *testing.T) {
 
 func TestImportEntryRejectsAmbiguousLenderAuthorityBeforeWriting(t *testing.T) {
 	resetImportDatabase(t)
-	repo := importdb.New(testPool)
+	repo := importdb.New(testPool, nil)
 	aggregate := minimalEntryAggregate("CON", "Consortium")
 	aggregate.Data.ILLConfig = &model.ILLConfig{
 		LendersOfLastResort: []uuid.UUID{uuid.Nil},
@@ -702,7 +702,7 @@ func TestImportEntryRejectsAmbiguousLenderAuthorityBeforeWriting(t *testing.T) {
 
 func TestImportEntryAllowsOnlyOneConsortium(t *testing.T) {
 	resetImportDatabase(t)
-	repo := importdb.New(testPool)
+	repo := importdb.New(testPool, nil)
 	_, err := repo.ImportEntry(context.Background(), minimalEntryAggregate("CON1", "Consortium"), model.ConflictPolicyFail)
 	require.NoError(t, err)
 
@@ -814,7 +814,7 @@ func TestConcurrentEntryAndTierImportsUseSameEntryLockOrder(t *testing.T) {
 	_, err = blocker.Exec(ctx, `SELECT id FROM tiers WHERE id=$1 FOR UPDATE`, tierID)
 	require.NoError(t, err)
 
-	repo := importdb.New(testPool)
+	repo := importdb.New(testPool, nil)
 	tier := model.TierAggregate{
 		Key:  model.TierKey{Consortium: consortiumID, Name: "Loan"},
 		Data: model.TierData{Level: "standard", Type: "loan", Entries: []uuid.UUID{memberID}},
@@ -995,7 +995,7 @@ func TestConcurrentEntryAndNetworkImportsUseSameEntryLockOrder(t *testing.T) {
 	_, err = blocker.Exec(ctx, `SELECT id FROM networks WHERE id=$1 FOR UPDATE`, networkID)
 	require.NoError(t, err)
 
-	repo := importdb.New(testPool)
+	repo := importdb.New(testPool, nil)
 	network := model.NetworkAggregate{
 		Key:  model.NetworkKey{Consortium: consortiumID, Name: "Main"},
 		Data: model.NetworkData{Entries: []model.NetworkAssignment{{Entry: memberID, Priority: 1}}},
@@ -1298,7 +1298,7 @@ func TestAggregateCommitErrorsPreservePostgreSQLCause(t *testing.T) {
 func importRepoFixture(t *testing.T) (*importdb.PgImportRepo, uuid.UUID, uuid.UUID, uuid.UUID) {
 	t.Helper()
 	resetImportDatabase(t)
-	repo := importdb.New(testPool)
+	repo := importdb.New(testPool, nil)
 	consortium := minimalEntryAggregate("CON", "Consortium")
 	_, err := repo.ImportEntry(context.Background(), consortium, model.ConflictPolicyFail)
 	require.NoError(t, err)
@@ -1396,7 +1396,7 @@ func completeEntryAggregate(symbol string) model.EntryAggregate {
 	aggregate.Data.Endpoints = []model.ServiceEndpoint{{Name: "ISO", Type: "ISO18626", Address: "https://example.test/ill"}}
 	aggregate.Data.Addresses = []model.Address{{Type: "Default", Components: []model.AddressComponent{{Seq: 1, Type: "Locality", Value: "Riga"}}}}
 	aggregate.Data.Closures = []model.Closure{{StartDate: "2026-12-24", EndDate: "2026-12-26", Reason: "Holiday"}}
-	aggregate.Data.LMSConfig = &model.LMSConfig{Address: "https://example.test/ncip", FromAgency: "FROM", FromAgencyAuthentication: stringPointer("credential-value")}
+	aggregate.Data.LMSConfig = &model.LMSConfig{Address: stringPointer("https://example.test/ncip"), FromAgency: stringPointer("FROM"), FromAgencyAuthentication: stringPointer("credential-value")}
 	aggregate.Data.CatalogConfig = &model.CatalogConfig{
 		MetadataUpdateMode: &metadataMode,
 		Zoom:               &model.ZoomConfig{Address: "example.test:210", Options: &map[string]string{"user": "private"}},
@@ -1430,7 +1430,7 @@ func minimalEntryAggregate(symbol, entryType string) model.EntryAggregate {
 
 func concurrentlyImportEntry(t *testing.T, newAggregate func() model.EntryAggregate, policy model.ConflictPolicy, count int) ([]model.RepoResult, []error) {
 	t.Helper()
-	repo := importdb.New(testPool)
+	repo := importdb.New(testPool, nil)
 	start := make(chan struct{})
 	results := make([]model.RepoResult, count)
 	errs := make([]error, count)
@@ -1467,7 +1467,7 @@ func importRepoObservingLockUnavailable(t *testing.T, ctx context.Context) (*imp
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
-	return importdb.New(pool), observed
+	return importdb.New(pool, nil), observed
 }
 
 func waitForLockUnavailable(t *testing.T, ctx context.Context, observed <-chan struct{}) {
@@ -1584,7 +1584,7 @@ func requirePgCode(t *testing.T, err error, code string) {
 
 func TestImportLoadBalancingPolicyPersistence(t *testing.T) {
 	resetImportDatabase(t)
-	repo := importdb.New(testPool)
+	repo := importdb.New(testPool, nil)
 	aggregate := completeEntryAggregate("POLICY")
 	for _, value := range []*string{policyStringPointer("proportional"), policyStringPointer("deficit"), nil} {
 		aggregate.Data.ILLConfig.LoadBalancingPolicy = value
@@ -1601,7 +1601,7 @@ func policyStringPointer(value string) *string { return &value }
 func TestLoadBalancingPolicyMigrationRoundTrip(t *testing.T) {
 	resetImportDatabase(t)
 	aggregate := completeEntryAggregate("MIGRATION")
-	_, err := importdb.New(testPool).ImportEntry(context.Background(), aggregate, model.ConflictPolicyFail)
+	_, err := importdb.New(testPool, nil).ImportEntry(context.Background(), aggregate, model.ConflictPolicyFail)
 	require.NoError(t, err)
 	ctx := context.Background()
 	tx, err := testPool.Begin(ctx)

@@ -26,7 +26,8 @@ func TestDirectoryExportPickupLocations(t *testing.T) {
  crosslink_default_copyright_type AS (SELECT '{}'::jsonb AS item),
 		crosslink_ill_lists AS (SELECT '{}'::jsonb AS item),
 		crosslink_last_resort_lenders AS (SELECT '[]'::jsonb AS item),
-		entry AS (SELECT $1::uuid AS entry_id, $6::uuid AS parent_id, $2::text AS lms_location_code),
+		entry AS (SELECT $1::uuid AS entry_id, $6::uuid AS parent_id, $2::text AS lms_location_code,
+			CASE WHEN $3::boolean THEN 'Institution' ELSE 'Branch' END AS entry_type),
 		crosslink_local_entry AS (SELECT CASE WHEN $3::boolean THEN $1::uuid ELSE $6::uuid END AS entry_id),
 		local_entry AS (SELECT entry_id FROM crosslink_local_entry),
 		mpals_entry AS (SELECT NULL::uuid AS entry_id WHERE false),
@@ -85,7 +86,7 @@ func TestDirectoryExportPickupLocations(t *testing.T) {
 			if exported != nil {
 				require.NoError(t, json.Unmarshal(exported, &config))
 				require.Equal(t, tc.enabled, config["isPickupLocation"])
-				if tc.local || tc.directChild {
+				if tc.local {
 					require.Equal(t, float64(5), config["maxRequestsPerPatron"])
 					require.Equal(t, float64(7), config["duplicateCheckWindowHours"])
 					if tc.endpoint != nil {
@@ -94,8 +95,12 @@ func TestDirectoryExportPickupLocations(t *testing.T) {
 						require.Nil(t, config["iso18626Url"])
 					}
 				} else {
-					require.Nil(t, config["maxRequestsPerPatron"])
-					require.Nil(t, config["iso18626Url"])
+					// Branches export only isPickupLocation and inherit the rest.
+					for name, value := range config {
+						if name != "isPickupLocation" {
+							require.Nil(t, value, name)
+						}
+					}
 				}
 			} else {
 				require.False(t, tc.local)

@@ -21,9 +21,11 @@ func TestImportOrderedAggregates(t *testing.T) {
 	consortium := symbolObject("ISIL", "CON")
 	institution := symbolObject("ISIL", "INST")
 	branch := symbolObject("ISIL", "BRANCH")
+	institutionRecord := entryImportRecord(institution, "Institution", consortium, "Institution")
+	institutionRecord["data"].(map[string]any)["lmsConfig"] = importLmsConfig()
 	records := []any{
 		entryImportRecord(consortium, "Consortium", nil, "Consortium"),
-		entryImportRecord(institution, "Institution", consortium, "Institution"),
+		institutionRecord,
 		entryImportRecord(branch, "Branch", institution, "Branch"),
 		map[string]any{"type": "tier", "key": map[string]any{"consortium": importEntryUUID(consortium), "name": "Loan"}, "data": map[string]any{"level": "standard", "type": "loan", "cost": 1.5, "entries": []any{importEntryUUID(institution), importEntryUUID(branch)}}},
 		map[string]any{"type": "network", "key": map[string]any{"consortium": importEntryUUID(consortium), "name": "Main"}, "data": map[string]any{"reciprocal": true, "entries": []any{
@@ -56,12 +58,14 @@ func TestImportOrderedAggregates(t *testing.T) {
 		`SELECT count(*) FROM service_endpoints WHERE entry=$1`: 1,
 		`SELECT count(*) FROM addresses WHERE entry=$1`:         1,
 		`SELECT count(*) FROM closures WHERE entry=$1`:          1,
-		`SELECT count(*) FROM lms_configs WHERE entry=$1`:       1,
 	} {
 		var count int
 		require.NoError(t, dbpool.QueryRow(context.Background(), query, consortiumID).Scan(&count))
 		require.Equal(t, expected, count)
 	}
+	var lmsCount int
+	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT count(*) FROM lms_configs WHERE entry=$1`, institutionID).Scan(&lmsCount))
+	require.Equal(t, 1, lmsCount)
 	var tierAssignments, networkAssignments int
 	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT count(*) FROM entry_tiers`).Scan(&tierAssignments))
 	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT count(*) FROM entry_networks`).Scan(&networkAssignments))
@@ -172,17 +176,30 @@ func entryImportRecord(key map[string]any, name string, parent map[string]any, e
 		data["endpoints"] = []any{map[string]any{"name": "ISO", "type": "ISO18626", "address": "https://example.test/ill"}}
 		data["addresses"] = []any{map[string]any{"type": "Default", "addressComponents": []any{map[string]any{"seq": 1, "type": "Locality", "value": "Riga"}}}}
 		data["closures"] = []any{map[string]any{"startDate": "2026-12-24", "endDate": "2026-12-26", "reason": "Holiday"}}
-		data["lmsConfig"] = map[string]any{
-			"vendor": nil, "ncipNamespaceEnabled": nil, "bibIdNormalization": nil,
-			"address": "https://example.test/ncip", "fromAgency": "FROM", "fromAgencyAuthentication": "credential-value",
-			"toAgency": nil, "lookupUserEnabled": nil, "acceptItemEnabled": nil, "checkInItemEnabled": nil,
-			"checkOutItemEnabled": nil, "itemLocation": nil, "requestItemRequestType": nil,
-			"requestItemRequestScopeType": nil, "requestItemBibIdCode": nil, "requestItemEnabled": nil,
-			"requestItemPickupLocationEnabled": nil, "requesterPickupLocation": nil, "supplierPickupLocation": nil,
-			"requesterPatronPattern": nil, "patronProfiles": nil,
-		}
 	}
 	return map[string]any{"type": "entry", "key": importEntryUUID(key), "data": data}
+}
+
+// importLmsConfig returns a complete import lmsConfig. Only institutions may
+// store circulation settings.
+func importLmsConfig() map[string]any {
+	return map[string]any{
+		"vendor": nil, "ncipNamespaceEnabled": nil, "bibIdNormalization": nil,
+		"address": "https://example.test/ncip", "fromAgency": "FROM", "fromAgencyAuthentication": "credential-value",
+		"toAgency": nil, "lookupUserEnabled": nil, "acceptItemEnabled": nil, "checkInItemEnabled": nil,
+		"checkOutItemEnabled": nil, "itemLocation": nil, "requestItemRequestType": nil,
+		"requestItemRequestScopeType": nil, "requestItemBibIdCode": nil, "requestItemEnabled": nil,
+		"requestItemPickupLocationEnabled": nil, "requesterPickupLocation": nil, "supplierPickupLocation": nil,
+		"requesterPatronPattern": nil, "patronProfiles": nil,
+	}
+}
+
+// institutionImportRecord returns a parentless institution record with a
+// complete lmsConfig.
+func institutionImportRecord(key map[string]any, name string) map[string]any {
+	record := entryImportRecord(key, name, nil, "Institution")
+	record["data"].(map[string]any)["lmsConfig"] = importLmsConfig()
+	return record
 }
 
 func importEntryUUID(symbol map[string]any) uuid.UUID {
@@ -265,7 +282,7 @@ func TestImportLendToBorrowRatio(t *testing.T) {
 
 func TestImportHostSettingsRoundTrip(t *testing.T) {
 	resetImportState(t)
-	record := entryImportRecord(symbolObject("ISIL", "HOST"), "Host settings", nil, "Consortium")
+	record := institutionImportRecord(symbolObject("ISIL", "HOST"), "Host settings")
 	data := record["data"].(map[string]any)
 	lms := data["lmsConfig"].(map[string]any)
 	lms["ncipVersion"] = "1.0"
@@ -346,7 +363,7 @@ func TestImportHostSettingsRoundTrip(t *testing.T) {
 
 func TestImportAdditionalProfileOptions(t *testing.T) {
 	resetImportState(t)
-	record := entryImportRecord(symbolObject("ISIL", "EXTRA-HOST"), "Additional host options", nil, "Consortium")
+	record := institutionImportRecord(symbolObject("ISIL", "EXTRA-HOST"), "Additional host options")
 	data := record["data"].(map[string]any)
 	lms := data["lmsConfig"].(map[string]any)
 	lms["vendor"] = "Symphony"

@@ -47,7 +47,9 @@ func TestDefaultCopyrightTypeMapping(t *testing.T) {
 			require.NoError(t, json.Unmarshal([]byte(tc.body), &cfg))
 			created, err := illConfigToDBParams(uuid.New(), cfg)
 			require.NoError(t, err)
-			patched, err := illConfigPatchToDBParams(uuid.New(), cfg, db.IllConfig{DefaultCopyrightType: original})
+			var patch IllConfigPatch
+			require.NoError(t, json.Unmarshal([]byte(tc.body), &patch))
+			patched, err := illConfigPatchToDBParams(uuid.New(), patch, db.IllConfig{DefaultCopyrightType: original})
 			require.NoError(t, err)
 			for _, value := range []struct {
 				got  []byte
