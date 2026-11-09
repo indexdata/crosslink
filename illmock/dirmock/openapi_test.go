@@ -52,7 +52,8 @@ func TestModuleDescriptorRegistersDirectoryRoutes(t *testing.T) {
 			routes[handler.PathPattern] = handler.Methods
 		}
 	}
-	for _, path := range []string{"/directory/entries", "/directory/entries/owned", "/directory/openapi.json"} {
+	// Match Directory's suffix pattern: Okapi rejects literal dots in pathPattern.
+	for _, path := range []string{"/directory/entries", "/directory/entries/owned", "/directory/openapi{extension}"} {
 		require.Contains(t, routes[path], http.MethodGet, "Okapi must route %s to the mock", path)
 	}
 }
