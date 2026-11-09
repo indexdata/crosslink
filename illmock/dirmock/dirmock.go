@@ -32,9 +32,13 @@ type DirectoryMock struct {
 }
 
 type peerURLContextKey struct{}
+type tenantContextKey struct{}
 
-func peerURLCompatibilityMiddleware(next http.Handler) http.Handler {
+func directoryContextMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Like the rest of the mock, this trusts Okapi's headers rather than
+		// implementing Directory's authorization roles.
+		r = r.WithContext(context.WithValue(r.Context(), tenantContextKey{}, r.Header.Get("X-Okapi-Tenant")))
 		query := r.URL.Query()
 		peerURL := query.Get("peer_url")
 		if peerURL != "" {
@@ -312,31 +316,52 @@ func fullSymbol(symbol directory.Symbol) string {
 }
 
 func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEntriesRequestObject) (directory.GetEntriesResponseObject, error) {
+	response, err := d.listEntries(ctx, request.Params, "")
+	if err != nil {
+		return directory.GetEntries400TextResponse(err.Error()), nil
+	}
+	return directory.GetEntries200JSONResponse(response), nil
+}
+
+// GetOwnedEntries applies the current tenant's scope before CQL and pagination.
+func (d *DirectoryMock) GetOwnedEntries(ctx context.Context, request directory.GetOwnedEntriesRequestObject) (directory.GetOwnedEntriesResponseObject, error) {
+	tenant, _ := ctx.Value(tenantContextKey{}).(string)
+	if strings.TrimSpace(tenant) == "" {
+		return directory.GetOwnedEntries400TextResponse("Tenant is required"), nil
+	}
+	response, err := d.listEntries(ctx, directory.GetEntriesParams(request.Params), tenant)
+	if err != nil {
+		return directory.GetOwnedEntries400TextResponse(err.Error()), nil
+	}
+	return directory.GetOwnedEntries200JSONResponse(response), nil
+}
+
+func (d *DirectoryMock) listEntries(ctx context.Context, params directory.GetEntriesParams, tenant string) (directory.EntriesResponse, error) {
 	peerURL, _ := ctx.Value(peerURLContextKey{}).(string)
 	if peerURL != "" && !strings.HasPrefix(peerURL, "http://") && !strings.HasPrefix(peerURL, "https://") {
-		return directory.GetEntries400TextResponse("peer_url must start with http:// or https://"), nil
+		return directory.EntriesResponse{}, fmt.Errorf("peer_url must start with http:// or https://")
 	}
 
 	var query *cql.Query
-	if request.Params.Cql != nil {
+	if params.Cql != nil {
 		var p cql.Parser
-		tmp, err := p.Parse(*request.Params.Cql)
+		tmp, err := p.Parse(*params.Cql)
 		if err != nil {
-			return directory.GetEntries400TextResponse(err.Error()), nil
+			return directory.EntriesResponse{}, err
 		}
 		query = &tmp
 	}
 
 	limit := int32(defaultEntryLimit)
-	if request.Params.Limit != nil {
-		limit = *request.Params.Limit
+	if params.Limit != nil {
+		limit = *params.Limit
 	}
 	offset := int32(0)
-	if request.Params.Offset != nil {
-		offset = *request.Params.Offset
+	if params.Offset != nil {
+		offset = *params.Offset
 	}
 	if limit < 0 || limit > maxEntryLimit || offset < 0 {
-		return directory.GetEntries400TextResponse("invalid pagination parameters"), nil
+		return directory.EntriesResponse{}, fmt.Errorf("invalid pagination parameters")
 	}
 
 	filtered := make([]directory.Entry, 0)
@@ -347,9 +372,12 @@ func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEnt
 		}
 	}
 	for _, entry := range d.entries {
+		if tenant != "" && (entry.Tenant == nil || *entry.Tenant != tenant) {
+			continue
+		}
 		match, err := matchQuery(query, entry, symbolsByEntryID)
 		if err != nil {
-			return directory.GetEntries400TextResponse(err.Error()), nil
+			return directory.EntriesResponse{}, err
 		}
 		if !match {
 			continue
@@ -379,10 +407,23 @@ func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEnt
 		items = make([]directory.Entry, 0)
 	}
 
-	return directory.GetEntries200JSONResponse{
+	return directory.EntriesResponse{
 		Items: items,
 		About: directory.About{Count: total},
 	}, nil
+}
+
+// GetOpenapiJson exposes the generated specification, including copyright defaults.
+func (d *DirectoryMock) GetOpenapiJson(_ context.Context, _ directory.GetOpenapiJsonRequestObject) (directory.GetOpenapiJsonResponseObject, error) {
+	data, err := directory.GetSpecJSON()
+	if err != nil {
+		return nil, err
+	}
+	var response directory.GetOpenapiJson200JSONResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
 func (d *DirectoryMock) HandlerFromMux(mux *http.ServeMux) error {
@@ -396,6 +437,6 @@ func (d *DirectoryMock) HandlerFromMux(mux *http.ServeMux) error {
 		BaseURL:    directoryBasePath,
 		BaseRouter: directoryMux,
 	})
-	mux.Handle(directoryBasePath+"/", peerURLCompatibilityMiddleware(apiValidator.OapiRequestValidator(swagger)(handler)))
+	mux.Handle(directoryBasePath+"/", directoryContextMiddleware(apiValidator.OapiRequestValidator(swagger)(handler)))
 	return nil
 }
