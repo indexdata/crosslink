@@ -179,6 +179,21 @@ against an entry's symbols or its immediate parent's symbols. It also supports i
 supported relation `=` which matches against directory entry `tenant`. CQL results contain only
 entries that directly match the query; include `parentSymbol` explicitly when branches are needed.
 
+`GET /directory/entries/owned` returns only entries whose `tenant` matches the
+`X-Okapi-Tenant` header. It accepts the same CQL and pagination parameters, applied
+within that tenant's entries, and returns HTTP 400 if the tenant is missing.
+The mock trusts this header as supplied by Okapi; it does not enforce Directory
+authorization roles when accessed directly.
+
+`GET /directory/openapi.json` publishes the mock's
+generated Directory specification, including the shared schema's copyright
+defaults. The request form uses these defaults when the institution has no
+configured `illConfig.availableCopyrightTypes`. Entry types in custom directory
+data must use the API values `Institution`, `Consortium`, or `Branch`.
+
+After deploying an updated mock, register its new module descriptor and enable
+the updated module for the affected Okapi tenants so the new routes are available.
+
 # NCIP server
 
 The mock NCIP server accepts messages from `/ncip` endpoint.
