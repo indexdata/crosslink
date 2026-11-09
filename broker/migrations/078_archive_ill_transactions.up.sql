@@ -86,7 +86,9 @@ BEGIN
              WHERE requester_symbol = v_transaction.requester_symbol
                AND requester_req_id IN (v_transaction.requester_request_id, v_transaction.prev_requester_request_id)))
           AND (event_status IN ('NEW', 'PROCESSING')
-               OR EXISTS (SELECT 1 FROM event_consumer_work w WHERE w.event_id = event.id)))
+               OR (last_signal <> '' AND NOT (
+                   event_type = 'NOTICE' AND last_signal = 'notice_created'
+                   AND event_name IN ('supplier-added', 'supplier-moved')))))
     THEN
         RETURN FALSE;
     END IF;

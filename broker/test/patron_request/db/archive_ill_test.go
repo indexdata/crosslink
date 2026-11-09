@@ -92,7 +92,7 @@ func TestArchiveIllTransactionBundleAndLendingPreservation(t *testing.T) {
 	}
 }
 func TestArchiveIllTransactionEligibility(t *testing.T) {
-	for _, condition := range []string{"borrowing", "owner", "age", "changed", "lending active", "transaction task", "lending task", "consumer work", "availability", "locked event"} {
+	for _, condition := range []string{"borrowing", "owner", "age", "changed", "lending active", "transaction task", "lending task", "availability", "locked event"} {
 		t.Run(condition, func(t *testing.T) {
 			f, repo, candidate := transactionArchiveFixture(t)
 			owner, cutoff := f.owner, time.Now()
@@ -117,9 +117,6 @@ func TestArchiveIllTransactionEligibility(t *testing.T) {
 				}
 				_, err := repo.Pool.Exec(appCtx, `UPDATE event SET event_status='PROCESSING' WHERE id=$1`, id)
 				require.NoError(t, err)
-			case "consumer work":
-				_, err := repo.Pool.Exec(appCtx, `INSERT INTO event_consumer_work(event_id,signal,claimed) VALUES ($1,'TASK_COMPLETE',true)`, f.transactionEvent)
-				require.NoError(t, err)
 			case "availability":
 				_, err := repo.Pool.Exec(appCtx, `INSERT INTO availability_attempt (ill_transaction_id,token,located_supplier_id) SELECT $1::varchar,'pending',id FROM located_supplier WHERE ill_transaction_id=$1 LIMIT 1`, f.transaction)
 				require.NoError(t, err)
@@ -139,6 +136,65 @@ func TestArchiveIllTransactionEligibility(t *testing.T) {
 		})
 	}
 }
+
+func TestArchiveIllTransactionSkipsPendingSignals(t *testing.T) {
+	for _, scope := range []string{"transaction", "lending", "related lending"} {
+		for _, signal := range []events.Signal{events.SignalNoticeCreated, events.SignalTaskComplete} {
+			t.Run(scope+"/"+string(signal), func(t *testing.T) {
+				f, repo, candidate := transactionArchiveFixture(t)
+				eventID := f.transactionEvent
+				if scope != "transaction" {
+					eventID = f.lendingEvent
+				}
+				if scope == "related lending" {
+					_, err := repo.Pool.Exec(appCtx, `UPDATE event SET ill_transaction_id=$2 WHERE id=$1`, eventID, events.DEFAULT_ILL_TRANSACTION_ID)
+					require.NoError(t, err)
+				}
+				_, err := repo.Pool.Exec(appCtx, `UPDATE event SET last_signal=$2 WHERE id=$1`, eventID, signal)
+				require.NoError(t, err)
+				stored, err := repo.ArchiveIllTransaction(appCtx, candidate, f.owner, time.Now(), false)
+				require.NoError(t, err)
+				require.False(t, stored, "a completed event with a pending signal still blocks archival")
+
+				claimed, err := eventRepo.ClaimEventForSignal(appCtx, eventID, signal)
+				require.NoError(t, err)
+				require.Empty(t, claimed.LastSignal)
+				stored, err = repo.ArchiveIllTransaction(appCtx, candidate, f.owner, time.Now(), false)
+				require.NoError(t, err)
+				require.True(t, stored, "claiming clears the signal without tracking handler completion")
+			})
+		}
+	}
+}
+
+func TestArchiveIllTransactionIgnoresRotaAuditSignals(t *testing.T) {
+	for _, name := range []events.EventName{events.EventNameSupplierAdded, events.EventNameSupplierMoved} {
+		t.Run(string(name), func(t *testing.T) {
+			f, repo, candidate := transactionArchiveFixture(t)
+			require.NoError(t, repo.WithTxFunc(appCtx, func(txRepo ill_db.IllRepo) error {
+				return txRepo.SaveRotaAudit(appCtx, f.transaction, string(name), "staff", nil)
+			}))
+			// A consumer notice still blocks archival alongside observer-only audits.
+			_, err := repo.Pool.Exec(appCtx, `UPDATE event SET event_type='NOTICE',event_name=$2,last_signal=$3 WHERE id=$1`,
+				f.transactionEvent, events.EventNameRequesterMsgReceived, events.SignalNoticeCreated)
+			require.NoError(t, err)
+			stored, err := repo.ArchiveIllTransaction(appCtx, candidate, f.owner, time.Now(), false)
+			require.NoError(t, err)
+			require.False(t, stored)
+			_, err = eventRepo.ClaimEventForSignal(appCtx, f.transactionEvent, events.SignalNoticeCreated)
+			require.NoError(t, err)
+			stored, err = repo.ArchiveIllTransaction(appCtx, candidate, f.owner, time.Now(), false)
+			require.NoError(t, err)
+			require.True(t, stored)
+			var signal string
+			require.NoError(t, repo.Pool.QueryRow(appCtx, `SELECT audit->>'last_signal'
+				FROM archived_resource, jsonb_array_elements(bundle->'illTransactionEvents') AS audit
+				WHERE resource_id=$1 AND audit->>'event_name'=$2`, f.transaction, name).Scan(&signal))
+			require.Equal(t, string(events.SignalNoticeCreated), signal, "the unchanged audit is included in the archive")
+		})
+	}
+}
+
 func TestArchiveIllTransactionConcurrentAndRollback(t *testing.T) {
 	f, repo, candidate := transactionArchiveFixture(t)
 	// Force a deletion failure after inserting the archive and detaching events.
@@ -265,12 +321,12 @@ func TestManualBatchRunQueueRollback(t *testing.T) {
 			return err
 		}
 		require.True(t, active)
-		var protected int
-		err = txRepo.(*sched_db.PgSchedRepo).GetConnOrTx().QueryRow(appCtx, `SELECT count(*) FROM event_consumer_work w JOIN event e ON e.id=w.event_id WHERE e.event_data->'batchActionData'->>'taskId'=$1`, id).Scan(&protected)
+		var signal string
+		err = txRepo.(*sched_db.PgSchedRepo).GetConnOrTx().QueryRow(appCtx, `SELECT last_signal FROM event WHERE event_data->'batchActionData'->>'taskId'=$1`, id).Scan(&signal)
 		if err != nil {
 			return err
 		}
-		require.Equal(t, 1, protected)
+		require.Equal(t, string(events.SignalTaskCreated), signal)
 		return rollback
 	})
 	require.ErrorIs(t, err, rollback)
@@ -323,9 +379,9 @@ func TestArchiveIllTransactionMigrationRoundTrip(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = pool.Exec(appCtx, `DELETE FROM archived_ill_transactions WHERE ill_transaction->>'id'=$1`, marker)
 	})
-	down, err := os.ReadFile("../../../migrations/076_archive_ill_transactions.down.sql")
+	down, err := os.ReadFile("../../../migrations/078_archive_ill_transactions.down.sql")
 	require.NoError(t, err)
-	up, err := os.ReadFile("../../../migrations/076_archive_ill_transactions.up.sql")
+	up, err := os.ReadFile("../../../migrations/078_archive_ill_transactions.up.sql")
 	require.NoError(t, err)
 	_, err = pool.Exec(appCtx, string(down))
 	require.NoError(t, err)

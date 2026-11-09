@@ -210,9 +210,11 @@ defaults to `false` and uses the same operational allowlist described above.
 
 Each run archives up to 100 transactions, scanning pages of 100 in stable ID
 order regardless of CQL `sortBy`. Changed or locked transactions, transactions
-with local borrowing PRs, nonterminal related requests, active events, unfinished
-consumer work, or pending availability attempts are skipped. Related requests
-are matched by requester symbol and current/previous requester request ID.
+with local borrowing PRs, nonterminal related requests, active events, pending
+consumer signals, or pending availability attempts are skipped. Observer-only
+`supplier-added` and `supplier-moved` rota audit signals do not block archival.
+Claiming a signal clears it; consumer handlers are not tracked through completion.
+Related requests are matched by requester symbol and current/previous requester request ID.
 The caller selects the statuses to retain through CQL; age alone does not prove
 that a transaction is finished.
 
@@ -242,7 +244,7 @@ The legacy `archive` binary, `POST /archive_ill_transactions`, `call_archive.sh`
 and their database function have been removed. Replace old jobs with scheduled
 batch actions. Historical rows in `archived_ill_transactions` are preserved;
 new archives use `archived_resource`. Stop legacy jobs and upgrade all broker
-replicas before enabling the new action: migration 076 removes the legacy
+replicas before enabling the new action: migration 078 removes the legacy
 function and adds request/transaction locking used by the new archiver.
 Import and restoration of transaction archives are not supported.
 

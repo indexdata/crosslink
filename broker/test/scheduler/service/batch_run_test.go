@@ -82,12 +82,10 @@ func TestScheduledBatchActionDefersUntilManualRunCompletes(t *testing.T) {
 		if _, err := repo.ClaimEventForSignal(appCtx, manualEvents[0].ID, events.SignalTaskCreated); err != nil {
 			return err
 		}
-		if _, err := repo.UpdateEventLifecycle(appCtx, events.UpdateEventLifecycleParams{
+		_, err := repo.UpdateEventLifecycle(appCtx, events.UpdateEventLifecycleParams{
 			ID: manualEvents[0].ID, EventStatus: events.EventStatusSuccess,
-		}); err != nil {
-			return err
-		}
-		return repo.CompleteConsumerSignal(appCtx, manualEvents[0].ID, events.SignalTaskCreated)
+		})
+		return err
 	}))
 	deferred.RunAt = pgtype.Timestamptz{Time: time.Now().Add(-time.Second), Valid: true}
 	_, err = schedRepo.SaveScheduledTask(appCtx, sched_db.SaveScheduledTaskParams(deferred))
