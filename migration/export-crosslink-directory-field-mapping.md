@@ -115,12 +115,11 @@ below.
 Under the same conditions, each of the local entry's direct children with a
 non-blank `directory_entry.de_lms_location_code` gets a pickup-code-only
 `data.lmsConfig`, because CrossLink reads a selected pickup location's LMS code
-from that entry's own `lmsConfig.requesterPickupLocation`. It contains the
-branch's code as `requesterPickupLocation`, `requestItemPickupLocationEnabled`
-set to `true`, and the tenant's `address` and `fromAgency`, which the import
-contract requires. Every other field is `null`, including `vendor` and
-`fromAgencyAuthentication`, so the NCIP credential and the tenant's NCIP
-settings are not copied to branches. CrossLink builds LMS connections only from
+from that entry's own `lmsConfig.requesterPickupLocation`. It contains only the
+branch's code as `requesterPickupLocation`; every other field is `null`. Branches
+may not store other circulation settings: Directory reads fill them in from the
+branch's institution (see [configuration inheritance](../directory/README.md#configuration-inheritance)),
+so nothing is copied to branches. CrossLink builds LMS connections only from
 entries found by symbol, and branches have no symbols.
 
 | mod-rs source | CrossLink field | Mapping |
@@ -138,7 +137,7 @@ entries found by symbol, and branches have no symbols.
 | `app_setting.check_in_item` | `data.lmsConfig.checkInItemEnabled` | `true` when the value equals `ncip`, case-insensitively; otherwise `false`. |
 | `app_setting.check_out_item` | `data.lmsConfig.checkOutItemEnabled` | `true` when the value equals `ncip`, case-insensitively; otherwise `false`. |
 | `app_setting.use_request_item` | `data.lmsConfig.requestItemEnabled` | `true` when the value equals `ncip`, case-insensitively; otherwise `false`. |
-| `app_setting.host_lms_integration` and `directory_entry.de_lms_location_code` | `data.lmsConfig.requestItemPickupLocationEnabled` | `false` for Evergreen, Horizon, Polaris and Symphony, matching their circulation profiles. For other profiles, `true` when the location code is not `null`; otherwise `false`. Branch pickup-code-only configurations retain `true`. |
+| `app_setting.host_lms_integration` and `directory_entry.de_lms_location_code` | `data.lmsConfig.requestItemPickupLocationEnabled` | `false` for Evergreen, Horizon, Polaris and Symphony, matching their circulation profiles. For other profiles, `true` when the location code is not `null`; otherwise `false`. Branches export `null` and inherit their institution's value. |
 | `directory_entry.de_lms_location_code` | `data.lmsConfig.requesterPickupLocation` | Copied directly from the entry itself, so each branch carries its own code. |
 | `app_setting.ncip_request_item_pickup_location` | `data.lmsConfig.supplierPickupLocation` | Copied directly. |
 | Local entry custom property `folio_location_filter` | `data.lmsConfig.itemLocation` | Copied when present; otherwise `null`. mod-rs passes this value as the item location in NCIP RequestItem messages. |
@@ -170,17 +169,18 @@ is not exported.
 when no ISO18626 endpoint is configured, and for mpals institutions in
 `mode=mpals`. It is also emitted for non-local
 entries tagged as pickup locations so that `isPickupLocation` is preserved.
-The owner's direct branches inherit the tenant policy values when they are
-exported as pickup locations. Other non-local pickup entries have `null` for
-the ISO18626 endpoint, vendor, and tenant policy values; the remaining fields
-retain their exported defaults.
+Branches export only `isPickupLocation`; every other field is `null`, so a branch
+inherits its institution's ISO18626 endpoint and tenant policy values when
+Directory reads it. Other non-local pickup entries have `null` for the ISO18626
+endpoint, vendor, and tenant policy values; the remaining fields retain their
+exported defaults.
 
 | mod-rs source | CrossLink field | Mapping |
 | --- | --- | --- |
 | First `service.se_address` whose normalized service type is `ISO18626` | `data.illConfig.iso18626Url` | The first matching endpoint ordered by `service.se_id` is used. |
 | Presence of the ISO18626 endpoint | `data.illConfig.iso18626Vendor` | Set to `ReShare`. |
-| `app_setting.max_requests` | `data.illConfig.maxRequestsPerPatron` | Cast to an integer for the selected local entry and its direct branches. Values must be from 0 through 2147483647; the value is `null` for other non-local pickup entries. |
-| `app_setting.check_duplicate_time` | `data.illConfig.duplicateCheckWindowHours` | Cast to an integer number of hours for the selected local entry and its direct branches. Values must be from 0 through 2147483647; the value is `null` for other non-local pickup entries. |
+| `app_setting.max_requests` | `data.illConfig.maxRequestsPerPatron` | Cast to an integer for the selected local entry. Values must be from 0 through 2147483647. The value is `null` for branches, which inherit it, and for other non-local pickup entries. |
+| `app_setting.check_duplicate_time` | `data.illConfig.duplicateCheckWindowHours` | Cast to an integer number of hours for the selected local entry. Values must be from 0 through 2147483647. The value is `null` for branches, which inherit it, and for other non-local pickup entries. |
 | `app_setting.default_copyright_type` resolved through `copyrightType` refdata | `data.illConfig.defaultCopyrightType` | Exported only on the selected local owner as a single object: `rdv_value` becomes `code` as its ISO18626 CopyrightCompliance code, and `rdv_label` becomes `defaultDesc`, falling back to the code for a null or whitespace-only label. |
 | Unsupported mod-rs agency-information behavior | `data.illConfig.includeRequestingAgencyInfo` | Set to `false`; mod-rs does not populate requesting-agency information. |
 | Unsupported mod-rs agency-information behavior | `data.illConfig.includeSupplierInfo` | Set to `false`; mod-rs does not populate supplier information. |
@@ -224,8 +224,8 @@ case-insensitively against the symbols of non-deleted directory entries, and the
 list holds the matching entry IDs in setting order without duplicates. For
 example, `ISIL:US-MNMPUMNX` becomes the Minitex entry's ID. A value without an
 authority, or one that matches no entry or several entries, fails the export
-before any records are emitted. All other entries, including the owner's
-branches, get an empty list.
+before any records are emitted. Branches get `null` and inherit their
+institution's list; all other entries get an empty list.
 
 CrossLink imports NDJSON records sequentially and requires each lender to exist
 already, so `join-crosslink-exports.sh` emits the institutions that are listed

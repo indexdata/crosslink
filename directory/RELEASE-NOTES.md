@@ -1,5 +1,31 @@
 # Unreleased
 
+- Directory entries now inherit configuration through the consortium →
+  institution → branch hierarchy. Entry GETs return merged values by default;
+  pass `resolve-inherit=false` for stored values only. Inheritance boundaries,
+  merge units and per-type editability are declared in `api.yaml`
+  (`x-inheritance-root`, `x-editable-on`, `x-merge-unit`, `x-off-value`). See
+  [configuration inheritance](README.md#configuration-inheritance).
+- Behavior changes: `null` now removes a local value so that an inherited one
+  applies, and is accepted for every configuration field, including LMS
+  `address`/`fromAgency`, catalog sub-objects and ILL lists. Writes of fields an
+  entry type may not set return HTTP 400 (for example, `illConfig.loadBalancingPolicy`
+  is consortium-only, and branches may set only pickup codes and `isPickupLocation`).
+  Imports report these as per-record errors, and import nulls clear legacy values.
+  On PATCH and update imports, resubmitting a value the entry already stores is
+  accepted.
+  Only consortial administrators may change an entry's `parent` or `type`;
+  institutional administrators get HTTP 401 (resending the stored values is still
+  accepted). A stored empty `lendersOfLastResort` now reads as `[]`
+  instead of being omitted.
+- Use `defaultLoanPeriod: 0` and `ncipVersion: "default"` to switch these settings
+  off locally. Apply migration `025_inheritance_off_values` first; its down migration
+  converts them back to null. Deploy the updated broker, which treats both values as
+  unset, together with Directory.
+- The migration export no longer copies the tenant's NCIP and ILL settings onto
+  branches; branches inherit them. Branch records exported by earlier versions keep
+  overriding inherited values until they are re-imported or cleared with PATCH `null`.
+
 - Add configurable Evergreen, Horizon, Polaris and Symphony host profiles, including
   catalog identifier transformations and MARC/OPAC availability and loan-policy
   options. Apply Directory migration `021_catalog_identifier_options` and deploy

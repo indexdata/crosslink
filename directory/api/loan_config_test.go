@@ -18,9 +18,10 @@ func TestDefaultLoanPeriodPatch(t *testing.T) {
 	}{
 		{`{}`, &original},
 		{`{"defaultLoanPeriod":null}`, nil},
+		{`{"defaultLoanPeriod":0}`, int32Pointer(0)},
 		{`{"defaultLoanPeriod":30}`, int32Pointer(30)},
 	} {
-		var config IllConfig
+		var config IllConfigPatch
 		require.NoError(t, json.Unmarshal([]byte(tc.body), &config))
 		result, err := illConfigPatchToDBParams(uuid.New(), config, db.IllConfig{DefaultLoanPeriod: &original})
 		require.NoError(t, err)
@@ -44,7 +45,7 @@ func TestMaxRequestsPerPatronPatch(t *testing.T) {
 		{`{"maxRequestsPerPatron":0}`, int32Pointer(0)},
 		{`{"maxRequestsPerPatron":25}`, int32Pointer(25)},
 	} {
-		var config IllConfig
+		var config IllConfigPatch
 		require.NoError(t, json.Unmarshal([]byte(tc.body), &config))
 		result, err := illConfigPatchToDBParams(uuid.New(), config, db.IllConfig{MaxRequestsPerPatron: &original})
 		require.NoError(t, err)
@@ -67,7 +68,7 @@ func TestMinimumCostPatch(t *testing.T) {
 		{`{"minimumCost":0}`, float64Pointer(0)},
 		{`{"minimumCost":2.75}`, float64Pointer(2.75)},
 	} {
-		var config IllConfig
+		var config IllConfigPatch
 		require.NoError(t, json.Unmarshal([]byte(tc.body), &config))
 		result, err := illConfigPatchToDBParams(uuid.New(), config, db.IllConfig{MinimumCost: &original})
 		require.NoError(t, err)

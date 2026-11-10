@@ -18,7 +18,7 @@ func TestLoadBalancingPolicyPatch(t *testing.T) {
 	}{
 		{`{}`, &original}, {`{"loadBalancingPolicy":null}`, nil}, {`{"loadBalancingPolicy":"deficit"}`, &deficit},
 	} {
-		var cfg IllConfig
+		var cfg IllConfigPatch
 		require.NoError(t, json.Unmarshal([]byte(tc.body), &cfg))
 		result, err := illConfigPatchToDBParams(uuid.New(), cfg, db.IllConfig{LoadBalancingPolicy: &original})
 		require.NoError(t, err)
