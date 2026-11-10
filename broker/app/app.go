@@ -210,7 +210,7 @@ func Init(ctx context.Context) (Context, error) {
 	sseBroker := api.NewSseBroker(appCtx, tenantResolver)
 	psApiHandler := psapi.NewPsApiHandler(psRepo, prRepo, tenantResolver, eventBus)
 
-	batchActionService := sched_service.NewBatchActionService(eventBus, prRepo, schedRepo, emailSenderService)
+	batchActionService := sched_service.NewBatchActionService(eventBus, prRepo, schedRepo, emailSenderService, prRepo.(sched_service.PatronRequestArchiveRepo))
 
 	if err != nil {
 		appCtx.Logger().Warn("email service not available, email sending events will fail", "error", err)

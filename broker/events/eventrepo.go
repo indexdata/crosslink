@@ -15,6 +15,7 @@ type EventRepo interface {
 	GetEvent(ctx common.ExtendedContext, id string) (Event, error)
 	GetEventForUpdate(ctx common.ExtendedContext, id string) (Event, error)
 	GetOlderIncompleteEvent(ctx common.ExtendedContext, event Event) (Event, error)
+	// ClaimEventForSignal atomically clears and claims one pending lifecycle signal.
 	ClaimEventForSignal(ctx common.ExtendedContext, id string, signal Signal) (Event, error)
 	Notify(ctx common.ExtendedContext, eventId string, signal Signal, target SignalTarget) error
 	GetIllTransactionEvents(ctx common.ExtendedContext, id string) ([]Event, int64, error)
@@ -82,15 +83,15 @@ func (r *PgEventRepo) UpdateEventLifecycle(ctx common.ExtendedContext, params Up
 }
 
 func (r *PgEventRepo) Notify(ctx common.ExtendedContext, eventId string, signal Signal, target SignalTarget) error {
-	data := NotifyData{
-		Event:  eventId,
-		Signal: signal,
-		Target: target,
+	data := NotifyData{Event: eventId, Signal: signal, Target: target}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("encode event notification: %w", err)
 	}
-	jsonData, _ := json.Marshal(data)
-	sql := fmt.Sprintf("NOTIFY crosslink_channel, '%s'", jsonData)
-	_, err := r.GetConnOrTx().Exec(ctx, sql)
-	return err
+	if _, err = r.GetConnOrTx().Exec(ctx, "SELECT pg_notify($1, $2)", EVENT_BUS_CHANNEL, string(jsonData)); err != nil {
+		return fmt.Errorf("publish event notification: %w", err)
+	}
+	return nil
 }
 
 func (r *PgEventRepo) GetIllTransactionEvents(ctx common.ExtendedContext, id string) ([]Event, int64, error) {
