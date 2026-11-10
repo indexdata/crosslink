@@ -5,18 +5,23 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 
 	"golang.org/x/text/encoding/ianaindex"
-	"golang.org/x/text/encoding/unicode"
 )
+
+// Extract the encoding label from the initial declaration without validating it.
+// Stop at '?' so a declaration without encoding cannot match document content.
+var xmlDeclEncoding = regexp.MustCompile(`^<\?xml\s+[^?]*\sencoding\s*=\s*["']([^"']+)["']`)
 
 // UnmarshalXML decodes XML using the encoding precedence from RFC 7303:
 // BOM, transport charset, XML declaration, then the XML default of UTF-8.
 // transportCharset is an encoding label (for example an HTTP charset parameter),
 // or empty when the transport supplies none. UTF-8 and UTF-16 BOMs are supported;
 // other charset labels use the encodings supported by x/text's IANA registry.
-// Incorrectly labelled UTF-8 is rejected rather than guessed to be a legacy charset.
+// Malformed character sequences use the selected decoder's U+FFFD replacement
+// behavior, including for UTF-8. XML syntax errors are still rejected.
 func UnmarshalXML(data []byte, transportCharset string, value any) error {
 	charset := strings.TrimSpace(transportCharset)
 	switch {
@@ -35,24 +40,27 @@ func UnmarshalXML(data []byte, transportCharset string, value any) error {
 		data = data[2:]
 	}
 
-	var input io.Reader = bytes.NewReader(data)
-	if charset != "" {
-		var err error
-		input, err = xmlCharsetReader(charset, input)
-		if err != nil {
-			return err
-		}
+	if charset == "" {
+		charset = xmlDeclarationCharset(data)
+	}
+	input, err := xmlCharsetReader(charset, bytes.NewReader(data))
+	if err != nil {
+		return err
 	}
 	decoder := xml.NewDecoder(input)
-	decoder.CharsetReader = xmlCharsetReader
-	if charset != "" {
-		// A BOM or transport charset already determined the encoding. The XML
-		// declaration must neither override it nor cause a second conversion.
-		decoder.CharsetReader = func(_ string, input io.Reader) (io.Reader, error) {
-			return input, nil
-		}
+	// Every input is now converted to UTF-8. The declaration is still parsed,
+	// but must not trigger a second conversion or override the chosen encoding.
+	decoder.CharsetReader = func(_ string, input io.Reader) (io.Reader, error) {
+		return input, nil
 	}
 	return decoder.Decode(value)
+}
+
+func xmlDeclarationCharset(data []byte) string {
+	if match := xmlDeclEncoding.FindSubmatch(data); match != nil {
+		return string(match[1])
+	}
+	return "UTF-8"
 }
 
 func xmlCharsetReader(charset string, input io.Reader) (io.Reader, error) {
@@ -62,11 +70,6 @@ func xmlCharsetReader(charset string, input io.Reader) (io.Reader, error) {
 	}
 	if enc == nil {
 		return nil, fmt.Errorf("unsupported XML charset %q", charset)
-	}
-	if enc == unicode.UTF8 {
-		// Let encoding/xml reject invalid UTF-8. x/text's UTF-8 decoder would
-		// replace malformed bytes with U+FFFD and conceal the encoding error.
-		return input, nil
 	}
 	return enc.NewDecoder().Reader(input), nil
 }
