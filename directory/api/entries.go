@@ -17,6 +17,7 @@ import (
 	"github.com/indexdata/crosslink/directory/auth"
 	"github.com/indexdata/crosslink/directory/db"
 	"github.com/indexdata/crosslink/directory/domain"
+	"github.com/indexdata/crosslink/directory/storedconfig"
 )
 
 func isOwnedEntry(authData *auth.AuthData, tenant *string) bool {
@@ -44,7 +45,9 @@ func maybeUpdateEntryVendor(cur *string, patch nullable.Nullable[EntryVendor]) *
 	return &value
 }
 
-func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
+// scanEntryRow scans one entry. It also returns the entry's stored
+// configuration containers as projected JSON, keyed by API property name.
+func scanEntryRow(rows pgx.Rows) (Entry, storedconfig.Configs, int, error) {
 	var (
 		id                 uuid.UUID
 		name               string
@@ -78,56 +81,56 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 	if err := rows.Scan(&id, &name, &description, &organizationId, &contactName, &email, &fromEmail, &tenant, &vendor, &phoneNumber,
 		&lmsLocationCode, &lendToBorrowRatio, &illConfigJSON, &lmsConfigJSON, &catalogConfigJSON, &holdingsPolicyJSON, &hrid, &timeZone, &entryType, &parent, &symbolsJSON, &endpointsJSON,
 		&addressesJSON, &tiersJSON, &networksJSON, &closuresJSON, &totalCount); err != nil {
-		return Entry{}, 0, err
+		return Entry{}, nil, 0, err
 	}
 
 	symbols, err := unmarshalJSONArray[Symbol](symbolsJSON)
 	if err != nil {
-		return Entry{}, 0, fmt.Errorf("unmarshalling symbols: %w", err)
+		return Entry{}, nil, 0, fmt.Errorf("unmarshalling symbols: %w", err)
 	}
 
 	endpoints, err := unmarshalJSONArray[ServiceEndpoint](endpointsJSON)
 	if err != nil {
-		return Entry{}, 0, fmt.Errorf("unmarshalling endpoints: %w", err)
+		return Entry{}, nil, 0, fmt.Errorf("unmarshalling endpoints: %w", err)
 	}
 
 	addresses, err := unmarshalJSONArray[Address](addressesJSON)
 	if err != nil {
-		return Entry{}, 0, fmt.Errorf("unmarshalling addresses: %w", err)
+		return Entry{}, nil, 0, fmt.Errorf("unmarshalling addresses: %w", err)
 	}
 
 	closures, err := unmarshalJSONArray[Closure](closuresJSON)
 	if err != nil {
-		return Entry{}, 0, fmt.Errorf("unmarshalling closures: %w", err)
+		return Entry{}, nil, 0, fmt.Errorf("unmarshalling closures: %w", err)
 	}
 
 	lmsConfig, err := unmarshalJSONObject[LmsConfig](lmsConfigJSON)
 	if err != nil {
-		return Entry{}, 0, fmt.Errorf("unmarshalling lms config: %w", err)
+		return Entry{}, nil, 0, fmt.Errorf("unmarshalling lms config: %w", err)
 	}
 
 	catalogConfig, err := unmarshalJSONObject[CatalogConfig](catalogConfigJSON)
 	if err != nil {
-		return Entry{}, 0, fmt.Errorf("unmarshalling holdings config: %w", err)
+		return Entry{}, nil, 0, fmt.Errorf("unmarshalling holdings config: %w", err)
 	}
 	holdingsPolicy, err := unmarshalJSONObject[HoldingsPolicy](holdingsPolicyJSON)
 	if err != nil {
-		return Entry{}, 0, fmt.Errorf("failed to parse holdings policy: %w", err)
+		return Entry{}, nil, 0, fmt.Errorf("failed to parse holdings policy: %w", err)
 	}
 
 	tiers, err := unmarshalJSONArray[Tier](tiersJSON)
 	if err != nil {
-		return Entry{}, 0, fmt.Errorf("unmarshalling tiers: %w", err)
+		return Entry{}, nil, 0, fmt.Errorf("unmarshalling tiers: %w", err)
 	}
 
 	networks, err := unmarshalJSONArray[EntryNetworkDetails](networksJSON)
 	if err != nil {
-		return Entry{}, 0, fmt.Errorf("unmarshalling networks config: %w", err)
+		return Entry{}, nil, 0, fmt.Errorf("unmarshalling networks config: %w", err)
 	}
 
 	illConfig, err := unmarshalJSONObject[IllConfig](illConfigJSON)
 	if err != nil {
-		return Entry{}, 0, fmt.Errorf("unmarshalling ill config: %w", err)
+		return Entry{}, nil, 0, fmt.Errorf("unmarshalling ill config: %w", err)
 	}
 
 	// Use nil for empty arrays so they're omitted in JSON (omitempty)
@@ -165,6 +168,8 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 
 	typeValue := EntryType(*entryType)
 
+	configs := storedconfig.FromColumns(illConfigJSON, lmsConfigJSON, catalogConfigJSON, holdingsPolicyJSON)
+
 	return Entry{
 		Id:                &id,
 		Name:              name,
@@ -192,7 +197,7 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 		Networks:          networksPtr,
 		TimeZone:          timeZone,
 		Vendor:            (*EntryVendor)(vendor),
-	}, totalCount, nil
+	}, configs, totalCount, nil
 }
 
 const defaultEntryOrder = "ORDER BY e.name, e.id"
@@ -271,7 +276,7 @@ func (f *fieldEntrySymbol) Generate(sc cql.SearchClause, queryArgumentIndex int)
 // buildEntrySQL builds the base SQL query for entries with nested subresources
 func buildEntrySQL(whereClause string) string {
 	baseQuery := `
-	
+
 	SELECT
 		e.id,
 		e.name,
@@ -285,133 +290,7 @@ func buildEntrySQL(whereClause string) string {
 		e.phone_number,
 		e.lms_location_code,
 		e.lend_to_borrow_ratio,
-		(
-		SELECT json_strip_nulls(json_build_object(
-			'isPickupLocation', i.is_pickup_location,
-			'iso18626Url', i.iso18626_url,
-			'iso18626Vendor', i.iso18626_vendor,
-			'lendersOfLastResort', CASE WHEN i.lenders_of_last_resort IS NULL THEN NULL ELSE (
-				SELECT json_agg(json_build_object(
-					'authority', split_part(value, ':', 1),
-					'symbol', substring(value from position(':' in value) + 1)
-				))
-				FROM unnest(i.lenders_of_last_resort) value
-			) END,
-			'includeRequestingAgencyInfo', i.include_requesting_agency_info,
-			'includeSupplierInfo', i.include_supplier_info,
-			'includeReturnInfo', i.include_return_info,
-			'includeVendorNote', i.include_vendor_note,
-			'useOfferedCosts', i.use_offered_costs,
-			'noteFieldSeparator', i.note_field_separator,
-			'supplierPatronPattern', i.supplier_patron_pattern,
-			'requestIdPrefix', i.request_id_prefix,
-			'duplicateCheckWindowHours', i.duplicate_check_window_hours,
-			'defaultLoanPeriod', i.default_loan_period,
-			'maxRequestsPerPatron', i.max_requests_per_patron,
-			'minimumCost', i.minimum_cost,
-			'loadBalancingPolicy', i.load_balancing_policy,
-			'defaultCopyrightType', i.default_copyright_type,
-			'availableCopyrightTypes', i.available_copyright_types,
-			'unfilledReasons', i.unfilled_reasons,
-			'loanConditions', i.loan_conditions,
-			'cancellationReasons', i.cancellation_reasons
-		)) FROM ill_configs i WHERE i.entry = e.id) as ill_config,
-		(
-		SELECT 
-			json_strip_nulls(json_build_object(
-				'vendor', l.vendor,
-				'ncipNamespaceEnabled', l.ncip_namespace_enabled,
-				'ncipVersion', l.ncip_version,
-				'bibIdNormalization', l.bib_id_normalization,
-				'acceptItemEnabled', l.accept_item_enabled,
-				'address', NULLIF(l.address, ''),
-				'checkInItemEnabled', l.checkin_item_enabled,
-				'checkOutItemEnabled', l.checkout_item_enabled,
-				'fromAgency', NULLIF(l.from_agency, ''),
-				'fromAgencyAuthentication', l.from_agency_authentication,
-				'itemLocation', l.item_location,
-				'lookupUserEnabled', l.lookup_user_enabled,
-				'requestItemBibIdCode', l.request_item_bib_code,
-				'requestItemEnabled', l.request_item_enabled,
-				'requestItemPickupLocationEnabled', l.request_item_pickup_location_enabled,
-				'requestItemRequestScopeType', l.request_item_scope_type,
-				'bibItemScopeName', l.bib_item_scope_name,
-				'requestItemRequestType', l.request_item_request_type,
-				'requesterPatronPattern', l.requester_patron_pattern,
-				'requesterPickupLocation', l.requester_pickup_location,
-				'supplierPickupLocation', l.supplier_pickup_location,
-				'patronProfiles', l.patron_profiles,
-				'toAgency', l.to_agency
-			))
-		from lms_configs l WHERE l.entry = e.id) as lms_config,
-		(
-		SELECT
-			json_strip_nulls(json_build_object(
-				'profile', h.profile,
-				'metadataUpdateMode', h.metadata_update_mode,
-				'sru', CASE WHEN h.sru_address IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
-					'address', h.sru_address,
-					'recordSchema', h.sru_record_schema
-				)) END,
-				'zoom', CASE WHEN h.zoom_address IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
-					'address', h.zoom_address,
-					'options', h.zoom_options
-				)) END,
-				'queryConfig', CASE WHEN h.query_type IS NULL AND h.query_identifier IS NULL AND h.query_isbn IS NULL AND h.query_issn IS NULL AND h.query_title IS NULL AND h.query_year IS NULL AND h.query_identifier_normalization IS NULL AND h.query_identifier_prefix IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
-					'type', h.query_type,
-					'identifier', h.query_identifier,
-					'isbn', h.query_isbn,
-					'issn', h.query_issn,
-					'title', h.query_title,
-					'year', h.query_year,
-					'identifierNormalization', h.query_identifier_normalization,
-					'identifierPrefix', h.query_identifier_prefix
-				)) END,
-				'holdingsFormat', COALESCE(h.holdings_config, NULLIF(jsonb_strip_nulls(jsonb_build_object(
-					'marc', CASE WHEN h.holdings_marc_call_number_subfield IS NULL
-						AND h.holdings_marc_item_id_subfield IS NULL
-						AND h.holdings_marc_location_subfield IS NULL
-						AND h.holdings_marc_main_field IS NULL
-						AND h.holdings_marc_restricted_subfield IS NULL
-						AND h.holdings_marc_shelving_location_subfield IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
-							'callNumberSubField', h.holdings_marc_call_number_subfield,
-							'itemIdSubField', h.holdings_marc_item_id_subfield,
-							'locationSubField', h.holdings_marc_location_subfield,
-							'mainField', h.holdings_marc_main_field,
-							'restrictedSubField', h.holdings_marc_restricted_subfield,
-							'shelvingLocationSubField', h.holdings_marc_shelving_location_subfield
-						)) END,
-					'marc21plus1', CASE WHEN h.holdings_marc21plus1_enabled THEN json_build_object() ELSE NULL END,
-					'opac', CASE WHEN h.holdings_opac_enabled THEN json_build_object() ELSE NULL END,
-					'reservoir', CASE WHEN h.holdings_reservoir_enabled THEN json_build_object() ELSE NULL END
-				)), '{}'::jsonb)),
-				'metadataFormat', CASE WHEN h.metadata_marc21_author IS NULL
-					AND h.metadata_marc21_edition IS NULL
-					AND h.metadata_marc21_identifier IS NULL
-					AND h.metadata_marc21_isbn IS NULL
-					AND h.metadata_marc21_issn IS NULL
-					AND h.metadata_marc21_subtitle IS NULL
-					AND h.metadata_marc21_publisher IS NULL
-					AND h.metadata_marc21_publication_date IS NULL
-					AND h.metadata_marc21_place_of_publication IS NULL
-					AND h.metadata_marc21_title IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
-						'marc21', json_strip_nulls(json_build_object(
-							'author', h.metadata_marc21_author,
-							'edition', h.metadata_marc21_edition,
-							'identifier', h.metadata_marc21_identifier,
-							'isbn', h.metadata_marc21_isbn,
-							'issn', h.metadata_marc21_issn,
-							'subtitle', h.metadata_marc21_subtitle,
-							'publisher', h.metadata_marc21_publisher,
-							'publicationDate', h.metadata_marc21_publication_date,
-							'placeOfPublication', h.metadata_marc21_place_of_publication,
-							'title', h.metadata_marc21_title
-						))
-					)) END
-				)
-			)
-		from catalog_configs h WHERE h.entry = e.id) as catalog_config,
-		(SELECT hp.policy FROM holdings_policies hp WHERE hp.entry = e.id) as holdings_policy,
+		` + storedconfig.Columns + `,
 		e.hrid,
 		e.time_zone,
 		e.type,
@@ -521,37 +400,67 @@ func buildEntryListQuery(cqlString *string, limit *Limit, offset *Offset, baseWh
 	return query, args, nil
 }
 
-func (a ApiImpl) queryEntryList(ctx context.Context, query string, args []any, transform func(*Entry) error) (EntriesResponse, error) {
-	rows, err := a.pool.Query(ctx, query, args...)
-	if err != nil {
-		return EntriesResponse{}, fmt.Errorf("querying entries: %w", err)
+// readEntries runs an entry query, merges inherited configuration when
+// resolve is true, and sanitizes protected fields for the caller.
+//
+// When resolving, the entries and their ancestors are read in one read-only
+// REPEATABLE READ transaction so that both come from the same snapshot.
+func (a ApiImpl) readEntries(ctx context.Context, query string, args []any, authData *auth.AuthData, resolve bool) ([]Entry, int, error) {
+	var q storedconfig.Querier = a.pool
+	resolve = resolve && a.inheritance != nil
+	if resolve {
+		tx, err := a.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+		if err != nil {
+			return nil, 0, fmt.Errorf("begin entry read transaction: %w", err)
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		q = tx
 	}
-	defer rows.Close()
 
+	rows, err := q.Query(ctx, query, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("querying entries: %w", err)
+	}
 	// Initialise items as explicitly zero length because a nil slice is
 	// JSON-encoded as null rather than [].
 	items := make([]Entry, 0)
+	var configs []storedconfig.Configs
 	var totalCount int
-
 	for rows.Next() {
-		entry, count, err := scanEntryRow(rows)
+		entry, stored, count, err := scanEntryRow(rows)
 		if err != nil {
-			return EntriesResponse{}, fmt.Errorf("scanning entry row: %w", err)
+			rows.Close()
+			return nil, 0, fmt.Errorf("scanning entry row: %w", err)
 		}
-		if transform != nil {
-			if err := transform(&entry); err != nil {
-				return EntriesResponse{}, fmt.Errorf("transforming entry: %w", err)
-			}
-		}
-
 		items = append(items, entry)
+		configs = append(configs, stored)
 		totalCount = count
 	}
-
+	rows.Close()
 	if err := rows.Err(); err != nil {
-		return EntriesResponse{}, fmt.Errorf("iterating entry rows: %w", err)
+		return nil, 0, fmt.Errorf("iterating entry rows: %w", err)
 	}
 
+	if resolve {
+		if err := a.resolveInheritance(ctx, q, authData, items, configs); err != nil {
+			return nil, 0, err
+		}
+	}
+	for i := range items {
+		if !canSeeSensitiveEntry(authData, items[i].Tenant) {
+			if err := sanitizeEntry(&items[i]); err != nil {
+				return nil, 0, fmt.Errorf("sanitizing entry: %w", err)
+			}
+		}
+	}
+	return items, totalCount, nil
+}
+
+func (a ApiImpl) queryEntryList(ctx context.Context, query string, args []any, authData *auth.AuthData, resolve bool) (EntriesResponse, error) {
+	items, totalCount, err := a.readEntries(ctx, query, args, authData, resolve)
+	if err != nil {
+		return EntriesResponse{}, err
+	}
 	return EntriesResponse{
 		Items: items,
 		About: About{Count: int64(totalCount)},
@@ -572,12 +481,7 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 		return GetEntries400TextResponse(fmt.Sprintf("CQL parse error: %v", err)), nil
 	}
 
-	response, err := a.queryEntryList(ctx, query, args, func(entry *Entry) error {
-		if !canSeeSensitiveEntry(authData, entry.Tenant) {
-			return sanitizeEntry(entry)
-		}
-		return nil
-	})
+	response, err := a.queryEntryList(ctx, query, args, authData, resolveInheritParam(request.Params.ResolveInherit))
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to read entries", "error", err)
 		return GetEntries500TextResponse("Internal server error"), nil
@@ -610,12 +514,7 @@ func (a ApiImpl) GetOwnedEntries(ctx context.Context, request GetOwnedEntriesReq
 		return GetOwnedEntries400TextResponse(fmt.Sprintf("CQL parse error: %v", err)), nil
 	}
 
-	response, err := a.queryEntryList(ctx, query, args, func(entry *Entry) error {
-		if !canSeeSensitiveEntry(authData, entry.Tenant) {
-			return sanitizeEntry(entry)
-		}
-		return nil
-	})
+	response, err := a.queryEntryList(ctx, query, args, authData, resolveInheritParam(request.Params.ResolveInherit))
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to read owned entries", "error", err)
 		return GetOwnedEntries500TextResponse("Internal server error"), nil
@@ -657,32 +556,16 @@ func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (G
 		args = []interface{}{authority, symbol}
 	}
 
-	rows, err := a.pool.Query(ctx, query, args...)
+	entries, _, err := a.readEntries(ctx, query, args, authData, resolveInheritParam(request.Params.ResolveInherit))
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to query entry", "error", err)
+		slog.ErrorContext(ctx, "failed to read entry", "error", err)
 		return GetEntry500TextResponse("Internal server error"), nil
 	}
-	defer rows.Close()
-
-	if !rows.Next() {
+	if len(entries) == 0 {
 		return GetEntry404TextResponse("Entry not found"), nil
 	}
 
-	entry, _, err := scanEntryRow(rows)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to scan entry row", "error", err)
-		return GetEntry500TextResponse("Internal server error"), nil
-	}
-
-	if !canSeeSensitiveEntry(authData, entry.Tenant) {
-		err := sanitizeEntry(&entry)
-		if err != nil {
-			slog.ErrorContext(ctx, "error sanitizing protected fields", "error", err)
-			return GetEntry500TextResponse("Internal server error"), nil
-		}
-	}
-
-	return GetEntry200JSONResponse(entry), nil
+	return GetEntry200JSONResponse(entries[0]), nil
 }
 
 func sanitizeEntry(entry *Entry) error {
@@ -774,6 +657,15 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		if !validParent {
 			return AddEntry400TextResponse("Invalid entry for parent: " + reason), nil
 		}
+	}
+
+	violation, err := a.checkConfigWrite(string(entryType), request.Body, nil)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to check configuration editability", "error", err)
+		return AddEntry500TextResponse("Internal server error"), nil
+	}
+	if violation != "" {
+		return AddEntry400TextResponse(violation), nil
 	}
 
 	toInsert := db.CreateEntryParams{
@@ -1010,6 +902,12 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 	resultingType := string(*maybeUpdateCol(&origTypeEntryPatch, request.Body.Type))
 	var parentEntry db.Entry
 	parent := maybeUpdateCol(orig.Parent, request.Body.Parent)
+	// An entry's parent and type decide what it inherits, so only consortial
+	// administrators may change them. Resending the stored values is allowed.
+	parentChanged := (parent == nil) != (orig.Parent == nil) || parent != nil && *parent != *orig.Parent
+	if (parentChanged || resultingType != orig.Type) && !authData.HasRoleFromList(writeRoles) {
+		return UpdateEntry401TextResponse("Only consortial administrators may change an entry's parent or type"), nil
+	}
 	if parent != nil {
 		if *parent == orig.ID {
 			return UpdateEntry400TextResponse("An entry cannot be its own parent"), nil
@@ -1044,6 +942,20 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 				return UpdateEntry400TextResponse("Entry type is invalid for existing child: " + reason), nil
 			}
 		}
+	}
+
+	localConfigs, err := storedconfig.LoadLocal(ctx, tx, orig.ID)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to load stored configuration", "error", err)
+		return UpdateEntry500TextResponse("Internal server error"), nil
+	}
+	violation, err := a.checkConfigWrite(resultingType, request.Body, localConfigs)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to check configuration editability", "error", err)
+		return UpdateEntry500TextResponse("Internal server error"), nil
+	}
+	if violation != "" {
+		return UpdateEntry400TextResponse(violation), nil
 	}
 
 	if resultingType == "Consortium" || orig.Type == "Consortium" {
@@ -1270,14 +1182,15 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 				return UpdateEntry500TextResponse("Internal server error"), nil
 			}
 
+			// address and from_agency are NOT NULL; an empty string is the unset encoding.
 			_, err = qtx.UpsertLMSConfig(ctx, db.UpsertLMSConfigParams{
 				Entry:                            &orig.ID,
 				Vendor:                           maybeUpdateCol(originalLMSConfig.Vendor, lmsConfig.Vendor),
 				NcipNamespaceEnabled:             maybeUpdateCol(originalLMSConfig.NcipNamespaceEnabled, lmsConfig.NcipNamespaceEnabled),
 				NcipVersion:                      maybeUpdateCol(originalLMSConfig.NcipVersion, lmsConfig.NcipVersion),
 				BibIDNormalization:               maybeUpdateCol(originalLMSConfig.BibIDNormalization, lmsConfig.BibIdNormalization),
-				Address:                          derefOrDefault(lmsConfig.Address, originalLMSConfig.Address),
-				FromAgency:                       derefOrDefault(lmsConfig.FromAgency, originalLMSConfig.FromAgency),
+				Address:                          derefOrDefault(maybeUpdateCol(&originalLMSConfig.Address, lmsConfig.Address), ""),
+				FromAgency:                       derefOrDefault(maybeUpdateCol(&originalLMSConfig.FromAgency, lmsConfig.FromAgency), ""),
 				FromAgencyAuthentication:         maybeUpdateCol(originalLMSConfig.FromAgencyAuthentication, lmsConfig.FromAgencyAuthentication),
 				ToAgency:                         maybeUpdateCol(originalLMSConfig.ToAgency, lmsConfig.ToAgency),
 				LookupUserEnabled:                maybeUpdateCol(originalLMSConfig.LookupUserEnabled, lmsConfig.LookupUserEnabled),
@@ -1345,7 +1258,8 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 			}
 		} else {
 			illConfig := request.Body.IllConfig.MustGet()
-			validationMessage, validationErr := validateLendersOfLastResort(ctx, qtx, illConfig.LendersOfLastResort)
+			lenders, _ := patchValue(illConfig.LendersOfLastResort)
+			validationMessage, validationErr := validateLendersOfLastResort(ctx, qtx, lenders)
 			if validationErr != nil {
 				slog.ErrorContext(ctx, "failed to validate lenders of last resort", "error", validationErr)
 				return UpdateEntry500TextResponse("Internal server error"), nil

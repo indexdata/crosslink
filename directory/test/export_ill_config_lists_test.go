@@ -29,7 +29,7 @@ func TestDirectoryExportIllConfigLists(t *testing.T) {
 	query := `WITH
  crosslink_default_copyright_type AS (SELECT '{}'::jsonb AS item),
  crosslink_last_resort_lenders AS (SELECT '[]'::jsonb AS item),
- entry AS (SELECT $1::uuid AS entry_id, NULL::uuid AS parent_id),
+ entry AS (SELECT $1::uuid AS entry_id, NULL::uuid AS parent_id, 'Institution'::text AS entry_type),
  crosslink_local_entry AS (SELECT $1::uuid AS entry_id WHERE $2::boolean),
  local_entry AS (SELECT $1::uuid AS entry_id WHERE $2::boolean),
  mpals_entry AS (SELECT NULL::uuid AS entry_id WHERE false),

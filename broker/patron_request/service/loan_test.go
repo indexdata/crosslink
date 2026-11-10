@@ -57,8 +57,10 @@ func TestResolveLoanDueDate(t *testing.T) {
 	entry := dirapi.Entry{TimeZone: &zone, IllConfig: &dirapi.IllConfig{}}
 	entry.IllConfig.DefaultLoanPeriod.Set(2)
 	invalidZone := "invalid/zone"
+	disabledDefault := dirapi.Entry{IllConfig: &dirapi.IllConfig{}}
+	disabledDefault.IllConfig.DefaultLoanPeriod.Set(0)
 	invalidDefault := dirapi.Entry{IllConfig: &dirapi.IllConfig{}}
-	invalidDefault.IllConfig.DefaultLoanPeriod.Set(0)
+	invalidDefault.IllConfig.DefaultLoanPeriod.Set(-1)
 	for _, tc := range []struct {
 		name   string
 		items  []pr_db.Item
@@ -87,7 +89,8 @@ func TestResolveLoanDueDate(t *testing.T) {
 		{name: "calendar default", entry: entry, want: time.Date(2026, 3, 30, 21, 59, 59, 0, time.UTC), source: "illConfig.defaultLoanPeriod"},
 		{name: "no date"},
 		{name: "unset default", entry: dirapi.Entry{IllConfig: &dirapi.IllConfig{}}},
-		{name: "invalid default period", entry: invalidDefault, err: "defaultLoanPeriod must be a positive integer"},
+		{name: "disabled default period", entry: disabledDefault},
+		{name: "invalid default period", entry: invalidDefault, err: "defaultLoanPeriod must not be negative"},
 		{name: "invalid default timezone", entry: dirapi.Entry{TimeZone: &invalidZone, IllConfig: entry.IllConfig}, err: "unknown time zone"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

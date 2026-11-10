@@ -838,9 +838,11 @@ func TestPatchEntryLMSConfigNullValues(t *testing.T) {
 		t.Fatalf("expected patron profiles to be cleared, got %s", patronProfiles)
 	}
 
+	// Null removes the local value so that an inherited one applies. The
+	// columns are NOT NULL, so an empty string is the unset encoding.
 	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+entryID, `{"lmsConfig":{"address":null,"fromAgency":null}}`, headers)
-	if res.StatusCode != http.StatusBadRequest {
-		t.Fatalf("expected required LMS null PATCH status %d, got %d and body %s", http.StatusBadRequest, res.StatusCode, data)
+	if res.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected LMS address null PATCH status %d, got %d and body %s", http.StatusNoContent, res.StatusCode, data)
 	}
 	err = dbpool.QueryRow(
 		context.Background(),
@@ -848,10 +850,23 @@ func TestPatchEntryLMSConfigNullValues(t *testing.T) {
 		entryID,
 	).Scan(&address, &fromAgency)
 	if err != nil {
-		t.Fatalf("failed to refetch LMS config after rejected PATCH: %v", err)
+		t.Fatalf("failed to refetch LMS config after address null PATCH: %v", err)
 	}
-	if address != originalAddress || fromAgency != originalFromAgency {
-		t.Fatalf("rejected required-field null PATCH changed LMS config")
+	if address != "" || fromAgency != "" {
+		t.Fatalf("expected null address and fromAgency to be stored as empty strings, got %q and %q", address, fromAgency)
+	}
+	res, data = jsonReq(t, http.MethodGet, "/entries/by-id/"+entryID+"?resolve-inherit=false", "", headers)
+	var cleared struct {
+		LmsConfig map[string]any `json:"lmsConfig"`
+	}
+	if res.StatusCode != http.StatusOK || json.Unmarshal([]byte(data), &cleared) != nil {
+		t.Fatalf("failed to read entry after address null PATCH: %d %s", res.StatusCode, data)
+	}
+	if _, ok := cleared.LmsConfig["address"]; ok {
+		t.Fatalf("expected cleared address to be absent, got %v", cleared.LmsConfig)
+	}
+	if _, ok := cleared.LmsConfig["fromAgency"]; ok {
+		t.Fatalf("expected cleared fromAgency to be absent, got %v", cleared.LmsConfig)
 	}
 
 	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+entryID, `{"lmsConfig":null}`, headers)
@@ -907,8 +922,7 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 			"supplierPatronPattern":"PATRON-{requesterSymbol}",
 			"duplicateCheckWindowHours":24,
 			"maxRequestsPerPatron":0,
-			"minimumCost":1.5,
-			"loadBalancingPolicy":"proportional"
+			"minimumCost":1.5
 		},
 		"symbols":[{"authority":"ISIL","symbol":"CONTRACT"}],
 		"catalogConfig":{
@@ -1003,7 +1017,7 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 		illConfig["supplierPatronPattern"] != "PATRON-{requesterSymbol}" ||
 		illConfig["duplicateCheckWindowHours"] != float64(24) ||
 		illConfig["maxRequestsPerPatron"] != float64(0) ||
-		illConfig["minimumCost"] != 1.5 || illConfig["loadBalancingPolicy"] != "proportional" {
+		illConfig["minimumCost"] != 1.5 {
 		t.Fatalf("illConfig fields did not round-trip: %#v", illConfig)
 	}
 
@@ -1020,11 +1034,12 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 		t.Fatalf("failed to parse entry after illConfig PATCH: %v", err)
 	}
 	illConfig = entry["illConfig"].(map[string]any)
-	if illConfig["noteFieldSeparator"] != " / " || illConfig["useOfferedCosts"] != false || illConfig["iso18626Url"] != "https://iso.example.org/iso18626" || illConfig["maxRequestsPerPatron"] != float64(25) || illConfig["minimumCost"] != 1.5 || illConfig["loadBalancingPolicy"] != "proportional" {
+	if illConfig["noteFieldSeparator"] != " / " || illConfig["useOfferedCosts"] != false || illConfig["iso18626Url"] != "https://iso.example.org/iso18626" || illConfig["maxRequestsPerPatron"] != float64(25) || illConfig["minimumCost"] != 1.5 {
 		t.Fatalf("partial illConfig PATCH did not merge fields: %#v", illConfig)
 	}
-	if _, ok := illConfig["lendersOfLastResort"]; ok {
-		t.Fatalf("partial illConfig PATCH did not clear lendersOfLastResort: %#v", illConfig)
+	// An empty list is a local value that blocks inheritance, so it reads back as [].
+	if lenders, ok := illConfig["lendersOfLastResort"].([]any); !ok || len(lenders) != 0 {
+		t.Fatalf("partial illConfig PATCH did not store an empty lendersOfLastResort: %#v", illConfig)
 	}
 	holdings := entry["catalogConfig"].(map[string]any)
 	zoom := holdings["zoom"].(map[string]any)

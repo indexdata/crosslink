@@ -48,7 +48,7 @@ func TestBibItemScopeNamePersistence(t *testing.T) {
 func TestImportBibItemScopeName(t *testing.T) {
 	resetImportState(t)
 	key := symbolObject("ISIL", "SCOPE")
-	record := entryImportRecord(key, "Scope", nil, "Consortium")
+	record := institutionImportRecord(key, "Scope")
 	lms := record["data"].(map[string]any)["lmsConfig"].(map[string]any)
 	for _, value := range []any{"Title", "Record", nil} {
 		lms["bibItemScopeName"] = value

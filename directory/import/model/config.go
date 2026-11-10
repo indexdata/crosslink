@@ -11,8 +11,8 @@ type LMSConfig struct {
 	Vendor                           *string          `json:"vendor"`
 	NcipNamespaceEnabled             *bool            `json:"ncipNamespaceEnabled"`
 	BibIDNormalization               *string          `json:"bibIdNormalization"`
-	Address                          string           `json:"address"`
-	FromAgency                       string           `json:"fromAgency"`
+	Address                          *string          `json:"address"`
+	FromAgency                       *string          `json:"fromAgency"`
 	FromAgencyAuthentication         *string          `json:"fromAgencyAuthentication"`
 	ToAgency                         *string          `json:"toAgency"`
 	LookupUserEnabled                *bool            `json:"lookupUserEnabled"`

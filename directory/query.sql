@@ -169,6 +169,7 @@ RETURNING *;
 DELETE FROM address_components WHERE address = @address;
 
 -- name: UpsertIllConfig :one
+-- The caller supplies the complete local row so that null clears a stored value.
 INSERT INTO ill_configs (
   entry, is_pickup_location, iso18626_url, iso18626_vendor, lenders_of_last_resort,
   include_requesting_agency_info, include_supplier_info, include_return_info,
@@ -185,19 +186,19 @@ INSERT INTO ill_configs (
   @request_id_prefix
 )
 ON CONFLICT (entry) DO UPDATE SET
-  is_pickup_location = COALESCE(@is_pickup_location, ill_configs.is_pickup_location),
-  iso18626_url = COALESCE(@iso18626_url, ill_configs.iso18626_url),
-  iso18626_vendor = COALESCE(@iso18626_vendor, ill_configs.iso18626_vendor),
-  lenders_of_last_resort = COALESCE(@lenders_of_last_resort, ill_configs.lenders_of_last_resort),
-  include_requesting_agency_info = COALESCE(@include_requesting_agency_info, ill_configs.include_requesting_agency_info),
-  include_supplier_info = COALESCE(@include_supplier_info, ill_configs.include_supplier_info),
-  include_return_info = COALESCE(@include_return_info, ill_configs.include_return_info),
-  include_vendor_note = COALESCE(@include_vendor_note, ill_configs.include_vendor_note),
-  use_offered_costs = COALESCE(@use_offered_costs, ill_configs.use_offered_costs),
-  note_field_separator = COALESCE(@note_field_separator, ill_configs.note_field_separator),
-  supplier_patron_pattern = COALESCE(@supplier_patron_pattern, ill_configs.supplier_patron_pattern),
-  request_id_prefix = COALESCE(@request_id_prefix, ill_configs.request_id_prefix),
-  duplicate_check_window_hours = COALESCE(@duplicate_check_window_hours, ill_configs.duplicate_check_window_hours),
+  is_pickup_location = @is_pickup_location,
+  iso18626_url = @iso18626_url,
+  iso18626_vendor = @iso18626_vendor,
+  lenders_of_last_resort = @lenders_of_last_resort,
+  include_requesting_agency_info = @include_requesting_agency_info,
+  include_supplier_info = @include_supplier_info,
+  include_return_info = @include_return_info,
+  include_vendor_note = @include_vendor_note,
+  use_offered_costs = @use_offered_costs,
+  note_field_separator = @note_field_separator,
+  supplier_patron_pattern = @supplier_patron_pattern,
+  request_id_prefix = @request_id_prefix,
+  duplicate_check_window_hours = @duplicate_check_window_hours,
   default_loan_period = @default_loan_period,
   max_requests_per_patron = @max_requests_per_patron,
   minimum_cost = @minimum_cost,
@@ -300,7 +301,7 @@ ON CONFLICT (entry) DO UPDATE SET
   sru_address = @sru_address,
   sru_record_schema = @sru_record_schema,
   zoom_address = @zoom_address,
-  zoom_options = COALESCE(@zoom_options, catalog_configs.zoom_options),
+  zoom_options = @zoom_options,
   query_type = @query_type,
   query_identifier = @query_identifier,
   query_isbn = @query_isbn,

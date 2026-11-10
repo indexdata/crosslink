@@ -56,6 +56,9 @@ func TestRequestIdPrefixPersistence(t *testing.T) {
 	response, body = jsonReq(t, http.MethodPatch, path, `{"illConfig":{"requestIdPrefix":""}}`, headers)
 	require.Equal(t, http.StatusNoContent, response.StatusCode, body)
 	require.Equal(t, "", read())
+	response, body = jsonReq(t, http.MethodPatch, path, `{"illConfig":{"requestIdPrefix":null}}`, headers)
+	require.Equal(t, http.StatusNoContent, response.StatusCode, body)
+	require.Nil(t, read())
 }
 
 func TestImportRequestIdPrefix(t *testing.T) {
@@ -120,7 +123,7 @@ func TestDirectoryExportRequestIdPrefix(t *testing.T) {
 	query := `WITH
  crosslink_ill_lists AS (SELECT '{}'::jsonb AS item),
  crosslink_last_resort_lenders AS (SELECT '[]'::jsonb AS item),
- entry AS (SELECT $1::uuid AS entry_id, $3::uuid AS parent_id),
+ entry AS (SELECT $1::uuid AS entry_id, $3::uuid AS parent_id, $5::text AS entry_type),
  crosslink_local_entry AS (SELECT $4::uuid AS entry_id),
  local_entry AS (SELECT $1::uuid AS entry_id WHERE $2::boolean),
  mpals_entry AS (SELECT NULL::uuid AS entry_id WHERE false),
@@ -145,7 +148,7 @@ func TestDirectoryExportRequestIdPrefix(t *testing.T) {
 		{name: "inner space", setting: "A B", local: true, wantError: "request_id_prefix must be at most 32 ASCII letters and digits: A B"},
 		{name: "invalid default value", setting: "  ", fallback: "A.B", local: true, wantError: "request_id_prefix must be at most 32 ASCII letters and digits: A.B"},
 		{name: "default value", setting: "  ", fallback: "DEF", local: true, want: "DEF"},
-		{name: "direct branch", setting: "ABC", branch: true, want: "ABC"},
+		{name: "direct branch inherits", setting: "ABC", branch: true},
 		{name: "unset", local: true},
 		{name: "missing setting", local: true, cleanup: "DELETE FROM app_setting;"},
 		{name: "non-local", setting: "ABC"},
@@ -170,14 +173,41 @@ func TestDirectoryExportRequestIdPrefix(t *testing.T) {
 			require.NoError(t, err)
 			entryID, localOwner := uuid.New(), uuid.New()
 			var parent *uuid.UUID
+			entryType := "Institution"
 			if tc.branch {
-				parent = &localOwner
+				parent, entryType = &localOwner, "Branch"
 			}
 			var raw []byte
-			require.NoError(t, tx.QueryRow(ctx, query, entryID, tc.local, parent, localOwner).Scan(&raw))
+			require.NoError(t, tx.QueryRow(ctx, query, entryID, tc.local, parent, localOwner, entryType).Scan(&raw))
 			var config map[string]any
 			require.NoError(t, json.Unmarshal(raw, &config))
 			require.Equal(t, tc.want, config["requestIdPrefix"])
 		})
 	}
+}
+
+func TestRequestIdPrefixInheritance(t *testing.T) {
+	tree := setupInheritanceTree(t)
+	sqlExec(t, `UPDATE ill_configs SET request_id_prefix = 'CONS' WHERE entry = $1`, fixtureConsortium)
+	prefix := func(id uuid.UUID) any {
+		t.Helper()
+		return getEntryJSON(t, entryPath(id), systemHeaders)["illConfig"].(map[string]any)["requestIdPrefix"]
+	}
+	require.Nil(t, prefix(tree.institution), "a consortium prefix is not inherited")
+	require.Nil(t, prefix(tree.branch))
+
+	response, body := jsonReq(t, http.MethodPatch, entryPath(tree.institution), `{"illConfig":{"requestIdPrefix":"INST"}}`, consortialHeaders)
+	require.Equal(t, http.StatusNoContent, response.StatusCode, body)
+	require.Equal(t, "INST", prefix(tree.branch), "a branch inherits its institution's prefix")
+	local := getEntryJSON(t, entryPath(tree.branch)+"?resolve-inherit=false", systemHeaders)
+	require.Nil(t, local["illConfig"], "the branch stores no ILL configuration")
+
+	response, body = jsonReq(t, http.MethodPatch, entryPath(tree.institution), `{"illConfig":{"requestIdPrefix":""}}`, consortialHeaders)
+	require.Equal(t, http.StatusNoContent, response.StatusCode, body)
+	require.Equal(t, "", prefix(tree.branch), "an empty prefix is inherited and selects the symbol")
+
+	response, body = jsonReq(t, http.MethodPatch, entryPath(tree.institution), `{"illConfig":{"requestIdPrefix":null}}`, consortialHeaders)
+	require.Equal(t, http.StatusNoContent, response.StatusCode, body)
+	require.Nil(t, prefix(tree.institution))
+	require.Nil(t, prefix(tree.branch))
 }

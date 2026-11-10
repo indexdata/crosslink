@@ -85,9 +85,10 @@ outside these limits must be corrected before applying migration 016; the
 migration validates existing entries without changing their ratios.
 
 The optional `illConfig.loadBalancingPolicy` accepts `deficit` or `proportional`.
-The broker reads this setting from the entry identified by `CONSORTIUM_SYMBOL`.
-An omitted or null policy, missing `illConfig`, or an unset consortium symbol
-uses `proportional`.
+The broker reads this setting from the entry identified by `CONSORTIUM_SYMBOL`,
+which must name the Consortium entry. Only the consortium may set the policy, and
+it is never inherited. An omitted or null policy, missing `illConfig`, or an unset
+consortium symbol uses `proportional`.
 Requester settings do not select the policy. PATCH omission preserves the current
 value; explicit null clears it. Imports also accept this optional field.
 
@@ -147,12 +148,14 @@ Complete imports include raw host settings: `lmsConfig.vendor`,
 availability predicates, and OPAC parser options. These fields are required in
 their respective non-null configuration objects; use `null` to inherit defaults.
 Explicit `false` and empty arrays are preserved. Imports replace stored
-configuration, so include all overrides when restoring an entry. Configure at
+configuration, so include all overrides when restoring an entry. A `null`
+clears a stored value; a non-null value in a field the record's entry type may not
+set fails that record unless it equals the value already stored (see [configuration inheritance](#configuration-inheritance)). Configure at
 most one SRU/ZOOM endpoint and at most one holdings parser. The deprecated OPAC
 `allCirculations` field is optional and accepted for compatibility, but ignored:
 OPAC parsing always returns all available circulation candidates.
 
-`lmsConfig.ncipVersion` selects `"1.0"` or `"2.02"` (profile default: `"1.0"` for Horizon, Polaris and Symphony, otherwise `"2.02"`).
+`lmsConfig.ncipVersion` selects `"1.0"` or `"2.02"` (profile default: `"1.0"` for Horizon, Polaris and Symphony, otherwise `"2.02"`). `"default"` selects the profile default without inheriting a value.
 It is optional in import records for compatibility with older exports; omission
 or `null` clears the stored version override during full replacement. For REST
 PATCH, omission preserves it and `null` clears it. See
@@ -356,12 +359,96 @@ The permissions and roles are as follows:
 |---------------------|---------------------------|-------------|
 | Public User         | directory.public.all      | This is the public facing role, that lets all non-sensitive fields be viewed, but not edited. |
 | System User         | directory.system.all      | This role is primarily granted to system processes. It allows all fields (even sensitive ones) to be viewed. |
-| Institutional Admin | directory.institution.all | This role is for the administrator of a single institution. It grants viewing (including sensitive) and editing of entries for a given tenant. |
+| Institutional Admin | directory.institution.all | This role is for the administrator of a single institution. It grants viewing (including sensitive) and editing of entries for a given tenant, except an entry's `parent` and `type`. |
 | Consortial Admin    | directory.consortium.all  | This role is for the administrator of the consortium. It allows viewing and editing of all entries for the consortial record, as well as those for consortium's institutions. |
+
+### Configuration inheritance
+
+Entries form a fixed hierarchy: one Consortium, Institutions under it, and
+Branches under institutions. An entry's `illConfig`, `lmsConfig`, `catalogConfig`
+and `holdingsPolicy` fields that it does not store itself are filled in on read
+from the nearest ancestor that stores them. Nothing is copied into child records,
+so a parent change applies to its descendants on their next read. The policy is
+declared in [api.yaml](api.yaml) with these extensions on `EntryProperties` and
+the configuration schemas:
+
+- `x-inheritance-root`: the highest ancestor type consulted (`Consortium`,
+  `Institution`, or `none` for a field that never inherits).
+- `x-editable-on`: the entry types that may store a value.
+- `x-merge-unit`: fields that are always taken from the same entry.
+- `x-off-value`: a stored value meaning "off"; it blocks inheritance and is
+  omitted from merged reads.
+
+A field without its own annotation uses its container's. Directory compiles the
+annotations at startup and stops if they are invalid.
+
+| Field | Inherits up to | Editable on |
+|---|---|---|
+| `catalogConfig` | Institution | Consortium, Institution |
+| `lmsConfig` | Institution | Institution |
+| `lmsConfig.requesterPickupLocation`, `supplierPickupLocation` | never | Institution, Branch |
+| `illConfig` | Consortium | Consortium, Institution |
+| `illConfig.iso18626Url`, `iso18626Vendor` | Institution | Consortium, Institution |
+| `illConfig.requestIdPrefix` | Institution | Consortium, Institution |
+| `illConfig.isPickupLocation` | never | Institution, Branch |
+| `illConfig.loadBalancingPolicy` | never | Consortium |
+| `holdingsPolicy` | Institution | Institution |
+
+So institutions inherit the consortium's ILL policy (except its ISO18626 peer,
+pickup flag and load-balancing policy), and branches inherit their institution's
+ILL, LMS, catalog and holdings settings. Consortium catalog settings are not
+inherited; the broker uses them only through `CONSORTIUM_SYMBOL`.
+
+Reads: every entry GET (by ID, by symbol, `/entries`, `/entries/owned`) returns
+merged values by default. Pass `resolve-inherit=false` for the entry's stored
+values only; use that view to edit an entry or to write values back. Merged reads
+take the entries and their ancestors from one database snapshot. CQL filters
+match stored values.
+
+Merge units are taken whole from the nearest entry that stores any of their fields:
+the NCIP connection (`lmsConfig.address`, `fromAgency`, `fromAgencyAuthentication`,
+`toAgency`, `vendor`, `ncipVersion`, `ncipNamespaceEnabled`), the ISO18626 peer
+(`iso18626Url`, `iso18626Vendor`), the catalog endpoint (`sru`, `zoom`), and the
+whole `holdingsPolicy`. Other fields, including whole `queryConfig`,
+`holdingsFormat` and `metadataFormat` objects, resolve on their own. Arrays are
+replaced, never combined.
+
+Writes: create stores the supplied configuration; PATCH omission preserves a stored
+value. Imports replace the local configuration, so omitted optional fields remove
+their stored overrides. On PATCH and import, `null` removes a local value so that an
+inherited value applies, and a non-null value stores a local override. A value
+in a field the entry type may not set is rejected with HTTP 400 naming the field
+(for example `lmsConfig.address is not editable on Branch`), and the request
+changes nothing. Resubmitting the value already stored is accepted. `null` is
+always accepted, so values stored before these rules (such as branch NCIP
+settings from earlier migration exports) can be cleared; until then they keep
+overriding inherited values. A container `null`, such as `"lmsConfig": null`,
+removes the entry's whole local configuration. Changing an entry's type keeps its
+stored values. Clearing `lmsConfig.address` or `fromAgency` stores the empty
+string, which reads treat as unset.
+
+Because null now means "inherit", these values switch a setting off locally:
+`defaultLoanPeriod: 0` (omitted from merged reads), `ncipVersion: "default"`
+(the profile default; omitted from merged reads), `minimumCost: 0`,
+`maxRequestsPerPatron: 0`, `duplicateCheckWindowHours: 0`, `false` for booleans,
+and `[]` for lists. An institution can replace an inherited
+`defaultCopyrightType` but cannot decline one. Apply migration
+`025_inheritance_off_values` before deploying; its down migration converts these
+values back to null.
+
+Protected values: `fromAgencyAuthentication` is never inherited from an entry with
+a different tenant. A protected value is shown only to callers who may see
+sensitive fields on both the entry that stores it and the entry being read;
+others see `""`, as before. Only consortial administrators may change an entry's
+parent or type.
+
+The broker serves Directory entries from its peer cache, so a parent change
+reaches ILL processing after the cache refreshes. Host-profile defaults still
+apply beneath the merged values and are never stored in Directory.
 
 ### Pickup locations
 
-Set `illConfig.isPickupLocation` to `true` to offer an institution or branch in the request form's pickup-location selector. This flag is independent of `lmsConfig.requesterPickupLocation`: manual workflows can offer locations without an LMS code. Migration 012 enables the flag for existing entries whose requester pickup code is non-null (including empty strings), preserving other ILL settings. Other entries remain unselected unless explicitly enabled. Imports can set the flag in `illConfig`.
+Set `illConfig.isPickupLocation` to `true` to offer an institution or branch in the request form's pickup-location selector. The flag and the LMS pickup codes are never inherited; an unset flag means the entry is not offered. This flag is independent of `lmsConfig.requesterPickupLocation`: manual workflows can offer locations without an LMS code. Migration 012 enables the flag for existing entries whose requester pickup code is non-null (including empty strings), preserving other ILL settings. Other entries remain unselected unless explicitly enabled. Imports can set the flag in `illConfig`.
 
 The broker accepts the requesting institution's UUID or a descendant's UUID. An explicit selection supplies that entry's shipping address and, when needed, its LMS pickup code. Omitting the selection retains existing defaults. LMS operations that consume a pickup code still require one for explicit selections.
 
@@ -373,9 +460,11 @@ Filter Directory entries with CQL `isPickupLocation=true` or `isPickupLocation=f
 generates for this requester, in the form `PREFIX-N` with the prefix uppercased.
 It may contain at most 32 ASCII letters and digits. When it is unset or empty, the
 broker uses the value part of the requester symbol (`DK-123` for `ISIL:DK-123`).
-Create, read, PATCH, and NDJSON import support this field. PATCH omission
-preserves the value; set it to an empty string to return to the symbol-derived
-prefix. A change reaches the broker when its cached peer data is next refreshed.
+Branches inherit their institution's prefix; a consortium prefix is not
+inherited. Create, read, PATCH, and NDJSON import support this field. PATCH
+omission preserves the value and `null` removes the local value, so a branch
+inherits again. An empty string stores "use the symbol" and blocks inheritance.
+A change reaches the broker when its cached peer data is next refreshed.
 
 ### ILL configuration lists and reference defaults
 
@@ -406,10 +495,11 @@ For example, inside an existing complete NDJSON entry record's `data.illConfig`:
 
 Include the other required ILL configuration fields from `ImportIllConfig` in
 [api.yaml](api.yaml). The three arrays shown above are optional for
-compatibility with older imports. Import replaces configuration: omitted lists
-become unset, and `[]` stores an empty list. Create and PATCH also accept the lists; PATCH omission
-preserves existing values, while `[]` clears a list. Explicit list-level `null`
-is invalid. Entry reads return stored lists in their original order.
+compatibility with older imports. Import replaces configuration: omitted or `null`
+lists become unset so that an inherited list applies, and `[]` stores an empty
+list that blocks inheritance. Create and PATCH also accept the lists; PATCH omission
+preserves existing values, `[]` stores an empty list, and `null` removes the local
+list so that an inherited list applies. Entry reads return lists in their original order.
 
 The OpenAPI array properties `availableCopyrightTypes`, `unfilledReasons`,
 `cancellationReasons`, and `loanConditions` each carry an `x-default-data` object
