@@ -310,6 +310,7 @@ func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) (db.UpsertIllConfigPa
 		UseOfferedCosts:             cfg.UseOfferedCosts,
 		NoteFieldSeparator:          cfg.NoteFieldSeparator,
 		SupplierPatronPattern:       cfg.SupplierPatronPattern,
+		RequestIDPrefix:             cfg.RequestIdPrefix,
 		DuplicateCheckWindowHours:   cfg.DuplicateCheckWindowHours,
 		DefaultLoanPeriod:           nullableLoanPeriod(cfg),
 		MaxRequestsPerPatron:        nullableMaxRequestsPerPatron(cfg),
@@ -345,6 +346,7 @@ func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllC
 		UseOfferedCosts:             original.UseOfferedCosts,
 		NoteFieldSeparator:          original.NoteFieldSeparator,
 		SupplierPatronPattern:       original.SupplierPatronPattern,
+		RequestIDPrefix:             original.RequestIDPrefix,
 		DuplicateCheckWindowHours:   original.DuplicateCheckWindowHours,
 		DefaultLoanPeriod:           original.DefaultLoanPeriod,
 		MaxRequestsPerPatron:        original.MaxRequestsPerPatron,
@@ -368,6 +370,7 @@ func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllC
 	params.UseOfferedCosts = derefOrDefaultPtr(cfg.UseOfferedCosts, params.UseOfferedCosts)
 	params.NoteFieldSeparator = derefOrDefaultPtr(cfg.NoteFieldSeparator, params.NoteFieldSeparator)
 	params.SupplierPatronPattern = derefOrDefaultPtr(cfg.SupplierPatronPattern, params.SupplierPatronPattern)
+	params.RequestIDPrefix = derefOrDefaultPtr(cfg.RequestIdPrefix, params.RequestIDPrefix)
 	params.DuplicateCheckWindowHours = derefOrDefaultPtr(cfg.DuplicateCheckWindowHours, params.DuplicateCheckWindowHours)
 	if cfg.DefaultLoanPeriod.IsSpecified() {
 		params.DefaultLoanPeriod = nullableLoanPeriod(cfg)

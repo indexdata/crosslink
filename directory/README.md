@@ -367,6 +367,16 @@ The broker accepts the requesting institution's UUID or a descendant's UUID. An 
 
 Filter Directory entries with CQL `isPickupLocation=true` or `isPickupLocation=false`. Missing flags (including entries without ILL configuration) match `false`. The former `requesterPickupLocation` CQL filter is no longer supported.
 
+### Request ID prefix
+
+`illConfig.requestIdPrefix` is the optional prefix for request IDs the broker
+generates for this requester, in the form `PREFIX-N` with the prefix uppercased.
+It may contain at most 32 ASCII letters and digits. When it is unset or empty, the
+broker uses the value part of the requester symbol (`DK-123` for `ISIL:DK-123`).
+Create, read, PATCH, and NDJSON import support this field. PATCH omission
+preserves the value; set it to an empty string to return to the symbol-derived
+prefix. A change reaches the broker when its cached peer data is next refreshed.
+
 ### ILL configuration lists and reference defaults
 
 `illConfig.defaultCopyrightType` is the default copyright type to use for copy

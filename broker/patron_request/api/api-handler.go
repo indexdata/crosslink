@@ -37,6 +37,11 @@ type PickupLocationValidator interface {
 	ValidateRequesterPickupLocation(ctx common.ExtendedContext, pr pr_db.PatronRequest) error
 }
 
+// RequestIdPrefixResolver chooses the prefix for request IDs generated for a requester.
+type RequestIdPrefixResolver interface {
+	RequestIdPrefix(ctx common.ExtendedContext, requesterSymbol string) (string, error)
+}
+
 type ActionTaskProcessor interface {
 	ProcessInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error)
 }
@@ -50,6 +55,7 @@ const templateLabelUniqueConstraint = "template_owner_purpose_audience_labels_un
 type PatronRequestApiHandler struct {
 	prefillProvider         PrefillProvider
 	pickupLocationValidator PickupLocationValidator
+	requestIdPrefixResolver RequestIdPrefixResolver
 	limitDefault            int32
 	prRepo                  pr_db.PrRepo
 	eventBus                events.EventBus
@@ -76,6 +82,10 @@ func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
 
 func (a *PatronRequestApiHandler) SetPickupLocationValidator(validator PickupLocationValidator) {
 	a.pickupLocationValidator = validator
+}
+
+func (a *PatronRequestApiHandler) SetRequestIdPrefixResolver(resolver RequestIdPrefixResolver) {
+	a.requestIdPrefixResolver = resolver
 }
 
 func (a *PatronRequestApiHandler) SetAutoActionRunner(autoActionRunner prservice.AutoActionRunner) {
@@ -1530,7 +1540,14 @@ func (a *PatronRequestApiHandler) parseAndValidateIllRequest(
 	if request.Id != nil {
 		requesterReqId = *request.Id
 	} else {
-		hrid, err := a.prRepo.GetNextHrid(ctx, reqSymbolValue)
+		prefix := reqSymbolValue
+		if a.requestIdPrefixResolver != nil {
+			prefix, err = a.requestIdPrefixResolver.RequestIdPrefix(ctx, *request.RequesterSymbol)
+			if err != nil {
+				return iso18626.Request{}, "", fmt.Errorf("%w: requesterSymbol: %w", errInvalidPatronRequest, err)
+			}
+		}
+		hrid, err := a.prRepo.GetNextHrid(ctx, prefix)
 		if err != nil {
 			return iso18626.Request{}, "", err
 		}

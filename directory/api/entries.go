@@ -304,6 +304,7 @@ func buildEntrySQL(whereClause string) string {
 			'useOfferedCosts', i.use_offered_costs,
 			'noteFieldSeparator', i.note_field_separator,
 			'supplierPatronPattern', i.supplier_patron_pattern,
+			'requestIdPrefix', i.request_id_prefix,
 			'duplicateCheckWindowHours', i.duplicate_check_window_hours,
 			'defaultLoanPeriod', i.default_loan_period,
 			'maxRequestsPerPatron', i.max_requests_per_patron,

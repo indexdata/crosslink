@@ -1403,6 +1403,33 @@ func (a *PatronRequestActionService) rejectConditionBorrowingRequest(ctx common.
 	return execResult
 }
 
+// RequestIdPrefix returns the prefix for request IDs generated for a requester:
+// its Directory illConfig.requestIdPrefix when set, otherwise the value part of
+// requesterSymbol. Directory lookup failures fall back to the symbol value, so
+// generating an ID never depends on Directory being available. An error means
+// requesterSymbol is malformed.
+func (a *PatronRequestActionService) RequestIdPrefix(ctx common.ExtendedContext, requesterSymbol string) (string, error) {
+	_, symbolValue, err := common.SplitSymbol(requesterSymbol)
+	if err != nil {
+		return "", err
+	}
+	peers, _, err := a.illRepo.GetCachedPeersBySymbols(ctx, []string{requesterSymbol}, a.directoryLookupAdapter)
+	if err != nil {
+		ctx.Logger().Warn("failed to get requester peer for request ID prefix, using symbol", "requesterSymbol", requesterSymbol, "error", err)
+		return symbolValue, nil
+	}
+	if len(peers) == 0 {
+		ctx.Logger().Warn("no requester peer found for request ID prefix, using symbol", "requesterSymbol", requesterSymbol)
+		return symbolValue, nil
+	}
+	return common.IllConfigString(peers[0].CustomData, symbolValue, func(c dirapi.IllConfig) *string {
+		if c.RequestIdPrefix == nil || *c.RequestIdPrefix == "" {
+			return nil
+		}
+		return c.RequestIdPrefix
+	}), nil
+}
+
 func (a *PatronRequestActionService) createSuccessorBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, retry bool) actionExecutionResult {
 	if pr.NextReqID.Valid {
 		status, result := logActionErrorAndReturnResult(ctx, "request already has a successor", nil)
@@ -1435,12 +1462,12 @@ func (a *PatronRequestActionService) createSuccessorBorrowingRequest(ctx common.
 	}
 	successorPr.State = borrowerInitialState
 	successorPr.TerminalState = actionMapping.IsTerminalState(successorPr)
-	_, requesterSymbol, err := common.SplitSymbol(pr.RequesterSymbol.String)
+	prefix, err := a.RequestIdPrefix(ctx, pr.RequesterSymbol.String)
 	if err != nil {
 		status, result := logActionErrorAndReturnResult(ctx, "invalid requester symbol for successor request", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	successorPr.ID, err = a.prRepo.GetNextHrid(ctx, requesterSymbol)
+	successorPr.ID, err = a.prRepo.GetNextHrid(ctx, prefix)
 	if err != nil {
 		status, result := logActionErrorAndReturnResult(ctx, "failed to generate requester HRID for successor request", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}

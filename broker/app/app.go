@@ -205,6 +205,7 @@ func Init(ctx context.Context) (Context, error) {
 	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, eventRepo, tenantResolver, &iso18626Handler, API_PAGE_SIZE)
 	prApiHandler.SetPrefillProvider(prservice.NewPrefillService(illRepo, dirAdapter, lookupAdapterFactory))
 	prApiHandler.SetPickupLocationValidator(prActionService)
+	prApiHandler.SetRequestIdPrefixResolver(prActionService)
 	prApiHandler.SetAutoActionRunner(prActionService)
 	prApiHandler.SetActionTaskProcessor(prActionService)
 	sseBroker := api.NewSseBroker(appCtx, tenantResolver)
