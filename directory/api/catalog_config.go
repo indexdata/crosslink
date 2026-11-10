@@ -49,12 +49,12 @@ func catalogConfigToDBParams(entryID uuid.UUID, cfg CatalogConfig) db.UpsertCata
 		params.HoldingsConfig, _ = json.Marshal(cfg.HoldingsFormat)
 		if cfg.HoldingsFormat.Marc != nil {
 			marc := cfg.HoldingsFormat.Marc
-			params.HoldingsMarcCallNumberSubfield = marc.CallNumberSubField
-			params.HoldingsMarcItemIDSubfield = marc.ItemIdSubField
-			params.HoldingsMarcLocationSubfield = marc.LocationSubField
+			params.HoldingsMarcCallNumberSubfield = marc.CallNumberSubfield
+			params.HoldingsMarcItemIDSubfield = marc.ItemIdSubfield
+			params.HoldingsMarcLocationSubfield = marc.LocationSubfield
 			params.HoldingsMarcMainField = marc.MainField
-			params.HoldingsMarcRestrictedSubfield = marc.RestrictedSubField
-			params.HoldingsMarcShelvingLocationSubfield = marc.ShelvingLocationSubField
+			params.HoldingsMarcRestrictedSubfield = marc.RestrictedSubfield
+			params.HoldingsMarcShelvingLocationSubfield = marc.ShelvingLocationSubfield
 		}
 		params.HoldingsMarc21plus1Enabled = boolPtr(cfg.HoldingsFormat.Marc21plus1 != nil)
 		params.HoldingsOpacEnabled = boolPtr(cfg.HoldingsFormat.Opac != nil)
@@ -238,12 +238,12 @@ func catalogConfigPatchToDBParams(entryID uuid.UUID, cfg CatalogConfigPatch, ori
 		}
 		if holdings.Marc != nil {
 			marc := holdings.Marc
-			params.HoldingsMarcCallNumberSubfield = derefOrDefaultPtr(marc.CallNumberSubField, params.HoldingsMarcCallNumberSubfield)
-			params.HoldingsMarcItemIDSubfield = derefOrDefaultPtr(marc.ItemIdSubField, params.HoldingsMarcItemIDSubfield)
-			params.HoldingsMarcLocationSubfield = derefOrDefaultPtr(marc.LocationSubField, params.HoldingsMarcLocationSubfield)
+			params.HoldingsMarcCallNumberSubfield = derefOrDefaultPtr(marc.CallNumberSubfield, params.HoldingsMarcCallNumberSubfield)
+			params.HoldingsMarcItemIDSubfield = derefOrDefaultPtr(marc.ItemIdSubfield, params.HoldingsMarcItemIDSubfield)
+			params.HoldingsMarcLocationSubfield = derefOrDefaultPtr(marc.LocationSubfield, params.HoldingsMarcLocationSubfield)
 			params.HoldingsMarcMainField = derefOrDefaultPtr(marc.MainField, params.HoldingsMarcMainField)
-			params.HoldingsMarcRestrictedSubfield = derefOrDefaultPtr(marc.RestrictedSubField, params.HoldingsMarcRestrictedSubfield)
-			params.HoldingsMarcShelvingLocationSubfield = derefOrDefaultPtr(marc.ShelvingLocationSubField, params.HoldingsMarcShelvingLocationSubfield)
+			params.HoldingsMarcRestrictedSubfield = derefOrDefaultPtr(marc.RestrictedSubfield, params.HoldingsMarcRestrictedSubfield)
+			params.HoldingsMarcShelvingLocationSubfield = derefOrDefaultPtr(marc.ShelvingLocationSubfield, params.HoldingsMarcShelvingLocationSubfield)
 		}
 		if holdings.Marc21plus1 != nil {
 			params.HoldingsMarc21plus1Enabled = boolPtr(true)

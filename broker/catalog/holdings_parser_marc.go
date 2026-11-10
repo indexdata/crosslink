@@ -15,13 +15,13 @@ type MarcHoldingsParser struct {
 }
 
 func NewMarcHoldingsParser(config dirapi.MarcHoldingsParserConfig) HoldingsParser {
-	if config.MainField == nil && config.LocationSubField == nil && config.ShelvingLocationSubField == nil && config.CallNumberSubField == nil && config.ItemIdSubField == nil && config.RestrictedSubField == nil && config.Availability == nil && config.ItemLoanPolicySubField == nil {
+	if config.MainField == nil && config.LocationSubfield == nil && config.ShelvingLocationSubfield == nil && config.CallNumberSubfield == nil && config.ItemIdSubfield == nil && config.RestrictedSubfield == nil && config.Availability == nil && config.ItemLoanPolicySubfield == nil {
 		config.MainField = NewString("852")
-		config.LocationSubField = NewString("b")
-		config.ShelvingLocationSubField = NewString("c")
-		config.CallNumberSubField = NewString("h")
-		config.ItemIdSubField = NewString("p")
-		config.RestrictedSubField = NewString("r")
+		config.LocationSubfield = NewString("b")
+		config.ShelvingLocationSubfield = NewString("c")
+		config.CallNumberSubfield = NewString("h")
+		config.ItemIdSubfield = NewString("p")
+		config.RestrictedSubfield = NewString("r")
 	}
 	// perhaps should check if mainField is specified
 	return &MarcHoldingsParser{
@@ -52,22 +52,22 @@ func (p *MarcHoldingsParser) Parse(record []byte, params LookupParams) ([]Holdin
 			var itemId string
 			var itemLoanPolicy string
 			for _, subfield := range field.Subfield {
-				if p.config.LocationSubField != nil && subfield.Code == *p.config.LocationSubField {
+				if p.config.LocationSubfield != nil && subfield.Code == *p.config.LocationSubfield {
 					location = strings.TrimSpace(string(subfield.Text))
 				}
-				if p.config.ShelvingLocationSubField != nil && subfield.Code == *p.config.ShelvingLocationSubField {
+				if p.config.ShelvingLocationSubfield != nil && subfield.Code == *p.config.ShelvingLocationSubfield {
 					shelvingLocation = strings.TrimSpace(string(subfield.Text))
 				}
-				if p.config.CallNumberSubField != nil && subfield.Code == *p.config.CallNumberSubField {
+				if p.config.CallNumberSubfield != nil && subfield.Code == *p.config.CallNumberSubfield {
 					callNumber = strings.TrimSpace(string(subfield.Text))
 				}
-				if p.config.ItemIdSubField != nil && subfield.Code == *p.config.ItemIdSubField {
+				if p.config.ItemIdSubfield != nil && subfield.Code == *p.config.ItemIdSubfield {
 					itemId = strings.TrimSpace(string(subfield.Text))
 				}
-				if p.config.ItemLoanPolicySubField != nil && subfield.Code == *p.config.ItemLoanPolicySubField {
+				if p.config.ItemLoanPolicySubfield != nil && subfield.Code == *p.config.ItemLoanPolicySubfield {
 					itemLoanPolicy = strings.TrimSpace(string(subfield.Text))
 				}
-				if p.config.RestrictedSubField != nil && subfield.Code == *p.config.RestrictedSubField {
+				if p.config.RestrictedSubfield != nil && subfield.Code == *p.config.RestrictedSubfield {
 					restricted = true
 				}
 			}
@@ -75,7 +75,7 @@ func (p *MarcHoldingsParser) Parse(record []byte, params LookupParams) ([]Holdin
 				for _, rule := range *p.config.Availability {
 					found, matches, excluded := false, false, false
 					for _, sub := range field.Subfield {
-						if sub.Code == rule.SubField {
+						if sub.Code == rule.Subfield {
 							found = true
 							if rule.Values != nil && slices.Contains(*rule.Values, string(sub.Text)) {
 								excluded = true

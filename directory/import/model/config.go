@@ -106,19 +106,19 @@ type HoldingsParserConfig struct {
 }
 
 type MarcHoldingsParserConfig struct {
-	ItemLoanPolicySubField   *string                      `json:"itemLoanPolicySubField,omitempty"`
+	ItemLoanPolicySubfield   *string                      `json:"itemLoanPolicySubfield,omitempty"`
 	Availability             *[]MarcAvailabilityPredicate `json:"availability,omitempty"`
-	CallNumberSubField       *string                      `json:"callNumberSubField,omitempty"`
-	ItemIDSubField           *string                      `json:"itemIdSubField,omitempty"`
-	LocationSubField         *string                      `json:"locationSubField,omitempty"`
+	CallNumberSubfield       *string                      `json:"callNumberSubfield,omitempty"`
+	ItemIDSubfield           *string                      `json:"itemIdSubfield,omitempty"`
+	LocationSubfield         *string                      `json:"locationSubfield,omitempty"`
 	MainField                *string                      `json:"mainField,omitempty"`
-	RestrictedSubField       *string                      `json:"restrictedSubField,omitempty"`
-	ShelvingLocationSubField *string                      `json:"shelvingLocationSubField,omitempty"`
+	RestrictedSubfield       *string                      `json:"restrictedSubfield,omitempty"`
+	ShelvingLocationSubfield *string                      `json:"shelvingLocationSubfield,omitempty"`
 }
 
 type MarcAvailabilityPredicate struct {
 	Values   *[]string `json:"values,omitempty"`
-	SubField string    `json:"subField"`
+	Subfield string    `json:"subfield"`
 	Operator string    `json:"operator"`
 	Value    *string   `json:"value,omitempty"`
 }
@@ -214,7 +214,7 @@ func validateConfigEnums(lms *LMSConfig, catalog *CatalogConfig, ill *ILLConfig)
 			}
 			if h.Marc != nil && h.Marc.Availability != nil {
 				for _, predicate := range *h.Marc.Availability {
-					if predicate.SubField == "" || !oneOf(predicate.Operator, "equals", "absent", "present", "notIn") || (predicate.Operator == "equals" && predicate.Value == nil) || (predicate.Operator == "notIn" && predicate.Values == nil) {
+					if predicate.Subfield == "" || !oneOf(predicate.Operator, "equals", "absent", "present", "notIn") || (predicate.Operator == "equals" && predicate.Value == nil) || (predicate.Operator == "notIn" && predicate.Values == nil) {
 						return fmt.Errorf("invalid catalogConfig.holdingsFormat.marc.availability predicate")
 					}
 				}

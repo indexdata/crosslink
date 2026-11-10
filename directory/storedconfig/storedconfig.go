@@ -104,12 +104,12 @@ const Columns = `
 						AND h.holdings_marc_main_field IS NULL
 						AND h.holdings_marc_restricted_subfield IS NULL
 						AND h.holdings_marc_shelving_location_subfield IS NULL THEN NULL ELSE json_strip_nulls(json_build_object(
-							'callNumberSubField', h.holdings_marc_call_number_subfield,
-							'itemIdSubField', h.holdings_marc_item_id_subfield,
-							'locationSubField', h.holdings_marc_location_subfield,
+							'callNumberSubfield', h.holdings_marc_call_number_subfield,
+							'itemIdSubfield', h.holdings_marc_item_id_subfield,
+							'locationSubfield', h.holdings_marc_location_subfield,
 							'mainField', h.holdings_marc_main_field,
-							'restrictedSubField', h.holdings_marc_restricted_subfield,
-							'shelvingLocationSubField', h.holdings_marc_shelving_location_subfield
+							'restrictedSubfield', h.holdings_marc_restricted_subfield,
+							'shelvingLocationSubfield', h.holdings_marc_shelving_location_subfield
 						)) END,
 					'marc21plus1', CASE WHEN h.holdings_marc21plus1_enabled THEN json_build_object() ELSE NULL END,
 					'opac', CASE WHEN h.holdings_opac_enabled THEN json_build_object() ELSE NULL END,
