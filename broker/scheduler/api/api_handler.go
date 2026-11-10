@@ -27,6 +27,7 @@ import (
 
 var errDuplicateBatchActionTitle = errors.New("a batch action with this owner and title already exists")
 var errInvalidBatchEmailTemplate = errors.New("invalid batch email template")
+var errInvalidArchiveConfig = errors.New("invalid patron request archive configuration")
 
 // SchedulerApiHandler implements schedoapi.ServerInterface.
 type SchedulerApiHandler struct {
@@ -181,6 +182,10 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if err := validateBatchEmailActionParams(taskToSave.ActionData.BatchActionData.ActionName, paramsMap); err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return
+	}
+	if err := sched_service.ValidatePatronRequestArchiveConfig(string(create.ActionName), owner, create.BatchQuery, paramsMap); err != nil {
 		brokerapi.AddBadRequestError(ctx, w, err)
 		return
 	}
@@ -341,6 +346,14 @@ func (h SchedulerApiHandler) PutBatchActionsId(w http.ResponseWriter, r *http.Re
 		if update.ActionParams != nil {
 			task.ActionData.CustomData = *update.ActionParams
 		}
+	}, func(task sched_db.ScheduledTask) error {
+		if task.ActionData.BatchActionData == nil {
+			return nil
+		}
+		if err := sched_service.ValidatePatronRequestArchiveConfig(task.ActionData.BatchActionData.ActionName, task.Owner, task.ActionData.BatchActionData.Selector, task.ActionData.CustomData); err != nil {
+			return fmt.Errorf("%w: %w", errInvalidArchiveConfig, err)
+		}
+		return nil
 	})
 	if err != nil {
 		h.writeScheduledTaskMutationError(ctx, w, err)
@@ -391,6 +404,7 @@ func (h SchedulerApiHandler) mutateScheduledTask(
 	id string,
 	owners []string,
 	mutate func(*sched_db.ScheduledTask),
+	validators ...func(sched_db.ScheduledTask) error,
 ) (sched_db.ScheduledTask, error) {
 	var task sched_db.ScheduledTask
 	err := h.schedRepo.WithTxFunc(ctx, func(repo sched_db.SchedRepo) error {
@@ -403,6 +417,11 @@ func (h SchedulerApiHandler) mutateScheduledTask(
 			return inErr
 		}
 		mutate(&task)
+		for _, validate := range validators {
+			if inErr = validate(task); inErr != nil {
+				return inErr
+			}
+		}
 		task, inErr = repo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
 		return inErr
 	})
@@ -472,6 +491,10 @@ func validateBatchActionTask(task sched_db.ScheduledTask) error {
 }
 
 func (h SchedulerApiHandler) writeScheduledTaskMutationError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
+	if errors.Is(err, errInvalidArchiveConfig) {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		brokerapi.AddNotFoundError(w)
 		return

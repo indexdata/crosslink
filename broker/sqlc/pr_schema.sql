@@ -30,6 +30,26 @@ CREATE TABLE patron_request
     due_at TIMESTAMPTZ
 );
 
+CREATE INDEX idx_pr_borrowing_archive_cursor
+    ON patron_request (requester_symbol, created_at, id)
+    WHERE side = 'borrowing' AND ill_request IS NOT NULL;
+
+CREATE INDEX idx_pr_lending_archive_cursor
+    ON patron_request (supplier_symbol, created_at, id)
+    WHERE side = 'lending' AND ill_request IS NOT NULL;
+
+CREATE TABLE archived_resource (
+    owner TEXT NOT NULL,
+    resource_type TEXT NOT NULL,
+    resource_id TEXT NOT NULL,
+    archived_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    schema_version INTEGER NOT NULL,
+    anonymized BOOLEAN NOT NULL,
+    anonymization_method TEXT,
+    bundle JSONB NOT NULL,
+    PRIMARY KEY (resource_type, resource_id)
+);
+
 CREATE OR REPLACE FUNCTION get_next_hrid(prefix VARCHAR) RETURNS VARCHAR AS $$
 BEGIN
     EXECUTE format('CREATE SEQUENCE IF NOT EXISTS %I START 1', LOWER(prefix) || '_hrid_seq');

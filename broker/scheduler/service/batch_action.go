@@ -7,6 +7,7 @@ import (
 
 	"github.com/indexdata/cql-go/cql"
 	"github.com/indexdata/cql-go/cqlbuilder"
+	"github.com/indexdata/cql-go/pgcql"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
@@ -24,19 +25,32 @@ var BATCH_ACTION_RUN_RETENTION = common.ToInt32(utils.Must(utils.GetEnvInt("BATC
 type BatchActionService struct {
 	eventBus             events.EventBus
 	prRepo               pr_db.PrRepo
+	prArchiveRepo        PatronRequestArchiveRepo
 	schedRepo            sched_db.SchedRepo
 	emailSenderService   *EmailSenderService
 	actionMappingService prservice.ActionMappingService
 }
 
-func NewBatchActionService(eventBus events.EventBus, prRepo pr_db.PrRepo, schedRepo sched_db.SchedRepo, emailSenderService *EmailSenderService) *BatchActionService {
-	return &BatchActionService{
+// PatronRequestArchiveRepo selects archive candidates and archives each side's
+// owned data atomically.
+type PatronRequestArchiveRepo interface {
+	ListPatronRequestArchiveCandidates(common.ExtendedContext, int32, *pr_db.PatronRequestArchiveCursor, pgcql.Query) ([]pr_db.PatronRequest, error)
+	ArchiveBorrowingRequest(common.ExtendedContext, pr_db.PatronRequest, string, time.Time, bool) (bool, error)
+	ArchiveLendingRequest(common.ExtendedContext, pr_db.PatronRequest, string, time.Time, bool) (bool, error)
+}
+
+func NewBatchActionService(eventBus events.EventBus, prRepo pr_db.PrRepo, schedRepo sched_db.SchedRepo, emailSenderService *EmailSenderService, archiveRepos ...PatronRequestArchiveRepo) *BatchActionService {
+	s := &BatchActionService{
 		eventBus:             eventBus,
 		prRepo:               prRepo,
 		schedRepo:            schedRepo,
 		emailSenderService:   emailSenderService,
 		actionMappingService: prservice.ActionMappingService{SMService: &prservice.StateModelService{}},
 	}
+	if len(archiveRepos) > 0 {
+		s.prArchiveRepo = archiveRepos[0]
+	}
+	return s
 }
 
 func (s *BatchActionService) BatchAction(ctx common.ExtendedContext, event events.Event) {
@@ -57,6 +71,10 @@ func (s *BatchActionService) batchAction(ctx common.ExtendedContext, event event
 		action = s.RequestAging
 	case string(schedoapi.Overdue):
 		action = s.Overdue
+	case string(schedoapi.ArchiveBorrowingRequests):
+		action = s.ArchiveBorrowingRequests
+	case string(schedoapi.ArchiveLendingRequests):
+		action = s.ArchiveLendingRequests
 	default:
 		ctx.Logger().Error("unknown batch action",
 			"actionName", event.EventData.BatchActionData.ActionName,
@@ -65,10 +83,16 @@ func (s *BatchActionService) batchAction(ctx common.ExtendedContext, event event
 		return events.NewErrorResult("cannot process event", "unknown batch action")
 	}
 
-	restrictedSelector, err := addBatchActionOwnerRestriction(
-		event.EventData.BatchActionData.Selector,
-		event.EventData.BatchActionData.Owner,
-	)
+	var restrictedSelector string
+	var err error
+	switch event.EventData.BatchActionData.ActionName {
+	case string(schedoapi.ArchiveBorrowingRequests):
+		restrictedSelector, err = addPatronRequestArchiveRestriction(event.EventData.BatchActionData.Selector, event.EventData.BatchActionData.Owner, prservice.SideBorrowing)
+	case string(schedoapi.ArchiveLendingRequests):
+		restrictedSelector, err = addPatronRequestArchiveRestriction(event.EventData.BatchActionData.Selector, event.EventData.BatchActionData.Owner, prservice.SideLending)
+	default:
+		restrictedSelector, err = addBatchActionOwnerRestriction(event.EventData.BatchActionData.Selector, event.EventData.BatchActionData.Owner)
+	}
 	if err != nil {
 		return events.NewErrorResult("invalid batch action data", err.Error())
 	}
@@ -80,6 +104,30 @@ func (s *BatchActionService) batchAction(ctx common.ExtendedContext, event event
 	event.EventData.BatchActionData = &batchActionData
 	s.cleanupOldRuns(ctx, event)
 	return action(ctx, event)
+}
+
+func addPatronRequestArchiveRestriction(selector, owner string, side pr_db.PatronRequestSide) (string, error) {
+	if selector == "" || owner == "" {
+		return "", fmt.Errorf("patron request archive requires a selector and owner")
+	}
+	ownerField := "requester_symbol_exact"
+	switch side {
+	case prservice.SideBorrowing:
+	case prservice.SideLending:
+		ownerField = "supplier_symbol_exact"
+	default:
+		return "", fmt.Errorf("invalid archive side %q", side)
+	}
+	qb, err := cqlbuilder.NewQueryFromString(selector)
+	if err != nil {
+		return "", err
+	}
+	query, err := qb.And().Search("side").Term(string(side)).
+		And().Search(ownerField).Term(owner).Build()
+	if err != nil {
+		return "", err
+	}
+	return query.String(), nil
 }
 
 func (s *BatchActionService) cleanupOldRuns(ctx common.ExtendedContext, event events.Event) {
