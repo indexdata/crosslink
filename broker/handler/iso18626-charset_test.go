@@ -31,20 +31,28 @@ func (r *charsetRequestRepo) SaveIllTransaction(_ common.ExtendedContext, params
 
 func TestIso18626PostHandlerCharset(t *testing.T) {
 	tests := []struct {
-		name        string
-		contentType string
-		encoding    encoding.Encoding
-		bom         bool
-		title       string
-		status      int
+		name          string
+		contentType   string
+		encoding      encoding.Encoding
+		bom           bool
+		noDeclaration bool
+		declaration   string
+		title         string
+		wantTitle     string
+		status        int
 	}{
 		{name: "UTF-8 default", contentType: "application/xml", title: "Anaïs Nin © — 🙂", status: http.StatusOK},
 		{name: "Latin-1 transport overrides UTF-8 declaration", contentType: "application/xml; charset=ISO-8859-1", encoding: charmap.ISO8859_1, title: "Götterzorn / Anaïs Nin ©", status: http.StatusOK},
+		{name: "Latin-1 spaced declaration", contentType: "application/xml", encoding: charmap.ISO8859_1, declaration: `<?xml version='1.0' encoding = 'ISO-8859-1'?>`, title: "Götterzorn / Anaïs Nin ©", status: http.StatusOK},
+		{name: "unsupported spaced declaration", contentType: "application/xml", declaration: `<?xml version='1.0' encoding = 'unknown'?>`, title: "Nin", status: http.StatusBadRequest},
 		{name: "Windows-1252 quoted charset", contentType: `text/xml; charset="windows-1252"`, encoding: charmap.Windows1252, title: "Anaïs Nin © —", status: http.StatusOK},
 		{name: "case insensitive media type and charset parameter", contentType: `Application/XML; Charset="ISO-8859-1"`, encoding: charmap.ISO8859_1, title: "Götterzorn", status: http.StatusOK},
 		{name: "BOM overrides transport charset", contentType: "application/xml; charset=ISO-8859-1", bom: true, title: "Anaïs Nin 🙂", status: http.StatusOK},
 		{name: "BOM overrides unsupported transport charset", contentType: "application/xml; charset=unknown", bom: true, title: "Anaïs Nin 🙂", status: http.StatusOK},
-		{name: "incorrect UTF-8 remains rejected", contentType: "application/xml", encoding: charmap.ISO8859_1, title: "Anaïs Nin", status: http.StatusBadRequest},
+		{name: "invalid UTF-8 declaration is replaced", contentType: "application/xml", encoding: charmap.ISO8859_1, title: "Anaïs Nin", wantTitle: "Ana�s Nin", status: http.StatusOK},
+		{name: "invalid UTF-8 transport is replaced", contentType: "application/xml; charset=UTF-8", encoding: charmap.ISO8859_1, title: "Anaïs Nin", wantTitle: "Ana�s Nin", status: http.StatusOK},
+		{name: "invalid UTF-8 BOM is replaced", contentType: "application/xml; charset=ISO-8859-1", encoding: charmap.ISO8859_1, bom: true, title: "Anaïs Nin", wantTitle: "Ana�s Nin", status: http.StatusOK},
+		{name: "invalid UTF-8 default is replaced", contentType: "application/xml", encoding: charmap.ISO8859_1, noDeclaration: true, title: "Anaïs Nin", wantTitle: "Ana�s Nin", status: http.StatusOK},
 		{name: "unsupported charset", contentType: "application/xml; charset=unknown", title: "Nin", status: http.StatusBadRequest},
 		{name: "malformed charset parameter", contentType: "application/xml; charset", title: "Nin", status: http.StatusUnsupportedMediaType},
 		{name: "invalid media type prefix", contentType: "application/xml-invalid", title: "Nin", status: http.StatusUnsupportedMediaType},
@@ -68,7 +76,13 @@ func TestIso18626PostHandlerCharset(t *testing.T) {
 			}
 			body, err := xml.Marshal(message)
 			require.NoError(t, err)
-			body = append([]byte(xml.Header), body...)
+			if !tt.noDeclaration {
+				declaration := tt.declaration
+				if declaration == "" {
+					declaration = xml.Header
+				}
+				body = append([]byte(declaration), body...)
+			}
 			if tt.encoding != nil {
 				body, err = tt.encoding.NewEncoder().Bytes(body)
 				require.NoError(t, err)
@@ -89,7 +103,11 @@ func TestIso18626PostHandlerCharset(t *testing.T) {
 				return
 			}
 			require.NotNil(t, repo.saved)
-			assert.Equal(t, tt.title, repo.saved.IllTransactionData.BibliographicInfo.Title)
+			wantTitle := tt.wantTitle
+			if wantTitle == "" {
+				wantTitle = tt.title
+			}
+			assert.Equal(t, wantTitle, repo.saved.IllTransactionData.BibliographicInfo.Title)
 			var confirmation iso18626.ISO18626Message
 			require.NoError(t, xml.Unmarshal(response.Body.Bytes(), &confirmation))
 			require.NotNil(t, confirmation.RequestConfirmation)
