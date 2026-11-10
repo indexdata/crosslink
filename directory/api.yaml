@@ -258,6 +258,7 @@ paths:
             type: string
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/ResolveInherit'
       responses:
         '200':
           description: Entry list response
@@ -351,6 +352,7 @@ paths:
             type: string
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/ResolveInherit'
       responses:
         '200':
           description: Owned entry list response
@@ -383,6 +385,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/entryLookupKey'
         - $ref: '#/components/parameters/entryLookupValue'
+        - $ref: '#/components/parameters/ResolveInherit'
       responses:
         '200':
           description: Entry response
@@ -1734,6 +1737,17 @@ components:
         minimum: 0
         maximum: 1000
         default: 10
+    ResolveInherit:
+      name: resolve-inherit
+      in: query
+      description: >-
+        When true (the default), configuration fields an entry does not store
+        are filled in from its parent institution and consortium, following each
+        field's x-inheritance-root. When false, only the entry's own stored
+        values are returned; use this to edit an entry or to write values back.
+      schema:
+        type: boolean
+        default: true
     entryLookupKey:
       name: key
       in: path
@@ -1795,21 +1809,34 @@ components:
           description: Desired lending-to-borrowing ratio, expressed as desired_loans:desired_borrows. Both values must be positive unsigned decimals with one to four integer digits (including leading zeros) and at most two decimal places, ranging from 0.01 to 9999.99.
           example: '50:2'
         illConfig:
-          $ref: '#/components/schemas/AddEntryIllConfig'
+          description: ILL configuration. Unset fields inherit from the parent institution and consortium; see x-inheritance-root.
+          allOf:
+            - $ref: '#/components/schemas/AddEntryIllConfig'
+          x-inheritance-root: Consortium
+          x-editable-on: [Consortium, Institution]
         hrid:
           type: string
         timeZone:
           type: string
         lmsConfig:
-          description: Configuration for LMS (Library Management System) integration via NCIP protocol
+          description: Configuration for LMS (Library Management System) integration via NCIP protocol. Branches inherit unset fields from their institution.
           allOf:
             - $ref: '#/components/schemas/LmsConfig'
+          x-inheritance-root: Institution
+          x-editable-on: [Institution]
         catalogConfig:
-          $ref: '#/components/schemas/CatalogConfig'
+          description: Catalog configuration. Branches inherit unset fields from their institution; consortium values are not inherited.
+          allOf:
+            - $ref: '#/components/schemas/CatalogConfig'
+          x-inheritance-root: Institution
+          x-editable-on: [Consortium, Institution]
         holdingsPolicy:
-          description: Policy that determines whether and in which order holdings may supply an item.
+          description: Policy that determines whether and in which order holdings may supply an item. Branches inherit their institution's policy as a whole when they have none.
           allOf:
             - $ref: '#/components/schemas/HoldingsPolicy'
+          x-inheritance-root: Institution
+          x-editable-on: [Institution]
+          x-merge-unit: holdingsPolicy
 
     AddEntry:
       x-go-type: Entry
@@ -1916,9 +1943,9 @@ components:
 
     NcipVersion:
       type: string
-      enum: ["1.0", "2.02"]
+      enum: ["1.0", "2.02", "default"]
       x-go-type: string
-      description: NCIP wire version. Omission inherits the selected profile default (1.0 for Horizon, Polaris and Symphony; 2.02 otherwise). Version 1.0 uses namespace-free XML over HTTP.
+      description: NCIP wire version. Omission inherits the parent institution's value, then the selected profile default (1.0 for Horizon, Polaris and Symphony; 2.02 otherwise). "default" selects the profile default without inheriting. Version 1.0 uses namespace-free XML over HTTP.
 
     BibIdNormalization:
       type: string
@@ -2074,8 +2101,8 @@ components:
         ncipNamespaceEnabled: { type: [boolean, "null"] }
         bibIdNormalization:
           anyOf: [{ $ref: '#/components/schemas/BibIdNormalization' }, { type: "null" }]
-        address: { type: string }
-        fromAgency: { type: string }
+        address: { type: [string, "null"] }
+        fromAgency: { type: [string, "null"] }
         fromAgencyAuthentication: { type: [string, "null"] }
         toAgency: { type: [string, "null"] }
         lookupUserEnabled: { type: [boolean, "null"] }
@@ -2097,27 +2124,31 @@ components:
     ImportIllConfig:
       type: object
       additionalProperties: false
-      required: [iso18626Url, iso18626Vendor, lendersOfLastResort, includeRequestingAgencyInfo, includeSupplierInfo, includeReturnInfo, includeVendorNote, useOfferedCosts, noteFieldSeparator, supplierPatronPattern, duplicateCheckWindowHours]
+      required: [iso18626Url, iso18626Vendor, includeRequestingAgencyInfo, includeSupplierInfo, includeReturnInfo, includeVendorNote, useOfferedCosts, noteFieldSeparator, supplierPatronPattern, duplicateCheckWindowHours]
       properties:
         defaultCopyrightType:
           anyOf:
             - $ref: '#/components/schemas/IllConfigCodeDescription'
             - type: "null"
         loanConditions:
-          type: array
+          type: [array, "null"]
+          description: Null or omitted inherits the parent's list; an empty list stores no entries locally.
           items: { $ref: '#/components/schemas/IllConfigCodeDescription' }
         unfilledReasons:
-          type: array
+          type: [array, "null"]
+          description: Null or omitted inherits the parent's list; an empty list stores no entries locally.
           items: { $ref: '#/components/schemas/IllConfigCodeDescription' }
         cancellationReasons:
-          type: array
+          type: [array, "null"]
+          description: Null or omitted inherits the parent's list; an empty list stores no entries locally.
           items: { $ref: '#/components/schemas/IllConfigCodeDescription' }
         isPickupLocation: { type: [boolean, "null"] }
         iso18626Url: { type: [string, "null"] }
         iso18626Vendor:
           anyOf: [{ $ref: '#/components/schemas/EntryVendor' }, { type: "null" }]
         lendersOfLastResort:
-          type: array
+          type: [array, "null"]
+          description: Null or omitted inherits the parent's list; an empty list stores no lenders locally.
           items: { type: string, format: uuid }
         includeRequestingAgencyInfo: { type: [boolean, "null"] }
         includeSupplierInfo: { type: [boolean, "null"] }
@@ -2127,7 +2158,7 @@ components:
         noteFieldSeparator: { type: [string, "null"] }
         supplierPatronPattern: { type: [string, "null"] }
         duplicateCheckWindowHours: { type: [integer, "null"], format: int32, minimum: 0 }
-        defaultLoanPeriod: { type: [integer, "null"], format: int32, minimum: 1 }
+        defaultLoanPeriod: { type: [integer, "null"], format: int32, minimum: 0 }
         maxRequestsPerPatron: { type: [integer, "null"], format: int32, minimum: 0 }
         minimumCost: { type: [number, "null"], format: double, minimum: 0 }
         loadBalancingPolicy:
@@ -2694,32 +2725,41 @@ components:
           anyOf:
             - $ref: '#/components/schemas/LoadBalancingPolicy'
             - type: "null"
-          description: Consortium lender scoring policy. Omitted or null defaults to proportional.
+          description: Consortium lender scoring policy, set on the consortium only and never inherited. Omitted or null defaults to proportional.
+          x-inheritance-root: none
+          x-editable-on: [Consortium]
         isPickupLocation:
           type: boolean
-          description: Whether this entry is offered as a pickup location. Applies to institutions and branches, independently of LMS pickup codes. Defaults to false.
+          description: Whether this entry is offered as a pickup location. Applies to institutions and branches, independently of LMS pickup codes. Never inherited; an unset value means the entry is not a pickup location.
+          x-inheritance-root: none
+          x-editable-on: [Institution, Branch]
         defaultLoanPeriod:
           type: [integer, "null"]
           format: int32
-          minimum: 1
-          description: Default supplier loan period in calendar days. Omitted or null disables the fallback.
+          minimum: 0
+          description: Default supplier loan period in calendar days. Omitted or null inherits the parent's value; 0 disables the fallback and is omitted from inherited views.
+          x-off-value: 0
         maxRequestsPerPatron:
           type: [integer, "null"]
           format: int32
           minimum: 0
-          description: Maximum number of active requests allowed per patron. 0, omitted, or null disables the limit.
+          description: Maximum number of active requests allowed per patron. Omitted or null inherits the parent's value; 0 disables the limit.
         minimumCost:
           type: [number, "null"]
           format: double
           minimum: 0
-          description: Minimum cost configured for ILL requests. Omitted or null means no minimum cost is configured.
+          description: Minimum cost configured for ILL requests. Omitted or null inherits the parent's value; 0 means no minimum cost.
         iso18626Url:
           type: string
-          description: URL of the ISO18626 service. When set, used instead of an ISO18626 service from endpoints.
+          description: URL of the ISO18626 service. When set, used instead of an ISO18626 service from endpoints. Branches inherit their institution's URL together with iso18626Vendor; consortium values are not inherited.
+          x-inheritance-root: Institution
+          x-merge-unit: iso18626Peer
         iso18626Vendor:
-          description: ISO18626 service vendor. Used only when iso18626Url is non-empty.
+          description: ISO18626 service vendor. Used only when iso18626Url is non-empty. Inherited together with iso18626Url.
           allOf:
             - $ref: '#/components/schemas/EntryVendor'
+          x-inheritance-root: Institution
+          x-merge-unit: iso18626Peer
         lendersOfLastResort:
           type: array
           description: Suppliers appended to the end of the rota when no regular supplier can fill the request. Each normalized authority and symbol pair must be unique and exist in the directory; authorities must not contain colons.
@@ -2751,6 +2791,79 @@ components:
           format: int32
           description: The number of hours to check for duplicate requests. If a request is submitted within this window, it will be considered a duplicate.
           minimum: 0
+    IllConfigPatch:
+      type: object
+      description: >-
+        Partial update of an entry's local ILL configuration. Omitted fields keep
+        their stored value. Null removes the local value, so an inherited value
+        applies; null is accepted even where the entry type may not set the field.
+      properties:
+        loanConditions:
+          type: [array, "null"]
+          items:
+            $ref: '#/components/schemas/IllConfigCodeDescription'
+        defaultCopyrightType:
+          anyOf:
+            - $ref: '#/components/schemas/IllConfigCodeDescription'
+            - type: "null"
+        availableCopyrightTypes:
+          type: [array, "null"]
+          items:
+            $ref: '#/components/schemas/IllConfigCodeDescription'
+        unfilledReasons:
+          type: [array, "null"]
+          items:
+            $ref: '#/components/schemas/IllConfigCodeDescription'
+        cancellationReasons:
+          type: [array, "null"]
+          items:
+            $ref: '#/components/schemas/IllConfigCodeDescription'
+        loadBalancingPolicy:
+          anyOf:
+            - $ref: '#/components/schemas/LoadBalancingPolicy'
+            - type: "null"
+        isPickupLocation:
+          type: [boolean, "null"]
+        defaultLoanPeriod:
+          type: [integer, "null"]
+          format: int32
+          minimum: 0
+        maxRequestsPerPatron:
+          type: [integer, "null"]
+          format: int32
+          minimum: 0
+        minimumCost:
+          type: [number, "null"]
+          format: double
+          minimum: 0
+        iso18626Url:
+          type: [string, "null"]
+        iso18626Vendor:
+          anyOf:
+            - $ref: '#/components/schemas/EntryVendor'
+            - type: "null"
+        lendersOfLastResort:
+          type: [array, "null"]
+          items:
+            $ref: '#/components/schemas/SymbolProperties'
+        includeRequestingAgencyInfo:
+          type: [boolean, "null"]
+        includeSupplierInfo:
+          type: [boolean, "null"]
+        includeReturnInfo:
+          type: [boolean, "null"]
+        includeVendorNote:
+          type: [boolean, "null"]
+        useOfferedCosts:
+          type: [boolean, "null"]
+        noteFieldSeparator:
+          type: [string, "null"]
+        supplierPatronPattern:
+          type: [string, "null"]
+        duplicateCheckWindowHours:
+          type: [integer, "null"]
+          format: int32
+          minimum: 0
     EntryVendor:
       type: string
       description: ISO18626 vendor type
@@ -2775,9 +2888,15 @@ components:
             - type: "null"
           description: Host integration profile, independent of the ILL vendor. WMS and Aleph are reserved and currently unsupported.
         sru:
-          $ref: '#/components/schemas/SruConfig'
+          description: SRU endpoint. Inherited together with zoom.
+          allOf:
+            - $ref: '#/components/schemas/SruConfig'
+          x-merge-unit: catalogEndpoint
         zoom:
-          $ref: '#/components/schemas/ZoomConfig'
+          description: Z39.50 endpoint. Inherited together with sru.
+          allOf:
+            - $ref: '#/components/schemas/ZoomConfig'
+          x-merge-unit: catalogEndpoint
         queryConfig:
           $ref: '#/components/schemas/QueryConfig'
         holdingsFormat:
@@ -2789,6 +2908,7 @@ components:
       additionalProperties: false
     CatalogConfigPatch:
       type: object
+      description: Partial update of an entry's local catalog configuration. Null removes a local value, so an inherited value applies.
       properties:
         profile:
           anyOf:
@@ -2796,17 +2916,29 @@ components:
             - type: "null"
           description: Host integration profile, independent of the ILL vendor. WMS and Aleph are reserved and currently unsupported.
         sru:
-          $ref: '#/components/schemas/SruConfigPatch'
+          anyOf:
+            - $ref: '#/components/schemas/SruConfigPatch'
+            - type: "null"
         zoom:
-          $ref: '#/components/schemas/ZoomConfigPatch'
+          anyOf:
+            - $ref: '#/components/schemas/ZoomConfigPatch'
+            - type: "null"
         queryConfig:
-          $ref: '#/components/schemas/QueryConfig'
+          anyOf:
+            - $ref: '#/components/schemas/QueryConfig'
+            - type: "null"
         holdingsFormat:
-          $ref: '#/components/schemas/HoldingsParserConfig'
+          anyOf:
+            - $ref: '#/components/schemas/HoldingsParserConfig'
+            - type: "null"
         metadataUpdateMode:
-          $ref: '#/components/schemas/MetadataUpdateMode'
+          anyOf:
+            - $ref: '#/components/schemas/MetadataUpdateMode'
+            - type: "null"
         metadataFormat:
-          $ref: '#/components/schemas/MetadataParserConfig'
+          anyOf:
+            - $ref: '#/components/schemas/MetadataParserConfig'
+            - type: "null"
       additionalProperties: false
     MetadataUpdateMode:
       type: string
@@ -2979,10 +3111,12 @@ components:
           type: string
           minLength: 1
         type:
+          description: Only consortial administrators may change this value; sending the stored value is accepted.
           anyOf:
             - $ref: '#/components/schemas/EntryType'
             - type: "null"
         parent:
+          description: Only consortial administrators may change this value; sending the stored value is accepted.
           type: [string, "null"]
           format: uuid
         description:
@@ -3012,8 +3146,9 @@ components:
           pattern: '^((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9])):((0{0,3}[1-9]|0{0,2}[1-9][0-9]|0?[1-9][0-9]{2}|[1-9][0-9]{3})(\.[0-9]{1,2})?|0{1,4}\.([1-9][0-9]?|0[1-9]))$'
           description: Desired lending-to-borrowing ratio, expressed as desired_loans:desired_borrows. Both values must be positive unsigned decimals with one to four integer digits (including leading zeros) and at most two decimal places, ranging from 0.01 to 9999.99.
         illConfig:
+          description: Null removes the entry's whole local ILL configuration, so inherited values apply.
           anyOf:
-            - $ref: '#/components/schemas/AddEntryIllConfig'
+            - $ref: '#/components/schemas/IllConfigPatch'
             - type: "null"
         hrid:
           type: [string, "null"]
@@ -3153,10 +3288,15 @@ components:
       type: object
       properties:
         ncipVersion:
-          $ref: '#/components/schemas/NcipVersion'
+          description: NCIP wire version. "default" uses the selected profile's version instead of an inherited value and is omitted from inherited views.
+          allOf:
+            - $ref: '#/components/schemas/NcipVersion'
+          x-merge-unit: ncipConnection
+          x-off-value: default
         ncipNamespaceEnabled:
           description: Controls XML namespaces for NCIP 2.02 only; ignored for NCIP 1.0.
           type: boolean
+          x-merge-unit: ncipConnection
         bibIdNormalization:
           $ref: '#/components/schemas/BibIdNormalization'
         vendor:
@@ -3164,22 +3304,27 @@ components:
             - $ref: '#/components/schemas/HostLmsVendor'
             - type: "null"
           description: Host integration profile, independent of the ILL vendor. WMS and Aleph are reserved and currently unsupported.
+          x-merge-unit: ncipConnection
         address:
           type: string
           x-go-type-skip-optional-pointer: true
           description: Base URL of the LMS API
+          x-merge-unit: ncipConnection
         fromAgency:
           type: string
           x-go-type-skip-optional-pointer: true
           description: Agency code used when the entry is acting as the supplying agency
+          x-merge-unit: ncipConnection
         fromAgencyAuthentication:
           type: string
           x-oapi-codegen-extra-tags:
             protected: "true"
-          description: Authentication token or credentials for the fromAgency
+          description: Authentication token or credentials for the fromAgency. Never inherited from an entry with a different tenant.
+          x-merge-unit: ncipConnection
         toAgency:
           type: string
           description: Agency code used when the entry is acting as the requesting agency
+          x-merge-unit: ncipConnection
         lookupUserEnabled:
           type: boolean
           description: Whether user lookup is enabled
@@ -3215,10 +3360,14 @@ components:
           description: Whether to include a pickup location when making Request Item requests
         requesterPickupLocation:
           type: string
-          description: Pickup location code used when acting as requesting agency
+          description: Pickup location code used when acting as requesting agency. Never inherited.
+          x-inheritance-root: none
+          x-editable-on: [Institution, Branch]
         supplierPickupLocation:
           type: string
-          description: Pickup location code used when acting as supplying agency
+          description: Pickup location code used when acting as supplying agency. Never inherited.
+          x-inheritance-root: none
+          x-editable-on: [Institution, Branch]
         requesterPatronPattern:
           type: string
           description: "'{requesterSymbol}' occurrences are replaced with requesting agency ISIL"
@@ -3256,7 +3405,7 @@ components:
       properties:
         ncipVersion:
           anyOf: [{ $ref: '#/components/schemas/NcipVersion' }, { type: "null" }]
-          description: NCIP wire version. Null removes the override and restores the profile default.
+          description: NCIP wire version. Null removes the local value, so an inherited value or the profile default applies; "default" selects the profile default without inheriting.
         ncipNamespaceEnabled:
           description: Controls XML namespaces for NCIP 2.02 only; ignored for NCIP 1.0.
           type: [boolean, "null"]
@@ -3270,9 +3419,11 @@ components:
             - type: "null"
           description: Host integration profile, independent of the ILL vendor. WMS and Aleph are reserved and currently unsupported.
         address:
-          type: string
+          type: [string, "null"]
+          description: Null removes the local value, so an inherited value applies.
         fromAgency:
-          type: string
+          type: [string, "null"]
+          description: Null removes the local value, so an inherited value applies.
         fromAgencyAuthentication:
           type: [string, "null"]
         toAgency:

@@ -12,6 +12,12 @@ then explicit catalog values. Missing or null profiles resolve to Generic, excep
 that an unset catalog profile inherits the LMS vendor. Setting the catalog profile
 to `Generic` explicitly prevents that inheritance.
 
+"Explicit directory values" are the merged values Directory returns, so a branch's
+LMS and catalog settings inherited from its institution count as explicit. Directory
+resolves [entry inheritance](README.md#configuration-inheritance) first; the broker
+then applies profile defaults beneath the result. Directory never stores profile
+defaults.
+
 ```yaml
 illConfig:
   iso18626Vendor: ReShare
@@ -218,7 +224,10 @@ repository convention.
 Set `lmsConfig.ncipVersion` to `"1.0"` or `"2.02"`. Horizon, Polaris and Symphony
 default to `"1.0"`; other profiles default to `"2.02"`. An explicit value overrides
 the profile. Existing profiles retain their prior defaults without a stored version. POST/GET preserve explicit settings;
-PATCH with `null` removes the override, while omission leaves it unchanged.
+PATCH with `null` removes the override so that an inherited value or the profile
+default applies, while omission leaves it unchanged. `"default"` selects the profile
+default without inheriting; merged Directory reads omit it, and the broker also
+ignores it if it receives the raw value.
 `ncipNamespaceEnabled` affects v2 only: v1 always uses namespace-free XML.
 
 ```json

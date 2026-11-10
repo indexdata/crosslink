@@ -289,3 +289,14 @@ func TestBibItemScopeName(t *testing.T) {
 		require.ErrorContains(t, err, "bibItemScopeName")
 	}
 }
+
+func TestDefaultNcipVersionUsesProfileDefault(t *testing.T) {
+	for vendor, want := range map[string]string{"Horizon": "1.0", "Sierra": "2.02"} {
+		raw := entry(t, `{"lmsConfig":{"vendor":"`+vendor+`","ncipVersion":"default"}}`)
+		e, err := Resolve(raw)
+		require.NoError(t, err)
+		require.Equal(t, want, *e.LMS.NcipVersion, vendor)
+		require.NotEqual(t, "directory", e.Origins["lmsConfig.ncipVersion"], "a profile, not the directory, supplies the version")
+		require.Equal(t, "default", *raw.LmsConfig.NcipVersion, "the entry is not mutated")
+	}
+}

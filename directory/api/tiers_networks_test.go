@@ -8,7 +8,7 @@ import (
 )
 
 func TestAddTierRejectsWhitespaceOnlyName(t *testing.T) {
-	impl := NewApiImpl(nil, nil, nil)
+	impl := NewApiImpl(nil, nil, nil, nil)
 	response, err := impl.AddTier(consortialAdminContext(t), AddTierRequestObject{
 		Body: &Tier{Consortium: uuid.New(), Name: " \t\n"},
 	})
@@ -18,7 +18,7 @@ func TestAddTierRejectsWhitespaceOnlyName(t *testing.T) {
 }
 
 func TestAddNetworkRejectsWhitespaceOnlyName(t *testing.T) {
-	impl := NewApiImpl(nil, nil, nil)
+	impl := NewApiImpl(nil, nil, nil, nil)
 	response, err := impl.AddNetwork(consortialAdminContext(t), AddNetworkRequestObject{
 		Body: &Network{Consortium: uuid.New(), Name: " \t\n"},
 	})

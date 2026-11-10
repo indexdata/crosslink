@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/oapi-codegen/nullable"
 
 	"github.com/indexdata/crosslink/directory/db"
 )
@@ -106,13 +107,27 @@ func validateCatalogConfigParams(params db.UpsertCatalogConfigParams) error {
 }
 
 func validateCatalogConfigPatch(cfg CatalogConfigPatch, original db.CatalogConfig) error {
-	if cfg.Sru != nil && cfg.Sru.Address == nil && original.SruAddress == nil {
+	if sru, ok := patchValue(cfg.Sru); ok && sru.Address == nil && original.SruAddress == nil {
 		return errors.New("catalogConfig.sru.address is required when creating SRU configuration")
 	}
-	if cfg.Zoom != nil && cfg.Zoom.Address == nil && original.ZoomAddress == nil {
+	if zoom, ok := patchValue(cfg.Zoom); ok && zoom.Address == nil && original.ZoomAddress == nil {
 		return errors.New("catalogConfig.zoom.address is required when creating ZOOM configuration")
 	}
 	return nil
+}
+
+// patchValue returns a specified, non-null patch value.
+func patchValue[T any](patch nullable.Nullable[T]) (*T, bool) {
+	value, err := patch.Get()
+	if err != nil {
+		return nil, false
+	}
+	return &value, true
+}
+
+// clearsValue reports whether a patch explicitly removes a value.
+func clearsValue[T any](patch nullable.Nullable[T]) bool {
+	return patch.IsSpecified() && patch.IsNull()
 }
 
 func catalogConfigPatchToDBParams(entryID uuid.UUID, cfg CatalogConfigPatch, original db.CatalogConfig) (db.UpsertCatalogConfigParams, error) {
@@ -154,17 +169,23 @@ func catalogConfigPatchToDBParams(entryID uuid.UUID, cfg CatalogConfigPatch, ori
 		MetadataMarc21Title:                  original.MetadataMarc21Title,
 	}
 
-	if cfg.MetadataUpdateMode != nil {
-		value := string(*cfg.MetadataUpdateMode)
+	if clearsValue(cfg.MetadataUpdateMode) {
+		params.MetadataUpdateMode = nil
+	} else if mode, ok := patchValue(cfg.MetadataUpdateMode); ok {
+		value := string(*mode)
 		params.MetadataUpdateMode = &value
 	}
-	if cfg.Sru != nil {
-		params.SruAddress = derefOrDefaultPtr(cfg.Sru.Address, params.SruAddress)
-		params.SruRecordSchema = derefOrDefaultPtr(cfg.Sru.RecordSchema, params.SruRecordSchema)
+	if clearsValue(cfg.Sru) {
+		params.SruAddress, params.SruRecordSchema = nil, nil
+	} else if sru, ok := patchValue(cfg.Sru); ok {
+		params.SruAddress = derefOrDefaultPtr(sru.Address, params.SruAddress)
+		params.SruRecordSchema = derefOrDefaultPtr(sru.RecordSchema, params.SruRecordSchema)
 	}
-	if cfg.Zoom != nil {
-		params.ZoomAddress = derefOrDefaultPtr(cfg.Zoom.Address, params.ZoomAddress)
-		if cfg.Zoom.Options != nil {
+	if clearsValue(cfg.Zoom) {
+		params.ZoomAddress, params.ZoomOptions = nil, nil
+	} else if zoom, ok := patchValue(cfg.Zoom); ok {
+		params.ZoomAddress = derefOrDefaultPtr(zoom.Address, params.ZoomAddress)
+		if zoom.Options != nil {
 			options := make(map[string]string)
 			if len(params.ZoomOptions) > 0 {
 				if err := json.Unmarshal(params.ZoomOptions, &options); err != nil {
@@ -174,7 +195,7 @@ func catalogConfigPatchToDBParams(entryID uuid.UUID, cfg CatalogConfigPatch, ori
 					options = make(map[string]string)
 				}
 			}
-			for key, value := range *cfg.Zoom.Options {
+			for key, value := range *zoom.Options {
 				if value == nil {
 					delete(options, key)
 				} else {
@@ -188,27 +209,35 @@ func catalogConfigPatchToDBParams(entryID uuid.UUID, cfg CatalogConfigPatch, ori
 			}
 		}
 	}
-	if cfg.QueryConfig != nil {
-		if cfg.QueryConfig.Type != nil {
-			value := string(*cfg.QueryConfig.Type)
+	if clearsValue(cfg.QueryConfig) {
+		params.QueryType, params.QueryIdentifier, params.QueryIsbn, params.QueryIssn = nil, nil, nil, nil
+		params.QueryTitle, params.QueryYear, params.QueryIdentifierNormalization, params.QueryIdentifierPrefix = nil, nil, nil, nil
+	} else if query, ok := patchValue(cfg.QueryConfig); ok {
+		if query.Type != nil {
+			value := string(*query.Type)
 			params.QueryType = &value
 		}
-		params.QueryIdentifier = derefOrDefaultPtr(cfg.QueryConfig.Identifier, params.QueryIdentifier)
-		params.QueryIsbn = derefOrDefaultPtr(cfg.QueryConfig.Isbn, params.QueryIsbn)
-		params.QueryIssn = derefOrDefaultPtr(cfg.QueryConfig.Issn, params.QueryIssn)
-		params.QueryTitle = derefOrDefaultPtr(cfg.QueryConfig.Title, params.QueryTitle)
-		params.QueryYear = derefOrDefaultPtr(cfg.QueryConfig.Year, params.QueryYear)
-		params.QueryIdentifierNormalization = derefOrDefaultPtr(cfg.QueryConfig.IdentifierNormalization, params.QueryIdentifierNormalization)
-		params.QueryIdentifierPrefix = derefOrDefaultPtr(cfg.QueryConfig.IdentifierPrefix, params.QueryIdentifierPrefix)
+		params.QueryIdentifier = derefOrDefaultPtr(query.Identifier, params.QueryIdentifier)
+		params.QueryIsbn = derefOrDefaultPtr(query.Isbn, params.QueryIsbn)
+		params.QueryIssn = derefOrDefaultPtr(query.Issn, params.QueryIssn)
+		params.QueryTitle = derefOrDefaultPtr(query.Title, params.QueryTitle)
+		params.QueryYear = derefOrDefaultPtr(query.Year, params.QueryYear)
+		params.QueryIdentifierNormalization = derefOrDefaultPtr(query.IdentifierNormalization, params.QueryIdentifierNormalization)
+		params.QueryIdentifierPrefix = derefOrDefaultPtr(query.IdentifierPrefix, params.QueryIdentifierPrefix)
 	}
-	if cfg.HoldingsFormat != nil {
+	if clearsValue(cfg.HoldingsFormat) {
+		params.HoldingsConfig = nil
+		params.HoldingsMarcCallNumberSubfield, params.HoldingsMarcItemIDSubfield, params.HoldingsMarcLocationSubfield = nil, nil, nil
+		params.HoldingsMarcMainField, params.HoldingsMarcRestrictedSubfield, params.HoldingsMarcShelvingLocationSubfield = nil, nil, nil
+		params.HoldingsMarc21plus1Enabled, params.HoldingsOpacEnabled, params.HoldingsReservoirEnabled = nil, nil, nil
+	} else if holdings, ok := patchValue(cfg.HoldingsFormat); ok {
 		var mergeErr error
-		params.HoldingsConfig, mergeErr = mergeHoldingsConfig(original.HoldingsConfig, cfg.HoldingsFormat)
+		params.HoldingsConfig, mergeErr = mergeHoldingsConfig(original.HoldingsConfig, holdings)
 		if mergeErr != nil {
 			return params, mergeErr
 		}
-		if cfg.HoldingsFormat.Marc != nil {
-			marc := cfg.HoldingsFormat.Marc
+		if holdings.Marc != nil {
+			marc := holdings.Marc
 			params.HoldingsMarcCallNumberSubfield = derefOrDefaultPtr(marc.CallNumberSubField, params.HoldingsMarcCallNumberSubfield)
 			params.HoldingsMarcItemIDSubfield = derefOrDefaultPtr(marc.ItemIdSubField, params.HoldingsMarcItemIDSubfield)
 			params.HoldingsMarcLocationSubfield = derefOrDefaultPtr(marc.LocationSubField, params.HoldingsMarcLocationSubfield)
@@ -216,18 +245,23 @@ func catalogConfigPatchToDBParams(entryID uuid.UUID, cfg CatalogConfigPatch, ori
 			params.HoldingsMarcRestrictedSubfield = derefOrDefaultPtr(marc.RestrictedSubField, params.HoldingsMarcRestrictedSubfield)
 			params.HoldingsMarcShelvingLocationSubfield = derefOrDefaultPtr(marc.ShelvingLocationSubField, params.HoldingsMarcShelvingLocationSubfield)
 		}
-		if cfg.HoldingsFormat.Marc21plus1 != nil {
+		if holdings.Marc21plus1 != nil {
 			params.HoldingsMarc21plus1Enabled = boolPtr(true)
 		}
-		if cfg.HoldingsFormat.Opac != nil {
+		if holdings.Opac != nil {
 			params.HoldingsOpacEnabled = boolPtr(true)
 		}
-		if cfg.HoldingsFormat.Reservoir != nil {
+		if holdings.Reservoir != nil {
 			params.HoldingsReservoirEnabled = boolPtr(true)
 		}
 	}
-	if cfg.MetadataFormat != nil && cfg.MetadataFormat.Marc21 != nil {
-		marc := cfg.MetadataFormat.Marc21
+	if clearsValue(cfg.MetadataFormat) {
+		params.MetadataMarc21Author, params.MetadataMarc21Edition, params.MetadataMarc21Identifier = nil, nil, nil
+		params.MetadataMarc21Isbn, params.MetadataMarc21Issn, params.MetadataMarc21Subtitle = nil, nil, nil
+		params.MetadataMarc21Publisher, params.MetadataMarc21PublicationDate = nil, nil
+		params.MetadataMarc21PlaceOfPublication, params.MetadataMarc21Title = nil, nil
+	} else if metadata, ok := patchValue(cfg.MetadataFormat); ok && metadata.Marc21 != nil {
+		marc := metadata.Marc21
 		params.MetadataMarc21Author = derefOrDefaultPtr(marc.Author, params.MetadataMarc21Author)
 		params.MetadataMarc21Edition = derefOrDefaultPtr(marc.Edition, params.MetadataMarc21Edition)
 		params.MetadataMarc21Identifier = derefOrDefaultPtr(marc.Identifier, params.MetadataMarc21Identifier)
@@ -326,7 +360,9 @@ func illConfigToDBParams(entryID uuid.UUID, cfg IllConfig) (db.UpsertIllConfigPa
 	return params, nil
 }
 
-func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllConfig) (db.UpsertIllConfigParams, error) {
+// illConfigPatchToDBParams applies a patch to the stored local row. Omitted
+// fields keep their stored value and null removes it.
+func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfigPatch, original db.IllConfig) (db.UpsertIllConfigParams, error) {
 	params := db.UpsertIllConfigParams{
 		Entry:                       entryID,
 		DefaultCopyrightType:        original.DefaultCopyrightType,
@@ -334,55 +370,71 @@ func illConfigPatchToDBParams(entryID uuid.UUID, cfg IllConfig, original db.IllC
 		UnfilledReasons:             original.UnfilledReasons,
 		LoanConditions:              original.LoanConditions,
 		CancellationReasons:         original.CancellationReasons,
-		IsPickupLocation:            original.IsPickupLocation,
-		Iso18626Url:                 original.Iso18626Url,
+		IsPickupLocation:            maybeUpdateCol(original.IsPickupLocation, cfg.IsPickupLocation),
+		Iso18626Url:                 maybeUpdateCol(original.Iso18626Url, cfg.Iso18626Url),
 		Iso18626Vendor:              original.Iso18626Vendor,
 		LendersOfLastResort:         original.LendersOfLastResort,
-		IncludeRequestingAgencyInfo: original.IncludeRequestingAgencyInfo,
-		IncludeSupplierInfo:         original.IncludeSupplierInfo,
-		IncludeReturnInfo:           original.IncludeReturnInfo,
-		IncludeVendorNote:           original.IncludeVendorNote,
-		UseOfferedCosts:             original.UseOfferedCosts,
-		NoteFieldSeparator:          original.NoteFieldSeparator,
-		SupplierPatronPattern:       original.SupplierPatronPattern,
-		DuplicateCheckWindowHours:   original.DuplicateCheckWindowHours,
-		DefaultLoanPeriod:           original.DefaultLoanPeriod,
-		MaxRequestsPerPatron:        original.MaxRequestsPerPatron,
-		MinimumCost:                 original.MinimumCost,
+		IncludeRequestingAgencyInfo: maybeUpdateCol(original.IncludeRequestingAgencyInfo, cfg.IncludeRequestingAgencyInfo),
+		IncludeSupplierInfo:         maybeUpdateCol(original.IncludeSupplierInfo, cfg.IncludeSupplierInfo),
+		IncludeReturnInfo:           maybeUpdateCol(original.IncludeReturnInfo, cfg.IncludeReturnInfo),
+		IncludeVendorNote:           maybeUpdateCol(original.IncludeVendorNote, cfg.IncludeVendorNote),
+		UseOfferedCosts:             maybeUpdateCol(original.UseOfferedCosts, cfg.UseOfferedCosts),
+		NoteFieldSeparator:          maybeUpdateCol(original.NoteFieldSeparator, cfg.NoteFieldSeparator),
+		SupplierPatronPattern:       maybeUpdateCol(original.SupplierPatronPattern, cfg.SupplierPatronPattern),
+		DuplicateCheckWindowHours:   maybeUpdateCol(original.DuplicateCheckWindowHours, cfg.DuplicateCheckWindowHours),
+		DefaultLoanPeriod:           maybeUpdateCol(original.DefaultLoanPeriod, cfg.DefaultLoanPeriod),
+		MaxRequestsPerPatron:        maybeUpdateCol(original.MaxRequestsPerPatron, cfg.MaxRequestsPerPatron),
+		MinimumCost:                 maybeUpdateCol(original.MinimumCost, cfg.MinimumCost),
 		LoadBalancingPolicy:         original.LoadBalancingPolicy,
 	}
-
-	params.IsPickupLocation = derefOrDefaultPtr(cfg.IsPickupLocation, params.IsPickupLocation)
-	params.Iso18626Url = derefOrDefaultPtr(cfg.Iso18626Url, params.Iso18626Url)
-	if cfg.Iso18626Vendor != nil {
-		vendor := string(*cfg.Iso18626Vendor)
-		params.Iso18626Vendor = &vendor
+	if clearsValue(cfg.Iso18626Vendor) {
+		params.Iso18626Vendor = nil
+	} else if vendor, ok := patchValue(cfg.Iso18626Vendor); ok {
+		value := string(*vendor)
+		params.Iso18626Vendor = &value
 	}
-	if cfg.LendersOfLastResort != nil {
-		params.LendersOfLastResort = symbolsToFullSymbols(cfg.LendersOfLastResort)
+	if clearsValue(cfg.LendersOfLastResort) {
+		params.LendersOfLastResort = nil
+	} else if lenders, ok := patchValue(cfg.LendersOfLastResort); ok {
+		params.LendersOfLastResort = symbolsToFullSymbols(lenders)
 	}
-	params.IncludeRequestingAgencyInfo = derefOrDefaultPtr(cfg.IncludeRequestingAgencyInfo, params.IncludeRequestingAgencyInfo)
-	params.IncludeSupplierInfo = derefOrDefaultPtr(cfg.IncludeSupplierInfo, params.IncludeSupplierInfo)
-	params.IncludeReturnInfo = derefOrDefaultPtr(cfg.IncludeReturnInfo, params.IncludeReturnInfo)
-	params.IncludeVendorNote = derefOrDefaultPtr(cfg.IncludeVendorNote, params.IncludeVendorNote)
-	params.UseOfferedCosts = derefOrDefaultPtr(cfg.UseOfferedCosts, params.UseOfferedCosts)
-	params.NoteFieldSeparator = derefOrDefaultPtr(cfg.NoteFieldSeparator, params.NoteFieldSeparator)
-	params.SupplierPatronPattern = derefOrDefaultPtr(cfg.SupplierPatronPattern, params.SupplierPatronPattern)
-	params.DuplicateCheckWindowHours = derefOrDefaultPtr(cfg.DuplicateCheckWindowHours, params.DuplicateCheckWindowHours)
-	if cfg.DefaultLoanPeriod.IsSpecified() {
-		params.DefaultLoanPeriod = nullableLoanPeriod(cfg)
+	if clearsValue(cfg.LoadBalancingPolicy) {
+		params.LoadBalancingPolicy = nil
+	} else if policy, ok := patchValue(cfg.LoadBalancingPolicy); ok {
+		value := string(*policy)
+		params.LoadBalancingPolicy = &value
 	}
-	if cfg.MaxRequestsPerPatron.IsSpecified() {
-		params.MaxRequestsPerPatron = nullableMaxRequestsPerPatron(cfg)
+	if cfg.DefaultCopyrightType.IsSpecified() {
+		params.DefaultCopyrightType = nil
+		if value, ok := patchValue(cfg.DefaultCopyrightType); ok {
+			data, err := json.Marshal(value)
+			if err != nil {
+				return db.UpsertIllConfigParams{}, fmt.Errorf("encode illConfig.defaultCopyrightType: %w", err)
+			}
+			params.DefaultCopyrightType = data
+		}
 	}
-	if cfg.LoadBalancingPolicy.IsSpecified() {
-		params.LoadBalancingPolicy = nullableLoadBalancingPolicy(cfg)
-	}
-	if cfg.MinimumCost.IsSpecified() {
-		params.MinimumCost = nullableMinimumCost(cfg)
-	}
-	if err := encodeIllConfigCodes(&params, cfg); err != nil {
-		return db.UpsertIllConfigParams{}, err
+	for _, field := range []struct {
+		name   string
+		codes  nullable.Nullable[[]IllConfigCodeDescription]
+		target *[]byte
+	}{
+		{"availableCopyrightTypes", cfg.AvailableCopyrightTypes, &params.AvailableCopyrightTypes},
+		{"unfilledReasons", cfg.UnfilledReasons, &params.UnfilledReasons},
+		{"cancellationReasons", cfg.CancellationReasons, &params.CancellationReasons},
+		{"loanConditions", cfg.LoanConditions, &params.LoanConditions},
+	} {
+		if !field.codes.IsSpecified() {
+			continue
+		}
+		*field.target = nil
+		if codes, ok := patchValue(field.codes); ok {
+			data, err := json.Marshal(*codes)
+			if err != nil {
+				return db.UpsertIllConfigParams{}, fmt.Errorf("encode illConfig.%s: %w", field.name, err)
+			}
+			*field.target = data
+		}
 	}
 	return params, nil
 }
