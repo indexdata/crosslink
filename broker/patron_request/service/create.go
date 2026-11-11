@@ -54,6 +54,11 @@ func CreateBorrowingRequest(ctx common.ExtendedContext, repo pr_db.PrRepo, reque
 // CreateLendingRequest creates a supply request and atomically links a retry or rerequest to
 // its local predecessor, if held by the same supplier for the same requester.
 func CreateLendingRequest(ctx common.ExtendedContext, repo pr_db.PrRepo, request pr_db.PatronRequest) (pr_db.PatronRequest, error) {
+	bibRecordID, err := sharedIndexRecordID(request.IllRequest.BibliographicInfo)
+	if err != nil {
+		return pr_db.PatronRequest{}, err
+	}
+	request.BibRecordID = getDbTextPtr(&bibRecordID)
 	info := request.IllRequest.ServiceInfo
 	if info == nil || info.RequestingAgencyPreviousRequestId == "" {
 		return repo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(request))
@@ -67,7 +72,7 @@ func CreateLendingRequest(ctx common.ExtendedContext, repo pr_db.PrRepo, request
 		return repo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(request))
 	}
 	var created pr_db.PatronRequest
-	err := repo.WithTxFunc(ctx, func(txRepo pr_db.PrRepo) error {
+	err = repo.WithTxFunc(ctx, func(txRepo pr_db.PrRepo) error {
 		previous, err := txRepo.GetLendingPredecessorForUpdate(ctx, pr_db.GetLendingPredecessorForUpdateParams{
 			SupplierSymbol: request.SupplierSymbol, RequesterSymbol: request.RequesterSymbol,
 			RequesterReqID: getDbText(info.RequestingAgencyPreviousRequestId), Tenant: request.Tenant,
