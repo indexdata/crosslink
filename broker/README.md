@@ -11,6 +11,11 @@ CrossLink broker is a system to manage inter-library loans (ILL), specifically i
 * provides ILS integration for internal requesters and suppliers via NCIP
   ([NCIP 1.0 adapter](ncipclientv1/README.md))
 
+Incoming ISO18626 transaction events include `eventData.charset`, for example
+`"UTF-8 (declaration)"`. The value records the encoding used to decode the message
+and its source: `BOM`, `Content-Type`, `declaration`, or `default`, in precedence
+order. This field is omitted for messages processed internally without HTTP input.
+
 # Cancellation reasons in ISO18626 notes
 
 Incoming requester `Cancel` messages and supplier `CancelResponse` messages (including
