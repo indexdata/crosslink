@@ -22,8 +22,6 @@ type ApiHandler struct {
 }
 
 const maxImportBodyBytes int64 = 2 << 30 // 2 GB
-const importReadTimeout = 10 * time.Minute
-const importWriteTimeout = 10 * time.Minute
 
 var _ importoapi.ServerInterface = (*ApiHandler)(nil)
 
@@ -37,12 +35,13 @@ func (a *ApiHandler) PostImport(w http.ResponseWriter, r *http.Request, params i
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "PostImport"},
 	})
+	// Imports can outlast the server's normal request deadlines.
 	controller := http.NewResponseController(w)
-	if err := controller.SetReadDeadline(time.Now().Add(importReadTimeout)); err != nil {
+	if err := controller.SetReadDeadline(time.Time{}); err != nil {
 		brokerapi.AddBadRequestError(ctx, w, err)
 		return
 	}
-	if err := controller.SetWriteDeadline(time.Now().Add(importWriteTimeout)); err != nil {
+	if err := controller.SetWriteDeadline(time.Time{}); err != nil {
 		brokerapi.AddBadRequestError(ctx, w, err)
 		return
 	}

@@ -21,6 +21,8 @@ Content-Type: application/x-ndjson
 
 `conflictPolicy` is optional and defaults to `fail`. Its supported values are `fail`, `skip`, and `update`.
 
+The import endpoint clears the broker's HTTP read and write deadlines so large streams can finish. Client and reverse-proxy timeouts still apply.
+
 The request body must contain one complete JSON object per line. Blank lines are ignored. Do not wrap the records in a JSON array and do not pretty-print a record across multiple lines.
 
 Each line has this envelope:

@@ -30,6 +30,8 @@ func TestPostImportDefaultsConflictPolicyToFail(t *testing.T) {
 	handler.PostImport(recorder, ndjsonRequest(`{"type":"template","owner":"ISIL:OWNER","data":`+string(validTemplateData())+`}`+"\n"), importoapi.PostImportParams{})
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Equal(t, []time.Time{{}}, recorder.readDeadlines)
+	assert.Equal(t, []time.Time{{}}, recorder.writeDeadlines)
 	assert.Equal(t, importdb.ConflictPolicyFail, repo.templatePolicy)
 	assert.JSONEq(t, `{"patronRequests":{"imported":0,"failed":0,"skipped":0},"batchActions":{"imported":0,"failed":0,"skipped":0},"templates":{"imported":1,"failed":0,"skipped":0},"errors":[],"errorsOmitted":0}`, recorder.Body.String())
 }
@@ -122,14 +124,23 @@ func ndjsonRequest(body string) *http.Request {
 
 type responseRecorder struct {
 	*httptest.ResponseRecorder
+	readDeadlines  []time.Time
+	writeDeadlines []time.Time
 }
 
 func newResponseRecorder() *responseRecorder {
 	return &responseRecorder{ResponseRecorder: httptest.NewRecorder()}
 }
 
-func (*responseRecorder) SetReadDeadline(time.Time) error  { return nil }
-func (*responseRecorder) SetWriteDeadline(time.Time) error { return nil }
+func (r *responseRecorder) SetReadDeadline(deadline time.Time) error {
+	r.readDeadlines = append(r.readDeadlines, deadline)
+	return nil
+}
+
+func (r *responseRecorder) SetWriteDeadline(deadline time.Time) error {
+	r.writeDeadlines = append(r.writeDeadlines, deadline)
+	return nil
+}
 
 type recordingImportRepo struct {
 	patron          importdb.PatronRequestBundle
