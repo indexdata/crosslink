@@ -163,7 +163,8 @@ func (r *PgSchedRepo) GetScheduledTasks(ctx common.ExtendedContext, params GetSc
 }
 
 // QueueBatchActionRun persists the run and consumer notification in the caller's
-// transaction. The caller holds the scheduled-task lock and checks active runs.
+// transaction. The caller holds the scheduled-task lock and, for pull-slip email
+// runs, checks for active batch events before queuing.
 func (r *PgSchedRepo) QueueBatchActionRun(ctx common.ExtendedContext, task ScheduledTask) error {
 	if r.Tx == nil {
 		return fmt.Errorf("queue batch action run requires a transaction")

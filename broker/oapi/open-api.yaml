@@ -3660,7 +3660,7 @@ paths:
   /batch_actions/{id}/run:
     post:
       summary: Queue a manual batch action run
-      description: Queues one run without changing the schedule or enabled state. Requires the normal run permission and, for archive-ill-transactions, broker.consortium.all. Returns a conflict if a run is already active.
+      description: Queues one run without changing the schedule or enabled state. Requires the normal run permission and, for archive-ill-transactions, broker.consortium.all. For email-pullslips, returns a conflict while a run of the same batch action or its background actions remain unfinished. Other batch runs may overlap.
       tags:
         - scheduler-api
       parameters:
@@ -3682,7 +3682,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: Batch action already has an active run
+          description: Pull-slip email batch action already has an unfinished run or background actions
           content:
             application/json:
               schema:

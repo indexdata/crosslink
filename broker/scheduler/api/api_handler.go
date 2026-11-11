@@ -634,7 +634,7 @@ func (h SchedulerApiHandler) resolveMutationScope(ctx common.ExtendedContext, w 
 }
 
 // PostBatchActionsIdRun queues one durable run without changing the saved schedule
-// or enabled status. The task lock serializes manual runs and task mutations.
+// or enabled status. The task lock serializes queuing and task mutations.
 func (h SchedulerApiHandler) PostBatchActionsIdRun(w http.ResponseWriter, r *http.Request, id string, params schedoapi.PostBatchActionsIdRunParams) {
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: map[string]string{"method": "PostBatchActionsIdRun", "id": id}})
 	owners, canManage, ok := h.resolveMutationScope(ctx, w, r, params.Symbol)
@@ -656,12 +656,16 @@ func (h SchedulerApiHandler) PostBatchActionsIdRun(w http.ResponseWriter, r *htt
 		if err = sched_service.ValidateArchiveConfig(data.ActionName, task.Owner, data.Selector, task.ActionData.CustomData); err != nil {
 			return fmt.Errorf("%w: %w", errInvalidArchiveConfig, err)
 		}
-		active, err := repo.HasActiveBatchActionEvents(ctx, id)
-		if err != nil {
-			return err
-		}
-		if active {
-			return errBatchActionInProgress
+		if data.ActionName == string(schedoapi.EmailPullslips) {
+			// The task lock also protects scheduled dispatch, so neither path
+			// can queue a second email before its printed-state actions finish.
+			active, err := repo.HasActiveBatchActionEvents(ctx, id)
+			if err != nil {
+				return fmt.Errorf("check active pull-slip email runs: %w", err)
+			}
+			if active {
+				return errBatchActionInProgress
+			}
 		}
 		return repo.QueueBatchActionRun(ctx, task)
 	})

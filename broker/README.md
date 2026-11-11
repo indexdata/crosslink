@@ -234,11 +234,14 @@ accepts this action with the same configuration validation.
 
 `POST /batch_actions/{id}/run` (or `/broker/batch_actions/{id}/run`) queues one
 manual run and returns `202`. It preserves the saved schedule and enabled state,
-so a disabled action can be run once without enabling it. An already active run
-returns `409`. Okapi callers need `broker.batch_actions.item.run.post`.
-If a scheduled batch action becomes due while a run or its background actions
-are active, the scheduler defers it by `SCHEDULER_RETRY_DELAY` and retries until
-that work finishes. Other due tasks continue to run.
+so a disabled action can be run once without enabling it. Okapi callers need
+`broker.batch_actions.item.run.post`. For `email-pullslips`, an unfinished run or
+its background actions block another run of the same batch action: manual runs
+return `409`, and scheduled runs retry after `SCHEDULER_RETRY_DELAY`. This prevents
+duplicate emails before the printed-state updates finish. Other scheduled and
+manual batch runs can overlap, including while earlier batch events or
+background actions remain unfinished.
+Archive operations use database locking and atomic checks for each resource.
 
 The legacy `archive` binary, `POST /archive_ill_transactions`, `call_archive.sh`,
 and their database function have been removed. Replace old jobs with scheduled
@@ -367,8 +370,8 @@ Configuration is provided via environment variables:
 |                                  | Request on supplier side Deprecated: use supplier  |                                           |
 |                                  | `illConfig.supplierPatronPattern` .                |                                           |
 | `LANGUAGE`                       | Language parameter used for ts_vector search in DB | `english`                                 |
-| `SCHEDULER_RETRY_DELAY`          | Delay for failed scheduled tasks, batch actions    | `5m`                                      |
-|                                  | waiting for active runs, and fallback polling      |                                           |
+| `SCHEDULER_RETRY_DELAY`          | Delay for failed tasks, pull-slip email runs       | `5m`                                      |
+|                                  | waiting for prior work, and fallback polling       |                                           |
 | `SMTP_HOST`                      | SMTP server host for sending emails, if not        | (empty value)                             |
 |                                  | configured all email tasks will fail               |                                           |
 | `SMTP_PORT`                      | SMTP server port                                   | `2525`                                    |
