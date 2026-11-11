@@ -22,30 +22,32 @@ var xmlDeclEncoding = regexp.MustCompile(`^<\?xml\s+[^?]*\sencoding\s*=\s*["']([
 // other charset labels use the encodings supported by x/text's IANA registry.
 // Malformed character sequences use the selected decoder's U+FFFD replacement
 // behavior, including for UTF-8. XML syntax errors are still rejected.
-func UnmarshalXML(data []byte, transportCharset string, value any) error {
+// The returned charset includes its source, for example "UTF-8 (declaration)".
+func UnmarshalXML(data []byte, transportCharset string, value any) (string, error) {
 	charset := strings.TrimSpace(transportCharset)
+	source := "Content-Type"
 	switch {
 	case bytes.HasPrefix(data, []byte{0xff, 0xfe, 0x00, 0x00}),
 		bytes.HasPrefix(data, []byte{0x00, 0x00, 0xfe, 0xff}):
 		// Check UTF-32 before UTF-16, whose little-endian BOM is a prefix of it.
-		return fmt.Errorf("unsupported XML BOM: UTF-32")
+		return "", fmt.Errorf("unsupported XML BOM: UTF-32")
 	case bytes.HasPrefix(data, []byte{0xef, 0xbb, 0xbf}):
-		charset = "UTF-8"
+		charset, source = "UTF-8", "BOM"
 		data = data[3:]
 	case bytes.HasPrefix(data, []byte{0xfe, 0xff}):
-		charset = "UTF-16BE"
+		charset, source = "UTF-16BE", "BOM"
 		data = data[2:]
 	case bytes.HasPrefix(data, []byte{0xff, 0xfe}):
-		charset = "UTF-16LE"
+		charset, source = "UTF-16LE", "BOM"
 		data = data[2:]
 	}
 
 	if charset == "" {
-		charset = xmlDeclarationCharset(data)
+		charset, source = xmlDeclarationCharset(data)
 	}
 	input, err := xmlCharsetReader(charset, bytes.NewReader(data))
 	if err != nil {
-		return err
+		return "", err
 	}
 	decoder := xml.NewDecoder(input)
 	// Every input is now converted to UTF-8. The declaration is still parsed,
@@ -53,14 +55,14 @@ func UnmarshalXML(data []byte, transportCharset string, value any) error {
 	decoder.CharsetReader = func(_ string, input io.Reader) (io.Reader, error) {
 		return input, nil
 	}
-	return decoder.Decode(value)
+	return fmt.Sprintf("%s (%s)", charset, source), decoder.Decode(value)
 }
 
-func xmlDeclarationCharset(data []byte) string {
+func xmlDeclarationCharset(data []byte) (string, string) {
 	if match := xmlDeclEncoding.FindSubmatch(data); match != nil {
-		return string(match[1])
+		return string(match[1]), "declaration"
 	}
-	return "UTF-8"
+	return "UTF-8", "default"
 }
 
 func xmlCharsetReader(charset string, input io.Reader) (io.Reader, error) {
