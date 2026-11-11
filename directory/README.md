@@ -389,6 +389,7 @@ annotations at startup and stops if they are invalid.
 | `lmsConfig.requesterPickupLocation`, `supplierPickupLocation` | never | Institution, Branch |
 | `illConfig` | Consortium | Consortium, Institution |
 | `illConfig.iso18626Url`, `iso18626Vendor` | Institution | Consortium, Institution |
+| `illConfig.requestIdPrefix` | Institution | Consortium, Institution |
 | `illConfig.isPickupLocation` | never | Institution, Branch |
 | `illConfig.loadBalancingPolicy` | never | Consortium |
 | `holdingsPolicy` | Institution | Institution |
@@ -452,6 +453,18 @@ Set `illConfig.isPickupLocation` to `true` to offer an institution or branch in 
 The broker accepts the requesting institution's UUID or a descendant's UUID. An explicit selection supplies that entry's shipping address and, when needed, its LMS pickup code. Omitting the selection retains existing defaults. LMS operations that consume a pickup code still require one for explicit selections.
 
 Filter Directory entries with CQL `isPickupLocation=true` or `isPickupLocation=false`. Missing flags (including entries without ILL configuration) match `false`. The former `requesterPickupLocation` CQL filter is no longer supported.
+
+### Request ID prefix
+
+`illConfig.requestIdPrefix` is the optional prefix for request IDs the broker
+generates for this requester, in the form `PREFIX-N` with the prefix uppercased.
+It may contain at most 32 ASCII letters and digits. When it is unset or empty, the
+broker uses the value part of the requester symbol (`DK-123` for `ISIL:DK-123`).
+Branches inherit their institution's prefix; a consortium prefix is not
+inherited. Create, read, PATCH, and NDJSON import support this field. PATCH
+omission preserves the value and `null` removes the local value, so a branch
+inherits again. An empty string stores "use the symbol" and blocks inheritance.
+A change reaches the broker when its cached peer data is next refreshed.
 
 ### ILL configuration lists and reference defaults
 

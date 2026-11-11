@@ -64,6 +64,7 @@ type ILLConfig struct {
 	UseOfferedCosts             *bool                       `json:"useOfferedCosts"`
 	NoteFieldSeparator          *string                     `json:"noteFieldSeparator"`
 	SupplierPatronPattern       *string                     `json:"supplierPatronPattern"`
+	RequestIdPrefix             *string                     `json:"requestIdPrefix"`
 	DuplicateCheckWindowHours   *int32                      `json:"duplicateCheckWindowHours"`
 }
 

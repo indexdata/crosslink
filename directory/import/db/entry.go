@@ -509,6 +509,7 @@ func replaceILLConfig(ctx context.Context, queries *db.Queries, entryID uuid.UUI
 		IncludeRequestingAgencyInfo: config.IncludeRequestingAgencyInfo, IncludeSupplierInfo: config.IncludeSupplierInfo,
 		IncludeReturnInfo: config.IncludeReturnInfo, IncludeVendorNote: config.IncludeVendorNote, UseOfferedCosts: config.UseOfferedCosts,
 		NoteFieldSeparator: config.NoteFieldSeparator, SupplierPatronPattern: config.SupplierPatronPattern,
+		RequestIDPrefix:           config.RequestIdPrefix,
 		DuplicateCheckWindowHours: config.DuplicateCheckWindowHours,
 		DefaultLoanPeriod:         config.DefaultLoanPeriod,
 		MaxRequestsPerPatron:      config.MaxRequestsPerPatron,
