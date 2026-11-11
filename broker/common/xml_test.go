@@ -39,15 +39,16 @@ func TestUnmarshalXML(t *testing.T) {
 		return data
 	}
 	tests := []struct {
-		name    string
-		data    []byte
-		charset string
-		want    string
-		err     string
+		name        string
+		data        []byte
+		charset     string
+		want        string
+		wantCharset string
+		err         string
 	}{
-		{name: "UTF-8 default", data: document("", "Anaïs © — 🙂"), want: "Anaïs © — 🙂"},
-		{name: "UTF-8 declaration", data: document("UTF-8", "Götterzorn"), want: "Götterzorn"},
-		{name: "declaration without encoding defaults to UTF-8", data: []byte(`<?xml version="1.0"?><document><title>Anaïs</title></document>`), want: "Anaïs"},
+		{name: "UTF-8 default", data: document("", "Anaïs © — 🙂"), want: "Anaïs © — 🙂", wantCharset: "UTF-8 (default)"},
+		{name: "UTF-8 declaration", data: document("UTF-8", "Götterzorn"), want: "Götterzorn", wantCharset: "UTF-8 (declaration)"},
+		{name: "declaration without encoding defaults to UTF-8", data: []byte(`<?xml version="1.0"?><document><title>Anaïs</title></document>`), want: "Anaïs", wantCharset: "UTF-8 (default)"},
 		{name: "encoding attribute in document does not affect declaration", data: []byte(`<?xml version="1.0"?><document encoding="windows-1252"><title>Anaïs</title></document>`), want: "Anaïs"},
 		{name: "Latin-1 declaration", data: document("ISO-8859-1", "Ana\xefs Nin"), want: "Anaïs Nin"},
 		{name: "declaration spaces before equals", data: []byte("<?xml version=\"1.0\" encoding =\"ISO-8859-1\"?><document><title>Ana\xefs</title></document>"), want: "Anaïs"},
@@ -58,18 +59,18 @@ func TestUnmarshalXML(t *testing.T) {
 		{name: "declaration ignores encoding text inside another value", data: []byte(`<?xml version="1.0" other='encoding="windows-1252"'?><document><title>Anaïs</title></document>`), want: "Anaïs"},
 		{name: "Windows-1252 declaration", data: document("windows-1252", "\x93Nin\x94 \x97 \xa9 \x80"), want: "“Nin” — © €"},
 		{name: "Shift-JIS declaration", data: document("Shift_JIS", "\x93\xfa\x96\x7b"), want: "日本"},
-		{name: "transport overrides UTF-8 declaration", data: document("UTF-8", "G\xf6tterzorn"), charset: "ISO-8859-1", want: "Götterzorn"},
+		{name: "transport overrides UTF-8 declaration", data: document("UTF-8", "G\xf6tterzorn"), charset: "ISO-8859-1", want: "Götterzorn", wantCharset: "ISO-8859-1 (Content-Type)"},
 		{name: "transport without declaration", data: document("", "Ana\xefs Nin"), charset: "ISO-8859-1", want: "Anaïs Nin"},
 		{name: "transport overrides legacy declaration", data: document("ISO-8859-1", "\x80\x97"), charset: "windows-1252", want: "€—"},
 		{name: "transport conversion happens once", data: document("ISO-8859-1", "Ana\xefs Nin"), charset: "ISO-8859-1", want: "Anaïs Nin"},
 		{name: "UTF-8 transport overrides legacy declaration", data: document("ISO-8859-1", "Anaïs © 🙂"), charset: "UTF-8", want: "Anaïs © 🙂"},
-		{name: "transport charset alias", data: document("UTF-8", "Ana\xefs"), charset: " LaTiN1 ", want: "Anaïs"},
+		{name: "transport charset alias", data: document("UTF-8", "Ana\xefs"), charset: " LaTiN1 ", want: "Anaïs", wantCharset: "LaTiN1 (Content-Type)"},
 		{name: "transport overrides unsupported declaration", data: document("unknown", "Anaïs"), charset: "UTF-8", want: "Anaïs"},
 		{name: "transport overrides spaced declaration", data: []byte(`<?xml version="1.0" encoding = "unknown"?><document><title>Anaïs</title></document>`), charset: "UTF-8", want: "Anaïs"},
-		{name: "UTF-8 BOM overrides transport and declaration", data: utf8BOM(document("ISO-8859-1", "Anaïs © 🙂")), charset: "windows-1252", want: "Anaïs © 🙂"},
+		{name: "UTF-8 BOM overrides transport and declaration", data: utf8BOM(document("ISO-8859-1", "Anaïs © 🙂")), charset: "windows-1252", want: "Anaïs © 🙂", wantCharset: "UTF-8 (BOM)"},
 		{name: "UTF-8 BOM overrides unsupported charset", data: utf8BOM(document("unknown", "Anaïs")), charset: "unknown", want: "Anaïs"},
-		{name: "UTF-16LE BOM overrides transport and declaration", data: utf16Document("ISO-8859-1", "Anaïs 🙂", binary.LittleEndian, true), charset: "UTF-8", want: "Anaïs 🙂"},
-		{name: "UTF-16BE BOM overrides unsupported charset", data: utf16Document("unknown", "Götterzorn 🙂", binary.BigEndian, true), charset: "unknown", want: "Götterzorn 🙂"},
+		{name: "UTF-16LE BOM overrides transport and declaration", data: utf16Document("ISO-8859-1", "Anaïs 🙂", binary.LittleEndian, true), charset: "UTF-8", want: "Anaïs 🙂", wantCharset: "UTF-16LE (BOM)"},
+		{name: "UTF-16BE BOM overrides unsupported charset", data: utf16Document("unknown", "Götterzorn 🙂", binary.BigEndian, true), charset: "unknown", want: "Götterzorn 🙂", wantCharset: "UTF-16BE (BOM)"},
 		{name: "UTF-16LE transport", data: utf16Document("UTF-8", "Anaïs", binary.LittleEndian, false), charset: "UTF-16LE", want: "Anaïs"},
 		{name: "UTF-16BE transport", data: utf16Document("UTF-8", "Götterzorn", binary.BigEndian, false), charset: "UTF-16BE", want: "Götterzorn"},
 		{name: "UTF-16 transport without BOM defaults to big endian", data: utf16Document("UTF-16", "Anaïs", binary.BigEndian, false), charset: "UTF-16", want: "Anaïs"},
@@ -105,20 +106,23 @@ func TestUnmarshalXML(t *testing.T) {
 			var got struct {
 				Title string `xml:"title"`
 			}
-			err := UnmarshalXML(tt.data, tt.charset, &got)
+			charset, err := UnmarshalXML(tt.data, tt.charset, &got)
 			if tt.err != "" {
 				require.ErrorContains(t, err, tt.err)
 				return
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got.Title)
+			if tt.wantCharset != "" {
+				assert.Equal(t, tt.wantCharset, charset)
+			}
 		})
 	}
 }
 
 func TestUnmarshalXMLPreservesSyntaxError(t *testing.T) {
 	var got struct{}
-	err := UnmarshalXML([]byte("<document>"), "", &got)
+	_, err := UnmarshalXML([]byte("<document>"), "", &got)
 	var syntaxError *xml.SyntaxError
 	assert.ErrorAs(t, err, &syntaxError)
 }
