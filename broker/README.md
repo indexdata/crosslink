@@ -16,6 +16,16 @@ Incoming ISO18626 transaction events include `eventData.charset`, for example
 and its source: `BOM`, `Content-Type`, `declaration`, or `default`, in precedence
 order. This field is omitted for messages processed internally without HTTP input.
 
+Patron-request `patron-request-message` events include `resultData.stateModelEvent`
+when a supplier or requester message resolves to a state-model event, for example
+`completed-local`, `will-supply`, or `received`. The label is retained even when
+the event is rejected in the current state or subsequent processing fails. It is
+omitted when no label is resolved, including ordinary notifications and initial
+requests. The ISO message and confirmation remain in the same log record. Local
+audit events such as `completed-local` do not change state; the local action owns
+the transition. These results are available through
+`GET /patron_requests/{id}/events`. Older records may lack the field.
+
 # Cancellation reasons in ISO18626 notes
 
 Incoming requester `Cancel` messages and supplier `CancelResponse` messages (including
