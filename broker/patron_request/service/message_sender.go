@@ -149,6 +149,7 @@ func (ms *PatronRequestMessageSender) sendBorrowingRequest(ctx common.ExtendedCo
 		AgencyIdValue: reqSymbol,
 	}
 	illRequest.Header.RequestingAgencyRequestId = pr.ID
+	setSharedIndexRecordID(&illRequest.BibliographicInfo, pr.BibRecordID.String)
 	illRequest.Header.Timestamp = utils.XSDDateTime{Time: time.Now()}
 	if illRequest.PatronInfo == nil {
 		illRequest.PatronInfo = &iso18626.PatronInfo{}

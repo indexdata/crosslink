@@ -43,6 +43,7 @@ var mockEventRepoError = new(mocks.MockEventRepositoryError)
 var eventBussError = events.NewPostgresEventBus(mockEventRepoError, "mock")
 var dirAdapter = new(adapter.MockDirectoryLookupAdapter)
 var illRepo ill_db.IllRepo
+var eventRepo events.EventRepo
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
@@ -64,7 +65,7 @@ func TestMain(m *testing.M) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	_, illRepo, _, _ = apptest.StartApp(ctx)
+	_, illRepo, eventRepo, _ = apptest.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	code := m.Run()
@@ -337,6 +338,7 @@ func TestIso18626PostSupplyingMessageConfirm(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, vcs.GetSignature(), res.Header.Get("Server"))
 			assert.Contains(t, string(body), tt.contains)
+			assertReceivedEventCharset(t, appCtx, illId, events.EventNameSupplierMsgReceived)
 		})
 	}
 }
@@ -518,8 +520,25 @@ func TestIso18626PostRequestingMessage(t *testing.T) {
 				t.Errorf("handler returned unexpected body: got '%v' want to contain %v",
 					string(body), tt.contains)
 			}
+			assertReceivedEventCharset(t, appCtx, illId, events.EventNameRequesterMsgReceived)
 		})
 	}
+}
+
+func assertReceivedEventCharset(t *testing.T, ctx common.ExtendedContext, illID string, name events.EventName) {
+	t.Helper()
+	saved, _, err := eventRepo.GetIllTransactionEvents(ctx, illID)
+	if !assert.NoError(t, err) {
+		return
+	}
+	found := false
+	for _, event := range saved {
+		if event.EventName == name {
+			found = true
+			assert.Equal(t, "UTF-8 (declaration)", event.EventData.Charset)
+		}
+	}
+	assert.True(t, found, "received event must be persisted")
 }
 
 func TestIso18626PostRequestingMessageDBFailure(t *testing.T) {

@@ -80,13 +80,14 @@ SET ill_request         = $3,
     state_model          = $24,
     requester_pickup_location_id = $25,
     cancellation_reason = $26,
-    due_at = $27
+    due_at = $27,
+    bib_record_id = $28
 WHERE id = $1 AND created_at = $2 AND (updated_at is null OR updated_at = $18)
 RETURNING sqlc.embed(patron_request);
 
 -- name: CreatePatronRequest :one
-INSERT INTO patron_request (id, created_at, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, items, language, terminal_state, updated_at, ill_response, internal_note, next_req_id, prev_req_id, retry_bib_info, state_model, requester_pickup_location_id, cancellation_reason, due_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
+INSERT INTO patron_request (id, created_at, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, items, language, terminal_state, updated_at, ill_response, internal_note, next_req_id, prev_req_id, retry_bib_info, state_model, requester_pickup_location_id, cancellation_reason, due_at, bib_record_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
 RETURNING sqlc.embed(patron_request);
 
 -- name: UpdatePatronRequestInternalNote :exec

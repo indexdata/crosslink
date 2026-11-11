@@ -252,6 +252,7 @@ func patronRequestFromSearchView(v PatronRequestSearchView) PatronRequest {
 		RequesterPickupLocationID: v.RequesterPickupLocationID,
 		CancellationReason:        v.CancellationReason,
 		DueAt:                     v.DueAt,
+		BibRecordID:               v.BibRecordID,
 	}
 }
 
