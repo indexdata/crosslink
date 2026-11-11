@@ -27,7 +27,8 @@ CREATE TABLE patron_request
     state_model         VARCHAR NOT NULL DEFAULT 'default',
     requester_pickup_location_id UUID,
     cancellation_reason       VARCHAR,
-    due_at TIMESTAMPTZ
+    due_at TIMESTAMPTZ,
+    bib_record_id VARCHAR
 );
 
 CREATE INDEX idx_pr_borrowing_archive_cursor

@@ -1439,6 +1439,7 @@ func (a *PatronRequestActionService) createSuccessorBorrowingRequest(ctx common.
 	successorPr.Side = pr.Side
 	successorPr.RequesterSymbol = pr.RequesterSymbol
 	successorPr.RequesterPickupLocationID = pr.RequesterPickupLocationID
+	successorPr.BibRecordID = pr.BibRecordID
 	if retry {
 		successorPr.SupplierSymbol = pr.SupplierSymbol
 	}

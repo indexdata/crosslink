@@ -245,6 +245,12 @@ components:
           type: string
           minLength: 1
           format: date-time
+        bibRecordId:
+          type: string
+          description: >-
+            Shared-index bibliographic record ID (VuFind UUID or Trove ANBD record ID),
+            independent of supplier bibliographic and item IDs. Sent to suppliers as
+            bibliographicInfo.bibliographicRecordId with identifier code ReShare.
         illRequest:
           type: object
           description: JSON of ISO18626 request
@@ -939,6 +945,12 @@ components:
           type: string
           format: date-time
           description: Timestamp of the patron request last update
+        bibRecordId:
+          type: string
+          description: >-
+            Shared-index bibliographic record ID (VuFind UUID or Trove ANBD record ID),
+            independent of supplier bibliographic and item IDs. Sent to suppliers as
+            bibliographicInfo.bibliographicRecordId with identifier code ReShare.
         illRequest:
           type: object
           description: JSON of ISO18626 request
@@ -1075,6 +1087,13 @@ components:
             On creation, ID of the previous borrowing request belonging to the same
             requester. The previous request must not already have a successor.
             Both requests are linked atomically. Not supported on update.
+        bibRecordId:
+          type: string
+          description: >-
+            Shared-index bibliographic record ID (VuFind UUID or Trove ANBD record ID),
+            independent of supplier bibliographic and item IDs. Sent to suppliers as
+            bibliographicInfo.bibliographicRecordId with identifier code ReShare.
+            On update, omit to preserve the current ID or send an empty string to clear it.
         illRequest:
           type: object
           description: JSON of ISO18626 request

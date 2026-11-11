@@ -11,6 +11,11 @@ CrossLink broker is a system to manage inter-library loans (ILL), specifically i
 * provides ILS integration for internal requesters and suppliers via NCIP
   ([NCIP 1.0 adapter](ncipclientv1/README.md))
 
+Incoming ISO18626 transaction events include `eventData.charset`, for example
+`"UTF-8 (declaration)"`. The value records the encoding used to decode the message
+and its source: `BOM`, `Content-Type`, `declaration`, or `default`, in precedence
+order. This field is omitted for messages processed internally without HTTP input.
+
 # Cancellation reasons in ISO18626 notes
 
 Incoming requester `Cancel` messages and supplier `CancelResponse` messages (including
@@ -734,6 +739,23 @@ Catalog parsing or availability lookup without a holdings policy does not select
 an item ID. The selected holding's call number, when available, is persisted
 with its item ID and sent in `supplierInfo.callNumber`. Both fields are cleared
 when a new availability lookup invalidates the previous selection.
+
+Patron requests carry the shared-index record identifier separately in
+`bib_record_id` (API: `bibRecordId`). Clients should supply the VuFind UUID or
+Trove ANBD record ID when creating the borrowing request. Updates omit the field
+to preserve it or send an empty string to clear it. This identifier is preserved
+through retries and rerequests. Outgoing ISO18626 requests include it in
+`bibliographicInfo.bibliographicRecordId` with
+`bibliographicRecordIdentifierCode` set to `ReShare`; incoming lending requests
+extract and persist that identifier. Other record codes are preserved, and
+conflicting ReShare identifiers are rejected.
+
+The “view in shared index” UI should use `bibRecordId` with its configured
+VuFind/Trove URL and hide the link when the ID is absent or empty. It must not
+substitute the supplier's local bibliographic or copy ID. Existing requests
+remain without a shared-index ID unless it is explicitly supplied; the migration
+does not infer one from local identifiers. Import bundles also accept
+`patronRequest.bibRecordId`.
 
 When supplier Request Item is disabled (including manual LMS workflows), a
 Loan automatically attaches the selected copy as a volume before proceeding to
