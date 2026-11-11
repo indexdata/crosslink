@@ -173,6 +173,7 @@ func patronRequestSearchViewFromPatronRequest(pr pr_db.PatronRequest, hasCost bo
 		ID:                        pr.ID,
 		CreatedAt:                 pr.CreatedAt,
 		IllRequest:                pr.IllRequest,
+		BibRecordID:               pr.BibRecordID,
 		State:                     pr.State,
 		Side:                      pr.Side,
 		Patron:                    pr.Patron,
@@ -1834,6 +1835,7 @@ type PrRepoUpdateCapture struct {
 	lastUpdateParams *pr_db.UpdatePatronRequestParams
 	state            pr_db.PatronRequestState
 	pickupLocationID pgtype.UUID
+	bibRecordID      pgtype.Text
 }
 
 func (r *PrRepoUpdateCapture) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
@@ -1842,7 +1844,7 @@ func (r *PrRepoUpdateCapture) GetPatronRequestById(ctx common.ExtendedContext, i
 		if state == "" {
 			state = prservice.BorrowerStateNeedsReview
 		}
-		return pr_db.PatronRequest{ID: id, RequesterPickupLocationID: r.pickupLocationID, State: state, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, InternalNote: pgtype.Text{String: "original note", Valid: true}, Patron: pgtype.Text{String: "original patron", Valid: true}}, nil
+		return pr_db.PatronRequest{ID: id, BibRecordID: r.bibRecordID, RequesterPickupLocationID: r.pickupLocationID, State: state, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, InternalNote: pgtype.Text{String: "original note", Valid: true}, Patron: pgtype.Text{String: "original patron", Valid: true}}, nil
 	}
 	return r.PrRepoError.GetPatronRequestById(ctx, id)
 }
@@ -2300,6 +2302,40 @@ func TestCreateValidatesPickupBeforePersistence(t *testing.T) {
 			} else {
 				require.Equal(t, 1, repo.createCalls)
 			}
+		})
+	}
+}
+
+func TestPatronRequestBibRecordIDMapping(t *testing.T) {
+	for _, id := range []*string{nil, new("9a18bd66-8db6-4afd-95e6-157b2d3b6d12"), new("36457383"), new("")} {
+		request := proapi.CreatePatronRequest{BibRecordId: id, IllRequest: validIllRequest()}
+		pr := buildDbPatronRequest(&request, nil, pgtype.Timestamp{}, "request-1", request.IllRequest, "", "default")
+		result := toApiPatronRequest(httptest.NewRequest(http.MethodGet, "/patron_requests/request-1", nil), patronRequestSearchViewFromPatronRequest(pr, false))
+		assert.Equal(t, id, result.BibRecordId)
+	}
+}
+
+func TestPutPatronRequestBibRecordID(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		supplied *string
+		expected string
+	}{
+		{name: "omitted preserves ID", expected: "original"},
+		{name: "supplied replaces ID", supplied: new("replacement"), expected: "replacement"},
+		{name: "empty clears ID", supplied: new("")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &PrRepoUpdateCapture{bibRecordID: pgtype.Text{String: "original", Valid: true}}
+			handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+			id := "3"
+			body, err := json.Marshal(proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol, IllRequest: validIllRequest(), BibRecordId: tc.supplied})
+			require.NoError(t, err)
+			rr := httptest.NewRecorder()
+			handler.PutPatronRequestsId(rr, httptest.NewRequest(http.MethodPut, "/", bytes.NewReader(body)), id, proapi.PutPatronRequestsIdParams{})
+			require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+			require.NotNil(t, repo.lastUpdateParams)
+			assert.Equal(t, tc.expected, repo.lastUpdateParams.BibRecordID.String)
 		})
 	}
 }

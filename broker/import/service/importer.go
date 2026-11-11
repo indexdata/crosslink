@@ -431,7 +431,8 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 	bundle := importdb.PatronRequestBundle{PatronRequest: pr_db.CreatePatronRequestParams{
 		ID: request.Id, CreatedAt: pgTimestamp(request.CreatedAt), UpdatedAt: pgTimestamp(request.UpdatedAt),
 		IllRequest: request.IllRequest, IllResponse: responseValue, DueAt: dueAt,
-		State: pr_db.PatronRequestState(request.State), Side: side,
+		BibRecordID: pgTextFromPtr(request.BibRecordId),
+		State:       pr_db.PatronRequestState(request.State), Side: side,
 		Patron: pgTextFromPtr(request.Patron), RequesterSymbol: pgTextFromString(request.RequesterSymbol),
 		SupplierSymbol: pgTextFromPtr(request.SupplierSymbol), Tenant: pgTextFromPtr(request.Tenant),
 		RequesterReqID: pgTextFromString(request.RequesterRequestId), NeedsAttention: request.NeedsAttention,
