@@ -59,7 +59,7 @@ It also exports the selected local owner's `defaultCopyrightType`, resolving the
 `default_copyright_type` setting through the `copyrightType` refdata vocabulary.
 An unset setting is omitted; a configured value without a unique refdata match
 fails the export. The `request_id_prefix` setting is exported as `requestIdPrefix`
-on the selected local owner and its direct branches. A value longer than 32
+on the selected local owner; its branches inherit it. A value longer than 32
 characters, or containing anything other than ASCII letters and digits, fails the
 export.
 See the [ILL configuration field mappings](export-crosslink-directory-field-mapping.md#ill-configuration)
