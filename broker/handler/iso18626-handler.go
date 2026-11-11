@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"strings"
 	"sync"
@@ -122,7 +123,8 @@ func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapt
 			return
 		}
 		contentType := r.Header.Get("Content-Type")
-		if !strings.HasPrefix(contentType, "application/xml") && !strings.HasPrefix(contentType, "text/xml") {
+		mediaType, parameters, err := mime.ParseMediaType(contentType)
+		if err != nil || (mediaType != "application/xml" && mediaType != "text/xml") {
 			ctx.Logger().Error("content-type unsupported", "contentType", contentType, "url", r.URL)
 			http.Error(w, "only application/xml or text/xml accepted", http.StatusUnsupportedMediaType)
 			return
@@ -141,7 +143,7 @@ func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapt
 			return
 		}
 		illMessage := iso18626.NewISO18626Message()
-		err = xml.Unmarshal(byteReq, illMessage)
+		err = common.UnmarshalXML(byteReq, parameters["charset"], illMessage)
 		if err != nil {
 			ctx.Logger().Error("failure parsing request", "error", err, "body", string(byteReq))
 			http.Error(w, "failure parsing request", http.StatusBadRequest)
