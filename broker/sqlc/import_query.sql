@@ -22,7 +22,7 @@ INSERT INTO patron_request (
     supplier_symbol, tenant, requester_req_id, needs_attention, last_action,
     last_action_outcome, last_action_result, language, terminal_state,
     updated_at, ill_response, internal_note, next_req_id, prev_req_id,
-    retry_bib_info, state_model, due_at, requester_pickup_location_id, bib_record_id
+    retry_bib_info, state_model, due_at, requester_pickup_location_id
 ) VALUES (
     sqlc.arg(id), sqlc.arg(created_at), sqlc.arg(ill_request), sqlc.arg(state),
     sqlc.arg(side), sqlc.arg(patron), sqlc.arg(requester_symbol),
@@ -32,7 +32,7 @@ INSERT INTO patron_request (
     sqlc.arg(language), sqlc.arg(terminal_state), sqlc.arg(updated_at),
     sqlc.arg(ill_response), sqlc.arg(internal_note), sqlc.arg(next_req_id),
     sqlc.arg(prev_req_id), sqlc.arg(retry_bib_info), sqlc.arg(state_model), sqlc.arg(due_at),
-    sqlc.arg(requester_pickup_location_id), sqlc.arg(bib_record_id)
+    sqlc.arg(requester_pickup_location_id)
 );
 
 -- name: UpdateImportedPatronRequest :exec
@@ -60,8 +60,7 @@ SET created_at = sqlc.arg(created_at),
     retry_bib_info = sqlc.arg(retry_bib_info),
     state_model = sqlc.arg(state_model),
     due_at = sqlc.arg(due_at),
-    requester_pickup_location_id = sqlc.arg(requester_pickup_location_id),
-    bib_record_id = sqlc.arg(bib_record_id)
+    requester_pickup_location_id = sqlc.arg(requester_pickup_location_id)
 WHERE id = sqlc.arg(id);
 
 -- name: DeleteImportedItemsNotPresent :exec

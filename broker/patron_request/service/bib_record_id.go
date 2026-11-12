@@ -4,10 +4,26 @@ import (
 	"fmt"
 	"strings"
 
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/iso18626"
 )
 
 const sharedIndexRecordCode = "ReShare"
+
+// BibRecordID returns a patron request's shared-index record ID, or "" if it has none
+// or it is ambiguous. On the borrowing side that is supplierUniqueRecordId. The broker
+// replaces that field with the supplier's local ID in the requests it sends and adds the
+// shared-index ID under code ReShare, so on the lending side it is read from there.
+func BibRecordID(side pr_db.PatronRequestSide, illRequest iso18626.Request) string {
+	if side == SideBorrowing {
+		return illRequest.BibliographicInfo.SupplierUniqueRecordId
+	}
+	id, err := sharedIndexRecordID(illRequest.BibliographicInfo)
+	if err != nil {
+		return ""
+	}
+	return id
+}
 
 // sharedIndexRecordID reads only the consortium's record identifier. Supplier
 // bibliographic IDs and copy IDs belong to different namespaces.

@@ -750,22 +750,19 @@ an item ID. The selected holding's call number, when available, is persisted
 with its item ID and sent in `supplierInfo.callNumber`. Both fields are cleared
 when a new availability lookup invalidates the previous selection.
 
-Patron requests carry the shared-index record identifier separately in
-`bib_record_id` (API: `bibRecordId`). Clients should supply the VuFind UUID or
-Trove ANBD record ID when creating the borrowing request. Updates omit the field
-to preserve it or send an empty string to clear it. This identifier is preserved
-through retries and rerequests. Outgoing ISO18626 requests include it in
-`bibliographicInfo.bibliographicRecordId` with
-`bibliographicRecordIdentifierCode` set to `ReShare`; incoming lending requests
-extract and persist that identifier. Other record codes are preserved, and
-conflicting ReShare identifiers are rejected.
+`bibRecordId` is a read-only shared-index ID (VuFind UUID or Trove ANBD record ID),
+derived from `illRequest`: `bibliographicInfo.supplierUniqueRecordId` for borrowing,
+or the ReShare-coded `bibliographicInfo.bibliographicRecordId` for lending.
 
-The “view in shared index” UI should use `bibRecordId` with its configured
-VuFind/Trove URL and hide the link when the ID is absent or empty. It must not
-substitute the supplier's local bibliographic or copy ID. Existing requests
-remain without a shared-index ID unless it is explicitly supplied; the migration
-does not infer one from local identifiers. Import bundles also accept
-`patronRequest.bibRecordId`.
+The broker replaces `supplierUniqueRecordId` with the supplier's local ID in the
+requests it sends to suppliers, so it also sends the shared-index ID as a
+`bibliographicRecordId` with code `ReShare`. Other record codes are preserved;
+incoming requests with conflicting ReShare IDs are rejected.
+
+Clients linking to the shared index should use `bibRecordId` with their
+configured VuFind/Trove URL and hide the link when it is absent. They must not
+fall back to `supplierUniqueRecordId`, which on a lending request is the
+supplier's local ID.
 
 When supplier Request Item is disabled (including manual LMS workflows), a
 Loan automatically attaches the selected copy as a volume before proceeding to
