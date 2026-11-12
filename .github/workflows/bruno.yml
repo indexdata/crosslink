@@ -20,13 +20,10 @@ jobs:
     - name: Load tool versions
       run: cat .github/tool-versions.env >> "$GITHUB_ENV"
 
-    # Installed directly: the shared apt-package cache could restore without
-    # leaving xsltproc on PATH, which only surfaced later in make generate.
-    - name: Install xsltproc
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y --no-install-recommends xsltproc
-        xsltproc --version
+    - uses: awalsh128/cache-apt-pkgs-action@latest
+      with:
+        packages: xsltproc
+        version: 1.0
 
     - name: Set up Go
       uses: actions/setup-go@v7
