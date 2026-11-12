@@ -332,11 +332,11 @@ func TestLookupDeserializesDirectoryConfigurationFields(t *testing.T) {
 					"holdingsFormat":{
 						"marc":{
 							"mainField":"999",
-							"itemIdSubField":"i",
-							"locationSubField":"l",
-							"callNumberSubField":"c",
-							"restrictedSubField":"r",
-							"shelvingLocationSubField":"s"
+							"itemIdSubfield":"i",
+							"locationSubfield":"l",
+							"callNumberSubfield":"c",
+							"restrictedSubfield":"r",
+							"shelvingLocationSubfield":"s"
 						},
 						"opac":{}
 					},

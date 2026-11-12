@@ -45,7 +45,7 @@ func materializeCatalogDefaults(c object, origins map[string]string) {
 	}
 	if format, ok := c["holdingsFormat"].(object); ok {
 		if m, ok := format["marc"].(object); ok && len(m) == 0 {
-			fillMissing(m, object{"mainField": "852", "locationSubField": "b", "shelvingLocationSubField": "c", "callNumberSubField": "h", "itemIdSubField": "p", "restrictedSubField": "r"}, "catalogConfig.holdingsFormat.marc", origins)
+			fillMissing(m, object{"mainField": "852", "locationSubfield": "b", "shelvingLocationSubfield": "c", "callNumberSubfield": "h", "itemIdSubfield": "p", "restrictedSubfield": "r"}, "catalogConfig.holdingsFormat.marc", origins)
 		}
 		if o, ok := format["opac"].(object); ok {
 			fillMissing(o, object{"availabilityRule": "availableNow", "requireLocalLocation": false, "shelvingLocationSource": "shelvingLocation", "includeItemId": true, "includeItemLoanPolicy": true, "includeTemporaryLocation": false}, "catalogConfig.holdingsFormat.opac", origins)

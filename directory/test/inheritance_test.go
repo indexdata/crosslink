@@ -398,7 +398,7 @@ func TestImportResubmitsStoredConfiguration(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(`{"profile":"Koha","metadataUpdateMode":"merge",
 		"sru":{"address":"https://round-trip.example/sru","recordSchema":null},"zoom":null,
 		"queryConfig":{"type":"cql","identifier":null,"isbn":"isbn={term}","issn":null,"title":null},
-		"holdingsFormat":{"marc":{"mainField":"999","callNumberSubField":null,"itemIdSubField":null,"locationSubField":null,"restrictedSubField":null,"shelvingLocationSubField":null,"availability":[{"subField":"7","operator":"equals","value":"0"},{"subField":"q","operator":"absent","value":null}]},"opac":null,"reservoir":null,"marc21plus1":null},
+		"holdingsFormat":{"marc":{"mainField":"999","callNumberSubfield":null,"itemIdSubfield":null,"locationSubfield":null,"restrictedSubfield":null,"shelvingLocationSubfield":null,"availability":[{"subfield":"7","operator":"equals","value":"0"},{"subfield":"q","operator":"absent","value":null}]},"opac":null,"reservoir":null,"marc21plus1":null},
 		"metadataFormat":{"marc21":{"author":"100","edition":null,"identifier":null,"isbn":null,"issn":null,"subtitle":null,"title":"245"}}}`), &catalog))
 	data["catalogConfig"] = catalog
 	data["holdingsPolicy"] = map[string]any{

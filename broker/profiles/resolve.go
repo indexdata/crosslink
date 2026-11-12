@@ -242,7 +242,7 @@ func (e *Effective) validate() error {
 			}
 			if m := h.Marc; m != nil && m.Availability != nil {
 				for _, r := range *m.Availability {
-					if r.SubField == "" || (r.Operator != "equals" && r.Operator != "absent" && r.Operator != "present" && r.Operator != "notIn") || (r.Operator == "equals" && r.Value == nil) || (r.Operator == "notIn" && r.Values == nil) {
+					if r.Subfield == "" || (r.Operator != "equals" && r.Operator != "absent" && r.Operator != "present" && r.Operator != "notIn") || (r.Operator == "equals" && r.Value == nil) || (r.Operator == "notIn" && r.Values == nil) {
 						return bad("holdingsFormat.marc.availability")
 					}
 				}

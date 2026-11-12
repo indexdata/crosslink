@@ -947,11 +947,11 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 			"holdingsFormat":{
 				"marc":{
 					"mainField":"999",
-					"itemIdSubField":"i",
-					"locationSubField":"l",
-					"callNumberSubField":"c",
-					"restrictedSubField":"r",
-					"shelvingLocationSubField":"s"
+					"itemIdSubfield":"i",
+					"locationSubfield":"l",
+					"callNumberSubfield":"c",
+					"restrictedSubfield":"r",
+					"shelvingLocationSubfield":"s"
 				}
 			},
 			"metadataFormat":{
@@ -1095,7 +1095,7 @@ func TestEntryDirectoryContractFieldsAndCatalogConfig(t *testing.T) {
 	if holdings["metadataUpdateMode"] != "merge" || zoom["address"] != "z3950.example.org:210/catalog" ||
 		options["count"] != "50" || options["preferredRecordSyntax"] != "usmarc" || options["emptyValue"] != "" ||
 		queryConfig["title"] != "new title query" || queryConfig["identifier"] != "rec.id = {term}" || queryConfig["year"] != "dc.date = {term}" ||
-		marcHoldings["mainField"] != "998" || marcHoldings["locationSubField"] != "l" ||
+		marcHoldings["mainField"] != "998" || marcHoldings["locationSubfield"] != "l" ||
 		metadataMarc["title"] != "246$a" || metadataMarc["author"] != "100$a" || metadataMarc["publisher"] != "260$b" || metadataMarc["publicationDate"] != "" || metadataMarc["placeOfPublication"] != "264*1$a/260$a" {
 		t.Fatalf("partial catalogConfig PATCH did not recursively merge fields: %#v", holdings)
 	}

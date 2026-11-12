@@ -16,12 +16,12 @@ x-host-profiles:
       holdingsFormat:
         marc:
           mainField: "852"
-          locationSubField: b
-          shelvingLocationSubField: a
-          callNumberSubField: c
-          itemIdSubField: g
+          locationSubfield: b
+          shelvingLocationSubfield: a
+          callNumberSubfield: c
+          itemIdSubfield: g
           availability:
-            - subField: n
+            - subfield: n
               operator: equals
               value: Available
   Horizon:
@@ -48,12 +48,12 @@ x-host-profiles:
       holdingsFormat:
         marc:
           mainField: "852"
-          locationSubField: b
-          shelvingLocationSubField: a
-          callNumberSubField: h
-          itemIdSubField: p
+          locationSubfield: b
+          shelvingLocationSubfield: a
+          callNumberSubfield: h
+          itemIdSubfield: p
           availability:
-            - subField: r
+            - subfield: r
               operator: equals
               value: In
   Symphony:
@@ -71,14 +71,14 @@ x-host-profiles:
       holdingsFormat:
         marc:
           mainField: "926"
-          locationSubField: a
-          shelvingLocationSubField: b
-          callNumberSubField: c
-          itemLoanPolicySubField: d
+          locationSubfield: a
+          shelvingLocationSubfield: b
+          callNumberSubfield: c
+          itemLoanPolicySubfield: d
           availability:
-            - subField: b
+            - subfield: b
               operator: present
-            - subField: b
+            - subfield: b
               operator: notIn
               values: [RESERVES, CHECKEDOUT, MISSING, DISCARD]
   Alma:
@@ -126,14 +126,14 @@ x-host-profiles:
       holdingsFormat:
         marc:
           mainField: "952"
-          locationSubField: b
-          shelvingLocationSubField: c
-          callNumberSubField: o
+          locationSubfield: b
+          shelvingLocationSubfield: c
+          callNumberSubfield: o
           availability:
-            - subField: "7"
+            - subfield: "7"
               operator: equals
               value: "0"
-            - subField: q
+            - subfield: q
               operator: absent
   Sierra:
     lmsConfig:
@@ -2236,28 +2236,28 @@ components:
     ImportMarcHoldingsParserConfig:
       type: object
       additionalProperties: false
-      required: [availability, callNumberSubField, itemIdSubField, locationSubField, mainField, restrictedSubField, shelvingLocationSubField]
+      required: [availability, callNumberSubfield, itemIdSubfield, locationSubfield, mainField, restrictedSubfield, shelvingLocationSubfield]
       properties:
-        itemLoanPolicySubField: { type: [string, "null"] }
+        itemLoanPolicySubfield: { type: [string, "null"] }
         availability:
           type: [array, "null"]
           items: { $ref: '#/components/schemas/ImportMarcAvailabilityPredicate' }
-        callNumberSubField: { type: [string, "null"] }
-        itemIdSubField: { type: [string, "null"] }
-        locationSubField: { type: [string, "null"] }
+        callNumberSubfield: { type: [string, "null"] }
+        itemIdSubfield: { type: [string, "null"] }
+        locationSubfield: { type: [string, "null"] }
         mainField: { type: [string, "null"] }
-        restrictedSubField: { type: [string, "null"] }
-        shelvingLocationSubField: { type: [string, "null"] }
+        restrictedSubfield: { type: [string, "null"] }
+        shelvingLocationSubfield: { type: [string, "null"] }
 
     ImportMarcAvailabilityPredicate:
       type: object
       additionalProperties: false
-      required: [subField, operator, value]
+      required: [subfield, operator, value]
       properties:
         values:
           type: [array, "null"]
           items: { type: string }
-        subField: { type: string, minLength: 1 }
+        subfield: { type: string, minLength: 1 }
         operator: { $ref: '#/components/schemas/MarcAvailabilityOperator' }
         value: { type: [string, "null"] }
 
@@ -3058,27 +3058,27 @@ components:
     MarcHoldingsParserConfig:
       type: object
       properties:
-        itemLoanPolicySubField: { type: string }
+        itemLoanPolicySubfield: { type: string }
         availability:
           type: array
           description: All predicates must match a candidate item. Equals requires a present matching subfield; absent rejects any occurrence; present requires an occurrence (including empty); notIn rejects any occurrence matching values and permits absence. Comparisons use exact untrimmed values.
           items:
             $ref: '#/components/schemas/MarcAvailabilityPredicate'
         mainField: { type: string }
-        locationSubField: { type: string }
-        shelvingLocationSubField: { type: string }
-        itemIdSubField: { type: string }
-        restrictedSubField: { type: string }
-        callNumberSubField: { type: string }
+        locationSubfield: { type: string }
+        shelvingLocationSubfield: { type: string }
+        itemIdSubfield: { type: string }
+        restrictedSubfield: { type: string }
+        callNumberSubfield: { type: string }
       additionalProperties: false
     MarcAvailabilityPredicate:
       type: object
-      required: [subField, operator]
+      required: [subfield, operator]
       properties:
         values:
           type: array
           items: { type: string }
-        subField: { type: string, minLength: 1 }
+        subfield: { type: string, minLength: 1 }
         operator:
           $ref: '#/components/schemas/MarcAvailabilityOperator'
         value: { type: string }
