@@ -324,6 +324,8 @@ SELECT
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
         FILTER (WHERE st_key = 'default_copyright_type') AS default_copyright_type,
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+        FILTER (WHERE st_key = 'request_id_prefix') AS request_id_prefix,
+    max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
         FILTER (WHERE st_key = 'last_resort_lenders') AS last_resort_lenders
 FROM app_setting;
 
@@ -370,6 +372,18 @@ BEGIN
     WHERE code IS NOT NULL AND matches <> 1;
     IF problem IS NOT NULL THEN
         RAISE EXCEPTION 'default_copyright_type must resolve to exactly one copyrightType refdata value: %', problem;
+    END IF;
+END $$;
+
+-- Directory accepts only alphanumeric request ID prefixes of up to 32 characters.
+DO $$
+DECLARE
+    problem text;
+BEGIN
+    SELECT request_id_prefix INTO problem FROM crosslink_tenant_settings
+    WHERE request_id_prefix !~ '^[A-Za-z0-9]{1,32}$';
+    IF problem IS NOT NULL THEN
+        RAISE EXCEPTION 'request_id_prefix must be at most 32 ASCII letters and digits: %', problem;
     END IF;
 END $$;
 
@@ -692,7 +706,8 @@ BEGIN
             'accept_item', 'check_in_item', 'check_out_item', 'use_request_item',
             'ncip_request_item_pickup_location', 'ncip_use_title_request_type',
             'default_institutional_patron_id', 'z3950_server_address',
-            'max_requests', 'check_duplicate_time', 'default_copyright_type'
+            'max_requests', 'check_duplicate_time', 'default_copyright_type',
+            'request_id_prefix'
         )
         GROUP BY st_key
         HAVING count(*) > 1
@@ -1116,6 +1131,12 @@ entry_records AS (
             'useOfferedCosts', NULL,
             'noteFieldSeparator', NULL,
             'supplierPatronPattern', NULL,
+            'requestIdPrefix', CASE
+                WHEN local_entry.entry_id IS NOT NULL
+                  OR entry.parent_id IN (SELECT entry_id FROM crosslink_local_entry)
+                THEN tenant_settings.request_id_prefix
+                ELSE NULL
+            END,
             'duplicateCheckWindowHours', CASE
                 WHEN local_entry.entry_id IS NOT NULL
                   OR entry.parent_id IN (SELECT entry_id FROM crosslink_local_entry)
@@ -1144,6 +1165,7 @@ entry_records AS (
                 'useOfferedCosts', NULL,
                 'noteFieldSeparator', NULL,
                 'supplierPatronPattern', NULL,
+                'requestIdPrefix', NULL,
                 'duplicateCheckWindowHours', NULL,
                 'maxRequestsPerPatron', NULL
             )
