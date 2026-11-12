@@ -46,11 +46,11 @@ func TestMockRecordIncludesBibliographicMetadata(t *testing.T) {
 
 func TestMockRecordMetadataIsStableAndRecordSpecific(t *testing.T) {
 	api := new(SruApi)
-	first, err := api.getMarcXmlRecord("record-1")
+	first, err := api.getMarcXmlRecord("return-ISIL:SUP1::record-1")
 	assert.NoError(t, err)
-	firstAgain, err := api.getMarcXmlRecord("record-1")
+	firstAgain, err := api.getMarcXmlRecord("return-ISIL:SUP1::record-1")
 	assert.NoError(t, err)
-	second, err := api.getMarcXmlRecord("record-2")
+	second, err := api.getMarcXmlRecord("return-ISIL:SUP1::record-2")
 	assert.NoError(t, err)
 
 	firstValues := marcValues(first)
@@ -206,8 +206,8 @@ func TestSruService(t *testing.T) {
 		assert.Equal(t, "Unsupported version", sruResp.Diagnostics.Diagnostic[0].Message)
 	})
 
-	t.Run("sr2.0 no records", func(t *testing.T) {
-		cqlQuery := "rec.id=1"
+	t.Run("sr2.0 count only", func(t *testing.T) {
+		cqlQuery := "rec.id=return-ISIL:SUP1::42"
 		sruResp := getSr(t, url+"?query="+neturl.QueryEscape(cqlQuery))
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Len(t, sruResp.Diagnostics.Diagnostic, 0)
@@ -234,7 +234,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 with one holding", func(t *testing.T) {
-		cqlQuery := "rec.id=42"
+		cqlQuery := "rec.id=return-ISIL:SUP1::42"
 		sruResp := getSr(t, url+"?version=2.0&maximumRecords=1&query="+neturl.QueryEscape(cqlQuery))
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 0, len(sruResp.Diagnostics.Diagnostic))
@@ -247,7 +247,7 @@ func TestSruService(t *testing.T) {
 		var marc marcxml.Record
 		err := xml.Unmarshal([]byte(sruResp.Records.Record[0].RecordData.XMLContent), &marc)
 		assert.Nil(t, err)
-		assert.Equal(t, "42", marc.Id)
+		assert.Equal(t, "return-ISIL:SUP1::42", marc.Id)
 		matched := false
 		for _, f := range marc.Datafield {
 			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
@@ -263,7 +263,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 with two holdings", func(t *testing.T) {
-		cqlQuery := "rec.id=42;43"
+		cqlQuery := "rec.id=return-ISIL:SUP1::42;return-ISIL:SUP2::43"
 		sruResp := getSr(t, url+"?version=2.0&maximumRecords=1&query="+neturl.QueryEscape(cqlQuery))
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 0, len(sruResp.Diagnostics.Diagnostic))
@@ -276,7 +276,7 @@ func TestSruService(t *testing.T) {
 		var marc marcxml.Record
 		err := xml.Unmarshal([]byte(sruResp.Records.Record[0].RecordData.XMLContent), &marc)
 		assert.Nil(t, err)
-		assert.Equal(t, "42;43", marc.Id)
+		assert.Equal(t, "return-ISIL:SUP1::42;return-ISIL:SUP2::43", marc.Id)
 		matched := 0
 		for _, f := range marc.Datafield {
 			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
@@ -299,52 +299,47 @@ func TestSruService(t *testing.T) {
 		assert.Equal(t, 2, matched)
 	})
 
-	t.Run("sr2.0 magic: not found", func(t *testing.T) {
-		cqlQuery := "rec.id=not-found"
-		sruResp := getSr(t, url+"?maximumRecords=1&query="+neturl.QueryEscape(cqlQuery))
-		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
-		assert.Len(t, sruResp.Diagnostics.Diagnostic, 0)
-		assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
-		assert.Len(t, sruResp.Records.Record, 1)
+	for _, id := range []string{"42", "record-1", "429e871b-9cd3-465a-8d94-a82bac2d9a44", "42;43", "not-found", ""} {
+		t.Run("sr2.0 no match: "+id, func(t *testing.T) {
+			cqlQuery := `rec.id="` + id + `"`
+			sruResp := getSr(t, url+"?maximumRecords=1&query="+neturl.QueryEscape(cqlQuery))
+			assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
+			assert.Empty(t, sruResp.Diagnostics.Diagnostic)
+			assert.Zero(t, sruResp.NumberOfRecords)
+			assert.Empty(t, sruResp.Records.Record)
+		})
+	}
 
-		assert.Equal(t, "xml", string(*sruResp.Records.Record[0].RecordXMLEscaping))
-		assert.Equal(t, "info:srw/schema/1/marcxml-v1.1", sruResp.Records.Record[0].RecordSchema)
-
-		var marc marcxml.Record
-		err := xml.Unmarshal([]byte(sruResp.Records.Record[0].RecordData.XMLContent), &marc)
-		assert.Nil(t, err)
-		assert.Equal(t, "not-found", marc.Id)
-		matched := 0
-		for _, f := range marc.Datafield {
-			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
-				matched++
+	for _, id := range []string{"42;return-ISIL:SUP1::43", "return-ISIL:SUP1::43;42"} {
+		t.Run("sr2.0 mixed identifiers: "+id, func(t *testing.T) {
+			cqlQuery := `rec.id="` + id + `"`
+			sruResp := getSr(t, url+"?maximumRecords=1&query="+neturl.QueryEscape(cqlQuery))
+			assert.Empty(t, sruResp.Diagnostics.Diagnostic)
+			assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
+			if !assert.Len(t, sruResp.Records.Record, 1) {
+				return
 			}
-		}
-		assert.Equal(t, 0, matched)
-	})
-
-	t.Run("sr2.0 magic: empty", func(t *testing.T) {
-		cqlQuery := "rec.id=\"\""
-		sruResp := getSr(t, url+"?maximumRecords=1&query="+neturl.QueryEscape(cqlQuery))
-		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
-		assert.Len(t, sruResp.Diagnostics.Diagnostic, 0)
-		assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
-		assert.Len(t, sruResp.Records.Record, 1)
-
-		assert.Equal(t, "xml", string(*sruResp.Records.Record[0].RecordXMLEscaping))
-		assert.Equal(t, "info:srw/schema/1/marcxml-v1.1", sruResp.Records.Record[0].RecordSchema)
-
-		var marc marcxml.Record
-		err := xml.Unmarshal([]byte(sruResp.Records.Record[0].RecordData.XMLContent), &marc)
-		assert.Nil(t, err)
-		assert.Equal(t, "", marc.Id)
-		matched := 0
-		for _, f := range marc.Datafield {
-			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
-				matched++
+			var marc marcxml.Record
+			assert.NoError(t, xml.Unmarshal(sruResp.Records.Record[0].RecordData.XMLContent, &marc))
+			var holdings []marcxml.DataFieldType
+			for _, field := range marc.Datafield {
+				if field.Tag == "999" {
+					holdings = append(holdings, field)
+				}
 			}
-		}
-		assert.Equal(t, 0, matched)
+			assert.Len(t, holdings, 1)
+			values := marcValues(&marc)
+			assert.Equal(t, "43", values["999$l"])
+			assert.Equal(t, "ISIL:SUP1", values["999$s"])
+		})
+	}
+
+	t.Run("sr2.0 past last record", func(t *testing.T) {
+		cqlQuery := "rec.id=return-ISIL:SUP1::42"
+		sruResp := getSr(t, url+"?maximumRecords=1&startRecord=2&query="+neturl.QueryEscape(cqlQuery))
+		assert.Empty(t, sruResp.Diagnostics.Diagnostic)
+		assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
+		assert.Empty(t, sruResp.Records.Record)
 	})
 
 	t.Run("sr2.0 magic: error", func(t *testing.T) {
