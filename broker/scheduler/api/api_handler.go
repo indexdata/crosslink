@@ -656,25 +656,10 @@ func (h SchedulerApiHandler) PostBatchActionsIdRun(w http.ResponseWriter, r *htt
 		if err = sched_service.ValidateArchiveConfig(data.ActionName, task.Owner, data.Selector, task.ActionData.CustomData); err != nil {
 			return fmt.Errorf("%w: %w", errInvalidArchiveConfig, err)
 		}
-		if data.ActionName == string(schedoapi.EmailPullslips) {
-			// The task lock also protects scheduled dispatch, so neither path
-			// can queue a second email before its printed-state actions finish.
-			active, err := repo.HasActiveBatchActionEvents(ctx, id)
-			if err != nil {
-				return fmt.Errorf("check active pull-slip email runs: %w", err)
-			}
-			if active {
-				return errBatchActionInProgress
-			}
-		}
 		return repo.QueueBatchActionRun(ctx, task)
 	})
 	if err != nil {
-		if errors.Is(err, errBatchActionInProgress) {
-			brokerapi.WriteJsonErrorResponse(w, err, http.StatusConflict)
-		} else {
-			h.writeScheduledTaskMutationError(ctx, w, err)
-		}
+		h.writeScheduledTaskMutationError(ctx, w, err)
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)

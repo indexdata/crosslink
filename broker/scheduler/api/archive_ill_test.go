@@ -89,49 +89,30 @@ func TestTransactionArchiveMutationAuthorization(t *testing.T) {
 	}
 }
 
-func TestManualNonEmailBatchRunQueuesWithoutCheckingActiveEvents(t *testing.T) {
-	repo := new(MockSchedRepo)
-	h := newHandler(repo) // master capability
-	task := scheduledTaskFixture("active")
-	task.ActionData.BatchActionData.ActionName = string(schedoapi.RequestAging)
-	repo.On("GetScheduledTaskByIdForUpdate", task.ID, testOwnerScope).Return(task, nil).Once()
-	repo.On("QueueBatchActionRun", task).Return(nil).Once()
-	rr := httptest.NewRecorder()
-	h.PostBatchActionsIdRun(rr, newReq(http.MethodPost, ""), task.ID, schedoapi.PostBatchActionsIdRunParams{Symbol: symPtr(testSymbol)})
-	assert.Equal(t, http.StatusAccepted, rr.Code)
-	repo.AssertNotCalled(t, "HasActiveBatchActionEvents", mock.Anything)
-	repo.AssertExpectations(t)
-}
-
-func TestManualEmailBatchRunChecksActiveEvents(t *testing.T) {
-	for _, tc := range []struct {
-		name       string
-		active     bool
-		checkErr   error
-		queueErr   error
-		wantStatus int
-	}{
-		{name: "idle", wantStatus: http.StatusAccepted},
-		{name: "active", active: true, wantStatus: http.StatusConflict},
-		{name: "check fails", checkErr: errors.New("check failed"), wantStatus: http.StatusInternalServerError},
-		{name: "queue fails", queueErr: errors.New("queue failed"), wantStatus: http.StatusInternalServerError},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			repo := new(MockSchedRepo)
-			h := newHandler(repo)
-			task := scheduledTaskFixture("email")
-			repo.On("GetScheduledTaskByIdForUpdate", task.ID, testOwnerScope).Return(task, nil).Once()
-			repo.On("HasActiveBatchActionEvents", task.ID).Return(tc.active, tc.checkErr).Once()
-			if !tc.active && tc.checkErr == nil {
-				repo.On("QueueBatchActionRun", task).Return(tc.queueErr).Once()
+func TestManualBatchRunQueuesWithoutCheckingActiveEvents(t *testing.T) {
+	for _, action := range []string{string(schedoapi.RequestAging), string(schedoapi.EmailPullslips)} {
+		for _, failQueue := range []bool{false, true} {
+			name := action + "/queued"
+			var queueErr error
+			wantStatus := http.StatusAccepted
+			if failQueue {
+				name = action + "/queue fails"
+				queueErr = errors.New("queue failed")
+				wantStatus = http.StatusInternalServerError
 			}
-			rr := httptest.NewRecorder()
-			h.PostBatchActionsIdRun(rr, newReq(http.MethodPost, ""), task.ID, schedoapi.PostBatchActionsIdRunParams{Symbol: symPtr(testSymbol)})
-			assert.Equal(t, tc.wantStatus, rr.Code, rr.Body.String())
-			if tc.active || tc.checkErr != nil {
-				repo.AssertNotCalled(t, "QueueBatchActionRun", mock.Anything)
-			}
-			repo.AssertExpectations(t)
-		})
+			t.Run(name, func(t *testing.T) {
+				repo := new(MockSchedRepo)
+				h := newHandler(repo)
+				task := scheduledTaskFixture("active")
+				task.ActionData.BatchActionData.ActionName = action
+				repo.On("GetScheduledTaskByIdForUpdate", task.ID, testOwnerScope).Return(task, nil).Once()
+				repo.On("QueueBatchActionRun", task).Return(queueErr).Once()
+				rr := httptest.NewRecorder()
+				h.PostBatchActionsIdRun(rr, newReq(http.MethodPost, ""), task.ID, schedoapi.PostBatchActionsIdRunParams{Symbol: symPtr(testSymbol)})
+				assert.Equal(t, wantStatus, rr.Code, rr.Body.String())
+				repo.AssertNotCalled(t, "HasActiveBatchActionEvents", mock.Anything)
+				repo.AssertExpectations(t)
+			})
+		}
 	}
 }

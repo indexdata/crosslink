@@ -10,7 +10,6 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	sched_db "github.com/indexdata/crosslink/broker/scheduler/db"
-	schedoapi "github.com/indexdata/crosslink/broker/scheduler/oapi"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -159,7 +158,7 @@ func (s *SchedulerService) schedulerLoop(ctx common.ExtendedContext) {
 }
 
 // runDueTasks processes all currently claimable tasks.
-// Returns true if at least one task was dispatched or deferred behind an active email run.
+// Returns true if at least one task was dispatched.
 func (s *SchedulerService) runDueTasks(ctx common.ExtendedContext) bool {
 	madeProgress := false
 	for {
@@ -170,21 +169,6 @@ func (s *SchedulerService) runDueTasks(ctx common.ExtendedContext) bool {
 			}
 
 			if task.EventName == events.EventNameInvokeBatchAction {
-				if data := task.ActionData.BatchActionData; data != nil && data.ActionName == string(schedoapi.EmailPullslips) {
-					// Email sends precede their printed-state updates. Keep runs of
-					// this task separate until those child actions finish, checking
-					// under the same task lock used by manual runs.
-					active, err := txRepo.HasActiveBatchActionEvents(ctx, task.ID)
-					if err != nil {
-						return fmt.Errorf("check active pull-slip email runs: %w", err)
-					}
-					if active {
-						task.Status = sched_db.ScheduledTaskStatusPending
-						task.RunAt = pgtype.Timestamptz{Time: time.Now().UTC().Add(SCHEDULER_RETRY_DELAY), Valid: true}
-						_, txErr = txRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
-						return txErr
-					}
-				}
 				// Commit the run and next schedule atomically under the task lock.
 				txErr = txRepo.QueueBatchActionRun(ctx, task)
 			} else {

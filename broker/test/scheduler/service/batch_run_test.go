@@ -19,6 +19,15 @@ import (
 )
 
 func TestBatchRunsProceedWithUnfinishedEvents(t *testing.T) {
+	for _, action := range []string{string(schedoapi.RequestAging), string(schedoapi.EmailPullslips)} {
+		t.Run(action, func(t *testing.T) {
+			testBatchRunsProceedWithUnfinishedEvents(t, action)
+		})
+	}
+}
+
+func testBatchRunsProceedWithUnfinishedEvents(t *testing.T, action string) {
+	t.Helper()
 	for _, name := range []events.EventName{events.EventNameInvokeBatchAction, events.EventNameInvokeBackgroundAction} {
 		for _, status := range []events.EventStatus{events.EventStatusNew, events.EventStatusProcessing} {
 			t.Run(string(name)+"/"+string(status), func(t *testing.T) {
@@ -33,9 +42,13 @@ func TestBatchRunsProceedWithUnfinishedEvents(t *testing.T) {
 				params.RunAt = pgtype.Timestamptz{}
 				params.ActionData = events.EventData{
 					CommonEventData: events.CommonEventData{BatchActionData: &events.BatchActionData{
-						TaskId: params.ID, Owner: params.Owner, ActionName: string(schedoapi.RequestAging), Selector: "state==CLOSED",
+						TaskId: params.ID, Owner: params.Owner, ActionName: action, Selector: "state==CLOSED",
 					}},
 					CustomData: map[string]any{"interval": "24h"},
+				}
+				if action == string(schedoapi.EmailPullslips) {
+					params.ActionData.BatchActionData.Selector = "side==lending and state==WILL_SUPPLY"
+					params.ActionData.CustomData = map[string]any{"to": []string{"staff@example.com"}, "templateLabel": "pullslip-email", "includePdf": true}
 				}
 				task, err := schedRepo.SaveScheduledTask(appCtx, params)
 				require.NoError(t, err)
@@ -135,94 +148,7 @@ func saveEmailBatchRunTask(t *testing.T) sched_db.ScheduledTask {
 	return task
 }
 
-func TestEmailBatchRunsWaitForUnfinishedEvents(t *testing.T) {
-	for _, name := range []events.EventName{events.EventNameInvokeBatchAction, events.EventNameInvokeBackgroundAction} {
-		for _, status := range []events.EventStatus{events.EventStatusNew, events.EventStatusProcessing} {
-			t.Run(string(name)+"/"+string(status), func(t *testing.T) {
-				task := saveEmailBatchRunTask(t)
-				eventRepo := app.CreateEventRepo(schedRepo.(*sched_db.PgSchedRepo).Pool)
-				parent := events.SaveEventParams{
-					ID: uuid.NewString(), Timestamp: pgtype.Timestamp{Time: time.Now().Add(-time.Hour), Valid: true},
-					IllTransactionID: events.DEFAULT_ILL_TRANSACTION_ID, PatronRequestID: events.DEFAULT_PATRON_REQUEST_ID,
-					EventType: events.EventTypeTask, EventName: events.EventNameInvokeBatchAction,
-					EventStatus: status, EventData: task.ActionData,
-				}
-				if name == events.EventNameInvokeBackgroundAction {
-					parent.EventStatus = events.EventStatusSuccess
-				}
-				_, err := eventRepo.SaveEvent(appCtx, parent)
-				require.NoError(t, err)
-				unfinishedID := parent.ID
-				existingCount := 1
-				if name == events.EventNameInvokeBackgroundAction {
-					child := parent
-					child.ID = uuid.NewString()
-					child.ParentID = pgtype.Text{String: parent.ID, Valid: true}
-					child.EventName = name
-					child.EventStatus = status
-					_, err = eventRepo.SaveEvent(appCtx, child)
-					require.NoError(t, err)
-					unfinishedID = child.ID
-					existingCount++
-				}
-
-				handler := schedapi.NewSchedulerApiHandler(10, schedRepo, eventRepo, tenant.NewResolver(), nil)
-				rr := httptest.NewRecorder()
-				handler.PostBatchActionsIdRun(rr, httptest.NewRequest(http.MethodPost, "/batch_actions/"+task.ID+"/run", nil), task.ID, schedoapi.PostBatchActionsIdRunParams{})
-				require.Equal(t, http.StatusConflict, rr.Code, rr.Body.String())
-				saved, err := schedRepo.GetScheduledTaskById(appCtx, task.ID, nil)
-				require.NoError(t, err)
-				require.Equal(t, task, saved, "rejected manual runs must preserve the disabled schedule")
-
-				task.Status = sched_db.ScheduledTaskStatusPending
-				task.RunAt = pgtype.Timestamptz{Time: time.Now().Add(-time.Minute), Valid: true}
-				_, err = schedRepo.SaveScheduledTask(appCtx, sched_db.SaveScheduledTaskParams(task))
-				require.NoError(t, err)
-				other, err := schedRepo.SaveScheduledTask(appCtx, overdueTask())
-				require.NoError(t, err)
-				t.Cleanup(func() { require.NoError(t, schedRepo.DeleteScheduledTask(appCtx, other.ID, nil)) })
-				ctx, cancel := context.WithCancel(context.Background())
-				defer cancel()
-				bus := &countingEventBus{}
-				startScheduler(t, ctx, bus)
-				startScheduler(t, ctx, bus)
-				require.Eventually(t, func() bool {
-					deferred, err := schedRepo.GetScheduledTaskById(appCtx, task.ID, nil)
-					return err == nil && deferred.Status == sched_db.ScheduledTaskStatusPending &&
-						deferred.RunAt.Valid && deferred.RunAt.Time.After(time.Now()) && bus.totalClaims() > 0
-				}, 5*time.Second, 10*time.Millisecond)
-				require.Equal(t, []string{other.ID}, bus.getClaims())
-				list, err := eventRepo.GetBatchActionEvents(appCtx, task.ID)
-				require.NoError(t, err)
-				require.Len(t, list, existingCount, "unfinished email work must prevent another email run")
-
-				// Finish the old work, then let both replicas contend for the retry.
-				require.NoError(t, eventRepo.WithTxFunc(appCtx, func(repo events.EventRepo) error {
-					_, err := repo.UpdateEventLifecycle(appCtx, events.UpdateEventLifecycleParams{
-						ID: unfinishedID, EventStatus: events.EventStatusSuccess,
-					})
-					return err
-				}))
-				task.RunAt = pgtype.Timestamptz{Time: time.Now().Add(-time.Second), Valid: true}
-				_, err = schedRepo.SaveScheduledTask(appCtx, sched_db.SaveScheduledTaskParams(task))
-				require.NoError(t, err)
-				require.Eventually(t, func() bool {
-					rescheduled, err := schedRepo.GetScheduledTaskById(appCtx, task.ID, nil)
-					return err == nil && rescheduled.Status == sched_db.ScheduledTaskStatusPending &&
-						rescheduled.RunAt.Valid && rescheduled.RunAt.Time.After(time.Now())
-				}, 5*time.Second, 10*time.Millisecond)
-				list, err = eventRepo.GetBatchActionEvents(appCtx, task.ID)
-				require.NoError(t, err)
-				require.Len(t, list, existingCount+1, "the retry must queue one email run across replicas")
-				saved, err = schedRepo.GetScheduledTaskById(appCtx, task.ID, nil)
-				require.NoError(t, err)
-				require.Equal(t, task.Schedule, saved.Schedule)
-			})
-		}
-	}
-}
-
-func TestConcurrentManualEmailRunsQueueOnce(t *testing.T) {
+func TestConcurrentManualEmailRunsEachQueue(t *testing.T) {
 	task := saveEmailBatchRunTask(t)
 	eventRepo := app.CreateEventRepo(schedRepo.(*sched_db.PgSchedRepo).Pool)
 	handler := schedapi.NewSchedulerApiHandler(10, schedRepo, eventRepo, tenant.NewResolver(), nil)
@@ -246,10 +172,10 @@ func TestConcurrentManualEmailRunsQueueOnce(t *testing.T) {
 			t.Fatal("concurrent manual email run did not return")
 		}
 	}
-	require.ElementsMatch(t, []int{http.StatusAccepted, http.StatusConflict}, statuses)
+	require.ElementsMatch(t, []int{http.StatusAccepted, http.StatusAccepted}, statuses)
 	list, err := eventRepo.GetBatchActionEvents(appCtx, task.ID)
 	require.NoError(t, err)
-	require.Len(t, list, 1)
+	require.Len(t, list, 2)
 	saved, err := schedRepo.GetScheduledTaskById(appCtx, task.ID, nil)
 	require.NoError(t, err)
 	require.Equal(t, task, saved, "manual runs must preserve the disabled schedule")

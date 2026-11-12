@@ -3660,7 +3660,7 @@ paths:
   /batch_actions/{id}/run:
     post:
       summary: Queue a manual batch action run
-      description: Queues one run without changing the schedule or enabled state. Requires the normal run permission and, for archive-ill-transactions, broker.consortium.all. For email-pullslips, returns a conflict while a run of the same batch action or its background actions remain unfinished. Other batch runs may overlap.
+      description: Queues one run without changing the schedule or enabled state. Requires the normal run permission and, for archive-ill-transactions, broker.consortium.all. Scheduled and manual batch runs may overlap, including while earlier batch events or background actions remain unfinished.
       tags:
         - scheduler-api
       parameters:
@@ -3677,12 +3677,6 @@ paths:
           description: Batch action run queued
         '400':
           description: Bad Request. Invalid query parameters.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '409':
-          description: Pull-slip email batch action already has an unfinished run or background actions
           content:
             application/json:
               schema:

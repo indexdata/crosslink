@@ -235,12 +235,8 @@ accepts this action with the same configuration validation.
 `POST /batch_actions/{id}/run` (or `/broker/batch_actions/{id}/run`) queues one
 manual run and returns `202`. It preserves the saved schedule and enabled state,
 so a disabled action can be run once without enabling it. Okapi callers need
-`broker.batch_actions.item.run.post`. For `email-pullslips`, an unfinished run or
-its background actions block another run of the same batch action: manual runs
-return `409`, and scheduled runs retry after `SCHEDULER_RETRY_DELAY`. This prevents
-duplicate emails before the printed-state updates finish. Other scheduled and
-manual batch runs can overlap, including while earlier batch events or
-background actions remain unfinished.
+`broker.batch_actions.item.run.post`. Scheduled and manual batch runs can overlap,
+including while earlier batch events or background actions remain unfinished.
 Archive operations use database locking and atomic checks for each resource.
 
 The legacy `archive` binary, `POST /archive_ill_transactions`, `call_archive.sh`,
