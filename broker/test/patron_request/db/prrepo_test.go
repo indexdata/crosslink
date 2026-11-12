@@ -1211,38 +1211,3 @@ func TestGetTemplateNotificationsKeepsNotesBehindManyReasonOnlyRows(t *testing.T
 	require.NoError(t, err)
 	assert.Equal(t, int64(2), fullCount)
 }
-
-func TestPatronRequestBibRecordIDPersistence(t *testing.T) {
-	id := uuid.NewString()
-	pr, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
-		ID: id, CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
-		Language: "english", Items: []pr_db.PrItem{},
-		IllRequest:  iso18626.Request{BibliographicInfo: iso18626.BibliographicInfo{Title: "Shared index"}},
-		BibRecordID: pgtype.Text{String: "shared-record", Valid: true},
-	})
-	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, prRepo.DeletePatronRequest(appCtx, id)) })
-	for _, expected := range []pgtype.Text{pr.BibRecordID, {String: "updated-record", Valid: true}, {}} {
-		pr.BibRecordID = expected
-		pr, err = prRepo.UpdatePatronRequest(appCtx, pr_db.UpdatePatronRequestParams(pr))
-		require.NoError(t, err)
-		persisted, err := prRepo.GetPatronRequestById(appCtx, id)
-		require.NoError(t, err)
-		assert.Equal(t, expected, persisted.BibRecordID)
-		view, err := prRepo.GetPatronRequestSearchView(appCtx, id)
-		require.NoError(t, err)
-		assert.Equal(t, expected, view.BibRecordID)
-		query, err := pr_db.ParsePatronRequestsCql(`id = "` + id + `"`)
-		require.NoError(t, err)
-		rows, count, err := prRepo.ListPatronRequestsSearchView(appCtx, pr_db.ListPatronRequestsParams{Limit: 10}, query)
-		require.NoError(t, err)
-		require.EqualValues(t, 1, count)
-		require.Len(t, rows, 1)
-		assert.Equal(t, expected, rows[0].BibRecordID)
-		requests, count, err := prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{Limit: 10}, query)
-		require.NoError(t, err)
-		require.EqualValues(t, 1, count)
-		require.Len(t, requests, 1)
-		assert.Equal(t, expected, requests[0].BibRecordID)
-	}
-}

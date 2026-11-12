@@ -556,20 +556,3 @@ func assertMissingChild(t *testing.T, tx pgx.Tx, table, id string) {
 	err := tx.QueryRow(context.Background(), "SELECT id FROM "+table+" WHERE id=$1", id).Scan(&foundID)
 	assert.ErrorIs(t, err, pgx.ErrNoRows)
 }
-
-func TestImportPatronRequestPersistsBibRecordID(t *testing.T) {
-	prefix := uuid.NewString()
-	bundle := testPatronBundle(prefix, prefix+"-request")
-	for i, expected := range []pgtype.Text{{String: "shared-record", Valid: true}, {String: "updated-record", Valid: true}, {}} {
-		bundle.PatronRequest.BibRecordID = expected
-		policy := importdb.ConflictPolicyUpdate
-		if i == 0 {
-			policy = importdb.ConflictPolicyFail
-		}
-		_, err := importTestRepo.ImportPatronRequest(importTestCtx, bundle, policy)
-		require.NoError(t, err)
-		var actual pgtype.Text
-		require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT bib_record_id FROM patron_request WHERE id=$1", bundle.PatronRequest.ID).Scan(&actual))
-		assert.Equal(t, expected, actual)
-	}
-}

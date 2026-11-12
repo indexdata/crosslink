@@ -16,7 +16,7 @@ func TestSharedIndexRecordIDExchange(t *testing.T) {
 		t.Run(id, func(t *testing.T) {
 			request := iso18626.Request{
 				BibliographicInfo: iso18626.BibliographicInfo{
-					SupplierUniqueRecordId: "local-bib",
+					SupplierUniqueRecordId: id,
 					BibliographicRecordId: []iso18626.BibliographicRecordId{
 						{BibliographicRecordIdentifierCode: iso18626.TypeSchemeValuePair{Text: "OCLC"}, BibliographicRecordIdentifier: "oclc-id"},
 						{BibliographicRecordIdentifierCode: iso18626.TypeSchemeValuePair{Text: "ReShare"}, BibliographicRecordIdentifier: "stale-index-id"},
@@ -26,7 +26,7 @@ func TestSharedIndexRecordIDExchange(t *testing.T) {
 			}
 			sender := PatronRequestMessageSender{eventBus: new(MockEventBus), iso18626Handler: new(MockIso18626Handler)}
 			status, result, err := sender.sendBorrowingRequest(appCtx, "send", pr_db.PatronRequest{
-				ID: "request", RequesterSymbol: getDbText("ISIL:REQ1"), BibRecordID: getDbTextPtr(&id),
+				ID: "request", RequesterSymbol: getDbText("ISIL:REQ1"),
 			}, request)
 			require.NoError(t, err)
 			require.Equal(t, events.EventStatusSuccess, status)
@@ -50,9 +50,7 @@ func TestSharedIndexRecordIDExchange(t *testing.T) {
 			repo := new(MockPrRepo)
 			created, err := CreateLendingRequest(appCtx, repo, pr_db.PatronRequest{ID: "supply", Side: SideLending, IllRequest: *received.Request})
 			require.NoError(t, err)
-			assert.Equal(t, id, created.BibRecordID.String)
-			assert.Equal(t, id != "", created.BibRecordID.Valid)
-			assert.Equal(t, "local-bib", created.IllRequest.BibliographicInfo.SupplierUniqueRecordId)
+			assert.Equal(t, id, BibRecordID(SideLending, created.IllRequest))
 			assert.Equal(t, "local-copy", created.IllRequest.SupplierInfo[0].BibliographicRecordId.BibliographicRecordIdentifier)
 			assert.Equal(t, "stale-index-id", request.BibliographicInfo.BibliographicRecordId[1].BibliographicRecordIdentifier)
 		})
@@ -85,7 +83,7 @@ func TestLendingRequestReShareRecordIDs(t *testing.T) {
 				assert.Empty(t, repo.createdPr.ID)
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, tc.expected, created.BibRecordID.String)
+				assert.Equal(t, tc.expected, BibRecordID(SideLending, created.IllRequest))
 			}
 		})
 	}
