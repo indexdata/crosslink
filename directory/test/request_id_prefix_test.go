@@ -14,7 +14,9 @@ import (
 
 var longestRequestIdPrefix = strings.Repeat("A", 32)
 
-var invalidRequestIdPrefixes = []string{"ABC-", "A B", "A.B", "A_B", "ÅBC", " ABC", longestRequestIdPrefix + "A"}
+const exportPrefixError = "request_id_prefix must be at most 32 ASCII letters and digits after removing punctuation and spaces: "
+
+var invalidRequestIdPrefixes =[]string{"ABC-", "A B", "A.B", "A_B", "ÅBC", " ABC", longestRequestIdPrefix + "A"}
 
 func TestRequestIdPrefixPersistence(t *testing.T) {
 	resetDb()
@@ -143,10 +145,11 @@ func TestDirectoryExportRequestIdPrefix(t *testing.T) {
 		{name: "local", setting: "ABC", local: true, want: "ABC"},
 		{name: "trimmed", setting: "  ABC ", local: true, want: "ABC"},
 		{name: "longest", setting: longestRequestIdPrefix, local: true, want: longestRequestIdPrefix},
-		{name: "too long", setting: longestRequestIdPrefix + "A", local: true, wantError: "request_id_prefix must be at most 32 ASCII letters and digits: " + longestRequestIdPrefix + "A"},
-		{name: "trailing delimiter", setting: "ABC-", local: true, wantError: "request_id_prefix must be at most 32 ASCII letters and digits: ABC-"},
-		{name: "inner space", setting: "A B", local: true, wantError: "request_id_prefix must be at most 32 ASCII letters and digits: A B"},
-		{name: "invalid default value", setting: "  ", fallback: "A.B", local: true, wantError: "request_id_prefix must be at most 32 ASCII letters and digits: A.B"},
+		{name: "too long", setting: longestRequestIdPrefix + "-A", local: true, wantError: exportPrefixError + longestRequestIdPrefix + "-A"},
+		{name: "trailing delimiter removed", setting: "ABC-", local: true, want: "ABC"},
+		{name: "inner punctuation and space removed", setting: "A.B C", local: true, want: "ABC"},
+		{name: "only punctuation", setting: "-", local: true, wantError: exportPrefixError + "-"},
+		{name: "invalid default value", setting: "  ", fallback: "ÅB-", local: true, wantError: exportPrefixError + "ÅB-"},
 		{name: "default value", setting: "  ", fallback: "DEF", local: true, want: "DEF"},
 		{name: "direct branch inherits", setting: "ABC", branch: true},
 		{name: "unset", local: true},

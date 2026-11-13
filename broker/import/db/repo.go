@@ -3,6 +3,8 @@ package importdb
 import (
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/indexdata/crosslink/broker/common"
@@ -150,6 +152,11 @@ func (r *PgImportRepo) ImportPatronRequest(ctx common.ExtendedContext, bundle Pa
 				return fmt.Errorf("insert patron request %q: %w", bundle.PatronRequest.ID, err)
 			}
 		}
+		if bundle.PatronRequest.Side == prservice.SideBorrowing {
+			if err := r.advanceHrid(ctx, tx, bundle.PatronRequest.ID); err != nil {
+				return err
+			}
+		}
 
 		itemIDs := make([]string, 0, len(bundle.Items))
 		for _, item := range bundle.Items {
@@ -192,6 +199,29 @@ func (r *PgImportRepo) ImportPatronRequest(ctx common.ExtendedContext, bundle Pa
 		return nil
 	})
 	return result, err
+}
+
+// hridPattern matches the PREFIX-NUMBER form that get_next_hrid generates.
+var hridPattern = regexp.MustCompile(`^([A-Za-z0-9]+)-([0-9]+)$`)
+
+// advanceHrid keeps generated request IDs from colliding with an imported one.
+// When id has the PREFIX-NUMBER form, the HRID sequence for PREFIX is raised so
+// get_next_hrid only returns numbers above NUMBER. Other IDs are left alone.
+// The sequence is not locked against concurrent get_next_hrid calls, so imports
+// of such IDs should finish before the tenant creates new requests.
+func (r *PgImportRepo) advanceHrid(ctx common.ExtendedContext, tx DBTX, id string) error {
+	match := hridPattern.FindStringSubmatch(id)
+	if match == nil {
+		return nil
+	}
+	used, err := strconv.ParseInt(match[2], 10, 64)
+	if err != nil {
+		return fmt.Errorf("parse HRID number of patron request %q: %w", id, err)
+	}
+	if err := r.queries.AdvanceImportedHrid(ctx, tx, AdvanceImportedHridParams{Prefix: match[1], Used: used}); err != nil {
+		return fmt.Errorf("advance HRID sequence for patron request %q: %w", id, err)
+	}
+	return nil
 }
 
 func createImportedPatronRequestParams(params pr_db.CreatePatronRequestParams) CreateImportedPatronRequestParams {

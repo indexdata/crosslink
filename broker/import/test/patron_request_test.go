@@ -3,6 +3,7 @@ package test
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -572,4 +573,32 @@ func TestImportPatronRequestPersistsBibRecordID(t *testing.T) {
 		require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT bib_record_id FROM patron_request WHERE id=$1", bundle.PatronRequest.ID).Scan(&actual))
 		assert.Equal(t, expected, actual)
 	}
+}
+
+func TestImportBorrowingPatronRequestAdvancesHridSequence(t *testing.T) {
+	hridPrefix := "T" + strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
+	importID := func(id string, lending bool) {
+		t.Helper()
+		prefix := uuid.NewString()
+		bundle := testPatronBundle(prefix, prefix+"-request")
+		if lending {
+			bundle = testLendingPatronBundle(prefix, prefix+"-request", prefix+"-SUP")
+		}
+		bundle.PatronRequest.ID = id
+		_, err := importTestRepo.ImportPatronRequest(importTestCtx, bundle, importdb.ConflictPolicyFail)
+		require.NoError(t, err)
+	}
+	nextHrid := func() string {
+		t.Helper()
+		var hrid string
+		require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT get_next_hrid($1)", hridPrefix).Scan(&hrid))
+		return hrid
+	}
+
+	importID(hridPrefix+"-41", false)
+	assert.Equal(t, strings.ToUpper(hridPrefix)+"-42", nextHrid())
+	importID(hridPrefix+"-10", false)
+	assert.Equal(t, strings.ToUpper(hridPrefix)+"-43", nextHrid(), "a lower imported number does not move the sequence back")
+	importID(hridPrefix+"-500", true)
+	assert.Equal(t, strings.ToUpper(hridPrefix)+"-44", nextHrid(), "lending request IDs are not generated locally")
 }

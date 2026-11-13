@@ -324,7 +324,14 @@ SELECT
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
         FILTER (WHERE st_key = 'default_copyright_type') AS default_copyright_type,
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-        FILTER (WHERE st_key = 'request_id_prefix') AS request_id_prefix,
+        FILTER (WHERE st_key = 'request_id_prefix') AS request_id_prefix_source,
+    -- mod-rs appends the HRID number directly to the prefix, so prefixes often
+    -- end in a separator such as "ALV-". CrossLink adds its own "-" separator,
+    -- so ASCII punctuation and whitespace are dropped: "ALV-" becomes "ALV".
+    regexp_replace(
+        max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+            FILTER (WHERE st_key = 'request_id_prefix'),
+        '[[:punct:][:space:]]', '', 'g') AS request_id_prefix,
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
         FILTER (WHERE st_key = 'last_resort_lenders') AS last_resort_lenders
 FROM app_setting;
@@ -380,10 +387,10 @@ DO $$
 DECLARE
     problem text;
 BEGIN
-    SELECT request_id_prefix INTO problem FROM crosslink_tenant_settings
+    SELECT request_id_prefix_source INTO problem FROM crosslink_tenant_settings
     WHERE request_id_prefix !~ '^[A-Za-z0-9]{1,32}$';
     IF problem IS NOT NULL THEN
-        RAISE EXCEPTION 'request_id_prefix must be at most 32 ASCII letters and digits: %', problem;
+        RAISE EXCEPTION 'request_id_prefix must be at most 32 ASCII letters and digits after removing punctuation and spaces: %', problem;
     END IF;
 END $$;
 
