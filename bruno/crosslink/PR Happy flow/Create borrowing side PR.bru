@@ -22,7 +22,6 @@ auth:basic {
 
 body:json {
   {
-      "bibRecordId": "9a18bd66-8db6-4afd-95e6-157b2d3b6d12",
       "illRequest": {
         "bibliographicInfo": {
           "supplierUniqueRecordId": "return-{{supplierSymbol}}::{{itemId}}",
@@ -45,7 +44,8 @@ script:post-response {
   test("Capture patron request id", () => {
       expect(responseData.id).to.be.a("string").and.not.empty;
       bru.setVar("prId", responseData.id);
-      expect(responseData.bibRecordId).to.equal("9a18bd66-8db6-4afd-95e6-157b2d3b6d12");
+      expect(responseData.bibRecordId).to.equal(responseData.illRequest.bibliographicInfo.supplierUniqueRecordId);
+      bru.setVar("bibRecordId", responseData.bibRecordId);
   });
 }
 
