@@ -89,7 +89,7 @@ func RenderPdfPullSlip(pr pr_db.PatronRequest, notes []pr_db.Notification, condi
 		return nil, fmt.Errorf("barcode: %w", err)
 	}
 
-	doc := document.NewDocument(document.PageSizeA4)
+	doc := document.NewDocument(document.PageSizeLetter)
 
 	data := email.GetPullSlipData(pr, notes, conditions, barcodeData)
 	html, err := email.RenderHtmlTemplate(data, labels, templateBody)
