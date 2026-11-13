@@ -4,18 +4,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	schedapi "github.com/indexdata/crosslink/broker/scheduler/api"
-	sched_db "github.com/indexdata/crosslink/broker/scheduler/db"
-	schedoapi "github.com/indexdata/crosslink/broker/scheduler/oapi"
-	"github.com/indexdata/crosslink/broker/tenant"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgtype"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"sync"
 	"testing"
 	"time"
+
+	schedapi "github.com/indexdata/crosslink/broker/scheduler/api"
+	sched_db "github.com/indexdata/crosslink/broker/scheduler/db"
+	schedoapi "github.com/indexdata/crosslink/broker/scheduler/oapi"
+	"github.com/indexdata/crosslink/broker/tenant"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/events"
@@ -379,9 +380,9 @@ func TestArchiveIllTransactionMigrationRoundTrip(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = pool.Exec(appCtx, `DELETE FROM archived_ill_transactions WHERE ill_transaction->>'id'=$1`, marker)
 	})
-	down, err := os.ReadFile("../../../migrations/078_archive_ill_transactions.down.sql")
+	down, err := os.ReadFile("../../../migrations/079_archive_ill_transactions.down.sql")
 	require.NoError(t, err)
-	up, err := os.ReadFile("../../../migrations/078_archive_ill_transactions.up.sql")
+	up, err := os.ReadFile("../../../migrations/079_archive_ill_transactions.up.sql")
 	require.NoError(t, err)
 	_, err = pool.Exec(appCtx, string(down))
 	require.NoError(t, err)
