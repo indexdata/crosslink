@@ -21,6 +21,8 @@ Content-Type: application/x-ndjson
 
 `conflictPolicy` is optional and defaults to `fail`. Its supported values are `fail`, `skip`, and `update`.
 
+The import endpoint refreshes a 10-minute read deadline before each request-body read and clears it after the read. It clears the write deadline during processing, then sets fresh 10-minute read and write deadlines before the final response (including any unread-body drain by the HTTP server). Progressing imports can run longer than 10 minutes, while stalled network I/O still times out. Client and reverse-proxy timeouts still apply while waiting for the response.
+
 The request body must contain one complete JSON object per line. Blank lines are ignored. Do not wrap the records in a JSON array and do not pretty-print a record across multiple lines.
 
 Each line has this envelope:
@@ -234,4 +236,4 @@ Always inspect the counters and `errors` array instead of treating HTTP 200 as p
 | `413 Request Entity Too Large` | The whole body exceeds 2 GiB or one NDJSON record exceeds 1 MiB |
 | `500 Internal Server Error` | The server could not read the request stream |
 
-The handler sets 10-minute read and write deadlines. A fatal stream error such as an oversized record stops reading the request; records already committed before that error are not rolled back.
+The handler applies the network I/O deadlines described above. A fatal stream error such as an oversized record stops reading the request; records already committed before that error are not rolled back.
