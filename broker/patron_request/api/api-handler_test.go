@@ -2306,36 +2306,91 @@ func TestCreateValidatesPickupBeforePersistence(t *testing.T) {
 	}
 }
 
-func TestPatronRequestBibRecordIDMapping(t *testing.T) {
-	for _, id := range []*string{nil, new("9a18bd66-8db6-4afd-95e6-157b2d3b6d12"), new("36457383"), new("")} {
-		request := proapi.CreatePatronRequest{BibRecordId: id, IllRequest: validIllRequest()}
-		pr := buildDbPatronRequest(&request, nil, pgtype.Timestamp{}, "request-1", request.IllRequest, "", "default")
-		result := toApiPatronRequest(httptest.NewRequest(http.MethodGet, "/patron_requests/request-1", nil), patronRequestSearchViewFromPatronRequest(pr, false))
-		assert.Equal(t, id, result.BibRecordId)
+func TestPatronRequestBibRecordID(t *testing.T) {
+	reShare := []iso18626.BibliographicRecordId{{
+		BibliographicRecordIdentifierCode: iso18626.TypeSchemeValuePair{Text: "ReShare"},
+		BibliographicRecordIdentifier:     "shared-record",
+	}}
+	for _, tc := range []struct {
+		name     string
+		side     pr_db.PatronRequestSide
+		info     iso18626.BibliographicInfo
+		expected *string
+	}{
+		{name: "borrowing uses system ID", side: prservice.SideBorrowing, info: iso18626.BibliographicInfo{SupplierUniqueRecordId: "shared-record", BibliographicRecordId: []iso18626.BibliographicRecordId{{BibliographicRecordIdentifierCode: iso18626.TypeSchemeValuePair{Text: "ReShare"}, BibliographicRecordIdentifier: "other"}}}, expected: new("shared-record")},
+		{name: "borrowing without system ID", side: prservice.SideBorrowing},
+		{name: "lending uses ReShare record ID", side: prservice.SideLending, info: iso18626.BibliographicInfo{SupplierUniqueRecordId: "local-bib", BibliographicRecordId: reShare}, expected: new("shared-record")},
+		{name: "lending without ReShare record ID", side: prservice.SideLending, info: iso18626.BibliographicInfo{SupplierUniqueRecordId: "local-bib"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pr := pr_db.PatronRequest{ID: "request-1", Side: tc.side, BibRecordID: pgtype.Text{String: "stale-column-value", Valid: true}, IllRequest: iso18626.Request{BibliographicInfo: tc.info}}
+			result := toApiPatronRequest(httptest.NewRequest(http.MethodGet, "/patron_requests/request-1", nil), patronRequestSearchViewFromPatronRequest(pr, false))
+			assert.Equal(t, tc.expected, result.BibRecordId)
+		})
 	}
 }
 
-func TestPutPatronRequestBibRecordID(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		supplied *string
-		expected string
-	}{
-		{name: "omitted preserves ID", expected: "original"},
-		{name: "supplied replaces ID", supplied: new("replacement"), expected: "replacement"},
-		{name: "empty clears ID", supplied: new("")},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			repo := &PrRepoUpdateCapture{bibRecordID: pgtype.Text{String: "original", Valid: true}}
-			handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
-			id := "3"
-			body, err := json.Marshal(proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol, IllRequest: validIllRequest(), BibRecordId: tc.supplied})
-			require.NoError(t, err)
-			rr := httptest.NewRecorder()
-			handler.PutPatronRequestsId(rr, httptest.NewRequest(http.MethodPut, "/", bytes.NewReader(body)), id, proapi.PutPatronRequestsIdParams{})
-			require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-			require.NotNil(t, repo.lastUpdateParams)
-			assert.Equal(t, tc.expected, repo.lastUpdateParams.BibRecordID.String)
-		})
+type bibRecordIDRepo struct {
+	PrRepoUpdateCapture
+	createdPr *pr_db.PatronRequest
+}
+
+func (r *bibRecordIDRepo) CreatePatronRequest(ctx common.ExtendedContext, params pr_db.CreatePatronRequestParams) (pr_db.PatronRequest, error) {
+	pr := pr_db.PatronRequest(params)
+	r.createdPr = &pr
+	return pr, nil
+}
+
+func (r *bibRecordIDRepo) GetPatronRequestSearchView(ctx common.ExtendedContext, id string) (pr_db.PatronRequestSearchView, error) {
+	if r.createdPr != nil {
+		return patronRequestSearchViewFromPatronRequest(*r.createdPr, false), nil
+	}
+	return patronRequestSearchViewFromPatronRequest(pr_db.PatronRequest(*r.lastUpdateParams), false), nil
+}
+
+func TestPatronRequestBibRecordIDReadOnly(t *testing.T) {
+	for _, method := range []string{http.MethodPost, http.MethodPut} {
+		for _, source := range []string{"source-record", ""} {
+			for _, supplied := range []string{"omitted", `"override"`, `""`, "null"} {
+				t.Run(method+"/source="+source+"/supplied="+supplied, func(t *testing.T) {
+					repo := &bibRecordIDRepo{PrRepoUpdateCapture: PrRepoUpdateCapture{bibRecordID: pgtype.Text{String: "stale-column-value", Valid: true}}}
+					handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+					request := validIllRequest()
+					request.BibliographicInfo.SupplierUniqueRecordId = source
+					id := "3"
+					body, err := json.Marshal(proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol, IllRequest: request})
+					require.NoError(t, err)
+					var payload map[string]json.RawMessage
+					require.NoError(t, json.Unmarshal(body, &payload))
+					if supplied != "omitted" {
+						payload["bibRecordId"] = json.RawMessage(supplied)
+					}
+					body, err = json.Marshal(payload)
+					require.NoError(t, err)
+					rr := httptest.NewRecorder()
+					req := httptest.NewRequest(method, "/patron_requests/"+id, bytes.NewReader(body))
+					if method == http.MethodPost {
+						handler.PostPatronRequests(rr, req, proapi.PostPatronRequestsParams{})
+						require.Equal(t, http.StatusCreated, rr.Code, rr.Body.String())
+						require.NotNil(t, repo.createdPr)
+						assert.False(t, repo.createdPr.BibRecordID.Valid)
+					} else {
+						handler.PutPatronRequestsId(rr, req, id, proapi.PutPatronRequestsIdParams{})
+						require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+						require.NotNil(t, repo.lastUpdateParams)
+						assert.Equal(t, repo.bibRecordID, repo.lastUpdateParams.BibRecordID)
+					}
+					var response proapi.PatronRequest
+					require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &response))
+					if source == "" {
+						assert.Nil(t, response.BibRecordId)
+						assert.NotContains(t, rr.Body.String(), `"bibRecordId"`)
+					} else {
+						require.NotNil(t, response.BibRecordId)
+						assert.Equal(t, source, *response.BibRecordId)
+					}
+				})
+			}
+		}
 	}
 }

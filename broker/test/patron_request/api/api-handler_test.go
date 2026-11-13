@@ -136,6 +136,8 @@ func TestCrud(t *testing.T) {
 	assert.NoError(t, err, "failed to unmarshal patron request")
 
 	assert.Equal(t, *newPr.Id, foundPr.Id)
+	require.NotNil(t, foundPr.BibRecordId)
+	assert.Equal(t, "WILLSUPPLY_LOANED", *foundPr.BibRecordId)
 	assert.True(t, foundPr.State != "")
 	assert.Equal(t, "default", foundPr.StateModel)
 	assert.Equal(t, proapi.PatronRequestSide(prservice.SideBorrowing), foundPr.Side)
@@ -188,6 +190,8 @@ func TestCrud(t *testing.T) {
 
 	assert.Equal(t, int64(1), foundPrs.About.Count)
 	assert.Equal(t, *newPr.Id, foundPrs.Items[0].Id)
+	require.NotNil(t, foundPrs.Items[0].BibRecordId)
+	assert.Equal(t, "WILLSUPPLY_LOANED", *foundPrs.Items[0].BibRecordId)
 	assert.Nil(t, foundPrs.About.LastLink)
 	assert.NotNil(t, foundPrs.Items[0].NotificationsLink)
 	assert.Equal(t, "/patron_requests/"+*newPr.Id+"/notifications?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPrs.Items[0].NotificationsLink)
@@ -418,6 +422,7 @@ func TestNeedsReviewAndUpdate(t *testing.T) {
 		assert.Equal(t, prservice.ActionOutcomeReview, *foundPr.LastActionOutcome)
 	}
 	assert.True(t, foundPr.NeedsAttention)
+	assert.Nil(t, foundPr.BibRecordId)
 
 	// PUT without SupplierUniqueRecordId: state must remain NEEDS_REVIEW
 	prId := foundPr.Id
@@ -459,6 +464,7 @@ func TestNeedsReviewAndUpdate(t *testing.T) {
 	require.NotNil(t, foundPr.LastActionOutcome)
 	assert.Equal(t, prservice.ActionOutcomeReview, *foundPr.LastActionOutcome)
 	assert.True(t, foundPr.NeedsAttention)
+	assert.Nil(t, foundPr.BibRecordId)
 
 	// PUT with SupplierUniqueRecordId: PUT only persists data, state stays NEEDS_REVIEW
 	updateWithId := proapi.CreatePatronRequest{
@@ -481,9 +487,24 @@ func TestNeedsReviewAndUpdate(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, string(prservice.BorrowerStateNeedsReview), foundPr.State)
 	assert.Equal(t, "default", foundPr.StateModel)
+	require.NotNil(t, foundPr.BibRecordId)
+	assert.Equal(t, "WILLSUPPLY_LOANED", *foundPr.BibRecordId)
 	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
 		assert.Equal(t, "WILLSUPPLY_LOANED", r.BibliographicInfo.SupplierUniqueRecordId)
 	})
+
+	// Clearing the source ID also clears the derived API field after persistence.
+	respBytes = httpRequest(t, "PUT", prPath, updateNoIdBytes, 200)
+	foundPr = proapi.PatronRequest{}
+	require.NoError(t, json.Unmarshal(respBytes, &foundPr))
+	assert.Nil(t, foundPr.BibRecordId)
+	respBytes = httpRequest(t, "GET", prPath+queryParams, nil, 200)
+	require.NoError(t, json.Unmarshal(respBytes, &foundPr))
+	assert.Nil(t, foundPr.BibRecordId)
+	respBytes = httpRequest(t, "PUT", prPath, updateWithIdBytes, 200)
+	require.NoError(t, json.Unmarshal(respBytes, &foundPr))
+	require.NotNil(t, foundPr.BibRecordId)
+	assert.Equal(t, "WILLSUPPLY_LOANED", *foundPr.BibRecordId)
 
 	// Retrying metadata update uses the saved identifier and resumes the pre-send chain.
 	respBytes = httpRequest(t, "POST", prPath+"/action"+queryParams, updateActionBytes, 200)
@@ -501,6 +522,8 @@ func TestNeedsReviewAndUpdate(t *testing.T) {
 	assert.NotEqual(t, string(prservice.BorrowerStateMetadataUpdated), foundPr.State)
 	assert.NotEqual(t, string(prservice.BorrowerStateReadyToSend), foundPr.State)
 	assert.Equal(t, "WILLSUPPLY_LOANED", foundPr.IllRequest.BibliographicInfo.SupplierUniqueRecordId)
+	require.NotNil(t, foundPr.BibRecordId)
+	assert.Equal(t, "WILLSUPPLY_LOANED", *foundPr.BibRecordId)
 }
 
 func TestActionsToCompleteState(t *testing.T) {
