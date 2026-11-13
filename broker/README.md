@@ -190,12 +190,62 @@ survive through unstructured data. Archive owner/resource metadata remains for
 identification, and `anonymization_method` records `operational-allowlist-v1`.
 Import and restoration are not supported.
 
-The legacy `archive` binary, `POST /archive_ill_transactions`, and
-`call_archive.sh` archive transactions only; they do not archive patron
-requests or their related records. Replace any job intended to archive patron
-requests with a batch action and stop calling that endpoint/script for those
-requests. The legacy path remains for transaction-only jobs until the separate
-`archive-ill-transactions` action is implemented.
+## Archiving ILL transactions
+
+Use `archive-ill-transactions` for transactions without a local borrowing PR.
+An owner symbol is required, and candidates are restricted to that exact
+`requester_symbol`. `batchQuery` uses ILL-transaction CQL, not patron-request
+fields. `interval` is measured from `ill_transaction.timestamp`; `anonymize`
+defaults to `false` and uses the same operational allowlist described above.
+
+```json
+{
+  "title": "Archive completed external borrowing transactions",
+  "schedule": "FREQ=DAILY;BYHOUR=3",
+  "actionName": "archive-ill-transactions",
+  "batchQuery": "last_supplier_status==LoanCompleted or last_supplier_status==CopyCompleted or last_supplier_status==Unfilled",
+  "actionParams": {"interval": "720h", "anonymize": false}
+}
+```
+
+Each run archives up to 100 transactions, scanning pages of 100 in stable ID
+order regardless of CQL `sortBy`. Changed or locked transactions, transactions
+with local borrowing PRs, nonterminal related requests, active events, pending
+consumer signals, or pending availability attempts are skipped. Observer-only
+`supplier-added` and `supplier-moved` rota audit signals do not block archival.
+Claiming a signal clears it; consumer handlers are not tracked through completion.
+Related requests are matched by requester symbol and current/previous requester request ID.
+The caller selects the statuses to retain through CQL; age alone does not prove
+that a transaction is finished.
+
+Each atomic archive stores a version-1 `ill-transaction` bundle in
+`archived_resource` containing `illTransaction`, `illTransactionEvents`, and
+`locatedSuppliers`, then removes their live records. Lending PRs and their
+PR-domain events remain live; their transaction references are detached.
+Counts and bounded failure details are recorded in batch-action history.
+
+Creating, updating, enabling, disabling, deleting, or manually running this action
+requires `broker.consortium.all` **in addition to** the normal batch-action
+operation permission. The Tenant abstraction resolves this capability from
+trusted Okapi permissions; trusted master access retains its existing behavior.
+Owner scoping still applies. Reading actions and their history uses existing
+read permissions. Import is available only through trusted master access and
+accepts this action with the same configuration validation.
+
+`POST /batch_actions/{id}/run` (or `/broker/batch_actions/{id}/run`) queues one
+manual run and returns `202`. It preserves the saved schedule and enabled state,
+so a disabled action can be run once without enabling it. Okapi callers need
+`broker.batch_actions.item.run.post`. Scheduled and manual batch runs can overlap,
+including while earlier batch events or background actions remain unfinished.
+Archive operations use database locking and atomic checks for each resource.
+
+The legacy `archive` binary, `POST /archive_ill_transactions`, `call_archive.sh`,
+and their database function have been removed. Replace old jobs with scheduled
+batch actions. Historical rows in `archived_ill_transactions` are preserved;
+new archives use `archived_resource`. Stop legacy jobs and upgrade all broker
+replicas before enabling the new action: migration 078 removes the legacy
+function and adds request/transaction locking used by the new archiver.
+Import and restoration of transaction archives are not supported.
 
 # Compatibility with external peers
 
@@ -316,8 +366,8 @@ Configuration is provided via environment variables:
 |                                  | Request on supplier side Deprecated: use supplier  |                                           |
 |                                  | `illConfig.supplierPatronPattern` .                |                                           |
 | `LANGUAGE`                       | Language parameter used for ts_vector search in DB | `english`                                 |
-| `SCHEDULER_RETRY_DELAY`          | Delay for rescheduling failed scheduled tasks and  | `5m`                                      |
-|                                  | fallback poll interval in `waitUntil`              |                                           |
+| `SCHEDULER_RETRY_DELAY`          | Delay for failed tasks, pull-slip email runs       | `5m`                                      |
+|                                  | waiting for prior work, and fallback polling       |                                           |
 | `SMTP_HOST`                      | SMTP server host for sending emails, if not        | (empty value)                             |
 |                                  | configured all email tasks will fail               |                                           |
 | `SMTP_PORT`                      | SMTP server port                                   | `2525`                                    |
@@ -338,16 +388,13 @@ This prevents a transient catalog failure from being treated as confirmed unavai
 
 # Build
 
-Generate sources and compile the main programs with:
+Generate sources and compile the broker with:
 
 ```
 make
 ```
 
-This will build the following binaries:
-
-* `broker` — the main program for the ILL service
-* `archive` — the legacy utility for archiving old ILL transactions
+This builds `broker`, the main program for the ILL service.
 
 You can also run included tests with:
 

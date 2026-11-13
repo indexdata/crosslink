@@ -598,3 +598,28 @@ func TestTenantRepoError2(t *testing.T) {
 	assert.ErrorIs(t, err, ErrResolutionBackend)
 	assert.ErrorIs(t, err, assert.AnError)
 }
+
+func TestTenantConsortiumCapability(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	resolver := NewResolver().WithTenantToSymbol("ISIL:{tenant}")
+	for _, tc := range []struct {
+		name, permissions string
+		allowed           bool
+	}{
+		{"missing", "", false}, {"malformed", "[", false}, {"wrong type", `"broker.consortium.all"`, false},
+		{"unrelated", `["broker.batch_actions.all"]`, false}, {"exact", `["broker.consortium.all"]`, true},
+		{"prefix", `["broker.consortium.all.extra"]`, false}, {"invalid entry", `["broker.consortium.all",1]`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := &http.Request{URL: &url.URL{Path: "/broker/batch_actions"}, Header: http.Header{}}
+			req.Header.Set(OkapiTenantHeader, "test")
+			req.Header.Set("X-Okapi-Permissions", tc.permissions)
+			resolved := mustResolve(t, resolver, ctx, req, nil)
+			assert.Equal(t, tc.allowed, resolved.CanManageConsortium())
+		})
+	}
+	for _, symbol := range []*string{nil, new(string)} {
+		resolved := mustResolve(t, resolver, ctx, &http.Request{URL: &url.URL{Path: "/batch_actions"}, Header: http.Header{}}, symbol)
+		assert.True(t, resolved.CanManageConsortium())
+	}
+}

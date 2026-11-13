@@ -158,7 +158,7 @@ func (s *SchedulerService) schedulerLoop(ctx common.ExtendedContext) {
 }
 
 // runDueTasks processes all currently claimable tasks.
-// Returns true if at least one task was successfully claimed and dispatched.
+// Returns true if at least one task was dispatched.
 func (s *SchedulerService) runDueTasks(ctx common.ExtendedContext) bool {
 	madeProgress := false
 	for {
@@ -168,9 +168,12 @@ func (s *SchedulerService) runDueTasks(ctx common.ExtendedContext) bool {
 				return txErr
 			}
 
-			// Publish the event. If this fails the transaction rolls back,
-			// the claim is undone, and the task stays 'pending' for the next cycle.
-			_, txErr = s.eventBus.CreateTask(events.DEFAULT_ILL_TRANSACTION_ID, task.EventName, task.ActionData, events.EventDomainScheduler, nil, events.SignalConsumers)
+			if task.EventName == events.EventNameInvokeBatchAction {
+				// Commit the run and next schedule atomically under the task lock.
+				txErr = txRepo.QueueBatchActionRun(ctx, task)
+			} else {
+				_, txErr = s.eventBus.CreateTask(events.DEFAULT_ILL_TRANSACTION_ID, task.EventName, task.ActionData, events.EventDomainScheduler, nil, events.SignalConsumers)
+			}
 			if txErr != nil {
 				return txErr
 			}

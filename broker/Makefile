@@ -70,7 +70,7 @@ IMPORT_OAPI_GEN = import/oapi/import_openapi_gen.go
 
 .PHONY: all docker generate generate-sqlc generate-api generate-commit-id directory-generate check run fmt fmt-check clean clean-build-caches view-coverage deps-update tools-update lint vulncheck check-coverage
 
-all: $(BINARY) archive
+all: $(BINARY)
 
 docker: generate
 	cd .. && $(DOCKER) build -t indexdata/$(MODULE):latest -f ./$(MODULE)/Dockerfile .
@@ -115,9 +115,6 @@ $(COMMIT_ID): $(GIT_COMMIT_DEPS)
 $(BINARY):  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(IMPORT_OAPI_GEN) $(BUILD_GOFILES) $(STATE_MODELS_JSON) ../directory/api.yaml | directory-generate
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
 
-archive:  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(IMPORT_OAPI_GEN) $(BUILD_GOFILES) $(STATE_MODELS_JSON) ../directory/api.yaml | directory-generate
-	$(GO) build -v -o archive ./cmd/archive
-
 check: generate
 	$(GO) test -v -cover -coverpkg=./... -coverprofile=$(COVERAGE) ./...
 
@@ -152,7 +149,7 @@ tools-update:
 	$(GO) mod tidy
 
 clean:
-	rm -f $(BINARY) archive
+	rm -f $(BINARY)
 	rm -f $(COVERAGE)
 	rm -f $(COMMIT_ID)
 	rm -f $(STATE_MODELS_JSON) $(STATE_MODELS_JSON).tmp
