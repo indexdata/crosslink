@@ -39,7 +39,7 @@ script:post-response {
       // for cleanup/diagnostics even if the assertion fails.
       bru.setVar("lendingPrId", lendingPr.id);
       expect(lendingPr.lastActionResult).to.equal("SUCCESS")
-      expect(lendingPr.bibRecordId).to.equal("9a18bd66-8db6-4afd-95e6-157b2d3b6d12");
+      expect(lendingPr.bibRecordId).to.equal(bru.getVar("bibRecordId"));
       const recordIds = lendingPr.illRequest.bibliographicInfo.bibliographicRecordId;
       const sharedRecord = recordIds.find(record => record.bibliographicRecordIdentifierCode["#text"] === "ReShare");
       expect(sharedRecord.bibliographicRecordIdentifier).to.equal(lendingPr.bibRecordId);

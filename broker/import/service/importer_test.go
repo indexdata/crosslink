@@ -1175,7 +1175,7 @@ func TestImportNotificationRejectsLegacyCondition(t *testing.T) {
 	assert.Contains(t, err.Error(), "condition")
 }
 
-func TestImportPatronRequestStoresBibRecordID(t *testing.T) {
+func TestImportPatronRequestRejectsBibRecordID(t *testing.T) {
 	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
 	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "peer-requester"}, {ID: "peer-supplier"}}}
 	importer := newImporter(repo, cache, nil, &recordingStateValidator{terminal: true}, fixedClock)
@@ -1183,6 +1183,6 @@ func TestImportPatronRequestStoresBibRecordID(t *testing.T) {
 		bundle["patronRequest"].(map[string]any)["bibRecordId"] = "shared-record"
 	})
 	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyUpdate, "ISIL:REQ", data)
-	require.NoError(t, err)
-	assert.Equal(t, pgText("shared-record"), repo.patron.PatronRequest.BibRecordID)
+	require.ErrorContains(t, err, "bibRecordId")
+	assert.Empty(t, repo.patron.PatronRequest.ID)
 }

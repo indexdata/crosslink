@@ -4,10 +4,14 @@ import (
 	"encoding/xml"
 	"testing"
 
+	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,7 +20,7 @@ func TestSharedIndexRecordIDExchange(t *testing.T) {
 		t.Run(id, func(t *testing.T) {
 			request := iso18626.Request{
 				BibliographicInfo: iso18626.BibliographicInfo{
-					SupplierUniqueRecordId: "local-bib",
+					SupplierUniqueRecordId: id,
 					BibliographicRecordId: []iso18626.BibliographicRecordId{
 						{BibliographicRecordIdentifierCode: iso18626.TypeSchemeValuePair{Text: "OCLC"}, BibliographicRecordIdentifier: "oclc-id"},
 						{BibliographicRecordIdentifierCode: iso18626.TypeSchemeValuePair{Text: "ReShare"}, BibliographicRecordIdentifier: "stale-index-id"},
@@ -26,11 +30,13 @@ func TestSharedIndexRecordIDExchange(t *testing.T) {
 			}
 			sender := PatronRequestMessageSender{eventBus: new(MockEventBus), iso18626Handler: new(MockIso18626Handler)}
 			status, result, err := sender.sendBorrowingRequest(appCtx, "send", pr_db.PatronRequest{
-				ID: "request", RequesterSymbol: getDbText("ISIL:REQ1"), BibRecordID: getDbTextPtr(&id),
+				ID: "request", RequesterSymbol: getDbText("ISIL:REQ1"),
 			}, request)
 			require.NoError(t, err)
 			require.Equal(t, events.EventStatusSuccess, status)
 			// Exercise the wire format used between brokers and suppliers.
+			// The transaction client substitutes the selected supplier's local ID before delivery.
+			result.OutgoingMessage.Request.BibliographicInfo.SupplierUniqueRecordId = "local-bib"
 			wire, err := xml.Marshal(result.OutgoingMessage)
 			require.NoError(t, err)
 			var received iso18626.ISO18626Message
@@ -50,11 +56,54 @@ func TestSharedIndexRecordIDExchange(t *testing.T) {
 			repo := new(MockPrRepo)
 			created, err := CreateLendingRequest(appCtx, repo, pr_db.PatronRequest{ID: "supply", Side: SideLending, IllRequest: *received.Request})
 			require.NoError(t, err)
-			assert.Equal(t, id, created.BibRecordID.String)
-			assert.Equal(t, id != "", created.BibRecordID.Valid)
+			assert.Equal(t, id, BibRecordID(SideLending, created.IllRequest))
 			assert.Equal(t, "local-bib", created.IllRequest.BibliographicInfo.SupplierUniqueRecordId)
 			assert.Equal(t, "local-copy", created.IllRequest.SupplierInfo[0].BibliographicRecordId.BibliographicRecordIdentifier)
 			assert.Equal(t, "stale-index-id", request.BibliographicInfo.BibliographicRecordId[1].BibliographicRecordIdentifier)
+		})
+	}
+}
+
+func TestBibRecordIDFollowsMetadataUpdate(t *testing.T) {
+	for _, tc := range []struct {
+		name, before, catalogID, expected string
+	}{
+		{name: "fills missing ID", catalogID: "catalog-record", expected: "catalog-record"},
+		{name: "replaces ID", before: "original-record", catalogID: "catalog-record", expected: "catalog-record"},
+		{name: "preserves ID when catalog omits it", before: "original-record", expected: "original-record"},
+		{name: "missing ID stays absent"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mode := dirapi.Auto
+			peer := peerWithMetadataMode(&mode)
+			peer.Vendor = string(dirapi.CrossLink)
+			illRepo := new(IllRepoMock)
+			illRepo.On("GetCachedPeersBySymbols", []string{"ISIL:REQ1"}, mock.Anything).Return([]ill_db.Peer{peer}, "", nil)
+			svc := PatronRequestActionService{
+				illRepo: illRepo,
+				lookupAdapterFactory: lookupFactoryWithAdapter(&catalog.MockLookupAdapter{Metadata: catalog.Metadata{
+					Identifier: tc.catalogID, Title: "Catalog title",
+				}}),
+			}
+			pr := pr_db.PatronRequest{
+				ID: "request", Side: SideBorrowing, RequesterSymbol: getDbText("ISIL:REQ1"),
+				BibRecordID: getDbText("stale-column-value"),
+				IllRequest: iso18626.Request{BibliographicInfo: iso18626.BibliographicInfo{
+					SupplierUniqueRecordId: tc.before, Title: "Original title",
+				}},
+			}
+			assert.Equal(t, tc.before, BibRecordID(pr.Side, pr.IllRequest))
+			updated := svc.updateMetadataBorrowingRequest(appCtx, pr, pr.IllRequest)
+			require.Equal(t, events.EventStatusSuccess, updated.status)
+			assert.Equal(t, tc.expected, BibRecordID(updated.pr.Side, updated.pr.IllRequest))
+			sender := PatronRequestMessageSender{eventBus: new(MockEventBus), iso18626Handler: new(MockIso18626Handler)}
+			status, result, err := sender.sendBorrowingRequest(appCtx, "send", updated.pr, updated.pr.IllRequest)
+			require.NoError(t, err)
+			require.Equal(t, events.EventStatusSuccess, status)
+			id, err := sharedIndexRecordID(result.OutgoingMessage.Request.BibliographicInfo)
+			require.NoError(t, err)
+			assert.Equal(t, tc.expected, id)
+			illRepo.AssertExpectations(t)
 		})
 	}
 }
@@ -85,7 +134,7 @@ func TestLendingRequestReShareRecordIDs(t *testing.T) {
 				assert.Empty(t, repo.createdPr.ID)
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, tc.expected, created.BibRecordID.String)
+				assert.Equal(t, tc.expected, BibRecordID(SideLending, created.IllRequest))
 			}
 		})
 	}
