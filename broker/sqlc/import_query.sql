@@ -16,6 +16,9 @@ WHERE id = sqlc.arg(id)
 ORDER BY id
 FOR UPDATE;
 
+-- name: AdvanceImportedHrid :exec
+SELECT advance_hrid(sqlc.arg(prefix)::text, sqlc.arg(used)::bigint);
+
 -- name: CreateImportedPatronRequest :exec
 INSERT INTO patron_request (
     id, created_at, ill_request, state, side, patron, requester_symbol,

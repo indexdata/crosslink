@@ -11,7 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestExportPreflightRejectsNonAlphanumericHrid(t *testing.T) {
+const hridProblem = " must be ASCII letters and digits, optionally followed by a hyphen and digits"
+
+func TestExportPreflightRejectsInvalidHrid(t *testing.T) {
 	// Execute the actual preflight check without requiring the full legacy schema.
 	source, err := os.ReadFile("../../../migration/export-crosslink-open-patron-requests.sql")
 	require.NoError(t, err)
@@ -32,13 +34,16 @@ func TestExportPreflightRejectsNonAlphanumericHrid(t *testing.T) {
 		{name: "lowercase", side: "borrowing", hrid: pgtype.Text{String: "abc123", Valid: true}},
 		{name: "digits only", side: "borrowing", hrid: pgtype.Text{String: "123", Valid: true}},
 		{name: "missing HRID keeps UUID", side: "borrowing"},
-		{name: "lending is not checked", side: "lending", hrid: pgtype.Text{String: "ABC-1", Valid: true}},
-		{name: "hyphen", side: "borrowing", hrid: pgtype.Text{String: "ABC-1", Valid: true},
-			want: "request pr1: HRID ABC-1 must contain only ASCII letters and digits"},
+		{name: "lending is not checked", side: "lending", hrid: pgtype.Text{String: "AB 1", Valid: true}},
+		{name: "hyphen before number", side: "borrowing", hrid: pgtype.Text{String: "ABC-10008", Valid: true}},
+		{name: "hyphen before letters", side: "borrowing", hrid: pgtype.Text{String: "ABC-X1", Valid: true},
+			want: "request pr1: HRID ABC-X1" + hridProblem},
+		{name: "two hyphens", side: "borrowing", hrid: pgtype.Text{String: "A-B-1", Valid: true},
+			want: "request pr1: HRID A-B-1" + hridProblem},
 		{name: "space", side: "borrowing", hrid: pgtype.Text{String: "AB 1", Valid: true},
-			want: "request pr1: HRID AB 1 must contain only ASCII letters and digits"},
+			want: "request pr1: HRID AB 1" + hridProblem},
 		{name: "non-ASCII", side: "borrowing", hrid: pgtype.Text{String: "ÅB1", Valid: true},
-			want: "request pr1: HRID ÅB1 must contain only ASCII letters and digits"},
+			want: "request pr1: HRID ÅB1" + hridProblem},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()

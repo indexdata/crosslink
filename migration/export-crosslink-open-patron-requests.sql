@@ -74,9 +74,11 @@
 --
 -- The preflight block runs before any NDJSON is emitted and stops the export if
 -- an open request or rota entry has an unmapped state or is missing required
--- import data, or if a borrowing request's HRID is not alphanumeric. Broker
--- generated IDs have the form PREFIX-N, so an alphanumeric HRID cannot collide
--- with one. Borrowing requests without an HRID keep their UUID.
+-- import data, or if a borrowing request's HRID is neither alphanumeric nor
+-- PREFIX-N (as when the mod-rs prefix ends in "-"). Broker generated IDs have
+-- the form PREFIX-N, so an alphanumeric HRID cannot collide with one. For a
+-- PREFIX-N HRID, the broker import raises PREFIX's HRID sequence past N so new
+-- IDs cannot collide either. Borrowing requests without an HRID keep their UUID.
 
 \set ON_ERROR_STOP on
 
@@ -742,10 +744,10 @@ BEGIN
         UNION ALL
 
         SELECT 'request ' || pr_id || ': HRID ' || pr_hrid
-            || ' must contain only ASCII letters and digits'
+            || ' must be ASCII letters and digits, optionally followed by a hyphen and digits'
         FROM crosslink_open_requests
         WHERE import_side = 'borrowing'
-          AND pr_hrid !~ '^[A-Za-z0-9]+$'
+          AND pr_hrid !~ '^[A-Za-z0-9]+(-[0-9]+)?$'
     ) AS validation;
 
     IF problems IS NOT NULL THEN
