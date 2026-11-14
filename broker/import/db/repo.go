@@ -214,9 +214,8 @@ var (
 // like a Directory requestIdPrefix, or equal the value of requesterSymbol, which
 // RequestIdPrefix falls back to and which may contain hyphens ("US-RS1-1001").
 // Other IDs, including UUIDs whose last group is all digits, are left alone.
-// advance_hrid serializes concurrent advances of one sequence until commit, but
-// get_next_hrid does not take that lock, so imports of such IDs should finish
-// before the tenant creates new requests.
+// advance_hrid locks the sequence against other advances and get_next_hrid
+// until commit, so imports may run while the tenant creates requests.
 func (r *PgImportRepo) advanceHrid(ctx common.ExtendedContext, tx DBTX, id string, requesterSymbol string) error {
 	match := hridPattern.FindStringSubmatch(id)
 	if match == nil {

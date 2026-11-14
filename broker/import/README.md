@@ -114,7 +114,7 @@ Important validation rules include:
 - An `illTransaction`, when supplied, must use the same requester symbol and requester request ID. `locatedSuppliers` require an `illTransaction`.
 - Item, notification, and located-supplier IDs must be unique within their respective arrays. At most one located supplier may have status `selected`.
 
-When a borrowing request's `id` has the `PREFIX-N` form that the broker generates, the import raises the request-ID sequence for `PREFIX` past `N`, so new requests cannot reuse the ID. `PREFIX` must be ASCII letters and digits, or equal the value of `requesterSymbol` (`US-RS1` in `US-RS1-1001`), which the broker uses when Directory sets no `requestIdPrefix`. Other IDs, such as UUIDs, leave the sequences unchanged. Finish such imports before the requester creates new requests.
+When a borrowing request's `id` has the `PREFIX-N` form that the broker generates, the import raises the request-ID sequence for `PREFIX` past `N`, so new requests cannot reuse the ID. `PREFIX` must be ASCII letters and digits, or equal the value of `requesterSymbol` (`US-RS1` in `US-RS1-1001`), which the broker uses when Directory sets no `requestIdPrefix`. Other IDs, such as UUIDs, leave the sequences unchanged. Request creation for that prefix waits while an import is advancing its sequence, so imports and new requests can run at the same time.
 
 Minimal borrowing example:
 

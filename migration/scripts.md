@@ -68,8 +68,8 @@ The patron-request export keeps mod-rs HRIDs as borrowing request IDs. An HRID
 must be ASCII letters and digits, or such a prefix followed by `-` and digits
 (for example `ALV-10008`). When the broker imports a borrowing request with a
 `PREFIX-N` ID, it raises the HRID sequence for `PREFIX` past `N`, so new
-CrossLink IDs cannot repeat a migrated one. Finish the patron-request import
-before the tenant starts creating requests in CrossLink.
+CrossLink IDs cannot repeat a migrated one, even when the tenant creates requests
+during the import.
 See the [ILL configuration field mappings](export-crosslink-directory-field-mapping.md#ill-configuration)
 for source fields, setting and label fallbacks, ordering, and missing-list behavior.
 

@@ -603,40 +603,57 @@ func TestImportBorrowingPatronRequestAdvancesHridSequence(t *testing.T) {
 	assert.Equal(t, strings.ToUpper(hridPrefix)+"-44", nextHrid(), "lending request IDs are not generated locally")
 }
 
-func TestImportHridAdvanceWaitsForConcurrentAdvance(t *testing.T) {
-	ctx := context.Background()
-	hridPrefix := "T" + strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
-	blocker, err := importTestPool.Begin(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = blocker.Rollback(ctx) })
-	// An uncommitted advance to 90 holds the sequence's advisory lock.
-	_, err = blocker.Exec(ctx, "SELECT advance_hrid($1, 90)", hridPrefix)
-	require.NoError(t, err)
+func TestImportHridAdvanceWaitsForConcurrentSequenceUse(t *testing.T) {
+	// Counts waiters on this prefix's sequence lock; a bigint advisory key is
+	// stored as classid (high 32 bits) and objid (low 32 bits).
+	const waitingQuery = `WITH lock_key AS (
+		SELECT hashtextextended('broker:hrid-seq:' || lower($1) || '_hrid_seq', 0) AS k
+	)
+	SELECT count(*) FROM pg_locks, lock_key
+	WHERE locktype = 'advisory' AND NOT granted AND objsubid = 1
+	  AND classid::bigint = (k >> 32) & 4294967295
+	  AND objid::bigint = k & 4294967295`
+	for _, tc := range []struct {
+		name, blockerSQL, wantNext string
+	}{
+		{name: "uncommitted advance", blockerSQL: "SELECT advance_hrid($1, 90)", wantNext: "-91"},
+		{name: "uncommitted request creation", blockerSQL: "SELECT get_next_hrid($1)", wantNext: "-42"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			hridPrefix := "T" + strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
+			blocker, err := importTestPool.Begin(ctx)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = blocker.Rollback(ctx) })
+			_, err = blocker.Exec(ctx, tc.blockerSQL, hridPrefix)
+			require.NoError(t, err)
 
-	prefix := uuid.NewString()
-	bundle := testPatronBundle(prefix, prefix+"-request")
-	bundle.PatronRequest.ID = hridPrefix + "-41"
-	done := make(chan error, 1)
-	go func() {
-		_, err := importTestRepo.ImportPatronRequest(importTestCtx, bundle, importdb.ConflictPolicyFail)
-		done <- err
-	}()
-	require.Eventually(t, func() bool {
-		var waiting int
-		err := importTestPool.QueryRow(ctx, "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND NOT granted").Scan(&waiting)
-		return err == nil && waiting > 0
-	}, 5*time.Second, 10*time.Millisecond, "the import must wait for the advisory lock")
-	select {
-	case err := <-done:
-		t.Fatalf("import finished while another advance held the lock: %v", err)
-	default:
+			prefix := uuid.NewString()
+			bundle := testPatronBundle(prefix, prefix+"-request")
+			bundle.PatronRequest.ID = hridPrefix + "-41"
+			done := make(chan error, 1)
+			go func() {
+				_, err := importTestRepo.ImportPatronRequest(importTestCtx, bundle, importdb.ConflictPolicyFail)
+				done <- err
+			}()
+			require.Eventually(t, func() bool {
+				var waiting int
+				err := importTestPool.QueryRow(ctx, waitingQuery, hridPrefix).Scan(&waiting)
+				return err == nil && waiting > 0
+			}, 5*time.Second, 10*time.Millisecond, "the import must wait for the sequence lock")
+			select {
+			case err := <-done:
+				t.Fatalf("import finished while the sequence lock was held: %v", err)
+			default:
+			}
+
+			require.NoError(t, blocker.Commit(ctx))
+			require.NoError(t, <-done)
+			var hrid string
+			require.NoError(t, importTestPool.QueryRow(ctx, "SELECT get_next_hrid($1)", hridPrefix).Scan(&hrid))
+			assert.Equal(t, strings.ToUpper(hridPrefix)+tc.wantNext, hrid)
+		})
 	}
-
-	require.NoError(t, blocker.Commit(ctx))
-	require.NoError(t, <-done)
-	var hrid string
-	require.NoError(t, importTestPool.QueryRow(ctx, "SELECT get_next_hrid($1)", hridPrefix).Scan(&hrid))
-	assert.Equal(t, strings.ToUpper(hridPrefix)+"-91", hrid, "the later advance to 41 does not lower the sequence")
 }
 
 func TestImportBorrowingPatronRequestAdvancesSymbolHridSequence(t *testing.T) {

@@ -53,6 +53,7 @@ CREATE TABLE archived_resource (
 
 CREATE OR REPLACE FUNCTION get_next_hrid(prefix VARCHAR) RETURNS VARCHAR AS $$
 BEGIN
+    PERFORM pg_advisory_xact_lock_shared(hashtextextended('broker:hrid-seq:' || LOWER(prefix) || '_hrid_seq', 0));
     EXECUTE format('CREATE SEQUENCE IF NOT EXISTS %I START 1', LOWER(prefix) || '_hrid_seq');
     RETURN UPPER(prefix) || '-' || nextval(LOWER(prefix) || '_hrid_seq')::TEXT;
 END;

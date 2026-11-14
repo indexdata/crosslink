@@ -16,7 +16,7 @@ var longestRequestIdPrefix = strings.Repeat("A", 32)
 
 const exportPrefixError = "request_id_prefix must be at most 32 ASCII letters and digits after removing punctuation and spaces: "
 
-var invalidRequestIdPrefixes =[]string{"ABC-", "A B", "A.B", "A_B", "ÅBC", " ABC", longestRequestIdPrefix + "A"}
+var invalidRequestIdPrefixes = []string{"ABC-", "A B", "A.B", "A_B", "ÅBC", " ABC", longestRequestIdPrefix + "A"}
 
 func TestRequestIdPrefixPersistence(t *testing.T) {
 	resetDb()

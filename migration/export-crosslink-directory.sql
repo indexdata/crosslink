@@ -287,6 +287,17 @@ FROM settings;
 
 CREATE TEMP TABLE crosslink_tenant_settings ON COMMIT DROP AS
 SELECT
+    settings.*,
+    -- mod-rs appends the HRID number directly to the prefix, so prefixes often
+    -- end in a separator such as "ALV-". CrossLink adds its own "-" separator,
+    -- so ASCII punctuation and whitespace are dropped: "ALV-" becomes "ALV".
+    -- The C collation keeps the character classes ASCII-only whatever the
+    -- database locale, so non-ASCII characters such as "—" stay and fail
+    -- validation.
+    regexp_replace(settings.request_id_prefix_source COLLATE "C",
+        '[[:punct:][:space:]]', '', 'g') AS request_id_prefix
+FROM (
+SELECT
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
         FILTER (WHERE st_key = 'default_request_symbol') AS default_request_symbol,
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
@@ -325,19 +336,10 @@ SELECT
         FILTER (WHERE st_key = 'default_copyright_type') AS default_copyright_type,
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
         FILTER (WHERE st_key = 'request_id_prefix') AS request_id_prefix_source,
-    -- mod-rs appends the HRID number directly to the prefix, so prefixes often
-    -- end in a separator such as "ALV-". CrossLink adds its own "-" separator,
-    -- so ASCII punctuation and whitespace are dropped: "ALV-" becomes "ALV".
-    -- The C collation keeps the character classes ASCII-only whatever the
-    -- database locale, so non-ASCII characters such as "—" stay and fail
-    -- validation.
-    regexp_replace(
-        (max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-            FILTER (WHERE st_key = 'request_id_prefix')) COLLATE "C",
-        '[[:punct:][:space:]]', '', 'g') AS request_id_prefix,
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
         FILTER (WHERE st_key = 'last_resort_lenders') AS last_resort_lenders
-FROM app_setting;
+FROM app_setting
+) AS settings;
 
 -- ISO18626 CopyrightCompliance codes. mod-rs copyrightType values are these
 -- codes lowercased, so they are matched case-insensitively.
