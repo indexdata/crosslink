@@ -64,6 +64,7 @@ DECLARE
     current_value bigint;
     called boolean;
 BEGIN
+    PERFORM pg_advisory_xact_lock(hashtextextended('broker:hrid-seq:' || seq, 0));
     EXECUTE format('CREATE SEQUENCE IF NOT EXISTS %I START 1', seq);
     EXECUTE format('SELECT last_value, is_called FROM %I', seq) INTO current_value, called;
     IF NOT called OR current_value < used THEN

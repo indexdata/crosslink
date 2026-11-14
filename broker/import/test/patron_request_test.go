@@ -602,3 +602,64 @@ func TestImportBorrowingPatronRequestAdvancesHridSequence(t *testing.T) {
 	importID(hridPrefix+"-500", true)
 	assert.Equal(t, strings.ToUpper(hridPrefix)+"-44", nextHrid(), "lending request IDs are not generated locally")
 }
+
+func TestImportHridAdvanceWaitsForConcurrentAdvance(t *testing.T) {
+	ctx := context.Background()
+	hridPrefix := "T" + strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
+	blocker, err := importTestPool.Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = blocker.Rollback(ctx) })
+	// An uncommitted advance to 90 holds the sequence's advisory lock.
+	_, err = blocker.Exec(ctx, "SELECT advance_hrid($1, 90)", hridPrefix)
+	require.NoError(t, err)
+
+	prefix := uuid.NewString()
+	bundle := testPatronBundle(prefix, prefix+"-request")
+	bundle.PatronRequest.ID = hridPrefix + "-41"
+	done := make(chan error, 1)
+	go func() {
+		_, err := importTestRepo.ImportPatronRequest(importTestCtx, bundle, importdb.ConflictPolicyFail)
+		done <- err
+	}()
+	require.Eventually(t, func() bool {
+		var waiting int
+		err := importTestPool.QueryRow(ctx, "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND NOT granted").Scan(&waiting)
+		return err == nil && waiting > 0
+	}, 5*time.Second, 10*time.Millisecond, "the import must wait for the advisory lock")
+	select {
+	case err := <-done:
+		t.Fatalf("import finished while another advance held the lock: %v", err)
+	default:
+	}
+
+	require.NoError(t, blocker.Commit(ctx))
+	require.NoError(t, <-done)
+	var hrid string
+	require.NoError(t, importTestPool.QueryRow(ctx, "SELECT get_next_hrid($1)", hridPrefix).Scan(&hrid))
+	assert.Equal(t, strings.ToUpper(hridPrefix)+"-91", hrid, "the later advance to 41 does not lower the sequence")
+}
+
+func TestImportBorrowingPatronRequestAdvancesSymbolHridSequence(t *testing.T) {
+	// Without a Directory prefix, IDs use the requester symbol value, which may
+	// contain hyphens.
+	prefix := uuid.NewString()
+	bundle := testPatronBundle(prefix, prefix+"-request")
+	symbolValue := "T-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
+	bundle.PatronRequest.RequesterSymbol = pgtype.Text{String: "ISIL:" + symbolValue, Valid: true}
+	bundle.PatronRequest.ID = symbolValue + "-41"
+	_, err := importTestRepo.ImportPatronRequest(importTestCtx, bundle, importdb.ConflictPolicyFail)
+	require.NoError(t, err)
+	var hrid string
+	require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT get_next_hrid($1)", symbolValue).Scan(&hrid))
+	assert.Equal(t, strings.ToUpper(symbolValue)+"-42", hrid)
+
+	// A UUID whose last group is all digits is not an HRID.
+	uuidPrefix := uuid.NewString()[:23]
+	bundle = testPatronBundle(uuid.NewString(), uuid.NewString()+"-request")
+	bundle.PatronRequest.ID = uuidPrefix + "-" + strings.Repeat("7", 12)
+	_, err = importTestRepo.ImportPatronRequest(importTestCtx, bundle, importdb.ConflictPolicyFail)
+	require.NoError(t, err)
+	var sequences int
+	require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT count(*) FROM pg_class WHERE relkind = 'S' AND relname = $1", uuidPrefix+"_hrid_seq").Scan(&sequences))
+	assert.Zero(t, sequences)
+}
