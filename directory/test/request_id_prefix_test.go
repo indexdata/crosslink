@@ -149,6 +149,7 @@ func TestDirectoryExportRequestIdPrefix(t *testing.T) {
 		{name: "trailing delimiter removed", setting: "ABC-", local: true, want: "ABC"},
 		{name: "inner punctuation and space removed", setting: "A.B C", local: true, want: "ABC"},
 		{name: "only punctuation", setting: "-", local: true, wantError: exportPrefixError + "-"},
+		{name: "non-ASCII punctuation kept", setting: "ABC—", local: true, wantError: exportPrefixError + "ABC—"},
 		{name: "invalid default value", setting: "  ", fallback: "ÅB-", local: true, wantError: exportPrefixError + "ÅB-"},
 		{name: "default value", setting: "  ", fallback: "DEF", local: true, want: "DEF"},
 		{name: "direct branch inherits", setting: "ABC", branch: true},

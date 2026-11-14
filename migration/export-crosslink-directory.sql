@@ -328,9 +328,12 @@ SELECT
     -- mod-rs appends the HRID number directly to the prefix, so prefixes often
     -- end in a separator such as "ALV-". CrossLink adds its own "-" separator,
     -- so ASCII punctuation and whitespace are dropped: "ALV-" becomes "ALV".
+    -- The C collation keeps the character classes ASCII-only whatever the
+    -- database locale, so non-ASCII characters such as "—" stay and fail
+    -- validation.
     regexp_replace(
-        max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
-            FILTER (WHERE st_key = 'request_id_prefix'),
+        (max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
+            FILTER (WHERE st_key = 'request_id_prefix')) COLLATE "C",
         '[[:punct:][:space:]]', '', 'g') AS request_id_prefix,
     max(coalesce(nullif(btrim(st_value), ''), nullif(btrim(st_default_value), '')))
         FILTER (WHERE st_key = 'last_resort_lenders') AS last_resort_lenders
