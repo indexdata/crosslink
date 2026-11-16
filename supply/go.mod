@@ -1,6 +1,6 @@
 module github.com/indexdata/crosslink/supply
 
-go 1.25.0
+go 1.27.0
 
 require (
 	github.com/google/uuid v1.6.0
