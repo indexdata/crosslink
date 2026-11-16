@@ -1,5 +1,6 @@
--- The previous constraint allows only ASCII letters and digits, so the ISIL
--- punctuation is removed first: "US-ABC" becomes "USABC". Every value is at
+-- The previous constraint allows only ASCII letters and digits, so ':' and '-'
+-- are removed first: "US-ABC" becomes "USABC". '/' is never stored, but is
+-- removed too in case the up constraint was loosened. Every value is at
 -- most 16 characters, so the old 32-character limit holds. A value of only
 -- punctuation becomes empty, which means "use the requester symbol".
 UPDATE ill_configs

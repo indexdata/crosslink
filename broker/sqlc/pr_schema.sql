@@ -201,3 +201,8 @@ LEFT JOIN symbol sup_sym ON sup_sym.symbol_value = pr.supplier_symbol
 LEFT JOIN peer sup_peer ON sup_peer.id = sup_sym.peer_id;
 
 CREATE INDEX idx_pr_transaction_archive_link ON patron_request (requester_symbol, requester_req_id, side);
+
+-- Patron requests created by POST /import; see migration 080.
+CREATE TABLE imported_patron_request (
+    id VARCHAR PRIMARY KEY REFERENCES patron_request (id) ON DELETE CASCADE ON UPDATE CASCADE
+);

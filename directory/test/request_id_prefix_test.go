@@ -14,12 +14,12 @@ import (
 
 var longestRequestIdPrefix = strings.Repeat("A", 16)
 
-const exportPrefixError = `request_id_prefix must be at most 16 ASCII letters, digits, "/", ":" or "-" after removing trailing punctuation and spaces: `
+const exportPrefixError = `request_id_prefix must be at most 16 ASCII letters, digits, ":" or "-" after removing "/", trailing punctuation and spaces: `
 
-var invalidRequestIdPrefixes = []string{"A B", "A.B", "A_B", "ÅBC", " ABC", longestRequestIdPrefix + "A"}
+var invalidRequestIdPrefixes = []string{"A B", "A.B", "A_B", "ÅBC", " ABC", "A/B", "/ABC", longestRequestIdPrefix + "A"}
 
 // validIsilRequestIdPrefixes use the ISIL punctuation that prefixes may contain.
-var validIsilRequestIdPrefixes = []string{"US-ABC", "A/B", "A:B", "ABC-"}
+var validIsilRequestIdPrefixes = []string{"US-ABC", "A:B", "ABC-"}
 
 func TestRequestIdPrefixPersistence(t *testing.T) {
 	resetDb()
@@ -169,7 +169,9 @@ func TestDirectoryExportRequestIdPrefix(t *testing.T) {
 		{name: "too long", setting: longestRequestIdPrefix + "-A", local: true, wantError: exportPrefixError + longestRequestIdPrefix + "-A"},
 		{name: "trailing delimiter removed", setting: "ABC-", local: true, want: "ABC"},
 		{name: "trailing delimiters removed", setting: "US-ABC-/", local: true, want: "US-ABC"},
-		{name: "inner ISIL punctuation kept", setting: "US/A:B-C", local: true, want: "US/A:B-C"},
+		{name: "inner ISIL punctuation kept", setting: "US:A-B", local: true, want: "US:A-B"},
+		{name: "slashes removed", setting: "/US/A:B-C/-", local: true, want: "USA:B-C"},
+		{name: "only slashes", setting: "//", local: true, wantError: exportPrefixError + "//"},
 		{name: "inner other punctuation", setting: "A.B", local: true, wantError: exportPrefixError + "A.B"},
 		{name: "inner space", setting: "A B", local: true, wantError: exportPrefixError + "A B"},
 		{name: "only punctuation", setting: "-", local: true, wantError: exportPrefixError + "-"},
@@ -247,7 +249,7 @@ func TestRequestIdPrefixIsilMigrationDown(t *testing.T) {
 	tx, err := dbpool.Begin(ctx)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, tx.Rollback(ctx)) })
-	_, err = tx.Exec(ctx, `INSERT INTO ill_configs (entry, request_id_prefix) VALUES ($1, 'US-A/B:C')
+	_, err = tx.Exec(ctx, `INSERT INTO ill_configs (entry, request_id_prefix) VALUES ($1, 'US-AB:C')
 		ON CONFLICT (entry) DO UPDATE SET request_id_prefix = EXCLUDED.request_id_prefix`, fixtureConsortium)
 	require.NoError(t, err)
 

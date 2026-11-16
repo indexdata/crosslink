@@ -1,3 +1,5 @@
+DROP TABLE imported_patron_request;
+
 DROP FUNCTION advance_hrid;
 
 CREATE OR REPLACE FUNCTION get_next_hrid(prefix text) RETURNS varchar AS $$

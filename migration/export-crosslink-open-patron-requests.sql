@@ -79,7 +79,9 @@
 -- ISIL characters (ASCII letters, digits, "/", ":" and "-"). Broker generated IDs have
 -- the form PREFIX-N, so an alphanumeric HRID cannot collide with one. For a
 -- PREFIX-N HRID whose PREFIX is the requester's request ID prefix, the broker
--- import raises PREFIX's HRID sequence past N so new IDs cannot collide either. Borrowing requests without an HRID keep their UUID.
+-- import raises PREFIX's HRID sequence past N so new IDs cannot collide either.
+-- A PREFIX containing "/" is never a CrossLink prefix, because the directory
+-- export removes "/", so such HRIDs get no reservation and cannot collide. Borrowing requests without an HRID keep their UUID.
 
 \set ON_ERROR_STOP on
 

@@ -104,7 +104,9 @@ autoscaling:
   # targetMemoryUtilizationPercentage: 80
 
 # Size limit of the emptyDir mounted at /tmp. Imports spool the request body
-# there, up to 2Gi per concurrent import.
+# there, up to 2Gi per concurrent import, and the broker does not limit
+# concurrent imports. Set it to at least 2Gi times the imports that may run at
+# once on one replica: exceeding it makes Kubernetes evict the whole pod.
 tmpSizeLimit: 4Gi
 
 # Additional volumes on the output Deployment definition.

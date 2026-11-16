@@ -98,6 +98,31 @@ func TestImportPatronRequestInsertsAndSynchronizesCompleteBundle(t *testing.T) {
 	assert.Equal(t, "updated-patron", patron)
 }
 
+func TestImportPatronRequestUpdateLeavesLiveBorrowingRequests(t *testing.T) {
+	prefix := uuid.NewString()
+	bundle := testPatronBundle(prefix, prefix+"-request")
+	_, err := importTestRepo.ImportPatronRequest(importTestCtx, bundle, importdb.ConflictPolicyFail)
+	require.NoError(t, err)
+	assert.Equal(t, 1, queryCount(t, "SELECT count(*) FROM imported_patron_request WHERE id=$1", bundle.PatronRequest.ID))
+	// The request now looks like one created by the broker, as a live request
+	// that took the ID before the import reserved it would.
+	_, err = importTestPool.Exec(context.Background(), "DELETE FROM imported_patron_request WHERE id=$1", bundle.PatronRequest.ID)
+	require.NoError(t, err)
+
+	bundle.PatronRequest.Patron = pgtype.Text{String: "legacy-patron", Valid: true}
+	_, err = importTestRepo.ImportPatronRequest(importTestCtx, bundle, importdb.ConflictPolicyUpdate)
+	var conflict *importdb.ConflictError
+	require.ErrorAs(t, err, &conflict)
+	assert.Contains(t, conflict.Reason, "not created by an import")
+	var patron pgtype.Text
+	require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT patron FROM patron_request WHERE id=$1", bundle.PatronRequest.ID).Scan(&patron))
+	assert.NotEqual(t, "legacy-patron", patron.String, "the live request keeps its data")
+
+	skipped, err := importTestRepo.ImportPatronRequest(importTestCtx, bundle, importdb.ConflictPolicySkip)
+	require.NoError(t, err)
+	assert.Equal(t, importdb.OutcomeSkipped, skipped.Outcome)
+}
+
 func TestImportPatronRequestUpdatePreservesStoredItemLocations(t *testing.T) {
 	prefix := uuid.NewString()
 	bundle := testPatronBundle(prefix, prefix+"-request")
@@ -660,7 +685,7 @@ func TestReserveHridsSupportsIsilPrefixes(t *testing.T) {
 // symbols it does not know.
 type stubPrefixResolver map[string]string
 
-func (r stubPrefixResolver) RequestIdPrefix(_ common.ExtendedContext, symbol string) (string, error) {
+func (r stubPrefixResolver) LookupRequestIdPrefix(_ common.ExtendedContext, symbol string) (string, error) {
 	prefix, ok := r[symbol]
 	if !ok {
 		return "", errors.New("unknown requester symbol")

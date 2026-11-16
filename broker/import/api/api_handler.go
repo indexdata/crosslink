@@ -30,7 +30,7 @@ var _ importoapi.ServerInterface = (*ApiHandler)(nil)
 
 // NewApiHandler creates the import API handler. prefixResolver resolves the
 // request ID prefixes whose IDs an import reserves.
-func NewApiHandler(repo importdb.ImportRepo, illRepo ill_db.IllRepo, directoryAdapter adapter.DirectoryLookupAdapter, stateModels *prservice.StateModelService, prefixResolver *prservice.PatronRequestActionService) ApiHandler {
+func NewApiHandler(repo importdb.ImportRepo, illRepo ill_db.IllRepo, directoryAdapter adapter.DirectoryLookupAdapter, stateModels *prservice.StateModelService, prefixResolver service.RequestIdPrefixResolver) ApiHandler {
 	return ApiHandler{
 		importer: service.NewImporter(repo, illRepo, directoryAdapter, stateModels, prefixResolver, nil),
 	}

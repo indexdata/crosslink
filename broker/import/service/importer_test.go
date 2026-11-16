@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -886,14 +888,14 @@ func TestImporterRejectsRecordOverSizeLimit(t *testing.T) {
 	assert.Zero(t, repo.templateCalls)
 }
 
-// stubPrefixResolver resolves request ID prefixes from a map, failing for
-// symbols it does not know.
+// stubPrefixResolver resolves request ID prefixes from a map. A symbol it does
+// not know fails as a Directory outage would.
 type stubPrefixResolver map[string]string
 
-func (r stubPrefixResolver) RequestIdPrefix(_ common.ExtendedContext, symbol string) (string, error) {
+func (r stubPrefixResolver) LookupRequestIdPrefix(_ common.ExtendedContext, symbol string) (string, error) {
 	prefix, ok := r[symbol]
 	if !ok {
-		return "", errors.New("malformed symbol")
+		return "", errors.New("directory down")
 	}
 	return prefix, nil
 }
@@ -928,7 +930,7 @@ func requesterRecord(t *testing.T, owner, requester, id, side string) string {
 }
 
 // reservingImporter imports for owners whose branches are ISIL:REQ and
-// ISIL:REQ2, with request ID prefixes ABC and US/A:B-C.
+// ISIL:REQ2, with request ID prefixes ABC and US:A-B-C.
 func reservingImporter(repo *recordingImportRepo) Importer {
 	cache := &recordingPeerCache{
 		peers: []ill_db.Peer{{ID: "requester-peer"}, {ID: "supplier-peer"}},
@@ -938,7 +940,7 @@ func reservingImporter(repo *recordingImportRepo) Importer {
 		},
 	}
 	importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
-	importer.prefixResolver = stubPrefixResolver{"ISIL:REQ": "abc", "ISIL:REQ2": "US/A:B-C"}
+	importer.prefixResolver = stubPrefixResolver{"ISIL:REQ": "abc", "ISIL:REQ2": "US:A-B-C"}
 	return importer
 }
 
@@ -949,7 +951,7 @@ func TestImporterReservesHridsBeforeImporting(t *testing.T) {
 		"\n{bad json}\n" +
 		patronRequestRecord(t, "ISIL:OWNER", "abc-99", "borrowing") +
 		patronRequestRecord(t, "ISIL:REQ", "ABC-50", "borrowing") +
-		requesterRecord(t, "ISIL:REQ", "REQ2", "us/a:b-c-7", "borrowing") +
+		requesterRecord(t, "ISIL:REQ", "REQ2", "us:a-b-c-7", "borrowing") +
 		patronRequestRecord(t, "ISIL:REQ", "OTHER-500", "borrowing") +
 		patronRequestRecord(t, "ISIL:REQ", "ABC-"+strings.Repeat("9", 16), "borrowing") +
 		patronRequestRecord(t, "ISIL:SUP", "ABC-600", "lending") +
@@ -959,7 +961,7 @@ func TestImporterReservesHridsBeforeImporting(t *testing.T) {
 	result, err := importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader(body))
 
 	require.NoError(t, err)
-	require.Equal(t, []map[string]int64{{"ABC": 99, "US/A:B-C": 7}}, repo.reservations,
+	require.Equal(t, []map[string]int64{{"ABC": 99, "US:A-B-C": 7}}, repo.reservations,
 		"the highest number per requester prefix is reserved; other prefixes, long numbers, lending, UUID and malformed records are not")
 	assert.Equal(t, []int{0}, repo.reservedBeforePatronCalls, "reservation precedes every record import")
 	assert.Equal(t, int32(8), result.PatronRequests.Imported, "unreserved IDs still import")
@@ -968,7 +970,7 @@ func TestImporterReservesHridsBeforeImporting(t *testing.T) {
 	assert.Equal(t, int32(3), result.Errors[0].Line, "spooling keeps line numbers")
 }
 
-func TestHridNumber(t *testing.T) {
+func TestSplitHrid(t *testing.T) {
 	for _, tc := range []struct {
 		id, prefix string
 		want       int64
@@ -977,21 +979,91 @@ func TestHridNumber(t *testing.T) {
 		{id: "ABC-41", prefix: "ABC", want: 41, ok: true},
 		{id: "abc-41", prefix: "ABC", want: 41, ok: true},
 		{id: "US-RS1-1001", prefix: "US-RS1", want: 1001, ok: true},
-		{id: "US/A:B-C-7", prefix: "US/A:B-C", want: 7, ok: true},
+		{id: "US:A-B-C-7", prefix: "US:A-B-C", want: 7, ok: true},
+		{id: "A--5", prefix: "A-", want: 5, ok: true},
 		{id: "ABC-" + strings.Repeat("9", 15), prefix: "ABC", want: 999999999999999, ok: true},
-		{id: "ABC-" + strings.Repeat("9", 16), prefix: "ABC"},
-		{id: "ABC-" + strings.Repeat("9", 25), prefix: "ABC"},
-		{id: "ABCD-41", prefix: "ABC"},
-		{id: "XABC-41", prefix: "ABC"},
-		{id: "ABC-4A", prefix: "ABC"},
-		{id: "ABC-", prefix: "ABC"},
-		{id: "ABC", prefix: "ABC"},
-		{id: "-41", prefix: ""},
+		{id: "ABC-" + strings.Repeat("9", 16)},
+		{id: "ABC-" + strings.Repeat("9", 25)},
+		{id: "ABC-4A"},
+		{id: "ABC-"},
+		{id: "ABC"},
+		{id: "-41"},
 	} {
-		used, ok := hridNumber(tc.id, tc.prefix)
+		prefix, used, ok := splitHrid(tc.id)
 		assert.Equal(t, tc.ok, ok, tc.id)
+		assert.Equal(t, tc.prefix, prefix, tc.id)
 		assert.Equal(t, tc.want, used, tc.id)
 	}
+}
+
+// eofProbe reads from Reader and runs atEOF once when it is exhausted.
+type eofProbe struct {
+	io.Reader
+	atEOF func()
+}
+
+func (p *eofProbe) Read(b []byte) (int, error) {
+	n, err := p.Reader.Read(b)
+	if errors.Is(err, io.EOF) && p.atEOF != nil {
+		p.atEOF()
+		p.atEOF = nil
+	}
+	return n, err
+}
+
+func TestImporterLooksUpOwnersAfterReadingBody(t *testing.T) {
+	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	importer := reservingImporter(repo)
+	cache := importer.peerCache.(*recordingPeerCache)
+	callsWhileReading := -1
+	body := patronRequestRecord(t, "ISIL:REQ", "ABC-41", "borrowing") +
+		patronRequestRecord(t, "ISIL:REQ", "ABC-42", "borrowing")
+	input := &eofProbe{Reader: strings.NewReader(body), atEOF: func() { callsWhileReading = cache.calls }}
+
+	_, err := importer.Import(testCtx(), importdb.ConflictPolicyFail, input)
+
+	require.NoError(t, err)
+	assert.Zero(t, callsWhileReading, "reading the body makes no lookups")
+	assert.Equal(t, []map[string]int64{{"ABC": 42}}, repo.reservations)
+}
+
+func TestImporterImportsNothingWhenRequesterLookupFails(t *testing.T) {
+	repo := &recordingImportRepo{}
+	importer := reservingImporter(repo)
+	importer.prefixResolver = stubPrefixResolver{}
+
+	_, err := importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader(patronRequestRecord(t, "ISIL:REQ", "ABC-41", "borrowing")))
+
+	assert.ErrorContains(t, err, "directory down", "a guessed prefix could leave the real prefix's IDs unreserved")
+	assert.Empty(t, repo.reservations)
+	assert.Zero(t, repo.patronCalls)
+}
+
+func TestRequesterPrefixIgnoresMalformedSymbol(t *testing.T) {
+	importer := reservingImporter(&recordingImportRepo{})
+	importer.prefixResolver = stubPrefixResolver{}
+
+	prefix, err := importer.requesterPrefix(testCtx(), map[string]string{}, "MALFORMED")
+
+	require.NoError(t, err, "a malformed symbol is not looked up")
+	assert.Empty(t, prefix)
+}
+
+func TestImporterReportsUnknownOwnerWithoutAbortingReservation(t *testing.T) {
+	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	importer := reservingImporter(repo)
+	importer.peerCache.(*recordingPeerCache).unknown = map[string]bool{"ISIL:MISSING": true}
+	body := patronRequestRecord(t, "ISIL:MISSING", "ABC-90", "borrowing") +
+		patronRequestRecord(t, "ISIL:REQ", "ABC-41", "borrowing")
+
+	result, err := importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader(body))
+
+	require.NoError(t, err)
+	assert.Equal(t, []map[string]int64{{"ABC": 41}}, repo.reservations, "an unknown owner reserves nothing")
+	assert.Equal(t, 1, repo.patronCalls)
+	require.Len(t, result.Errors, 1)
+	assert.Equal(t, int32(1), result.Errors[0].Line)
+	assert.Contains(t, result.Errors[0].Error, "directory entry not found")
 }
 
 func TestImporterDoesNotReserveForeignRequesters(t *testing.T) {
@@ -1004,17 +1076,6 @@ func TestImporterDoesNotReserveForeignRequesters(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Empty(t, repo.reservations, "a requester outside the envelope owner reserves nothing")
-}
-
-func TestImporterDoesNotReserveForMalformedRequesterSymbol(t *testing.T) {
-	repo := &recordingImportRepo{}
-	importer := reservingImporter(repo)
-	importer.prefixResolver = stubPrefixResolver{}
-
-	_, err := importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader(patronRequestRecord(t, "ISIL:REQ", "ABC-41", "borrowing")))
-
-	require.NoError(t, err)
-	assert.Empty(t, repo.reservations)
 }
 
 func TestImporterDoesNotReserveWithoutHrids(t *testing.T) {
@@ -1079,13 +1140,13 @@ func TestImporterLimitsReservedPrefixes(t *testing.T) {
 	importer := reservingImporter(repo)
 	importer.maxHridPrefixes = 2
 	body := patronRequestRecord(t, "ISIL:REQ", "ABC-1", "borrowing") +
-		requesterRecord(t, "ISIL:REQ", "REQ2", "US/A:B-C-1", "borrowing") +
+		requesterRecord(t, "ISIL:REQ", "REQ2", "US:A-B-C-1", "borrowing") +
 		patronRequestRecord(t, "ISIL:REQ", "ABC-2", "borrowing")
 
 	_, err := importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader(body))
 	require.NoError(t, err, "a known requester does not count again")
 
-	importer.prefixResolver = stubPrefixResolver{"ISIL:REQ": "ABC", "ISIL:REQ2": "US/A:B-C", "ISIL:REQ3": "XYZ"}
+	importer.prefixResolver = stubPrefixResolver{"ISIL:REQ": "ABC", "ISIL:REQ2": "US:A-B-C", "ISIL:REQ3": "XYZ"}
 	_, err = importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader(body+requesterRecord(t, "ISIL:REQ3", "REQ3", "XYZ-1", "borrowing")))
 	assert.ErrorIs(t, err, ErrTooManyImportHridPrefixes)
 }
@@ -1285,11 +1346,18 @@ type recordingPeerCache struct {
 	branchSymbols []ill_db.BranchSymbol
 	err           error
 	calls         int
+	// unknown lists symbols Directory has no entry for.
+	unknown map[string]bool
 }
 
 func (c *recordingPeerCache) GetCachedPeersBySymbols(_ common.ExtendedContext, symbols []string, _ adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string, error) {
 	c.calls++
 	c.symbols = append([]string(nil), symbols...)
+	for _, symbol := range symbols {
+		if c.unknown[symbol] {
+			return nil, "test", fmt.Errorf("empty directory response for symbols %v: %w", symbols, ill_db.ErrDirectoryEntryNotFound)
+		}
+	}
 	return c.peers, "test", c.err
 }
 

@@ -291,11 +291,13 @@ SELECT
     -- mod-rs appends the HRID number directly to the prefix, so prefixes often
     -- end in a separator such as "ALV-". CrossLink adds its own "-" separator,
     -- so trailing ASCII punctuation and whitespace are dropped: "ALV-" becomes
-    -- "ALV" and "US-ABC-" becomes "US-ABC". Inner characters are kept and
+    -- "ALV" and "US-ABC-" becomes "US-ABC". CrossLink prefixes cannot contain
+    -- "/", because request IDs are URL path segments, so every "/" is removed
+    -- first: "US/ABC-" becomes "USABC". Other inner characters are kept and
     -- validated. The C collation keeps the character classes ASCII-only
     -- whatever the database locale, so non-ASCII characters such as "—" stay
     -- and fail validation.
-    regexp_replace(settings.request_id_prefix_source COLLATE "C",
+    regexp_replace(replace(settings.request_id_prefix_source COLLATE "C", '/', ''),
         '[[:punct:][:space:]]+$', '') AS request_id_prefix
 FROM (
 SELECT
@@ -388,15 +390,16 @@ BEGIN
     END IF;
 END $$;
 
--- Directory accepts request ID prefixes of up to 16 ISIL characters.
+-- Directory accepts request ID prefixes of up to 16 ASCII letters, digits, ":"
+-- and "-".
 DO $$
 DECLARE
     problem text;
 BEGIN
     SELECT request_id_prefix_source INTO problem FROM crosslink_tenant_settings
-    WHERE request_id_prefix !~ '^[A-Za-z0-9/:-]{1,16}$';
+    WHERE request_id_prefix !~ '^[A-Za-z0-9:-]{1,16}$';
     IF problem IS NOT NULL THEN
-        RAISE EXCEPTION 'request_id_prefix must be at most 16 ASCII letters, digits, "/", ":" or "-" after removing trailing punctuation and spaces: %', problem;
+        RAISE EXCEPTION 'request_id_prefix must be at most 16 ASCII letters, digits, ":" or "-" after removing "/", trailing punctuation and spaces: %', problem;
     END IF;
 END $$;
 

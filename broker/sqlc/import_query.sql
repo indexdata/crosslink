@@ -1,8 +1,13 @@
 -- name: LockImportPatronRequest :one
-SELECT id, requester_req_id, side, requester_symbol, supplier_symbol
-FROM patron_request
-WHERE id = $1
+SELECT pr.id, pr.requester_req_id, pr.side, pr.requester_symbol, pr.supplier_symbol,
+    EXISTS (SELECT 1 FROM imported_patron_request ipr WHERE ipr.id = pr.id) AS imported
+FROM patron_request pr
+WHERE pr.id = $1
 FOR UPDATE;
+
+-- name: MarkPatronRequestImported :exec
+INSERT INTO imported_patron_request (id) VALUES ($1)
+ON CONFLICT (id) DO NOTHING;
 
 -- name: LockImportLendingPatronRequestMatches :many
 SELECT id

@@ -129,6 +129,12 @@ func (r *PgImportRepo) ImportPatronRequest(ctx common.ExtendedContext, bundle Pa
 				}
 				switch existing.Side {
 				case prservice.SideBorrowing:
+					// A live borrowing request can hold an ID that a legacy record
+					// also uses, when it was created before the import reserved
+					// that ID; legacy data must never replace it.
+					if !existing.Imported {
+						return &ConflictError{Resource: "patron request", Identifier: bundle.PatronRequest.ID, Reason: "existing borrowing request was not created by an import"}
+					}
 					if existing.RequesterSymbol != bundle.PatronRequest.RequesterSymbol {
 						return &ConflictError{Resource: "patron request", Identifier: bundle.PatronRequest.ID, Reason: "requester symbol does not match existing aggregate owner"}
 					}
@@ -149,6 +155,9 @@ func (r *PgImportRepo) ImportPatronRequest(ctx common.ExtendedContext, bundle Pa
 		} else {
 			if err := r.queries.CreateImportedPatronRequest(ctx, tx, createImportedPatronRequestParams(bundle.PatronRequest)); err != nil {
 				return fmt.Errorf("insert patron request %q: %w", bundle.PatronRequest.ID, err)
+			}
+			if err := r.queries.MarkPatronRequestImported(ctx, tx, bundle.PatronRequest.ID); err != nil {
+				return fmt.Errorf("mark patron request %q imported: %w", bundle.PatronRequest.ID, err)
 			}
 		}
 		itemIDs := make([]string, 0, len(bundle.Items))

@@ -28,3 +28,12 @@ BEGIN
     RETURN UPPER(prefix) || '-' || nextval(LOWER(prefix) || '_hrid_seq')::TEXT;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Records the patron requests created by POST /import. An import with
+-- conflictPolicy=update may replace only these: a live borrowing request that
+-- took an ID a later import record also uses must not be overwritten with
+-- legacy data. Requests imported before this migration are not recorded, so
+-- update treats them as live.
+CREATE TABLE imported_patron_request (
+    id VARCHAR PRIMARY KEY REFERENCES patron_request (id) ON DELETE CASCADE ON UPDATE CASCADE
+);
