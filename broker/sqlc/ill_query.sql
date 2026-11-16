@@ -257,8 +257,6 @@ DELETE
 FROM branch_symbol
 WHERE peer_id = $1;
 
--- name: CallArchiveIllTransactionByDateAndStatus :one
-SELECT archive_ill_transaction_by_date_and_status($1, $2);
 
 -- name: GetExclusiveBranchSymbolsByPeerId :many
 SELECT sqlc.embed(branch_symbol)
@@ -310,3 +308,14 @@ SELECT * FROM availability_attempt WHERE ill_transaction_id = $1;
 
 -- name: DeleteAvailabilityAttempt :exec
 DELETE FROM availability_attempt WHERE ill_transaction_id = $1;
+
+-- name: ListIllTransactionArchiveCandidates :many
+SELECT id, xmin::text AS version
+FROM ill_transaction
+WHERE id > $2::text
+  AND id <> '00000000-0000-0000-0000-000000000001'
+ORDER BY id
+LIMIT $1;
+
+-- name: ArchiveIllTransaction :one
+SELECT archive_ill_transaction(sqlc.arg(id)::text, sqlc.arg(owner)::text, sqlc.arg(version)::text, sqlc.arg(cutoff)::timestamp, sqlc.arg(anonymize)::boolean)::boolean AS archived;

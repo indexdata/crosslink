@@ -60,7 +60,6 @@ type IllRepo interface {
 	GetBranchSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]BranchSymbol, error)
 	GetExclusiveBranchSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]BranchSymbol, error)
 	DeleteBranchSymbolByPeerId(ctx common.ExtendedContext, peerId string) error
-	CallArchiveIllTransactionByDateAndStatus(ctx common.ExtendedContext, toDate time.Time, statuses []string) error
 }
 
 type PgIllRepo struct {
@@ -641,11 +640,6 @@ func (r *PgIllRepo) mapSymbolsAndFilterStale(ctx common.ExtendedContext, symbols
 		}
 	}
 	return symbolToPeer, symbolsToFetch
-}
-
-func (r *PgIllRepo) CallArchiveIllTransactionByDateAndStatus(ctx common.ExtendedContext, toDate time.Time, statuses []string) error {
-	_, err := r.queries.CallArchiveIllTransactionByDateAndStatus(ctx, r.GetConnOrTx(), CallArchiveIllTransactionByDateAndStatusParams{toDate, statuses})
-	return err
 }
 
 func (r *PgIllRepo) GetExclusiveBranchSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]BranchSymbol, error) {

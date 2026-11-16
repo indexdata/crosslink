@@ -910,36 +910,41 @@ func TestImportBatchActionCreatesInactiveTask(t *testing.T) {
 	assert.True(t, repo.batch.RunAt.Valid)
 }
 
-func TestImportLendingArchiveValidatesAndPersistsParameters(t *testing.T) {
-	for _, tc := range []struct {
-		name   string
-		params map[string]any
-		valid  bool
-	}{
-		{"valid", map[string]any{"interval": "720h", "anonymize": true}, true},
-		{"missing interval", map[string]any{"anonymize": false}, false},
+func TestImportArchiveValidatesAndPersistsParameters(t *testing.T) {
+	for _, action := range []struct{ name, query string }{
+		{"archive-lending-requests", "terminal_state=true"},
+		{"archive-ill-transactions", "last_supplier_status==LoanCompleted"},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			repo := &recordingImportRepo{batchResult: importdb.Result{Outcome: importdb.OutcomeImported}}
-			cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "supplier-peer"}}}
-			importer := newImporter(repo, cache, nil, nil, fixedClock)
-			data, err := json.Marshal(map[string]any{
-				"actionName": "archive-lending-requests", "title": "Archive closed lending requests",
-				"schedule": "FREQ=DAILY;BYHOUR=3", "batchQuery": "terminal_state=true", "actionParams": tc.params,
+		for _, tc := range []struct {
+			name   string
+			params map[string]any
+			valid  bool
+		}{
+			{"valid", map[string]any{"interval": "720h", "anonymize": true}, true},
+			{"missing interval", map[string]any{"anonymize": false}, false},
+		} {
+			t.Run(action.name+"/"+tc.name, func(t *testing.T) {
+				repo := &recordingImportRepo{batchResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+				cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "supplier-peer"}}}
+				importer := newImporter(repo, cache, nil, nil, fixedClock)
+				data, err := json.Marshal(map[string]any{
+					"actionName": action.name, "title": "Archive closed lending requests",
+					"schedule": "FREQ=DAILY;BYHOUR=3", "batchQuery": action.query, "actionParams": tc.params,
+				})
+				require.NoError(t, err)
+				_, _, err = importer.importBatchAction(testCtx(), importdb.ConflictPolicyFail, "ISIL:SUPPLIER", data)
+				if !tc.valid {
+					require.Error(t, err)
+					require.Zero(t, repo.batchCalls)
+					return
+				}
+				require.NoError(t, err)
+				require.Equal(t, "ISIL:SUPPLIER", repo.batch.Owner)
+				require.Equal(t, action.name, repo.batch.ActionData.BatchActionData.ActionName)
+				require.Equal(t, tc.params, repo.batch.ActionData.CustomData)
+				require.Equal(t, sched_db.ScheduledTaskStatusStopped, repo.batch.Status)
 			})
-			require.NoError(t, err)
-			_, _, err = importer.importBatchAction(testCtx(), importdb.ConflictPolicyFail, "ISIL:SUPPLIER", data)
-			if !tc.valid {
-				require.Error(t, err)
-				require.Zero(t, repo.batchCalls)
-				return
-			}
-			require.NoError(t, err)
-			require.Equal(t, "ISIL:SUPPLIER", repo.batch.Owner)
-			require.Equal(t, "archive-lending-requests", repo.batch.ActionData.BatchActionData.ActionName)
-			require.Equal(t, tc.params, repo.batch.ActionData.CustomData)
-			require.Equal(t, sched_db.ScheduledTaskStatusStopped, repo.batch.Status)
-		})
+		}
 	}
 }
 

@@ -34,7 +34,7 @@ func TestEmptyHoldingsFormatPatchPreservesConfig(t *testing.T) {
 		profile  string
 		holdings []byte
 	}{
-		{"generic overrides", "Generic", []byte(`{"marc":{"mainField":"999","itemIdSubField":"i"}}`)},
+		{"generic overrides", "Generic", []byte(`{"marc":{"mainField":"999","itemIdSubfield":"i"}}`)},
 		{"vendor overrides", "Sierra", []byte(`{"opac":{"requireLocalLocation":false,"includeItemId":false}}`)},
 		{"vendor defaults", "Sierra", nil},
 	} {

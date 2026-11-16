@@ -66,11 +66,6 @@ RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
     GOOS=linux \
     go build -o /broker ./cmd/broker
 
-RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
-    --mount=type=cache,sharing=shared,target=/root/.cache/go-build \
-    CGO_ENABLED=1 \
-    GOOS=linux \
-    go build -o /archive ./cmd/archive
 
 # create runtime user
 RUN adduser \
@@ -100,7 +95,6 @@ COPY --from=build /app/broker/deps /
 
 # copy binaries
 COPY --from=build /broker .
-COPY --from=build /archive .
 # copy migrations
 COPY --from=build /app/broker/migrations /migrations
 

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,7 +31,6 @@ var LOCATED_SUPPLIERS_PATH = "/located_suppliers"
 var PEERS_PATH = "/peers"
 var PATRON_REQUESTS_PATH = "/patron_requests"
 var LIMIT_DEFAULT int32 = 10
-var ARCHIVE_PROCESS_STARTED = "Archive process started"
 
 type ApiHandler struct {
 	rotaService    *service.RotaService
@@ -610,22 +608,6 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 		resp.Items = append(resp.Items, toApiLocatedSupplier(r, supplier))
 	}
 	WriteJsonResponse(w, resp)
-}
-
-func (a *ApiHandler) PostArchiveIllTransactions(w http.ResponseWriter, r *http.Request, params oapi.PostArchiveIllTransactionsParams) {
-	logParams := map[string]string{"method": "PostArchiveIllTransactions", "ArchiveDelay": params.ArchiveDelay, "ArchiveStatus": params.ArchiveStatus}
-	// a background process so use background context instead of request context to avoid cancellation when request is finished
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
-		Other: logParams,
-	})
-	err := service.Archive(ctx, a.illRepo, params.ArchiveStatus, params.ArchiveDelay, true)
-	if err != nil {
-		AddBadRequestError(ctx, w, err)
-		return
-	}
-	WriteJsonResponse(w, oapi.StatusMessage{
-		Status: ARCHIVE_PROCESS_STARTED,
-	})
 }
 
 func ToApiEvent(event events.Event, illId string, prId *string) oapi.Event {

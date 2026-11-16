@@ -310,7 +310,8 @@
           "pathPattern": "/broker/batch_actions",
           "permissionsRequired": [
             "broker.batch_actions.post"
-          ]
+          ],
+          "permissionsDesired": ["broker.consortium.all"]
         },
         {
           "methods": [
@@ -337,7 +338,8 @@
           "pathPattern": "/broker/batch_actions/{id}",
           "permissionsRequired": [
             "broker.batch_actions.item.put"
-          ]
+          ],
+          "permissionsDesired": ["broker.consortium.all"]
         },
         {
           "methods": [
@@ -346,7 +348,8 @@
           "pathPattern": "/broker/batch_actions/{id}",
           "permissionsRequired": [
             "broker.batch_actions.item.delete"
-          ]
+          ],
+          "permissionsDesired": ["broker.consortium.all"]
         },
         {
           "methods": [
@@ -355,7 +358,14 @@
           "pathPattern": "/broker/batch_actions/{id}/enable",
           "permissionsRequired": [
             "broker.batch_actions.item.enable.post"
-          ]
+          ],
+          "permissionsDesired": ["broker.consortium.all"]
+        },
+        {
+          "methods": ["POST"],
+          "pathPattern": "/broker/batch_actions/{id}/run",
+          "permissionsRequired": ["broker.batch_actions.item.run.post"],
+          "permissionsDesired": ["broker.consortium.all"]
         },
         {
           "methods": [
@@ -364,7 +374,8 @@
           "pathPattern": "/broker/batch_actions/{id}/disable",
           "permissionsRequired": [
             "broker.batch_actions.item.disable.post"
-          ]
+          ],
+          "permissionsDesired": ["broker.consortium.all"]
         },
         {
           "methods": [
@@ -435,6 +446,16 @@
   ],
   "requires": [],
   "permissionSets": [
+    {
+      "permissionName": "broker.consortium.all",
+      "displayName": "CrossLink: Manage consortium",
+      "description": "Manage consortium-level broker operations"
+    },
+    {
+      "permissionName": "broker.batch_actions.item.run.post",
+      "displayName": "CrossLink: Run batch action",
+      "description": "Manually run a batch action"
+    },
     {
       "description": "Add and reorder untried suppliers for requesting tenants",
       "displayName": "Broker - edit supplier rota",
@@ -710,7 +731,8 @@
         "broker.batch_actions.item.put",
         "broker.batch_actions.item.delete",
         "broker.batch_actions.item.enable.post",
-        "broker.batch_actions.item.disable.post"
+        "broker.batch_actions.item.disable.post",
+        "broker.batch_actions.item.run.post"
       ]
     },
     {
@@ -837,6 +859,7 @@
         "broker.batch_actions.item.delete",
         "broker.batch_actions.item.enable.post",
         "broker.batch_actions.item.disable.post",
+        "broker.batch_actions.item.run.post",
         "broker.templates.get",
         "broker.templates.post",
         "broker.templates.item.get",

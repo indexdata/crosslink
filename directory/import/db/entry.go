@@ -465,9 +465,9 @@ func replaceCatalogConfig(ctx context.Context, queries *db.Queries, entryID uuid
 		}
 		if config.HoldingsFormat.Marc != nil {
 			marc := config.HoldingsFormat.Marc
-			params.HoldingsMarcCallNumberSubfield, params.HoldingsMarcItemIDSubfield = marc.CallNumberSubField, marc.ItemIDSubField
-			params.HoldingsMarcLocationSubfield, params.HoldingsMarcMainField = marc.LocationSubField, marc.MainField
-			params.HoldingsMarcRestrictedSubfield, params.HoldingsMarcShelvingLocationSubfield = marc.RestrictedSubField, marc.ShelvingLocationSubField
+			params.HoldingsMarcCallNumberSubfield, params.HoldingsMarcItemIDSubfield = marc.CallNumberSubfield, marc.ItemIDSubfield
+			params.HoldingsMarcLocationSubfield, params.HoldingsMarcMainField = marc.LocationSubfield, marc.MainField
+			params.HoldingsMarcRestrictedSubfield, params.HoldingsMarcShelvingLocationSubfield = marc.RestrictedSubfield, marc.ShelvingLocationSubfield
 		}
 		params.HoldingsMarc21plus1Enabled = boolPointer(config.HoldingsFormat.Marc21Plus1 != nil)
 		params.HoldingsOpacEnabled = boolPointer(config.HoldingsFormat.OPAC != nil)
@@ -509,6 +509,7 @@ func replaceILLConfig(ctx context.Context, queries *db.Queries, entryID uuid.UUI
 		IncludeRequestingAgencyInfo: config.IncludeRequestingAgencyInfo, IncludeSupplierInfo: config.IncludeSupplierInfo,
 		IncludeReturnInfo: config.IncludeReturnInfo, IncludeVendorNote: config.IncludeVendorNote, UseOfferedCosts: config.UseOfferedCosts,
 		NoteFieldSeparator: config.NoteFieldSeparator, SupplierPatronPattern: config.SupplierPatronPattern,
+		RequestIDPrefix:           config.RequestIdPrefix,
 		DuplicateCheckWindowHours: config.DuplicateCheckWindowHours,
 		DefaultLoanPeriod:         config.DefaultLoanPeriod,
 		MaxRequestsPerPatron:      config.MaxRequestsPerPatron,

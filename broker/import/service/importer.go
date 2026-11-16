@@ -537,7 +537,7 @@ func (i Importer) importBatchAction(ctx common.ExtendedContext, policy importdb.
 	if create.ActionParams != nil {
 		paramsMap = *create.ActionParams
 	}
-	if err := schedservice.ValidatePatronRequestArchiveConfig(string(create.ActionName), owner, create.BatchQuery, paramsMap); err != nil {
+	if err := schedservice.ValidateArchiveConfig(string(create.ActionName), owner, create.BatchQuery, paramsMap); err != nil {
 		return create.Title, importdb.Result{}, err
 	}
 	now := pgtype.Timestamptz{Time: i.clock(), Valid: true}

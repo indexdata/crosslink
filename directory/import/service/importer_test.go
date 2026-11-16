@@ -474,7 +474,7 @@ func composedSchemaProperty(schema *openapi3.Schema, propertyName string) *opena
 }
 
 func TestImportValidatesHostSettings(t *testing.T) {
-	const catalogJSON = `{"profile":"Koha","metadataUpdateMode":null,"sru":null,"zoom":null,"queryConfig":null,"metadataFormat":null,"holdingsFormat":{"marc":{"availability":[{"subField":"7","operator":"equals","value":"0"}],"mainField":null,"callNumberSubField":null,"itemIdSubField":null,"locationSubField":null,"restrictedSubField":null,"shelvingLocationSubField":null},"opac":null,"reservoir":null,"marc21plus1":null}}`
+	const catalogJSON = `{"profile":"Koha","metadataUpdateMode":null,"sru":null,"zoom":null,"queryConfig":null,"metadataFormat":null,"holdingsFormat":{"marc":{"availability":[{"subfield":"7","operator":"equals","value":"0"}],"mainField":null,"callNumberSubfield":null,"itemIdSubfield":null,"locationSubfield":null,"restrictedSubfield":null,"shelvingLocationSubfield":null},"opac":null,"reservoir":null,"marc21plus1":null}}`
 	const opacJSON = `{"availabilityRule":"publicNote","availablePublicNotes":[],"requireLocalLocation":false,"shelvingLocationSource":"localLocation","includeItemId":false,"includeItemLoanPolicy":false,"includeTemporaryLocation":true,"allCirculations":true}`
 	for _, tc := range []struct {
 		name string
@@ -506,7 +506,7 @@ func TestImportValidatesHostSettings(t *testing.T) {
 			c["holdingsFormat"].(map[string]any)["marc"].(map[string]any)["availability"].([]any)[0].(map[string]any)["operator"] = "bad"
 		}},
 		{"empty predicate subfield", func(l, c map[string]any) {
-			c["holdingsFormat"].(map[string]any)["marc"].(map[string]any)["availability"].([]any)[0].(map[string]any)["subField"] = ""
+			c["holdingsFormat"].(map[string]any)["marc"].(map[string]any)["availability"].([]any)[0].(map[string]any)["subfield"] = ""
 		}},
 		{"invalid OPAC rule", func(l, c map[string]any) {
 			var opac map[string]any

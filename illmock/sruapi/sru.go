@@ -129,6 +129,32 @@ func mockDigits(source []byte) string {
 }
 
 func (api *SruApi) getMarcXmlRecord(id string) (*marcxml.Record, error) {
+	var holdings []marcxml.DataFieldType
+	for _, localId := range strings.Split(id, ";") {
+		if localId == "record-error" {
+			return nil, fmt.Errorf("mock record error")
+		}
+		if !strings.HasPrefix(localId, "return-") {
+			continue
+		}
+		val := strings.SplitN(strings.TrimPrefix(localId, "return-"), "::", 2)
+		if val[0] == "" {
+			return nil, fmt.Errorf("invalid return- value")
+		}
+		sValue, lValue := val[0], val[0]
+		if len(val) == 2 {
+			lValue = val[1]
+		}
+		holdings = append(holdings, marcxml.DataFieldType{Tag: "999", Ind1: "1", Ind2: "1",
+			Subfield: []marcxml.SubfieldatafieldType{
+				{Code: "l", Text: marcxml.SubfieldDataType(lValue)},
+				{Code: "s", Text: marcxml.SubfieldDataType(sValue)},
+			}})
+	}
+	if len(holdings) == 0 {
+		return nil, nil
+	}
+
 	var record marcxml.Record
 	metadata := mockMetadataForId(id)
 
@@ -147,49 +173,14 @@ func (api *SruApi) getMarcXmlRecord(id string) (*marcxml.Record, error) {
 		marcxml.DataFieldType{Tag: "022", Subfield: []marcxml.SubfieldatafieldType{{Code: "a", Text: marcxml.SubfieldDataType(metadata.issn)}}},
 		marcxml.DataFieldType{Tag: "250", Subfield: []marcxml.SubfieldatafieldType{{Code: "a", Text: "Mock edition"}}},
 	)
-	localIds := strings.Split(id, ";")
-	i := 1
-	for _, localId := range localIds {
-		if localId == "not-found" || localId == "" {
-			continue
-		}
-		if localId == "record-error" {
-			return nil, fmt.Errorf("mock record error")
-		}
-		var lValue string
-		var sValue string
-		if strings.HasPrefix(id, "return-") {
-			val := strings.SplitN(strings.TrimPrefix(localId, "return-"), "::", 2)
-			if len(val) < 1 || len(val[0]) < 1 {
-				return nil, fmt.Errorf("invalid return- value")
-			}
-			if len(val) == 1 {
-				sValue = val[0]
-				lValue = val[0]
-			}
-			if len(val) == 2 {
-				sValue = val[0]
-				lValue = val[1]
-			}
-		} else {
-			lValue = localId
-			sValue = "ISIL:SUP" + strconv.Itoa(i)
-		}
-		subFields := []marcxml.SubfieldatafieldType{
-			marcxml.SubfieldatafieldType{Code: "l", Text: marcxml.SubfieldDataType(lValue)},
-			marcxml.SubfieldatafieldType{Code: "s", Text: marcxml.SubfieldDataType(sValue)},
-		}
-		record.Datafield = append(record.Datafield, marcxml.DataFieldType{Tag: "999", Ind1: "1", Ind2: "1",
-			Subfield: subFields})
-		i++
-	}
+	record.Datafield = append(record.Datafield, holdings...)
 
 	return &record, nil
 }
 
 func (api *SruApi) getMarcXmlBuf(id string) ([]byte, error) {
 	buf, err := api.getMarcXmlRecord(id)
-	if err != nil {
+	if err != nil || buf == nil {
 		return nil, err
 	}
 	return xml.MarshalIndent(buf, "  ", "  ")
@@ -207,12 +198,15 @@ func (api *SruApi) getSurrogateDiagnostic(pos uint64, errorId string, message st
 	}
 }
 
-func (api *SruApi) getMockRecords(id string, pos uint64, maximumRecords uint64) *sru.RecordsDefinition {
+func (api *SruApi) getMockRecords(id string, pos uint64, maximumRecords uint64) (*sru.RecordsDefinition, uint64) {
 	records := sru.RecordsDefinition{}
-	if pos != 1 || maximumRecords == 0 {
-		return &records
-	}
 	buf, err := api.getMarcXmlBuf(id)
+	if err == nil && len(buf) == 0 {
+		return &records, 0
+	}
+	if pos != 1 || maximumRecords == 0 {
+		return &records, 1
+	}
 	var record *sru.RecordDefinition
 	if err == nil {
 		v := sru.RecordXMLEscapingDefinitionXml
@@ -228,7 +222,7 @@ func (api *SruApi) getMockRecords(id string, pos uint64, maximumRecords uint64) 
 	if record != nil {
 		records.Record = append(records.Record, *record)
 	}
-	return &records
+	return &records, 1
 }
 
 func (api *SruApi) searchRetrieve(w http.ResponseWriter, retVersion sru.VersionDefinition, diagnostics []diag.Diagnostic, parms url.Values, query string) {
@@ -256,8 +250,7 @@ func (api *SruApi) searchRetrieve(w http.ResponseWriter, retVersion sru.VersionD
 	if qDiag != nil {
 		diagnostics = append(diagnostics, *qDiag)
 	} else {
-		records = api.getMockRecords(id, startRecord, maximumRecords)
-		NumberOfRecords = 1
+		records, NumberOfRecords = api.getMockRecords(id, startRecord, maximumRecords)
 	}
 	sr := sru.SearchRetrieveResponse{
 		SearchRetrieveResponseDefinition: sru.SearchRetrieveResponseDefinition{

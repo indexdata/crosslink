@@ -294,8 +294,8 @@ func TestImportHostSettingsRoundTrip(t *testing.T) {
 	for _, tc := range []struct {
 		name, holdings, expected string
 	}{
-		{"MARC predicates", `{"marc":{"mainField":"999","callNumberSubField":null,"itemIdSubField":null,"locationSubField":null,"restrictedSubField":null,"shelvingLocationSubField":null,"availability":[{"subField":"7","operator":"equals","value":"0"},{"subField":"q","operator":"absent","value":null}]},"opac":null,"reservoir":null,"marc21plus1":null}`, `{"marc":{"mainField":"999","availability":[{"subField":"7","operator":"equals","value":"0"},{"subField":"q","operator":"absent"}]}}`},
-		{"empty MARC predicates", `{"marc":{"mainField":null,"callNumberSubField":null,"itemIdSubField":null,"locationSubField":null,"restrictedSubField":null,"shelvingLocationSubField":null,"availability":[]},"opac":null,"reservoir":null,"marc21plus1":null}`, `{"marc":{"availability":[]}}`},
+		{"MARC predicates", `{"marc":{"mainField":"999","callNumberSubfield":null,"itemIdSubfield":null,"locationSubfield":null,"restrictedSubfield":null,"shelvingLocationSubfield":null,"availability":[{"subfield":"7","operator":"equals","value":"0"},{"subfield":"q","operator":"absent","value":null}]},"opac":null,"reservoir":null,"marc21plus1":null}`, `{"marc":{"mainField":"999","availability":[{"subfield":"7","operator":"equals","value":"0"},{"subfield":"q","operator":"absent"}]}}`},
+		{"empty MARC predicates", `{"marc":{"mainField":null,"callNumberSubfield":null,"itemIdSubfield":null,"locationSubfield":null,"restrictedSubfield":null,"shelvingLocationSubfield":null,"availability":[]},"opac":null,"reservoir":null,"marc21plus1":null}`, `{"marc":{"availability":[]}}`},
 		{"OPAC overrides", `{"marc":null,"opac":{"availabilityRule":"publicNote","availablePublicNotes":["AVAILABLE"],"requireLocalLocation":false,"shelvingLocationSource":"localLocation","includeItemId":false,"includeItemLoanPolicy":false,"includeTemporaryLocation":true,"allCirculations":true},"reservoir":null,"marc21plus1":null}`, `{"opac":{"availabilityRule":"publicNote","availablePublicNotes":["AVAILABLE"],"requireLocalLocation":false,"shelvingLocationSource":"localLocation","includeItemId":false,"includeItemLoanPolicy":false,"includeTemporaryLocation":true,"allCirculations":true}}`},
 		{"empty OPAC notes", `{"marc":null,"opac":{"availabilityRule":null,"availablePublicNotes":[],"requireLocalLocation":null,"shelvingLocationSource":null,"includeItemId":null,"includeItemLoanPolicy":null,"includeTemporaryLocation":null,"allCirculations":null},"reservoir":null,"marc21plus1":null}`, `{"opac":{"availablePublicNotes":[]}}`},
 		{"deprecated circulation limit false", `{"marc":null,"opac":{"availabilityRule":null,"availablePublicNotes":[],"requireLocalLocation":null,"shelvingLocationSource":null,"includeItemId":null,"includeItemLoanPolicy":null,"includeTemporaryLocation":null,"allCirculations":false},"reservoir":null,"marc21plus1":null}`, `{"opac":{"availablePublicNotes":[],"allCirculations":false}}`},
@@ -386,12 +386,12 @@ func TestImportAdditionalProfileOptions(t *testing.T) {
 	require.Equal(t, map[string]any{"identifierNormalization": "stripLeadingLetters", "identifierPrefix": "^C"}, saved["queryConfig"])
 	require.Equal(t, []any{"shelvingData", "temporaryLocation"}, saved["holdingsFormat"].(map[string]any)["opac"].(map[string]any)["itemLoanPolicySources"])
 	var holdings map[string]any
-	require.NoError(t, json.Unmarshal([]byte(`{"marc":{"mainField":"926","locationSubField":"a","shelvingLocationSubField":"b","callNumberSubField":"c","itemIdSubField":null,"restrictedSubField":null,"itemLoanPolicySubField":"d","availability":[{"subField":"b","operator":"present","value":null},{"subField":"b","operator":"notIn","values":["MISSING"],"value":null}]},"opac":null,"reservoir":null,"marc21plus1":null}`), &holdings))
+	require.NoError(t, json.Unmarshal([]byte(`{"marc":{"mainField":"926","locationSubfield":"a","shelvingLocationSubfield":"b","callNumberSubfield":"c","itemIdSubfield":null,"restrictedSubfield":null,"itemLoanPolicySubfield":"d","availability":[{"subfield":"b","operator":"present","value":null},{"subfield":"b","operator":"notIn","values":["MISSING"],"value":null}]},"opac":null,"reservoir":null,"marc21plus1":null}`), &holdings))
 	catalog["holdingsFormat"] = holdings
 	response, result = importRequest(t, []any{record}, "update", standardHeaders)
 	require.Equal(t, http.StatusOK, response.StatusCode)
 	require.Empty(t, result.Errors)
-	require.Equal(t, "d", get()["holdingsFormat"].(map[string]any)["marc"].(map[string]any)["itemLoanPolicySubField"])
+	require.Equal(t, "d", get()["holdingsFormat"].(map[string]any)["marc"].(map[string]any)["itemLoanPolicySubfield"])
 	// Omission of additive fields in complete imports clears stored overrides.
 	q := catalog["queryConfig"].(map[string]any)
 	delete(q, "identifierNormalization")

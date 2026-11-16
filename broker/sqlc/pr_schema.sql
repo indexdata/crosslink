@@ -183,3 +183,5 @@ LEFT JOIN symbol req_sym ON req_sym.symbol_value = pr.requester_symbol
 LEFT JOIN peer req_peer ON req_peer.id = req_sym.peer_id
 LEFT JOIN symbol sup_sym ON sup_sym.symbol_value = pr.supplier_symbol
 LEFT JOIN peer sup_peer ON sup_peer.id = sup_sym.peer_id;
+
+CREATE INDEX idx_pr_transaction_archive_link ON patron_request (requester_symbol, requester_req_id, side);

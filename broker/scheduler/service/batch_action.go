@@ -26,6 +26,7 @@ type BatchActionService struct {
 	eventBus             events.EventBus
 	prRepo               pr_db.PrRepo
 	prArchiveRepo        PatronRequestArchiveRepo
+	illArchiveRepo       IllTransactionArchiveRepo
 	schedRepo            sched_db.SchedRepo
 	emailSenderService   *EmailSenderService
 	actionMappingService prservice.ActionMappingService
@@ -75,6 +76,8 @@ func (s *BatchActionService) batchAction(ctx common.ExtendedContext, event event
 		action = s.ArchiveBorrowingRequests
 	case string(schedoapi.ArchiveLendingRequests):
 		action = s.ArchiveLendingRequests
+	case string(schedoapi.ArchiveIllTransactions):
+		action = s.ArchiveIllTransactions
 	default:
 		ctx.Logger().Error("unknown batch action",
 			"actionName", event.EventData.BatchActionData.ActionName,
@@ -86,6 +89,9 @@ func (s *BatchActionService) batchAction(ctx common.ExtendedContext, event event
 	var restrictedSelector string
 	var err error
 	switch event.EventData.BatchActionData.ActionName {
+	case string(schedoapi.ArchiveIllTransactions):
+		// Transaction execution applies its own CQL and requester-owner restriction.
+		restrictedSelector = event.EventData.BatchActionData.Selector
 	case string(schedoapi.ArchiveBorrowingRequests):
 		restrictedSelector, err = addPatronRequestArchiveRestriction(event.EventData.BatchActionData.Selector, event.EventData.BatchActionData.Owner, prservice.SideBorrowing)
 	case string(schedoapi.ArchiveLendingRequests):

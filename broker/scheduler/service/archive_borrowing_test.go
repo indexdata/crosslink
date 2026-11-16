@@ -65,7 +65,7 @@ func (r *recordingArchiveRepo) archive(pr pr_db.PatronRequest, owner string, ano
 	return r.err == nil, r.err
 }
 
-func TestValidatePatronRequestArchiveConfig(t *testing.T) {
+func TestValidateArchiveConfig(t *testing.T) {
 	for _, name := range []schedoapi.BatchActionName{schedoapi.ArchiveBorrowingRequests, schedoapi.ArchiveLendingRequests} {
 		for _, tc := range []struct {
 			name, owner, selector string
@@ -80,7 +80,7 @@ func TestValidatePatronRequestArchiveConfig(t *testing.T) {
 			{"invalid anonymize", "ISIL:TEST", "state==CLOSED", map[string]any{"interval": "720h", "anonymize": "true"}, false},
 		} {
 			t.Run(string(name)+"/"+tc.name, func(t *testing.T) {
-				err := ValidatePatronRequestArchiveConfig(string(name), tc.owner, tc.selector, tc.params)
+				err := ValidateArchiveConfig(string(name), tc.owner, tc.selector, tc.params)
 				if tc.valid {
 					require.NoError(t, err)
 				} else {

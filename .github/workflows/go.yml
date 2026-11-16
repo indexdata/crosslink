@@ -66,6 +66,14 @@ jobs:
         packages: xsltproc libyaz-dev pkg-config
         version: 1.0
 
+    - name: Ensure xsltproc is available
+      run: |
+        if ! xsltproc --version; then
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends --reinstall xsltproc
+        fi
+        xsltproc --version
+
     - name: Set up Go
       uses: actions/setup-go@v7
       with:

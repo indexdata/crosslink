@@ -127,7 +127,7 @@ catalogConfig:
     address: https://catalog.example.org/sru
   holdingsFormat:
     marc:
-      callNumberSubField: h
+      callNumberSubfield: h
 ```
 
 MARC `availability` is an array of predicates that must all pass. `equals`
@@ -136,19 +136,19 @@ any occurrence, including an empty subfield. `present` requires an occurrence,
 including an empty one. `notIn` requires a `values` array and rejects a candidate
 if any occurrence matches an excluded value; use it together with `present` to
 reject missing subfields. Comparisons are exact and untrimmed. An empty `values`
-array excludes nothing. `itemLoanPolicySubField` maps the MARC loan policy.
+array excludes nothing. `itemLoanPolicySubfield` maps the MARC loan policy.
 Koha's default is:
 
 ```yaml
 availability:
-  - subField: '7'
+  - subfield: '7'
     operator: equals
     value: '0'
-  - subField: q
+  - subfield: q
     operator: absent
 ```
 
-`availability: []` clears these predicates. The existing `restrictedSubField`
+`availability: []` clears these predicates. The existing `restrictedSubfield`
 remains available independently. Generic partial MARC mappings retain legacy
 behavior: only specified fields are mapped; an empty MARC configuration uses
 852 defaults. A custom MARC mapping should provide `mainField`.

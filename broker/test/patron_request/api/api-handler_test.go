@@ -943,6 +943,30 @@ func TestCopySupplyDocumentCompletesRequesterAndSupplier(t *testing.T) {
 	require.NoError(t, json.Unmarshal(responseBytes, &completedSupplierPr))
 	assert.Equal(t, string(prservice.LenderStateCompleted), completedSupplierPr.State)
 	assert.True(t, completedSupplierPr.TerminalState)
+
+	// Verify the resolved label survives PostgreSQL persistence and API encoding.
+	var completionEvent *oapi.Event
+	require.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		responseBytes = httpRequest(t, "GET", requesterPath+"/events"+requesterParams, nil, http.StatusOK)
+		var eventLog oapi.Events
+		require.NoError(t, json.Unmarshal(responseBytes, &eventLog))
+		for i := range eventLog.Items {
+			event := &eventLog.Items[i]
+			if event.EventName == string(events.EventNamePatronRequestMessage) &&
+				event.ResultData != nil && event.ResultData.StateModelEvent == string(prservice.SupplierCompleted) {
+				completionEvent = event
+				return true
+			}
+		}
+		return false
+	}), "CopyCompleted should be logged with its state-model event label")
+	assert.Equal(t, string(events.EventStatusSuccess), completionEvent.EventStatus)
+	require.NotNil(t, completionEvent.ResultData.IncomingMessage)
+	require.NotNil(t, completionEvent.ResultData.IncomingMessage.SupplyingAgencyMessage)
+	assert.Equal(t, iso18626.TypeStatusCopyCompleted, completionEvent.ResultData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status)
+	require.NotNil(t, completionEvent.ResultData.OutgoingMessage)
+	require.NotNil(t, completionEvent.ResultData.OutgoingMessage.SupplyingAgencyMessageConfirmation)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, completionEvent.ResultData.OutgoingMessage.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 }
 
 func TestRejectRetry(t *testing.T) {

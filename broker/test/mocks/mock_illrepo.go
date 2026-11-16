@@ -2,7 +2,6 @@ package mocks
 
 import (
 	"errors"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
@@ -184,9 +183,6 @@ func (r *MockIllRepositorySuccess) GetBranchSymbolsByPeerId(ctx common.ExtendedC
 func (r *MockIllRepositorySuccess) DeleteBranchSymbolByPeerId(ctx common.ExtendedContext, peerId string) error {
 	return nil
 }
-func (r *MockIllRepositorySuccess) CallArchiveIllTransactionByDateAndStatus(ctx common.ExtendedContext, toDate time.Time, statuses []string) error {
-	return errors.New("DB error")
-}
 
 // Implement missing method for interface compliance
 func (r *MockIllRepositorySuccess) GetLocatedSupplierByIllTransactionAndSymbol(ctx common.ExtendedContext, illTransactionId string, symbol string) (ill_db.LocatedSupplier, error) {
@@ -352,10 +348,6 @@ func (r *MockIllRepositoryError) GetBranchSymbolsByPeerId(ctx common.ExtendedCon
 	return []ill_db.BranchSymbol{}, errors.New("DB error")
 }
 func (r *MockIllRepositoryError) DeleteBranchSymbolByPeerId(ctx common.ExtendedContext, peerId string) error {
-	return errors.New("DB error")
-}
-
-func (r *MockIllRepositoryError) CallArchiveIllTransactionByDateAndStatus(ctx common.ExtendedContext, toDate time.Time, statuses []string) error {
 	return errors.New("DB error")
 }
 

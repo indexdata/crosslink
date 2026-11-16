@@ -128,7 +128,7 @@ func TestLegacyRerequestStartsInitialWorkflow(t *testing.T) {
 				ID: "REQ1-1", Side: SideBorrowing, State: state, TerminalState: true,
 				RequesterSymbol: getDbText("ISIL:REQ1"),
 			}
-			service := CreatePatronRequestActionService(repo, nil, bus, new(MockIso18626Handler), nil, nil, nil, nil)
+			service := CreatePatronRequestActionService(repo, new(MockIllRepo), bus, new(MockIso18626Handler), nil, nil, nil, nil)
 			result := service.createSuccessorBorrowingRequest(appCtx, original, false)
 			require.Equal(t, events.EventStatusSuccess, result.status)
 			next := result.successorPr
@@ -154,7 +154,7 @@ func TestSuccessorPersistsRequestType(t *testing.T) {
 		for _, legacy := range []bool{false, true} {
 			t.Run(fmt.Sprintf("retry=%t/legacy=%t", retry, legacy), func(t *testing.T) {
 				repo := new(MockPrRepo)
-				service := CreatePatronRequestActionService(repo, nil, new(MockEventBus), new(MockIso18626Handler), nil, nil, nil, nil)
+				service := CreatePatronRequestActionService(repo, new(MockIllRepo), new(MockEventBus), new(MockIso18626Handler), nil, nil, nil, nil)
 				inheritedType := iso18626.TypeRequestTypeRetry
 				if retry {
 					inheritedType = iso18626.TypeRequestTypeNew

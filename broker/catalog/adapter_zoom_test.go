@@ -40,7 +40,7 @@ func TestLookupFoundMarc(t *testing.T) {
 	// target does not return holdings, we just use 010$a as fake location to verify that the record was parsed correctly
 	config := dirapi.MarcHoldingsParserConfig{
 		MainField:        NewString("010"),
-		LocationSubField: NewString("a"),
+		LocationSubfield: NewString("a"),
 	}
 	pqfType := dirapi.QueryConfigTypePqf
 	queryBuilder, err := NewQueryBuilderGen(&dirapi.QueryConfig{

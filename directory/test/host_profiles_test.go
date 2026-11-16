@@ -12,7 +12,7 @@ func TestHostProfilePersistence(t *testing.T) {
 	resetDb()
 	headers := map[string]string{"X-Okapi-Tenant": "ANINST", "X-Okapi-Permissions": `["directory.consortium.all"]`}
 
-	res, data := jsonReq(t, http.MethodPost, "/entries", `{"name":"Profile only","type":"Institution","lmsConfig":{"vendor":"Sierra","requestItemPickupLocationEnabled":false},"catalogConfig":{"profile":"Koha","holdingsFormat":{"marc":{"callNumberSubField":"x"}}}}`, headers)
+	res, data := jsonReq(t, http.MethodPost, "/entries", `{"name":"Profile only","type":"Institution","lmsConfig":{"vendor":"Sierra","requestItemPickupLocationEnabled":false},"catalogConfig":{"profile":"Koha","holdingsFormat":{"marc":{"callNumberSubfield":"x"}}}}`, headers)
 	require.Equal(t, http.StatusCreated, res.StatusCode, data)
 	var created struct {
 		Id string `json:"id"`
@@ -31,8 +31,8 @@ func TestHostProfilePersistence(t *testing.T) {
 	require.Equal(t, map[string]any{"vendor": "Sierra", "requestItemPickupLocationEnabled": false}, l)
 	c := e["catalogConfig"].(map[string]any)
 	require.Equal(t, "Koha", c["profile"])
-	require.Equal(t, map[string]any{"marc": map[string]any{"callNumberSubField": "x"}}, c["holdingsFormat"])
-	res, data = jsonReq(t, http.MethodPatch, path, `{"lmsConfig":{"ncipNamespaceEnabled":false,"bibIdNormalization":"none"},"catalogConfig":{"profile":null,"holdingsFormat":{"marc":{"locationSubField":"y"}}}}`, headers)
+	require.Equal(t, map[string]any{"marc": map[string]any{"callNumberSubfield": "x"}}, c["holdingsFormat"])
+	res, data = jsonReq(t, http.MethodPatch, path, `{"lmsConfig":{"ncipNamespaceEnabled":false,"bibIdNormalization":"none"},"catalogConfig":{"profile":null,"holdingsFormat":{"marc":{"locationSubfield":"y"}}}}`, headers)
 	require.Equal(t, http.StatusNoContent, res.StatusCode, data)
 	e = get()
 	l = e["lmsConfig"].(map[string]any)
@@ -40,7 +40,7 @@ func TestHostProfilePersistence(t *testing.T) {
 	require.Equal(t, false, l["ncipNamespaceEnabled"])
 	c = e["catalogConfig"].(map[string]any)
 	require.NotContains(t, c, "profile")
-	require.Equal(t, map[string]any{"marc": map[string]any{"callNumberSubField": "x", "locationSubField": "y"}}, c["holdingsFormat"])
+	require.Equal(t, map[string]any{"marc": map[string]any{"callNumberSubfield": "x", "locationSubfield": "y"}}, c["holdingsFormat"])
 	res, data = jsonReq(t, http.MethodPatch, path, `{"lmsConfig":{"vendor":null,"ncipNamespaceEnabled":null,"bibIdNormalization":null},"catalogConfig":{"holdingsFormat":{"opac":{"availabilityRule":"publicNote","availablePublicNotes":[]}}}}`, headers)
 	require.Equal(t, http.StatusNoContent, res.StatusCode, data)
 	e = get()
@@ -185,7 +185,7 @@ func TestAdditionalHostProfilePersistence(t *testing.T) {
 	resetDb()
 	headers := map[string]string{"X-Okapi-Tenant": "ANINST", "X-Okapi-Permissions": `["directory.consortium.all"]`}
 	for _, vendor := range []string{"Evergreen", "Horizon", "Polaris", "Symphony"} {
-		res, data := jsonReq(t, http.MethodPost, "/entries", `{"name":"`+vendor+`","type":"Institution","lmsConfig":{"vendor":"`+vendor+`","bibIdNormalization":"stripLeadingNonDigits"},"catalogConfig":{"profile":"`+vendor+`","queryConfig":{"identifierNormalization":"stripLeadingLetters","identifierPrefix":"^C"},"holdingsFormat":{"marc":{"itemLoanPolicySubField":"d","availability":[{"subField":"b","operator":"present"},{"subField":"b","operator":"notIn","values":["MISSING"]}]}}}}`, headers)
+		res, data := jsonReq(t, http.MethodPost, "/entries", `{"name":"`+vendor+`","type":"Institution","lmsConfig":{"vendor":"`+vendor+`","bibIdNormalization":"stripLeadingNonDigits"},"catalogConfig":{"profile":"`+vendor+`","queryConfig":{"identifierNormalization":"stripLeadingLetters","identifierPrefix":"^C"},"holdingsFormat":{"marc":{"itemLoanPolicySubfield":"d","availability":[{"subfield":"b","operator":"present"},{"subfield":"b","operator":"notIn","values":["MISSING"]}]}}}}`, headers)
 		require.Equal(t, http.StatusCreated, res.StatusCode, data)
 		var created struct{ Id string }
 		require.NoError(t, json.Unmarshal([]byte(data), &created))
@@ -202,7 +202,7 @@ func TestAdditionalHostProfilePersistence(t *testing.T) {
 		require.Equal(t, map[string]any{"identifierNormalization": "stripLeadingLetters", "identifierPrefix": "^C"}, cfg["queryConfig"])
 		require.Equal(t, vendor, entry["lmsConfig"].(map[string]any)["vendor"])
 		require.NotContains(t, entry["lmsConfig"], "ncipVersion") // Persist overrides, not defaults.
-		require.Equal(t, "d", cfg["holdingsFormat"].(map[string]any)["marc"].(map[string]any)["itemLoanPolicySubField"])
+		require.Equal(t, "d", cfg["holdingsFormat"].(map[string]any)["marc"].(map[string]any)["itemLoanPolicySubfield"])
 		res, data = jsonReq(t, http.MethodPatch, path, `{"catalogConfig":{"queryConfig":{"title":"local.title = {term}"}}}`, headers)
 		require.Equal(t, http.StatusNoContent, res.StatusCode, data)
 		require.Equal(t, "^C", get()["catalogConfig"].(map[string]any)["queryConfig"].(map[string]any)["identifierPrefix"])
@@ -217,7 +217,7 @@ func TestAdditionalHostProfilePersistence(t *testing.T) {
 		opac = get()["catalogConfig"].(map[string]any)["holdingsFormat"].(map[string]any)["opac"].(map[string]any)
 		require.Equal(t, []any{}, opac["itemLoanPolicySources"])
 		require.Equal(t, false, opac["requireItemLoanPolicy"])
-		for _, invalid := range []string{`{"queryConfig":{"identifierNormalization":"bad"}}`, `{"holdingsFormat":{"opac":{"itemLoanPolicySources":["bad"]}}}`, `{"holdingsFormat":{"marc":{"availability":[{"subField":"b","operator":"notIn"}]}}}`} {
+		for _, invalid := range []string{`{"queryConfig":{"identifierNormalization":"bad"}}`, `{"holdingsFormat":{"opac":{"itemLoanPolicySources":["bad"]}}}`, `{"holdingsFormat":{"marc":{"availability":[{"subfield":"b","operator":"notIn"}]}}}`} {
 			res, data = jsonReq(t, http.MethodPatch, path, `{"catalogConfig":`+invalid+`}`, headers)
 			require.Equal(t, http.StatusBadRequest, res.StatusCode, data)
 		}

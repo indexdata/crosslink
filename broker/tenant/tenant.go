@@ -161,12 +161,13 @@ func (s *TenantResolver) Resolve(ctx common.ExtendedContext, r *http.Request, sy
 			return nil, fmt.Errorf("failed to map tenant to symbol: %w", err)
 		}
 		t := &okapiTenant{
-			tenantResolver: s,
-			mappedSymbols:  append([]string(nil), symbols...),
-			ctx:            ctx,
-			requestSymbol:  requestSymbol,
-			user:           getOkapiUser(r.Header),
-			remoteHost:     getRemoteHost(r),
+			tenantResolver:      s,
+			mappedSymbols:       append([]string(nil), symbols...),
+			ctx:                 ctx,
+			requestSymbol:       requestSymbol,
+			canManageConsortium: hasConsortiumPermission(r.Header),
+			user:                getOkapiUser(r.Header),
+			remoteHost:          getRemoteHost(r),
 		}
 		return t, nil
 	} else {
@@ -182,6 +183,8 @@ func (s *TenantResolver) Resolve(ctx common.ExtendedContext, r *http.Request, sy
 }
 
 type Tenant interface {
+	// CanManageConsortium reports whether this request has trusted consortium access.
+	CanManageConsortium() bool
 	// Returns true if tenant is owner of the symbol.
 	IsOwnerOf(symbol string) (bool, error)
 	// Returns all symbols owned by the tenant.
@@ -199,12 +202,13 @@ type Tenant interface {
 }
 
 type okapiTenant struct {
-	tenantResolver *TenantResolver
-	ctx            common.ExtendedContext
-	mappedSymbols  []string
-	requestSymbol  string
-	user           string
-	remoteHost     string
+	canManageConsortium bool
+	tenantResolver      *TenantResolver
+	ctx                 common.ExtendedContext
+	mappedSymbols       []string
+	requestSymbol       string
+	user                string
+	remoteHost          string
 }
 
 func (t *okapiTenant) IsOwnerOf(symbol string) (bool, error) {
@@ -354,3 +358,15 @@ func getOkapiTokenSubject(token string) string {
 	}
 	return strings.TrimSpace(claims.Subject)
 }
+
+// Only permissions forwarded by the trusted Okapi gateway grant capabilities.
+func hasConsortiumPermission(header http.Header) bool {
+	var permissions []string
+	if err := json.Unmarshal([]byte(header.Get("X-Okapi-Permissions")), &permissions); err != nil {
+		return false
+	}
+	return slices.Contains(permissions, "broker.consortium.all")
+}
+
+func (t *okapiTenant) CanManageConsortium() bool  { return t.canManageConsortium }
+func (t *masterTenant) CanManageConsortium() bool { return true }

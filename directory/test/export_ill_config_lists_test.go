@@ -33,7 +33,7 @@ func TestDirectoryExportIllConfigLists(t *testing.T) {
  crosslink_local_entry AS (SELECT $1::uuid AS entry_id WHERE $2::boolean),
  local_entry AS (SELECT $1::uuid AS entry_id WHERE $2::boolean),
  mpals_entry AS (SELECT NULL::uuid AS entry_id WHERE false),
- tenant_settings AS (SELECT NULL::text AS max_requests_per_patron, NULL::text AS duplicate_check_window_hours),
+ tenant_settings AS (SELECT NULL::text AS max_requests_per_patron, NULL::text AS duplicate_check_window_hours, NULL::text AS request_id_prefix),
  service AS (SELECT 1 AS se_id, 'iso'::text AS se_type_fk, NULL::text AS se_address WHERE false),
  service_account AS (SELECT 1 AS sa_service, $1::uuid AS sa_account_holder),
  tag AS (SELECT 1 AS id, 'pickup'::text AS norm_value),

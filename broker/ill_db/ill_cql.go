@@ -11,7 +11,8 @@ import (
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 )
 
-func handleIllTransactionsQuery(cqlString string, noBaseArgs int) (pgcql.Query, error) {
+// ParseIllTransactionsCql parses transaction CQL after the specified base SQL arguments.
+func ParseIllTransactionsCql(cqlString string, noBaseArgs int) (pgcql.Query, error) {
 	def := pgcql.NewPgDefinition()
 
 	f := pgcql.NewFieldString().WithExact()
@@ -102,7 +103,7 @@ func (q *Queries) ListIllTransactionsCql(ctx context.Context, db DBTX, arg ListI
 		return q.ListIllTransactions(ctx, db, arg)
 	}
 	noBaseArgs := 2 // we have two base arguments: limit and offset
-	res, err := handleIllTransactionsQuery(cql.String(), noBaseArgs)
+	res, err := ParseIllTransactionsCql(cql.String(), noBaseArgs)
 	if err != nil {
 		return nil, err
 	}

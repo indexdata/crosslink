@@ -73,7 +73,7 @@ func TestEmptyHoldingsFormatUsesDefaults(t *testing.T) {
 }
 
 func TestIndependentOverrides(t *testing.T) {
-	raw := entry(t, `{"lmsConfig":{"vendor":"Sierra","requestItemPickupLocationEnabled":false,"requestItemRequestType":"","bibIdNormalization":"none"},"catalogConfig":{"profile":"Koha","zoom":{"address":"site","options":{"preferredRecordSyntax":"custom"}},"holdingsFormat":{"marc":{"callNumberSubField":"x","availability":[]}}}}`)
+	raw := entry(t, `{"lmsConfig":{"vendor":"Sierra","requestItemPickupLocationEnabled":false,"requestItemRequestType":"","bibIdNormalization":"none"},"catalogConfig":{"profile":"Koha","zoom":{"address":"site","options":{"preferredRecordSyntax":"custom"}},"holdingsFormat":{"marc":{"callNumberSubfield":"x","availability":[]}}}}`)
 	e, err := Resolve(raw)
 	require.NoError(t, err)
 	require.Equal(t, "Koha", e.CatalogProfile)
@@ -81,7 +81,7 @@ func TestIndependentOverrides(t *testing.T) {
 	require.Empty(t, *e.LMS.RequestItemRequestType)
 	require.Equal(t, "none", *e.LMS.BibIdNormalization)
 	require.Equal(t, "952", *e.Catalog.HoldingsFormat.Marc.MainField)
-	require.Equal(t, "x", *e.Catalog.HoldingsFormat.Marc.CallNumberSubField)
+	require.Equal(t, "x", *e.Catalog.HoldingsFormat.Marc.CallNumberSubfield)
 	require.Empty(t, *e.Catalog.HoldingsFormat.Marc.Availability)
 	require.Equal(t, "custom", (*e.Catalog.Zoom.Options)["preferredRecordSyntax"])
 	require.Equal(t, "Koha", e.Origins["catalogConfig.holdingsFormat.marc.mainField"])
@@ -200,7 +200,7 @@ func TestValidation(t *testing.T) {
 		`{"lmsConfig":{"vendor":"WMS"}}`, `{"catalogConfig":{"profile":"Aleph"}}`, `{"lmsConfig":{"vendor":"bad"}}`,
 		`{"lmsConfig":{"vendor":"Sierra","address":"x"}}`,
 		`{"catalogConfig":{"profile":"Alma","zoom":{"address":""}}}`,
-		`{"catalogConfig":{"profile":"Koha","holdingsFormat":{"marc":{"availability":[{"operator":"equals","subField":"7"}]}}}}`,
+		`{"catalogConfig":{"profile":"Koha","holdingsFormat":{"marc":{"availability":[{"operator":"equals","subfield":"7"}]}}}}`,
 		`{"catalogConfig":{"profile":"Alma","holdingsFormat":{"opac":{"availabilityRule":"bad"}}}}`,
 	} {
 		_, err := Resolve(entry(t, data))
@@ -250,7 +250,7 @@ func TestAdditionalProfileValidationAndOverrides(t *testing.T) {
 	for _, config := range []string{
 		`{"queryConfig":{"identifierNormalization":"bad"}}`,
 		`{"holdingsFormat":{"opac":{"itemLoanPolicySources":["bad"]}}}`,
-		`{"holdingsFormat":{"marc":{"availability":[{"subField":"b","operator":"notIn"}]}}}`,
+		`{"holdingsFormat":{"marc":{"availability":[{"subfield":"b","operator":"notIn"}]}}}`,
 	} {
 		_, err := Resolve(entry(t, `{"catalogConfig":`+config+`}`))
 		require.Error(t, err)

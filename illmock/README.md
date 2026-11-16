@@ -131,41 +131,46 @@ The program offers an SRU service at URI path `/sru`. Only version 2.0
 is supported. It is substantially different from version 1.1, 1.2 -
 for example different namespace and different semantics for recordPacking.
 
-The service produces a MARCXML record if a query of format "rec.id = value" is
-used. If the index (`rec.id`) is omitted a SRU diagnostic is returned.
+The service accepts queries of format "rec.id = value". A MARCXML record is
+produced only for explicit `return-` identifiers, apart from the diagnostic test
+tokens below. Ordinary identifiers, including UUIDs, return zero records so the
+mock can precede a real catalog in the broker's ordered SRU URL list.
+If the index (`rec.id`) is omitted a SRU diagnostic is returned.
 The `rec` prefix refers to the
 [Record metadata](https://www.loc.gov/standards/sru/cql/contextSets/listOfContextSets.html) context set.
 
-The identifier value is split by semicolon and each substring generates a holdings record entry
-in the `999#11` field with subfield `$l` set to the local ID and subfield `$s` set to library ISIL.
+The identifier value is split by semicolon and each `return-` substring generates a holdings record
+entry in the `999#11` field with subfield `$l` set to the local ID and subfield `$s` set to library ISIL.
+Other substrings are ignored and no supplier symbols are assigned automatically.
 The MARCXML record also contains mock bibliographic metadata. Its identifier, title, ISBN, and ISSN
 are derived from the requested record identifier, so repeated requests for the same record are stable
 while different records do not receive matching metadata. The subtitle `Subtitle from SRU mock`,
 author `Author from SRU mock`, and edition `Mock edition` are fixed.
 
-By default each substring is taken verbatim, except for some special cases:
+The following test identifiers are supported:
 
   * `error`: produces an SRU error (non-surrogate diagnostic).
   * `return-$s::$l` prefix: produces a holdings entry with `$l` as local ID and `$s` as symbol
+  * `return-$s`: uses `$s` as both the symbol and local ID.
   * `record-error`: produces SRU response with a diagnostic record.
-  * `not-found` or empty: omits generating a holdings `$l`, `$s` entry.
+  * `not-found` or empty: returns zero records, as do other unprefixed identifiers.
 
-For example to get a MARCXML with identifier 123, use:
+For example to get a holding for local ID 123 at `ISIL:SUP1`, use:
 
-    curl 'http://localhost:8081/sru?query=rec.id%3D123'
+    curl 'http://localhost:8081/sru?maximumRecords=1&query=rec.id%3Dreturn-ISIL:SUP1::123'
 
 With yaz-client:
 
     yaz-client http://localhost:8081/sru
     Z> sru get 2.0
-    Z> f rec.id=123
+    Z> f rec.id=return-ISIL:SUP1::123
     Z> s
 
 With zoomsh:
 
     zoomsh "set sru_version 2.0" "set sru get" \
         "connect http://localhost:8081/sru" \
-        "search cql:rec.id=123" "show 0 1" "quit"
+        "search cql:rec.id=return-ISIL:SUP1::123" "show 0 1" "quit"
 
 # Directory service
 

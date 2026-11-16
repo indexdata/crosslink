@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
@@ -1220,6 +1221,10 @@ func TestHandleSupplyingAgencyMessageNoImplemented(t *testing.T) {
 type MockIllRepo struct {
 	mock.Mock
 	ill_db.PgIllRepo
+}
+
+func (r *MockIllRepo) GetCachedPeersBySymbols(ctx common.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string, error) {
+	return []ill_db.Peer{}, "", nil
 }
 
 type MockAutoActionRunner struct {
