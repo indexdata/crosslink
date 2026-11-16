@@ -57,8 +57,10 @@ func TestResolveLoanDueDate(t *testing.T) {
 	entry := dirapi.Entry{TimeZone: &zone, IllConfig: &dirapi.IllConfig{}}
 	entry.IllConfig.DefaultLoanPeriod.Set(2)
 	invalidZone := "invalid/zone"
+	disabledDefault := dirapi.Entry{IllConfig: &dirapi.IllConfig{}}
+	disabledDefault.IllConfig.DefaultLoanPeriod.Set(0)
 	invalidDefault := dirapi.Entry{IllConfig: &dirapi.IllConfig{}}
-	invalidDefault.IllConfig.DefaultLoanPeriod.Set(0)
+	invalidDefault.IllConfig.DefaultLoanPeriod.Set(-1)
 	for _, tc := range []struct {
 		name   string
 		items  []pr_db.Item
@@ -87,7 +89,8 @@ func TestResolveLoanDueDate(t *testing.T) {
 		{name: "calendar default", entry: entry, want: time.Date(2026, 3, 30, 21, 59, 59, 0, time.UTC), source: "illConfig.defaultLoanPeriod"},
 		{name: "no date"},
 		{name: "unset default", entry: dirapi.Entry{IllConfig: &dirapi.IllConfig{}}},
-		{name: "invalid default period", entry: invalidDefault, err: "defaultLoanPeriod must be a positive integer"},
+		{name: "disabled default period", entry: disabledDefault},
+		{name: "invalid default period", entry: invalidDefault, err: "defaultLoanPeriod must not be negative"},
 		{name: "invalid default timezone", entry: dirapi.Entry{TimeZone: &invalidZone, IllConfig: entry.IllConfig}, err: "unknown time zone"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -176,6 +179,37 @@ func TestShippingWithoutDateRetainsCompletedCheckout(t *testing.T) {
 	assert.False(t, result.pr.DueAt.Valid)
 	assert.Nil(t, sender.lastSupplyingAgencyMessage.StatusInfo.DueDate)
 	adapter.AssertNumberOfCalls(t, "CheckOutItem", 1)
+}
+
+func TestShippingCheckoutTitlePreservesItemLocations(t *testing.T) {
+	pr := testLoan()
+	item := pr_db.Item{
+		ID:               "item",
+		PrID:             pr.ID,
+		Barcode:          "barcode",
+		Location:         pgtype.Text{String: "Main Library", Valid: true},
+		ShelvingLocation: pgtype.Text{String: "Stacks", Valid: true},
+	}
+	repo := &MockPrRepo{savedPr: pr, savedItems: []pr_db.Item{item}}
+	var saved pr_db.SaveItemParams
+	repo.On("SaveItem", mock.Anything).Run(func(args mock.Arguments) {
+		saved = args.Get(0).(pr_db.SaveItemParams)
+	}).Return(item, nil).Once()
+	directory := new(IllRepoMock)
+	directory.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything).Return([]ill_db.Peer{{CustomData: dirapi.Entry{}}}, "", nil)
+	adapter := new(mockLmsAdapter)
+	adapter.On("CheckOutItem", "", "barcode", "", "").Return(&lms.CheckedOutItem{Title: "LMS title"}, nil).Once()
+	sender := new(MockIso18626Handler)
+	svc := CreatePatronRequestActionService(repo, directory, new(MockEventBus), sender, nil, nil, nil, nil)
+
+	result := svc.shipLenderRequest(appCtx, "event", pr, adapter, pr.IllRequest, actionParams{})
+
+	require.Equal(t, events.EventStatusSuccess, result.status)
+	assert.Equal(t, pgtype.Text{String: "LMS title", Valid: true}, saved.Title)
+	assert.Equal(t, pgtype.Text{String: "Main Library", Valid: true}, saved.Location)
+	assert.Equal(t, pgtype.Text{String: "Stacks", Valid: true}, saved.ShelvingLocation)
+	repo.AssertExpectations(t)
+	adapter.AssertExpectations(t)
 }
 
 func TestShippingRetryRecalculatesDueDate(t *testing.T) {
@@ -308,7 +342,7 @@ func TestIncomingLoanAndRenewalDates(t *testing.T) {
 		{name: "undated acceptance clears previous date", state: BorrowerStateRenewalPending, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoY), want: BorrowerStateRenewed},
 		{name: "zero renewal date clears previous date", state: BorrowerStateRenewalPending, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoY), date: &utils.XSDDateTime{}, want: BorrowerStateRenewed},
 		{name: "zero shipment date preserves previous date", state: BorrowerStateWillSupply, reason: iso18626.TypeReasonForMessageStatusChange, date: &utils.XSDDateTime{}, want: BorrowerStateShipped, existingDate: true},
-		{name: "reject preserves date", state: BorrowerStateRenewalPending, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoN), want: BorrowerStateOverdue},
+		{name: "reject preserves date", state: BorrowerStateRenewalPending, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoN), want: BorrowerStateRenewalRejected},
 		{name: "unsolicited response", state: BorrowerStateReceived, reason: iso18626.TypeReasonForMessageRenewResponse, answer: loanYesNo(iso18626.TypeYesNoY), date: &utils.XSDDateTime{Time: past}, fail: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -465,13 +499,17 @@ func TestSupplierOverdueAndRenewalSendBeforeTransition(t *testing.T) {
 			assert.Equal(t, sender.lastSupplyingAgencyMessage.MessageInfo, repo.savedPr.IllResponse.MessageInfo)
 			assert.Equal(t, pr.IllResponse.DeliveryInfo, repo.savedPr.IllResponse.DeliveryInfo)
 			assert.Equal(t, pr.IllResponse.ReturnInfo, repo.savedPr.IllResponse.ReturnInfo)
-			if action == LenderActionAcceptRenewal {
+			switch action {
+			case LenderActionAcceptRenewal:
 				assert.Equal(t, LenderStateRenewed, repo.savedPr.State)
 				assert.True(t, repo.savedPr.DueAt.Time.After(old))
 				assert.Nil(t, sender.lastSupplyingAgencyMessage.DeliveryInfo)
 				assert.Equal(t, iso18626.TypeStatusLoaned, sender.lastSupplyingAgencyMessage.StatusInfo.Status)
 				assert.Equal(t, iso18626.TypeReasonForMessageRenewResponse, sender.lastSupplyingAgencyMessage.MessageInfo.ReasonForMessage)
-			} else {
+			case LenderActionRejectRenewal:
+				assert.Equal(t, LenderStateRenewalRejected, repo.savedPr.State)
+				assert.Equal(t, iso18626.TypeStatusLoaned, sender.lastSupplyingAgencyMessage.StatusInfo.Status)
+			default:
 				assert.Equal(t, LenderStateOverdue, repo.savedPr.State)
 			}
 		})
@@ -644,15 +682,15 @@ func TestSupplierOverdueUsesConfiguredStateAndRechecksDueDate(t *testing.T) {
 }
 
 func TestRequesterHelpersRepeatAllItemsWithoutChangingLoanState(t *testing.T) {
-	for _, state := range []pr_db.PatronRequestState{BorrowerStateReceived, BorrowerStateRenewed, BorrowerStateOverdue, BorrowerStateRenewalPending} {
+	for _, state := range []pr_db.PatronRequestState{BorrowerStateReceived, BorrowerStateRenewed, BorrowerStateOverdue, BorrowerStateRenewalPending, BorrowerStateRenewalRejected} {
 		repo := &MockPrRepo{savedPr: testLoan(), savedItems: []pr_db.Item{{ID: "a", PrID: "loan", Barcode: "a", LmsStatus: pr_db.LmsStatusCheckedOut}, {ID: "b", PrID: "loan", Barcode: "b", LmsStatus: pr_db.LmsStatusUnknown}}}
 		repo.savedPr.Side = SideBorrowing
 		repo.savedPr.State = state
 		adapter := new(mockLmsAdapter)
 		patronDue := time.Now().Add(time.Hour)
-		adapter.On("CheckOutItem", "loan", "a", "", "externalReferenceValue").Return(&lms.CheckedOutItem{DueDate: &patronDue}, nil).Twice()
-		adapter.On("CheckOutItem", "loan", "b", "", "externalReferenceValue").Return(nil, errors.New("failed")).Once()
-		adapter.On("CheckOutItem", "loan", "b", "", "externalReferenceValue").Return(&lms.CheckedOutItem{}, nil).Once()
+		adapter.On("CheckOutItem", "loan", "a", "", "").Return(&lms.CheckedOutItem{DueDate: &patronDue}, nil).Twice()
+		adapter.On("CheckOutItem", "loan", "b", "", "").Return(nil, errors.New("failed")).Once()
+		adapter.On("CheckOutItem", "loan", "b", "", "").Return(&lms.CheckedOutItem{}, nil).Once()
 		creator := new(MockLmsCreator)
 		creator.On("GetAdapter", "ISIL:REQ").Return(adapter, nil)
 		svc := CreatePatronRequestActionService(repo, nil, new(MockEventBus), new(MockIso18626Handler), creator, nil, nil, nil)
@@ -753,7 +791,7 @@ func TestIncomingOverdueDueDate(t *testing.T) {
 
 func TestOverdueEventsAndTransitionlessHelpers(t *testing.T) {
 	mapping := mustActionMapping(t)
-	for _, state := range []pr_db.PatronRequestState{BorrowerStateReceived, BorrowerStateRenewed, BorrowerStateOverdue, BorrowerStateRenewalPending} {
+	for _, state := range []pr_db.PatronRequestState{BorrowerStateReceived, BorrowerStateRenewed, BorrowerStateOverdue, BorrowerStateRenewalPending, BorrowerStateRenewalRejected} {
 		t.Run(string(state), func(t *testing.T) {
 			repo := new(MockPrRepo)
 			pr := testLoan()
@@ -762,7 +800,7 @@ func TestOverdueEventsAndTransitionlessHelpers(t *testing.T) {
 			for _, action := range []pr_db.PatronRequestAction{BorrowerActionCheckIn, BorrowerActionCheckOut, BorrowerActionShipReturn} {
 				assert.True(t, mapping.IsActionSupported(pr, action))
 			}
-			assert.Equal(t, state == BorrowerStateOverdue, mapping.IsActionSupported(pr, BorrowerActionRenew))
+			assert.Equal(t, state == BorrowerStateReceived || state == BorrowerStateRenewed || state == BorrowerStateOverdue, mapping.IsActionSupported(pr, BorrowerActionRenew))
 			handler := CreatePatronRequestMessageHandler(repo, nil, nil, nil)
 			status, _, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{MessageInfo: iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange}, StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusOverdue}}, pr)
 			require.NoError(t, err)

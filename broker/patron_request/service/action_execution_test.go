@@ -206,7 +206,7 @@ func TestUnboundToleratedNotificationProblemContinuesValidation(t *testing.T) {
 		body string
 		smtp bool
 	}{
-		{name: "template expansion", body: "{{.PatronGivenName}}"},
+		{name: "template expansion", body: "{{.UnknownPlaceholder}}"},
 		{name: "SMTP", body: "New request", smtp: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -249,8 +249,10 @@ func TestUnboundToleratedNotificationProblemContinuesValidation(t *testing.T) {
 			if tc.smtp {
 				assert.Contains(t, notification.ResultData.Problem.Details, "SMTP failed")
 			} else {
-				assert.Contains(t, notification.ResultData.Problem.Details, "PatronGivenName")
-				assert.Contains(t, notification.ResultData.Problem.Details, "template-1")
+				assert.Equal(t,
+					`error sending email to staff: Template "new-supply-request-notification" could not be rendered: unknown placeholder "UnknownPlaceholder" in body.`,
+					notification.ResultData.Problem.Details,
+				)
 			}
 			assert.Equal(t, events.EventStatusSuccess, validation.EventStatus)
 			assert.Nil(t, validation.ResultData.ActionResult.ChildActionError)
@@ -271,15 +273,18 @@ func TestToleratedPatronReviewDoesNotPropagate(t *testing.T) {
 	bus := new(MockEventBus)
 	lmsCreator := new(MockLmsCreator)
 	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(&MockLmsAdapterPatronProblem{}, nil)
-	svc := CreatePatronRequestActionService(repo, new(IllRepoMock), bus, new(MockIso18626Handler), lmsCreator, new(EmailSenderMock), nil, nil)
+	emailSvc := new(EmailSenderMock)
+	svc := CreatePatronRequestActionService(repo, new(IllRepoMock), bus, new(MockIso18626Handler), lmsCreator, emailSvc, nil, nil)
 
 	require.NoError(t, svc.RunAutoActionsOnStateEntry(appCtx, pr, nil, "test-user"))
 
 	require.Len(t, bus.processedTaskEvents, 1)
+	assert.Equal(t, BorrowerActionValidatePatron, *bus.processedTaskEvents[0].EventData.Action)
 	assert.Equal(t, events.EventStatusProblem, bus.processedTaskEvents[0].EventStatus)
 	assert.Equal(t, ActionOutcomeReview, bus.processedTaskEvents[0].ResultData.ActionResult.Outcome)
 	assert.Equal(t, BorrowerStateInvalidPatron, repo.savedPr.State)
 	assert.True(t, repo.savedPr.NeedsAttention)
+	emailSvc.AssertNotCalled(t, "IsReadyToSend")
 }
 
 func TestManualNotificationRetryUsesStateModelParams(t *testing.T) {
@@ -461,4 +466,34 @@ func (r *actionHistoryRepo) UpdatePatronRequest(ctx common.ExtendedContext, para
 
 func (r *actionHistoryRepo) WithTxFunc(ctx common.ExtendedContext, fn func(pr_db.PrRepo) error) error {
 	return fn(r)
+}
+
+// Reason notifications keep their explanation text visible to staff even though
+// the reason itself is stored as the notification's code.
+func TestEmailStaffNotesIncludeReasonNotificationText(t *testing.T) {
+	pr := prWithPatronEmail(testPatronTo)
+	pr.ID, pr.Side, pr.State = patronRequestId, SideBorrowing, BorrowerStateReceived
+	note := func(kind pr_db.NotificationKind, text, code string) pr_db.Notification {
+		return pr_db.Notification{PrID: pr.ID, Kind: kind, Note: getDbTextPtr(&text), Code: getDbTextPtr(&code)}
+	}
+	repo := &MockPrRepo{savedPr: pr, savedNotifications: []pr_db.Notification{
+		note(pr_db.NotificationKindNote, "plain note", ""),
+		note(pr_db.NotificationKindCancellationReason, "please cancel", "InvalidUser"),
+		note(pr_db.NotificationKindUnfilledReason, "searched the shelf", "NotOnShelf"),
+		note(pr_db.NotificationKindCancellationReason, "", "Duplicate"),
+		note(pr_db.NotificationKindCondition, "condition note", "NoReproduction"),
+	}}
+	repo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).
+		Return(pr_db.Template{Body: "notes: [{{.StaffNotes}}] conditions: [{{.LoanConditions}}]", Subject: getDbText("Notification"), ContentType: "text"}, nil)
+	sender := &notificationRetryEmailRecorder{ready: true}
+	svc := CreatePatronRequestActionService(repo, new(IllRepoMock), new(MockEventBus), new(MockIso18626Handler), new(MockLmsCreator), sender, nil, nil)
+
+	err := svc.createAndSendEmail(appCtx, pr, testSymbol, testFrom, []string{testPatronTo}, "received-notification", proapi.ModelActionParamsSendToPatron)
+
+	require.NoError(t, err)
+	// Quoted-printable bodies use CRLF line breaks.
+	body := string(sender.raw)
+	assert.Contains(t, body, "notes: [plain note\r\nplease cancel\r\nsearched the shelf]")
+	assert.Contains(t, body, "conditions: [NoReproduction]")
+	assert.NotContains(t, body, "InvalidUser", "reason codes render through their own placeholders")
 }

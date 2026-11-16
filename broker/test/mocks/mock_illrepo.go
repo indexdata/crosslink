@@ -9,11 +9,13 @@ import (
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/mock"
 )
 
 type MockIllRepositorySuccess struct {
+	AvailabilityAttempts map[string]ill_db.AvailabilityAttempt
 	mock.Mock
 }
 
@@ -391,4 +393,32 @@ func (r *MockIllRepositorySuccess) RotaRequestCancelled(ctx common.ExtendedConte
 
 func (r *MockIllRepositoryError) RotaRequestCancelled(ctx common.ExtendedContext, transactionID, brokerSymbol string) (bool, error) {
 	return false, errors.New("DB error")
+}
+
+func (r *MockIllRepositorySuccess) SaveAvailabilityAttempt(_ common.ExtendedContext, p ill_db.SaveAvailabilityAttemptParams) error {
+	if r.AvailabilityAttempts == nil {
+		r.AvailabilityAttempts = map[string]ill_db.AvailabilityAttempt{}
+	}
+	r.AvailabilityAttempts[p.IllTransactionID] = ill_db.AvailabilityAttempt(p)
+	return nil
+}
+func (r *MockIllRepositorySuccess) GetAvailabilityAttempt(_ common.ExtendedContext, id string) (ill_db.AvailabilityAttempt, error) {
+	a, ok := r.AvailabilityAttempts[id]
+	if !ok {
+		return a, pgx.ErrNoRows
+	}
+	return a, nil
+}
+func (r *MockIllRepositorySuccess) DeleteAvailabilityAttempt(_ common.ExtendedContext, id string) error {
+	delete(r.AvailabilityAttempts, id)
+	return nil
+}
+func (r *MockIllRepositoryError) SaveAvailabilityAttempt(common.ExtendedContext, ill_db.SaveAvailabilityAttemptParams) error {
+	return errors.New("DB error")
+}
+func (r *MockIllRepositoryError) GetAvailabilityAttempt(common.ExtendedContext, string) (ill_db.AvailabilityAttempt, error) {
+	return ill_db.AvailabilityAttempt{}, errors.New("DB error")
+}
+func (r *MockIllRepositoryError) DeleteAvailabilityAttempt(common.ExtendedContext, string) error {
+	return errors.New("DB error")
 }

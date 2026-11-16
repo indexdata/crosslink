@@ -36,6 +36,35 @@ func TestCreateLmsAdapterNcip(t *testing.T) {
 	assert.Contains(t, err.Error(), "lmsConfig.address and fromAgency")
 }
 
+func TestRequestedItemLocations(t *testing.T) {
+	location, shelvingLocation := requestedItemLocations(&ncip.ItemOptionalFields{
+		Location: []ncip.Location{{LocationName: ncip.LocationName{LocationNameInstance: []ncip.LocationNameInstance{
+			{LocationNameLevel: 1, LocationNameValue: "Main Library"},
+			{LocationNameLevel: 2, LocationNameValue: "Stacks"},
+		}}}},
+	})
+
+	assert.Equal(t, "Main Library", location)
+	assert.Equal(t, "Stacks", shelvingLocation)
+}
+
+func TestRequestedItemLocationsDoesNotCombineHierarchies(t *testing.T) {
+	location, shelvingLocation := requestedItemLocations(&ncip.ItemOptionalFields{
+		Location: []ncip.Location{
+			{LocationName: ncip.LocationName{LocationNameInstance: []ncip.LocationNameInstance{
+				{LocationNameLevel: 1, LocationNameValue: "Library A"},
+			}}},
+			{LocationName: ncip.LocationName{LocationNameInstance: []ncip.LocationNameInstance{
+				{LocationNameLevel: 1, LocationNameValue: "Library B"},
+				{LocationNameLevel: 2, LocationNameValue: "Stacks B"},
+			}}},
+		},
+	})
+
+	assert.Equal(t, "Library A", location)
+	assert.Equal(t, "Library A", shelvingLocation)
+}
+
 func TestLookupUser(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	b := true
@@ -355,9 +384,9 @@ func TestAcceptItem(t *testing.T) {
 		config:     dirapi.LmsConfig{AcceptItemEnabled: &b},
 		ncipClient: mock,
 	}
-	performed, err := ad.AcceptItem("item1", "req1", "testuser", "author", "title", "isbn", "callnum", "loc", "action")
+	accepted, err := ad.AcceptItem("item1", "req1", "testuser", "author", "title", "isbn", "callnum", "loc", "action")
 	assert.NoError(t, err)
-	assert.True(t, performed)
+	assert.Equal(t, &AcceptedItem{ItemID: "item1"}, accepted)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.AcceptItem)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
 	assert.Equal(t, "item1", req.ItemId.ItemIdentifierValue)
@@ -385,9 +414,9 @@ func TestAcceptItem(t *testing.T) {
 
 	b = false
 	mock.(*ncipClientMock).lastRequest = nil
-	performed, err = ad.AcceptItem("", "", "", "", "", "", "", "", "")
+	accepted, err = ad.AcceptItem("", "", "", "", "", "", "", "", "")
 	assert.NoError(t, err)
-	assert.False(t, performed)
+	assert.Nil(t, accepted)
 	assert.Nil(t, mock.(*ncipClientMock).lastRequest)
 }
 
@@ -446,11 +475,13 @@ func TestRequestItem(t *testing.T) {
 		},
 		ncipClient: mock,
 	}
-	response, err := ad.RequestItem("req1", "item1", "testuser", "pickloc", itemLocation)
+	response, err := ad.RequestItem("req1", RequestItemIdentifier{BibliographicID: "item1"}, "testuser", "pickloc", itemLocation)
 	assert.NoError(t, err)
 	assert.Equal(t, "123.456", response.Barcode)
 	assert.Equal(t, "QA123 .A45", response.CallNumber)
 	assert.Equal(t, "", response.Title)
+	assert.Equal(t, "Main Library", response.Location)
+	assert.Equal(t, "Stacks", response.ShelvingLocation)
 	assert.Equal(t, "lms-req-1", response.RequestID)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
@@ -461,39 +492,43 @@ func TestRequestItem(t *testing.T) {
 	assert.Equal(t, "Loan", req.RequestType.Text)
 	assert.Equal(t, "Title", req.RequestScopeType.Text)
 	assert.Equal(t, itemLocation, req.ItemOptionalFields.Location[0].LocationName.LocationNameInstance[0].LocationNameValue)
+	assert.Equal(t, []ncip.SchemeValuePair{
+		{Text: "Bibliographic Description"},
+		{Text: "Location"},
+	}, req.ItemElementType)
 
 	ad = &LmsAdapterNcip{
 		config:     dirapi.LmsConfig{},
 		ncipClient: mock,
 	}
 	mock.(*ncipClientMock).honorTitle = true
-	response, err = ad.RequestItem("req1", "item1", "testuser", "loc", "itemloc")
+	response, err = ad.RequestItem("req1", RequestItemIdentifier{ItemID: "item1"}, "testuser", "loc", "itemloc")
 	assert.NoError(t, err)
 	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Equal(t, "123.456", response.Barcode)
 	assert.Equal(t, "QA123 .A45", response.CallNumber)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
-	assert.Equal(t, "item1", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
-	assert.Equal(t, "SYSNUMBER", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifierCode.Text)
+	assert.Equal(t, "item1", req.ItemId[0].ItemIdentifierValue)
+	assert.Empty(t, req.BibliographicId)
 	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
 	assert.Equal(t, "loc", req.PickupLocation.Text)
 	assert.Equal(t, "Page", req.RequestType.Text)
 	assert.Equal(t, "Item", req.RequestScopeType.Text)
 
-	response, err = ad.RequestItem("req1", "copynumber", "testuser", "loc", "itemloc")
+	response, err = ad.RequestItem("req1", RequestItemIdentifier{ItemID: "copynumber"}, "testuser", "loc", "itemloc")
 	assert.NoError(t, err)
 	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Equal(t, "234.567", response.Barcode)
 	assert.Equal(t, "QA123 .A45", response.CallNumber)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
-	assert.Equal(t, "copynumber", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
-	assert.Equal(t, "SYSNUMBER", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifierCode.Text)
+	assert.Equal(t, "copynumber", req.ItemId[0].ItemIdentifierValue)
+	assert.Empty(t, req.BibliographicId)
 	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
 	assert.Equal(t, "loc", req.PickupLocation.Text)
 	assert.Equal(t, "Page", req.RequestType.Text)
 	assert.Equal(t, "Item", req.RequestScopeType.Text)
 
-	response, err = ad.RequestItem("req1", "empty", "testuser", "loc", "itemloc")
+	response, err = ad.RequestItem("req1", RequestItemIdentifier{ItemID: "empty"}, "testuser", "loc", "itemloc")
 	assert.NoError(t, err)
 	assert.NotNil(t, response)
 	assert.Empty(t, response.Barcode)
@@ -501,8 +536,8 @@ func TestRequestItem(t *testing.T) {
 	assert.Empty(t, response.Title)
 	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
-	assert.Equal(t, "empty", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
-	assert.Equal(t, "SYSNUMBER", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifierCode.Text)
+	assert.Equal(t, "empty", req.ItemId[0].ItemIdentifierValue)
+	assert.Empty(t, req.BibliographicId)
 	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
 	assert.Equal(t, "loc", req.PickupLocation.Text)
 	assert.Equal(t, "Page", req.RequestType.Text)
@@ -516,7 +551,7 @@ func TestRequestItem(t *testing.T) {
 		ncipClient: mock,
 	}
 	mock.(*ncipClientMock).lastRequest = nil
-	response, err = ad.RequestItem("req1", "item1", "testuser", "pickloc", "")
+	response, err = ad.RequestItem("req1", RequestItemIdentifier{ItemID: "item1"}, "testuser", "pickloc", "")
 	assert.NoError(t, err)
 	assert.Equal(t, "123.456", response.Barcode)
 	assert.Equal(t, "QA123 .A45", response.CallNumber)
@@ -526,7 +561,7 @@ func TestRequestItem(t *testing.T) {
 	assert.Nil(t, req.ItemOptionalFields)
 
 	mock.(*ncipClientMock).nilResponse = true
-	_, err = ad.RequestItem("req1", "item2", "testuser", "loc", "itemloc")
+	_, err = ad.RequestItem("req1", RequestItemIdentifier{ItemID: "item2"}, "testuser", "loc", "itemloc")
 	assert.Error(t, err)
 	assert.Equal(t, "empty response from RequestItem", err.Error())
 
@@ -536,13 +571,13 @@ func TestRequestItem(t *testing.T) {
 		ncipClient: mock,
 	}
 	mock.(*ncipClientMock).lastRequest = nil
-	response, err = ad.RequestItem("", "item1", "testuser", "loc", "itemloc")
+	response, err = ad.RequestItem("", RequestItemIdentifier{ItemID: "item1"}, "testuser", "loc", "itemloc")
 	assert.NoError(t, err)
 	assert.Nil(t, response)
 	assert.Nil(t, mock.(*ncipClientMock).lastRequest)
 
 	ad = &LmsAdapterNcip{config: dirapi.LmsConfig{}, ncipClient: mock}
-	_, err = ad.RequestItem("", "item1", "testuser", "loc", "itemloc")
+	_, err = ad.RequestItem("", RequestItemIdentifier{ItemID: "item1"}, "testuser", "loc", "itemloc")
 	assert.EqualError(t, err, "missing request ID for RequestItem")
 	assert.Nil(t, mock.(*ncipClientMock).lastRequest)
 }
@@ -558,7 +593,7 @@ func TestCancelRequestItem(t *testing.T) {
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
 	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
 	assert.Equal(t, "Page", req.RequestType.Text)
-	assert.Equal(t, "Item", req.RequestScopeType.Text)
+	assert.Nil(t, req.RequestScopeType)
 }
 
 func TestCheckInItem(t *testing.T) {
@@ -642,13 +677,13 @@ func TestCheckOutItem(t *testing.T) {
 
 func TestManualOperationOutcomes(t *testing.T) {
 	ad := &LmsAdapterManual{}
-	performed, err := ad.AcceptItem("item", "request", "patron", "", "", "", "", "", "")
+	accepted, err := ad.AcceptItem("item", "request", "patron", "", "", "", "", "", "")
+	assert.NoError(t, err)
+	assert.Nil(t, accepted)
+	performed, err := ad.DeleteItem("item")
 	assert.NoError(t, err)
 	assert.False(t, performed)
-	performed, err = ad.DeleteItem("item")
-	assert.NoError(t, err)
-	assert.False(t, performed)
-	requested, err := ad.RequestItem("request", "item", "patron", "", "")
+	requested, err := ad.RequestItem("request", RequestItemIdentifier{BibliographicID: "item"}, "patron", "", "")
 	assert.NoError(t, err)
 	assert.Nil(t, requested)
 
@@ -888,6 +923,8 @@ func (n *ncipClientMock) RequestItem(request ncip.RequestItem) (*ncip.RequestIte
 	itemId := ""
 	if len(request.BibliographicId) > 0 {
 		itemId = request.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier
+	} else if len(request.ItemId) > 0 {
+		itemId = request.ItemId[0].ItemIdentifierValue
 	}
 	if itemId == "empty" {
 		return &ncip.RequestItemResponse{}, nil
@@ -911,9 +948,19 @@ func (n *ncipClientMock) RequestItem(request ncip.RequestItem) (*ncip.RequestIte
 		}
 	}
 	for _, itemElement := range request.ItemElementType {
-		if n.honorTitle && itemElement.Text == "Bibliographic Description" {
+		switch itemElement.Text {
+		case "Bibliographic Description":
+			if !n.honorTitle {
+				continue
+			}
 			res.ItemOptionalFields.BibliographicDescription = &ncip.BibliographicDescription{Title: "request title"}
-			break
+		case "Location":
+			res.ItemOptionalFields.Location = []ncip.Location{{
+				LocationName: ncip.LocationName{LocationNameInstance: []ncip.LocationNameInstance{
+					{LocationNameLevel: 1, LocationNameValue: "Main Library"},
+					{LocationNameLevel: 2, LocationNameValue: "Stacks"},
+				}},
+			}}
 		}
 	}
 	return res, nil

@@ -34,7 +34,7 @@ body:json {
 }
 
 script:pre-request {
-  bru.setVar("renewalOmittedOriginalDueDate", new Date(Date.now() - 86400000).toISOString());
+  bru.setVar("renewalOmittedOriginalDueDate", new Date(Date.now() + 7 * 86400000).toISOString());
   bru.sleep(Number(bru.getEnvVar("sleepDelay")))
 }
 

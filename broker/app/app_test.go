@@ -79,7 +79,7 @@ func TestOpenAPIRequestValidatorRejectsMissingIllRequest(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
-	assert.Contains(t, rr.Body.String(), `property \"illRequest\" is missing`)
+	assert.Contains(t, rr.Body.String(), `missing property 'illRequest'`)
 }
 
 func TestOpenAPIRequestValidatorRejectsNullNonNullableString(t *testing.T) {
@@ -97,7 +97,7 @@ func TestOpenAPIRequestValidatorRejectsNullNonNullableString(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
-	assert.Contains(t, rr.Body.String(), `Error at \"/requesterSymbol\": Value is not nullable`)
+	assert.Contains(t, rr.Body.String(), `got null, want string`)
 }
 
 func TestOpenAPIRequestValidatorRejectsBatchActionWithoutTitle(t *testing.T) {
@@ -165,4 +165,20 @@ func TestBadClientDelay(t *testing.T) {
 	_, err := Init(ctx)
 	assert.ErrorContains(t, err, "invalid duration \"bad\"")
 	CLIENT_DELAY = "0ms"
+}
+
+func TestOpenAPIPrefillValidation(t *testing.T) {
+	validator, err := newOpenAPIRequestValidator()
+	assert.NoError(t, err)
+	for _, prefix := range []string{"", "/broker"} {
+		for _, tc := range []struct {
+			query  string
+			status int
+		}{{"?identifier=record&serviceType=Copy", 204}, {"?identifier=record&serviceType=Invalid", 400}, {"?identifier=record&serviceType=", 400}} {
+			handler := validator(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, prefix+"/patron_requests/prefill"+tc.query, nil))
+			assert.Equal(t, tc.status, response.Code, response.Body.String())
+		}
+	}
 }

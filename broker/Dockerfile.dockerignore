@@ -21,11 +21,11 @@ broker/**/*_test.go
 # Include OpenAPI specs
 !broker/oapi/*.yaml
 
-# Include embedded built-in profiles
-!broker/profiles/builtin/*.yaml
-
 # Include statemodels
 !broker/patron_request/service/statemodels
+
+# Include template samples
+!broker/patron_request/service/templatesamples
 
 # Directory sources are generated inside the build.
 directory/api/directory.gen.go

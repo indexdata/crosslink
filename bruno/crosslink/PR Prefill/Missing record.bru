@@ -1,0 +1,27 @@
+meta {
+  name: Missing record
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{host}}/patron_requests/prefill?identifier=not-found
+  body: none
+  auth: basic
+}
+
+headers {
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+  X-Okapi-User-Id: {{userName}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+tests {
+  test("Prefill response", function () {
+    expect(res.getStatus()).to.equal(404);
+  });
+}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	sched_db "github.com/indexdata/crosslink/broker/scheduler/db"
 	schedoapi "github.com/indexdata/crosslink/broker/scheduler/oapi"
 	"github.com/indexdata/crosslink/broker/tenant"
@@ -33,6 +34,15 @@ type MockSchedRepo struct {
 type MockEventRepo struct {
 	mock.Mock
 	events.EventRepo
+}
+
+type MockTemplateRepo struct {
+	pr_db.PrRepo
+	template pr_db.Template
+}
+
+func (m *MockTemplateRepo) GetTemplateByPurposeAudienceLabelAndOwner(_ common.ExtendedContext, _ pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams) (pr_db.Template, error) {
+	return m.template, nil
 }
 
 func (m *MockEventRepo) GetBatchActionEvents(_ common.ExtendedContext, taskID string) ([]events.Event, error) {
@@ -93,12 +103,12 @@ var testOwnerScope = []string{testSymbol, "ISIL:S1"}
 
 func newHandler(repo sched_db.SchedRepo) SchedulerApiHandler {
 	resolver := tenant.NewResolver().WithIllRepo(new(testmocks.MockIllRepositorySuccess))
-	return NewSchedulerApiHandler(10, repo, nil, resolver)
+	return NewSchedulerApiHandler(10, repo, nil, resolver, nil)
 }
 
 func newHandlerWithEvents(repo sched_db.SchedRepo, eventRepo events.EventRepo) SchedulerApiHandler {
 	resolver := tenant.NewResolver().WithIllRepo(new(testmocks.MockIllRepositorySuccess))
-	return NewSchedulerApiHandler(10, repo, eventRepo, resolver)
+	return NewSchedulerApiHandler(10, repo, eventRepo, resolver, nil)
 }
 
 func newReq(method, body string) *http.Request {
@@ -206,7 +216,7 @@ func TestGetBatchActions_OkapiWithoutSymbolUsesTenantOwnedScope(t *testing.T) {
 	resolver := tenant.NewResolver().
 		WithTenantToSymbol("ISIL:DK-{tenant}").
 		WithIllRepo(new(testmocks.MockIllRepositorySuccess))
-	h := NewSchedulerApiHandler(10, repo, nil, resolver)
+	h := NewSchedulerApiHandler(10, repo, nil, resolver, nil)
 	req := httptest.NewRequest(http.MethodGet, "/broker/batch_actions", nil)
 	req.Header.Set(tenant.OkapiTenantHeader, "diku")
 	rr := httptest.NewRecorder()
@@ -346,67 +356,29 @@ func TestGetBatchActionsIdEventsSyntheticIDUsesParentLookup(t *testing.T) {
 
 // ── PostBatchActions ──────────────────────────────────────────────────────────
 
-func TestPostBatchActions_OK(t *testing.T) {
+func TestPostBatchActions_EmailPullslipsRequiresTemplateLabel(t *testing.T) {
 	repo := new(MockSchedRepo)
-	before := time.Now().UTC()
-
-	repo.On("SaveScheduledTask", mock.MatchedBy(func(p sched_db.SaveScheduledTaskParams) bool {
-		return p.ID != "" &&
-			p.EventName == events.EventNameInvokeBatchAction &&
-			p.Schedule == validRrule &&
-			p.Title == (pgtype.Text{String: "Email pull slips", Valid: true}) &&
-			p.Status == sched_db.ScheduledTaskStatusPending &&
-			p.Owner == testSymbol &&
-			p.RunAt.Valid && p.RunAt.Time.After(before) &&
-			p.CreatedAt.Valid &&
-			p.ActionData.BatchActionData != nil &&
-			p.ActionData.BatchActionData.ActionName == string(schedoapi.EmailPullslips) &&
-			p.ActionData.BatchActionData.Selector == "title=test" &&
-			p.ActionData.BatchActionData.TaskId == p.ID &&
-			p.ActionData.BatchActionData.Owner == testSymbol &&
-			len(p.ActionData.CustomData) == 0
-	})).Return(saveScheduledTaskReturn, nil)
-
 	h := newHandler(repo)
 	body := `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"` + validRrule + `","title":"Email pull slips"}`
 	req := newReq(http.MethodPost, body)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
 
-	assert.Equal(t, http.StatusCreated, rr.Code)
-	assert.NotEmpty(t, rr.Header().Get("Location"))
-	assert.Contains(t, rr.Header().Get("Content-Type"), "application/json")
-	var resp schedoapi.BatchAction
-	assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
-	assert.NotEmpty(t, resp.Id)
-	assert.Equal(t, testSymbol, resp.Owner)
-	assert.Equal(t, validRrule, resp.Schedule)
-	assert.Equal(t, "title=test", resp.BatchQuery)
-	assert.True(t, resp.Active)
-	assert.NotNil(t, resp.NextRun)
-	repo.AssertExpectations(t)
+	assertErrorStatus(t, rr, http.StatusBadRequest)
+	assert.Contains(t, rr.Body.String(), "templateLabel")
+	repo.AssertNotCalled(t, "SaveScheduledTask", mock.Anything)
 }
 
-func TestPostBatchActions_ValidDailySchedule_ComputesMidnightRunAt(t *testing.T) {
+func TestPostBatchActions_EmailPullslipsRequiresTemplateLabelWithValidSchedule(t *testing.T) {
 	repo := new(MockSchedRepo)
-	before := time.Now().UTC()
-
-	repo.On("SaveScheduledTask", mock.MatchedBy(func(p sched_db.SaveScheduledTaskParams) bool {
-		runAt := p.RunAt.Time
-		return p.Schedule == "FREQ=DAILY" &&
-			p.RunAt.Valid &&
-			runAt.After(before) &&
-			!runAt.After(before.Add(24*time.Hour+time.Second)) &&
-			runAt.Equal(runAt.UTC().Truncate(24*time.Hour))
-	})).Return(saveScheduledTaskReturn, nil)
-
 	h := newHandler(repo)
 	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"FREQ=DAILY","title":"Email pull slips"}`)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
 
-	assert.Equal(t, http.StatusCreated, rr.Code)
-	repo.AssertExpectations(t)
+	assertErrorStatus(t, rr, http.StatusBadRequest)
+	assert.Contains(t, rr.Body.String(), "templateLabel")
+	repo.AssertNotCalled(t, "SaveScheduledTask", mock.Anything)
 }
 
 func TestPostBatchActions_ActionParamsPersisted(t *testing.T) {
@@ -417,7 +389,7 @@ func TestPostBatchActions_ActionParamsPersisted(t *testing.T) {
 	})).Return(saveScheduledTaskReturn, nil)
 
 	h := newHandler(repo)
-	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"`+validRrule+`","title":"Email pull slips","actionParams":{"delivery":"email","max":3}}`)
+	req := newReq(http.MethodPost, `{"actionName":"request-aging","batchQuery":"title=test","schedule":"`+validRrule+`","title":"Request aging","actionParams":{"delivery":"email","max":3}}`)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
 
@@ -427,6 +399,53 @@ func TestPostBatchActions_ActionParamsPersisted(t *testing.T) {
 	assert.NotNil(t, resp.ActionParams)
 	assert.Equal(t, "email", (*resp.ActionParams)["delivery"])
 	repo.AssertExpectations(t)
+}
+
+func TestPostBatchActions_EmailPullslipsRejectsActionParamsWithoutTemplateLabel(t *testing.T) {
+	repo := new(MockSchedRepo)
+	h := newHandler(repo)
+	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"`+validRrule+`","title":"Email pull slips","actionParams":{"to":["staff@example.com"]}}`)
+	rr := httptest.NewRecorder()
+
+	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
+
+	assertErrorStatus(t, rr, http.StatusBadRequest)
+	assert.Contains(t, rr.Body.String(), "templateLabel")
+	repo.AssertNotCalled(t, "SaveScheduledTask", mock.Anything)
+}
+
+func TestPostBatchActions_EmailPullslipsRejectsMistypedTemplateLabel(t *testing.T) {
+	repo := new(MockSchedRepo)
+	h := newHandler(repo)
+	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"`+validRrule+`","title":"Email pull slips","actionParams":{"to":["staff@example.com"],"templateLabel":123}}`)
+	rr := httptest.NewRecorder()
+
+	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
+
+	assertErrorStatus(t, rr, http.StatusBadRequest)
+	assert.Contains(t, rr.Body.String(), "non-empty string")
+	repo.AssertNotCalled(t, "SaveScheduledTask", mock.Anything)
+}
+
+func TestPostBatchActions_RejectsTemplateThatCannotRenderBatchData(t *testing.T) {
+	repo := new(MockSchedRepo)
+	templateRepo := &MockTemplateRepo{template: pr_db.Template{
+		ID:          "template-id",
+		Subject:     pgtype.Text{String: "Request {{.ReqId}}", Valid: true},
+		Body:        "Request {{.ReqId}}",
+		ContentType: "text",
+		Labels:      []string{"pullslips"},
+	}}
+	resolver := tenant.NewResolver().WithIllRepo(new(testmocks.MockIllRepositorySuccess))
+	h := NewSchedulerApiHandler(10, repo, nil, resolver, templateRepo)
+	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"`+validRrule+`","title":"Email pull slips","actionParams":{"to":["staff@example.com"],"templateLabel":"pullslips"}}`)
+	rr := httptest.NewRecorder()
+
+	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
+
+	assertErrorStatus(t, rr, http.StatusBadRequest)
+	assert.Contains(t, rr.Body.String(), "ReqId")
+	repo.AssertNotCalled(t, "SaveScheduledTask", mock.Anything)
 }
 
 func TestPostBatchActions_MasterWithoutSymbolCreatesUnrestrictedAction(t *testing.T) {
@@ -451,6 +470,47 @@ func TestPostBatchActions_MasterWithoutSymbolCreatesUnrestrictedAction(t *testin
 	repo.AssertExpectations(t)
 }
 
+func TestPostBatchActions_PatronRequestArchiveRequiresOwnerAndInterval(t *testing.T) {
+	h := newHandler(new(MockSchedRepo))
+	for _, action := range []string{"archive-borrowing-requests", "archive-lending-requests"} {
+		for _, tc := range []struct {
+			name, body string
+			symbol     *string
+		}{
+			{"owner", `{"actionName":"archive-borrowing-requests","batchQuery":"state==CLOSED","schedule":"FREQ=DAILY","title":"Archive","actionParams":{"interval":"720h"}}`, nil},
+			{"interval", `{"actionName":"archive-borrowing-requests","batchQuery":"state==CLOSED","schedule":"FREQ=DAILY","title":"Archive"}`, symPtr(testSymbol)},
+			{"anonymize", `{"actionName":"archive-borrowing-requests","batchQuery":"state==CLOSED","schedule":"FREQ=DAILY","title":"Archive","actionParams":{"interval":"720h","anonymize":"true"}}`, symPtr(testSymbol)},
+		} {
+			t.Run(action+"/"+tc.name, func(t *testing.T) {
+				rr := httptest.NewRecorder()
+				body := strings.ReplaceAll(tc.body, "archive-borrowing-requests", action)
+				h.PostBatchActions(rr, newReq(http.MethodPost, body), schedoapi.PostBatchActionsParams{Symbol: tc.symbol})
+				assertErrorStatus(t, rr, http.StatusBadRequest)
+			})
+		}
+	}
+}
+
+func TestPostBatchActions_LendingArchivePersistsTenantOwner(t *testing.T) {
+	const owner = "ISIL:DK-DIKU"
+	repo := new(MockSchedRepo)
+	repo.On("SaveScheduledTask", mock.MatchedBy(func(p sched_db.SaveScheduledTaskParams) bool {
+		return p.Owner == owner && p.ActionData.BatchActionData.Owner == owner &&
+			p.ActionData.BatchActionData.ActionName == "archive-lending-requests" &&
+			p.ActionData.CustomData["interval"] == "720h"
+	})).Return(saveScheduledTaskReturn, nil)
+	resolver := tenant.NewResolver().WithTenantToSymbol("ISIL:DK-{tenant}").
+		WithIllRepo(new(testmocks.MockIllRepositorySuccess))
+	h := NewSchedulerApiHandler(10, repo, nil, resolver, nil)
+	req := httptest.NewRequest(http.MethodPost, "/broker/batch_actions", strings.NewReader(
+		`{"actionName":"archive-lending-requests","title":"Archive closed lending requests","schedule":"FREQ=DAILY;BYHOUR=3","batchQuery":"terminal_state=true","actionParams":{"interval":"720h","anonymize":false}}`))
+	req.Header.Set(tenant.OkapiTenantHeader, "diku")
+	rr := httptest.NewRecorder()
+	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{})
+	assert.Equal(t, http.StatusCreated, rr.Code)
+	repo.AssertExpectations(t)
+}
+
 func TestPostBatchActions_OkapiWithoutSymbolUsesPrimaryMappedOwner(t *testing.T) {
 	const mappedOwner = "ISIL:DK-DIKU"
 	repo := new(MockSchedRepo)
@@ -462,7 +522,7 @@ func TestPostBatchActions_OkapiWithoutSymbolUsesPrimaryMappedOwner(t *testing.T)
 	resolver := tenant.NewResolver().
 		WithTenantToSymbol("ISIL:DK-{tenant}").
 		WithIllRepo(new(testmocks.MockIllRepositorySuccess))
-	h := NewSchedulerApiHandler(10, repo, nil, resolver)
+	h := NewSchedulerApiHandler(10, repo, nil, resolver, nil)
 	req := httptest.NewRequest(http.MethodPost, "/broker/batch_actions",
 		strings.NewReader(`{"actionName":"request-aging","batchQuery":"title=test","schedule":"`+validRrule+`","title":"Request aging","actionParams":{"interval":"24h"}}`))
 	req.Header.Set(tenant.OkapiTenantHeader, "diku")
@@ -562,7 +622,7 @@ func TestPostBatchActions_SaveScheduledTaskError(t *testing.T) {
 	repo.On("SaveScheduledTask", mock.Anything).Return(sched_db.ScheduledTask{}, errors.New("db error"))
 
 	h := newHandler(repo)
-	body := `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"` + validRrule + `","title":"Email pull slips"}`
+	body := `{"actionName":"request-aging","batchQuery":"title=test","schedule":"` + validRrule + `","title":"Request aging"}`
 	req := newReq(http.MethodPost, body)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
@@ -576,7 +636,7 @@ func TestPostBatchActions_DuplicateOwnerTitleReturnsConflict(t *testing.T) {
 	repo.On("SaveScheduledTask", mock.Anything).Return(sched_db.ScheduledTask{}, &pgconn.PgError{Code: pgerrcode.UniqueViolation})
 
 	h := newHandler(repo)
-	body := `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"` + validRrule + `","title":"Email pull slips"}`
+	body := `{"actionName":"request-aging","batchQuery":"title=test","schedule":"` + validRrule + `","title":"Request aging"}`
 	req := newReq(http.MethodPost, body)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
@@ -644,8 +704,10 @@ func TestGetBatchActionsId_DBError(t *testing.T) {
 func TestPutBatchActionsId_OK_RecomputesRunAtAndPersistsActionData(t *testing.T) {
 	repo := new(MockSchedRepo)
 	task := scheduledTaskFixture("task-1")
+	task.ActionData.BatchActionData.ActionName = string(schedoapi.RequestAging)
 	oldRunAt := task.RunAt.Time
 	newSchedule := "FREQ=DAILY"
+	repo.On("GetScheduledTaskById", "task-1", testOwnerScope).Return(task, nil)
 	repo.On("GetScheduledTaskByIdForUpdate", "task-1", testOwnerScope).Return(task, nil)
 	repo.On("SaveScheduledTask", mock.MatchedBy(func(p sched_db.SaveScheduledTaskParams) bool {
 		return p.ID == "task-1" &&
@@ -669,6 +731,50 @@ func TestPutBatchActionsId_OK_RecomputesRunAtAndPersistsActionData(t *testing.T)
 	assert.Equal(t, "author=doe", resp.BatchQuery)
 	assert.NotNil(t, resp.NextRun)
 	repo.AssertExpectations(t)
+}
+
+func TestPutBatchActionsId_RejectsTemplateThatCannotRenderBatchData(t *testing.T) {
+	repo := new(MockSchedRepo)
+	task := scheduledTaskFixture("task-1")
+	repo.On("GetScheduledTaskById", "task-1", testOwnerScope).Return(task, nil)
+	templateRepo := &MockTemplateRepo{template: pr_db.Template{
+		ID:          "template-id",
+		Subject:     pgtype.Text{String: "Request {{.ReqId}}", Valid: true},
+		Body:        "Request {{.ReqId}}",
+		ContentType: "text",
+		Labels:      []string{"pullslips"},
+	}}
+	resolver := tenant.NewResolver().WithIllRepo(new(testmocks.MockIllRepositorySuccess))
+	h := NewSchedulerApiHandler(10, repo, nil, resolver, templateRepo)
+	req := newReq(http.MethodPut, `{"batchQuery":"author=doe","schedule":"FREQ=DAILY","actionParams":{"to":["staff@example.com"],"templateLabel":"pullslips"}}`)
+	rr := httptest.NewRecorder()
+
+	h.PutBatchActionsId(rr, req, "task-1", schedoapi.PutBatchActionsIdParams{Symbol: symPtr(testSymbol)})
+
+	assertErrorStatus(t, rr, http.StatusBadRequest)
+	assert.Contains(t, rr.Body.String(), "ReqId")
+	repo.AssertNotCalled(t, "GetScheduledTaskByIdForUpdate", mock.Anything, mock.Anything)
+	repo.AssertNotCalled(t, "SaveScheduledTask", mock.Anything)
+}
+
+func TestPutBatchActionsId_EmailPullslipsRejectsActionParamsWithoutTemplateLabel(t *testing.T) {
+	repo := new(MockSchedRepo)
+	task := scheduledTaskFixture("task-1")
+	task.ActionData.CustomData = map[string]any{
+		"to":            []any{"staff@example.com"},
+		"templateLabel": "existing-template",
+	}
+	repo.On("GetScheduledTaskById", "task-1", testOwnerScope).Return(task, nil)
+	h := newHandler(repo)
+	req := newReq(http.MethodPut, `{"batchQuery":"author=doe","schedule":"FREQ=DAILY","actionParams":{"to":["staff@example.com"]}}`)
+	rr := httptest.NewRecorder()
+
+	h.PutBatchActionsId(rr, req, "task-1", schedoapi.PutBatchActionsIdParams{Symbol: symPtr(testSymbol)})
+
+	assertErrorStatus(t, rr, http.StatusBadRequest)
+	assert.Contains(t, rr.Body.String(), "templateLabel")
+	repo.AssertNotCalled(t, "GetScheduledTaskByIdForUpdate", mock.Anything, mock.Anything)
+	repo.AssertNotCalled(t, "SaveScheduledTask", mock.Anything)
 }
 
 func TestPutBatchActionsId_OmittedTitlePreservesExistingTitle(t *testing.T) {

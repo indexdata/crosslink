@@ -83,3 +83,32 @@ func (r *MockIllRepo) GetCachedPeersBySymbols(ctx common.ExtendedContext, symbol
 	args := r.Called(symbols)
 	return args.Get(0).([]ill_db.Peer), args.String(1), args.Error(2)
 }
+
+func TestGetAdapterNcipVersion(t *testing.T) {
+	for _, version := range []string{"1.0", "2.02", "unsupported"} {
+		t.Run(version, func(t *testing.T) {
+			config := dirapi.LmsConfig{Address: "https://lms.example", FromAgency: "broker", NcipVersion: &version}
+			repo := &MockIllRepo{}
+			repo.On("GetCachedPeersBySymbols", mock.Anything).Return([]ill_db.Peer{{CustomData: dirapi.Entry{LmsConfig: &config}}}, "", nil)
+			adapter, err := NewLmsCreator(repo, nil).GetAdapter(common.CreateExtCtxWithArgs(context.Background(), nil), "TEST")
+			if version == "unsupported" {
+				assert.ErrorContains(t, err, "ncipVersion")
+				return
+			}
+			assert.NoError(t, err)
+			if version == "1.0" {
+				assert.IsType(t, &LmsAdapterNcip1{}, adapter)
+			} else {
+				assert.IsType(t, &LmsAdapterNcip{}, adapter)
+			}
+			// The public NCIP factory uses the same selection as the Directory path.
+			adapter, err = CreateLmsAdapterNcip(config)
+			assert.NoError(t, err)
+			if version == "1.0" {
+				assert.IsType(t, &LmsAdapterNcip1{}, adapter)
+			} else {
+				assert.IsType(t, &LmsAdapterNcip{}, adapter)
+			}
+		})
+	}
+}

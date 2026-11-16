@@ -1,0 +1,37 @@
+meta {
+  name: Lending side delete overdue batch
+  type: http
+  seq: 60
+}
+
+delete {
+  url: {{host}}/batch_actions/{{happyOverdueBatchId}}
+  body: none
+  auth: basic
+}
+
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
+script:post-response {
+  test("Delete the regression batch", () => {
+    expect(res.getStatus()).to.equal(204);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

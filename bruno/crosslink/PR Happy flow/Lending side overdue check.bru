@@ -1,7 +1,7 @@
 meta {
   name: Lending side overdue check
   type: http
-  seq: 27
+  seq: 29
 }
 
 get {
@@ -25,7 +25,7 @@ auth:basic {
 }
 
 script:pre-request {
-  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+  bru.sleep(Math.max(2000, Number(bru.getEnvVar("sleepDelay"))));
 }
 
 script:post-response {

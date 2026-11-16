@@ -9,6 +9,79 @@ CrossLink broker is a system to manage inter-library loans (ILL), specifically i
 * negotiates loans with external suppliers (e.g Alma or ReShare) via ISO18626
 * allows internal requesters and suppliers to manage ILL requests using a convenient JSON API
 * provides ILS integration for internal requesters and suppliers via NCIP
+  ([NCIP 1.0 adapter](ncipclientv1/README.md))
+
+Incoming ISO18626 transaction events include `eventData.charset`, for example
+`"UTF-8 (declaration)"`. The value records the encoding used to decode the message
+and its source: `BOM`, `Content-Type`, `declaration`, or `default`, in precedence
+order. This field is omitted for messages processed internally without HTTP input.
+
+# Cancellation reasons in ISO18626 notes
+
+Incoming requester `Cancel` messages and supplier `CancelResponse` messages (including
+rejections), plus supported supplier `Cancelled` status messages, can carry
+`#CancellationReason: <reason>#` in their note. The reason is arbitrary nonblank
+text, for example `InvalidUser` or `Duplicate Request`, and cannot contain `#`.
+The prefix is case-sensitive. Surrounding whitespace in the value is trimmed.
+
+The first nonblank reason is stored in the patron request's `cancellationReason`;
+all complete nonblank reason markers are removed from the working note. Other
+text, whitespace, and microformats remain intact for normal processing. The first
+`#` after `CancellationReason:` closes the reason, regardless of following text.
+For example, `#CancellationReason: InvalidUser#Ref: 123#` stores `InvalidUser` and
+leaves `Ref: 123#`. Adjacent microformats require separate closing and opening
+hashes, such as `#CancellationReason: InvalidUser##ReShareLoanConditionRejectResponse#`;
+hashes cannot be shared between markers or escaped inside a reason. Empty markers
+and prefixes without a closing hash remain ordinary note text. Existing
+notification-history cleanup of condition and item markers still applies.
+
+Plain notes no longer populate `cancellationReason`. A message without a valid
+reason marker leaves the stored reason unchanged; a later valid reason replaces
+it. This does not change cancellation routing or state transitions.
+
+The extracted reason is also recorded as a notification of kind
+`cancellation_reason`, with the reason in `code` and the remaining note text, if
+any, in `note`. Requesters keep a `sent` copy when their `cancel-request` action
+succeeds; the receiving side stores a `received` copy.
+
+# Notification codes
+
+A notification's `code` is interpreted by its `kind`: the loan condition for
+`condition`, the reason for `cancellation_reason` and `unfilled_reason`, and
+absent for `note`. Libraries define their own codes, so `code` is free text owned
+by the sender (`fromSymbol`). When the sender's cached Directory entry lists the
+code under `loanConditions`, `cancellationReasons` or `unfilledReasons`, its
+description is copied into `codeDescription` when the notification is stored;
+otherwise `codeDescription` is absent. Behind an opaque broker, received
+notifications come from the broker's symbol, so the sender's vocabulary is not
+visible and they carry only `code`; sent copies are always described from the
+sender's own entry. Unfilled reasons come from ISO18626
+`reasonUnfilled`, both on incoming supplier messages and on this broker's
+`cannot-supply` action. A message is stored as one notification; when it carries
+several coded values, a condition (or cost) takes precedence over an unfilled
+reason, which takes precedence over a cancellation reason.
+
+Email and pull-slip templates render conditions through `{{.LoanConditions}}`;
+the note text of every other notification kind, including reason
+notifications, appears in `{{.StaffNotes}}`; notifications without note text
+are skipped. Reason codes are not staff notes: cancellation reasons render
+through `{{.CancellationReason}}`.
+
+External vendor shims strip these markers from outgoing requester, supplier, and
+request-service notes before serialization, using a copy so internal messages
+retain their data. Local CrossLink delivery retains markers for extraction. Original
+received messages remain in the event audit trail.
+
+The requester `cancel-request` action accepts an optional `actionParams.note` and
+forwards it unchanged in the internal requester `Cancel` message, addressed to
+the configured Broker symbol. Omitting the note sends an empty note. Callers may
+include a cancellation-reason microformat in the note; the action does not generate
+one automatically. When cancellation is successfully sent, the extracted reason is
+saved on the originating borrowing request along with its action result and state.
+A failed send or a note without a valid reason leaves the stored reason unchanged.
+A supplier response without a reason marker preserves that value, including when
+cancellation is accepted. Existing incoming extraction and external-shim cleanup
+apply on delivery.
 
 # API
 
@@ -25,6 +98,15 @@ The broker exposes a JSON API that addresses two use cases:
    Internally, the broker creates an ILL transaction to back the execution of a _Patron Request_ so that the detailed monitoring is available through the `ILL Transactions API`.
    See the [Broker API Specification](./oapi/open-api.yaml) for details, where relevant endpoints are tagged with `patron-requests-api`.
 
+A `rerequest` creates a new borrowing request linked to its predecessor through
+`prevReqId` and `nextReqId`. With `noop: true`, the action only records the transition;
+the requester must create the replacement through `POST /patron_requests` and supply
+`prevReqId` to retain the link. Both flows send a `New` ISO18626 request carrying
+`requestingAgencyPreviousRequestId`. When the receiving supplier has the matching
+previous lending request for the same requester and tenant, it links the two supply
+requests atomically. A supplier without that predecessor accepts the request without
+links. Retries retain their `Retry` request type and use the same supplier-side linking.
+
 The broker’s APIs use hyperlinks to connect JSON resources.
 If you use Chrome or another browser to explore the API,
 consider installing an extension like [JSON Formatter Classic](https://chromewebstore.google.com/detail/json-formatter-classic/caacnjeoikecoeepknkbjdcaediamaej), which makes hyperlinked JSON easier to navigate.
@@ -32,6 +114,78 @@ consider installing an extension like [JSON Formatter Classic](https://chromeweb
 Note on FOLIO integration: selected API endpoints are available under the base path `/broker` when the `TENANT_TO_SYMBOL` environment variable is set.
 This enables the broker to operate as a FOLIO/Okapi module with authentication/authorization and multi-tenancy support;
 see the [ModuleDescriptor](./descriptors/ModuleDescriptor-template.json) for details.
+
+## Archiving patron requests
+
+Create a scheduled `archive-borrowing-requests` or `archive-lending-requests` batch action through
+`POST /batch_actions` (or `/broker/batch_actions` in Okapi). An owner symbol is
+required. `batchQuery` selects eligible patron-request states and may include
+other patron-request CQL filters. `actionParams.interval` is a positive Go duration
+measured from `patron_request.updated_at`; `anonymize` defaults to `false`.
+Borrowing actions are restricted to `requester_symbol`, and lending actions to
+`supplier_symbol`, matching the action's owner.
+
+```json
+{
+  "title": "Archive closed borrowing requests",
+  "schedule": "FREQ=DAILY;BYHOUR=3",
+  "actionName": "archive-borrowing-requests",
+  "batchQuery": "terminal_state = true",
+  "actionParams": {"interval": "720h", "anonymize": false}
+}
+```
+
+The lending default uses the same schedule, CQL selector, and action parameters,
+with `actionName: "archive-lending-requests"` and title
+`"Archive closed lending requests"`. Defaults are offered through the state-model
+API as starting points for tenant-owned scheduled actions.
+
+Each run archives up to 100 matching requests. It scans pages of 100 candidates
+in creation-time/ID order, continuing past skipped and failed requests until the
+archive limit is reached or all matches have been examined. CQL `sortBy` does not
+change this scan order. Counts and up to 100 per-request failures are recorded in
+the batch-action event history. Requests with changed state/timestamps or active
+events or pending signals are skipped for a later run. Pending signals are
+checked through `event.last_signal`, which consumers clear when claiming them.
+Borrowing checks exclude observer-only `supplier-added` and `supplier-moved`
+rota audit notices, whose signals remain set; these notices are still archived.
+Archiving does not track handlers through completion, so an old terminal request
+can be archived during the handoff from a claimed signal to follow-up work.
+The archive is in
+`archived_resource`, keyed by resource type and ID, with owner, timestamp,
+schema version, anonymization metadata, and one JSONB bundle. The bundle holds
+the selected request, its events, items, notifications, and notes.
+
+Borrowing archival also waits for nonterminal lending requests with the same
+requester symbol and request ID, and for a nonterminal Retry successor while the
+transaction still belongs to its predecessor. Activity checks and event locks
+include related lending requests' patron-request-domain tasks, including tasks
+on terminal requests that use the synthetic transaction ID. New rerequests use
+independent transactions and do not defer predecessor archival. Contention on related request
+rows skips the candidate for a later run. Borrowing archives additionally include
+the associated ILL transaction, transaction events,
+and located suppliers. Lending archives store only the supplier PR's data and
+preserve the transaction, located suppliers, borrowing PR, and their events.
+Resource types are `borrowing-patron-request` and `lending-patron-request`.
+Each archive insertion and deletion of the corresponding live records is atomic.
+The request's
+`internal_note` and other notes are included in their owning rows. With
+`anonymize: true`, an explicit allowlist retains operational states, actions,
+outcomes, timestamps, institution symbols, service/request types, item LMS status,
+and notification amounts/currency. Personal fields, record identifiers inside the
+bundle, bibliographic/free-text fields, notes, embedded messages, error payloads,
+and custom data are omitted. Unknown keys and structured values in scalar fields
+are discarded, so numeric personal identifiers and personal JSON keys cannot
+survive through unstructured data. Archive owner/resource metadata remains for
+identification, and `anonymization_method` records `operational-allowlist-v1`.
+Import and restoration are not supported.
+
+The legacy `archive` binary, `POST /archive_ill_transactions`, and
+`call_archive.sh` archive transactions only; they do not archive patron
+requests or their related records. Replace any job intended to archive patron
+requests with a batch action and stop calling that endpoint/script for those
+requests. The legacy path remains for transaction-only jobs until the separate
+`archive-ill-transactions` action is implemented.
 
 # Compatibility with external peers
 
@@ -183,7 +337,7 @@ make
 This will build the following binaries:
 
 * `broker` — the main program for the ILL service
-* `archive` — a utility for archiving old ILL transactions
+* `archive` — the legacy utility for archiving old ILL transactions
 
 You can also run included tests with:
 
@@ -320,10 +474,42 @@ intend to tolerate failures; binding an outcome no longer suppresses them.
 Email sending remains synchronous; successful sends and skipped recipients retain
 their existing behavior.
 
+## Action triggers
+
+The state model supports three action triggers:
+
+| Trigger | Runs on state entry | Staff execution |
+| --- | --- | --- |
+| `manual` (default) | No | Available through the normal staff action API |
+| `auto` | Yes | Existing manual retry behavior after failure |
+| `background` | No | Hidden and rejected by the staff action API, including after failure |
+
+Background jobs may invoke any action supported in the current state. The
+trigger does not bypass state checks or cause background actions to run on state
+entry. The default supplier `overdue` actions use `trigger: background` and run
+through the scheduled overdue batch. Existing saved batch selectors must include
+the desired loan states, including `RENEWAL_REJECTED` when applicable.
+
+## Loan renewal
+
+Borrowers can invoke `renew` from `RECEIVED`, `RENEWED`, and `OVERDUE` for
+`Loan` and `CopyOrLoan`, including loans with a future due date or no due date.
+Both sides enter `RENEWAL_PENDING`. Acceptance moves both sides to `RENEWED`;
+rejection moves them to `RENEWAL_REJECTED`, preserving the due date and the
+supplier's current ISO18626 loan status (`Loaned` or `Overdue`).
+
+`RENEWAL_REJECTED` is an active loan state with checkout/check-in, return, and
+recall available, but no renewal action. When the supplier marks the loan
+overdue, both sides move to `OVERDUE` and renewal becomes available again. The
+overdue batch includes rejected loans; after transition, `OVERDUE` is excluded
+from subsequent batches. This also applies to rejection of an already-overdue
+loan. Receipt notifications remain configured only on entry into `RECEIVED`.
+
 ## Loan recall
 
-Lenders can invoke `recall` from `RECEIVED`, `RENEWED`, `OVERDUE`, or
-`RENEWAL_PENDING` for `Loan` and `CopyOrLoan`. Optional action parameters are
+Lenders can invoke `recall` from `RECEIVED`, `RENEWED`, `OVERDUE`,
+`RENEWAL_PENDING`, or `RENEWAL_REJECTED` for `Loan` and `CopyOrLoan`. Optional
+action parameters are
 `note` and `dueDate` (a date or RFC3339 timestamp). An omitted or null date
 preserves the current deadline, including an open-ended loan; a date without
 a time means the end of the supplier's calendar day. Blank or invalid dates
@@ -400,3 +586,209 @@ to 1:1. An omitted or null policy, missing `illConfig`, or unset
 `CONSORTIUM_SYMBOL` uses proportional, regardless of requester settings.
 Locality, cost, network priority, and holdings preferences retain precedence over the score; last-resort lenders remain at the end.
 Rota diagnostics include the selected `loadBalancingPolicy` and raw scores.
+
+## Catalog prefill
+
+`GET /patron_requests/prefill` retrieves metadata without creating or modifying a
+patron request. Supply at least one of `identifier`, `isbn`, or `issn`, and a
+requester `symbol`. On `/broker/patron_requests/prefill`, `X-Okapi-Tenant` resolves
+the requester; an optional `symbol` must belong to that tenant. The existing
+requester/consortium/global catalog selection applies, independently of
+`metadataUpdateMode`.
+
+Optional `serviceType=Loan|Copy|CopyOrLoan` is passed to catalog lookup and echoed
+in `serviceInfo.serviceType`. Omit it to leave the service choice unset. No other
+service fields are inferred. ISBN/ISSN syntax accepts spaces and hyphens; checksums
+are not validated. Values are passed unchanged after trimming outer whitespace.
+
+The response uses ISO 18626 JSON sections `bibliographicInfo`, `publicationInfo`,
+and `serviceInfo`, omitting empty sections. A returned record with no mapped
+fields yields `{}` (or just the supplied service type). The general query builder
+tries identifier, ISBN, then ISSN. Existing holdings-driven fallback and first-record
+metadata selection are retained; metadata does not require available holdings.
+
+Responses are `400` for invalid input or requester context, `404` for no record,
+`502` for lookup failures, and `503` when no catalog is configured. Prefill has a
+30-second deadline; SRU/metaproxy requests honor cancellation. Native ZOOM calls
+check cancellation between operations, with individual calls limited to at most
+10 seconds (or a shorter configured timeout).
+
+Publication extraction defaults to MARC 264 with second indicator 1, falling back
+to 260 (`$a` place, `$b` publisher, `$c` date). Dates retain the catalog's text.
+The three extraction specifications can be overridden in
+`catalogConfig.metadataFormat.marc21` using `placeOfPublication`, `publisher`, and
+`publicationDate`; an explicit empty string disables a field. An asterisk in the first
+indicator in a five-character field selector matches any first indicator.
+Publication type uses conservative leader mappings: language monographs to Book,
+monographic components to Chapter, serial components to Article, manuscript text
+to Manuscript, notated music to MusicScore, maps to Map, nonmusical sound to
+SoundRecording, and musical sound to MusicRecording. Other types are omitted.
+
+## Holdings policy and request identifiers
+
+Holdings policy runs after the supplier availability lookup when the supplier's
+resolved catalog configuration contains an SRU or Z39.50 (ZOOM) endpoint. Otherwise
+it runs after the central holdings lookup. A profile, parser, or metadata setting
+alone does not enable availability lookup. No additional policy-stage setting is
+needed; invalid configuration is reported as an error. OPAC parsing always returns
+all available circulation candidates before policy filtering and ranking, for
+both central and supplier lookups. Availability and other parser filters still
+apply. The deprecated `allCirculations` setting is accepted for compatibility but
+has no effect, including when explicitly set to false.
+
+An eligible holding selected by a configured holdings policy supplies the located
+supplier's nullable `ItemID`. The central bibliographic `LocalID` remains unchanged.
+Reevaluation through a configured availability endpoint replaces or clears the
+selected item, including when lookup fails.
+Suppliers without eligible holdings are skipped. If availability lookup or holdings
+parsing fails, the error is recorded and deferred holdings policy is skipped. The
+workflow continues with unknown availability, sending the request to the supplier
+(or continuing local supply) without a selected item. Adapter creation failures
+use the same fallback; invalid configuration and database errors still stop processing.
+`holdingsPolicyResolved` persists readiness separately from `ItemID`: an eligible
+holding without an item ID still resolves the policy. Deferred-policy reevaluation
+first revokes readiness; a successful check or a committed lookup-failure bypass
+restores it. Unresolved selections cannot send a new supply request or run
+`fill-locally`, including requests already in
+`LOCAL_SUPPLY`. Legacy rows without readiness are accepted only when the supplier
+has no holdings policy; otherwise they require an availability check (or new
+supplier discovery for a central policy). Availability updates lock and re-read the selected
+supplier in short transactions, preserving concurrent protocol updates. If the
+selection or lookup identity changes during a check, its result is recorded as
+`superseded` and schedules no follow-up workflow tasks. Catalog lookup runs
+outside these transactions. Each availability attempt (including a retry of the
+same task) receives a fresh persisted token. Starting another attempt atomically
+supersedes older writes and results. Configured or invalid availability lookups
+revoke readiness; valid configurations without an availability endpoint preserve
+the discovery decision and selected item across overlapping checks and restarts.
+An unresolved central-policy selection still requires supplier discovery, including
+rows whose readiness was erased by an earlier broker version. Follow-up messages and
+rota selection carry the token and revalidate it before acting; successful
+reselection invalidates it. An exhausted rota retains the token for its requester
+notification. Tokens are transient coordination state, not imported/exported
+request data. Checks run without holding database locks during catalog or message
+I/O. Local fill also snapshots the selection and attempt under these locks, then
+revalidates both and policy readiness after pickup resolution, immediately before
+NCIP RequestItem. A message already dispatched cannot be recalled by a later reevaluation.
+During deployment, drain old broker workers before relying on token enforcement;
+older binaries do not perform these checks.
+
+The `check-availability` transaction event includes `availabilityLookup` and
+`holdingsPolicy` diagnostics in `resultData.customData`. Lookup diagnostics record
+the supplier, bibliographic ID, configured protocol and sanitized
+target, actual query, lookup/parsing duration in milliseconds,
+available-holding count and outcome. Targets omit URL credentials, query parameters
+and fragments; ZOOM options and complete Directory configuration are never copied.
+Counts describe holdings returned by the parser after availability filters, not
+every inventory item. Outcomes distinguish no record, no available holdings and
+lookup/parsing failures. SRU and Z39.50 holdings-parser failures report
+`holdings-failed`, including when parsing occurs inside `Lookup`.
+Connection, search and retrieval errors retain `lookup-failed`.
+Policy diagnostics report whether policy was absent,
+previously applied at discovery, still pending, skipped after lookup failure, or
+evaluated here; they include eligibility/exclusion counts, effective location and shelving preferences, rejection
+reasons, the selected copy and its selection reason. Tied preferences retain the
+first returned eligible holding, matching selection behavior.
+
+Candidate details are limited to 50 holdings, including the winner marked
+`selected: true`. If necessary, the winner replaces the last displayed candidate.
+Eligible and excluded counts describe all parsed candidates; `candidatesTruncated`
+is included only when holdings are omitted. Reasons are included only for exclusions.
+The winner is not repeated in a separate object. Diagnostic text fields are bounded
+to 2048 bytes plus a truncation marker. Policy `status` becomes `applied` only after
+a current result commits successfully; superseded attempts and commit failures
+retain `evaluated` status. `availabilityLookup.resultApplied` records whether the
+lookup decision or lookup-failure bypass committed. A committed bypass reports
+policy status `skipped-lookup-failure` and retains the lookup error. The normal
+event uses its existing availability token; a nested attempt token is included
+only when that token is absent from the result.
+
+Both event types include a short operator summary in `resultData.note`, explaining
+the lookup outcome and policy decision. For example: "Found 2 available items.
+Holdings policy selected RS3-CL-000008-POPULAR at Popular Reading Collection:
+shelving preference 20, compared with Main Library's 10." Superseded and failed
+saves explicitly state that the evaluated decision was not applied.
+
+The central `locate-suppliers` event uses the same lookup summary under
+`resultData.customData.holdingsLookup`, alongside its existing query, holdings and
+`rotaInfo` data. It records lookup/parsing time, returned-holding
+counts and failures, including on unsuccessful discovery. The discovery note says
+"Found N holdings" because these results may identify supplier holdings without
+identifying individual items or confirming current circulation availability.
+The existing `availableHoldings` field counts those parsed holdings.
+`configurationSource`
+distinguishes global adapters from Directory configuration. A global override does
+not report the overridden Directory endpoint as its target.
+Each `rotaInfo.suppliers` candidate includes its raw catalog `itemId`,
+`holdingsPolicyStatus` (`not-configured`, `deferred`, `evaluated`, or `applied`),
+and, for evaluated policies, `holdingsPolicyEligible` and any
+`holdingsPolicyReason`. Deferred candidates do not claim policy eligibility.
+Policy status becomes `applied` only after successful rota persistence; a failed
+save retains the evaluated decisions and reports `holdingsLookup.resultApplied`
+as false. These fields describe holdings policy separately from the existing
+overall candidate `match`, which also includes network, tier and other filters.
+
+ISO18626 requests put `LocalID` in `bibliographicInfo.supplierUniqueRecordId`
+and a nonempty selected `ItemID` in
+`supplierInfo.bibliographicRecordId.bibliographicRecordIdentifier`. Internal
+CrossLink delivery uses the same fields. Transparent local fulfillment
+(`fill-locally`) passes the same persisted bibliographic and item identifiers to
+the LMS adapter. It requires a selected local supplier belonging to the borrowing
+request and preserves the original request's bibliographic identifier.
+Catalog parsing or availability lookup without a holdings policy does not select
+an item ID. The selected holding's call number, when available, is persisted
+with its item ID and sent in `supplierInfo.callNumber`. Both fields are cleared
+when a new availability lookup invalidates the previous selection.
+
+Patron requests carry the shared-index record identifier separately in
+`bib_record_id` (API: `bibRecordId`). Clients should supply the VuFind UUID or
+Trove ANBD record ID when creating the borrowing request. Updates omit the field
+to preserve it or send an empty string to clear it. This identifier is preserved
+through retries and rerequests. Outgoing ISO18626 requests include it in
+`bibliographicInfo.bibliographicRecordId` with
+`bibliographicRecordIdentifierCode` set to `ReShare`; incoming lending requests
+extract and persist that identifier. Other record codes are preserved, and
+conflicting ReShare identifiers are rejected.
+
+The “view in shared index” UI should use `bibRecordId` with its configured
+VuFind/Trove URL and hide the link when the ID is absent or empty. It must not
+substitute the supplier's local bibliographic or copy ID. Existing requests
+remain without a shared-index ID unless it is explicitly supplied; the migration
+does not infer one from local identifiers. Import bundles also accept
+`patronRequest.bibRecordId`.
+
+When supplier Request Item is disabled (including manual LMS workflows), a
+Loan automatically attaches the selected copy as a volume before proceeding to
+`WILL_SUPPLY`. The volume uses the selected item ID as its barcode, the request
+title, and the supplied call number; it has no LMS reservation. Existing volumes
+are preserved on retries so staff can add or replace copies. Without a selected
+copy, the workflow continues without an automatically attached volume. Location
+fields are not carried by this mapping. CopyOrLoan retains its deferred item
+attachment at shipping; Copy does not attach a loan volume.
+
+For both NCIP versions, `requestItemRequestScopeType` controls identifier selection:
+
+- `auto` is the Generic default. A supplied item ID selects `Item` scope; otherwise
+  `supplierUniqueRecordId` supplies the bibliographic ID with `bibItemScopeName`
+  scope. The code default is `Bibliographic Item`; Sierra and FOLIO profiles
+  override the name to `Title`. Libraries can override `lmsConfig.bibItemScopeName`.
+  Item identifiers are not normalized; bibliographic identifiers are.
+- `Title` or `Bibliographic Item` uses the bibliographic identifier with
+  `requestItemBibIdCode` and bibliographic normalization, even when a selected
+  item ID is supplied. Both NCIP versions send the configured scope name unchanged.
+- `Item` uses the supplied item ID, falling back to `supplierUniqueRecordId` for
+  compatibility with existing item-scoped integrations, without normalization.
+
+Named vendor profiles retain their existing scopes. Explicit per-library scopes
+also override the Generic default. Unsupported scopes, empty required identifiers,
+and conflicting item IDs in supplierInfo are rejected before NCIP is sent.
+Explicit bibliographic scopes take precedence over supplied item IDs for incoming
+ISO18626 requests and local fulfillment. The LMS may select another copy of the
+requested title. A missing bibliographic ID still fails before NCIP is sent.
+Cancellation in `auto` uses the saved request ID and omits the optional NCIP scope;
+`auto` is never sent on the wire.
+
+**Compatibility:** Generic configurations without a scope override now interpret
+`supplierUniqueRecordId` as a bibliographic ID. Integrations that put item IDs in
+that field must retain an explicit `Item` setting or move the item ID into
+`supplierInfo.bibliographicRecordId`. The scope is not inferred from ID contents.

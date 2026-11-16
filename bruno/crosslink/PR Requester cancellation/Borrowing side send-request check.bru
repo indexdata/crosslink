@@ -1,0 +1,45 @@
+meta {
+  name: Borrowing side send-request check
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{host}}/patron_requests/{{cancellationPrId}}?side=borrowing
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: borrowing
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")))
+}
+
+script:post-response {
+  test("HTTP request succeeds", () => {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("for send-request", function() {
+    const pr = res.getBody();
+    expect(pr.lastAction).to.equal("send-request")
+    expect(pr.lastActionResult).to.equal("SUCCESS")
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

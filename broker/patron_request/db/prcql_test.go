@@ -13,14 +13,28 @@ import (
 func TestPatronRequestDateWithin(t *testing.T) {
 	for _, field := range []string{"created_at", "updated_at", "needed_at", "due_at"} {
 		t.Run(field, func(t *testing.T) {
-			query, err := ParsePatronRequestsCql(fmt.Sprintf(`%s within "2026-09-01 2026-09-17" and side = borrowing`, field))
-			require.NoError(t, err)
-			assert.Equal(t, fmt.Sprintf("(%s >= $3 AND %s <= $4) AND side = $5", field, field), query.GetWhereClause())
-			assert.Equal(t, []any{
-				time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC),
-				time.Date(2026, 9, 17, 0, 0, 0, 0, time.UTC),
-				"borrowing",
-			}, query.GetQueryArguments())
+			for _, tc := range []struct {
+				name, lower, upper, upperRelation string
+				wantLower, wantUpper              time.Time
+			}{
+				{"date range", "2026-09-01", "2026-09-17", "<",
+					time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC)},
+				{"same day", "2026-09-17", "2026-09-17", "<",
+					time.Date(2026, 9, 17, 0, 0, 0, 0, time.UTC), time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC)},
+				{"month end", "2026-09-01", "2026-09-30", "<",
+					time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)},
+				{"explicit midnight", "2026-09-01", "2026-09-17T00:00:00Z", "<=",
+					time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 9, 17, 0, 0, 0, 0, time.UTC)},
+				{"explicit timestamps", "2026-09-01T09:00:00Z", "2026-09-17T15:30:00Z", "<=",
+					time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC), time.Date(2026, 9, 17, 15, 30, 0, 0, time.UTC)},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					query, err := ParsePatronRequestsCql(fmt.Sprintf(`%s within "%s %s" and side = borrowing`, field, tc.lower, tc.upper))
+					require.NoError(t, err)
+					assert.Equal(t, fmt.Sprintf("(%s >= $3 AND %s %s $4) AND side = $5", field, field, tc.upperRelation), query.GetWhereClause())
+					assert.Equal(t, []any{tc.wantLower, tc.wantUpper, "borrowing"}, query.GetQueryArguments())
+				})
+			}
 		})
 	}
 }
@@ -35,6 +49,29 @@ func TestHandlePatronRequestsQueryKeepsOwnerRestrictionGrouped(t *testing.T) {
 	if got := query.GetWhereClause(); got != want {
 		t.Fatalf("where clause = %q, want %q", got, want)
 	}
+}
+
+func TestDefaultAgingCqlIncludesMissingServiceLevel(t *testing.T) {
+	cql := `side = lending and (state = VALIDATED or state = ITEM_PENDING or state = WILL_SUPPLY_PENDING or state = WILL_SUPPLY or state = CONDITION_PENDING or state = SEARCHING) and ((cql.allRecords = 1 not service_level = "") or (service_level <> Rush and service_level <> Express))`
+
+	query, err := ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
+	assert.Contains(
+		t,
+		query.GetWhereClause(),
+		`(TRUE AND NOT service_level IS NOT NULL) OR (service_level <> $10 AND service_level <> $11)`,
+	)
+	assert.Equal(t, []any{
+		"lending",
+		"VALIDATED",
+		"ITEM_PENDING",
+		"WILL_SUPPLY_PENDING",
+		"WILL_SUPPLY",
+		"CONDITION_PENDING",
+		"SEARCHING",
+		"Rush",
+		"Express",
+	}, query.GetQueryArguments())
 }
 
 func TestFieldTextArrayContainsGenerate(t *testing.T) {
@@ -116,6 +153,49 @@ func TestPatronRequestDuplicateFields(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "((patron = $3 AND ill_request->'bibliographicInfo'->>'supplierUniqueRecordId' = $4) AND lower(ill_request->'bibliographicInfo'->>'title') = lower($5)) AND id NOT IN($6)", query.GetWhereClause())
 	assert.Equal(t, []any{"patron-1", "record-1", "A Title", "current-pr"}, query.GetQueryArguments())
+}
+
+func TestPatronRequestStateAny(t *testing.T) {
+	query, err := ParsePatronRequestsCql(`state any "VALIDATED RECEIVED" and id <> "current-pr"`)
+	require.NoError(t, err)
+	assert.Equal(t, "state IN($3, $4) AND id NOT IN($5)", query.GetWhereClause())
+	assert.Equal(t, []any{"VALIDATED", "RECEIVED", "current-pr"}, query.GetQueryArguments())
+}
+
+func TestHandlePatronRequestsQueryItemFieldsUseExists(t *testing.T) {
+	tests := []struct {
+		name      string
+		cql       string
+		wantWhere string
+	}{
+		{
+			name:      "item_id exact",
+			cql:       `item_id = "item-123"`,
+			wantWhere: "EXISTS (SELECT 1 FROM item cql_item WHERE cql_item.pr_id = patron_request_search_view.id AND lower(cql_item.item_id) = lower($3))",
+		},
+		{
+			name:      "barcode wildcard",
+			cql:       `barcode = "abc*"`,
+			wantWhere: "EXISTS (SELECT 1 FROM item cql_item WHERE cql_item.pr_id = patron_request_search_view.id AND lower(cql_item.barcode) LIKE lower($3))",
+		},
+		{
+			name:      "call_number empty",
+			cql:       `call_number = ""`,
+			wantWhere: "NOT EXISTS (SELECT 1 FROM item cql_item WHERE cql_item.pr_id = patron_request_search_view.id AND cql_item.call_number IS NOT NULL AND cql_item.call_number <> '')",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			query, err := ParsePatronRequestsCql(tc.cql)
+			if err != nil {
+				t.Fatalf("ParsePatronRequestsCql() error = %v", err)
+			}
+			if got := query.GetWhereClause(); got != tc.wantWhere {
+				t.Fatalf("where clause = %q, want %q", got, tc.wantWhere)
+			}
+		})
+	}
 }
 
 func searchClauseForTest(term, relation string) cql.SearchClause {

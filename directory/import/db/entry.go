@@ -127,8 +127,13 @@ func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.E
 	if err != nil {
 		return model.RepoResult{}, fmt.Errorf("lock entry hierarchy: %w", err)
 	}
+	var existingID *uuid.UUID
 	if exists {
 		existing = lockedEntries[existing.ID]
+		existingID = &existing.ID
+	}
+	if err := r.checkConfigPolicy(ctx, tx, queries, aggregate.Data, existingID); err != nil {
+		return model.RepoResult{}, err
 	}
 	if err := validateImportSymbolOwnership(ctx, queries, aggregate.Data.Symbols, aggregate.Key); err != nil {
 		return model.RepoResult{}, err
@@ -340,7 +345,7 @@ func replaceEntryChildren(ctx context.Context, queries *db.Queries, entryID uuid
 		return err
 	}
 	for _, symbol := range data.Symbols {
-		if _, err := queries.UpsertSymbol(ctx, db.UpsertSymbolParams{Owner: entryID, Authority: symbol.Authority, Symbol: symbol.Symbol}); err != nil {
+		if _, err := queries.CreateSymbol(ctx, db.CreateSymbolParams{Owner: entryID, Authority: symbol.Authority, Symbol: symbol.Symbol}); err != nil {
 			return err
 		}
 	}
@@ -398,12 +403,12 @@ func replaceEntryConfigs(ctx context.Context, queries *db.Queries, entryID uuid.
 			patronProfiles, _ = json.Marshal(cfg.PatronProfiles)
 		}
 		if _, err := queries.UpsertLMSConfig(ctx, db.UpsertLMSConfigParams{
-			Vendor: cfg.Vendor, NcipNamespaceEnabled: cfg.NcipNamespaceEnabled, BibIDNormalization: cfg.BibIDNormalization,
-			Entry: &entryID, Address: cfg.Address, FromAgency: cfg.FromAgency, FromAgencyAuthentication: cfg.FromAgencyAuthentication,
+			NcipVersion: cfg.NcipVersion, Vendor: cfg.Vendor, NcipNamespaceEnabled: cfg.NcipNamespaceEnabled, BibIDNormalization: cfg.BibIDNormalization,
+			Entry: &entryID, Address: stringOrEmpty(cfg.Address), FromAgency: stringOrEmpty(cfg.FromAgency), FromAgencyAuthentication: cfg.FromAgencyAuthentication,
 			ToAgency: cfg.ToAgency, LookupUserEnabled: cfg.LookupUserEnabled, AcceptItemEnabled: cfg.AcceptItemEnabled,
 			CheckinItemEnabled: cfg.CheckInItemEnabled, CheckoutItemEnabled: cfg.CheckOutItemEnabled, ItemLocation: cfg.ItemLocation,
 			RequestItemRequestType: cfg.RequestItemRequestType, RequestItemScopeType: cfg.RequestItemRequestScopeType,
-			RequestItemBibCode: cfg.RequestItemBibIDCode, RequestItemEnabled: cfg.RequestItemEnabled,
+			BibItemScopeName: cfg.BibItemScopeName, RequestItemBibCode: cfg.RequestItemBibIDCode, RequestItemEnabled: cfg.RequestItemEnabled,
 			RequestItemPickupLocationEnabled: cfg.RequestItemPickupLocationEnabled, RequesterPickupLocation: cfg.RequesterPickupLocation,
 			SupplierPickupLocation: cfg.SupplierPickupLocation, RequesterPatronPattern: cfg.RequesterPatronPattern,
 			PatronProfiles: patronProfiles,
@@ -449,6 +454,8 @@ func replaceCatalogConfig(ctx context.Context, queries *db.Queries, entryID uuid
 	if config.Query != nil {
 		params.QueryType, params.QueryIdentifier, params.QueryIsbn, params.QueryIssn, params.QueryTitle = config.Query.Type, config.Query.Identifier, config.Query.ISBN, config.Query.ISSN, config.Query.Title
 		params.QueryYear = config.Query.Year
+		params.QueryIdentifierNormalization = config.Query.IdentifierNormalization
+		params.QueryIdentifierPrefix = config.Query.IdentifierPrefix
 	}
 	if config.HoldingsFormat != nil {
 		var err error
@@ -468,6 +475,10 @@ func replaceCatalogConfig(ctx context.Context, queries *db.Queries, entryID uuid
 	}
 	if config.MetadataFormat != nil && config.MetadataFormat.Marc21 != nil {
 		marc := config.MetadataFormat.Marc21
+		params.MetadataMarc21Publisher = marc.Publisher
+		params.MetadataMarc21PublicationDate = marc.PublicationDate
+		params.MetadataMarc21PlaceOfPublication = marc.PlaceOfPublication
+
 		params.MetadataMarc21Author, params.MetadataMarc21Edition, params.MetadataMarc21Identifier = marc.Author, marc.Edition, marc.Identifier
 		params.MetadataMarc21Isbn, params.MetadataMarc21Issn, params.MetadataMarc21Subtitle, params.MetadataMarc21Title = marc.ISBN, marc.ISSN, marc.Subtitle, marc.Title
 	}
@@ -479,18 +490,20 @@ func replaceILLConfig(ctx context.Context, queries *db.Queries, entryID uuid.UUI
 	if err := queries.DeleteIllConfigByEntry(ctx, entryID); err != nil || config == nil {
 		return err
 	}
-	lenders := make([]string, 0, len(config.LendersOfLastResort))
-	for _, lenderID := range config.LendersOfLastResort {
-		lenderSymbol, err := queries.FirstSymbolByOwner(ctx, lenderID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("lender of last resort %s has no symbol", lenderID)
-		}
-		if err != nil {
-			return fmt.Errorf("resolve lender of last resort %s symbol: %w", lenderID, err)
-		}
-		lenders = append(lenders, lenderSymbol.Authority+":"+lenderSymbol.Symbol)
+	// A null list is stored as NULL so that an inherited list applies; an
+	// empty list is stored as an empty array, which blocks inheritance.
+	var lenders []string
+	if config.LendersOfLastResort != nil {
+		lenders = make([]string, 0, len(config.LendersOfLastResort))
 	}
-	_, err := queries.UpsertIllConfig(ctx, db.UpsertIllConfigParams{
+	for _, lenderID := range config.LendersOfLastResort {
+		symbol, err := lenderSymbol(ctx, queries, lenderID)
+		if err != nil {
+			return err
+		}
+		lenders = append(lenders, symbol)
+	}
+	params := db.UpsertIllConfigParams{
 		IsPickupLocation: config.IsPickupLocation,
 		Entry:            entryID, Iso18626Url: config.ISO18626URL, Iso18626Vendor: config.ISO18626Vendor, LendersOfLastResort: lenders,
 		IncludeRequestingAgencyInfo: config.IncludeRequestingAgencyInfo, IncludeSupplierInfo: config.IncludeSupplierInfo,
@@ -501,8 +514,43 @@ func replaceILLConfig(ctx context.Context, queries *db.Queries, entryID uuid.UUI
 		MaxRequestsPerPatron:      config.MaxRequestsPerPatron,
 		MinimumCost:               config.MinimumCost,
 		LoadBalancingPolicy:       config.LoadBalancingPolicy,
-	})
+	}
+	if config.DefaultCopyrightType != nil {
+		data, err := json.Marshal(config.DefaultCopyrightType)
+		if err != nil {
+			return fmt.Errorf("encode illConfig.defaultCopyrightType: %w", err)
+		}
+		params.DefaultCopyrightType = data
+	}
+	for _, field := range []struct {
+		name   string
+		codes  *[]model.IllConfigCodeDescription
+		target *[]byte
+	}{
+		{"unfilledReasons", config.UnfilledReasons, &params.UnfilledReasons},
+		{"cancellationReasons", config.CancellationReasons, &params.CancellationReasons},
+		{"loanConditions", config.LoanConditions, &params.LoanConditions},
+	} {
+		if field.codes == nil {
+			continue
+		}
+		data, err := json.Marshal(*field.codes)
+		if err != nil {
+			return fmt.Errorf("encode illConfig.%s: %w", field.name, err)
+		}
+		*field.target = data
+	}
+	_, err := queries.UpsertIllConfig(ctx, params)
 	return err
 }
 
 func boolPointer(value bool) *bool { return &value }
+
+// stringOrEmpty encodes an unset LMS address or agency as the empty string
+// that the NOT NULL columns use for "unset".
+func stringOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}

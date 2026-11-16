@@ -4,8 +4,11 @@ package catalog
 
 import (
 	"context"
+	"encoding/xml"
+	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
+	"time"
 
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	zoomtestutil "github.com/indexdata/crosslink/testutil"
@@ -151,6 +154,7 @@ func TestLookupDiagnosticPQF(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to search server with PQF")
 	assert.Contains(t, err.Error(), "Record syntax not supported")
+	require.NotErrorIs(t, err, ErrHoldingsParse)
 	assert.Equal(t, "@attr 1=12 \"1234\"", result.GetQuery())
 }
 
@@ -182,6 +186,7 @@ func TestLookupDiagnosticCql(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to search server with CQL")
 	assert.Contains(t, err.Error(), "Record syntax not supported")
+	require.NotErrorIs(t, err, ErrHoldingsParse)
 	assert.Equal(t, "rec.id = \"1234\"", result.GetQuery())
 }
 
@@ -203,4 +208,45 @@ func TestConnectFailure(t *testing.T) {
 	_, err = aa.Lookup(params)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to connect to Z39.50 server")
+	require.NotErrorIs(t, err, ErrHoldingsParse)
+}
+
+func TestZoomLookupHoldingsParseFailure(t *testing.T) {
+	for _, queryType := range []dirapi.QueryConfigType{dirapi.QueryConfigTypePqf, dirapi.QueryConfigTypeCql} {
+		t.Run(string(queryType), func(t *testing.T) {
+			builder, err := NewQueryBuilderGen(&dirapi.QueryConfig{Type: &queryType})
+			require.NoError(t, err)
+			// Retrieve MARC XML but configure an OPAC parser to exercise a real parser failure.
+			adapter, err := NewZoomLookupAdapter(dirapi.ZoomConfig{Address: containerHost + ":" + mappedPort + "/marc"},
+				builder, NewOpacHoldingsParser(dirapi.OpacHoldingsParserConfig{}), nil)
+			require.NoError(t, err)
+			result, err := adapter.Lookup(LookupParams{Title: "Computer"})
+			require.ErrorIs(t, err, ErrHoldingsParse)
+			var cause xml.UnmarshalError
+			require.ErrorAs(t, err, &cause, "preserve the parser error through search wrappers")
+			require.True(t, result.HasRecord())
+			require.NotEmpty(t, result.GetQuery())
+		})
+	}
+}
+
+func TestPrefillZoomContext(t *testing.T) {
+	for _, timeout := range []string{"2", "invalid"} {
+		t.Run(timeout, func(t *testing.T) {
+			builder, err := NewQueryBuilderGen(nil)
+			require.NoError(t, err)
+			adapter, err := NewZoomLookupAdapter(dirapi.ZoomConfig{Address: containerHost + ":" + mappedPort + "/marc", Options: &map[string]string{"timeout": timeout}}, builder, NewMarcHoldingsParser(dirapi.MarcHoldingsParserConfig{}), NewMetadataParserMarc(dirapi.MarcMetadataParserConfig{}))
+			require.NoError(t, err)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			result, err := LookupContext(ctx, adapter, LookupParams{Title: "computer"})
+			require.NoError(t, err)
+			require.True(t, result.HasRecord())
+			assert.Equal(t, timeout, adapter.(*ZoomLookupAdapter).options["timeout"], "per-call timeout must not mutate a shared adapter")
+			cancelled, stop := context.WithCancel(context.Background())
+			stop()
+			_, err = adapter.(*ZoomLookupAdapter).LookupContext(cancelled, LookupParams{Title: "computer"})
+			require.ErrorIs(t, err, context.Canceled)
+		})
+	}
 }

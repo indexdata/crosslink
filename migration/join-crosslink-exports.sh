@@ -6,8 +6,20 @@ umask 077
 SOURCE_DIR=${1:-.}
 DIRECTORY_OUTPUT=${DIRECTORY_OUTPUT:-"$SOURCE_DIR/directories.ndjson"}
 DIRECTORY_PREFIX=${DIRECTORY_PREFIX:-directories}
+CONFIG_OUTPUT=${CONFIG_OUTPUT:-"$SOURCE_DIR/config.ndjson"}
+CONFIG_PREFIX=${CONFIG_PREFIX:-config}
+UNSUPPORTED_TEMPLATE_OUTPUT=${UNSUPPORTED_TEMPLATE_OUTPUT:-"$SOURCE_DIR/unsupported-templates.ndjson"}
+UNSUPPORTED_TEMPLATE_PREFIX=${UNSUPPORTED_TEMPLATE_PREFIX:-unsupported-templates}
 PATRON_REQUEST_PREFIX=${PATRON_REQUEST_PREFIX:-patron-request}
-PATRON_REQUEST_OUTPUT=${PATRON_REQUEST_OUTPUT:-"$SOURCE_DIR/patron-requests.ndjson"}
+PATRON_REQUEST_DIR=${PATRON_REQUEST_DIR:-"$SOURCE_DIR/patron-requests"}
+PATRON_REQUEST_BATCH_SIZE=${PATRON_REQUEST_BATCH_SIZE:-1000}
+
+case "$PATRON_REQUEST_BATCH_SIZE" in
+    ''|*[!0-9]*|0)
+        echo "PATRON_REQUEST_BATCH_SIZE must be a positive integer: $PATRON_REQUEST_BATCH_SIZE" >&2
+        exit 1
+        ;;
+esac
 
 if [ ! -d "$SOURCE_DIR" ]; then
     echo "Source directory not found: $SOURCE_DIR" >&2
@@ -25,6 +37,7 @@ trap 'rm -rf "$TEMP_DIR"' EXIT HUP INT TERM
 join_exports() {
     prefix=$1
     output=$2
+    required=${3:-true}
     list_file="$TEMP_DIR/$prefix.list"
     sorted_list_file="$TEMP_DIR/$prefix.sorted.list"
     found=false
@@ -50,6 +63,13 @@ join_exports() {
     done
 
     if [ "$found" = false ]; then
+        if [ "$required" = false ]; then
+            : >"$output"
+            chmod 600 "$output"
+            printf '%s\n' "No $prefix export files found; wrote empty $output"
+            return
+        fi
+
         echo "No $prefix export files found in $SOURCE_DIR" >&2
         exit 1
     fi
@@ -81,6 +101,9 @@ join_exports() {
             --slurpfile entries "$entry_records" \
             --slurpfile metadata "$metadata_records" \
             '
+                # An institution and its branches form a group; branches are
+                # never nested.
+                def group_key: if .data.type == "Branch" then .data.parent else .key end;
                 ($entries | map(select(.data.type == "Consortium") | .key) | first) as $consortium_key |
                 ($entries | map(
                     if $consortium_key != null
@@ -94,7 +117,32 @@ join_exports() {
                 )) as $entries_with_parents |
                 ($entries_with_parents | map(select(.data.type != "Consortium") | .key)) as $member_keys |
                 ($member_keys | to_entries | map({entry: .value, priority: (.key + 1)})) as $network_members |
-                (($entries_with_parents) + ($metadata | map(
+                # The import resolves lenders of last resort against entries
+                # already imported, so groups holding a lender go first. Tier
+                # and network membership keep the export order.
+                ($entries_with_parents
+                    | map(.data.illConfig.lendersOfLastResort // [] | .[])
+                    | unique) as $lender_keys |
+                ($entries_with_parents
+                    | map(select(.key | IN($lender_keys[])) | group_key)
+                    | unique) as $lender_groups |
+                ($entries_with_parents | map(select(.data.type == "Consortium"))
+                    + map(select(.data.type != "Consortium"
+                        and (group_key | IN($lender_groups[]))))
+                    + map(select(.data.type != "Consortium"
+                        and (group_key | IN($lender_groups[]) | not)))
+                ) as $ordered_entries |
+                (reduce $ordered_entries[] as $entry ({seen: {}, problems: []};
+                    .seen as $seen
+                    | .problems += [
+                        ($entry.data.illConfig.lendersOfLastResort // [])[]
+                        | select($seen[.] != true)
+                        | "\($entry.data.name) (\($entry.key)) lists lender of last resort \(.), which is not an earlier directory entry"
+                    ]
+                    | .seen[$entry.key] = true
+                ) | .problems) as $problems |
+                if $problems != [] then error($problems | join("\n")) else . end |
+                (($ordered_entries) + ($metadata | map(
                     if .type == "tier" then
                         .data.entries = $member_keys
                     elif .type == "network" then
@@ -104,14 +152,42 @@ join_exports() {
                     end
                 )))[]
             ' >"$output"
+        printf '%s\n' "Joined $prefix exports into $output"
     else
         while IFS='	' read -r _ file; do
             cat "$file" >>"$output"
         done <"$sorted_list_file"
     fi
+}
 
-    printf '%s\n' "Joined $prefix exports into $output"
+# Splits the joined patron requests into numbered files of at most
+# PATRON_REQUEST_BATCH_SIZE records. Each NDJSON record is one line.
+split_patron_requests() {
+    input=$1
+
+    mkdir -p "$PATRON_REQUEST_DIR"
+    for file in "$PATRON_REQUEST_DIR"/patron-requests-*.ndjson; do
+        if [ -f "$file" ]; then
+            rm "$file"
+        fi
+    done
+
+    files=$(awk -v dir="$PATRON_REQUEST_DIR" -v size="$PATRON_REQUEST_BATCH_SIZE" '
+        (NR - 1) % size == 0 {
+            if (out != "") close(out)
+            batch++
+            out = sprintf("%s/patron-requests-%04d.ndjson", dir, batch)
+        }
+        { print > out }
+        END { print batch + 0 }
+    ' "$input")
+    records=$(wc -l <"$input" | tr -d ' ')
+
+    printf '%s\n' "Wrote $records patron requests to $files file(s) in $PATRON_REQUEST_DIR"
 }
 
 join_exports "$DIRECTORY_PREFIX" "$DIRECTORY_OUTPUT"
-join_exports "$PATRON_REQUEST_PREFIX" "$PATRON_REQUEST_OUTPUT"
+join_exports "$CONFIG_PREFIX" "$CONFIG_OUTPUT"
+join_exports "$UNSUPPORTED_TEMPLATE_PREFIX" "$UNSUPPORTED_TEMPLATE_OUTPUT" false
+join_exports "$PATRON_REQUEST_PREFIX" "$TEMP_DIR/patron-requests.ndjson"
+split_patron_requests "$TEMP_DIR/patron-requests.ndjson"

@@ -3,7 +3,7 @@ stateModels:
     type: StateModel
     name: CrossLink State Model
     desc: "Requester/Supplier workflow for returnable loans and non-returnable copies over ISO18626."
-    version: 3.9.0
+    version: 3.13.0
     pullslipPdfTemplateLabel: pullslip-pdf
     selector:
       serviceType: [Copy, Loan, CopyOrLoan]
@@ -65,9 +65,42 @@ stateModels:
         primaryAction: check-limit
         closingAction: close-request
         actions:
+          - name: send-notification
+            continueOn: [PROBLEM, ERROR]
+            desc: Send email notification after patron validation completes or is skipped
+            trigger: auto
+            params:
+              sendTo:
+                - patron
+              templateLabel: new-request-notification
           - name: check-limit
             desc: Check the patron's active-request limit
             trigger: auto
+            params:
+              countedStates: &patron-limit-counted-states
+                - NEW
+                - INVALID_PATRON
+                - VALIDATED
+                - OVER_LIMIT
+                - LIMIT_CHECKED
+                - METADATA_UPDATED
+                - NEEDS_REVIEW
+                - READY_TO_SEND
+                - DUPLICATE
+                - LOCAL_SUPPLY
+                - SENT
+                - SUPPLIER_LOCATED
+                - CONDITION_PENDING
+                - RETRY_PENDING
+                - WILL_SUPPLY
+                - SHIPPED
+                - RECEIVED
+                - RENEWED
+                - OVERDUE
+                - RENEWAL_PENDING
+                - RENEWAL_REJECTED
+                - RECALLED
+                - CANCEL_PENDING
             transitions:
               success: LIMIT_CHECKED
               review: OVER_LIMIT
@@ -85,8 +118,18 @@ stateModels:
         primaryAction: check-limit
         closingAction: close-request
         actions:
+          - name: send-notification
+            continueOn: [PROBLEM, ERROR]
+            desc: Notify the patron that the request exceeds the active-request limit and needs staff review
+            trigger: auto
+            params:
+              sendTo:
+                - patron
+              templateLabel: over-limit-notification
           - name: check-limit
             desc: Recheck whether the patron now has capacity
+            params:
+              countedStates: *patron-limit-counted-states
             transitions:
               success: LIMIT_CHECKED
               review: OVER_LIMIT
@@ -456,6 +499,10 @@ stateModels:
             desc: Send ISO ShippedReturn and delete temporary LMS items
             transitions:
               success: SHIPPED_RETURNED
+          - name: renew
+            desc: Request renewal from supplier
+            transitions:
+              success: RENEWAL_PENDING
           - name: send-notification
             continueOn: [PROBLEM, ERROR]
             desc: Send email notification when the item is received
@@ -486,6 +533,10 @@ stateModels:
             desc: Send ISO ShippedReturn and delete temporary LMS items
             transitions:
               success: SHIPPED_RETURNED
+          - name: renew
+            desc: Request renewal from supplier
+            transitions:
+              success: RENEWAL_PENDING
 
       - name: OVERDUE
         display: Overdue
@@ -526,7 +577,30 @@ stateModels:
           - name: renewal-accepted
             transition: RENEWED
           - name: renewal-rejected
+            transition: RENEWAL_REJECTED
+        actions:
+          - name: check-out
+            desc: Check out all items
+          - name: check-in
+            desc: Check in all items
+          - name: ship-return
+            desc: Send ISO ShippedReturn and delete temporary LMS items
+            transitions:
+              success: SHIPPED_RETURNED
+
+      - name: RENEWAL_REJECTED
+        display: Renewal rejected
+        desc: Renewal declined; another renewal becomes available when the supplier marks the loan overdue
+        side: REQUESTER
+        appliesTo:
+          serviceTypes: [Loan, CopyOrLoan]
+        primaryAction: ship-return
+        events:
+          - name: recalled
+            transition: RECALLED
+          - name: overdue
             transition: OVERDUE
+          - name: renewal-rejected
         actions:
           - name: check-out
             desc: Check out all items
@@ -959,12 +1033,15 @@ stateModels:
         events:
           - name: shipped-return
             transition: SHIPPED_RETURN
+          - name: renew
+            transition: RENEWAL_PENDING
         actions:
           - name: recall
             desc: Recall the loan with an optional dueDate and note
             transitions:
               success: RECALLED
           - name: overdue
+            trigger: background
             desc: Notify requester that the loan is overdue
             transitions:
               success: OVERDUE
@@ -978,12 +1055,15 @@ stateModels:
         events:
           - name: shipped-return
             transition: SHIPPED_RETURN
+          - name: renew
+            transition: RENEWAL_PENDING
         actions:
           - name: recall
             desc: Recall the loan with an optional dueDate and note
             transitions:
               success: RECALLED
           - name: overdue
+            trigger: background
             desc: Notify requester that the loan is overdue
             transitions:
               success: OVERDUE
@@ -1028,6 +1108,26 @@ stateModels:
               success: RENEWED
           - name: reject-renewal
             desc: Reject renewal
+            transitions:
+              success: RENEWAL_REJECTED
+
+      - name: RENEWAL_REJECTED
+        display: Renewal rejected
+        desc: Renewal declined; another renewal becomes available after marking the loan overdue
+        side: SUPPLIER
+        appliesTo:
+          serviceTypes: [Loan, CopyOrLoan]
+        events:
+          - name: shipped-return
+            transition: SHIPPED_RETURN
+        actions:
+          - name: recall
+            desc: Recall the loan with an optional dueDate and note
+            transitions:
+              success: RECALLED
+          - name: overdue
+            trigger: background
+            desc: Notify requester that the loan is overdue
             transitions:
               success: OVERDUE
 
@@ -1102,10 +1202,28 @@ stateModels:
         manualClose: true
 
 batchActionDefaults:
+  - actionName: archive-borrowing-requests
+    titleKey: archive-borrowing-requests
+    title: Archive closed borrowing requests
+    batchQuery: "terminal_state = true"
+    schedule: "FREQ=DAILY;BYHOUR=3"
+    actionParams:
+      interval: 720h
+      anonymize: false
+
+  - actionName: archive-lending-requests
+    titleKey: archive-lending-requests
+    title: Archive closed lending requests
+    batchQuery: "terminal_state = true"
+    schedule: "FREQ=DAILY;BYHOUR=3"
+    actionParams:
+      interval: 720h
+      anonymize: false
+
   - actionName: overdue
     titleKey: overdue
     title: Overdue loans
-    batchQuery: "side = lending and (state = RECEIVED or state = RENEWED)"
+    batchQuery: "side = lending and (state = RECEIVED or state = RENEWED or state = RENEWAL_REJECTED)"
     schedule: "FREQ=MINUTELY;INTERVAL=15"
 
   - actionName: email-pullslips
@@ -1144,6 +1262,21 @@ batchActionDefaults:
       interval: 72h
 
 templateDefaults:
+  - title: Patron request processing started
+    labels:
+      - new-request-notification
+    subject: "Your request is now being processed"
+    contentType: text
+    audience: patron
+    purpose: email
+    body: |
+      Your request is now being processed.
+
+      Request number: {{.ReqId}}
+      Item title: {{.Title}}
+
+      We’ll notify you when there is an update.
+
   - title: Document delivered notification
     labels:
       - copy-completed-notification
@@ -1187,6 +1320,22 @@ templateDefaults:
     purpose: email
     body: |
       Your request has been cancelled.
+
+  - title: Request exceeds active limit
+    labels:
+      - over-limit-notification
+    subject: "Interlibrary loan request: Active request limit reached"
+    contentType: html
+    audience: patron
+    purpose: email
+    body: |
+      <p>Interlibrary loan request: Active request limit reached</p>
+      <p>{{.PatronGivenName}} {{.PatronSurname}}<br>
+      {{.ReqId}}<br>
+      {{.Title}}<br>
+      {{.MaterialType}}</p>
+      <p>Your interlibrary loan request exceeds the current limit of active requests and is awaiting library review. Library staff can recheck the limit or approve an override. You do not need to place another request.</p>
+      <p>Please contact your local library if you have any questions about your interlibrary loan requests.</p>
 
   - title: New supply request notification
     labels:

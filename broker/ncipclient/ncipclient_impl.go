@@ -3,6 +3,7 @@ package ncipclient
 import (
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -228,9 +229,13 @@ func (n *NcipClientImpl) sendReceiveMessage(message *ncip.NCIPMessage) (*ncip.NC
 	var respMessage ncip.NCIPMessage
 
 	err := httpclient.NewClient().RequestResponse(n.client, http.MethodPost, []string{httpclient.ContentTypeApplicationXml},
-		n.address, message, &respMessage, n.marshal, n.unmarshal)
+		n.address, message, &respMessage, n.marshal, n.decodeResponse)
 	if err != nil {
-		return &respMessage, fmt.Errorf("NCIP message exchange failed: %s", err.Error())
+		var httpErr *httpclient.HttpError
+		if errors.As(err, &httpErr) {
+			err = &httpclient.HttpError{StatusCode: httpErr.StatusCode}
+		}
+		return &respMessage, fmt.Errorf("NCIP message exchange failed: %w", err)
 	}
 	if len(respMessage.Problem) > 0 {
 		return &respMessage, &NcipError{
@@ -266,40 +271,41 @@ func (n *NcipClientImpl) logOperation(outgoingMessage *ncip.NCIPMessage, incomin
 	n.logFunc(outgoing, incoming, logErr)
 }
 
-func hideSensitive(message map[string]any) {
-	traverse(message, 0)
-}
-
-// removes values from the FromAgencyAuthentication and FromSystemAuthentication fields
-// as well as user name/address information and AuthenticationInput fields except
-// if type is "username"
-func traverse(value any, level int) {
-	if level > 20 {
-		return
-	}
-	level++
+// hideSensitive masks credentials, personal details, and echoed problem data in
+// logging copies only. Identifiers and protocol problem types remain available.
+func hideSensitive(value any) {
 	switch v := value.(type) {
 	case map[string]any:
-		if authenticationType, ok := v["AuthenticationInputType"].(map[string]any); ok {
-			if authenticationType["#text"] != "username" {
-				if _, exists := v["AuthenticationInputData"]; exists {
-					v["AuthenticationInputData"] = "***"
-				}
-			}
-		}
 		for key, field := range v {
-			if key == "FromAgencyAuthentication" || key == "FromSystemAuthentication" ||
-				key == "NameInformation" || key == "UserAddressInformation" {
+			switch key {
+			case "FromAgencyAuthentication", "FromSystemAuthentication", "AuthenticationInputData",
+				"NameInformation", "UserAddressInformation", "PhysicalAddress", "ElectronicAddress",
+				"DateOfBirth", "ProblemDetail", "ProblemValue":
 				v[key] = "***"
-				continue
+			default:
+				hideSensitive(field)
 			}
-			traverse(field, level)
 		}
 	case []any:
 		for _, item := range v {
-			traverse(item, level)
+			hideSensitive(item)
 		}
 	}
+}
+
+// decodeResponse discards parser diagnostics and partially decoded fields, which
+// may contain sensitive response data. Transport errors retain their causes.
+func (n *NcipClientImpl) decodeResponse(data []byte, value any) error {
+	var message ncip.NCIPMessage
+	if err := n.unmarshal(data, &message); err != nil {
+		return errors.New("invalid NCIP v2 response")
+	}
+	target, ok := value.(*ncip.NCIPMessage)
+	if !ok {
+		return errors.New("NCIP v2 response target must be NCIPMessage")
+	}
+	*target = message
+	return nil
 }
 
 // transformNamespace handles namespace-free NCIP integrations while keeping

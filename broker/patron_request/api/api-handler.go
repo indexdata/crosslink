@@ -15,12 +15,14 @@ import (
 	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/broker/api"
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/email"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/oapi"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
+	psservice "github.com/indexdata/crosslink/broker/pullslip/service"
 	"github.com/indexdata/crosslink/broker/tenant"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
@@ -46,6 +48,7 @@ var errDuplicateTemplateLabel = errors.New("one or more template labels already 
 const templateLabelUniqueConstraint = "template_owner_purpose_audience_labels_unique"
 
 type PatronRequestApiHandler struct {
+	prefillProvider         PrefillProvider
 	pickupLocationValidator PickupLocationValidator
 	limitDefault            int32
 	prRepo                  pr_db.PrRepo
@@ -557,6 +560,9 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 
 	existingPr.RequesterReqID = getDbText(&requesterReqId)
 	existingPr.IllRequest = illRequest
+	if newPr.BibRecordId != nil {
+		existingPr.BibRecordID = getDbText(newPr.BibRecordId)
+	}
 	if newPr.RequesterPickupLocationId.IsSpecified() {
 		existingPr.RequesterPickupLocationID = getPickupLocationID(newPr.RequesterPickupLocationId)
 		if !a.validatePickupLocation(w, ctx, existingPr) {
@@ -730,6 +736,14 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 	if err != nil {
 		api.AddBadRequestError(ctx, w, err)
 		return
+	}
+	if action.ActionParams != nil {
+		for key := range *action.ActionParams {
+			if strings.EqualFold(key, "staticActionParams") {
+				api.AddBadRequestError(ctx, w, errors.New("actionParams.staticActionParams is reserved"))
+				return
+			}
+		}
 	}
 
 	actionMapping, err := a.actionMappingService.GetActionMapping(pr.IllRequest)
@@ -1144,6 +1158,95 @@ func (a *PatronRequestApiHandler) GetTemplates(w http.ResponseWriter, r *http.Re
 	api.WriteJsonResponse(w, resp)
 }
 
+func (a *PatronRequestApiHandler) GetTemplatesPlaceholders(w http.ResponseWriter, _ *http.Request) {
+	toAPIPlaceholders := func(source []email.TemplatePlaceholder) []proapi.TemplatePlaceholder {
+		result := make([]proapi.TemplatePlaceholder, 0, len(source))
+		for _, placeholder := range source {
+			result = append(result, proapi.TemplatePlaceholder{
+				Placeholder: placeholder.Placeholder,
+				Description: placeholder.Description,
+			})
+		}
+		return result
+	}
+
+	api.WriteJsonResponse(w, proapi.TemplatePlaceholders{
+		SingleRecord: toAPIPlaceholders(email.GetPullSlipTemplatePlaceholders()),
+		BatchRecord:  toAPIPlaceholders(email.GetBatchEmailTemplatePlaceholders()),
+	})
+}
+
+func (a *PatronRequestApiHandler) PostTemplatesPreview(w http.ResponseWriter, r *http.Request, params proapi.PostTemplatesPreviewParams) {
+	logParams := map[string]string{"method": "PostTemplatesPreview"}
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	var preview proapi.TemplatePreviewRequest
+	if err := decodeRequiredBody(r, &preview); err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	var labels []string
+	if preview.Labels != nil {
+		labels = *preview.Labels
+	}
+	if err := prservice.ValidateTemplateRenderingForContext(proapi.Pullslip, proapi.Html, preview.Body, nil, labels, prservice.PatronRequestTemplateContext); err != nil {
+		writeTemplateError(ctx, w, err, prservice.TemplateSample{})
+		return
+	}
+
+	var samples []prservice.TemplateSample
+	if preview.RequestIds == nil || len(*preview.RequestIds) == 0 {
+		var err error
+		samples, err = prservice.GetTemplateSamples()
+		if err != nil {
+			api.AddInternalError(ctx, w, err)
+			return
+		}
+	} else {
+		if len(*preview.RequestIds) > maxPreviewRequests {
+			api.AddBadRequestError(ctx, w, fmt.Errorf("at most %d requestIds can be previewed at once", maxPreviewRequests))
+			return
+		}
+		for _, id := range *preview.RequestIds {
+			pr := a.getOwnedPatronRequest(w, ctx, id, nil, tenant)
+			if pr == nil {
+				return
+			}
+			notes, conditions, err := pr_db.GetTemplateNotifications(ctx, a.prRepo, pr.ID)
+			if err != nil {
+				api.AddInternalError(ctx, w, err)
+				return
+			}
+			samples = append(samples, prservice.TemplateSample{RequestID: pr.ID, Request: *pr, Notes: notes, Conditions: conditions})
+		}
+	}
+	pdfs := make([][]byte, 0, len(samples))
+	for _, sample := range samples {
+		pdf, err := psservice.RenderPdfPullSlip(sample.Request, sample.Notes, sample.Conditions, labels, preview.Body)
+		if err != nil {
+			var templateErr *email.TemplateError
+			if errors.As(err, &templateErr) {
+				err = &prservice.TemplateContentError{Part: "body", Err: err}
+			}
+			writeTemplateError(ctx, w, err, sample)
+			return
+		}
+		pdfs = append(pdfs, pdf)
+	}
+	pdf, err := psservice.MergePdfs(pdfs)
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/pdf")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(pdf) // #nosec G705 -- content is a generated PDF binary; Content-Type is set to application/pdf
+}
+
 func (a *PatronRequestApiHandler) PostTemplates(w http.ResponseWriter, r *http.Request, params proapi.PostTemplatesParams) {
 	logParams := map[string]string{"method": "PostTemplates"}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
@@ -1161,6 +1264,10 @@ func (a *PatronRequestApiHandler) PostTemplates(w http.ResponseWriter, r *http.R
 	err = decodeRequiredBody(r, &template)
 	if err != nil {
 		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	if err := prservice.ValidateTemplateRendering(template.Purpose, template.ContentType, template.Body, template.Subject, template.Labels); err != nil {
+		writeTemplateError(ctx, w, err, prservice.TemplateSample{})
 		return
 	}
 	tem, err := a.prRepo.SaveTemplate(ctx, pr_db.SaveTemplateParams{
@@ -1224,12 +1331,55 @@ func (a *PatronRequestApiHandler) PutTemplatesId(w http.ResponseWriter, r *http.
 	// PUT replaces optional fields; omitted values are cleared.
 	tem.Audience = getDbText((*string)(updated.Audience))
 	tem.Subject = getDbText(updated.Subject)
+	if err := prservice.ValidateTemplateRendering(proapi.TemplatePurpose(tem.Purpose), updated.ContentType, updated.Body, updated.Subject, updated.Labels); err != nil {
+		writeTemplateError(ctx, w, err, prservice.TemplateSample{})
+		return
+	}
 	template, err := a.prRepo.SaveTemplate(ctx, pr_db.SaveTemplateParams(*tem))
 	if err != nil {
 		writeTemplateSaveError(ctx, w, err)
 		return
 	}
 	api.WriteJsonResponse(w, toApiTemplate(template))
+}
+
+// Patron requests a preview renders at once, so a request body cannot ask for
+// a PDF of a whole queue.
+const maxPreviewRequests = 20
+
+// When the error lies in the template source, the 400 response locates it so
+// an editor can mark the line. sample is the preview sample the template
+// failed on, or the zero value. A rejected template is the caller's mistake,
+// so it is logged for troubleshooting only.
+func writeTemplateError(ctx common.ExtendedContext, w http.ResponseWriter, err error, sample prservice.TemplateSample) {
+	switch {
+	case sample.Name != "":
+		err = fmt.Errorf("sample %s: %w", sample.Name, err)
+	case sample.RequestID != "":
+		err = fmt.Errorf("request %s: %w", sample.RequestID, err)
+	}
+	ctx.Logger().Debug("template rejected", "error", err.Error())
+	message := err.Error()
+	resp := proapi.Error{Error: &message}
+	var templateErr *email.TemplateError
+	var contentErr *prservice.TemplateContentError
+	if errors.As(err, &templateErr) && errors.As(err, &contentErr) {
+		details := proapi.TemplateError{Part: proapi.TemplateErrorPart(contentErr.Part), Message: templateErr.Message}
+		if sample.Name != "" {
+			details.Sample = &sample.Name
+		}
+		if sample.RequestID != "" {
+			details.RequestId = &sample.RequestID
+		}
+		if templateErr.Line > 0 {
+			details.Line = &templateErr.Line
+		}
+		if templateErr.Column > 0 {
+			details.Column = &templateErr.Column
+		}
+		resp.Template = &details
+	}
+	api.WriteJsonResponseWithStatus(w, resp, http.StatusBadRequest)
 }
 
 func writeTemplateSaveError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
@@ -1328,6 +1478,7 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequestSearchView) 
 		DueDate:                   toLoanDate(request.DueAt),
 		SupplierSymbol:            toString(request.SupplierSymbol),
 		IllRequest:                request.IllRequest,
+		BibRecordId:               toString(request.BibRecordID),
 		RequesterRequestId:        toString(request.RequesterReqID),
 		NeedsAttention:            request.NeedsAttention,
 		HasCost:                   request.HasCost,
@@ -1342,6 +1493,7 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequestSearchView) 
 		IllTransactionLink:        illTransactionLink,
 		EventsLink:                eventsLink,
 		TerminalState:             request.TerminalState,
+		CancellationReason:        toString(request.CancellationReason),
 		InternalNote:              toString(request.InternalNote),
 		RequesterName:             toString(request.RequesterName),
 		SupplierName:              toString(request.SupplierName),
@@ -1477,6 +1629,7 @@ func buildDbPatronRequest(
 		RequesterPickupLocationID: getPickupLocationID(request.RequesterPickupLocationId),
 		SupplierSymbol:            getDbText(nil),
 		IllRequest:                illRequest,
+		BibRecordID:               getDbText(request.BibRecordId),
 		Tenant:                    getDbText(tenant),
 		RequesterReqID:            getDbText(&requesterReqId),
 		InternalNote:              getDbText(request.InternalNote),
@@ -1551,18 +1704,19 @@ func toApiNotification(notification pr_db.Notification) (proapi.PrNotification, 
 		receipt = &r
 	}
 	return proapi.PrNotification{
-		Id:             notification.ID,
-		FromSymbol:     notification.FromSymbol,
-		ToSymbol:       notification.ToSymbol,
-		Direction:      proapi.NotificationDirection(notification.Direction),
-		Kind:           proapi.NotificationKind(notification.Kind),
-		Note:           toString(notification.Note),
-		Cost:           cost,
-		Currency:       toString(notification.Currency),
-		Condition:      toString(notification.Condition),
-		Receipt:        receipt,
-		CreatedAt:      notification.CreatedAt.Time,
-		AcknowledgedAt: ackAt,
+		Id:              notification.ID,
+		FromSymbol:      notification.FromSymbol,
+		ToSymbol:        notification.ToSymbol,
+		Direction:       proapi.NotificationDirection(notification.Direction),
+		Kind:            proapi.NotificationKind(notification.Kind),
+		Note:            toString(notification.Note),
+		Cost:            cost,
+		Currency:        toString(notification.Currency),
+		Code:            toString(notification.Code),
+		CodeDescription: toString(notification.CodeDescription),
+		Receipt:         receipt,
+		CreatedAt:       notification.CreatedAt.Time,
+		AcknowledgedAt:  ackAt,
 	}, nil
 }
 

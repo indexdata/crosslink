@@ -100,6 +100,15 @@
           "methods": [
             "GET"
           ],
+          "pathPattern": "/broker/patron_requests/prefill",
+          "permissionsRequired": [
+            "broker.patron_requests.prefill.get"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
           "pathPattern": "/broker/patron_requests",
           "permissionsRequired": [
             "broker.patron_requests.get"
@@ -379,6 +388,25 @@
           "methods": [
             "GET"
           ],
+          "pathPattern": "/broker/templates/placeholders",
+          "permissionsRequired": [
+            "broker.templates.get"
+          ]
+        },
+        {
+          "methods": [
+            "POST"
+          ],
+          "pathPattern": "/broker/templates/preview",
+          "permissionsRequired": [
+            "broker.templates.preview.post",
+            "broker.patron_requests.item.get"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
           "pathPattern": "/broker/templates/{id}",
           "permissionsRequired": [
             "broker.templates.item.get"
@@ -468,6 +496,11 @@
       "description": "Read peers",
       "displayName": "Broker - read peers",
       "permissionName": "broker.peers.get"
+    },
+    {
+      "description": "Retrieve catalog prefill metadata",
+      "displayName": "Broker - retrieve catalog prefill metadata",
+      "permissionName": "broker.patron_requests.prefill.get"
     },
     {
       "description": "List patron requests",
@@ -605,6 +638,11 @@
       "permissionName": "broker.templates.post"
     },
     {
+      "description": "Render a template preview against built-in samples or a patron request",
+      "displayName": "Broker - preview template",
+      "permissionName": "broker.templates.preview.post"
+    },
+    {
       "description": "Read a template",
       "displayName": "Broker - read template",
       "permissionName": "broker.templates.item.get"
@@ -626,7 +664,8 @@
       "visible": true,
       "subPermissions": [
         "broker.templates.get",
-        "broker.templates.item.get"
+        "broker.templates.item.get",
+        "broker.templates.preview.post"
       ]
     },
     {
@@ -691,6 +730,7 @@
       "visible": true,
       "subPermissions": [
         "broker.patron_requests.get",
+        "broker.patron_requests.prefill.get",
         "broker.patron_requests.item.get",
         "broker.patron_requests.item.actions.get",
         "broker.patron_requests.item.events.get",
@@ -768,6 +808,7 @@
         "broker.peers.get",
         "broker.sse.events.get",
         "broker.patron_requests.get",
+        "broker.patron_requests.prefill.get",
         "broker.patron_requests.post",
         "broker.patron_requests.item.get",
         "broker.patron_requests.item.put",
@@ -800,7 +841,8 @@
         "broker.templates.post",
         "broker.templates.item.get",
         "broker.templates.item.put",
-        "broker.templates.item.delete"
+        "broker.templates.item.delete",
+        "broker.templates.preview.post"
       ]
     }
   ]

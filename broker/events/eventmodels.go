@@ -95,6 +95,8 @@ type EventData struct {
 }
 
 type CommonEventData struct {
+	// Charset records the incoming XML encoding and its source when known.
+	Charset         string                     `json:"charset,omitempty"`
 	IncomingMessage *iso18626.ISO18626Message  `json:"incomingMessage,omitempty"`
 	OutgoingMessage *iso18626.ISO18626Message  `json:"outgoingMessage,omitempty"`
 	Problem         *Problem                   `json:"problem,omitempty"`

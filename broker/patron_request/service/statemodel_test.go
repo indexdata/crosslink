@@ -1,6 +1,7 @@
 package prservice
 
 import (
+	"encoding/json"
 	"slices"
 	"sync"
 	"testing"
@@ -37,6 +38,9 @@ func TestBuiltInStateModelCapabilities(t *testing.T) {
 	}))
 	assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
 		return a.Name == string(BorrowerActionSupplyDocument) && slices.Equal(a.Parameters, []string{"note", "deliveryUrl"})
+	}))
+	assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
+		return a.Name == string(BorrowerActionCancelRequest) && slices.Equal(a.Parameters, []string{"note"})
 	}))
 	for _, transitionAction := range []pr_db.PatronRequestAction{
 		BorrowerActionSkipPatronValidation,
@@ -148,9 +152,208 @@ func TestCompletedDocumentNotificationAutoAction(t *testing.T) {
 	}
 }
 
+func TestValidatedRequestNotificationAutoAction(t *testing.T) {
+	service := &StateModelService{}
+	for _, serviceType := range []proapi.StateModelServiceType{proapi.Copy, proapi.CopyOrLoan, proapi.Loan} {
+		t.Run(string(serviceType), func(t *testing.T) {
+			mapping, err := service.GetActionMapping("default", serviceType)
+			if !assert.NoError(t, err) {
+				return
+			}
+			actions := mapping.GetAutoActionsForState(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated})
+			if assert.Len(t, actions, 2) {
+				notification := actions[0]
+				assert.Equal(t, string(BorrowerActionSendNotification), notification.Name)
+				if assert.NotNil(t, notification.Params) {
+					if assert.NotNil(t, notification.Params.TemplateLabel) {
+						assert.Equal(t, "new-request-notification", *notification.Params.TemplateLabel)
+					}
+					if assert.NotNil(t, notification.Params.SendTo) {
+						assert.Equal(t, []proapi.ModelActionParamsSendTo{proapi.ModelActionParamsSendToPatron}, *notification.Params.SendTo)
+					}
+				}
+				assert.Equal(t, string(BorrowerActionCheckLimit), actions[1].Name)
+			}
+		})
+	}
+}
+
+func TestOverLimitNotificationAutoAction(t *testing.T) {
+	service := &StateModelService{}
+	for _, serviceType := range []proapi.StateModelServiceType{proapi.Copy, proapi.CopyOrLoan, proapi.Loan} {
+		t.Run(string(serviceType), func(t *testing.T) {
+			mapping, err := service.GetActionMapping("default", serviceType)
+			if !assert.NoError(t, err) {
+				return
+			}
+			actions := mapping.GetAutoActionsForState(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateOverLimit})
+			if !assert.Len(t, actions, 1) {
+				return
+			}
+			notification := actions[0]
+			assert.Equal(t, string(BorrowerActionSendNotification), notification.Name)
+			if assert.NotNil(t, notification.Params) {
+				if assert.NotNil(t, notification.Params.TemplateLabel) {
+					assert.Equal(t, "over-limit-notification", *notification.Params.TemplateLabel)
+				}
+				if assert.NotNil(t, notification.Params.SendTo) {
+					assert.Equal(t, []proapi.ModelActionParamsSendTo{proapi.ModelActionParamsSendToPatron}, *notification.Params.SendTo)
+				}
+			}
+			if assert.NotNil(t, notification.ContinueOn) {
+				assert.ElementsMatch(t, []proapi.ModelActionContinueOn{proapi.PROBLEM, proapi.ERROR}, *notification.ContinueOn)
+			}
+		})
+	}
+}
+
+func TestDefaultCheckLimitCountedStatesExcludeShippedReturned(t *testing.T) {
+	model, err := LoadStateModelByName("default")
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	actions := checkLimitActions(t, model)
+	if !assert.Len(t, actions, 2) {
+		return
+	}
+	for _, action := range actions {
+		states := countedStatesFromParams(t, action.Params)
+		assert.NotEmpty(t, states)
+		assert.Contains(t, states, string(BorrowerStateValidated))
+		assert.NotContains(t, states, string(BorrowerStateShippedReturned))
+		assert.NotContains(t, states, string(BorrowerStateCompleted))
+	}
+}
+
+func TestValidateStateModelCheckLimitCountedStates(t *testing.T) {
+	tests := []struct {
+		name      string
+		configure func(t *testing.T, actions []*proapi.ModelAction)
+		errorText string
+	}{
+		{
+			name: "missing",
+			configure: func(t *testing.T, actions []*proapi.ModelAction) {
+				actions[0].Params = nil
+			},
+			errorText: "action check-limit in state VALIDATED must define non-empty params.countedStates",
+		},
+		{
+			name: "empty",
+			configure: func(t *testing.T, actions []*proapi.ModelAction) {
+				setCountedStates(t, actions[0], []string{})
+			},
+			errorText: "action check-limit in state VALIDATED must define non-empty params.countedStates",
+		},
+		{
+			name: "duplicate",
+			configure: func(t *testing.T, actions []*proapi.ModelAction) {
+				setCountedStates(t, actions[0], []string{string(BorrowerStateNew), string(BorrowerStateNew)})
+			},
+			errorText: "action check-limit in state VALIDATED params.countedStates contains duplicate requester state NEW",
+		},
+		{
+			name: "unknown",
+			configure: func(t *testing.T, actions []*proapi.ModelAction) {
+				setCountedStates(t, actions[0], []string{"MISSING"})
+			},
+			errorText: "action check-limit in state VALIDATED params.countedStates contains unknown requester state MISSING",
+		},
+		{
+			name: "inconsistent declarations",
+			configure: func(t *testing.T, actions []*proapi.ModelAction) {
+				setCountedStates(t, actions[0], []string{string(BorrowerStateNew)})
+				setCountedStates(t, actions[1], []string{string(BorrowerStateValidated)})
+			},
+			errorText: "all check-limit actions must define the same params.countedStates",
+		},
+		{
+			name: "accepts the same set in a different order",
+			configure: func(t *testing.T, actions []*proapi.ModelAction) {
+				states := countedStatesFromParams(t, actions[1].Params)
+				slices.Reverse(states)
+				setCountedStates(t, actions[1], states)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model, err := LoadStateModelByName("default")
+			if !assert.NoError(t, err) {
+				return
+			}
+			actions := checkLimitActions(t, model)
+			if !assert.Len(t, actions, 2) {
+				return
+			}
+			tt.configure(t, actions)
+
+			err = ValidateStateModel(model)
+			if tt.errorText == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.EqualError(t, err, tt.errorText)
+			}
+		})
+	}
+}
+
+func checkLimitActions(t *testing.T, model *proapi.StateModel) []*proapi.ModelAction {
+	t.Helper()
+	actions := make([]*proapi.ModelAction, 0, 2)
+	for stateIndex := range model.States {
+		state := &model.States[stateIndex]
+		if state.Side != proapi.REQUESTER || state.Actions == nil {
+			continue
+		}
+		for actionIndex := range *state.Actions {
+			action := &(*state.Actions)[actionIndex]
+			if action.Name == string(BorrowerActionCheckLimit) {
+				actions = append(actions, action)
+			}
+		}
+	}
+	return actions
+}
+
+func setCountedStates(t *testing.T, action *proapi.ModelAction, states []string) {
+	t.Helper()
+	data, err := json.Marshal(struct {
+		CountedStates []string `json:"countedStates"`
+	}{CountedStates: states})
+	if !assert.NoError(t, err) {
+		return
+	}
+	var params proapi.ModelAction_Params
+	if !assert.NoError(t, json.Unmarshal(data, &params)) {
+		return
+	}
+	action.Params = &params
+}
+
+func countedStatesFromParams(t *testing.T, params *proapi.ModelAction_Params) []string {
+	t.Helper()
+	if params == nil {
+		return nil
+	}
+	data, err := json.Marshal(params)
+	if !assert.NoError(t, err) {
+		return nil
+	}
+	var decoded struct {
+		CountedStates []string `json:"countedStates"`
+	}
+	if !assert.NoError(t, json.Unmarshal(data, &decoded)) {
+		return nil
+	}
+	return decoded.CountedStates
+}
+
 func TestDocumentDeliveredNotificationTemplate(t *testing.T) {
 	templates := GetStateModelTemplateDefaults()
-	idx := slices.IndexFunc(templates, func(template proapi.CreateTemplate) bool {
+	idx := slices.IndexFunc(templates, func(template proapi.TemplateProperties) bool {
 		return slices.Contains(template.Labels, "copy-completed-notification")
 	})
 	if !assert.NotEqual(t, -1, idx) {
@@ -166,9 +369,56 @@ func TestDocumentDeliveredNotificationTemplate(t *testing.T) {
 	if assert.NotNil(t, template.Subject) {
 		assert.Equal(t, "Your requested document is ready", *template.Subject)
 	}
-	body, err := email.RenderTextTemplate(email.PullSlipData{ReqId: "REQ-123", Title: "Requested article"}, template.Body)
+	body, err := email.RenderTextTemplate(email.PullSlipData{ReqId: "REQ-123", Title: "Requested article"}, template.Labels, template.Body)
 	assert.NoError(t, err)
 	assert.Equal(t, "Your document is now available.\n\nRequest number: REQ-123\n\nItem Title: Requested article\n", body)
+}
+
+func TestPatronRequestProcessingNotificationTemplate(t *testing.T) {
+	templates := GetStateModelTemplateDefaults()
+	idx := slices.IndexFunc(templates, func(template proapi.TemplateProperties) bool {
+		return slices.Contains(template.Labels, "new-request-notification")
+	})
+	if !assert.NotEqual(t, -1, idx) {
+		return
+	}
+	template := templates[idx]
+	assert.Equal(t, "Patron request processing started", template.Title)
+	assert.Equal(t, proapi.Email, template.Purpose)
+	assert.Equal(t, proapi.Text, template.ContentType)
+	if assert.NotNil(t, template.Audience) {
+		assert.Equal(t, proapi.TemplateAudiencePatron, *template.Audience)
+	}
+	if assert.NotNil(t, template.Subject) {
+		assert.Equal(t, "Your request is now being processed", *template.Subject)
+	}
+	body, err := email.RenderTextTemplate(email.PullSlipData{ReqId: "REQ-123", Title: "Requested article"}, template.Labels, template.Body)
+	assert.NoError(t, err)
+	assert.Equal(t, "Your request is now being processed.\n\nRequest number: REQ-123\nItem title: Requested article\n\nWe’ll notify you when there is an update.\n", body)
+}
+
+func TestOverLimitNotificationTemplate(t *testing.T) {
+	template, err := GetStateModelTemplateDefault(proapi.Email, proapi.TemplateAudiencePatron, "over-limit-notification")
+	if !assert.NoError(t, err) {
+		return
+	}
+	assert.Equal(t, "Request exceeds active limit", template.Title)
+	assert.Equal(t, "Interlibrary loan request: Active request limit reached", template.Subject.String)
+	assert.Equal(t, string(proapi.Html), template.ContentType)
+	body, err := email.RenderHtmlTemplate(email.PullSlipData{
+		PatronGivenName: "Ann", PatronSurname: "Reader", ReqId: "REQ-123",
+		Title: "Requested article", MaterialType: "JournalArticle",
+	}, template.Labels, template.Body)
+	if assert.NoError(t, err) {
+		assert.Contains(t, body, "Ann Reader")
+		assert.Contains(t, body, "REQ-123")
+		assert.Contains(t, body, "Requested article")
+		assert.Contains(t, body, "JournalArticle")
+		assert.Contains(t, body, "awaiting library review")
+		assert.Contains(t, body, "You do not need to place another request")
+		assert.NotContains(t, body, "canceled")
+		assert.NotContains(t, body, "cancelled")
+	}
 }
 
 func TestLegacyReturnablesStateModelAlias(t *testing.T) {
@@ -374,7 +624,7 @@ func TestReturnablesPullslipPdfTemplateLabel(t *testing.T) {
 func TestStateModelTemplateDefaultsIncludePullslipPdf(t *testing.T) {
 	templates := GetStateModelTemplateDefaults()
 
-	idx := slices.IndexFunc(templates, func(template proapi.CreateTemplate) bool {
+	idx := slices.IndexFunc(templates, func(template proapi.TemplateProperties) bool {
 		return slices.Contains(template.Labels, "pullslip-pdf")
 	})
 	if !assert.NotEqual(t, -1, idx) {
@@ -390,6 +640,14 @@ func TestStateModelTemplateDefaultsIncludePullslipPdf(t *testing.T) {
 	}
 	assert.Contains(t, template.Body, "{{.BarcodeBase64}}")
 	assert.Contains(t, template.Body, "{{.ReqId}}")
+}
+
+func TestStateModelTemplateDefaultsExcludeResponseFields(t *testing.T) {
+	data, err := json.Marshal(GetStateModelTemplateDefaults())
+	assert.NoError(t, err)
+	assert.NotContains(t, string(data), `"id"`)
+	assert.NotContains(t, string(data), `"createdAt"`)
+	assert.NotContains(t, string(data), `"updatedAt"`)
 }
 
 func TestDefaultInvalidPatronStateIsEditableAndNeedsAttention(t *testing.T) {
@@ -1192,6 +1450,6 @@ func TestDefaultStateModelContinuationPoliciesAndRecoveryTransition(t *testing.T
 			}
 		}
 	}
-	assert.Equal(t, 11, policyCount)
+	assert.Equal(t, 13, policyCount)
 	assert.Equal(t, 1, failureCount)
 }

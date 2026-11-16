@@ -149,6 +149,7 @@ func (ms *PatronRequestMessageSender) sendBorrowingRequest(ctx common.ExtendedCo
 		AgencyIdValue: reqSymbol,
 	}
 	illRequest.Header.RequestingAgencyRequestId = pr.ID
+	setSharedIndexRecordID(&illRequest.BibliographicInfo, pr.BibRecordID.String)
 	illRequest.Header.Timestamp = utils.XSDDateTime{Time: time.Now()}
 	if illRequest.PatronInfo == nil {
 		illRequest.PatronInfo = &iso18626.PatronInfo{}
@@ -159,9 +160,11 @@ func (ms *PatronRequestMessageSender) sendBorrowingRequest(ctx common.ExtendedCo
 	}
 	requestType := iso18626.TypeRequestTypeNew
 	illRequest.ServiceInfo.RequestingAgencyPreviousRequestId = ""
-	if pr.PrevReqID.Valid && illRequest.ServiceInfo.RequestType != nil && *illRequest.ServiceInfo.RequestType == iso18626.TypeRequestTypeRetry {
-		requestType = iso18626.TypeRequestTypeRetry
+	if pr.PrevReqID.Valid {
 		illRequest.ServiceInfo.RequestingAgencyPreviousRequestId = pr.PrevReqID.String
+		if illRequest.ServiceInfo.RequestType != nil && *illRequest.ServiceInfo.RequestType == iso18626.TypeRequestTypeRetry {
+			requestType = iso18626.TypeRequestTypeRetry
+		}
 	}
 	illRequest.ServiceInfo.RequestType = &requestType
 

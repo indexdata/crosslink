@@ -1,4 +1,4 @@
-openapi: 3.0.0
+openapi: 3.1.0
 info:
   title: Broker API
   version: 1.0.0
@@ -81,7 +81,7 @@ components:
     NotificationKind:
       name: kind
       in: query
-      description: Notification kind, valid values "note" and "condition"
+      description: Notification kind, valid values "note", "condition", "cancellation_reason" and "unfilled_reason"
       schema:
         $ref: '#/components/schemas/NotificationKind'
     PatronRequestId:
@@ -125,7 +125,7 @@ components:
       type: string
       description: Kind of patron request notification
       minLength: 1
-      enum: [note, condition]
+      enum: [note, condition, cancellation_reason, unfilled_reason]
     NotificationReceipt:
       type: string
       description: Receipt status of a patron request notification
@@ -245,6 +245,12 @@ components:
           type: string
           minLength: 1
           format: date-time
+        bibRecordId:
+          type: string
+          description: >-
+            Shared-index bibliographic record ID (VuFind UUID or Trove ANBD record ID),
+            independent of supplier bibliographic and item IDs. Sent to suppliers as
+            bibliographicInfo.bibliographicRecordId with identifier code ReShare.
         illRequest:
           type: object
           description: JSON of ISO18626 request
@@ -256,6 +262,19 @@ components:
           minLength: 1
         side:
           $ref: '#/components/schemas/PatronRequestSide'
+        tenant:
+          type: string
+          minLength: 1
+          description: >-
+            FOLIO tenant ID stored as the request's tenant. Omit for no tenant, as
+            CrossLink does for lending requests it receives.
+        requesterPickupLocationId:
+          type: string
+          format: uuid
+          description: >-
+            Directory entry UUID of the requester's pickup location: the requesting
+            institution or one of its branches. Omit for none. Borrowing requests
+            only; not checked against the directory during import.
         patron:
           type: string
         requesterSymbol:
@@ -343,9 +362,12 @@ components:
         currency:
           type: string
           description: Currency symbol
-        condition:
+        code:
           type: string
-          description: Condition of notification
+          description: Coded value interpreted per kind; the loan condition, cancellation reason or unfilled reason. Codes come from the sender's own vocabulary.
+        codeDescription:
+          type: string
+          description: Description of code from the sender's Directory configuration, when known at the time the notification was stored
         receipt:
           $ref: '#/components/schemas/NotificationReceipt'
         createdAt:
@@ -420,6 +442,12 @@ components:
           type: string
         localID:
           type: string
+        itemID:
+          type: string
+          description: Item identifier selected by holdings policy, absent when no item was selected
+        holdingsPolicyResolved:
+          type: boolean
+          description: Whether policy passed or is not required. False blocks fulfillment; absence denotes legacy unknown readiness.
         prevReason:
           type: string
         lastReason:
@@ -476,6 +504,37 @@ components:
         error:
           type: string
           description: Error message
+        template:
+          $ref: '#/components/schemas/TemplateError'
+    TemplateError:
+      type: object
+      title: Template Error
+      description: Where an error lies in a template, for responses that reject a template body or subject
+      required:
+        - part
+        - message
+      properties:
+        part:
+          type: string
+          description: Which part of the template failed
+          enum:
+            - body
+            - subject
+        sample:
+          type: string
+          description: Name of the built-in preview sample the template failed on, absent when it fails on every sample or on a patron request
+        requestId:
+          type: string
+          description: ID of the patron request the template failed on, when previewing patron requests
+        line:
+          type: integer
+          description: 1-based line in the part's source, absent when the error has no position
+        column:
+          type: integer
+          description: 1-based character column within that line, absent when the error has no column
+        message:
+          type: string
+          description: The error without its location
     StatusMessage:
       type: object
       properties:
@@ -830,7 +889,13 @@ components:
           description: Latest supplier transaction status
         localID:
           type: string
-          description: Item local ID
+          description: Local bibliographic identifier from holdings lookup
+        itemID:
+          type: string
+          description: Item identifier selected by holdings policy, absent when no item was selected
+        holdingsPolicyResolved:
+          type: boolean
+          description: Whether policy passed or is not required. False blocks fulfillment; absence denotes legacy unknown readiness.
         prevReason:
           type: string
           description: ISO 18626 reasonForMessage from the previously processed supplying-agency message
@@ -880,6 +945,12 @@ components:
           type: string
           format: date-time
           description: Timestamp of the patron request last update
+        bibRecordId:
+          type: string
+          description: >-
+            Shared-index bibliographic record ID (VuFind UUID or Trove ANBD record ID),
+            independent of supplier bibliographic and item IDs. Sent to suppliers as
+            bibliographicInfo.bibliographicRecordId with identifier code ReShare.
         illRequest:
           type: object
           description: JSON of ISO18626 request
@@ -958,6 +1029,9 @@ components:
         illResponse:
           type: object
           description: JSON of ISO18626 supplying agency message
+        cancellationReason:
+          type: string
+          description: Recorded reason for cancellation; absent when no reason is stored
         internalNote:
           type: string
           description: Staff-only internal note, local to this request and never shared with peers
@@ -1013,6 +1087,13 @@ components:
             On creation, ID of the previous borrowing request belonging to the same
             requester. The previous request must not already have a successor.
             Both requests are linked atomically. Not supported on update.
+        bibRecordId:
+          type: string
+          description: >-
+            Shared-index bibliographic record ID (VuFind UUID or Trove ANBD record ID),
+            independent of supplier bibliographic and item IDs. Sent to suppliers as
+            bibliographicInfo.bibliographicRecordId with identifier code ReShare.
+            On update, omit to preserve the current ID or send an empty string to clear it.
         illRequest:
           type: object
           description: JSON of ISO18626 request
@@ -1020,9 +1101,8 @@ components:
           type: string
           description: User who requested item
         requesterPickupLocationId:
-          type: string
+          type: [string, "null"]
           format: uuid
-          nullable: true
           description: >-
             UUID of the requesting institution or one of its descendant entries providing the shipping address and requester
             pickup location code used by AcceptItem when receiving a remotely supplied
@@ -1350,10 +1430,15 @@ components:
           description: Description of the action
         trigger:
           type: string
-          description: Trigger for the action
+          description: >-
+            Manual (the default) allows staff initiation. Auto runs on state entry and
+            retains manual retry after failure. Background runs only through background
+            execution, never on state entry or through the staff action API, even after
+            failure. Background jobs may invoke any action supported in the current state.
           enum:
             - auto
             - manual
+            - background
           default: manual
         appliesTo:
           $ref: '#/components/schemas/AppliesTo'
@@ -1410,6 +1495,13 @@ components:
             templateLabel:
               type: string
               description: Template label for this action. The template selector is used to select the appropriate template for generating messages.
+            countedStates:
+              type: array
+              minItems: 1
+              uniqueItems: true
+              description: Requester states counted by the check-limit action toward maxRequestsPerPatron.
+              items:
+                type: string
       required:
         - name
 
@@ -1569,51 +1661,41 @@ components:
         - email-pullslips
         - request-aging
         - overdue
+        - archive-borrowing-requests
+        - archive-lending-requests
 
     BatchAction:
       type: object
       title: Batch Action
       description: A scheduled batch action
-      properties:
-        id:
-          type: string
-          description: Unique identifier of the batch action
-        owner:
-          type: string
-          description: Symbol of the institution that owns the batch action. Empty for unrestricted actions created with master access.
-        schedule:
-          type: string
-          description: RRULE schedule expression, e.g. "FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0" (every Monday at 06:00)
-        actionName:
-          $ref: '#/components/schemas/BatchActionName'
-        title:
-          type: string
-          description: Title of the batch action, for display purposes
-        batchQuery:
-          type: string
-          description: Batch action selection query in CQL format
-        actionParams:
-          type: object
-          description: Parameters for the batch action. For request-aging, interval is required and must be a Go duration string such as "24h" or "168h". Additional parameters are passed to the generated patron-request background action.
-          additionalProperties: true
-        nextRun:
-          type: string
-          format: date-time
-          description: Next execution time according to the schedule
-        createdAt:
-          type: string
-          format: date-time
-          description: Creation timestamp
-        updatedAt:
-          type: string
-          format: date-time
-          description: Last update timestamp
-        active:
-          type: boolean
-          description: Indicates if the batch action is active
-        eventsLink:
-          type: string
-          description: Link to execution events for this batch action
+      allOf:
+        - $ref: '#/components/schemas/BatchActionProperties'
+        - type: object
+          properties:
+            id:
+              type: string
+              description: Unique identifier of the batch action
+            owner:
+              type: string
+              description: Symbol of the institution that owns the batch action. Empty for unrestricted actions created with master access.
+            nextRun:
+              type: string
+              format: date-time
+              description: Next execution time according to the schedule
+            createdAt:
+              type: string
+              format: date-time
+              description: Creation timestamp
+            updatedAt:
+              type: string
+              format: date-time
+              description: Last update timestamp
+            active:
+              type: boolean
+              description: Indicates if the batch action is active
+            eventsLink:
+              type: string
+              description: Link to execution events for this batch action
       required:
         - id
         - owner
@@ -1623,6 +1705,43 @@ components:
         - batchQuery
         - active
         - eventsLink
+
+    BatchActionProperties:
+      type: object
+      title: Batch Action Properties
+      description: Common fields for creating and returning a scheduled batch action
+      allOf:
+        - $ref: '#/components/schemas/BatchActionMutableProperties'
+        - type: object
+          properties:
+            actionName:
+              $ref: '#/components/schemas/BatchActionName'
+      required:
+        - schedule
+        - actionName
+        - batchQuery
+
+    BatchActionMutableProperties:
+      type: object
+      title: Batch Action Mutable Properties
+      description: Mutable fields of a scheduled batch action
+      properties:
+        schedule:
+          type: string
+          minLength: 1
+          description: RRULE schedule expression, e.g. "FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0" (every Monday at 06:00)
+        title:
+          type: string
+          minLength: 1
+          description: Title of the batch action, for display purposes
+        batchQuery:
+          type: string
+          minLength: 1
+          description: Batch action selection query in CQL format
+        actionParams:
+          type: object
+          description: Parameters for the batch action. For request-aging, archive-borrowing-requests, and archive-lending-requests, interval is required and must be a positive Go duration string such as "720h". Both archive actions accept an optional anonymize boolean (default false). For email-pullslips, templateLabel is required and must be a non-empty string naming an email template for staff. Other parameters are passed to generated patron-request background actions.
+          additionalProperties: true
 
     BatchActions:
       type: object
@@ -1642,25 +1761,8 @@ components:
       type: object
       title: Create Batch Action
       description: Request body for creating a batch action
-      properties:
-        schedule:
-          type: string
-          minLength: 1
-          description: RRULE schedule expression, e.g. "FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0" (every Monday at 06:00)
-        actionName:
-          $ref: '#/components/schemas/BatchActionName'
-        title:
-          type: string
-          minLength: 1
-          description: Title of the batch action, for display purposes
-        batchQuery:
-          type: string
-          minLength: 1
-          description: Batch action selection query in CQL format
-        actionParams:
-          type: object
-          description: Parameters for the batch action. For request-aging, interval is required and must be a Go duration string such as "24h" or "168h". Additional parameters are passed to the generated patron-request background action.
-          additionalProperties: true
+      allOf:
+        - $ref: '#/components/schemas/BatchActionProperties'
       required:
         - schedule
         - actionName
@@ -1677,27 +1779,19 @@ components:
             titleKey:
               type: string
               description: Stable identifier for this default, for clients to look up a localized title
-          required:
-            - titleKey
+      required:
+        - schedule
+        - actionName
+        - title
+        - batchQuery
+        - titleKey
 
     UpdateBatchAction:
       type: object
       title: Update Batch Action
       description: Request body for updating a batch action
-      properties:
-        title:
-          type: string
-          description: Title of the batch action, for display purposes
-        schedule:
-          type: string
-          description: RRULE schedule expression, e.g. "FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0" (every Monday at 06:00)
-        batchQuery:
-          type: string
-          description: Batch action selection query in CQL format
-        actionParams:
-          type: object
-          description: Parameters for the batch action
-          additionalProperties: true
+      allOf:
+        - $ref: '#/components/schemas/BatchActionMutableProperties'
       required:
         - schedule
         - batchQuery
@@ -1715,6 +1809,38 @@ components:
         cql:
           description: CQL search for patron requests to create pull slips for
           type: string
+
+    PatronRequestPrefill:
+      type: object
+      description: Catalog metadata for form prefill. Empty sections are omitted; serviceInfo is present only when serviceType was supplied.
+      properties:
+        bibliographicInfo:
+          $ref: '#/components/schemas/BibliographicInfo'
+        publicationInfo:
+          $ref: '#/components/schemas/PrefillPublicationInfo'
+        serviceInfo:
+          $ref: '#/components/schemas/PrefillServiceInfo'
+    PrefillPublicationInfo:
+      type: object
+      properties:
+        publisher:
+          type: string
+        publicationDate:
+          type: string
+        placeOfPublication:
+          type: string
+        publicationType:
+          type: object
+          properties:
+            '#text':
+              type: string
+    PrefillServiceInfo:
+      type: object
+      required: [serviceType]
+      properties:
+        serviceType:
+          type: string
+          enum: [Loan, Copy, CopyOrLoan]
 
     BibliographicInfo:
       type: object
@@ -1745,47 +1871,24 @@ components:
       type: object
       title: Template
       description: An email or pull slip template with optional placeholder support
-      properties:
-        id:
-          type: string
-          description: Unique identifier of the template
-        title:
-          type: string
-          description: Human-readable title for the template
-        purpose:
-          $ref: '#/components/schemas/TemplatePurpose'
-        subject:
-          type: string
-          description: Subject line template, supports {{.X}} placeholders. Not used for pullslip templates. Supports same placeholders as template body.
-        body:
-          type: string
-          description: >-
-            Body of the email or pull slip template. Supports {{.X}} placeholders.
-            Supported placeholders for patron request templates include
-            {{.ReqId}}, {{.PickupLocation}}, {{.Title}},
-            {{.Author}}, {{.DueDate}}, {{.ReturnAddress}}, {{.BarcodeBase64}},
-            {{.ServiceType}}, {{.ServiceLevel}}, {{.SystemIdentifier}},
-            {{.Publisher}}, {{.Volume}}, {{.Issue}}, {{.Pages}}, {{.StaffNotes}},
-            {{.CallNumber}}, {{.LoanConditions}}, {{.PatronName}},
-            {{.PatronSurname}}, {{.PatronId}} and batch templates include
-            {{.FullCount}}, {{.ActualCount}}, {{.BatchQuery}}.
-        contentType:
-          $ref: '#/components/schemas/TemplateContentType'
-        labels:
-          type: array
-          description: Predefined labels identifying the template's usage context. Values correspond to templateLabel parameters used in state model send-email actions.
-          items:
-            type: string
-        audience:
-          $ref: '#/components/schemas/TemplateAudience'
-        createdAt:
-          type: string
-          format: date-time
-          description: Timestamp when the template was created
-        updatedAt:
-          type: string
-          format: date-time
-          description: Timestamp when the template was last updated
+      allOf:
+        - $ref: '#/components/schemas/TemplateProperties'
+        - type: object
+          properties:
+            id:
+              type: string
+              description: Unique identifier of the template
+            createdAt:
+              type: string
+              format: date-time
+              description: Timestamp when the template was created
+            updatedAt:
+              type: string
+              format: date-time
+              description: Timestamp when the template was last updated
+          required:
+            - id
+            - createdAt
       required:
         - id
         - title
@@ -1794,6 +1897,66 @@ components:
         - contentType
         - labels
         - createdAt
+
+    TemplateProperties:
+      type: object
+      title: Template Properties
+      description: Common fields for creating and returning a template
+      allOf:
+        - $ref: '#/components/schemas/TemplateMutableProperties'
+        - type: object
+          properties:
+            purpose:
+              $ref: '#/components/schemas/TemplatePurpose'
+      required:
+        - title
+        - purpose
+        - body
+        - contentType
+        - labels
+
+    TemplateMutableProperties:
+      type: object
+      title: Template Mutable Properties
+      description: Mutable fields of a template
+      properties:
+        title:
+          type: string
+          minLength: 1
+          description: Human-readable title for the template
+        subject:
+          type: string
+          description: Subject line template, supports {{.X}} placeholders. Not used for pullslip templates. Supports same placeholders as template body. Omit from a full-replacement update to clear it.
+        body:
+          type: string
+          minLength: 1
+          description: >-
+            Body of the email or pull slip template. Supports {{.X}} placeholders.
+            Supported placeholders for patron request templates include
+            {{.ReqId}}, {{.CancellationReason}}, {{.PickupLocation}}, {{.PickupURL}}, {{.NeededBy}},
+            {{.Title}}, {{.TitleOfComponent}}, {{.Author}}, {{.AuthorOfComponent}},
+            {{.MaterialType}}, {{.DueDate}}, {{.ReturnAddress}}, {{.BarcodeBase64}},
+            {{.ServiceType}}, {{.ServiceLevel}}, {{.SystemIdentifier}},
+            {{.Publisher}}, {{.Volume}}, {{.Issue}}, {{.Pages}}, {{.PagesRequested}}, {{.StaffNotes}},
+            {{.CallNumber}}, {{.Location}}, {{.ShelvingLocation}}, {{.LoanConditions}}, {{.PatronGivenName}}, {{.PatronName}},
+            {{.PatronSurname}}, {{.PatronId}}, {{.PatronProfile}} and batch templates include
+            {{.FullCount}}, {{.ActualCount}}, {{.BatchQuery}}. {{.PatronName}} remains
+            supported as a backwards-compatible alias for {{.PatronGivenName}}.
+            To render each item associated with a patron request, use
+            {{range .Items}}{{.Title}}: {{.Barcode}}{{end}}. Inside the range,
+            item fields are {{.Title}}, {{.Barcode}}, {{.CallNumber}},
+            {{.Location}}, and {{.ShelvingLocation}}. An empty item list renders nothing.
+        contentType:
+          $ref: '#/components/schemas/TemplateContentType'
+        labels:
+          type: array
+          minItems: 1
+          description: Predefined labels identifying the template's usage context. Values correspond to templateLabel parameters used in state model send-email actions.
+          items:
+            type: string
+            minLength: 1
+        audience:
+          $ref: '#/components/schemas/TemplateAudience'
 
     Templates:
       type: object
@@ -1809,65 +1972,77 @@ components:
           items:
             $ref: '#/components/schemas/Template'
 
+    TemplatePlaceholder:
+      type: object
+      title: Template Placeholder
+      description: Placeholder available for use in a template
+      required:
+        - placeholder
+        - description
+      properties:
+        placeholder:
+          type: string
+          description: Ready-to-insert Go template expression
+          example: '{{.ReqId}}'
+        description:
+          type: string
+          description: Human-readable description of the placeholder value
+
+    TemplatePlaceholders:
+      type: object
+      title: Template Placeholders
+      description: Placeholders grouped by the template data source in which they are available
+      required:
+        - singleRecord
+        - batchRecord
+      properties:
+        singleRecord:
+          type: array
+          description: Placeholders available to templates rendered for a single patron request record
+          items:
+            $ref: '#/components/schemas/TemplatePlaceholder'
+        batchRecord:
+          type: array
+          description: Placeholders available to templates rendered for a batch of patron request records
+          items:
+            $ref: '#/components/schemas/TemplatePlaceholder'
+
+    TemplatePreviewRequest:
+      type: object
+      title: Template Preview Request
+      description: A pull slip template to render without saving it, and optionally the patron requests to render it with
+      required:
+        - body
+      properties:
+        body:
+          type: string
+          description: HTML template body, as in a pullslip template
+        labels:
+          type: array
+          description: Labels for the template. The first label sets the Go template name for both previewing and printing, so a matching {{define}} block renders correctly.
+          items:
+            type: string
+        requestIds:
+          type: array
+          maxItems: 20
+          description: IDs of patron requests owned by the caller to render the template with, in this order. Omit it to render against every built-in sample.
+          items:
+            type: string
+
     CreateTemplate:
+      x-go-type: Template
       type: object
       title: Create Template
       description: Request body for creating a template
-      properties:
-        title:
-          type: string
-          minLength: 1
-          description: Human-readable title for the template
-        purpose:
-          $ref: '#/components/schemas/TemplatePurpose'
-        subject:
-          type: string
-          description: Subject line template, supports {{.X}} placeholders. Not used for pullslip templates. For full list of supported placeholders, see the Template object.
-        body:
-          type: string
-          minLength: 1
-          description: Body of the email or pull slip template. Supports {{.X}} placeholders. For full list of supported placeholders, see the Template object.
-        contentType:
-          $ref: '#/components/schemas/TemplateContentType'
-        labels:
-          type: array
-          minItems: 1
-          description: Labels identifying the template's usage context
-          items:
-            type: string
-            minLength: 1
-        audience:
-          $ref: '#/components/schemas/TemplateAudience'
-      required:
-        - title
-        - purpose
-        - body
-        - contentType
-        - labels
+      allOf:
+        - $ref: '#/components/schemas/TemplateProperties'
 
     UpdateTemplate:
       type: object
       title: Update Template
       description: Request body for replacing a template's mutable fields.
-      properties:
-        title:
-          type: string
-          description: Human-readable title for the template
-        subject:
-          type: string
-          description: Subject line template supporting {{.X}} placeholders. Not used for pull slip templates. Omit to clear. For full list of supported placeholders, see the Template object.
-        body:
-          type: string
-          description: Body of the email or pull slip template. Supports {{.X}} placeholders. For full list of supported placeholders, see the Template object.
-        contentType:
-          $ref: '#/components/schemas/TemplateContentType'
-        labels:
-          type: array
-          description: Labels identifying the template's usage context
-          items:
-            type: string
-        audience:
-          $ref: '#/components/schemas/TemplateAudience'
+      allOf:
+        - $ref: '#/components/schemas/TemplateMutableProperties'
       required:
         - title
         - body
@@ -1898,10 +2073,7 @@ paths:
             examples:
               resources:
                 summary: Three import records
-                value: |
-                  {"type":"patronRequest","owner":"ISIL:SYM","data":{"patronRequest":{"id":"pr-1","createdAt":"2026-08-26T08:00:00Z","updatedAt":"2026-08-26T09:00:00Z","illRequest":{"header":{"requestingAgencyId":{"agencyIdType":{"#text":"ISIL"},"agencyIdValue":"REQ"},"supplyingAgencyId":{"agencyIdType":{"#text":"ISIL"},"agencyIdValue":"SUP"},"timestamp":"2026-08-26T08:00:00Z","requestingAgencyRequestId":"pr-1"},"bibliographicInfo":{"title":"Example title"},"serviceInfo":{"serviceType":"Loan"}},"state":"SENT","stateModel":"default","side":"borrowing","requesterSymbol":"ISIL:REQ","requesterRequestId":"pr-1","needsAttention":false},"items":[],"notifications":[],"locatedSuppliers":[]}}
-                  {"type":"batchAction","owner":"ISIL:SYM","data":{"schedule":"FREQ=DAILY;BYHOUR=6;BYMINUTE=0","actionName":"request-aging","title":"Daily aging","batchQuery":"state==NEW","actionParams":{"interval":"24h"}}}
-                  {"type":"template","owner":"ISIL:SYM","data":{"title":"Request reminder","purpose":"email","subject":"Reminder","body":"Your request is ready","contentType":"text","labels":["request-reminder"],"audience":"patron"}}
+                value: "{\"type\":\"patronRequest\",\"owner\":\"ISIL:SYM\",\"data\":{\"patronRequest\":{\"id\":\"pr-1\",\"createdAt\":\"2026-08-26T08:00:00Z\",\"updatedAt\":\"2026-08-26T09:00:00Z\",\"illRequest\":{\"header\":{\"requestingAgencyId\":{\"agencyIdType\":{\"#text\":\"ISIL\"},\"agencyIdValue\":\"REQ\"},\"supplyingAgencyId\":{\"agencyIdType\":{\"#text\":\"ISIL\"},\"agencyIdValue\":\"SUP\"},\"timestamp\":\"2026-08-26T08:00:00Z\",\"requestingAgencyRequestId\":\"pr-1\"},\"bibliographicInfo\":{\"title\":\"Example title\"},\"serviceInfo\":{\"serviceType\":\"Loan\"}},\"state\":\"SENT\",\"stateModel\":\"default\",\"side\":\"borrowing\",\"requesterSymbol\":\"ISIL:REQ\",\"requesterRequestId\":\"pr-1\",\"needsAttention\":false},\"items\":[],\"notifications\":[],\"locatedSuppliers\":[]}}\n{\"type\":\"batchAction\",\"owner\":\"ISIL:SYM\",\"data\":{\"schedule\":\"FREQ=DAILY;BYHOUR=6\",\"actionName\":\"request-aging\",\"title\":\"Daily aging\",\"batchQuery\":\"state==NEW\",\"actionParams\":{\"interval\":\"24h\"}}}\n{\"type\":\"template\",\"owner\":\"ISIL:SYM\",\"data\":{\"title\":\"Request reminder\",\"purpose\":\"email\",\"subject\":\"Reminder\",\"body\":\"Your request is ready\",\"contentType\":\"text\",\"labels\":[\"request-reminder\"],\"audience\":\"patron\"}}"
         x-ndjson-item-schema:
           $ref: '#/components/schemas/ImportResourceRecord'
       responses:
@@ -2416,7 +2588,8 @@ paths:
         supplier_name, supplier_symbol, needs_attention, has_notification, has_cost,
         has_unread_notification, service_type, service_level, created_at, needed_at, requester_req_id,
         title, author, patron, terminal_state, updated_at, isbn, issn, given_name, surname, has_internal_note,
-        cql.serverChoice.
+        item_id, barcode, call_number, cql.serverChoice.
+        Item fields item_id, barcode, and call_number support case-insensitive exact and wildcard matching.
       tags:
         - patron-requests-api
       parameters:
@@ -2475,6 +2648,95 @@ paths:
                 $ref: '#/components/schemas/Error'
         '500':
           description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /patron_requests/prefill:
+    get:
+      summary: Retrieve catalog metadata for patron request form prefill
+      description: |
+        Requires at least one nonblank identifier, isbn, or issn. ISBN/ISSN syntax
+        is checked (spaces and hyphens are accepted), but checksums are not checked.
+        Lookup values are passed to the configured catalog query builder. The general
+        builder tries identifier, ISBN, then ISSN; these are fallback queries, not an AND.
+        Existing adapter selection is preserved: the first record supplies metadata,
+        and holdings determine whether further fallback queries are attempted.
+        Records without holdings can still supply metadata. Empty sections are omitted.
+        serviceType is a caller choice, passed to lookup and returned in serviceInfo;
+        no service type is inferred or defaulted. No patron request is created or modified.
+        Uses requester/consortium/global catalog configuration regardless of metadataUpdateMode.
+        The unprefixed endpoint requires symbol; the /broker endpoint resolves the tenant
+        and validates any explicit symbol using the existing tenant rules.
+      tags:
+        - patron-requests-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+        - name: identifier
+          in: query
+          description: Catalog record identifier
+          schema:
+            type: string
+            maxLength: 1024
+        - name: isbn
+          in: query
+          description: ISBN-10 or ISBN-13; spaces and hyphens accepted
+          schema:
+            type: string
+            maxLength: 1024
+        - name: issn
+          in: query
+          description: ISSN; spaces and hyphens accepted
+          schema:
+            type: string
+            maxLength: 1024
+        - name: serviceType
+          in: query
+          description: Optional patron service choice; does not replace the required lookup identifier.
+          schema:
+            type: string
+            enum: [Loan, Copy, CopyOrLoan]
+            x-enum-varnames: [PrefillLoan, PrefillCopy, PrefillCopyOrLoan]
+      responses:
+        '200':
+          description: Record found; available metadata only (possibly an empty object).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatronRequestPrefill'
+              example:
+                bibliographicInfo:
+                  title: Example title
+                  supplierUniqueRecordId: '12345'
+                publicationInfo:
+                  publisher: Example publisher
+                  publicationDate: '2025'
+                  publicationType:
+                    '#text': Book
+                serviceInfo:
+                  serviceType: Loan
+        '400':
+          description: Invalid parameters or requester context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: No catalog record found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Catalog or Directory lookup failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: No catalog configured for this requester
           content:
             application/json:
               schema:
@@ -3089,7 +3351,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/CreateTemplate'
+                  $ref: '#/components/schemas/TemplateProperties'
         '500':
           description: Internal Server Error
           content:
@@ -3634,13 +3896,75 @@ paths:
               schema:
                 $ref: '#/components/schemas/Template'
         '400':
-          description: Bad Request. Invalid input.
+          description: Bad Request. Invalid input, or the template does not render. When the error lies in the template, `template` locates it.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
           description: Conflict. A template label already exists for this owner, purpose, and audience.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /templates/placeholders:
+    get:
+      summary: List available template placeholders
+      tags:
+        - templates-api
+        - patron-requests-api
+      responses:
+        '200':
+          description: Template placeholders grouped by data source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplatePlaceholders'
+
+  /templates/preview:
+    post:
+      summary: Render a pull slip template without saving it
+      description: |
+        Renders a pull slip template body against the caller's patron requests named by requestIds, or without them against every built-in
+        sample, through the same rendering as printed pull slips. The samples are fixed data embedded in the broker and are never stored. In
+        order they are typical, a lending request with every field filled; long, with long values and several items; sparse, with nearly
+        everything missing; and requester, the borrowing side of a request. The response is one PDF holding the slips in that order, so a
+        slip longer than a page moves the slips after it.
+      tags:
+        - templates-api
+        - patron-requests-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplatePreviewRequest'
+      responses:
+        '200':
+          description: Rendered pull slips
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Bad Request. Invalid input, or the template does not render. When the error lies in the template, `template` locates it and names the sample it failed on.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Patron request not found for the caller
           content:
             application/json:
               schema:
@@ -3714,7 +4038,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Template'
         '400':
-          description: Bad Request. Invalid input.
+          description: Bad Request. Invalid input, or the template does not render. When the error lies in the template, `template` locates it.
           content:
             application/json:
               schema:

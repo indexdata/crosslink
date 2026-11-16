@@ -203,13 +203,14 @@ func Init(ctx context.Context) (Context, error) {
 	tenantResolver := tenant.NewResolver().WithIllRepo(illRepo).WithLookupAdapter(dirAdapter).WithTenantToSymbol(TENANT_TO_SYMBOL)
 	apiHandler := api.NewApiHandler(eventRepo, illRepo, tenantResolver, dirAdapter, API_PAGE_SIZE)
 	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, eventRepo, tenantResolver, &iso18626Handler, API_PAGE_SIZE)
+	prApiHandler.SetPrefillProvider(prservice.NewPrefillService(illRepo, dirAdapter, lookupAdapterFactory))
 	prApiHandler.SetPickupLocationValidator(prActionService)
 	prApiHandler.SetAutoActionRunner(prActionService)
 	prApiHandler.SetActionTaskProcessor(prActionService)
 	sseBroker := api.NewSseBroker(appCtx, tenantResolver)
 	psApiHandler := psapi.NewPsApiHandler(psRepo, prRepo, tenantResolver, eventBus)
 
-	batchActionService := sched_service.NewBatchActionService(eventBus, prRepo, schedRepo, emailSenderService)
+	batchActionService := sched_service.NewBatchActionService(eventBus, prRepo, schedRepo, emailSenderService, prRepo.(sched_service.PatronRequestArchiveRepo))
 
 	if err != nil {
 		appCtx.Logger().Warn("email service not available, email sending events will fail", "error", err)
@@ -221,7 +222,7 @@ func Init(ctx context.Context) (Context, error) {
 		return Context{}, err
 	}
 
-	schedApiHandler := schedapi.NewSchedulerApiHandler(API_PAGE_SIZE, schedRepo, eventRepo, tenantResolver)
+	schedApiHandler := schedapi.NewSchedulerApiHandler(API_PAGE_SIZE, schedRepo, eventRepo, tenantResolver, prRepo)
 	if err = StartScheduler(ctx, schedRepo, eventBus); err != nil {
 		return Context{}, err
 	}

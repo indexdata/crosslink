@@ -68,16 +68,19 @@ IMPORT_OAPI_CFG = $(IMPORT_OAPI_DIR)/import-cfg.yaml
 IMPORT_OAPI_SPEC = $(IMPORT_OAPI_DIR)/open-api.yaml
 IMPORT_OAPI_GEN = import/oapi/import_openapi_gen.go
 
-.PHONY: all docker generate generate-sqlc generate-api generate-commit-id check run fmt fmt-check clean clean-build-caches view-coverage deps-update tools-update lint vulncheck check-coverage
+.PHONY: all docker generate generate-sqlc generate-api generate-commit-id directory-generate check run fmt fmt-check clean clean-build-caches view-coverage deps-update tools-update lint vulncheck check-coverage
 
 all: $(BINARY) archive
 
 docker: generate
 	cd .. && $(DOCKER) build -t indexdata/$(MODULE):latest -f ./$(MODULE)/Dockerfile .
 
-generate: generate-commit-id generate-sqlc generate-api $(STATE_MODELS_JSON)
+generate: generate-commit-id generate-sqlc generate-api directory-generate $(STATE_MODELS_JSON)
 
 generate-commit-id: $(COMMIT_ID)
+
+directory-generate:
+	$(MAKE) -C ../directory generate
 
 generate-sqlc: $(SQL_GEN_OUT)
 
@@ -109,10 +112,10 @@ $(SQL_GEN_OUT): $(SQL_GEN_IN) $(SQLC_CONFIG)
 $(COMMIT_ID): $(GIT_COMMIT_DEPS)
 	commit_id="$$( $(GIT) rev-parse --short HEAD )" && printf '%s' "$$commit_id" > $(COMMIT_ID)
 
-$(BINARY):  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(IMPORT_OAPI_GEN) $(BUILD_GOFILES) $(STATE_MODELS_JSON)
+$(BINARY):  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(IMPORT_OAPI_GEN) $(BUILD_GOFILES) $(STATE_MODELS_JSON) ../directory/api.yaml | directory-generate
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
 
-archive:  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(IMPORT_OAPI_GEN) $(BUILD_GOFILES) $(STATE_MODELS_JSON)
+archive:  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(IMPORT_OAPI_GEN) $(BUILD_GOFILES) $(STATE_MODELS_JSON) ../directory/api.yaml | directory-generate
 	$(GO) build -v -o archive ./cmd/archive
 
 check: generate

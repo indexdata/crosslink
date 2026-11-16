@@ -6,16 +6,22 @@ import (
 	"encoding/base64"
 	"errors"
 	"image/png"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/carlos7ags/folio/reader"
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/email"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	"github.com/indexdata/crosslink/broker/patron_request/proapi"
+	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var appCtx = common.CreateExtCtxWithArgs(context.Background(), nil)
@@ -156,7 +162,7 @@ func TestGeneratePdfPullSlip_FullData(t *testing.T) {
 		{Note: pgtype.Text{String: "Rush request", Valid: true}},
 	}
 	conditions := []pr_db.Notification{
-		{Condition: pgtype.Text{String: "No photocopying", Valid: true}},
+		{Code: pgtype.Text{String: "No photocopying", Valid: true}},
 	}
 
 	pdfBytes, err := svc.GeneratePdfPullSlip(appCtx, pr, notes, conditions)
@@ -172,7 +178,7 @@ func TestGetBarcodeBase64_EncodeError(t *testing.T) {
 }
 
 func TestGeneratePdfPullSlip_BarcodeError(t *testing.T) {
-	svc := &PdfServiceImpl{}
+	svc := newSvcWithMock(&mockPrRepo{})
 	pr := pr_db.PatronRequest{
 		RequesterReqID: pgtype.Text{
 			String: "\x80invalid", // non-ASCII causes code128 encoding to fail
@@ -180,7 +186,7 @@ func TestGeneratePdfPullSlip_BarcodeError(t *testing.T) {
 		},
 	}
 	_, err := svc.GeneratePdfPullSlip(appCtx, pr, []pr_db.Notification{}, []pr_db.Notification{})
-	assert.Error(t, err)
+	assert.ErrorContains(t, err, "barcode:")
 }
 
 func TestGeneratePdfPullSlip_TemplateError(t *testing.T) {
@@ -231,18 +237,22 @@ func TestGeneratePdfPullSlip_TemplateDbError(t *testing.T) {
 // ── GeneratePdfPullSlipForPrs ─────────────────────────────────────────────────
 
 type mockPrRepo struct {
-	pr_db.PrRepo // embed to satisfy the full interface
-	notes        []pr_db.Notification
-	conditions   []pr_db.Notification
-	noteErr      error
-	condErr      error
+	pr_db.PrRepo    // embed to satisfy the full interface
+	notifications   []pr_db.Notification
+	notificationErr error
+	notificationReq []pr_db.GetNotificationsByPrIdParams
 }
 
 func (m *mockPrRepo) GetNotificationsByPrId(_ common.ExtendedContext, params pr_db.GetNotificationsByPrIdParams) ([]pr_db.Notification, int64, error) {
-	if params.Kind == string(pr_db.NotificationKindNote) {
-		return m.notes, int64(len(m.notes)), m.noteErr
+	m.notificationReq = append(m.notificationReq, params)
+	matched := []pr_db.Notification{}
+	for _, n := range m.notifications {
+		if (params.Kind == "" || string(n.Kind) == params.Kind) && (params.ExcludeKind == "" || string(n.Kind) != params.ExcludeKind) &&
+			(!params.WithNote || (n.Note.Valid && n.Note.String != "")) {
+			matched = append(matched, n)
+		}
 	}
-	return m.conditions, int64(len(m.conditions)), m.condErr
+	return matched, int64(len(matched)), m.notificationErr
 }
 
 func (m *mockPrRepo) GetTemplateByPurposeAudienceLabelAndOwner(_ common.ExtendedContext, params pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams) (pr_db.Template, error) {
@@ -286,20 +296,25 @@ func TestGeneratePdfPullSlipForPrs_Multiple(t *testing.T) {
 	assert.True(t, len(pdfBytes) > 0)
 }
 
-func TestGeneratePdfPullSlipForPrs_NoteError(t *testing.T) {
-	repo := &mockPrRepo{noteErr: errors.New("note db error")}
+func TestGeneratePdfPullSlipForPrs_NotificationError(t *testing.T) {
+	repo := &mockPrRepo{notificationErr: errors.New("notification db error")}
 	svc := newSvcWithMock(repo)
 	pr := pr_db.PatronRequest{ID: "pr-1", RequesterReqID: pgtype.Text{String: "REQ-1", Valid: true}}
 	_, err := svc.GeneratePdfPullSlipForPrs(appCtx, []pr_db.PatronRequest{pr})
-	assert.Error(t, err)
+	assert.ErrorContains(t, err, "notification db error")
 }
 
-func TestGeneratePdfPullSlipForPrs_ConditionError(t *testing.T) {
-	repo := &mockPrRepo{condErr: errors.New("condition db error")}
+func TestGeneratePdfPullSlipForPrs_LoadsNotesAndConditionsSeparately(t *testing.T) {
+	repo := &mockPrRepo{}
 	svc := newSvcWithMock(repo)
 	pr := pr_db.PatronRequest{ID: "pr-1", RequesterReqID: pgtype.Text{String: "REQ-1", Valid: true}}
 	_, err := svc.GeneratePdfPullSlipForPrs(appCtx, []pr_db.PatronRequest{pr})
-	assert.Error(t, err)
+	require.NoError(t, err)
+	// Staff notes include every non-condition kind; each category has its own limit.
+	require.Len(t, repo.notificationReq, 2)
+	assert.Equal(t, string(pr_db.NotificationKindCondition), repo.notificationReq[0].ExcludeKind)
+	assert.True(t, repo.notificationReq[0].WithNote, "staff notes skip rows without note text")
+	assert.Equal(t, string(pr_db.NotificationKindCondition), repo.notificationReq[1].Kind)
 }
 
 // ── ServiceInfo edge cases ────────────────────────────────────────────────────
@@ -319,4 +334,70 @@ func TestGeneratePdfPullSlip_ServiceInfoEmptyServiceLevel(t *testing.T) {
 	pdfBytes, err := svc.GeneratePdfPullSlip(appCtx, pr, nil, nil)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, pdfBytes)
+}
+
+// ── RenderPdfPullSlip ─────────────────────────────────────────────────────────
+
+func pdfText(t *testing.T, pdf []byte) string {
+	t.Helper()
+	parsed, err := reader.Parse(pdf)
+	require.NoError(t, err)
+	var text strings.Builder
+	for i := range parsed.PageCount() {
+		page, err := parsed.Page(i)
+		require.NoError(t, err)
+		pageText, err := page.ExtractText()
+		require.NoError(t, err)
+		text.WriteString(pageText)
+	}
+	return text.String()
+}
+
+func TestRenderPdfPullSlip_EverySampleWithDefaultPreset(t *testing.T) {
+	preset, err := prservice.GetStateModelTemplateDefault(proapi.Pullslip, proapi.TemplateAudienceStaff, "pullslip-pdf")
+	require.NoError(t, err)
+	want := map[string][]string{
+		"typical":   {"REQ-2026-00417", "QA76.6", "2026-08-15", "Library use only"},
+		"long":      {"US-REQ-CONSORTIUM-2026-0000419", "Z 105.5"},
+		"sparse":    {"REQ-7", email.DEFAULT_FOR_NO_VALUE},
+		"requester": {"REQ-2026-00418", "Silent Spring", "2026-09-01"},
+	}
+	samples, err := prservice.GetTemplateSamples()
+	require.NoError(t, err)
+	require.Len(t, samples, len(want))
+	for _, sample := range samples {
+		t.Run(sample.Name, func(t *testing.T) {
+			pdf, err := RenderPdfPullSlip(sample.Request, sample.Notes, sample.Conditions, preset.Labels, preset.Body)
+			require.NoError(t, err)
+			text := pdfText(t, pdf)
+			require.Contains(t, want, sample.Name)
+			for _, expected := range want[sample.Name] {
+				assert.Contains(t, text, expected)
+			}
+		})
+	}
+}
+
+func TestMergePdfs_KeepsOrder(t *testing.T) {
+	var pdfs [][]byte
+	for _, title := range []string{"FIRST-SLIP", "SECOND-SLIP"} {
+		pdf, err := RenderPdfPullSlip(pr_db.PatronRequest{RequesterReqID: pgtype.Text{String: "REQ-1", Valid: true}}, nil, nil, nil, "<p>"+title+"</p>")
+		require.NoError(t, err)
+		pdfs = append(pdfs, pdf)
+	}
+	merged, err := MergePdfs(pdfs)
+	require.NoError(t, err)
+	text := pdfText(t, merged)
+	first, second := strings.Index(text, "FIRST-SLIP"), strings.Index(text, "SECOND-SLIP")
+	assert.True(t, first >= 0 && second > first, text)
+}
+
+func TestMergePdfs_InvalidPdf(t *testing.T) {
+	_, err := MergePdfs([][]byte{[]byte("not a pdf")})
+	assert.Error(t, err)
+}
+
+func TestRenderPdfPullSlip_TemplateError(t *testing.T) {
+	_, err := RenderPdfPullSlip(pr_db.PatronRequest{RequesterReqID: pgtype.Text{String: "REQ-1", Valid: true}}, nil, nil, nil, "<p>\n{{.Title}\n</p>")
+	assert.ErrorContains(t, err, "template:2:")
 }

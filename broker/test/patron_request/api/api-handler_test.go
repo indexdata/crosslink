@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/carlos7ags/folio/reader"
 	"io"
 	"net/http"
 	"net/url"
@@ -710,8 +711,8 @@ func TestActionsToCompleteState(t *testing.T) {
 		return strings.Contains(string(respBytes), "\"name\":\""+string(prservice.BorrowerActionShipReturn)+"\"")
 	})
 
-	// Circulation helpers leave the request state unchanged. Renew the overdue
-	// loan through the actual broker relay before returning it.
+	// Circulation helpers leave the request state unchanged. Exercise early and
+	// overdue renewals through the actual broker relay before returning the loan.
 	invokeLoanAction := func(path, query, name string, params map[string]any) {
 		if params == nil {
 			params = map[string]any{}
@@ -733,12 +734,52 @@ func TestActionsToCompleteState(t *testing.T) {
 	}
 	waitLoanState(requesterPrPath, queryParams, "RECEIVED")
 	waitLoanState(supplierPrPath, supQueryParams, "RECEIVED")
-	invokeLoanAction(supplierPrPath, supQueryParams, "overdue", nil)
+	invokeLoanAction(requesterPrPath, queryParams, "renew", nil)
+	waitLoanState(supplierPrPath, supQueryParams, "RENEWAL_PENDING")
+	waitLoanState(requesterPrPath, queryParams, "RENEWAL_PENDING")
+	invokeLoanAction(supplierPrPath, supQueryParams, "reject-renewal", nil)
+	waitLoanState(supplierPrPath, supQueryParams, "RENEWAL_REJECTED")
+	waitLoanState(requesterPrPath, queryParams, "RENEWAL_REJECTED")
+	var allowed proapi.AllowedActions
+	require.NoError(t, json.Unmarshal(httpRequest(t, "GET", supplierPrPath+"/actions"+supQueryParams, nil, 200), &allowed))
+	assert.False(t, slices.ContainsFunc(allowed.Actions, func(action proapi.AllowedAction) bool { return action.Name == "overdue" }))
+	for _, payload := range []string{`{"action":"overdue"}`, `{"action":"overdue","actionParams":{"trigger":"manual"}}`} {
+		response := httpRequest(t, "POST", supplierPrPath+"/action"+supQueryParams, []byte(payload), 400)
+		assert.Contains(t, string(response), "not allowed")
+	}
+	// Use the scheduler's real background action path; the staff API cannot
+	// invoke overdue, even when its state-model declaration supports it.
+	batchBody, err := json.Marshal(map[string]any{
+		"title": "Overdue " + supPr.ID, "actionName": "overdue",
+		"schedule": "FREQ=SECONDLY;INTERVAL=1", "batchQuery": "id = \"" + supPr.ID + "\"",
+	})
+	require.NoError(t, err)
+	batchQuery := "?symbol=" + url.QueryEscape(supplierSymbol)
+	var batch struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(httpRequest(t, "POST", "/batch_actions"+batchQuery, batchBody, 201), &batch))
+	require.NotEmpty(t, batch.ID)
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("overdue batch: %s", httpRequest(t, "GET", "/batch_actions/"+batch.ID+batchQuery, nil, 200))
+			t.Logf("overdue batch events: %s", httpRequest(t, "GET", "/batch_actions/"+batch.ID+"/events"+batchQuery, nil, 200))
+		}
+		httpRequest(t, "DELETE", "/batch_actions/"+batch.ID+batchQuery, nil, 204)
+	})
+	waitLoanState(supplierPrPath, supQueryParams, "OVERDUE")
 	waitLoanState(requesterPrPath, queryParams, "OVERDUE")
+	httpRequest(t, "POST", "/batch_actions/"+batch.ID+"/disable"+batchQuery, nil, 204)
 	invokeLoanAction(requesterPrPath, queryParams, "renew", nil)
 	waitLoanState(supplierPrPath, supQueryParams, "RENEWAL_PENDING")
 	invokeLoanAction(supplierPrPath, supQueryParams, "accept-renewal", map[string]any{"dueDate": time.Now().UTC().AddDate(0, 0, 14).Format(time.RFC3339)})
 	waitLoanState(requesterPrPath, queryParams, "RENEWED")
+	invokeLoanAction(requesterPrPath, queryParams, "renew", nil)
+	waitLoanState(supplierPrPath, supQueryParams, "RENEWAL_PENDING")
+	waitLoanState(requesterPrPath, queryParams, "RENEWAL_PENDING")
+	invokeLoanAction(supplierPrPath, supQueryParams, "reject-renewal", nil)
+	waitLoanState(supplierPrPath, supQueryParams, "RENEWAL_REJECTED")
+	waitLoanState(requesterPrPath, queryParams, "RENEWAL_REJECTED")
 	// Ship return
 	action = proapi.ExecuteAction{
 		Action: string(prservice.BorrowerActionShipReturn),
@@ -872,10 +913,17 @@ func TestCopySupplyDocumentCompletesRequesterAndSupplier(t *testing.T) {
 		ActionParams: &actionParams,
 	})
 	require.NoError(t, err)
-	responseBytes = httpRequest(t, "POST", supplierPath+"/action"+supplierParams, actionBytes, http.StatusOK)
 	var actionResult proapi.ActionResult
-	require.NoError(t, json.Unmarshal(responseBytes, &actionResult))
-	assert.Equal(t, string(events.EventStatusSuccess), actionResult.Result)
+	// The action can become available before the previous invoke-action task
+	// completes. Retry only the exclusivity rejection, which did not execute it.
+	require.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		responseBytes = httpRequest(t, "POST", supplierPath+"/action"+supplierParams, actionBytes, http.StatusOK)
+		actionResult = proapi.ActionResult{}
+		require.NoError(t, json.Unmarshal(responseBytes, &actionResult))
+		return actionResult.Result != string(events.EventStatusError) ||
+			actionResult.Message == nil || *actionResult.Message != "another invoke-action task in progress"
+	}), "timed out waiting for supply-document to run without task conflict")
+	require.Equal(t, string(events.EventStatusSuccess), actionResult.Result)
 
 	require.True(t, test.WaitForPredicateToBeTrue(func() bool {
 		responseBytes = httpRequest(t, "GET", requesterPath+requesterParams, nil, http.StatusOK)
@@ -1584,7 +1632,7 @@ func TestCRUDTemplate(t *testing.T) {
 
 	// POST – create a template
 	audience := proapi.TemplateAudiencePatron
-	subject := "Your ILL request {{title}} is ready"
+	subject := "Your ILL request {{.Title}} is ready"
 	newTemplate := proapi.CreateTemplate{
 		Title:       "Ready notification",
 		Purpose:     proapi.Email,
@@ -1592,7 +1640,7 @@ func TestCRUDTemplate(t *testing.T) {
 		Audience:    &audience,
 		Subject:     &subject,
 		Labels:      []string{"borrower-loaned"},
-		Body:        "Dear {{patronName}}, your item {{title}} has arrived.",
+		Body:        "Dear {{.PatronName}}, your item {{.Title}} has arrived.",
 	}
 	newTemplateBytes, err := json.Marshal(newTemplate)
 	assert.NoError(t, err)
@@ -1649,14 +1697,14 @@ func TestCRUDTemplate(t *testing.T) {
 
 	// PUT – update the template
 	updatedAudience := proapi.TemplateAudienceStaff
-	updatedSubject := "Staff: ILL item {{title}} ready for {{patronName}}"
+	updatedSubject := "Staff: ILL item {{.Title}} ready for {{.PatronName}}"
 	updateTemplate := proapi.UpdateTemplate{
 		Title:       "Ready notification – updated",
 		ContentType: proapi.Html,
 		Audience:    &updatedAudience,
 		Subject:     &updatedSubject,
 		Labels:      []string{"borrower-loaned", "staff"},
-		Body:        "<p>Dear {{patronName}}, your item is ready.</p>",
+		Body:        "<p>Dear {{.PatronName}}, your item is ready.</p>",
 	}
 	updateBytes, err := json.Marshal(updateTemplate)
 	assert.NoError(t, err)
@@ -1757,4 +1805,136 @@ func TestTemplateLabelConflictsReturn409(t *testing.T) {
 	require.NoError(t, err)
 	conflictBody = httpRequest(t, http.MethodPut, "/templates/"+created.Id+"?symbol="+url.QueryEscape(symbol), updateBytes, http.StatusConflict)
 	assert.Contains(t, string(conflictBody), "template labels already exist")
+}
+
+func TestTemplatePreview(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	symbol := "ISIL:PREV" + uuid.NewString()
+	apptest.CreatePeerWithModeAndVendor(t, illRepo, symbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink, dirapi.Entry{}, symbol)
+	otherSymbol := "ISIL:OTHER" + uuid.NewString()
+	apptest.CreatePeerWithModeAndVendor(t, illRepo, otherSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, dirapi.CrossLink, dirapi.Entry{}, otherSymbol)
+
+	prId := uuid.NewString()
+	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID:              prId,
+		CreatedAt:       pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Side:            prservice.SideLending,
+		RequesterSymbol: pgtype.Text{String: otherSymbol, Valid: true},
+		SupplierSymbol:  pgtype.Text{String: symbol, Valid: true},
+		State:           prservice.LenderStateWillSupply,
+		Language:        "english",
+		RequesterReqID:  pgtype.Text{String: "REQ-PREVIEW", Valid: true},
+		IllRequest: iso18626.Request{
+			BibliographicInfo: iso18626.BibliographicInfo{Title: "Preview Title"},
+		},
+		Items: []pr_db.PrItem{},
+	})
+	require.NoError(t, err)
+	_, err = prRepo.SaveItem(appCtx, pr_db.SaveItemParams{
+		ID:         uuid.NewString(),
+		PrID:       prId,
+		Barcode:    "BAR-PREVIEW",
+		CallNumber: pgtype.Text{String: "CALL-PREVIEW", Valid: true},
+		CreatedAt:  pgtype.Timestamp{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = prRepo.SaveNotification(appCtx, pr_db.SaveNotificationParams{
+		ID: uuid.NewString(), PrID: prId, FromSymbol: symbol, ToSymbol: otherSymbol,
+		Direction: pr_db.NotificationDirectionSent, Kind: pr_db.NotificationKindNote,
+		Note:      pgtype.Text{String: "Preview note", Valid: true},
+		CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+
+	previewPath := func(symbol string) string {
+		return "/templates/preview?symbol=" + url.QueryEscape(symbol)
+	}
+	secondPrId := uuid.NewString()
+	_, err = prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID:              secondPrId,
+		CreatedAt:       pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Side:            prservice.SideLending,
+		RequesterSymbol: pgtype.Text{String: otherSymbol, Valid: true},
+		SupplierSymbol:  pgtype.Text{String: symbol, Valid: true},
+		State:           prservice.LenderStateWillSupply,
+		Language:        "english",
+		RequesterReqID:  pgtype.Text{String: "REQ-PREVIEW-2", Valid: true},
+		IllRequest: iso18626.Request{
+			BibliographicInfo: iso18626.BibliographicInfo{Title: "Second Title"},
+		},
+		Items: []pr_db.PrItem{},
+	})
+	require.NoError(t, err)
+	// A reason notification's explanation is a staff note too; its code is not.
+	_, err = prRepo.SaveNotification(appCtx, pr_db.SaveNotificationParams{
+		ID: uuid.NewString(), PrID: secondPrId, FromSymbol: symbol, ToSymbol: otherSymbol,
+		Direction: pr_db.NotificationDirectionSent, Kind: pr_db.NotificationKindUnfilledReason,
+		Note:      pgtype.Text{String: "Searched the shelf", Valid: true},
+		Code:      pgtype.Text{String: "NotOnShelf", Valid: true},
+		CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+
+	pdfText := func(pdf []byte) string {
+		parsed, err := reader.Parse(pdf)
+		require.NoError(t, err)
+		var text strings.Builder
+		for i := range parsed.PageCount() {
+			page, err := parsed.Page(i)
+			require.NoError(t, err)
+			pageText, err := page.ExtractText()
+			require.NoError(t, err)
+			text.WriteString(pageText)
+			text.WriteString("\n")
+		}
+		return text.String()
+	}
+	previewBody := func(body string, requestIds ...string) []byte {
+		request := proapi.TemplatePreviewRequest{Body: body}
+		if len(requestIds) > 0 {
+			request.RequestIds = &requestIds
+		}
+		bytes, err := json.Marshal(request)
+		require.NoError(t, err)
+		return bytes
+	}
+	slip := "<p>{{.Title}}|{{.CallNumber}}|{{.StaffNotes}}</p>"
+
+	// The supplier owns the lending requests and sees their data, one slip each in the order asked for.
+	hres, respBytes := httpRequest2(t, http.MethodPost, previewPath(symbol), previewBody(slip, secondPrId, prId), http.StatusOK)
+	assert.Equal(t, "application/pdf", hres.Header.Get("Content-Type"))
+	text := pdfText(respBytes)
+	first := strings.Index(text, "Second Title|")
+	second := strings.Index(text, "Preview Title|CALL-PREVIEW|Preview note")
+	require.GreaterOrEqual(t, first, 0, text)
+	require.Greater(t, second, first, text)
+	reasonNote := strings.Index(text, "Searched the shelf")
+	assert.True(t, reasonNote > first && reasonNote < second, text)
+	assert.NotContains(t, text, "NotOnShelf")
+
+	// The requester symbol on the request does not own the lending side.
+	httpRequest(t, http.MethodPost, previewPath(otherSymbol), previewBody(slip, prId), http.StatusNotFound)
+	httpRequest(t, http.MethodPost, previewPath(symbol), previewBody(slip, prId, uuid.NewString()), http.StatusNotFound)
+	tooMany := make([]string, 21)
+	for i := range tooMany {
+		tooMany[i] = prId
+	}
+	httpRequest(t, http.MethodPost, previewPath(symbol), previewBody(slip, tooMany...), http.StatusBadRequest)
+
+	preset, err := prservice.GetStateModelTemplateDefault(proapi.Pullslip, proapi.TemplateAudienceStaff, "pullslip-pdf")
+	require.NoError(t, err)
+	respBytes = httpRequest(t, http.MethodPost, previewPath(symbol), previewBody(preset.Body), http.StatusOK)
+	assert.True(t, bytes.HasPrefix(respBytes, []byte("%PDF")))
+
+	respBytes = httpRequest(t, http.MethodPost, previewPath(symbol), previewBody("<p>\n{{.Missing}}</p>", prId), http.StatusBadRequest)
+	var errResp proapi.Error
+	require.NoError(t, json.Unmarshal(respBytes, &errResp))
+	assert.Contains(t, *errResp.Error, "template:2:")
+	require.NotNil(t, errResp.Template)
+	assert.Equal(t, proapi.Body, errResp.Template.Part)
+	assert.Nil(t, errResp.Template.Sample)
+	assert.Nil(t, errResp.Template.RequestId)
+	assert.Equal(t, 2, *errResp.Template.Line)
+	assert.Equal(t, 3, *errResp.Template.Column)
+	assert.Equal(t, "unknown field Missing", errResp.Template.Message)
 }

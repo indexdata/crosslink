@@ -9,6 +9,7 @@ require (
 	github.com/indexdata/crosslink/iso18626 v0.0.0
 	github.com/indexdata/crosslink/marcxml v0.0.0
 	github.com/indexdata/crosslink/ncip v0.0.0
+	github.com/indexdata/crosslink/ncipv1 v0.0.0
 	github.com/indexdata/crosslink/sru v0.0.0
 	github.com/indexdata/crosslink/testutil v0.0.0
 	github.com/indexdata/crosslink/zoom v0.0.0
@@ -21,6 +22,7 @@ replace (
 	github.com/indexdata/crosslink/iso18626 => ../iso18626
 	github.com/indexdata/crosslink/marcxml => ../marcxml
 	github.com/indexdata/crosslink/ncip => ../ncip
+	github.com/indexdata/crosslink/ncipv1 => ../ncipv1
 	github.com/indexdata/crosslink/sru => ../sru
 	github.com/indexdata/crosslink/testutil => ../testutil
 	github.com/indexdata/crosslink/zoom => ../zoom
@@ -35,7 +37,7 @@ require (
 	github.com/go-playground/validator/v10 v10.30.3
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
-	github.com/indexdata/cql-go v1.0.2-0.20260910122542-3df8746ff9ee
+	github.com/indexdata/cql-go v1.0.2-0.20261021081055-c83cc11807e2
 	github.com/indexdata/go-utils v1.0.0
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.10.0
@@ -45,6 +47,7 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/teambition/rrule-go v1.8.2
 	github.com/testcontainers/testcontainers-go v0.44.0
+	golang.org/x/text v0.41.0
 )
 
 require (
@@ -149,7 +152,6 @@ require (
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/tools v0.49.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect

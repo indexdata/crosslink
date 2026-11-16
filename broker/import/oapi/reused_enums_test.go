@@ -34,7 +34,7 @@ func TestImportModelsReuseDomainEnums(t *testing.T) {
 	}
 	require.False(t, NotificationDirection("invalid").Valid())
 
-	for _, value := range []NotificationKind{"note", "condition"} {
+	for _, value := range []NotificationKind{"note", "condition", "cancellation_reason", "unfilled_reason"} {
 		require.True(t, value.Valid(), "kind %q should be valid", value)
 	}
 	require.False(t, NotificationKind("invalid").Valid())

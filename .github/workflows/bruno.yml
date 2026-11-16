@@ -42,6 +42,9 @@ jobs:
       with:
         node-version: 22
 
+    - name: Test Bruno polling helper
+      run: node --test bruno/crosslink/scripts/wait-for-state.test.js
+
     - name: Start Crosslink stack
       run: docker compose -f bruno/docker-compose.yml up -d --build
 

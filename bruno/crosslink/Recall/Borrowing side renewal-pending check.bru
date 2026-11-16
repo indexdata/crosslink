@@ -1,7 +1,7 @@
 meta {
   name: Borrowing side renewal-pending check
   type: http
-  seq: 13
+  seq: 14
 }
 
 get {
@@ -29,11 +29,11 @@ script:pre-request {
 }
 
 script:post-response {
-  test("State is RENEWAL_PENDING without a due date", () => {
+  test("State is RENEWAL_PENDING with the original due date", () => {
     expect(res.getStatus()).to.equal(200);
     const pr = res.getBody();
     expect(pr.state).to.equal("RENEWAL_PENDING");
-    expect(pr.dueDate == null).to.equal(true);
+    expect(Date.parse(pr.dueDate)).to.equal(Date.parse(bru.getVar("recallOriginalDueDate")));
     expect(pr.needsAttention).to.equal(false);
   });
 }

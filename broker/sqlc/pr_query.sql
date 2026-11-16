@@ -24,6 +24,18 @@ WHERE ill_request IS NOT NULL
 ORDER BY created_at
 LIMIT $1 OFFSET $2;
 
+-- name: ListPatronRequestArchiveCandidates :many
+-- Two base arguments keep CQL placeholders starting at $3. Cursor contains a
+-- zone-free created_at timestamp and ID. CQL sorting is intentionally ignored
+-- so concurrent deletions and skipped records cannot move the scan backwards.
+SELECT id, created_at, state, updated_at
+FROM patron_request_search_view
+WHERE ill_request IS NOT NULL
+  AND (sqlc.arg(cursor)::text[] IS NULL OR (created_at, id) >
+       ((sqlc.arg(cursor)::text[])[1]::timestamp, (sqlc.arg(cursor)::text[])[2]))
+ORDER BY created_at, id
+LIMIT $1;
+
 -- name: GetPatronRequestsFacets :many
 -- TEMPLATE: 'requester_symbol' (value) and 'requester_name' (label) are placeholder
 -- column names. This query is not meant to be called directly; use
@@ -67,13 +79,15 @@ SET ill_request         = $3,
     retry_bib_info       = $23,
     state_model          = $24,
     requester_pickup_location_id = $25,
-    due_at = $26
+    cancellation_reason = $26,
+    due_at = $27,
+    bib_record_id = $28
 WHERE id = $1 AND created_at = $2 AND (updated_at is null OR updated_at = $18)
 RETURNING sqlc.embed(patron_request);
 
 -- name: CreatePatronRequest :one
-INSERT INTO patron_request (id, created_at, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, items, language, terminal_state, updated_at, ill_response, internal_note, next_req_id, prev_req_id, retry_bib_info, state_model, requester_pickup_location_id, due_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+INSERT INTO patron_request (id, created_at, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, items, language, terminal_state, updated_at, ill_response, internal_note, next_req_id, prev_req_id, retry_bib_info, state_model, requester_pickup_location_id, cancellation_reason, due_at, bib_record_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
 RETURNING sqlc.embed(patron_request);
 
 -- name: UpdatePatronRequestInternalNote :exec
@@ -98,11 +112,13 @@ LIMIT 1;
 SELECT get_next_hrid($1)::TEXT AS hrid;
 
 -- name: SaveItem :one
-INSERT INTO item (id, pr_id, barcode, call_number, title, item_id, lms_request_id, lms_item_id, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO item (id, pr_id, barcode, call_number, location, shelving_location, title, item_id, lms_request_id, lms_item_id, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (id) DO UPDATE
     SET barcode = EXCLUDED.barcode,
         call_number = EXCLUDED.call_number,
+        location = COALESCE(EXCLUDED.location, item.location),
+        shelving_location = COALESCE(EXCLUDED.shelving_location, item.shelving_location),
         title = EXCLUDED.title,
         item_id = EXCLUDED.item_id,
         lms_request_id = EXCLUDED.lms_request_id,
@@ -141,8 +157,8 @@ SET lms_request_id = $2,
 WHERE id = $1;
 
 -- name: SaveNotification :one
-INSERT INTO notification (id, pr_id, from_symbol, to_symbol, direction, kind, note, cost, currency, condition, receipt, created_at, acknowledged_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+INSERT INTO notification (id, pr_id, from_symbol, to_symbol, direction, kind, note, cost, currency, code, code_description, receipt, created_at, acknowledged_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 ON CONFLICT (id) DO UPDATE
     SET from_symbol     = EXCLUDED.from_symbol,
         to_symbol       = EXCLUDED.to_symbol,
@@ -151,7 +167,8 @@ ON CONFLICT (id) DO UPDATE
         note            = EXCLUDED.note,
         cost            = EXCLUDED.cost,
         currency        = EXCLUDED.currency,
-        condition       = EXCLUDED.condition,
+        code            = EXCLUDED.code,
+        code_description = EXCLUDED.code_description,
         receipt         = EXCLUDED.receipt,
         created_at      = EXCLUDED.created_at,
         acknowledged_at = EXCLUDED.acknowledged_at
@@ -169,6 +186,8 @@ SELECT sqlc.embed(notification), COUNT(*) OVER () as full_count
 FROM notification
 WHERE pr_id = $3
   AND (sqlc.arg(kind)::text = '' OR kind = sqlc.arg(kind)::text)
+  AND (sqlc.arg(exclude_kind)::text = '' OR kind <> sqlc.arg(exclude_kind)::text)
+  AND (NOT sqlc.arg(with_note)::boolean OR (note IS NOT NULL AND note <> ''))
 ORDER BY created_at
 LIMIT $1 OFFSET $2;
 

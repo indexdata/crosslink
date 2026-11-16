@@ -53,9 +53,6 @@ func (a ApiImpl) AddTier(ctx context.Context, request AddTierRequestObject) (Add
 	qtx := a.queries.WithTx(tx)
 
 	level := request.Body.Level
-	if level == "" {
-		level = Standard
-	}
 	switch level {
 	case Express, Normal, Rush, Secondarymail, Standard, Urgent:
 	default:
@@ -63,9 +60,6 @@ func (a ApiImpl) AddTier(ctx context.Context, request AddTierRequestObject) (Add
 	}
 
 	tierType := request.Body.Type
-	if tierType == "" {
-		tierType = Loan
-	}
 	switch tierType {
 	case Loan, Copy:
 	default:

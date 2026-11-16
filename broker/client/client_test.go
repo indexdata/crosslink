@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1114,4 +1115,188 @@ func TestGetPeerInfoUsesContactEmail(t *testing.T) {
 
 	_, _, _, electronicAddress := getPeerInfo(peer, "")
 	assert.Equal(t, contactEmail, electronicAddress.ElectronicAddressData)
+}
+
+func TestCancellationReasonDelivery(t *testing.T) {
+	const note = "#CancellationReason: InvalidUser#keep this note"
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	t.Run("external", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var incoming iso18626.ISO18626Message
+			if !assert.NoError(t, xml.NewDecoder(r.Body).Decode(&incoming)) {
+				return
+			}
+			assert.Equal(t, "keep this note", incoming.SupplyingAgencyMessage.MessageInfo.Note)
+			w.Header().Set("Content-Type", "application/xml")
+			assert.NoError(t, xml.NewEncoder(w).Encode(iso18626.NewISO18626Message()))
+		}))
+		defer server.Close()
+		client := CreateIso18626Client(nil, nil, prservice.PatronRequestMessageHandler{}, 1024*1024, 0)
+		msg := iso18626.NewISO18626Message()
+		msg.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{MessageInfo: iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse, Note: note}, StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled}}
+		_, err := client.HandleIllMessage(ctx, &ill_db.Peer{Url: server.URL, Vendor: string(dirapi.Alma)}, msg)
+		assert.NoError(t, err)
+		assert.Equal(t, note, msg.SupplyingAgencyMessage.MessageInfo.Note)
+	})
+	t.Run("local CrossLink", func(t *testing.T) {
+		repo := &cancellationDeliveryRepo{}
+		bus := &cancellationDeliveryBus{}
+		handler := prservice.CreatePatronRequestMessageHandler(repo, nil, nil, bus)
+		client := CreateIso18626Client(nil, nil, handler, 1024*1024, 0)
+		msg := iso18626.NewISO18626Message()
+		msg.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{Header: iso18626.Header{RequestingAgencyRequestId: "pr"}, MessageInfo: iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse, Note: note}, StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled}}
+		response, err := client.HandleIllMessage(ctx, &ill_db.Peer{Vendor: string(dirapi.CrossLink)}, msg)
+		assert.NoError(t, err)
+		if assert.NotNil(t, response) {
+			assert.Equal(t, iso18626.TypeMessageStatusOK, response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+		}
+		assert.Equal(t, "InvalidUser", repo.saved.CancellationReason.String)
+		assert.Equal(t, "keep this note", repo.notification.Note.String)
+		assert.Equal(t, note, bus.receivedNote)
+		assert.Equal(t, note, msg.SupplyingAgencyMessage.MessageInfo.Note)
+	})
+}
+
+// Only the storage and task operations used by local cancellation delivery are implemented.
+type cancellationDeliveryRepo struct {
+	pr_db.PrRepo
+	saved        pr_db.PatronRequest
+	notification pr_db.Notification
+}
+
+func (r *cancellationDeliveryRepo) GetPatronRequestByIdAndSide(_ common.ExtendedContext, id string, side pr_db.PatronRequestSide) (pr_db.PatronRequest, error) {
+	return pr_db.PatronRequest{ID: id, Side: side, State: prservice.BorrowerStateCancelPending}, nil
+}
+func (r *cancellationDeliveryRepo) UpdatePatronRequest(_ common.ExtendedContext, params pr_db.UpdatePatronRequestParams) (pr_db.PatronRequest, error) {
+	r.saved = pr_db.PatronRequest(params)
+	return r.saved, nil
+}
+func (r *cancellationDeliveryRepo) SaveNotification(_ common.ExtendedContext, params pr_db.SaveNotificationParams) (pr_db.Notification, error) {
+	r.notification = pr_db.Notification(params)
+	return r.notification, nil
+}
+
+type cancellationDeliveryBus struct {
+	events.EventBus
+	receivedNote string
+}
+
+func (b *cancellationDeliveryBus) CreateTask(_ string, _ events.EventName, data events.EventData, _ events.EventDomain, _ *string, _ events.SignalTarget) (string, error) {
+	b.receivedNote = data.IncomingMessage.SupplyingAgencyMessage.MessageInfo.Note
+	return "task", nil
+}
+func (b *cancellationDeliveryBus) ProcessTask(ctx common.ExtendedContext, event events.Event, _ events.SignalTarget, h func(common.ExtendedContext, events.Event) (events.EventStatus, *events.EventResult)) (events.Event, error) {
+	event.EventStatus, _ = h(ctx, event)
+	return event, nil
+}
+
+func TestCreateRequestMessageSelectedItem(t *testing.T) {
+	for _, vendor := range []string{string(dirapi.Alma), string(dirapi.CrossLink)} {
+		for _, tc := range []struct {
+			name string
+			item pgtype.Text
+			want string
+		}{
+			{"selected", getPgText("copy-1"), "bib-1"},
+			{"empty", getPgText(""), "bib-1"},
+			{"absent", pgtype.Text{}, "bib-1"},
+		} {
+			t.Run(vendor+"/"+tc.name, func(t *testing.T) {
+				sup := &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP", LocalID: getPgText("bib-1"), ItemID: tc.item}
+				peer := &ill_db.Peer{Name: "supplier", Vendor: vendor}
+				ctx := createTransactionContext(events.Event{}, sup, peer, common.BrokerModeTransparent)
+				msg, _ := createRequestMessage(ctx)
+				assert.Equal(t, tc.want, msg.Request.BibliographicInfo.SupplierUniqueRecordId)
+				if tc.item.Valid && tc.item.String != "" {
+					if assert.NotEmpty(t, msg.Request.SupplierInfo) {
+						assert.Equal(t, tc.item.String, msg.Request.SupplierInfo[0].BibliographicRecordId.BibliographicRecordIdentifier)
+					}
+				} else {
+					for _, info := range msg.Request.SupplierInfo {
+						assert.Nil(t, info.BibliographicRecordId)
+					}
+				}
+				assert.Equal(t, "bib-1", sup.LocalID.String)
+			})
+		}
+	}
+}
+
+type selectedItemScopeRepo struct {
+	mocks.MockIllRepositorySuccess
+	scope, url string
+}
+
+func (r *selectedItemScopeRepo) GetSelectedSupplierForIllTransaction(common.ExtendedContext, string) (ill_db.LocatedSupplier, error) {
+	return ill_db.LocatedSupplier{ID: "selected", SupplierID: "supplier", SupplierSymbol: "ISIL:SUP", ItemID: getPgText("selected-copy"), LocalID: getPgText("bib")}, nil
+}
+func (r *selectedItemScopeRepo) GetPeerById(_ common.ExtendedContext, id string) (ill_db.Peer, error) {
+	return ill_db.Peer{ID: id, Url: r.url, CustomData: dirapi.Entry{LmsConfig: &dirapi.LmsConfig{Address: "https://lms.example/ncip", FromAgency: "broker", RequestItemRequestScopeType: &r.scope}}}, nil
+}
+func TestSelectedItemBibliographicScopeSentOverISO(t *testing.T) {
+	for _, scope := range []string{"Title", "Bibliographic Item"} {
+		t.Run(scope, func(t *testing.T) {
+			var calls atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				var message iso18626.ISO18626Message
+				if !assert.NoError(t, xml.NewDecoder(r.Body).Decode(&message)) || !assert.NotNil(t, message.Request) {
+					return
+				}
+				assert.Equal(t, "bib", message.Request.BibliographicInfo.SupplierUniqueRecordId)
+				if assert.NotEmpty(t, message.Request.SupplierInfo) && assert.NotNil(t, message.Request.SupplierInfo[0].BibliographicRecordId) {
+					assert.Equal(t, "selected-copy", message.Request.SupplierInfo[0].BibliographicRecordId.BibliographicRecordIdentifier)
+				}
+				w.Header().Set("Content-Type", "application/xml")
+				assert.NoError(t, xml.NewEncoder(w).Encode(iso18626.NewISO18626Message()))
+			}))
+			defer server.Close()
+			repo := &selectedItemScopeRepo{scope: scope, url: server.URL}
+			client := CreateIso18626Client(new(events.PostgresEventBus), repo, *new(prservice.PatronRequestMessageHandler), 1<<20, 0)
+			ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+			status, result := client.createAndSendRequestOrRequestingAgencyMessage(ctx, events.Event{IllTransactionID: "ill"})
+			assert.Equal(t, events.EventStatusSuccess, status)
+			assert.Nil(t, result.EventError)
+			assert.NotNil(t, result.OutgoingMessage)
+			assert.Equal(t, int32(1), calls.Load())
+		})
+	}
+}
+
+func TestSelectedSupplierPolicyReadinessBeforeExpectToSupply(t *testing.T) {
+	for _, ready := range []bool{false, true} {
+		supplier := &ill_db.LocatedSupplier{LocalSupplier: true, HoldingsPolicyResolved: pgtype.Bool{Valid: true, Bool: ready}}
+		peer := &ill_db.Peer{CustomData: dirapi.Entry{HoldingsPolicy: &dirapi.HoldingsPolicy{}}}
+		target, err := handleSelectedSupplier(transactionContext{selectedSupplier: supplier, selectedSupplierPeer: peer})
+		if ready {
+			assert.NoError(t, err)
+			if assert.NotNil(t, target) {
+				assert.Equal(t, iso18626.TypeStatusExpectToSupply, target.status)
+			}
+		} else {
+			assert.ErrorContains(t, err, "unresolved")
+			assert.Nil(t, target)
+		}
+	}
+}
+
+func TestRequestItemMappingClearsStaleSupplierCopy(t *testing.T) {
+	old := &iso18626.BibliographicRecordId{BibliographicRecordIdentifier: "old-copy"}
+	sup := &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP", LocalID: getPgText("bib"), ItemID: getPgText("new-copy"), CallNumber: getPgText("QA 76")}
+	ctx := createTransactionContext(events.Event{}, sup, &ill_db.Peer{}, common.BrokerModeTransparent)
+	ctx.transaction.IllTransactionData.SupplierInfo = []iso18626.SupplierInfo{{BibliographicRecordId: old, CallNumber: "old call"}, {BibliographicRecordId: old, CallNumber: "other call"}}
+	message, _ := createRequestMessage(ctx)
+	assert.Equal(t, "new-copy", message.Request.SupplierInfo[0].BibliographicRecordId.BibliographicRecordIdentifier)
+	assert.Equal(t, "QA 76", message.Request.SupplierInfo[0].CallNumber)
+	assert.Empty(t, message.Request.SupplierInfo[1].CallNumber)
+	assert.Equal(t, "old call", ctx.transaction.IllTransactionData.SupplierInfo[0].CallNumber)
+	assert.Nil(t, message.Request.SupplierInfo[1].BibliographicRecordId)
+	assert.Equal(t, "old-copy", ctx.transaction.IllTransactionData.SupplierInfo[0].BibliographicRecordId.BibliographicRecordIdentifier)
+	sup.ItemID = pgtype.Text{}
+	message, _ = createRequestMessage(ctx)
+	for _, info := range message.Request.SupplierInfo {
+		assert.Nil(t, info.BibliographicRecordId)
+		assert.Empty(t, info.CallNumber)
+	}
+	assert.Equal(t, "bib", message.Request.BibliographicInfo.SupplierUniqueRecordId)
 }

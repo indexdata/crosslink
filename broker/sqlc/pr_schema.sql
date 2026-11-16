@@ -26,7 +26,29 @@ CREATE TABLE patron_request
     retry_bib_info       JSONB,
     state_model         VARCHAR NOT NULL DEFAULT 'default',
     requester_pickup_location_id UUID,
-    due_at TIMESTAMPTZ
+    cancellation_reason       VARCHAR,
+    due_at TIMESTAMPTZ,
+    bib_record_id VARCHAR
+);
+
+CREATE INDEX idx_pr_borrowing_archive_cursor
+    ON patron_request (requester_symbol, created_at, id)
+    WHERE side = 'borrowing' AND ill_request IS NOT NULL;
+
+CREATE INDEX idx_pr_lending_archive_cursor
+    ON patron_request (supplier_symbol, created_at, id)
+    WHERE side = 'lending' AND ill_request IS NOT NULL;
+
+CREATE TABLE archived_resource (
+    owner TEXT NOT NULL,
+    resource_type TEXT NOT NULL,
+    resource_id TEXT NOT NULL,
+    archived_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    schema_version INTEGER NOT NULL,
+    anonymized BOOLEAN NOT NULL,
+    anonymization_method TEXT,
+    bundle JSONB NOT NULL,
+    PRIMARY KEY (resource_type, resource_id)
 );
 
 CREATE OR REPLACE FUNCTION get_next_hrid(prefix VARCHAR) RETURNS VARCHAR AS $$
@@ -42,6 +64,8 @@ CREATE TABLE item
     pr_id          VARCHAR   NOT NULL REFERENCES patron_request (id) ON DELETE CASCADE,
     barcode        VARCHAR   NOT NULL,
     call_number    VARCHAR,
+    location       VARCHAR,
+    shelving_location VARCHAR,
     title          VARCHAR,
     item_id        VARCHAR,
     lms_request_id VARCHAR,
@@ -50,6 +74,17 @@ CREATE TABLE item
     lms_status VARCHAR NOT NULL DEFAULT 'UNKNOWN' CHECK (lms_status IN ('UNKNOWN', 'REQUESTED', 'ACCEPTED', 'CHECKED_OUT', 'CHECKED_IN', 'DELETED')),
     lms_due_date TIMESTAMPTZ
 );
+
+CREATE INDEX idx_item_barcode_pr_id
+    ON item (lower(barcode) text_pattern_ops, pr_id);
+
+CREATE INDEX idx_item_item_id_pr_id
+    ON item (lower(item_id) text_pattern_ops, pr_id)
+    WHERE item_id IS NOT NULL;
+
+CREATE INDEX idx_item_call_number_pr_id
+    ON item (lower(call_number) text_pattern_ops, pr_id)
+    WHERE call_number IS NOT NULL;
 
 CREATE TABLE notification
 (
@@ -62,7 +97,8 @@ CREATE TABLE notification
     note            VARCHAR,
     cost            NUMERIC(19, 4),
     currency        VARCHAR,
-    condition       VARCHAR,
+    code            VARCHAR,
+    code_description VARCHAR,
     receipt         VARCHAR,
     created_at      TIMESTAMP NOT NULL DEFAULT now(),
     acknowledged_at TIMESTAMP

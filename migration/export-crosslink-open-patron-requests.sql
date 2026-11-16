@@ -9,6 +9,7 @@
 --     --set=ON_ERROR_STOP=1 \
 --     --set=owner='ISIL:US-RS1' \
 --     --set=broker='ISIL:BROKER' \
+--     [--set=tenant=TENANT_ID] \
 --     --file=migration/export-crosslink-open-patron-requests.sql \
 --     --quiet --tuples-only --no-align \
 --     > crosslink-open-patron-requests.ndjson
@@ -24,17 +25,56 @@
 --   * The ISO18626 request is reconstructed from normalized mod-rs columns.
 --     Unsourced borrowing requests use the configured CrossLink broker symbol
 --     as the required supplying agency without acquiring a supplier assignment.
---   * A selected item is emitted only when pr_selected_item_barcode is present.
+--   * Borrowing items come from request_volume: barcode is the temporary item
+--     barcode in the requester LMS and itemId is the supplier's barcode. A
+--     borrowing request without volumes falls back to pr_selected_item_barcode
+--     as itemId with the request ID as barcode. Lending requests emit one item
+--     with pr_selected_item_barcode as barcode, only when it is present.
 --   * Borrowing requests include a synthesized ILL transaction and their rota as
---     located suppliers. Lending requests must not include an ILL transaction.
+--     located suppliers. A rota entry without a peer symbol uses its directory
+--     reference directly when it is a symbol; otherwise it uses the first symbol
+--     of that directory entry in directory export order. The selected entry
+--     prefers the current supplier's symbol when that directory entry owns it,
+--     including when the directory reference is another symbol of that entry.
+--     Entries without a usable symbol stop the export. Lending requests must
+--     not include an ILL transaction.
+--   * A borrowing request's supplierSymbol is the current lender:
+--     pr_sup_inst_symbol, else the resolved supplier
+--     (pr_resolved_sup_inst_symbol_fk), else the selected rota entry. Requests
+--     not yet sent to a lender have no supplierSymbol.
 --   * Notifications without enough information to identify both parties are
 --     omitted. Loan conditions are exported as condition notifications.
 --   * Audit history, protocol audit payloads, batches, and queued jobs are not
 --     represented by CrossLink's patron-request import contract and are omitted.
+--   * The ILL due date (pr_parsed_due_date_rs) becomes
+--     illResponse.statusInfo.dueDate, from which CrossLink sets the request's
+--     due date. It is emitted only for loan states (shipped through returned),
+--     with status Overdue for OVERDUE and Loaned otherwise; due dates left on
+--     requests in earlier states are omitted.
+--   * A borrowing request's pr_patron_email becomes patronInfo Email addresses,
+--     one per comma- or semicolon-separated part that looks like an address
+--     (x@y.z). Other parts, such as "none" or "N/A", are omitted and listed in
+--     a NOTICE. CrossLink shows the first address and sends patron
+--     notifications to all of them.
+--   * copyrightType values become their ISO18626 CopyrightCompliance codes
+--     (us-ccl becomes US-CCL), matched case-insensitively. Values that match no
+--     ISO code are exported unchanged.
 --   * mod-rs timestamps are treated as UTC.
+--   * Requester request IDs drop the "~<rota position>" or "~norota" suffix
+--     that mod-rs appends to non-SLNP protocol IDs. Borrowing requests use the
+--     HRID; lending requests strip the suffix from the peer's request ID.
+--   * Borrowing requests carry the FOLIO tenant ID: the psql `tenant` variable
+--     when set, otherwise the current schema name without its _mod_rs suffix.
+--     Lending requests carry no tenant, matching requests CrossLink receives.
+--   * A borrowing request's requesterPickupLocationId is its
+--     pr_resolved_pickup_location_fk, the directory entry ID that the directory
+--     export keeps as the CrossLink entry key. It is emitted only when that
+--     entry is the requesting institution or one of its direct branches and is
+--     not tagged deleted; other values are omitted and listed in a NOTICE.
 --
 -- The preflight block runs before any NDJSON is emitted and stops the export if
--- an open request has an unmapped state or is missing required import data.
+-- an open request or rota entry has an unmapped state or is missing required
+-- import data.
 
 \set ON_ERROR_STOP on
 
@@ -52,6 +92,27 @@ SELECT :'broker' = btrim(:'broker')
 \if :crosslink_broker_symbol_valid
 \else
 \warn Invalid or missing broker symbol. Re-run with --set=broker=AUTHORITY:VALUE.
+SELECT 1 / 0;
+\endif
+
+\if :{?tenant}
+\else
+\set tenant ''
+\endif
+
+SELECT coalesce(
+    nullif(btrim(:'tenant'), ''),
+    substring(current_schema() FROM '^(.+)_mod_rs$'),
+    ''
+) AS tenant
+\gset
+
+SELECT :'tenant' ~ '^[a-z][a-z0-9_]*$' AS crosslink_tenant_valid
+\gset
+
+\if :crosslink_tenant_valid
+\else
+\warn Invalid or missing tenant. Run against a <tenant>_mod_rs schema or pass --set=tenant=TENANT_ID.
 SELECT 1 / 0;
 \endif
 
@@ -84,6 +145,9 @@ INSERT INTO crosslink_state_map (legacy_state, side, crosslink_state) VALUES
     ('REQ_BLANK_FORM_REVIEW',            'borrowing', 'NEEDS_REVIEW'),
     ('REQ_DUPLICATE_REVIEW',             'borrowing', 'DUPLICATE'),
     ('REQ_ERROR',                        'borrowing', 'NEEDS_REVIEW'),
+    ('REQ_OVER_LIMIT',                   'borrowing', 'OVER_LIMIT'),
+    ('REQ_UNFILLED',                     'borrowing', 'UNFILLED'),
+    ('REQ_END_OF_ROTA_REVIEWED',         'borrowing', 'UNFILLED'),
     ('SLNP_REQ_IDLE',                    'borrowing', 'NEW'),
     ('SLNP_REQ_ABORTED',                 'borrowing', 'NEEDS_REVIEW'),
     ('SLNP_REQ_ITEM_LOST',               'borrowing', 'NEEDS_REVIEW'),
@@ -93,6 +157,7 @@ INSERT INTO crosslink_state_map (legacy_state, side, crosslink_state) VALUES
     ('RES_NEW_AWAIT_PULL_SLIP',          'lending', 'WILL_SUPPLY'),
     ('RES_COPY_AWAIT_PICKING',           'lending', 'WILL_SUPPLY'),
     ('RES_CANCEL_REQUEST_RECEIVED',      'lending', 'CANCEL_REQUESTED'),
+    ('RES_UNFILLED',                     'lending', 'UNFILLED'),
     ('SLNP_RES_IDLE',                    'lending', 'NEW'),
     ('SLNP_RES_NEW_AWAIT_PULL_SLIP',     'lending', 'WILL_SUPPLY');
 
@@ -151,7 +216,205 @@ VALUES
     ('SLNP_REQ_DOCUMENT_AVAILABLE',  'borrowing', 'CopyOrLoan', 'RECEIVED'),
     ('RES_LOANED_DIGITALLY',           'lending',   'Copy',       'COMPLETED'),
     ('RES_LOANED_DIGITALLY',           'lending',   'Loan',       'SHIPPED'),
-    ('RES_LOANED_DIGITALLY',           'lending',   'CopyOrLoan', 'SHIPPED');
+    ('RES_LOANED_DIGITALLY',           'lending',   'CopyOrLoan', 'SHIPPED'),
+    ('RES_AWAIT_PICKING',              'lending',   'Copy',       'WILL_SUPPLY'),
+    ('RES_AWAIT_PICKING',              'lending',   'CopyOrLoan', 'SEARCHING');
+
+-- ISO18626 CopyrightCompliance codes. mod-rs copyrightType values are these
+-- codes lowercased, so they are matched case-insensitively.
+CREATE TEMP TABLE crosslink_copyright_compliance ON COMMIT DROP AS
+SELECT code
+FROM (VALUES
+    ('AU-CopyRCatS183ComW'), ('AU-CopyRCatS183State'), ('AU-CopyrightActS49'),
+    ('AU-CopyrightActS50-1'), ('AU-CopyrightActS50-7A'), ('AU-CopyrightActS50-7B'),
+    ('AU-CopyrightCleared'), ('AU-GenBus'), ('NZ-CopyrightActS54'),
+    ('NZ-CopyrightActS55'), ('Other'), ('UK-CopyRFeePaid'), ('UK-FairDealing'),
+    ('US-CCG'), ('US-CCL')
+) AS codes(code);
+
+-- A rota entry's lastStatus is consumed as an ISO 18626 supplier status.
+-- Keep its mapping separate from the patron-request state mapping above.
+CREATE TEMP TABLE crosslink_rota_status_map (
+    source_status TEXT NOT NULL,
+    service_type TEXT NOT NULL DEFAULT '*',
+    iso_status TEXT,
+    PRIMARY KEY (source_status, service_type)
+) ON COMMIT DROP;
+
+INSERT INTO crosslink_rota_status_map (source_status, iso_status) VALUES
+    -- These states do not identify an ISO supplier status; omit lastStatus.
+    ('REQ_IDLE', NULL),
+    ('REQ_VALIDATED', NULL),
+    ('REQ_INVALID_PATRON', NULL),
+    ('REQ_SOURCING_ITEM', NULL),
+    ('REQ_SUPPLIER_IDENTIFIED', NULL),
+    ('REQ_REQUEST_SENT_TO_SUPPLIER', NULL),
+    ('REQ_CONDITIONAL_ANSWER_RECEIVED', NULL),
+    ('REQ_CANCEL_PENDING', NULL),
+    ('REQ_UNABLE_TO_CONTACT_SUPPLIER', NULL),
+    ('REQ_PENDING', NULL),
+    ('REQ_LOCAL_REVIEW', NULL),
+    ('REQ_BLANK_FORM_REVIEW', NULL),
+    ('REQ_DUPLICATE_REVIEW', NULL),
+    ('REQ_ERROR', NULL),
+    ('REQ_OVER_LIMIT', NULL),
+    ('SLNP_REQ_IDLE', NULL),
+    ('SLNP_REQ_ABORTED', NULL),
+    ('SLNP_REQ_ITEM_LOST', NULL),
+    ('SLNP_REQ_PATRON_INVALID', NULL),
+    ('REQ_EXPEXTS_TO_SUPPLY', 'ExpectToSupply'),
+    ('REQ_EXPECTS_TO_SUPPLY', 'ExpectToSupply'),
+    ('REQ_WILL_SUPPLY', 'WillSupply'),
+    ('REQ_SHIPPED', 'Loaned'),
+    -- The supplier's loan remains active during requester-side receipt and return.
+    ('REQ_BORROWING_LIBRARY_RECEIVED', 'Loaned'),
+    ('REQ_AWAITING_RETURN_SHIPPING', 'Loaned'),
+    ('REQ_CHECKED_IN', 'Loaned'),
+    ('REQ_SHIPPED_TO_SUPPLIER', 'Loaned'),
+    ('REQ_BORROWER_RETURNED', 'Loaned'),
+    ('SLNP_REQ_SHIPPED', 'Loaned'),
+    ('SLNP_REQ_CHECKED_IN', 'Loaned'),
+    ('SLNP_REQ_AWAITING_RETURN_SHIPPING', 'Loaned'),
+    ('REQ_UNFILLED', 'Unfilled'),
+    ('REQ_END_OF_ROTA_REVIEWED', 'Unfilled'),
+    ('REQ_CANCELLED_WITH_SUPPLIER', 'Cancelled'),
+    ('REQ_OVERDUE', 'Overdue'),
+    ('REQ_RECALLED', 'Recalled'),
+    -- Preserve values already stored as ISO 18626 statuses.
+    ('REQUESTRECEIVED', 'RequestReceived'),
+    ('EXPECTTOSUPPLY', 'ExpectToSupply'),
+    ('WILLSUPPLY', 'WillSupply'),
+    ('LOANED', 'Loaned'),
+    ('OVERDUE', 'Overdue'),
+    ('RECALLED', 'Recalled'),
+    ('RETRYPOSSIBLE', 'RetryPossible'),
+    ('UNFILLED', 'Unfilled'),
+    ('COPYCOMPLETED', 'CopyCompleted'),
+    ('LOANCOMPLETED', 'LoanCompleted'),
+    ('COMPLETEDWITHOUTRETURN', 'CompletedWithoutReturn'),
+    ('CANCELLED', 'Cancelled');
+
+INSERT INTO crosslink_rota_status_map
+    (source_status, service_type, iso_status)
+VALUES
+    ('REQ_LOANED_DIGITALLY', 'Copy', 'CopyCompleted'),
+    ('REQ_LOANED_DIGITALLY', 'Loan', 'Loaned'),
+    ('REQ_LOANED_DIGITALLY', 'CopyOrLoan', 'Loaned'),
+    ('SLNP_REQ_DOCUMENT_AVAILABLE', 'Copy', 'CopyCompleted'),
+    ('SLNP_REQ_DOCUMENT_AVAILABLE', 'Loan', 'Loaned'),
+    ('SLNP_REQ_DOCUMENT_AVAILABLE', 'CopyOrLoan', 'Loaned');
+
+-- Keep every supported borrowing state exportable if the state map changes.
+DO $rota_map_coverage$
+DECLARE
+    missing TEXT;
+BEGIN
+    SELECT string_agg(
+        request_state.legacy_state || ' (' || request_state.service_type || ')',
+        ', ' ORDER BY request_state.legacy_state, request_state.service_type
+    )
+    INTO missing
+    FROM crosslink_state_map AS request_state
+    WHERE request_state.side = 'borrowing'
+      AND NOT EXISTS (
+          SELECT 1
+          FROM crosslink_rota_status_map AS rota_state
+          WHERE rota_state.source_status = request_state.legacy_state
+            AND rota_state.service_type IN ('*', request_state.service_type)
+      );
+
+    IF missing IS NOT NULL THEN
+        RAISE EXCEPTION 'Borrowing states lack rota status mappings: %', missing;
+    END IF;
+END
+$rota_map_coverage$;
+
+CREATE TEMP VIEW crosslink_rota_suppliers AS
+SELECT
+    rota.*,
+    coalesce(
+        CASE
+            WHEN nullif(btrim(peer_authority.na_symbol), '') IS NOT NULL
+             AND nullif(btrim(peer_symbol.sym_symbol), '') IS NOT NULL
+             AND upper(btrim(peer_symbol.sym_symbol)) NOT LIKE 'DELETED-%'
+                THEN upper(btrim(peer_authority.na_symbol)) || ':'
+                    || upper(btrim(peer_symbol.sym_symbol))
+        END,
+        CASE
+            WHEN directory_symbol.is_current_supplier
+                THEN directory_symbol.supplier_symbol
+        END,
+        CASE
+            WHEN btrim(rota.prr_directory_id_fk) ~ '^[^[:space:]:]+:[^[:space:]]+$'
+             AND upper(split_part(btrim(rota.prr_directory_id_fk), ':', 2))
+                    NOT LIKE 'DELETED-%'
+                THEN upper(btrim(rota.prr_directory_id_fk))
+        END,
+        directory_symbol.supplier_symbol
+    ) AS supplier_symbol
+FROM patron_request_rota AS rota
+LEFT JOIN patron_request AS current_request
+  ON current_request.pr_id = rota.prr_patron_request_fk
+LEFT JOIN symbol AS peer_symbol
+  ON peer_symbol.sym_id = rota.prr_peer_symbol_fk
+LEFT JOIN naming_authority AS peer_authority
+  ON peer_authority.na_id = peer_symbol.sym_authority_fk
+LEFT JOIN LATERAL (
+    SELECT upper(btrim(authority.na_symbol)) || ':'
+        || upper(btrim(symbol.sym_symbol)) AS supplier_symbol,
+        coalesce(
+            rota.prr_rota_position = current_request.pr_rota_position
+            AND current_request.pr_is_requester IS TRUE
+            AND (
+                upper(btrim(authority.na_symbol)) || ':'
+                    || upper(btrim(symbol.sym_symbol))
+                    = nullif(upper(btrim(current_request.pr_sup_inst_symbol)), '')
+                OR (
+                    nullif(btrim(current_request.pr_sup_inst_symbol), '') IS NULL
+                    AND symbol.sym_id = current_request.pr_resolved_sup_inst_symbol_fk
+                )
+            ), false
+        ) AS is_current_supplier
+    FROM directory_entry AS entry
+    JOIN symbol
+      ON symbol.sym_owner_fk = entry.de_id
+    JOIN naming_authority AS authority
+      ON authority.na_id = symbol.sym_authority_fk
+    WHERE (
+          entry.de_id = rota.prr_directory_id_fk
+          OR (
+              rota.prr_rota_position = current_request.pr_rota_position
+              AND current_request.pr_is_requester IS TRUE
+              AND position(':' IN rota.prr_directory_id_fk) > 0
+              AND EXISTS (
+                  SELECT 1
+                  FROM symbol AS reference_symbol
+                  JOIN naming_authority AS reference_authority
+                    ON reference_authority.na_id = reference_symbol.sym_authority_fk
+                  WHERE reference_symbol.sym_owner_fk = entry.de_id
+                    AND upper(btrim(reference_authority.na_symbol)) || ':'
+                        || upper(btrim(reference_symbol.sym_symbol))
+                        = upper(btrim(rota.prr_directory_id_fk))
+              )
+          )
+      )
+      AND nullif(btrim(authority.na_symbol), '') IS NOT NULL
+      AND nullif(btrim(symbol.sym_symbol), '') IS NOT NULL
+      AND upper(btrim(symbol.sym_symbol)) NOT LIKE 'DELETED-%'
+      AND NOT EXISTS (
+          SELECT 1
+          FROM directory_entry_tag
+          JOIN tag ON tag.id = directory_entry_tag.tag_id
+          WHERE directory_entry_tag.directory_entry_tags_id = entry.de_id
+            AND lower(btrim(tag.norm_value)) = 'deleted'
+      )
+    ORDER BY is_current_supplier DESC,
+             symbol.sym_priority NULLS LAST,
+             upper(btrim(authority.na_symbol)),
+             upper(btrim(symbol.sym_symbol)),
+             symbol.sym_id
+    LIMIT 1
+) AS directory_symbol ON true;
 
 CREATE TEMP VIEW crosslink_request_ids AS
 SELECT
@@ -159,18 +422,11 @@ SELECT
     CASE
         WHEN patron_request.pr_is_requester IS NOT TRUE
             THEN patron_request.pr_id
-        WHEN state_model.sm_shortcode IN ('SLNPRequester', 'SLNPResponder',
-                                          'SLNPNonReturnableRequester',
-                                          'SLNPNonReturnableResponder')
-            THEN coalesce(patron_request.pr_hrid, patron_request.pr_id)
         ELSE coalesce(patron_request.pr_hrid, patron_request.pr_id)
-             || '~' || coalesce(patron_request.pr_rota_position::text, 'norota')
     END AS import_id
-FROM patron_request
-JOIN state_model
-  ON state_model.sm_id = patron_request.pr_state_model_fk;
+FROM patron_request;
 
-CREATE TEMP VIEW crosslink_open_requests AS
+CREATE TEMP VIEW crosslink_all_open_requests AS
 SELECT
     patron_request.*,
     request_identity.import_id AS import_patron_request_id,
@@ -185,15 +441,19 @@ SELECT
         ELSE 'lending'
     END AS import_side,
     crosslink_state_map.crosslink_state AS import_state,
+    service_type.rdv_value AS legacy_service_type,
     normalized_service_type.value AS import_service_type,
+    pickup_location.id AS import_pickup_location_id,
     service_level.rdv_value AS import_service_level,
     publication_type.rdv_value AS import_publication_type,
-    copyright_type.rdv_value AS import_copyright_type,
+    coalesce(copyright_code.code, copyright_type.rdv_value) AS import_copyright_type,
     maximum_cost_currency.rdv_value AS import_maximum_cost_currency,
     cost_currency.rdv_value AS import_cost_currency,
     CASE
         WHEN patron_request.pr_is_requester IS NOT TRUE
-            THEN patron_request.pr_peer_request_identifier
+            THEN regexp_replace(
+                patron_request.pr_peer_request_identifier, '~([0-9]+|norota)$', ''
+            )
         ELSE request_identity.import_id
     END AS import_requester_request_id,
     CASE
@@ -204,11 +464,31 @@ SELECT
     CASE
         WHEN patron_request.pr_is_requester IS TRUE
             THEN coalesce(
-                nullif(btrim(patron_request.pr_sup_inst_symbol), ''),
+                nullif(upper(btrim(patron_request.pr_sup_inst_symbol)), ''),
                 :'broker'
             )
         ELSE patron_request.pr_sup_inst_symbol
-    END AS import_supplying_agency_symbol
+    END AS import_supplying_agency_symbol,
+    -- mod-rs rarely sets pr_sup_inst_symbol on standard borrowing requests; the
+    -- current lender is the resolved supplier, or else the selected rota entry.
+    CASE
+        WHEN patron_request.pr_is_requester IS TRUE
+            THEN coalesce(
+                nullif(upper(btrim(patron_request.pr_sup_inst_symbol)), ''),
+                upper(btrim(resolved_authority.na_symbol)) || ':'
+                    || upper(btrim(resolved_symbol.sym_symbol)),
+                (
+                    SELECT rota.supplier_symbol
+                    FROM crosslink_rota_suppliers AS rota
+                    WHERE rota.prr_patron_request_fk = patron_request.pr_id
+                      AND rota.prr_rota_position = patron_request.pr_rota_position
+                    LIMIT 1
+                )
+            )
+        ELSE patron_request.pr_sup_inst_symbol
+    END AS import_supplier_symbol,
+    patron_email.addresses AS import_patron_addresses,
+    patron_email.rejected AS import_rejected_patron_emails
 FROM patron_request
 JOIN crosslink_request_ids AS request_identity
   ON request_identity.legacy_id = patron_request.pr_id
@@ -245,11 +525,127 @@ LEFT JOIN refdata_value AS publication_type
   ON publication_type.rdv_id = patron_request.pr_pub_type_fk
 LEFT JOIN refdata_value AS copyright_type
   ON copyright_type.rdv_id = patron_request.pr_copyright_type_fk
+LEFT JOIN crosslink_copyright_compliance AS copyright_code
+  ON lower(copyright_code.code) = lower(copyright_type.rdv_value)
 LEFT JOIN refdata_value AS maximum_cost_currency
   ON maximum_cost_currency.rdv_id = patron_request.pr_maximum_costs_code_fk
 LEFT JOIN refdata_value AS cost_currency
   ON cost_currency.rdv_id = patron_request.pr_cost_currency_fk
+LEFT JOIN symbol AS resolved_symbol
+  ON resolved_symbol.sym_id = patron_request.pr_resolved_sup_inst_symbol_fk
+LEFT JOIN naming_authority AS resolved_authority
+  ON resolved_authority.na_id = resolved_symbol.sym_authority_fk
+-- The same entries the directory export emits for the requester: the
+-- institution itself and its direct branches.
+LEFT JOIN LATERAL (
+    SELECT pickup.de_id AS id
+    FROM directory_entry AS pickup
+    WHERE patron_request.pr_is_requester IS TRUE
+      AND pickup.de_id = patron_request.pr_resolved_pickup_location_fk
+      AND NOT EXISTS (
+          SELECT 1
+          FROM directory_entry_tag
+          JOIN tag ON tag.id = directory_entry_tag.tag_id
+          WHERE directory_entry_tag.directory_entry_tags_id = pickup.de_id
+            AND lower(btrim(tag.norm_value)) = 'deleted'
+      )
+      AND EXISTS (
+          SELECT 1
+          FROM symbol AS requester_symbol
+          JOIN naming_authority AS requester_authority
+            ON requester_authority.na_id = requester_symbol.sym_authority_fk
+          WHERE requester_authority.na_symbol || ':' || requester_symbol.sym_symbol
+                = patron_request.pr_req_inst_symbol
+            AND requester_symbol.sym_owner_fk IN (pickup.de_id, pickup.de_parent)
+      )
+) AS pickup_location ON true
+-- pr_patron_email can hold a comma- or semicolon-separated list and
+-- placeholders such as "none"; each part that looks like an address becomes
+-- an ISO18626 Email address.
+LEFT JOIN LATERAL (
+    SELECT
+        jsonb_agg(jsonb_build_object('electronicAddress', jsonb_build_object(
+            'electronicAddressType', jsonb_build_object('#text', 'Email'),
+            'electronicAddressData', part.email
+        )) ORDER BY part.ordinality) FILTER (WHERE part.valid) AS addresses,
+        string_agg(part.email, ', ' ORDER BY part.ordinality)
+            FILTER (WHERE NOT part.valid) AS rejected
+    FROM (
+        SELECT
+            split.ordinality,
+            btrim(split.value) AS email,
+            btrim(split.value) ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' AS valid
+        FROM regexp_split_to_table(patron_request.pr_patron_email, '[,;]')
+            WITH ORDINALITY AS split(value, ordinality)
+        WHERE patron_request.pr_is_requester IS TRUE
+          AND btrim(split.value) <> ''
+    ) AS part
+) AS patron_email ON true
 WHERE state_model_status.sms_is_terminal IS FALSE;
+
+-- Requests without a supported service type cannot be imported; skip them.
+CREATE TEMP VIEW crosslink_open_requests AS
+SELECT *
+FROM crosslink_all_open_requests
+WHERE import_service_type IS NOT NULL;
+
+DO $skipped$
+DECLARE
+    skipped TEXT;
+BEGIN
+    SELECT string_agg(
+        'request ' || pr_id || ': unsupported or missing service type ('
+            || coalesce(legacy_service_type, 'missing') || ')',
+        E'\n' ORDER BY pr_id
+    )
+    INTO skipped
+    FROM crosslink_all_open_requests
+    WHERE import_service_type IS NULL;
+
+    IF skipped IS NOT NULL THEN
+        RAISE NOTICE E'Skipping open patron requests:\n%', skipped;
+    END IF;
+END
+$skipped$;
+
+DO $pickup_omitted$
+DECLARE
+    omitted TEXT;
+BEGIN
+    SELECT string_agg(
+        'request ' || pr_id || ': pickup location ' || pr_resolved_pickup_location_fk
+            || ' is not the requester or one of its branches',
+        E'\n' ORDER BY pr_id
+    )
+    INTO omitted
+    FROM crosslink_open_requests
+    WHERE import_side = 'borrowing'
+      AND pr_resolved_pickup_location_fk IS NOT NULL
+      AND import_pickup_location_id IS NULL;
+
+    IF omitted IS NOT NULL THEN
+        RAISE NOTICE E'Omitting pickup locations:\n%', omitted;
+    END IF;
+END
+$pickup_omitted$;
+
+DO $patron_email_omitted$
+DECLARE
+    omitted TEXT;
+BEGIN
+    SELECT string_agg(
+        'request ' || pr_id || ': ' || import_rejected_patron_emails,
+        E'\n' ORDER BY pr_id
+    )
+    INTO omitted
+    FROM crosslink_open_requests
+    WHERE import_rejected_patron_emails IS NOT NULL;
+
+    IF omitted IS NOT NULL THEN
+        RAISE NOTICE E'Omitting patron email values that are not addresses:\n%', omitted;
+    END IF;
+END
+$patron_email_omitted$;
 
 DO $preflight$
 DECLARE
@@ -264,6 +660,34 @@ BEGIN
                 || coalesce(import_service_type, 'missing') || ')' AS problem
         FROM crosslink_open_requests
         WHERE import_state IS NULL
+
+        UNION ALL
+
+        SELECT DISTINCT
+            'request ' || request.pr_id || ', rota ' || rota.prr_id
+                || ': unmapped rota status '
+                || coalesce(rota_status.st_code, '<null>')
+        FROM crosslink_open_requests AS request
+        JOIN crosslink_rota_suppliers AS rota
+          ON rota.prr_patron_request_fk = request.pr_id
+        JOIN status AS rota_status
+          ON rota_status.st_id = rota.prr_state_fk
+        LEFT JOIN crosslink_rota_status_map AS mapped_status
+          ON mapped_status.source_status = upper(rota_status.st_code)
+         AND mapped_status.service_type IN ('*', request.import_service_type)
+        WHERE request.import_side = 'borrowing'
+          AND mapped_status.source_status IS NULL
+
+        UNION ALL
+
+        SELECT 'request ' || request.pr_id || ', rota ' || rota.prr_id
+            || ': missing supplier symbol (peer symbol and directory reference '
+            || coalesce(rota.prr_directory_id_fk, '<missing>') || ')'
+        FROM crosslink_open_requests AS request
+        JOIN crosslink_rota_suppliers AS rota
+          ON rota.prr_patron_request_fk = request.pr_id
+        WHERE request.import_side = 'borrowing'
+          AND rota.supplier_symbol IS NULL
 
         UNION ALL
 
@@ -306,11 +730,6 @@ BEGIN
                         pr_sup_inst_symbol, '^[^:]+:', ''
                     )))
 
-        UNION ALL
-
-        SELECT 'request ' || pr_id || ': unsupported or missing service type'
-        FROM crosslink_open_requests
-        WHERE import_service_type IS NULL
 
         UNION ALL
 
@@ -376,14 +795,14 @@ WITH request_payloads AS (
                     CASE WHEN nullif(btrim(request.pr_isbn), '') IS NOT NULL
                         THEN jsonb_build_array(jsonb_build_object(
                             'bibliographicItemIdentifierCode',
-                                jsonb_build_object('#text', 'isbn'),
+                                jsonb_build_object('#text', 'ISBN'),
                             'bibliographicItemIdentifier', request.pr_isbn
                         )) ELSE '[]'::jsonb END
                     ||
                     CASE WHEN nullif(btrim(request.pr_issn), '') IS NOT NULL
                         THEN jsonb_build_array(jsonb_build_object(
                             'bibliographicItemIdentifierCode',
-                                jsonb_build_object('#text', 'issn'),
+                                jsonb_build_object('#text', 'ISSN'),
                             'bibliographicItemIdentifier', request.pr_issn
                         )) ELSE '[]'::jsonb END
             )),
@@ -422,7 +841,8 @@ WITH request_payloads AS (
                 'sendToPatron', CASE
                     WHEN request.pr_send_to_patron IS TRUE THEN 'Y'
                     WHEN request.pr_send_to_patron IS FALSE THEN 'N'
-                END
+                END,
+                'address', request.import_patron_addresses
             )),
             'billingInfo', jsonb_strip_nulls(jsonb_build_object(
                 'maximumCosts', CASE
@@ -454,19 +874,84 @@ request_bundles AS (
                     'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
                 ),
                 'illRequest', request.ill_request,
+                'illResponse', CASE
+                    WHEN request.pr_parsed_due_date_rs IS NOT NULL
+                     AND request.import_state IN (
+                         'SHIPPED', 'RECEIVED', 'OVERDUE',
+                         'SHIPPED_RETURNED', 'SHIPPED_RETURN'
+                     )
+                    THEN jsonb_build_object('statusInfo', jsonb_build_object(
+                        'status', CASE request.import_state
+                            WHEN 'OVERDUE' THEN 'Overdue'
+                            ELSE 'Loaned'
+                        END,
+                        'lastChange', to_char(
+                            request.pr_last_updated,
+                            'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
+                        ),
+                        'dueDate', to_char(
+                            request.pr_parsed_due_date_rs,
+                            'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
+                        )
+                    ))
+                END,
                 'state', request.import_state,
                 'stateModel', 'default',
                 'side', request.import_side,
+                'tenant', CASE WHEN request.import_side = 'borrowing' THEN :'tenant' END,
+                'requesterPickupLocationId', request.import_pickup_location_id,
                 'patron', request.pr_patron_identifier,
                 'requesterSymbol', request.pr_req_inst_symbol,
-                'supplierSymbol', request.pr_sup_inst_symbol,
+                'supplierSymbol', request.import_supplier_symbol,
                 'requesterRequestId', request.import_requester_request_id,
                 'needsAttention', request.import_needs_attention,
                 'internalNote', request.pr_local_note,
                 'nextReqId', request.import_next_request_id,
                 'prevReqId', request.import_previous_request_id
             )),
+            -- Borrowing items follow CrossLink's requester convention: barcode is
+            -- the temporary item in the requester LMS (used for NCIP) and itemId
+            -- is the supplier's barcode.
             'items', CASE
+                WHEN request.import_side = 'borrowing' THEN coalesce(
+                    (
+                        SELECT jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+                            'id', volume.rv_id,
+                            'barcode', coalesce(
+                                nullif(btrim(volume.rv_temporary_item_barcode), ''),
+                                request.import_patron_request_id
+                            ),
+                            'callNumber', coalesce(
+                                volume.rv_call_number, request.pr_local_call_number
+                            ),
+                            'title', coalesce(volume.rv_name, request.pr_title),
+                            'itemId', nullif(btrim(volume.rv_item_id), ''),
+                            'lmsRequestId', request.pr_external_hold_request_id,
+                            'createdAt', to_char(
+                                coalesce(volume.rv_date_created, request.pr_date_created),
+                                'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+                            )
+                        )) ORDER BY volume.rv_date_created, volume.rv_id)
+                        FROM request_volume AS volume
+                        WHERE volume.rv_patron_request_fk = request.pr_id
+                    ),
+                    CASE
+                        WHEN nullif(btrim(request.pr_selected_item_barcode), '') IS NULL
+                            THEN '[]'::jsonb
+                        ELSE jsonb_build_array(jsonb_strip_nulls(jsonb_build_object(
+                            'id', request.pr_id || ':selected-item',
+                            'barcode', request.import_patron_request_id,
+                            'callNumber', request.pr_local_call_number,
+                            'title', request.pr_title,
+                            'itemId', request.pr_selected_item_barcode,
+                            'lmsRequestId', request.pr_external_hold_request_id,
+                            'createdAt', to_char(
+                                request.pr_date_created,
+                                'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+                            )
+                        )))
+                    END
+                )
                 WHEN nullif(btrim(request.pr_selected_item_barcode), '') IS NULL
                     THEN '[]'::jsonb
                 ELSE jsonb_build_array(jsonb_strip_nulls(jsonb_build_object(
@@ -474,7 +959,6 @@ request_bundles AS (
                     'barcode', request.pr_selected_item_barcode,
                     'callNumber', request.pr_local_call_number,
                     'title', request.pr_title,
-                    'itemId', request.pr_system_instance_id,
                     'lmsRequestId', request.pr_external_hold_request_id,
                     'createdAt', to_char(
                         request.pr_date_created,
@@ -532,13 +1016,13 @@ request_bundles AS (
                     CROSS JOIN LATERAL (
                         SELECT CASE
                             WHEN request.import_side = 'borrowing'
-                                THEN request.pr_sup_inst_symbol
+                                THEN request.import_supplier_symbol
                             ELSE request.pr_req_inst_symbol
                         END AS symbol,
                         CASE
                             WHEN request.import_side = 'borrowing'
                                 THEN request.pr_req_inst_symbol
-                            ELSE request.pr_sup_inst_symbol
+                            ELSE request.import_supplier_symbol
                         END AS local_symbol
                     ) AS counterpart
                     WHERE note.prn_patron_request_fk = request.pr_id
@@ -565,9 +1049,9 @@ request_bundles AS (
                                 WHEN request.import_side = 'borrowing'
                                     THEN coalesce(
                                         condition.prlc_sup_inst_symbol,
-                                        request.pr_sup_inst_symbol
+                                        request.import_supplier_symbol
                                     )
-                                ELSE request.pr_sup_inst_symbol
+                                ELSE request.import_supplier_symbol
                             END,
                             'toSymbol', request.pr_req_inst_symbol,
                             'direction', CASE
@@ -579,7 +1063,7 @@ request_bundles AS (
                             'note', condition.prlc_note,
                             'cost', condition.prlc_cost,
                             'currency', condition_currency.rdv_value,
-                            'condition', condition.prlc_code,
+                            'code', condition.prlc_code,
                             'createdAt', to_char(
                                 condition.prlc_date_created,
                                 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
@@ -594,9 +1078,9 @@ request_bundles AS (
                           WHEN request.import_side = 'borrowing'
                               THEN coalesce(
                                   condition.prlc_sup_inst_symbol,
-                                  request.pr_sup_inst_symbol
+                                  request.import_supplier_symbol
                               )
-                          ELSE request.pr_sup_inst_symbol
+                          ELSE request.import_supplier_symbol
                       END), '') IS NOT NULL
                 ) AS notification
             ), '[]'::jsonb),
@@ -609,7 +1093,7 @@ request_bundles AS (
                         'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
                     ),
                     'requesterSymbol', request.pr_req_inst_symbol,
-                    'supplierSymbol', request.pr_sup_inst_symbol,
+                    'supplierSymbol', request.import_supplier_symbol,
                     'requesterRequestID', request.import_requester_request_id,
                     'supplierRequestID', request.pr_peer_request_identifier,
                     'illTransactionData', jsonb_strip_nulls(jsonb_build_object(
@@ -627,7 +1111,7 @@ request_bundles AS (
                     SELECT jsonb_agg(
                         jsonb_strip_nulls(jsonb_build_object(
                             'id', rota.prr_id,
-                            'supplierSymbol', authority.na_symbol || ':' || symbol.sym_symbol,
+                            'supplierSymbol', rota.supplier_symbol,
                             'ordinal', rota.prr_rota_position::integer,
                             'supplierStatus', CASE
                                 WHEN request.pr_rota_position IS NULL
@@ -637,7 +1121,7 @@ request_bundles AS (
                                     THEN 'selected'
                                 ELSE 'skipped'
                             END,
-                            'lastStatus', rota_status.st_code,
+                            'lastStatus', mapped_status.iso_status,
                             'localID', rota.prr_system_identifier,
                             'lastReason', rota.prr_note,
                             'supplierRequestID', CASE
@@ -645,16 +1129,15 @@ request_bundles AS (
                                     THEN request.pr_peer_request_identifier
                             END,
                             'localSupplier',
-                                authority.na_symbol || ':' || symbol.sym_symbol = :'owner'
+                                rota.supplier_symbol = :'owner'
                         )) ORDER BY rota.prr_rota_position
                     )
-                    FROM patron_request_rota AS rota
-                    JOIN symbol
-                      ON symbol.sym_id = rota.prr_peer_symbol_fk
-                    JOIN naming_authority AS authority
-                      ON authority.na_id = symbol.sym_authority_fk
+                    FROM crosslink_rota_suppliers AS rota
                     LEFT JOIN status AS rota_status
                       ON rota_status.st_id = rota.prr_state_fk
+                    LEFT JOIN crosslink_rota_status_map AS mapped_status
+                      ON mapped_status.source_status = upper(rota_status.st_code)
+                     AND mapped_status.service_type IN ('*', request.import_service_type)
                     WHERE rota.prr_patron_request_fk = request.pr_id
                 ), '[]'::jsonb)
             END

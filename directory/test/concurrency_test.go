@@ -260,7 +260,7 @@ func TestConcurrentImportDoesNotDeadlockEntryPatch(t *testing.T) {
 	}
 	importDone := make(chan error, 1)
 	go func() {
-		_, importErr := importdb.New(importPool).ImportEntry(ctx, aggregate, model.ConflictPolicyUpdate)
+		_, importErr := importdb.New(importPool, nil).ImportEntry(ctx, aggregate, model.ConflictPolicyUpdate)
 		importDone <- importErr
 	}()
 
@@ -355,7 +355,7 @@ func TestConcurrentAssignmentImportsDoNotDeadlockEntryPatch(t *testing.T) {
 
 			importDone := make(chan error, 1)
 			go func() {
-				importDone <- testCase.importRun(ctx, importdb.New(importPool), consortiumID, memberID)
+				importDone <- testCase.importRun(ctx, importdb.New(importPool, nil), consortiumID, memberID)
 			}()
 
 			select {

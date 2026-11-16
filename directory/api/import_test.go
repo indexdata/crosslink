@@ -36,7 +36,7 @@ func TestPostImportDefaultsPolicyAndMapsResult(t *testing.T) {
 		Errors:        []model.ImportItemError{},
 		ErrorsOmitted: 7,
 	}}
-	impl := NewApiImpl(nil, nil, importer)
+	impl := NewApiImpl(nil, nil, importer, nil)
 
 	response, err := impl.PostImport(consortialAdminContext(t), PostImportRequestObject{Body: strings.NewReader("record")})
 
@@ -51,7 +51,7 @@ func TestPostImportDefaultsPolicyAndMapsResult(t *testing.T) {
 
 func TestPostImportRejectsUnauthorizedCallerBeforeReadingBody(t *testing.T) {
 	importer := &recordingAggregateImporter{}
-	impl := NewApiImpl(nil, nil, importer)
+	impl := NewApiImpl(nil, nil, importer, nil)
 
 	response, err := impl.PostImport(context.Background(), PostImportRequestObject{Body: strings.NewReader("record")})
 
@@ -62,7 +62,7 @@ func TestPostImportRejectsUnauthorizedCallerBeforeReadingBody(t *testing.T) {
 
 func TestPostImportValidatesPolicyAndBody(t *testing.T) {
 	importer := &recordingAggregateImporter{}
-	impl := NewApiImpl(nil, nil, importer)
+	impl := NewApiImpl(nil, nil, importer, nil)
 	unknown := ConflictPolicy("unknown")
 
 	response, err := impl.PostImport(consortialAdminContext(t), PostImportRequestObject{Params: PostImportParams{ConflictPolicy: &unknown}, Body: strings.NewReader("record")})
@@ -83,7 +83,7 @@ func TestPostImportMapsRecordAndBodyLimitsTo413(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			importer := &recordingAggregateImporter{err: importErr}
-			impl := NewApiImpl(nil, nil, importer)
+			impl := NewApiImpl(nil, nil, importer, nil)
 			response, err := impl.PostImport(consortialAdminContext(t), PostImportRequestObject{Body: strings.NewReader("record")})
 			require.NoError(t, err)
 			require.IsType(t, PostImport413TextResponse(""), response)
@@ -93,7 +93,7 @@ func TestPostImportMapsRecordAndBodyLimitsTo413(t *testing.T) {
 
 func TestPostImportMapsFatalReaderErrorTo500(t *testing.T) {
 	importer := &recordingAggregateImporter{err: errors.New("read failed")}
-	impl := NewApiImpl(nil, nil, importer)
+	impl := NewApiImpl(nil, nil, importer, nil)
 	response, err := impl.PostImport(consortialAdminContext(t), PostImportRequestObject{Body: strings.NewReader("record")})
 	require.NoError(t, err)
 	require.IsType(t, PostImport500TextResponse(""), response)

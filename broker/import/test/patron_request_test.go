@@ -92,6 +92,42 @@ func TestImportPatronRequestInsertsAndSynchronizesCompleteBundle(t *testing.T) {
 	assert.Equal(t, "updated-patron", patron)
 }
 
+func TestImportPatronRequestUpdatePreservesStoredItemLocations(t *testing.T) {
+	prefix := uuid.NewString()
+	bundle := testPatronBundle(prefix, prefix+"-request")
+	bundle.Items[0].Location = pgtype.Text{String: "Main Library", Valid: true}
+	bundle.Items[0].ShelvingLocation = pgtype.Text{String: "Stacks", Valid: true}
+	require.NoError(t, importOnly(bundle))
+
+	bundle.Items[0].Location = pgtype.Text{}
+	bundle.Items[0].ShelvingLocation = pgtype.Text{}
+	_, err := importTestRepo.ImportPatronRequest(importTestCtx, bundle, importdb.ConflictPolicyUpdate)
+	require.NoError(t, err)
+
+	var location, shelvingLocation pgtype.Text
+	require.NoError(t, importTestPool.QueryRow(
+		context.Background(),
+		"SELECT location, shelving_location FROM item WHERE id=$1",
+		bundle.Items[0].ID,
+	).Scan(&location, &shelvingLocation))
+	assert.Equal(t, pgtype.Text{String: "Main Library", Valid: true}, location)
+	assert.Equal(t, pgtype.Text{String: "Stacks", Valid: true}, shelvingLocation)
+}
+
+func TestImportPatronRequestPersistsPickupLocation(t *testing.T) {
+	prefix := uuid.NewString()
+	bundle := testPatronBundle(prefix, prefix+"-request")
+	first, second := uuid.New(), uuid.New()
+	bundle.PatronRequest.RequesterPickupLocationID = pgtype.UUID{Bytes: first, Valid: true}
+	require.NoError(t, importOnly(bundle))
+	assert.Equal(t, pgtype.UUID{Bytes: first, Valid: true}, pickupLocationValue(t, bundle.PatronRequest.ID))
+
+	bundle.PatronRequest.RequesterPickupLocationID = pgtype.UUID{Bytes: second, Valid: true}
+	_, err := importTestRepo.ImportPatronRequest(importTestCtx, bundle, importdb.ConflictPolicyUpdate)
+	require.NoError(t, err)
+	assert.Equal(t, pgtype.UUID{Bytes: second, Valid: true}, pickupLocationValue(t, bundle.PatronRequest.ID))
+}
+
 func TestImportPatronRequestPersistsDueDate(t *testing.T) {
 	prefix := uuid.NewString()
 	bundle := testPatronBundle(prefix, prefix+"-request")
@@ -482,6 +518,13 @@ func patronValue(t *testing.T, id string) string {
 	return patron
 }
 
+func pickupLocationValue(t *testing.T, id string) pgtype.UUID {
+	t.Helper()
+	var pickupLocation pgtype.UUID
+	require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT requester_pickup_location_id FROM patron_request WHERE id=$1", id).Scan(&pickupLocation))
+	return pickupLocation
+}
+
 func insertPeer(symbol, id string) {
 	_, err := importTestPool.Exec(context.Background(), `INSERT INTO peer (id,name,refresh_policy,url,vendor,broker_mode) VALUES ($1,$1,'never','http://example.test','test','transparent') ON CONFLICT DO NOTHING`, id)
 	if err != nil {
@@ -512,4 +555,21 @@ func assertMissingChild(t *testing.T, tx pgx.Tx, table, id string) {
 	var foundID string
 	err := tx.QueryRow(context.Background(), "SELECT id FROM "+table+" WHERE id=$1", id).Scan(&foundID)
 	assert.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestImportPatronRequestPersistsBibRecordID(t *testing.T) {
+	prefix := uuid.NewString()
+	bundle := testPatronBundle(prefix, prefix+"-request")
+	for i, expected := range []pgtype.Text{{String: "shared-record", Valid: true}, {String: "updated-record", Valid: true}, {}} {
+		bundle.PatronRequest.BibRecordID = expected
+		policy := importdb.ConflictPolicyUpdate
+		if i == 0 {
+			policy = importdb.ConflictPolicyFail
+		}
+		_, err := importTestRepo.ImportPatronRequest(importTestCtx, bundle, policy)
+		require.NoError(t, err)
+		var actual pgtype.Text
+		require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT bib_record_id FROM patron_request WHERE id=$1", bundle.PatronRequest.ID).Scan(&actual))
+		assert.Equal(t, expected, actual)
+	}
 }

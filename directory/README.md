@@ -67,6 +67,15 @@ text property to `lendToBorrowRatio`, preserving the ratio string. Missing
 properties export as null. Invalid ratios or multiple matching properties stop
 the export before NDJSON output; the error identifies the affected entries.
 
+The export also populates the selected local owner's `illConfig.cancellationReasons`,
+`unfilledReasons`, and `loanConditions` from the mod-rs reference-data vocabularies
+`cancellationReasons`, `cannotSupplyReasons`, and `loanConditions`, respectively.
+Values become codes and labels become default descriptions. Unfilled reasons and
+loan conditions use the value when the label is null, empty, or whitespace-only.
+Missing or empty vocabularies are omitted, leaving the lists unset on import.
+See the [directory field mappings](../migration/export-crosslink-directory-field-mapping.md#ill-configuration)
+for ordering and ownership details.
+
 The optional `lendToBorrowRatio` field expresses desired loans:borrows (for
 example, `50:2`). Each component must be positive, with one to four integer
 digits and at most two decimal places (`0.01` through `9999.99`). Leading zeros
@@ -76,9 +85,10 @@ outside these limits must be corrected before applying migration 016; the
 migration validates existing entries without changing their ratios.
 
 The optional `illConfig.loadBalancingPolicy` accepts `deficit` or `proportional`.
-The broker reads this setting from the entry identified by `CONSORTIUM_SYMBOL`.
-An omitted or null policy, missing `illConfig`, or an unset consortium symbol
-uses `proportional`.
+The broker reads this setting from the entry identified by `CONSORTIUM_SYMBOL`,
+which must name the Consortium entry. Only the consortium may set the policy, and
+it is never inherited. An omitted or null policy, missing `illConfig`, or an unset
+consortium symbol uses `proportional`.
 Requester settings do not select the policy. PATCH omission preserves the current
 value; explicit null clears it. Imports also accept this optional field.
 
@@ -138,8 +148,25 @@ Complete imports include raw host settings: `lmsConfig.vendor`,
 availability predicates, and OPAC parser options. These fields are required in
 their respective non-null configuration objects; use `null` to inherit defaults.
 Explicit `false` and empty arrays are preserved. Imports replace stored
-configuration, so include all overrides when restoring an entry. Configure at
-most one SRU/ZOOM endpoint and at most one holdings parser.
+configuration, so include all overrides when restoring an entry. A `null`
+clears a stored value; a non-null value in a field the record's entry type may not
+set fails that record unless it equals the value already stored (see [configuration inheritance](#configuration-inheritance)). Configure at
+most one SRU/ZOOM endpoint and at most one holdings parser. The deprecated OPAC
+`allCirculations` field is optional and accepted for compatibility, but ignored:
+OPAC parsing always returns all available circulation candidates.
+
+`lmsConfig.ncipVersion` selects `"1.0"` or `"2.02"` (profile default: `"1.0"` for Horizon, Polaris and Symphony, otherwise `"2.02"`). `"default"` selects the profile default without inheriting a value.
+It is optional in import records for compatibility with older exports; omission
+or `null` clears the stored version override during full replacement. For REST
+PATCH, omission preserves it and `null` clears it. See
+[NCIP version selection](host-profiles.md#ncip-version-selection).
+
+`lmsConfig.requestItemRequestScopeType` accepts `auto`, `Item`, `Title`, or
+`Bibliographic Item`. Generic defaults to `auto`: an ISO18626 item identifier in
+`supplierInfo.bibliographicRecordId` selects Item scope; otherwise
+`bibliographicInfo.supplierUniqueRecordId` selects Bibliographic Item scope.
+Named vendor profiles keep their previous scope defaults. Explicit library
+settings override the profile.
 
 ### Import with curl
 
@@ -252,10 +279,232 @@ Run `make generate` before invoking `go build` or `go test` directly.
 See [Host LMS and catalog profiles](host-profiles.md) for `lmsConfig.vendor`,
 `catalogConfig.profile`, precedence, parser overrides, diagnostics and migration.
 
+## Directory entry symbols
+
+When patching entry symbols, omit `id` to create a new symbol. A supplied `id`
+must identify an existing symbol owned by the entry being patched; unknown or
+foreign IDs return HTTP 400 and roll back the entire PATCH. Symbols cannot be
+moved between entries through the API.
+
+Application writes lock the owner entry before modifying its symbols. Direct
+SQL maintenance must follow the same order; the search trigger alone cannot
+prevent deadlocks caused by acquiring these locks in the opposite order.
+
+## Directory entry searches
+
+`cql.serverChoice` searches a combined document containing the entry's name,
+description, organization ID, email, phone number, and all its own symbols
+(both `authority:symbol` and bare symbol values). It uses PostgreSQL full-text
+search with the fixed `simple` configuration: case is normalized without English
+stemming or stop-word removal. NULL fields contribute no text. Parent and child
+entry data are not included.
+
+| CQL example | Behavior |
+| --- | --- |
+| `cql.serverChoice="central library"` | Both words, potentially in different fields |
+| `cql.serverChoice all "central library"` | Both words |
+| `cql.serverChoice any "central library"` | Either word |
+| `cql.serverChoice adj "central library"` | Adjacent words in order |
+| `cql.serverChoice="centr*"` | Word-prefix matching |
+
+This index is available on both `/entries` and `/entries/owned`; existing access
+restrictions, counts, pagination, and result ordering apply. Results are not
+ranked by relevance. Email addresses, phone numbers, and symbols follow
+PostgreSQL tokenization rather than arbitrary substring matching. Use dedicated
+field indexes such as `symbol` for exact identifier comparisons.
+
+A stored search vector and GIN index are maintained transactionally by database
+triggers when entry fields or symbols change, including imports. Migration 018
+backfills existing entries. SQLC expands wildcard selections into explicit column
+lists, so adding the search column preserves the result shape expected by
+pre-018 binaries. Existing binaries can continue serving against the upgraded
+schema after the migration completes.
+
+Migration 018 runs as one transaction: it adds the search column, creates the
+symbols ownership index before backfill, installs the search triggers, backfills
+all entries, and builds the GIN index. The initial schema change takes an
+exclusive lock on `entries` that is held until the transaction completes,
+blocking entry reads and writes throughout the backfill and index builds. The
+regular symbols index build also blocks symbol writes until commit. Migration
+duration depends on data volume and active transactions; requests may time out
+while waiting. Concurrent transactions that acquire locks in the opposite order
+can also deadlock with the migration.
+
+Plan a maintenance window for this upgrade. Stop all Directory instances and
+import jobs, pause other database writers, and allow active transactions to
+finish before starting one upgraded instance to apply migrations. Once migration
+018 succeeds and that instance is ready, restore the remaining instances and
+resume traffic and imports. A rolling update alone does not enforce this
+sequence. If migration fails, inspect the error and migration version/dirty state
+before retrying; a failed transaction rolls back its schema changes, but the
+migration runner may leave the version marked dirty and prevent startup.
+
+The `name` and `description` CQL indexes match case insensitively by default,
+using PostgreSQL `lower()` on both the stored value and the search term. For
+example, `name="central library"` matches `Central Library`, and
+`description="*LIBRARY*"` matches descriptions containing `library` in any case.
+This also applies to `==`, `exact`, and `<>` comparisons. Existing wildcard and
+escaping rules apply; no CQL relation modifier is required. Other indexes and
+result ordering retain their existing behavior. This does not add full-text
+search or accent normalization.
+
+### Permissions and Roles
+
+Rather than rely on Okapi 'required' permissions that block requests at the API path level, Directory uses role-based authorization to decide which operations a request may perform. Directory trusts the `X-Okapi-Permissions` and `X-Okapi-Tenant` headers and does not authenticate callers itself. A trusted gateway must authenticate callers and ensure these headers reflect their granted permissions and tenant, rather than accepting caller-supplied values. Direct access to Directory must be restricted to trusted clients.
+
+The role is determined by reading the X-Okapi-Permissions header, and assigning a role based on the permissions present. These permissions are surfaced in the module descriptor as Okapi desired permissions.
+
+The permissions and roles are as follows:
+| Role Name           | Permission Name           | Description |
+|---------------------|---------------------------|-------------|
+| Public User         | directory.public.all      | This is the public facing role, that lets all non-sensitive fields be viewed, but not edited. |
+| System User         | directory.system.all      | This role is primarily granted to system processes. It allows all fields (even sensitive ones) to be viewed. |
+| Institutional Admin | directory.institution.all | This role is for the administrator of a single institution. It grants viewing (including sensitive) and editing of entries for a given tenant, except an entry's `parent` and `type`. |
+| Consortial Admin    | directory.consortium.all  | This role is for the administrator of the consortium. It allows viewing and editing of all entries for the consortial record, as well as those for consortium's institutions. |
+
+### Configuration inheritance
+
+Entries form a fixed hierarchy: one Consortium, Institutions under it, and
+Branches under institutions. An entry's `illConfig`, `lmsConfig`, `catalogConfig`
+and `holdingsPolicy` fields that it does not store itself are filled in on read
+from the nearest ancestor that stores them. Nothing is copied into child records,
+so a parent change applies to its descendants on their next read. The policy is
+declared in [api.yaml](api.yaml) with these extensions on `EntryProperties` and
+the configuration schemas:
+
+- `x-inheritance-root`: the highest ancestor type consulted (`Consortium`,
+  `Institution`, or `none` for a field that never inherits).
+- `x-editable-on`: the entry types that may store a value.
+- `x-merge-unit`: fields that are always taken from the same entry.
+- `x-off-value`: a stored value meaning "off"; it blocks inheritance and is
+  omitted from merged reads.
+
+A field without its own annotation uses its container's. Directory compiles the
+annotations at startup and stops if they are invalid.
+
+| Field | Inherits up to | Editable on |
+|---|---|---|
+| `catalogConfig` | Institution | Consortium, Institution |
+| `lmsConfig` | Institution | Institution |
+| `lmsConfig.requesterPickupLocation`, `supplierPickupLocation` | never | Institution, Branch |
+| `illConfig` | Consortium | Consortium, Institution |
+| `illConfig.iso18626Url`, `iso18626Vendor` | Institution | Consortium, Institution |
+| `illConfig.isPickupLocation` | never | Institution, Branch |
+| `illConfig.loadBalancingPolicy` | never | Consortium |
+| `holdingsPolicy` | Institution | Institution |
+
+So institutions inherit the consortium's ILL policy (except its ISO18626 peer,
+pickup flag and load-balancing policy), and branches inherit their institution's
+ILL, LMS, catalog and holdings settings. Consortium catalog settings are not
+inherited; the broker uses them only through `CONSORTIUM_SYMBOL`.
+
+Reads: every entry GET (by ID, by symbol, `/entries`, `/entries/owned`) returns
+merged values by default. Pass `resolve-inherit=false` for the entry's stored
+values only; use that view to edit an entry or to write values back. Merged reads
+take the entries and their ancestors from one database snapshot. CQL filters
+match stored values.
+
+Merge units are taken whole from the nearest entry that stores any of their fields:
+the NCIP connection (`lmsConfig.address`, `fromAgency`, `fromAgencyAuthentication`,
+`toAgency`, `vendor`, `ncipVersion`, `ncipNamespaceEnabled`), the ISO18626 peer
+(`iso18626Url`, `iso18626Vendor`), the catalog endpoint (`sru`, `zoom`), and the
+whole `holdingsPolicy`. Other fields, including whole `queryConfig`,
+`holdingsFormat` and `metadataFormat` objects, resolve on their own. Arrays are
+replaced, never combined.
+
+Writes: create stores the supplied configuration; PATCH omission preserves a stored
+value. Imports replace the local configuration, so omitted optional fields remove
+their stored overrides. On PATCH and import, `null` removes a local value so that an
+inherited value applies, and a non-null value stores a local override. A value
+in a field the entry type may not set is rejected with HTTP 400 naming the field
+(for example `lmsConfig.address is not editable on Branch`), and the request
+changes nothing. Resubmitting the value already stored is accepted. `null` is
+always accepted, so values stored before these rules (such as branch NCIP
+settings from earlier migration exports) can be cleared; until then they keep
+overriding inherited values. A container `null`, such as `"lmsConfig": null`,
+removes the entry's whole local configuration. Changing an entry's type keeps its
+stored values. Clearing `lmsConfig.address` or `fromAgency` stores the empty
+string, which reads treat as unset.
+
+Because null now means "inherit", these values switch a setting off locally:
+`defaultLoanPeriod: 0` (omitted from merged reads), `ncipVersion: "default"`
+(the profile default; omitted from merged reads), `minimumCost: 0`,
+`maxRequestsPerPatron: 0`, `duplicateCheckWindowHours: 0`, `false` for booleans,
+and `[]` for lists. An institution can replace an inherited
+`defaultCopyrightType` but cannot decline one. Apply migration
+`025_inheritance_off_values` before deploying; its down migration converts these
+values back to null.
+
+Protected values: `fromAgencyAuthentication` is never inherited from an entry with
+a different tenant. A protected value is shown only to callers who may see
+sensitive fields on both the entry that stores it and the entry being read;
+others see `""`, as before. Only consortial administrators may change an entry's
+parent or type.
+
+The broker serves Directory entries from its peer cache, so a parent change
+reaches ILL processing after the cache refreshes. Host-profile defaults still
+apply beneath the merged values and are never stored in Directory.
+
 ### Pickup locations
 
-Set `illConfig.isPickupLocation` to `true` to offer an institution or branch in the request form's pickup-location selector. This flag is independent of `lmsConfig.requesterPickupLocation`: manual workflows can offer locations without an LMS code. Migration 012 enables the flag for existing entries whose requester pickup code is non-null (including empty strings), preserving other ILL settings. Other entries remain unselected unless explicitly enabled. Imports can set the flag in `illConfig`.
+Set `illConfig.isPickupLocation` to `true` to offer an institution or branch in the request form's pickup-location selector. The flag and the LMS pickup codes are never inherited; an unset flag means the entry is not offered. This flag is independent of `lmsConfig.requesterPickupLocation`: manual workflows can offer locations without an LMS code. Migration 012 enables the flag for existing entries whose requester pickup code is non-null (including empty strings), preserving other ILL settings. Other entries remain unselected unless explicitly enabled. Imports can set the flag in `illConfig`.
 
 The broker accepts the requesting institution's UUID or a descendant's UUID. An explicit selection supplies that entry's shipping address and, when needed, its LMS pickup code. Omitting the selection retains existing defaults. LMS operations that consume a pickup code still require one for explicit selections.
 
 Filter Directory entries with CQL `isPickupLocation=true` or `isPickupLocation=false`. Missing flags (including entries without ILL configuration) match `false`. The former `requesterPickupLocation` CQL filter is no longer supported.
+
+### ILL configuration lists and reference defaults
+
+`illConfig.defaultCopyrightType` is the default copyright type to use for copy
+requests. It accepts a single object with required string fields `code` and
+`defaultDesc`, for example `{"code":"US-CCG","defaultDesc":"CCG (US)"}`.
+Create, read, PATCH, and NDJSON import support this field. PATCH omission
+preserves the value; an object replaces it and `null` clears it. Unset values
+are omitted from entry reads. Import replaces the entire ILL configuration, so
+an omitted or null default leaves it unset. Custom codes are accepted independently
+of `availableCopyrightTypes`. Its `x-default-data` mapping matches that list's
+reference mapping and does not automatically set a default. Directory stores
+this setting; the broker does not yet apply it to copy requests.
+
+`illConfig.availableCopyrightTypes`, `illConfig.unfilledReasons`,
+`illConfig.cancellationReasons`, and `illConfig.loanConditions` accept ordered
+arrays of objects with required string fields `code` and `defaultDesc`. Custom
+codes from previous systems are supported and preserved without normalization.
+For example, inside an existing complete NDJSON entry record's `data.illConfig`:
+
+```json
+{
+  "unfilledReasons": [{"code": "LegacyNotHeld", "defaultDesc": "Not held locally"}],
+  "cancellationReasons": [{"code": "LegacyDuplicate", "defaultDesc": "Duplicate request"}],
+  "loanConditions": [{"code": "LegacySupervised", "defaultDesc": "Supervised use only"}]
+}
+```
+
+Include the other required ILL configuration fields from `ImportIllConfig` in
+[api.yaml](api.yaml). The three arrays shown above are optional for
+compatibility with older imports. Import replaces configuration: omitted or `null`
+lists become unset so that an inherited list applies, and `[]` stores an empty
+list that blocks inheritance. Create and PATCH also accept the lists; PATCH omission
+preserves existing values, `[]` stores an empty list, and `null` removes the local
+list so that an inherited list applies. Entry reads return lists in their original order.
+
+The OpenAPI array properties `availableCopyrightTypes`, `unfilledReasons`,
+`cancellationReasons`, and `loanConditions` each carry an `x-default-data` object
+mapping codes to reference descriptions. Other processes can read these mappings
+from the source or served OpenAPI specification. Directory does not apply them automatically,
+and they do not restrict configured codes. All four lists support storage and
+create/read/PATCH operations. `availableCopyrightTypes` is excluded from NDJSON
+imports. Imports replace the entire ILL configuration, leaving copyright types
+unset; configure them through the API after an import.
+
+Legacy exports must be converted to the existing Directory NDJSON format; no
+source-system converter is included.
+
+### NCIP bibliographic scope name
+
+`lmsConfig.bibItemScopeName` overrides the bibliographic scope name used by
+`requestItemRequestScopeType: auto` when no item ID is supplied. The broker's
+code default is `Bibliographic Item`; Sierra and FOLIO profiles use `Title`.
+The setting supports creation, GET, PATCH, and import. Omission preserves a
+stored override during PATCH; `null` clears it to resume profile inheritance.
+See [automatic NCIP request scope](host-profiles.md#automatic-ncip-request-scope).

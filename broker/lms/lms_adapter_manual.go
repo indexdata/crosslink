@@ -23,8 +23,8 @@ func (l *LmsAdapterManual) AcceptItem(
 	callNumber string,
 	pickupLocation string,
 	requestedAction string,
-) (bool, error) {
-	return false, nil
+) (*AcceptedItem, error) {
+	return nil, nil
 }
 
 // DeleteItem skips requester LMS item deletion in manual workflows.
@@ -34,7 +34,7 @@ func (l *LmsAdapterManual) DeleteItem(itemId string) (bool, error) {
 
 func (l *LmsAdapterManual) RequestItem(
 	requestId string,
-	itemId string,
+	identifier RequestItemIdentifier,
 	userId string,
 	pickupLocation string,
 	itemLocation string,

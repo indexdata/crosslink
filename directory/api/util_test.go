@@ -1,7 +1,6 @@
 package api
 
 import (
-	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -15,15 +14,20 @@ func TestEntryNetworkPriorityContract(t *testing.T) {
 	}
 
 	createSchema := spec.Components.Schemas["CreateEntryNetwork"].Value
-	if slices.Contains(createSchema.Required, "priority") {
+	if composedRequired(createSchema, "priority") {
 		t.Error("CreateEntryNetwork priority must be optional")
 	}
-	if createSchema.Properties["priority"].Value.Default != float64(0) {
-		t.Errorf("CreateEntryNetwork priority default = %v, want 0", createSchema.Properties["priority"].Value.Default)
+	priority := composedProperty(createSchema, "priority")
+	if priority == nil || priority.Value.Default != float64(0) {
+		var got any
+		if priority != nil {
+			got = priority.Value.Default
+		}
+		t.Errorf("CreateEntryNetwork priority default = %v, want 0", got)
 	}
 
 	responseSchema := spec.Components.Schemas["EntryNetwork"].Value
-	if !slices.Contains(responseSchema.Required, "priority") {
+	if !composedRequired(responseSchema, "priority") {
 		t.Error("EntryNetwork response priority must be required")
 	}
 }

@@ -198,6 +198,7 @@ func (s *RotaService) Add(ctx common.ExtendedContext, id, symbol, localID string
 		added, err := repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams{
 			ID: uuid.NewString(), IllTransactionID: id, SupplierID: peer.ID, SupplierSymbol: symbol, Ordinal: ordinal,
 			SupplierStatus: status, LocalID: pgtype.Text{String: localID, Valid: true}, LocalSupplier: local,
+			HoldingsPolicyResolved: pgtype.Bool{Bool: peer.CustomData.HoldingsPolicy == nil, Valid: true},
 		})
 		if err != nil {
 			return err

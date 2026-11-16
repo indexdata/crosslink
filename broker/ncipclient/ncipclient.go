@@ -2,6 +2,7 @@ package ncipclient
 
 import "github.com/indexdata/crosslink/ncip"
 
+// NcipLogFunc receives redacted message copies and response-sanitized errors.
 type NcipLogFunc func(outgoing map[string]any, incoming map[string]any, err error)
 
 type NcipClient interface {
@@ -34,8 +35,7 @@ func (e *NcipError) Error() string {
 	if e.Problem.ProblemType.Text != "" {
 		s += ": " + e.Problem.ProblemType.Text
 	}
-	if e.Problem.ProblemDetail != "" {
-		s += ": " + e.Problem.ProblemDetail
-	}
+	// Free-text details may echo credentials or personal data. They remain
+	// available in Problem for callers, but must not enter error strings.
 	return s
 }

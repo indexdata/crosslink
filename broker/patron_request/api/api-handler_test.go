@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/carlos7ags/folio/reader"
 	"github.com/google/uuid"
 	"github.com/indexdata/cql-go/pgcql"
 	"github.com/indexdata/crosslink/broker/common"
@@ -135,11 +136,44 @@ func TestToApiPatronRequestSurfacesInternalNote(t *testing.T) {
 	}
 }
 
+func TestToApiPatronRequestCancellationReason(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		reason pgtype.Text
+	}{
+		{name: "populated", reason: pgtype.Text{String: "InvalidUser", Valid: true}},
+		{name: "null", reason: pgtype.Text{}},
+		{name: "empty", reason: pgtype.Text{String: "", Valid: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/patron_requests/pr-1", nil)
+			pr := pr_db.PatronRequest{ID: "pr-1", CancellationReason: tc.reason}
+			apiPr := toApiPatronRequest(req, patronRequestSearchViewFromPatronRequest(pr, false))
+			body, err := json.Marshal(apiPr)
+			require.NoError(t, err)
+			var payload map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(body, &payload))
+			if !tc.reason.Valid {
+				assert.Nil(t, apiPr.CancellationReason)
+				assert.NotContains(t, payload, "cancellationReason")
+				return
+			}
+			require.NotNil(t, apiPr.CancellationReason)
+			assert.Equal(t, tc.reason.String, *apiPr.CancellationReason)
+			require.Contains(t, payload, "cancellationReason")
+			var reason string
+			require.NoError(t, json.Unmarshal(payload["cancellationReason"], &reason))
+			assert.Equal(t, tc.reason.String, reason)
+		})
+	}
+}
+
 func patronRequestSearchViewFromPatronRequest(pr pr_db.PatronRequest, hasCost bool) pr_db.PatronRequestSearchView {
 	return pr_db.PatronRequestSearchView{
 		ID:                        pr.ID,
 		CreatedAt:                 pr.CreatedAt,
 		IllRequest:                pr.IllRequest,
+		BibRecordID:               pr.BibRecordID,
 		State:                     pr.State,
 		Side:                      pr.Side,
 		Patron:                    pr.Patron,
@@ -156,6 +190,7 @@ func patronRequestSearchViewFromPatronRequest(pr pr_db.PatronRequest, hasCost bo
 		TerminalState:             pr.TerminalState,
 		UpdatedAt:                 pr.UpdatedAt,
 		IllResponse:               pr.IllResponse,
+		CancellationReason:        pr.CancellationReason,
 		InternalNote:              pr.InternalNote,
 		StateModel:                pr.StateModel,
 		RequesterPickupLocationID: pr.RequesterPickupLocationID,
@@ -634,6 +669,24 @@ func TestPostPatronRequestsIdActionStoresTenantUserInInvokeTask(t *testing.T) {
 	assert.Equal(t, "okapi-subject", eventBus.lastData.User)
 }
 
+func TestPostPatronRequestsIdActionRejectsStaticActionParamsOverride(t *testing.T) {
+	eventBus := new(MockEventBusCapture)
+	tenantResolver := tenant.NewResolver().WithTenantToSymbol("ISIL:DK-{tenant}")
+	handler := NewPrApiHandler(new(PrRepoOkapiOwner), eventBus, mockEventRepo, tenantResolver, nil, 10)
+	handler.SetActionTaskProcessor(&MockActionTaskProcessor{})
+
+	req := httptest.NewRequest(http.MethodPost, "/broker/patron_requests/3/action", strings.NewReader(
+		`{"action":"`+string(prservice.BorrowerActionCheckLimit)+`","actionParams":{"staticactionparams":{"countedStates":["NOT_A_STATE"]}}}`,
+	))
+	req.Header.Set("X-Okapi-Tenant", "tenant1")
+	rr := httptest.NewRecorder()
+	handler.PostPatronRequestsIdAction(rr, req, "3", proapi.PostPatronRequestsIdActionParams{Side: &proapiBorrowingSide})
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "actionParams.staticActionParams is reserved")
+	assert.Empty(t, eventBus.lastEventName)
+}
+
 func TestPostPatronRequestsIdActionReturnsExclusiveTaskError(t *testing.T) {
 	eventBus := new(MockEventBusCapture)
 	handler := NewPrApiHandler(new(PrRepoOkapiOwner), eventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
@@ -684,7 +737,7 @@ func TestInvokeActionReturnsProblemDetails(t *testing.T) {
 	assert.Equal(t, string(events.EventStatusProblem), result.Result)
 	assert.Equal(t, prservice.ActionOutcomeFailure, result.Outcome)
 	require.NotNil(t, result.Message)
-	assert.Equal(t, "email template body: unknown field PatronGivenName", *result.Message)
+	assert.Equal(t, "email template body: unknown field UnknownPlaceholder", *result.Message)
 }
 
 func TestPostPatronRequestsIdTerminateStoresTenantUserAndActionInInvokeTask(t *testing.T) {
@@ -808,6 +861,48 @@ func TestGetPatronRequestsIdNotificationsErrorGettingEvents(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "DB error")
 }
 
+func TestGetPatronRequestsIdNotificationsCancellationReason(t *testing.T) {
+	repo := &PrRepoNotificationsCapture{
+		notifications: []pr_db.Notification{{
+			ID:              "n-cancel-1",
+			PrID:            "3",
+			FromSymbol:      "ISIL:SUP",
+			ToSymbol:        "ISIL:REQ",
+			Direction:       pr_db.NotificationDirectionReceived,
+			Kind:            pr_db.NotificationKindCancellationReason,
+			Code:            pgtype.Text{String: "LocalCode", Valid: true},
+			CodeDescription: pgtype.Text{String: "Library-defined reason", Valid: true},
+			CreatedAt:       pgtype.Timestamp{Time: time.Now(), Valid: true},
+		}},
+		fullCount: 1,
+	}
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+
+	kind := proapi.NotificationKind("cancellation_reason")
+	handler.GetPatronRequestsIdNotifications(rr, req, "3", proapi.GetPatronRequestsIdNotificationsParams{
+		Symbol: &symbol,
+		Side:   &proapiBorrowingSide,
+		Kind:   &kind,
+	})
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	if assert.NotNil(t, repo.lastParams) {
+		assert.Equal(t, "cancellation_reason", repo.lastParams.Kind)
+	}
+	assert.NotContains(t, rr.Body.String(), `"condition"`)
+	var response proapi.PrNotifications
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &response))
+	if assert.Len(t, response.Items, 1) {
+		item := response.Items[0]
+		assert.Equal(t, proapi.NotificationKind("cancellation_reason"), item.Kind)
+		assert.Equal(t, "LocalCode", *item.Code)
+		assert.Equal(t, "Library-defined reason", *item.CodeDescription)
+		assert.Nil(t, item.Note)
+	}
+}
+
 func TestGetPatronRequestsIdNotificationsWithKindFilter(t *testing.T) {
 	repo := &PrRepoNotificationsCapture{
 		notifications: []pr_db.Notification{
@@ -818,7 +913,7 @@ func TestGetPatronRequestsIdNotificationsWithKindFilter(t *testing.T) {
 				ToSymbol:   "ISIL:REQ",
 				Direction:  pr_db.NotificationDirectionReceived,
 				Kind:       pr_db.NotificationKindCondition,
-				Condition: pgtype.Text{
+				Code: pgtype.Text{
 					String: "NoReproduction",
 					Valid:  true,
 				},
@@ -862,7 +957,7 @@ func TestGetPatronRequestsIdNotificationsWithKindFilter(t *testing.T) {
 	assert.NoError(t, err)
 	if assert.Len(t, response.Items, 1) {
 		assert.Equal(t, proapi.NotificationKind("condition"), response.Items[0].Kind)
-		assert.Equal(t, "NoReproduction", *response.Items[0].Condition)
+		assert.Equal(t, "NoReproduction", *response.Items[0].Code)
 		assert.Equal(t, "please do not copy", *response.Items[0].Note)
 	}
 	assert.Equal(t, int64(1), response.About.Count)
@@ -1102,14 +1197,31 @@ func TestGetStateModelBatchActions(t *testing.T) {
 	var actions []proapi.BatchActionDefault
 	err := json.Unmarshal(rr.Body.Bytes(), &actions)
 	assert.NoError(t, err)
-	assert.Len(t, actions, 5)
+	assert.Len(t, actions, 7)
 	// Clients key translated titles off titleKey, so each default needs a distinct one.
 	seen := map[string]bool{}
+	foundArchives := map[string]bool{}
 	for _, action := range actions {
 		assert.NotEmpty(t, action.TitleKey)
 		assert.False(t, seen[action.TitleKey], "duplicate titleKey %s", action.TitleKey)
 		seen[action.TitleKey] = true
+		if action.ActionName == "archive-borrowing-requests" || action.ActionName == "archive-lending-requests" {
+			foundArchives[string(action.ActionName)] = true
+			assert.Equal(t, string(action.ActionName), action.TitleKey)
+			expectedTitle := "Archive closed borrowing requests"
+			if action.ActionName == "archive-lending-requests" {
+				expectedTitle = "Archive closed lending requests"
+			}
+			assert.Equal(t, expectedTitle, action.Title)
+			assert.Equal(t, "FREQ=DAILY;BYHOUR=3", action.Schedule)
+			assert.Equal(t, "terminal_state = true", action.BatchQuery)
+			if assert.NotNil(t, action.ActionParams) {
+				assert.Equal(t, map[string]any{"interval": "720h", "anonymize": false}, *action.ActionParams)
+			}
+		}
 	}
+	assert.True(t, foundArchives["archive-borrowing-requests"], "borrowing archive default is missing")
+	assert.True(t, foundArchives["archive-lending-requests"], "lending archive default is missing")
 }
 
 func TestGetStateModelTemplates(t *testing.T) {
@@ -1121,7 +1233,7 @@ func TestGetStateModelTemplates(t *testing.T) {
 	var templates []proapi.CreateTemplate
 	err := json.Unmarshal(rr.Body.Bytes(), &templates)
 	assert.NoError(t, err)
-	assert.Len(t, templates, 7)
+	assert.Len(t, templates, 9)
 	labels := make([]string, 0, len(templates))
 	for _, template := range templates {
 		assert.NotEmpty(t, template.Title)
@@ -1129,14 +1241,337 @@ func TestGetStateModelTemplates(t *testing.T) {
 		labels = append(labels, template.Labels...)
 	}
 	assert.ElementsMatch(t, []string{
+		"new-request-notification",
 		"received-notification",
 		"copy-completed-notification",
 		"unfilled-notification",
 		"cancelled-notification",
+		"over-limit-notification",
 		"new-supply-request-notification",
 		"pullslip-email",
 		"pullslip-pdf",
 	}, labels)
+}
+
+func TestGetTemplatesPlaceholders(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), tenant.NewResolver(), nil, 10)
+	req := httptest.NewRequest(http.MethodGet, "/templates/placeholders", nil)
+	rr := httptest.NewRecorder()
+
+	handler.GetTemplatesPlaceholders(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	var responseFields map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &responseFields))
+	assert.Contains(t, responseFields, "singleRecord")
+	assert.Contains(t, responseFields, "batchRecord")
+	assert.NotContains(t, responseFields, "pullSlip")
+	assert.NotContains(t, responseFields, "batchEmail")
+	var placeholders proapi.TemplatePlaceholders
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &placeholders))
+	require.Len(t, placeholders.SingleRecord, 36)
+	assert.Equal(t, proapi.TemplatePlaceholder{
+		Placeholder: "{{.ReqId}}",
+		Description: "Requester request identifier",
+	}, placeholders.SingleRecord[0])
+	assert.Equal(t, proapi.TemplatePlaceholder{
+		Placeholder: "{{range .Items}}{{.Title}}{{end}}",
+		Description: "Title of the item",
+	}, placeholders.SingleRecord[31])
+	require.Len(t, placeholders.BatchRecord, 3)
+	assert.Equal(t, []proapi.TemplatePlaceholder{
+		{Placeholder: "{{.FullCount}}", Description: "Total number of requests matched by the batch query"},
+		{Placeholder: "{{.ActualCount}}", Description: "Number of requests included in the batch email"},
+		{Placeholder: "{{.BatchQuery}}", Description: "Query used to select requests for the batch"},
+	}, placeholders.BatchRecord)
+}
+
+func TestValidateTemplateRendering(t *testing.T) {
+	patronSubject := "Request {{.ReqId}}"
+	batchSubject := "{{.ActualCount}} requests"
+	unsupportedSubject := "Request {{.Unsupported}}"
+	conditionalUnsupportedSubject := "{{if .Title}}{{.Unsupported}}{{end}}"
+
+	for _, tc := range []struct {
+		name        string
+		purpose     proapi.TemplatePurpose
+		contentType proapi.TemplateContentType
+		body        string
+		subject     *string
+		labels      []string
+		wantErr     string
+	}{
+		{
+			name:        "patron request email",
+			purpose:     proapi.Email,
+			contentType: proapi.Html,
+			body:        "<p>{{.PatronName}}</p>",
+			subject:     &patronSubject,
+		},
+		{
+			name:        "batch email",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        "{{.FullCount}} requests for {{.BatchQuery}}",
+			subject:     &batchSubject,
+			labels:      []string{"pullslip-email"},
+		},
+		{
+			name:        "batch email with arbitrary label",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        "{{.ActualCount}} requests",
+			subject:     &batchSubject,
+			labels:      []string{"pullslips"},
+		},
+		{
+			name:        "pullslip",
+			purpose:     proapi.Pullslip,
+			contentType: proapi.Html,
+			body:        "<p>{{.BarcodeBase64}}</p>",
+			subject:     &unsupportedSubject,
+		},
+		{
+			name:        "pullslip requires html content type",
+			purpose:     proapi.Pullslip,
+			contentType: proapi.Text,
+			body:        "Pull slip {{.ReqId}}",
+			wantErr:     "HTML",
+		},
+		{
+			name:        "pullslip html context validation",
+			purpose:     proapi.Pullslip,
+			contentType: proapi.Html,
+			body:        `{{if .Title}}<a href="{{end}}{{.Author}}`,
+			wantErr:     "body",
+		},
+		{
+			name:        "invalid body syntax",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        "{{.Unclosed",
+			wantErr:     "body",
+		},
+		{
+			name:        "unsupported body placeholder",
+			purpose:     proapi.Pullslip,
+			contentType: proapi.Html,
+			body:        "{{.Unsupported}}",
+			wantErr:     "Unsupported",
+		},
+		{
+			name:        "unsupported subject placeholder",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        "Request ready",
+			subject:     &unsupportedSubject,
+			wantErr:     "subject",
+		},
+		{
+			name:        "unsupported subject placeholder in unexecuted branch",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        "Request ready",
+			subject:     &conditionalUnsupportedSubject,
+			wantErr:     "Unsupported",
+		},
+		{
+			name:        "mixed email contexts",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        "{{.ReqId}}",
+			subject:     &batchSubject,
+			wantErr:     "does not render",
+		},
+		{
+			name:        "mixed batch and notification labels",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        "{{.BatchQuery}}",
+			labels:      []string{"pullslip-email", "received-notification"},
+			wantErr:     "cannot combine",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			labels := tc.labels
+			if len(labels) == 0 {
+				labels = []string{"received-notification"}
+			}
+			err := prservice.ValidateTemplateRendering(tc.purpose, tc.contentType, tc.body, tc.subject, labels)
+			if tc.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			assert.ErrorContains(t, err, tc.wantErr)
+		})
+	}
+}
+
+func TestTemplateSaveEndpointsRejectRenderingErrorsBeforeSave(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		call     func(PatronRequestApiHandler, *httptest.ResponseRecorder, *http.Request)
+		body     string
+		want     string
+		template templateErrorDetails
+	}{
+		{
+			name: "create",
+			body: `{"title":"Invalid","purpose":"email","body":"{{.Unsupported}}","contentType":"text","labels":["received-notification"]}`,
+			call: func(handler PatronRequestApiHandler, rr *httptest.ResponseRecorder, req *http.Request) {
+				handler.PostTemplates(rr, req, proapi.PostTemplatesParams{Symbol: &symbol})
+			},
+			want:     "Unsupported",
+			template: templateErrorDetails{part: "body", line: 1, column: 3, message: "unknown field Unsupported"},
+		},
+		{
+			name: "update",
+			body: `{"title":"Invalid","subject":"{{.Unsupported}}","body":"Request ready","contentType":"text","labels":["received-notification"]}`,
+			call: func(handler PatronRequestApiHandler, rr *httptest.ResponseRecorder, req *http.Request) {
+				handler.PutTemplatesId(rr, req, "template-1", proapi.PutTemplatesIdParams{Symbol: &symbol})
+			},
+			want:     "Unsupported",
+			template: templateErrorDetails{part: "subject", line: 1, column: 3, message: "unknown field Unsupported"},
+		},
+		{
+			name: "batch template with patron request placeholder",
+			body: `{"title":"Invalid","purpose":"email","subject":"Pull slips","body":"Request {{.ReqId}}","contentType":"text","labels":["pullslip-email"]}`,
+			call: func(handler PatronRequestApiHandler, rr *httptest.ResponseRecorder, req *http.Request) {
+				handler.PostTemplates(rr, req, proapi.PostTemplatesParams{Symbol: &symbol})
+			},
+			want:     "ReqId",
+			template: templateErrorDetails{part: "body", line: 1, column: 11, message: "unknown field ReqId"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &PrRepoTemplateCapture{template: pr_db.Template{
+				ID:      "template-1",
+				Owner:   symbol,
+				Purpose: string(proapi.Email),
+			}}
+			handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+			req := httptest.NewRequest(http.MethodPost, "/templates", strings.NewReader(tc.body))
+			rr := httptest.NewRecorder()
+
+			tc.call(handler, rr, req)
+
+			assert.Equal(t, http.StatusBadRequest, rr.Code)
+			assert.Contains(t, rr.Body.String(), tc.want)
+			assertTemplateErrorDetails(t, rr.Body.Bytes(), &tc.template)
+			assert.Zero(t, repo.saveCalls)
+		})
+	}
+}
+
+func postTemplatesPreview(t *testing.T, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req := httptest.NewRequest(http.MethodPost, "/templates/preview", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	handler.PostTemplatesPreview(rr, req, proapi.PostTemplatesPreviewParams{Symbol: &symbol})
+	return rr
+}
+
+func pdfPages(t *testing.T, pdf []byte) []string {
+	t.Helper()
+	parsed, err := reader.Parse(pdf)
+	require.NoError(t, err)
+	var pages []string
+	for i := range parsed.PageCount() {
+		page, err := parsed.Page(i)
+		require.NoError(t, err)
+		text, err := page.ExtractText()
+		require.NoError(t, err)
+		pages = append(pages, strings.TrimSpace(text))
+	}
+	return pages
+}
+
+func TestPostTemplatesPreviewPullslipRendersEverySampleInOrder(t *testing.T) {
+	rr := postTemplatesPreview(t, `{"body":"<p>SLIP {{.ReqId}}</p>"}`)
+
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, "application/pdf", rr.Header().Get("Content-Type"))
+	assert.Equal(t, []string{
+		"SLIP REQ-2026-00417",
+		"SLIP US-REQ-CONSORTIUM-2026-0000419",
+		"SLIP REQ-7",
+		"SLIP REQ-2026-00418",
+	}, pdfPages(t, rr.Body.Bytes()))
+}
+
+func TestPostTemplatesPreviewUsesFirstLabelAsTemplateName(t *testing.T) {
+	body := `{"labels":["pullslip-pdf"],"body":"{{define \"pullslip-pdf\"}}<p>SLIP {{.ReqId}}</p>{{end}}"}`
+	rr := postTemplatesPreview(t, body)
+
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, "SLIP REQ-2026-00417", pdfPages(t, rr.Body.Bytes())[0])
+}
+
+func TestPostTemplatesPreviewRequiresTenantWithoutRequestIds(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver().WithTenantToSymbol("ISIL:DK-{tenant}"), nil, 10)
+	body := `{"body":"<p>{{.ReqId}}</p>"}`
+	req := httptest.NewRequest(http.MethodPost, "/broker/templates/preview", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	handler.PostTemplatesPreview(rr, req, proapi.PostTemplatesPreviewParams{})
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), tenant.OkapiTenantHeader+" must be specified")
+}
+
+type templateErrorDetails struct {
+	part, sample, message string
+	line, column          int
+}
+
+func assertTemplateErrorDetails(t *testing.T, body []byte, want *templateErrorDetails) {
+	t.Helper()
+	var resp proapi.Error
+	require.NoError(t, json.Unmarshal(body, &resp))
+	if want == nil {
+		assert.Nil(t, resp.Template)
+		return
+	}
+	require.NotNil(t, resp.Template)
+	got := templateErrorDetails{part: string(resp.Template.Part), message: resp.Template.Message}
+	if resp.Template.Sample != nil {
+		got.sample = *resp.Template.Sample
+	}
+	if resp.Template.Line != nil {
+		got.line = *resp.Template.Line
+	}
+	if resp.Template.Column != nil {
+		got.column = *resp.Template.Column
+	}
+	assert.Equal(t, *want, got)
+}
+
+func TestPostTemplatesPreviewRejectsBadRequests(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		body     string
+		want     string
+		template *templateErrorDetails
+	}{
+		{"no body", ``, "body is required", nil},
+		{"parse error with line", `{"body":"<p>\n{{.Title}\n</p>"}`, "template:2:",
+			&templateErrorDetails{part: "body", line: 2, message: "bad character U+007D '}'"}},
+		{"unknown field with line", `{"body":"<p>\n\n{{.Nope}}</p>"}`, "template:3:",
+			&templateErrorDetails{part: "body", line: 3, column: 3, message: "unknown field Nope"}},
+		{"batch placeholder", `{"body":"{{.FullCount}}"}`, "FullCount",
+			&templateErrorDetails{part: "body", line: 1, column: 3, message: "unknown field FullCount"}},
+		{"fails on one sample", `{"body":"<p>{{if ne .Title \"n/a\"}}{{index .Title 40}}{{end}}</p>"}`, "sample typical: template body:",
+			&templateErrorDetails{part: "body", sample: "typical", line: 1, column: 28, message: `executing "template" at <index .Title 40>: error calling index: index out of range: 40`}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rr := postTemplatesPreview(t, tc.body)
+
+			assert.Equal(t, http.StatusBadRequest, rr.Code)
+			assert.Contains(t, rr.Body.String(), tc.want)
+			assertTemplateErrorDetails(t, rr.Body.Bytes(), tc.template)
+		})
+	}
 }
 
 type PrRepoError struct {
@@ -1156,6 +1591,24 @@ type PrRepoTerminal struct {
 
 type PrRepoCopyWillSupply struct {
 	PrRepoError
+}
+
+type PrRepoTemplateCapture struct {
+	PrRepoError
+	template  pr_db.Template
+	saveCalls int
+}
+
+func (r *PrRepoTemplateCapture) GetTemplateByIdAndOwner(_ common.ExtendedContext, id string, owner string) (pr_db.Template, error) {
+	if r.template.ID != id || r.template.Owner != owner {
+		return pr_db.Template{}, pgx.ErrNoRows
+	}
+	return r.template, nil
+}
+
+func (r *PrRepoTemplateCapture) SaveTemplate(_ common.ExtendedContext, params pr_db.SaveTemplateParams) (pr_db.Template, error) {
+	r.saveCalls++
+	return pr_db.Template(params), nil
 }
 
 func (r *PrRepoCopyWillSupply) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
@@ -1355,7 +1808,7 @@ type MockActionTaskProcessorExclusiveError struct{}
 type MockActionTaskProcessorProblem struct{}
 
 func (m *MockActionTaskProcessorProblem) ProcessInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error) {
-	status, result := events.NewProblemResult("notification failed", "email template body: unknown field PatronGivenName")
+	status, result := events.NewProblemResult("notification failed", "email template body: unknown field UnknownPlaceholder")
 	result.ActionResult = &events.ActionResult{Outcome: prservice.ActionOutcomeFailure}
 	return events.Event{ID: event.ID, EventStatus: status, ResultData: *result}, nil
 }
@@ -1382,6 +1835,7 @@ type PrRepoUpdateCapture struct {
 	lastUpdateParams *pr_db.UpdatePatronRequestParams
 	state            pr_db.PatronRequestState
 	pickupLocationID pgtype.UUID
+	bibRecordID      pgtype.Text
 }
 
 func (r *PrRepoUpdateCapture) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
@@ -1390,7 +1844,7 @@ func (r *PrRepoUpdateCapture) GetPatronRequestById(ctx common.ExtendedContext, i
 		if state == "" {
 			state = prservice.BorrowerStateNeedsReview
 		}
-		return pr_db.PatronRequest{ID: id, RequesterPickupLocationID: r.pickupLocationID, State: state, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, InternalNote: pgtype.Text{String: "original note", Valid: true}, Patron: pgtype.Text{String: "original patron", Valid: true}}, nil
+		return pr_db.PatronRequest{ID: id, BibRecordID: r.bibRecordID, RequesterPickupLocationID: r.pickupLocationID, State: state, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, InternalNote: pgtype.Text{String: "original note", Valid: true}, Patron: pgtype.Text{String: "original patron", Valid: true}}, nil
 	}
 	return r.PrRepoError.GetPatronRequestById(ctx, id)
 }
@@ -1848,6 +2302,40 @@ func TestCreateValidatesPickupBeforePersistence(t *testing.T) {
 			} else {
 				require.Equal(t, 1, repo.createCalls)
 			}
+		})
+	}
+}
+
+func TestPatronRequestBibRecordIDMapping(t *testing.T) {
+	for _, id := range []*string{nil, new("9a18bd66-8db6-4afd-95e6-157b2d3b6d12"), new("36457383"), new("")} {
+		request := proapi.CreatePatronRequest{BibRecordId: id, IllRequest: validIllRequest()}
+		pr := buildDbPatronRequest(&request, nil, pgtype.Timestamp{}, "request-1", request.IllRequest, "", "default")
+		result := toApiPatronRequest(httptest.NewRequest(http.MethodGet, "/patron_requests/request-1", nil), patronRequestSearchViewFromPatronRequest(pr, false))
+		assert.Equal(t, id, result.BibRecordId)
+	}
+}
+
+func TestPutPatronRequestBibRecordID(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		supplied *string
+		expected string
+	}{
+		{name: "omitted preserves ID", expected: "original"},
+		{name: "supplied replaces ID", supplied: new("replacement"), expected: "replacement"},
+		{name: "empty clears ID", supplied: new("")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &PrRepoUpdateCapture{bibRecordID: pgtype.Text{String: "original", Valid: true}}
+			handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+			id := "3"
+			body, err := json.Marshal(proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol, IllRequest: validIllRequest(), BibRecordId: tc.supplied})
+			require.NoError(t, err)
+			rr := httptest.NewRecorder()
+			handler.PutPatronRequestsId(rr, httptest.NewRequest(http.MethodPut, "/", bytes.NewReader(body)), id, proapi.PutPatronRequestsIdParams{})
+			require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+			require.NotNil(t, repo.lastUpdateParams)
+			assert.Equal(t, tc.expected, repo.lastUpdateParams.BibRecordID.String)
 		})
 	}
 }

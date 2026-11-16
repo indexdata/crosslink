@@ -14,22 +14,26 @@ func TestDefaultLoanPeriodPersistenceAndValidation(t *testing.T) {
 	headers := map[string]string{"X-Okapi-Tenant": "ANINST", "X-Okapi-Permissions": `["directory.consortium.all"]`}
 	path := "/entries/by-id/00000000-0000-0000-0000-000000000002"
 	for _, tc := range []struct {
-		value  string
-		status int
+		value         string
+		status        int
+		local, merged any
 	}{
-		{"21", http.StatusNoContent}, {"0", http.StatusBadRequest}, {"-1", http.StatusBadRequest}, {"1.5", http.StatusBadRequest}, {"null", http.StatusNoContent},
+		{"21", http.StatusNoContent, float64(21), float64(21)},
+		// 0 is the off value: stored locally, omitted from the merged view.
+		{"0", http.StatusNoContent, float64(0), nil},
+		{"-1", http.StatusBadRequest, float64(0), nil},
+		{"1.5", http.StatusBadRequest, float64(0), nil},
+		{"null", http.StatusNoContent, nil, nil},
 	} {
 		response, body := jsonReq(t, http.MethodPatch, path, `{"illConfig":{"defaultLoanPeriod":`+tc.value+`}}`, headers)
 		require.Equal(t, tc.status, response.StatusCode, body)
-		response, body = jsonReq(t, http.MethodGet, path, "", headers)
-		require.Equal(t, http.StatusOK, response.StatusCode, body)
-		var entry map[string]any
-		require.NoError(t, json.Unmarshal([]byte(body), &entry))
-		config := entry["illConfig"].(map[string]any)
-		if tc.value == "null" {
-			assert.Nil(t, config["defaultLoanPeriod"])
-		} else {
-			assert.Equal(t, float64(21), config["defaultLoanPeriod"])
+		for query, want := range map[string]any{"?resolve-inherit=false": tc.local, "": tc.merged} {
+			response, body = jsonReq(t, http.MethodGet, path+query, "", headers)
+			require.Equal(t, http.StatusOK, response.StatusCode, body)
+			var entry map[string]any
+			require.NoError(t, json.Unmarshal([]byte(body), &entry))
+			config, _ := entry["illConfig"].(map[string]any)
+			assert.Equal(t, want, config["defaultLoanPeriod"], "value %s, query %q", tc.value, query)
 		}
 	}
 }

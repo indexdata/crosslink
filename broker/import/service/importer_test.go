@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	ill_db "github.com/indexdata/crosslink/broker/ill_db"
@@ -48,7 +49,8 @@ func TestImportPatronRequestNormalizesCompleteBundle(t *testing.T) {
 	assert.Equal(t, importdb.OutcomeImported, result.Outcome)
 	assert.Equal(t, importdb.ConflictPolicyUpdate, repo.patronPolicy)
 	assert.Equal(t, "pr-1", repo.patron.PatronRequest.ID)
-	assert.Equal(t, pgText("ISIL:REQ"), repo.patron.PatronRequest.Tenant)
+	assert.Equal(t, pgtype.Text{}, repo.patron.PatronRequest.Tenant)
+	assert.False(t, repo.patron.PatronRequest.RequesterPickupLocationID.Valid)
 	assert.Equal(t, prservice.SideBorrowing, repo.patron.PatronRequest.Side)
 	assert.Equal(t, pr_db.PatronRequestState("SENT"), repo.patron.PatronRequest.State)
 	assert.True(t, repo.patron.PatronRequest.TerminalState)
@@ -67,6 +69,35 @@ func TestImportPatronRequestNormalizesCompleteBundle(t *testing.T) {
 	assert.Equal(t, []string{"ISIL:REQ", "ISIL:SUP"}, cache.symbols)
 	assert.Equal(t, "default", validator.model)
 	assert.Equal(t, proapi.Loan, validator.serviceType)
+}
+
+func TestImportPatronRequestStoresTenant(t *testing.T) {
+	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "peer-requester"}, {ID: "peer-supplier"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{terminal: true}, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		bundle["patronRequest"].(map[string]any)["tenant"] = "anokacounty"
+	})
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyUpdate, "ISIL:REQ", data)
+
+	require.NoError(t, err)
+	assert.Equal(t, pgText("anokacounty"), repo.patron.PatronRequest.Tenant)
+}
+
+func TestImportPatronRequestStoresPickupLocation(t *testing.T) {
+	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "peer-requester"}, {ID: "peer-supplier"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{terminal: true}, fixedClock)
+	pickupLocation := uuid.MustParse("7aa9fd5b-7291-407c-b344-17af27e20629")
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		bundle["patronRequest"].(map[string]any)["requesterPickupLocationId"] = pickupLocation.String()
+	})
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyUpdate, "ISIL:REQ", data)
+
+	require.NoError(t, err)
+	assert.Equal(t, pgtype.UUID{Bytes: pickupLocation, Valid: true}, repo.patron.PatronRequest.RequesterPickupLocationID)
 }
 
 func TestImportPatronRequestLocatedSupplierUnfilledReasonAndNote(t *testing.T) {
@@ -380,6 +411,25 @@ func TestImportPatronRequestRejectsMissingOrBlankSupplierSymbolForLending(t *tes
 			assert.Zero(t, repo.patronCalls)
 		})
 	}
+}
+
+func TestImportPatronRequestRejectsPickupLocationForLendingRequest(t *testing.T) {
+	repo := &recordingImportRepo{}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		request := bundle["patronRequest"].(map[string]any)
+		request["side"] = "lending"
+		request["supplierSymbol"] = "ISIL:SUP"
+		request["requesterPickupLocationId"] = "7aa9fd5b-7291-407c-b344-17af27e20629"
+		delete(bundle, "illTransaction")
+		bundle["locatedSuppliers"] = []any{}
+	})
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyFail, "ISIL:SUP", data)
+
+	require.ErrorContains(t, err, "requesterPickupLocationId is only allowed for borrowing patron requests")
+	assert.Zero(t, repo.patronCalls)
 }
 
 func TestImportPatronRequestRejectsSupplierSymbolDifferentFromISOHeaderForLending(t *testing.T) {
@@ -773,6 +823,43 @@ func TestImportTemplateRejectsEmptyLabel(t *testing.T) {
 	assert.Zero(t, repo.templateCalls)
 }
 
+func TestImportTemplateRejectsInvalidRendering(t *testing.T) {
+	tests := []struct {
+		name    string
+		data    string
+		wantErr string
+	}{
+		{
+			name:    "pullslip must be html",
+			data:    `{"title":"Pull slip","purpose":"pullslip","body":"{{.ReqId}}","contentType":"text","labels":["pullslip-pdf"]}`,
+			wantErr: "HTML",
+		},
+		{
+			name:    "unknown placeholder",
+			data:    `{"title":"Notification","purpose":"email","body":"{{.Unsupported}}","contentType":"text","labels":["received-notification"]}`,
+			wantErr: "Unsupported",
+		},
+		{
+			name:    "batch template with patron request placeholder",
+			data:    `{"title":"Batch","purpose":"email","body":"{{.ReqId}}","contentType":"text","labels":["pullslip-email"]}`,
+			wantErr: "ReqId",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &recordingImportRepo{}
+			cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+			importer := newImporter(repo, cache, nil, nil, fixedClock)
+
+			_, _, err := importer.importTemplate(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", json.RawMessage(tt.data))
+
+			require.ErrorContains(t, err, tt.wantErr)
+			assert.Zero(t, repo.templateCalls)
+		})
+	}
+}
+
 func TestImporterAcceptsRecordAtSizeLimit(t *testing.T) {
 	repo := &recordingImportRepo{}
 	importer := newImporter(repo, &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}, nil, nil, fixedClock)
@@ -808,6 +895,52 @@ func TestImporterForwardsPolicyToBatchAction(t *testing.T) {
 	assert.Equal(t, importdb.ConflictPolicyUpdate, repo.batchPolicy)
 	assert.Equal(t, "ISIL:OWNER", repo.batch.Owner)
 	assert.Equal(t, pgText("Daily aging"), repo.batch.Title)
+}
+
+func TestImportBatchActionCreatesInactiveTask(t *testing.T) {
+	repo := &recordingImportRepo{batchResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+	importer := newImporter(repo, cache, nil, nil, fixedClock)
+
+	_, _, err := importer.importBatchAction(testCtx(), importdb.ConflictPolicyFail, "ISIL:OWNER", validBatchActionData())
+
+	require.NoError(t, err)
+	assert.Equal(t, sched_db.ScheduledTaskStatusStopped, repo.batch.Status)
+	assert.Equal(t, "FREQ=DAILY;BYHOUR=6;BYMINUTE=0", repo.batch.Schedule)
+	assert.True(t, repo.batch.RunAt.Valid)
+}
+
+func TestImportLendingArchiveValidatesAndPersistsParameters(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		params map[string]any
+		valid  bool
+	}{
+		{"valid", map[string]any{"interval": "720h", "anonymize": true}, true},
+		{"missing interval", map[string]any{"anonymize": false}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &recordingImportRepo{batchResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+			cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "supplier-peer"}}}
+			importer := newImporter(repo, cache, nil, nil, fixedClock)
+			data, err := json.Marshal(map[string]any{
+				"actionName": "archive-lending-requests", "title": "Archive closed lending requests",
+				"schedule": "FREQ=DAILY;BYHOUR=3", "batchQuery": "terminal_state=true", "actionParams": tc.params,
+			})
+			require.NoError(t, err)
+			_, _, err = importer.importBatchAction(testCtx(), importdb.ConflictPolicyFail, "ISIL:SUPPLIER", data)
+			if !tc.valid {
+				require.Error(t, err)
+				require.Zero(t, repo.batchCalls)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, "ISIL:SUPPLIER", repo.batch.Owner)
+			require.Equal(t, "archive-lending-requests", repo.batch.ActionData.BatchActionData.ActionName)
+			require.Equal(t, tc.params, repo.batch.ActionData.CustomData)
+			require.Equal(t, sched_db.ScheduledTaskStatusStopped, repo.batch.Status)
+		})
+	}
 }
 
 func TestImportBatchActionRejectsMissingOrEmptyRequiredValues(t *testing.T) {
@@ -980,4 +1113,71 @@ func validTemplateData() json.RawMessage {
 }
 func validBatchActionData() json.RawMessage {
 	return json.RawMessage(`{"actionName":"request-aging","batchQuery":"state==NEW","schedule":"FREQ=DAILY;BYHOUR=6;BYMINUTE=0","title":"Daily aging"}`)
+}
+
+func TestImportLocatedSupplierSelectedItem(t *testing.T) {
+	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "peer-requester"}, {ID: "peer-supplier"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{terminal: true}, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		supplier := bundle["locatedSuppliers"].([]any)[0].(map[string]any)
+		supplier["localID"] = "bib-1"
+		supplier["itemID"] = "copy-2"
+		supplier["holdingsPolicyResolved"] = true
+	})
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyUpdate, "ISIL:REQ", data)
+	require.NoError(t, err)
+	require.Len(t, repo.patron.LocatedSuppliers, 1)
+	assert.Equal(t, pgText("bib-1"), repo.patron.LocatedSuppliers[0].LocalID)
+	assert.Equal(t, pgText("copy-2"), repo.patron.LocatedSuppliers[0].ItemID)
+	assert.Equal(t, pgtype.Bool{Valid: true, Bool: true}, repo.patron.LocatedSuppliers[0].HoldingsPolicyResolved)
+}
+
+func TestImportNotificationCode(t *testing.T) {
+	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "peer-requester"}, {ID: "peer-supplier"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{terminal: true}, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		notification := bundle["notifications"].([]any)[0].(map[string]any)
+		notification["kind"] = "cancellation_reason"
+		notification["code"] = "LocalCode"
+		notification["codeDescription"] = "Library-defined reason"
+	})
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyUpdate, "ISIL:REQ", data)
+
+	require.NoError(t, err)
+	require.Len(t, repo.patron.Notifications, 1)
+	n := repo.patron.Notifications[0]
+	assert.Equal(t, pr_db.NotificationKindCancellationReason, n.Kind)
+	assert.Equal(t, pgText("LocalCode"), n.Code)
+	assert.Equal(t, pgText("Library-defined reason"), n.CodeDescription)
+}
+
+func TestImportNotificationRejectsLegacyCondition(t *testing.T) {
+	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "peer-requester"}, {ID: "peer-supplier"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{terminal: true}, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		notification := bundle["notifications"].([]any)[0].(map[string]any)
+		notification["kind"] = "condition"
+		notification["condition"] = "NoReproduction"
+	})
+
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyUpdate, "ISIL:REQ", data)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "condition")
+}
+
+func TestImportPatronRequestStoresBibRecordID(t *testing.T) {
+	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "peer-requester"}, {ID: "peer-supplier"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{terminal: true}, fixedClock)
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		bundle["patronRequest"].(map[string]any)["bibRecordId"] = "shared-record"
+	})
+	_, _, err := importer.importPatronRequest(testCtx(), importdb.ConflictPolicyUpdate, "ISIL:REQ", data)
+	require.NoError(t, err)
+	assert.Equal(t, pgText("shared-record"), repo.patron.PatronRequest.BibRecordID)
 }

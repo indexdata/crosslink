@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<zs:searchRetrieveResponse xmlns:zs="http://docs.oasis-open.org/ns/search-ws/sruResponse"><zs:numberOfRecords>1</zs:numberOfRecords><zs:records><zs:record><zs:recordSchema>marcxml</zs:recordSchema><zs:recordXMLEscaping>xml</zs:recordXMLEscaping><zs:recordData><record xmlns="http://www.loc.gov/MARC21/slim">
+  <leader>01995cam a2200469 i 4500</leader>
+  <datafield tag="852" ind1="4" ind2=" ">
+    <subfield code="a">Children's Literature Area</subfield>
+    <subfield code="b">AM</subfield>
+    <subfield code="c">PZ 7 .S3912 Ho </subfield>
+    <subfield code="d">AM</subfield>
+    <subfield code="g">30619003213957</subfield>
+    <subfield code="n">Available</subfield>
+  </datafield>
+</record></zs:recordData><zs:recordPosition>1</zs:recordPosition></zs:record></zs:records><zs:echoedSearchRetrieveRequest><zs:version>2.0</zs:version><zs:queryType>pqf</zs:queryType><zs:query>@attr 1=1016 300171</zs:query><zs:maximumRecords>1</zs:maximumRecords><zs:recordXMLEscaping>xml</zs:recordXMLEscaping><zs:recordSchema>marcxml</zs:recordSchema><zs:extraRequestData><zs:target>http://traverseds.sequoia.evergreencatalog.com:210/tdsls</zs:target></zs:extraRequestData></zs:echoedSearchRetrieveRequest></zs:searchRetrieveResponse>

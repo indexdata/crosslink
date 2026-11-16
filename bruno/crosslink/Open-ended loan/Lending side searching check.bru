@@ -20,14 +20,11 @@ auth:basic {
   password: {{userPassword}}
 }
 
-script:pre-request {
-  bru.sleep(Number(bru.getEnvVar("sleepDelay")))
-}
-
 script:post-response {
+  const waitForState = require("./scripts/wait-for-state");
+  const pr = await waitForState(bru, req, res, "SEARCHING");
   test("Pull slip output moves supplier to SEARCHING", function() {
     expect(res.getStatus()).to.equal(200);
-    const pr = res.getBody();
     expect(pr.state).to.equal("SEARCHING");
     expect(pr.lastAction).to.equal("pullslip-printed");
     expect(pr.lastActionResult).to.equal("SUCCESS");

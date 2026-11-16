@@ -1,0 +1,48 @@
+meta {
+  name: Lending side schedule overdue batch
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{host}}/batch_actions
+  body: json
+  auth: basic
+}
+
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+body:json {
+  {
+    "title": "Overdue regression {{recallLendingPrId}}",
+    "actionName": "overdue",
+    "schedule": "FREQ=SECONDLY;INTERVAL=1",
+    "batchQuery": "id = \"{{recallLendingPrId}}\""
+  }
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")));
+}
+
+script:post-response {
+  test("Schedule an overdue batch for this loan", () => {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.getBody().id).to.be.a("string").and.not.empty;
+    bru.setVar("recallOverdueBatchId", res.getBody().id);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

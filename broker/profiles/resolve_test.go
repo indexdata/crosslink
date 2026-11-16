@@ -221,3 +221,82 @@ func TestDiagnosticsProtectCredentials(t *testing.T) {
 	require.NotContains(t, string(diagnostics), "secret-")
 	require.Contains(t, string(diagnostics), "Sierra")
 }
+
+func TestNcipVersionDefaultsAndOverrides(t *testing.T) {
+	for _, vendor := range []string{"Generic", "Alma", "Sierra", "Koha", "FOLIO"} {
+		for _, version := range []string{"", "1.0", "2.02"} {
+			raw := `{"lmsConfig":{"vendor":"` + vendor + `"`
+			if version != "" {
+				raw += `,"ncipVersion":"` + version + `"`
+			}
+			raw += `}}`
+			input := entry(t, raw)
+			effective, err := Resolve(input)
+			require.NoError(t, err)
+			expected, origin := "2.02", "Generic"
+			if version != "" {
+				expected, origin = version, "directory"
+			} else {
+				require.Nil(t, input.LmsConfig.NcipVersion)
+			}
+			require.Equal(t, expected, *effective.LMS.NcipVersion)
+			require.Equal(t, origin, effective.Origins["lmsConfig.ncipVersion"])
+			require.Equal(t, expected, effective.Diagnostics()["lmsConfig"].(object)["ncipVersion"])
+		}
+	}
+}
+
+func TestAdditionalProfileValidationAndOverrides(t *testing.T) {
+	for _, config := range []string{
+		`{"queryConfig":{"identifierNormalization":"bad"}}`,
+		`{"holdingsFormat":{"opac":{"itemLoanPolicySources":["bad"]}}}`,
+		`{"holdingsFormat":{"marc":{"availability":[{"subField":"b","operator":"notIn"}]}}}`,
+	} {
+		_, err := Resolve(entry(t, `{"catalogConfig":`+config+`}`))
+		require.Error(t, err)
+	}
+	e, err := Resolve(entry(t, `{"lmsConfig":{"vendor":"Symphony","ncipVersion":"2.02","bibIdNormalization":"none"},"catalogConfig":{"profile":"Horizon","holdingsFormat":{"opac":{"itemLoanPolicySources":[],"requireItemLoanPolicy":false,"trimWhitespace":false}}}}`))
+	require.NoError(t, err)
+	require.Equal(t, "2.02", *e.LMS.NcipVersion)
+	require.Equal(t, "none", *e.LMS.BibIdNormalization)
+	require.Empty(t, *e.Catalog.HoldingsFormat.Opac.ItemLoanPolicySources)
+	require.False(t, *e.Catalog.HoldingsFormat.Opac.RequireItemLoanPolicy)
+	require.False(t, *e.Catalog.HoldingsFormat.Opac.TrimWhitespace)
+	require.Equal(t, "directory", e.Origins["lmsConfig.ncipVersion"])
+	require.Equal(t, "directory", e.Origins["catalogConfig.holdingsFormat.opac.itemLoanPolicySources"])
+}
+
+func TestBibItemScopeName(t *testing.T) {
+	for _, tc := range []struct{ vendor, want string }{{"Generic", ""}, {"Sierra", "Title"}, {"FOLIO", "Title"}, {"Alma", ""}} {
+		t.Run(tc.vendor, func(t *testing.T) {
+			e, err := Resolve(entry(t, `{"lmsConfig":{"vendor":"`+tc.vendor+`"}}`))
+			require.NoError(t, err)
+			if tc.want == "" {
+				require.Nil(t, e.LMS.BibItemScopeName)
+			} else {
+				require.Equal(t, tc.want, *e.LMS.BibItemScopeName)
+				require.Equal(t, tc.vendor, e.Origins["lmsConfig.bibItemScopeName"])
+			}
+			e, err = Resolve(entry(t, `{"lmsConfig":{"vendor":"`+tc.vendor+`","bibItemScopeName":"Record"}}`))
+			require.NoError(t, err)
+			require.Equal(t, "Record", *e.LMS.BibItemScopeName)
+			require.Equal(t, "directory", e.Origins["lmsConfig.bibItemScopeName"])
+			require.Equal(t, "Record", e.Diagnostics()["lmsConfig"].(object)["bibItemScopeName"])
+		})
+	}
+	for _, value := range []string{"", "  ", "Item", "auto"} {
+		_, err := Resolve(entry(t, `{"lmsConfig":{"bibItemScopeName":"`+value+`"}}`))
+		require.ErrorContains(t, err, "bibItemScopeName")
+	}
+}
+
+func TestDefaultNcipVersionUsesProfileDefault(t *testing.T) {
+	for vendor, want := range map[string]string{"Horizon": "1.0", "Sierra": "2.02"} {
+		raw := entry(t, `{"lmsConfig":{"vendor":"`+vendor+`","ncipVersion":"default"}}`)
+		e, err := Resolve(raw)
+		require.NoError(t, err)
+		require.Equal(t, want, *e.LMS.NcipVersion, vendor)
+		require.NotEqual(t, "directory", e.Origins["lmsConfig.ncipVersion"], "a profile, not the directory, supplies the version")
+		require.Equal(t, "default", *raw.LmsConfig.NcipVersion, "the entry is not mutated")
+	}
+}

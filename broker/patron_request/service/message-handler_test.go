@@ -985,12 +985,14 @@ func TestHandleSupplyingAgencyMessageCancelled(t *testing.T) {
 		},
 		MessageInfo: iso18626.MessageInfo{
 			ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
+			Note:             "#CancellationReason: Item no longer needed#",
 		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled},
 	}, pr_db.PatronRequest{State: BorrowerStateCancelPending, Side: SideBorrowing})
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, BorrowerStateCancelled, mockPrRepo.savedPr.State)
+	assert.Equal(t, pgtype.Text{String: "Item no longer needed", Valid: true}, mockPrRepo.savedPr.CancellationReason)
 	assert.NoError(t, err)
 }
 
@@ -1740,7 +1742,7 @@ func TestExtractRamNotifications(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), new(MockEventBus))
 	// No note
-	err := handler.extractRamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.RequestingAgencyMessage{})
+	err := handler.extractRamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.RequestingAgencyMessage{}, "")
 	assert.NoError(t, err)
 	assert.Equal(t, 0, len(mockPrRepo.savedNotifications))
 
@@ -1757,7 +1759,7 @@ func TestExtractRamNotifications(t *testing.T) {
 			},
 		},
 		Note: "save this",
-	})
+	}, "")
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(mockPrRepo.savedNotifications))
 	assert.Equal(t, "save this", mockPrRepo.savedNotifications[0].Note.String)
@@ -1768,7 +1770,7 @@ func TestExtractRamNotifications(t *testing.T) {
 	mockPrRepo.savedNotifications = nil
 	err = handler.extractRamNotifications(appCtx, pr_db.PatronRequest{ID: "error"}, iso18626.RequestingAgencyMessage{
 		Note: "save this",
-	})
+	}, "")
 	assert.Equal(t, "db error", err.Error())
 	assert.Equal(t, 1, len(mockPrRepo.savedNotifications))
 }
@@ -1835,7 +1837,7 @@ func TestExtractSamNotifications(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), new(MockEventBus))
 	// No note
-	err := handler.extractSamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.SupplyingAgencyMessage{})
+	err := handler.extractSamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.SupplyingAgencyMessage{}, "")
 	assert.NoError(t, err)
 	assert.Equal(t, 0, len(mockPrRepo.savedNotifications))
 
@@ -1873,7 +1875,7 @@ func TestExtractSamNotifications(t *testing.T) {
 				Text: "library use only",
 			},
 		},
-	})
+	}, "")
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(mockPrRepo.savedNotifications))
 	assert.Equal(t, "save this", mockPrRepo.savedNotifications[0].Note.String)
@@ -1882,13 +1884,13 @@ func TestExtractSamNotifications(t *testing.T) {
 	cost, err := mockPrRepo.savedNotifications[0].Cost.Float64Value()
 	assert.NoError(t, err)
 	assert.Equal(t, 1.24, cost.Float64)
-	assert.Equal(t, "library use only", mockPrRepo.savedNotifications[0].Condition.String)
+	assert.Equal(t, "library use only", mockPrRepo.savedNotifications[0].Code.String)
 
 	// Error
 	mockPrRepo.savedNotifications = nil
 	err = handler.extractSamNotifications(appCtx, pr_db.PatronRequest{ID: "error"}, iso18626.SupplyingAgencyMessage{
 		MessageInfo: iso18626.MessageInfo{Note: "save this"},
-	})
+	}, "")
 	assert.Equal(t, "db error", err.Error())
 	assert.Equal(t, 1, len(mockPrRepo.savedNotifications))
 
@@ -1903,7 +1905,7 @@ func TestExtractSamNotifications(t *testing.T) {
 				},
 			},
 		},
-	})
+	}, "")
 	assert.Equal(t, "db error", err.Error())
 	assert.Equal(t, 1, len(mockPrRepo.savedNotifications))
 
@@ -1918,7 +1920,7 @@ func TestExtractSamNotifications(t *testing.T) {
 				},
 			},
 		},
-	})
+	}, "")
 	assert.Equal(t, "db error", err.Error())
 	assert.Equal(t, 1, len(mockPrRepo.savedNotifications))
 
@@ -1929,7 +1931,7 @@ func TestExtractSamNotifications(t *testing.T) {
 				Text: "library use only",
 			},
 		},
-	})
+	}, "")
 	assert.Equal(t, "db error", err.Error())
 	assert.Equal(t, 1, len(mockPrRepo.savedNotifications))
 }
@@ -1954,14 +1956,14 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 		err := handler.extractRamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.RequestingAgencyMessage{
 			Header: makeHeader(),
 			Note:   "plain ram note",
-		})
+		}, "")
 		assert.NoError(t, err)
 		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
 			n := mockPrRepo.savedNotifications[0]
 			assert.Equal(t, "plain ram note", n.Note.String)
 			assert.Equal(t, pr_db.NotificationKindNote, n.Kind)
 			assert.False(t, n.Cost.Valid)
-			assert.False(t, n.Condition.Valid)
+			assert.False(t, n.Code.Valid)
 		}
 	})
 
@@ -1971,7 +1973,7 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 		err := handler.extractRamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.RequestingAgencyMessage{
 			Header: makeHeader(),
 			Note:   shim.RESHARE_LOAN_CONDITION_AGREE,
-		})
+		}, "")
 		assert.NoError(t, err)
 		assert.Len(t, mockPrRepo.savedNotifications, 0)
 	})
@@ -1984,14 +1986,14 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 			MessageInfo: iso18626.MessageInfo{
 				Note: "plain sam note",
 			},
-		})
+		}, "")
 		assert.NoError(t, err)
 		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
 			n := mockPrRepo.savedNotifications[0]
 			assert.Equal(t, "plain sam note", n.Note.String)
 			assert.Equal(t, pr_db.NotificationKindNote, n.Kind)
 			assert.False(t, n.Cost.Valid)
-			assert.False(t, n.Condition.Valid)
+			assert.False(t, n.Code.Valid)
 		}
 	})
 
@@ -2006,12 +2008,12 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 			DeliveryInfo: &iso18626.DeliveryInfo{
 				LoanCondition: &iso18626.TypeSchemeValuePair{Text: "NoReproduction"},
 			},
-		})
+		}, "")
 		assert.NoError(t, err)
 		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
 			n := mockPrRepo.savedNotifications[0]
 			assert.False(t, n.Note.Valid)
-			assert.Equal(t, "NoReproduction", n.Condition.String)
+			assert.Equal(t, "NoReproduction", n.Code.String)
 		}
 	})
 
@@ -2023,7 +2025,7 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 			MessageInfo: iso18626.MessageInfo{
 				Note: common.MULTIPLE_ITEMS + "\nitem001||title one\n" + common.MULTIPLE_ITEMS_END,
 			},
-		})
+		}, "")
 		assert.NoError(t, err)
 		assert.Len(t, mockPrRepo.savedNotifications, 0)
 	})
@@ -2036,13 +2038,13 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 			MessageInfo: iso18626.MessageInfo{
 				Note: "human note\n" + common.MULTIPLE_ITEMS + "\nitem001||title one\n" + common.MULTIPLE_ITEMS_END,
 			},
-		})
+		}, "")
 		assert.NoError(t, err)
 		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
 			n := mockPrRepo.savedNotifications[0]
 			assert.Equal(t, "human note", n.Note.String)
 			assert.False(t, n.Cost.Valid)
-			assert.False(t, n.Condition.Valid)
+			assert.False(t, n.Code.Valid)
 		}
 	})
 
@@ -2054,13 +2056,13 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 			DeliveryInfo: &iso18626.DeliveryInfo{
 				LoanCondition: &iso18626.TypeSchemeValuePair{Text: "NoReproduction"},
 			},
-		})
+		}, "")
 		assert.NoError(t, err)
 		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
 			n := mockPrRepo.savedNotifications[0]
 			assert.False(t, n.Note.Valid)
 			assert.Equal(t, pr_db.NotificationKindCondition, n.Kind)
-			assert.Equal(t, "NoReproduction", n.Condition.String)
+			assert.Equal(t, "NoReproduction", n.Code.String)
 			assert.False(t, n.Cost.Valid)
 		}
 	})
@@ -2076,13 +2078,13 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 					MonetaryValue: utils.XSDDecimal{Base: 500, Exp: -2},
 				},
 			},
-		})
+		}, "")
 		assert.NoError(t, err)
 		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
 			n := mockPrRepo.savedNotifications[0]
 			assert.False(t, n.Note.Valid) // no synthetic "Offered costs" note
 			assert.Equal(t, pr_db.NotificationKindCondition, n.Kind)
-			assert.False(t, n.Condition.Valid)
+			assert.False(t, n.Code.Valid)
 			c, err := n.Cost.Float64Value()
 			assert.NoError(t, err)
 			assert.Equal(t, 5.0, c.Float64)
@@ -2101,7 +2103,7 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 				DeliveryCosts: &iso18626.TypeCosts{CurrencyCode: iso18626.TypeSchemeValuePair{Text: "EUR"}},
 				LoanCondition: &iso18626.TypeSchemeValuePair{Text: "  "},
 			},
-		})
+		}, "")
 		assert.NoError(t, err)
 		assert.Empty(t, mockPrRepo.savedNotifications)
 	})
@@ -2119,7 +2121,7 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 				DeliveryCosts: &iso18626.TypeCosts{CurrencyCode: iso18626.TypeSchemeValuePair{Text: "EUR"}},
 				LoanCondition: &iso18626.TypeSchemeValuePair{Text: "  "},
 			},
-		})
+		}, "")
 		assert.NoError(t, err)
 		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
 			n := mockPrRepo.savedNotifications[0]
@@ -2127,7 +2129,7 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 			assert.Equal(t, "plain sam note", n.Note.String)
 			assert.False(t, n.Cost.Valid)
 			assert.False(t, n.Currency.Valid)
-			assert.False(t, n.Condition.Valid)
+			assert.False(t, n.Code.Valid)
 		}
 	})
 
@@ -2145,7 +2147,7 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 					MonetaryValue: utils.XSDDecimal{Base: 2500, Exp: -2},
 				},
 			},
-		})
+		}, "")
 		assert.NoError(t, err)
 		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
 			n := mockPrRepo.savedNotifications[0]
@@ -2173,7 +2175,7 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
 			n := mockPrRepo.savedNotifications[0]
 			assert.False(t, n.Note.Valid) // no synthetic "Maximum costs" note
-			assert.False(t, n.Condition.Valid)
+			assert.False(t, n.Code.Valid)
 			c, err := n.Cost.Float64Value()
 			assert.NoError(t, err)
 			assert.Equal(t, 1.23, c.Float64)
@@ -2181,60 +2183,66 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 	})
 }
 
-func TestHandleRetryRequestLinksSupplyRequests(t *testing.T) {
-	for _, tc := range []struct {
-		name      string
-		previous  pr_db.PatronRequest
-		lookupErr error
-		wantErr   bool
-	}{
-		{name: "matched", previous: pr_db.PatronRequest{ID: "local-previous"}},
-		{name: "not held locally", lookupErr: pgx.ErrNoRows},
-		{name: "lookup failure", lookupErr: errors.New("lookup failed"), wantErr: true},
-		{name: "already linked", previous: pr_db.PatronRequest{ID: "local-previous", NextReqID: getDbText("existing")}, wantErr: true},
-		{name: "update failure", previous: pr_db.PatronRequest{ID: "error-previous"}, wantErr: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			repo := new(MockPrRepo)
-			repo.On("GetLendingRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "new-remote-id").Return(pr_db.PatronRequest{}, pgx.ErrNoRows)
-			repo.On("GetLendingPredecessorForUpdate", pr_db.GetLendingPredecessorForUpdateParams{
-				SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1"), RequesterReqID: getDbText("old-remote-id"),
-			}).Return(tc.previous, tc.lookupErr)
-			handler := CreatePatronRequestMessageHandler(repo, nil, nil, new(MockEventBus))
-			retry := iso18626.TypeRequestTypeRetry
-			message := iso18626.NewISO18626Message()
-			message.Request = &iso18626.Request{
-				Header: iso18626.Header{
-					RequestingAgencyId:        iso18626.TypeAgencyId{AgencyIdType: iso18626.TypeSchemeValuePair{Text: "ISIL"}, AgencyIdValue: "REQ1"},
-					SupplyingAgencyId:         iso18626.TypeAgencyId{AgencyIdType: iso18626.TypeSchemeValuePair{Text: "ISIL"}, AgencyIdValue: "SUP1"},
-					RequestingAgencyRequestId: "new-remote-id",
-				},
-				ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan, RequestType: &retry, RequestingAgencyPreviousRequestId: "old-remote-id"},
+func TestHandleSuccessorRequestLinksSupplyRequests(t *testing.T) {
+	for _, requestType := range []iso18626.TypeRequestType{iso18626.TypeRequestTypeRetry, iso18626.TypeRequestTypeNew, ""} {
+		t.Run(string(requestType), func(t *testing.T) {
+			for _, tc := range []struct {
+				name      string
+				previous  pr_db.PatronRequest
+				lookupErr error
+				wantErr   bool
+			}{
+				{name: "matched", previous: pr_db.PatronRequest{ID: "local-previous"}},
+				{name: "not held locally", lookupErr: pgx.ErrNoRows},
+				{name: "lookup failure", lookupErr: errors.New("lookup failed"), wantErr: true},
+				{name: "already linked", previous: pr_db.PatronRequest{ID: "local-previous", NextReqID: getDbText("existing")}, wantErr: true},
+				{name: "update failure", previous: pr_db.PatronRequest{ID: "error-previous"}, wantErr: true},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					repo := new(MockPrRepo)
+					repo.On("GetLendingRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "new-remote-id").Return(pr_db.PatronRequest{}, pgx.ErrNoRows)
+					repo.On("GetLendingPredecessorForUpdate", pr_db.GetLendingPredecessorForUpdateParams{
+						SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1"), RequesterReqID: getDbText("old-remote-id"),
+					}).Return(tc.previous, tc.lookupErr)
+					handler := CreatePatronRequestMessageHandler(repo, nil, nil, new(MockEventBus))
+					message := iso18626.NewISO18626Message()
+					message.Request = &iso18626.Request{
+						Header: iso18626.Header{
+							RequestingAgencyId:        iso18626.TypeAgencyId{AgencyIdType: iso18626.TypeSchemeValuePair{Text: "ISIL"}, AgencyIdValue: "REQ1"},
+							SupplyingAgencyId:         iso18626.TypeAgencyId{AgencyIdType: iso18626.TypeSchemeValuePair{Text: "ISIL"}, AgencyIdValue: "SUP1"},
+							RequestingAgencyRequestId: "new-remote-id",
+						},
+						ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan, RequestType: &requestType, RequestingAgencyPreviousRequestId: "old-remote-id"},
+					}
+					if requestType == "" {
+						// Exercise the valid default-New representation without requestType.
+						message.Request.ServiceInfo.RequestType = nil
+					}
+					response, err := handler.HandleMessage(appCtx, message, nil)
+					if tc.wantErr {
+						require.Error(t, err)
+					} else {
+						require.NoError(t, err)
+						require.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
+						if tc.lookupErr == nil {
+							assert.Equal(t, getDbText(tc.previous.ID), repo.createdPr.PrevReqID)
+							assert.Equal(t, getDbText(repo.createdPr.ID), repo.savedPr.NextReqID)
+						} else {
+							assert.False(t, repo.createdPr.PrevReqID.Valid)
+						}
+					}
+					repo.AssertExpectations(t)
+				})
 			}
-			response, err := handler.HandleMessage(appCtx, message, nil)
-			if tc.wantErr {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				require.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
-				if tc.lookupErr == nil {
-					assert.Equal(t, getDbText(tc.previous.ID), repo.createdPr.PrevReqID)
-					assert.Equal(t, getDbText(repo.createdPr.ID), repo.savedPr.NextReqID)
-				} else {
-					assert.False(t, repo.createdPr.PrevReqID.Valid)
-				}
-			}
-			repo.AssertExpectations(t)
 		})
 	}
 }
 
-func TestCreateLendingRequestWithoutRetryPredecessor(t *testing.T) {
+func TestCreateLendingRequestWithoutPredecessor(t *testing.T) {
 	retry, newType := iso18626.TypeRequestTypeRetry, iso18626.TypeRequestTypeNew
 	for _, info := range []*iso18626.ServiceInfo{
 		nil, {}, {RequestType: &retry},
-		{RequestingAgencyPreviousRequestId: "previous"},
-		{RequestType: &newType, RequestingAgencyPreviousRequestId: "previous"},
+		{RequestType: &newType},
 	} {
 		repo := new(MockPrRepo)
 		created, err := CreateLendingRequest(appCtx, repo, pr_db.PatronRequest{ID: "next", Side: SideLending, IllRequest: iso18626.Request{ServiceInfo: info}})
@@ -2242,4 +2250,243 @@ func TestCreateLendingRequestWithoutRetryPredecessor(t *testing.T) {
 		assert.False(t, created.PrevReqID.Valid)
 		assert.Equal(t, "next", created.ID)
 	}
+}
+
+func TestCancellationReasonRequester(t *testing.T) {
+	for _, tt := range []struct {
+		name, note, reason, remainder, code string
+		condition, invalid                  bool
+	}{
+		{name: "reason and note", note: "before #CancellationReason: InvalidUser# after", reason: "InvalidUser", remainder: "before  after", code: "InvalidUser"},
+		{name: "reason only", note: "#CancellationReason: Duplicate Request#", reason: "Duplicate Request", code: "Duplicate Request"},
+		{name: "immediate suffix", note: "#CancellationReason: InvalidUser#Ref: 123#", reason: "InvalidUser", remainder: "Ref: 123#", code: "InvalidUser"},
+		{name: "plain note preserves reason", note: "ordinary note", reason: "existing", remainder: "ordinary note"},
+		{name: "empty marker preserves reason", note: "#CancellationReason: #", reason: "existing", remainder: "#CancellationReason: #"},
+		{name: "condition rejection", note: "#CancellationReason: InvalidUser#" + shim.RESHARE_LOAN_CONDITION_REJECT + "explanation", reason: "InvalidUser", remainder: "explanation", code: "InvalidUser", condition: true},
+		{name: "invalid transition", note: "#CancellationReason: InvalidUser#", invalid: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := new(MockPrRepo)
+			handler := CreatePatronRequestMessageHandler(repo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+			runner := &MockAutoActionRunner{}
+			handler.SetAutoActionRunner(runner)
+			state := LenderStateWillSupply
+			if tt.condition {
+				state = LenderStateConditionPending
+			}
+			if tt.invalid {
+				state = LenderStateCompleted
+			}
+			pr := pr_db.PatronRequest{ID: patronRequestId, State: state, Side: SideLending, CancellationReason: getDbText("existing")}
+			ram := iso18626.RequestingAgencyMessage{Action: iso18626.TypeActionCancel, Note: tt.note}
+			status, _, err := handler.handleRequestingAgencyMessage(appCtx, ram, pr)
+			if tt.invalid {
+				assert.Error(t, err)
+				assert.NotEqual(t, events.EventStatusSuccess, status)
+				assert.Empty(t, repo.savedPr.ID)
+				assert.Empty(t, repo.savedNotifications)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, events.EventStatusSuccess, status)
+			assert.Equal(t, LenderStateCancelRequested, repo.savedPr.State)
+			assert.Equal(t, tt.reason, repo.savedPr.CancellationReason.String)
+			if runner.callCount > 0 {
+				assert.Equal(t, tt.reason, runner.lastPr.CancellationReason.String)
+			}
+			assertCancellationReasonNotification(t, repo.savedNotifications, tt.remainder, tt.code)
+			assert.Equal(t, tt.note, ram.Note)
+			if tt.condition {
+				require.Len(t, repo.markedConditionNotificationsReceipts, 1)
+			}
+		})
+	}
+}
+
+// assertCancellationReasonNotification checks the single notification a cancel
+// message stores: a cancellation_reason row when code is set, otherwise a note.
+func assertCancellationReasonNotification(t *testing.T, saved []pr_db.Notification, remainder, code string) {
+	t.Helper()
+	if remainder == "" && code == "" {
+		assert.Empty(t, saved)
+		return
+	}
+	require.Len(t, saved, 1)
+	n := saved[0]
+	assert.Equal(t, remainder, n.Note.String)
+	assert.Equal(t, remainder != "", n.Note.Valid)
+	if code == "" {
+		assert.Equal(t, pr_db.NotificationKindNote, n.Kind)
+		assert.False(t, n.Code.Valid)
+		return
+	}
+	assert.Equal(t, pr_db.NotificationKindCancellationReason, n.Kind)
+	assert.Equal(t, code, n.Code.String)
+	assert.False(t, n.CodeDescription.Valid, "no peer config is cached in this test")
+}
+
+func TestCancellationReasonSupplier(t *testing.T) {
+	for _, tt := range []struct {
+		name, note, reason, remainder, code string
+		rejected, local, invalid            bool
+	}{
+		{name: "accepted", note: "before #CancellationReason: InvalidUser# after", reason: "InvalidUser", remainder: "before  after", code: "InvalidUser"},
+		{name: "reason only", note: "#CancellationReason: Duplicate Request#", reason: "Duplicate Request", code: "Duplicate Request"},
+		{name: "immediate suffix", note: "#CancellationReason: InvalidUser#Ref: 123#", reason: "InvalidUser", remainder: "Ref: 123#", code: "InvalidUser"},
+		{name: "plain note preserves reason", note: "ordinary note", reason: "existing", remainder: "ordinary note"},
+		{name: "absent preserves reason", reason: "existing"},
+		{name: "rejected", note: "#CancellationReason: Still needed#explanation", reason: "Still needed", remainder: "explanation", code: "Still needed", rejected: true},
+		{name: "local", note: "#CancellationReason: InvalidUser#local note", reason: "InvalidUser", remainder: "local note", code: "InvalidUser", local: true},
+		{name: "contradictory", note: "#CancellationReason: InvalidUser#", invalid: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := new(MockPrRepo)
+			handler := CreatePatronRequestMessageHandler(repo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+			runner := &MockAutoActionRunner{}
+			handler.SetAutoActionRunner(runner)
+			yes, no := iso18626.TypeYesNoY, iso18626.TypeYesNoN
+			pr := pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateCancelPending, Side: SideBorrowing, CancellationReason: getDbText("existing")}
+			sam := iso18626.SupplyingAgencyMessage{MessageInfo: iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse, AnswerYesNo: &yes, Note: tt.note}, StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled}}
+			expectedState := BorrowerStateCancelled
+			if tt.rejected {
+				sam.StatusInfo.Status = iso18626.TypeStatusWillSupply
+				sam.MessageInfo.AnswerYesNo = &no
+				expectedState = BorrowerStateWillSupply
+			}
+			if tt.invalid {
+				sam.MessageInfo.AnswerYesNo = &no
+			}
+			if tt.local {
+				pr.State = BorrowerStateLocalSupply
+				pr.RequesterSymbol = getDbText("ISIL:REQ")
+				sam.Header.SupplyingAgencyId = iso18626.TypeAgencyId{AgencyIdType: iso18626.TypeSchemeValuePair{Text: "ISIL"}, AgencyIdValue: "REQ"}
+				sam.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
+				expectedState = BorrowerStateLocalSupply
+			}
+			status, _, err := handler.handleSupplyingAgencyMessage(appCtx, sam, pr)
+			if tt.invalid {
+				assert.Error(t, err)
+				assert.NotEqual(t, events.EventStatusSuccess, status)
+				assert.Empty(t, repo.savedPr.ID)
+				assert.Empty(t, repo.savedNotifications)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, events.EventStatusSuccess, status)
+			assert.Equal(t, expectedState, repo.savedPr.State)
+			assert.Equal(t, tt.reason, repo.savedPr.CancellationReason.String)
+			if runner.callCount > 0 {
+				assert.Equal(t, tt.reason, runner.lastPr.CancellationReason.String)
+			}
+			assertCancellationReasonNotification(t, repo.savedNotifications, tt.remainder, tt.code)
+			assert.Equal(t, tt.note, sam.MessageInfo.Note)
+		})
+	}
+}
+
+func codedHeader(supplier, requester string) iso18626.Header {
+	return iso18626.Header{
+		SupplyingAgencyId:  iso18626.TypeAgencyId{AgencyIdType: iso18626.TypeSchemeValuePair{Text: "ISIL"}, AgencyIdValue: supplier},
+		RequestingAgencyId: iso18626.TypeAgencyId{AgencyIdType: iso18626.TypeSchemeValuePair{Text: "ISIL"}, AgencyIdValue: requester},
+	}
+}
+
+func peerWithCodes(conditions, unfilled, cancellation map[string]string) ill_db.Peer {
+	toList := func(codes map[string]string) *[]dirapi.IllConfigCodeDescription {
+		list := []dirapi.IllConfigCodeDescription{}
+		for code, desc := range codes {
+			list = append(list, dirapi.IllConfigCodeDescription{Code: code, DefaultDesc: desc})
+		}
+		return &list
+	}
+	return ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{
+		LoanConditions:      toList(conditions),
+		UnfilledReasons:     toList(unfilled),
+		CancellationReasons: toList(cancellation),
+	}}}
+}
+
+func TestExtractNotificationsCodeDescription(t *testing.T) {
+	requester := peerWithCodes(nil, nil, map[string]string{"UserRequest": "User requested cancellation", "LocalCode": "Library-defined reason"})
+	supplier := peerWithCodes(map[string]string{"NoReproduction": "No reproduction"}, map[string]string{"NotOnShelf": "Not on shelf"}, nil)
+
+	for _, tt := range []struct {
+		name     string
+		ram      bool
+		reason   string
+		sam      iso18626.SupplyingAgencyMessage
+		kind     pr_db.NotificationKind
+		code     string
+		desc     string
+		note     string
+		lookupOK bool
+	}{
+		{name: "default cancellation reason", ram: true, reason: "UserRequest", kind: pr_db.NotificationKindCancellationReason, code: "UserRequest", desc: "User requested cancellation", lookupOK: true},
+		{name: "custom cancellation reason", ram: true, reason: "LocalCode", kind: pr_db.NotificationKindCancellationReason, code: "LocalCode", desc: "Library-defined reason", lookupOK: true},
+		{name: "unknown cancellation reason", ram: true, reason: "Free text reason", kind: pr_db.NotificationKindCancellationReason, code: "Free text reason", lookupOK: true},
+		{name: "uncached requester", ram: true, reason: "UserRequest", kind: pr_db.NotificationKindCancellationReason, code: "UserRequest"},
+		{name: "unfilled reason with note", sam: iso18626.SupplyingAgencyMessage{MessageInfo: iso18626.MessageInfo{Note: "sorry", ReasonUnfilled: &iso18626.TypeSchemeValuePair{Text: " NotOnShelf "}}},
+			kind: pr_db.NotificationKindUnfilledReason, code: "NotOnShelf", desc: "Not on shelf", note: "sorry", lookupOK: true},
+		{name: "condition description", sam: iso18626.SupplyingAgencyMessage{DeliveryInfo: &iso18626.DeliveryInfo{LoanCondition: &iso18626.TypeSchemeValuePair{Text: "NoReproduction"}}},
+			kind: pr_db.NotificationKindCondition, code: "NoReproduction", desc: "No reproduction", lookupOK: true},
+		{name: "condition wins over unfilled reason", sam: iso18626.SupplyingAgencyMessage{
+			MessageInfo:  iso18626.MessageInfo{ReasonUnfilled: &iso18626.TypeSchemeValuePair{Text: "NotOnShelf"}},
+			DeliveryInfo: &iso18626.DeliveryInfo{LoanCondition: &iso18626.TypeSchemeValuePair{Text: "NoReproduction"}}},
+			kind: pr_db.NotificationKindCondition, code: "NoReproduction", desc: "No reproduction", lookupOK: true},
+		{name: "unfilled wins over cancellation reason", reason: "UserRequest", sam: iso18626.SupplyingAgencyMessage{MessageInfo: iso18626.MessageInfo{ReasonUnfilled: &iso18626.TypeSchemeValuePair{Text: "NotOnShelf"}}},
+			kind: pr_db.NotificationKindUnfilledReason, code: "NotOnShelf", desc: "Not on shelf", lookupOK: true},
+		{name: "supplier cancellation reason", reason: "Duplicate", kind: pr_db.NotificationKindCancellationReason, code: "Duplicate", lookupOK: true},
+		{name: "blank unfilled reason is a note", sam: iso18626.SupplyingAgencyMessage{MessageInfo: iso18626.MessageInfo{Note: "n", ReasonUnfilled: &iso18626.TypeSchemeValuePair{Text: " "}}},
+			kind: pr_db.NotificationKindNote, note: "n", lookupOK: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := new(MockPrRepo)
+			illRepo := new(IllRepoMock)
+			if tt.lookupOK {
+				illRepo.On("GetPeerBySymbol", "ISIL:REQ").Return(requester, nil).Maybe()
+				illRepo.On("GetPeerBySymbol", "ISIL:SUP").Return(supplier, nil).Maybe()
+			} else {
+				illRepo.On("GetPeerBySymbol", mock.Anything).Return(ill_db.Peer{}, pgx.ErrNoRows)
+			}
+			handler := CreatePatronRequestMessageHandler(repo, *new(events.EventRepo), illRepo, new(MockEventBus))
+			var err error
+			if tt.ram {
+				err = handler.extractRamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.RequestingAgencyMessage{Header: codedHeader("SUP", "REQ")}, tt.reason)
+			} else {
+				tt.sam.Header = codedHeader("SUP", "REQ")
+				err = handler.extractSamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, tt.sam, tt.reason)
+			}
+			require.NoError(t, err)
+			require.Len(t, repo.savedNotifications, 1)
+			n := repo.savedNotifications[0]
+			assert.Equal(t, tt.kind, n.Kind)
+			assert.Equal(t, pr_db.NotificationDirectionReceived, n.Direction)
+			assert.Equal(t, tt.code, n.Code.String)
+			assert.Equal(t, tt.code != "", n.Code.Valid)
+			assert.Equal(t, tt.desc, n.CodeDescription.String)
+			assert.Equal(t, tt.desc != "", n.CodeDescription.Valid)
+			assert.Equal(t, tt.note, n.Note.String)
+			if tt.ram {
+				assert.Equal(t, "ISIL:REQ", n.FromSymbol)
+			} else {
+				assert.Equal(t, "ISIL:SUP", n.FromSymbol)
+			}
+		})
+	}
+}
+
+func TestExtractNotificationsSameCodeFromTwoPeers(t *testing.T) {
+	illRepo := new(IllRepoMock)
+	illRepo.On("GetPeerBySymbol", "ISIL:REQA").Return(peerWithCodes(nil, nil, map[string]string{"Other": "Patron moved away"}), nil)
+	illRepo.On("GetPeerBySymbol", "ISIL:REQB").Return(peerWithCodes(nil, nil, map[string]string{"Other": "Ordered elsewhere"}), nil)
+	repo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(repo, *new(events.EventRepo), illRepo, new(MockEventBus))
+
+	for _, requester := range []string{"REQA", "REQB"} {
+		err := handler.extractRamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.RequestingAgencyMessage{Header: codedHeader("SUP", requester)}, "Other")
+		require.NoError(t, err)
+	}
+	require.Len(t, repo.savedNotifications, 2)
+	assert.Equal(t, "Patron moved away", repo.savedNotifications[0].CodeDescription.String)
+	assert.Equal(t, "Ordered elsewhere", repo.savedNotifications[1].CodeDescription.String)
 }

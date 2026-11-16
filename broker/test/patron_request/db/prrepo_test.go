@@ -23,6 +23,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var prRepo pr_db.PrRepo
@@ -236,7 +237,7 @@ func TestItem(t *testing.T) {
 			Valid:  true,
 		},
 		CreatedAt: pgtype.Timestamp{
-			Time:  time.Now().Add(time.Hour),
+			Time:  time.Now().UTC().Add(time.Hour),
 			Valid: true,
 		},
 	})
@@ -368,7 +369,7 @@ func TestNotification(t *testing.T) {
 			String: "EUR",
 			Valid:  true,
 		},
-		Condition: pgtype.Text{
+		Code: pgtype.Text{
 			String: "c123",
 			Valid:  true,
 		},
@@ -391,7 +392,7 @@ func TestNotification(t *testing.T) {
 	assert.Equal(t, pr_db.NotificationDirectionReceived, notification.Direction)
 	assert.Equal(t, "n123", notification.Note.String)
 	assert.Equal(t, "EUR", notification.Currency.String)
-	assert.Equal(t, "c123", notification.Condition.String)
+	assert.Equal(t, "c123", notification.Code.String)
 	assert.Equal(t, pr_db.NotificationSeen, notification.Receipt)
 	cost, err := notification.Cost.Float64Value()
 	assert.NoError(t, err)
@@ -420,7 +421,7 @@ func TestNotification(t *testing.T) {
 			String: "USD",
 			Valid:  true,
 		},
-		Condition: pgtype.Text{
+		Code: pgtype.Text{
 			String: "c12",
 			Valid:  true,
 		},
@@ -443,7 +444,7 @@ func TestNotification(t *testing.T) {
 	assert.Equal(t, pr_db.NotificationDirectionSent, notification.Direction)
 	assert.Equal(t, "n12", notification.Note.String)
 	assert.Equal(t, "USD", notification.Currency.String)
-	assert.Equal(t, "c12", notification.Condition.String)
+	assert.Equal(t, "c12", notification.Code.String)
 	assert.Equal(t, pr_db.NotificationAccepted, notification.Receipt)
 	cost, err = notification.Cost.Float64Value()
 	assert.NoError(t, err)
@@ -463,6 +464,35 @@ func TestNotification(t *testing.T) {
 	assert.Len(t, notifications, 1)
 	assert.Equal(t, notificaitonId, notifications[0].ID)
 	assert.Equal(t, int64(1), fullCount)
+
+	// Reason kinds store their code and description and filter by kind
+	reason, err := prRepo.SaveNotification(appCtx, pr_db.SaveNotificationParams{
+		ID:              uuid.NewString(),
+		PrID:            prId,
+		FromSymbol:      "ISIL:REQ",
+		ToSymbol:        "ISIL:SUP",
+		Direction:       pr_db.NotificationDirectionReceived,
+		Kind:            pr_db.NotificationKindCancellationReason,
+		Code:            pgtype.Text{String: "LocalCode", Valid: true},
+		CodeDescription: pgtype.Text{String: "Library-defined reason", Valid: true},
+		CreatedAt:       pgtype.Timestamp{Time: time.Now(), Valid: true},
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, "Library-defined reason", reason.CodeDescription.String)
+	notifications, fullCount, err = prRepo.GetNotificationsByPrId(appCtx, pr_db.GetNotificationsByPrIdParams{PrID: prId, Limit: 10, Offset: 0, Kind: string(pr_db.NotificationKindCancellationReason)})
+	assert.NoError(t, err)
+	if assert.Len(t, notifications, 1) {
+		assert.Equal(t, reason.ID, notifications[0].ID)
+		assert.Equal(t, "LocalCode", notifications[0].Code.String)
+		assert.Equal(t, "Library-defined reason", notifications[0].CodeDescription.String)
+	}
+	assert.Equal(t, int64(1), fullCount)
+	notifications, _, err = prRepo.GetNotificationsByPrId(appCtx, pr_db.GetNotificationsByPrIdParams{PrID: prId, Limit: 10, Offset: 0, Kind: string(pr_db.NotificationKindCondition)})
+	assert.NoError(t, err)
+	if assert.Len(t, notifications, 1) {
+		assert.Equal(t, notificaitonId, notifications[0].ID)
+		assert.False(t, notifications[0].CodeDescription.Valid)
+	}
 
 	err = prRepo.DeletePatronRequest(appCtx, prId)
 	assert.NoError(t, err)
@@ -583,20 +613,108 @@ func TestMarkConditionNotificationsReceipt(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestListPatronRequestsDateWithin(t *testing.T) {
+	requesterSymbol := uuid.NewString()
+	ids := make([]string, 0, 5)
+	for _, timestamp := range []string{
+		"2026-09-16T23:59:59.999999Z",
+		"2026-09-17T00:00:00Z",
+		"2026-09-17T12:00:00Z",
+		"2026-09-17T23:59:59.999999Z",
+		"2026-09-18T00:00:00Z",
+	} {
+		createdAt, err := time.Parse(time.RFC3339Nano, timestamp)
+		require.NoError(t, err)
+		id := uuid.NewString()
+		_, err = prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+			ID: id, CreatedAt: pgtype.Timestamp{Time: createdAt, Valid: true},
+			RequesterSymbol: pgtype.Text{String: requesterSymbol, Valid: true},
+			Language:        "english", Items: []pr_db.PrItem{},
+		})
+		require.NoError(t, err)
+		t.Cleanup(func() { assert.NoError(t, prRepo.DeletePatronRequest(appCtx, id)) })
+		ids = append(ids, id)
+	}
+	for _, tc := range []struct {
+		name, upper string
+		wantIDs     []string
+	}{
+		{"whole final day", "2026-09-17", ids[1:4]},
+		{"explicit midnight", "2026-09-17T00:00:00Z", ids[1:2]},
+		{"explicit timestamp", "2026-09-17T12:00:00Z", ids[1:3]},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			query, err := pr_db.ParsePatronRequestsCql(`requester_symbol_exact = "` + requesterSymbol +
+				`" and created_at within "2026-09-17 ` + tc.upper + `"`)
+			require.NoError(t, err)
+			list, count, err := prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{Limit: 10}, query)
+			require.NoError(t, err)
+			gotIDs := make([]string, 0, len(list))
+			for _, request := range list {
+				gotIDs = append(gotIDs, request.ID)
+			}
+			assert.ElementsMatch(t, tc.wantIDs, gotIDs)
+			assert.Equal(t, int64(len(tc.wantIDs)), count)
+		})
+	}
+}
+
+func TestListPatronRequestsStateAny(t *testing.T) {
+	requesterSymbol := uuid.NewString()
+	wantIDs := make([]string, 0, 2)
+	for _, state := range []pr_db.PatronRequestState{
+		prservice.BorrowerStateValidated,
+		prservice.BorrowerStateShippedReturned,
+		prservice.BorrowerStateCompleted,
+	} {
+		id := uuid.NewString()
+		_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+			ID:              id,
+			CreatedAt:       pgtype.Timestamp{Time: time.Now(), Valid: true},
+			Side:            prservice.SideBorrowing,
+			State:           state,
+			RequesterSymbol: pgtype.Text{String: requesterSymbol, Valid: true},
+			Language:        "english",
+			Items:           []pr_db.PrItem{},
+		})
+		require.NoError(t, err)
+		t.Cleanup(func() { assert.NoError(t, prRepo.DeletePatronRequest(appCtx, id)) })
+		if state != prservice.BorrowerStateShippedReturned {
+			wantIDs = append(wantIDs, id)
+		}
+	}
+
+	query, err := pr_db.ParsePatronRequestsCql(`requester_symbol_exact = "` + requesterSymbol +
+		`" and state any "VALIDATED COMPLETED"`)
+	require.NoError(t, err)
+	list, count, err := prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{Limit: 10}, query)
+	require.NoError(t, err)
+	gotIDs := make([]string, 0, len(list))
+	for _, request := range list {
+		gotIDs = append(gotIDs, request.ID)
+	}
+	assert.ElementsMatch(t, wantIDs, gotIDs)
+	assert.Equal(t, int64(2), count)
+}
+
 func TestListPatronRequests(t *testing.T) {
 	prIds := []string{}
+	itemIds := []string{}
 
-	// Create 2 requests; only the first carries an internal note
+	// Create 2 requests; only the first carries an internal note and cancellation reason
 	for i := 0; i < 2; i++ {
 		prId := uuid.NewString()
 		prIds = append(prIds, prId)
 		var internalNote pgtype.Text
+		var cancellationReason pgtype.Text
 		if i == 0 {
 			internalNote = pgtype.Text{String: "staff only", Valid: true}
+			cancellationReason = pgtype.Text{String: "already available", Valid: true}
 		}
 		_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
-			ID:           prId,
-			InternalNote: internalNote,
+			ID:                 prId,
+			InternalNote:       internalNote,
+			CancellationReason: cancellationReason,
 			CreatedAt: pgtype.Timestamp{
 				Time:  time.Now(),
 				Valid: true,
@@ -656,6 +774,48 @@ func TestListPatronRequests(t *testing.T) {
 		})
 		assert.NoError(t, err)
 	}
+	firstItemId := uuid.NewString()
+	itemIds = append(itemIds, firstItemId)
+	_, err := prRepo.SaveItem(appCtx, pr_db.SaveItemParams{
+		ID:      firstItemId,
+		PrID:    prIds[0],
+		Barcode: "BarCode-123",
+		CallNumber: pgtype.Text{
+			String: "Call-123",
+			Valid:  true,
+		},
+		Title: pgtype.Text{
+			String: "Item title",
+			Valid:  true,
+		},
+		ItemID: pgtype.Text{
+			String: "Item-123",
+			Valid:  true,
+		},
+		CreatedAt: pgtype.Timestamp{
+			Time:  time.Now(),
+			Valid: true,
+		},
+	})
+	assert.NoError(t, err)
+
+	secondItemId := uuid.NewString()
+	itemIds = append(itemIds, secondItemId)
+	_, err = prRepo.SaveItem(appCtx, pr_db.SaveItemParams{
+		ID:      secondItemId,
+		PrID:    prIds[0],
+		Barcode: "barcode-456",
+		Title: pgtype.Text{
+			String: "Second item title",
+			Valid:  true,
+		},
+		CreatedAt: pgtype.Timestamp{
+			Time:  time.Now(),
+			Valid: true,
+		},
+	})
+	assert.NoError(t, err)
+
 	cql := "title = Androids"
 	pgcql, err := pr_db.ParsePatronRequestsCql(cql)
 	assert.NoError(t, err)
@@ -756,6 +916,119 @@ func TestListPatronRequests(t *testing.T) {
 	assert.Len(t, list, 2)
 	assert.Equal(t, int64(2), fullCount)
 
+	cql = `item_id = "item-123"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, pgcql)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.Equal(t, prIds[0], list[0].ID)
+	assert.Equal(t, int64(1), fullCount)
+
+	cql = `barcode = "barcode-123"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, pgcql)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.Equal(t, prIds[0], list[0].ID)
+	assert.Equal(t, int64(1), fullCount)
+
+	cql = `barcode = "barcode-*"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, pgcql)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.Equal(t, prIds[0], list[0].ID)
+	assert.Equal(t, int64(1), fullCount)
+
+	cql = `call_number = "call-123"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, pgcql)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.Equal(t, prIds[0], list[0].ID)
+	assert.Equal(t, int64(1), fullCount)
+
+	cql = `barcode <> "barcode-123"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, pgcql)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.Equal(t, prIds[1], list[0].ID)
+	assert.Equal(t, int64(1), fullCount)
+
+	cql = `call_number = ""`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, pgcql)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.Equal(t, prIds[1], list[0].ID)
+	assert.Equal(t, int64(1), fullCount)
+
+	cql = `call_number <> ""`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	require.NoError(t, err)
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, pgcql)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.Equal(t, prIds[0], list[0].ID)
+	assert.Equal(t, int64(1), fullCount)
+
+	for _, field := range []struct {
+		name string
+		term string
+	}{
+		{"item_id", "ITEM-123"},
+		{"barcode", "BARCODE-123"},
+		{"call_number", "CALL-123"},
+	} {
+		for _, relation := range []string{"=", "<>"} {
+			for _, term := range []string{field.term, field.term[:len(field.term)-1] + "*"} {
+				t.Run(field.name+relation+term, func(t *testing.T) {
+					query, err := pr_db.ParsePatronRequestsCql(field.name + " " + relation + ` "` + term + `"`)
+					require.NoError(t, err)
+					list, count, err := prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+						Limit: 10,
+					}, query)
+					require.NoError(t, err)
+					require.Len(t, list, 1)
+					wantID := prIds[0]
+					if relation == "<>" {
+						wantID = prIds[1]
+					}
+					assert.Equal(t, wantID, list[0].ID)
+					assert.Equal(t, int64(1), count)
+				})
+			}
+		}
+	}
+
 	// not found
 	cql = "title = banners"
 	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
@@ -792,6 +1065,7 @@ func TestListPatronRequests(t *testing.T) {
 	if assert.Len(t, list, 1) {
 		assert.Equal(t, prIds[0], list[0].ID)
 		assert.Equal(t, "staff only", list[0].InternalNote.String)
+		assert.Equal(t, "already available", list[0].CancellationReason.String)
 	}
 
 	// has_internal_note=false selects requests without one
@@ -807,6 +1081,10 @@ func TestListPatronRequests(t *testing.T) {
 		assert.Equal(t, prIds[1], list[0].ID)
 	}
 
+	for _, itemId := range itemIds {
+		err = prRepo.DeleteItemById(appCtx, itemId)
+		assert.NoError(t, err)
+	}
 	for _, prId := range prIds {
 		err = prRepo.DeletePatronRequest(appCtx, prId)
 		assert.NoError(t, err)
@@ -831,5 +1109,140 @@ func TestRequesterPickupLocationPersistence(t *testing.T) {
 	updated, err := prRepo.UpdatePatronRequest(appCtx, pr_db.UpdatePatronRequestParams(pr))
 	if assert.NoError(t, err) {
 		assert.Equal(t, pr.RequesterPickupLocationID, updated.RequesterPickupLocationID)
+	}
+}
+
+func TestGetTemplateNotificationsKeepsConditionsBehindManyNotes(t *testing.T) {
+	prId := uuid.NewString()
+	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID:            prId,
+		CreatedAt:     pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Language:      "english",
+		Items:         []pr_db.PrItem{},
+		TerminalState: false,
+	})
+	require.NoError(t, err)
+	save := func(kind pr_db.NotificationKind, at time.Time) string {
+		id := uuid.NewString()
+		_, err := prRepo.SaveNotification(appCtx, pr_db.SaveNotificationParams{
+			ID: id, PrID: prId, FromSymbol: "ISIL:SUP", ToSymbol: "ISIL:REQ",
+			Direction: pr_db.NotificationDirectionReceived, Kind: kind,
+			Note:      pgtype.Text{String: string(kind), Valid: true},
+			CreatedAt: pgtype.Timestamp{Time: at, Valid: true},
+		})
+		require.NoError(t, err)
+		return id
+	}
+	// More notes than either category's limit, all older than the only condition.
+	start := time.Now().Add(-time.Hour)
+	reasonID := save(pr_db.NotificationKindCancellationReason, start)
+	for i := range 250 {
+		save(pr_db.NotificationKindNote, start.Add(time.Duration(i+1)*time.Second))
+	}
+	conditionID := save(pr_db.NotificationKindCondition, start.Add(time.Hour))
+
+	notes, conditions, err := pr_db.GetTemplateNotifications(appCtx, prRepo, prId)
+
+	require.NoError(t, err)
+	require.Len(t, conditions, 1)
+	assert.Equal(t, conditionID, conditions[0].ID)
+	assert.Len(t, notes, 100)
+	assert.Equal(t, reasonID, notes[0].ID, "reason notifications count as staff notes")
+	for _, n := range notes {
+		assert.NotEqual(t, pr_db.NotificationKindCondition, n.Kind)
+	}
+
+	// exclude_kind composes with the other filters and reports its own full count.
+	_, fullCount, err := prRepo.GetNotificationsByPrId(appCtx, pr_db.GetNotificationsByPrIdParams{Limit: 1, PrID: prId, ExcludeKind: string(pr_db.NotificationKindCondition)})
+	require.NoError(t, err)
+	assert.Equal(t, int64(251), fullCount)
+	_, fullCount, err = prRepo.GetNotificationsByPrId(appCtx, pr_db.GetNotificationsByPrIdParams{Limit: 1, PrID: prId})
+	require.NoError(t, err)
+	assert.Equal(t, int64(252), fullCount)
+}
+
+func TestGetTemplateNotificationsKeepsNotesBehindManyReasonOnlyRows(t *testing.T) {
+	prId := uuid.NewString()
+	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID:            prId,
+		CreatedAt:     pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Language:      "english",
+		Items:         []pr_db.PrItem{},
+		TerminalState: false,
+	})
+	require.NoError(t, err)
+	save := func(kind pr_db.NotificationKind, code, note pgtype.Text, at time.Time) string {
+		id := uuid.NewString()
+		_, err := prRepo.SaveNotification(appCtx, pr_db.SaveNotificationParams{
+			ID: id, PrID: prId, FromSymbol: "ISIL:SUP", ToSymbol: "ISIL:REQ",
+			Direction: pr_db.NotificationDirectionReceived, Kind: kind, Code: code, Note: note,
+			CreatedAt: pgtype.Timestamp{Time: at, Valid: true},
+		})
+		require.NoError(t, err)
+		return id
+	}
+	// More reason-only rows than the staff-note limit, all older than the only notes.
+	start := time.Now().Add(-time.Hour)
+	for i := range 150 {
+		kind := pr_db.NotificationKindUnfilledReason
+		if i%2 == 0 {
+			kind = pr_db.NotificationKindCancellationReason
+		}
+		save(kind, pgtype.Text{String: "Code", Valid: true}, pgtype.Text{}, start.Add(time.Duration(i)*time.Second))
+	}
+	save(pr_db.NotificationKindNote, pgtype.Text{}, pgtype.Text{String: "", Valid: true}, start.Add(30*time.Minute))
+	reasonNoteID := save(pr_db.NotificationKindUnfilledReason, pgtype.Text{String: "NotOnShelf", Valid: true}, pgtype.Text{String: "Searched the shelf", Valid: true}, start.Add(40*time.Minute))
+	noteID := save(pr_db.NotificationKindNote, pgtype.Text{}, pgtype.Text{String: "Please call the patron", Valid: true}, start.Add(time.Hour))
+
+	notes, _, err := pr_db.GetTemplateNotifications(appCtx, prRepo, prId)
+
+	require.NoError(t, err)
+	noteIDs := []string{}
+	for _, n := range notes {
+		noteIDs = append(noteIDs, n.ID)
+	}
+	assert.Equal(t, []string{reasonNoteID, noteID}, noteIDs, "reason-only and blank rows must not use up the staff-note limit")
+
+	// Without with_note, reason-only rows are still listed, e.g. for the chat timeline.
+	_, fullCount, err := prRepo.GetNotificationsByPrId(appCtx, pr_db.GetNotificationsByPrIdParams{Limit: 1, PrID: prId})
+	require.NoError(t, err)
+	assert.Equal(t, int64(153), fullCount)
+	_, fullCount, err = prRepo.GetNotificationsByPrId(appCtx, pr_db.GetNotificationsByPrIdParams{Limit: 1, PrID: prId, WithNote: true})
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), fullCount)
+}
+
+func TestPatronRequestBibRecordIDPersistence(t *testing.T) {
+	id := uuid.NewString()
+	pr, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID: id, CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Language: "english", Items: []pr_db.PrItem{},
+		IllRequest:  iso18626.Request{BibliographicInfo: iso18626.BibliographicInfo{Title: "Shared index"}},
+		BibRecordID: pgtype.Text{String: "shared-record", Valid: true},
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, prRepo.DeletePatronRequest(appCtx, id)) })
+	for _, expected := range []pgtype.Text{pr.BibRecordID, {String: "updated-record", Valid: true}, {}} {
+		pr.BibRecordID = expected
+		pr, err = prRepo.UpdatePatronRequest(appCtx, pr_db.UpdatePatronRequestParams(pr))
+		require.NoError(t, err)
+		persisted, err := prRepo.GetPatronRequestById(appCtx, id)
+		require.NoError(t, err)
+		assert.Equal(t, expected, persisted.BibRecordID)
+		view, err := prRepo.GetPatronRequestSearchView(appCtx, id)
+		require.NoError(t, err)
+		assert.Equal(t, expected, view.BibRecordID)
+		query, err := pr_db.ParsePatronRequestsCql(`id = "` + id + `"`)
+		require.NoError(t, err)
+		rows, count, err := prRepo.ListPatronRequestsSearchView(appCtx, pr_db.ListPatronRequestsParams{Limit: 10}, query)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, count)
+		require.Len(t, rows, 1)
+		assert.Equal(t, expected, rows[0].BibRecordID)
+		requests, count, err := prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{Limit: 10}, query)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, count)
+		require.Len(t, requests, 1)
+		assert.Equal(t, expected, requests[0].BibRecordID)
 	}
 }

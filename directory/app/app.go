@@ -25,6 +25,7 @@ import (
 	"github.com/indexdata/crosslink/directory/enhancedcontext"
 	importdb "github.com/indexdata/crosslink/directory/import/db"
 	importservice "github.com/indexdata/crosslink/directory/import/service"
+	"github.com/indexdata/crosslink/directory/policy"
 )
 
 var Host = cmp.Or(os.Getenv("HOST"), "localhost")
@@ -67,14 +68,20 @@ func InitHandler(ctx context.Context, dbpool *pgxpool.Pool) http.Handler {
 		os.Exit(1)
 	}
 
+	inheritance, err := policy.Compile(swagger)
+	if err != nil {
+		slog.ErrorContext(ctx, "Invalid inheritance policy", "error", err)
+		os.Exit(1)
+	}
+
 	queries := db.New(dbpool)
-	importRepo := importdb.New(dbpool)
+	importRepo := importdb.New(dbpool, inheritance)
 	importer, err := importservice.New(importRepo, swagger)
 	if err != nil {
 		slog.ErrorContext(ctx, "Invalid import schemas", "error", err)
 		os.Exit(1)
 	}
-	impl := api.NewApiImpl(dbpool, queries, importer)
+	impl := api.NewApiImpl(dbpool, queries, importer, inheritance)
 	si := api.NewStrictHandler(impl, nil)
 	m := http.NewServeMux()
 	h := api.HandlerWithOptions(si, api.StdHTTPServerOptions{

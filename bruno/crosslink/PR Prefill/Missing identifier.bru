@@ -1,0 +1,27 @@
+meta {
+  name: Missing identifier
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{host}}/patron_requests/prefill?serviceType=Loan
+  body: none
+  auth: basic
+}
+
+headers {
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+  X-Okapi-User-Id: {{userName}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+tests {
+  test("Prefill response", function () {
+    expect(res.getStatus()).to.equal(400);
+  });
+}

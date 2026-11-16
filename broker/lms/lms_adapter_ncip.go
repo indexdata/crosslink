@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/indexdata/crosslink/broker/ncipclient"
-	"github.com/indexdata/crosslink/broker/profiles"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/ncip"
 )
@@ -49,18 +48,10 @@ func (l *LmsAdapterNcip) requestItemRequestScopeType() string {
 	if l.config.RequestItemRequestScopeType != nil {
 		return *l.config.RequestItemRequestScopeType
 	}
-	return "Item"
+	return autoRequestScope
 }
 
-func CreateLmsAdapterNcip(lmsConfig dirapi.LmsConfig) (LmsAdapter, error) {
-	effective, err := profiles.Resolve(dirapi.Entry{LmsConfig: &lmsConfig})
-	if err != nil {
-		return nil, err
-	}
-	return createResolvedLmsAdapterNcip(*effective.LMS)
-}
-
-func createResolvedLmsAdapterNcip(lmsConfig dirapi.LmsConfig) (LmsAdapter, error) {
+func createResolvedLmsAdapterNcip2(lmsConfig dirapi.LmsConfig) (LmsAdapter, error) {
 	l := &LmsAdapterNcip{config: lmsConfig}
 	toAgency := "default-to-agency"
 	if l.config.ToAgency != nil {
@@ -204,16 +195,19 @@ func ncipEmailAddress(address *ncip.ElectronicAddress) string {
 }
 
 func (l *LmsAdapterNcip) validatePatronProfile(response *ncip.LookupUserResponse) error {
-	if l.config.PatronProfiles == nil {
+	return validatePatronProfileCandidates(l.config, patronProfileCandidates(response))
+}
+
+func validatePatronProfileCandidates(config dirapi.LmsConfig, candidates []patronProfileCandidate) error {
+	if config.PatronProfiles == nil {
 		return nil
 	}
-	candidates := patronProfileCandidates(response)
 	if len(candidates) == 0 {
 		// Keep an empty candidate so a rule without a code can
 		// provide the configured default when no profile was returned.
 		candidates = []patronProfileCandidate{{}}
 	}
-	for _, profile := range *l.config.PatronProfiles {
+	for _, profile := range *config.PatronProfiles {
 		for _, candidate := range candidates {
 			codeMatches := profile.Code == nil || strings.EqualFold(strings.TrimSpace(*profile.Code), candidate.code)
 			if codeMatches {
@@ -242,17 +236,27 @@ func patronProfileCandidates(response *ncip.LookupUserResponse) []patronProfileC
 	}
 	privileges := response.UserOptionalFields.UserPrivilege
 
+	normalized := make([]patronPrivilege, 0, len(privileges))
+	for _, p := range privileges {
+		normalized = append(normalized, patronPrivilege{code: p.AgencyUserPrivilegeType.Text, status: userPrivilegeStatus(p), name: p.UserPrivilegeDescription})
+	}
+	return profileCandidates(normalized)
+}
+
+type patronPrivilege struct{ code, status, name string }
+
+func profileCandidates(privileges []patronPrivilege) []patronProfileCandidate {
 	// Most implementations return PROFILE as the privilege type and the
 	// patron profile code as its status value. Treat this explicit discriminator
 	// as authoritative when it is present.
 	var candidates []patronProfileCandidate
 	for _, privilege := range privileges {
-		privilegeType := strings.TrimSpace(privilege.AgencyUserPrivilegeType.Text)
-		status := userPrivilegeStatus(privilege)
+		privilegeType := strings.TrimSpace(privilege.code)
+		status := privilege.status
 		if strings.EqualFold(privilegeType, "PROFILE") && status != "" {
 			candidates = append(candidates, patronProfileCandidate{
 				code: status,
-				name: strings.TrimSpace(privilege.UserPrivilegeDescription),
+				name: strings.TrimSpace(privilege.name),
 			})
 		}
 	}
@@ -264,12 +268,12 @@ func patronProfileCandidates(response *ncip.LookupUserResponse) []patronProfileC
 	// use Active or OK as its status. All such privileges are candidates: NCIP
 	// permits UserPrivilege to repeat and unrelated privileges may come first.
 	for _, privilege := range privileges {
-		privilegeType := strings.TrimSpace(privilege.AgencyUserPrivilegeType.Text)
-		status := userPrivilegeStatus(privilege)
+		privilegeType := strings.TrimSpace(privilege.code)
+		status := privilege.status
 		if privilegeType != "" && (strings.EqualFold(status, "ACTIVE") || strings.EqualFold(status, "OK")) {
 			candidates = append(candidates, patronProfileCandidate{
 				code: privilegeType,
-				name: strings.TrimSpace(privilege.UserPrivilegeDescription),
+				name: strings.TrimSpace(privilege.name),
 			})
 		}
 	}
@@ -279,10 +283,10 @@ func patronProfileCandidates(response *ncip.LookupUserResponse) []patronProfileC
 
 	// Some implementations return just one privilege containing the profile
 	// code, without a status.
-	if len(privileges) == 1 && userPrivilegeStatus(privileges[0]) == "" {
+	if len(privileges) == 1 && privileges[0].status == "" {
 		return []patronProfileCandidate{{
-			code: strings.TrimSpace(privileges[0].AgencyUserPrivilegeType.Text),
-			name: strings.TrimSpace(privileges[0].UserPrivilegeDescription),
+			code: strings.TrimSpace(privileges[0].code),
+			name: strings.TrimSpace(privileges[0].name),
 		}}
 	}
 	return nil
@@ -306,9 +310,9 @@ func (l *LmsAdapterNcip) AcceptItem(
 	callNumber string,
 	pickupLocation string,
 	requestedAction string,
-) (bool, error) {
+) (*AcceptedItem, error) {
 	if l.config.AcceptItemEnabled != nil && !*l.config.AcceptItemEnabled {
-		return false, nil
+		return nil, nil
 	}
 	var bibliographicItemId *ncip.BibliographicItemId
 	if isbn != "" {
@@ -346,7 +350,10 @@ func (l *LmsAdapterNcip) AcceptItem(
 		PickupLocation:      pickupLocationField,
 	}
 	_, err := l.ncipClient.AcceptItem(arg)
-	return err == nil, err
+	if err != nil {
+		return nil, err
+	}
+	return &AcceptedItem{ItemID: itemId}, nil
 }
 
 // DeleteItem confirms requester LMS item removal, including an already absent item.
@@ -368,7 +375,7 @@ func (l *LmsAdapterNcip) DeleteItem(itemId string) (bool, error) {
 
 func (l *LmsAdapterNcip) RequestItem(
 	requestId string,
-	itemId string,
+	identifier RequestItemIdentifier,
 	userId string,
 	pickupLocation string,
 	itemLocation string,
@@ -391,18 +398,17 @@ func (l *LmsAdapterNcip) RequestItem(
 	if l.config.RequestItemBibIdCode != nil {
 		code = *l.config.RequestItemBibIdCode
 	}
-	if l.config.BibIdNormalization != nil && *l.config.BibIdNormalization == "sierra" {
-		itemId = strings.TrimPrefix(itemId, ".b")
-		if len(itemId) > 1 && itemId[len(itemId)-1] >= '0' && itemId[len(itemId)-1] <= '9' {
-			itemId = itemId[:len(itemId)-1]
-		}
+	identifierValue, scope, err := identifier.resolve(l.config)
+	if err != nil {
+		return nil, err
 	}
+	itemScope := scope == string(ncip.Item)
 	bibIdField := ncip.BibliographicId{
 		BibliographicRecordId: &ncip.BibliographicRecordId{
-			BibliographicRecordIdentifier:     itemId,
+			BibliographicRecordIdentifier:     identifierValue,
 			BibliographicRecordIdentifierCode: &ncip.SchemeValuePair{Text: code},
 		}}
-	requestScopeTypeField := ncip.SchemeValuePair{Text: l.requestItemRequestScopeType()}
+	requestScopeTypeField := ncip.SchemeValuePair{Text: scope}
 	requestTypeField := ncip.SchemeValuePair{Text: l.requestItemRequestType()}
 
 	var itemOptionalFields *ncip.ItemOptionalFields
@@ -423,6 +429,7 @@ func (l *LmsAdapterNcip) RequestItem(
 	}
 	itemElements := []ncip.SchemeValuePair{
 		{Text: string(NCIPBibliographicDescription)},
+		{Text: "Location"},
 	}
 	arg := ncip.RequestItem{
 		RequestId:          &ncip.RequestId{RequestIdentifierValue: requestId},
@@ -433,6 +440,10 @@ func (l *LmsAdapterNcip) RequestItem(
 		RequestScopeType:   requestScopeTypeField,
 		ItemOptionalFields: itemOptionalFields,
 		ItemElementType:    itemElements,
+	}
+	if itemScope {
+		arg.BibliographicId = nil
+		arg.ItemId = []ncip.ItemId{{ItemIdentifierValue: identifierValue}}
 	}
 	response, err := l.ncipClient.RequestItem(arg)
 	if err != nil {
@@ -457,16 +468,51 @@ func (l *LmsAdapterNcip) RequestItem(
 	if response.ItemOptionalFields != nil && response.ItemOptionalFields.BibliographicDescription != nil {
 		title = response.ItemOptionalFields.BibliographicDescription.Title
 	}
+	location, shelvingLocation := requestedItemLocations(response.ItemOptionalFields)
 	lmsRequestID := requestId
 	if response.RequestId != nil && strings.TrimSpace(response.RequestId.RequestIdentifierValue) != "" {
 		lmsRequestID = response.RequestId.RequestIdentifierValue
 	}
 	return &RequestedItem{
-		RequestID:  lmsRequestID,
-		Barcode:    barcode,
-		CallNumber: callNumber,
-		Title:      title,
+		RequestID:        lmsRequestID,
+		Barcode:          barcode,
+		CallNumber:       callNumber,
+		Title:            title,
+		Location:         location,
+		ShelvingLocation: shelvingLocation,
 	}, nil
+}
+
+func requestedItemLocations(fields *ncip.ItemOptionalFields) (string, string) {
+	if fields == nil {
+		return "", ""
+	}
+	for _, itemLocation := range fields.Location {
+		names := itemLocation.LocationName.LocationNameInstance
+		var location, shelvingLocation string
+		for _, name := range names {
+			if strings.TrimSpace(name.LocationNameValue) == "" {
+				continue
+			}
+			switch name.LocationNameLevel {
+			case 1:
+				if location == "" {
+					location = strings.TrimSpace(name.LocationNameValue)
+				}
+			case 2:
+				if shelvingLocation == "" {
+					shelvingLocation = strings.TrimSpace(name.LocationNameValue)
+				}
+			}
+		}
+		if shelvingLocation == "" && location != "" && len(names) == 1 {
+			shelvingLocation = location
+		}
+		if location != "" || shelvingLocation != "" {
+			return location, shelvingLocation
+		}
+	}
+	return "", ""
 }
 
 func (l *LmsAdapterNcip) CancelRequestItem(requestId string, userId string) error {
@@ -475,6 +521,10 @@ func (l *LmsAdapterNcip) CancelRequestItem(requestId string, userId string) erro
 		RequestId:        &ncip.RequestId{RequestIdentifierValue: requestId},
 		RequestType:      ncip.SchemeValuePair{Text: l.requestItemRequestType()},
 		RequestScopeType: &ncip.SchemeValuePair{Text: l.requestItemRequestScopeType()},
+	}
+	// Scope is optional for cancellation by request ID; auto is not an NCIP value.
+	if l.requestItemRequestScopeType() == autoRequestScope {
+		arg.RequestScopeType = nil
 	}
 	_, err := l.ncipClient.CancelRequestItem(arg)
 	return err

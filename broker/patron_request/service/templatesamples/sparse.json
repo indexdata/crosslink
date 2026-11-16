@@ -1,0 +1,13 @@
+{
+  "request": {
+    "ID": "sample-sparse",
+    "CreatedAt": "2026-07-01T09:30:00Z",
+    "State": "WILL_SUPPLY",
+    "Side": "lending",
+    "SupplierSymbol": "ISIL:US-SUP",
+    "RequesterReqID": "REQ-7",
+    "StateModel": "default"
+  },
+  "notes": [],
+  "conditions": []
+}

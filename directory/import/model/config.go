@@ -7,11 +7,12 @@ import (
 )
 
 type LMSConfig struct {
+	NcipVersion                      *string          `json:"ncipVersion"`
 	Vendor                           *string          `json:"vendor"`
 	NcipNamespaceEnabled             *bool            `json:"ncipNamespaceEnabled"`
 	BibIDNormalization               *string          `json:"bibIdNormalization"`
-	Address                          string           `json:"address"`
-	FromAgency                       string           `json:"fromAgency"`
+	Address                          *string          `json:"address"`
+	FromAgency                       *string          `json:"fromAgency"`
 	FromAgencyAuthentication         *string          `json:"fromAgencyAuthentication"`
 	ToAgency                         *string          `json:"toAgency"`
 	LookupUserEnabled                *bool            `json:"lookupUserEnabled"`
@@ -21,6 +22,7 @@ type LMSConfig struct {
 	ItemLocation                     *string          `json:"itemLocation"`
 	RequestItemRequestType           *string          `json:"requestItemRequestType"`
 	RequestItemRequestScopeType      *string          `json:"requestItemRequestScopeType"`
+	BibItemScopeName                 *string          `json:"bibItemScopeName"`
 	RequestItemBibIDCode             *string          `json:"requestItemBibIdCode"`
 	RequestItemEnabled               *bool            `json:"requestItemEnabled"`
 	RequestItemPickupLocationEnabled *bool            `json:"requestItemPickupLocationEnabled"`
@@ -36,23 +38,33 @@ type PatronProfile struct {
 	CanCreateRequests bool    `json:"canCreateRequests"`
 }
 
+// IllConfigCodeDescription is an imported ILL code and its default description.
+type IllConfigCodeDescription struct {
+	Code        string `json:"code"`
+	DefaultDesc string `json:"defaultDesc"`
+}
+
 type ILLConfig struct {
-	LoadBalancingPolicy         *string     `json:"loadBalancingPolicy"`
-	IsPickupLocation            *bool       `json:"isPickupLocation"`
-	DefaultLoanPeriod           *int32      `json:"defaultLoanPeriod"`
-	MaxRequestsPerPatron        *int32      `json:"maxRequestsPerPatron"`
-	MinimumCost                 *float64    `json:"minimumCost"`
-	ISO18626URL                 *string     `json:"iso18626Url"`
-	ISO18626Vendor              *string     `json:"iso18626Vendor"`
-	LendersOfLastResort         []uuid.UUID `json:"lendersOfLastResort"`
-	IncludeRequestingAgencyInfo *bool       `json:"includeRequestingAgencyInfo"`
-	IncludeSupplierInfo         *bool       `json:"includeSupplierInfo"`
-	IncludeReturnInfo           *bool       `json:"includeReturnInfo"`
-	IncludeVendorNote           *bool       `json:"includeVendorNote"`
-	UseOfferedCosts             *bool       `json:"useOfferedCosts"`
-	NoteFieldSeparator          *string     `json:"noteFieldSeparator"`
-	SupplierPatronPattern       *string     `json:"supplierPatronPattern"`
-	DuplicateCheckWindowHours   *int32      `json:"duplicateCheckWindowHours"`
+	DefaultCopyrightType        *IllConfigCodeDescription   `json:"defaultCopyrightType"`
+	LoanConditions              *[]IllConfigCodeDescription `json:"loanConditions"`
+	UnfilledReasons             *[]IllConfigCodeDescription `json:"unfilledReasons"`
+	CancellationReasons         *[]IllConfigCodeDescription `json:"cancellationReasons"`
+	LoadBalancingPolicy         *string                     `json:"loadBalancingPolicy"`
+	IsPickupLocation            *bool                       `json:"isPickupLocation"`
+	DefaultLoanPeriod           *int32                      `json:"defaultLoanPeriod"`
+	MaxRequestsPerPatron        *int32                      `json:"maxRequestsPerPatron"`
+	MinimumCost                 *float64                    `json:"minimumCost"`
+	ISO18626URL                 *string                     `json:"iso18626Url"`
+	ISO18626Vendor              *string                     `json:"iso18626Vendor"`
+	LendersOfLastResort         []uuid.UUID                 `json:"lendersOfLastResort"`
+	IncludeRequestingAgencyInfo *bool                       `json:"includeRequestingAgencyInfo"`
+	IncludeSupplierInfo         *bool                       `json:"includeSupplierInfo"`
+	IncludeReturnInfo           *bool                       `json:"includeReturnInfo"`
+	IncludeVendorNote           *bool                       `json:"includeVendorNote"`
+	UseOfferedCosts             *bool                       `json:"useOfferedCosts"`
+	NoteFieldSeparator          *string                     `json:"noteFieldSeparator"`
+	SupplierPatronPattern       *string                     `json:"supplierPatronPattern"`
+	DuplicateCheckWindowHours   *int32                      `json:"duplicateCheckWindowHours"`
 }
 
 type CatalogConfig struct {
@@ -76,12 +88,14 @@ type ZoomConfig struct {
 }
 
 type QueryConfig struct {
-	Type       *string `json:"type"`
-	Identifier *string `json:"identifier"`
-	ISBN       *string `json:"isbn"`
-	ISSN       *string `json:"issn"`
-	Title      *string `json:"title"`
-	Year       *string `json:"year,omitempty"`
+	IdentifierNormalization *string `json:"identifierNormalization,omitempty"`
+	IdentifierPrefix        *string `json:"identifierPrefix,omitempty"`
+	Type                    *string `json:"type"`
+	Identifier              *string `json:"identifier"`
+	ISBN                    *string `json:"isbn"`
+	ISSN                    *string `json:"issn"`
+	Title                   *string `json:"title"`
+	Year                    *string `json:"year,omitempty"`
 }
 
 type HoldingsParserConfig struct {
@@ -92,6 +106,7 @@ type HoldingsParserConfig struct {
 }
 
 type MarcHoldingsParserConfig struct {
+	ItemLoanPolicySubField   *string                      `json:"itemLoanPolicySubField,omitempty"`
 	Availability             *[]MarcAvailabilityPredicate `json:"availability,omitempty"`
 	CallNumberSubField       *string                      `json:"callNumberSubField,omitempty"`
 	ItemIDSubField           *string                      `json:"itemIdSubField,omitempty"`
@@ -102,12 +117,17 @@ type MarcHoldingsParserConfig struct {
 }
 
 type MarcAvailabilityPredicate struct {
-	SubField string  `json:"subField"`
-	Operator string  `json:"operator"`
-	Value    *string `json:"value,omitempty"`
+	Values   *[]string `json:"values,omitempty"`
+	SubField string    `json:"subField"`
+	Operator string    `json:"operator"`
+	Value    *string   `json:"value,omitempty"`
 }
 
 type OpacHoldingsParserConfig struct {
+	TrimWhitespace           *bool     `json:"trimWhitespace,omitempty"`
+	ExcludedLocations        *[]string `json:"excludedLocations,omitempty"`
+	ItemLoanPolicySources    *[]string `json:"itemLoanPolicySources,omitempty"`
+	RequireItemLoanPolicy    *bool     `json:"requireItemLoanPolicy,omitempty"`
 	AvailabilityRule         *string   `json:"availabilityRule,omitempty"`
 	AvailablePublicNotes     *[]string `json:"availablePublicNotes,omitempty"`
 	RequireLocalLocation     *bool     `json:"requireLocalLocation,omitempty"`
@@ -115,7 +135,8 @@ type OpacHoldingsParserConfig struct {
 	IncludeItemID            *bool     `json:"includeItemId,omitempty"`
 	IncludeItemLoanPolicy    *bool     `json:"includeItemLoanPolicy,omitempty"`
 	IncludeTemporaryLocation *bool     `json:"includeTemporaryLocation,omitempty"`
-	AllCirculations          *bool     `json:"allCirculations,omitempty"`
+	// Deprecated: accepted for compatibility; all available circulations are returned.
+	AllCirculations *bool `json:"allCirculations,omitempty"`
 }
 
 type MetadataParserConfig struct {
@@ -123,13 +144,16 @@ type MetadataParserConfig struct {
 }
 
 type MarcMetadataParserConfig struct {
-	Author     *string `json:"author"`
-	Edition    *string `json:"edition"`
-	Identifier *string `json:"identifier"`
-	ISBN       *string `json:"isbn"`
-	ISSN       *string `json:"issn"`
-	Subtitle   *string `json:"subtitle"`
-	Title      *string `json:"title"`
+	Publisher          *string `json:"publisher,omitempty"`
+	PublicationDate    *string `json:"publicationDate,omitempty"`
+	PlaceOfPublication *string `json:"placeOfPublication,omitempty"`
+	Author             *string `json:"author"`
+	Edition            *string `json:"edition"`
+	Identifier         *string `json:"identifier"`
+	ISBN               *string `json:"isbn"`
+	ISSN               *string `json:"issn"`
+	Subtitle           *string `json:"subtitle"`
+	Title              *string `json:"title"`
 }
 
 type HoldingsPolicy struct {
@@ -161,15 +185,18 @@ type HoldingsItemLoanPolicy struct {
 
 func validateConfigEnums(lms *LMSConfig, catalog *CatalogConfig, ill *ILLConfig) error {
 	if lms != nil {
-		if lms.Vendor != nil && !oneOf(*lms.Vendor, "Generic", "Alma", "Sierra", "Koha", "FOLIO", "WMS", "Aleph") {
+		if lms.Vendor != nil && !oneOf(*lms.Vendor, "Generic", "Alma", "Sierra", "Koha", "FOLIO", "WMS", "Aleph", "Evergreen", "Horizon", "Polaris", "Symphony") {
 			return fmt.Errorf("invalid lmsConfig.vendor")
 		}
-		if lms.BibIDNormalization != nil && !oneOf(*lms.BibIDNormalization, "none", "sierra") {
+		if lms.BibIDNormalization != nil && !oneOf(*lms.BibIDNormalization, "none", "sierra", "stripLeadingNonDigits") {
 			return fmt.Errorf("invalid lmsConfig.bibIdNormalization")
 		}
 	}
 	if catalog != nil {
-		if catalog.Profile != nil && !oneOf(*catalog.Profile, "Generic", "Alma", "Sierra", "Koha", "FOLIO", "WMS", "Aleph") {
+		if q := catalog.Query; q != nil && q.IdentifierNormalization != nil && !oneOf(*q.IdentifierNormalization, "none", "stripLeadingLetters") {
+			return fmt.Errorf("invalid catalogConfig.queryConfig.identifierNormalization")
+		}
+		if catalog.Profile != nil && !oneOf(*catalog.Profile, "Generic", "Alma", "Sierra", "Koha", "FOLIO", "WMS", "Aleph", "Evergreen", "Horizon", "Polaris", "Symphony") {
 			return fmt.Errorf("invalid catalogConfig.profile")
 		}
 		if catalog.SRU != nil && catalog.Zoom != nil {
@@ -187,12 +214,19 @@ func validateConfigEnums(lms *LMSConfig, catalog *CatalogConfig, ill *ILLConfig)
 			}
 			if h.Marc != nil && h.Marc.Availability != nil {
 				for _, predicate := range *h.Marc.Availability {
-					if predicate.SubField == "" || !oneOf(predicate.Operator, "equals", "absent") || (predicate.Operator == "equals" && predicate.Value == nil) {
+					if predicate.SubField == "" || !oneOf(predicate.Operator, "equals", "absent", "present", "notIn") || (predicate.Operator == "equals" && predicate.Value == nil) || (predicate.Operator == "notIn" && predicate.Values == nil) {
 						return fmt.Errorf("invalid catalogConfig.holdingsFormat.marc.availability predicate")
 					}
 				}
 			}
 			if h.OPAC != nil {
+				if h.OPAC.ItemLoanPolicySources != nil {
+					for _, source := range *h.OPAC.ItemLoanPolicySources {
+						if !oneOf(source, "availableThru", "shelvingData", "temporaryLocation") {
+							return fmt.Errorf("invalid catalogConfig.holdingsFormat.opac.itemLoanPolicySources")
+						}
+					}
+				}
 				if h.OPAC.AvailabilityRule != nil && !oneOf(*h.OPAC.AvailabilityRule, "availableNow", "publicNote") {
 					return fmt.Errorf("invalid catalogConfig.holdingsFormat.opac.availabilityRule")
 				}

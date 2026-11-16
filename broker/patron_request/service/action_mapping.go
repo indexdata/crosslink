@@ -252,6 +252,7 @@ func (r *ActionMapping) GetAllowedActionsForPatronRequest(pr pr_db.PatronRequest
 	allowedActions := proapi.AllowedActions{
 		Actions: []proapi.AllowedAction{},
 	}
+	config, _ := r.getStateConfig(pr)
 	for _, action := range actionEntries {
 		if action.actionName == BorrowerActionRerequest && pr.NextReqID.Valid {
 			continue
@@ -259,6 +260,9 @@ func (r *ActionMapping) GetAllowedActionsForPatronRequest(pr pr_db.PatronRequest
 		name := string(action.actionName)
 		if pr.LastAction.String == name && prLastActionFailed {
 			hasFailed = true
+		}
+		if trigger := config.actions[action.actionName].Trigger; trigger != nil && strings.EqualFold(string(*trigger), string(proapi.Background)) {
+			continue
 		}
 		if action.auto && !hasFailed {
 			continue

@@ -18,6 +18,7 @@ import (
 	"github.com/indexdata/crosslink/testutil"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var illRepo IllRepo
@@ -332,4 +333,22 @@ func containsSlice(searchSymbols []string, foundSymbols []string) bool {
 		}
 	}
 	return false
+}
+
+func TestLocatedSupplierSelectedItemPersistence(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	peer, err := illRepo.SavePeer(ctx, SavePeerParams{ID: "item-policy-peer", Name: "Item policy peer", RefreshPolicy: RefreshPolicyTransaction, RefreshTime: pgtype.Timestamp{Time: time.Now(), Valid: true}, Url: "https://supplier.invalid"})
+	require.NoError(t, err)
+	_, err = illRepo.SaveIllTransaction(ctx, SaveIllTransactionParams{ID: "item-policy-transaction", Timestamp: pgtype.Timestamp{Time: time.Now(), Valid: true}})
+	require.NoError(t, err)
+	params := SaveLocatedSupplierParams{ID: "item-policy-supplier", IllTransactionID: "item-policy-transaction", SupplierID: peer.ID, SupplierSymbol: "ISIL:ITEM", LocalID: pgtype.Text{String: "bib", Valid: true}}
+	for _, item := range []pgtype.Text{{}, {String: "first", Valid: true}, {String: "replacement", Valid: true}, {}} {
+		params.ItemID = item
+		require.NoError(t, illRepo.WithTxFunc(ctx, func(repo IllRepo) error { _, err := repo.SaveLocatedSupplier(ctx, params); return err }))
+		rows, _, err := illRepo.GetLocatedSuppliersByIllTransaction(ctx, params.IllTransactionID)
+		require.NoError(t, err)
+		require.Len(t, rows, 1)
+		require.Equal(t, item, rows[0].ItemID)
+		require.Equal(t, params.LocalID, rows[0].LocalID)
+	}
 }

@@ -3,6 +3,7 @@ package catalog
 import (
 	"encoding/xml"
 	"fmt"
+	"slices"
 	"strings"
 
 	dirapi "github.com/indexdata/crosslink/directory/api"
@@ -14,7 +15,7 @@ type MarcHoldingsParser struct {
 }
 
 func NewMarcHoldingsParser(config dirapi.MarcHoldingsParserConfig) HoldingsParser {
-	if config.MainField == nil && config.LocationSubField == nil && config.ShelvingLocationSubField == nil && config.CallNumberSubField == nil && config.ItemIdSubField == nil && config.RestrictedSubField == nil && config.Availability == nil {
+	if config.MainField == nil && config.LocationSubField == nil && config.ShelvingLocationSubField == nil && config.CallNumberSubField == nil && config.ItemIdSubField == nil && config.RestrictedSubField == nil && config.Availability == nil && config.ItemLoanPolicySubField == nil {
 		config.MainField = NewString("852")
 		config.LocationSubField = NewString("b")
 		config.ShelvingLocationSubField = NewString("c")
@@ -49,6 +50,7 @@ func (p *MarcHoldingsParser) Parse(record []byte, params LookupParams) ([]Holdin
 			var shelvingLocation string
 			var callNumber string
 			var itemId string
+			var itemLoanPolicy string
 			for _, subfield := range field.Subfield {
 				if p.config.LocationSubField != nil && subfield.Code == *p.config.LocationSubField {
 					location = strings.TrimSpace(string(subfield.Text))
@@ -62,22 +64,28 @@ func (p *MarcHoldingsParser) Parse(record []byte, params LookupParams) ([]Holdin
 				if p.config.ItemIdSubField != nil && subfield.Code == *p.config.ItemIdSubField {
 					itemId = strings.TrimSpace(string(subfield.Text))
 				}
+				if p.config.ItemLoanPolicySubField != nil && subfield.Code == *p.config.ItemLoanPolicySubField {
+					itemLoanPolicy = strings.TrimSpace(string(subfield.Text))
+				}
 				if p.config.RestrictedSubField != nil && subfield.Code == *p.config.RestrictedSubField {
 					restricted = true
 				}
 			}
 			if p.config.Availability != nil {
 				for _, rule := range *p.config.Availability {
-					found, matches := false, false
+					found, matches, excluded := false, false, false
 					for _, sub := range field.Subfield {
 						if sub.Code == rule.SubField {
 							found = true
+							if rule.Values != nil && slices.Contains(*rule.Values, string(sub.Text)) {
+								excluded = true
+							}
 							if rule.Value != nil && string(sub.Text) == *rule.Value {
 								matches = true
 							}
 						}
 					}
-					if (rule.Operator == "absent" && found) || (rule.Operator == "equals" && !matches) {
+					if (rule.Operator == "absent" && found) || (rule.Operator == "equals" && !matches) || (rule.Operator == "present" && !found) || (rule.Operator == "notIn" && excluded) {
 						restricted = true
 					}
 				}
@@ -88,6 +96,7 @@ func (p *MarcHoldingsParser) Parse(record []byte, params LookupParams) ([]Holdin
 					ShelvingLocation: shelvingLocation,
 					CallNumber:       callNumber,
 					ItemId:           itemId,
+					ItemLoanPolicy:   itemLoanPolicy,
 				})
 			}
 		}

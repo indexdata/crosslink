@@ -6,6 +6,10 @@ import "errors"
 // because none of the parameters supported by its query builder are present.
 var ErrMissingLookupParameters = errors.New("missing lookup parameters")
 
+// ErrHoldingsParse identifies a holdings-parser failure for a catalog record.
+// Connection, search and retrieval errors do not use it.
+var ErrHoldingsParse = errors.New("holdings parsing failed")
+
 type missingLookupParametersError struct {
 	message string
 }
@@ -27,6 +31,8 @@ type LookupAdapter interface {
 }
 
 type LookupResult interface {
+	// HasRecord reports whether a catalog record was returned, even without metadata or holdings.
+	HasRecord() bool
 	GetQuery() string
 	GetHoldings() ([]Holding, error)
 	GetMetadata() (Metadata, error)
@@ -66,11 +72,15 @@ type MetadataParser interface {
 }
 
 type Metadata struct {
-	Identifier string
-	Title      string
-	Subtitle   string
-	Author     string
-	Edition    string
-	Isbn       string
-	Issn       string
+	Publisher          string
+	PublicationDate    string
+	PlaceOfPublication string
+	PublicationType    string
+	Identifier         string
+	Title              string
+	Subtitle           string
+	Author             string
+	Edition            string
+	Isbn               string
+	Issn               string
 }

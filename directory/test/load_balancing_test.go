@@ -12,7 +12,8 @@ import (
 func TestLoadBalancingPolicyPersistenceAndValidation(t *testing.T) {
 	resetDb()
 	headers := map[string]string{"X-Okapi-Tenant": "ANINST", "X-Okapi-Permissions": `["directory.consortium.all"]`}
-	path := "/entries/by-id/00000000-0000-0000-0000-000000000002"
+	// The policy is consortium-wide: only the consortium may store one.
+	path := "/entries/by-id/00000000-0000-0000-0000-000000000004"
 	for _, tc := range []struct {
 		body   string
 		status int
@@ -39,6 +40,16 @@ func TestLoadBalancingPolicyPersistenceAndValidation(t *testing.T) {
 			assert.False(t, present)
 		}
 	}
-	_, err := dbpool.Exec(context.Background(), `UPDATE ill_configs SET load_balancing_policy='invalid' WHERE entry='00000000-0000-0000-0000-000000000002'`)
+	_, err := dbpool.Exec(context.Background(), `UPDATE ill_configs SET load_balancing_policy='invalid' WHERE entry='00000000-0000-0000-0000-000000000004'`)
 	require.Error(t, err, "database constraint rejects invalid policies")
+
+	institution := "/entries/by-id/00000000-0000-0000-0000-000000000002"
+	response, body := jsonReq(t, http.MethodPatch, institution, `{"illConfig":{"loadBalancingPolicy":"deficit"}}`, headers)
+	require.Equal(t, http.StatusBadRequest, response.StatusCode, body)
+	require.Equal(t, "illConfig.loadBalancingPolicy is not editable on Institution", body)
+	response, body = jsonReq(t, http.MethodPatch, path, `{"illConfig":{"loadBalancingPolicy":"deficit"}}`, headers)
+	require.Equal(t, http.StatusNoContent, response.StatusCode, body)
+	response, body = jsonReq(t, http.MethodGet, institution, "", headers)
+	require.Equal(t, http.StatusOK, response.StatusCode, body)
+	require.NotContains(t, body, "loadBalancingPolicy", "the consortium policy is never inherited")
 }

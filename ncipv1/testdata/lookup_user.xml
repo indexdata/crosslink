@@ -1,0 +1,33 @@
+<NCIPMessage version="http://www.niso.org/ncip/v1_0/imp1/dtd/ncip_v1_0.dtd">
+  <LookupUser>
+    <InitiationHeader>
+      <FromAgencyId>
+        <UniqueAgencyId>
+          <Scheme>urn:agency</Scheme>
+          <Value>sender</Value>
+        </UniqueAgencyId>
+      </FromAgencyId>
+      <ToAgencyId>
+        <UniqueAgencyId>
+          <Scheme>urn:agency</Scheme>
+          <Value>supplier</Value>
+        </UniqueAgencyId>
+      </ToAgencyId>
+    </InitiationHeader>
+    <UniqueUserId>
+      <UniqueAgencyId>
+        <Scheme>urn:agency</Scheme>
+        <Value>supplier</Value>
+      </UniqueAgencyId>
+      <UserIdentifierValue>test-user</UserIdentifierValue>
+    </UniqueUserId>
+    <UserElementType>
+      <Scheme>urn:user-elements</Scheme>
+      <Value>Name Information</Value>
+    </UserElementType>
+    <UserElementType>
+      <Scheme>urn:user-elements</Scheme>
+      <Value>User Address Information</Value>
+    </UserElementType>
+  </LookupUser>
+</NCIPMessage>

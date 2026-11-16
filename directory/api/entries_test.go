@@ -104,6 +104,112 @@ func TestHandleEntryCQL(t *testing.T) {
 	}
 }
 
+func TestHandleEntryCQLCaseInsensitive(t *testing.T) {
+	for _, field := range []string{"name", "description"} {
+		t.Run(field, func(t *testing.T) {
+			for _, tc := range []struct {
+				clause string
+				op     string
+				term   string
+			}{
+				{`="Central Library"`, "=", "Central Library"},
+				{`=="Central Library"`, "=", "Central Library"},
+				{` exact "Central Library"`, "=", "Central Library"},
+				{`<>"Central Library"`, "<>", "Central Library"},
+				{`="*Central?Library*"`, "LIKE", "%Central_Library%"},
+				{`<>"*Central*"`, "NOT LIKE", "%Central%"},
+				{`="Central\*Library"`, "=", "Central*Library"},
+				{`="*A\"B\\C*"`, "LIKE", "%A\"B\\\\C%"},
+				{`="*Central_100%*"`, "LIKE", "%Central\\_100\\%%"},
+			} {
+				t.Run(tc.clause, func(t *testing.T) {
+					res, err := handleEntryCQL(field+tc.clause, 0)
+					if err != nil {
+						t.Fatalf("translate CQL: %v", err)
+					}
+					want := "lower(e." + field + ") " + tc.op + " lower($1)"
+					if got := res.GetWhereClause(); got != want {
+						t.Errorf("WHERE clause = %q, want %q", got, want)
+					}
+					if got := res.GetQueryArguments(); !reflect.DeepEqual(got, []any{tc.term}) {
+						t.Errorf("arguments = %#v, want %#v", got, []any{tc.term})
+					}
+				})
+			}
+		})
+	}
+
+	t.Run("combined fields with existing arguments", func(t *testing.T) {
+		res, err := handleEntryCQL(`name="*Central*" OR description="*Library*"`, 1)
+		if err != nil {
+			t.Fatalf("translate combined CQL: %v", err)
+		}
+		want := "lower(e.name) LIKE lower($2) OR lower(e.description) LIKE lower($3)"
+		if got := res.GetWhereClause(); got != want {
+			t.Errorf("WHERE clause = %q, want %q", got, want)
+		}
+		if got := res.GetQueryArguments(); !reflect.DeepEqual(got, []any{"%Central%", "%Library%"}) {
+			t.Errorf("unexpected arguments: %#v", got)
+		}
+	})
+
+	t.Run("type remains case sensitive", func(t *testing.T) {
+		res, err := handleEntryCQL(`type="*Institution*"`, 0)
+		if err != nil {
+			t.Fatalf("translate type CQL: %v", err)
+		}
+		if got := res.GetWhereClause(); got != "e.type LIKE $1" {
+			t.Errorf("unexpected type predicate: %s", got)
+		}
+	})
+}
+
+func TestHandleEntryCQLServerChoice(t *testing.T) {
+	for _, tc := range []struct {
+		query string
+		term  string
+	}{
+		{`cql.serverChoice="Central Library"`, "'Central'&'Library'"},
+		{`"Central Library"`, "'Central'&'Library'"},
+		{`cql.serverChoice all "Central Library"`, "'Central'&'Library'"},
+		{`cql.serverChoice any "Central Library"`, "'Central'|'Library'"},
+		{`cql.serverChoice adj "Central Library"`, "'Central'<->'Library'"},
+		{`cql.serverChoice="Centr*"`, "'Centr':*"},
+		{`cql.serverChoice="O'Brien"`, "'O''Brien'"},
+		{`cql.serverChoice="A\"B\\C"`, "'A\"B\\C'"},
+	} {
+		t.Run(tc.query, func(t *testing.T) {
+			res, err := handleEntryCQL(tc.query, 0)
+			if err != nil {
+				t.Fatalf("translate serverChoice CQL: %v", err)
+			}
+			if got := res.GetWhereClause(); got != "e.search @@ to_tsquery('simple', $1)" {
+				t.Errorf("unexpected search predicate: %s", got)
+			}
+			if got := res.GetQueryArguments(); !reflect.DeepEqual(got, []any{tc.term}) {
+				t.Errorf("arguments = %#v, want %#v", got, []any{tc.term})
+			}
+		})
+	}
+	t.Run("composes with existing filters and offsets", func(t *testing.T) {
+		res, err := handleEntryCQL(`cql.serverChoice="Central" AND isPickupLocation=true`, 1)
+		if err != nil {
+			t.Fatalf("translate combined CQL: %v", err)
+		}
+		if got := res.GetWhereClause(); !strings.HasPrefix(got, "e.search @@ to_tsquery('simple', $2) AND ") || !strings.HasSuffix(got, " = $3") {
+			t.Errorf("unexpected combined predicate: %s", got)
+		}
+		if got := res.GetQueryArguments(); !reflect.DeepEqual(got, []any{"'Central'", true}) {
+			t.Errorf("unexpected combined arguments: %#v", got)
+		}
+	})
+	for _, query := range []string{`cql.serverChoice="*central*"`, `cql.serverChoice="centr?"`} {
+		if _, err := handleEntryCQL(query, 0); err == nil {
+			t.Errorf("expected unsupported wildcard error for %s", query)
+		}
+	}
+}
+
 func TestBuildOwnedEntryListQueryScopesCQL(t *testing.T) {
 	cqlQuery := `name="Owned" OR tenant="OTHER"`
 	limit := Limit(5)

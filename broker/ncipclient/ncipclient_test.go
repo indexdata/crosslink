@@ -81,7 +81,7 @@ func TestLookupUserAutoInvalidUser(t *testing.T) {
 	}
 	_, err := ncipClient.LookupUser(lookup)
 	assert.Error(t, err)
-	assert.Equal(t, "NCIP user lookup failed: Unknown User: foo", err.Error())
+	assert.Equal(t, "NCIP user lookup failed: Unknown User", err.Error())
 	var ncipErr *NcipError
 	assert.ErrorAs(t, logErr, &ncipErr)
 	assert.Equal(t, string(ncip.UnknownUser), ncipErr.Problem.ProblemType.Text)
@@ -301,7 +301,7 @@ func TestLookupUserProblemResponse(t *testing.T) {
 	}
 	_, err := ncipClient.LookupUser(lookup)
 	assert.Error(t, err)
-	assert.Equal(t, "NCIP message processing failed: Some Problem: Details about the problem", err.Error())
+	assert.Equal(t, "NCIP message processing failed: Some Problem", err.Error())
 	var ncipErr *NcipError
 	assert.ErrorAs(t, logErr, &ncipErr)
 	assert.Equal(t, "Some Problem", ncipErr.Problem.ProblemType.Text)
@@ -349,7 +349,7 @@ func TestAcceptItemMissingTitle(t *testing.T) {
 	}
 	_, err := ncipClient.AcceptItem(accept)
 	assert.Error(t, err)
-	assert.Equal(t, "NCIP accept item failed: Needed Data Missing: Title is required in ItemOptionalFields.BibliographicDescription for accepting the request", err.Error())
+	assert.Equal(t, "NCIP accept item failed: Needed Data Missing", err.Error())
 }
 
 func TestAcceptItemInvalidUser(t *testing.T) {
@@ -374,7 +374,7 @@ func TestAcceptItemInvalidUser(t *testing.T) {
 	}
 	_, err := ncipClient.AcceptItem(accept)
 	assert.Error(t, err)
-	assert.Equal(t, "NCIP accept item failed: Unknown User: foo", err.Error())
+	assert.Equal(t, "NCIP accept item failed: Unknown User", err.Error())
 }
 
 func TestDeleteItemOK(t *testing.T) {
@@ -533,7 +533,7 @@ func TestHideSensitive(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Contains(t, string(messageJSON), "ILL-MOCK")
 	assert.Contains(t, string(messageJSON), "validuser")
-	assert.Contains(t, string(messageJSON), "myuser")
+	assert.NotContains(t, string(messageJSON), "myuser")
 	assert.NotContains(t, string(messageJSON), "supersecret")
 	assert.NotContains(t, string(messageJSON), "othersecret")
 	assert.NotContains(t, string(messageJSON), "1234")

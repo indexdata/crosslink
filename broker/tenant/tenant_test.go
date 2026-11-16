@@ -560,11 +560,15 @@ func TestTenantRepoError1(t *testing.T) {
 	tenant := mustResolve(t, tenantResolver, ctx, httpRequest, &symbol)
 	_, err := tenant.GetRequestSymbol()
 	assert.Error(t, err)
-	assert.Equal(t, "assert.AnError general error for testing", err.Error())
+	assert.EqualError(t, err, "tenant resolution backend failed: assert.AnError general error for testing")
+	assert.ErrorIs(t, err, ErrResolutionBackend)
+	assert.ErrorIs(t, err, assert.AnError)
 
 	_, err = tenant.GetOwnedSymbols()
 	assert.Error(t, err)
-	assert.Equal(t, "assert.AnError general error for testing", err.Error())
+	assert.EqualError(t, err, "tenant resolution backend failed: assert.AnError general error for testing")
+	assert.ErrorIs(t, err, ErrResolutionBackend)
+	assert.ErrorIs(t, err, assert.AnError)
 }
 
 func TestTenantRepoError2(t *testing.T) {
@@ -584,9 +588,13 @@ func TestTenantRepoError2(t *testing.T) {
 	tenant := mustResolve(t, tenantResolver, ctx, httpRequest, &symbol)
 	_, err := tenant.GetRequestSymbol()
 	assert.Error(t, err)
-	assert.Equal(t, "assert.AnError general error for testing", err.Error())
+	assert.EqualError(t, err, "tenant resolution backend failed: assert.AnError general error for testing")
+	assert.ErrorIs(t, err, ErrResolutionBackend)
+	assert.ErrorIs(t, err, assert.AnError)
 
 	_, err = tenant.GetOwnedSymbols()
 	assert.Error(t, err)
-	assert.Equal(t, "assert.AnError general error for testing", err.Error())
+	assert.EqualError(t, err, "tenant resolution backend failed: assert.AnError general error for testing")
+	assert.ErrorIs(t, err, ErrResolutionBackend)
+	assert.ErrorIs(t, err, assert.AnError)
 }

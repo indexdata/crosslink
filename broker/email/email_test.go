@@ -10,6 +10,7 @@ import (
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // ---------------------------------------------------------------------------
@@ -106,7 +107,7 @@ func TestRenderPullSlipHTML(t *testing.T) {
 		DueDate:          "2026-01-01",
 		ReturnAddress:    "1 Test Street",
 		SystemIdentifier: "abc123",
-	}, template)
+	}, []string{"pullslip-pdf"}, template)
 	assert.NoError(t, err)
 	assert.True(t, strings.Contains(html, "Loan"))
 	assert.True(t, strings.Contains(html, "John Doe"))
@@ -115,10 +116,26 @@ func TestRenderPullSlipHTML(t *testing.T) {
 }
 
 func TestRenderPullSlipHTML_UsesProvidedTemplate(t *testing.T) {
-	html, err := RenderHtmlTemplate(PullSlipData{ReqId: "REQ-1"}, "<main>{{.ReqId}}</main>")
+	html, err := RenderHtmlTemplate(PullSlipData{ReqId: "REQ-1"}, []string{"pullslip-pdf"}, "<main>{{.ReqId}}</main>")
 
 	assert.NoError(t, err)
 	assert.Equal(t, "<main>REQ-1</main>", html)
+}
+
+func TestRenderPullSlipHTML_RangesOverItems(t *testing.T) {
+	title := "First <book>"
+	secondTitle := "Second book"
+	data := GetPullSlipData(pr_db.PatronRequest{Items: []pr_db.PrItem{
+		{Title: &title, Barcode: "A-1"},
+		{Title: &secondTitle, Barcode: "B-2"},
+	}}, nil, nil, "")
+	templateBody := `{{range .Items}}<p>{{.Title}}: {{.Barcode}}</p>{{end}}`
+
+	assert.NoError(t, ValidateHtmlTemplate(PullSlipData{}, []string{"pullslip-pdf"}, templateBody))
+	assert.NoError(t, ValidateHtmlTemplate(data, []string{"pullslip-pdf"}, templateBody))
+	html, err := RenderHtmlTemplate(data, []string{"pullslip-pdf"}, templateBody)
+	assert.NoError(t, err)
+	assert.Equal(t, "<p>First &lt;book&gt;: A-1</p><p>Second book: B-2</p>", html)
 }
 
 func TestGetPullSlipDataUsesCanonicalDueDate(t *testing.T) {
@@ -141,14 +158,292 @@ func TestGetPullSlipDataUsesCanonicalDueDate(t *testing.T) {
 }
 
 func TestRenderPullSlipHTML_InvalidTemplate(t *testing.T) {
-	_, err := RenderHtmlTemplate(PullSlipData{ReqId: "X"}, "{{.Unclosed")
+	_, err := RenderHtmlTemplate(PullSlipData{ReqId: "X"}, []string{"pullslip-pdf"}, "{{.Unclosed")
 	assert.Error(t, err)
 }
 
 func TestRenderPullSlipHTML_ExecuteError(t *testing.T) {
-	_, err := RenderHtmlTemplate(PullSlipData{ReqId: "X"}, "{{index . \"nonexistent\"}}")
+	_, err := RenderHtmlTemplate(PullSlipData{ReqId: "X"}, []string{"pullslip-pdf"}, "{{index . \"nonexistent\"}}")
 	// Execute on a struct with map-access fails
 	assert.Error(t, err)
+}
+
+func TestRenderPullSlipTemplateSupportsCancellationAndItemLocations(t *testing.T) {
+	data := PullSlipData{
+		CancellationReason: "Already available",
+		Location:           "Main Library",
+		ShelvingLocation:   "Stacks",
+	}
+
+	rendered, err := RenderTextTemplate(data, []string{"pullslip-pdf"}, "{{.CancellationReason}}|{{.Location}}|{{.ShelvingLocation}}")
+
+	require.NoError(t, err)
+	assert.Equal(t, "Already available|Main Library|Stacks", rendered)
+}
+
+func TestValidateTextTemplateRejectsUnsupportedFieldInUnexecutedBranch(t *testing.T) {
+	err := ValidateTextTemplate(PullSlipData{}, []string{"received-notification"}, "{{if .Title}}{{.Unsupported}}{{end}}")
+	assert.ErrorContains(t, err, "Unsupported")
+}
+
+func TestValidateTemplateErrorsCarryLocation(t *testing.T) {
+	body := "<p>{{.Title}}</p>\n{{if .Title}}\n  {{with .Author}}{{.Unsupported}}{{end}}\n{{end}}"
+	err := ValidateHtmlTemplate(PullSlipData{}, []string{"pullslip-pdf"}, body)
+	require.Error(t, err)
+	assert.Equal(t, "template: pullslip-pdf:3:20: can't evaluate field Unsupported in type string", err.Error())
+	var templateErr *TemplateError
+	require.ErrorAs(t, err, &templateErr)
+	assert.Equal(t, &TemplateError{Name: "pullslip-pdf", Line: 3, Column: 21, Message: "can't evaluate field Unsupported in type string", text: err.Error()}, templateErr)
+
+	err = ValidateTextTemplate(PullSlipData{}, nil, "Hello\n{{.Nope}}")
+	require.Error(t, err)
+	assert.Equal(t, "template: template:2:2: unknown field Nope", err.Error())
+}
+
+func TestTemplateErrorsLocateGoTemplateErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want TemplateError
+	}{
+		{
+			name: "parse error has a line and no column",
+			err:  ValidateTextTemplate(PullSlipData{}, nil, "<p>\n{{.Title}\n</p>"),
+			want: TemplateError{Name: "template", Line: 2, Message: "bad character U+007D '}'"},
+		},
+		{
+			name: "execution error keeps Go's context in the message",
+			err: func() error {
+				_, err := RenderTextTemplate(PullSlipData{Title: "x"}, []string{"a:b"}, "<p>\n{{index .Title 40}}</p>")
+				return err
+			}(),
+			want: TemplateError{Name: "a:b", Line: 2, Column: 3, Message: `executing "a:b" at <index .Title 40>: error calling index: index out of range: 40`},
+		},
+		{
+			name: "column counts characters, not bytes",
+			err:  ValidateTextTemplate(PullSlipData{}, nil, "éé {{.Nope}}"),
+			want: TemplateError{Name: "template", Line: 1, Column: 6, Message: "unknown field Nope"},
+		},
+		{
+			name: "escaping error is located at its node",
+			err:  ValidateHtmlTemplate(PullSlipData{}, nil, "<p>\n{{if .Title}}<a href=\"{{end}}x\">"),
+			want: TemplateError{Name: "template", Line: 2, Column: 6, Message: `{{if}} branches end in different contexts: {stateURL delimDoubleQuote urlPartNone jsCtxRegexp [] attrURL elementNone <nil>}, {stateText delimNone urlPartNone jsCtxRegexp [] attrNone elementNone <nil>}`},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var templateErr *TemplateError
+			require.ErrorAs(t, tc.err, &templateErr)
+			tc.want.text = tc.err.Error()
+			assert.Equal(t, &tc.want, templateErr)
+		})
+	}
+}
+
+func TestValidateTextTemplateRejectsInvalidCommandInUnexecutedBranch(t *testing.T) {
+	for _, testCase := range []struct {
+		name         string
+		templateBody string
+		command      string
+	}{
+		{
+			name:         "index cannot operate on struct",
+			templateBody: `{{if .Title}}{{index . "Unsupported"}}{{end}}`,
+			command:      "index",
+		},
+		{
+			name:         "len cannot operate on struct",
+			templateBody: `{{if .Title}}{{len .}}{{end}}`,
+			command:      "len",
+		},
+		{
+			name:         "call cannot be checked statically",
+			templateBody: `{{if .Title}}{{call .}}{{end}}`,
+			command:      "call",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			err := ValidateTextTemplate(PullSlipData{}, []string{"received-notification"}, testCase.templateBody)
+			assert.ErrorContains(t, err, testCase.command)
+		})
+	}
+}
+
+func TestValidateTextTemplateAcceptsValidCommandInUnexecutedBranch(t *testing.T) {
+	data := struct {
+		Title  string
+		Values map[string]string
+		Left   float32
+		Right  float64
+	}{}
+
+	for _, templateBody := range []string{
+		`{{if .Title}}{{index .Values "title"}}{{end}}`,
+		`{{if .Title}}{{eq .Left .Right}}{{end}}`,
+	} {
+		err := ValidateTextTemplate(data, []string{"received-notification"}, templateBody)
+		assert.NoError(t, err)
+	}
+}
+
+func TestValidateTextTemplateRejectsInvalidSliceAndComparisonCommands(t *testing.T) {
+	data := struct {
+		Title  string
+		Flag   bool
+		Values map[string]string
+		Number *int
+		Key    any
+		Items  []string
+	}{}
+	for _, testCase := range []struct {
+		name         string
+		templateBody string
+		command      string
+	}{
+		{
+			name:         "three-index string slice",
+			templateBody: `{{if .Title}}{{slice .Title 0 0 0}}{{end}}`,
+			command:      "slice",
+		},
+		{
+			name:         "reversed literal slice bounds",
+			templateBody: `{{if .Title}}{{slice .Title 2 1}}{{end}}`,
+			command:      "slice",
+		},
+		{
+			name:         "negative literal index",
+			templateBody: `{{if .Title}}{{index .Title -1}}{{end}}`,
+			command:      "index",
+		},
+		{
+			name:         "non-comparable map equality",
+			templateBody: `{{if .Title}}{{eq .Values .Values}}{{end}}`,
+			command:      "eq",
+		},
+		{
+			name:         "unordered boolean",
+			templateBody: `{{if .Title}}{{lt .Flag true}}{{end}}`,
+			command:      "lt",
+		},
+		{
+			name:         "unordered pointer",
+			templateBody: `{{if .Title}}{{lt .Number .Number}}{{end}}`,
+			command:      "lt",
+		},
+		{
+			name:         "floating-point slice index",
+			templateBody: `{{if .Title}}{{index .Items 1.0}}{{end}}`,
+			command:      "index",
+		},
+		{
+			name:         "integer literal overflowing int",
+			templateBody: `{{if .Title}}{{eq 9223372036854775808 9223372036854775808}}{{end}}`,
+			command:      "overflows int",
+		},
+		{
+			name:         "interface value is not assignable to string map key",
+			templateBody: `{{if .Title}}{{index .Values .Key}}{{end}}`,
+			command:      "index",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			err := ValidateTextTemplate(data, []string{"received-notification"}, testCase.templateBody)
+			assert.ErrorContains(t, err, testCase.command)
+		})
+	}
+}
+
+func TestValidateTextTemplateAcceptsNamedTemplateWithoutPipeline(t *testing.T) {
+	err := ValidateTextTemplate(
+		PullSlipData{},
+		[]string{"received-notification"},
+		`{{define "footer"}}Footer{{end}}{{template "footer"}}`,
+	)
+	assert.NoError(t, err)
+}
+
+func TestValidateTextTemplateAcceptsValidLogicalAndNilComparisons(t *testing.T) {
+	data := struct {
+		Title string
+		Value *[]int
+	}{}
+	for _, templateBody := range []string{
+		`{{if .Title}}{{or .Title 1}}{{end}}`,
+		`{{if .Title}}{{eq .Value nil}}{{end}}`,
+		`{{if .Title}}{{eq .Value .Value}}{{end}}`,
+	} {
+		err := ValidateTextTemplate(data, []string{"received-notification"}, templateBody)
+		assert.NoError(t, err)
+	}
+}
+
+func TestValidateTextTemplateInfersRangeIndexVariableType(t *testing.T) {
+	data := struct {
+		Values []string
+	}{}
+
+	err := ValidateTextTemplate(data, []string{"received-notification"}, `{{range $i, $value := .Values}}{{index $.Values $i}}{{end}}`)
+	assert.NoError(t, err)
+}
+
+func TestValidateTextTemplateAcceptsSupportedFieldsInConditionalBranches(t *testing.T) {
+	err := ValidateTextTemplate(PullSlipData{}, []string{"received-notification"}, "{{if .Title}}{{.Author}}{{else}}{{.Publisher}}{{end}}")
+	assert.NoError(t, err)
+}
+
+func TestValidateTextTemplateAcceptsSupportedFieldsThroughNamedVariables(t *testing.T) {
+	err := ValidateTextTemplate(PullSlipData{}, []string{"received-notification"}, "{{$request := .}}{{$request.Title}}")
+	assert.NoError(t, err)
+}
+
+func TestValidateTextTemplateRejectsInvalidScopedFieldsInUnexecutedBranches(t *testing.T) {
+	for _, templateBody := range []string{
+		"{{with .Title}}{{.ReqId}}{{end}}",
+		"{{$request := .}}{{if .Title}}{{$request.Unsupported}}{{end}}",
+	} {
+		err := ValidateTextTemplate(PullSlipData{}, []string{"received-notification"}, templateBody)
+		assert.Error(t, err)
+	}
+}
+
+func TestValidateTextTemplateReturnsErrorForRangeWithUnknownVariableType(t *testing.T) {
+	var err error
+	assert.NotPanics(t, func() {
+		err = ValidateTextTemplate(
+			PullSlipData{},
+			[]string{"received-notification"},
+			`{{$items := printf "%s" .Title}}{{range $items}}{{end}}`,
+		)
+	})
+	assert.ErrorContains(t, err, "range")
+}
+
+func TestValidateHtmlTemplateUsesHtmlRenderingContexts(t *testing.T) {
+	err := ValidateHtmlTemplate(PullSlipData{}, []string{"received-notification"}, `{{if .Title}}<a href="{{end}}{{.Author}}`)
+	assert.Error(t, err)
+}
+
+func TestRenderTextTemplateUsesFirstLabelAsTemplateName(t *testing.T) {
+	result, err := RenderTextTemplate(
+		PullSlipData{Title: "Requested book"},
+		[]string{"received-notification", "secondary-label"},
+		`{{define "received-notification"}}Ready: {{.Title}}{{end}}`,
+	)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "Ready: Requested book", result)
+}
+
+func TestRenderTextTemplateUsesDefaultNameWhenFirstLabelIsMissing(t *testing.T) {
+	for _, labels := range [][]string{nil, {""}} {
+		result, err := RenderTextTemplate(
+			PullSlipData{Title: "Requested book"},
+			labels,
+			`{{define "template"}}Ready: {{.Title}}{{end}}`,
+		)
+
+		assert.NoError(t, err)
+		assert.Equal(t, "Ready: Requested book", result)
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -157,24 +452,36 @@ func TestRenderPullSlipHTML_ExecuteError(t *testing.T) {
 
 func TestGetPullSlipData_PopulatesAllAvailableFields(t *testing.T) {
 	callNumber := "QA76.73.G63"
+	location := "Main Library"
+	shelvingLocation := "Stacks"
+	itemTitle := "Item title"
+	cancellationReason := "Requested item is locally available"
 	dueDate := utils.XSDDateTime{Time: time.Date(2026, 8, 15, 9, 30, 0, 0, time.UTC)}
 	pr := pr_db.PatronRequest{
-		RequesterReqID: pgtype.Text{String: "REQ-123", Valid: true},
-		DueAt:          pgtype.Timestamptz{Time: dueDate.Time, Valid: true},
-		Items:          []pr_db.PrItem{{ID: "item-1", CallNumber: &callNumber}},
+		RequesterReqID:     pgtype.Text{String: "REQ-123", Valid: true},
+		CancellationReason: pgtype.Text{String: cancellationReason, Valid: true},
+		DueAt:              pgtype.Timestamptz{Time: dueDate.Time, Valid: true},
+		Items:              []pr_db.PrItem{{ID: "item-1", Title: &itemTitle, Barcode: "item-barcode", CallNumber: &callNumber, Location: &location, ShelvingLocation: &shelvingLocation}},
 		IllRequest: iso18626.Request{
 			BibliographicInfo: iso18626.BibliographicInfo{
 				Author:                 "Jane Doe",
+				AuthorOfComponent:      "John Contributor",
 				Title:                  "Distributed Libraries",
+				TitleOfComponent:       "Resource sharing at scale",
 				Volume:                 "7",
 				Issue:                  "2",
 				EstimatedNoPages:       "18",
+				PagesRequested:         "12-14",
 				SupplierUniqueRecordId: "SYS-456",
 			},
-			PublicationInfo: &iso18626.PublicationInfo{Publisher: "Index Press"},
+			PublicationInfo: &iso18626.PublicationInfo{
+				Publisher:       "Index Press",
+				PublicationType: &iso18626.TypeSchemeValuePair{Text: "JournalArticle"},
+			},
 			ServiceInfo: &iso18626.ServiceInfo{
-				ServiceType:  iso18626.TypeServiceTypeLoan,
-				ServiceLevel: &iso18626.TypeSchemeValuePair{Text: "Rush"},
+				ServiceType:    iso18626.TypeServiceTypeLoan,
+				ServiceLevel:   &iso18626.TypeSchemeValuePair{Text: "Rush"},
+				NeedBeforeDate: &utils.XSDDateTime{Time: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)},
 			},
 			RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{
 				{Address: &iso18626.Address{
@@ -185,11 +492,17 @@ func TestGetPullSlipData_PopulatesAllAvailableFields(t *testing.T) {
 						Country:    &iso18626.TypeSchemeValuePair{Text: "LV"},
 					},
 				}},
+				{Address: &iso18626.Address{
+					ElectronicAddress: &iso18626.ElectronicAddress{
+						ElectronicAddressData: "https://example.test/document/123",
+					},
+				}},
 			},
 			PatronInfo: &iso18626.PatronInfo{
-				PatronId:  "P-789",
-				GivenName: "Ann",
-				Surname:   "Reader",
+				PatronId:   "P-789",
+				GivenName:  "Ann",
+				Surname:    "Reader",
+				PatronType: &iso18626.TypeSchemeValuePair{Text: "Faculty"},
 			},
 		},
 		IllResponse: iso18626.SupplyingAgencyMessage{
@@ -208,61 +521,116 @@ func TestGetPullSlipData_PopulatesAllAvailableFields(t *testing.T) {
 		{Note: pgtype.Text{String: "second note", Valid: true}},
 	}
 	conditions := []pr_db.Notification{
-		{Condition: pgtype.Text{String: "library use only", Valid: true}},
-		{Condition: pgtype.Text{String: "no renewal", Valid: true}},
+		{Code: pgtype.Text{String: "library use only", Valid: true}},
+		{Code: pgtype.Text{String: "no renewal", Valid: true}},
 	}
 
 	data := GetPullSlipData(pr, notes, conditions, "barcode-base64")
 
 	assert.Equal(t, PullSlipData{
-		ReqId:            "REQ-123",
-		PickupLocation:   "Pickup Desk, Riga, LV-1050, LV",
-		Title:            "Distributed Libraries",
-		Author:           "Jane Doe",
-		DueDate:          "2026-08-15",
-		ReturnAddress:    "Return Room, Shelf B, Riga, LV",
-		BarcodeBase64:    "barcode-base64",
-		ServiceType:      "Loan",
-		ServiceLevel:     "Rush",
-		SystemIdentifier: "SYS-456",
-		Publisher:        "Index Press",
-		Volume:           "7",
-		Issue:            "2",
-		Pages:            "18",
-		StaffNotes:       "first note\nsecond note",
-		CallNumber:       "QA76.73.G63",
-		LoanConditions:   "library use only\nno renewal",
-		PatronName:       "Ann",
-		PatronSurname:    "Reader",
-		PatronId:         "P-789",
+		ReqId:              "REQ-123",
+		CancellationReason: cancellationReason,
+		PickupLocation:     "Pickup Desk, Riga, LV-1050, LV",
+		PickupURL:          "https://example.test/document/123",
+		NeededBy:           "2026-08-01",
+		Title:              "Distributed Libraries",
+		TitleOfComponent:   "Resource sharing at scale",
+		Author:             "Jane Doe",
+		AuthorOfComponent:  "John Contributor",
+		DueDate:            "2026-08-15",
+		ReturnAddress:      "Return Room, Shelf B, Riga, LV",
+		BarcodeBase64:      "barcode-base64",
+		ServiceType:        "Loan",
+		ServiceLevel:       "Rush",
+		SystemIdentifier:   "SYS-456",
+		Publisher:          "Index Press",
+		MaterialType:       "JournalArticle",
+		Volume:             "7",
+		Issue:              "2",
+		Pages:              "18",
+		PagesRequested:     "12-14",
+		StaffNotes:         "first note\nsecond note",
+		CallNumber:         "QA76.73.G63",
+		Location:           location,
+		ShelvingLocation:   shelvingLocation,
+		LoanConditions:     "library use only\nno renewal",
+		PatronGivenName:    "Ann",
+		PatronName:         "Ann",
+		PatronSurname:      "Reader",
+		PatronId:           "P-789",
+		PatronProfile:      "Faculty",
+		Items: []PullSlipItem{{
+			Title:            itemTitle,
+			Barcode:          "item-barcode",
+			CallNumber:       callNumber,
+			Location:         location,
+			ShelvingLocation: shelvingLocation,
+		}},
 	}, data)
+}
+
+func TestGetPullSlipData_ItemsUseDefaultsForMissingOptionalFields(t *testing.T) {
+	data := GetPullSlipData(pr_db.PatronRequest{
+		Items: []pr_db.PrItem{{Barcode: "item-barcode"}},
+	}, nil, nil, "")
+
+	assert.Equal(t, []PullSlipItem{{
+		Title:            DEFAULT_FOR_NO_VALUE,
+		Barcode:          "item-barcode",
+		CallNumber:       DEFAULT_FOR_NO_VALUE,
+		Location:         DEFAULT_FOR_NO_VALUE,
+		ShelvingLocation: DEFAULT_FOR_NO_VALUE,
+	}}, data.Items)
 }
 
 func TestGetPullSlipData_UsesDefaultsWhenOptionalFieldsAreMissing(t *testing.T) {
 	data := GetPullSlipData(pr_db.PatronRequest{}, nil, nil, DEFAULT_FOR_NO_VALUE)
 
 	assert.Equal(t, PullSlipData{
-		ReqId:            "",
-		PickupLocation:   DEFAULT_FOR_NO_VALUE,
-		Title:            DEFAULT_FOR_NO_VALUE,
-		Author:           DEFAULT_FOR_NO_VALUE,
-		DueDate:          DEFAULT_FOR_NO_VALUE,
-		ReturnAddress:    DEFAULT_FOR_NO_VALUE,
-		BarcodeBase64:    DEFAULT_FOR_NO_VALUE,
-		ServiceType:      DEFAULT_FOR_NO_VALUE,
-		ServiceLevel:     DEFAULT_FOR_NO_VALUE,
-		SystemIdentifier: DEFAULT_FOR_NO_VALUE,
-		Publisher:        DEFAULT_FOR_NO_VALUE,
-		Volume:           DEFAULT_FOR_NO_VALUE,
-		Issue:            DEFAULT_FOR_NO_VALUE,
-		Pages:            DEFAULT_FOR_NO_VALUE,
-		StaffNotes:       DEFAULT_FOR_NO_VALUE,
-		CallNumber:       DEFAULT_FOR_NO_VALUE,
-		LoanConditions:   DEFAULT_FOR_NO_VALUE,
-		PatronName:       DEFAULT_FOR_NO_VALUE,
-		PatronSurname:    DEFAULT_FOR_NO_VALUE,
-		PatronId:         DEFAULT_FOR_NO_VALUE,
+		ReqId:              "",
+		CancellationReason: DEFAULT_FOR_NO_VALUE,
+		PickupLocation:     DEFAULT_FOR_NO_VALUE,
+		PickupURL:          DEFAULT_FOR_NO_VALUE,
+		NeededBy:           DEFAULT_FOR_NO_VALUE,
+		Title:              DEFAULT_FOR_NO_VALUE,
+		TitleOfComponent:   DEFAULT_FOR_NO_VALUE,
+		Author:             DEFAULT_FOR_NO_VALUE,
+		AuthorOfComponent:  DEFAULT_FOR_NO_VALUE,
+		DueDate:            DEFAULT_FOR_NO_VALUE,
+		ReturnAddress:      DEFAULT_FOR_NO_VALUE,
+		BarcodeBase64:      DEFAULT_FOR_NO_VALUE,
+		ServiceType:        DEFAULT_FOR_NO_VALUE,
+		ServiceLevel:       DEFAULT_FOR_NO_VALUE,
+		SystemIdentifier:   DEFAULT_FOR_NO_VALUE,
+		Publisher:          DEFAULT_FOR_NO_VALUE,
+		MaterialType:       DEFAULT_FOR_NO_VALUE,
+		Volume:             DEFAULT_FOR_NO_VALUE,
+		Issue:              DEFAULT_FOR_NO_VALUE,
+		Pages:              DEFAULT_FOR_NO_VALUE,
+		PagesRequested:     DEFAULT_FOR_NO_VALUE,
+		StaffNotes:         DEFAULT_FOR_NO_VALUE,
+		CallNumber:         DEFAULT_FOR_NO_VALUE,
+		Location:           DEFAULT_FOR_NO_VALUE,
+		ShelvingLocation:   DEFAULT_FOR_NO_VALUE,
+		LoanConditions:     DEFAULT_FOR_NO_VALUE,
+		PatronGivenName:    DEFAULT_FOR_NO_VALUE,
+		PatronName:         DEFAULT_FOR_NO_VALUE,
+		PatronSurname:      DEFAULT_FOR_NO_VALUE,
+		PatronId:           DEFAULT_FOR_NO_VALUE,
+		PatronProfile:      DEFAULT_FOR_NO_VALUE,
 	}, data)
+}
+
+func TestGetPullSlipData_UsesDefaultNeededByForZeroDate(t *testing.T) {
+	data := GetPullSlipData(pr_db.PatronRequest{
+		IllRequest: iso18626.Request{
+			ServiceInfo: &iso18626.ServiceInfo{
+				NeedBeforeDate: &utils.XSDDateTime{},
+			},
+		},
+	}, nil, nil, DEFAULT_FOR_NO_VALUE)
+
+	assert.Equal(t, DEFAULT_FOR_NO_VALUE, data.NeededBy)
 }
 
 // ── formatPhysicalAddress ─────────────────────────────────────────────────────
@@ -332,16 +700,16 @@ func TestGetLoanConditions_Empty(t *testing.T) {
 
 func TestGetLoanConditions_InvalidSkipped(t *testing.T) {
 	conditions := []pr_db.Notification{
-		{Condition: pgtype.Text{String: "library use only", Valid: true}},
-		{Condition: pgtype.Text{String: "ignored", Valid: false}},
+		{Code: pgtype.Text{String: "library use only", Valid: true}},
+		{Code: pgtype.Text{String: "ignored", Valid: false}},
 	}
 	assert.Equal(t, "library use only", getLoanConditions(conditions))
 }
 
 func TestGetLoanConditions_Multiple(t *testing.T) {
 	conditions := []pr_db.Notification{
-		{Condition: pgtype.Text{String: "no photocopying", Valid: true}},
-		{Condition: pgtype.Text{String: "in-library use", Valid: true}},
+		{Code: pgtype.Text{String: "no photocopying", Valid: true}},
+		{Code: pgtype.Text{String: "in-library use", Valid: true}},
 	}
 	assert.Equal(t, "no photocopying\nin-library use", getLoanConditions(conditions))
 }
@@ -427,16 +795,150 @@ func TestGetPickupLocation_AddressWithNoUsableFields(t *testing.T) {
 	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getPickupLocation(pr))
 }
 
+// ── getPickupURL ───────────────────────────────────────────────────────────────────
+
+func TestGetPickupURL_IgnoresEmailAddress(t *testing.T) {
+	pr := pr_db.PatronRequest{IllRequest: iso18626.Request{
+		RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{{
+			Address: &iso18626.Address{ElectronicAddress: &iso18626.ElectronicAddress{
+				ElectronicAddressType: iso18626.TypeSchemeValuePair{Text: string(iso18626.ElectronicAddressTypeEmail)},
+				ElectronicAddressData: "patron@library.org",
+			}},
+		}},
+	}}
+
+	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getPickupURL(pr))
+}
+
+func TestGetPickupURL_RejectsUnsafeRequestSchemes(t *testing.T) {
+	for _, value := range []string{
+		"javascript://host/alert",
+		"ftp://files.example/item",
+	} {
+		t.Run(value, func(t *testing.T) {
+			pr := pr_db.PatronRequest{IllRequest: iso18626.Request{
+				RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{{
+					Address: &iso18626.Address{ElectronicAddress: &iso18626.ElectronicAddress{
+						ElectronicAddressData: value,
+					}},
+				}},
+			}}
+
+			assert.Equal(t, DEFAULT_FOR_NO_VALUE, getPickupURL(pr))
+		})
+	}
+}
+
+func TestGetPickupURL_ContinuesPastEmailToURL(t *testing.T) {
+	pr := pr_db.PatronRequest{IllRequest: iso18626.Request{
+		RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{
+			{
+				Address: &iso18626.Address{ElectronicAddress: &iso18626.ElectronicAddress{
+					ElectronicAddressType: iso18626.TypeSchemeValuePair{Text: string(iso18626.ElectronicAddressTypeEmail)},
+					ElectronicAddressData: "patron@library.org",
+				}},
+			},
+			{
+				Address: &iso18626.Address{ElectronicAddress: &iso18626.ElectronicAddress{
+					ElectronicAddressData: "https://example.test/document/123",
+				}},
+			},
+		},
+	}}
+
+	assert.Equal(t, "https://example.test/document/123", getPickupURL(pr))
+}
+
+func TestGetPickupURL_PrefersResponseURL(t *testing.T) {
+	pr := pr_db.PatronRequest{
+		IllRequest: iso18626.Request{RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{{
+			Address: &iso18626.Address{ElectronicAddress: &iso18626.ElectronicAddress{
+				ElectronicAddressData: "https://example.test/requested-url",
+			}},
+		}}},
+		IllResponse: iso18626.SupplyingAgencyMessage{
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				ItemId:  " https://example.test/response-url ",
+				SentVia: &iso18626.TypeSchemeValuePair{Text: string(iso18626.SentViaUrl)},
+			},
+		},
+	}
+
+	assert.Equal(t, "https://example.test/response-url", getPickupURL(pr))
+}
+
 func TestRenderTextTemplate(t *testing.T) {
 	template := "This is A&B query '{{.BatchQuery}}'."
 	data := GetBatchEmailData(1, 1, "select \"A&B\" from dual")
-	result, err := RenderTextTemplate(data, template)
+	result, err := RenderTextTemplate(data, []string{"pullslip-email"}, template)
 	assert.NoError(t, err)
 	assert.Equal(t, "This is A&B query 'select \"A&B\" from dual'.", result)
 
 	template = "<p>This is A&B request {{.ReqId}}.</p>"
 	prData := GetPullSlipData(pr_db.PatronRequest{RequesterReqID: pgtype.Text{String: "REQ-1-A&B", Valid: true}}, nil, nil, "")
-	result, err = RenderHtmlTemplate(prData, template)
+	result, err = RenderHtmlTemplate(prData, []string{"received-notification"}, template)
 	assert.NoError(t, err)
 	assert.Equal(t, "<p>This is A&B request REQ-1-A&amp;B.</p>", result)
+}
+
+func TestRenderTextTemplateSupportsPatronGivenNameAndLegacyPatronName(t *testing.T) {
+	data := GetPullSlipData(pr_db.PatronRequest{
+		IllRequest: iso18626.Request{
+			PatronInfo: &iso18626.PatronInfo{GivenName: "Ann"},
+		},
+	}, nil, nil, DEFAULT_FOR_NO_VALUE)
+
+	result, err := RenderTextTemplate(data, []string{"pullslip-pdf"}, "{{.PatronGivenName}}/{{.PatronName}}")
+
+	assert.NoError(t, err)
+	assert.Equal(t, "Ann/Ann", result)
+}
+
+func TestGetTemplatePlaceholdersReturnsFieldsWithDescriptions(t *testing.T) {
+	wantPullSlip := []TemplatePlaceholder{
+		{Placeholder: "{{.ReqId}}", Description: "Requester request identifier"},
+		{Placeholder: "{{.CancellationReason}}", Description: "Reason the request was cancelled"},
+		{Placeholder: "{{.PickupLocation}}", Description: "Pickup location for the requested item"},
+		{Placeholder: "{{.PickupURL}}", Description: "URL where the requested item can be accessed"},
+		{Placeholder: "{{.NeededBy}}", Description: "Date by which the patron needs the item"},
+		{Placeholder: "{{.Title}}", Description: "Title of the requested item"},
+		{Placeholder: "{{.TitleOfComponent}}", Description: "Title of the requested component, such as an article or chapter"},
+		{Placeholder: "{{.Author}}", Description: "Author of the requested item"},
+		{Placeholder: "{{.AuthorOfComponent}}", Description: "Author of the requested component, such as an article or chapter"},
+		{Placeholder: "{{.DueDate}}", Description: "Date by which the item must be returned"},
+		{Placeholder: "{{.ReturnAddress}}", Description: "Address to which the item must be returned"},
+		{Placeholder: "{{.BarcodeBase64}}", Description: "Base64-encoded barcode image"},
+		{Placeholder: "{{.ServiceType}}", Description: "Requested ISO 18626 service type"},
+		{Placeholder: "{{.ServiceLevel}}", Description: "Requested ISO 18626 service level"},
+		{Placeholder: "{{.SystemIdentifier}}", Description: "System identifier of the requested item"},
+		{Placeholder: "{{.Publisher}}", Description: "Publisher of the requested item"},
+		{Placeholder: "{{.MaterialType}}", Description: "Material type of the requested item"},
+		{Placeholder: "{{.Volume}}", Description: "Volume of the requested item"},
+		{Placeholder: "{{.Issue}}", Description: "Issue of the requested item"},
+		{Placeholder: "{{.Pages}}", Description: "Pages of the requested item"},
+		{Placeholder: "{{.PagesRequested}}", Description: "Specific pages requested from the item"},
+		{Placeholder: "{{.StaffNotes}}", Description: "Notes intended for staff"},
+		{Placeholder: "{{.CallNumber}}", Description: "Library call number of the requested item"},
+		{Placeholder: "{{.Location}}", Description: "Library location of the requested item"},
+		{Placeholder: "{{.ShelvingLocation}}", Description: "Shelving location of the requested item"},
+		{Placeholder: "{{.LoanConditions}}", Description: "Conditions that apply to the loan"},
+		{Placeholder: "{{.PatronGivenName}}", Description: "Patron's given name"},
+		{Placeholder: "{{.PatronName}}", Description: "Patron's given name (legacy alias)"},
+		{Placeholder: "{{.PatronSurname}}", Description: "Patron's surname"},
+		{Placeholder: "{{.PatronId}}", Description: "Patron identifier"},
+		{Placeholder: "{{.PatronProfile}}", Description: "Patron profile"},
+		{Placeholder: "{{range .Items}}{{.Title}}{{end}}", Description: "Title of the item"},
+		{Placeholder: "{{range .Items}}{{.Barcode}}{{end}}", Description: "Barcode of the item"},
+		{Placeholder: "{{range .Items}}{{.CallNumber}}{{end}}", Description: "Library call number of the item"},
+		{Placeholder: "{{range .Items}}{{.Location}}{{end}}", Description: "Library location of the item"},
+		{Placeholder: "{{range .Items}}{{.ShelvingLocation}}{{end}}", Description: "Shelving location of the item"},
+	}
+	wantBatchEmail := []TemplatePlaceholder{
+		{Placeholder: "{{.FullCount}}", Description: "Total number of requests matched by the batch query"},
+		{Placeholder: "{{.ActualCount}}", Description: "Number of requests included in the batch email"},
+		{Placeholder: "{{.BatchQuery}}", Description: "Query used to select requests for the batch"},
+	}
+
+	assert.Equal(t, wantPullSlip, GetPullSlipTemplatePlaceholders())
+	assert.Equal(t, wantBatchEmail, GetBatchEmailTemplatePlaceholders())
 }

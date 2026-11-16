@@ -3,13 +3,18 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	brokerapi "github.com/indexdata/crosslink/broker/api"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	"github.com/indexdata/crosslink/broker/patron_request/proapi"
+	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	sched_db "github.com/indexdata/crosslink/broker/scheduler/db"
 	schedoapi "github.com/indexdata/crosslink/broker/scheduler/oapi"
 	sched_service "github.com/indexdata/crosslink/broker/scheduler/service"
@@ -21,6 +26,8 @@ import (
 )
 
 var errDuplicateBatchActionTitle = errors.New("a batch action with this owner and title already exists")
+var errInvalidBatchEmailTemplate = errors.New("invalid batch email template")
+var errInvalidArchiveConfig = errors.New("invalid patron request archive configuration")
 
 // SchedulerApiHandler implements schedoapi.ServerInterface.
 type SchedulerApiHandler struct {
@@ -28,15 +35,17 @@ type SchedulerApiHandler struct {
 	schedRepo      sched_db.SchedRepo
 	eventRepo      events.EventRepo
 	tenantResolver *tenant.TenantResolver
+	templateRepo   pr_db.PrRepo
 }
 
 // NewSchedulerApiHandler creates a SchedulerApiHandler.
-func NewSchedulerApiHandler(limitDefault int32, schedRepo sched_db.SchedRepo, eventRepo events.EventRepo, tenantResolver *tenant.TenantResolver) SchedulerApiHandler {
+func NewSchedulerApiHandler(limitDefault int32, schedRepo sched_db.SchedRepo, eventRepo events.EventRepo, tenantResolver *tenant.TenantResolver, templateRepo pr_db.PrRepo) SchedulerApiHandler {
 	return SchedulerApiHandler{
 		limitDefault:   limitDefault,
 		schedRepo:      schedRepo,
 		eventRepo:      eventRepo,
 		tenantResolver: tenantResolver,
+		templateRepo:   templateRepo,
 	}
 }
 
@@ -114,7 +123,7 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 		brokerapi.AddBadRequestError(ctx, w, err)
 		return
 	}
-	if create.Title == "" {
+	if create.Title == nil || *create.Title == "" {
 		brokerapi.AddBadRequestError(ctx, w, errors.New("title must not be empty"))
 		return
 	}
@@ -147,7 +156,7 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 	if create.ActionParams != nil {
 		paramsMap = *create.ActionParams
 	}
-	task, err := h.schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams{
+	taskToSave := sched_db.ScheduledTask{
 		ID:        taskId,
 		EventName: events.EventNameInvokeBatchAction,
 		Schedule:  create.Schedule,
@@ -164,10 +173,23 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 			},
 			CustomData: paramsMap,
 		},
-		Title:     pgtype.Text{String: create.Title, Valid: true},
+		Title:     pgtype.Text{String: *create.Title, Valid: true},
 		RunAt:     next,
 		CreatedAt: now,
-	})
+	}
+	if err := h.validateBatchEmailTemplate(ctx, taskToSave); err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return
+	}
+	if err := validateBatchEmailActionParams(taskToSave.ActionData.BatchActionData.ActionName, paramsMap); err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return
+	}
+	if err := sched_service.ValidatePatronRequestArchiveConfig(string(create.ActionName), owner, create.BatchQuery, paramsMap); err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return
+	}
+	task, err := h.schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(taskToSave))
 	if err != nil {
 		h.writeScheduledTaskSaveError(ctx, w, err)
 		return
@@ -294,6 +316,26 @@ func (h SchedulerApiHandler) PutBatchActionsId(w http.ResponseWriter, r *http.Re
 		brokerapi.AddBadRequestError(ctx, w, err)
 		return
 	}
+	if update.ActionParams != nil {
+		taskForValidation, validationErr := h.schedRepo.GetScheduledTaskById(ctx, id, owners)
+		if validationErr != nil {
+			h.writeScheduledTaskMutationError(ctx, w, validationErr)
+			return
+		}
+		if validationErr = validateBatchActionTask(taskForValidation); validationErr != nil {
+			h.writeScheduledTaskMutationError(ctx, w, validationErr)
+			return
+		}
+		if validationErr = validateBatchEmailActionParams(taskForValidation.ActionData.BatchActionData.ActionName, *update.ActionParams); validationErr != nil {
+			brokerapi.AddBadRequestError(ctx, w, validationErr)
+			return
+		}
+		taskForValidation.ActionData.CustomData = *update.ActionParams
+		if validationErr = h.validateBatchEmailTemplate(ctx, taskForValidation); validationErr != nil {
+			brokerapi.AddBadRequestError(ctx, w, validationErr)
+			return
+		}
+	}
 	task, err := h.mutateScheduledTask(ctx, id, owners, func(task *sched_db.ScheduledTask) {
 		task.Schedule = update.Schedule
 		task.RunAt = next
@@ -304,6 +346,14 @@ func (h SchedulerApiHandler) PutBatchActionsId(w http.ResponseWriter, r *http.Re
 		if update.ActionParams != nil {
 			task.ActionData.CustomData = *update.ActionParams
 		}
+	}, func(task sched_db.ScheduledTask) error {
+		if task.ActionData.BatchActionData == nil {
+			return nil
+		}
+		if err := sched_service.ValidatePatronRequestArchiveConfig(task.ActionData.BatchActionData.ActionName, task.Owner, task.ActionData.BatchActionData.Selector, task.ActionData.CustomData); err != nil {
+			return fmt.Errorf("%w: %w", errInvalidArchiveConfig, err)
+		}
+		return nil
 	})
 	if err != nil {
 		h.writeScheduledTaskMutationError(ctx, w, err)
@@ -354,6 +404,7 @@ func (h SchedulerApiHandler) mutateScheduledTask(
 	id string,
 	owners []string,
 	mutate func(*sched_db.ScheduledTask),
+	validators ...func(sched_db.ScheduledTask) error,
 ) (sched_db.ScheduledTask, error) {
 	var task sched_db.ScheduledTask
 	err := h.schedRepo.WithTxFunc(ctx, func(repo sched_db.SchedRepo) error {
@@ -366,10 +417,70 @@ func (h SchedulerApiHandler) mutateScheduledTask(
 			return inErr
 		}
 		mutate(&task)
+		for _, validate := range validators {
+			if inErr = validate(task); inErr != nil {
+				return inErr
+			}
+		}
 		task, inErr = repo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
 		return inErr
 	})
 	return task, err
+}
+
+func (h SchedulerApiHandler) validateBatchEmailTemplate(ctx common.ExtendedContext, task sched_db.ScheduledTask) error {
+	if task.ActionData.BatchActionData == nil ||
+		task.ActionData.BatchActionData.ActionName != string(schedoapi.EmailPullslips) {
+		return nil
+	}
+	templateLabel, _ := task.ActionData.CustomData["templateLabel"].(string)
+	if templateLabel == "" {
+		return nil
+	}
+	if h.templateRepo == nil {
+		return fmt.Errorf("%w: template repository is unavailable", errInvalidBatchEmailTemplate)
+	}
+	template, err := prservice.ResolveTemplate(ctx, h.templateRepo, pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams{
+		Owner:    task.Owner,
+		Purpose:  string(proapi.Email),
+		Label:    templateLabel,
+		Audience: string(proapi.ModelActionParamsSendToStaff),
+	})
+	if err != nil {
+		return fmt.Errorf("%w: %w", errInvalidBatchEmailTemplate, err)
+	}
+	if !template.Subject.Valid || template.Subject.String == "" {
+		return fmt.Errorf("%w: subject field is required", errInvalidBatchEmailTemplate)
+	}
+	if template.Body == "" {
+		return fmt.Errorf("%w: body field is required", errInvalidBatchEmailTemplate)
+	}
+	if err := prservice.ValidateTemplateRenderingForContext(
+		proapi.Email,
+		proapi.TemplateContentType(template.ContentType),
+		template.Body,
+		&template.Subject.String,
+		template.Labels,
+		prservice.BatchEmailTemplateContext,
+	); err != nil {
+		return fmt.Errorf("%w: %w", errInvalidBatchEmailTemplate, err)
+	}
+	return nil
+}
+
+func validateBatchEmailActionParams(actionName string, params map[string]any) error {
+	if actionName != string(schedoapi.EmailPullslips) {
+		return nil
+	}
+	rawLabel, ok := params["templateLabel"]
+	if !ok {
+		return errors.New("templateLabel field is required for email-pullslips action")
+	}
+	templateLabel, ok := rawLabel.(string)
+	if !ok || strings.TrimSpace(templateLabel) == "" {
+		return errors.New("templateLabel field must be a non-empty string for email-pullslips action")
+	}
+	return nil
 }
 
 func validateBatchActionTask(task sched_db.ScheduledTask) error {
@@ -380,6 +491,10 @@ func validateBatchActionTask(task sched_db.ScheduledTask) error {
 }
 
 func (h SchedulerApiHandler) writeScheduledTaskMutationError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
+	if errors.Is(err, errInvalidArchiveConfig) {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		brokerapi.AddNotFoundError(w)
 		return

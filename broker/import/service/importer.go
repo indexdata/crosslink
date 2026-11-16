@@ -391,6 +391,9 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 	if side != prservice.SideBorrowing && apiBundle.IllTransaction != nil {
 		return importdb.PatronRequestBundle{}, nil, errors.New("illTransaction is only allowed for borrowing patron requests")
 	}
+	if side != prservice.SideBorrowing && request.RequesterPickupLocationId != nil {
+		return importdb.PatronRequestBundle{}, nil, errors.New("requesterPickupLocationId is only allowed for borrowing patron requests")
+	}
 	if request.SupplierSymbol != nil && strings.TrimSpace(*request.SupplierSymbol) == "" {
 		request.SupplierSymbol = nil
 	}
@@ -428,14 +431,16 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 	bundle := importdb.PatronRequestBundle{PatronRequest: pr_db.CreatePatronRequestParams{
 		ID: request.Id, CreatedAt: pgTimestamp(request.CreatedAt), UpdatedAt: pgTimestamp(request.UpdatedAt),
 		IllRequest: request.IllRequest, IllResponse: responseValue, DueAt: dueAt,
-		State: pr_db.PatronRequestState(request.State), Side: side,
+		BibRecordID: pgTextFromPtr(request.BibRecordId),
+		State:       pr_db.PatronRequestState(request.State), Side: side,
 		Patron: pgTextFromPtr(request.Patron), RequesterSymbol: pgTextFromString(request.RequesterSymbol),
-		SupplierSymbol: pgTextFromPtr(request.SupplierSymbol), Tenant: pgTextFromString(owner),
+		SupplierSymbol: pgTextFromPtr(request.SupplierSymbol), Tenant: pgTextFromPtr(request.Tenant),
 		RequesterReqID: pgTextFromString(request.RequesterRequestId), NeedsAttention: request.NeedsAttention,
 		LastAction: pgTextFromPtr(request.LastAction), LastActionOutcome: pgTextFromPtr(request.LastActionOutcome),
 		LastActionResult: pgTextFromPtr(request.LastActionResult), Language: pr_db.LANGUAGE,
 		TerminalState: terminal, InternalNote: pgTextFromPtr(request.InternalNote), NextReqID: pgTextFromPtr(request.NextReqId),
 		PrevReqID: pgTextFromPtr(request.PrevReqId), RetryBibInfo: request.RetryBibInfo, StateModel: request.StateModel,
+		RequesterPickupLocationID: pgUUIDFromPtr(request.RequesterPickupLocationId),
 	}}
 
 	seenItems := make(map[string]struct{}, len(apiBundle.Items))
@@ -467,7 +472,7 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 		if notification.Receipt != nil {
 			receipt = pr_db.NotificationReceipt(*notification.Receipt)
 		}
-		bundle.Notifications = append(bundle.Notifications, pr_db.SaveNotificationParams{ID: notification.Id, FromSymbol: notification.FromSymbol, ToSymbol: notification.ToSymbol, Direction: pr_db.NotificationDirection(notification.Direction), Kind: pr_db.NotificationKind(notification.Kind), Note: pgTextFromPtr(notification.Note), Cost: cost, Currency: pgTextFromPtr(notification.Currency), Condition: pgTextFromPtr(notification.Condition), Receipt: receipt, CreatedAt: pgTimestamp(notification.CreatedAt), AcknowledgedAt: pgTimestampFromPtr(notification.AcknowledgedAt)})
+		bundle.Notifications = append(bundle.Notifications, pr_db.SaveNotificationParams{ID: notification.Id, FromSymbol: notification.FromSymbol, ToSymbol: notification.ToSymbol, Direction: pr_db.NotificationDirection(notification.Direction), Kind: pr_db.NotificationKind(notification.Kind), Note: pgTextFromPtr(notification.Note), Cost: cost, Currency: pgTextFromPtr(notification.Currency), Code: pgTextFromPtr(notification.Code), CodeDescription: pgTextFromPtr(notification.CodeDescription), Receipt: receipt, CreatedAt: pgTimestamp(notification.CreatedAt), AcknowledgedAt: pgTimestampFromPtr(notification.AcknowledgedAt)})
 	}
 
 	if apiBundle.IllTransaction == nil {
@@ -498,7 +503,7 @@ func (i Importer) normalizePatronRequest(owner string, apiBundle importoapi.Impo
 			}
 			selectedSupplierSeen = true
 		}
-		bundle.LocatedSuppliers = append(bundle.LocatedSuppliers, ill_db.SaveLocatedSupplierParams{ID: supplier.Id, SupplierSymbol: supplier.SupplierSymbol, Ordinal: supplier.Ordinal, SupplierStatus: pgTextFromString(string(supplier.SupplierStatus)), PrevAction: pgTextFromPtr(supplier.PrevAction), PrevStatus: pgTextFromPtr(supplier.PrevStatus), LastAction: pgTextFromPtr(supplier.LastAction), LastStatus: pgTextFromPtr(supplier.LastStatus), LocalID: pgTextFromPtr(supplier.LocalID), PrevReason: pgTextFromPtr(supplier.PrevReason), LastReason: pgTextFromPtr(supplier.LastReason), SupplierRequestID: pgTextFromPtr(supplier.SupplierRequestID), LocalSupplier: supplier.LocalSupplier, ReasonUnfilled: pgTextFromPtr(supplier.ReasonUnfilled), Note: pgTextFromPtr(supplier.Note)})
+		bundle.LocatedSuppliers = append(bundle.LocatedSuppliers, ill_db.SaveLocatedSupplierParams{ID: supplier.Id, SupplierSymbol: supplier.SupplierSymbol, Ordinal: supplier.Ordinal, SupplierStatus: pgTextFromString(string(supplier.SupplierStatus)), PrevAction: pgTextFromPtr(supplier.PrevAction), PrevStatus: pgTextFromPtr(supplier.PrevStatus), LastAction: pgTextFromPtr(supplier.LastAction), LastStatus: pgTextFromPtr(supplier.LastStatus), LocalID: pgTextFromPtr(supplier.LocalID), ItemID: pgTextFromPtr(supplier.ItemID), HoldingsPolicyResolved: pgBoolFromPtr(supplier.HoldingsPolicyResolved), PrevReason: pgTextFromPtr(supplier.PrevReason), LastReason: pgTextFromPtr(supplier.LastReason), SupplierRequestID: pgTextFromPtr(supplier.SupplierRequestID), LocalSupplier: supplier.LocalSupplier, ReasonUnfilled: pgTextFromPtr(supplier.ReasonUnfilled), Note: pgTextFromPtr(supplier.Note)})
 		symbols = appendStableUnique(symbols, supplier.SupplierSymbol)
 	}
 	return bundle, symbols, nil
@@ -525,16 +530,19 @@ func (i Importer) importBatchAction(ctx common.ExtendedContext, policy importdb.
 	}
 	nextRun, err := schedservice.NextScheduleTime(create.Schedule)
 	if err != nil {
-		return &create.Title, importdb.Result{}, err
+		return create.Title, importdb.Result{}, err
 	}
 	taskID := uuid.NewString()
 	paramsMap := map[string]any{}
 	if create.ActionParams != nil {
 		paramsMap = *create.ActionParams
 	}
+	if err := schedservice.ValidatePatronRequestArchiveConfig(string(create.ActionName), owner, create.BatchQuery, paramsMap); err != nil {
+		return create.Title, importdb.Result{}, err
+	}
 	now := pgtype.Timestamptz{Time: i.clock(), Valid: true}
-	result, err := i.repo.ImportBatchAction(ctx, sched_db.SaveScheduledTaskParams{ID: taskID, EventName: events.EventNameInvokeBatchAction, Schedule: create.Schedule, ActionData: events.EventData{CommonEventData: events.CommonEventData{BatchActionData: &events.BatchActionData{ActionName: string(create.ActionName), Selector: create.BatchQuery, TaskId: taskID, Owner: owner}}, CustomData: paramsMap}, Title: pgTextFromString(create.Title), RunAt: nextRun, Status: sched_db.ScheduledTaskStatusPending, Owner: owner, CreatedAt: now, UpdatedAt: now}, policy)
-	return &create.Title, result, err
+	result, err := i.repo.ImportBatchAction(ctx, sched_db.SaveScheduledTaskParams{ID: taskID, EventName: events.EventNameInvokeBatchAction, Schedule: create.Schedule, ActionData: events.EventData{CommonEventData: events.CommonEventData{BatchActionData: &events.BatchActionData{ActionName: string(create.ActionName), Selector: create.BatchQuery, TaskId: taskID, Owner: owner}}, CustomData: paramsMap}, Title: pgTextFromPtr(create.Title), RunAt: nextRun, Status: sched_db.ScheduledTaskStatusStopped, Owner: owner, CreatedAt: now, UpdatedAt: now}, policy)
+	return create.Title, result, err
 }
 
 func (i Importer) importTemplate(ctx common.ExtendedContext, policy importdb.ConflictPolicy, owner string, data json.RawMessage) (*string, importdb.Result, error) {
@@ -555,6 +563,9 @@ func (i Importer) importTemplate(ctx common.ExtendedContext, policy importdb.Con
 	var create proapi.CreateTemplate
 	if err = json.Unmarshal(data, &create); err != nil {
 		return nil, importdb.Result{}, err
+	}
+	if err = prservice.ValidateTemplateRendering(create.Purpose, create.ContentType, create.Body, create.Subject, create.Labels); err != nil {
+		return nil, importdb.Result{}, fmt.Errorf("validate template rendering: %w", err)
 	}
 
 	labels := strings.Join(create.Labels, ",")
@@ -586,6 +597,12 @@ func (i Importer) resolveOwner(ctx common.ExtendedContext, owner string) (ill_db
 	return peers[0], nil
 }
 
+func pgUUIDFromPtr(value *uuid.UUID) pgtype.UUID {
+	if value == nil {
+		return pgtype.UUID{}
+	}
+	return pgtype.UUID{Bytes: *value, Valid: true}
+}
 func pgTextFromPtr(value *string) pgtype.Text {
 	if value == nil {
 		return pgtype.Text{}
@@ -696,4 +713,11 @@ func importItemType(itemType string) importoapi.ImportItemType {
 	default:
 		return ""
 	}
+}
+
+func pgBoolFromPtr(value *bool) pgtype.Bool {
+	if value == nil {
+		return pgtype.Bool{}
+	}
+	return pgtype.Bool{Bool: *value, Valid: true}
 }

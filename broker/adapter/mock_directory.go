@@ -130,12 +130,11 @@ func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx common.ExtendedContext, e
 	rotaInfo.Suppliers = make([]SupplierMatch, 0, len(entries))
 	filtered := make([]Supplier, 0, len(entries))
 	for _, sup := range entries {
-		applyHoldingsPolicy(&sup)
-		match := holdingMatchesPolicy(sup)
+		match, reason := EvaluateHoldingsPolicyWithReason(&sup)
 		if match {
 			filtered = append(filtered, sup)
 		}
-		rotaInfo.Suppliers = append(rotaInfo.Suppliers, SupplierMatch{
+		supMatch := SupplierMatch{
 			Symbol:             sup.Symbol,
 			Location:           sup.Location,
 			ShelvingLocation:   sup.ShelvingLocation,
@@ -145,7 +144,9 @@ func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx common.ExtendedContext, e
 			Local:              sup.Local,
 			LoadBalancingScore: sup.LoadBalancingScore,
 			Match:              match,
-		})
+		}
+		supMatch.recordHoldingsPolicy(sup, match, reason)
+		rotaInfo.Suppliers = append(rotaInfo.Suppliers, supMatch)
 	}
 
 	slices.SortFunc(filtered, func(a, b Supplier) int {

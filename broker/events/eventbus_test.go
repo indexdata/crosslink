@@ -97,3 +97,40 @@ func (r *exclusiveCheckErrorRepo) GetLatestRequestEventByAction(ctx common.Exten
 func (r *exclusiveCheckErrorRepo) GetPatronRequestEvents(ctx common.ExtendedContext, id string) ([]Event, error) {
 	return nil, nil
 }
+
+func TestCreateNoticeWithID(t *testing.T) {
+	repo := &noticeIDRepo{}
+	bus := NewPostgresEventBus(repo, "")
+	bus.ctx = common.CreateExtCtxWithArgs(context.Background(), nil)
+	id, err := bus.CreateNoticeWithID("allocated-event", "transaction", EventNameRequesterMsgReceived, EventData{}, EventStatusSuccess, EventDomainIllTransaction, SignalConsumers)
+	assert.NoError(t, err)
+	assert.Equal(t, "allocated-event", id)
+	assert.Equal(t, id, repo.saved.ID)
+	assert.Equal(t, "transaction", repo.saved.IllTransactionID)
+	assert.Equal(t, EventTypeNotice, repo.saved.EventType)
+	assert.Equal(t, EventNameRequesterMsgReceived, repo.saved.EventName)
+	assert.Equal(t, EventStatusSuccess, repo.saved.EventStatus)
+	assert.Equal(t, id, repo.notifiedID)
+	assert.Equal(t, SignalNoticeCreated, repo.signal)
+	assert.Equal(t, SignalConsumers, repo.target)
+}
+
+type noticeIDRepo struct {
+	EventRepo
+	saved      Event
+	notifiedID string
+	signal     Signal
+	target     SignalTarget
+}
+
+func (r *noticeIDRepo) WithTxFunc(_ common.ExtendedContext, fn func(EventRepo) error) error {
+	return fn(r)
+}
+func (r *noticeIDRepo) SaveEvent(_ common.ExtendedContext, params SaveEventParams) (Event, error) {
+	r.saved = Event(params)
+	return r.saved, nil
+}
+func (r *noticeIDRepo) Notify(_ common.ExtendedContext, id string, signal Signal, target SignalTarget) error {
+	r.notifiedID, r.signal, r.target = id, signal, target
+	return nil
+}

@@ -8,6 +8,7 @@ See individual components docs for details:
 * [directory](directory/README.md): CrossLink directory service
 * [illmock](illmock/README.md): ISO18626 and SRU mocking service
 * [supply](supply/README.md): S3-backed document storage service
+* [ncipv1](ncipv1/README.md): generated NCIP v1.0 XML types
 
 # Project goals and architecture
 

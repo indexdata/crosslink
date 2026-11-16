@@ -179,9 +179,10 @@ func WriteJsonResponse(w http.ResponseWriter, resp any) {
 
 func WriteJsonErrorResponse(w http.ResponseWriter, err error, statusCode int) {
 	errorString := err.Error()
-	resp := oapi.Error{
-		Error: &errorString,
-	}
+	WriteJsonResponseWithStatus(w, oapi.Error{Error: &errorString}, statusCode)
+}
+
+func WriteJsonResponseWithStatus(w http.ResponseWriter, resp any, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	_ = json.NewEncoder(w).Encode(resp)
