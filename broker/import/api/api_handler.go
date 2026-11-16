@@ -2,6 +2,7 @@ package importapi
 
 import (
 	"errors"
+	"io"
 	"mime"
 	"net/http"
 	"time"
@@ -37,15 +38,6 @@ func (a *ApiHandler) PostImport(w http.ResponseWriter, r *http.Request, params i
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "PostImport"},
 	})
-	controller := http.NewResponseController(w)
-	if err := controller.SetReadDeadline(time.Now().Add(importReadTimeout)); err != nil {
-		brokerapi.AddBadRequestError(ctx, w, err)
-		return
-	}
-	if err := controller.SetWriteDeadline(time.Now().Add(importWriteTimeout)); err != nil {
-		brokerapi.AddBadRequestError(ctx, w, err)
-		return
-	}
 	policyValue := ""
 	if params.ConflictPolicy != nil {
 		policyValue = string(*params.ConflictPolicy)
@@ -72,8 +64,24 @@ func (a *ApiHandler) PostImport(w http.ResponseWriter, r *http.Request, params i
 		http.Error(w, "import request too large", http.StatusRequestEntityTooLarge)
 		return
 	}
+	// Imports can outlast the server's normal request deadlines. Bound network
+	// I/O separately so processing does not consume the next I/O timeout.
+	controller := http.NewResponseController(w)
+	if err := controller.SetWriteDeadline(time.Time{}); err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, bodyLimit)
-	result, err := a.importer.Import(ctx, policy, r.Body)
+	result, err := a.importer.Import(ctx, policy, importReader{Reader: r.Body, controller: controller})
+	if deadlineErr := controller.SetWriteDeadline(time.Now().Add(importWriteTimeout)); deadlineErr != nil {
+		brokerapi.AddInternalError(ctx, w, deadlineErr)
+		return
+	}
+	// net/http may drain an unread request body while sending the response.
+	if deadlineErr := controller.SetReadDeadline(time.Now().Add(importReadTimeout)); deadlineErr != nil {
+		brokerapi.AddInternalError(ctx, w, deadlineErr)
+		return
+	}
 	if err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) || errors.Is(err, service.ErrImportRecordTooLarge) {
@@ -85,6 +93,25 @@ func (a *ApiHandler) PostImport(w http.ResponseWriter, r *http.Request, params i
 		return
 	}
 	brokerapi.WriteJsonResponse(w, result)
+}
+
+type importReader struct {
+	io.Reader
+	controller *http.ResponseController
+}
+
+func (r importReader) Read(p []byte) (int, error) {
+	if err := r.controller.SetReadDeadline(time.Now().Add(importReadTimeout)); err != nil {
+		return 0, err
+	}
+	n, err := r.Reader.Read(p)
+	// HTTP/2 read deadlines can expire even when no Read is pending.
+	// Clear the deadline while records are being processed.
+	clearErr := r.controller.SetReadDeadline(time.Time{})
+	if err != nil {
+		return n, err
+	}
+	return n, clearErr
 }
 
 func isNDJSONContentType(contentType string) bool {
