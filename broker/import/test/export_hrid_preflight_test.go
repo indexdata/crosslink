@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const hridProblem = " must be ASCII letters and digits, optionally followed by a hyphen and digits"
+const hridProblem = ` must be ASCII letters and digits, or a prefix of up to 16 ASCII letters, digits, "/", ":" or "-" followed by a hyphen and digits`
 
 func TestExportPreflightRejectsInvalidHrid(t *testing.T) {
 	// Execute the actual preflight check without requiring the full legacy schema.
@@ -38,8 +38,13 @@ func TestExportPreflightRejectsInvalidHrid(t *testing.T) {
 		{name: "hyphen before number", side: "borrowing", hrid: pgtype.Text{String: "ABC-10008", Valid: true}},
 		{name: "hyphen before letters", side: "borrowing", hrid: pgtype.Text{String: "ABC-X1", Valid: true},
 			want: "request pr1: HRID ABC-X1" + hridProblem},
-		{name: "two hyphens", side: "borrowing", hrid: pgtype.Text{String: "A-B-1", Valid: true},
-			want: "request pr1: HRID A-B-1" + hridProblem},
+		{name: "hyphenated prefix", side: "borrowing", hrid: pgtype.Text{String: "A-B-1", Valid: true}},
+		{name: "ISIL prefix", side: "borrowing", hrid: pgtype.Text{String: "US/A:B-C-10008", Valid: true}},
+		{name: "longest prefix", side: "borrowing", hrid: pgtype.Text{String: strings.Repeat("A", 16) + "-1", Valid: true}},
+		{name: "prefix too long", side: "borrowing", hrid: pgtype.Text{String: strings.Repeat("A", 17) + "-1", Valid: true},
+			want: "request pr1: HRID " + strings.Repeat("A", 17) + "-1" + hridProblem},
+		{name: "ISIL characters without number", side: "borrowing", hrid: pgtype.Text{String: "A/B", Valid: true},
+			want: "request pr1: HRID A/B" + hridProblem},
 		{name: "space", side: "borrowing", hrid: pgtype.Text{String: "AB 1", Valid: true},
 			want: "request pr1: HRID AB 1" + hridProblem},
 		{name: "non-ASCII", side: "borrowing", hrid: pgtype.Text{String: "ÅB1", Valid: true},

@@ -65,6 +65,9 @@ type ImportRepo interface {
 	ImportPatronRequest(common.ExtendedContext, PatronRequestBundle, ConflictPolicy) (Result, error)
 	ImportTemplate(common.ExtendedContext, pr_db.SaveTemplateParams, ConflictPolicy) (Result, error)
 	ImportBatchAction(common.ExtendedContext, sched_db.SaveScheduledTaskParams, ConflictPolicy) (Result, error)
+	// ReserveHrids raises each prefix's HRID sequence past the given number in
+	// one transaction.
+	ReserveHrids(common.ExtendedContext, map[string]int64) error
 }
 
 type ConflictError struct {

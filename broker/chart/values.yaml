@@ -103,6 +103,10 @@ autoscaling:
   targetCPUUtilizationPercentage: 80
   # targetMemoryUtilizationPercentage: 80
 
+# Size limit of the emptyDir mounted at /tmp. Imports spool the request body
+# there, up to 2Gi per concurrent import.
+tmpSizeLimit: 4Gi
+
 # Additional volumes on the output Deployment definition.
 volumes: []
 # - name: foo

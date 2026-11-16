@@ -28,9 +28,11 @@ const importWriteTimeout = 10 * time.Minute
 
 var _ importoapi.ServerInterface = (*ApiHandler)(nil)
 
-func NewApiHandler(repo importdb.ImportRepo, illRepo ill_db.IllRepo, directoryAdapter adapter.DirectoryLookupAdapter, stateModels *prservice.StateModelService) ApiHandler {
+// NewApiHandler creates the import API handler. prefixResolver resolves the
+// request ID prefixes whose IDs an import reserves.
+func NewApiHandler(repo importdb.ImportRepo, illRepo ill_db.IllRepo, directoryAdapter adapter.DirectoryLookupAdapter, stateModels *prservice.StateModelService, prefixResolver *prservice.PatronRequestActionService) ApiHandler {
 	return ApiHandler{
-		importer: service.NewImporter(repo, illRepo, directoryAdapter, stateModels, nil),
+		importer: service.NewImporter(repo, illRepo, directoryAdapter, stateModels, prefixResolver, nil),
 	}
 }
 
@@ -88,8 +90,12 @@ func (a *ApiHandler) PostImport(w http.ResponseWriter, r *http.Request, params i
 			http.Error(w, "import request too large", http.StatusRequestEntityTooLarge)
 			return
 		}
-		ctx.Logger().Error("failed to read import request", "error", err)
-		http.Error(w, "failed to read import request", http.StatusInternalServerError)
+		if errors.Is(err, service.ErrTooManyImportHridPrefixes) {
+			brokerapi.AddBadRequestError(ctx, w, err)
+			return
+		}
+		ctx.Logger().Error("failed to process import request", "error", err)
+		http.Error(w, "failed to process import request", http.StatusInternalServerError)
 		return
 	}
 	brokerapi.WriteJsonResponse(w, result)

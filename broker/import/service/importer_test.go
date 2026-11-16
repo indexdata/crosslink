@@ -886,6 +886,210 @@ func TestImporterRejectsRecordOverSizeLimit(t *testing.T) {
 	assert.Zero(t, repo.templateCalls)
 }
 
+// stubPrefixResolver resolves request ID prefixes from a map, failing for
+// symbols it does not know.
+type stubPrefixResolver map[string]string
+
+func (r stubPrefixResolver) RequestIdPrefix(_ common.ExtendedContext, symbol string) (string, error) {
+	prefix, ok := r[symbol]
+	if !ok {
+		return "", errors.New("malformed symbol")
+	}
+	return prefix, nil
+}
+
+// patronRequestRecord is an NDJSON patron-request record of requester ISIL:REQ
+// whose request IDs are id.
+func patronRequestRecord(t *testing.T, owner, id, side string) string {
+	t.Helper()
+	return requesterRecord(t, owner, "REQ", id, side)
+}
+
+// requesterRecord is an NDJSON patron-request record of requester ISIL:requester
+// whose request IDs are id.
+func requesterRecord(t *testing.T, owner, requester, id, side string) string {
+	t.Helper()
+	data := mutatePatronBundleData(t, func(bundle map[string]any) {
+		request := bundle["patronRequest"].(map[string]any)
+		request["id"], request["requesterRequestId"], request["side"] = id, id, side
+		request["requesterSymbol"] = "ISIL:" + requester
+		header := request["illRequest"].(map[string]any)["header"].(map[string]any)
+		header["requestingAgencyRequestId"] = id
+		header["requestingAgencyId"].(map[string]any)["agencyIdValue"] = requester
+		bundle["illTransaction"].(map[string]any)["requesterRequestID"] = id
+		bundle["illTransaction"].(map[string]any)["requesterSymbol"] = "ISIL:" + requester
+		if side == "lending" {
+			request["supplierSymbol"] = "ISIL:SUP"
+			delete(bundle, "illTransaction")
+			bundle["locatedSuppliers"] = []any{}
+		}
+	})
+	return `{"type":"patronRequest","owner":"` + owner + `","data":` + string(data) + "}\n"
+}
+
+// reservingImporter imports for owners whose branches are ISIL:REQ and
+// ISIL:REQ2, with request ID prefixes ABC and US/A:B-C.
+func reservingImporter(repo *recordingImportRepo) Importer {
+	cache := &recordingPeerCache{
+		peers: []ill_db.Peer{{ID: "requester-peer"}, {ID: "supplier-peer"}},
+		branchSymbols: []ill_db.BranchSymbol{
+			{SymbolValue: "ISIL:REQ", PeerID: "requester-peer"},
+			{SymbolValue: "ISIL:REQ2", PeerID: "requester-peer"},
+		},
+	}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
+	importer.prefixResolver = stubPrefixResolver{"ISIL:REQ": "abc", "ISIL:REQ2": "US/A:B-C"}
+	return importer
+}
+
+func TestImporterReservesHridsBeforeImporting(t *testing.T) {
+	repo := &recordingImportRepo{patronResult: importdb.Result{Outcome: importdb.OutcomeImported}}
+	importer := reservingImporter(repo)
+	body := patronRequestRecord(t, "ISIL:REQ", "ABC-41", "borrowing") +
+		"\n{bad json}\n" +
+		patronRequestRecord(t, "ISIL:OWNER", "abc-99", "borrowing") +
+		patronRequestRecord(t, "ISIL:REQ", "ABC-50", "borrowing") +
+		requesterRecord(t, "ISIL:REQ", "REQ2", "us/a:b-c-7", "borrowing") +
+		patronRequestRecord(t, "ISIL:REQ", "OTHER-500", "borrowing") +
+		patronRequestRecord(t, "ISIL:REQ", "ABC-"+strings.Repeat("9", 16), "borrowing") +
+		patronRequestRecord(t, "ISIL:SUP", "ABC-600", "lending") +
+		patronRequestRecord(t, "ISIL:REQ", "0b8ae4f3-2c1c-4c4e-9d9b-"+strings.Repeat("7", 12), "borrowing") +
+		`{"type":"template","owner":"ISIL:REQ","data":` + string(validTemplateData()) + "}\n"
+
+	result, err := importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader(body))
+
+	require.NoError(t, err)
+	require.Equal(t, []map[string]int64{{"ABC": 99, "US/A:B-C": 7}}, repo.reservations,
+		"the highest number per requester prefix is reserved; other prefixes, long numbers, lending, UUID and malformed records are not")
+	assert.Equal(t, []int{0}, repo.reservedBeforePatronCalls, "reservation precedes every record import")
+	assert.Equal(t, int32(8), result.PatronRequests.Imported, "unreserved IDs still import")
+	assert.Equal(t, int32(1), result.Templates.Imported)
+	require.Len(t, result.Errors, 1)
+	assert.Equal(t, int32(3), result.Errors[0].Line, "spooling keeps line numbers")
+}
+
+func TestHridNumber(t *testing.T) {
+	for _, tc := range []struct {
+		id, prefix string
+		want       int64
+		ok         bool
+	}{
+		{id: "ABC-41", prefix: "ABC", want: 41, ok: true},
+		{id: "abc-41", prefix: "ABC", want: 41, ok: true},
+		{id: "US-RS1-1001", prefix: "US-RS1", want: 1001, ok: true},
+		{id: "US/A:B-C-7", prefix: "US/A:B-C", want: 7, ok: true},
+		{id: "ABC-" + strings.Repeat("9", 15), prefix: "ABC", want: 999999999999999, ok: true},
+		{id: "ABC-" + strings.Repeat("9", 16), prefix: "ABC"},
+		{id: "ABC-" + strings.Repeat("9", 25), prefix: "ABC"},
+		{id: "ABCD-41", prefix: "ABC"},
+		{id: "XABC-41", prefix: "ABC"},
+		{id: "ABC-4A", prefix: "ABC"},
+		{id: "ABC-", prefix: "ABC"},
+		{id: "ABC", prefix: "ABC"},
+		{id: "-41", prefix: ""},
+	} {
+		used, ok := hridNumber(tc.id, tc.prefix)
+		assert.Equal(t, tc.ok, ok, tc.id)
+		assert.Equal(t, tc.want, used, tc.id)
+	}
+}
+
+func TestImporterDoesNotReserveForeignRequesters(t *testing.T) {
+	repo := &recordingImportRepo{}
+	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}
+	importer := newImporter(repo, cache, nil, &recordingStateValidator{}, fixedClock)
+	importer.prefixResolver = stubPrefixResolver{"ISIL:REQ": "ABC"}
+
+	_, err := importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader(patronRequestRecord(t, "ISIL:OTHER", "ABC-41", "borrowing")))
+
+	require.NoError(t, err)
+	assert.Empty(t, repo.reservations, "a requester outside the envelope owner reserves nothing")
+}
+
+func TestImporterDoesNotReserveForMalformedRequesterSymbol(t *testing.T) {
+	repo := &recordingImportRepo{}
+	importer := reservingImporter(repo)
+	importer.prefixResolver = stubPrefixResolver{}
+
+	_, err := importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader(patronRequestRecord(t, "ISIL:REQ", "ABC-41", "borrowing")))
+
+	require.NoError(t, err)
+	assert.Empty(t, repo.reservations)
+}
+
+func TestImporterDoesNotReserveWithoutHrids(t *testing.T) {
+	repo := &recordingImportRepo{}
+	importer := newImporter(repo, &recordingPeerCache{peers: []ill_db.Peer{{ID: "owner-peer"}}}, nil, nil, fixedClock)
+
+	_, err := importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader(`{"type":"template","owner":"ISIL:OWNER","data":`+string(validTemplateData())+"}\n"))
+
+	require.NoError(t, err)
+	assert.Empty(t, repo.reservations)
+	assert.Equal(t, 1, repo.templateCalls)
+}
+
+func TestImporterRequiresPrefixResolverForHrids(t *testing.T) {
+	repo := &recordingImportRepo{}
+	importer := reservingImporter(repo)
+	importer.prefixResolver = nil
+
+	_, err := importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader(patronRequestRecord(t, "ISIL:REQ", "ABC-41", "borrowing")))
+
+	assert.ErrorContains(t, err, "request ID prefix resolver is required")
+	assert.Zero(t, repo.patronCalls)
+}
+
+func TestImporterImportsNothingWhenStreamFails(t *testing.T) {
+	repo := &recordingImportRepo{}
+	importer := reservingImporter(repo)
+	record := patronRequestRecord(t, "ISIL:REQ", "ABC-41", "borrowing")
+	importer.maxRecordBytes = len(record) + 16
+
+	_, err := importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader(record+strings.Repeat("x", len(record)+17)+"\n"))
+
+	assert.ErrorIs(t, err, ErrImportRecordTooLarge)
+	assert.Empty(t, repo.reservations)
+	assert.Zero(t, repo.patronCalls)
+}
+
+func TestImporterImportsNothingWhenReservationFails(t *testing.T) {
+	repo := &recordingImportRepo{reserveErr: errors.New("db down")}
+	importer := reservingImporter(repo)
+
+	_, err := importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader(patronRequestRecord(t, "ISIL:REQ", "ABC-41", "borrowing")))
+
+	assert.ErrorContains(t, err, "db down")
+	assert.Zero(t, repo.patronCalls)
+}
+
+func TestImporterImportsNothingWhenOwnerLookupFails(t *testing.T) {
+	repo := &recordingImportRepo{}
+	importer := newImporter(repo, &recordingPeerCache{err: errors.New("directory down")}, nil, &recordingStateValidator{}, fixedClock)
+	importer.prefixResolver = stubPrefixResolver{"ISIL:REQ": "ABC"}
+
+	_, err := importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader(patronRequestRecord(t, "ISIL:REQ", "ABC-41", "borrowing")))
+
+	assert.ErrorContains(t, err, "directory down")
+	assert.Empty(t, repo.reservations)
+	assert.Zero(t, repo.patronCalls)
+}
+
+func TestImporterLimitsReservedPrefixes(t *testing.T) {
+	repo := &recordingImportRepo{}
+	importer := reservingImporter(repo)
+	importer.maxHridPrefixes = 2
+	body := patronRequestRecord(t, "ISIL:REQ", "ABC-1", "borrowing") +
+		requesterRecord(t, "ISIL:REQ", "REQ2", "US/A:B-C-1", "borrowing") +
+		patronRequestRecord(t, "ISIL:REQ", "ABC-2", "borrowing")
+
+	_, err := importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader(body))
+	require.NoError(t, err, "a known requester does not count again")
+
+	importer.prefixResolver = stubPrefixResolver{"ISIL:REQ": "ABC", "ISIL:REQ2": "US/A:B-C", "ISIL:REQ3": "XYZ"}
+	_, err = importer.Import(testCtx(), importdb.ConflictPolicyFail, strings.NewReader(body+requesterRecord(t, "ISIL:REQ3", "REQ3", "XYZ-1", "borrowing")))
+	assert.ErrorIs(t, err, ErrTooManyImportHridPrefixes)
+}
+
 func TestImporterForwardsPolicyToBatchAction(t *testing.T) {
 	repo := &recordingImportRepo{batchResult: importdb.Result{Outcome: importdb.OutcomeImported}}
 	cache := &recordingPeerCache{peers: []ill_db.Peer{{ID: "only-one"}}}
@@ -1009,21 +1213,24 @@ func TestImportBatchActionRejectsInvalidSchedule(t *testing.T) {
 }
 
 type recordingImportRepo struct {
-	patron          importdb.PatronRequestBundle
-	patronPolicy    importdb.ConflictPolicy
-	patronResult    importdb.Result
-	patronErr       error
-	patronCalls     int
-	template        pr_db.SaveTemplateParams
-	templatePolicy  importdb.ConflictPolicy
-	templateResults []importdb.Result
-	templateErrors  []error
-	templateCalls   int
-	batch           sched_db.SaveScheduledTaskParams
-	batchPolicy     importdb.ConflictPolicy
-	batchResult     importdb.Result
-	batchErr        error
-	batchCalls      int
+	reservations              []map[string]int64
+	reservedBeforePatronCalls []int
+	reserveErr                error
+	patron                    importdb.PatronRequestBundle
+	patronPolicy              importdb.ConflictPolicy
+	patronResult              importdb.Result
+	patronErr                 error
+	patronCalls               int
+	template                  pr_db.SaveTemplateParams
+	templatePolicy            importdb.ConflictPolicy
+	templateResults           []importdb.Result
+	templateErrors            []error
+	templateCalls             int
+	batch                     sched_db.SaveScheduledTaskParams
+	batchPolicy               importdb.ConflictPolicy
+	batchResult               importdb.Result
+	batchErr                  error
+	batchCalls                int
 }
 
 func (r *recordingImportRepo) WithTxFunc(_ common.ExtendedContext, fn func(importdb.ImportRepo) error) error {
@@ -1047,6 +1254,11 @@ func (r *recordingImportRepo) ImportTemplate(_ common.ExtendedContext, params pr
 		return result, r.templateErrors[index]
 	}
 	return result, nil
+}
+func (r *recordingImportRepo) ReserveHrids(_ common.ExtendedContext, reservations map[string]int64) error {
+	r.reservations = append(r.reservations, reservations)
+	r.reservedBeforePatronCalls = append(r.reservedBeforePatronCalls, r.patronCalls)
+	return r.reserveErr
 }
 func (r *recordingImportRepo) ImportBatchAction(_ common.ExtendedContext, params sched_db.SaveScheduledTaskParams, policy importdb.ConflictPolicy) (importdb.Result, error) {
 	r.batch, r.batchPolicy, r.batchCalls = params, policy, r.batchCalls+1

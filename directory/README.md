@@ -458,7 +458,8 @@ Filter Directory entries with CQL `isPickupLocation=true` or `isPickupLocation=f
 
 `illConfig.requestIdPrefix` is the optional prefix for request IDs the broker
 generates for this requester, in the form `PREFIX-N` with the prefix uppercased.
-It may contain at most 32 ASCII letters and digits. When it is unset or empty, the
+It may contain at most 16 ISIL characters: ASCII letters, digits, `/`, `:`, and
+`-`. When it is unset or empty, the
 broker uses the value part of the requester symbol (`DK-123` for `ISIL:DK-123`).
 Branches inherit their institution's prefix; a consortium prefix is not
 inherited. Create, read, PATCH, and NDJSON import support this field. PATCH

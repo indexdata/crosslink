@@ -116,7 +116,11 @@ Important validation rules include:
 - An `illTransaction`, when supplied, must use the same requester symbol and requester request ID. `locatedSuppliers` require an `illTransaction`.
 - Item, notification, and located-supplier IDs must be unique within their respective arrays. At most one located supplier may have status `selected`.
 
-When a borrowing request's `id` has the `PREFIX-N` form that the broker generates, the import raises the request-ID sequence for `PREFIX` past `N`, so new requests cannot reuse the ID. `PREFIX` must be ASCII letters and digits, or equal the value of `requesterSymbol` (`US-RS1` in `US-RS1-1001`), which the broker uses when Directory sets no `requestIdPrefix`. Other IDs, such as UUIDs, leave the sequences unchanged. Request creation for that prefix waits while an import is advancing its sequence, so imports and new requests can run at the same time.
+When a borrowing request's `id` has the `PREFIX-N` form that the broker generates for its requester, the import reserves the ID so new requests cannot reuse it. `PREFIX` must be the requester's own request-ID prefix, compared case-insensitively: its Directory `requestIdPrefix`, or the value of `requesterSymbol` (`US-RS1` in `US-RS1-1001`) when Directory sets none. `N` must have at most 15 digits. Other IDs, such as UUIDs or IDs with another prefix, are imported without a reservation; they cannot collide with IDs the broker generates for the requester. A requester outside the envelope owner and its branches reserves nothing, so an import cannot move another institution's sequence.
+
+The broker first receives the whole stream into a temporary file. It then raises the request-ID sequence of every requester prefix past the highest `N` among the stream's reservable borrowing requests, in one transaction, before it imports any record. A request created while the records are imported therefore cannot take an ID that a later record uses. Requests created before the upload finishes are not protected, just like requests created before the import started. Request creation for a prefix waits while an import is advancing its sequence, so imports and new requests can run at the same time. The broker's temporary directory (`/tmp`, or `TMPDIR` when set) must have room for the whole request body of every concurrent import. The Helm chart mounts a size-limited `emptyDir` there (`tmpSizeLimit`, default `4Gi`).
+
+IDs generated from a prefix that contains `/` must be percent-encoded (`%2F`) in `/patron_requests/{id}` URLs.
 
 Minimal borrowing example:
 
@@ -126,7 +130,7 @@ Minimal borrowing example:
 
 ## Conflict policies
 
-The selected policy applies independently to every record in the stream. A record-level conflict or validation error does not stop later records, and successful earlier records remain committed. Every imported resource is written in its own database transaction.
+The selected policy applies independently to every record in the stream. A record-level conflict or validation error does not stop later records, and successful earlier records remain committed. Every imported resource is written in its own database transaction, after the request-ID reservation described under [Patron requests](#patron-requests).
 
 ### `fail` (default)
 
@@ -234,8 +238,8 @@ Always inspect the counters and `errors` array instead of treating HTTP 200 as p
 
 | Status | Meaning |
 | --- | --- |
-| `400 Bad Request` | Missing body, unsupported `conflictPolicy`, or a content type other than `application/x-ndjson` |
+| `400 Bad Request` | Missing body, unsupported `conflictPolicy`, a content type other than `application/x-ndjson`, or borrowing request IDs from more than 10,000 prefixes or envelope owners |
 | `413 Request Entity Too Large` | The whole body exceeds 2 GiB or one NDJSON record exceeds 1 MiB |
-| `500 Internal Server Error` | The server could not read the request stream |
+| `500 Internal Server Error` | The server could not read or store the request stream, resolve an envelope owner, or reserve request IDs |
 
-The handler applies the network I/O deadlines described above. A fatal stream error such as an oversized record stops reading the request; records already committed before that error are not rolled back.
+The handler applies the network I/O deadlines described above. Any request-level error occurs before the first record is imported, so a fatal stream error such as an oversized record imports nothing.

@@ -2,7 +2,10 @@ package test
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +15,9 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	ill_db "github.com/indexdata/crosslink/broker/ill_db"
 	importdb "github.com/indexdata/crosslink/broker/import/db"
+	"github.com/indexdata/crosslink/broker/import/service"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/crosslink/testutil"
@@ -575,35 +580,21 @@ func TestImportPatronRequestPersistsBibRecordID(t *testing.T) {
 	}
 }
 
-func TestImportBorrowingPatronRequestAdvancesHridSequence(t *testing.T) {
+func TestImportPatronRequestLeavesHridSequenceToReservation(t *testing.T) {
+	// The importer reserves HRIDs for the whole stream before importing records,
+	// so a record import takes no sequence lock and leaves the sequence alone.
 	hridPrefix := "T" + strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
-	importID := func(id string, lending bool) {
-		t.Helper()
-		prefix := uuid.NewString()
-		bundle := testPatronBundle(prefix, prefix+"-request")
-		if lending {
-			bundle = testLendingPatronBundle(prefix, prefix+"-request", prefix+"-SUP")
-		}
-		bundle.PatronRequest.ID = id
-		_, err := importTestRepo.ImportPatronRequest(importTestCtx, bundle, importdb.ConflictPolicyFail)
-		require.NoError(t, err)
-	}
-	nextHrid := func() string {
-		t.Helper()
-		var hrid string
-		require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT get_next_hrid($1)", hridPrefix).Scan(&hrid))
-		return hrid
-	}
-
-	importID(hridPrefix+"-41", false)
-	assert.Equal(t, strings.ToUpper(hridPrefix)+"-42", nextHrid())
-	importID(hridPrefix+"-10", false)
-	assert.Equal(t, strings.ToUpper(hridPrefix)+"-43", nextHrid(), "a lower imported number does not move the sequence back")
-	importID(hridPrefix+"-500", true)
-	assert.Equal(t, strings.ToUpper(hridPrefix)+"-44", nextHrid(), "lending request IDs are not generated locally")
+	prefix := uuid.NewString()
+	bundle := testPatronBundle(prefix, prefix+"-request")
+	bundle.PatronRequest.ID = hridPrefix + "-41"
+	_, err := importTestRepo.ImportPatronRequest(importTestCtx, bundle, importdb.ConflictPolicyFail)
+	require.NoError(t, err)
+	var hrid string
+	require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT get_next_hrid($1)", hridPrefix).Scan(&hrid))
+	assert.Equal(t, strings.ToUpper(hridPrefix)+"-1", hrid)
 }
 
-func TestImportHridAdvanceWaitsForConcurrentSequenceUse(t *testing.T) {
+func TestReserveHridsWaitsForConcurrentSequenceUse(t *testing.T) {
 	// Counts waiters on this prefix's sequence lock; a bigint advisory key is
 	// stored as classid (high 32 bits) and objid (low 32 bits).
 	const waitingQuery = `WITH lock_key AS (
@@ -628,22 +619,18 @@ func TestImportHridAdvanceWaitsForConcurrentSequenceUse(t *testing.T) {
 			_, err = blocker.Exec(ctx, tc.blockerSQL, hridPrefix)
 			require.NoError(t, err)
 
-			prefix := uuid.NewString()
-			bundle := testPatronBundle(prefix, prefix+"-request")
-			bundle.PatronRequest.ID = hridPrefix + "-41"
 			done := make(chan error, 1)
 			go func() {
-				_, err := importTestRepo.ImportPatronRequest(importTestCtx, bundle, importdb.ConflictPolicyFail)
-				done <- err
+				done <- importTestRepo.ReserveHrids(importTestCtx, map[string]int64{strings.ToUpper(hridPrefix): 41})
 			}()
 			require.Eventually(t, func() bool {
 				var waiting int
 				err := importTestPool.QueryRow(ctx, waitingQuery, hridPrefix).Scan(&waiting)
 				return err == nil && waiting > 0
-			}, 5*time.Second, 10*time.Millisecond, "the import must wait for the sequence lock")
+			}, 5*time.Second, 10*time.Millisecond, "the reservation must wait for the sequence lock")
 			select {
 			case err := <-done:
-				t.Fatalf("import finished while the sequence lock was held: %v", err)
+				t.Fatalf("reservation finished while the sequence lock was held: %v", err)
 			default:
 			}
 
@@ -656,27 +643,91 @@ func TestImportHridAdvanceWaitsForConcurrentSequenceUse(t *testing.T) {
 	}
 }
 
-func TestImportBorrowingPatronRequestAdvancesSymbolHridSequence(t *testing.T) {
-	// Without a Directory prefix, IDs use the requester symbol value, which may
-	// contain hyphens.
-	prefix := uuid.NewString()
-	bundle := testPatronBundle(prefix, prefix+"-request")
-	symbolValue := "T-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
-	bundle.PatronRequest.RequesterSymbol = pgtype.Text{String: "ISIL:" + symbolValue, Valid: true}
-	bundle.PatronRequest.ID = symbolValue + "-41"
-	_, err := importTestRepo.ImportPatronRequest(importTestCtx, bundle, importdb.ConflictPolicyFail)
-	require.NoError(t, err)
-	var hrid string
-	require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT get_next_hrid($1)", symbolValue).Scan(&hrid))
-	assert.Equal(t, strings.ToUpper(symbolValue)+"-42", hrid)
+func TestReserveHridsSupportsIsilPrefixes(t *testing.T) {
+	base := "T" + strings.ReplaceAll(uuid.NewString(), "-", "")[:8]
+	reservations := map[string]int64{base + "-X": 41, base + "/X": 7, base + ":X": 1000, strings.ToUpper(base) + "-Y": 3}
+	require.NoError(t, importTestRepo.ReserveHrids(importTestCtx, reservations))
+	// Reserving a lower number later never moves a sequence back.
+	require.NoError(t, importTestRepo.ReserveHrids(importTestCtx, map[string]int64{base + "-X": 5}))
+	for prefix, used := range reservations {
+		var hrid string
+		require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT get_next_hrid($1)", prefix).Scan(&hrid))
+		assert.Equal(t, strings.ToUpper(prefix)+"-"+strconv.FormatInt(used+1, 10), hrid)
+	}
+}
 
-	// A UUID whose last group is all digits is not an HRID.
-	uuidPrefix := uuid.NewString()[:23]
-	bundle = testPatronBundle(uuid.NewString(), uuid.NewString()+"-request")
-	bundle.PatronRequest.ID = uuidPrefix + "-" + strings.Repeat("7", 12)
-	_, err = importTestRepo.ImportPatronRequest(importTestCtx, bundle, importdb.ConflictPolicyFail)
+// stubPrefixResolver resolves request ID prefixes from a map, failing for
+// symbols it does not know.
+type stubPrefixResolver map[string]string
+
+func (r stubPrefixResolver) RequestIdPrefix(_ common.ExtendedContext, symbol string) (string, error) {
+	prefix, ok := r[symbol]
+	if !ok {
+		return "", errors.New("unknown requester symbol")
+	}
+	return prefix, nil
+}
+
+// liveCreationRepo creates a request ID the way request creation does after
+// the first patron request record is imported.
+type liveCreationRepo struct {
+	importdb.ImportRepo
+	prefix  string
+	created []string
+}
+
+func (r *liveCreationRepo) ImportPatronRequest(ctx common.ExtendedContext, bundle importdb.PatronRequestBundle, policy importdb.ConflictPolicy) (importdb.Result, error) {
+	result, err := r.ImportRepo.ImportPatronRequest(ctx, bundle, policy)
+	if err == nil && len(r.created) == 0 {
+		var hrid string
+		err = importTestPool.QueryRow(context.Background(), "SELECT get_next_hrid($1)", r.prefix).Scan(&hrid)
+		r.created = append(r.created, hrid)
+	}
+	return result, err
+}
+
+func borrowingImportRecord(t *testing.T, symbolValue, id string) string {
+	t.Helper()
+	record := map[string]any{
+		"type": "patronRequest", "owner": "ISIL:" + symbolValue,
+		"data": map[string]any{
+			"patronRequest": map[string]any{
+				"id": id, "createdAt": testTimestamp(0).Time, "updatedAt": testTimestamp(1).Time,
+				"state": "SENT", "side": "borrowing", "stateModel": "default", "needsAttention": false,
+				"requesterSymbol": "ISIL:" + symbolValue, "requesterRequestId": id,
+				"illRequest": map[string]any{
+					"header": map[string]any{
+						"requestingAgencyId": map[string]any{"agencyIdType": map[string]string{"#text": "ISIL"}, "agencyIdValue": symbolValue},
+						"supplyingAgencyId":  map[string]any{"agencyIdType": map[string]string{"#text": "ISIL"}, "agencyIdValue": symbolValue + "-SUP"},
+						"timestamp":          testTimestamp(0).Time, "requestingAgencyRequestId": id,
+					},
+					"bibliographicInfo": map[string]string{"title": "Reservation"},
+					"serviceInfo":       map[string]string{"serviceType": "Loan"},
+				},
+			},
+			"items": []any{}, "notifications": []any{}, "locatedSuppliers": []any{},
+		},
+	}
+	line, err := json.Marshal(record)
 	require.NoError(t, err)
-	var sequences int
-	require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT count(*) FROM pg_class WHERE relkind = 'S' AND relname = $1", uuidPrefix+"_hrid_seq").Scan(&sequences))
-	assert.Zero(t, sequences)
+	return string(line) + "\n"
+}
+
+func TestImportReservesHridsOfLaterRecords(t *testing.T) {
+	// A request created after the first record is imported must not take the
+	// ID of a later record in the same stream.
+	symbolValue := "T" + strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
+	hridPrefix := "P/" + symbolValue[:8]
+	insertPeer("ISIL:"+symbolValue, symbolValue+"-peer")
+	repo := &liveCreationRepo{ImportRepo: importTestRepo, prefix: hridPrefix}
+	importer := service.NewImporter(repo, ill_db.CreateIllRepo(importTestPool), nil, &prservice.StateModelService{},
+		stubPrefixResolver{"ISIL:" + symbolValue: hridPrefix}, time.Now)
+	body := borrowingImportRecord(t, symbolValue, hridPrefix+"-41") + borrowingImportRecord(t, symbolValue, hridPrefix+"-42")
+
+	result, err := importer.Import(importTestCtx, importdb.ConflictPolicyFail, strings.NewReader(body))
+
+	require.NoError(t, err)
+	require.Empty(t, result.Errors)
+	assert.EqualValues(t, 2, result.PatronRequests.Imported)
+	assert.Equal(t, []string{strings.ToUpper(hridPrefix) + "-43"}, repo.created)
 }

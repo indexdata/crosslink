@@ -3,8 +3,7 @@ package importdb
 import (
 	"errors"
 	"fmt"
-	"regexp"
-	"strconv"
+	"slices"
 	"strings"
 
 	"github.com/indexdata/crosslink/broker/common"
@@ -152,12 +151,6 @@ func (r *PgImportRepo) ImportPatronRequest(ctx common.ExtendedContext, bundle Pa
 				return fmt.Errorf("insert patron request %q: %w", bundle.PatronRequest.ID, err)
 			}
 		}
-		if bundle.PatronRequest.Side == prservice.SideBorrowing {
-			if err := r.advanceHrid(ctx, tx, bundle.PatronRequest.ID, bundle.PatronRequest.RequesterSymbol.String); err != nil {
-				return err
-			}
-		}
-
 		itemIDs := make([]string, 0, len(bundle.Items))
 		for _, item := range bundle.Items {
 			item.PrID = bundle.PatronRequest.ID
@@ -201,38 +194,30 @@ func (r *PgImportRepo) ImportPatronRequest(ctx common.ExtendedContext, bundle Pa
 	return result, err
 }
 
-var (
-	// hridPattern splits the PREFIX-NUMBER form that get_next_hrid generates.
-	hridPattern = regexp.MustCompile(`^(.+)-([0-9]+)$`)
-	// alphanumericPrefix matches prefixes configured in Directory.
-	alphanumericPrefix = regexp.MustCompile(`^[A-Za-z0-9]+$`)
-)
-
-// advanceHrid keeps generated request IDs from colliding with an imported one.
-// When id has the PREFIX-NUMBER form, the HRID sequence for PREFIX is raised so
-// get_next_hrid only returns numbers above NUMBER. PREFIX must be alphanumeric,
-// like a Directory requestIdPrefix, or equal the value of requesterSymbol, which
-// RequestIdPrefix falls back to and which may contain hyphens ("US-RS1-1001").
-// Other IDs, including UUIDs whose last group is all digits, are left alone.
-// advance_hrid locks the sequence against other advances and get_next_hrid
-// until commit, so imports may run while the tenant creates requests.
-func (r *PgImportRepo) advanceHrid(ctx common.ExtendedContext, tx DBTX, id string, requesterSymbol string) error {
-	match := hridPattern.FindStringSubmatch(id)
-	if match == nil {
+// ReserveHrids raises the HRID sequence of every prefix past its reserved
+// number in one transaction, so get_next_hrid only returns higher numbers. An
+// import reserves the IDs of all its records this way before writing the first
+// one, so requests created during the import cannot take a later record's ID.
+// advance_hrid locks each sequence against get_next_hrid until commit. Prefixes
+// are advanced in sorted order so concurrent reservations take the sequence
+// locks in the same order.
+func (r *PgImportRepo) ReserveHrids(ctx common.ExtendedContext, reservations map[string]int64) error {
+	if len(reservations) == 0 {
 		return nil
 	}
-	_, symbolValue, _ := common.SplitSymbol(requesterSymbol)
-	if !alphanumericPrefix.MatchString(match[1]) && (symbolValue == "" || !strings.EqualFold(match[1], symbolValue)) {
+	prefixes := make([]string, 0, len(reservations))
+	for prefix := range reservations {
+		prefixes = append(prefixes, prefix)
+	}
+	slices.Sort(prefixes)
+	return r.withTxConn(ctx, func(tx DBTX) error {
+		for _, prefix := range prefixes {
+			if err := r.queries.AdvanceImportedHrid(ctx, tx, AdvanceImportedHridParams{Prefix: prefix, Used: reservations[prefix]}); err != nil {
+				return fmt.Errorf("reserve HRID sequence for prefix %q: %w", prefix, err)
+			}
+		}
 		return nil
-	}
-	used, err := strconv.ParseInt(match[2], 10, 64)
-	if err != nil {
-		return fmt.Errorf("parse HRID number of patron request %q: %w", id, err)
-	}
-	if err := r.queries.AdvanceImportedHrid(ctx, tx, AdvanceImportedHridParams{Prefix: match[1], Used: used}); err != nil {
-		return fmt.Errorf("advance HRID sequence for patron request %q: %w", id, err)
-	}
-	return nil
+	})
 }
 
 func createImportedPatronRequestParams(params pr_db.CreatePatronRequestParams) CreateImportedPatronRequestParams {
