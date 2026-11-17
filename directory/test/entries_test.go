@@ -555,7 +555,7 @@ func TestEntryLendersOfLastResortValidation(t *testing.T) {
 		"X-Okapi-Permissions": `["directory.consortium.all"]`,
 	}
 	t.Cleanup(func() {
-		if _, err := dbpool.Exec(context.Background(), "DELETE FROM ill_configs"); err != nil {
+		if _, err := dbpool.Exec(context.Background(), "UPDATE entries SET ill_config = NULL"); err != nil {
 			t.Errorf("failed to clean up ILL configurations: %v", err)
 		}
 	})
@@ -639,11 +639,11 @@ func TestEntryLendersOfLastResortValidation(t *testing.T) {
 			t.Fatalf("expected PATCH status %d, got %d and body %s", http.StatusNoContent, res.StatusCode, data)
 		}
 
-		var lenders []string
-		if err := dbpool.QueryRow(context.Background(), "SELECT lenders_of_last_resort FROM ill_configs WHERE entry = $1", "00000000-0000-0000-0000-000000000002").Scan(&lenders); err != nil {
+		var lenders []map[string]string
+		if err := dbpool.QueryRow(context.Background(), "SELECT ill_config->'lendersOfLastResort' FROM entries WHERE id = $1", "00000000-0000-0000-0000-000000000002").Scan(&lenders); err != nil {
 			t.Fatalf("failed to fetch lenders after PATCH: %v", err)
 		}
-		if !reflect.DeepEqual(lenders, []string{"ISIL:NEW-LENDER"}) {
+		if !reflect.DeepEqual(lenders, []map[string]string{{"authority": "ISIL", "symbol": "NEW-LENDER"}}) {
 			t.Fatalf("unexpected stored lenders: %#v", lenders)
 		}
 	})
@@ -731,8 +731,7 @@ func TestPatchEntryLenderOfLastResortToNull(t *testing.T) {
 
 	_, err := dbpool.Exec(
 		context.Background(),
-		"INSERT INTO ill_configs (entry, lenders_of_last_resort) VALUES ($2, ARRAY[$1]::text[])",
-		"TEST:PATCHED-LOR",
+		`UPDATE entries SET ill_config = '{"lendersOfLastResort":[{"authority":"TEST","symbol":"PATCHED-LOR"}]}' WHERE id = $1`,
 		"00000000-0000-0000-0000-000000000002",
 	)
 	if err != nil {
@@ -747,7 +746,7 @@ func TestPatchEntryLenderOfLastResortToNull(t *testing.T) {
 	var illConfigCount int
 	err = dbpool.QueryRow(
 		context.Background(),
-		"SELECT count(*) FROM ill_configs WHERE entry = $1",
+		"SELECT count(*) FROM entries WHERE id = $1 AND ill_config IS NOT NULL",
 		"00000000-0000-0000-0000-000000000002",
 	).Scan(&illConfigCount)
 	if err != nil {
@@ -771,7 +770,7 @@ func TestPatchEntryLMSConfigNullValues(t *testing.T) {
 	var originalRequesterPatronPattern *string
 	err := dbpool.QueryRow(
 		context.Background(),
-		"SELECT address, from_agency, requester_patron_pattern FROM lms_configs WHERE entry = $1",
+		"SELECT lms_config->>'address', lms_config->>'fromAgency', lms_config->>'requesterPatronPattern' FROM entries WHERE id = $1",
 		entryID,
 	).Scan(&originalAddress, &originalFromAgency, &originalRequesterPatronPattern)
 	if err != nil {
@@ -798,8 +797,9 @@ func TestPatchEntryLMSConfigNullValues(t *testing.T) {
 	var patronProfiles []byte
 	err = dbpool.QueryRow(
 		context.Background(),
-		`SELECT address, from_agency, to_agency, accept_item_enabled, item_location, requester_patron_pattern, patron_profiles
-		 FROM lms_configs WHERE entry = $1`,
+		`SELECT lms_config->>'address', lms_config->>'fromAgency', lms_config->>'toAgency', (lms_config->>'acceptItemEnabled')::boolean,
+		 lms_config->>'itemLocation', lms_config->>'requesterPatronPattern', lms_config->'patronProfiles'
+		 FROM entries WHERE id = $1`,
 		entryID,
 	).Scan(&address, &fromAgency, &toAgency, &acceptItemEnabled, &itemLocation, &requesterPatronPattern, &patronProfiles)
 	if err != nil {
@@ -829,7 +829,7 @@ func TestPatchEntryLMSConfigNullValues(t *testing.T) {
 	}
 	if err := dbpool.QueryRow(
 		context.Background(),
-		"SELECT patron_profiles FROM lms_configs WHERE entry = $1",
+		"SELECT lms_config->'patronProfiles' FROM entries WHERE id = $1",
 		entryID,
 	).Scan(&patronProfiles); err != nil {
 		t.Fatalf("failed to fetch cleared patron profiles: %v", err)
@@ -838,22 +838,10 @@ func TestPatchEntryLMSConfigNullValues(t *testing.T) {
 		t.Fatalf("expected patron profiles to be cleared, got %s", patronProfiles)
 	}
 
-	// Null removes the local value so that an inherited one applies. The
-	// columns are NOT NULL, so an empty string is the unset encoding.
+	// Null removes the local value so that an inherited one applies.
 	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+entryID, `{"lmsConfig":{"address":null,"fromAgency":null}}`, headers)
 	if res.StatusCode != http.StatusNoContent {
 		t.Fatalf("expected LMS address null PATCH status %d, got %d and body %s", http.StatusNoContent, res.StatusCode, data)
-	}
-	err = dbpool.QueryRow(
-		context.Background(),
-		"SELECT address, from_agency FROM lms_configs WHERE entry = $1",
-		entryID,
-	).Scan(&address, &fromAgency)
-	if err != nil {
-		t.Fatalf("failed to refetch LMS config after address null PATCH: %v", err)
-	}
-	if address != "" || fromAgency != "" {
-		t.Fatalf("expected null address and fromAgency to be stored as empty strings, got %q and %q", address, fromAgency)
 	}
 	res, data = jsonReq(t, http.MethodGet, "/entries/by-id/"+entryID+"?resolve-inherit=false", "", headers)
 	var cleared struct {
@@ -874,7 +862,7 @@ func TestPatchEntryLMSConfigNullValues(t *testing.T) {
 		t.Fatalf("expected top-level LMS null PATCH status %d, got %d and body %s", http.StatusNoContent, res.StatusCode, data)
 	}
 	var count int
-	err = dbpool.QueryRow(context.Background(), "SELECT count(*) FROM lms_configs WHERE entry = $1", entryID).Scan(&count)
+	err = dbpool.QueryRow(context.Background(), "SELECT count(*) FROM entries WHERE id = $1 AND lms_config IS NOT NULL", entryID).Scan(&count)
 	if err != nil {
 		t.Fatalf("failed to count LMS configs after delete: %v", err)
 	}
@@ -1216,7 +1204,7 @@ func TestPatchCatalogConfigRequiresAddressForCreation(t *testing.T) {
 	}
 
 	var count int
-	if err := dbpool.QueryRow(context.Background(), "SELECT count(*) FROM catalog_configs WHERE entry = $1", entryID).Scan(&count); err != nil {
+	if err := dbpool.QueryRow(context.Background(), "SELECT count(*) FROM entries WHERE id = $1 AND catalog_config IS NOT NULL", entryID).Scan(&count); err != nil {
 		t.Fatalf("failed to count catalog configs after rejected patches: %v", err)
 	}
 	if count != 0 {

@@ -3,8 +3,10 @@ package test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -218,7 +220,7 @@ func TestDirectoryExportRequestIdPrefix(t *testing.T) {
 
 func TestRequestIdPrefixInheritance(t *testing.T) {
 	tree := setupInheritanceTree(t)
-	sqlExec(t, `UPDATE ill_configs SET request_id_prefix = 'CONS' WHERE entry = $1`, fixtureConsortium)
+	mergeConfig(t, fixtureConsortium, "ill_config", `{"requestIdPrefix":"CONS"}`)
 	prefix := func(id uuid.UUID) any {
 		t.Helper()
 		return getEntryJSON(t, entryPath(id), systemHeaders)["illConfig"].(map[string]any)["requestIdPrefix"]
@@ -243,22 +245,37 @@ func TestRequestIdPrefixInheritance(t *testing.T) {
 }
 
 func TestRequestIdPrefixIsilMigrationDown(t *testing.T) {
-	down, err := os.ReadFile("../migrations/027_request_id_prefix_isil.down.sql")
-	require.NoError(t, err)
 	ctx := context.Background()
 	tx, err := dbpool.Begin(ctx)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, tx.Rollback(ctx)) })
-	_, err = tx.Exec(ctx, `INSERT INTO ill_configs (entry, request_id_prefix) VALUES ($1, 'US-AB:C')
-		ON CONFLICT (entry) DO UPDATE SET request_id_prefix = EXCLUDED.request_id_prefix`, fixtureConsortium)
+	_, err = tx.Exec(ctx, "CREATE SCHEMA request_id_prefix_migration_test; SET LOCAL search_path TO request_id_prefix_migration_test")
+	require.NoError(t, err)
+	migration := func(version int, direction string) string {
+		t.Helper()
+		paths, err := filepath.Glob(fmt.Sprintf("../migrations/%03d_*.%s.sql", version, direction))
+		require.NoError(t, err)
+		require.Len(t, paths, 1)
+		sql, err := os.ReadFile(paths[0])
+		require.NoError(t, err)
+		return string(sql)
+	}
+	for version := 1; version <= 27; version++ {
+		_, err = tx.Exec(ctx, migration(version, "up"))
+		require.NoError(t, err, version)
+	}
+	id := uuid.New()
+	_, err = tx.Exec(ctx, `INSERT INTO entries (id, name, type) VALUES ($1, 'Prefix migration', 'Consortium')`, id)
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, `INSERT INTO ill_configs (entry, request_id_prefix) VALUES ($1, 'US-AB:C')`, id)
 	require.NoError(t, err)
 
-	_, err = tx.Exec(ctx, string(down))
+	_, err = tx.Exec(ctx, migration(27, "down"))
 	require.NoError(t, err, "rolling back must not fail on ISIL prefixes")
 
 	var prefix string
-	require.NoError(t, tx.QueryRow(ctx, `SELECT request_id_prefix FROM ill_configs WHERE entry = $1`, fixtureConsortium).Scan(&prefix))
+	require.NoError(t, tx.QueryRow(ctx, `SELECT request_id_prefix FROM ill_configs WHERE entry = $1`, id).Scan(&prefix))
 	require.Equal(t, "USABC", prefix)
-	_, err = tx.Exec(ctx, `UPDATE ill_configs SET request_id_prefix = 'US-ABC' WHERE entry = $1`, fixtureConsortium)
+	_, err = tx.Exec(ctx, `UPDATE ill_configs SET request_id_prefix = 'US-ABC' WHERE entry = $1`, id)
 	require.ErrorContains(t, err, "ill_configs_request_id_prefix_check", "the previous constraint is restored")
 }
