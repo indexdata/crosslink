@@ -26,8 +26,7 @@ func TestRerequest(t *testing.T) {
 			original := pr_db.PatronRequest{
 				ID: "REQ1-1", Side: SideBorrowing, State: state, TerminalState: true,
 				RequesterSymbol: getDbText("ISIL:REQ1"), SupplierSymbol: getDbText("ISIL:SUP1"),
-				BibRecordID: getDbText("shared-record"),
-				Patron:      getDbText("patron"), Tenant: getDbText("tenant"), StateModel: "default",
+				Patron: getDbText("patron"), Tenant: getDbText("tenant"), StateModel: "default",
 				IllRequest: iso18626.Request{
 					Header:            iso18626.Header{RequestingAgencyRequestId: "REQ1-1", SupplyingAgencyRequestId: "old-supplier-id"},
 					BibliographicInfo: iso18626.BibliographicInfo{Title: "Original title"},
@@ -57,7 +56,6 @@ func TestRerequest(t *testing.T) {
 			assert.False(t, next.TerminalState)
 			assert.Equal(t, original.Patron, next.Patron)
 			assert.Equal(t, original.Tenant, next.Tenant)
-			assert.Equal(t, original.BibRecordID, next.BibRecordID)
 			assert.Equal(t, original.RequesterPickupLocationID, next.RequesterPickupLocationID)
 			assert.False(t, next.SupplierSymbol.Valid)
 			assert.Empty(t, next.SupplierSymbol.String)
@@ -161,9 +159,12 @@ func TestSuccessorPersistsRequestType(t *testing.T) {
 				}
 				original := pr_db.PatronRequest{
 					ID: "REQ1-1", Side: SideBorrowing, State: "CUSTOM_STATE",
-					BibRecordID:     getDbText("shared-record"),
 					RequesterSymbol: getDbText("ISIL:REQ1"),
 					SupplierSymbol:  getDbText("ISIL:SUP1"),
+					IllRequest: iso18626.Request{
+						BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "shared-record"},
+					},
+					RetryBibInfo: &iso18626.BibliographicInfo{SupplierUniqueRecordId: "proposed-record"},
 				}
 				if !legacy {
 					original.IllRequest.ServiceInfo = &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeLoan, RequestType: &inheritedType}
@@ -171,11 +172,12 @@ func TestSuccessorPersistsRequestType(t *testing.T) {
 				result := service.createSuccessorBorrowingRequest(appCtx, original, retry)
 				require.Equal(t, events.EventStatusSuccess, result.status)
 				next := result.successorPr
-				assert.Equal(t, original.BibRecordID, next.BibRecordID)
 				expectedType := iso18626.TypeRequestTypeNew
 				expectedPrevious := original.ID
+				expectedRecord := "shared-record"
 				if retry {
 					expectedType = iso18626.TypeRequestTypeRetry
+					expectedRecord = "proposed-record"
 					assert.Equal(t, original.SupplierSymbol, next.SupplierSymbol)
 				} else {
 					assert.False(t, next.SupplierSymbol.Valid)
@@ -193,6 +195,9 @@ func TestSuccessorPersistsRequestType(t *testing.T) {
 				require.Equal(t, events.EventStatusSuccess, status)
 				assert.Equal(t, expectedType, *sent.OutgoingMessage.Request.ServiceInfo.RequestType)
 				assert.Equal(t, expectedPrevious, sent.OutgoingMessage.Request.ServiceInfo.RequestingAgencyPreviousRequestId)
+				sharedID, err := sharedIndexRecordID(sent.OutgoingMessage.Request.BibliographicInfo)
+				require.NoError(t, err)
+				assert.Equal(t, expectedRecord, sharedID)
 				repo.AssertNotCalled(t, "GetPatronRequestById", original.ID)
 			})
 		}

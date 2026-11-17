@@ -570,9 +570,6 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 
 	existingPr.RequesterReqID = getDbText(&requesterReqId)
 	existingPr.IllRequest = illRequest
-	if newPr.BibRecordId != nil {
-		existingPr.BibRecordID = getDbText(newPr.BibRecordId)
-	}
 	if newPr.RequesterPickupLocationId.IsSpecified() {
 		existingPr.RequesterPickupLocationID = getPickupLocationID(newPr.RequesterPickupLocationId)
 		if !a.validatePickupLocation(w, ctx, existingPr) {
@@ -1475,6 +1472,10 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequestSearchView) 
 		value := api.Link(r, api.Path("ill_transactions"), api.Query("requester_req_id", request.RequesterReqID.String))
 		illTransactionLink = &value
 	}
+	var bibRecordID *string
+	if id := prservice.BibRecordID(request.Side, request.IllRequest); id != "" {
+		bibRecordID = &id
+	}
 
 	pr := proapi.PatronRequest{
 		Id:                        request.ID,
@@ -1488,7 +1489,7 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequestSearchView) 
 		DueDate:                   toLoanDate(request.DueAt),
 		SupplierSymbol:            toString(request.SupplierSymbol),
 		IllRequest:                request.IllRequest,
-		BibRecordId:               toString(request.BibRecordID),
+		BibRecordId:               bibRecordID,
 		RequesterRequestId:        toString(request.RequesterReqID),
 		NeedsAttention:            request.NeedsAttention,
 		HasCost:                   request.HasCost,
@@ -1646,7 +1647,6 @@ func buildDbPatronRequest(
 		RequesterPickupLocationID: getPickupLocationID(request.RequesterPickupLocationId),
 		SupplierSymbol:            getDbText(nil),
 		IllRequest:                illRequest,
-		BibRecordID:               getDbText(request.BibRecordId),
 		Tenant:                    getDbText(tenant),
 		RequesterReqID:            getDbText(&requesterReqId),
 		InternalNote:              getDbText(request.InternalNote),
