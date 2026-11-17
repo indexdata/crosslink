@@ -154,8 +154,28 @@ Each run archives up to 100 matching requests. It scans pages of 100 candidates
 in creation-time/ID order, continuing past skipped and failed requests until the
 archive limit is reached or all matches have been examined. CQL `sortBy` does not
 change this scan order. Counts and up to 100 per-request failures are recorded in
-the batch-action event history. Requests with changed state/timestamps or active
-events or pending signals are skipped for a later run. Pending signals are
+the batch-action event history. Both borrowing and lending runs report the total
+skipped count with three groups:
+
+- **Active events or signals:** events in `NEW`/`PROCESSING` or with pending signals
+  on the request, or (for borrowing) its transaction and related lending requests.
+- **Unfinished related requests:** related nonterminal lending requests or Retry
+  successors that still depend on the borrowing request's transaction. This count
+  is always zero for lending archives.
+- **Changed or busy requests:** the selected request no longer matches its owner,
+  side, state, timestamp, or age cutoff (including removal by another run), or a
+  related request or item could not be locked immediately.
+
+Each skipped request counts only in the group for its first blocking check, so
+the three counts sum to the skipped total. Skips remain eligible for later runs
+if they still match the selector and age cutoff. For example:
+
+```text
+archived 0 borrowing requests; skipped 40 requests (active events or signals: 25; unfinished related requests: 10; changed or busy requests: 5); failed 0 requests
+```
+
+These counts describe the current run; earlier history is not recalculated.
+Pending signals are
 checked through `event.last_signal`, which consumers clear when claiming them.
 Borrowing checks exclude observer-only `supplier-added` and `supplier-moved`
 rota audit notices, whose signals remain set; these notices are still archived.
@@ -207,6 +227,9 @@ defaults to `false` and uses the same operational allowlist described above.
   "actionParams": {"interval": "720h", "anonymize": false}
 }
 ```
+
+A default with these values is offered through the state-model API as a starting
+point for a scheduled action. Creating it still requires `broker.consortium.all`.
 
 Each run archives up to 100 transactions, scanning pages of 100 in stable ID
 order regardless of CQL `sortBy`. Changed or locked transactions, transactions

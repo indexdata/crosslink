@@ -50,31 +50,32 @@ type PrRepo interface {
 }
 
 // ArchiveBorrowingRequest stores and removes one unchanged, owner-matched borrowing
-// request and its transaction in a single database statement/transaction.
-func (r *PgPrRepo) ArchiveBorrowingRequest(ctx common.ExtendedContext, pr PatronRequest, owner string, cutoff time.Time, anonymize bool) (bool, error) {
-	var archived bool
+// request and its transaction atomically, or reports the first blocking check.
+func (r *PgPrRepo) ArchiveBorrowingRequest(ctx common.ExtendedContext, pr PatronRequest, owner string, cutoff time.Time, anonymize bool) (ArchiveResult, error) {
+	var result ArchiveResult
 	err := r.GetConnOrTx().QueryRow(ctx,
-		"SELECT archive_borrowing_request($1, $2, $3, $4, $5, $6)",
+		"SELECT archive_borrowing_request_result($1, $2, $3, $4, $5, $6)",
 		pr.ID, owner, string(pr.State), pr.UpdatedAt.Time, cutoff, anonymize,
-	).Scan(&archived)
+	).Scan(&result)
 	if err != nil {
-		return false, fmt.Errorf("archive borrowing request %s: %w", pr.ID, err)
+		return "", fmt.Errorf("archive borrowing request %s: %w", pr.ID, err)
 	}
-	return archived, nil
+	return result, nil
 }
 
 // ArchiveLendingRequest atomically stores and removes one unchanged,
-// supplier-owned lending request and its children, preserving the transaction.
-func (r *PgPrRepo) ArchiveLendingRequest(ctx common.ExtendedContext, pr PatronRequest, owner string, cutoff time.Time, anonymize bool) (bool, error) {
-	var archived bool
+// supplier-owned lending request and its children, preserving the transaction,
+// or reports the first blocking check.
+func (r *PgPrRepo) ArchiveLendingRequest(ctx common.ExtendedContext, pr PatronRequest, owner string, cutoff time.Time, anonymize bool) (ArchiveResult, error) {
+	var result ArchiveResult
 	err := r.GetConnOrTx().QueryRow(ctx,
-		"SELECT archive_lending_request($1, $2, $3, $4, $5, $6)",
+		"SELECT archive_lending_request_result($1, $2, $3, $4, $5, $6)",
 		pr.ID, owner, string(pr.State), pr.UpdatedAt.Time, cutoff, anonymize,
-	).Scan(&archived)
+	).Scan(&result)
 	if err != nil {
-		return false, fmt.Errorf("archive lending request %s: %w", pr.ID, err)
+		return "", fmt.Errorf("archive lending request %s: %w", pr.ID, err)
 	}
-	return archived, nil
+	return result, nil
 }
 
 var ErrUnsupportedFacet = errors.New("unsupported facet field")

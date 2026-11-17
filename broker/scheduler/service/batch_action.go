@@ -36,8 +36,8 @@ type BatchActionService struct {
 // owned data atomically.
 type PatronRequestArchiveRepo interface {
 	ListPatronRequestArchiveCandidates(common.ExtendedContext, int32, *pr_db.PatronRequestArchiveCursor, pgcql.Query) ([]pr_db.PatronRequest, error)
-	ArchiveBorrowingRequest(common.ExtendedContext, pr_db.PatronRequest, string, time.Time, bool) (bool, error)
-	ArchiveLendingRequest(common.ExtendedContext, pr_db.PatronRequest, string, time.Time, bool) (bool, error)
+	ArchiveBorrowingRequest(common.ExtendedContext, pr_db.PatronRequest, string, time.Time, bool) (pr_db.ArchiveResult, error)
+	ArchiveLendingRequest(common.ExtendedContext, pr_db.PatronRequest, string, time.Time, bool) (pr_db.ArchiveResult, error)
 }
 
 func NewBatchActionService(eventBus events.EventBus, prRepo pr_db.PrRepo, schedRepo sched_db.SchedRepo, emailSenderService *EmailSenderService, archiveRepos ...PatronRequestArchiveRepo) *BatchActionService {
