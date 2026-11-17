@@ -66,7 +66,7 @@ func (s *BatchActionService) archivePatronRequests(ctx common.ExtendedContext, e
 		return events.NewErrorResult("invalid "+label+" archive selector", err.Error())
 	}
 	result := &events.EventResult{CustomData: map[string]any{}}
-	archived, skipped, failed := 0, 0, 0
+	archived, activeEvents, relatedRequests, changedOrBusy, failed := 0, 0, 0, 0, 0
 	var cursor *pr_db.PatronRequestArchiveCursor
 	var runErr error
 	for archived < int(archiveBatchSize) {
@@ -85,7 +85,21 @@ func (s *BatchActionService) archivePatronRequests(ctx common.ExtendedContext, e
 				break
 			}
 			cursor = &pr_db.PatronRequestArchiveCursor{CreatedAt: pr.CreatedAt.Time, ID: pr.ID}
-			stored, archiveErr := archive(ctx, pr, data.Owner, cutoff, anonymize)
+			outcome, archiveErr := archive(ctx, pr, data.Owner, cutoff, anonymize)
+			if archiveErr == nil {
+				switch outcome {
+				case pr_db.ArchiveResultArchived:
+					archived++
+				case pr_db.ArchiveResultActiveEvents:
+					activeEvents++
+				case pr_db.ArchiveResultRelatedRequests:
+					relatedRequests++
+				case pr_db.ArchiveResultChangedOrBusy:
+					changedOrBusy++
+				default:
+					archiveErr = fmt.Errorf("unexpected archive result %q", outcome)
+				}
+			}
 			if archiveErr != nil {
 				failed++
 				// Bound history size even when a large backlog repeatedly fails.
@@ -94,20 +108,16 @@ func (s *BatchActionService) archivePatronRequests(ctx common.ExtendedContext, e
 				}
 				continue
 			}
-			if stored {
-				archived++
-				if archived == int(archiveBatchSize) {
-					break
-				}
-			} else {
-				skipped++
+			if archived == int(archiveBatchSize) {
+				break
 			}
 		}
 		if runErr != nil || len(prs) < int(archiveBatchSize) {
 			break
 		}
 	}
-	result.Note = fmt.Sprintf("archived %d %s requests; skipped %d changed or active requests; failed %d requests", archived, label, skipped, failed)
+	skipped := activeEvents + relatedRequests + changedOrBusy
+	result.Note = fmt.Sprintf("archived %d %s requests; skipped %d requests (active events or signals: %d; unfinished related requests: %d; changed or busy requests: %d); failed %d requests", archived, label, skipped, activeEvents, relatedRequests, changedOrBusy, failed)
 	if runErr != nil {
 		result.EventError = &events.EventError{Message: label + " archive interrupted", Cause: runErr.Error()}
 	}

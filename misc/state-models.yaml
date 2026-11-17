@@ -1220,6 +1220,15 @@ batchActionDefaults:
       interval: 720h
       anonymize: false
 
+  - actionName: archive-ill-transactions
+    titleKey: archive-ill-transactions
+    title: Archive completed external borrowing transactions
+    batchQuery: "last_supplier_status==LoanCompleted or last_supplier_status==CopyCompleted or last_supplier_status==Unfilled"
+    schedule: "FREQ=DAILY;BYHOUR=3"
+    actionParams:
+      interval: 720h
+      anonymize: false
+
   - actionName: overdue
     titleKey: overdue
     title: Overdue loans

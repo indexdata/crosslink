@@ -1197,7 +1197,7 @@ func TestGetStateModelBatchActions(t *testing.T) {
 	var actions []proapi.BatchActionDefault
 	err := json.Unmarshal(rr.Body.Bytes(), &actions)
 	assert.NoError(t, err)
-	assert.Len(t, actions, 7)
+	assert.Len(t, actions, 8)
 	// Clients key translated titles off titleKey, so each default needs a distinct one.
 	seen := map[string]bool{}
 	foundArchives := map[string]bool{}
@@ -1205,16 +1205,21 @@ func TestGetStateModelBatchActions(t *testing.T) {
 		assert.NotEmpty(t, action.TitleKey)
 		assert.False(t, seen[action.TitleKey], "duplicate titleKey %s", action.TitleKey)
 		seen[action.TitleKey] = true
-		if action.ActionName == "archive-borrowing-requests" || action.ActionName == "archive-lending-requests" {
+		if action.ActionName == "archive-borrowing-requests" || action.ActionName == "archive-lending-requests" || action.ActionName == "archive-ill-transactions" {
 			foundArchives[string(action.ActionName)] = true
 			assert.Equal(t, string(action.ActionName), action.TitleKey)
 			expectedTitle := "Archive closed borrowing requests"
-			if action.ActionName == "archive-lending-requests" {
+			expectedQuery := "terminal_state = true"
+			switch action.ActionName {
+			case "archive-lending-requests":
 				expectedTitle = "Archive closed lending requests"
+			case "archive-ill-transactions":
+				expectedTitle = "Archive completed external borrowing transactions"
+				expectedQuery = "last_supplier_status==LoanCompleted or last_supplier_status==CopyCompleted or last_supplier_status==Unfilled"
 			}
 			assert.Equal(t, expectedTitle, action.Title)
 			assert.Equal(t, "FREQ=DAILY;BYHOUR=3", action.Schedule)
-			assert.Equal(t, "terminal_state = true", action.BatchQuery)
+			assert.Equal(t, expectedQuery, action.BatchQuery)
 			if assert.NotNil(t, action.ActionParams) {
 				assert.Equal(t, map[string]any{"interval": "720h", "anonymize": false}, *action.ActionParams)
 			}
@@ -1222,6 +1227,7 @@ func TestGetStateModelBatchActions(t *testing.T) {
 	}
 	assert.True(t, foundArchives["archive-borrowing-requests"], "borrowing archive default is missing")
 	assert.True(t, foundArchives["archive-lending-requests"], "lending archive default is missing")
+	assert.True(t, foundArchives["archive-ill-transactions"], "ILL transaction archive default is missing")
 }
 
 func TestGetStateModelTemplates(t *testing.T) {

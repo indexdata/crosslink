@@ -24,7 +24,7 @@ type recordingArchiveRepo struct {
 	pages     [][]pr_db.PatronRequest
 	query     pgcql.Query
 	cursors   []*pr_db.PatronRequestArchiveCursor
-	stored    map[string]bool
+	outcomes  map[string]pr_db.ArchiveResult
 	errByID   map[string]error
 	onArchive func()
 	side      pr_db.PatronRequestSide
@@ -40,29 +40,35 @@ func (r *recordingArchiveRepo) ListPatronRequestArchiveCandidates(_ common.Exten
 	return r.pages[page], nil
 }
 
-func (r *recordingArchiveRepo) ArchiveBorrowingRequest(_ common.ExtendedContext, pr pr_db.PatronRequest, owner string, _ time.Time, anonymize bool) (bool, error) {
+func (r *recordingArchiveRepo) ArchiveBorrowingRequest(_ common.ExtendedContext, pr pr_db.PatronRequest, owner string, _ time.Time, anonymize bool) (pr_db.ArchiveResult, error) {
 	r.side = "borrowing"
 	return r.archive(pr, owner, anonymize)
 }
 
-func (r *recordingArchiveRepo) ArchiveLendingRequest(_ common.ExtendedContext, pr pr_db.PatronRequest, owner string, _ time.Time, anonymize bool) (bool, error) {
+func (r *recordingArchiveRepo) ArchiveLendingRequest(_ common.ExtendedContext, pr pr_db.PatronRequest, owner string, _ time.Time, anonymize bool) (pr_db.ArchiveResult, error) {
 	r.side = "lending"
 	return r.archive(pr, owner, anonymize)
 }
 
-func (r *recordingArchiveRepo) archive(pr pr_db.PatronRequest, owner string, anonymize bool) (bool, error) {
+func (r *recordingArchiveRepo) archive(pr pr_db.PatronRequest, owner string, anonymize bool) (pr_db.ArchiveResult, error) {
 	r.called++
 	if r.onArchive != nil {
 		r.onArchive()
 	}
 	r.owner, r.anonymize = owner, anonymize
 	if err := r.errByID[pr.ID]; err != nil {
-		return false, err
+		return "", err
 	}
-	if r.stored != nil {
-		return r.stored[pr.ID], r.err
+	if r.err != nil {
+		return "", r.err
 	}
-	return r.err == nil, r.err
+	if r.outcomes != nil {
+		if outcome, ok := r.outcomes[pr.ID]; ok {
+			return outcome, nil
+		}
+		return pr_db.ArchiveResultChangedOrBusy, nil
+	}
+	return pr_db.ArchiveResultArchived, nil
 }
 
 func TestValidateArchiveConfig(t *testing.T) {
@@ -126,6 +132,72 @@ func TestArchiveLendingRequestsSelectionAndHistory(t *testing.T) {
 	require.Contains(t, archive.query.GetQueryArguments(), testBatchActionOwner)
 }
 
+func TestArchivePatronRequestsGroupsSkips(t *testing.T) {
+	for _, side := range []string{"borrowing", "lending"} {
+		t.Run(side, func(t *testing.T) {
+			archive := &recordingArchiveRepo{
+				pages:    [][]pr_db.PatronRequest{{{ID: "archived"}, {ID: "failed"}}},
+				outcomes: map[string]pr_db.ArchiveResult{"archived": pr_db.ArchiveResultArchived},
+				errByID:  map[string]error{"failed": errors.New("archive failed")},
+			}
+			related := 3
+			if side == "lending" {
+				related = 0
+			}
+			for _, group := range []struct {
+				outcome pr_db.ArchiveResult
+				count   int
+			}{
+				{pr_db.ArchiveResultActiveEvents, 2},
+				{pr_db.ArchiveResultRelatedRequests, related},
+				{pr_db.ArchiveResultChangedOrBusy, 4},
+			} {
+				for i := range group.count {
+					id := fmt.Sprintf("%s-%d", group.outcome, i)
+					archive.pages[0] = append(archive.pages[0], pr_db.PatronRequest{ID: id})
+					archive.outcomes[id] = group.outcome
+				}
+			}
+			svc := NewBatchActionService(nil, nil, &mockBatchActionCleanupRepo{}, nil, archive)
+			event := batchActionEvent("archive-" + side + "-requests")
+			event.EventData.CustomData = map[string]any{"interval": "24h"}
+			status, result := svc.batchAction(testCtx, event)
+			require.Equal(t, events.EventStatusError, status)
+			require.Equal(t, fmt.Sprintf("archived 1 %s requests; skipped %d requests (active events or signals: 2; unfinished related requests: %d; changed or busy requests: 4); failed 1 requests", side, 6+related, related), result.Note)
+			require.Equal(t, map[string]any{"failed": "archive failed"}, result.CustomData)
+			require.Equal(t, 8+related, archive.called)
+		})
+	}
+}
+
+func TestArchivePatronRequestsNoCandidates(t *testing.T) {
+	for _, side := range []string{"borrowing", "lending"} {
+		t.Run(side, func(t *testing.T) {
+			svc := NewBatchActionService(nil, nil, &mockBatchActionCleanupRepo{}, nil, &recordingArchiveRepo{})
+			event := batchActionEvent("archive-" + side + "-requests")
+			event.EventData.CustomData = map[string]any{"interval": "24h"}
+			status, result := svc.batchAction(testCtx, event)
+			require.Equal(t, events.EventStatusSuccess, status)
+			require.Equal(t, "archived 0 "+side+" requests; skipped 0 requests (active events or signals: 0; unfinished related requests: 0; changed or busy requests: 0); failed 0 requests", result.Note)
+		})
+	}
+}
+
+func TestArchivePatronRequestsRejectsUnknownResult(t *testing.T) {
+	archive := &recordingArchiveRepo{
+		pages:    [][]pr_db.PatronRequest{{{ID: "unexpected"}}},
+		outcomes: map[string]pr_db.ArchiveResult{"unexpected": "unknown"},
+	}
+	svc := NewBatchActionService(nil, nil, &mockBatchActionCleanupRepo{}, nil, archive)
+	event := batchActionEvent(string(schedoapi.ArchiveBorrowingRequests))
+	event.EventData.CustomData = map[string]any{"interval": "24h"}
+	status, result := svc.batchAction(testCtx, event)
+	require.Equal(t, events.EventStatusError, status)
+	require.Contains(t, result.Note, "skipped 0 requests")
+	require.Contains(t, result.Note, "failed 1 requests")
+	require.Equal(t, `unexpected archive result "unknown"`, result.CustomData["unexpected"])
+}
+
 func TestArchiveBorrowingRequestsReportsFailure(t *testing.T) {
 	archive := &recordingArchiveRepo{err: errors.New("database failed"), pages: [][]pr_db.PatronRequest{{{ID: "pr-1", State: "CLOSED"}}}}
 	svc := NewBatchActionService(nil, nil, &mockBatchActionCleanupRepo{}, nil, archive)
@@ -141,7 +213,7 @@ func TestArchiveBorrowingRequestsAdvancesPastSkippedAndFailedPages(t *testing.T)
 		t.Run(fmt.Sprintf("failures=%t", fail), func(t *testing.T) {
 			firstPage := make([]pr_db.PatronRequest, archiveBatchSize)
 			created := pgtype.Timestamp{Time: time.Now().Add(-48 * time.Hour), Valid: true}
-			archive := &recordingArchiveRepo{stored: map[string]bool{"eligible": true}, errByID: map[string]error{}}
+			archive := &recordingArchiveRepo{outcomes: map[string]pr_db.ArchiveResult{"eligible": pr_db.ArchiveResultArchived}, errByID: map[string]error{}}
 			for i := range firstPage {
 				id := fmt.Sprintf("blocked-%03d", i)
 				firstPage[i] = pr_db.PatronRequest{ID: id, CreatedAt: created}
