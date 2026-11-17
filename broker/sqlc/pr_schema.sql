@@ -27,8 +27,7 @@ CREATE TABLE patron_request
     state_model         VARCHAR NOT NULL DEFAULT 'default',
     requester_pickup_location_id UUID,
     cancellation_reason       VARCHAR,
-    due_at TIMESTAMPTZ,
-    bib_record_id VARCHAR
+    due_at TIMESTAMPTZ
 );
 
 CREATE INDEX idx_pr_borrowing_archive_cursor
@@ -53,8 +52,24 @@ CREATE TABLE archived_resource (
 
 CREATE OR REPLACE FUNCTION get_next_hrid(prefix VARCHAR) RETURNS VARCHAR AS $$
 BEGIN
+    PERFORM pg_advisory_xact_lock_shared(hashtextextended('broker:hrid-seq:' || LOWER(prefix) || '_hrid_seq', 0));
     EXECUTE format('CREATE SEQUENCE IF NOT EXISTS %I START 1', LOWER(prefix) || '_hrid_seq');
     RETURN UPPER(prefix) || '-' || nextval(LOWER(prefix) || '_hrid_seq')::TEXT;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION advance_hrid(prefix text, used bigint) RETURNS void AS $$
+DECLARE
+    seq text := LOWER(prefix) || '_hrid_seq';
+    current_value bigint;
+    called boolean;
+BEGIN
+    PERFORM pg_advisory_xact_lock(hashtextextended('broker:hrid-seq:' || seq, 0));
+    EXECUTE format('CREATE SEQUENCE IF NOT EXISTS %I START 1', seq);
+    EXECUTE format('SELECT last_value, is_called FROM %I', seq) INTO current_value, called;
+    IF NOT called OR current_value < used THEN
+        PERFORM setval(quote_ident(seq)::regclass, GREATEST(current_value, used));
+    END IF;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -185,3 +200,8 @@ LEFT JOIN symbol sup_sym ON sup_sym.symbol_value = pr.supplier_symbol
 LEFT JOIN peer sup_peer ON sup_peer.id = sup_sym.peer_id;
 
 CREATE INDEX idx_pr_transaction_archive_link ON patron_request (requester_symbol, requester_req_id, side);
+
+-- Patron requests created by POST /import; see migration 080.
+CREATE TABLE imported_patron_request (
+    id VARCHAR PRIMARY KEY REFERENCES patron_request (id) ON DELETE CASCADE ON UPDATE CASCADE
+);

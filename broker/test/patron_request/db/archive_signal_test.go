@@ -37,13 +37,13 @@ func TestArchiveBorrowingRequestIgnoresRotaAuditSignals(t *testing.T) {
 			require.NoError(t, err)
 			stored, err := repo.ArchiveBorrowingRequest(appCtx, archiveFixtureRequest(f), f.owner, time.Now(), false)
 			require.NoError(t, err)
-			require.False(t, stored)
+			require.Equal(t, pr_db.ArchiveResultActiveEvents, stored)
 
 			_, err = eventRepo.ClaimEventForSignal(appCtx, pending.ID, events.SignalNoticeCreated)
 			require.NoError(t, err)
 			stored, err = repo.ArchiveBorrowingRequest(appCtx, archiveFixtureRequest(f), f.owner, time.Now(), false)
 			require.NoError(t, err)
-			require.True(t, stored, "an observer-only rota audit must not block archival")
+			require.Equal(t, pr_db.ArchiveResultArchived, stored, "an observer-only rota audit must not block archival")
 			require.NoError(t, repo.Pool.QueryRow(appCtx, `SELECT audit->>'last_signal'
 				FROM archived_resource, jsonb_array_elements(bundle->'illTransactionEvents') AS audit
 				WHERE resource_id=$1 AND audit->>'id'=$2`, f.pr, auditID).Scan(&signal))
@@ -86,7 +86,7 @@ func TestArchiveRequestSkipsPendingSignal(t *testing.T) {
 				require.NoError(t, err)
 				stored, err := archive(appCtx, request, owner, time.Now(), false)
 				require.NoError(t, err)
-				require.False(t, stored, "SUCCESS with an undispatched signal is still active")
+				require.Equal(t, pr_db.ArchiveResultActiveEvents, stored, "SUCCESS with an undispatched signal is still active")
 
 				claimed, err := eventRepo.ClaimEventForSignal(appCtx, eventID, signal)
 				require.NoError(t, err)
@@ -97,7 +97,7 @@ func TestArchiveRequestSkipsPendingSignal(t *testing.T) {
 				// track consumer handlers through completion.
 				stored, err = archive(appCtx, request, owner, time.Now(), false)
 				require.NoError(t, err)
-				require.True(t, stored)
+				require.Equal(t, pr_db.ArchiveResultArchived, stored)
 			})
 		}
 	}
@@ -133,7 +133,7 @@ func TestArchiveRequestRechecksPendingSignalAfterEventLock(t *testing.T) {
 			require.NoError(t, err)
 			pid := make(chan int, 1)
 			result := make(chan error, 1)
-			var stored bool
+			var stored pr_db.ArchiveResult
 			go func() {
 				result <- repo.WithTxFunc(extCtx, func(txRepo pr_db.PrRepo) error {
 					tx := txRepo.(*pr_db.PgPrRepo)
@@ -164,7 +164,7 @@ func TestArchiveRequestRechecksPendingSignalAfterEventLock(t *testing.T) {
 			}, 3*time.Second, 10*time.Millisecond, "archiver must reach the event lock after seeing no committed pending signal")
 			require.NoError(t, publisher.Commit(extCtx))
 			require.NoError(t, <-result)
-			require.False(t, stored, "final check must observe the newly committed signal")
+			require.Equal(t, pr_db.ArchiveResultActiveEvents, stored, "final check must observe the newly committed signal")
 		})
 	}
 }
@@ -176,7 +176,7 @@ func TestLendingArchiveIgnoresTransactionPendingSignal(t *testing.T) {
 	require.NoError(t, err)
 	stored, err := repo.ArchiveLendingRequest(appCtx, lendingFixtureRequest(f), f.supplierOwner, time.Now(), false)
 	require.NoError(t, err)
-	require.True(t, stored)
+	require.Equal(t, pr_db.ArchiveResultArchived, stored)
 	remaining, err := eventRepo.GetEvent(appCtx, f.transactionEvent)
 	require.NoError(t, err)
 	require.Equal(t, string(events.SignalTaskComplete), remaining.LastSignal, "lending archival must preserve transaction signals")

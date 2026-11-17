@@ -59,14 +59,18 @@ func TestArchiveBorrowingRequestWaitsForRetrySuccessor(t *testing.T) {
 			repo := prRepo.(*pr_db.PgPrRepo)
 			stored, err := repo.ArchiveBorrowingRequest(appCtx, archiveFixtureRequest(f), f.owner, time.Now(), false)
 			require.NoError(t, err)
-			require.Equal(t, !tc.deferArchive, stored)
+			expected := pr_db.ArchiveResultArchived
+			if tc.deferArchive {
+				expected = pr_db.ArchiveResultRelatedRequests
+			}
+			require.Equal(t, expected, stored)
 			if tc.deferArchive {
 				requireUnarchivedTransaction(t, f)
 				_, err = repo.Pool.Exec(appCtx, `UPDATE patron_request SET terminal_state=true WHERE id=$1`, successor)
 				require.NoError(t, err)
 				stored, err = repo.ArchiveBorrowingRequest(appCtx, archiveFixtureRequest(f), f.owner, time.Now(), false)
 				require.NoError(t, err)
-				require.True(t, stored, "a terminal successor no longer needs the transaction")
+				require.Equal(t, pr_db.ArchiveResultArchived, stored, "a terminal successor no longer needs the transaction")
 			}
 		})
 	}
@@ -78,7 +82,7 @@ func TestArchiveBorrowingRequestAfterRetryHandoffPreservesTransaction(t *testing
 	repo := prRepo.(*pr_db.PgPrRepo)
 	stored, err := repo.ArchiveBorrowingRequest(appCtx, archiveFixtureRequest(f), f.owner, time.Now(), false)
 	require.NoError(t, err)
-	require.False(t, stored)
+	require.Equal(t, pr_db.ArchiveResultRelatedRequests, stored)
 	requireUnarchivedTransaction(t, f)
 	// handleRetryRequest advances the requester ID under the transaction lock.
 	_, err = repo.Pool.Exec(appCtx, `UPDATE ill_transaction
@@ -86,7 +90,7 @@ func TestArchiveBorrowingRequestAfterRetryHandoffPreservesTransaction(t *testing
 	require.NoError(t, err)
 	stored, err = repo.ArchiveBorrowingRequest(appCtx, archiveFixtureRequest(f), f.owner, time.Now(), false)
 	require.NoError(t, err)
-	require.True(t, stored)
+	require.Equal(t, pr_db.ArchiveResultArchived, stored)
 	var requestID string
 	require.NoError(t, repo.Pool.QueryRow(appCtx, `SELECT requester_request_id FROM ill_transaction WHERE id=$1`, f.transaction).Scan(&requestID))
 	require.Equal(t, successor, requestID)
@@ -117,14 +121,18 @@ func TestArchiveBorrowingRequestWaitsForRelatedLending(t *testing.T) {
 			require.NoError(t, err)
 			stored, err := repo.ArchiveBorrowingRequest(appCtx, archiveFixtureRequest(f), f.owner, time.Now(), false)
 			require.NoError(t, err)
-			require.Equal(t, !tc.deferArchive, stored)
+			expected := pr_db.ArchiveResultArchived
+			if tc.deferArchive {
+				expected = pr_db.ArchiveResultRelatedRequests
+			}
+			require.Equal(t, expected, stored)
 			if tc.deferArchive {
 				requireUnarchivedTransaction(t, f)
 				_, err = repo.Pool.Exec(appCtx, `UPDATE patron_request SET terminal_state=true WHERE id=$1`, f.lending)
 				require.NoError(t, err)
 				stored, err = repo.ArchiveBorrowingRequest(appCtx, archiveFixtureRequest(f), f.owner, time.Now(), false)
 				require.NoError(t, err)
-				require.True(t, stored, "lending completion allows transaction archival")
+				require.Equal(t, pr_db.ArchiveResultArchived, stored, "lending completion allows transaction archival")
 			}
 		})
 	}
@@ -149,12 +157,12 @@ func TestArchiveBorrowingRequestSkipsContendedDependencies(t *testing.T) {
 			extCtx := common.CreateExtCtxWithArgs(ctx, nil)
 			stored, err := repo.ArchiveBorrowingRequest(extCtx, archiveFixtureRequest(f), f.owner, time.Now(), false)
 			require.NoError(t, err)
-			require.False(t, stored)
+			require.Equal(t, pr_db.ArchiveResultChangedOrBusy, stored)
 			requireUnarchivedTransaction(t, f)
 			require.NoError(t, holder.Rollback(extCtx))
 			stored, err = repo.ArchiveBorrowingRequest(extCtx, archiveFixtureRequest(f), f.owner, time.Now(), false)
 			require.NoError(t, err)
-			require.True(t, stored)
+			require.Equal(t, pr_db.ArchiveResultArchived, stored)
 		})
 	}
 }
@@ -181,14 +189,18 @@ func TestArchiveBorrowingRequestWaitsForRelatedLendingTask(t *testing.T) {
 				}
 				stored, err := repo.ArchiveBorrowingRequest(appCtx, archiveFixtureRequest(f), f.owner, time.Now(), false)
 				require.NoError(t, err)
-				require.Equal(t, scope != "related", stored)
+				expected := pr_db.ArchiveResultArchived
+				if scope == "related" {
+					expected = pr_db.ArchiveResultActiveEvents
+				}
+				require.Equal(t, expected, stored)
 				if scope == "related" {
 					requireUnarchivedTransaction(t, f)
 					_, err = repo.Pool.Exec(appCtx, `UPDATE event SET event_status='SUCCESS' WHERE id=$1`, f.lendingEvent)
 					require.NoError(t, err)
 					stored, err = repo.ArchiveBorrowingRequest(appCtx, archiveFixtureRequest(f), f.owner, time.Now(), false)
 					require.NoError(t, err)
-					require.True(t, stored, "the completed notification permits archival")
+					require.Equal(t, pr_db.ArchiveResultArchived, stored, "the completed notification permits archival")
 				}
 				remaining, err := eventRepo.GetEvent(appCtx, f.lendingEvent)
 				require.NoError(t, err, "lending tasks survive borrowing archival")

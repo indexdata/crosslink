@@ -12,9 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var longestRequestIdPrefix = strings.Repeat("A", 32)
+var longestRequestIdPrefix = strings.Repeat("A", 16)
 
-var invalidRequestIdPrefixes = []string{"ABC-", "A B", "A.B", "A_B", "ÅBC", " ABC", longestRequestIdPrefix + "A"}
+const exportPrefixError = `request_id_prefix must be at most 16 ASCII letters, digits, ":" or "-" after removing "/", trailing punctuation and spaces: `
+
+var invalidRequestIdPrefixes = []string{"A B", "A.B", "A_B", "ÅBC", " ABC", "A/B", "/ABC", longestRequestIdPrefix + "A"}
+
+// validIsilRequestIdPrefixes use the ISIL punctuation that prefixes may contain.
+var validIsilRequestIdPrefixes = []string{"US-ABC", "A:B", "ABC-"}
 
 func TestRequestIdPrefixPersistence(t *testing.T) {
 	resetDb()
@@ -42,6 +47,14 @@ func TestRequestIdPrefixPersistence(t *testing.T) {
 	response, body = jsonReq(t, http.MethodPatch, path, `{"illConfig":{"requestIdPrefix":"`+longestRequestIdPrefix+`"}}`, headers)
 	require.Equal(t, http.StatusNoContent, response.StatusCode, body)
 	require.Equal(t, longestRequestIdPrefix, read())
+	response, body = jsonReq(t, http.MethodPatch, path, `{"illConfig":{"requestIdPrefix":"aB3"}}`, headers)
+	require.Equal(t, http.StatusNoContent, response.StatusCode, body)
+	require.Equal(t, "aB3", read())
+	for _, valid := range validIsilRequestIdPrefixes {
+		response, body = jsonReq(t, http.MethodPatch, path, `{"illConfig":{"requestIdPrefix":"`+valid+`"}}`, headers)
+		require.Equal(t, http.StatusNoContent, response.StatusCode, body)
+		require.Equal(t, valid, read())
+	}
 	response, body = jsonReq(t, http.MethodPatch, path, `{"illConfig":{"requestIdPrefix":"aB3"}}`, headers)
 	require.Equal(t, http.StatusNoContent, response.StatusCode, body)
 	require.Equal(t, "aB3", read())
@@ -82,6 +95,16 @@ func TestImportRequestIdPrefix(t *testing.T) {
 	}
 	config["requestIdPrefix"] = "ABC"
 	_, result := importRequest(t, []any{record}, "", standardHeaders)
+	require.Empty(t, result.Errors)
+	require.Equal(t, "ABC", read()["requestIdPrefix"])
+	for _, valid := range validIsilRequestIdPrefixes {
+		config["requestIdPrefix"] = valid
+		_, result = importRequest(t, []any{record}, "update", standardHeaders)
+		require.Empty(t, result.Errors)
+		require.Equal(t, valid, read()["requestIdPrefix"])
+	}
+	config["requestIdPrefix"] = "ABC"
+	_, result = importRequest(t, []any{record}, "update", standardHeaders)
 	require.Empty(t, result.Errors)
 	require.Equal(t, "ABC", read()["requestIdPrefix"])
 	for _, invalid := range invalidRequestIdPrefixes {
@@ -143,10 +166,17 @@ func TestDirectoryExportRequestIdPrefix(t *testing.T) {
 		{name: "local", setting: "ABC", local: true, want: "ABC"},
 		{name: "trimmed", setting: "  ABC ", local: true, want: "ABC"},
 		{name: "longest", setting: longestRequestIdPrefix, local: true, want: longestRequestIdPrefix},
-		{name: "too long", setting: longestRequestIdPrefix + "A", local: true, wantError: "request_id_prefix must be at most 32 ASCII letters and digits: " + longestRequestIdPrefix + "A"},
-		{name: "trailing delimiter", setting: "ABC-", local: true, wantError: "request_id_prefix must be at most 32 ASCII letters and digits: ABC-"},
-		{name: "inner space", setting: "A B", local: true, wantError: "request_id_prefix must be at most 32 ASCII letters and digits: A B"},
-		{name: "invalid default value", setting: "  ", fallback: "A.B", local: true, wantError: "request_id_prefix must be at most 32 ASCII letters and digits: A.B"},
+		{name: "too long", setting: longestRequestIdPrefix + "-A", local: true, wantError: exportPrefixError + longestRequestIdPrefix + "-A"},
+		{name: "trailing delimiter removed", setting: "ABC-", local: true, want: "ABC"},
+		{name: "trailing delimiters removed", setting: "US-ABC-/", local: true, want: "US-ABC"},
+		{name: "inner ISIL punctuation kept", setting: "US:A-B", local: true, want: "US:A-B"},
+		{name: "slashes removed", setting: "/US/A:B-C/-", local: true, want: "USA:B-C"},
+		{name: "only slashes", setting: "//", local: true, wantError: exportPrefixError + "//"},
+		{name: "inner other punctuation", setting: "A.B", local: true, wantError: exportPrefixError + "A.B"},
+		{name: "inner space", setting: "A B", local: true, wantError: exportPrefixError + "A B"},
+		{name: "only punctuation", setting: "-", local: true, wantError: exportPrefixError + "-"},
+		{name: "non-ASCII punctuation kept", setting: "ABC—", local: true, wantError: exportPrefixError + "ABC—"},
+		{name: "invalid default value", setting: "  ", fallback: "ÅB-", local: true, wantError: exportPrefixError + "ÅB-"},
 		{name: "default value", setting: "  ", fallback: "DEF", local: true, want: "DEF"},
 		{name: "direct branch inherits", setting: "ABC", branch: true},
 		{name: "unset", local: true},
@@ -210,4 +240,25 @@ func TestRequestIdPrefixInheritance(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, response.StatusCode, body)
 	require.Nil(t, prefix(tree.institution))
 	require.Nil(t, prefix(tree.branch))
+}
+
+func TestRequestIdPrefixIsilMigrationDown(t *testing.T) {
+	down, err := os.ReadFile("../migrations/027_request_id_prefix_isil.down.sql")
+	require.NoError(t, err)
+	ctx := context.Background()
+	tx, err := dbpool.Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, tx.Rollback(ctx)) })
+	_, err = tx.Exec(ctx, `INSERT INTO ill_configs (entry, request_id_prefix) VALUES ($1, 'US-AB:C')
+		ON CONFLICT (entry) DO UPDATE SET request_id_prefix = EXCLUDED.request_id_prefix`, fixtureConsortium)
+	require.NoError(t, err)
+
+	_, err = tx.Exec(ctx, string(down))
+	require.NoError(t, err, "rolling back must not fail on ISIL prefixes")
+
+	var prefix string
+	require.NoError(t, tx.QueryRow(ctx, `SELECT request_id_prefix FROM ill_configs WHERE entry = $1`, fixtureConsortium).Scan(&prefix))
+	require.Equal(t, "USABC", prefix)
+	_, err = tx.Exec(ctx, `UPDATE ill_configs SET request_id_prefix = 'US-ABC' WHERE entry = $1`, fixtureConsortium)
+	require.ErrorContains(t, err, "ill_configs_request_id_prefix_check", "the previous constraint is restored")
 }

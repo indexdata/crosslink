@@ -154,8 +154,28 @@ Each run archives up to 100 matching requests. It scans pages of 100 candidates
 in creation-time/ID order, continuing past skipped and failed requests until the
 archive limit is reached or all matches have been examined. CQL `sortBy` does not
 change this scan order. Counts and up to 100 per-request failures are recorded in
-the batch-action event history. Requests with changed state/timestamps or active
-events or pending signals are skipped for a later run. Pending signals are
+the batch-action event history. Both borrowing and lending runs report the total
+skipped count with three groups:
+
+- **Active events or signals:** events in `NEW`/`PROCESSING` or with pending signals
+  on the request, or (for borrowing) its transaction and related lending requests.
+- **Unfinished related requests:** related nonterminal lending requests or Retry
+  successors that still depend on the borrowing request's transaction. This count
+  is always zero for lending archives.
+- **Changed or busy requests:** the selected request no longer matches its owner,
+  side, state, timestamp, or age cutoff (including removal by another run), or a
+  related request or item could not be locked immediately.
+
+Each skipped request counts only in the group for its first blocking check, so
+the three counts sum to the skipped total. Skips remain eligible for later runs
+if they still match the selector and age cutoff. For example:
+
+```text
+archived 0 borrowing requests; skipped 40 requests (active events or signals: 25; unfinished related requests: 10; changed or busy requests: 5); failed 0 requests
+```
+
+These counts describe the current run; earlier history is not recalculated.
+Pending signals are
 checked through `event.last_signal`, which consumers clear when claiming them.
 Borrowing checks exclude observer-only `supplier-added` and `supplier-moved`
 rota audit notices, whose signals remain set; these notices are still archived.
@@ -207,6 +227,9 @@ defaults to `false` and uses the same operational allowlist described above.
   "actionParams": {"interval": "720h", "anonymize": false}
 }
 ```
+
+A default with these values is offered through the state-model API as a starting
+point for a scheduled action. Creating it still requires `broker.consortium.all`.
 
 Each run archives up to 100 transactions, scanning pages of 100 in stable ID
 order regardless of CQL `sortBy`. Changed or locked transactions, transactions
@@ -797,22 +820,31 @@ an item ID. The selected holding's call number, when available, is persisted
 with its item ID and sent in `supplierInfo.callNumber`. Both fields are cleared
 when a new availability lookup invalidates the previous selection.
 
-Patron requests carry the shared-index record identifier separately in
-`bib_record_id` (API: `bibRecordId`). Clients should supply the VuFind UUID or
-Trove ANBD record ID when creating the borrowing request. Updates omit the field
-to preserve it or send an empty string to clear it. This identifier is preserved
-through retries and rerequests. Outgoing ISO18626 requests include it in
-`bibliographicInfo.bibliographicRecordId` with
-`bibliographicRecordIdentifierCode` set to `ReShare`; incoming lending requests
-extract and persist that identifier. Other record codes are preserved, and
-conflicting ReShare identifiers are rejected.
+`bibRecordId` is a read-only shared-index ID (VuFind UUID or Trove ANBD record ID),
+derived from `illRequest`: `bibliographicInfo.supplierUniqueRecordId` for borrowing,
+or the ReShare-coded `bibliographicInfo.bibliographicRecordId` for lending.
+The borrowing value follows creation, edits, metadata updates, and corrected
+retry requests automatically. Clients cannot set `bibRecordId` directly; create
+and update requests ignore that property, and import bundles do not accept it.
+Import the source identifiers in `illRequest` instead. Migration 082 removes the
+legacy `bib_record_id` database column and recreates `patron_request_search_view`
+without it. Before deploying this migration, deploy an intermediate release to
+every broker instance that removes the column from queries and models but does
+not include migration 082. Do not upgrade directly from a release that still
+references the column: Helm runs migrations before upgrading instances, so
+older instances would fail during the rollout. Rolling migration 082 back
+restores the nullable column and view, but cannot recover discarded legacy
+values. The source identifiers in `illRequest` are preserved.
 
-The “view in shared index” UI should use `bibRecordId` with its configured
-VuFind/Trove URL and hide the link when the ID is absent or empty. It must not
-substitute the supplier's local bibliographic or copy ID. Existing requests
-remain without a shared-index ID unless it is explicitly supplied; the migration
-does not infer one from local identifiers. Import bundles also accept
-`patronRequest.bibRecordId`.
+The broker replaces `supplierUniqueRecordId` with the supplier's local ID in the
+requests it sends to suppliers, so it also sends the shared-index ID as a
+`bibliographicRecordId` with code `ReShare`. Other record codes are preserved;
+incoming requests with conflicting ReShare IDs are rejected.
+
+Clients linking to the shared index should use `bibRecordId` with their
+configured VuFind/Trove URL and hide the link when it is absent. They must not
+fall back to `supplierUniqueRecordId`, which on a lending request is the
+supplier's local ID.
 
 When supplier Request Item is disabled (including manual LMS workflows), a
 Loan automatically attaches the selected copy as a volume before proceeding to

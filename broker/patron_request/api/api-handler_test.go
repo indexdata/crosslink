@@ -173,7 +173,6 @@ func patronRequestSearchViewFromPatronRequest(pr pr_db.PatronRequest, hasCost bo
 		ID:                        pr.ID,
 		CreatedAt:                 pr.CreatedAt,
 		IllRequest:                pr.IllRequest,
-		BibRecordID:               pr.BibRecordID,
 		State:                     pr.State,
 		Side:                      pr.Side,
 		Patron:                    pr.Patron,
@@ -1197,7 +1196,7 @@ func TestGetStateModelBatchActions(t *testing.T) {
 	var actions []proapi.BatchActionDefault
 	err := json.Unmarshal(rr.Body.Bytes(), &actions)
 	assert.NoError(t, err)
-	assert.Len(t, actions, 7)
+	assert.Len(t, actions, 8)
 	// Clients key translated titles off titleKey, so each default needs a distinct one.
 	seen := map[string]bool{}
 	foundArchives := map[string]bool{}
@@ -1205,16 +1204,21 @@ func TestGetStateModelBatchActions(t *testing.T) {
 		assert.NotEmpty(t, action.TitleKey)
 		assert.False(t, seen[action.TitleKey], "duplicate titleKey %s", action.TitleKey)
 		seen[action.TitleKey] = true
-		if action.ActionName == "archive-borrowing-requests" || action.ActionName == "archive-lending-requests" {
+		if action.ActionName == "archive-borrowing-requests" || action.ActionName == "archive-lending-requests" || action.ActionName == "archive-ill-transactions" {
 			foundArchives[string(action.ActionName)] = true
 			assert.Equal(t, string(action.ActionName), action.TitleKey)
 			expectedTitle := "Archive closed borrowing requests"
-			if action.ActionName == "archive-lending-requests" {
+			expectedQuery := "terminal_state = true"
+			switch action.ActionName {
+			case "archive-lending-requests":
 				expectedTitle = "Archive closed lending requests"
+			case "archive-ill-transactions":
+				expectedTitle = "Archive completed external borrowing transactions"
+				expectedQuery = "last_supplier_status==LoanCompleted or last_supplier_status==CopyCompleted or last_supplier_status==Unfilled"
 			}
 			assert.Equal(t, expectedTitle, action.Title)
 			assert.Equal(t, "FREQ=DAILY;BYHOUR=3", action.Schedule)
-			assert.Equal(t, "terminal_state = true", action.BatchQuery)
+			assert.Equal(t, expectedQuery, action.BatchQuery)
 			if assert.NotNil(t, action.ActionParams) {
 				assert.Equal(t, map[string]any{"interval": "720h", "anonymize": false}, *action.ActionParams)
 			}
@@ -1222,6 +1226,7 @@ func TestGetStateModelBatchActions(t *testing.T) {
 	}
 	assert.True(t, foundArchives["archive-borrowing-requests"], "borrowing archive default is missing")
 	assert.True(t, foundArchives["archive-lending-requests"], "lending archive default is missing")
+	assert.True(t, foundArchives["archive-ill-transactions"], "ILL transaction archive default is missing")
 }
 
 func TestGetStateModelTemplates(t *testing.T) {
@@ -1835,7 +1840,6 @@ type PrRepoUpdateCapture struct {
 	lastUpdateParams *pr_db.UpdatePatronRequestParams
 	state            pr_db.PatronRequestState
 	pickupLocationID pgtype.UUID
-	bibRecordID      pgtype.Text
 }
 
 func (r *PrRepoUpdateCapture) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
@@ -1844,7 +1848,7 @@ func (r *PrRepoUpdateCapture) GetPatronRequestById(ctx common.ExtendedContext, i
 		if state == "" {
 			state = prservice.BorrowerStateNeedsReview
 		}
-		return pr_db.PatronRequest{ID: id, BibRecordID: r.bibRecordID, RequesterPickupLocationID: r.pickupLocationID, State: state, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, InternalNote: pgtype.Text{String: "original note", Valid: true}, Patron: pgtype.Text{String: "original patron", Valid: true}}, nil
+		return pr_db.PatronRequest{ID: id, RequesterPickupLocationID: r.pickupLocationID, State: state, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, InternalNote: pgtype.Text{String: "original note", Valid: true}, Patron: pgtype.Text{String: "original patron", Valid: true}}, nil
 	}
 	return r.PrRepoError.GetPatronRequestById(ctx, id)
 }
@@ -2306,36 +2310,89 @@ func TestCreateValidatesPickupBeforePersistence(t *testing.T) {
 	}
 }
 
-func TestPatronRequestBibRecordIDMapping(t *testing.T) {
-	for _, id := range []*string{nil, new("9a18bd66-8db6-4afd-95e6-157b2d3b6d12"), new("36457383"), new("")} {
-		request := proapi.CreatePatronRequest{BibRecordId: id, IllRequest: validIllRequest()}
-		pr := buildDbPatronRequest(&request, nil, pgtype.Timestamp{}, "request-1", request.IllRequest, "", "default")
-		result := toApiPatronRequest(httptest.NewRequest(http.MethodGet, "/patron_requests/request-1", nil), patronRequestSearchViewFromPatronRequest(pr, false))
-		assert.Equal(t, id, result.BibRecordId)
+func TestPatronRequestBibRecordID(t *testing.T) {
+	reShare := []iso18626.BibliographicRecordId{{
+		BibliographicRecordIdentifierCode: iso18626.TypeSchemeValuePair{Text: "ReShare"},
+		BibliographicRecordIdentifier:     "shared-record",
+	}}
+	for _, tc := range []struct {
+		name     string
+		side     pr_db.PatronRequestSide
+		info     iso18626.BibliographicInfo
+		expected *string
+	}{
+		{name: "borrowing uses system ID", side: prservice.SideBorrowing, info: iso18626.BibliographicInfo{SupplierUniqueRecordId: "shared-record", BibliographicRecordId: []iso18626.BibliographicRecordId{{BibliographicRecordIdentifierCode: iso18626.TypeSchemeValuePair{Text: "ReShare"}, BibliographicRecordIdentifier: "other"}}}, expected: new("shared-record")},
+		{name: "borrowing without system ID", side: prservice.SideBorrowing},
+		{name: "lending uses ReShare record ID", side: prservice.SideLending, info: iso18626.BibliographicInfo{SupplierUniqueRecordId: "local-bib", BibliographicRecordId: reShare}, expected: new("shared-record")},
+		{name: "lending without ReShare record ID", side: prservice.SideLending, info: iso18626.BibliographicInfo{SupplierUniqueRecordId: "local-bib"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pr := pr_db.PatronRequest{ID: "request-1", Side: tc.side, IllRequest: iso18626.Request{BibliographicInfo: tc.info}}
+			result := toApiPatronRequest(httptest.NewRequest(http.MethodGet, "/patron_requests/request-1", nil), patronRequestSearchViewFromPatronRequest(pr, false))
+			assert.Equal(t, tc.expected, result.BibRecordId)
+		})
 	}
 }
 
-func TestPutPatronRequestBibRecordID(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		supplied *string
-		expected string
-	}{
-		{name: "omitted preserves ID", expected: "original"},
-		{name: "supplied replaces ID", supplied: new("replacement"), expected: "replacement"},
-		{name: "empty clears ID", supplied: new("")},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			repo := &PrRepoUpdateCapture{bibRecordID: pgtype.Text{String: "original", Valid: true}}
-			handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
-			id := "3"
-			body, err := json.Marshal(proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol, IllRequest: validIllRequest(), BibRecordId: tc.supplied})
-			require.NoError(t, err)
-			rr := httptest.NewRecorder()
-			handler.PutPatronRequestsId(rr, httptest.NewRequest(http.MethodPut, "/", bytes.NewReader(body)), id, proapi.PutPatronRequestsIdParams{})
-			require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-			require.NotNil(t, repo.lastUpdateParams)
-			assert.Equal(t, tc.expected, repo.lastUpdateParams.BibRecordID.String)
-		})
+type bibRecordIDRepo struct {
+	PrRepoUpdateCapture
+	createdPr *pr_db.PatronRequest
+}
+
+func (r *bibRecordIDRepo) CreatePatronRequest(ctx common.ExtendedContext, params pr_db.CreatePatronRequestParams) (pr_db.PatronRequest, error) {
+	pr := pr_db.PatronRequest(params)
+	r.createdPr = &pr
+	return pr, nil
+}
+
+func (r *bibRecordIDRepo) GetPatronRequestSearchView(ctx common.ExtendedContext, id string) (pr_db.PatronRequestSearchView, error) {
+	if r.createdPr != nil {
+		return patronRequestSearchViewFromPatronRequest(*r.createdPr, false), nil
+	}
+	return patronRequestSearchViewFromPatronRequest(pr_db.PatronRequest(*r.lastUpdateParams), false), nil
+}
+
+func TestPatronRequestBibRecordIDReadOnly(t *testing.T) {
+	for _, method := range []string{http.MethodPost, http.MethodPut} {
+		for _, source := range []string{"source-record", ""} {
+			for _, supplied := range []string{"omitted", `"override"`, `""`, "null"} {
+				t.Run(method+"/source="+source+"/supplied="+supplied, func(t *testing.T) {
+					repo := &bibRecordIDRepo{}
+					handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+					request := validIllRequest()
+					request.BibliographicInfo.SupplierUniqueRecordId = source
+					id := "3"
+					body, err := json.Marshal(proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol, IllRequest: request})
+					require.NoError(t, err)
+					var payload map[string]json.RawMessage
+					require.NoError(t, json.Unmarshal(body, &payload))
+					if supplied != "omitted" {
+						payload["bibRecordId"] = json.RawMessage(supplied)
+					}
+					body, err = json.Marshal(payload)
+					require.NoError(t, err)
+					rr := httptest.NewRecorder()
+					req := httptest.NewRequest(method, "/patron_requests/"+id, bytes.NewReader(body))
+					if method == http.MethodPost {
+						handler.PostPatronRequests(rr, req, proapi.PostPatronRequestsParams{})
+						require.Equal(t, http.StatusCreated, rr.Code, rr.Body.String())
+						require.NotNil(t, repo.createdPr)
+					} else {
+						handler.PutPatronRequestsId(rr, req, id, proapi.PutPatronRequestsIdParams{})
+						require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+						require.NotNil(t, repo.lastUpdateParams)
+					}
+					var response proapi.PatronRequest
+					require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &response))
+					if source == "" {
+						assert.Nil(t, response.BibRecordId)
+						assert.NotContains(t, rr.Body.String(), `"bibRecordId"`)
+					} else {
+						require.NotNil(t, response.BibRecordId)
+						assert.Equal(t, source, *response.BibRecordId)
+					}
+				})
+			}
+		}
 	}
 }

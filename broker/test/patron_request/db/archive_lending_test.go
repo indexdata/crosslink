@@ -65,16 +65,16 @@ func TestArchiveLendingRequestOwnershipAndCompleteness(t *testing.T) {
 	} {
 		stored, err := repo.ArchiveLendingRequest(appCtx, tc.pr, tc.owner, tc.cutoff, false)
 		require.NoError(t, err)
-		require.False(t, stored)
+		require.Equal(t, pr_db.ArchiveResultChangedOrBusy, stored)
 	}
 	stale := lendingFixtureRequest(f)
 	stale.State = "NEW"
 	stored, err := repo.ArchiveLendingRequest(appCtx, stale, f.supplierOwner, time.Now(), false)
 	require.NoError(t, err)
-	require.False(t, stored)
+	require.Equal(t, pr_db.ArchiveResultChangedOrBusy, stored)
 	stored, err = repo.ArchiveLendingRequest(appCtx, lendingFixtureRequest(f), f.supplierOwner, time.Now(), false)
 	require.NoError(t, err)
-	require.True(t, stored)
+	require.Equal(t, pr_db.ArchiveResultArchived, stored)
 	var bundle []byte
 	var owner string
 	var version int
@@ -121,7 +121,7 @@ func TestArchiveLendingRequestAnonymization(t *testing.T) {
 	repo := prRepo.(*pr_db.PgPrRepo)
 	stored, err := repo.ArchiveLendingRequest(appCtx, lendingFixtureRequest(f), f.supplierOwner, time.Now(), true)
 	require.NoError(t, err)
-	require.True(t, stored)
+	require.Equal(t, pr_db.ArchiveResultArchived, stored)
 	var bundle []byte
 	var method string
 	var anonymized bool
@@ -180,10 +180,10 @@ func TestArchiveLendingRequestRollbackAndRetry(t *testing.T) {
 	require.NoError(t, err)
 	stored, err := repo.ArchiveLendingRequest(appCtx, lendingFixtureRequest(f), f.supplierOwner, time.Now(), false)
 	require.NoError(t, err)
-	require.True(t, stored)
+	require.Equal(t, pr_db.ArchiveResultArchived, stored)
 	stored, err = repo.ArchiveLendingRequest(appCtx, lendingFixtureRequest(f), f.supplierOwner, time.Now(), false)
 	require.NoError(t, err)
-	require.False(t, stored)
+	require.Equal(t, pr_db.ArchiveResultChangedOrBusy, stored)
 }
 
 func TestArchiveLendingRequestOnlyChecksOwnedActiveEvents(t *testing.T) {
@@ -193,14 +193,14 @@ func TestArchiveLendingRequestOnlyChecksOwnedActiveEvents(t *testing.T) {
 	require.NoError(t, err)
 	stored, err := repo.ArchiveLendingRequest(appCtx, lendingFixtureRequest(f), f.supplierOwner, time.Now(), false)
 	require.NoError(t, err)
-	require.False(t, stored)
+	require.Equal(t, pr_db.ArchiveResultActiveEvents, stored)
 	_, err = repo.Pool.Exec(context.Background(), `UPDATE event SET event_status='SUCCESS' WHERE id=$1`, f.lendingEvent)
 	require.NoError(t, err)
 	_, err = repo.Pool.Exec(context.Background(), `UPDATE event SET event_status='PROCESSING' WHERE id IN ($1,$2)`, f.borrowerEvent, f.transactionEvent)
 	require.NoError(t, err)
 	stored, err = repo.ArchiveLendingRequest(appCtx, lendingFixtureRequest(f), f.supplierOwner, time.Now(), false)
 	require.NoError(t, err)
-	require.True(t, stored)
+	require.Equal(t, pr_db.ArchiveResultArchived, stored)
 }
 
 func TestArchiveLendingRequestConcurrentExecution(t *testing.T) {
@@ -208,14 +208,14 @@ func TestArchiveLendingRequestConcurrentExecution(t *testing.T) {
 		t.Run(map[bool]string{false: "same-side", true: "both-sides"}[bothSides], func(t *testing.T) {
 			f := createLendingArchiveFixture(t)
 			repo := prRepo.(*pr_db.PgPrRepo)
-			results := make(chan bool, 2)
+			results := make(chan pr_db.ArchiveResult, 2)
 			errs := make(chan error, 2)
 			var group sync.WaitGroup
 			for i := range 2 {
 				group.Add(1)
 				go func() {
 					defer group.Done()
-					var stored bool
+					var stored pr_db.ArchiveResult
 					var err error
 					if bothSides && i == 0 {
 						stored, err = repo.ArchiveBorrowingRequest(appCtx, archiveFixtureRequest(f.borrowingArchiveFixture), f.owner, time.Now(), false)
@@ -234,7 +234,7 @@ func TestArchiveLendingRequestConcurrentExecution(t *testing.T) {
 				require.NoError(t, err)
 			}
 			for stored := range results {
-				if stored {
+				if stored == pr_db.ArchiveResultArchived {
 					count++
 				}
 			}
@@ -245,7 +245,7 @@ func TestArchiveLendingRequestConcurrentExecution(t *testing.T) {
 				if count == 1 {
 					stored, err := repo.ArchiveBorrowingRequest(appCtx, archiveFixtureRequest(f.borrowingArchiveFixture), f.owner, time.Now(), false)
 					require.NoError(t, err)
-					require.True(t, stored)
+					require.Equal(t, pr_db.ArchiveResultArchived, stored)
 					count++
 				}
 				expected = 2
@@ -287,7 +287,7 @@ func TestLendingArchiveBatchContinuesPastBlockedCandidates(t *testing.T) {
 	event.EventData.CustomData["interval"] = "24h"
 	status, result = svc.ArchiveLendingRequests(appCtx, event)
 	require.Equal(t, events.EventStatusSuccess, status)
-	require.Contains(t, result.Note, "archived 1 lending requests; skipped 100")
+	require.Equal(t, "archived 1 lending requests; skipped 100 requests (active events or signals: 100; unfinished related requests: 0; changed or busy requests: 0); failed 0 requests", result.Note)
 	var count int
 	require.NoError(t, repo.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM patron_request WHERE id=$1`, f.lending+"-candidate-101").Scan(&count))
 	require.Zero(t, count)

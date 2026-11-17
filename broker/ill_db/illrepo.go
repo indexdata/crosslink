@@ -415,7 +415,7 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx common.ExtendedContext, lookupSy
 	}
 	if len(dirEntries) == 0 {
 		ctx.Logger().Warn("empty directory response, non-cached symbols will be ignored", "symbols", symbolsToFetch)
-		return getSliceFromMapInOrder(symbolToPeer, lookupSymbols), query, fmt.Errorf("empty directory response for symbols: %v", symbolsToFetch)
+		return getSliceFromMapInOrder(symbolToPeer, lookupSymbols), query, fmt.Errorf("empty directory response for symbols %v: %w", symbolsToFetch, ErrDirectoryEntryNotFound)
 	}
 	// directory lookup might return additional entries (e.g branches) or entries with new, duplicate or missing symbols
 	// we iterate over all entries to eagerly refresh local data but ensure that the result list depends on the lookupSymbols
