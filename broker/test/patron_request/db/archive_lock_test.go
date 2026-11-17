@@ -57,7 +57,11 @@ func TestArchiveRequestSkipsLockedItems(t *testing.T) {
 					if err != nil {
 						return err
 					}
-					require.False(t, stored)
+					expected := pr_db.ArchiveResultChangedOrBusy
+					if active {
+						expected = pr_db.ArchiveResultActiveEvents
+					}
+					require.Equal(t, expected, stored)
 					_, err = tx.GetConnOrTx().Exec(extCtx, `SELECT 1`)
 					return err
 				})
@@ -79,7 +83,7 @@ func TestArchiveRequestSkipsLockedItems(t *testing.T) {
 				require.NoError(t, repo.Pool.QueryRow(appCtx, `SELECT state,updated_at FROM patron_request WHERE id=$1`, request.ID).Scan(&request.State, &request.UpdatedAt))
 				stored, err := archive(extCtx, request, owner, time.Now(), false)
 				require.NoError(t, err)
-				require.True(t, stored)
+				require.Equal(t, pr_db.ArchiveResultArchived, stored)
 				var barcode string
 				require.NoError(t, repo.Pool.QueryRow(appCtx, `SELECT bundle->'items'->0->>'barcode' FROM archived_resource WHERE resource_id=$1`, request.ID).Scan(&barcode))
 				require.Equal(t, "updated", barcode)
