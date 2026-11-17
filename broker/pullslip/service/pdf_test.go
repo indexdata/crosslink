@@ -353,6 +353,23 @@ func pdfText(t *testing.T, pdf []byte) string {
 	return text.String()
 }
 
+// assertLetterPages checks that every page is US Letter, 8.5 x 11 in
+// portrait. The size is written out in points rather than taken from folio's
+// PageSizeLetter, so the check does not depend on the library it is testing.
+func assertLetterPages(t *testing.T, pdf []byte) {
+	t.Helper()
+	parsed, err := reader.Parse(pdf)
+	require.NoError(t, err)
+	require.Positive(t, parsed.PageCount())
+	for i := range parsed.PageCount() {
+		page, err := parsed.Page(i)
+		require.NoError(t, err)
+		assert.Equal(t, 612.0, page.Width, "page %d width", page.Number)
+		assert.Equal(t, 792.0, page.Height, "page %d height", page.Number)
+		assert.Zero(t, page.Rotate, "page %d rotation", page.Number)
+	}
+}
+
 func TestRenderPdfPullSlip_EverySampleWithDefaultPreset(t *testing.T) {
 	preset, err := prservice.GetStateModelTemplateDefault(proapi.Pullslip, proapi.TemplateAudienceStaff, "pullslip-pdf")
 	require.NoError(t, err)
@@ -369,6 +386,7 @@ func TestRenderPdfPullSlip_EverySampleWithDefaultPreset(t *testing.T) {
 		t.Run(sample.Name, func(t *testing.T) {
 			pdf, err := RenderPdfPullSlip(sample.Request, sample.Notes, sample.Conditions, preset.Labels, preset.Body)
 			require.NoError(t, err)
+			assertLetterPages(t, pdf)
 			text := pdfText(t, pdf)
 			require.Contains(t, want, sample.Name)
 			for _, expected := range want[sample.Name] {
@@ -387,6 +405,7 @@ func TestMergePdfs_KeepsOrder(t *testing.T) {
 	}
 	merged, err := MergePdfs(pdfs)
 	require.NoError(t, err)
+	assertLetterPages(t, merged)
 	text := pdfText(t, merged)
 	first, second := strings.Index(text, "FIRST-SLIP"), strings.Index(text, "SECOND-SLIP")
 	assert.True(t, first >= 0 && second > first, text)
