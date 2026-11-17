@@ -826,9 +826,15 @@ or the ReShare-coded `bibliographicInfo.bibliographicRecordId` for lending.
 The borrowing value follows creation, edits, metadata updates, and corrected
 retry requests automatically. Clients cannot set `bibRecordId` directly; create
 and update requests ignore that property, and import bundles do not accept it.
-Import the source identifiers in `illRequest` instead. The legacy `bib_record_id`
-database column is retained for schema compatibility and is no longer used to
-determine the API value or the outgoing shared-index identifier.
+Import the source identifiers in `illRequest` instead. Migration 082 removes the
+legacy `bib_record_id` database column and recreates `patron_request_search_view`
+without it. Before deploying this migration, deploy an intermediate release to
+every broker instance that removes the column from queries and models but does
+not include migration 082. Do not upgrade directly from a release that still
+references the column: Helm runs migrations before upgrading instances, so
+older instances would fail during the rollout. Rolling migration 082 back
+restores the nullable column and view, but cannot recover discarded legacy
+values. The source identifiers in `illRequest` are preserved.
 
 The broker replaces `supplierUniqueRecordId` with the supplier's local ID in the
 requests it sends to suppliers, so it also sends the shared-index ID as a

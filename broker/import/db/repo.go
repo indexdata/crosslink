@@ -242,7 +242,6 @@ func createImportedPatronRequestParams(params pr_db.CreatePatronRequestParams) C
 		NextReqID: params.NextReqID, PrevReqID: params.PrevReqID,
 		RetryBibInfo: params.RetryBibInfo, StateModel: params.StateModel, DueAt: params.DueAt,
 		RequesterPickupLocationID: params.RequesterPickupLocationID,
-		BibRecordID:               params.BibRecordID,
 	}
 }
 
@@ -259,7 +258,6 @@ func updateImportedPatronRequestParams(params pr_db.CreatePatronRequestParams) U
 		NextReqID: params.NextReqID, PrevReqID: params.PrevReqID,
 		RetryBibInfo: params.RetryBibInfo, StateModel: params.StateModel, DueAt: params.DueAt,
 		RequesterPickupLocationID: params.RequesterPickupLocationID,
-		BibRecordID:               params.BibRecordID,
 	}
 }
 

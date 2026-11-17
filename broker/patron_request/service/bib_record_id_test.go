@@ -87,7 +87,6 @@ func TestBibRecordIDFollowsMetadataUpdate(t *testing.T) {
 			}
 			pr := pr_db.PatronRequest{
 				ID: "request", Side: SideBorrowing, RequesterSymbol: getDbText("ISIL:REQ1"),
-				BibRecordID: getDbText("stale-column-value"),
 				IllRequest: iso18626.Request{BibliographicInfo: iso18626.BibliographicInfo{
 					SupplierUniqueRecordId: tc.before, Title: "Original title",
 				}},
