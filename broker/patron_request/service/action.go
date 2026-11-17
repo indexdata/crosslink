@@ -1413,10 +1413,28 @@ func (a *PatronRequestActionService) RequestIdPrefix(ctx common.ExtendedContext,
 	if err != nil {
 		return "", err
 	}
-	peers, _, err := a.illRepo.GetCachedPeersBySymbols(ctx, []string{requesterSymbol}, a.directoryLookupAdapter)
+	prefix, err := a.LookupRequestIdPrefix(ctx, requesterSymbol)
 	if err != nil {
 		ctx.Logger().Warn("failed to get requester peer for request ID prefix, using symbol", "requesterSymbol", requesterSymbol, "error", err)
 		return symbolValue, nil
+	}
+	return prefix, nil
+}
+
+// LookupRequestIdPrefix returns the prefix that RequestIdPrefix returns while
+// Directory is available, but returns an error instead of falling back when the
+// requester's Directory entry cannot be read. A requester that Directory does
+// not know uses the value part of requesterSymbol, as RequestIdPrefix does.
+// Callers that must not guess the prefix, such as an import reserving request
+// IDs, use it.
+func (a *PatronRequestActionService) LookupRequestIdPrefix(ctx common.ExtendedContext, requesterSymbol string) (string, error) {
+	_, symbolValue, err := common.SplitSymbol(requesterSymbol)
+	if err != nil {
+		return "", err
+	}
+	peers, _, err := a.illRepo.GetCachedPeersBySymbols(ctx, []string{requesterSymbol}, a.directoryLookupAdapter)
+	if err != nil && !errors.Is(err, ill_db.ErrDirectoryEntryNotFound) {
+		return "", fmt.Errorf("look up requester %q: %w", requesterSymbol, err)
 	}
 	if len(peers) == 0 {
 		ctx.Logger().Warn("no requester peer found for request ID prefix, using symbol", "requesterSymbol", requesterSymbol)

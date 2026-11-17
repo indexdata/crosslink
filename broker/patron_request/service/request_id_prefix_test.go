@@ -2,6 +2,7 @@ package prservice
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/ill_db"
@@ -37,6 +38,35 @@ func TestRequestIdPrefix(t *testing.T) {
 			illRepo.On("GetCachedPeersBySymbols", []string{"ISIL:REQ1"}, mock.Anything).Return(tc.peers, "", tc.lookupErr)
 			service := CreatePatronRequestActionService(new(MockPrRepo), illRepo, new(MockEventBus), new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
 			got, err := service.RequestIdPrefix(appCtx, "ISIL:REQ1")
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestLookupRequestIdPrefix(t *testing.T) {
+	configured := "ABC"
+	for _, tc := range []struct {
+		name      string
+		peers     []ill_db.Peer
+		lookupErr error
+		want      string
+		wantErr   bool
+	}{
+		{name: "configured", peers: []ill_db.Peer{peerWithRequestIdPrefix(&configured)}, want: "ABC"},
+		{name: "no peer", peers: []ill_db.Peer{}, want: "REQ1"},
+		{name: "unknown to directory", lookupErr: fmt.Errorf("empty directory response: %w", ill_db.ErrDirectoryEntryNotFound), want: "REQ1"},
+		{name: "lookup failure", lookupErr: errors.New("directory down"), wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			illRepo := new(IllRepoMock)
+			illRepo.On("GetCachedPeersBySymbols", []string{"ISIL:REQ1"}, mock.Anything).Return(tc.peers, "", tc.lookupErr)
+			service := CreatePatronRequestActionService(new(MockPrRepo), illRepo, new(MockEventBus), new(MockIso18626Handler), nil, new(EmailSenderMock), nil, nil)
+			got, err := service.LookupRequestIdPrefix(appCtx, "ISIL:REQ1")
+			if tc.wantErr {
+				require.ErrorContains(t, err, "directory down", "a Directory failure is not guessed around")
+				return
+			}
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got)
 		})

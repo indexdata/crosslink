@@ -3,6 +3,7 @@ package importdb
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/indexdata/crosslink/broker/common"
@@ -128,6 +129,12 @@ func (r *PgImportRepo) ImportPatronRequest(ctx common.ExtendedContext, bundle Pa
 				}
 				switch existing.Side {
 				case prservice.SideBorrowing:
+					// A live borrowing request can hold an ID that a legacy record
+					// also uses, when it was created before the import reserved
+					// that ID; legacy data must never replace it.
+					if !existing.Imported {
+						return &ConflictError{Resource: "patron request", Identifier: bundle.PatronRequest.ID, Reason: "existing borrowing request was not created by an import"}
+					}
 					if existing.RequesterSymbol != bundle.PatronRequest.RequesterSymbol {
 						return &ConflictError{Resource: "patron request", Identifier: bundle.PatronRequest.ID, Reason: "requester symbol does not match existing aggregate owner"}
 					}
@@ -149,8 +156,10 @@ func (r *PgImportRepo) ImportPatronRequest(ctx common.ExtendedContext, bundle Pa
 			if err := r.queries.CreateImportedPatronRequest(ctx, tx, createImportedPatronRequestParams(bundle.PatronRequest)); err != nil {
 				return fmt.Errorf("insert patron request %q: %w", bundle.PatronRequest.ID, err)
 			}
+			if err := r.queries.MarkPatronRequestImported(ctx, tx, bundle.PatronRequest.ID); err != nil {
+				return fmt.Errorf("mark patron request %q imported: %w", bundle.PatronRequest.ID, err)
+			}
 		}
-
 		itemIDs := make([]string, 0, len(bundle.Items))
 		for _, item := range bundle.Items {
 			item.PrID = bundle.PatronRequest.ID
@@ -192,6 +201,32 @@ func (r *PgImportRepo) ImportPatronRequest(ctx common.ExtendedContext, bundle Pa
 		return nil
 	})
 	return result, err
+}
+
+// ReserveHrids raises the HRID sequence of every prefix past its reserved
+// number in one transaction, so get_next_hrid only returns higher numbers. An
+// import reserves the IDs of all its records this way before writing the first
+// one, so requests created during the import cannot take a later record's ID.
+// advance_hrid locks each sequence against get_next_hrid until commit. Prefixes
+// are advanced in sorted order so concurrent reservations take the sequence
+// locks in the same order.
+func (r *PgImportRepo) ReserveHrids(ctx common.ExtendedContext, reservations map[string]int64) error {
+	if len(reservations) == 0 {
+		return nil
+	}
+	prefixes := make([]string, 0, len(reservations))
+	for prefix := range reservations {
+		prefixes = append(prefixes, prefix)
+	}
+	slices.Sort(prefixes)
+	return r.withTxConn(ctx, func(tx DBTX) error {
+		for _, prefix := range prefixes {
+			if err := r.queries.AdvanceImportedHrid(ctx, tx, AdvanceImportedHridParams{Prefix: prefix, Used: reservations[prefix]}); err != nil {
+				return fmt.Errorf("reserve HRID sequence for prefix %q: %w", prefix, err)
+			}
+		}
+		return nil
+	})
 }
 
 func createImportedPatronRequestParams(params pr_db.CreatePatronRequestParams) CreateImportedPatronRequestParams {

@@ -77,6 +77,11 @@ RUN adduser \
   --uid 65532 \
   broker-user
 
+# The runtime image has no /tmp; imports spool request bodies there. COPY copies
+# a directory's contents, not the directory, so /tmp is copied inside a parent
+# directory to keep its mode.
+RUN mkdir -p /runtime-root/tmp && chmod 1777 /runtime-root/tmp
+
 # Save list of shared lib deps
 RUN ldd /broker | tr -s '[:blank:]' '\n' | grep '^/' | \
     xargs -I % sh -c 'mkdir -p $(dirname deps%); cp % deps%;'
@@ -97,6 +102,8 @@ COPY --from=build /app/broker/deps /
 COPY --from=build /broker .
 # copy migrations
 COPY --from=build /app/broker/migrations /migrations
+# writable temporary directory for import spool files
+COPY --from=build /runtime-root/ /
 
 ENV HTTP_PORT=8081
 EXPOSE ${HTTP_PORT}

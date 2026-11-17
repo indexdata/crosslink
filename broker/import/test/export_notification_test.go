@@ -121,7 +121,7 @@ func TestExportLoanConditionNotificationsImportCompatibility(t *testing.T) {
 			}
 			var ndjson bytes.Buffer
 			require.NoError(t, json.NewEncoder(&ndjson).Encode(record))
-			importer := service.NewImporter(importTestRepo, ill_db.CreateIllRepo(importTestPool), nil, &prservice.StateModelService{}, time.Now)
+			importer := service.NewImporter(importTestRepo, ill_db.CreateIllRepo(importTestPool), nil, &prservice.StateModelService{}, stubPrefixResolver{}, time.Now)
 			result, err := importer.Import(importTestCtx, importdb.ConflictPolicyFail, &ndjson)
 			require.NoError(t, err)
 			require.Empty(t, result.Errors)

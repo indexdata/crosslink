@@ -3,10 +3,15 @@ package service
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
+	"os"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -36,12 +41,33 @@ const (
 	importItemTypeTemplate      = "template"
 	maxImportRecordBytes        = 1 << 20
 	maxRetainedImportErrors     = 100
+	// maxImportHridPrefixes bounds the distinct combinations of envelope owner,
+	// requester and request ID prefix whose IDs one import may reserve, and so
+	// the owners and requesters looked up for them.
+	maxImportHridPrefixes = 10000
+	// maxImportHridDigits bounds the number of a reserved request ID, so a
+	// mistyped ID cannot exhaust its prefix's bigint sequence. Longer numbers are
+	// far beyond any generated ID and are imported without a reservation.
+	maxImportHridDigits = 15
 )
 
 var ErrImportRecordTooLarge = errors.New("import record too large")
 
+// ErrTooManyImportHridPrefixes is returned when an import has reservable request
+// IDs from more than maxImportHridPrefixes combinations of envelope owner,
+// requester and request ID prefix.
+var ErrTooManyImportHridPrefixes = fmt.Errorf("import uses request IDs from more than %d combinations of owner, requester and prefix", maxImportHridPrefixes)
+
 type importStateValidator interface {
 	ValidateImportState(string, proapi.StateModelServiceType, pr_db.PatronRequestSide, pr_db.PatronRequestState) (bool, error)
+}
+
+// RequestIdPrefixResolver resolves the prefix of the request IDs the broker
+// generates for a requester, as
+// PatronRequestActionService.LookupRequestIdPrefix does. It returns an error
+// when the prefix cannot be determined, rather than guessing one.
+type RequestIdPrefixResolver interface {
+	LookupRequestIdPrefix(common.ExtendedContext, string) (string, error)
 }
 
 type importPeerCache interface {
@@ -54,8 +80,10 @@ type Importer struct {
 	peerCache        importPeerCache
 	directoryAdapter adapter.DirectoryLookupAdapter
 	stateValidator   importStateValidator
+	prefixResolver   RequestIdPrefixResolver
 	clock            func() time.Time
 	maxRecordBytes   int
+	maxHridPrefixes  int
 	schemas          importSchemas
 }
 
@@ -71,8 +99,12 @@ type importItem struct {
 	Data  json.RawMessage
 }
 
-func NewImporter(repo importdb.ImportRepo, illRepo ill_db.IllRepo, directoryAdapter adapter.DirectoryLookupAdapter, stateValidator importStateValidator, clock func() time.Time) Importer {
-	return newImporter(repo, illRepo, directoryAdapter, stateValidator, clock)
+// NewImporter creates an Importer. prefixResolver resolves the request ID
+// prefix of a requester, whose generated IDs an import reserves.
+func NewImporter(repo importdb.ImportRepo, illRepo ill_db.IllRepo, directoryAdapter adapter.DirectoryLookupAdapter, stateValidator importStateValidator, prefixResolver RequestIdPrefixResolver, clock func() time.Time) Importer {
+	importer := newImporter(repo, illRepo, directoryAdapter, stateValidator, clock)
+	importer.prefixResolver = prefixResolver
+	return importer
 }
 
 func newImporter(repo importdb.ImportRepo, peerCache importPeerCache, directoryAdapter adapter.DirectoryLookupAdapter, stateValidator importStateValidator, clock func() time.Time) Importer {
@@ -90,6 +122,7 @@ func newImporter(repo importdb.ImportRepo, peerCache importPeerCache, directoryA
 		stateValidator:   stateValidator,
 		clock:            clock,
 		maxRecordBytes:   maxImportRecordBytes,
+		maxHridPrefixes:  maxImportHridPrefixes,
 		schemas:          schemas,
 	}
 }
@@ -157,12 +190,230 @@ func decodeImportItem(raw json.RawMessage) (importItem, error) {
 	return envelope, nil
 }
 
+// Import reads an NDJSON stream of import records and imports each record in
+// its own transaction. The stream is first spooled to a temporary file while
+// collecting the request IDs of borrowing patron requests, and the HRID
+// sequence of every requester prefix is raised past the highest imported number
+// before any record is written. Requests created while the import runs therefore
+// cannot take an ID that a later record in the stream uses. A stream that
+// cannot be read completely imports nothing.
 func (i Importer) Import(ctx common.ExtendedContext, policy importdb.ConflictPolicy, input io.Reader) (importoapi.ImportResult, error) {
 	result := importoapi.ImportResult{Errors: make([]importoapi.ImportItemError, 0, maxRetainedImportErrors)}
 	maxRecordBytes := i.maxRecordBytes
 	if maxRecordBytes <= 0 {
 		maxRecordBytes = maxImportRecordBytes
 	}
+	spool, err := os.CreateTemp("", "broker-import-*.ndjson")
+	if err != nil {
+		return result, fmt.Errorf("create import spool file: %w", err)
+	}
+	defer func() {
+		_ = spool.Close()
+		_ = os.Remove(spool.Name())
+	}()
+	candidates, err := i.spoolImport(input, spool, maxRecordBytes)
+	if err != nil {
+		return result, err
+	}
+	reservations, err := i.hridReservations(ctx, candidates)
+	if err != nil {
+		return result, err
+	}
+	if len(reservations) != 0 {
+		if i.repo == nil {
+			return result, errors.New("import repository is required")
+		}
+		if err := i.repo.ReserveHrids(ctx, reservations); err != nil {
+			return result, fmt.Errorf("reserve imported request IDs: %w", err)
+		}
+	}
+	if _, err := spool.Seek(0, io.SeekStart); err != nil {
+		return result, fmt.Errorf("rewind import spool file: %w", err)
+	}
+	return i.importRecords(ctx, policy, spool, maxRecordBytes, result)
+}
+
+// hridScanRecord holds the fields of an import record that decide whether it
+// reserves an HRID. Other fields and malformed records are left to the import
+// pass, which reports them.
+type hridScanRecord struct {
+	Type  string `json:"type"`
+	Owner string `json:"owner"`
+	Data  struct {
+		PatronRequest struct {
+			ID              string `json:"id"`
+			Side            string `json:"side"`
+			RequesterSymbol string `json:"requesterSymbol"`
+		} `json:"patronRequest"`
+	} `json:"data"`
+}
+
+// hridCandidate identifies borrowing request IDs PREFIX-N that reserve a
+// number when PREFIX is the request ID prefix of requester, and requester is
+// owner or one of its branches. prefix is uppercased.
+type hridCandidate struct {
+	owner, requester, prefix string
+}
+
+// spoolImport copies the records of input to spool and returns the highest
+// number per hridCandidate among borrowing patron requests with PREFIX-N IDs.
+// It makes no lookups, so reading the request body never waits for Directory
+// or the database.
+func (i Importer) spoolImport(input io.Reader, spool io.Writer, maxRecordBytes int) (map[hridCandidate]int64, error) {
+	reader := bufio.NewReaderSize(input, maxRecordBytes+2)
+	writer := bufio.NewWriter(spool)
+	candidates := map[hridCandidate]int64{}
+	for {
+		raw, err := readImportRecord(reader, maxRecordBytes)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if _, err := writer.Write(raw); err != nil {
+			return nil, fmt.Errorf("write import spool file: %w", err)
+		}
+		if err := writer.WriteByte('\n'); err != nil {
+			return nil, fmt.Errorf("write import spool file: %w", err)
+		}
+		var record hridScanRecord
+		if json.Unmarshal(raw, &record) != nil || record.Type != importItemTypePatronRequest ||
+			pr_db.PatronRequestSide(record.Data.PatronRequest.Side) != prservice.SideBorrowing {
+			continue
+		}
+		request := record.Data.PatronRequest
+		prefix, used, ok := splitHrid(request.ID)
+		if !ok || record.Owner == "" || request.RequesterSymbol == "" {
+			continue
+		}
+		key := hridCandidate{owner: record.Owner, requester: request.RequesterSymbol, prefix: prefix}
+		highest, known := candidates[key]
+		if !known && len(candidates) >= i.maxHridPrefixes {
+			return nil, ErrTooManyImportHridPrefixes
+		}
+		if !known || used > highest {
+			candidates[key] = used
+		}
+	}
+	if err := writer.Flush(); err != nil {
+		return nil, fmt.Errorf("write import spool file: %w", err)
+	}
+	return candidates, nil
+}
+
+// hridReservations returns the highest number to reserve per request ID prefix:
+// a candidate counts only when its requester is the envelope owner or one of its
+// branches, and its prefix is the requester's own request ID prefix, so an
+// import cannot move another requester's sequence. Each owner and requester is
+// looked up once. A lookup that fails for any reason other than an unknown
+// owner fails the import, because skipping a reservation could let a live
+// request take an imported ID.
+func (i Importer) hridReservations(ctx common.ExtendedContext, candidates map[hridCandidate]int64) (map[string]int64, error) {
+	keys := slices.SortedFunc(maps.Keys(candidates), func(a, b hridCandidate) int {
+		return cmp.Or(cmp.Compare(a.owner, b.owner), cmp.Compare(a.requester, b.requester), cmp.Compare(a.prefix, b.prefix))
+	})
+	reservations := map[string]int64{}
+	ownedSymbols := map[string]map[string]bool{}
+	requesterPrefixes := map[string]string{}
+	for _, key := range keys {
+		owned, err := i.ownsRequesterSymbol(ctx, ownedSymbols, key.owner, key.requester)
+		if err != nil {
+			return nil, err
+		}
+		if !owned {
+			continue
+		}
+		prefix, err := i.requesterPrefix(ctx, requesterPrefixes, key.requester)
+		if err != nil {
+			return nil, err
+		}
+		if prefix != key.prefix {
+			continue
+		}
+		if used := candidates[key]; used > reservations[prefix] {
+			reservations[prefix] = used
+		}
+	}
+	return reservations, nil
+}
+
+// hridNumberSuffix matches IDs ending in "-" and a number that can be reserved.
+var hridNumberSuffix = regexp.MustCompile(`-[0-9]{1,` + strconv.Itoa(maxImportHridDigits) + `}$`)
+
+// splitHrid splits id of the form PREFIX-N, where N has at most
+// maxImportHridDigits digits, into the uppercased PREFIX and N. PREFIX is
+// uppercased because get_next_hrid uppercases it, so prefixes compare
+// case-insensitively.
+func splitHrid(id string) (string, int64, bool) {
+	loc := hridNumberSuffix.FindStringIndex(id)
+	if loc == nil || loc[0] == 0 {
+		return "", 0, false
+	}
+	used, err := strconv.ParseInt(id[loc[0]+1:], 10, 64)
+	if err != nil {
+		return "", 0, false
+	}
+	return strings.ToUpper(id[:loc[0]]), used, true
+}
+
+// requesterPrefix returns the uppercased request ID prefix of requesterSymbol,
+// caching it in prefixes. A malformed symbol has no prefix; any other resolver
+// error is returned.
+func (i Importer) requesterPrefix(ctx common.ExtendedContext, prefixes map[string]string, requesterSymbol string) (string, error) {
+	if prefix, cached := prefixes[requesterSymbol]; cached {
+		return prefix, nil
+	}
+	if i.prefixResolver == nil {
+		return "", errors.New("request ID prefix resolver is required")
+	}
+	prefix := ""
+	if _, _, err := common.SplitSymbol(requesterSymbol); err == nil {
+		prefix, err = i.prefixResolver.LookupRequestIdPrefix(ctx, requesterSymbol)
+		if err != nil {
+			return "", fmt.Errorf("resolve request ID prefix of requester %q: %w", requesterSymbol, err)
+		}
+	}
+	prefix = strings.ToUpper(prefix)
+	prefixes[requesterSymbol] = prefix
+	return prefix, nil
+}
+
+// ownsRequesterSymbol reports whether symbol is owner or one of its branches,
+// caching the owner's symbols in owned. An owner Directory does not know owns
+// nothing, so its records reserve nothing and are reported when imported;
+// other lookup failures abort, because skipping a reservation could let a live
+// request take an imported ID.
+func (i Importer) ownsRequesterSymbol(ctx common.ExtendedContext, owned map[string]map[string]bool, owner, symbol string) (bool, error) {
+	if owner == "" || symbol == "" {
+		return false, nil
+	}
+	symbols, cached := owned[owner]
+	if !cached {
+		symbols = map[string]bool{}
+		peers, _, err := i.peerCache.GetCachedPeersBySymbols(ctx, []string{owner}, i.directoryAdapter)
+		if errors.Is(err, ill_db.ErrDirectoryEntryNotFound) {
+			peers, err = nil, nil
+		}
+		if err != nil {
+			return false, fmt.Errorf("resolve envelope owner %q: %w", owner, err)
+		}
+		if len(peers) != 0 {
+			symbols[owner] = true
+			branches, err := i.peerCache.GetBranchSymbolsByPeerId(ctx, peers[0].ID)
+			if err != nil {
+				return false, fmt.Errorf("resolve branches for envelope owner %q: %w", owner, err)
+			}
+			for _, branch := range branches {
+				symbols[branch.SymbolValue] = true
+			}
+		}
+		owned[owner] = symbols
+	}
+	return symbols[symbol], nil
+}
+
+func (i Importer) importRecords(ctx common.ExtendedContext, policy importdb.ConflictPolicy, input io.Reader, maxRecordBytes int, result importoapi.ImportResult) (importoapi.ImportResult, error) {
 	reader := bufio.NewReaderSize(input, maxRecordBytes+2)
 	for line := int32(1); ; {
 		raw, err := readImportRecord(reader, maxRecordBytes)

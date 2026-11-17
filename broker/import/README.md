@@ -116,6 +116,12 @@ Important validation rules include:
 - An `illTransaction`, when supplied, must use the same requester symbol and requester request ID. `locatedSuppliers` require an `illTransaction`.
 - Item, notification, and located-supplier IDs must be unique within their respective arrays. At most one located supplier may have status `selected`.
 
+When a borrowing request's `id` has the `PREFIX-N` form that the broker generates for its requester, the import reserves the ID so new requests cannot reuse it. `PREFIX` must be the requester's own request-ID prefix, compared case-insensitively: its Directory `requestIdPrefix`, or the value of `requesterSymbol` (`US-RS1` in `US-RS1-1001`) when Directory sets none. `N` must have at most 15 digits. Other IDs, such as UUIDs or IDs with another prefix, are imported without a reservation; they cannot collide with IDs the broker generates for the requester. A requester outside the envelope owner and its branches reserves nothing, so an import cannot move another institution's sequence. An envelope owner that Directory does not know reserves nothing either, and its records are reported as per-record errors. A requester that Directory does not know uses its `requesterSymbol` value as its prefix, as request creation does. Any other Directory or database failure while looking up owners or requesters fails the whole upload before any record is imported, because guessing a prefix could leave the real prefix's IDs unreserved.
+
+The broker first receives the whole stream into a temporary file, without making lookups while it reads. It then looks up each envelope owner and requester once and raises the request-ID sequence of every requester prefix past the highest `N` among the stream's reservable borrowing requests, in one transaction, before it imports any record. A request created while the records are imported therefore cannot take an ID that a later record uses. Requests created before the upload finishes are not protected, just like requests created before the import started. Such a request fails the record that uses its ID under `fail`, and is never replaced under `update` (see [`update`](#update)). Request creation for a prefix waits while an import is advancing its sequence, so imports and new requests can run at the same time. The broker's temporary directory (`/tmp`, or `TMPDIR` when set) must have room for the whole request body of every concurrent import, up to 2 GB each. The broker does not limit concurrent imports. The Helm chart mounts a size-limited `emptyDir` there (`tmpSizeLimit`, default `4Gi`, enough for two maximum-size imports at once). Set `tmpSizeLimit` to at least 2 GB times the number of imports that may run at once on one replica: when the `emptyDir` grows past its limit, Kubernetes evicts the whole pod, which stops every request and task on that replica rather than failing only the import.
+
+Request-ID prefixes cannot contain `/`, but imported legacy IDs, such as mod-rs HRIDs, may. Such IDs must be percent-encoded (`%2F`) in `/patron_requests/{id}` URLs.
+
 Minimal borrowing example:
 
 ```ndjson
@@ -124,7 +130,7 @@ Minimal borrowing example:
 
 ## Conflict policies
 
-The selected policy applies independently to every record in the stream. A record-level conflict or validation error does not stop later records, and successful earlier records remain committed. Every imported resource is written in its own database transaction.
+The selected policy applies independently to every record in the stream. A record-level conflict or validation error does not stop later records, and successful earlier records remain committed. Every imported resource is written in its own database transaction, after the request-ID reservation described under [Patron requests](#patron-requests).
 
 ### `fail` (default)
 
@@ -181,7 +187,7 @@ Updates still fail when applying them would make identity resolution unsafe. Exa
 
 | Resource | Conflict identity | `update` behavior |
 | --- | --- | --- |
-| Borrowing patron request | Patron-request `id` | Replaces the root data and synchronizes the submitted aggregate collections. The requester request ID, side, and requester owner symbol must still match the existing aggregate. |
+| Borrowing patron request | Patron-request `id` | Replaces the root data and synchronizes the submitted aggregate collections. The requester request ID, side, and requester owner symbol must still match the existing aggregate. Only a request created by an import is replaced; a request the broker created, such as a live request that took the ID before the import reserved it, fails the record. Requests imported before this rule was introduced are not recorded as imported and are treated the same way. |
 | Lending patron request | Patron-request `id`, or the routing identity `(supplierSymbol, requesterRequestId)` | Updates the matched local aggregate, preserving its local ID when the match was by routing identity. The requester request ID, side, and supplier owner symbol must still match. If the incoming ID and routing identity match two different aggregates, the record fails under every policy. |
 | Template | Any label overlap for the same `owner`, `purpose`, and `audience` | Updates the one matching template while preserving its ID and creation timestamp. If the labels overlap more than one template, the record fails as ambiguous. A generic template (no audience) and an audience-specific template do not conflict. |
 | Batch action | Same `owner` and `title` among batch-action scheduled tasks | Updates that batch action while preserving its ID and creation timestamp, then notifies the scheduler. A different kind of scheduled task with the same title does not conflict. |
@@ -232,8 +238,8 @@ Always inspect the counters and `errors` array instead of treating HTTP 200 as p
 
 | Status | Meaning |
 | --- | --- |
-| `400 Bad Request` | Missing body, unsupported `conflictPolicy`, or a content type other than `application/x-ndjson` |
+| `400 Bad Request` | Missing body, unsupported `conflictPolicy`, a content type other than `application/x-ndjson`, or borrowing request IDs from more than 10,000 combinations of envelope owner, requester, and request-ID prefix |
 | `413 Request Entity Too Large` | The whole body exceeds 2 GiB or one NDJSON record exceeds 1 MiB |
-| `500 Internal Server Error` | The server could not read the request stream |
+| `500 Internal Server Error` | The server could not read or store the request stream, resolve an envelope owner, or reserve request IDs |
 
-The handler applies the network I/O deadlines described above. A fatal stream error such as an oversized record stops reading the request; records already committed before that error are not rolled back.
+The handler applies the network I/O deadlines described above. Any request-level error occurs before the first record is imported, so a fatal stream error such as an oversized record imports nothing.

@@ -59,9 +59,24 @@ It also exports the selected local owner's `defaultCopyrightType`, resolving the
 `default_copyright_type` setting through the `copyrightType` refdata vocabulary.
 An unset setting is omitted; a configured value without a unique refdata match
 fails the export. The `request_id_prefix` setting is exported as `requestIdPrefix`
-on the selected local owner; its branches inherit it. A value longer than 32
-characters, or containing anything other than ASCII letters and digits, fails the
-export.
+on the selected local owner; its branches inherit it. CrossLink prefixes
+cannot contain `/`, so every `/` is removed. Trailing ASCII punctuation and
+spaces are then removed, because CrossLink adds its own `-` separator: `ALV-`
+is exported as `ALV`, `US-ABC-` as `US-ABC`, and `US/ABC-` as `USABC`. A value
+that is then empty, longer than 16 characters, or contains anything other than
+ASCII letters, digits, `:`, and `-` fails the export.
+
+The patron-request export keeps mod-rs HRIDs as borrowing request IDs. An HRID
+must be ASCII letters and digits, or a prefix of up to 16 ASCII letters, digits,
+`/`, `:`, and `-` followed by `-` and digits (for example `ALV-10008` or
+`US-ABC-10008`). Before importing any record, the broker raises the HRID
+sequence of each requester's request-ID prefix past the highest `N` among the
+stream's borrowing IDs with that prefix, so new CrossLink IDs cannot repeat a
+migrated one, even when the tenant creates requests during the import. The
+exported `requestIdPrefix` must therefore match the HRID prefix, as it does when
+both come from the same `request_id_prefix` setting. HRIDs whose prefix contains
+`/` keep it, so they get no reservation; new CrossLink IDs use the prefix
+without `/` (`USABC-1` rather than `US/ABC-1`) and cannot repeat them.
 See the [ILL configuration field mappings](export-crosslink-directory-field-mapping.md#ill-configuration)
 for source fields, setting and label fallbacks, ordering, and missing-list behavior.
 

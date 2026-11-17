@@ -29,7 +29,7 @@ func fixedClock() time.Time { return time.Date(2026, 8, 19, 12, 0, 0, 0, time.UT
 
 func TestPostImportDefaultsConflictPolicyToFail(t *testing.T) {
 	repo := &recordingImportRepo{}
-	handler := ApiHandler{importer: service.NewImporter(repo, cache, nil, nil, fixedClock)}
+	handler := ApiHandler{importer: service.NewImporter(repo, cache, nil, nil, nil, fixedClock)}
 	recorder := newResponseRecorder()
 	handler.PostImport(recorder, ndjsonRequest(`{"type":"template","owner":"ISIL:OWNER","data":`+string(validTemplateData())+`}`+"\n"), importoapi.PostImportParams{})
 
@@ -44,7 +44,8 @@ func TestPostImportDefaultsConflictPolicyToFail(t *testing.T) {
 func TestPostImportDeadlinesFollowNetworkIO(t *testing.T) {
 	recorder := newResponseRecorder()
 	line := `{"type":"template","owner":"ISIL:OWNER","data":` + string(validTemplateData()) + "}\n"
-	// Split a record across reads, and process it before reading the next one.
+	// Split a record across reads. The whole body is spooled before any record
+	// is processed, and the read deadline stays cleared while processing.
 	input := io.MultiReader(strings.NewReader(line[:20]), strings.NewReader(line[20:]), strings.NewReader(line))
 	reads := 0
 	processed := 0
@@ -75,7 +76,7 @@ func TestPostImportDeadlinesFollowNetworkIO(t *testing.T) {
 		assert.False(t, recorder.writeDeadlines[1].Before(responseDeadline))
 		assert.False(t, recorder.readDeadlines[len(recorder.readDeadlines)-1].IsZero())
 	}
-	handler := ApiHandler{importer: service.NewImporter(repo, cache, nil, nil, fixedClock)}
+	handler := ApiHandler{importer: service.NewImporter(repo, cache, nil, nil, nil, fixedClock)}
 
 	handler.PostImport(recorder, req, importoapi.PostImportParams{})
 
@@ -101,13 +102,13 @@ func TestPostImportRearmsWriteDeadlineOnReadError(t *testing.T) {
 				assert.False(t, recorder.writeDeadlines[1].Before(responseDeadline))
 			}
 			repo := &recordingImportRepo{}
-			handler := ApiHandler{importer: service.NewImporter(repo, cache, nil, nil, fixedClock)}
+			handler := ApiHandler{importer: service.NewImporter(repo, cache, nil, nil, nil, fixedClock)}
 
 			handler.PostImport(recorder, req, importoapi.PostImportParams{})
 
 			assert.Equal(t, http.StatusInternalServerError, recorder.Code)
 			assert.Zero(t, repo.templateCalls)
-			assert.Contains(t, recorder.Body.String(), "failed to read import request")
+			assert.Contains(t, recorder.Body.String(), "failed to process import request")
 		})
 	}
 }
@@ -132,7 +133,7 @@ func TestImportReaderPropagatesDeadlineErrors(t *testing.T) {
 
 func TestPostImportAcceptsExplicitConflictPolicy(t *testing.T) {
 	repo := &recordingImportRepo{}
-	handler := ApiHandler{importer: service.NewImporter(repo, cache, nil, nil, fixedClock)}
+	handler := ApiHandler{importer: service.NewImporter(repo, cache, nil, nil, nil, fixedClock)}
 	policy := importoapi.Update
 	recorder := newResponseRecorder()
 	handler.PostImport(recorder, ndjsonRequest(`{"type":"template","owner":"ISIL:OWNER","data":`+string(validTemplateData())+`}`+"\n"), importoapi.PostImportParams{ConflictPolicy: &policy})
@@ -142,7 +143,7 @@ func TestPostImportAcceptsExplicitConflictPolicy(t *testing.T) {
 }
 
 func TestPostImportRejectsUnknownConflictPolicyBeforeBodyValidation(t *testing.T) {
-	handler := ApiHandler{importer: service.NewImporter(&recordingImportRepo{}, cache, nil, nil, fixedClock)}
+	handler := ApiHandler{importer: service.NewImporter(&recordingImportRepo{}, cache, nil, nil, nil, fixedClock)}
 	policy := importoapi.ConflictPolicy("unknown")
 	recorder := newResponseRecorder()
 	handler.PostImport(recorder, httptest.NewRequest(http.MethodPost, "/import", http.NoBody), importoapi.PostImportParams{ConflictPolicy: &policy})
@@ -152,7 +153,7 @@ func TestPostImportRejectsUnknownConflictPolicyBeforeBodyValidation(t *testing.T
 }
 
 func TestPostImportValidatesBodyAndContentType(t *testing.T) {
-	handler := ApiHandler{importer: service.NewImporter(&recordingImportRepo{}, cache, nil, nil, fixedClock)}
+	handler := ApiHandler{importer: service.NewImporter(&recordingImportRepo{}, cache, nil, nil, nil, fixedClock)}
 
 	missingBody := newResponseRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/import", http.NoBody)
@@ -169,7 +170,7 @@ func TestPostImportValidatesBodyAndContentType(t *testing.T) {
 
 func TestPostImportRejectsKnownOversizedBody(t *testing.T) {
 	handler := ApiHandler{
-		importer:           service.NewImporter(&recordingImportRepo{}, cache, nil, nil, fixedClock),
+		importer:           service.NewImporter(&recordingImportRepo{}, cache, nil, nil, nil, fixedClock),
 		maxImportBodyBytes: 128,
 	}
 	req := ndjsonRequest(strings.Repeat("x", 129))
@@ -183,7 +184,7 @@ func TestPostImportRejectsKnownOversizedBody(t *testing.T) {
 func TestPostImportRejectsChunkedOversizedBody(t *testing.T) {
 	repo := &recordingImportRepo{}
 	handler := ApiHandler{
-		importer:           service.NewImporter(repo, cache, nil, nil, fixedClock),
+		importer:           service.NewImporter(repo, cache, nil, nil, nil, fixedClock),
 		maxImportBodyBytes: 128,
 	}
 	req := ndjsonRequest(strings.Repeat("x", 129))
@@ -199,7 +200,7 @@ func TestPostImportRejectsChunkedOversizedBody(t *testing.T) {
 
 func TestPostImportRejectsOversizedRecord(t *testing.T) {
 	repo := &recordingImportRepo{}
-	handler := ApiHandler{importer: service.NewImporter(repo, cache, nil, nil, fixedClock)}
+	handler := ApiHandler{importer: service.NewImporter(repo, cache, nil, nil, nil, fixedClock)}
 	req := ndjsonRequest(strings.Repeat("x", (1<<20)+1) + "\n")
 	recorder := newResponseRecorder()
 
@@ -291,6 +292,9 @@ func (r *recordingImportRepo) ImportTemplate(_ common.ExtendedContext, params pr
 		return result, r.templateErrors[index]
 	}
 	return result, nil
+}
+func (r *recordingImportRepo) ReserveHrids(common.ExtendedContext, map[string]int64) error {
+	return nil
 }
 func (r *recordingImportRepo) ImportBatchAction(_ common.ExtendedContext, params sched_db.SaveScheduledTaskParams, policy importdb.ConflictPolicy) (importdb.Result, error) {
 	r.batch, r.batchPolicy = params, policy

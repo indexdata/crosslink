@@ -229,7 +229,7 @@ func Init(ctx context.Context) (Context, error) {
 	}
 
 	importRepo := importdb.CreateImportRepo(pool)
-	importApiHandler := importapi.NewApiHandler(importRepo, illRepo, dirAdapter, &prservice.StateModelService{})
+	importApiHandler := importapi.NewApiHandler(importRepo, illRepo, dirAdapter, &prservice.StateModelService{}, prActionService)
 	return Context{
 		EventBus:         eventBus,
 		IllRepo:          illRepo,

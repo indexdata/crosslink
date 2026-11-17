@@ -105,6 +105,25 @@ func TestDirectoryEntryCacheMissAndSymbolReuse(t *testing.T) {
 	require.Equal(t, 2, calls)
 }
 
+func TestCachedPeersBySymbolsReportsUnknownSymbolAsNotFound(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(dirapi.EntriesResponse{Items: []dirapi.Entry{}})
+	}))
+	defer server.Close()
+	peers, _, err := illRepo.GetCachedPeersBySymbols(ctx, []string{"ISIL:missing-" + uuid.NewString()}, createDirectoryAdapter(server.URL))
+	require.ErrorIs(t, err, ErrDirectoryEntryNotFound)
+	require.Empty(t, peers)
+
+	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer failing.Close()
+	_, _, err = illRepo.GetCachedPeersBySymbols(ctx, []string{"ISIL:missing-" + uuid.NewString()}, createDirectoryAdapter(failing.URL))
+	require.Error(t, err)
+	require.NotErrorIs(t, err, ErrDirectoryEntryNotFound)
+}
+
 func TestDirectoryEntryCacheRejectsInvalidResponses(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	for _, status := range []int{http.StatusNotFound, http.StatusInternalServerError, http.StatusOK} {
