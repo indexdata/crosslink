@@ -157,6 +157,11 @@ type MarcMetadataParserConfig struct {
 	Title              *string `json:"title"`
 }
 
+type DiscoveryConfig struct {
+	QueryURL         *string `json:"queryUrl"`
+	ItemLinkTemplate *string `json:"itemLinkTemplate"`
+}
+
 type HoldingsPolicy struct {
 	Locations         []HoldingsLocation         `json:"locations"`
 	ShelvingLocations []HoldingsShelvingLocation `json:"shelvingLocations"`

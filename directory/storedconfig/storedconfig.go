@@ -11,9 +11,9 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Columns projects an entry's stored ill_config, lms_config, catalog_config
-// and holdings_policy as JSON objects, in that order. It expects the entries
-// table aliased as e.
+// Columns projects an entry's stored ill_config, lms_config, catalog_config,
+// holdings_policy and discovery_config as JSON objects, in that order. It
+// expects the entries table aliased as e.
 const Columns = `
 		(
 		SELECT json_strip_nulls(json_build_object(
@@ -142,18 +142,23 @@ const Columns = `
 				)
 			)
 		from catalog_configs h WHERE h.entry = e.id) as catalog_config,
-		(SELECT jsonb_strip_nulls(hp.policy) FROM holdings_policies hp WHERE hp.entry = e.id) as holdings_policy`
+		(SELECT jsonb_strip_nulls(hp.policy) FROM holdings_policies hp WHERE hp.entry = e.id) as holdings_policy,
+		(SELECT json_strip_nulls(json_build_object(
+			'queryUrl', d.query_url,
+			'itemLinkTemplate', d.item_link_template
+		)) FROM discovery_configs d WHERE d.entry = e.id) as discovery_config`
 
 // Configs maps a configuration container's API property name, such as
 // lmsConfig, to the JSON object an entry stores locally.
 type Configs map[string]json.RawMessage
 
-// FromColumns builds Configs from the four columns of Columns, omitting
+// FromColumns builds Configs from the five columns of Columns, omitting
 // containers the entry does not store.
-func FromColumns(illConfig, lmsConfig, catalogConfig, holdingsPolicy []byte) Configs {
+func FromColumns(illConfig, lmsConfig, catalogConfig, holdingsPolicy, discoveryConfig []byte) Configs {
 	configs := Configs{}
 	for name, value := range map[string][]byte{
 		"illConfig": illConfig, "lmsConfig": lmsConfig, "catalogConfig": catalogConfig, "holdingsPolicy": holdingsPolicy,
+		"discoveryConfig": discoveryConfig,
 	} {
 		if value != nil {
 			configs[name] = value
@@ -189,14 +194,14 @@ func Load(ctx context.Context, q Querier, ids []uuid.UUID) (map[uuid.UUID]Entry,
 	result := make(map[uuid.UUID]Entry, len(ids))
 	for rows.Next() {
 		var (
-			id                                     uuid.UUID
-			entry                                  Entry
-			illConfig, lmsConfig, catalog, holding []byte
+			id                                                      uuid.UUID
+			entry                                                   Entry
+			illConfig, lmsConfig, catalog, holding, discoveryConfig []byte
 		)
-		if err := rows.Scan(&id, &entry.Type, &entry.Parent, &entry.Tenant, &illConfig, &lmsConfig, &catalog, &holding); err != nil {
+		if err := rows.Scan(&id, &entry.Type, &entry.Parent, &entry.Tenant, &illConfig, &lmsConfig, &catalog, &holding, &discoveryConfig); err != nil {
 			return nil, fmt.Errorf("scan stored entry configuration: %w", err)
 		}
-		entry.Configs = FromColumns(illConfig, lmsConfig, catalog, holding)
+		entry.Configs = FromColumns(illConfig, lmsConfig, catalog, holding, discoveryConfig)
 		result[id] = entry
 	}
 	if err := rows.Err(); err != nil {

@@ -1,9 +1,8 @@
 // Package policy interprets the inheritance and editability annotations that
 // directory/api.yaml declares on entry configuration fields.
 //
-// Annotations are placed on EntryProperties' configuration containers
-// (illConfig, lmsConfig, catalogConfig, holdingsPolicy) and on their direct
-// children:
+// Annotations are placed on EntryProperties' configuration containers, such
+// as illConfig, and on their direct children:
 //
 //   - x-inheritance-root: the highest ancestor type consulted for a value
 //     (Consortium or Institution), or none when the field never inherits.

@@ -571,6 +571,19 @@ WHERE entry = @entry;
 -- name: DeleteHoldingsPolicyByEntry :exec
 DELETE FROM holdings_policies WHERE entry = @entry;
 
+-- name: UpsertDiscoveryConfig :one
+INSERT INTO discovery_configs (entry, query_url, item_link_template)
+VALUES (@entry, @query_url, @item_link_template)
+ON CONFLICT (entry) DO UPDATE SET query_url = @query_url, item_link_template = @item_link_template
+RETURNING *;
+
+-- name: GetDiscoveryConfigByEntry :one
+SELECT * FROM discovery_configs
+WHERE entry = @entry;
+
+-- name: DeleteDiscoveryConfigByEntry :exec
+DELETE FROM discovery_configs WHERE entry = @entry;
+
 -- name: LockTierByBusinessKey :one
 SELECT * FROM tiers
 WHERE consortium = @consortium AND name = @name
