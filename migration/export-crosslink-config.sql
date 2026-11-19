@@ -22,7 +22,9 @@
 --     positive default, rush, or express threshold configured for the tenant.
 --     Blank values use the setting default. When weekend exclusion is enabled,
 --     default-request aging keeps only weekday selectors, preserving ordinals.
---     Weekend-only rules abort the export for review. The threshold still measures
+--     Weekend-only rules, rules relying on implicit anchor dates, and
+--     calendar-period BYSETPOS rules whose day candidates would change abort
+--     the export for review. The threshold still measures
 --     elapsed time, including weekends; rush and express schedules are unchanged.
 --   * PrintPullSlips becomes email-pullslips when it has a non-empty RRULE,
 --     valid JSON configuration, and at least one non-empty recipient.
@@ -134,8 +136,8 @@ BEGIN
 END
 $convert_handlebars_placeholder$;
 
--- Daily weekday schedules use WEEKLY so the scheduled-action form can display
--- their selected days. Preserve other frequencies and non-unit intervals.
+-- Non-positional daily weekday schedules use WEEKLY so the scheduled-action form
+-- can display their selected days. Preserve positional periods and other cadences.
 -- Intersect existing BYDAY selectors with weekdays without losing ordinals.
 CREATE OR REPLACE FUNCTION pg_temp.weekday_schedule(schedule TEXT)
     RETURNS TEXT
@@ -144,6 +146,7 @@ CREATE OR REPLACE FUNCTION pg_temp.weekday_schedule(schedule TEXT)
 AS $weekday_schedule$
 DECLARE
     day_match TEXT[] := regexp_match(schedule, '(^|;)BYDAY=([^;]*)', 'i');
+    has_positions BOOLEAN := schedule ~* '(^|;)BYSETPOS=';
     weekdays TEXT := 'MO,TU,WE,TH,FR';
     converted TEXT := btrim(regexp_replace(
         schedule, '(^|;)BYDAY=[^;]*', '', 'gi'
@@ -166,7 +169,32 @@ BEGIN
         END IF;
     END IF;
 
+    -- BYSETPOS selects from the period's candidates after BYDAY filtering.
+    -- Removing weekend candidates can select a different weekday occurrence.
+    -- Only an existing weekday-only BYDAY proves these candidates unchanged.
+    IF has_positions
+       AND converted ~* '(^|;)FREQ=(WEEKLY|MONTHLY|YEARLY)(;|$)'
+       AND (day_match IS NULL OR weekdays IS DISTINCT FROM day_match[2]) THEN
+        RAISE EXCEPTION
+            'Weekend exclusion would change BYSETPOS day candidates in request-aging schedule: %',
+            schedule
+            USING ERRCODE = 'invalid_parameter_value',
+                  HINT = 'Review the timer schedule or set stale_request_3_exclude_weekend to no before exporting.';
+    END IF;
+
+    -- Adding BYDAY suppresses rrule-go's DTSTART-based date defaults for these
+    -- periods. BYMONTH and time selectors alone do not replace those defaults.
+    IF converted ~* '(^|;)FREQ=(WEEKLY|MONTHLY|YEARLY)(;|$)'
+       AND schedule !~* '(^|;)(BYWEEKNO|BYYEARDAY|BYMONTHDAY|BYDAY|BYEASTER)=[^;]+' THEN
+        RAISE EXCEPTION
+            'Weekend exclusion would replace implicit anchor dates in request-aging schedule: %',
+            schedule
+            USING ERRCODE = 'invalid_parameter_value',
+                  HINT = 'Specify explicit date selectors or set stale_request_3_exclude_weekend to no before exporting.';
+    END IF;
+
     IF converted ~* '(^|;)FREQ=DAILY(;|$)'
+       AND NOT has_positions
        AND converted !~* '(^|;)INTERVAL=([2-9]|[0-9]{2,})(;|$)' THEN
         converted := regexp_replace(
             converted, '(^|;)FREQ=DAILY(;|$)', '\1FREQ=WEEKLY\2', 'i'

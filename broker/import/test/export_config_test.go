@@ -266,14 +266,36 @@ func TestExportConfigAgingWeekends(t *testing.T) {
 		{"monthly first Monday preserved", new("yes"), nil, "FREQ=MONTHLY;BYDAY=1MO", "FREQ=MONTHLY;BYDAY=1MO"},
 		{"monthly last Friday preserved", new("yes"), nil, "FREQ=MONTHLY;BYDAY=-1FR", "FREQ=MONTHLY;BYDAY=-1FR"},
 		{"monthly mixed ordinals intersected", new("yes"), nil, "FREQ=MONTHLY;BYDAY=1MO,1SA,-1FR,-1SU;BYHOUR=6", "FREQ=MONTHLY;BYHOUR=6;BYDAY=1MO,-1FR"},
+		{"monthly explicit dates preserved", new("yes"), nil, "FREQ=MONTHLY;BYMONTHDAY=13,28", "FREQ=MONTHLY;BYMONTHDAY=13,28;BYDAY=MO,TU,WE,TH,FR"},
+		{"yearly explicit dates preserved", new("yes"), nil, "FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=13,28", "FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=13,28;BYDAY=MO,TU,WE,TH,FR"},
+		{"yearly year days preserved", new("yes"), nil, "FREQ=YEARLY;BYYEARDAY=1,100", "FREQ=YEARLY;BYYEARDAY=1,100;BYDAY=MO,TU,WE,TH,FR"},
+		{"yearly week numbers preserved", new("yes"), nil, "FREQ=YEARLY;BYWEEKNO=1", "FREQ=YEARLY;BYWEEKNO=1;BYDAY=MO,TU,WE,TH,FR"},
+		{"yearly Easter offset preserved", new("yes"), nil, "FREQ=YEARLY;BYEASTER=1", "FREQ=YEARLY;BYEASTER=1;BYDAY=MO,TU,WE,TH,FR"},
+		{"implicit weekly without exclusion", new("no"), nil, "FREQ=WEEKLY", "FREQ=WEEKLY"},
+		{"implicit monthly without exclusion", new("no"), nil, "FREQ=MONTHLY", "FREQ=MONTHLY"},
+		{"implicit yearly without exclusion", new("no"), nil, "FREQ=YEARLY", "FREQ=YEARLY"},
 		{"weekend only without exclusion", new("no"), nil, "FREQ=WEEKLY;BYDAY=SA,SU", "FREQ=WEEKLY;BYDAY=SA,SU"},
 		{"daily unit interval", new("yes"), nil, "FREQ=DAILY;INTERVAL=1;BYHOUR=5;BYMINUTE=0", "FREQ=WEEKLY;BYHOUR=5;BYMINUTE=0;BYDAY=MO,TU,WE,TH,FR"},
+		{"daily first position preserves period", new("yes"), nil, "FREQ=DAILY;BYHOUR=6;BYSETPOS=1", "FREQ=DAILY;BYHOUR=6;BYSETPOS=1;BYDAY=MO,TU,WE,TH,FR"},
+		{"daily last position preserves period", new("yes"), nil, "FREQ=DAILY;INTERVAL=1;BYHOUR=6,18;BYSETPOS=-1", "FREQ=DAILY;INTERVAL=1;BYHOUR=6,18;BYSETPOS=-1;BYDAY=MO,TU,WE,TH,FR"},
+		{"daily positional days intersected", new("yes"), nil, "FREQ=DAILY;BYDAY=MO,FR,SA;BYHOUR=6,18;BYSETPOS=1,-1", "FREQ=DAILY;BYHOUR=6,18;BYSETPOS=1,-1;BYDAY=MO,FR"},
+		{"weekly weekday positions preserved", new("yes"), nil, "FREQ=WEEKLY;BYDAY=MO,FR;BYHOUR=6;BYMINUTE=0;BYSETPOS=-1", "FREQ=WEEKLY;BYHOUR=6;BYMINUTE=0;BYSETPOS=-1;BYDAY=MO,FR"},
+		{"monthly weekday positions preserved", new("yes"), nil, "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1", "FREQ=MONTHLY;BYSETPOS=-1;BYDAY=MO,TU,WE,TH,FR"},
+		{"yearly weekday positions preserved", new("yes"), nil, "FREQ=YEARLY;BYDAY=MO,FR;BYSETPOS=1,-1", "FREQ=YEARLY;BYSETPOS=1,-1;BYDAY=MO,FR"},
+		{"monthly positions without exclusion", new("no"), nil, "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR,SA,SU;BYSETPOS=-1", "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR,SA,SU;BYSETPOS=-1"},
 		{"daily non-unit interval preserved", new("yes"), nil, "FREQ=DAILY;INTERVAL=2;BYHOUR=5", "FREQ=DAILY;INTERVAL=2;BYHOUR=5;BYDAY=MO,TU,WE,TH,FR"},
 		{"hourly cadence preserved", new("yes"), nil, "FREQ=HOURLY;INTERVAL=2;BYMINUTE=15", "FREQ=HOURLY;INTERVAL=2;BYMINUTE=15;BYDAY=MO,TU,WE,TH,FR"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tx := configExportTx(t)
 			ctx := context.Background()
+			excludeWeekends := true
+			for _, setting := range []*string{tc.value, tc.fallback} {
+				if setting != nil && strings.TrimSpace(*setting) != "" {
+					excludeWeekends = strings.EqualFold(strings.TrimSpace(*setting), "yes")
+					break
+				}
+			}
 			if tc.value != nil || tc.fallback != nil {
 				_, err := tx.Exec(ctx, `INSERT INTO app_setting VALUES ('stale_request_3_exclude_weekend', $1, $2)`, tc.value, tc.fallback)
 				require.NoError(t, err)
@@ -298,37 +320,65 @@ func TestExportConfigAgingWeekends(t *testing.T) {
 				}
 				require.Equal(t, want, record.Data.Schedule)
 				require.Equal(t, interval, record.Data.ActionParams["interval"])
-				options, err := rrule.StrToROption(record.Data.Schedule)
-				require.NoError(t, err)
-				options.Dtstart = time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC) // Friday
-				rule, err := rrule.NewRRule(*options)
-				require.NoError(t, err)
-				if record.Data.Title == "Request aging of default requests" && tc.value != nil && strings.EqualFold(*tc.value, "yes") {
-					// Compare occurrences as well as expressions so added weekdays and
-					// lost monthly ordinals cannot silently broaden the schedule.
+				// Check both weekday and weekend anchors, including implicit dates
+				// when exclusion is disabled and explicit dates without BYDAY.
+				for _, day := range []int{13, 14} { // Friday, Saturday
+					options, err := rrule.StrToROption(record.Data.Schedule)
+					require.NoError(t, err)
+					options.Dtstart = time.Date(2026, 11, day, 0, 0, 0, 0, time.UTC)
+					rule, err := rrule.NewRRule(*options)
+					require.NoError(t, err)
 					original, err := rrule.StrToROption(strings.TrimPrefix(tc.schedule, "RRULE:"))
 					require.NoError(t, err)
 					original.Dtstart = options.Dtstart
 					originalRule, err := rrule.NewRRule(*original)
 					require.NoError(t, err)
 					end := options.Dtstart.AddDate(0, 6, 0)
-					var weekdays []time.Time
-					for _, run := range originalRule.Between(options.Dtstart, end, true) {
-						if run.Weekday() != time.Saturday && run.Weekday() != time.Sunday {
-							weekdays = append(weekdays, run)
+					wantRuns := originalRule.Between(options.Dtstart, end, true)
+					if record.Data.Title == "Request aging of default requests" && excludeWeekends {
+						var weekdays []time.Time
+						for _, run := range wantRuns {
+							if run.Weekday() != time.Saturday && run.Weekday() != time.Sunday {
+								weekdays = append(weekdays, run)
+							}
 						}
+						wantRuns = weekdays
 					}
 					runs := rule.Between(options.Dtstart, end, true)
 					require.NotEmpty(t, runs)
-					require.Equal(t, weekdays, runs)
-				}
-				if record.Data.Title == "Request aging of default requests" && strings.Contains(want, "BYDAY=MO,TU,WE,TH,FR") {
-					for _, run := range rule.Between(options.Dtstart, options.Dtstart.AddDate(0, 0, 8), true) {
-						require.NotEqual(t, time.Saturday, run.Weekday())
-						require.NotEqual(t, time.Sunday, run.Weekday())
-					}
+					require.Equal(t, wantRuns, runs, "anchor %s", options.Dtstart)
 				}
 			}
+		})
+	}
+}
+
+func requireAgingScheduleRejected(t *testing.T, schedule, message string) {
+	t.Helper()
+	tx := configExportTx(t)
+	_, err := tx.Exec(context.Background(), `INSERT INTO timer VALUES ($1, 'aging', 'Aging', 'CheckForStaleSupplierRequests', $2, NULL)`, uuid.New(), schedule)
+	require.NoError(t, err)
+
+	err = executeConfigExport(t, tx, "ISIL:CONFIG-TEST")
+	var pgErr *pgconn.PgError
+	require.ErrorAs(t, err, &pgErr)
+	require.Equal(t, "22023", pgErr.Code)
+	require.Contains(t, pgErr.Message, message)
+	require.Contains(t, pgErr.Message, schedule)
+	require.Contains(t, pgErr.Hint, "stale_request_3_exclude_weekend")
+}
+
+func TestExportConfigAgingImplicitDatesRejected(t *testing.T) {
+	for _, schedule := range []string{
+		"FREQ=WEEKLY",
+		"FREQ=WEEKLY;INTERVAL=2;BYHOUR=6",
+		"FREQ=MONTHLY",
+		"FREQ=MONTHLY;BYMONTH=12;BYHOUR=6",
+		"FREQ=YEARLY",
+		"FREQ=YEARLY;BYMONTH=12;BYMINUTE=30",
+	} {
+		t.Run(schedule, func(t *testing.T) {
+			requireAgingScheduleRejected(t, schedule, "Weekend exclusion would replace implicit anchor dates")
 		})
 	}
 }
@@ -340,17 +390,22 @@ func TestExportConfigAgingWeekendOnlyRejected(t *testing.T) {
 		"FREQ=MONTHLY;BYDAY=1SA,-1SU",
 	} {
 		t.Run(schedule, func(t *testing.T) {
-			tx := configExportTx(t)
-			_, err := tx.Exec(context.Background(), `INSERT INTO timer VALUES ($1, 'aging', 'Aging', 'CheckForStaleSupplierRequests', $2, NULL)`, uuid.New(), schedule)
-			require.NoError(t, err)
+			requireAgingScheduleRejected(t, schedule, "Weekend exclusion leaves no weekdays")
+		})
+	}
+}
 
-			err = executeConfigExport(t, tx, "ISIL:CONFIG-TEST")
-			var pgErr *pgconn.PgError
-			require.ErrorAs(t, err, &pgErr)
-			require.Equal(t, "22023", pgErr.Code)
-			require.Contains(t, pgErr.Message, "Weekend exclusion leaves no weekdays")
-			require.Contains(t, pgErr.Message, schedule)
-			require.Contains(t, pgErr.Hint, "stale_request_3_exclude_weekend")
+func TestExportConfigAgingPositionalDayChangesRejected(t *testing.T) {
+	for _, schedule := range []string{
+		"FREQ=WEEKLY;BYDAY=FR,SA,SU;BYSETPOS=-1",
+		"FREQ=WEEKLY;BYHOUR=6;BYSETPOS=1",
+		"FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR,SA,SU;BYSETPOS=-1",
+		"FREQ=MONTHLY;BYMONTHDAY=1,2,3,4,5,6,7;BYSETPOS=1",
+		"FREQ=YEARLY;BYDAY=MO,SA;BYSETPOS=-1",
+		"FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=30,31;BYSETPOS=-1",
+	} {
+		t.Run(schedule, func(t *testing.T) {
+			requireAgingScheduleRejected(t, schedule, "Weekend exclusion would change BYSETPOS day candidates")
 		})
 	}
 }
