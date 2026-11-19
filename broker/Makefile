@@ -86,9 +86,9 @@ generate-sqlc: $(SQL_GEN_OUT)
 
 generate-api: $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(IMPORT_OAPI_GEN)
 
-$(STATE_MODELS_JSON): $(STATE_MODELS_YAML)
+$(STATE_MODELS_JSON): $(STATE_MODELS_YAML) go.mod go.sum
 	mkdir -p $(@D)
-	$(GO) run github.com/mikefarah/yq/v4@v4.52.5 eval -o=json $< > $@.tmp
+	$(GO) tool yq eval -o=json $< > $@.tmp
 	mv -f $@.tmp $@
 
 $(OAPI_GEN): $(OAPI_CFG) $(OAPI_SPEC) $(OAPI_OVERLAY)
@@ -144,8 +144,7 @@ deps-update:
 	$(GO) mod tidy
 
 tools-update:
-	$(GO) get -tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
-	$(GO) get -tool github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+	$(GO) get -u tool $(DEPS_UPDATE_CONSTRAINTS)
 	$(GO) mod tidy
 
 clean:

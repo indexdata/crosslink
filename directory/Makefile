@@ -63,8 +63,7 @@ deps-update:
 	$(GO) mod tidy
 
 tools-update:
-	$(GO) get -tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
-	$(GO) get -tool github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+	$(GO) get -u tool $(DEPS_UPDATE_CONSTRAINTS)
 	$(GO) mod tidy
 
 clean:
