@@ -4,8 +4,9 @@
 package directoryapi
 
 import (
-	// Retain dependencies used only by generated bindings when go mod tidy
-	// runs before generation, as it does in Dependabot.
+	// Retain the generated code's external runtime dependencies before generation.
+	_ "github.com/getkin/kin-openapi/openapi3"
 	_ "github.com/oapi-codegen/nullable"
 	_ "github.com/oapi-codegen/runtime"
+	_ "github.com/oapi-codegen/runtime/types"
 )

@@ -1,3 +1,6 @@
+// Package ncipv1 contains NCIP version 1 protocol models.
+//
+//go:generate make generate
 package ncipv1
 
 import (
