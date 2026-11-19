@@ -1401,8 +1401,6 @@ func completeEntryAggregate(symbol string) model.EntryAggregate {
 	return aggregate
 }
 
-func stringPointer(value string) *string { return &value }
-
 // lendersConfig is an illConfig that lists only the given lenders of last
 // resort.
 func lendersConfig(ids ...uuid.UUID) json.RawMessage {
