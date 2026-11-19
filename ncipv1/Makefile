@@ -37,5 +37,5 @@ deps-update:
 	$(GO) mod tidy
 
 tools-update:
-	$(GO) get -tool github.com/indexdata/xsd2goxsl@latest
+	$(GO) get -u tool $(DEPS_UPDATE_CONSTRAINTS)
 	$(GO) mod tidy
