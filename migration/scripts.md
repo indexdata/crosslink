@@ -173,6 +173,15 @@ implicit weekday, day of month, or annual date. `BYMONTH` and time selectors
 alone still rely on these defaults. Specify explicit date selectors or set
 `stale_request_3_exclude_weekend` to `no` before exporting these rules.
 
+Positive `COUNT` rules are exported only when their existing `BYDAY` selectors
+are already weekday-only. `COUNT` limits emitted runs, so adding or narrowing
+the weekday filter could extend the schedule beyond its original last run.
+For example, `FREQ=DAILY;COUNT=3` anchored on Friday, 2026-11-13 originally
+ends on Sunday; removing weekend runs should leave only Friday, not add Monday
+and Tuesday. These rules fail export for review. Set
+`stale_request_3_exclude_weekend` to `no` to export them unchanged. `COUNT=0`
+is unbounded in the broker's recurrence library and does not require this guard.
+
 `BYSETPOS` selects positions after day filtering. Daily rules with `BYSETPOS`
 remain `DAILY` so each weekday keeps its own positional selection. Weekly,
 monthly, and yearly rules with `BYSETPOS` are exported only when their existing

@@ -276,6 +276,11 @@ func TestExportConfigAgingWeekends(t *testing.T) {
 		{"implicit yearly without exclusion", new("no"), nil, "FREQ=YEARLY", "FREQ=YEARLY"},
 		{"weekend only without exclusion", new("no"), nil, "FREQ=WEEKLY;BYDAY=SA,SU", "FREQ=WEEKLY;BYDAY=SA,SU"},
 		{"daily unit interval", new("yes"), nil, "FREQ=DAILY;INTERVAL=1;BYHOUR=5;BYMINUTE=0", "FREQ=WEEKLY;BYHOUR=5;BYMINUTE=0;BYDAY=MO,TU,WE,TH,FR"},
+		{"weekday count preserved", new("yes"), nil, "FREQ=DAILY;COUNT=3;BYDAY=MO,FR", "FREQ=WEEKLY;COUNT=3;BYHOUR=0;BYMINUTE=0;BYDAY=MO,FR"},
+		{"weekday positional count preserved", new("yes"), nil, "FREQ=DAILY;COUNT=3;BYDAY=MO,FR;BYHOUR=6;BYSETPOS=1", "FREQ=DAILY;COUNT=3;BYHOUR=6;BYSETPOS=1;BYDAY=MO,FR"},
+		{"monthly ordinal count preserved", new("yes"), nil, "FREQ=MONTHLY;COUNT=3;BYDAY=1MO", "FREQ=MONTHLY;COUNT=3;BYDAY=1MO"},
+		{"zero count is unbounded", new("yes"), nil, "FREQ=DAILY;COUNT=0", "FREQ=WEEKLY;COUNT=0;BYHOUR=0;BYMINUTE=0;BYDAY=MO,TU,WE,TH,FR"},
+		{"count without exclusion", new("no"), nil, "FREQ=DAILY;COUNT=3", "FREQ=DAILY;COUNT=3"},
 		{"daily first position preserves period", new("yes"), nil, "FREQ=DAILY;BYHOUR=6;BYSETPOS=1", "FREQ=DAILY;BYHOUR=6;BYSETPOS=1;BYDAY=MO,TU,WE,TH,FR"},
 		{"daily last position preserves period", new("yes"), nil, "FREQ=DAILY;INTERVAL=1;BYHOUR=6,18;BYSETPOS=-1", "FREQ=DAILY;INTERVAL=1;BYHOUR=6,18;BYSETPOS=-1;BYDAY=MO,TU,WE,TH,FR"},
 		{"daily positional days intersected", new("yes"), nil, "FREQ=DAILY;BYDAY=MO,FR,SA;BYHOUR=6,18;BYSETPOS=1,-1", "FREQ=DAILY;BYHOUR=6,18;BYSETPOS=1,-1;BYDAY=MO,FR"},
@@ -379,6 +384,22 @@ func TestExportConfigAgingImplicitDatesRejected(t *testing.T) {
 	} {
 		t.Run(schedule, func(t *testing.T) {
 			requireAgingScheduleRejected(t, schedule, "Weekend exclusion would replace implicit anchor dates")
+		})
+	}
+}
+
+func TestExportConfigAgingCountChangesRejected(t *testing.T) {
+	for _, schedule := range []string{
+		"FREQ=DAILY;COUNT=3",
+		"FREQ=DAILY;COUNT=+03",
+		"FREQ=DAILY;COUNT=0003",
+		"FREQ=DAILY;COUNT=3;BYDAY=FR,SA,SU",
+		"FREQ=HOURLY;COUNT=3",
+		"FREQ=MONTHLY;COUNT=3;BYMONTHDAY=13",
+		"FREQ=YEARLY;COUNT=3;BYDAY=MO,SA",
+	} {
+		t.Run(schedule, func(t *testing.T) {
+			requireAgingScheduleRejected(t, schedule, "Weekend exclusion would change COUNT-limited occurrences")
 		})
 	}
 }
