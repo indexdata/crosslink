@@ -1837,6 +1837,12 @@ components:
           x-inheritance-root: Institution
           x-editable-on: [Institution]
           x-merge-unit: holdingsPolicy
+        discoveryConfig:
+          description: Discovery settings. Only the consortium stores them; every institution and branch inherits them.
+          allOf:
+            - $ref: '#/components/schemas/DiscoveryConfig'
+          x-inheritance-root: Consortium
+          x-editable-on: [Consortium]
 
     AddEntry:
       x-go-type: Entry
@@ -2337,6 +2343,14 @@ components:
           type: array
           items: { $ref: '#/components/schemas/HoldingsItemLoanPolicy' }
 
+    ImportDiscoveryConfig:
+      type: object
+      additionalProperties: false
+      required: [queryUrl, itemLinkTemplate]
+      properties:
+        queryUrl: { type: [string, "null"] }
+        itemLinkTemplate: { type: [string, "null"] }
+
     ImportHoldingsLocationPolicy:
       type: object
       additionalProperties: false
@@ -2392,6 +2406,9 @@ components:
           anyOf: [{ $ref: '#/components/schemas/ImportIllConfig' }, { type: "null" }]
         holdingsPolicy:
           anyOf: [{ $ref: '#/components/schemas/ImportHoldingsPolicy' }, { type: "null" }]
+        discoveryConfig:
+          description: Optional; omitting it is the same as null.
+          anyOf: [{ $ref: '#/components/schemas/ImportDiscoveryConfig' }, { type: "null" }]
 
     ImportEntryData:
       allOf:
@@ -3177,6 +3194,11 @@ components:
           anyOf:
             - $ref: '#/components/schemas/HoldingsPolicy'
             - type: "null"
+        discoveryConfig:
+          description: Null removes the entry's whole local discovery configuration.
+          anyOf:
+            - $ref: '#/components/schemas/DiscoveryConfigPatch'
+            - type: "null"
         symbols:
           type: [array, "null"]
           items:
@@ -3193,6 +3215,25 @@ components:
           type: [array, "null"]
           items:
             $ref: '#/components/schemas/ClosurePatch'
+
+    DiscoveryConfig:
+      type: object
+      properties:
+        queryUrl:
+          type: string
+          description: Discovery search endpoint, used to fill in new requests from discovery records.
+        itemLinkTemplate:
+          type: string
+          description: URL template for linking to an item in discovery. `{itemid}` is replaced by the item's identifier.
+
+    DiscoveryConfigPatch:
+      type: object
+      description: Partial update of an entry's local discovery configuration. Omitted fields keep their stored value; null removes it.
+      properties:
+        queryUrl:
+          type: [string, "null"]
+        itemLinkTemplate:
+          type: [string, "null"]
 
     HoldingsPolicy:
       type: object

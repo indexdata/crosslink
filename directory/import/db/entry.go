@@ -434,6 +434,16 @@ func replaceEntryConfigs(ctx context.Context, queries *db.Queries, entryID uuid.
 			return err
 		}
 	}
+	if err := queries.DeleteDiscoveryConfigByEntry(ctx, entryID); err != nil {
+		return err
+	}
+	if cfg := data.DiscoveryConfig; cfg != nil {
+		if _, err := queries.UpsertDiscoveryConfig(ctx, db.UpsertDiscoveryConfigParams{
+			Entry: entryID, QueryUrl: cfg.QueryURL, ItemLinkTemplate: cfg.ItemLinkTemplate,
+		}); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

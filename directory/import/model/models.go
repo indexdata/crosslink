@@ -113,6 +113,7 @@ type EntryData struct {
 	CatalogConfig     *CatalogConfig    `json:"catalogConfig"`
 	ILLConfig         *ILLConfig        `json:"illConfig"`
 	HoldingsPolicy    *HoldingsPolicy   `json:"holdingsPolicy"`
+	DiscoveryConfig   *DiscoveryConfig  `json:"discoveryConfig"`
 }
 
 type ServiceEndpoint struct {

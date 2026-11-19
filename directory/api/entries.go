@@ -65,6 +65,7 @@ func scanEntryRow(rows pgx.Rows) (Entry, storedconfig.Configs, int, error) {
 		lmsConfigJSON      []byte
 		catalogConfigJSON  []byte
 		holdingsPolicyJSON []byte
+		discoveryJSON      []byte
 		hrid               *string
 		timeZone           *string
 		entryType          *string
@@ -79,7 +80,7 @@ func scanEntryRow(rows pgx.Rows) (Entry, storedconfig.Configs, int, error) {
 	)
 
 	if err := rows.Scan(&id, &name, &description, &organizationId, &contactName, &email, &fromEmail, &tenant, &vendor, &phoneNumber,
-		&lmsLocationCode, &lendToBorrowRatio, &illConfigJSON, &lmsConfigJSON, &catalogConfigJSON, &holdingsPolicyJSON, &hrid, &timeZone, &entryType, &parent, &symbolsJSON, &endpointsJSON,
+		&lmsLocationCode, &lendToBorrowRatio, &illConfigJSON, &lmsConfigJSON, &catalogConfigJSON, &holdingsPolicyJSON, &discoveryJSON, &hrid, &timeZone, &entryType, &parent, &symbolsJSON, &endpointsJSON,
 		&addressesJSON, &tiersJSON, &networksJSON, &closuresJSON, &totalCount); err != nil {
 		return Entry{}, nil, 0, err
 	}
@@ -116,6 +117,10 @@ func scanEntryRow(rows pgx.Rows) (Entry, storedconfig.Configs, int, error) {
 	holdingsPolicy, err := unmarshalJSONObject[HoldingsPolicy](holdingsPolicyJSON)
 	if err != nil {
 		return Entry{}, nil, 0, fmt.Errorf("failed to parse holdings policy: %w", err)
+	}
+	discoveryConfig, err := unmarshalJSONObject[DiscoveryConfig](discoveryJSON)
+	if err != nil {
+		return Entry{}, nil, 0, fmt.Errorf("unmarshalling discovery config: %w", err)
 	}
 
 	tiers, err := unmarshalJSONArray[Tier](tiersJSON)
@@ -168,7 +173,7 @@ func scanEntryRow(rows pgx.Rows) (Entry, storedconfig.Configs, int, error) {
 
 	typeValue := EntryType(*entryType)
 
-	configs := storedconfig.FromColumns(illConfigJSON, lmsConfigJSON, catalogConfigJSON, holdingsPolicyJSON)
+	configs := storedconfig.FromColumns(illConfigJSON, lmsConfigJSON, catalogConfigJSON, holdingsPolicyJSON, discoveryJSON)
 
 	return Entry{
 		Id:                &id,
@@ -193,6 +198,7 @@ func scanEntryRow(rows pgx.Rows) (Entry, storedconfig.Configs, int, error) {
 		LmsConfig:         lmsConfigPtr,
 		CatalogConfig:     catalogConfig,
 		HoldingsPolicy:    holdingsPolicy,
+		DiscoveryConfig:   discoveryConfig,
 		Tiers:             tiersPtr,
 		Networks:          networksPtr,
 		TimeZone:          timeZone,
@@ -836,6 +842,18 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		}
 	}
 
+	if request.Body.DiscoveryConfig != nil {
+		_, err := qtx.UpsertDiscoveryConfig(ctx, db.UpsertDiscoveryConfigParams{
+			Entry:            insertedEntry.ID,
+			QueryUrl:         request.Body.DiscoveryConfig.QueryUrl,
+			ItemLinkTemplate: request.Body.DiscoveryConfig.ItemLinkTemplate,
+		})
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to create discoveryConfig component", "error", err)
+			return AddEntry500TextResponse("Internal server error"), nil
+		}
+	}
+
 	var resp Id
 	resp.Id = insertedEntry.ID
 
@@ -1310,6 +1328,32 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 			})
 			if err != nil {
 				slog.ErrorContext(ctx, "unexpected database error during holdingsPolicy upsert", "error", err)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		}
+	}
+
+	if request.Body.DiscoveryConfig.IsSpecified() {
+		if request.Body.DiscoveryConfig.IsNull() {
+			err = qtx.DeleteDiscoveryConfigByEntry(ctx, orig.ID)
+			if err != nil {
+				slog.ErrorContext(ctx, "unexpected database error during discoveryConfig delete", "error", err)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+		} else {
+			discoveryPatch := request.Body.DiscoveryConfig.MustGet()
+			original, queryErr := qtx.GetDiscoveryConfigByEntry(ctx, orig.ID)
+			if queryErr != nil && !errors.Is(queryErr, pgx.ErrNoRows) {
+				slog.ErrorContext(ctx, "unable to query original discoveryConfig", "error", queryErr)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
+			_, err = qtx.UpsertDiscoveryConfig(ctx, db.UpsertDiscoveryConfigParams{
+				Entry:            orig.ID,
+				QueryUrl:         maybeUpdateCol(original.QueryUrl, discoveryPatch.QueryUrl),
+				ItemLinkTemplate: maybeUpdateCol(original.ItemLinkTemplate, discoveryPatch.ItemLinkTemplate),
+			})
+			if err != nil {
+				slog.ErrorContext(ctx, "unexpected database error during discoveryConfig upsert", "error", err)
 				return UpdateEntry500TextResponse("Internal server error"), nil
 			}
 		}
