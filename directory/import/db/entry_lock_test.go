@@ -41,7 +41,7 @@ func TestReplaceEntryChildrenReturnsInvalidClosureStartDate(t *testing.T) {
 	queries := db.New(closurePersistenceStub{})
 	data := model.EntryData{Closures: []model.Closure{{StartDate: "invalid", EndDate: "2026-12-26"}}}
 
-	err := replaceEntryChildren(context.Background(), queries, uuid.New(), data, nil)
+	err := replaceEntryChildren(context.Background(), queries, uuid.New(), data)
 
 	var parseErr *time.ParseError
 	require.ErrorAs(t, err, &parseErr)
@@ -53,7 +53,7 @@ func TestReplaceEntryChildrenReturnsInvalidClosureEndDate(t *testing.T) {
 	queries := db.New(closurePersistenceStub{})
 	data := model.EntryData{Closures: []model.Closure{{StartDate: "2026-12-24", EndDate: "invalid"}}}
 
-	err := replaceEntryChildren(context.Background(), queries, uuid.New(), data, nil)
+	err := replaceEntryChildren(context.Background(), queries, uuid.New(), data)
 
 	var parseErr *time.ParseError
 	require.ErrorAs(t, err, &parseErr)

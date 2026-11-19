@@ -12,7 +12,6 @@ import (
 	"github.com/indexdata/crosslink/directory/db"
 	"github.com/indexdata/crosslink/directory/domain"
 	"github.com/indexdata/crosslink/directory/import/model"
-	"github.com/indexdata/crosslink/directory/storedconfig"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -132,13 +131,6 @@ func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.E
 		existing = lockedEntries[existing.ID]
 		existingID = &existing.ID
 	}
-	sections, err := storedSections(ctx, queries, aggregate.Data)
-	if err != nil {
-		return model.RepoResult{}, err
-	}
-	if err := r.checkConfigPolicy(ctx, tx, aggregate.Data.Type, sections, existingID); err != nil {
-		return model.RepoResult{}, err
-	}
 	if err := validateImportSymbolOwnership(ctx, queries, aggregate.Data.Symbols, aggregate.Key); err != nil {
 		return model.RepoResult{}, err
 	}
@@ -176,7 +168,22 @@ func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.E
 	if err != nil {
 		return model.RepoResult{}, persistenceError("entry", key, err)
 	}
-	if err := replaceEntryChildren(ctx, queries, entryID, aggregate.Data, sections); err != nil {
+	if err := replaceEntryChildren(ctx, queries, entryID, aggregate.Data); err != nil {
+		return model.RepoResult{}, persistenceError("entry", key, err)
+	}
+	// Lenders resolve to symbols only now that the record's own symbols are
+	// written, so an entry that lists itself is stored under its new symbol.
+	sections, err := storedSections(ctx, queries, aggregate.Data)
+	if err != nil {
+		return model.RepoResult{}, err
+	}
+	if err := r.checkConfigPolicy(ctx, tx, aggregate.Data.Type, sections, existingID); err != nil {
+		return model.RepoResult{}, err
+	}
+	ill, lms, catalog, holdings := sections.ToColumns()
+	if err := queries.UpdateEntryConfigs(ctx, db.UpdateEntryConfigsParams{
+		ID: entryID, IllConfig: ill, LmsConfig: lms, CatalogConfig: catalog, HoldingsPolicy: holdings,
+	}); err != nil {
 		return model.RepoResult{}, persistenceError("entry", key, err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -345,10 +352,9 @@ func writeEntry(ctx context.Context, queries *db.Queries, existing db.Entry, exi
 	return created.ID, err
 }
 
-// replaceEntryChildren replaces everything the entry owns with the import
-// record's values. configs are the record's configuration sections in stored
-// form.
-func replaceEntryChildren(ctx context.Context, queries *db.Queries, entryID uuid.UUID, data model.EntryData, configs storedconfig.Configs) error {
+// replaceEntryChildren replaces the symbols, endpoints, addresses and closures
+// the entry owns with the import record's values.
+func replaceEntryChildren(ctx context.Context, queries *db.Queries, entryID uuid.UUID, data model.EntryData) error {
 	if err := queries.DeleteAllOwnedSymbols(ctx, entryID); err != nil {
 		return err
 	}
@@ -397,8 +403,5 @@ func replaceEntryChildren(ctx context.Context, queries *db.Queries, entryID uuid
 			return err
 		}
 	}
-	ill, lms, catalog, holdings := configs.ToColumns()
-	return queries.UpdateEntryConfigs(ctx, db.UpdateEntryConfigsParams{
-		ID: entryID, IllConfig: ill, LmsConfig: lms, CatalogConfig: catalog, HoldingsPolicy: holdings,
-	})
+	return nil
 }
