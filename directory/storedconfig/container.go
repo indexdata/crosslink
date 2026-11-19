@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// Section names, as the entry API properties name them.
+// Configuration container names, as the entry API properties name them.
 const (
 	IllConfig      = "illConfig"
 	LmsConfig      = "lmsConfig"
@@ -18,26 +18,27 @@ const (
 	HoldingsPolicy = "holdingsPolicy"
 )
 
-// Normalize puts a configuration section into the form it is stored and read
-// back in. Nulls are dropped at every depth, whole numbers are written as
-// integers, fields that a stored value cannot hold empty are dropped when they
-// are empty, and lenders of last resort are upper case. A null section stays
-// null.
-func Normalize(section string, value json.RawMessage) (json.RawMessage, error) {
+// Normalize puts a configuration container into the form it is stored and
+// read back in. It removes null-valued object members at every depth and
+// writes whole numbers as integers. It also drops values that mean unset,
+// which are an empty queryConfig, metadataFormat or metadataFormat.marc21 in
+// catalogConfig and an empty address or fromAgency in lmsConfig. Lenders of
+// last resort are put in upper case. A null container stays null.
+func Normalize(name string, value json.RawMessage) (json.RawMessage, error) {
 	decoded, err := decode(value)
 	if err != nil {
-		return nil, fmt.Errorf("decode %s: %w", section, err)
+		return nil, fmt.Errorf("decode %s: %w", name, err)
 	}
 	if decoded == nil {
 		return json.RawMessage("null"), nil
 	}
 	object, ok := decoded.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("%s is not an object", section)
+		return nil, fmt.Errorf("%s is not an object", name)
 	}
 	dropNulls(object)
 	writeIntegers(object)
-	switch section {
+	switch name {
 	case CatalogConfig:
 		// The resolver treats a stored key as a local value, so an empty
 		// object here would block inheritance without setting anything.
@@ -46,6 +47,8 @@ func Normalize(section string, value json.RawMessage) (json.RawMessage, error) {
 		}
 		dropEmpty(object, "queryConfig", "metadataFormat")
 	case LmsConfig:
+		// An empty address or fromAgency means unset. Stored as "", it
+		// would count as a local value and hide the inherited one.
 		for _, field := range []string{"address", "fromAgency"} {
 			if object[field] == "" {
 				delete(object, field)
@@ -66,15 +69,16 @@ func Normalize(section string, value json.RawMessage) (json.RawMessage, error) {
 	return json.Marshal(object)
 }
 
-// Check runs the checks on a whole stored section that span more than one
-// field. The error message is meant for the client.
-func Check(section string, value json.RawMessage) error {
+// Check validates a stored configuration container as a whole, applying the
+// rules that involve more than one field. Only catalogConfig has such rules.
+// The error message is meant for the client.
+func Check(name string, value json.RawMessage) error {
 	decoded, err := decode(value)
 	if err != nil {
-		return fmt.Errorf("decode %s: %w", section, err)
+		return fmt.Errorf("decode %s: %w", name, err)
 	}
 	object, _ := decoded.(map[string]any)
-	if section != CatalogConfig || object == nil {
+	if name != CatalogConfig || object == nil {
 		return nil
 	}
 	sru, hasSru := object["sru"].(map[string]any)
@@ -106,35 +110,39 @@ func Check(section string, value json.RawMessage) error {
 	return nil
 }
 
-// Merge applies a PATCH to a stored section, which is nil when the entry
-// stores none, and returns the merged section in stored form. It is an RFC
-// 7396 merge patch: an absent field is kept, null removes a field, objects
-// merge and anything else replaces the stored value.
+// Merge applies a PATCH to a stored configuration container, which is nil
+// when the entry stores none, and returns the merged container in stored
+// form. It is an RFC 7396 merge patch, with one exception for holdingsFormat.
+// An absent field is kept, null removes a field, objects merge and anything
+// else replaces the stored value.
 //
-// holdingsFormat holds a single parser. A patch that names the stored parser
-// merges into it, a patch that names another parser replaces it, and an empty
-// holdingsFormat changes nothing.
-func Merge(section string, stored, patch json.RawMessage) (json.RawMessage, error) {
+// The exception is that holdingsFormat holds a single parser. A patch that
+// names the stored parser merges into it, a patch that names another parser
+// replaces it, and an empty holdingsFormat changes nothing.
+func Merge(name string, stored, patch json.RawMessage) (json.RawMessage, error) {
 	target, err := decode(stored)
 	if err != nil {
-		return nil, fmt.Errorf("decode stored %s: %w", section, err)
+		return nil, fmt.Errorf("decode stored %s: %w", name, err)
 	}
 	changes, err := decode(patch)
 	if err != nil {
-		return nil, fmt.Errorf("decode %s patch: %w", section, err)
+		return nil, fmt.Errorf("decode %s patch: %w", name, err)
 	}
-	if section == CatalogConfig {
+	if name == CatalogConfig {
 		target, changes = selectHoldingsParser(target, changes)
 	}
 	merged, err := json.Marshal(mergePatch(target, changes))
 	if err != nil {
-		return nil, fmt.Errorf("encode %s: %w", section, err)
+		return nil, fmt.Errorf("encode %s: %w", name, err)
 	}
-	return Normalize(section, merged)
+	return Normalize(name, merged)
 }
 
-// selectHoldingsParser narrows the stored holdingsFormat to the parsers the
-// patch names, so that the merge keeps only those.
+// selectHoldingsParser prepares a catalogConfig merge for the holdingsFormat
+// rule. It changes stored and patch in place and returns them. An empty
+// holdingsFormat is removed from the patch, so that it changes nothing.
+// Otherwise the stored holdingsFormat loses every parser the patch does not
+// name, so that the merge keeps only the named ones.
 func selectHoldingsParser(stored, patch any) (any, any) {
 	changes, _ := patch.(map[string]any)
 	parsers, ok := changes["holdingsFormat"].(map[string]any)
@@ -209,7 +217,7 @@ func dropNulls(value any) {
 
 // writeIntegers rewrites whole numbers written with a fraction or exponent,
 // such as 10.0 or 1e1, in integer form at every depth. The schema accepts
-// those forms for integer fields, but reads decode the section into Go
+// those forms for integer fields, but reads decode the container into Go
 // integers, which reject them.
 func writeIntegers(value any) {
 	switch typed := value.(type) {
@@ -232,8 +240,13 @@ func writeIntegers(value any) {
 	}
 }
 
-// integerForm returns number in integer form when it is a whole number that
-// float64 holds exactly, and otherwise as written.
+// integerForm returns number in integer form when its float64 value is whole
+// and no larger than 2^53 in size, and otherwise as written.
+//
+// The test is on the float64 value, so a number that only rounds to a whole
+// one, such as 1.0000000000000001, is rewritten too. The schema check works
+// on the same value and accepts such a number for an integer field, where
+// leaving it as written would make reads fail.
 func integerForm(number json.Number) json.Number {
 	if !strings.ContainsAny(string(number), ".eE") {
 		return number

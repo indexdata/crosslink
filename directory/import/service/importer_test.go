@@ -259,7 +259,7 @@ func TestImportAcceptsNullLMSPatronProfiles(t *testing.T) {
 	assert.Equal(t, model.ImportSectionResult{Imported: 1}, result.Entries)
 	assert.Empty(t, result.Errors)
 	require.NotNil(t, repo.entry)
-	require.Nil(t, sectionFields(t, repo.entry.Data.LMSConfig)["patronProfiles"])
+	require.Nil(t, containerFields(t, repo.entry.Data.LMSConfig)["patronProfiles"])
 }
 
 func TestImportAcceptsPickupLocationFlag(t *testing.T) {
@@ -270,7 +270,7 @@ func TestImportAcceptsPickupLocationFlag(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, result.Errors)
 	require.NotNil(t, repo.entry)
-	assert.Equal(t, true, sectionFields(t, repo.entry.Data.ILLConfig)["isPickupLocation"])
+	assert.Equal(t, true, containerFields(t, repo.entry.Data.ILLConfig)["isPickupLocation"])
 }
 
 func TestImportAcceptsMaxRequestsPerPatron(t *testing.T) {
@@ -283,7 +283,7 @@ func TestImportAcceptsMaxRequestsPerPatron(t *testing.T) {
 	assert.Equal(t, model.ImportSectionResult{Imported: 1}, result.Entries)
 	assert.Empty(t, result.Errors)
 	require.NotNil(t, repo.entry)
-	ill := sectionFields(t, repo.entry.Data.ILLConfig)
+	ill := containerFields(t, repo.entry.Data.ILLConfig)
 	assert.Equal(t, float64(0), ill["maxRequestsPerPatron"])
 	assert.Equal(t, 1.25, ill["minimumCost"])
 }
@@ -300,16 +300,17 @@ func TestImportAcceptsNullRequestLimitAndMinimumCost(t *testing.T) {
 	assert.Equal(t, model.ImportSectionResult{Imported: 1}, result.Entries)
 	assert.Empty(t, result.Errors)
 	require.NotNil(t, repo.entry)
-	ill := sectionFields(t, repo.entry.Data.ILLConfig)
+	ill := containerFields(t, repo.entry.Data.ILLConfig)
 	assert.Nil(t, ill["maxRequestsPerPatron"])
 	assert.Nil(t, ill["minimumCost"])
 }
 
-// sectionFields decodes a configuration section that the repository received.
-func sectionFields(t *testing.T, section json.RawMessage) map[string]any {
+// containerFields decodes a configuration container that the repository
+// received.
+func containerFields(t *testing.T, container json.RawMessage) map[string]any {
 	t.Helper()
 	var fields map[string]any
-	require.NoError(t, json.Unmarshal(section, &fields))
+	require.NoError(t, json.Unmarshal(container, &fields))
 	require.NotNil(t, fields)
 	return fields
 }
@@ -565,7 +566,7 @@ func TestImportLoadBalancingPolicy(t *testing.T) {
 				return
 			}
 			require.Empty(t, result.Errors)
-			policy := sectionFields(t, repo.entry.Data.ILLConfig)["loadBalancingPolicy"]
+			policy := containerFields(t, repo.entry.Data.ILLConfig)["loadBalancingPolicy"]
 			if value == `null` {
 				assert.Nil(t, policy)
 			} else {

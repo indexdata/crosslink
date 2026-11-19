@@ -1,5 +1,5 @@
--- Each entry stores its configuration sections as JSON objects, in the form
--- entry reads return them. NULL means the entry stores no such section.
+-- Each entry stores its configuration containers as JSON objects, in the form
+-- entry reads return them. NULL means the entry stores no such container.
 ALTER TABLE entries
   ADD COLUMN ill_config jsonb CONSTRAINT entries_ill_config_object CHECK (jsonb_typeof(ill_config) = 'object'),
   ADD COLUMN lms_config jsonb CONSTRAINT entries_lms_config_object CHECK (jsonb_typeof(lms_config) = 'object'),

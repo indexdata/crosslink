@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Each configuration section, set on create, with every field an institution
-// may store.
-var fullSections = map[string]string{
+// Each configuration container, set on create, with every field an
+// institution may store.
+var fullContainers = map[string]string{
 	"illConfig": `{
 		"isPickupLocation":true,"iso18626Url":"https://iso.example/a","iso18626Vendor":"ReShare",
 		"lendersOfLastResort":[{"authority":"TEST","symbol":"ANINST"}],
@@ -69,17 +69,17 @@ func patchEntry(t *testing.T, path, body string) {
 	require.Equal(t, http.StatusNoContent, response.StatusCode, data)
 }
 
-// localSections returns the configuration sections the entry stores itself.
-func localSections(t *testing.T, path string) map[string]any {
+// localContainers returns the configuration containers the entry stores itself.
+func localContainers(t *testing.T, path string) map[string]any {
 	t.Helper()
 	entry := getEntryJSON(t, path+"?resolve-inherit=false", systemHeaders)
-	sections := map[string]any{}
-	for name := range fullSections {
+	containers := map[string]any{}
+	for name := range fullContainers {
 		if value, ok := entry[name]; ok {
-			sections[name] = value
+			containers[name] = value
 		}
 	}
-	return sections
+	return containers
 }
 
 func decodeObject(t *testing.T, data string) map[string]any {
@@ -89,57 +89,59 @@ func decodeObject(t *testing.T, data string) map[string]any {
 	return value
 }
 
-// TestConfigPatchSections checks that PATCH keeps an omitted section, removes
-// a null one and stores an empty object as a section with no fields set.
-func TestConfigPatchSections(t *testing.T) {
+// TestConfigPatchContainers checks that PATCH keeps an omitted configuration
+// container, removes a null one and stores an empty object as a container
+// with no fields set.
+func TestConfigPatchContainers(t *testing.T) {
 	resetDb()
 	all := ""
-	for _, name := range slices.Sorted(maps.Keys(fullSections)) {
-		all += fmt.Sprintf(`,%q:%s`, name, fullSections[name])
+	for _, name := range slices.Sorted(maps.Keys(fullContainers)) {
+		all += fmt.Sprintf(`,%q:%s`, name, fullContainers[name])
 	}
 	full := map[string]any{}
-	for name, value := range fullSections {
+	for name, value := range fullContainers {
 		full[name] = decodeObject(t, value)
 	}
 	path := createConfigEntry(t, all)
-	require.Equal(t, full, localSections(t, path))
+	require.Equal(t, full, localContainers(t, path))
 
 	patchEntry(t, path, `{"name":"Renamed"}`)
-	require.Equal(t, full, localSections(t, path), "omitted sections are kept")
+	require.Equal(t, full, localContainers(t, path), "omitted containers are kept")
 
-	for _, name := range slices.Sorted(maps.Keys(fullSections)) {
+	for _, name := range slices.Sorted(maps.Keys(fullContainers)) {
 		t.Run(name, func(t *testing.T) {
 			path := createConfigEntry(t, all)
 			patchEntry(t, path, fmt.Sprintf(`{%q:null}`, name))
 			want := maps.Clone(full)
 			delete(want, name)
-			require.Equal(t, want, localSections(t, path), "null removes only that section")
+			require.Equal(t, want, localContainers(t, path), "null removes only that container")
 
 			patchEntry(t, path, fmt.Sprintf(`{%q:{}}`, name))
 			want[name] = map[string]any{}
-			require.Equal(t, want, localSections(t, path), "an empty object stores an empty section")
+			require.Equal(t, want, localContainers(t, path), "an empty object stores an empty container")
 		})
 	}
 }
 
 // TestConfigPatchFields checks how PATCH changes the fields of a stored
-// section. An omitted field is kept, null removes it, a nested object merges
-// into the stored one and a list replaces the stored list.
+// configuration container. An omitted field is kept, null removes it, a
+// nested object merges into the stored one and a list replaces the stored
+// list.
 func TestConfigPatchFields(t *testing.T) {
 	resetDb()
 	type patchCase struct {
 		name  string
 		patch string
-		// want lists the fields that differ from the stored section after the
-		// patch. A null value means the field is gone.
+		// want lists the fields that differ from the stored container after
+		// the patch. A null value means the field is gone.
 		want string
 	}
 	for _, tc := range []struct {
-		section string
-		stored  string
-		cases   []patchCase
+		container string
+		stored    string
+		cases     []patchCase
 	}{
-		{"illConfig", fullSections["illConfig"], []patchCase{
+		{"illConfig", fullContainers["illConfig"], []patchCase{
 			{"scalars", `{"iso18626Url":"https://iso.example/b","includeSupplierInfo":true,"defaultLoanPeriod":0,"maxRequestsPerPatron":0,"minimumCost":0}`,
 				`{"iso18626Url":"https://iso.example/b","includeSupplierInfo":true,"defaultLoanPeriod":0,"maxRequestsPerPatron":0,"minimumCost":0}`},
 			{"code lists replace", `{"unfilledReasons":[{"code":"U2","defaultDesc":"Other"}],"loanConditions":[]}`,
@@ -150,14 +152,14 @@ func TestConfigPatchFields(t *testing.T) {
 				`{"lendersOfLastResort":[{"authority":"TEST","symbol":"ANINSTTOO"}]}`},
 			{"empty lender list", `{"lendersOfLastResort":[]}`, `{"lendersOfLastResort":[]}`},
 		}},
-		{"lmsConfig", fullSections["lmsConfig"], []patchCase{
+		{"lmsConfig", fullContainers["lmsConfig"], []patchCase{
 			{"scalars", `{"vendor":"Sierra","ncipVersion":"default","lookupUserEnabled":false,"itemLocation":""}`,
 				`{"vendor":"Sierra","ncipVersion":"default","lookupUserEnabled":false,"itemLocation":""}`},
 			{"empty address and fromAgency are unset", `{"address":"","fromAgency":""}`, `{"address":null,"fromAgency":null}`},
 			{"patron profiles replace", `{"patronProfiles":[{"code":"UG","name":"Undergraduate","canCreateRequests":false}]}`,
 				`{"patronProfiles":[{"code":"UG","name":"Undergraduate","canCreateRequests":false}]}`},
 		}},
-		{"catalogConfig", fullSections["catalogConfig"], []patchCase{
+		{"catalogConfig", fullContainers["catalogConfig"], []patchCase{
 			{"scalars", `{"profile":"Sierra","metadataUpdateMode":"none"}`, `{"profile":"Sierra","metadataUpdateMode":"none"}`},
 			{"sru record schema merges", `{"sru":{"recordSchema":"dc"}}`, `{"sru":{"address":"https://sru.example","recordSchema":"dc"}}`},
 			{"sru address merges", `{"sru":{"address":"https://sru2.example"}}`, `{"sru":{"address":"https://sru2.example","recordSchema":"marcxml"}}`},
@@ -194,7 +196,7 @@ func TestConfigPatchFields(t *testing.T) {
 			{"zoom options can become empty", `{"zoom":{"options":{"count":null,"location":null}}}`,
 				`{"zoom":{"address":"z.example:210/db","options":{}}}`},
 		}},
-		{"holdingsPolicy", fullSections["holdingsPolicy"], []patchCase{
+		{"holdingsPolicy", fullContainers["holdingsPolicy"], []patchCase{
 			{"lists replace", `{"locations":[{"code":"BRANCH","name":"Branch","supplyPreference":1}],"itemLoanPolicies":[]}`,
 				`{"locations":[{"code":"BRANCH","name":"Branch","supplyPreference":1}],"itemLoanPolicies":[]}`},
 		}},
@@ -204,15 +206,15 @@ func TestConfigPatchFields(t *testing.T) {
 		// The holdingsPolicy patch schema is the canonical one, which has no
 		// nullable fields.
 		for _, field := range slices.Sorted(maps.Keys(stored)) {
-			if tc.section != "holdingsPolicy" {
+			if tc.container != "holdingsPolicy" {
 				cases = append(cases, patchCase{field + " null", fmt.Sprintf(`{%q:null}`, field), fmt.Sprintf(`{%q:null}`, field)})
 			}
 		}
 		cases = append(cases, patchCase{"empty patch", `{}`, `{}`})
 		for _, pc := range cases {
-			t.Run(tc.section+"/"+pc.name, func(t *testing.T) {
-				path := createConfigEntry(t, fmt.Sprintf(`,%q:%s`, tc.section, tc.stored))
-				patchEntry(t, path, fmt.Sprintf(`{%q:%s}`, tc.section, pc.patch))
+			t.Run(tc.container+"/"+pc.name, func(t *testing.T) {
+				path := createConfigEntry(t, fmt.Sprintf(`,%q:%s`, tc.container, tc.stored))
+				patchEntry(t, path, fmt.Sprintf(`{%q:%s}`, tc.container, pc.patch))
 				want := maps.Clone(stored)
 				for field, value := range decodeObject(t, pc.want) {
 					if value == nil {
@@ -221,7 +223,7 @@ func TestConfigPatchFields(t *testing.T) {
 						want[field] = value
 					}
 				}
-				require.Equal(t, map[string]any{tc.section: want}, localSections(t, path))
+				require.Equal(t, map[string]any{tc.container: want}, localContainers(t, path))
 			})
 		}
 	}
@@ -232,7 +234,7 @@ func TestConfigPatchFields(t *testing.T) {
 func TestConfigCreateUnsetsEmptyLmsStrings(t *testing.T) {
 	resetDb()
 	path := createConfigEntry(t, `,"lmsConfig":{"address":"","fromAgency":"","itemLocation":""}`)
-	require.Equal(t, map[string]any{"lmsConfig": map[string]any{"itemLocation": ""}}, localSections(t, path))
+	require.Equal(t, map[string]any{"lmsConfig": map[string]any{"itemLocation": ""}}, localContainers(t, path))
 }
 
 // TestConfigPatchEmptyHoldingsFormatKeepsInheritance checks that an empty

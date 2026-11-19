@@ -223,14 +223,14 @@ func TestImportEntryUpdateReplacesLMSPatronProfiles(t *testing.T) {
 	resetImportDatabase(t)
 	repo := importdb.New(testPool, nil)
 	aggregate := completeEntryAggregate("CON")
-	setSectionField(t, &aggregate.Data.LMSConfig, "patronProfiles", []any{map[string]any{"code": "STAFF", "canCreateRequests": true}})
+	setContainerField(t, &aggregate.Data.LMSConfig, "patronProfiles", []any{map[string]any{"code": "STAFF", "canCreateRequests": true}})
 
 	_, err := repo.ImportEntry(context.Background(), aggregate, model.ConflictPolicyFail)
 	require.NoError(t, err)
 	entryID := aggregate.Key
 	require.JSONEq(t, `[{"code":"STAFF","canCreateRequests":true}]`, lmsPatronProfiles(t, entryID))
 
-	setSectionField(t, &aggregate.Data.LMSConfig, "patronProfiles", []any{map[string]any{"name": "Blocked", "canCreateRequests": false}})
+	setContainerField(t, &aggregate.Data.LMSConfig, "patronProfiles", []any{map[string]any{"name": "Blocked", "canCreateRequests": false}})
 	_, err = repo.ImportEntry(context.Background(), aggregate, model.ConflictPolicyUpdate)
 	require.NoError(t, err)
 	require.JSONEq(t, `[{"name":"Blocked","canCreateRequests":false}]`, lmsPatronProfiles(t, entryID))
@@ -1408,15 +1408,16 @@ func lendersConfig(ids ...uuid.UUID) json.RawMessage {
 	return data
 }
 
-// setSectionField sets one field of an import record's configuration section.
-func setSectionField(t *testing.T, section *json.RawMessage, field string, value any) {
+// setContainerField sets one field of an import record's configuration
+// container.
+func setContainerField(t *testing.T, container *json.RawMessage, field string, value any) {
 	t.Helper()
 	fields := map[string]any{}
-	require.NoError(t, json.Unmarshal(*section, &fields))
+	require.NoError(t, json.Unmarshal(*container, &fields))
 	fields[field] = value
 	data, err := json.Marshal(fields)
 	require.NoError(t, err)
-	*section = data
+	*container = data
 }
 
 func minimalEntryAggregate(symbol, entryType string) model.EntryAggregate {
@@ -1572,7 +1573,8 @@ func assertOwnedCount(t *testing.T, table string, entryID uuid.UUID, expected in
 	case "address_components":
 		query = `SELECT count(*) FROM address_components ac JOIN addresses a ON a.id=ac.address WHERE a.entry=$1`
 	case "ill_config", "lms_config", "catalog_config", "holdings_policy":
-		// A configuration section stored on the entry row counts as one.
+		// A configuration container is a column on the entry row, so the
+		// count is 1 when the entry stores it and 0 when it does not.
 		query = fmt.Sprintf(`SELECT count(*) FROM entries WHERE id=$1 AND %s IS NOT NULL`, table) //nolint:gosec // fixed test constant
 	}
 	var count int
@@ -1593,7 +1595,7 @@ func TestImportLoadBalancingPolicyPersistence(t *testing.T) {
 	repo := importdb.New(testPool, nil)
 	aggregate := completeEntryAggregate("POLICY")
 	for _, value := range []*string{policyStringPointer("proportional"), policyStringPointer("deficit"), nil} {
-		setSectionField(t, &aggregate.Data.ILLConfig, "loadBalancingPolicy", value)
+		setContainerField(t, &aggregate.Data.ILLConfig, "loadBalancingPolicy", value)
 		_, err := repo.ImportEntry(context.Background(), aggregate, model.ConflictPolicyUpdate)
 		require.NoError(t, err)
 		var stored *string

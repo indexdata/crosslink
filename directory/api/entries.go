@@ -770,7 +770,7 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		}
 	}
 	configs := storedconfig.Configs{}
-	for _, section := range []struct {
+	for _, container := range []struct {
 		name  string
 		value any
 		set   bool
@@ -780,18 +780,18 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		{storedconfig.CatalogConfig, request.Body.CatalogConfig, request.Body.CatalogConfig != nil},
 		{storedconfig.HoldingsPolicy, request.Body.HoldingsPolicy, request.Body.HoldingsPolicy != nil},
 	} {
-		if !section.set {
+		if !container.set {
 			continue
 		}
-		value, message, err := writeSection(section.name, nil, true, section.value)
+		value, message, err := writeContainer(container.name, nil, true, container.value)
 		if err != nil {
-			slog.ErrorContext(ctx, "failed to encode configuration", "section", section.name, "error", err)
+			slog.ErrorContext(ctx, "failed to encode configuration", "container", container.name, "error", err)
 			return AddEntry500TextResponse("Internal server error"), nil
 		}
 		if message != "" {
 			return AddEntry400TextResponse(message), nil
 		}
-		configs[section.name] = value
+		configs[container.name] = value
 	}
 	if len(configs) > 0 {
 		if err := updateEntryConfigs(ctx, qtx, insertedEntry.ID, configs); err != nil {
@@ -1147,11 +1147,11 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		configs = storedconfig.Configs{}
 	}
 	changed := false
-	for _, patch := range []sectionPatch{
-		newSectionPatch(storedconfig.IllConfig, request.Body.IllConfig),
-		newSectionPatch(storedconfig.LmsConfig, request.Body.LmsConfig),
-		newSectionPatch(storedconfig.CatalogConfig, request.Body.CatalogConfig),
-		newSectionPatch(storedconfig.HoldingsPolicy, request.Body.HoldingsPolicy),
+	for _, patch := range []containerPatch{
+		newContainerPatch(storedconfig.IllConfig, request.Body.IllConfig),
+		newContainerPatch(storedconfig.LmsConfig, request.Body.LmsConfig),
+		newContainerPatch(storedconfig.CatalogConfig, request.Body.CatalogConfig),
+		newContainerPatch(storedconfig.HoldingsPolicy, request.Body.HoldingsPolicy),
 	} {
 		if !patch.specified {
 			continue
@@ -1161,9 +1161,9 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 			delete(configs, patch.name)
 			continue
 		}
-		value, message, err := writeSection(patch.name, configs[patch.name], false, patch.value)
+		value, message, err := writeContainer(patch.name, configs[patch.name], false, patch.value)
 		if err != nil {
-			slog.ErrorContext(ctx, "unable to merge configuration", "section", patch.name, "error", err)
+			slog.ErrorContext(ctx, "unable to merge configuration", "container", patch.name, "error", err)
 			return UpdateEntry500TextResponse("Internal server error"), nil
 		}
 		if message != "" {

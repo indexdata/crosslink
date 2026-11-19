@@ -1,5 +1,7 @@
-// Package storedconfig loads the configuration containers that directory
-// entries store locally, as the JSON objects entry reads return.
+// Package storedconfig handles the configuration containers that directory
+// entries store locally. A container is stored as the JSON object that entry
+// reads return. The package loads containers and puts written values into
+// that form.
 package storedconfig
 
 import (

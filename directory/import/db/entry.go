@@ -171,16 +171,16 @@ func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.E
 	if err := replaceEntryChildren(ctx, queries, entryID, aggregate.Data); err != nil {
 		return model.RepoResult{}, persistenceError("entry", key, err)
 	}
-	// Lenders resolve to symbols only now that the record's own symbols are
-	// written, so an entry that lists itself is stored under its new symbol.
-	sections, err := storedSections(ctx, queries, aggregate.Data)
+	// This runs after the record's own symbols are written. Lenders are
+	// stored by symbol, so an entry that lists itself gets its new symbol.
+	containers, err := storedContainers(ctx, queries, aggregate.Data)
 	if err != nil {
 		return model.RepoResult{}, err
 	}
-	if err := r.checkConfigPolicy(ctx, tx, aggregate.Data.Type, sections, existingID); err != nil {
+	if err := r.checkConfigPolicy(ctx, tx, aggregate.Data.Type, containers, existingID); err != nil {
 		return model.RepoResult{}, err
 	}
-	ill, lms, catalog, holdings := sections.ToColumns()
+	ill, lms, catalog, holdings := containers.ToColumns()
 	if err := queries.UpdateEntryConfigs(ctx, db.UpdateEntryConfigsParams{
 		ID: entryID, IllConfig: ill, LmsConfig: lms, CatalogConfig: catalog, HoldingsPolicy: holdings,
 	}); err != nil {

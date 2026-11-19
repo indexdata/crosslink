@@ -112,8 +112,8 @@ type EntryData struct {
 	Endpoints         []ServiceEndpoint `json:"endpoints"`
 	Addresses         []Address         `json:"addresses"`
 	Closures          []Closure         `json:"closures"`
-	// The configuration sections are kept as the record sends them, which
-	// the import schema has already validated.
+	// The configuration containers are kept as raw JSON, as the record
+	// sends them. The import schema has already validated them.
 	LMSConfig      json.RawMessage `json:"lmsConfig"`
 	CatalogConfig  json.RawMessage `json:"catalogConfig"`
 	ILLConfig      json.RawMessage `json:"illConfig"`
@@ -136,8 +136,8 @@ func (d EntryData) LendersOfLastResort() ([]uuid.UUID, error) {
 	return config.LendersOfLastResort, nil
 }
 
-// Sections returns the record's configuration sections by their API names.
-func (d EntryData) Sections() map[string]json.RawMessage {
+// Containers returns the record's configuration containers by their API names.
+func (d EntryData) Containers() map[string]json.RawMessage {
 	return map[string]json.RawMessage{
 		storedconfig.IllConfig:      d.ILLConfig,
 		storedconfig.LmsConfig:      d.LMSConfig,
@@ -233,8 +233,8 @@ func (a *EntryAggregate) NormalizeAndValidate() error {
 			return fmt.Errorf("lender of last resort %d must be a valid UUID", index+1)
 		}
 	}
-	for name, section := range a.Data.Sections() {
-		normalized, err := storedconfig.Normalize(name, section)
+	for name, container := range a.Data.Containers() {
+		normalized, err := storedconfig.Normalize(name, container)
 		if err != nil {
 			return err
 		}

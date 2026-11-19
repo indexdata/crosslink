@@ -196,6 +196,8 @@ INSERT INTO entry_networks (
 RETURNING *;
 
 -- name: UpdateEntryConfigs :exec
+-- Replaces all four configuration containers of an entry. The caller supplies
+-- every container the entry keeps, because a NULL parameter clears that one.
 UPDATE entries SET
   ill_config = @ill_config,
   lms_config = @lms_config,

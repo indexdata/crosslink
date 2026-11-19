@@ -17,8 +17,8 @@ import (
 )
 
 // checkConfigPolicy rejects configuration values that the record's entry type
-// may not store. sections are the record's configuration in stored form, as
-// storedSections returns it. Import records are complete and replace the
+// may not store. containers are the record's configuration in stored form, as
+// storedContainers returns it. Import records are complete and replace the
 // entry's local configuration, so null is always allowed: it clears the
 // stored value. A value equal to the one the existing entry already stores is
 // allowed too, so re-importing unchanged legacy settings succeeds.
@@ -26,7 +26,7 @@ import (
 // existing is the entry being updated, or nil for a new entry. Call this after
 // locking the entry's row, so the stored configuration can't change before the
 // import writes.
-func (r *PgImportRepo) checkConfigPolicy(ctx context.Context, tx storedconfig.Querier, entryType string, sections storedconfig.Configs, existing *uuid.UUID) error {
+func (r *PgImportRepo) checkConfigPolicy(ctx context.Context, tx storedconfig.Querier, entryType string, containers storedconfig.Configs, existing *uuid.UUID) error {
 	if r.inheritance == nil {
 		return nil
 	}
@@ -37,7 +37,7 @@ func (r *PgImportRepo) checkConfigPolicy(ctx context.Context, tx storedconfig.Qu
 			return err
 		}
 	}
-	violations, err := r.inheritance.CheckWrite(entryType, sections, stored)
+	violations, err := r.inheritance.CheckWrite(entryType, containers, stored)
 	if err != nil {
 		return err
 	}
@@ -47,31 +47,31 @@ func (r *PgImportRepo) checkConfigPolicy(ctx context.Context, tx storedconfig.Qu
 	return nil
 }
 
-// storedSections returns an import record's configuration sections in stored
-// form. A null section is absent from the result. Lenders of last resort,
-// which the record names by entry ID, become the authority and symbol they
-// are stored under.
-func storedSections(ctx context.Context, queries *db.Queries, data model.EntryData) (storedconfig.Configs, error) {
+// storedContainers returns an import record's configuration containers in
+// stored form. A null container is absent from the result. Lenders of last
+// resort, which the record names by entry ID, become the authority and
+// symbol they are stored under.
+func storedContainers(ctx context.Context, queries *db.Queries, data model.EntryData) (storedconfig.Configs, error) {
 	lenders, err := data.LendersOfLastResort()
 	if err != nil {
 		return nil, err
 	}
-	sections := storedconfig.Configs{}
-	for name, section := range data.Sections() {
+	containers := storedconfig.Configs{}
+	for name, container := range data.Containers() {
 		if name == storedconfig.IllConfig && lenders != nil {
-			if section, err = withLenderSymbols(ctx, queries, section, lenders); err != nil {
+			if container, err = withLenderSymbols(ctx, queries, container, lenders); err != nil {
 				return nil, err
 			}
 		}
-		normalized, err := storedconfig.Normalize(name, section)
+		normalized, err := storedconfig.Normalize(name, container)
 		if err != nil {
 			return nil, err
 		}
 		if string(normalized) != "null" {
-			sections[name] = normalized
+			containers[name] = normalized
 		}
 	}
-	return sections, nil
+	return containers, nil
 }
 
 // withLenderSymbols replaces the lender entry IDs in an encoded illConfig
@@ -94,8 +94,8 @@ func withLenderSymbols(ctx context.Context, queries *db.Queries, illConfig json.
 	return json.Marshal(config)
 }
 
-// lenderSymbol returns the AUTHORITY:SYMBOL under which a lender of last
-// resort is stored.
+// lenderSymbol returns the first directory symbol of a lender of last
+// resort, formatted as AUTHORITY:SYMBOL.
 func lenderSymbol(ctx context.Context, queries *db.Queries, id uuid.UUID) (string, error) {
 	symbol, err := queries.FirstSymbolByOwner(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
