@@ -22,10 +22,11 @@
 --     positive default, rush, or express threshold configured for the tenant.
 --     Blank values use the setting default. When weekend exclusion is enabled,
 --     default-request aging keeps only weekday selectors, preserving ordinals.
---     Weekend-only rules, rules relying on implicit anchor dates, and
---     calendar-period BYSETPOS rules whose day candidates would change abort
---     the export for review. The threshold still measures
---     elapsed time, including weekends; rush and express schedules are unchanged.
+--     Weekend-only rules, rules relying on implicit anchor dates, COUNT rules
+--     whose emitted runs would change, and calendar-period BYSETPOS rules whose
+--     day candidates would change abort the export for review. The threshold
+--     still measures elapsed time, including weekends; rush and express
+--     schedules are unchanged.
 --   * PrintPullSlips becomes email-pullslips when it has a non-empty RRULE,
 --     valid JSON configuration, and at least one non-empty recipient.
 --   * Timer location filters cannot be carried across: CrossLink's
@@ -167,6 +168,17 @@ BEGIN
                 USING ERRCODE = 'invalid_parameter_value',
                       HINT = 'Review the timer schedule or set stale_request_3_exclude_weekend to no before exporting.';
         END IF;
+    END IF;
+
+    -- COUNT limits emitted occurrences, so filtering days can extend a finite
+    -- rule beyond its original last run. Require an unchanged weekday-only BYDAY.
+    IF schedule ~* '(^|;)COUNT=[+]?0*[1-9][0-9]*(;|$)'
+       AND (day_match IS NULL OR weekdays IS DISTINCT FROM day_match[2]) THEN
+        RAISE EXCEPTION
+            'Weekend exclusion would change COUNT-limited occurrences in request-aging schedule: %',
+            schedule
+            USING ERRCODE = 'invalid_parameter_value',
+                  HINT = 'Review the timer schedule or set stale_request_3_exclude_weekend to no before exporting.';
     END IF;
 
     -- BYSETPOS selects from the period's candidates after BYDAY filtering.
