@@ -160,15 +160,32 @@ the schedule uses the generated `pullslip-email` fallback template.
 When `stale_request_3_exclude_weekend` is `yes`, default-request aging excludes
 weekend runs, preserving its time of day. Existing `BYDAY` selectors are
 intersected with weekdays, including ordinals: `BYDAY=MO` stays Monday-only,
-and `BYDAY=1MO,1SA` becomes `BYDAY=1MO`. Rules without `BYDAY` receive a
-Monday-Friday filter. If no weekday selectors remain, the export fails with the
+and `BYDAY=1MO,1SA` becomes `BYDAY=1MO`. Daily and finer rules, and calendar-period
+rules with explicit date selectors, receive a Monday-Friday filter when `BYDAY`
+is absent. If no weekday selectors remain, the export fails with the
 schedule in the error; review the timer schedule or set
 `stale_request_3_exclude_weekend` to `no` before exporting.
 
+Weekly, monthly, and yearly rules must include at least one explicit date
+selector: `BYDAY`, `BYMONTHDAY`, `BYYEARDAY`, `BYWEEKNO`, or `BYEASTER`.
+Otherwise the export fails because adding `BYDAY` would replace the anchor's
+implicit weekday, day of month, or annual date. `BYMONTH` and time selectors
+alone still rely on these defaults. Specify explicit date selectors or set
+`stale_request_3_exclude_weekend` to `no` before exporting these rules.
+
+`BYSETPOS` selects positions after day filtering. Daily rules with `BYSETPOS`
+remain `DAILY` so each weekday keeps its own positional selection. Weekly,
+monthly, and yearly rules with `BYSETPOS` are exported only when their existing
+`BYDAY` selectors are already weekday-only. Otherwise the export fails for review,
+including when `BYDAY` is absent: filtering candidates before positional
+selection could move a run to another day, such as changing the last calendar
+day to the last weekday. Review the timer schedule or set
+`stale_request_3_exclude_weekend` to `no` before exporting these rules.
+
 Blank values use the legacy setting default; a missing setting defaults to
-`yes`, as in mod-rs. Daily schedules with a unit interval become weekly weekday
-schedules; other frequencies and intervals are preserved. Rush and express
-schedules are unchanged.
+`yes`, as in mod-rs. Daily schedules with a unit interval and no `BYSETPOS` become
+weekly weekday schedules; other frequencies and intervals are preserved. Rush
+and express schedules are unchanged.
 This skips weekend runs, but the aging threshold still counts elapsed time,
 including weekends. Imported scheduled actions remain inactive until enabled.
 
