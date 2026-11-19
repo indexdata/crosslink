@@ -555,7 +555,7 @@ func TestEntryLendersOfLastResortValidation(t *testing.T) {
 		"X-Okapi-Permissions": `["directory.consortium.all"]`,
 	}
 	t.Cleanup(func() {
-		if _, err := dbpool.Exec(context.Background(), "UPDATE entries SET ill_config = NULL"); err != nil {
+		if _, err := dbpool.Exec(context.Background(), "UPDATE entries SET configs = configs - 'illConfig'"); err != nil {
 			t.Errorf("failed to clean up ILL configurations: %v", err)
 		}
 	})
@@ -640,7 +640,7 @@ func TestEntryLendersOfLastResortValidation(t *testing.T) {
 		}
 
 		var lenders []map[string]string
-		if err := dbpool.QueryRow(context.Background(), "SELECT ill_config->'lendersOfLastResort' FROM entries WHERE id = $1", "00000000-0000-0000-0000-000000000002").Scan(&lenders); err != nil {
+		if err := dbpool.QueryRow(context.Background(), "SELECT configs->'illConfig'->'lendersOfLastResort' FROM entries WHERE id = $1", "00000000-0000-0000-0000-000000000002").Scan(&lenders); err != nil {
 			t.Fatalf("failed to fetch lenders after PATCH: %v", err)
 		}
 		if !reflect.DeepEqual(lenders, []map[string]string{{"authority": "ISIL", "symbol": "NEW-LENDER"}}) {
@@ -731,7 +731,7 @@ func TestPatchEntryLenderOfLastResortToNull(t *testing.T) {
 
 	_, err := dbpool.Exec(
 		context.Background(),
-		`UPDATE entries SET ill_config = '{"lendersOfLastResort":[{"authority":"TEST","symbol":"PATCHED-LOR"}]}' WHERE id = $1`,
+		`UPDATE entries SET configs = jsonb_set(configs, '{illConfig}', '{"lendersOfLastResort":[{"authority":"TEST","symbol":"PATCHED-LOR"}]}') WHERE id = $1`,
 		"00000000-0000-0000-0000-000000000002",
 	)
 	if err != nil {
@@ -746,7 +746,7 @@ func TestPatchEntryLenderOfLastResortToNull(t *testing.T) {
 	var illConfigCount int
 	err = dbpool.QueryRow(
 		context.Background(),
-		"SELECT count(*) FROM entries WHERE id = $1 AND ill_config IS NOT NULL",
+		"SELECT count(*) FROM entries WHERE id = $1 AND configs ? 'illConfig'",
 		"00000000-0000-0000-0000-000000000002",
 	).Scan(&illConfigCount)
 	if err != nil {
@@ -770,7 +770,7 @@ func TestPatchEntryLMSConfigNullValues(t *testing.T) {
 	var originalRequesterPatronPattern *string
 	err := dbpool.QueryRow(
 		context.Background(),
-		"SELECT lms_config->>'address', lms_config->>'fromAgency', lms_config->>'requesterPatronPattern' FROM entries WHERE id = $1",
+		"SELECT configs->'lmsConfig'->>'address', configs->'lmsConfig'->>'fromAgency', configs->'lmsConfig'->>'requesterPatronPattern' FROM entries WHERE id = $1",
 		entryID,
 	).Scan(&originalAddress, &originalFromAgency, &originalRequesterPatronPattern)
 	if err != nil {
@@ -797,8 +797,8 @@ func TestPatchEntryLMSConfigNullValues(t *testing.T) {
 	var patronProfiles []byte
 	err = dbpool.QueryRow(
 		context.Background(),
-		`SELECT lms_config->>'address', lms_config->>'fromAgency', lms_config->>'toAgency', (lms_config->>'acceptItemEnabled')::boolean,
-		 lms_config->>'itemLocation', lms_config->>'requesterPatronPattern', lms_config->'patronProfiles'
+		`SELECT configs->'lmsConfig'->>'address', configs->'lmsConfig'->>'fromAgency', configs->'lmsConfig'->>'toAgency', (configs->'lmsConfig'->>'acceptItemEnabled')::boolean,
+		 configs->'lmsConfig'->>'itemLocation', configs->'lmsConfig'->>'requesterPatronPattern', configs->'lmsConfig'->'patronProfiles'
 		 FROM entries WHERE id = $1`,
 		entryID,
 	).Scan(&address, &fromAgency, &toAgency, &acceptItemEnabled, &itemLocation, &requesterPatronPattern, &patronProfiles)
@@ -829,7 +829,7 @@ func TestPatchEntryLMSConfigNullValues(t *testing.T) {
 	}
 	if err := dbpool.QueryRow(
 		context.Background(),
-		"SELECT lms_config->'patronProfiles' FROM entries WHERE id = $1",
+		"SELECT configs->'lmsConfig'->'patronProfiles' FROM entries WHERE id = $1",
 		entryID,
 	).Scan(&patronProfiles); err != nil {
 		t.Fatalf("failed to fetch cleared patron profiles: %v", err)
@@ -862,7 +862,7 @@ func TestPatchEntryLMSConfigNullValues(t *testing.T) {
 		t.Fatalf("expected top-level LMS null PATCH status %d, got %d and body %s", http.StatusNoContent, res.StatusCode, data)
 	}
 	var count int
-	err = dbpool.QueryRow(context.Background(), "SELECT count(*) FROM entries WHERE id = $1 AND lms_config IS NOT NULL", entryID).Scan(&count)
+	err = dbpool.QueryRow(context.Background(), "SELECT count(*) FROM entries WHERE id = $1 AND configs ? 'lmsConfig'", entryID).Scan(&count)
 	if err != nil {
 		t.Fatalf("failed to count LMS configs after delete: %v", err)
 	}
@@ -1204,7 +1204,7 @@ func TestPatchCatalogConfigRequiresAddressForCreation(t *testing.T) {
 	}
 
 	var count int
-	if err := dbpool.QueryRow(context.Background(), "SELECT count(*) FROM entries WHERE id = $1 AND catalog_config IS NOT NULL", entryID).Scan(&count); err != nil {
+	if err := dbpool.QueryRow(context.Background(), "SELECT count(*) FROM entries WHERE id = $1 AND configs ? 'catalogConfig'", entryID).Scan(&count); err != nil {
 		t.Fatalf("failed to count catalog configs after rejected patches: %v", err)
 	}
 	if count != 0 {

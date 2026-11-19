@@ -28,6 +28,9 @@ SELECT * FROM entries WHERE type = 'Consortium' LIMIT 1;
 -- name: EntriesByParent :many
 SELECT * FROM entries WHERE parent = @parent;
 
+-- name: EntriesByIds :many
+SELECT * FROM entries WHERE id = ANY(@ids::uuid[]);
+
 -- name: LockConsortiumEntryChanges :exec
 SELECT pg_advisory_xact_lock(hashtextextended('directoryish:consortium-entry', 0));
 
@@ -196,14 +199,9 @@ INSERT INTO entry_networks (
 RETURNING *;
 
 -- name: UpdateEntryConfigs :exec
--- Replaces all four configuration containers of an entry. The caller supplies
--- every container the entry keeps, because a NULL parameter clears that one.
-UPDATE entries SET
-  ill_config = @ill_config,
-  lms_config = @lms_config,
-  catalog_config = @catalog_config,
-  holdings_policy = @holdings_policy
-WHERE id = @id;
+-- Replaces all of an entry's configuration containers. The caller supplies
+-- every container the entry keeps, because one missing from configs is removed.
+UPDATE entries SET configs = @configs WHERE id = @id;
 
 -- name: CreateEntryTier :one
 INSERT INTO entry_tiers (

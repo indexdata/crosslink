@@ -220,7 +220,7 @@ func TestDirectoryExportRequestIdPrefix(t *testing.T) {
 
 func TestRequestIdPrefixInheritance(t *testing.T) {
 	tree := setupInheritanceTree(t)
-	mergeConfig(t, fixtureConsortium, "ill_config", `{"requestIdPrefix":"CONS"}`)
+	mergeConfig(t, fixtureConsortium, "illConfig", `{"requestIdPrefix":"CONS"}`)
 	prefix := func(id uuid.UUID) any {
 		t.Helper()
 		return getEntryJSON(t, entryPath(id), systemHeaders)["illConfig"].(map[string]any)["requestIdPrefix"]

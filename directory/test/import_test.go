@@ -64,7 +64,7 @@ func TestImportOrderedAggregates(t *testing.T) {
 		require.Equal(t, expected, count)
 	}
 	var lmsCount int
-	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT count(*) FROM entries WHERE id=$1 AND lms_config IS NOT NULL`, institutionID).Scan(&lmsCount))
+	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT count(*) FROM entries WHERE id=$1 AND configs ? 'lmsConfig'`, institutionID).Scan(&lmsCount))
 	require.Equal(t, 1, lmsCount)
 	var tierAssignments, networkAssignments int
 	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT count(*) FROM entry_tiers`).Scan(&tierAssignments))
@@ -316,12 +316,12 @@ func TestImportHostSettingsRoundTrip(t *testing.T) {
 			var vendor, normalization, profile, version string
 			var namespace bool
 			var raw []byte
-			require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT lms_config->>'vendor', (lms_config->>'ncipNamespaceEnabled')::boolean, lms_config->>'bibIdNormalization', lms_config->>'ncipVersion' FROM entries WHERE id=$1`, id).Scan(&vendor, &namespace, &normalization, &version))
+			require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT configs->'lmsConfig'->>'vendor', (configs->'lmsConfig'->>'ncipNamespaceEnabled')::boolean, configs->'lmsConfig'->>'bibIdNormalization', configs->'lmsConfig'->>'ncipVersion' FROM entries WHERE id=$1`, id).Scan(&vendor, &namespace, &normalization, &version))
 			require.Equal(t, "1.0", version)
 			require.Equal(t, "Sierra", vendor)
 			require.False(t, namespace)
 			require.Equal(t, "none", normalization)
-			require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT catalog_config->>'profile', catalog_config->'holdingsFormat' FROM entries WHERE id=$1`, id).Scan(&profile, &raw))
+			require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT configs->'catalogConfig'->>'profile', configs->'catalogConfig'->'holdingsFormat' FROM entries WHERE id=$1`, id).Scan(&profile, &raw))
 			require.Equal(t, "Koha", profile)
 			require.JSONEq(t, tc.expected, string(raw))
 			res, body := jsonReq(t, http.MethodGet, "/entries/by-id/"+id.String(), "", standardHeaders)
@@ -355,9 +355,9 @@ func TestImportHostSettingsRoundTrip(t *testing.T) {
 	require.Empty(t, result.Errors)
 	id := importedEntryID(t, "ISIL", "HOST")
 	var cleared bool
-	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT NOT (lms_config ?| ARRAY['ncipVersion', 'vendor', 'ncipNamespaceEnabled', 'bibIdNormalization']) FROM entries WHERE id=$1`, id).Scan(&cleared))
+	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT NOT (configs->'lmsConfig' ?| ARRAY['ncipVersion', 'vendor', 'ncipNamespaceEnabled', 'bibIdNormalization']) FROM entries WHERE id=$1`, id).Scan(&cleared))
 	require.True(t, cleared)
-	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT NOT (catalog_config ? 'profile' OR catalog_config ? 'holdingsFormat') FROM entries WHERE id=$1`, id).Scan(&cleared))
+	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT NOT (configs->'catalogConfig' ? 'profile' OR configs->'catalogConfig' ? 'holdingsFormat') FROM entries WHERE id=$1`, id).Scan(&cleared))
 	require.True(t, cleared)
 }
 

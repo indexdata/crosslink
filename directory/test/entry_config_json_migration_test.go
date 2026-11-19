@@ -105,7 +105,7 @@ func TestEntryConfigJSONMigration(t *testing.T) {
 		t.Helper()
 		var c [4]*string
 		require.NoError(t, tx.QueryRow(ctx,
-			`SELECT ill_config::text, lms_config::text, catalog_config::text, holdings_policy::text FROM entries WHERE id=$1`, id).
+			`SELECT (configs->'illConfig')::text, (configs->'lmsConfig')::text, (configs->'catalogConfig')::text, (configs->'holdingsPolicy')::text FROM entries WHERE id=$1`, id).
 			Scan(&c[0], &c[1], &c[2], &c[3]))
 		return c
 	}

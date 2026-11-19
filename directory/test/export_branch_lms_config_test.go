@@ -84,7 +84,7 @@ func TestDirectoryExportBranchLmsConfig(t *testing.T) {
 				var authentication *string
 				require.NoError(t, dbpool.QueryRow(
 					context.Background(),
-					"SELECT lms_config->>'requesterPickupLocation', lms_config->>'fromAgencyAuthentication' FROM entries WHERE id=$1",
+					"SELECT configs->'lmsConfig'->>'requesterPickupLocation', configs->'lmsConfig'->>'fromAgencyAuthentication' FROM entries WHERE id=$1",
 					importedEntryID(t, "ISIL", "BRANCH"),
 				).Scan(&pickupLocation, &authentication))
 				require.Equal(t, code, pickupLocation)

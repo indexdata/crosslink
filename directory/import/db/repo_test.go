@@ -147,32 +147,32 @@ func TestImportEntryCreatesCompleteAggregateWithGeneratedIDs(t *testing.T) {
 	require.NotEqual(t, uuid.Nil, entryID)
 	for table, expected := range map[string]int{
 		"symbols": 1, "service_endpoints": 1, "addresses": 1, "address_components": 1, "closures": 1,
-		"lms_config": 1, "catalog_config": 1, "ill_config": 1, "holdings_policy": 1,
+		"lmsConfig": 1, "catalogConfig": 1, "illConfig": 1, "holdingsPolicy": 1,
 	} {
 		assertOwnedCount(t, table, entryID, expected)
 	}
 	var authentication string
-	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT lms_config->>'fromAgencyAuthentication' FROM entries WHERE id=$1`, entryID).Scan(&authentication))
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT configs->'lmsConfig'->>'fromAgencyAuthentication' FROM entries WHERE id=$1`, entryID).Scan(&authentication))
 	require.Equal(t, "credential-value", authentication)
 	var queryYear string
-	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT catalog_config->'queryConfig'->>'year' FROM entries WHERE id=$1`, entryID).Scan(&queryYear))
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT configs->'catalogConfig'->'queryConfig'->>'year' FROM entries WHERE id=$1`, entryID).Scan(&queryYear))
 	require.Equal(t, "dc.date = {term}", queryYear)
 	var publisher, publicationDate, placeOfPublication string
-	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT m->>'publisher', m->>'publicationDate', m->>'placeOfPublication' FROM entries, jsonb_extract_path(catalog_config, 'metadataFormat', 'marc21') m WHERE id=$1`, entryID).Scan(&publisher, &publicationDate, &placeOfPublication))
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT m->>'publisher', m->>'publicationDate', m->>'placeOfPublication' FROM entries, jsonb_extract_path(configs, 'catalogConfig', 'metadataFormat', 'marc21') m WHERE id=$1`, entryID).Scan(&publisher, &publicationDate, &placeOfPublication))
 	require.Equal(t, "264*1$b/260$b", publisher)
 	require.Equal(t, "264*1$c/260$c", publicationDate)
 	require.Equal(t, "264*1$a/260$a", placeOfPublication)
 	var zoomOptions map[string]string
-	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT catalog_config->'zoom'->'options' FROM entries WHERE id=$1`, entryID).Scan(&zoomOptions))
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT configs->'catalogConfig'->'zoom'->'options' FROM entries WHERE id=$1`, entryID).Scan(&zoomOptions))
 	require.Equal(t, map[string]string{"user": "private"}, zoomOptions)
 	var isPickupLocation bool
-	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT (ill_config->>'isPickupLocation')::boolean FROM entries WHERE id=$1`, entryID).Scan(&isPickupLocation))
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT (configs->'illConfig'->>'isPickupLocation')::boolean FROM entries WHERE id=$1`, entryID).Scan(&isPickupLocation))
 	require.True(t, isPickupLocation)
 	var maxRequestsPerPatron int32
-	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT (ill_config->>'maxRequestsPerPatron')::integer FROM entries WHERE id=$1`, entryID).Scan(&maxRequestsPerPatron))
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT (configs->'illConfig'->>'maxRequestsPerPatron')::integer FROM entries WHERE id=$1`, entryID).Scan(&maxRequestsPerPatron))
 	require.Zero(t, maxRequestsPerPatron)
 	var minimumCost float64
-	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT (ill_config->>'minimumCost')::float8 FROM entries WHERE id=$1`, entryID).Scan(&minimumCost))
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT (configs->'illConfig'->>'minimumCost')::float8 FROM entries WHERE id=$1`, entryID).Scan(&minimumCost))
 	require.Equal(t, 1.25, minimumCost)
 }
 
@@ -203,10 +203,10 @@ func TestImportEntryConflictPoliciesAndUpdateFullSynchronization(t *testing.T) {
 	require.Equal(t, model.OutcomeImported, updated.Outcome)
 	require.Equal(t, entryID, aggregate.Key)
 	assertOwnedCount(t, "service_endpoints", entryID, 0)
-	assertOwnedCount(t, "lms_config", entryID, 0)
-	assertOwnedCount(t, "catalog_config", entryID, 0)
-	assertOwnedCount(t, "ill_config", entryID, 0)
-	assertOwnedCount(t, "holdings_policy", entryID, 0)
+	assertOwnedCount(t, "lmsConfig", entryID, 0)
+	assertOwnedCount(t, "catalogConfig", entryID, 0)
+	assertOwnedCount(t, "illConfig", entryID, 0)
+	assertOwnedCount(t, "holdingsPolicy", entryID, 0)
 	var name string
 	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT name FROM entries WHERE id=$1`, entryID).Scan(&name))
 	require.Equal(t, "Updated Consortium", name)
@@ -251,7 +251,7 @@ func TestImportEntryPersistsLenderUUIDAsDirectorySymbol(t *testing.T) {
 
 	var lenders []map[string]string
 	require.NoError(t, testPool.QueryRow(context.Background(),
-		`SELECT ill_config->'lendersOfLastResort' FROM entries WHERE id=$1`, requester.Key).Scan(&lenders))
+		`SELECT configs->'illConfig'->'lendersOfLastResort' FROM entries WHERE id=$1`, requester.Key).Scan(&lenders))
 	require.Equal(t, []map[string]string{{"authority": "ALT", "symbol": "ALIAS"}}, lenders)
 }
 
@@ -1380,7 +1380,7 @@ func assertTierDoesNotExist(t *testing.T, consortium uuid.UUID, name string) {
 func lmsPatronProfiles(t *testing.T, entryID uuid.UUID) string {
 	t.Helper()
 	var profiles []byte
-	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT lms_config->'patronProfiles' FROM entries WHERE id=$1`, entryID).Scan(&profiles))
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT configs->'lmsConfig'->'patronProfiles' FROM entries WHERE id=$1`, entryID).Scan(&profiles))
 	return string(profiles)
 }
 
@@ -1572,10 +1572,10 @@ func assertOwnedCount(t *testing.T, table string, entryID uuid.UUID, expected in
 	switch table {
 	case "address_components":
 		query = `SELECT count(*) FROM address_components ac JOIN addresses a ON a.id=ac.address WHERE a.entry=$1`
-	case "ill_config", "lms_config", "catalog_config", "holdings_policy":
-		// A configuration container is a column on the entry row, so the
-		// count is 1 when the entry stores it and 0 when it does not.
-		query = fmt.Sprintf(`SELECT count(*) FROM entries WHERE id=$1 AND %s IS NOT NULL`, table) //nolint:gosec // fixed test constant
+	case "illConfig", "lmsConfig", "catalogConfig", "holdingsPolicy":
+		// A configuration container is a key in the entry's configs, so
+		// the count is 1 when the entry stores it and 0 when it does not.
+		query = fmt.Sprintf(`SELECT count(*) FROM entries WHERE id=$1 AND configs ? '%s'`, table) //nolint:gosec // fixed test constant
 	}
 	var count int
 	require.NoError(t, testPool.QueryRow(context.Background(), query, entryID).Scan(&count))
@@ -1599,7 +1599,7 @@ func TestImportLoadBalancingPolicyPersistence(t *testing.T) {
 		_, err := repo.ImportEntry(context.Background(), aggregate, model.ConflictPolicyUpdate)
 		require.NoError(t, err)
 		var stored *string
-		require.NoError(t, testPool.QueryRow(context.Background(), `SELECT ill_config->>'loadBalancingPolicy' FROM entries WHERE id=$1`, aggregate.Key).Scan(&stored))
+		require.NoError(t, testPool.QueryRow(context.Background(), `SELECT configs->'illConfig'->>'loadBalancingPolicy' FROM entries WHERE id=$1`, aggregate.Key).Scan(&stored))
 		require.Equal(t, value, stored)
 	}
 }

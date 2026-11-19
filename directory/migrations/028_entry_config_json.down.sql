@@ -1,4 +1,4 @@
--- Restores the configuration tables, one per container, from the JSON columns.
+-- Restores the configuration tables, one per container, from the JSON column.
 -- Columns keep their version 027 order, which positional reads such as
 -- SELECT * depend on. A stored value that a 027 column or constraint
 -- cannot hold fails the migration instead of being dropped.
@@ -123,8 +123,8 @@ SELECT e.id, c->>'iso18626Url', c->>'iso18626Vendor',
   (c->>'isPickupLocation')::boolean, (c->>'minimumCost')::double precision, c->>'loadBalancingPolicy',
   c->'unfilledReasons', c->'cancellationReasons', c->'loanConditions', c->'availableCopyrightTypes', c->'defaultCopyrightType',
   c->>'requestIdPrefix'
-FROM entries e, LATERAL (SELECT e.ill_config AS c) config
-WHERE e.ill_config IS NOT NULL;
+FROM entries e, LATERAL (SELECT e.configs->'illConfig' AS c) config
+WHERE e.configs ? 'illConfig';
 
 INSERT INTO lms_configs (
   entry, address, from_agency, from_agency_authentication, to_agency,
@@ -141,8 +141,8 @@ SELECT e.id, COALESCE(c->>'address', ''), COALESCE(c->>'fromAgency', ''), c->>'f
   c->>'requesterPickupLocation', c->>'supplierPickupLocation', c->>'requesterPatronPattern', (c->>'requestItemEnabled')::boolean,
   c->'patronProfiles',
   c->>'vendor', (c->>'ncipNamespaceEnabled')::boolean, c->>'bibIdNormalization', c->>'ncipVersion', c->>'bibItemScopeName'
-FROM entries e, LATERAL (SELECT e.lms_config AS c) config
-WHERE e.lms_config IS NOT NULL;
+FROM entries e, LATERAL (SELECT e.configs->'lmsConfig' AS c) config
+WHERE e.configs ? 'lmsConfig';
 
 -- holdingsFormat goes to holdings_config and, as version 027 writes it, to the
 -- MARC subfield columns and the three format flags as well.
@@ -174,14 +174,10 @@ SELECT e.id, c->>'metadataUpdateMode', c->'sru'->>'address', c->'sru'->>'recordS
   c->'queryConfig'->>'identifierNormalization', c->'queryConfig'->>'identifierPrefix',
   c->'metadataFormat'->'marc21'->>'publisher', c->'metadataFormat'->'marc21'->>'publicationDate',
   c->'metadataFormat'->'marc21'->>'placeOfPublication'
-FROM entries e, LATERAL (SELECT e.catalog_config AS c) config
-WHERE e.catalog_config IS NOT NULL;
+FROM entries e, LATERAL (SELECT e.configs->'catalogConfig' AS c) config
+WHERE e.configs ? 'catalogConfig';
 
 INSERT INTO holdings_policies (entry, policy)
-SELECT id, holdings_policy FROM entries WHERE holdings_policy IS NOT NULL;
+SELECT id, configs->'holdingsPolicy' FROM entries WHERE configs ? 'holdingsPolicy';
 
-ALTER TABLE entries
-  DROP COLUMN ill_config,
-  DROP COLUMN lms_config,
-  DROP COLUMN catalog_config,
-  DROP COLUMN holdings_policy;
+ALTER TABLE entries DROP COLUMN configs;

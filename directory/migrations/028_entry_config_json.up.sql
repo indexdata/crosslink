@@ -1,12 +1,16 @@
--- Each entry stores its configuration containers as JSON objects, in the form
--- entry reads return them. NULL means the entry stores no such container.
+-- Each entry stores its configuration containers in one JSON object, keyed by
+-- the container's API property name. A container is in the form entry reads
+-- return it. A container the entry does not store is absent from the object.
 ALTER TABLE entries
-  ADD COLUMN ill_config jsonb CONSTRAINT entries_ill_config_object CHECK (jsonb_typeof(ill_config) = 'object'),
-  ADD COLUMN lms_config jsonb CONSTRAINT entries_lms_config_object CHECK (jsonb_typeof(lms_config) = 'object'),
-  ADD COLUMN catalog_config jsonb CONSTRAINT entries_catalog_config_object CHECK (jsonb_typeof(catalog_config) = 'object'),
-  ADD COLUMN holdings_policy jsonb CONSTRAINT entries_holdings_policy_object CHECK (jsonb_typeof(holdings_policy) = 'object');
+  ADD COLUMN configs jsonb NOT NULL DEFAULT '{}'
+    CONSTRAINT entries_configs_objects CHECK (
+      jsonb_typeof(configs) = 'object'
+      AND NOT jsonb_path_exists(configs, '$.* ? (@.type() != "object")')
+    );
 
-UPDATE entries e SET ill_config = (
+-- A container the entry has no row for is NULL here, and the strip removes it.
+UPDATE entries e SET configs = jsonb_strip_nulls(jsonb_build_object(
+	'illConfig', (
 		SELECT json_strip_nulls(json_build_object(
 			'isPickupLocation', i.is_pickup_location,
 			'iso18626Url', i.iso18626_url,
@@ -37,10 +41,8 @@ UPDATE entries e SET ill_config = (
 			'unfilledReasons', i.unfilled_reasons,
 			'loanConditions', i.loan_conditions,
 			'cancellationReasons', i.cancellation_reasons
-		)) FROM ill_configs i WHERE i.entry = e.id)::jsonb
-WHERE EXISTS (SELECT 1 FROM ill_configs i WHERE i.entry = e.id);
-
-UPDATE entries e SET lms_config = (
+		)) FROM ill_configs i WHERE i.entry = e.id),
+	'lmsConfig', (
 		SELECT 
 			json_strip_nulls(json_build_object(
 				'vendor', l.vendor,
@@ -67,10 +69,8 @@ UPDATE entries e SET lms_config = (
 				'patronProfiles', l.patron_profiles,
 				'toAgency', l.to_agency
 			))
-		from lms_configs l WHERE l.entry = e.id)::jsonb
-WHERE EXISTS (SELECT 1 FROM lms_configs l WHERE l.entry = e.id);
-
-UPDATE entries e SET catalog_config = (
+		from lms_configs l WHERE l.entry = e.id),
+	'catalogConfig', (
 		SELECT
 			json_strip_nulls(json_build_object(
 				'profile', h.profile,
@@ -136,10 +136,8 @@ UPDATE entries e SET catalog_config = (
 					)) END
 				)
 			)
-		from catalog_configs h WHERE h.entry = e.id)::jsonb
-WHERE EXISTS (SELECT 1 FROM catalog_configs h WHERE h.entry = e.id);
-
-UPDATE entries e SET holdings_policy = (SELECT jsonb_strip_nulls(hp.policy) FROM holdings_policies hp WHERE hp.entry = e.id)
-WHERE EXISTS (SELECT 1 FROM holdings_policies hp WHERE hp.entry = e.id);
+		from catalog_configs h WHERE h.entry = e.id),
+	'holdingsPolicy', (SELECT hp.policy FROM holdings_policies hp WHERE hp.entry = e.id)
+));
 
 DROP TABLE ill_configs, lms_configs, catalog_configs, holdings_policies;

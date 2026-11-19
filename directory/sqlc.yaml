@@ -10,6 +10,10 @@ sql:
         sql_package: "pgx/v5"
         emit_pointers_for_null_types: true
         overrides:
+          - column: "entries.configs"
+            go_type:
+              import: "github.com/indexdata/crosslink/directory/storedconfig"
+              type: "Configs"
           - db_type: "uuid"
             go_type:
               import: "github.com/google/uuid"

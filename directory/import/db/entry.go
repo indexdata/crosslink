@@ -126,10 +126,8 @@ func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.E
 	if err != nil {
 		return model.RepoResult{}, fmt.Errorf("lock entry hierarchy: %w", err)
 	}
-	var existingID *uuid.UUID
 	if exists {
 		existing = lockedEntries[existing.ID]
-		existingID = &existing.ID
 	}
 	if err := validateImportSymbolOwnership(ctx, queries, aggregate.Data.Symbols, aggregate.Key); err != nil {
 		return model.RepoResult{}, err
@@ -177,13 +175,12 @@ func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.E
 	if err != nil {
 		return model.RepoResult{}, err
 	}
-	if err := r.checkConfigPolicy(ctx, tx, aggregate.Data.Type, containers, existingID); err != nil {
+	// existing is the locked row, so its containers cannot change before the
+	// write below. A new entry has none.
+	if err := r.checkConfigPolicy(aggregate.Data.Type, containers, existing.Configs); err != nil {
 		return model.RepoResult{}, err
 	}
-	ill, lms, catalog, holdings := containers.ToColumns()
-	if err := queries.UpdateEntryConfigs(ctx, db.UpdateEntryConfigsParams{
-		ID: entryID, IllConfig: ill, LmsConfig: lms, CatalogConfig: catalog, HoldingsPolicy: holdings,
-	}); err != nil {
+	if err := queries.UpdateEntryConfigs(ctx, db.UpdateEntryConfigsParams{ID: entryID, Configs: containers}); err != nil {
 		return model.RepoResult{}, persistenceError("entry", key, err)
 	}
 	if err := tx.Commit(ctx); err != nil {

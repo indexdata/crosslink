@@ -42,7 +42,7 @@ func setupInheritanceTree(t *testing.T) inheritanceTree {
 	ids := []uuid.UUID{tree.institution, tree.branch, uuid.MustParse(fixtureConsortium)}
 	sqlExec(t, `DELETE FROM symbols WHERE owner = ANY($1)`, ids)
 	clearConsortium := func() {
-		sqlExec(t, `UPDATE entries SET ill_config = NULL, lms_config = NULL, catalog_config = NULL, holdings_policy = NULL WHERE id = $1`, fixtureConsortium)
+		sqlExec(t, `UPDATE entries SET configs = '{}' WHERE id = $1`, fixtureConsortium)
 	}
 	clearConsortium()
 	// The fixture consortium outlives this test; keep its settings from
@@ -51,27 +51,27 @@ func setupInheritanceTree(t *testing.T) inheritanceTree {
 	sqlExec(t, `INSERT INTO entries (id, name, type, parent, tenant) VALUES ($1, 'Inherit institution', 'Institution', $3, 'INHERIT'), ($2, 'Inherit branch', 'Branch', $1, 'INHERIT')`,
 		tree.institution, tree.branch, fixtureConsortium)
 	sqlExec(t, `INSERT INTO symbols (owner, authority, symbol) VALUES ($1, 'ISIL', 'INHERIT-INST'), ($2, 'ISIL', 'INHERIT-BRANCH')`, tree.institution, tree.branch)
-	storeConfig(t, fixtureConsortium, "ill_config", `{"maxRequestsPerPatron":10,"iso18626Url":"https://consortium.example/iso","defaultLoanPeriod":30,
+	storeConfig(t, fixtureConsortium, "illConfig", `{"maxRequestsPerPatron":10,"iso18626Url":"https://consortium.example/iso","defaultLoanPeriod":30,
 		"lendersOfLastResort":[{"authority":"ISIL","symbol":"LAST"}],"isPickupLocation":true,"loadBalancingPolicy":"deficit"}`)
-	storeConfig(t, tree.institution, "ill_config", `{"iso18626Url":"https://institution.example/iso"}`)
-	storeConfig(t, tree.institution, "lms_config", `{"vendor":"Horizon","address":"https://ncip.example","fromAgency":"INST",
+	storeConfig(t, tree.institution, "illConfig", `{"iso18626Url":"https://institution.example/iso"}`)
+	storeConfig(t, tree.institution, "lmsConfig", `{"vendor":"Horizon","address":"https://ncip.example","fromAgency":"INST",
 		"fromAgencyAuthentication":"secret","requesterPickupLocation":"MAIN"}`)
-	storeConfig(t, tree.branch, "lms_config", `{"requesterPickupLocation":"BR1"}`)
+	storeConfig(t, tree.branch, "lmsConfig", `{"requesterPickupLocation":"BR1"}`)
 	return tree
 }
 
-// storeConfig sets an entry's stored configuration column, such as
-// lms_config, to value.
-func storeConfig(t *testing.T, id any, column, value string) {
+// storeConfig sets one of an entry's stored configuration containers, such
+// as lmsConfig, to value.
+func storeConfig(t *testing.T, id any, container, value string) {
 	t.Helper()
-	sqlExec(t, fmt.Sprintf(`UPDATE entries SET %s = $2 WHERE id = $1`, column), id, value)
+	sqlExec(t, `UPDATE entries SET configs = jsonb_set(configs, ARRAY[$2::text], $3::jsonb) WHERE id = $1`, id, container, value)
 }
 
-// mergeConfig adds the fields of value to an entry's stored configuration
-// column.
-func mergeConfig(t *testing.T, id any, column, value string) {
+// mergeConfig adds the fields of value to one of an entry's stored
+// configuration containers.
+func mergeConfig(t *testing.T, id any, container, value string) {
 	t.Helper()
-	sqlExec(t, fmt.Sprintf(`UPDATE entries SET %[1]s = %[1]s || $2::jsonb WHERE id = $1`, column), id, value)
+	sqlExec(t, `UPDATE entries SET configs = jsonb_set(configs, ARRAY[$2::text], COALESCE(configs->$2::text, '{}') || $3::jsonb) WHERE id = $1`, id, container, value)
 }
 
 func sqlExec(t *testing.T, query string, args ...any) {
@@ -129,7 +129,7 @@ func TestInheritanceMergedAndLocalReads(t *testing.T) {
 	require.Equal(t, map[string]any{"requesterPickupLocation": "BR1"}, list["items"].([]any)[0].(map[string]any)["lmsConfig"])
 
 	// A parent change takes effect on the next read without touching the child.
-	mergeConfig(t, tree.institution, "lms_config", `{"itemLocation":"STACKS"}`)
+	mergeConfig(t, tree.institution, "lmsConfig", `{"itemLocation":"STACKS"}`)
 	require.Equal(t, "STACKS", getEntryJSON(t, entryPath(tree.branch), systemHeaders)["lmsConfig"].(map[string]any)["itemLocation"])
 }
 
@@ -161,9 +161,9 @@ func TestInheritanceOverridesOffValuesAndEmptyArrays(t *testing.T) {
 func TestInheritanceCatalogNullClears(t *testing.T) {
 	tree := setupInheritanceTree(t)
 	// The consortium's catalog settings never flow to institutions.
-	sqlExec(t, `UPDATE entries SET catalog_config = $2 WHERE id = $1`, fixtureConsortium,
+	storeConfig(t, fixtureConsortium, "catalogConfig",
 		`{"sru":{"address":"https://consortium.example/sru"},"queryConfig":{"title":"consortium={term}"},"metadataFormat":{"marc21":{"title":"246"}}}`)
-	sqlExec(t, `UPDATE entries SET catalog_config = $2 WHERE id = $1`, tree.institution,
+	storeConfig(t, tree.institution, "catalogConfig",
 		`{"profile":"Koha","metadataUpdateMode":"merge","sru":{"address":"https://institution.example/sru","recordSchema":"marcxml"},
 		"queryConfig":{"type":"cql","title":"title={term}"},"holdingsFormat":{"marc":{"mainField":"999"}},"metadataFormat":{"marc21":{"author":"100"}}}`)
 	path := entryPath(tree.institution)
@@ -241,7 +241,7 @@ func TestInheritanceEditability(t *testing.T) {
 
 	// A legacy branch value supplies its whole merge unit and never mixes with
 	// the institution's credentials.
-	mergeConfig(t, tree.branch, "lms_config", `{"address":"https://legacy.example","fromAgency":"BR"}`)
+	mergeConfig(t, tree.branch, "lmsConfig", `{"address":"https://legacy.example","fromAgency":"BR"}`)
 	require.Equal(t, map[string]any{"address": "https://legacy.example", "fromAgency": "BR", "requesterPickupLocation": "BR2"},
 		getEntryJSON(t, branchPath, systemHeaders)["lmsConfig"])
 
@@ -270,7 +270,7 @@ func TestInheritanceProtectedValuesAndReparenting(t *testing.T) {
 
 	other := uuid.New()
 	sqlExec(t, `INSERT INTO entries (id, name, type, parent, tenant) VALUES ($1, 'Other institution', 'Institution', $2, 'OTHER')`, other, fixtureConsortium)
-	storeConfig(t, other, "lms_config", `{"address":"https://other.example","fromAgency":"OTHER","fromAgencyAuthentication":"other-secret"}`)
+	storeConfig(t, other, "lmsConfig", `{"address":"https://other.example","fromAgency":"OTHER","fromAgencyAuthentication":"other-secret"}`)
 
 	reparent := fmt.Sprintf(`{"parent":"%s"}`, other)
 	response, body := jsonReq(t, http.MethodPatch, branchPath, reparent, ownerHeaders)
@@ -336,7 +336,7 @@ func TestImportInheritanceRules(t *testing.T) {
 	tree := setupInheritanceTree(t)
 	branchKey := symbolObject("ISIL", "INHERIT-BRANCH")
 	institutionKey := symbolObject("ISIL", "INHERIT-INST")
-	mergeConfig(t, tree.branch, "lms_config", `{"address":"https://legacy.example","fromAgency":"BR"}`)
+	mergeConfig(t, tree.branch, "lmsConfig", `{"address":"https://legacy.example","fromAgency":"BR"}`)
 	branchID := tree.branch
 
 	record := entryImportRecord(branchKey, "Inherit branch", institutionKey, "Branch")

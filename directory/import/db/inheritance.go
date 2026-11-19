@@ -23,19 +23,12 @@ import (
 // stored value. A value equal to the one the existing entry already stores is
 // allowed too, so re-importing unchanged legacy settings succeeds.
 //
-// existing is the entry being updated, or nil for a new entry. Call this after
-// locking the entry's row, so the stored configuration can't change before the
+// stored is what the existing entry stores, or nil for a new entry. It must
+// come from the entry's locked row, so that it cannot change before the
 // import writes.
-func (r *PgImportRepo) checkConfigPolicy(ctx context.Context, tx storedconfig.Querier, entryType string, containers storedconfig.Configs, existing *uuid.UUID) error {
+func (r *PgImportRepo) checkConfigPolicy(entryType string, containers, stored storedconfig.Configs) error {
 	if r.inheritance == nil {
 		return nil
-	}
-	var stored storedconfig.Configs
-	if existing != nil {
-		var err error
-		if stored, err = storedconfig.LoadLocal(ctx, tx, *existing); err != nil {
-			return err
-		}
 	}
 	violations, err := r.inheritance.CheckWrite(entryType, containers, stored)
 	if err != nil {

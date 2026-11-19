@@ -47,40 +47,37 @@ func maybeUpdateEntryVendor(cur *string, patch nullable.Nullable[EntryVendor]) *
 }
 
 // scanEntryRow scans one entry. It also returns the entry's stored
-// configuration containers as projected JSON, keyed by API property name.
+// configuration containers, keyed by API property name.
 func scanEntryRow(rows pgx.Rows) (Entry, storedconfig.Configs, int, error) {
 	var (
-		id                 uuid.UUID
-		name               string
-		description        *string
-		contactName        *string
-		organizationId     *string
-		email              *string
-		fromEmail          *string
-		tenant             *string
-		vendor             *string
-		phoneNumber        *string
-		lmsLocationCode    *string
-		lendToBorrowRatio  *string
-		illConfigJSON      []byte
-		lmsConfigJSON      []byte
-		catalogConfigJSON  []byte
-		holdingsPolicyJSON []byte
-		hrid               *string
-		timeZone           *string
-		entryType          *string
-		parent             *uuid.UUID
-		symbolsJSON        [][]byte
-		endpointsJSON      [][]byte
-		addressesJSON      [][]byte
-		tiersJSON          [][]byte
-		networksJSON       [][]byte
-		closuresJSON       [][]byte
-		totalCount         int
+		id                uuid.UUID
+		name              string
+		description       *string
+		contactName       *string
+		organizationId    *string
+		email             *string
+		fromEmail         *string
+		tenant            *string
+		vendor            *string
+		phoneNumber       *string
+		lmsLocationCode   *string
+		lendToBorrowRatio *string
+		configs           storedconfig.Configs
+		hrid              *string
+		timeZone          *string
+		entryType         *string
+		parent            *uuid.UUID
+		symbolsJSON       [][]byte
+		endpointsJSON     [][]byte
+		addressesJSON     [][]byte
+		tiersJSON         [][]byte
+		networksJSON      [][]byte
+		closuresJSON      [][]byte
+		totalCount        int
 	)
 
 	if err := rows.Scan(&id, &name, &description, &organizationId, &contactName, &email, &fromEmail, &tenant, &vendor, &phoneNumber,
-		&lmsLocationCode, &lendToBorrowRatio, &illConfigJSON, &lmsConfigJSON, &catalogConfigJSON, &holdingsPolicyJSON, &hrid, &timeZone, &entryType, &parent, &symbolsJSON, &endpointsJSON,
+		&lmsLocationCode, &lendToBorrowRatio, &configs, &hrid, &timeZone, &entryType, &parent, &symbolsJSON, &endpointsJSON,
 		&addressesJSON, &tiersJSON, &networksJSON, &closuresJSON, &totalCount); err != nil {
 		return Entry{}, nil, 0, err
 	}
@@ -105,16 +102,16 @@ func scanEntryRow(rows pgx.Rows) (Entry, storedconfig.Configs, int, error) {
 		return Entry{}, nil, 0, fmt.Errorf("unmarshalling closures: %w", err)
 	}
 
-	lmsConfig, err := unmarshalJSONObject[LmsConfig](lmsConfigJSON)
+	lmsConfig, err := unmarshalJSONObject[LmsConfig](configs[storedconfig.LmsConfig])
 	if err != nil {
 		return Entry{}, nil, 0, fmt.Errorf("unmarshalling lms config: %w", err)
 	}
 
-	catalogConfig, err := unmarshalJSONObject[CatalogConfig](catalogConfigJSON)
+	catalogConfig, err := unmarshalJSONObject[CatalogConfig](configs[storedconfig.CatalogConfig])
 	if err != nil {
 		return Entry{}, nil, 0, fmt.Errorf("unmarshalling holdings config: %w", err)
 	}
-	holdingsPolicy, err := unmarshalJSONObject[HoldingsPolicy](holdingsPolicyJSON)
+	holdingsPolicy, err := unmarshalJSONObject[HoldingsPolicy](configs[storedconfig.HoldingsPolicy])
 	if err != nil {
 		return Entry{}, nil, 0, fmt.Errorf("failed to parse holdings policy: %w", err)
 	}
@@ -129,7 +126,7 @@ func scanEntryRow(rows pgx.Rows) (Entry, storedconfig.Configs, int, error) {
 		return Entry{}, nil, 0, fmt.Errorf("unmarshalling networks config: %w", err)
 	}
 
-	illConfig, err := unmarshalJSONObject[IllConfig](illConfigJSON)
+	illConfig, err := unmarshalJSONObject[IllConfig](configs[storedconfig.IllConfig])
 	if err != nil {
 		return Entry{}, nil, 0, fmt.Errorf("unmarshalling ill config: %w", err)
 	}
@@ -168,8 +165,6 @@ func scanEntryRow(rows pgx.Rows) (Entry, storedconfig.Configs, int, error) {
 	lmsConfigPtr := lmsConfig
 
 	typeValue := EntryType(*entryType)
-
-	configs := storedconfig.FromColumns(illConfigJSON, lmsConfigJSON, catalogConfigJSON, holdingsPolicyJSON)
 
 	return Entry{
 		Id:                &id,
@@ -232,7 +227,7 @@ func handleEntryCQL(cqlString string, noBaseArgs int) (pgcql.Query, error) {
 	def.AddField("tenant", f)
 
 	fb := pgcql.NewFieldBool()
-	fb.SetColumn("COALESCE((e.ill_config->>'isPickupLocation')::boolean, FALSE)")
+	fb.SetColumn("COALESCE((e.configs->'illConfig'->>'isPickupLocation')::boolean, FALSE)")
 	def.AddField("isPickupLocation", fb)
 
 	def.AddField("symbol", &fieldEntrySymbol{index: "symbol", ownerColumn: "e.id"})
@@ -291,7 +286,7 @@ func buildEntrySQL(whereClause string) string {
 		e.phone_number,
 		e.lms_location_code,
 		e.lend_to_borrow_ratio,
-		` + storedconfig.Columns + `,
+		e.configs,
 		e.hrid,
 		e.time_zone,
 		e.type,
@@ -407,7 +402,7 @@ func buildEntryListQuery(cqlString *string, limit *Limit, offset *Offset, baseWh
 // When resolving, the entries and their ancestors are read in one read-only
 // REPEATABLE READ transaction so that both come from the same snapshot.
 func (a ApiImpl) readEntries(ctx context.Context, query string, args []any, authData *auth.AuthData, resolve bool) ([]Entry, int, error) {
-	var q storedconfig.Querier = a.pool
+	var q db.DBTX = a.pool
 	resolve = resolve && a.inheritance != nil
 	if resolve {
 		tx, err := a.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
@@ -443,7 +438,7 @@ func (a ApiImpl) readEntries(ctx context.Context, query string, args []any, auth
 	}
 
 	if resolve {
-		if err := a.resolveInheritance(ctx, q, authData, items, configs); err != nil {
+		if err := a.resolveInheritance(ctx, db.New(q), authData, items, configs); err != nil {
 			return nil, 0, err
 		}
 	}
@@ -794,7 +789,7 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		configs[container.name] = value
 	}
 	if len(configs) > 0 {
-		if err := updateEntryConfigs(ctx, qtx, insertedEntry.ID, configs); err != nil {
+		if err := qtx.UpdateEntryConfigs(ctx, db.UpdateEntryConfigsParams{ID: insertedEntry.ID, Configs: configs}); err != nil {
 			slog.ErrorContext(ctx, "failed to store configuration", "error", err)
 			return AddEntry500TextResponse("Internal server error"), nil
 		}
@@ -908,12 +903,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		}
 	}
 
-	localConfigs, err := storedconfig.LoadLocal(ctx, tx, orig.ID)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to load stored configuration", "error", err)
-		return UpdateEntry500TextResponse("Internal server error"), nil
-	}
-	violation, err := a.checkConfigWrite(resultingType, request.Body, localConfigs)
+	violation, err := a.checkConfigWrite(resultingType, request.Body, orig.Configs)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to check configuration editability", "error", err)
 		return UpdateEntry500TextResponse("Internal server error"), nil
@@ -1142,10 +1132,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 			return UpdateEntry400TextResponse(validationMessage), nil
 		}
 	}
-	configs := maps.Clone(localConfigs)
-	if configs == nil {
-		configs = storedconfig.Configs{}
-	}
+	configs := maps.Clone(orig.Configs)
 	changed := false
 	for _, patch := range []containerPatch{
 		newContainerPatch(storedconfig.IllConfig, request.Body.IllConfig),
@@ -1172,7 +1159,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		configs[patch.name] = value
 	}
 	if changed {
-		if err := updateEntryConfigs(ctx, qtx, orig.ID, configs); err != nil {
+		if err := qtx.UpdateEntryConfigs(ctx, db.UpdateEntryConfigsParams{ID: orig.ID, Configs: configs}); err != nil {
 			slog.ErrorContext(ctx, "unexpected database error during configuration update", "error", err)
 			return UpdateEntry500TextResponse("Internal server error"), nil
 		}

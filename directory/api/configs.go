@@ -1,14 +1,11 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/oapi-codegen/nullable"
 
-	"github.com/indexdata/crosslink/directory/db"
 	"github.com/indexdata/crosslink/directory/storedconfig"
 )
 
@@ -52,15 +49,6 @@ func newContainerPatch[T any](name string, patch nullable.Nullable[T]) container
 		result.value = *value
 	}
 	return result
-}
-
-// updateEntryConfigs stores an entry's configuration containers. A container
-// missing from configs is removed.
-func updateEntryConfigs(ctx context.Context, queries *db.Queries, id uuid.UUID, configs storedconfig.Configs) error {
-	ill, lms, catalog, holdings := configs.ToColumns()
-	return queries.UpdateEntryConfigs(ctx, db.UpdateEntryConfigsParams{
-		ID: id, IllConfig: ill, LmsConfig: lms, CatalogConfig: catalog, HoldingsPolicy: holdings,
-	})
 }
 
 // patchValue returns a specified, non-null patch value.
