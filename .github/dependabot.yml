@@ -17,9 +17,8 @@ updates:
       - "/zoom"
     schedule:
       interval: daily
-    # Disabled for grouped rebase bug; use one PR at a time for now.
-    # rebase-strategy: auto
-    open-pull-requests-limit: 1
+    # Limit concurrent updates while grouped rebases remain unreliable.
+    open-pull-requests-limit: 3
     commit-message:
       prefix: "chore"
       include: "scope"
