@@ -1,12 +1,15 @@
 package model
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/indexdata/crosslink/directory/storedconfig"
 )
 
 // Leading zeros count toward the four integer digits; zero components are invalid.
@@ -109,10 +112,38 @@ type EntryData struct {
 	Endpoints         []ServiceEndpoint `json:"endpoints"`
 	Addresses         []Address         `json:"addresses"`
 	Closures          []Closure         `json:"closures"`
-	LMSConfig         *LMSConfig        `json:"lmsConfig"`
-	CatalogConfig     *CatalogConfig    `json:"catalogConfig"`
-	ILLConfig         *ILLConfig        `json:"illConfig"`
-	HoldingsPolicy    *HoldingsPolicy   `json:"holdingsPolicy"`
+	// These fields hold the raw JSON containers from the import record.
+	// The import schema has already validated them.
+	LMSConfig      json.RawMessage `json:"lmsConfig"`
+	CatalogConfig  json.RawMessage `json:"catalogConfig"`
+	ILLConfig      json.RawMessage `json:"illConfig"`
+	HoldingsPolicy json.RawMessage `json:"holdingsPolicy"`
+}
+
+// LendersOfLastResort returns the lender entry IDs from illConfig. A missing
+// or null list yields nil. An explicit empty list yields a non-nil empty slice.
+// Parsing the IDs here enforces the UUID format the schema validator skips.
+func (d EntryData) LendersOfLastResort() ([]uuid.UUID, error) {
+	if len(d.ILLConfig) == 0 {
+		return nil, nil
+	}
+	var config struct {
+		LendersOfLastResort []uuid.UUID `json:"lendersOfLastResort"`
+	}
+	if err := json.Unmarshal(d.ILLConfig, &config); err != nil {
+		return nil, fmt.Errorf("invalid illConfig.lendersOfLastResort: %w", err)
+	}
+	return config.LendersOfLastResort, nil
+}
+
+// Containers returns the record's configuration containers by their API names.
+func (d EntryData) Containers() map[string]json.RawMessage {
+	return map[string]json.RawMessage{
+		storedconfig.IllConfig:      d.ILLConfig,
+		storedconfig.LmsConfig:      d.LMSConfig,
+		storedconfig.CatalogConfig:  d.CatalogConfig,
+		storedconfig.HoldingsPolicy: d.HoldingsPolicy,
+	}
 }
 
 type ServiceEndpoint struct {
@@ -193,7 +224,25 @@ func (a *EntryAggregate) NormalizeAndValidate() error {
 			return fmt.Errorf("closure %d endDate must not precede startDate", index+1)
 		}
 	}
-	return validateConfigEnums(a.Data.LMSConfig, a.Data.CatalogConfig, a.Data.ILLConfig)
+	lenders, err := a.Data.LendersOfLastResort()
+	if err != nil {
+		return err
+	}
+	for index, lender := range lenders {
+		if lender == uuid.Nil {
+			return fmt.Errorf("lender of last resort %d must be a valid UUID", index+1)
+		}
+	}
+	for name, container := range a.Data.Containers() {
+		normalized, err := storedconfig.Normalize(name, container)
+		if err != nil {
+			return err
+		}
+		if err := storedconfig.Check(name, normalized); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type TierKey struct {

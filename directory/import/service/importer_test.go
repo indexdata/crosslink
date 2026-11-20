@@ -209,13 +209,16 @@ func TestImportAcceptsLMSPatronProfiles(t *testing.T) {
 	assert.Empty(t, result.Errors)
 	assert.Equal(t, 1, repo.entryCalls)
 	require.NotNil(t, repo.entry)
-	require.NotNil(t, repo.entry.Data.LMSConfig)
-	require.NotNil(t, repo.entry.Data.LMSConfig.PatronProfiles)
-	profiles := *repo.entry.Data.LMSConfig.PatronProfiles
-	require.Len(t, profiles, 1)
-	require.NotNil(t, profiles[0].Code)
-	require.Equal(t, "STAFF", *profiles[0].Code)
-	require.True(t, profiles[0].CanCreateRequests)
+	var lms struct {
+		PatronProfiles []struct {
+			Code              string
+			CanCreateRequests bool
+		}
+	}
+	require.NoError(t, json.Unmarshal(repo.entry.Data.LMSConfig, &lms))
+	require.Len(t, lms.PatronProfiles, 1)
+	require.Equal(t, "STAFF", lms.PatronProfiles[0].Code)
+	require.True(t, lms.PatronProfiles[0].CanCreateRequests)
 }
 
 func TestImportAcceptsLendToBorrowRatio(t *testing.T) {
@@ -256,8 +259,7 @@ func TestImportAcceptsNullLMSPatronProfiles(t *testing.T) {
 	assert.Equal(t, model.ImportSectionResult{Imported: 1}, result.Entries)
 	assert.Empty(t, result.Errors)
 	require.NotNil(t, repo.entry)
-	require.NotNil(t, repo.entry.Data.LMSConfig)
-	require.Nil(t, repo.entry.Data.LMSConfig.PatronProfiles)
+	require.Nil(t, containerFields(t, repo.entry.Data.LMSConfig)["patronProfiles"])
 }
 
 func TestImportAcceptsPickupLocationFlag(t *testing.T) {
@@ -268,8 +270,7 @@ func TestImportAcceptsPickupLocationFlag(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, result.Errors)
 	require.NotNil(t, repo.entry)
-	require.NotNil(t, repo.entry.Data.ILLConfig.IsPickupLocation)
-	assert.True(t, *repo.entry.Data.ILLConfig.IsPickupLocation)
+	assert.Equal(t, true, containerFields(t, repo.entry.Data.ILLConfig)["isPickupLocation"])
 }
 
 func TestImportAcceptsMaxRequestsPerPatron(t *testing.T) {
@@ -282,11 +283,9 @@ func TestImportAcceptsMaxRequestsPerPatron(t *testing.T) {
 	assert.Equal(t, model.ImportSectionResult{Imported: 1}, result.Entries)
 	assert.Empty(t, result.Errors)
 	require.NotNil(t, repo.entry)
-	require.NotNil(t, repo.entry.Data.ILLConfig)
-	require.NotNil(t, repo.entry.Data.ILLConfig.MaxRequestsPerPatron)
-	assert.Equal(t, int32(0), *repo.entry.Data.ILLConfig.MaxRequestsPerPatron)
-	require.NotNil(t, repo.entry.Data.ILLConfig.MinimumCost)
-	assert.Equal(t, 1.25, *repo.entry.Data.ILLConfig.MinimumCost)
+	ill := containerFields(t, repo.entry.Data.ILLConfig)
+	assert.Equal(t, float64(0), ill["maxRequestsPerPatron"])
+	assert.Equal(t, 1.25, ill["minimumCost"])
 }
 
 func TestImportAcceptsNullRequestLimitAndMinimumCost(t *testing.T) {
@@ -301,9 +300,19 @@ func TestImportAcceptsNullRequestLimitAndMinimumCost(t *testing.T) {
 	assert.Equal(t, model.ImportSectionResult{Imported: 1}, result.Entries)
 	assert.Empty(t, result.Errors)
 	require.NotNil(t, repo.entry)
-	require.NotNil(t, repo.entry.Data.ILLConfig)
-	assert.Nil(t, repo.entry.Data.ILLConfig.MaxRequestsPerPatron)
-	assert.Nil(t, repo.entry.Data.ILLConfig.MinimumCost)
+	ill := containerFields(t, repo.entry.Data.ILLConfig)
+	assert.Nil(t, ill["maxRequestsPerPatron"])
+	assert.Nil(t, ill["minimumCost"])
+}
+
+// containerFields decodes a configuration container that the repository
+// received.
+func containerFields(t *testing.T, container json.RawMessage) map[string]any {
+	t.Helper()
+	var fields map[string]any
+	require.NoError(t, json.Unmarshal(container, &fields))
+	require.NotNil(t, fields)
+	return fields
 }
 
 func validLMSConfig() string {
@@ -557,12 +566,11 @@ func TestImportLoadBalancingPolicy(t *testing.T) {
 				return
 			}
 			require.Empty(t, result.Errors)
-			require.NotNil(t, repo.entry.Data.ILLConfig)
+			policy := containerFields(t, repo.entry.Data.ILLConfig)["loadBalancingPolicy"]
 			if value == `null` {
-				assert.Nil(t, repo.entry.Data.ILLConfig.LoadBalancingPolicy)
+				assert.Nil(t, policy)
 			} else {
-				require.NotNil(t, repo.entry.Data.ILLConfig.LoadBalancingPolicy)
-				assert.Equal(t, strings.Trim(value, `"`), *repo.entry.Data.ILLConfig.LoadBalancingPolicy)
+				assert.Equal(t, strings.Trim(value, `"`), policy)
 			}
 		})
 	}

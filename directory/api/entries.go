@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strings"
 
 	"github.com/google/uuid"
@@ -46,40 +47,37 @@ func maybeUpdateEntryVendor(cur *string, patch nullable.Nullable[EntryVendor]) *
 }
 
 // scanEntryRow scans one entry. It also returns the entry's stored
-// configuration containers as projected JSON, keyed by API property name.
+// configuration containers, keyed by API property name.
 func scanEntryRow(rows pgx.Rows) (Entry, storedconfig.Configs, int, error) {
 	var (
-		id                 uuid.UUID
-		name               string
-		description        *string
-		contactName        *string
-		organizationId     *string
-		email              *string
-		fromEmail          *string
-		tenant             *string
-		vendor             *string
-		phoneNumber        *string
-		lmsLocationCode    *string
-		lendToBorrowRatio  *string
-		illConfigJSON      []byte
-		lmsConfigJSON      []byte
-		catalogConfigJSON  []byte
-		holdingsPolicyJSON []byte
-		hrid               *string
-		timeZone           *string
-		entryType          *string
-		parent             *uuid.UUID
-		symbolsJSON        [][]byte
-		endpointsJSON      [][]byte
-		addressesJSON      [][]byte
-		tiersJSON          [][]byte
-		networksJSON       [][]byte
-		closuresJSON       [][]byte
-		totalCount         int
+		id                uuid.UUID
+		name              string
+		description       *string
+		contactName       *string
+		organizationId    *string
+		email             *string
+		fromEmail         *string
+		tenant            *string
+		vendor            *string
+		phoneNumber       *string
+		lmsLocationCode   *string
+		lendToBorrowRatio *string
+		configs           storedconfig.Configs
+		hrid              *string
+		timeZone          *string
+		entryType         *string
+		parent            *uuid.UUID
+		symbolsJSON       [][]byte
+		endpointsJSON     [][]byte
+		addressesJSON     [][]byte
+		tiersJSON         [][]byte
+		networksJSON      [][]byte
+		closuresJSON      [][]byte
+		totalCount        int
 	)
 
 	if err := rows.Scan(&id, &name, &description, &organizationId, &contactName, &email, &fromEmail, &tenant, &vendor, &phoneNumber,
-		&lmsLocationCode, &lendToBorrowRatio, &illConfigJSON, &lmsConfigJSON, &catalogConfigJSON, &holdingsPolicyJSON, &hrid, &timeZone, &entryType, &parent, &symbolsJSON, &endpointsJSON,
+		&lmsLocationCode, &lendToBorrowRatio, &configs, &hrid, &timeZone, &entryType, &parent, &symbolsJSON, &endpointsJSON,
 		&addressesJSON, &tiersJSON, &networksJSON, &closuresJSON, &totalCount); err != nil {
 		return Entry{}, nil, 0, err
 	}
@@ -104,20 +102,6 @@ func scanEntryRow(rows pgx.Rows) (Entry, storedconfig.Configs, int, error) {
 		return Entry{}, nil, 0, fmt.Errorf("unmarshalling closures: %w", err)
 	}
 
-	lmsConfig, err := unmarshalJSONObject[LmsConfig](lmsConfigJSON)
-	if err != nil {
-		return Entry{}, nil, 0, fmt.Errorf("unmarshalling lms config: %w", err)
-	}
-
-	catalogConfig, err := unmarshalJSONObject[CatalogConfig](catalogConfigJSON)
-	if err != nil {
-		return Entry{}, nil, 0, fmt.Errorf("unmarshalling holdings config: %w", err)
-	}
-	holdingsPolicy, err := unmarshalJSONObject[HoldingsPolicy](holdingsPolicyJSON)
-	if err != nil {
-		return Entry{}, nil, 0, fmt.Errorf("failed to parse holdings policy: %w", err)
-	}
-
 	tiers, err := unmarshalJSONArray[Tier](tiersJSON)
 	if err != nil {
 		return Entry{}, nil, 0, fmt.Errorf("unmarshalling tiers: %w", err)
@@ -126,11 +110,6 @@ func scanEntryRow(rows pgx.Rows) (Entry, storedconfig.Configs, int, error) {
 	networks, err := unmarshalJSONArray[EntryNetworkDetails](networksJSON)
 	if err != nil {
 		return Entry{}, nil, 0, fmt.Errorf("unmarshalling networks config: %w", err)
-	}
-
-	illConfig, err := unmarshalJSONObject[IllConfig](illConfigJSON)
-	if err != nil {
-		return Entry{}, nil, 0, fmt.Errorf("unmarshalling ill config: %w", err)
 	}
 
 	// Use nil for empty arrays so they're omitted in JSON (omitempty)
@@ -164,13 +143,9 @@ func scanEntryRow(rows pgx.Rows) (Entry, storedconfig.Configs, int, error) {
 		networksPtr = &networks
 	}
 
-	lmsConfigPtr := lmsConfig
-
 	typeValue := EntryType(*entryType)
 
-	configs := storedconfig.FromColumns(illConfigJSON, lmsConfigJSON, catalogConfigJSON, holdingsPolicyJSON)
-
-	return Entry{
+	entry := Entry{
 		Id:                &id,
 		Name:              name,
 		Type:              &typeValue,
@@ -183,21 +158,21 @@ func scanEntryRow(rows pgx.Rows) (Entry, storedconfig.Configs, int, error) {
 		Hrid:              hrid,
 		LmsLocationCode:   lmsLocationCode,
 		LendToBorrowRatio: lendToBorrowRatio,
-		IllConfig:         illConfig,
 		PhoneNumber:       phoneNumber,
 		Parent:            parent,
 		Symbols:           symbolsPtr,
 		Endpoints:         endpointsPtr,
 		Addresses:         addressesPtr,
 		Closures:          closuresPtr,
-		LmsConfig:         lmsConfigPtr,
-		CatalogConfig:     catalogConfig,
-		HoldingsPolicy:    holdingsPolicy,
 		Tiers:             tiersPtr,
 		Networks:          networksPtr,
 		TimeZone:          timeZone,
 		Vendor:            (*EntryVendor)(vendor),
-	}, configs, totalCount, nil
+	}
+	if err := applyConfigs(&entry, configs); err != nil {
+		return Entry{}, nil, 0, err
+	}
+	return entry, configs, totalCount, nil
 }
 
 const defaultEntryOrder = "ORDER BY e.name, e.id"
@@ -231,7 +206,7 @@ func handleEntryCQL(cqlString string, noBaseArgs int) (pgcql.Query, error) {
 	def.AddField("tenant", f)
 
 	fb := pgcql.NewFieldBool()
-	fb.SetColumn("COALESCE((SELECT i.is_pickup_location FROM ill_configs i WHERE i.entry = e.id), FALSE)")
+	fb.SetColumn("COALESCE((e.configs->'illConfig'->>'isPickupLocation')::boolean, FALSE)")
 	def.AddField("isPickupLocation", fb)
 
 	def.AddField("symbol", &fieldEntrySymbol{index: "symbol", ownerColumn: "e.id"})
@@ -290,7 +265,7 @@ func buildEntrySQL(whereClause string) string {
 		e.phone_number,
 		e.lms_location_code,
 		e.lend_to_borrow_ratio,
-		` + storedconfig.Columns + `,
+		e.configs,
 		e.hrid,
 		e.time_zone,
 		e.type,
@@ -406,7 +381,7 @@ func buildEntryListQuery(cqlString *string, limit *Limit, offset *Offset, baseWh
 // When resolving, the entries and their ancestors are read in one read-only
 // REPEATABLE READ transaction so that both come from the same snapshot.
 func (a ApiImpl) readEntries(ctx context.Context, query string, args []any, authData *auth.AuthData, resolve bool) ([]Entry, int, error) {
-	var q storedconfig.Querier = a.pool
+	var q db.DBTX = a.pool
 	resolve = resolve && a.inheritance != nil
 	if resolve {
 		tx, err := a.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
@@ -442,7 +417,7 @@ func (a ApiImpl) readEntries(ctx context.Context, query string, args []any, auth
 	}
 
 	if resolve {
-		if err := a.resolveInheritance(ctx, q, authData, items, configs); err != nil {
+		if err := a.resolveInheritance(ctx, db.New(q), authData, items, configs); err != nil {
 			return nil, 0, err
 		}
 	}
@@ -659,7 +634,12 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		}
 	}
 
-	violation, err := a.checkConfigWrite(string(entryType), request.Body, nil)
+	supplied, err := bodyProperties(request.Body)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to read request body properties", "error", err)
+		return AddEntry500TextResponse("Internal server error"), nil
+	}
+	violation, err := a.checkConfigWrite(string(entryType), supplied, nil)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to check configuration editability", "error", err)
 		return AddEntry500TextResponse("Internal server error"), nil
@@ -758,52 +738,6 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		}
 	}
 
-	if request.Body.LmsConfig != nil {
-		lmsConfig := request.Body.LmsConfig
-		_, err := qtx.UpsertLMSConfig(ctx, db.UpsertLMSConfigParams{
-			Entry:                            &insertedEntry.ID,
-			Vendor:                           maybeUpdateCol[string](nil, lmsConfig.Vendor),
-			NcipNamespaceEnabled:             lmsConfig.NcipNamespaceEnabled,
-			NcipVersion:                      lmsConfig.NcipVersion,
-			BibIDNormalization:               lmsConfig.BibIdNormalization,
-			Address:                          lmsConfig.Address,
-			FromAgency:                       lmsConfig.FromAgency,
-			FromAgencyAuthentication:         lmsConfig.FromAgencyAuthentication,
-			ToAgency:                         lmsConfig.ToAgency,
-			LookupUserEnabled:                lmsConfig.LookupUserEnabled,
-			AcceptItemEnabled:                lmsConfig.AcceptItemEnabled,
-			CheckinItemEnabled:               lmsConfig.CheckInItemEnabled,
-			CheckoutItemEnabled:              lmsConfig.CheckOutItemEnabled,
-			ItemLocation:                     lmsConfig.ItemLocation,
-			RequestItemRequestType:           lmsConfig.RequestItemRequestType,
-			RequestItemScopeType:             lmsConfig.RequestItemRequestScopeType,
-			BibItemScopeName:                 lmsConfig.BibItemScopeName,
-			RequestItemBibCode:               lmsConfig.RequestItemBibIdCode,
-			RequestItemEnabled:               lmsConfig.RequestItemEnabled,
-			RequestItemPickupLocationEnabled: lmsConfig.RequestItemPickupLocationEnabled,
-			RequesterPickupLocation:          lmsConfig.RequesterPickupLocation,
-			RequesterPatronPattern:           lmsConfig.RequesterPatronPattern,
-			SupplierPickupLocation:           lmsConfig.SupplierPickupLocation,
-			PatronProfiles:                   patronProfilesJSON(lmsConfig.PatronProfiles),
-		})
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to create lmsConfig component", "error", err, "to_agency", lmsConfig.ToAgency)
-			return AddEntry500TextResponse("Internal server error"), nil
-		}
-	}
-
-	if request.Body.CatalogConfig != nil {
-		params := catalogConfigToDBParams(insertedEntry.ID, *request.Body.CatalogConfig)
-		if validationErr := validateCatalogConfigParams(params); validationErr != nil {
-			return AddEntry400TextResponse(validationErr.Error()), nil
-		}
-		_, err := qtx.UpsertCatalogConfig(ctx, params)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to create catalogConfig component", "error", err)
-			return AddEntry500TextResponse("Internal server error"), nil
-		}
-	}
-
 	if request.Body.IllConfig != nil {
 		validationMessage, validationErr := validateLendersOfLastResort(ctx, qtx, request.Body.IllConfig.LendersOfLastResort)
 		if validationErr != nil {
@@ -813,25 +747,19 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		if validationMessage != "" {
 			return AddEntry400TextResponse(validationMessage), nil
 		}
-		params, encodeErr := illConfigToDBParams(insertedEntry.ID, *request.Body.IllConfig)
-		if encodeErr != nil {
-			slog.ErrorContext(ctx, "failed to encode illConfig", "error", encodeErr)
-			return AddEntry500TextResponse("Internal server error"), nil
-		}
-		_, err := qtx.UpsertIllConfig(ctx, params)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to create illConfig component", "error", err)
-			return AddEntry500TextResponse("Internal server error"), nil
-		}
 	}
-
-	if request.Body.HoldingsPolicy != nil {
-		_, err := qtx.UpsertHoldingsPolicy(ctx, db.UpsertHoldingsPolicyParams{
-			Entry:  insertedEntry.ID,
-			Policy: holdingsPolicyJSON(*request.Body.HoldingsPolicy),
-		})
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to create holdingsPolicy component", "error", err)
+	configs := storedconfig.Configs{}
+	_, message, err := writeContainers(configs, supplied, true)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to encode configuration", "error", err)
+		return AddEntry500TextResponse("Internal server error"), nil
+	}
+	if message != "" {
+		return AddEntry400TextResponse(message), nil
+	}
+	if len(configs) > 0 {
+		if err := qtx.UpdateEntryConfigs(ctx, db.UpdateEntryConfigsParams{ID: insertedEntry.ID, Configs: configs}); err != nil {
+			slog.ErrorContext(ctx, "failed to store configuration", "error", err)
 			return AddEntry500TextResponse("Internal server error"), nil
 		}
 	}
@@ -944,12 +872,12 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		}
 	}
 
-	localConfigs, err := storedconfig.LoadLocal(ctx, tx, orig.ID)
+	supplied, err := bodyProperties(request.Body)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to load stored configuration", "error", err)
+		slog.ErrorContext(ctx, "failed to read request body properties", "error", err)
 		return UpdateEntry500TextResponse("Internal server error"), nil
 	}
-	violation, err := a.checkConfigWrite(resultingType, request.Body, localConfigs)
+	violation, err := a.checkConfigWrite(resultingType, supplied, orig.Configs)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to check configuration editability", "error", err)
 		return UpdateEntry500TextResponse("Internal server error"), nil
@@ -1167,151 +1095,30 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		}
 	}
 
-	if request.Body.LmsConfig.IsSpecified() {
-		if request.Body.LmsConfig.IsNull() {
-			err = qtx.DeleteLMSConfigByEntry(ctx, orig.ID)
-			if err != nil {
-				slog.ErrorContext(ctx, "unexpected database error during lmsConfig delete", "error", err)
-				return UpdateEntry500TextResponse("Internal server error"), nil
-			}
-		} else {
-			lmsConfig := request.Body.LmsConfig.MustGet()
-			originalLMSConfig, queryErr := qtx.GetLMSConfigByEntry(ctx, orig.ID)
-			if queryErr != nil && !errors.Is(queryErr, pgx.ErrNoRows) {
-				slog.ErrorContext(ctx, "unable to query original lmsConfig", "error", queryErr)
-				return UpdateEntry500TextResponse("Internal server error"), nil
-			}
-
-			// address and from_agency are NOT NULL; an empty string is the unset encoding.
-			_, err = qtx.UpsertLMSConfig(ctx, db.UpsertLMSConfigParams{
-				Entry:                            &orig.ID,
-				Vendor:                           maybeUpdateCol(originalLMSConfig.Vendor, lmsConfig.Vendor),
-				NcipNamespaceEnabled:             maybeUpdateCol(originalLMSConfig.NcipNamespaceEnabled, lmsConfig.NcipNamespaceEnabled),
-				NcipVersion:                      maybeUpdateCol(originalLMSConfig.NcipVersion, lmsConfig.NcipVersion),
-				BibIDNormalization:               maybeUpdateCol(originalLMSConfig.BibIDNormalization, lmsConfig.BibIdNormalization),
-				Address:                          derefOrDefault(maybeUpdateCol(&originalLMSConfig.Address, lmsConfig.Address), ""),
-				FromAgency:                       derefOrDefault(maybeUpdateCol(&originalLMSConfig.FromAgency, lmsConfig.FromAgency), ""),
-				FromAgencyAuthentication:         maybeUpdateCol(originalLMSConfig.FromAgencyAuthentication, lmsConfig.FromAgencyAuthentication),
-				ToAgency:                         maybeUpdateCol(originalLMSConfig.ToAgency, lmsConfig.ToAgency),
-				LookupUserEnabled:                maybeUpdateCol(originalLMSConfig.LookupUserEnabled, lmsConfig.LookupUserEnabled),
-				AcceptItemEnabled:                maybeUpdateCol(originalLMSConfig.AcceptItemEnabled, lmsConfig.AcceptItemEnabled),
-				CheckinItemEnabled:               maybeUpdateCol(originalLMSConfig.CheckinItemEnabled, lmsConfig.CheckInItemEnabled),
-				CheckoutItemEnabled:              maybeUpdateCol(originalLMSConfig.CheckoutItemEnabled, lmsConfig.CheckOutItemEnabled),
-				ItemLocation:                     maybeUpdateCol(originalLMSConfig.ItemLocation, lmsConfig.ItemLocation),
-				RequestItemRequestType:           maybeUpdateCol(originalLMSConfig.RequestItemRequestType, lmsConfig.RequestItemRequestType),
-				RequestItemScopeType:             maybeUpdateCol(originalLMSConfig.RequestItemScopeType, lmsConfig.RequestItemRequestScopeType),
-				BibItemScopeName:                 maybeUpdateCol(originalLMSConfig.BibItemScopeName, lmsConfig.BibItemScopeName),
-				RequestItemBibCode:               maybeUpdateCol(originalLMSConfig.RequestItemBibCode, lmsConfig.RequestItemBibIdCode),
-				RequestItemEnabled:               maybeUpdateCol(originalLMSConfig.RequestItemEnabled, lmsConfig.RequestItemEnabled),
-				RequestItemPickupLocationEnabled: maybeUpdateCol(originalLMSConfig.RequestItemPickupLocationEnabled, lmsConfig.RequestItemPickupLocationEnabled),
-				RequesterPickupLocation:          maybeUpdateCol(originalLMSConfig.RequesterPickupLocation, lmsConfig.RequesterPickupLocation),
-				SupplierPickupLocation:           maybeUpdateCol(originalLMSConfig.SupplierPickupLocation, lmsConfig.SupplierPickupLocation),
-				RequesterPatronPattern:           maybeUpdateCol(originalLMSConfig.RequesterPatronPattern, lmsConfig.RequesterPatronPattern),
-				PatronProfiles:                   maybeUpdatePatronProfiles(originalLMSConfig.PatronProfiles, lmsConfig.PatronProfiles),
-			})
-			if err != nil {
-				slog.ErrorContext(ctx, "unexpected database error during lmsConfig upsert", "error", err)
-				return UpdateEntry500TextResponse("Internal server error"), nil
-			}
+	if illConfig, ok := patchValue(request.Body.IllConfig); ok {
+		lenders, _ := patchValue(illConfig.LendersOfLastResort)
+		validationMessage, validationErr := validateLendersOfLastResort(ctx, qtx, lenders)
+		if validationErr != nil {
+			slog.ErrorContext(ctx, "failed to validate lenders of last resort", "error", validationErr)
+			return UpdateEntry500TextResponse("Internal server error"), nil
+		}
+		if validationMessage != "" {
+			return UpdateEntry400TextResponse(validationMessage), nil
 		}
 	}
-
-	if request.Body.CatalogConfig.IsSpecified() {
-		if request.Body.CatalogConfig.IsNull() {
-			err = qtx.DeleteCatalogConfigByEntry(ctx, orig.ID)
-			if err != nil {
-				slog.ErrorContext(ctx, "unexpected database error during catalogConfig delete", "error", err)
-				return UpdateEntry500TextResponse("Internal server error"), nil
-			}
-		} else {
-			catalogConfig := request.Body.CatalogConfig.MustGet()
-			originalCatalogConfig, queryErr := qtx.GetCatalogConfigByEntry(ctx, orig.ID)
-			if queryErr != nil && !errors.Is(queryErr, pgx.ErrNoRows) {
-				slog.ErrorContext(ctx, "unable to query original catalogConfig", "error", queryErr)
-				return UpdateEntry500TextResponse("Internal server error"), nil
-			}
-			if validationErr := validateCatalogConfigPatch(catalogConfig, originalCatalogConfig); validationErr != nil {
-				return UpdateEntry400TextResponse(validationErr.Error()), nil
-			}
-			params, mergeErr := catalogConfigPatchToDBParams(orig.ID, catalogConfig, originalCatalogConfig)
-			if mergeErr != nil {
-				slog.ErrorContext(ctx, "unable to merge catalogConfig", "error", mergeErr)
-				return UpdateEntry500TextResponse("Internal server error"), nil
-			}
-			if validationErr := validateCatalogConfigParams(params); validationErr != nil {
-				return UpdateEntry400TextResponse(validationErr.Error()), nil
-			}
-			_, err = qtx.UpsertCatalogConfig(ctx, params)
-			if err != nil {
-				slog.ErrorContext(ctx, "unexpected database error during catalogConfig upsert", "error", err)
-				return UpdateEntry500TextResponse("Internal server error"), nil
-			}
-		}
+	configs := maps.Clone(orig.Configs)
+	changed, message, err := writeContainers(configs, supplied, false)
+	if err != nil {
+		slog.ErrorContext(ctx, "unable to merge configuration", "error", err)
+		return UpdateEntry500TextResponse("Internal server error"), nil
 	}
-
-	if request.Body.IllConfig.IsSpecified() {
-		if request.Body.IllConfig.IsNull() {
-			err = qtx.DeleteIllConfigByEntry(ctx, orig.ID)
-			if err != nil {
-				slog.ErrorContext(ctx, "unexpected database error during illConfig delete", "error", err)
-				return UpdateEntry500TextResponse("Internal server error"), nil
-			}
-		} else {
-			illConfig := request.Body.IllConfig.MustGet()
-			lenders, _ := patchValue(illConfig.LendersOfLastResort)
-			validationMessage, validationErr := validateLendersOfLastResort(ctx, qtx, lenders)
-			if validationErr != nil {
-				slog.ErrorContext(ctx, "failed to validate lenders of last resort", "error", validationErr)
-				return UpdateEntry500TextResponse("Internal server error"), nil
-			}
-			if validationMessage != "" {
-				return UpdateEntry400TextResponse(validationMessage), nil
-			}
-			originalIllConfig, queryErr := qtx.GetIllConfigByEntry(ctx, orig.ID)
-			if queryErr != nil && !errors.Is(queryErr, pgx.ErrNoRows) {
-				slog.ErrorContext(ctx, "unable to query original illConfig", "error", queryErr)
-				return UpdateEntry500TextResponse("Internal server error"), nil
-			}
-			params, encodeErr := illConfigPatchToDBParams(orig.ID, illConfig, originalIllConfig)
-			if encodeErr != nil {
-				slog.ErrorContext(ctx, "failed to encode illConfig", "error", encodeErr)
-				return UpdateEntry500TextResponse("Internal server error"), nil
-			}
-			_, err = qtx.UpsertIllConfig(ctx, params)
-			if err != nil {
-				slog.ErrorContext(ctx, "unexpected database error during illConfig upsert", "error", err)
-				return UpdateEntry500TextResponse("Internal server error"), nil
-			}
-		}
+	if message != "" {
+		return UpdateEntry400TextResponse(message), nil
 	}
-
-	if request.Body.HoldingsPolicy.IsSpecified() {
-		if request.Body.HoldingsPolicy.IsNull() {
-			err = qtx.DeleteHoldingsPolicyByEntry(ctx, orig.ID)
-			if err != nil {
-				slog.ErrorContext(ctx, "unexpected database error during holdingsPolicy delete", "error", err)
-				return UpdateEntry500TextResponse("Internal server error"), nil
-			}
-		} else {
-			policyPatch := request.Body.HoldingsPolicy.MustGet()
-			originalPolicy, queryErr := qtx.GetHoldingsPolicyByEntry(ctx, orig.ID)
-			if queryErr != nil && !errors.Is(queryErr, pgx.ErrNoRows) {
-				slog.ErrorContext(ctx, "unable to query original holdingsPolicy", "error", queryErr)
-				return UpdateEntry500TextResponse("Internal server error"), nil
-			}
-			policy, mergeErr := mergeHoldingsPolicy(originalPolicy.Policy, policyPatch)
-			if mergeErr != nil {
-				slog.ErrorContext(ctx, "unable to merge holdingsPolicy", "error", mergeErr)
-				return UpdateEntry500TextResponse("Internal server error"), nil
-			}
-			_, err = qtx.UpsertHoldingsPolicy(ctx, db.UpsertHoldingsPolicyParams{
-				Entry:  orig.ID,
-				Policy: holdingsPolicyJSON(policy),
-			})
-			if err != nil {
-				slog.ErrorContext(ctx, "unexpected database error during holdingsPolicy upsert", "error", err)
-				return UpdateEntry500TextResponse("Internal server error"), nil
-			}
+	if changed {
+		if err := qtx.UpdateEntryConfigs(ctx, db.UpdateEntryConfigsParams{ID: orig.ID, Configs: configs}); err != nil {
+			slog.ErrorContext(ctx, "unexpected database error during configuration update", "error", err)
+			return UpdateEntry500TextResponse("Internal server error"), nil
 		}
 	}
 

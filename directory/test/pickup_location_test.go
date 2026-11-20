@@ -23,10 +23,10 @@ func TestEntryCQLPickupLocation(t *testing.T) {
 		require.NoError(t, err)
 	}
 	// Cover enabled, disabled, NULL, and absent ILL configurations.
-	_, err := dbpool.Exec(ctx, "INSERT INTO ill_configs (entry, is_pickup_location) VALUES ($1, TRUE), ($2, FALSE), ($3, NULL)", ids[0], ids[1], ids[2])
+	_, err := dbpool.Exec(ctx, `UPDATE entries SET configs = jsonb_set(configs, '{illConfig}', CASE id WHEN $1 THEN '{"isPickupLocation":true}'::jsonb WHEN $2 THEN '{"isPickupLocation":false}'::jsonb ELSE '{}'::jsonb END) WHERE id IN ($1, $2, $3)`, ids[0], ids[1], ids[2])
 	require.NoError(t, err)
 	// A pickup code must not override an explicitly disabled flag.
-	_, err = dbpool.Exec(ctx, "INSERT INTO lms_configs (entry, address, from_agency, requester_pickup_location) VALUES ($1, 'unused', 'MAIN', 'main')", ids[1])
+	_, err = dbpool.Exec(ctx, `UPDATE entries SET configs = jsonb_set(configs, '{lmsConfig}', '{"address":"unused","fromAgency":"MAIN","requesterPickupLocation":"main"}') WHERE id = $1`, ids[1])
 	require.NoError(t, err)
 	headers := map[string]string{"X-Okapi-Permissions": `["directory.system.all"]`}
 	for _, tc := range []struct {

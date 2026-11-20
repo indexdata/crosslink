@@ -45,7 +45,7 @@ func TestDefaultCopyrightTypePersistence(t *testing.T) {
 	require.Equal(t, true, config["useOfferedCosts"])
 	require.Equal(t, []any{}, config["availableCopyrightTypes"])
 	var cleared bool
-	require.NoError(t, dbpool.QueryRow(context.Background(), "SELECT default_copyright_type IS NULL FROM ill_configs WHERE entry=$1", entry["id"]).Scan(&cleared))
+	require.NoError(t, dbpool.QueryRow(context.Background(), "SELECT NOT configs->'illConfig' ? 'defaultCopyrightType' FROM entries WHERE id=$1", entry["id"]).Scan(&cleared))
 	require.True(t, cleared)
 }
 

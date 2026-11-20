@@ -28,6 +28,9 @@ SELECT * FROM entries WHERE type = 'Consortium' LIMIT 1;
 -- name: EntriesByParent :many
 SELECT * FROM entries WHERE parent = @parent;
 
+-- name: EntriesByIds :many
+SELECT * FROM entries WHERE id = ANY(@ids::uuid[]);
+
 -- name: LockConsortiumEntryChanges :exec
 SELECT pg_advisory_xact_lock(hashtextextended('directoryish:consortium-entry', 0));
 
@@ -168,55 +171,6 @@ RETURNING *;
 -- name: DeleteAllOwnedAddressComponents :exec
 DELETE FROM address_components WHERE address = @address;
 
--- name: UpsertIllConfig :one
--- The caller supplies the complete local row so that null clears a stored value.
-INSERT INTO ill_configs (
-  entry, is_pickup_location, iso18626_url, iso18626_vendor, lenders_of_last_resort,
-  include_requesting_agency_info, include_supplier_info, include_return_info,
-  include_vendor_note, use_offered_costs, note_field_separator,
-  supplier_patron_pattern, duplicate_check_window_hours, default_loan_period,
-  max_requests_per_patron, minimum_cost, load_balancing_policy, unfilled_reasons, cancellation_reasons, loan_conditions, available_copyright_types, default_copyright_type,
-  request_id_prefix
-) VALUES (
-  @entry, @is_pickup_location, @iso18626_url, @iso18626_vendor, @lenders_of_last_resort,
-  @include_requesting_agency_info, @include_supplier_info, @include_return_info,
-  @include_vendor_note, @use_offered_costs, @note_field_separator,
-  @supplier_patron_pattern, @duplicate_check_window_hours, @default_loan_period,
-  @max_requests_per_patron, @minimum_cost, @load_balancing_policy, @unfilled_reasons, @cancellation_reasons, @loan_conditions, @available_copyright_types, @default_copyright_type,
-  @request_id_prefix
-)
-ON CONFLICT (entry) DO UPDATE SET
-  is_pickup_location = @is_pickup_location,
-  iso18626_url = @iso18626_url,
-  iso18626_vendor = @iso18626_vendor,
-  lenders_of_last_resort = @lenders_of_last_resort,
-  include_requesting_agency_info = @include_requesting_agency_info,
-  include_supplier_info = @include_supplier_info,
-  include_return_info = @include_return_info,
-  include_vendor_note = @include_vendor_note,
-  use_offered_costs = @use_offered_costs,
-  note_field_separator = @note_field_separator,
-  supplier_patron_pattern = @supplier_patron_pattern,
-  request_id_prefix = @request_id_prefix,
-  duplicate_check_window_hours = @duplicate_check_window_hours,
-  default_loan_period = @default_loan_period,
-  max_requests_per_patron = @max_requests_per_patron,
-  minimum_cost = @minimum_cost,
-  load_balancing_policy = @load_balancing_policy,
-  unfilled_reasons = @unfilled_reasons,
-  cancellation_reasons = @cancellation_reasons,
-  loan_conditions = @loan_conditions,
-  available_copyright_types = @available_copyright_types,
-  default_copyright_type = @default_copyright_type
-RETURNING *;
-
--- name: GetIllConfigByEntry :one
-SELECT * FROM ill_configs
-WHERE entry = @entry;
-
--- name: DeleteIllConfigByEntry :exec
-DELETE FROM ill_configs WHERE entry = @entry;
-
 -- name: CreateTier :one
 INSERT INTO tiers (
   name, consortium, level, type, cost
@@ -244,93 +198,10 @@ INSERT INTO entry_networks (
 )
 RETURNING *;
 
--- name: UpsertCatalogConfig :one
-INSERT INTO catalog_configs (
-  id, entry, metadata_update_mode,
-  sru_address, sru_record_schema,
-  zoom_address, zoom_options,
-  query_type, query_identifier, query_isbn, query_issn, query_title, query_year, query_identifier_normalization, query_identifier_prefix,
-  holdings_marc_call_number_subfield, holdings_marc_item_id_subfield, holdings_marc_location_subfield,
-  holdings_marc_main_field, holdings_marc_restricted_subfield, holdings_marc_shelving_location_subfield,
-  holdings_marc21plus1_enabled, holdings_opac_enabled, holdings_reservoir_enabled,
-  metadata_marc21_author, metadata_marc21_edition, metadata_marc21_identifier, metadata_marc21_isbn,
-  metadata_marc21_issn, metadata_marc21_subtitle, metadata_marc21_title,
-  metadata_marc21_publisher, metadata_marc21_publication_date, metadata_marc21_place_of_publication, profile, holdings_config
-) VALUES (
-  coalesce(sqlc.narg('id'), gen_random_uuid()),
-  @entry,
-  @metadata_update_mode,
-  @sru_address,
-  @sru_record_schema,
-  @zoom_address,
-  @zoom_options,
-  @query_type,
-  @query_identifier,
-  @query_isbn,
-  @query_issn,
-  @query_title,
-  @query_year,
-  @query_identifier_normalization,
-  @query_identifier_prefix,
-  @holdings_marc_call_number_subfield,
-  @holdings_marc_item_id_subfield,
-  @holdings_marc_location_subfield,
-  @holdings_marc_main_field,
-  @holdings_marc_restricted_subfield,
-  @holdings_marc_shelving_location_subfield,
-  @holdings_marc21plus1_enabled,
-  @holdings_opac_enabled,
-  @holdings_reservoir_enabled,
-  @metadata_marc21_author,
-  @metadata_marc21_edition,
-  @metadata_marc21_identifier,
-  @metadata_marc21_isbn,
-  @metadata_marc21_issn,
-  @metadata_marc21_subtitle,
-  @metadata_marc21_title,
-  @metadata_marc21_publisher,
-  @metadata_marc21_publication_date,
-  @metadata_marc21_place_of_publication,
-  @profile,
-  @holdings_config
-)
-ON CONFLICT (entry) DO UPDATE SET
-  profile = @profile,
-  holdings_config = @holdings_config,
-  metadata_update_mode = @metadata_update_mode,
-  sru_address = @sru_address,
-  sru_record_schema = @sru_record_schema,
-  zoom_address = @zoom_address,
-  zoom_options = @zoom_options,
-  query_type = @query_type,
-  query_identifier = @query_identifier,
-  query_isbn = @query_isbn,
-  query_issn = @query_issn,
-  query_title = @query_title,
-  query_year = @query_year,
-  query_identifier_normalization = @query_identifier_normalization,
-  query_identifier_prefix = @query_identifier_prefix,
-  holdings_marc_call_number_subfield = @holdings_marc_call_number_subfield,
-  holdings_marc_item_id_subfield = @holdings_marc_item_id_subfield,
-  holdings_marc_location_subfield = @holdings_marc_location_subfield,
-  holdings_marc_main_field = @holdings_marc_main_field,
-  holdings_marc_restricted_subfield = @holdings_marc_restricted_subfield,
-  holdings_marc_shelving_location_subfield = @holdings_marc_shelving_location_subfield,
-  holdings_marc21plus1_enabled = @holdings_marc21plus1_enabled,
-  holdings_opac_enabled = @holdings_opac_enabled,
-  holdings_reservoir_enabled = @holdings_reservoir_enabled,
-  metadata_marc21_author = @metadata_marc21_author,
-  metadata_marc21_edition = @metadata_marc21_edition,
-  metadata_marc21_identifier = @metadata_marc21_identifier,
-  metadata_marc21_isbn = @metadata_marc21_isbn,
-  metadata_marc21_issn = @metadata_marc21_issn,
-  metadata_marc21_subtitle = @metadata_marc21_subtitle,
-  metadata_marc21_title = @metadata_marc21_title,
-  metadata_marc21_publisher = @metadata_marc21_publisher,
-  metadata_marc21_publication_date = @metadata_marc21_publication_date,
-  metadata_marc21_place_of_publication = @metadata_marc21_place_of_publication
-WHERE catalog_configs.entry = sqlc.narg('entry')
-RETURNING *;
+-- name: UpdateEntryConfigs :exec
+-- Replace the entire local configuration. Callers must include every
+-- container the entry should keep.
+UPDATE entries SET configs = @configs WHERE id = @id;
 
 -- name: CreateEntryTier :one
 INSERT INTO entry_tiers (
@@ -350,67 +221,6 @@ INSERT INTO closures (
   @end_date,
   @reason
 )
-RETURNING *;
-
--- name: UpsertLMSConfig :one
-INSERT INTO  lms_configs (
-  id, entry, address, from_agency, from_agency_authentication, to_agency, lookup_user_enabled,
-  accept_item_enabled, checkin_item_enabled, checkout_item_enabled, item_location, 
-  request_item_request_type, request_item_scope_type, bib_item_scope_name, request_item_bib_code,
-  request_item_enabled, request_item_pickup_location_enabled, requester_pickup_location, supplier_pickup_location,
-  requester_patron_pattern, patron_profiles, vendor, ncip_namespace_enabled, ncip_version, bib_id_normalization
-) VALUES (
-  coalesce(sqlc.narg('id'), gen_random_uuid()),
-  @entry,
-  @address,
-  @from_agency,
-  @from_agency_authentication,
-  @to_agency,
-  @lookup_user_enabled,
-  @accept_item_enabled,
-  @checkin_item_enabled,
-  @checkout_item_enabled,
-  @item_location,
-  @request_item_request_type,
-  @request_item_scope_type,
-  @bib_item_scope_name,
-  @request_item_bib_code,
-  @request_item_enabled,
-  @request_item_pickup_location_enabled,
-  @requester_pickup_location,
-  @supplier_pickup_location,
-  @requester_patron_pattern,
-  @patron_profiles,
-  @vendor,
-  @ncip_namespace_enabled,
-  @ncip_version,
-  @bib_id_normalization
-)
-ON CONFLICT (entry) DO UPDATE SET
-  vendor = @vendor,
-  ncip_namespace_enabled = @ncip_namespace_enabled,
-  ncip_version = @ncip_version,
-  bib_id_normalization = @bib_id_normalization,
-  address = @address,
-  from_agency = @from_agency,
-  from_agency_authentication = @from_agency_authentication,
-  to_agency = @to_agency,
-  lookup_user_enabled = @lookup_user_enabled,
-  accept_item_enabled = @accept_item_enabled,
-  checkin_item_enabled = @checkin_item_enabled,
-  checkout_item_enabled = @checkout_item_enabled,
-  item_location = @item_location,
-  request_item_request_type = @request_item_request_type,
-  request_item_scope_type = @request_item_scope_type,
-  bib_item_scope_name = @bib_item_scope_name,
-  request_item_bib_code = @request_item_bib_code,
-  request_item_enabled = @request_item_enabled,
-  request_item_pickup_location_enabled = @request_item_pickup_location_enabled,
-  requester_pickup_location = @requester_pickup_location,
-  supplier_pickup_location = @supplier_pickup_location,
-  requester_patron_pattern = @requester_patron_pattern,
-  patron_profiles = @patron_profiles
-WHERE lms_configs.entry = sqlc.narg('entry')
 RETURNING *;
 
 -- name: GetNetworkById :one
@@ -543,33 +353,6 @@ SELECT * FROM entry_tiers
   )
   LIMIT sqlc.arg('limit')
   OFFSET sqlc.arg('offset');
-
--- name: GetLMSConfigByEntry :one
-SELECT * FROM lms_configs 
-  WHERE entry = @entry;
-
--- name: DeleteLMSConfigByEntry :exec
-DELETE FROM lms_configs WHERE entry = @entry;
-
--- name: GetCatalogConfigByEntry :one
-SELECT * FROM catalog_configs
-  WHERE entry = @entry;
-
--- name: DeleteCatalogConfigByEntry :exec
-DELETE FROM catalog_configs WHERE entry = @entry;
-
--- name: UpsertHoldingsPolicy :one
-INSERT INTO holdings_policies (entry, policy)
-VALUES (@entry, @policy)
-ON CONFLICT (entry) DO UPDATE SET policy = @policy
-RETURNING *;
-
--- name: GetHoldingsPolicyByEntry :one
-SELECT * FROM holdings_policies
-WHERE entry = @entry;
-
--- name: DeleteHoldingsPolicyByEntry :exec
-DELETE FROM holdings_policies WHERE entry = @entry;
 
 -- name: LockTierByBusinessKey :one
 SELECT * FROM tiers

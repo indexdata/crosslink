@@ -64,7 +64,7 @@ func TestIllConfigListsPersistence(t *testing.T) {
 	response, body = jsonReq(t, http.MethodPatch, path, `{"illConfig":null}`, headers)
 	require.Equal(t, http.StatusNoContent, response.StatusCode, body)
 	var count int
-	require.NoError(t, dbpool.QueryRow(context.Background(), "SELECT count(*) FROM ill_configs WHERE entry=$1", entry["id"]).Scan(&count))
+	require.NoError(t, dbpool.QueryRow(context.Background(), "SELECT count(*) FROM entries WHERE id=$1 AND configs ? 'illConfig'", entry["id"]).Scan(&count))
 	require.Zero(t, count)
 }
 

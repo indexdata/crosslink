@@ -3,7 +3,6 @@ package importdb
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -114,7 +113,7 @@ func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.E
 	if err != nil {
 		return model.RepoResult{}, err
 	}
-	lenders, err := resolveLenders(ctx, queries, aggregate.Data.ILLConfig)
+	lenders, err := resolveLenders(ctx, queries, aggregate.Data)
 	if err != nil {
 		return model.RepoResult{}, err
 	}
@@ -127,13 +126,8 @@ func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.E
 	if err != nil {
 		return model.RepoResult{}, fmt.Errorf("lock entry hierarchy: %w", err)
 	}
-	var existingID *uuid.UUID
 	if exists {
 		existing = lockedEntries[existing.ID]
-		existingID = &existing.ID
-	}
-	if err := r.checkConfigPolicy(ctx, tx, queries, aggregate.Data, existingID); err != nil {
-		return model.RepoResult{}, err
 	}
 	if err := validateImportSymbolOwnership(ctx, queries, aggregate.Data.Symbols, aggregate.Key); err != nil {
 		return model.RepoResult{}, err
@@ -173,6 +167,20 @@ func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.E
 		return model.RepoResult{}, persistenceError("entry", key, err)
 	}
 	if err := replaceEntryChildren(ctx, queries, entryID, aggregate.Data); err != nil {
+		return model.RepoResult{}, persistenceError("entry", key, err)
+	}
+	// Resolve lenders after replacing symbols so an entry that lists itself as a
+	// lender uses its newly imported symbol.
+	containers, err := storedContainers(ctx, queries, aggregate.Data)
+	if err != nil {
+		return model.RepoResult{}, err
+	}
+	// The row lock keeps existing.Configs current from the policy check through
+	// the update. For a new entry, existing.Configs is nil.
+	if err := r.checkConfigPolicy(aggregate.Data.Type, containers, existing.Configs); err != nil {
+		return model.RepoResult{}, err
+	}
+	if err := queries.UpdateEntryConfigs(ctx, db.UpdateEntryConfigsParams{ID: entryID, Configs: containers}); err != nil {
 		return model.RepoResult{}, persistenceError("entry", key, err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -233,12 +241,13 @@ func resolveParent(ctx context.Context, queries *db.Queries, parent *uuid.UUID) 
 	return &entry, nil
 }
 
-func resolveLenders(ctx context.Context, queries *db.Queries, config *model.ILLConfig) ([]db.Entry, error) {
-	if config == nil {
-		return nil, nil
+func resolveLenders(ctx context.Context, queries *db.Queries, data model.EntryData) ([]db.Entry, error) {
+	ids, err := data.LendersOfLastResort()
+	if err != nil {
+		return nil, err
 	}
-	lenders := make([]db.Entry, 0, len(config.LendersOfLastResort))
-	for _, lender := range config.LendersOfLastResort {
+	lenders := make([]db.Entry, 0, len(ids))
+	for _, lender := range ids {
 		entry, err := queries.EntryById(ctx, lender)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("lender of last resort %s does not exist", lender)
@@ -340,6 +349,8 @@ func writeEntry(ctx context.Context, queries *db.Queries, existing db.Entry, exi
 	return created.ID, err
 }
 
+// replaceEntryChildren replaces the symbols, endpoints, addresses and closures
+// the entry owns with the import record's values.
 func replaceEntryChildren(ctx context.Context, queries *db.Queries, entryID uuid.UUID, data model.EntryData) error {
 	if err := queries.DeleteAllOwnedSymbols(ctx, entryID); err != nil {
 		return err
@@ -389,169 +400,5 @@ func replaceEntryChildren(ctx context.Context, queries *db.Queries, entryID uuid
 			return err
 		}
 	}
-	return replaceEntryConfigs(ctx, queries, entryID, data)
-}
-
-func replaceEntryConfigs(ctx context.Context, queries *db.Queries, entryID uuid.UUID, data model.EntryData) error {
-	if err := queries.DeleteLMSConfigByEntry(ctx, entryID); err != nil {
-		return err
-	}
-	if data.LMSConfig != nil {
-		cfg := data.LMSConfig
-		var patronProfiles []byte
-		if cfg.PatronProfiles != nil {
-			patronProfiles, _ = json.Marshal(cfg.PatronProfiles)
-		}
-		if _, err := queries.UpsertLMSConfig(ctx, db.UpsertLMSConfigParams{
-			NcipVersion: cfg.NcipVersion, Vendor: cfg.Vendor, NcipNamespaceEnabled: cfg.NcipNamespaceEnabled, BibIDNormalization: cfg.BibIDNormalization,
-			Entry: &entryID, Address: stringOrEmpty(cfg.Address), FromAgency: stringOrEmpty(cfg.FromAgency), FromAgencyAuthentication: cfg.FromAgencyAuthentication,
-			ToAgency: cfg.ToAgency, LookupUserEnabled: cfg.LookupUserEnabled, AcceptItemEnabled: cfg.AcceptItemEnabled,
-			CheckinItemEnabled: cfg.CheckInItemEnabled, CheckoutItemEnabled: cfg.CheckOutItemEnabled, ItemLocation: cfg.ItemLocation,
-			RequestItemRequestType: cfg.RequestItemRequestType, RequestItemScopeType: cfg.RequestItemRequestScopeType,
-			BibItemScopeName: cfg.BibItemScopeName, RequestItemBibCode: cfg.RequestItemBibIDCode, RequestItemEnabled: cfg.RequestItemEnabled,
-			RequestItemPickupLocationEnabled: cfg.RequestItemPickupLocationEnabled, RequesterPickupLocation: cfg.RequesterPickupLocation,
-			SupplierPickupLocation: cfg.SupplierPickupLocation, RequesterPatronPattern: cfg.RequesterPatronPattern,
-			PatronProfiles: patronProfiles,
-		}); err != nil {
-			return err
-		}
-	}
-	if err := replaceCatalogConfig(ctx, queries, entryID, data.CatalogConfig); err != nil {
-		return err
-	}
-	if err := replaceILLConfig(ctx, queries, entryID, data.ILLConfig); err != nil {
-		return err
-	}
-	if err := queries.DeleteHoldingsPolicyByEntry(ctx, entryID); err != nil {
-		return err
-	}
-	if data.HoldingsPolicy != nil {
-		policy, err := json.Marshal(data.HoldingsPolicy)
-		if err != nil {
-			return err
-		}
-		if _, err := queries.UpsertHoldingsPolicy(ctx, db.UpsertHoldingsPolicyParams{Entry: entryID, Policy: policy}); err != nil {
-			return err
-		}
-	}
 	return nil
-}
-
-func replaceCatalogConfig(ctx context.Context, queries *db.Queries, entryID uuid.UUID, config *model.CatalogConfig) error {
-	if err := queries.DeleteCatalogConfigByEntry(ctx, entryID); err != nil || config == nil {
-		return err
-	}
-	params := db.UpsertCatalogConfigParams{Entry: &entryID, Profile: config.Profile, MetadataUpdateMode: config.MetadataUpdateMode}
-	if config.SRU != nil {
-		params.SruAddress, params.SruRecordSchema = &config.SRU.Address, config.SRU.RecordSchema
-	}
-	if config.Zoom != nil {
-		params.ZoomAddress = &config.Zoom.Address
-		if config.Zoom.Options != nil {
-			params.ZoomOptions, _ = json.Marshal(config.Zoom.Options)
-		}
-	}
-	if config.Query != nil {
-		params.QueryType, params.QueryIdentifier, params.QueryIsbn, params.QueryIssn, params.QueryTitle = config.Query.Type, config.Query.Identifier, config.Query.ISBN, config.Query.ISSN, config.Query.Title
-		params.QueryYear = config.Query.Year
-		params.QueryIdentifierNormalization = config.Query.IdentifierNormalization
-		params.QueryIdentifierPrefix = config.Query.IdentifierPrefix
-	}
-	if config.HoldingsFormat != nil {
-		var err error
-		params.HoldingsConfig, err = json.Marshal(config.HoldingsFormat)
-		if err != nil {
-			return err
-		}
-		if config.HoldingsFormat.Marc != nil {
-			marc := config.HoldingsFormat.Marc
-			params.HoldingsMarcCallNumberSubfield, params.HoldingsMarcItemIDSubfield = marc.CallNumberSubfield, marc.ItemIDSubfield
-			params.HoldingsMarcLocationSubfield, params.HoldingsMarcMainField = marc.LocationSubfield, marc.MainField
-			params.HoldingsMarcRestrictedSubfield, params.HoldingsMarcShelvingLocationSubfield = marc.RestrictedSubfield, marc.ShelvingLocationSubfield
-		}
-		params.HoldingsMarc21plus1Enabled = boolPointer(config.HoldingsFormat.Marc21Plus1 != nil)
-		params.HoldingsOpacEnabled = boolPointer(config.HoldingsFormat.OPAC != nil)
-		params.HoldingsReservoirEnabled = boolPointer(config.HoldingsFormat.Reservoir != nil)
-	}
-	if config.MetadataFormat != nil && config.MetadataFormat.Marc21 != nil {
-		marc := config.MetadataFormat.Marc21
-		params.MetadataMarc21Publisher = marc.Publisher
-		params.MetadataMarc21PublicationDate = marc.PublicationDate
-		params.MetadataMarc21PlaceOfPublication = marc.PlaceOfPublication
-
-		params.MetadataMarc21Author, params.MetadataMarc21Edition, params.MetadataMarc21Identifier = marc.Author, marc.Edition, marc.Identifier
-		params.MetadataMarc21Isbn, params.MetadataMarc21Issn, params.MetadataMarc21Subtitle, params.MetadataMarc21Title = marc.ISBN, marc.ISSN, marc.Subtitle, marc.Title
-	}
-	_, err := queries.UpsertCatalogConfig(ctx, params)
-	return err
-}
-
-func replaceILLConfig(ctx context.Context, queries *db.Queries, entryID uuid.UUID, config *model.ILLConfig) error {
-	if err := queries.DeleteIllConfigByEntry(ctx, entryID); err != nil || config == nil {
-		return err
-	}
-	// A null list is stored as NULL so that an inherited list applies; an
-	// empty list is stored as an empty array, which blocks inheritance.
-	var lenders []string
-	if config.LendersOfLastResort != nil {
-		lenders = make([]string, 0, len(config.LendersOfLastResort))
-	}
-	for _, lenderID := range config.LendersOfLastResort {
-		symbol, err := lenderSymbol(ctx, queries, lenderID)
-		if err != nil {
-			return err
-		}
-		lenders = append(lenders, symbol)
-	}
-	params := db.UpsertIllConfigParams{
-		IsPickupLocation: config.IsPickupLocation,
-		Entry:            entryID, Iso18626Url: config.ISO18626URL, Iso18626Vendor: config.ISO18626Vendor, LendersOfLastResort: lenders,
-		IncludeRequestingAgencyInfo: config.IncludeRequestingAgencyInfo, IncludeSupplierInfo: config.IncludeSupplierInfo,
-		IncludeReturnInfo: config.IncludeReturnInfo, IncludeVendorNote: config.IncludeVendorNote, UseOfferedCosts: config.UseOfferedCosts,
-		NoteFieldSeparator: config.NoteFieldSeparator, SupplierPatronPattern: config.SupplierPatronPattern,
-		RequestIDPrefix:           config.RequestIdPrefix,
-		DuplicateCheckWindowHours: config.DuplicateCheckWindowHours,
-		DefaultLoanPeriod:         config.DefaultLoanPeriod,
-		MaxRequestsPerPatron:      config.MaxRequestsPerPatron,
-		MinimumCost:               config.MinimumCost,
-		LoadBalancingPolicy:       config.LoadBalancingPolicy,
-	}
-	if config.DefaultCopyrightType != nil {
-		data, err := json.Marshal(config.DefaultCopyrightType)
-		if err != nil {
-			return fmt.Errorf("encode illConfig.defaultCopyrightType: %w", err)
-		}
-		params.DefaultCopyrightType = data
-	}
-	for _, field := range []struct {
-		name   string
-		codes  *[]model.IllConfigCodeDescription
-		target *[]byte
-	}{
-		{"unfilledReasons", config.UnfilledReasons, &params.UnfilledReasons},
-		{"cancellationReasons", config.CancellationReasons, &params.CancellationReasons},
-		{"loanConditions", config.LoanConditions, &params.LoanConditions},
-	} {
-		if field.codes == nil {
-			continue
-		}
-		data, err := json.Marshal(*field.codes)
-		if err != nil {
-			return fmt.Errorf("encode illConfig.%s: %w", field.name, err)
-		}
-		*field.target = data
-	}
-	_, err := queries.UpsertIllConfig(ctx, params)
-	return err
-}
-
-func boolPointer(value bool) *bool { return &value }
-
-// stringOrEmpty encodes an unset LMS address or agency as the empty string
-// that the NOT NULL columns use for "unset".
-func stringOrEmpty(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
 }

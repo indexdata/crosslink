@@ -1,7 +1,6 @@
 package test
 
 import (
-	"context"
 	"encoding/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,8 +39,6 @@ func TestLoadBalancingPolicyPersistenceAndValidation(t *testing.T) {
 			assert.False(t, present)
 		}
 	}
-	_, err := dbpool.Exec(context.Background(), `UPDATE ill_configs SET load_balancing_policy='invalid' WHERE entry='00000000-0000-0000-0000-000000000004'`)
-	require.Error(t, err, "database constraint rejects invalid policies")
 
 	institution := "/entries/by-id/00000000-0000-0000-0000-000000000002"
 	response, body := jsonReq(t, http.MethodPatch, institution, `{"illConfig":{"loadBalancingPolicy":"deficit"}}`, headers)

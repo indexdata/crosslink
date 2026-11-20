@@ -6,12 +6,14 @@
   name: No Symbol
   description: A very particular test entry
   type: Institution
+  configs: '{"lmsConfig":{"address":"https://not.really.real","fromAgency":"diku","fromAgencyAuthentication":"the_beaver_flies_at_twilight"}}'
 - id: 00000000-0000-0000-0000-000000000002
   parent: 00000000-0000-0000-0000-000000000004
   name: An Institution
   contact_name: Bob
   tenant: ANINST
   type: Institution
+  configs: '{"lmsConfig":{"address":"https://also.not.real","fromAgency":"rivendell","fromAgencyAuthentication":"pack_extra_lembas","acceptItemEnabled":true}}'
 - id: 00000000-0000-0000-0000-000000000003
   parent: 00000000-0000-0000-0000-000000000004
   name: Eine Weitere Einrichtung

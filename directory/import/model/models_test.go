@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,7 +38,7 @@ func TestEntryAggregateAcceptsUUIDIndependentOfSymbols(t *testing.T) {
 
 func TestEntryAggregateRejectsNilLender(t *testing.T) {
 	aggregate := validEntryAggregate()
-	aggregate.Data.ILLConfig = &ILLConfig{LendersOfLastResort: []uuid.UUID{uuid.Nil}}
+	aggregate.Data.ILLConfig = json.RawMessage(`{"lendersOfLastResort":["00000000-0000-0000-0000-000000000000"]}`)
 	require.EqualError(t, aggregate.NormalizeAndValidate(), "lender of last resort 1 must be a valid UUID")
 }
 
@@ -93,17 +94,4 @@ func TestEntryAggregateValidatesLendToBorrowRatio(t *testing.T) {
 
 func validEntryAggregate() EntryAggregate {
 	return EntryAggregate{Key: uuid.New(), Data: EntryData{Name: "Library", Type: "Institution", Symbols: []SymbolRef{{Authority: "isil", Symbol: "lib"}}}}
-}
-
-func TestEntryAggregateLoadBalancingPolicy(t *testing.T) {
-	for _, policy := range []string{"deficit", "proportional", "invalid", ""} {
-		aggregate := validEntryAggregate()
-		aggregate.Data.ILLConfig = &ILLConfig{LoadBalancingPolicy: &policy}
-		err := aggregate.NormalizeAndValidate()
-		if policy == "invalid" || policy == "" {
-			require.Error(t, err)
-		} else {
-			require.NoError(t, err)
-		}
-	}
 }

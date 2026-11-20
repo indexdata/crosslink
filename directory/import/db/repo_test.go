@@ -2,9 +2,11 @@ package importdb_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -145,32 +147,32 @@ func TestImportEntryCreatesCompleteAggregateWithGeneratedIDs(t *testing.T) {
 	require.NotEqual(t, uuid.Nil, entryID)
 	for table, expected := range map[string]int{
 		"symbols": 1, "service_endpoints": 1, "addresses": 1, "address_components": 1, "closures": 1,
-		"lms_configs": 1, "catalog_configs": 1, "ill_configs": 1, "holdings_policies": 1,
+		"lmsConfig": 1, "catalogConfig": 1, "illConfig": 1, "holdingsPolicy": 1,
 	} {
 		assertOwnedCount(t, table, entryID, expected)
 	}
 	var authentication string
-	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT from_agency_authentication FROM lms_configs WHERE entry=$1`, entryID).Scan(&authentication))
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT configs->'lmsConfig'->>'fromAgencyAuthentication' FROM entries WHERE id=$1`, entryID).Scan(&authentication))
 	require.Equal(t, "credential-value", authentication)
 	var queryYear string
-	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT query_year FROM catalog_configs WHERE entry=$1`, entryID).Scan(&queryYear))
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT configs->'catalogConfig'->'queryConfig'->>'year' FROM entries WHERE id=$1`, entryID).Scan(&queryYear))
 	require.Equal(t, "dc.date = {term}", queryYear)
 	var publisher, publicationDate, placeOfPublication string
-	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT metadata_marc21_publisher, metadata_marc21_publication_date, metadata_marc21_place_of_publication FROM catalog_configs WHERE entry=$1`, entryID).Scan(&publisher, &publicationDate, &placeOfPublication))
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT m->>'publisher', m->>'publicationDate', m->>'placeOfPublication' FROM entries, jsonb_extract_path(configs, 'catalogConfig', 'metadataFormat', 'marc21') m WHERE id=$1`, entryID).Scan(&publisher, &publicationDate, &placeOfPublication))
 	require.Equal(t, "264*1$b/260$b", publisher)
 	require.Equal(t, "264*1$c/260$c", publicationDate)
 	require.Equal(t, "264*1$a/260$a", placeOfPublication)
 	var zoomOptions map[string]string
-	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT zoom_options FROM catalog_configs WHERE entry=$1`, entryID).Scan(&zoomOptions))
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT configs->'catalogConfig'->'zoom'->'options' FROM entries WHERE id=$1`, entryID).Scan(&zoomOptions))
 	require.Equal(t, map[string]string{"user": "private"}, zoomOptions)
 	var isPickupLocation bool
-	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT is_pickup_location FROM ill_configs WHERE entry=$1`, entryID).Scan(&isPickupLocation))
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT (configs->'illConfig'->>'isPickupLocation')::boolean FROM entries WHERE id=$1`, entryID).Scan(&isPickupLocation))
 	require.True(t, isPickupLocation)
 	var maxRequestsPerPatron int32
-	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT max_requests_per_patron FROM ill_configs WHERE entry=$1`, entryID).Scan(&maxRequestsPerPatron))
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT (configs->'illConfig'->>'maxRequestsPerPatron')::integer FROM entries WHERE id=$1`, entryID).Scan(&maxRequestsPerPatron))
 	require.Zero(t, maxRequestsPerPatron)
 	var minimumCost float64
-	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT minimum_cost FROM ill_configs WHERE entry=$1`, entryID).Scan(&minimumCost))
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT (configs->'illConfig'->>'minimumCost')::float8 FROM entries WHERE id=$1`, entryID).Scan(&minimumCost))
 	require.Equal(t, 1.25, minimumCost)
 }
 
@@ -201,10 +203,10 @@ func TestImportEntryConflictPoliciesAndUpdateFullSynchronization(t *testing.T) {
 	require.Equal(t, model.OutcomeImported, updated.Outcome)
 	require.Equal(t, entryID, aggregate.Key)
 	assertOwnedCount(t, "service_endpoints", entryID, 0)
-	assertOwnedCount(t, "lms_configs", entryID, 0)
-	assertOwnedCount(t, "catalog_configs", entryID, 0)
-	assertOwnedCount(t, "ill_configs", entryID, 0)
-	assertOwnedCount(t, "holdings_policies", entryID, 0)
+	assertOwnedCount(t, "lmsConfig", entryID, 0)
+	assertOwnedCount(t, "catalogConfig", entryID, 0)
+	assertOwnedCount(t, "illConfig", entryID, 0)
+	assertOwnedCount(t, "holdingsPolicy", entryID, 0)
 	var name string
 	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT name FROM entries WHERE id=$1`, entryID).Scan(&name))
 	require.Equal(t, "Updated Consortium", name)
@@ -221,16 +223,14 @@ func TestImportEntryUpdateReplacesLMSPatronProfiles(t *testing.T) {
 	resetImportDatabase(t)
 	repo := importdb.New(testPool, nil)
 	aggregate := completeEntryAggregate("CON")
-	initialProfiles := []model.PatronProfile{{Code: stringPointer("STAFF"), CanCreateRequests: true}}
-	aggregate.Data.LMSConfig.PatronProfiles = &initialProfiles
+	setContainerField(t, &aggregate.Data.LMSConfig, "patronProfiles", []any{map[string]any{"code": "STAFF", "canCreateRequests": true}})
 
 	_, err := repo.ImportEntry(context.Background(), aggregate, model.ConflictPolicyFail)
 	require.NoError(t, err)
 	entryID := aggregate.Key
 	require.JSONEq(t, `[{"code":"STAFF","canCreateRequests":true}]`, lmsPatronProfiles(t, entryID))
 
-	replacementProfiles := []model.PatronProfile{{Name: stringPointer("Blocked"), CanCreateRequests: false}}
-	aggregate.Data.LMSConfig.PatronProfiles = &replacementProfiles
+	setContainerField(t, &aggregate.Data.LMSConfig, "patronProfiles", []any{map[string]any{"name": "Blocked", "canCreateRequests": false}})
 	_, err = repo.ImportEntry(context.Background(), aggregate, model.ConflictPolicyUpdate)
 	require.NoError(t, err)
 	require.JSONEq(t, `[{"name":"Blocked","canCreateRequests":false}]`, lmsPatronProfiles(t, entryID))
@@ -245,14 +245,14 @@ func TestImportEntryPersistsLenderUUIDAsDirectorySymbol(t *testing.T) {
 	require.NoError(t, err)
 
 	requester := minimalEntryAggregate("REQUESTER", "Institution")
-	requester.Data.ILLConfig = &model.ILLConfig{LendersOfLastResort: []uuid.UUID{lender.Key}}
+	requester.Data.ILLConfig = lendersConfig(lender.Key)
 	_, err = repo.ImportEntry(context.Background(), requester, model.ConflictPolicyFail)
 	require.NoError(t, err)
 
-	var lenders []string
+	var lenders []map[string]string
 	require.NoError(t, testPool.QueryRow(context.Background(),
-		`SELECT lenders_of_last_resort FROM ill_configs WHERE entry=$1`, requester.Key).Scan(&lenders))
-	require.Equal(t, []string{"ALT:ALIAS"}, lenders)
+		`SELECT configs->'illConfig'->'lendersOfLastResort' FROM entries WHERE id=$1`, requester.Key).Scan(&lenders))
+	require.Equal(t, []map[string]string{{"authority": "ALT", "symbol": "ALIAS"}}, lenders)
 }
 
 func TestImportEntryRejectsLenderWithoutSymbol(t *testing.T) {
@@ -264,7 +264,7 @@ func TestImportEntryRejectsLenderWithoutSymbol(t *testing.T) {
 	require.NoError(t, err)
 
 	requester := minimalEntryAggregate("REQUESTER", "Institution")
-	requester.Data.ILLConfig = &model.ILLConfig{LendersOfLastResort: []uuid.UUID{lender.Key}}
+	requester.Data.ILLConfig = lendersConfig(lender.Key)
 	_, err = repo.ImportEntry(context.Background(), requester, model.ConflictPolicyFail)
 
 	require.ErrorContains(t, err, "lender of last resort "+lender.Key.String()+" has no symbol")
@@ -280,7 +280,7 @@ func TestImportEntryRejectsLenderWithoutSerializableSymbol(t *testing.T) {
 	require.NoError(t, err)
 
 	requester := minimalEntryAggregate("REQUESTER", "Institution")
-	requester.Data.ILLConfig = &model.ILLConfig{LendersOfLastResort: []uuid.UUID{lender.Key}}
+	requester.Data.ILLConfig = lendersConfig(lender.Key)
 	_, err = repo.ImportEntry(context.Background(), requester, model.ConflictPolicyFail)
 
 	require.ErrorContains(t, err, "lender of last resort "+lender.Key.String()+" has no symbol")
@@ -461,10 +461,10 @@ func TestConcurrentImportEntryOpposingLendersDoNotDeadlock(t *testing.T) {
 
 		first := minimalEntryAggregate(firstSymbol, "Institution")
 		first.Key = firstID
-		first.Data.ILLConfig = &model.ILLConfig{LendersOfLastResort: []uuid.UUID{secondID}}
+		first.Data.ILLConfig = lendersConfig(secondID)
 		second := minimalEntryAggregate(secondSymbol, "Institution")
 		second.Key = secondID
-		second.Data.ILLConfig = &model.ILLConfig{LendersOfLastResort: []uuid.UUID{firstID}}
+		second.Data.ILLConfig = lendersConfig(firstID)
 		pairs[index] = importPair{first: first, second: second}
 	}
 
@@ -690,9 +690,7 @@ func TestImportEntryRejectsAmbiguousLenderAuthorityBeforeWriting(t *testing.T) {
 	resetImportDatabase(t)
 	repo := importdb.New(testPool, nil)
 	aggregate := minimalEntryAggregate("CON", "Consortium")
-	aggregate.Data.ILLConfig = &model.ILLConfig{
-		LendersOfLastResort: []uuid.UUID{uuid.Nil},
-	}
+	aggregate.Data.ILLConfig = lendersConfig(uuid.Nil)
 
 	_, err := repo.ImportEntry(context.Background(), aggregate, model.ConflictPolicyFail)
 
@@ -1382,40 +1380,45 @@ func assertTierDoesNotExist(t *testing.T, consortium uuid.UUID, name string) {
 func lmsPatronProfiles(t *testing.T, entryID uuid.UUID) string {
 	t.Helper()
 	var profiles []byte
-	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT patron_profiles FROM lms_configs WHERE entry=$1`, entryID).Scan(&profiles))
+	require.NoError(t, testPool.QueryRow(context.Background(), `SELECT configs->'lmsConfig'->'patronProfiles' FROM entries WHERE id=$1`, entryID).Scan(&profiles))
 	return string(profiles)
 }
 
 func completeEntryAggregate(symbol string) model.EntryAggregate {
 	aggregate := minimalEntryAggregate(symbol, "Consortium")
-	text := "value"
-	metadataMode := "replace"
-	truth := true
-	zero := int32(0)
-	minimumCost := 1.25
 	aggregate.Data.Endpoints = []model.ServiceEndpoint{{Name: "ISO", Type: "ISO18626", Address: "https://example.test/ill"}}
 	aggregate.Data.Addresses = []model.Address{{Type: "Default", Components: []model.AddressComponent{{Seq: 1, Type: "Locality", Value: "Riga"}}}}
 	aggregate.Data.Closures = []model.Closure{{StartDate: "2026-12-24", EndDate: "2026-12-26", Reason: "Holiday"}}
-	aggregate.Data.LMSConfig = &model.LMSConfig{Address: stringPointer("https://example.test/ncip"), FromAgency: stringPointer("FROM"), FromAgencyAuthentication: stringPointer("credential-value")}
-	aggregate.Data.CatalogConfig = &model.CatalogConfig{
-		MetadataUpdateMode: &metadataMode,
-		Zoom:               &model.ZoomConfig{Address: "example.test:210", Options: &map[string]string{"user": "private"}},
-		Query:              &model.QueryConfig{Identifier: &text, Year: stringPointer("dc.date = {term}")},
-		HoldingsFormat:     &model.HoldingsParserConfig{Marc: &model.MarcHoldingsParserConfig{MainField: &text}},
-		MetadataFormat:     &model.MetadataParserConfig{Marc21: &model.MarcMetadataParserConfig{Title: &text, Publisher: stringPointer("264*1$b/260$b"), PublicationDate: stringPointer("264*1$c/260$c"), PlaceOfPublication: stringPointer("264*1$a/260$a")}},
-	}
-
-	aggregate.Data.ILLConfig = &model.ILLConfig{IsPickupLocation: &truth, ISO18626URL: &text, LendersOfLastResort: []uuid.UUID{}, IncludeSupplierInfo: &truth, MaxRequestsPerPatron: &zero, MinimumCost: &minimumCost}
-	aggregate.Data.HoldingsPolicy = &model.HoldingsPolicy{
-		Locations:         []model.HoldingsLocation{{Code: "MAIN", Name: "Main", SupplyPreference: 1}},
-		ShelvingLocations: []model.HoldingsShelvingLocation{},
-		LocationPolicies:  []model.HoldingsLocationPolicy{},
-		ItemLoanPolicies:  []model.HoldingsItemLoanPolicy{{Code: "BOOK", Name: "Book", Lendable: true}},
-	}
+	aggregate.Data.LMSConfig = json.RawMessage(`{"address":"https://example.test/ncip","fromAgency":"FROM","fromAgencyAuthentication":"credential-value"}`)
+	aggregate.Data.CatalogConfig = json.RawMessage(`{"metadataUpdateMode":"replace",
+		"zoom":{"address":"example.test:210","options":{"user":"private"}},
+		"queryConfig":{"identifier":"value","year":"dc.date = {term}"},
+		"holdingsFormat":{"marc":{"mainField":"value"}},
+		"metadataFormat":{"marc21":{"title":"value","publisher":"264*1$b/260$b","publicationDate":"264*1$c/260$c","placeOfPublication":"264*1$a/260$a"}}}`)
+	aggregate.Data.ILLConfig = json.RawMessage(`{"isPickupLocation":true,"iso18626Url":"value","lendersOfLastResort":[],"includeSupplierInfo":true,"maxRequestsPerPatron":0,"minimumCost":1.25}`)
+	aggregate.Data.HoldingsPolicy = json.RawMessage(`{"locations":[{"code":"MAIN","name":"Main","supplyPreference":1}],"shelvingLocations":[],"locationPolicies":[],
+		"itemLoanPolicies":[{"code":"BOOK","name":"Book","lendable":true}]}`)
 	return aggregate
 }
 
-func stringPointer(value string) *string { return &value }
+// lendersConfig is an illConfig that lists only the given lenders of last
+// resort.
+func lendersConfig(ids ...uuid.UUID) json.RawMessage {
+	data, _ := json.Marshal(map[string]any{"lendersOfLastResort": ids})
+	return data
+}
+
+// setContainerField sets one field of an import record's configuration
+// container.
+func setContainerField(t *testing.T, container *json.RawMessage, field string, value any) {
+	t.Helper()
+	fields := map[string]any{}
+	require.NoError(t, json.Unmarshal(*container, &fields))
+	fields[field] = value
+	data, err := json.Marshal(fields)
+	require.NoError(t, err)
+	*container = data
+}
 
 func minimalEntryAggregate(symbol, entryType string) model.EntryAggregate {
 	key := uuid.New()
@@ -1566,8 +1569,13 @@ func assertOwnedCount(t *testing.T, table string, entryID uuid.UUID, expected in
 		ownerColumn = "owner"
 	}
 	query := fmt.Sprintf(`SELECT count(*) FROM %s WHERE %s=$1`, table, ownerColumn) //nolint:gosec // table names are fixed test constants
-	if table == "address_components" {
+	switch table {
+	case "address_components":
 		query = `SELECT count(*) FROM address_components ac JOIN addresses a ON a.id=ac.address WHERE a.entry=$1`
+	case "illConfig", "lmsConfig", "catalogConfig", "holdingsPolicy":
+		// A configuration container is a key in the entry's configs, so
+		// the count is 1 when the entry stores it and 0 when it does not.
+		query = fmt.Sprintf(`SELECT count(*) FROM entries WHERE id=$1 AND configs ? '%s'`, table) //nolint:gosec // fixed test constant
 	}
 	var count int
 	require.NoError(t, testPool.QueryRow(context.Background(), query, entryID).Scan(&count))
@@ -1587,11 +1595,11 @@ func TestImportLoadBalancingPolicyPersistence(t *testing.T) {
 	repo := importdb.New(testPool, nil)
 	aggregate := completeEntryAggregate("POLICY")
 	for _, value := range []*string{policyStringPointer("proportional"), policyStringPointer("deficit"), nil} {
-		aggregate.Data.ILLConfig.LoadBalancingPolicy = value
+		setContainerField(t, &aggregate.Data.ILLConfig, "loadBalancingPolicy", value)
 		_, err := repo.ImportEntry(context.Background(), aggregate, model.ConflictPolicyUpdate)
 		require.NoError(t, err)
 		var stored *string
-		require.NoError(t, testPool.QueryRow(context.Background(), `SELECT load_balancing_policy FROM ill_configs WHERE entry=$1`, aggregate.Key).Scan(&stored))
+		require.NoError(t, testPool.QueryRow(context.Background(), `SELECT configs->'illConfig'->>'loadBalancingPolicy' FROM entries WHERE id=$1`, aggregate.Key).Scan(&stored))
 		require.Equal(t, value, stored)
 	}
 }
@@ -1599,23 +1607,37 @@ func TestImportLoadBalancingPolicyPersistence(t *testing.T) {
 func policyStringPointer(value string) *string { return &value }
 
 func TestLoadBalancingPolicyMigrationRoundTrip(t *testing.T) {
-	resetImportDatabase(t)
-	aggregate := completeEntryAggregate("MIGRATION")
-	_, err := importdb.New(testPool, nil).ImportEntry(context.Background(), aggregate, model.ConflictPolicyFail)
-	require.NoError(t, err)
 	ctx := context.Background()
 	tx, err := testPool.Begin(ctx)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, tx.Rollback(ctx)) }()
-	for _, direction := range []string{"down", "up"} {
-		sql, err := os.ReadFile("../../migrations/017_load_balancing_policy." + direction + ".sql")
+	_, err = tx.Exec(ctx, "CREATE SCHEMA load_balancing_migration_test; SET LOCAL search_path TO load_balancing_migration_test")
+	require.NoError(t, err)
+	migration := func(version int, direction string) string {
+		t.Helper()
+		paths, err := filepath.Glob(fmt.Sprintf("../../migrations/%03d_*.%s.sql", version, direction))
 		require.NoError(t, err)
-		_, err = tx.Exec(ctx, string(sql))
+		require.Len(t, paths, 1)
+		sql, err := os.ReadFile(paths[0])
+		require.NoError(t, err)
+		return string(sql)
+	}
+	for version := 1; version <= 17; version++ {
+		_, err = tx.Exec(ctx, migration(version, "up"))
+		require.NoError(t, err, version)
+	}
+	id := uuid.New()
+	_, err = tx.Exec(ctx, `INSERT INTO entries (id, name, type) VALUES ($1, 'Migration', 'Consortium')`, id)
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, `INSERT INTO ill_configs (entry, load_balancing_policy) VALUES ($1, 'deficit')`, id)
+	require.NoError(t, err)
+	for _, direction := range []string{"down", "up"} {
+		_, err = tx.Exec(ctx, migration(17, direction))
 		require.NoError(t, err)
 	}
 	var policy *string
-	require.NoError(t, tx.QueryRow(ctx, `SELECT load_balancing_policy FROM ill_configs WHERE entry=$1`, aggregate.Key).Scan(&policy))
+	require.NoError(t, tx.QueryRow(ctx, `SELECT load_balancing_policy FROM ill_configs WHERE entry=$1`, id).Scan(&policy))
 	require.Nil(t, policy, "existing entries remain unset")
-	_, err = tx.Exec(ctx, `UPDATE ill_configs SET load_balancing_policy='proportional' WHERE entry=$1`, aggregate.Key)
+	_, err = tx.Exec(ctx, `UPDATE ill_configs SET load_balancing_policy='proportional' WHERE entry=$1`, id)
 	require.NoError(t, err)
 }

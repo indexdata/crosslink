@@ -54,13 +54,6 @@ func derefOrDefault[T any](ptr *T, defaultValue T) T {
 	return defaultValue
 }
 
-func derefOrDefaultPtr[T any](ptr *T, defaultValue *T) *T {
-	if ptr != nil {
-		return ptr
-	}
-	return defaultValue
-}
-
 func isUniqueConstraintViolation(err error, constraint string) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == constraint

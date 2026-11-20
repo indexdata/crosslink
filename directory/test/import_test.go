@@ -64,7 +64,7 @@ func TestImportOrderedAggregates(t *testing.T) {
 		require.Equal(t, expected, count)
 	}
 	var lmsCount int
-	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT count(*) FROM lms_configs WHERE entry=$1`, institutionID).Scan(&lmsCount))
+	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT count(*) FROM entries WHERE id=$1 AND configs ? 'lmsConfig'`, institutionID).Scan(&lmsCount))
 	require.Equal(t, 1, lmsCount)
 	var tierAssignments, networkAssignments int
 	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT count(*) FROM entry_tiers`).Scan(&tierAssignments))
@@ -316,12 +316,12 @@ func TestImportHostSettingsRoundTrip(t *testing.T) {
 			var vendor, normalization, profile, version string
 			var namespace bool
 			var raw []byte
-			require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT vendor, ncip_namespace_enabled, bib_id_normalization, ncip_version FROM lms_configs WHERE entry=$1`, id).Scan(&vendor, &namespace, &normalization, &version))
+			require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT configs->'lmsConfig'->>'vendor', (configs->'lmsConfig'->>'ncipNamespaceEnabled')::boolean, configs->'lmsConfig'->>'bibIdNormalization', configs->'lmsConfig'->>'ncipVersion' FROM entries WHERE id=$1`, id).Scan(&vendor, &namespace, &normalization, &version))
 			require.Equal(t, "1.0", version)
 			require.Equal(t, "Sierra", vendor)
 			require.False(t, namespace)
 			require.Equal(t, "none", normalization)
-			require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT profile, holdings_config FROM catalog_configs WHERE entry=$1`, id).Scan(&profile, &raw))
+			require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT configs->'catalogConfig'->>'profile', configs->'catalogConfig'->'holdingsFormat' FROM entries WHERE id=$1`, id).Scan(&profile, &raw))
 			require.Equal(t, "Koha", profile)
 			require.JSONEq(t, tc.expected, string(raw))
 			res, body := jsonReq(t, http.MethodGet, "/entries/by-id/"+id.String(), "", standardHeaders)
@@ -355,10 +355,36 @@ func TestImportHostSettingsRoundTrip(t *testing.T) {
 	require.Empty(t, result.Errors)
 	id := importedEntryID(t, "ISIL", "HOST")
 	var cleared bool
-	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT ncip_version IS NULL AND vendor IS NULL AND ncip_namespace_enabled IS NULL AND bib_id_normalization IS NULL FROM lms_configs WHERE entry=$1`, id).Scan(&cleared))
+	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT NOT (configs->'lmsConfig' ?| ARRAY['ncipVersion', 'vendor', 'ncipNamespaceEnabled', 'bibIdNormalization']) FROM entries WHERE id=$1`, id).Scan(&cleared))
 	require.True(t, cleared)
-	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT profile IS NULL AND holdings_config IS NULL FROM catalog_configs WHERE entry=$1`, id).Scan(&cleared))
+	require.NoError(t, dbpool.QueryRow(context.Background(), `SELECT NOT (configs->'catalogConfig' ? 'profile' OR configs->'catalogConfig' ? 'holdingsFormat') FROM entries WHERE id=$1`, id).Scan(&cleared))
 	require.True(t, cleared)
+}
+
+// TestImportStoresWholeNumbersAsIntegers verifies that the entry API can read
+// integer fields imported with decimal or exponent notation.
+func TestImportStoresWholeNumbersAsIntegers(t *testing.T) {
+	resetImportState(t)
+	key := symbolObject("ISIL", "WHOLE")
+	record := entryImportRecord(key, "Whole numbers", nil, "Institution")
+	data := record["data"].(map[string]any)
+	data["illConfig"] = map[string]any{
+		"iso18626Url": nil, "iso18626Vendor": nil, "lendersOfLastResort": nil,
+		"includeRequestingAgencyInfo": nil, "includeSupplierInfo": nil, "includeReturnInfo": nil,
+		"includeVendorNote": nil, "useOfferedCosts": nil, "noteFieldSeparator": nil,
+		"supplierPatronPattern": nil, "duplicateCheckWindowHours": json.RawMessage("1e1"),
+		"defaultLoanPeriod": json.RawMessage("10.0"), "minimumCost": json.RawMessage("1.50"),
+	}
+	data["holdingsPolicy"] = map[string]any{
+		"locations":         []any{map[string]any{"code": "MAIN", "name": "Main", "supplyPreference": json.RawMessage("1.0")}},
+		"shelvingLocations": []any{}, "locationPolicies": []any{}, "itemLoanPolicies": []any{},
+	}
+	_, result := importRequest(t, []any{record}, "", standardHeaders)
+	require.Empty(t, result.Errors)
+
+	entry := getEntryJSON(t, "/entries/by-id/"+importEntryUUID(key).String()+"?resolve-inherit=false", systemHeaders)
+	require.Equal(t, map[string]any{"defaultLoanPeriod": float64(10), "duplicateCheckWindowHours": float64(10), "minimumCost": 1.5}, entry["illConfig"])
+	require.Equal(t, float64(1), entry["holdingsPolicy"].(map[string]any)["locations"].([]any)[0].(map[string]any)["supplyPreference"])
 }
 
 func TestImportAdditionalProfileOptions(t *testing.T) {

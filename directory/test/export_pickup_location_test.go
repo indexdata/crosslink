@@ -121,7 +121,7 @@ func TestDirectoryExportPickupLocations(t *testing.T) {
 				require.Empty(t, result.Errors)
 				id := importedEntryID(t, "ISIL", key["symbol"].(string))
 				var enabled bool
-				require.NoError(t, dbpool.QueryRow(context.Background(), "SELECT EXISTS (SELECT 1 FROM ill_configs WHERE entry=$1 AND is_pickup_location)", id).Scan(&enabled))
+				require.NoError(t, dbpool.QueryRow(context.Background(), "SELECT COALESCE((configs->'illConfig'->>'isPickupLocation')::boolean, false) FROM entries WHERE id=$1", id).Scan(&enabled))
 				require.Equal(t, tc.enabled, enabled)
 			}
 		})

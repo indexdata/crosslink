@@ -1,11 +1,8 @@
 package api
 
 import (
-	"encoding/json"
 	"testing"
 
-	"github.com/google/uuid"
-	"github.com/indexdata/crosslink/directory/db"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,37 +27,5 @@ func TestDefaultCopyrightTypeContract(t *testing.T) {
 				require.Error(t, schema.VisitJSON(invalid))
 			}
 		}
-	}
-}
-
-func TestDefaultCopyrightTypeMapping(t *testing.T) {
-	original := []byte(`{"code":"Original","defaultDesc":"Original description"}`)
-	for _, tc := range []struct {
-		name, body, wantCreate, wantPatch string
-	}{
-		{"omitted", `{}`, "", string(original)},
-		{"null", `{"defaultCopyrightType":null}`, "", ""},
-		{"object", `{"defaultCopyrightType":{"code":"Custom","defaultDesc":"New"}}`, `{"code":"Custom","defaultDesc":"New"}`, `{"code":"Custom","defaultDesc":"New"}`},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			var cfg IllConfig
-			require.NoError(t, json.Unmarshal([]byte(tc.body), &cfg))
-			created, err := illConfigToDBParams(uuid.New(), cfg)
-			require.NoError(t, err)
-			var patch IllConfigPatch
-			require.NoError(t, json.Unmarshal([]byte(tc.body), &patch))
-			patched, err := illConfigPatchToDBParams(uuid.New(), patch, db.IllConfig{DefaultCopyrightType: original})
-			require.NoError(t, err)
-			for _, value := range []struct {
-				got  []byte
-				want string
-			}{{created.DefaultCopyrightType, tc.wantCreate}, {patched.DefaultCopyrightType, tc.wantPatch}} {
-				if value.want == "" {
-					require.Nil(t, value.got)
-				} else {
-					require.JSONEq(t, value.want, string(value.got))
-				}
-			}
-		})
 	}
 }

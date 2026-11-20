@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/indexdata/crosslink/directory/auth"
+	"github.com/indexdata/crosslink/directory/db"
 	"github.com/indexdata/crosslink/directory/policy"
 	"github.com/indexdata/crosslink/directory/storedconfig"
 )
@@ -18,8 +19,8 @@ const maxAncestorDepth = 2
 
 // loadAncestors loads the stored configuration of the parents and
 // grandparents of entries, with one query per level.
-func loadAncestors(ctx context.Context, q storedconfig.Querier, entries []Entry) (map[uuid.UUID]storedconfig.Entry, error) {
-	ancestors := map[uuid.UUID]storedconfig.Entry{}
+func loadAncestors(ctx context.Context, queries *db.Queries, entries []Entry) (map[uuid.UUID]db.Entry, error) {
+	ancestors := map[uuid.UUID]db.Entry{}
 	var pending []uuid.UUID
 	queued := map[uuid.UUID]bool{}
 	queue := func(id *uuid.UUID) {
@@ -32,13 +33,13 @@ func loadAncestors(ctx context.Context, q storedconfig.Querier, entries []Entry)
 		queue(entries[i].Parent)
 	}
 	for depth := 0; depth < maxAncestorDepth && len(pending) > 0; depth++ {
-		loaded, err := storedconfig.Load(ctx, q, pending)
+		loaded, err := queries.EntriesByIds(ctx, pending)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("load ancestor entries: %w", err)
 		}
 		pending = nil
-		for id, entry := range loaded {
-			ancestors[id] = entry
+		for _, entry := range loaded {
+			ancestors[entry.ID] = entry
 			queue(entry.Parent)
 		}
 	}
@@ -51,11 +52,11 @@ func loadAncestors(ctx context.Context, q storedconfig.Querier, entries []Entry)
 // A protected value stored on an ancestor is resolved as "" unless the caller
 // may see sensitive data on that ancestor. The caller must still sanitize each
 // entry for the requested entry's own visibility.
-func (a ApiImpl) resolveInheritance(ctx context.Context, q storedconfig.Querier, authData *auth.AuthData, entries []Entry, configs []storedconfig.Configs) error {
+func (a ApiImpl) resolveInheritance(ctx context.Context, queries *db.Queries, authData *auth.AuthData, entries []Entry, configs []storedconfig.Configs) error {
 	if a.inheritance == nil || len(entries) == 0 {
 		return nil
 	}
-	ancestors, err := loadAncestors(ctx, q, entries)
+	ancestors, err := loadAncestors(ctx, queries, entries)
 	if err != nil {
 		return err
 	}
@@ -89,6 +90,8 @@ func (a ApiImpl) resolveInheritance(ctx context.Context, q storedconfig.Querier,
 	return nil
 }
 
+// applyConfigs replaces the entry's configuration, clearing any container
+// absent from configs.
 func applyConfigs(entry *Entry, configs map[string]json.RawMessage) error {
 	var err error
 	if entry.IllConfig, err = unmarshalJSONObject[IllConfig](configs["illConfig"]); err != nil {
@@ -106,20 +109,12 @@ func applyConfigs(entry *Entry, configs map[string]json.RawMessage) error {
 	return nil
 }
 
-// checkConfigWrite returns a client-facing message when body sets
-// configuration that entryType may not store. stored is the entry's current
-// local configuration, or nil for a new entry.
-func (a ApiImpl) checkConfigWrite(entryType string, body any, stored storedconfig.Configs) (string, error) {
+// checkConfigWrite returns a client-facing message if the request violates the
+// write policy for entryType. It compares the supplied request properties with
+// the entry's local configuration (nil for a new entry).
+func (a ApiImpl) checkConfigWrite(entryType string, supplied map[string]json.RawMessage, stored storedconfig.Configs) (string, error) {
 	if a.inheritance == nil {
 		return "", nil
-	}
-	data, err := json.Marshal(body)
-	if err != nil {
-		return "", fmt.Errorf("encode request body: %w", err)
-	}
-	var supplied map[string]json.RawMessage
-	if err := json.Unmarshal(data, &supplied); err != nil {
-		return "", fmt.Errorf("decode request body: %w", err)
 	}
 	violations, err := a.inheritance.CheckWrite(entryType, supplied, stored)
 	if err != nil {
