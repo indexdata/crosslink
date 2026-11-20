@@ -1,12 +1,9 @@
 package storedconfig
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
-	"strconv"
 	"strings"
 )
 
@@ -20,10 +17,11 @@ const (
 
 // Normalize puts a configuration container into the form it is stored and
 // read back in. It removes null-valued object members at every depth and
-// writes whole numbers as integers. It also drops values that mean unset,
-// which are an empty queryConfig, metadataFormat or metadataFormat.marc21 in
-// catalogConfig and an empty address or fromAgency in lmsConfig. Lenders of
-// last resort are put in upper case. A null container stays null.
+// writes a whole number such as 10.0 or 1e1 as 10. It also drops values that
+// mean unset, which are an empty queryConfig, metadataFormat or
+// metadataFormat.marc21 in catalogConfig and an empty address or fromAgency
+// in lmsConfig. Lenders of last resort are put in upper case. A null
+// container stays null.
 func Normalize(name string, value json.RawMessage) (json.RawMessage, error) {
 	decoded, err := decode(value)
 	if err != nil {
@@ -37,7 +35,6 @@ func Normalize(name string, value json.RawMessage) (json.RawMessage, error) {
 		return nil, fmt.Errorf("%s is not an object", name)
 	}
 	dropNulls(object)
-	writeIntegers(object)
 	switch name {
 	case CatalogConfig:
 		// The resolver treats a stored key as a local value, so an empty
@@ -183,15 +180,18 @@ func mergePatch(target, patch any) any {
 	return object
 }
 
-// decode reads JSON keeping numbers as written. Empty input decodes as null.
+// decode reads JSON. Empty input decodes as null.
+//
+// Numbers decode as float64 and not as json.Number, so that encoding them
+// again writes a whole number in integer form. The schema accepts 10.0 and
+// 1e1 for an integer field, but reads decode the container into Go integers,
+// which reject those forms.
 func decode(value json.RawMessage) (any, error) {
 	if len(value) == 0 {
 		return nil, nil
 	}
-	decoder := json.NewDecoder(bytes.NewReader(value))
-	decoder.UseNumber()
 	var decoded any
-	if err := decoder.Decode(&decoded); err != nil {
+	if err := json.Unmarshal(value, &decoded); err != nil {
 		return nil, err
 	}
 	return decoded, nil
@@ -213,49 +213,6 @@ func dropNulls(value any) {
 			dropNulls(member)
 		}
 	}
-}
-
-// writeIntegers rewrites whole numbers written with a fraction or exponent,
-// such as 10.0 or 1e1, in integer form at every depth. The schema accepts
-// those forms for integer fields, but reads decode the container into Go
-// integers, which reject them.
-func writeIntegers(value any) {
-	switch typed := value.(type) {
-	case map[string]any:
-		for key, member := range typed {
-			if number, ok := member.(json.Number); ok {
-				typed[key] = integerForm(number)
-			} else {
-				writeIntegers(member)
-			}
-		}
-	case []any:
-		for i, member := range typed {
-			if number, ok := member.(json.Number); ok {
-				typed[i] = integerForm(number)
-			} else {
-				writeIntegers(member)
-			}
-		}
-	}
-}
-
-// integerForm returns number in integer form when its float64 value is whole
-// and no larger than 2^53 in size, and otherwise as written.
-//
-// The test is on the float64 value, so a number that only rounds to a whole
-// one, such as 1.0000000000000001, is rewritten too. The schema check works
-// on the same value and accepts such a number for an integer field, where
-// leaving it as written would make reads fail.
-func integerForm(number json.Number) json.Number {
-	if !strings.ContainsAny(string(number), ".eE") {
-		return number
-	}
-	value, err := strconv.ParseFloat(string(number), 64)
-	if err != nil || value != math.Trunc(value) || math.Abs(value) > 1<<53 {
-		return number
-	}
-	return json.Number(strconv.FormatInt(int64(value), 10))
 }
 
 // dropEmpty removes the named members of object that are empty objects.
