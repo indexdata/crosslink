@@ -16,16 +16,13 @@ import (
 	"github.com/indexdata/crosslink/directory/storedconfig"
 )
 
-// checkConfigPolicy rejects configuration values that the record's entry type
-// may not store. containers are the record's configuration in stored form, as
-// storedContainers returns it. Import records are complete and replace the
-// entry's local configuration, so null is always allowed: it clears the
-// stored value. A value equal to the one the existing entry already stores is
-// allowed too, so re-importing unchanged legacy settings succeeds.
+// checkConfigPolicy checks the replacement configuration against the entry
+// type's write policy. Because an import replaces the entire local
+// configuration, null is always allowed to clear a value. Unchanged legacy
+// values are allowed so records with older settings can be re-imported.
 //
-// stored is what the existing entry stores, or nil for a new entry. It must
-// come from the entry's locked row, so that it cannot change before the
-// import writes.
+// For an existing entry, pass the local configuration from the row locked
+// for this import. For a new entry, pass nil.
 func (r *PgImportRepo) checkConfigPolicy(entryType string, containers, stored storedconfig.Configs) error {
 	if r.inheritance == nil {
 		return nil
@@ -40,10 +37,8 @@ func (r *PgImportRepo) checkConfigPolicy(entryType string, containers, stored st
 	return nil
 }
 
-// storedContainers returns an import record's configuration containers in
-// stored form. A null container is absent from the result. Lenders of last
-// resort, which the record names by entry ID, become the authority and
-// symbol they are stored under.
+// storedContainers normalizes the imported containers for storage, omitting
+// null containers and resolving lender entry IDs to directory symbols.
 func storedContainers(ctx context.Context, queries *db.Queries, data model.EntryData) (storedconfig.Configs, error) {
 	lenders, err := data.LendersOfLastResort()
 	if err != nil {
@@ -67,8 +62,8 @@ func storedContainers(ctx context.Context, queries *db.Queries, data model.Entry
 	return containers, nil
 }
 
-// withLenderSymbols replaces the lender entry IDs in an encoded illConfig
-// with the authority and symbol objects the lenders are stored under.
+// withLenderSymbols replaces each lender ID in illConfig with a JSON object
+// containing the lender's authority and symbol.
 func withLenderSymbols(ctx context.Context, queries *db.Queries, illConfig json.RawMessage, ids []uuid.UUID) (json.RawMessage, error) {
 	var config map[string]any
 	if err := json.Unmarshal(illConfig, &config); err != nil {

@@ -1,6 +1,6 @@
--- Each entry stores its configuration containers in one JSON object, keyed by
--- the container's API property name. A container is in the form entry reads
--- return it. A container the entry does not store is absent from the object.
+-- Store each local container under its API property name. Its value is the
+-- JSON object returned when reading the entry without inheritance. Omit the
+-- key when the entry has no local container of that name.
 ALTER TABLE entries
   ADD COLUMN configs jsonb NOT NULL DEFAULT '{}'
     CONSTRAINT entries_configs_objects CHECK (
@@ -8,14 +8,16 @@ ALTER TABLE entries
       AND NOT jsonb_path_exists(configs, '$.* ? (@.type() != "object")')
     );
 
--- A container the entry has no row for is NULL here, and the strip removes it.
+-- Each subquery returns NULL for a missing configuration row. Stripping nulls
+-- omits that container while preserving an existing row with no fields as {}.
 UPDATE entries e SET configs = jsonb_strip_nulls(jsonb_build_object(
 	'illConfig', (
 		SELECT json_strip_nulls(json_build_object(
 			'isPickupLocation', i.is_pickup_location,
 			'iso18626Url', i.iso18626_url,
 			'iso18626Vendor', i.iso18626_vendor,
-			-- json_agg over no rows is NULL; keep a stored empty list as [] so it blocks inheritance.
+			-- An empty lender list blocks inheritance. Preserve it as [] even though
+			-- json_agg returns NULL for an empty input.
 			'lendersOfLastResort', CASE WHEN i.lenders_of_last_resort IS NULL THEN NULL ELSE COALESCE((
 				SELECT json_agg(json_build_object(
 					'authority', split_part(value, ':', 1),

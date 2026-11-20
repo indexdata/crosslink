@@ -1,12 +1,10 @@
-// Package storedconfig holds the stored form of the configuration containers
-// of a directory entry, and the rules for writing them. An entry stores its
-// containers as one JSON object in entries.configs. Each container in it is
-// the JSON object that entry reads return.
+// Package storedconfig defines how directory entries store and update local
+// configuration in the entries.configs JSON column. Each stored container is
+// the JSON object returned when reading the entry without inheritance.
 package storedconfig
 
 import "encoding/json"
 
-// Configs is the configuration containers an entry stores locally. It maps a
-// container's API property name, such as lmsConfig, to the stored JSON
-// object. A container the entry does not store is absent.
+// Configs maps API property names such as lmsConfig to local configuration
+// objects. A missing key means the entry has no local container of that name.
 type Configs map[string]json.RawMessage

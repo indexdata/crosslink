@@ -9,15 +9,14 @@ import (
 	"github.com/indexdata/crosslink/directory/storedconfig"
 )
 
-// containerNames lists the configuration containers in the order a request's
-// containers are written and checked.
+// containerNames lists the configuration containers the entry API writes,
+// in the order it processes them.
 var containerNames = []string{
 	storedconfig.IllConfig, storedconfig.LmsConfig, storedconfig.CatalogConfig, storedconfig.HoldingsPolicy,
 }
 
-// bodyProperties returns the top-level properties of a create or PATCH body
-// as JSON. A property the body omits is absent, and one it sets to null is
-// the JSON null.
+// bodyProperties maps each top-level request property to its raw JSON value.
+// An omitted property has no key. An explicit null has the raw value "null".
 func bodyProperties(body any) (map[string]json.RawMessage, error) {
 	data, err := json.Marshal(body)
 	if err != nil {
@@ -30,14 +29,13 @@ func bodyProperties(body any) (map[string]json.RawMessage, error) {
 	return properties, nil
 }
 
-// writeContainers applies the configuration containers that a request
-// supplies to configs, which holds the entry's stored containers, and reports
-// whether the request supplied any. supplied is the request's properties, as
-// bodyProperties returns them. On create a container is put in stored form.
-// On PATCH it is merged into the stored container, and null removes it.
+// writeContainers updates configs in place. Create requests normalize each
+// supplied container. PATCH requests merge it with the stored value. In either
+// case, an explicit null removes the container and omitted containers are kept.
 //
-// A non-empty message means a container is invalid. It is the text for a 400
-// response, and configs must then not be stored.
+// On success, the boolean reports whether the request included any containers.
+// A non-empty message describes a validation failure for the HTTP 400 response.
+// Discard partial updates on any error or validation failure.
 func writeContainers(configs storedconfig.Configs, supplied map[string]json.RawMessage, create bool) (bool, string, error) {
 	changed := false
 	for _, name := range containerNames {

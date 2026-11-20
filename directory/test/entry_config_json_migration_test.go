@@ -81,8 +81,8 @@ func TestEntryConfigJSONMigration(t *testing.T) {
 		'year = {term}', 'strip', 'ocm',
 		'264*1$b', '264*1$c', '264*1$a')`, full)
 	exec(`INSERT INTO holdings_policies (entry, policy) VALUES ($1, '{"locations":[{"code":"MAIN","name":"Main"}]}')`, full)
-	// An empty lender list blocks inheritance, and LMS address and agency are
-	// required columns that an absent value restores as empty.
+	// The empty lender list must survive the round trip because it blocks
+	// inheritance. Version 027 uses empty strings for unset address and from_agency.
 	exec(`INSERT INTO ill_configs (entry, lenders_of_last_resort) VALUES ($1, '{}')`, sparse)
 	exec(`INSERT INTO lms_configs (entry, address, from_agency) VALUES ($1, '', '')`, sparse)
 

@@ -361,8 +361,8 @@ func TestImportHostSettingsRoundTrip(t *testing.T) {
 	require.True(t, cleared)
 }
 
-// TestImportStoresWholeNumbersAsIntegers checks that an integer field sent as
-// 10.0, which the import schema accepts, is stored so the entry still reads.
+// TestImportStoresWholeNumbersAsIntegers verifies that the entry API can read
+// integer fields imported with decimal or exponent notation.
 func TestImportStoresWholeNumbersAsIntegers(t *testing.T) {
 	resetImportState(t)
 	key := symbolObject("ISIL", "WHOLE")

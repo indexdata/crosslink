@@ -169,14 +169,14 @@ func (r *PgImportRepo) importEntryAttempt(ctx context.Context, aggregate model.E
 	if err := replaceEntryChildren(ctx, queries, entryID, aggregate.Data); err != nil {
 		return model.RepoResult{}, persistenceError("entry", key, err)
 	}
-	// This runs after the record's own symbols are written. Lenders are
-	// stored by symbol, so an entry that lists itself gets its new symbol.
+	// Resolve lenders after replacing symbols so an entry that lists itself as a
+	// lender uses its newly imported symbol.
 	containers, err := storedContainers(ctx, queries, aggregate.Data)
 	if err != nil {
 		return model.RepoResult{}, err
 	}
-	// existing is the locked row, so its containers cannot change before the
-	// write below. A new entry has none.
+	// The row lock keeps existing.Configs current from the policy check through
+	// the update. For a new entry, existing.Configs is nil.
 	if err := r.checkConfigPolicy(aggregate.Data.Type, containers, existing.Configs); err != nil {
 		return model.RepoResult{}, err
 	}

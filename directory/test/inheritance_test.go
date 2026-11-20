@@ -67,8 +67,8 @@ func storeConfig(t *testing.T, id any, container, value string) {
 	sqlExec(t, `UPDATE entries SET configs = jsonb_set(configs, ARRAY[$2::text], $3::jsonb) WHERE id = $1`, id, container, value)
 }
 
-// mergeConfig adds the fields of value to one of an entry's stored
-// configuration containers.
+// mergeConfig adds or replaces top-level fields in the stored container.
+// Each supplied field replaces its entire value, including nested objects.
 func mergeConfig(t *testing.T, id any, container, value string) {
 	t.Helper()
 	sqlExec(t, `UPDATE entries SET configs = jsonb_set(configs, ARRAY[$2::text], COALESCE(configs->$2::text, '{}') || $3::jsonb) WHERE id = $1`, id, container, value)

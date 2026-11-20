@@ -11,8 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Each configuration container, set on create, with every field an
-// institution may store.
+// Create payloads covering every configuration field an institution may store.
 var fullContainers = map[string]string{
 	"illConfig": `{
 		"isPickupLocation":true,"iso18626Url":"https://iso.example/a","iso18626Vendor":"ReShare",
@@ -132,8 +131,8 @@ func TestConfigPatchFields(t *testing.T) {
 	type patchCase struct {
 		name  string
 		patch string
-		// want lists the fields that differ from the stored container after
-		// the patch. A null value means the field is gone.
+		// want gives the expected top-level field updates. A null value marks
+		// a field that should be absent after the patch.
 		want string
 	}
 	for _, tc := range []struct {
@@ -203,8 +202,8 @@ func TestConfigPatchFields(t *testing.T) {
 	} {
 		stored := decodeObject(t, tc.stored)
 		cases := tc.cases
-		// The holdingsPolicy patch schema is the canonical one, which has no
-		// nullable fields.
+		// Skip field-deletion cases for holdingsPolicy because its schema
+		// rejects null for every field.
 		for _, field := range slices.Sorted(maps.Keys(stored)) {
 			if tc.container != "holdingsPolicy" {
 				cases = append(cases, patchCase{field + " null", fmt.Sprintf(`{%q:null}`, field), fmt.Sprintf(`{%q:null}`, field)})
@@ -237,9 +236,9 @@ func TestConfigCreateUnsetsEmptyLmsStrings(t *testing.T) {
 	require.Equal(t, map[string]any{"lmsConfig": map[string]any{"itemLocation": ""}}, localContainers(t, path))
 }
 
-// TestConfigPatchEmptyHoldingsFormatKeepsInheritance checks that an empty
-// holdingsFormat patch on an institution without a parser stores nothing, so
-// its branch still sees no parser rather than an empty holdingsFormat.
+// TestConfigPatchEmptyHoldingsFormatKeepsInheritance verifies that an empty
+// holdingsFormat patch preserves the parser a branch inherits, both when the
+// institution has no parser and when it has selected one.
 func TestConfigPatchEmptyHoldingsFormatKeepsInheritance(t *testing.T) {
 	tree := setupInheritanceTree(t)
 	patchEntry(t, entryPath(tree.institution), `{"catalogConfig":{"profile":"Koha"}}`)

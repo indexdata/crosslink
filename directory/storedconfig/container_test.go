@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestMergeHoldingsParsers checks the holdingsFormat rule on a stored value
-// that already selects two parsers, which the API can no longer store.
+// TestMergeHoldingsParsers checks that selecting a parser repairs a legacy
+// two-parser configuration. An omitted or empty selection leaves it invalid.
 func TestMergeHoldingsParsers(t *testing.T) {
 	stored := json.RawMessage(`{"holdingsFormat":{"marc":{"mainField":"999"},"opac":{}}}`)
 	for _, tc := range []struct {

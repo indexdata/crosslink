@@ -112,17 +112,17 @@ type EntryData struct {
 	Endpoints         []ServiceEndpoint `json:"endpoints"`
 	Addresses         []Address         `json:"addresses"`
 	Closures          []Closure         `json:"closures"`
-	// The configuration containers are kept as raw JSON, as the record
-	// sends them. The import schema has already validated them.
+	// These fields hold the raw JSON containers from the import record.
+	// The import schema has already validated them.
 	LMSConfig      json.RawMessage `json:"lmsConfig"`
 	CatalogConfig  json.RawMessage `json:"catalogConfig"`
 	ILLConfig      json.RawMessage `json:"illConfig"`
 	HoldingsPolicy json.RawMessage `json:"holdingsPolicy"`
 }
 
-// LendersOfLastResort returns the lender entry IDs that illConfig lists, or
-// nil when it lists none. The schema validator does not check the uuid
-// format, so this parse is what rejects a malformed ID.
+// LendersOfLastResort returns the lender entry IDs from illConfig. A missing
+// or null list yields nil. An explicit empty list yields a non-nil empty slice.
+// Parsing the IDs here enforces the UUID format the schema validator skips.
 func (d EntryData) LendersOfLastResort() ([]uuid.UUID, error) {
 	if len(d.ILLConfig) == 0 {
 		return nil, nil

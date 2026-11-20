@@ -199,8 +199,8 @@ INSERT INTO entry_networks (
 RETURNING *;
 
 -- name: UpdateEntryConfigs :exec
--- Replaces all of an entry's configuration containers. The caller supplies
--- every container the entry keeps, because one missing from configs is removed.
+-- Replace the entire local configuration. Callers must include every
+-- container the entry should keep.
 UPDATE entries SET configs = @configs WHERE id = @id;
 
 -- name: CreateEntryTier :one

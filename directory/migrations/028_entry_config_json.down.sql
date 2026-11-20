@@ -1,7 +1,6 @@
--- Restores the configuration tables, one per container, from the JSON column.
--- Columns keep their version 027 order, which positional reads such as
--- SELECT * depend on. A stored value that a 027 column or constraint
--- cannot hold fails the migration instead of being dropped.
+-- Restore the version 027 configuration tables from entries.configs. Keep
+-- columns in their original order for callers that scan SELECT * by position.
+-- Values that violate a restored column type or constraint fail the migration.
 CREATE TABLE ill_configs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   entry uuid NOT NULL UNIQUE REFERENCES entries (id) ON DELETE CASCADE,
@@ -144,8 +143,8 @@ SELECT e.id, COALESCE(c->>'address', ''), COALESCE(c->>'fromAgency', ''), c->>'f
 FROM entries e, LATERAL (SELECT e.configs->'lmsConfig' AS c) config
 WHERE e.configs ? 'lmsConfig';
 
--- holdingsFormat goes to holdings_config and, as version 027 writes it, to the
--- MARC subfield columns and the three format flags as well.
+-- Version 027 stored holdingsFormat in both the holdings_config JSON column
+-- and dedicated MARC subfield columns and format flags. Restore both forms.
 INSERT INTO catalog_configs (
   entry, metadata_update_mode, sru_address, sru_record_schema, zoom_address,
   query_type, query_identifier, query_isbn, query_issn, query_title,

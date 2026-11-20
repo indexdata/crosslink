@@ -90,8 +90,8 @@ func (a ApiImpl) resolveInheritance(ctx context.Context, queries *db.Queries, au
 	return nil
 }
 
-// applyConfigs sets entry's configuration containers from configs. A
-// container that configs lacks is cleared.
+// applyConfigs replaces the entry's configuration, clearing any container
+// absent from configs.
 func applyConfigs(entry *Entry, configs map[string]json.RawMessage) error {
 	var err error
 	if entry.IllConfig, err = unmarshalJSONObject[IllConfig](configs["illConfig"]); err != nil {
@@ -109,10 +109,9 @@ func applyConfigs(entry *Entry, configs map[string]json.RawMessage) error {
 	return nil
 }
 
-// checkConfigWrite returns a client-facing message when supplied sets
-// configuration that entryType may not store. supplied is the request's
-// properties, as bodyProperties returns them. stored is the entry's current
-// local configuration, or nil for a new entry.
+// checkConfigWrite returns a client-facing message if the request violates the
+// write policy for entryType. It compares the supplied request properties with
+// the entry's local configuration (nil for a new entry).
 func (a ApiImpl) checkConfigWrite(entryType string, supplied map[string]json.RawMessage, stored storedconfig.Configs) (string, error) {
 	if a.inheritance == nil {
 		return "", nil
