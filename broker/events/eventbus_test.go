@@ -134,3 +134,33 @@ func (r *noticeIDRepo) Notify(_ common.ExtendedContext, id string, signal Signal
 	r.notifiedID, r.signal, r.target = id, signal, target
 	return nil
 }
+
+// Failed scans return a zero event, including a null ParentID. The insert error
+// must be returned before Notify can replace it with an aborted-transaction error.
+func TestCreateTaskReturnsInsertErrorWithoutNotifying(t *testing.T) {
+	for _, parent := range []*string{nil, new("parent-event")} {
+		repo := &taskInsertErrorRepo{saveErr: errors.New("event insert failed")}
+		bus := NewPostgresEventBus(repo, "")
+		bus.ctx = common.CreateExtCtxWithArgs(context.Background(), nil)
+		_, err := bus.CreateTask("pr-1", EventNameInvokeBackgroundAction, EventData{}, EventDomainPatronRequest, parent, SignalConsumers)
+		assert.ErrorIs(t, err, repo.saveErr)
+		assert.False(t, repo.notified)
+	}
+}
+
+type taskInsertErrorRepo struct {
+	EventRepo
+	saveErr  error
+	notified bool
+}
+
+func (r *taskInsertErrorRepo) WithTxFunc(_ common.ExtendedContext, fn func(EventRepo) error) error {
+	return fn(r)
+}
+func (r *taskInsertErrorRepo) SaveEvent(common.ExtendedContext, SaveEventParams) (Event, error) {
+	return Event{}, r.saveErr
+}
+func (r *taskInsertErrorRepo) Notify(common.ExtendedContext, string, Signal, SignalTarget) error {
+	r.notified = true
+	return errors.New("current transaction is aborted")
+}
