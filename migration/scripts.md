@@ -254,7 +254,11 @@ nonzero exit status while preserving the server response body in the output.
 
 ### Supplier picking states
 
-`RES_AWAIT_PICKING` loan requests with a selected item barcode export as
-`SEARCHING`. Loans with a missing or blank barcode export as `ITEM_PENDING`
-so staff can look up or attach an item. Requests in `RES_NEW_AWAIT_PULL_SLIP`
-remain `WILL_SUPPLY` so printing records the normal transition to `SEARCHING`.
+Lending requests export each volume with a usable item barcode. The selected
+item barcode supplies a fallback when no volume can be exported, provided that
+barcode does not belong to a cancelled volume.
+
+`RES_AWAIT_PICKING` loans with an exported item enter `SEARCHING`. Loans
+without an exported item enter `ITEM_PENDING` so staff can look up or attach
+an item. Requests in `RES_NEW_AWAIT_PULL_SLIP` remain `WILL_SUPPLY` so printing
+records the normal transition to `SEARCHING`.

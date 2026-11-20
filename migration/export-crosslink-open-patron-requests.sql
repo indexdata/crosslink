@@ -28,8 +28,8 @@
 --   * Borrowing items come from request_volume: barcode is the temporary item
 --     barcode in the requester LMS and itemId is the supplier's barcode. A
 --     borrowing request without volumes falls back to pr_selected_item_barcode
---     as itemId with the request ID as barcode. Lending requests emit one item
---     with pr_selected_item_barcode as barcode, only when it is present.
+--     as itemId with the request ID as barcode. Lending volumes use rv_item_id
+--     as the barcode, with pr_selected_item_barcode as a fallback.
 --   * Borrowing requests include a synthesized ILL transaction and their rota as
 --     located suppliers. A rota entry without a peer symbol uses its directory
 --     reference directly when it is a symbol; otherwise it uses the first symbol
@@ -123,7 +123,8 @@ SELECT :'tenant' ~ '^[a-z][a-z0-9_]*$' AS crosslink_tenant_valid
 SELECT 1 / 0;
 \endif
 
-BEGIN;
+-- Keep the staged volumes and exported request rows on the same snapshot.
+BEGIN ISOLATION LEVEL REPEATABLE READ;
 
 CREATE TEMP TABLE crosslink_state_map (
     legacy_state TEXT NOT NULL,
@@ -433,6 +434,47 @@ SELECT
     END AS import_id
 FROM patron_request;
 
+-- Gather volumes once for open lending requests. The request-level barcode
+-- can be a duplicate of one of these volumes or refer to a cancelled volume.
+CREATE TEMP TABLE crosslink_lending_volumes ON COMMIT DROP AS
+SELECT
+    patron_request.pr_id,
+    jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+        'id', volume.rv_id,
+        'barcode', btrim(volume.rv_item_id),
+        'callNumber', coalesce(volume.rv_call_number, patron_request.pr_local_call_number),
+        'title', coalesce(volume.rv_name, patron_request.pr_title),
+        'lmsRequestId', CASE
+            WHEN btrim(volume.rv_item_id) = btrim(patron_request.pr_selected_item_barcode)
+              OR (nullif(btrim(patron_request.pr_selected_item_barcode), '') IS NULL
+                  AND volume_status.rdv_value = 'requested_from_the_ils')
+            THEN patron_request.pr_external_hold_request_id
+        END,
+        'createdAt', to_char(
+            coalesce(volume.rv_date_created, patron_request.pr_date_created),
+            'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+        )
+    )) ORDER BY volume.rv_date_created, volume.rv_id) FILTER (
+        WHERE nullif(btrim(volume.rv_item_id), '') IS NOT NULL
+          AND volume_status.rdv_value IS DISTINCT FROM 'ils_request_cancelled'
+    ) AS items,
+    bool_or(
+        btrim(volume.rv_item_id) = btrim(patron_request.pr_selected_item_barcode)
+        AND volume_status.rdv_value = 'ils_request_cancelled'
+    ) AS selected_barcode_cancelled
+FROM request_volume AS volume
+JOIN patron_request ON patron_request.pr_id = volume.rv_patron_request_fk
+LEFT JOIN refdata_value AS volume_status ON volume_status.rdv_id = volume.rv_status_fk
+WHERE patron_request.pr_is_requester IS NOT TRUE
+  AND EXISTS (
+      SELECT 1
+      FROM state_model_status
+      WHERE sms_state_model = patron_request.pr_state_model_fk
+        AND sms_state = patron_request.pr_state_fk
+        AND sms_is_terminal IS FALSE
+  )
+GROUP BY patron_request.pr_id;
+
 CREATE TEMP VIEW crosslink_all_open_requests AS
 SELECT
     patron_request.*,
@@ -448,15 +490,16 @@ SELECT
         ELSE 'lending'
     END AS import_side,
     CASE
-        -- Shipping a Loan requires an attached item. Without a barcode the
-        -- export has no item, so keep the item lookup action available.
+        -- Shipping a Loan requires an attached item. Keep item lookup
+        -- available when the export has no item to attach.
         WHEN crosslink_state_map.crosslink_state = 'SEARCHING'
          AND crosslink_state_map.side = 'lending'
          AND normalized_service_type.value = 'Loan'
-         AND nullif(btrim(patron_request.pr_selected_item_barcode), '') IS NULL
+         AND lending_items.items = '[]'::jsonb
             THEN 'ITEM_PENDING'
         ELSE crosslink_state_map.crosslink_state
     END AS import_state,
+    lending_items.items AS import_lending_items,
     service_type.rdv_value AS legacy_service_type,
     normalized_service_type.value AS import_service_type,
     pickup_location.id AS import_pickup_location_id,
@@ -519,6 +562,30 @@ JOIN state_model
 JOIN state_model_status
   ON state_model_status.sms_state_model = patron_request.pr_state_model_fk
  AND state_model_status.sms_state = patron_request.pr_state_fk
+LEFT JOIN crosslink_lending_volumes AS lending_volumes
+  ON lending_volumes.pr_id = patron_request.pr_id
+LEFT JOIN LATERAL (
+    SELECT coalesce(
+        lending_volumes.items,
+        CASE
+            WHEN nullif(btrim(patron_request.pr_selected_item_barcode), '') IS NOT NULL
+             AND lending_volumes.selected_barcode_cancelled IS NOT TRUE
+            THEN jsonb_build_array(jsonb_strip_nulls(jsonb_build_object(
+                'id', patron_request.pr_id || ':selected-item',
+                'barcode', patron_request.pr_selected_item_barcode,
+                'callNumber', patron_request.pr_local_call_number,
+                'title', patron_request.pr_title,
+                'lmsRequestId', patron_request.pr_external_hold_request_id,
+                'createdAt', to_char(
+                    patron_request.pr_date_created,
+                    'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+                )
+            )))
+        END,
+        '[]'::jsonb
+    ) AS items
+    WHERE patron_request.pr_is_requester IS NOT TRUE
+) AS lending_items ON true
 LEFT JOIN refdata_value AS service_type
   ON service_type.rdv_id = patron_request.pr_service_type_fk
 LEFT JOIN LATERAL (
@@ -976,19 +1043,7 @@ request_bundles AS (
                         )))
                     END
                 )
-                WHEN nullif(btrim(request.pr_selected_item_barcode), '') IS NULL
-                    THEN '[]'::jsonb
-                ELSE jsonb_build_array(jsonb_strip_nulls(jsonb_build_object(
-                    'id', request.pr_id || ':selected-item',
-                    'barcode', request.pr_selected_item_barcode,
-                    'callNumber', request.pr_local_call_number,
-                    'title', request.pr_title,
-                    'lmsRequestId', request.pr_external_hold_request_id,
-                    'createdAt', to_char(
-                        request.pr_date_created,
-                        'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
-                    )
-                )))
+                ELSE request.import_lending_items
             END,
             'notifications', coalesce((
                 SELECT jsonb_agg(notification.record ORDER BY notification.created_at)
