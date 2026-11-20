@@ -102,20 +102,6 @@ func scanEntryRow(rows pgx.Rows) (Entry, storedconfig.Configs, int, error) {
 		return Entry{}, nil, 0, fmt.Errorf("unmarshalling closures: %w", err)
 	}
 
-	lmsConfig, err := unmarshalJSONObject[LmsConfig](configs[storedconfig.LmsConfig])
-	if err != nil {
-		return Entry{}, nil, 0, fmt.Errorf("unmarshalling lms config: %w", err)
-	}
-
-	catalogConfig, err := unmarshalJSONObject[CatalogConfig](configs[storedconfig.CatalogConfig])
-	if err != nil {
-		return Entry{}, nil, 0, fmt.Errorf("unmarshalling holdings config: %w", err)
-	}
-	holdingsPolicy, err := unmarshalJSONObject[HoldingsPolicy](configs[storedconfig.HoldingsPolicy])
-	if err != nil {
-		return Entry{}, nil, 0, fmt.Errorf("failed to parse holdings policy: %w", err)
-	}
-
 	tiers, err := unmarshalJSONArray[Tier](tiersJSON)
 	if err != nil {
 		return Entry{}, nil, 0, fmt.Errorf("unmarshalling tiers: %w", err)
@@ -124,11 +110,6 @@ func scanEntryRow(rows pgx.Rows) (Entry, storedconfig.Configs, int, error) {
 	networks, err := unmarshalJSONArray[EntryNetworkDetails](networksJSON)
 	if err != nil {
 		return Entry{}, nil, 0, fmt.Errorf("unmarshalling networks config: %w", err)
-	}
-
-	illConfig, err := unmarshalJSONObject[IllConfig](configs[storedconfig.IllConfig])
-	if err != nil {
-		return Entry{}, nil, 0, fmt.Errorf("unmarshalling ill config: %w", err)
 	}
 
 	// Use nil for empty arrays so they're omitted in JSON (omitempty)
@@ -162,11 +143,9 @@ func scanEntryRow(rows pgx.Rows) (Entry, storedconfig.Configs, int, error) {
 		networksPtr = &networks
 	}
 
-	lmsConfigPtr := lmsConfig
-
 	typeValue := EntryType(*entryType)
 
-	return Entry{
+	entry := Entry{
 		Id:                &id,
 		Name:              name,
 		Type:              &typeValue,
@@ -179,21 +158,21 @@ func scanEntryRow(rows pgx.Rows) (Entry, storedconfig.Configs, int, error) {
 		Hrid:              hrid,
 		LmsLocationCode:   lmsLocationCode,
 		LendToBorrowRatio: lendToBorrowRatio,
-		IllConfig:         illConfig,
 		PhoneNumber:       phoneNumber,
 		Parent:            parent,
 		Symbols:           symbolsPtr,
 		Endpoints:         endpointsPtr,
 		Addresses:         addressesPtr,
 		Closures:          closuresPtr,
-		LmsConfig:         lmsConfigPtr,
-		CatalogConfig:     catalogConfig,
-		HoldingsPolicy:    holdingsPolicy,
 		Tiers:             tiersPtr,
 		Networks:          networksPtr,
 		TimeZone:          timeZone,
 		Vendor:            (*EntryVendor)(vendor),
-	}, configs, totalCount, nil
+	}
+	if err := applyConfigs(&entry, configs); err != nil {
+		return Entry{}, nil, 0, err
+	}
+	return entry, configs, totalCount, nil
 }
 
 const defaultEntryOrder = "ORDER BY e.name, e.id"
@@ -655,7 +634,12 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		}
 	}
 
-	violation, err := a.checkConfigWrite(string(entryType), request.Body, nil)
+	supplied, err := bodyProperties(request.Body)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to read request body properties", "error", err)
+		return AddEntry500TextResponse("Internal server error"), nil
+	}
+	violation, err := a.checkConfigWrite(string(entryType), supplied, nil)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to check configuration editability", "error", err)
 		return AddEntry500TextResponse("Internal server error"), nil
@@ -765,28 +749,13 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		}
 	}
 	configs := storedconfig.Configs{}
-	for _, container := range []struct {
-		name  string
-		value any
-		set   bool
-	}{
-		{storedconfig.IllConfig, request.Body.IllConfig, request.Body.IllConfig != nil},
-		{storedconfig.LmsConfig, request.Body.LmsConfig, request.Body.LmsConfig != nil},
-		{storedconfig.CatalogConfig, request.Body.CatalogConfig, request.Body.CatalogConfig != nil},
-		{storedconfig.HoldingsPolicy, request.Body.HoldingsPolicy, request.Body.HoldingsPolicy != nil},
-	} {
-		if !container.set {
-			continue
-		}
-		value, message, err := writeContainer(container.name, nil, true, container.value)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to encode configuration", "container", container.name, "error", err)
-			return AddEntry500TextResponse("Internal server error"), nil
-		}
-		if message != "" {
-			return AddEntry400TextResponse(message), nil
-		}
-		configs[container.name] = value
+	_, message, err := writeContainers(configs, supplied, true)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to encode configuration", "error", err)
+		return AddEntry500TextResponse("Internal server error"), nil
+	}
+	if message != "" {
+		return AddEntry400TextResponse(message), nil
 	}
 	if len(configs) > 0 {
 		if err := qtx.UpdateEntryConfigs(ctx, db.UpdateEntryConfigsParams{ID: insertedEntry.ID, Configs: configs}); err != nil {
@@ -903,7 +872,12 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		}
 	}
 
-	violation, err := a.checkConfigWrite(resultingType, request.Body, orig.Configs)
+	supplied, err := bodyProperties(request.Body)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to read request body properties", "error", err)
+		return UpdateEntry500TextResponse("Internal server error"), nil
+	}
+	violation, err := a.checkConfigWrite(resultingType, supplied, orig.Configs)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to check configuration editability", "error", err)
 		return UpdateEntry500TextResponse("Internal server error"), nil
@@ -1133,30 +1107,13 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		}
 	}
 	configs := maps.Clone(orig.Configs)
-	changed := false
-	for _, patch := range []containerPatch{
-		newContainerPatch(storedconfig.IllConfig, request.Body.IllConfig),
-		newContainerPatch(storedconfig.LmsConfig, request.Body.LmsConfig),
-		newContainerPatch(storedconfig.CatalogConfig, request.Body.CatalogConfig),
-		newContainerPatch(storedconfig.HoldingsPolicy, request.Body.HoldingsPolicy),
-	} {
-		if !patch.specified {
-			continue
-		}
-		changed = true
-		if patch.value == nil {
-			delete(configs, patch.name)
-			continue
-		}
-		value, message, err := writeContainer(patch.name, configs[patch.name], false, patch.value)
-		if err != nil {
-			slog.ErrorContext(ctx, "unable to merge configuration", "container", patch.name, "error", err)
-			return UpdateEntry500TextResponse("Internal server error"), nil
-		}
-		if message != "" {
-			return UpdateEntry400TextResponse(message), nil
-		}
-		configs[patch.name] = value
+	changed, message, err := writeContainers(configs, supplied, false)
+	if err != nil {
+		slog.ErrorContext(ctx, "unable to merge configuration", "error", err)
+		return UpdateEntry500TextResponse("Internal server error"), nil
+	}
+	if message != "" {
+		return UpdateEntry400TextResponse(message), nil
 	}
 	if changed {
 		if err := qtx.UpdateEntryConfigs(ctx, db.UpdateEntryConfigsParams{ID: orig.ID, Configs: configs}); err != nil {

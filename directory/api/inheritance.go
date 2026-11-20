@@ -90,6 +90,8 @@ func (a ApiImpl) resolveInheritance(ctx context.Context, queries *db.Queries, au
 	return nil
 }
 
+// applyConfigs sets entry's configuration containers from configs. A
+// container that configs lacks is cleared.
 func applyConfigs(entry *Entry, configs map[string]json.RawMessage) error {
 	var err error
 	if entry.IllConfig, err = unmarshalJSONObject[IllConfig](configs["illConfig"]); err != nil {
@@ -107,20 +109,13 @@ func applyConfigs(entry *Entry, configs map[string]json.RawMessage) error {
 	return nil
 }
 
-// checkConfigWrite returns a client-facing message when body sets
-// configuration that entryType may not store. stored is the entry's current
+// checkConfigWrite returns a client-facing message when supplied sets
+// configuration that entryType may not store. supplied is the request's
+// properties, as bodyProperties returns them. stored is the entry's current
 // local configuration, or nil for a new entry.
-func (a ApiImpl) checkConfigWrite(entryType string, body any, stored storedconfig.Configs) (string, error) {
+func (a ApiImpl) checkConfigWrite(entryType string, supplied map[string]json.RawMessage, stored storedconfig.Configs) (string, error) {
 	if a.inheritance == nil {
 		return "", nil
-	}
-	data, err := json.Marshal(body)
-	if err != nil {
-		return "", fmt.Errorf("encode request body: %w", err)
-	}
-	var supplied map[string]json.RawMessage
-	if err := json.Unmarshal(data, &supplied); err != nil {
-		return "", fmt.Errorf("decode request body: %w", err)
 	}
 	violations, err := a.inheritance.CheckWrite(entryType, supplied, stored)
 	if err != nil {
