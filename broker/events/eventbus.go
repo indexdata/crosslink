@@ -216,7 +216,7 @@ func (p *PostgresEventBus) CreateTask(classId string, eventName EventName, data 
 			LastSignal:       string(SignalTaskCreated),
 			PatronRequestID:  patronRequestID,
 		})
-		if err != nil && event.ParentID.Valid {
+		if err != nil {
 			return err
 		}
 		err = eventRepo.Notify(p.ctx, id, SignalTaskCreated, target)
