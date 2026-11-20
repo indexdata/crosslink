@@ -251,3 +251,9 @@ the selected conflict policy before the patron-request file.
 
 All import scripts use `curl --fail-with-body`, so HTTP failures return a
 nonzero exit status while preserving the server response body in the output.
+
+### Supplier picking states
+
+`RES_AWAIT_PICKING` loan requests export as `SEARCHING`: their pull slip has
+already been printed. Requests in `RES_NEW_AWAIT_PULL_SLIP` remain `WILL_SUPPLY`
+so printing records the normal transition to `SEARCHING`.

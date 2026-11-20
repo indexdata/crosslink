@@ -202,7 +202,7 @@ CROSS JOIN (VALUES ('Loan'), ('CopyOrLoan')) AS service_types(service_type);
 INSERT INTO crosslink_state_map
     (legacy_state, side, service_type, crosslink_state)
 VALUES
-    ('RES_AWAIT_PICKING',       'lending', 'Loan', 'ITEM_PENDING'),
+    ('RES_AWAIT_PICKING',       'lending', 'Loan', 'SEARCHING'),
     ('RES_SEQUESTERED',         'lending', 'Loan', 'ITEM_PENDING'),
     ('RES_AWAIT_PROXY_BORROWER','lending', 'Loan', 'ITEM_PENDING'),
     ('RES_HOLD_PLACED',         'lending', 'Loan', 'ITEM_PENDING'),
