@@ -447,7 +447,16 @@ SELECT
         WHEN patron_request.pr_is_requester IS TRUE THEN 'borrowing'
         ELSE 'lending'
     END AS import_side,
-    crosslink_state_map.crosslink_state AS import_state,
+    CASE
+        -- Shipping a Loan requires an attached item. Without a barcode the
+        -- export has no item, so keep the item lookup action available.
+        WHEN crosslink_state_map.crosslink_state = 'SEARCHING'
+         AND crosslink_state_map.side = 'lending'
+         AND normalized_service_type.value = 'Loan'
+         AND nullif(btrim(patron_request.pr_selected_item_barcode), '') IS NULL
+            THEN 'ITEM_PENDING'
+        ELSE crosslink_state_map.crosslink_state
+    END AS import_state,
     service_type.rdv_value AS legacy_service_type,
     normalized_service_type.value AS import_service_type,
     pickup_location.id AS import_pickup_location_id,

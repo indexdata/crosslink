@@ -318,6 +318,7 @@ nonzero exit status while preserving the server response body in the output.
 
 ### Supplier picking states
 
-`RES_AWAIT_PICKING` loan requests export as `SEARCHING`: their pull slip has
-already been printed. Requests in `RES_NEW_AWAIT_PULL_SLIP` remain `WILL_SUPPLY`
-so printing records the normal transition to `SEARCHING`.
+`RES_AWAIT_PICKING` loan requests with a selected item barcode export as
+`SEARCHING`. Loans with a missing or blank barcode export as `ITEM_PENDING`
+so staff can look up or attach an item. Requests in `RES_NEW_AWAIT_PULL_SLIP`
+remain `WILL_SUPPLY` so printing records the normal transition to `SEARCHING`.
