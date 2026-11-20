@@ -130,9 +130,73 @@ syntax and data-context checks. Templates with residual Handlebars actions or a
 mixture of both data contexts are preserved in `unsupported-templates.ndjson`
 with their source, converted content, and review reason.
 
+The unsupported **New host LMS location**, **New host LMS shelving location**,
+and **New patron profile** templates are omitted from both export files.
+Other templates retain their stable `mod-rs-template-<localized-template UUID>`
+label. Configured notice triggers add the following notification labels,
+independently of the template title:
+
+| Legacy notice trigger | CrossLink label | Audience |
+| --- | --- | --- |
+| New request | `new-request-notification` | Patron |
+| Document delivered; Loaned digitally | `copy-completed-notification` | Patron |
+| End of rota; End of rota reviewed | `unfilled-notification` | Patron |
+| Request cancelled | `cancelled-notification` | Patron |
+| Over limit | `over-limit-notification` | Patron |
+| New request (supply); New expedited request (supply) | `new-supply-request-notification` | Staff |
+
+When several compatible English templates match a notification label, the one
+with the lowest container UUID, then localized-template UUID, receives it. Other
+templates keep their migration labels for review. Unsupported templates,
+batch-only templates, and the configured pull-slip template do not receive
+patron-request notification labels. A template used for both patron and staff
+notices has no audience restriction. Legacy notice-policy activation is not
+migrated; these labels select templates when CrossLink sends a notification.
+
 A `PrintPullSlips` schedule selects a migrated template only when its converted
 subject and body are importable and compatible with batch-email data. Otherwise,
 the schedule uses the generated `pullslip-email` fallback template.
+
+When `stale_request_3_exclude_weekend` is `yes`, default-request aging excludes
+weekend runs, preserving its time of day. Existing `BYDAY` selectors are
+intersected with weekdays, including ordinals: `BYDAY=MO` stays Monday-only,
+and `BYDAY=1MO,1SA` becomes `BYDAY=1MO`. Daily and finer rules, and calendar-period
+rules with explicit date selectors, receive a Monday-Friday filter when `BYDAY`
+is absent. If no weekday selectors remain, the export fails with the
+schedule in the error; review the timer schedule or set
+`stale_request_3_exclude_weekend` to `no` before exporting.
+
+Weekly, monthly, and yearly rules must include at least one explicit date
+selector: `BYDAY`, `BYMONTHDAY`, `BYYEARDAY`, `BYWEEKNO`, or `BYEASTER`.
+Otherwise the export fails because adding `BYDAY` would replace the anchor's
+implicit weekday, day of month, or annual date. `BYMONTH` and time selectors
+alone still rely on these defaults. Specify explicit date selectors or set
+`stale_request_3_exclude_weekend` to `no` before exporting these rules.
+
+Positive `COUNT` rules are exported only when their existing `BYDAY` selectors
+are already weekday-only. `COUNT` limits emitted runs, so adding or narrowing
+the weekday filter could extend the schedule beyond its original last run.
+For example, `FREQ=DAILY;COUNT=3` anchored on Friday, 2026-11-13 originally
+ends on Sunday; removing weekend runs should leave only Friday, not add Monday
+and Tuesday. These rules fail export for review. Set
+`stale_request_3_exclude_weekend` to `no` to export them unchanged. `COUNT=0`
+is unbounded in the broker's recurrence library and does not require this guard.
+
+`BYSETPOS` selects positions after day filtering. Daily rules with `BYSETPOS`
+remain `DAILY` so each weekday keeps its own positional selection. Weekly,
+monthly, and yearly rules with `BYSETPOS` are exported only when their existing
+`BYDAY` selectors are already weekday-only. Otherwise the export fails for review,
+including when `BYDAY` is absent: filtering candidates before positional
+selection could move a run to another day, such as changing the last calendar
+day to the last weekday. Review the timer schedule or set
+`stale_request_3_exclude_weekend` to `no` before exporting these rules.
+
+Blank values use the legacy setting default; a missing setting defaults to
+`yes`, as in mod-rs. Daily schedules with a unit interval and no `BYSETPOS` become
+weekly weekday schedules; other frequencies and intervals are preserved. Rush
+and express schedules are unchanged.
+This skips weekend runs, but the aging threshold still counts elapsed time,
+including weekends. Imported scheduled actions remain inactive until enabled.
 
 ## `join-crosslink-exports.sh`
 

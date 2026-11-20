@@ -20,8 +20,13 @@
 --   * CheckForOverdueSupplierRequests becomes an overdue action.
 --   * CheckForStaleSupplierRequests becomes one request-aging action for each
 --     positive default, rush, or express threshold configured for the tenant.
---     Blank values use the setting default. CrossLink uses elapsed durations,
---     so mod-rs weekend exclusion cannot be carried across.
+--     Blank values use the setting default. When weekend exclusion is enabled,
+--     default-request aging keeps only weekday selectors, preserving ordinals.
+--     Weekend-only rules, rules relying on implicit anchor dates, COUNT rules
+--     whose emitted runs would change, and calendar-period BYSETPOS rules whose
+--     day candidates would change abort the export for review. The threshold
+--     still measures elapsed time, including weekends; rush and express
+--     schedules are unchanged.
 --   * PrintPullSlips becomes email-pullslips when it has a non-empty RRULE,
 --     valid JSON configuration, and at least one non-empty recipient.
 --   * Timer location filters cannot be carried across: CrossLink's
@@ -38,6 +43,10 @@
 --   * Template labels are stable and take the form "mod-rs-template-<UUID>",
 --     using the localized-template UUID so multiple English templates in one
 --     legacy container remain distinct.
+--     Supported notice triggers also map to CrossLink notification labels, with
+--     the lowest eligible container/localized-template UUID receiving each label
+--     when multiple templates match. The three unsupported new LMS location,
+--     shelving location, and patron profile notices are excluded.
 --     A pull-slip timer uses the template selected by pull_slip_template_id when
 --     an eligible, batch-compatible English template is exported, choosing the
 --     lowest localized-template UUID if legacy data contains multiple English
@@ -128,6 +137,96 @@ BEGIN
 END
 $convert_handlebars_placeholder$;
 
+-- Non-positional daily weekday schedules use WEEKLY so the scheduled-action form
+-- can display their selected days. Preserve positional periods and other cadences.
+-- Intersect existing BYDAY selectors with weekdays without losing ordinals.
+CREATE OR REPLACE FUNCTION pg_temp.weekday_schedule(schedule TEXT)
+    RETURNS TEXT
+    LANGUAGE plpgsql
+    IMMUTABLE
+AS $weekday_schedule$
+DECLARE
+    day_match TEXT[] := regexp_match(schedule, '(^|;)BYDAY=([^;]*)', 'i');
+    has_positions BOOLEAN := schedule ~* '(^|;)BYSETPOS=';
+    weekdays TEXT := 'MO,TU,WE,TH,FR';
+    converted TEXT := btrim(regexp_replace(
+        schedule, '(^|;)BYDAY=[^;]*', '', 'gi'
+    ), ';');
+BEGIN
+    IF day_match IS NOT NULL THEN
+        SELECT string_agg(day, ',' ORDER BY position)
+        INTO weekdays
+        FROM unnest(string_to_array(day_match[2], ','))
+            WITH ORDINALITY AS selected_days(day, position)
+        WHERE day ~* '^([+-]?[0-9]+)?(MO|TU|WE|TH|FR)$';
+
+        -- An empty BYDAY would remove the restriction and add unintended runs.
+        IF weekdays IS NULL THEN
+            RAISE EXCEPTION
+                'Weekend exclusion leaves no weekdays in request-aging schedule: %',
+                schedule
+                USING ERRCODE = 'invalid_parameter_value',
+                      HINT = 'Review the timer schedule or set stale_request_3_exclude_weekend to no before exporting.';
+        END IF;
+    END IF;
+
+    -- COUNT limits emitted occurrences, so filtering days can extend a finite
+    -- rule beyond its original last run. Require an unchanged weekday-only BYDAY.
+    IF schedule ~* '(^|;)COUNT=[+]?0*[1-9][0-9]*(;|$)'
+       AND (day_match IS NULL OR weekdays IS DISTINCT FROM day_match[2]) THEN
+        RAISE EXCEPTION
+            'Weekend exclusion would change COUNT-limited occurrences in request-aging schedule: %',
+            schedule
+            USING ERRCODE = 'invalid_parameter_value',
+                  HINT = 'Review the timer schedule or set stale_request_3_exclude_weekend to no before exporting.';
+    END IF;
+
+    -- BYSETPOS selects from the period's candidates after BYDAY filtering.
+    -- Removing weekend candidates can select a different weekday occurrence.
+    -- Only an existing weekday-only BYDAY proves these candidates unchanged.
+    IF has_positions
+       AND converted ~* '(^|;)FREQ=(WEEKLY|MONTHLY|YEARLY)(;|$)'
+       AND (day_match IS NULL OR weekdays IS DISTINCT FROM day_match[2]) THEN
+        RAISE EXCEPTION
+            'Weekend exclusion would change BYSETPOS day candidates in request-aging schedule: %',
+            schedule
+            USING ERRCODE = 'invalid_parameter_value',
+                  HINT = 'Review the timer schedule or set stale_request_3_exclude_weekend to no before exporting.';
+    END IF;
+
+    -- Adding BYDAY suppresses rrule-go's DTSTART-based date defaults for these
+    -- periods. BYMONTH and time selectors alone do not replace those defaults.
+    IF converted ~* '(^|;)FREQ=(WEEKLY|MONTHLY|YEARLY)(;|$)'
+       AND schedule !~* '(^|;)(BYWEEKNO|BYYEARDAY|BYMONTHDAY|BYDAY|BYEASTER)=[^;]+' THEN
+        RAISE EXCEPTION
+            'Weekend exclusion would replace implicit anchor dates in request-aging schedule: %',
+            schedule
+            USING ERRCODE = 'invalid_parameter_value',
+                  HINT = 'Specify explicit date selectors or set stale_request_3_exclude_weekend to no before exporting.';
+    END IF;
+
+    IF converted ~* '(^|;)FREQ=DAILY(;|$)'
+       AND NOT has_positions
+       AND converted !~* '(^|;)INTERVAL=([2-9]|[0-9]{2,})(;|$)' THEN
+        converted := regexp_replace(
+            converted, '(^|;)FREQ=DAILY(;|$)', '\1FREQ=WEEKLY\2', 'i'
+        );
+    END IF;
+    IF converted ~* '(^|;)FREQ=WEEKLY(;|$)' THEN
+        converted := btrim(regexp_replace(
+            converted, '(^|;)INTERVAL=1(;|$)', '\1', 'i'
+        ), ';');
+        IF converted !~* '(^|;)BYHOUR=' THEN
+            converted := converted || ';BYHOUR=0';
+        END IF;
+        IF converted !~* '(^|;)BYMINUTE=' THEN
+            converted := converted || ';BYMINUTE=0';
+        END IF;
+    END IF;
+    RETURN converted || ';BYDAY=' || weekdays;
+END
+$weekday_schedule$;
+
 CREATE TEMP TABLE crosslink_config_records ON COMMIT DROP AS
 WITH RECURSIVE
 effective_settings AS (
@@ -141,6 +240,7 @@ effective_settings AS (
     WHERE st_key IN (
         'pull_slip_template_id',
         'stale_request_2_days',
+        'stale_request_3_exclude_weekend',
         'stale_request_rush_hours',
         'stale_request_express_hours'
     )
@@ -156,6 +256,12 @@ export_settings AS (
             ),
             '3'
         ) AS stale_request_days,
+        lower(coalesce(
+            max(value) FILTER (
+                WHERE st_key = 'stale_request_3_exclude_weekend'
+            ),
+            'yes'
+        )) = 'yes' AS exclude_weekends,
         max(value) FILTER (
             WHERE st_key = 'stale_request_rush_hours'
         ) AS stale_request_rush_hours,
@@ -178,6 +284,11 @@ raw_english_templates AS (
       ON template.tm_id = localized_template.ltm_template_fk
     WHERE lower(localized_template.ltm_locality) = 'en'
       AND nullif(btrim(template.tm_template_body), '') IS NOT NULL
+      AND lower(btrim(template_container.tmc_name)) NOT IN (
+          'new host lms location',
+          'new host lms shelving location',
+          'new patron profile'
+      )
 ),
 -- CrossLink does not carry across mod-rs's location filters, so its
 -- comma-separated locations placeholder is replaced with "all locations".
@@ -377,6 +488,50 @@ english_templates AS (
         ) AS incompatibility_reason
     FROM template_characteristics
 ),
+-- Resolve labels through configured triggers, rather than mutable template
+-- titles. Keep only one eligible template per label to avoid import conflicts.
+notice_label_mappings(trigger_value, label, audience) AS (
+    VALUES
+        ('new request', 'new-request-notification', 'patron'),
+        ('document delivered', 'copy-completed-notification', 'patron'),
+        ('loaned digitally', 'copy-completed-notification', 'patron'),
+        ('end of rota', 'unfilled-notification', 'patron'),
+        ('end of rota reviewed', 'unfilled-notification', 'patron'),
+        ('request cancelled', 'cancelled-notification', 'patron'),
+        ('over limit', 'over-limit-notification', 'patron'),
+        ('new supply request', 'new-supply-request-notification', 'staff'),
+        ('new supply request expedited', 'new-supply-request-notification', 'staff')
+),
+selected_notice_templates AS (
+    SELECT DISTINCT ON (notice_label_mappings.label)
+        english_templates.localized_template_id,
+        notice_label_mappings.label,
+        notice_label_mappings.audience
+    FROM english_templates
+    JOIN notice_policy_notice
+      ON notice_policy_notice.npn_template_fk = english_templates.container_id
+    JOIN refdata_value AS trigger
+      ON trigger.rdv_id = notice_policy_notice.npn_trigger_fk
+    JOIN notice_label_mappings
+      ON notice_label_mappings.trigger_value =
+          lower(replace(btrim(trigger.rdv_value), '_', ' '))
+    CROSS JOIN export_settings
+    WHERE english_templates.import_compatible
+      AND english_templates.patron_compatible
+      AND english_templates.container_id::TEXT IS DISTINCT FROM
+          export_settings.pull_slip_template_id
+    ORDER BY notice_label_mappings.label,
+        english_templates.container_id,
+        english_templates.localized_template_id
+),
+template_notice_labels AS (
+    SELECT
+        localized_template_id,
+        jsonb_agg(label ORDER BY label) AS labels,
+        CASE WHEN count(DISTINCT audience) = 1 THEN min(audience) END AS audience
+    FROM selected_notice_templates
+    GROUP BY localized_template_id
+),
 compatible_timers AS (
     SELECT
         timer.tr_id AS timer_id,
@@ -516,10 +671,15 @@ request_aging_actions AS (
             ELSE aging_levels.title
         END AS title,
         aging_levels.batch_query,
-        compatible_timers.schedule,
+        CASE
+            WHEN aging_levels.level = 'all' AND export_settings.exclude_weekends
+                THEN pg_temp.weekday_schedule(compatible_timers.schedule)
+            ELSE compatible_timers.schedule
+        END AS schedule,
         aging_levels.interval_hours::TEXT || 'h' AS interval
     FROM compatible_timers
     CROSS JOIN aging_levels
+    CROSS JOIN export_settings
     WHERE compatible_timers.task_code =
         lower('CheckForStaleSupplierRequests')
 ),
@@ -543,16 +703,19 @@ export_records AS (
                 'labels', jsonb_build_array(
                     'mod-rs-template-'
                         || english_templates.localized_template_id
-                ),
+                ) || coalesce(template_notice_labels.labels, '[]'::JSONB),
                 'audience', CASE
                     WHEN english_templates.container_id::TEXT =
                         export_settings.pull_slip_template_id THEN 'staff'
-                    ELSE NULL
+                    ELSE template_notice_labels.audience
                 END
             ))
         ) AS record
     FROM english_templates
     CROSS JOIN export_settings
+    LEFT JOIN template_notice_labels
+      ON template_notice_labels.localized_template_id =
+          english_templates.localized_template_id
     WHERE english_templates.import_compatible
 
     UNION ALL
