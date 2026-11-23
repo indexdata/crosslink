@@ -25,7 +25,7 @@ require (
 	github.com/indexdata/go-utils v1.0.0
 	github.com/oapi-codegen/nethttp-middleware v1.3.1
 	github.com/oapi-codegen/nullable v1.2.0
-	github.com/oapi-codegen/runtime v1.9.0
+	github.com/oapi-codegen/runtime v1.9.1
 	github.com/stretchr/testify v1.12.1
 )
 
