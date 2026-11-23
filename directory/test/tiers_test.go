@@ -120,9 +120,16 @@ func TestTierCases(t *testing.T) {
 			name:        "PATCH tier without permission",
 			method:      http.MethodPatch,
 			endpoint:    "/tiers/30000000-0000-0000-0000-000000000001",
-			status:      http.StatusUnauthorized,
+			status:      http.StatusForbidden,
 			body:        `{"cost":2.5}`,
 			addlHeaders: institutionPermissionHeaders,
+		},
+		{
+			name:        "DELETE tier assigned to an entry",
+			method:      http.MethodDelete,
+			endpoint:    "/tiers/30000000-0000-0000-0000-000000000001",
+			status:      http.StatusConflict,
+			addlHeaders: consortiumPermissionHeaders,
 		},
 		{
 			name:          "DELETE tier",

@@ -82,11 +82,12 @@ func InitHandler(ctx context.Context, dbpool *pgxpool.Pool) http.Handler {
 		os.Exit(1)
 	}
 	impl := api.NewApiImpl(dbpool, queries, importer, inheritance)
-	si := api.NewStrictHandler(impl, nil)
+	si := api.NewStrictHandlerWithOptions(impl, nil, api.StrictServerOptions())
 	m := http.NewServeMux()
 	h := api.HandlerWithOptions(si, api.StdHTTPServerOptions{
-		BaseURL:    BasePath,
-		BaseRouter: m,
+		BaseURL:          BasePath,
+		BaseRouter:       m,
+		ErrorHandlerFunc: api.ParamErrorHandler,
 	})
 	handlerWithValidation := openAPIRequestValidationMiddleware(swagger)
 	handlerWithLogging := httpLoggingMiddleware(handlerWithValidation(h))

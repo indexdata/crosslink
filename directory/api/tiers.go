@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -17,35 +18,33 @@ func (a ApiImpl) AddTier(ctx context.Context, request AddTierRequestObject) (Add
 	authData := auth.GetAuthData(ctx)
 
 	if !authData.HasRole(auth.ConsortialAdminRole) {
-		slog.ErrorContext(ctx, "permission denied")
-		return AddTier401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return AddTier403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	if request.Body == nil || request.Body.Consortium == uuid.Nil {
-		return AddTier400TextResponse("You must provide a consortium"), nil
+		return AddTier400JSONResponse{badRequest("You must provide a consortium")}, nil
 	}
 	if strings.TrimSpace(request.Body.Name) == "" {
-		return AddTier400TextResponse("You must provide a tier name"), nil
+		return AddTier400JSONResponse{badRequest("You must provide a tier name")}, nil
 	}
 
 	consortium, err := a.queries.EntryById(ctx, request.Body.Consortium)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return AddTier400TextResponse("Consortium not found"), nil
+			return AddTier400JSONResponse{badRequest("Consortium not found")}, nil
 		}
-		slog.ErrorContext(ctx, "failed to get consortium", "error", err, "consortium", request.Body.Consortium)
-		return AddTier500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to get consortium consortium=%v: %w", request.Body.Consortium, err)
 	}
 
 	if consortium.Type != string(EntryTypeConsortium) {
-		return AddTier400TextResponse("Entry is not a consortium"), nil
+		return AddTier400JSONResponse{badRequest("Entry is not a consortium")}, nil
 	}
 
 	tx, err := a.pool.Begin(ctx)
 
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to begin transaction", "error", err, "operation", "AddTier")
-		return AddTier500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
 	defer func() { _ = tx.Rollback(ctx) }()
@@ -56,14 +55,14 @@ func (a ApiImpl) AddTier(ctx context.Context, request AddTierRequestObject) (Add
 	switch level {
 	case Express, Normal, Rush, Secondarymail, Standard, Urgent:
 	default:
-		return AddTier400TextResponse("Invalid tier level"), nil
+		return AddTier400JSONResponse{badRequest("Invalid tier level")}, nil
 	}
 
 	tierType := request.Body.Type
 	switch tierType {
 	case Loan, Copy:
 	default:
-		return AddTier400TextResponse("Invalid tier type"), nil
+		return AddTier400JSONResponse{badRequest("Invalid tier type")}, nil
 	}
 	insertedTier, err := qtx.CreateTier(ctx, db.CreateTierParams{
 		Name:       request.Body.Name,
@@ -75,10 +74,9 @@ func (a ApiImpl) AddTier(ctx context.Context, request AddTierRequestObject) (Add
 
 	if err != nil {
 		if isUniqueConstraintViolation(err, "tiers_consortium_name_unique") {
-			return AddTier409TextResponse("A tier with this name already exists in the consortium"), nil
+			return AddTier409JSONResponse{Error: "A tier with this name already exists in the consortium"}, nil
 		}
-		slog.ErrorContext(ctx, "failed to create tier", "error", err, "name", request.Body.Name)
-		return AddTier500TextResponse("Error creating tier"), nil
+		return nil, fmt.Errorf("failed to create tier name=%v: %w", request.Body.Name, err)
 	}
 
 	var resp Id
@@ -87,8 +85,7 @@ func (a ApiImpl) AddTier(ctx context.Context, request AddTierRequestObject) (Add
 	err = tx.Commit(ctx)
 
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to commit transaction", "error", err, "operation", "AddTier")
-		return AddTier500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return AddTier201JSONResponse(resp), nil
@@ -101,17 +98,16 @@ func (a ApiImpl) GetTier(ctx context.Context, request GetTierRequestObject) (Get
 	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole}
 
 	if !authData.HasRoleFromList(validRoles) {
-		slog.ErrorContext(ctx, "permission denied")
-		return GetTier401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return GetTier403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	tier, err := a.queries.GetTierById(ctx, request.Id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return GetTier404TextResponse("Tier not found"), nil
+			return GetTier404JSONResponse{notFound("Tier not found")}, nil
 		} else {
-			slog.ErrorContext(ctx, "failed to get tier", "error", err, "id", request.Id)
-			return GetTier500TextResponse("Internal server error"), nil
+			return nil, fmt.Errorf("failed to get tier id=%v: %w", request.Id, err)
 		}
 	}
 
@@ -132,8 +128,8 @@ func (a ApiImpl) GetTiers(ctx context.Context, request GetTiersRequestObject) (G
 	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.PublicUserRole}
 
 	if !authData.HasRoleFromList(validRoles) {
-		slog.ErrorContext(ctx, "permission denied")
-		return GetTiers401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return GetTiers403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	params := db.ListTiersParams{
@@ -143,8 +139,7 @@ func (a ApiImpl) GetTiers(ctx context.Context, request GetTiersRequestObject) (G
 
 	rows, err := a.queries.ListTiers(ctx, params)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to list tiers", "error", err)
-		return GetTiers500TextResponse("Internal Server Error"), nil
+		return nil, fmt.Errorf("failed to list tiers: %w", err)
 	}
 
 	tierList := make([]Tier, 0, len(rows))
@@ -176,14 +171,16 @@ func (a ApiImpl) DeleteTier(ctx context.Context, request DeleteTierRequestObject
 	authData := auth.GetAuthData(ctx)
 
 	if !authData.HasRole(auth.ConsortialAdminRole) {
-		slog.ErrorContext(ctx, "permission denied")
-		return DeleteTier401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return DeleteTier403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	err := a.queries.DeleteTierById(ctx, request.Id)
+	if isForeignKeyViolation(err, "entry_tiers_tier_fkey") {
+		return DeleteTier409JSONResponse{Error: "The tier is still assigned to an entry"}, nil
+	}
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to delete tier", "error", err, "id", request.Id)
-		return DeleteTier500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to delete tier id=%v: %w", request.Id, err)
 	}
 	return DeleteTier204Response{}, nil
 
@@ -192,27 +189,25 @@ func (a ApiImpl) DeleteTier(ctx context.Context, request DeleteTierRequestObject
 func (a ApiImpl) UpdateTier(ctx context.Context, request UpdateTierRequestObject) (UpdateTierResponseObject, error) {
 	authData := auth.GetAuthData(ctx)
 	if !authData.HasRole(auth.ConsortialAdminRole) {
-		slog.ErrorContext(ctx, "permission denied")
-		return UpdateTier401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return UpdateTier403JSONResponse{forbidden("Access denied")}, nil
 	}
 	if request.Body == nil {
-		return UpdateTier400TextResponse("You must provide fields to update"), nil
+		return UpdateTier400JSONResponse{badRequest("You must provide fields to update")}, nil
 	}
 
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to begin transaction", "error", err, "operation", "UpdateTier")
-		return UpdateTier500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	qtx := a.queries.WithTx(tx)
 	orig, err := qtx.GetTierByIdForUpdate(ctx, request.Id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return UpdateTier404TextResponse("Tier not found"), nil
+		return UpdateTier404JSONResponse{notFound("Tier not found")}, nil
 	} else if err != nil {
-		slog.ErrorContext(ctx, "failed to get tier for update", "error", err, "id", request.Id)
-		return UpdateTier500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to get tier for update id=%v: %w", request.Id, err)
 	}
 
 	level := orig.Level
@@ -228,12 +223,12 @@ func (a ApiImpl) UpdateTier(ctx context.Context, request UpdateTierRequestObject
 	switch TierLevel(level) {
 	case Express, Normal, Rush, Secondarymail, Standard, Urgent:
 	default:
-		return UpdateTier400TextResponse("Invalid tier level"), nil
+		return UpdateTier400JSONResponse{badRequest("Invalid tier level")}, nil
 	}
 	switch TierType(tierType) {
 	case Loan, Copy:
 	default:
-		return UpdateTier400TextResponse("Invalid tier type"), nil
+		return UpdateTier400JSONResponse{badRequest("Invalid tier type")}, nil
 	}
 	err = qtx.UpdateTier(ctx, db.UpdateTierParams{
 		ID:    request.Id,
@@ -242,13 +237,11 @@ func (a ApiImpl) UpdateTier(ctx context.Context, request UpdateTierRequestObject
 		Cost:  cost,
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to update tier", "error", err, "id", request.Id)
-		return UpdateTier500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to update tier id=%v: %w", request.Id, err)
 	}
 
 	if err = tx.Commit(ctx); err != nil {
-		slog.ErrorContext(ctx, "failed to commit transaction", "error", err, "operation", "UpdateTier")
-		return UpdateTier500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 	return UpdateTier204Response{}, nil
 }
