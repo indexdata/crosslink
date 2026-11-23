@@ -68,7 +68,7 @@ func TestLocateSuppliersLoadBalancingPolicy(t *testing.T) {
 				consortiumPeers: []ill_db.Peer{{ID: "consortium", CustomData: dirapi.Entry{Symbols: &[]dirapi.Symbol{{Authority: "ISIL", Symbol: "SUPC"}}, IllConfig: config(tc.consortiumPolicy)}}},
 			}
 			ad := new(adapter.MockDirectoryLookupAdapter)
-			factory := NewLookupAdapterFactory(repo, ad, tc.symbol, new(catalog.MockLookupShared), new(catalog.LookupAdapterCreatorImpl))
+			factory := NewLookupAdapterFactory(repo, ad, tc.symbol, globalSources(new(catalog.MockLookupShared)), new(catalog.LookupAdapterCreatorImpl))
 			locator := CreateSupplierLocator(new(events.PostgresEventBus), repo, ad, factory)
 			status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
 			if tc.first == "" {

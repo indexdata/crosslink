@@ -150,7 +150,7 @@ func TestCheckAvailabilityWithoutConfiguration(t *testing.T) {
 		mockRepo,
 		new(adapter.MockDirectoryLookupAdapter),
 		"",
-		nil,
+		directorySources(),
 		catalog.NewLookupAdapterCreator(catalog.LookupAdapterMock, ""),
 	)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, new(adapter.MockDirectoryLookupAdapter), factory)
@@ -183,7 +183,7 @@ func TestGetNextSupplierEmptyMap(t *testing.T) {
 	peerId := "p1"
 	mockIllRepo := new(MockIllRepoRequester)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{}, nil)
-	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", globalSources(new(catalog.SruLookupAdapter)), new(catalog.LookupAdapterCreatorImpl))
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
 
 	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
@@ -210,7 +210,7 @@ func TestGetNextSupplierClosed(t *testing.T) {
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
-	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", globalSources(new(catalog.SruLookupAdapter)), new(catalog.LookupAdapterCreatorImpl))
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
 
 	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId, SupplierSymbol: "ISIL:SUP"}})
@@ -225,7 +225,7 @@ func TestGetNextSupplierFailToLoadPeer(t *testing.T) {
 	peerId := "p1"
 	mockIllRepo := new(MockIllRepoRequester)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{}, errors.New("db error"))
-	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", globalSources(new(catalog.SruLookupAdapter)), new(catalog.LookupAdapterCreatorImpl))
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
 
 	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
@@ -244,7 +244,7 @@ func TestGetNextSupplierNoClosures(t *testing.T) {
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
-	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", globalSources(new(catalog.SruLookupAdapter)), new(catalog.LookupAdapterCreatorImpl))
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
 
 	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
@@ -269,7 +269,7 @@ func TestGetNextSupplierNoStartDate(t *testing.T) {
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
-	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", globalSources(new(catalog.SruLookupAdapter)), new(catalog.LookupAdapterCreatorImpl))
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
 
 	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
@@ -294,7 +294,7 @@ func TestGetNextSupplierNoEndDate(t *testing.T) {
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
-	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", globalSources(new(catalog.SruLookupAdapter)), new(catalog.LookupAdapterCreatorImpl))
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
 
 	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
@@ -321,7 +321,7 @@ func TestGetNextSupplierBothInPast(t *testing.T) {
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
-	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", globalSources(new(catalog.SruLookupAdapter)), new(catalog.LookupAdapterCreatorImpl))
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
 
 	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
@@ -348,7 +348,7 @@ func TestGetNextSupplierBothInFuture(t *testing.T) {
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
-	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", globalSources(new(catalog.SruLookupAdapter)), new(catalog.LookupAdapterCreatorImpl))
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
 
 	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
@@ -415,7 +415,7 @@ func TestGetNextSupplierBetweenHolidays(t *testing.T) {
 	err = json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
-	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", globalSources(new(catalog.SruLookupAdapter)), new(catalog.LookupAdapterCreatorImpl))
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
 
 	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "l1", SupplierID: peerId}})
@@ -442,7 +442,7 @@ func TestGetNextSupplierClosedEventFailed(t *testing.T) {
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
-	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", new(catalog.SruLookupAdapter), new(catalog.LookupAdapterCreatorImpl))
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.ApiDirectory), "", globalSources(new(catalog.SruLookupAdapter)), new(catalog.LookupAdapterCreatorImpl))
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), lookupAdapterFactory)
 	status, result := locator.selectSupplier(appCtx, events.Event{IllTransactionID: "1"})
 
@@ -477,7 +477,7 @@ func TestLocateSuppliersDeduplicatesHoldingSymbolsForDirectoryLookup(t *testing.
 		},
 	}
 
-	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.MockDirectoryLookupAdapter), "", new(catalog.MockLookupShared), new(catalog.LookupAdapterCreatorImpl))
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.MockDirectoryLookupAdapter), "", globalSources(new(catalog.MockLookupShared)), new(catalog.LookupAdapterCreatorImpl))
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.MockDirectoryLookupAdapter), lookupAdapterFactory)
 	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
 
@@ -527,7 +527,7 @@ func TestLocateSuppliersOrdersLowerProportionalScoreFirst(t *testing.T) {
 			}
 
 			directory := new(adapter.MockDirectoryLookupAdapter)
-			lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, directory, "", new(catalog.MockLookupShared), new(catalog.LookupAdapterCreatorImpl))
+			lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, directory, "", globalSources(new(catalog.MockLookupShared)), new(catalog.LookupAdapterCreatorImpl))
 			locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, directory, lookupAdapterFactory)
 			status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
 
@@ -565,7 +565,7 @@ func TestLocateSuppliersRetiresOldRotaBeforeNoHoldingsResult(t *testing.T) {
 		}},
 	}
 	lookupAdapter := &catalog.MockLookupAdapter{}
-	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.MockDirectoryLookupAdapter), "", lookupAdapter, nil)
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.MockDirectoryLookupAdapter), "", globalSources(lookupAdapter), nil)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.MockDirectoryLookupAdapter), lookupAdapterFactory)
 
 	status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
@@ -595,7 +595,7 @@ func TestLocateSuppliersUsesFirstHoldingLocalIdentifierForDuplicateSymbol(t *tes
 		},
 	}
 
-	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.MockDirectoryLookupAdapter), "", new(catalog.MockLookupShared), new(catalog.LookupAdapterCreatorImpl))
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.MockDirectoryLookupAdapter), "", globalSources(new(catalog.MockLookupShared)), new(catalog.LookupAdapterCreatorImpl))
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.MockDirectoryLookupAdapter), lookupAdapterFactory)
 	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
 
@@ -631,7 +631,7 @@ func TestLocateSuppliersLastResortRequester(t *testing.T) {
 		},
 	}
 
-	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.MockDirectoryLookupAdapter), "", new(catalog.MockLookupShared), new(catalog.LookupAdapterCreatorImpl))
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.MockDirectoryLookupAdapter), "", globalSources(new(catalog.MockLookupShared)), new(catalog.LookupAdapterCreatorImpl))
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.MockDirectoryLookupAdapter), lookupAdapterFactory)
 	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
 
@@ -675,7 +675,7 @@ func TestLocateSuppliersLastResortLookupEmpty(t *testing.T) {
 		},
 	}
 
-	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.MockDirectoryLookupAdapter), "", new(catalog.MockLookupShared), new(catalog.LookupAdapterCreatorImpl))
+	lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.MockDirectoryLookupAdapter), "", globalSources(new(catalog.MockLookupShared)), new(catalog.LookupAdapterCreatorImpl))
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.MockDirectoryLookupAdapter), lookupAdapterFactory)
 	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
 
@@ -721,7 +721,7 @@ func TestLocateSuppliersLastResortConsortium(t *testing.T) {
 			}
 
 			mockIllRepo.consortiumPeers[0].CustomData.IllConfig.LoadBalancingPolicy.Set(policy)
-			lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.MockDirectoryLookupAdapter), "ISIL:SUPC", new(catalog.MockLookupShared), new(catalog.LookupAdapterCreatorImpl))
+			lookupAdapterFactory := NewLookupAdapterFactory(mockIllRepo, new(adapter.MockDirectoryLookupAdapter), "ISIL:SUPC", globalSources(new(catalog.MockLookupShared)), new(catalog.LookupAdapterCreatorImpl))
 			locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.MockDirectoryLookupAdapter), lookupAdapterFactory)
 			status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
 
@@ -885,7 +885,7 @@ func TestLocateSuppliersMetadataModeNoneSkipsUpdate(t *testing.T) {
 	holdingsAdapter := &catalog.MockLookupAdapter{
 		Holdings: []catalog.Holding{{Symbol: "ISIL:SUP1"}},
 	}
-	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", holdingsAdapter, nil)
+	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", globalSources(holdingsAdapter), nil)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, new(adapter.MockDirectoryLookupAdapter), factory)
 
 	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
@@ -912,7 +912,7 @@ func TestLocateSuppliersMetadataSkippedForCrossLinkVendor(t *testing.T) {
 	holdingsAdapter := &catalog.MockLookupAdapter{
 		Holdings: []catalog.Holding{{Symbol: "ISIL:SUP1"}},
 	}
-	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", holdingsAdapter, nil)
+	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", globalSources(holdingsAdapter), nil)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, new(adapter.MockDirectoryLookupAdapter), factory)
 
 	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
@@ -938,7 +938,7 @@ func TestLocateSuppliersMetadataMergePopulatesEmptyFields(t *testing.T) {
 		Metadata: catalog.Metadata{Title: "Catalog Title", Author: "Catalog Author"},
 		Holdings: []catalog.Holding{{Symbol: "ISIL:SUP1"}},
 	}
-	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", holdingsAdapter, nil)
+	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", globalSources(holdingsAdapter), nil)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, new(adapter.MockDirectoryLookupAdapter), factory)
 
 	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
@@ -968,7 +968,7 @@ func TestLocateSuppliersMetadataMergePreservesExistingFields(t *testing.T) {
 		Metadata: catalog.Metadata{Title: "Catalog Title"},
 		Holdings: []catalog.Holding{{Symbol: "ISIL:SUP1"}},
 	}
-	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", holdingsAdapter, nil)
+	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", globalSources(holdingsAdapter), nil)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, new(adapter.MockDirectoryLookupAdapter), factory)
 
 	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
@@ -997,7 +997,7 @@ func TestLocateSuppliersMetadataAutoWithIdentifierReplaces(t *testing.T) {
 		Metadata: catalog.Metadata{Title: "Catalog Title"},
 		Holdings: []catalog.Holding{{Symbol: "ISIL:SUP1"}},
 	}
-	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", holdingsAdapter, nil)
+	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", globalSources(holdingsAdapter), nil)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, new(adapter.MockDirectoryLookupAdapter), factory)
 
 	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
@@ -1032,7 +1032,7 @@ func TestLocateSuppliersMetadataAutoWithoutIdentifierMerges(t *testing.T) {
 		Metadata: catalog.Metadata{Title: "Catalog Title"},
 		Holdings: []catalog.Holding{{Symbol: "ISIL:SUP1"}},
 	}
-	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", holdingsAdapter, nil)
+	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", globalSources(holdingsAdapter), nil)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, new(adapter.MockDirectoryLookupAdapter), factory)
 
 	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
@@ -1059,7 +1059,7 @@ func TestLocateSuppliersMetadataLookupError(t *testing.T) {
 	holdingsAdapter := &catalog.MockLookupAdapter{
 		Err: errors.New("metadata lookup failed"),
 	}
-	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", holdingsAdapter, nil)
+	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", globalSources(holdingsAdapter), nil)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, new(adapter.MockDirectoryLookupAdapter), factory)
 
 	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
@@ -1084,7 +1084,7 @@ func TestLocateSuppliersMetadataSaveTransactionError(t *testing.T) {
 	holdingsAdapter := &catalog.MockLookupAdapter{
 		Metadata: catalog.Metadata{Title: "Catalog Title"},
 	}
-	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", holdingsAdapter, nil)
+	factory := NewLookupAdapterFactory(mockRepo, new(adapter.MockDirectoryLookupAdapter), "", globalSources(holdingsAdapter), nil)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, new(adapter.MockDirectoryLookupAdapter), factory)
 
 	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
@@ -1126,7 +1126,7 @@ func TestLocateSuppliersPreservesAdditionsDuringDiscovery(t *testing.T) {
 				existingSuppliers: []ill_db.LocatedSupplier{existing},
 			}
 			directory := new(adapter.MockDirectoryLookupAdapter)
-			factory := NewLookupAdapterFactory(mockRepo, directory, "", new(catalog.MockLookupShared), new(catalog.LookupAdapterCreatorImpl))
+			factory := NewLookupAdapterFactory(mockRepo, directory, "", globalSources(new(catalog.MockLookupShared)), new(catalog.LookupAdapterCreatorImpl))
 			locator := CreateSupplierLocator(new(events.PostgresEventBus), mockRepo, directory, factory)
 			status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
 			assert.Equal(t, events.EventStatusSuccess, status)
