@@ -2208,6 +2208,7 @@ components:
 
     IllConfig:
       type: object
+      additionalProperties: false
       properties:
         loanConditions:
           type: array
@@ -2361,6 +2362,7 @@ components:
           minimum: 0
     IllConfigPatch:
       type: object
+      additionalProperties: false
       description: >-
         Partial update of an entry's local ILL configuration. Omitted fields keep
         their stored value. Null removes the local value, so an inherited value
@@ -2884,6 +2886,7 @@ components:
         A vendor alone does not enable NCIP; address and fromAgency must both
         be configured to create a circulation adapter.
       type: object
+      additionalProperties: false
       properties:
         ncipVersion:
           description: NCIP wire version. "default" uses the selected profile's version instead of an inherited value and is omitted from inherited views.
@@ -3000,6 +3003,7 @@ components:
 
     LmsConfigPatch:
       type: object
+      additionalProperties: false
       properties:
         ncipVersion:
           anyOf: [{ $ref: '#/components/schemas/NcipVersion' }, { type: "null" }]
