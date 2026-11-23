@@ -3218,6 +3218,7 @@ components:
 
     DiscoveryConfig:
       type: object
+      additionalProperties: false
       properties:
         queryUrl:
           type: string
@@ -3228,6 +3229,7 @@ components:
 
     DiscoveryConfigPatch:
       type: object
+      additionalProperties: false
       description: Partial update of an entry's local discovery configuration. Omitted fields keep their stored value; null removes it.
       properties:
         queryUrl:

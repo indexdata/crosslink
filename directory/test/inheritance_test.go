@@ -278,6 +278,10 @@ func TestInheritanceConsortiumOnlyDiscoveryConfig(t *testing.T) {
 	require.Equal(t, []any{want, want}, inherited(), "the institution and the branch inherit the consortium's settings")
 	require.NotContains(t, getEntryJSON(t, entryPath(tree.institution)+"?resolve-inherit=false", systemHeaders), "discoveryConfig")
 
+	status, body = patch(consortiumPath, `{"discoveryConfig":{"itemLinkTemplte":"https://other.example"}}`)
+	require.Equal(t, http.StatusBadRequest, status, "a misspelled field is rejected, not dropped: %s", body)
+	require.Equal(t, want, inherited()[0])
+
 	status, body = patch(entryPath(tree.institution), `{"discoveryConfig":{"queryUrl":"https://other.example"}}`)
 	require.Equal(t, http.StatusBadRequest, status)
 	require.Equal(t, "discoveryConfig.queryUrl is not editable on Institution", body)
