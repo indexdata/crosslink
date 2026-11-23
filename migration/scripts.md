@@ -315,3 +315,14 @@ the selected conflict policy before the patron-request file.
 
 All import scripts use `curl --fail-with-body`, so HTTP failures return a
 nonzero exit status while preserving the server response body in the output.
+
+### Supplier picking states
+
+Lending requests export each volume with a usable item barcode. The selected
+item barcode supplies a fallback when no volume can be exported, provided that
+barcode does not belong to a cancelled volume.
+
+`RES_AWAIT_PICKING` loans with an exported item enter `SEARCHING`. Loans
+without an exported item enter `ITEM_PENDING` so staff can look up or attach
+an item. Requests in `RES_NEW_AWAIT_PULL_SLIP` remain `WILL_SUPPLY` so printing
+records the normal transition to `SEARCHING`.

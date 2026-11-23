@@ -21,7 +21,9 @@ import (
 	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/indexdata/crosslink/testutil"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/require"
 )
 
 var eventBus events.EventBus
@@ -656,5 +658,18 @@ func TestReconnectListener(t *testing.T) {
 		return len(eventReceived) == 1
 	}) {
 		t.Error("Expected to have request event received")
+	}
+}
+
+func TestCreateTaskPreservesPostgresInsertErrorAndRollsBack(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	for _, parent := range []*string{nil, new("parent-event")} {
+		id, err := eventBus.CreateTask(uuid.NewString(), events.EventNameInvokeBackgroundAction,
+			events.EventData{}, events.EventDomainPatronRequest, parent, events.SignalConsumers)
+		var pgErr *pgconn.PgError
+		require.ErrorAs(t, err, &pgErr)
+		assert.Equal(t, "23503", pgErr.Code, "return the foreign-key failure, not 25P02")
+		_, err = eventRepo.GetEvent(ctx, id)
+		require.ErrorIs(t, err, pgx.ErrNoRows, "the failed task must not be persisted")
 	}
 }
