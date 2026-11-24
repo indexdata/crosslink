@@ -64,14 +64,13 @@ func ValidateTemplateRenderingForContext(purpose proapi.TemplatePurpose, content
 	var data any
 	switch context {
 	case PatronRequestTemplateContext:
-		data = email.GetPullSlipData(pr_db.PatronRequest{}, nil, nil, email.DEFAULT_FOR_NO_VALUE)
-		// Request IDs can be empty in a zero-valued request, but runtime
-		// rendering supplies a populated request ID.
-		patronData := data.(email.PullSlipData)
-		patronData.ReqId = email.DEFAULT_FOR_NO_VALUE
+		// Optional fields stay empty, as they are for a sparse request, but
+		// runtime rendering always has a request ID.
+		patronData := email.GetPullSlipData(pr_db.PatronRequest{}, nil, nil, "")
+		patronData.ReqId = "REQ-1"
 		data = patronData
 	case BatchEmailTemplateContext:
-		data = email.GetBatchEmailData(1, 1, email.DEFAULT_FOR_NO_VALUE)
+		data = email.GetBatchEmailData(1, 1, "query")
 	default:
 		return fmt.Errorf("unknown template rendering context %d", context)
 	}

@@ -121,9 +121,8 @@ After all schemas are exported, the script runs `join-crosslink-exports.sh` on
 the current directory.
 
 Known Handlebars placeholders, `#if` blocks, and triple-brace placeholders are
-converted to CrossLink Go-template syntax. Converted `#if` blocks compare their
-field against the `n/a` missing-value sentinel, so absent optional values follow
-the Handlebars `else` branch. Triple-brace values use CrossLink's normal HTML
+converted to CrossLink Go-template syntax. A missing optional value is empty,
+so a converted `#if` block follows the Handlebars `else` branch for it. Triple-brace values use CrossLink's normal HTML
 escaping. A converted template is included in `config.ndjson` only when it is
 valid for either patron-request or batch-email data according to the exporter's
 syntax and data-context checks. Templates with residual Handlebars actions or a

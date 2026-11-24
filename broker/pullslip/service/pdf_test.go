@@ -12,7 +12,6 @@ import (
 
 	"github.com/carlos7ags/folio/reader"
 	"github.com/indexdata/crosslink/broker/common"
-	"github.com/indexdata/crosslink/broker/email"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
@@ -66,7 +65,7 @@ func TestGeneratePdfPullSlip_Defaults(t *testing.T) {
 			String: "REQ-DEFAULTS",
 			Valid:  true,
 		},
-		// No bibliographic info — all fields should fall back to DEFAULT_FOR_NO_VALUE
+		// No bibliographic info, so those fields render empty.
 	}
 	pdfBytes, err := svc.GeneratePdfPullSlip(appCtx, pr, []pr_db.Notification{}, []pr_db.Notification{})
 	assert.NoError(t, err)
@@ -376,7 +375,7 @@ func TestRenderPdfPullSlip_EverySampleWithDefaultPreset(t *testing.T) {
 	want := map[string][]string{
 		"typical":   {"REQ-2026-00417", "QA76.6", "2026-08-15", "Library use only"},
 		"long":      {"US-REQ-CONSORTIUM-2026-0000419", "Z 105.5"},
-		"sparse":    {"REQ-7", email.DEFAULT_FOR_NO_VALUE},
+		"sparse":    {"REQ-7"},
 		"requester": {"REQ-2026-00418", "Silent Spring", "2026-09-01"},
 	}
 	samples, err := prservice.GetTemplateSamples()
