@@ -440,7 +440,7 @@ func (d *DirectoryMock) HandlerFromMux(mux *http.ServeMux) error {
 			writeError(w, http.StatusBadRequest, err.Error())
 		},
 		ResponseErrorHandlerFunc: func(w http.ResponseWriter, _ *http.Request, err error) {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			writeError(w, http.StatusInternalServerError, "Internal server error")
 		},
 	})
 	directoryMux := http.NewServeMux()
