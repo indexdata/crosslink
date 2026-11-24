@@ -75,7 +75,6 @@ require (
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/go-connections v0.8.2 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
-	github.com/dprotaso/go-yit v0.0.0-20250513224043-18a80f8f6df4 // indirect
 	github.com/ebitengine/purego v0.11.3 // indirect
 	github.com/elliotchance/orderedmap v1.8.0 // indirect
 	github.com/fatih/color v1.19.0 // indirect
@@ -122,7 +121,9 @@ require (
 	github.com/ncruces/go-sqlite3 v0.37.0 // indirect
 	github.com/ncruces/go-sqlite3-wasm/v6 v6.7.35401 // indirect
 	github.com/ncruces/julianday v1.0.0 // indirect
-	github.com/oapi-codegen/oapi-codegen/v2 v2.8.2 // indirect
+	github.com/oapi-codegen/oapi-codegen/v2 v2.9.0 // indirect
+	github.com/oasdiff/yaml v0.1.3 // indirect
+	github.com/oasdiff/yaml3 v0.0.16 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
@@ -136,8 +137,6 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 // indirect
 	github.com/shirou/gopsutil/v4 v4.26.10 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
-	github.com/speakeasy-api/jsonpath v0.6.3 // indirect
-	github.com/speakeasy-api/openapi v1.25.6 // indirect
 	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.1.0 // indirect
 	github.com/sqlc-dev/doubleclick v1.0.0 // indirect
@@ -145,9 +144,9 @@ require (
 	github.com/stretchr/objx v0.8.0 // indirect
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.45.0 // indirect
 	github.com/tetratelabs/wazero v1.12.0 // indirect
+	github.com/theory/jsonpath v0.12.3 // indirect
 	github.com/tklauser/go-sysconf v0.4.0 // indirect
 	github.com/tklauser/numcpus v0.12.0 // indirect
-	github.com/vmware-labs/yaml-jsonpath v0.3.2 // indirect
 	github.com/wasilibs/go-pgquery v0.0.0-20261117022153-47142ee672c1 // indirect
 	github.com/wasilibs/wazero-helpers v0.0.0-20250123031827-cd30c44769bb // indirect
 	github.com/yuin/gopher-lua v1.1.2 // indirect
