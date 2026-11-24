@@ -31,6 +31,7 @@ func (ctx batchAttemptContext) WithArgs(args *common.LoggerArgs) common.Extended
 type BatchAttempt struct {
 	EventID string
 	ID      string
+	LockID  string // PostgreSQL session lock held until the worker exits.
 }
 
 // ErrBatchAttemptLost indicates that the worker no longer owns the event.

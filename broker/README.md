@@ -298,8 +298,22 @@ An email with unconfirmed acceptance requires investigation.
 Coordinated child handlers and archive runs checkpoint work that may have side
 effects in the same transaction that moves the event to processing. An
 unfinished event with that checkpoint requires review
-before replay. Applying this migration marks existing processing events as
-potentially started. Automatic recovery is a separate step.
+before replay. The progress migration marks existing processing events as
+potentially started.
+
+The broker checks coordinated work at startup, after the event listener
+reconnects, and every 15 seconds. A worker holds a dedicated PostgreSQL session
+lock through its handler. Before replay, recovery verifies that the session
+lock is gone and invalidates the previous attempt under the event row lock.
+Each broker admits up to eight coordinated workers at a time. Pending tasks
+stay queued when all worker slots are occupied.
+
+Recovery re-notifies unclaimed batch and background tasks and resumes safe
+work from saved progress. Interrupted children or archives that entered work,
+unconfirmed SMTP deliveries, and attempts without verifiable worker ownership
+require investigation. Their reservations stay active. The broker records
+the reason and time on the affected row in `batch_action_run_event` in
+`recovery_reason` and `recovery_blocked_at`.
 
 The legacy `archive` binary, `POST /archive_ill_transactions`, `call_archive.sh`,
 and their database function have been removed. Replace old jobs with scheduled

@@ -25,10 +25,10 @@ func WithWorkerContext(bus EventBus, ctx common.ExtendedContext) EventBus {
 // ClaimEventAttemptForSignal claims the signal and persists a worker attempt
 // for coordinated task creation in the same transaction.
 func (r *PgEventRepo) ClaimEventAttemptForSignal(ctx common.ExtendedContext, id string, signal Signal) (Event, repo.BatchAttempt, error) {
-	return r.claimEventAttemptForSignal(ctx, id, signal, true)
+	return r.claimEventAttemptForSignal(ctx, id, signal, true, "")
 }
 
-func (r *PgEventRepo) claimEventAttemptForSignal(ctx common.ExtendedContext, id string, signal Signal, hasConsumer bool) (Event, repo.BatchAttempt, error) {
+func (r *PgEventRepo) claimEventAttemptForSignal(ctx common.ExtendedContext, id string, signal Signal, hasConsumer bool, lockID string) (Event, repo.BatchAttempt, error) {
 	if signal != SignalTaskCreated {
 		event, err := r.claimEventSignal(ctx, id, signal)
 		return event, repo.BatchAttempt{}, err
@@ -52,7 +52,7 @@ func (r *PgEventRepo) claimEventAttemptForSignal(ctx common.ExtendedContext, id 
 		if !hasConsumer || event.EventStatus != EventStatusNew || current.Valid {
 			return pgx.ErrNoRows
 		}
-		attempt, err = tx.assignBatchActionAttempt(ctx, id)
+		attempt, err = tx.assignBatchActionAttempt(ctx, id, lockID)
 		return err
 	}
 	err := r.WithTxFunc(ctx, claim)
@@ -63,10 +63,11 @@ func (r *PgEventRepo) claimEventAttemptForSignal(ctx common.ExtendedContext, id 
 }
 
 // assignBatchActionAttempt requires the event row lock.
-func (r *PgEventRepo) assignBatchActionAttempt(ctx common.ExtendedContext, eventID string) (repo.BatchAttempt, error) {
-	attempt := repo.BatchAttempt{EventID: eventID, ID: uuid.NewString()}
+func (r *PgEventRepo) assignBatchActionAttempt(ctx common.ExtendedContext, eventID, lockID string) (repo.BatchAttempt, error) {
+	attempt := repo.BatchAttempt{EventID: eventID, ID: uuid.NewString(), LockID: lockID}
 	count, err := r.queries.AssignBatchActionAttempt(ctx, r.Tx, AssignBatchActionAttemptParams{
 		EventID: eventID, AttemptID: pgtype.Text{String: attempt.ID, Valid: true},
+		AttemptLockID: pgtype.Text{String: lockID, Valid: lockID != ""},
 	})
 	if err != nil {
 		return repo.BatchAttempt{}, fmt.Errorf("assign batch action attempt: %w", err)
@@ -96,7 +97,7 @@ func (r *PgEventRepo) beginBatchActionAttempt(ctx common.ExtendedContext, event 
 		!event.ParentID.Valid || event.ParentID.String != attempt.EventID {
 		return ctx, repo.ErrBatchAttemptLost
 	}
-	attempt, err = r.assignBatchActionAttempt(ctx, event.ID)
+	attempt, err = r.assignBatchActionAttempt(ctx, event.ID, attempt.LockID)
 	if err != nil {
 		return ctx, err
 	}

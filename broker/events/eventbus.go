@@ -1,11 +1,11 @@
 package events
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math/rand"
-	"strings"
 	"sync"
 	"time"
 
@@ -54,6 +54,7 @@ type PostgresEventBus struct {
 	ConnectionString string
 	handlers         map[Signal]map[HandlerRole]map[EventName][]func(ctx common.ExtendedContext, event Event)
 	randGen          *rand.Rand // local random generator to avoid same seed for all instance, only needed in Go < 1.20
+	batchWorkers     *batchWorkers
 }
 
 func NewPostgresEventBus(repo EventRepo, connString string) *PostgresEventBus {
@@ -67,84 +68,93 @@ func NewPostgresEventBus(repo EventRepo, connString string) *PostgresEventBus {
 
 func (p *PostgresEventBus) Start(ctx common.ExtendedContext) error {
 	p.ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(EB_COMP))
-	var conn *pgx.Conn
-	var err error
-
-	connectAndListen := func() error {
-		conn, err = pgx.Connect(ctx, p.ConnectionString)
-		if err != nil {
-			ctx.Logger().Error("unable to connect to database", "error", err)
-			return err
-		}
-
-		_, err = conn.Exec(ctx, "LISTEN "+EVENT_BUS_CHANNEL)
-		if err != nil {
-			ctx.Logger().Error("unable to listen to channel", "channel", EVENT_BUS_CHANNEL, "error", err)
-			return err
-		}
-
-		ctx.Logger().Info("successfully connected and listening to channel", "channel", EVENT_BUS_CHANNEL)
-		return nil
-	}
-
-	if err = connectAndListen(); err != nil {
+	conn, err := p.connectListener(p.ctx)
+	if err != nil {
 		return err
 	}
-
-	go func() {
-		for {
-			notification, er := conn.WaitForNotification(ctx)
-			if er != nil {
-				ctx.Logger().Error("unable to receive notification", "error", err, "channel", EVENT_BUS_CHANNEL)
-
-				if er.Error() == "conn closed" {
-					ctx.Logger().Warn("connection closed, attempting to reconnect")
-
-					baseDelay := 1 * time.Second
-					maxDelay := 30 * time.Second
-					delay := baseDelay
-
-					for {
-						// add random duration for jitter between instances
-						jitter := time.Duration(p.randGen.Intn(500)) * time.Millisecond
-
-						select {
-						case <-time.After(delay + jitter):
-							// Wait for the delay and continue to retry
-						case <-ctx.Done():
-							ctx.Logger().Info("context cancelled during reconnect, stopping retries")
-							return // Exit goroutine if parent context is cancelled
-						}
-
-						if err = connectAndListen(); err == nil {
-							ctx.Logger().Info("successfully reconnected")
-							break // Exit the retry loop on success
-						}
-						ctx.Logger().Error("reconnection attempt failed", "error", err, "next_try_in", delay)
-
-						// Gradually increase the delay for the next attempt
-						delay = time.Duration(float64(delay) * 1.5)
-						if delay > maxDelay {
-							delay = maxDelay
-						}
-					}
-				}
-				if strings.Contains(er.Error(), "context canceled") {
-					ctx.Logger().Error("context cancelled, terminating")
-					break
-				}
-				continue
+	if eventRepo, ok := p.repo.(*PgEventRepo); ok {
+		var consumerNames []string
+		for _, name := range []EventName{EventNameInvokeBatchAction, EventNameInvokeBackgroundAction} {
+			if len(p.getHandlers(SignalTaskCreated, HandlerRoleConsumer, name)) != 0 {
+				consumerNames = append(consumerNames, string(name))
 			}
-
-			var notifyData NotifyData
-			var err = json.Unmarshal([]byte(notification.Payload), &notifyData)
-			if err != nil {
-				ctx.Logger().Error("failed to unmarshal notification", "error", err, "payload", notification.Payload)
-			}
-			go p.handleNotify(notifyData)
 		}
-	}()
+		if len(consumerNames) > 0 {
+			p.batchWorkers = &batchWorkers{slots: make(chan struct{}, batchWorkerLimit), wake: make(chan struct{}, 1)}
+			go p.runBatchRecovery(eventRepo, consumerNames)
+			p.batchWorkers.wakeRecovery()
+		}
+	}
+	go p.listen(conn)
 	return nil
+}
+
+func (p *PostgresEventBus) connectListener(ctx common.ExtendedContext) (*pgx.Conn, error) {
+	connectCtx, cancel := context.WithTimeout(ctx, batchRecoveryTimeout)
+	defer cancel()
+	conn, err := pgx.Connect(connectCtx, p.ConnectionString)
+	if err != nil {
+		return nil, fmt.Errorf("connect event listener: %w", err)
+	}
+	if _, err = conn.Exec(connectCtx, "LISTEN "+EVENT_BUS_CHANNEL); err != nil {
+		closeEventListener(conn)
+		return nil, fmt.Errorf("listen on event channel: %w", err)
+	}
+	ctx.Logger().Info("successfully connected and listening to channel", "channel", EVENT_BUS_CHANNEL)
+	return conn, nil
+}
+
+func closeEventListener(conn *pgx.Conn) {
+	ctx, cancel := context.WithTimeout(context.Background(), batchRecoveryTimeout)
+	defer cancel()
+	_ = conn.Close(ctx)
+}
+
+func (p *PostgresEventBus) listen(conn *pgx.Conn) {
+	ctx := p.ctx
+	for {
+		notification, err := conn.WaitForNotification(ctx)
+		if err != nil {
+			closeEventListener(conn)
+			if ctx.Err() != nil {
+				return
+			}
+			ctx.Logger().Warn("event listener disconnected", "error", err)
+			conn = p.reconnectListener(ctx)
+			if conn == nil {
+				return
+			}
+			if p.batchWorkers != nil {
+				p.batchWorkers.rescan.Store(true)
+				p.batchWorkers.wakeRecovery()
+			}
+			continue
+		}
+		var data NotifyData
+		if err := json.Unmarshal([]byte(notification.Payload), &data); err != nil {
+			ctx.Logger().Error("failed to unmarshal event notification", "error", err)
+			continue
+		}
+		go p.handleNotify(data)
+	}
+}
+
+func (p *PostgresEventBus) reconnectListener(ctx common.ExtendedContext) *pgx.Conn {
+	delay := time.Second
+	for {
+		jitter := time.Duration(p.randGen.Intn(500)) * time.Millisecond
+		select {
+		case <-time.After(delay + jitter):
+		case <-ctx.Done():
+			return nil
+		}
+		conn, err := p.connectListener(ctx)
+		if err == nil {
+			return conn
+		}
+		ctx.Logger().Warn("event listener reconnect failed", "error", err, "retryDelay", delay)
+		delay = min(delay+delay/2, 30*time.Second)
+	}
 }
 
 func (p *PostgresEventBus) handleNotify(data NotifyData) {
@@ -170,7 +180,11 @@ func (p *PostgresEventBus) handleNotify(data NotifyData) {
 		var attempt repo.BatchAttempt
 		var claimErr error
 		if pgRepo, ok := p.repo.(*PgEventRepo); ok {
-			claimedEvent, attempt, claimErr = pgRepo.claimEventAttemptForSignal(p.ctx, data.Event, data.Signal, len(handlers) > 0)
+			var release func()
+			claimedEvent, attempt, release, claimErr = p.claimNotifiedEvent(pgRepo, data.Event, data.Signal, len(handlers) > 0)
+			if release != nil {
+				defer release()
+			}
 		} else {
 			claimedEvent, claimErr = p.repo.ClaimEventForSignal(p.ctx, data.Event, data.Signal)
 		}

@@ -176,9 +176,17 @@ WHERE run_id = $1;
 -- name: GetBatchActionAttempt :one
 SELECT attempt_id FROM batch_action_run_event WHERE event_id = $1;
 
+-- name: GetBatchTaskClaimEligibility :one
+SELECT e.event_status = 'NEW' AND e.last_signal = $2
+    AND link.attempt_id IS NULL AND link.recovery_blocked_at IS NULL
+FROM batch_action_run_event link
+JOIN event e ON e.id = link.event_id
+WHERE link.event_id = $1;
+
 -- name: AssignBatchActionAttempt :execrows
-UPDATE batch_action_run_event SET attempt_id = sqlc.narg(attempt_id), attempt_claimed_at = clock_timestamp()
-WHERE event_id = $1 AND attempt_id IS NULL;
+UPDATE batch_action_run_event
+SET attempt_id = sqlc.narg(attempt_id), attempt_claimed_at = clock_timestamp(), attempt_lock_id = sqlc.narg(attempt_lock_id)
+WHERE event_id = $1 AND attempt_id IS NULL AND recovery_blocked_at IS NULL;
 
 -- name: LockBatchActionRunForEvent :one
 SELECT batch_action_run.id, batch_action_run.completed_at
@@ -246,3 +254,41 @@ WHERE event_id = $1 AND work_started_at IS NULL;
 
 -- name: GetBatchEmailDelivery :one
 SELECT sqlc.embed(batch_action_email_delivery) FROM batch_action_email_delivery WHERE run_id = $1;
+
+-- name: ListBatchRecoveryCandidates :many
+SELECT link.event_id
+FROM batch_action_run_event link
+JOIN batch_action_run run ON run.id = link.run_id
+JOIN event ON event.id = link.event_id
+WHERE link.event_id > sqlc.arg(after_id) AND link.recovery_blocked_at IS NULL
+  AND run.completed_at IS NULL AND event.event_status IN ('NEW', 'PROCESSING')
+  AND (
+    event.event_name = ANY(sqlc.arg(consumer_names)::varchar[])
+    OR event.event_name = 'invoke-action'
+  )
+ORDER BY link.event_id
+LIMIT sqlc.arg(page_size);
+
+-- name: GetBatchRecoveryCandidate :one
+SELECT sqlc.embed(event), link.run_id, link.attempt_id, link.attempt_lock_id, link.work_started_at,
+       link.recovery_blocked_at, run.action_name
+FROM event
+JOIN batch_action_run_event link ON link.event_id = event.id
+JOIN batch_action_run run ON run.id = link.run_id
+WHERE event.id = $1 AND run.completed_at IS NULL;
+
+-- name: LockBatchRecoveryCandidate :one
+SELECT id FROM event WHERE id = $1 FOR UPDATE SKIP LOCKED;
+
+-- name: TryBatchRecoveryLock :one
+SELECT pg_try_advisory_xact_lock(hashtextextended('broker:batch-worker:' || sqlc.arg(lock_id)::text, 0));
+
+-- name: ClearBatchActionAttempt :exec
+UPDATE batch_action_run_event
+SET attempt_id = NULL, attempt_claimed_at = NULL, attempt_lock_id = NULL
+WHERE event_id = $1;
+
+-- name: BlockBatchActionRecovery :exec
+UPDATE batch_action_run_event
+SET recovery_blocked_at = now(), recovery_reason = sqlc.arg(reason)
+WHERE event_id = sqlc.arg(event_id);
