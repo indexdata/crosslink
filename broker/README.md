@@ -18,18 +18,25 @@ order. This field is omitted for messages processed internally without HTTP inpu
 
 Patron-request `patron-request-message` events include `resultData.stateModelEvent`
 when a supplier or requester message resolves to a state-model event, for example
-`completed-local`, `will-supply`, or `received`. The label is retained even when
-the event is rejected in the current state or subsequent processing fails. It is
-omitted when no label is resolved, including ordinary notifications and initial
-requests. The ISO message and confirmation remain in the same log record. Local
-audit events such as `completed-local` do not change state; the local action owns
-the transition. These results are available through
-`GET /patron_requests/{id}/events`. Older records may lack the field.
+`will-supply` or `received`. The label is retained even when the event is rejected
+in the current state or subsequent processing fails. It is omitted when no label is
+resolved, including ordinary notifications and initial requests. The ISO message and
+confirmation remain in the same log record.
+
+Successful local-supply `invoke-action` events carry an audit label in the same
+field: `completed-local` for `fill-locally` and requester `supply-document`,
+`cancelled-local` for `cancel-local-supply`, and `unfilled-local` for
+`cannot-supply-locally`. The broker does not relay local-supply messages back to the
+requester, so the action records the outcome itself. These labels are not
+state-model events and do not change state; the action's transition does.
+
+These results are available through `GET /patron_requests/{id}/events`. Older
+records may lack the field.
 
 # Cancellation reasons in ISO18626 notes
 
 Incoming requester `Cancel` messages and supplier `CancelResponse` messages (including
-rejections), plus supported supplier `Cancelled` status messages, can carry
+rejections) can carry
 `#CancellationReason: <reason>#` in their note. The reason is arbitrary nonblank
 text, for example `InvalidUser` or `Duplicate Request`, and cannot contain `#`.
 The prefix is case-sensitive. Surrounding whitespace in the value is trimmed.

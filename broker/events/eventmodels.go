@@ -133,7 +133,8 @@ type Problem struct {
 type EventResult struct {
 	CommonEventData
 	// StateModelEvent is the resolved patron-request message event, including
-	// events rejected in the current state. Empty means no event was resolved.
+	// events rejected in the current state, or the audit label of a successful
+	// local-supply action (e.g. completed-local). Empty means none was resolved.
 	StateModelEvent string         `json:"stateModelEvent,omitempty"`
 	CustomData      map[string]any `json:"customData,omitempty"`
 }
