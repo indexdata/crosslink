@@ -674,7 +674,7 @@ func handleRequestingAgencyErrorWithNotice(ctx common.ExtendedContext, w http.Re
 			},
 		},
 	}
-	_, err := eventBus.CreateNotice(illTransId, events.EventNameRequesterMsgReceived, eventData, events.EventStatusProblem, events.EventDomainIllTransaction, events.SignalConsumers)
+	_, err := events.WithWorkerContext(eventBus, ctx).CreateNotice(illTransId, events.EventNameRequesterMsgReceived, eventData, events.EventStatusProblem, events.EventDomainIllTransaction, events.SignalConsumers)
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransId)
 	}
@@ -931,14 +931,14 @@ func handleSupplyingAgencyErrorWithNotice(ctx common.ExtendedContext, w http.Res
 			},
 		},
 	}
-	_, err := eventBus.CreateNotice(illTransId, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem, events.EventDomainIllTransaction, events.SignalConsumers)
+	_, err := events.WithWorkerContext(eventBus, ctx).CreateNotice(illTransId, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem, events.EventDomainIllTransaction, events.SignalConsumers)
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransId)
 	}
 }
 
 func createNotice(ctx common.ExtendedContext, eventBus events.EventBus, illTransId string, eventName events.EventName, eventData events.EventData, eventStatus events.EventStatus) (string, error) {
-	id, err := eventBus.CreateNotice(illTransId, eventName, eventData, eventStatus, events.EventDomainIllTransaction, events.SignalConsumers)
+	id, err := events.WithWorkerContext(eventBus, ctx).CreateNotice(illTransId, eventName, eventData, eventStatus, events.EventDomainIllTransaction, events.SignalConsumers)
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransId)
 		return "", err
@@ -1230,7 +1230,7 @@ func waitForMessageConfirmation(ctx common.ExtendedContext, eventBus events.Even
 	// Register before publishing: a consumer may confirm before creation returns.
 	waitingReqs.register(id, RequestWait{w: &w, wg: &wg})
 	defer waitingReqs.take(id)
-	if _, err := eventBus.CreateNoticeWithID(id, illTransID, eventName, data, events.EventStatusSuccess, events.EventDomainIllTransaction, events.SignalConsumers); err != nil {
+	if _, err := events.WithWorkerContext(eventBus, ctx).CreateNoticeWithID(id, illTransID, eventName, data, events.EventStatusSuccess, events.EventDomainIllTransaction, events.SignalConsumers); err != nil {
 		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransID)
 		return err
 	}

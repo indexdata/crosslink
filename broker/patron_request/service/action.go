@@ -501,7 +501,7 @@ func (a *PatronRequestActionService) deleteRequesterItemsOnClose(ctx common.Exte
 	}
 	var cleanupErrors []error
 	for _, item := range items {
-		performed, err := a.deleteRequesterLmsItem(pr.ID, eventID, lmsItemID(item), lmsAdapter)
+		performed, err := a.deleteRequesterLmsItem(ctx, pr.ID, eventID, lmsItemID(item), lmsAdapter)
 		if err != nil {
 			cleanupErrors = append(cleanupErrors, fmt.Errorf("LMS DeleteItem failed for item %s: %w", item.Barcode, err))
 			continue
@@ -688,7 +688,7 @@ func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.Exten
 			CommonEventData: events.CommonEventData{Action: &actionName, User: user},
 			CustomData:      withStaticActionParams(nil, action.Params),
 		}
-		eventID, err := a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, parentEventID, events.SignalConsumers)
+		eventID, err := events.WithWorkerContext(a.eventBus, ctx).CreateTask(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, parentEventID, events.SignalConsumers)
 		if err != nil {
 			return &autoActionFailure{action: actionName, msg: err.Error()}
 		}
@@ -822,7 +822,7 @@ func (a *PatronRequestActionService) createRequesterLmsAdapter(ctx common.Extend
 		customData["lmsOutgoingMessage"] = outgoing
 		customData["lmsIncomingMessage"] = incoming
 		eventData := events.EventData{CustomData: customData}
-		_, createErr := a.eventBus.CreateNoticeWithParent(pr.ID, events.EventNameLmsRequesterMessage, eventData, status, events.EventDomainPatronRequest, &eventID, events.SignalConsumers)
+		_, createErr := events.WithWorkerContext(a.eventBus, ctx).CreateNoticeWithParent(pr.ID, events.EventNameLmsRequesterMessage, eventData, status, events.EventDomainPatronRequest, &eventID, events.SignalConsumers)
 		if createErr != nil {
 			ctx.Logger().Error("failed to create LMS log event", "error", createErr)
 		}
@@ -847,7 +847,7 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 			"lmsIncomingMessage": incoming,
 		}
 		eventData := events.EventData{CustomData: customData}
-		_, createErr := a.eventBus.CreateNoticeWithParent(pr.ID, events.EventNameLmsSupplierMessage, eventData, status, events.EventDomainPatronRequest, &eventID, events.SignalConsumers)
+		_, createErr := events.WithWorkerContext(a.eventBus, ctx).CreateNoticeWithParent(pr.ID, events.EventNameLmsSupplierMessage, eventData, status, events.EventDomainPatronRequest, &eventID, events.SignalConsumers)
 		if createErr != nil {
 			ctx.Logger().Error("failed to create LMS log event", "error", createErr)
 		}
@@ -1243,7 +1243,7 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 			})
 		})
 		if err != nil {
-			if deleted, deleteErr := a.deleteRequesterLmsItem(pr.ID, parentEventID, itemId, lmsAdapter); deleteErr != nil {
+			if deleted, deleteErr := a.deleteRequesterLmsItem(ctx, pr.ID, parentEventID, itemId, lmsAdapter); deleteErr != nil {
 				err = errors.Join(err, fmt.Errorf("LMS DeleteItem compensation failed: %w", deleteErr))
 			} else if statusErr := a.recordItemLmsStatus(ctx, item, pr_db.LmsStatusDeleted, deleted, nil); statusErr != nil {
 				err = errors.Join(err, fmt.Errorf("failed to record LMS DeleteItem compensation: %w", statusErr))
@@ -1303,7 +1303,7 @@ func (a *PatronRequestActionService) checkinBorrowingRequest(ctx common.Extended
 
 // deleteRequesterLmsItem records unsupported cleanup without confirming deletion.
 // Transport and protocol failures from supported services still block progress.
-func (a *PatronRequestActionService) deleteRequesterLmsItem(prID, parentEventID, itemID string, adapter lms.LmsAdapter) (bool, error) {
+func (a *PatronRequestActionService) deleteRequesterLmsItem(ctx common.ExtendedContext, prID, parentEventID, itemID string, adapter lms.LmsAdapter) (bool, error) {
 	performed, err := adapter.DeleteItem(itemID)
 	if !errors.Is(err, lms.ErrDeleteItemUnsupported) {
 		return performed, err
@@ -1311,7 +1311,7 @@ func (a *PatronRequestActionService) deleteRequesterLmsItem(prID, parentEventID,
 	data := events.EventData{CustomData: map[string]any{
 		"operation": "DeleteItem", "outcome": "skipped", "reason": "unsupported", "itemId": itemID,
 	}}
-	_, err = a.eventBus.CreateNoticeWithParent(prID, events.EventNameLmsRequesterMessage, data, events.EventStatusProblem, events.EventDomainPatronRequest, &parentEventID, events.SignalConsumers)
+	_, err = events.WithWorkerContext(a.eventBus, ctx).CreateNoticeWithParent(prID, events.EventNameLmsRequesterMessage, data, events.EventStatusProblem, events.EventDomainPatronRequest, &parentEventID, events.SignalConsumers)
 	if err != nil {
 		return false, fmt.Errorf("failed to record skipped LMS cleanup: %w", err)
 	}
@@ -1329,7 +1329,7 @@ func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.Exten
 			continue
 		}
 		itemId := lmsItemID(item)
-		performed, err := a.deleteRequesterLmsItem(pr.ID, parentEventID, itemId, lmsAdapter)
+		performed, err := a.deleteRequesterLmsItem(ctx, pr.ID, parentEventID, itemId, lmsAdapter)
 		if err != nil {
 			status, result := logActionErrorAndReturnResult(ctx, "LMS DeleteItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}

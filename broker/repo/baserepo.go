@@ -57,6 +57,9 @@ func (r *PgBaseRepo[T]) WithTxFunc(ctx common.ExtendedContext, repo PgDerivedRep
 			err = tx.Commit(ctx)
 		}
 	}()
+	if err = LockBatchAttempt(ctx, tx); err != nil {
+		return err
+	}
 	newBase := r.createWithPoolAndTx(r.Pool, tx)
 	newRepo := repo.CreateWithPgBaseRepo(newBase)
 	err = fn(newRepo)

@@ -86,8 +86,10 @@ func (r *PgIllRepo) CreateWithPgBaseRepo(base *repo.PgBaseRepo[IllRepo]) IllRepo
 }
 
 func (r *PgIllRepo) SaveIllTransaction(ctx common.ExtendedContext, params SaveIllTransactionParams) (IllTransaction, error) {
-	row, err := r.queries.SaveIllTransaction(ctx, r.GetConnOrTx(), params)
-	return row.IllTransaction, err
+	return repo.BatchWrite(ctx, &r.PgBaseRepo, func(db repo.ConnOrTx) (IllTransaction, error) {
+		row, err := r.queries.SaveIllTransaction(ctx, db, params)
+		return row.IllTransaction, err
+	})
 }
 
 func (r *PgIllRepo) GetIllTransactionByRequesterRequestId(ctx common.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error) {

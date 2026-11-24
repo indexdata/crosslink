@@ -16,8 +16,8 @@ import (
 
 const SchedulerChannel = "crosslink_sched_channel"
 
-// ErrBatchActionRunActive means the owner already has an unfinished run of this action.
-var ErrBatchActionRunActive = errors.New("a run for this owner and action is already active")
+// ErrBatchActionRunActive means an unfinished run overlaps this action's owner scope.
+var ErrBatchActionRunActive = errors.New("an overlapping run of this batch action is already active")
 
 type SchedRepo interface {
 	QueueBatchActionRun(common.ExtendedContext, ScheduledTask) error
@@ -137,11 +137,13 @@ func (r *PgSchedRepo) DeleteBatchActionEvents(ctx common.ExtendedContext, taskID
 }
 
 func (r *PgSchedRepo) DeleteOldBatchActionRunEvents(ctx common.ExtendedContext, currentEventId string, taskID string, retention int32) error {
-	return r.eventQueries.DeleteOldBatchActionRunEvents(ctx, r.GetConnOrTx(), events.DeleteOldBatchActionRunEventsParams{
-		CurrentEventID:  currentEventId,
-		TaskID:          taskID,
-		Retention:       retention,
-		PatronRequestID: events.DEFAULT_PATRON_REQUEST_ID,
+	return repo.BatchExec(ctx, &r.PgBaseRepo, func(db repo.ConnOrTx) error {
+		return r.eventQueries.DeleteOldBatchActionRunEvents(ctx, db, events.DeleteOldBatchActionRunEventsParams{
+			CurrentEventID:  currentEventId,
+			TaskID:          taskID,
+			Retention:       retention,
+			PatronRequestID: events.DEFAULT_PATRON_REQUEST_ID,
+		})
 	})
 }
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/repo"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -164,7 +165,15 @@ func (p *PostgresEventBus) handleNotify(data NotifyData) {
 	}
 
 	if data.Target == SignalConsumers || data.Target == SignalAll {
-		claimedEvent, claimErr := p.repo.ClaimEventForSignal(p.ctx, data.Event, data.Signal)
+		handlers := p.getHandlers(data.Signal, HandlerRoleConsumer, event.EventName)
+		var claimedEvent Event
+		var attempt repo.BatchAttempt
+		var claimErr error
+		if pgRepo, ok := p.repo.(*PgEventRepo); ok {
+			claimedEvent, attempt, claimErr = pgRepo.claimEventAttemptForSignal(p.ctx, data.Event, data.Signal, len(handlers) > 0)
+		} else {
+			claimedEvent, claimErr = p.repo.ClaimEventForSignal(p.ctx, data.Event, data.Signal)
+		}
 		if claimErr != nil {
 			if !errors.Is(claimErr, pgx.ErrNoRows) {
 				p.ctx.Logger().Error("failure claiming event", "error", claimErr, "eventId", data.Event, "signal", data.Signal, "target", data.Target)
@@ -173,7 +182,11 @@ func (p *PostgresEventBus) handleNotify(data NotifyData) {
 			}
 			return
 		}
-		triggerHandlers(p.getEventContext(&claimedEvent), claimedEvent, p.getHandlers(data.Signal, HandlerRoleConsumer, claimedEvent.EventName), data.Signal)
+		ctx := p.getEventContext(&claimedEvent)
+		if attempt.ID != "" {
+			ctx = repo.WithBatchAttempt(ctx, attempt)
+		}
+		triggerHandlers(ctx, claimedEvent, handlers, data.Signal)
 	}
 }
 
@@ -246,6 +259,11 @@ func (p *PostgresEventBus) CreateNoticeWithID(eventID string, classId string, ev
 func (p *PostgresEventBus) createNotice(id string, classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error) {
 	illTransactionID, patronRequestID := getIllTransactionAndPatronRequestId(classId, eventDomain)
 	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
+		if pgRepo, ok := eventRepo.(*PgEventRepo); ok && parentId != nil {
+			if err := pgRepo.requireBatchActionAttempt(p.ctx, *parentId); err != nil {
+				return err
+			}
+		}
 		event, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
 			ID:               id,
 			IllTransactionID: illTransactionID,
@@ -268,10 +286,23 @@ func (p *PostgresEventBus) createNotice(id string, classId string, eventName Eve
 }
 
 func (p *PostgresEventBus) BeginTask(eventId string, target SignalTarget) (Event, error) {
+	event, _, err := p.beginTask(p.ctx, eventId, target)
+	return event, err
+}
+
+func (p *PostgresEventBus) beginTask(ctx common.ExtendedContext, eventId string, target SignalTarget) (Event, common.ExtendedContext, error) {
 	var event Event
-	err := p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
+	// The attempt is checked below under the event lock before the task is PROCESSING.
+	err := p.repo.WithTxFunc(repo.WithBatchAttempt(ctx, repo.BatchAttempt{}), func(eventRepo EventRepo) error {
 		var err error
-		event, err = eventRepo.GetEventForUpdate(p.ctx, eventId)
+		pgRepo, isPostgres := eventRepo.(*PgEventRepo)
+		if attempt := repo.BatchAttemptFrom(ctx); isPostgres && attempt.ID != "" && attempt.EventID != eventId {
+			// Inline actions lock the parent before the child event.
+			if err = repo.LockBatchAttempt(ctx, pgRepo.Tx); err != nil {
+				return err
+			}
+		}
+		event, err = eventRepo.GetEventForUpdate(ctx, eventId)
 		if err != nil {
 			return err
 		}
@@ -281,7 +312,13 @@ func (p *PostgresEventBus) BeginTask(eventId string, target SignalTarget) (Event
 		if event.EventStatus != EventStatusNew {
 			return fmt.Errorf("cannot begin task processing, event is not in state NEW but %s", event.EventStatus)
 		}
-		event, err = eventRepo.UpdateEventLifecycle(p.ctx, UpdateEventLifecycleParams{
+		if isPostgres {
+			ctx, err = pgRepo.beginBatchActionAttempt(ctx, event)
+			if err != nil {
+				return err
+			}
+		}
+		event, err = eventRepo.UpdateEventLifecycle(ctx, UpdateEventLifecycleParams{
 			ID:          eventId,
 			EventStatus: EventStatusProcessing,
 			LastSignal:  string(SignalTaskBegin),
@@ -289,17 +326,21 @@ func (p *PostgresEventBus) BeginTask(eventId string, target SignalTarget) (Event
 		if err != nil {
 			return err
 		}
-		err = eventRepo.Notify(p.ctx, eventId, SignalTaskBegin, target)
+		err = eventRepo.Notify(ctx, eventId, SignalTaskBegin, target)
 		return err
 	})
-	return event, err
+	return event, ctx, err
 }
 
 func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, status EventStatus, target SignalTarget) (Event, error) {
+	return p.completeTask(p.ctx, eventId, result, status, target)
+}
+
+func (p *PostgresEventBus) completeTask(ctx common.ExtendedContext, eventId string, result *EventResult, status EventStatus, target SignalTarget) (Event, error) {
 	var event Event
-	err := p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
+	err := p.repo.WithTxFunc(ctx, func(eventRepo EventRepo) error {
 		var err error
-		event, err = eventRepo.GetEventForUpdate(p.ctx, eventId)
+		event, err = eventRepo.GetEventForUpdate(ctx, eventId)
 		if err != nil {
 			return err
 		}
@@ -309,19 +350,24 @@ func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, sta
 		if event.EventStatus != EventStatusProcessing {
 			return fmt.Errorf("cannot complete task processing, event is not in state PROCESSING but %s", event.EventStatus)
 		}
+		if pgRepo, ok := eventRepo.(*PgEventRepo); ok {
+			if err = pgRepo.requireBatchActionAttempt(ctx, eventId); err != nil {
+				return err
+			}
+		}
 		event.EventStatus = status
 		if result != nil {
 			event.ResultData = *result
 		}
 		event.LastSignal = string(SignalTaskComplete)
-		event, err = eventRepo.SaveEvent(p.ctx, SaveEventParams(event))
+		event, err = eventRepo.SaveEvent(ctx, SaveEventParams(event))
 		if err != nil {
 			return err
 		}
-		if err = eventRepo.FinishBatchActionRunIfIdle(p.ctx, eventId); err != nil {
+		if err = eventRepo.FinishBatchActionRunIfIdle(ctx, eventId); err != nil {
 			return err
 		}
-		err = eventRepo.Notify(p.ctx, eventId, SignalTaskComplete, target)
+		err = eventRepo.Notify(ctx, eventId, SignalTaskComplete, target)
 		return err
 	})
 	return event, err
@@ -342,15 +388,22 @@ func (p *PostgresEventBus) HandleTaskCompleted(eventName EventName, role Handler
 
 func (p *PostgresEventBus) ProcessTask(ctx common.ExtendedContext, event Event, target SignalTarget, h func(common.ExtendedContext, Event) (EventStatus, *EventResult)) (Event, error) {
 	inEvent := &event
-	event, err := p.BeginTask(event.ID, target)
+	lifecycleCtx := p.ctx
+	if repo.BatchAttemptFrom(ctx).ID != "" {
+		lifecycleCtx = ctx
+	}
+	event, lifecycleCtx, err := p.beginTask(lifecycleCtx, event.ID, target)
 	if err != nil {
 		p.getEventContext(inEvent).Logger().Warn("failed to start processing TASK event", "error", err, "eventName", inEvent.EventName)
 		return event, err
 	}
 
+	if repo.BatchAttemptFrom(lifecycleCtx).ID != "" {
+		ctx = lifecycleCtx
+	}
 	status, result := h(ctx, event)
 
-	event, err = p.CompleteTask(event.ID, result, status, target)
+	event, err = p.completeTask(lifecycleCtx, event.ID, result, status, target)
 	if err != nil {
 		p.getEventContext(inEvent).Logger().Warn("failed to complete processing TASK event", "error", err, "eventName", inEvent.EventName)
 		return event, err

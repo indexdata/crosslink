@@ -54,7 +54,7 @@ func (s *BatchActionService) Overdue(ctx common.ExtendedContext, event events.Ev
 			continue
 		}
 		child := *data
-		_, err = s.eventBus.CreateTask(request.ID, events.EventNameInvokeBackgroundAction,
+		_, err = events.WithWorkerContext(s.eventBus, ctx).CreateTask(request.ID, events.EventNameInvokeBackgroundAction,
 			events.EventData{CommonEventData: events.CommonEventData{Action: &action, BatchActionData: &child}},
 			events.EventDomainPatronRequest, &event.ID, events.SignalConsumers)
 		if err != nil {

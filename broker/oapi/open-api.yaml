@@ -3648,7 +3648,7 @@ paths:
   /batch_actions/{id}/run:
     post:
       summary: Queue a manual batch action run
-      description: Queues one run without changing the schedule or enabled state. Requires the normal run permission and, for archive-ill-transactions, broker.consortium.all. An active run reserves its owner and action across all saved schedules until the run and its child tasks finish.
+      description: Queues one run without changing the schedule or enabled state. Requires the normal run permission and, for archive-ill-transactions, broker.consortium.all. An active run reserves its owner and action across all saved schedules until the run and its child tasks finish. An unrestricted run conflicts with every active run of the same action.
       tags:
         - scheduler-api
       parameters:
@@ -3682,7 +3682,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: A run for the same owner and action is already active
+          description: A run of the same action with an overlapping owner scope is already active
           content:
             application/json:
               schema:

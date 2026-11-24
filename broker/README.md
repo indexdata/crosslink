@@ -259,7 +259,8 @@ accepts this action with the same configuration validation.
 manual run and returns `202`. It preserves the saved schedule and enabled state,
 so a disabled action can be run once without enabling it. Okapi callers need
 `broker.batch_actions.item.run.post`. One run per owner and action can be active
-across all saved schedules. The reservation lasts until the run and its child
+across all saved schedules. An unrestricted run (empty owner) conflicts with
+every active run of the same action. The reservation lasts until the run and its child
 tasks finish. A conflicting manual request returns `409`. A conflicting scheduled
 occurrence is skipped and its schedule advances. Archive operations also use
 database locking and atomic checks for each resource.
@@ -269,6 +270,12 @@ and continues dispatching other due tasks.
 Before upgrading to batch run coordination, drain in-flight batch actions and
 their child tasks, then upgrade all broker replicas before resuming batch runs.
 Runs queued by earlier versions have no reservation.
+
+Coordinated tasks record a worker attempt when a consumer claims the creation
+signal or when an inline task starts. Only the current attempt can write batch
+state, queue children, or finish the task. A worker's cancellation or elapsed
+claim time never clears ownership. Drain in-flight coordinated tasks and
+upgrade all replicas together when deploying worker-attempt fencing.
 
 The legacy `archive` binary, `POST /archive_ill_transactions`, `call_archive.sh`,
 and their database function have been removed. Replace old jobs with scheduled

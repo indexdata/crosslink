@@ -7,6 +7,7 @@ import (
 
 	"github.com/indexdata/cql-go/pgcql"
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -56,9 +57,11 @@ func (r *PgIllRepo) ListIllTransactionArchiveCandidates(ctx common.ExtendedConte
 // ArchiveIllTransaction atomically archives an unchanged eligible transaction and
 // removes its live rows. False means it changed, is active, or is locally borrowed.
 func (r *PgIllRepo) ArchiveIllTransaction(ctx common.ExtendedContext, candidate IllTransactionArchiveCandidate, owner string, cutoff time.Time, anonymize bool) (bool, error) {
-	archived, err := r.queries.ArchiveIllTransaction(ctx, r.GetConnOrTx(), ArchiveIllTransactionParams{ID: candidate.ID, Owner: owner, Version: candidate.Version, Cutoff: pgtype.Timestamp{Time: cutoff, Valid: true}, Anonymize: anonymize})
-	if err != nil {
-		return false, fmt.Errorf("archive transaction %s: %w", candidate.ID, err)
-	}
-	return archived, nil
+	return repo.BatchWrite(ctx, &r.PgBaseRepo, func(db repo.ConnOrTx) (bool, error) {
+		archived, err := r.queries.ArchiveIllTransaction(ctx, db, ArchiveIllTransactionParams{ID: candidate.ID, Owner: owner, Version: candidate.Version, Cutoff: pgtype.Timestamp{Time: cutoff, Valid: true}, Anonymize: anonymize})
+		if err != nil {
+			return false, fmt.Errorf("archive transaction %s: %w", candidate.ID, err)
+		}
+		return archived, nil
+	})
 }

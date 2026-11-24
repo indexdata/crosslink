@@ -55,6 +55,9 @@ func (r *PgEventRepo) LinkBatchActionChild(ctx common.ExtendedContext, parentID,
 	if r.Tx == nil {
 		return errors.New("link batch action child requires a transaction")
 	}
+	if err := r.requireBatchActionAttempt(ctx, parentID); err != nil {
+		return err
+	}
 	run, err := r.queries.LockBatchActionRunForEvent(ctx, r.Tx, parentID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
@@ -110,6 +113,11 @@ func (r *PgEventRepo) GetOlderIncompleteEvent(ctx common.ExtendedContext, event 
 }
 
 func (r *PgEventRepo) ClaimEventForSignal(ctx common.ExtendedContext, id string, signal Signal) (Event, error) {
+	event, _, err := r.ClaimEventAttemptForSignal(ctx, id, signal)
+	return event, err
+}
+
+func (r *PgEventRepo) claimEventSignal(ctx common.ExtendedContext, id string, signal Signal) (Event, error) {
 	params := ClaimEventForSignalParams{
 		ID:         id,
 		LastSignal: string(signal),

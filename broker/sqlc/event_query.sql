@@ -161,6 +161,13 @@ RETURNING id;
 -- name: AddBatchActionRunEvent :exec
 INSERT INTO batch_action_run_event (event_id, run_id) VALUES ($1, $2);
 
+-- name: GetBatchActionAttempt :one
+SELECT attempt_id FROM batch_action_run_event WHERE event_id = $1;
+
+-- name: AssignBatchActionAttempt :execrows
+UPDATE batch_action_run_event SET attempt_id = sqlc.narg(attempt_id), attempt_claimed_at = clock_timestamp()
+WHERE event_id = $1 AND attempt_id IS NULL;
+
 -- name: LockBatchActionRunForEvent :one
 SELECT batch_action_run.id, batch_action_run.completed_at
 FROM batch_action_run_event

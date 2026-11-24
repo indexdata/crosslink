@@ -52,30 +52,34 @@ type PrRepo interface {
 // ArchiveBorrowingRequest stores and removes one unchanged, owner-matched borrowing
 // request and its transaction atomically, or reports the first blocking check.
 func (r *PgPrRepo) ArchiveBorrowingRequest(ctx common.ExtendedContext, pr PatronRequest, owner string, cutoff time.Time, anonymize bool) (ArchiveResult, error) {
-	var result ArchiveResult
-	err := r.GetConnOrTx().QueryRow(ctx,
-		"SELECT archive_borrowing_request_result($1, $2, $3, $4, $5, $6)",
-		pr.ID, owner, string(pr.State), pr.UpdatedAt.Time, cutoff, anonymize,
-	).Scan(&result)
-	if err != nil {
-		return "", fmt.Errorf("archive borrowing request %s: %w", pr.ID, err)
-	}
-	return result, nil
+	return repo.BatchWrite(ctx, &r.PgBaseRepo, func(db repo.ConnOrTx) (ArchiveResult, error) {
+		var result ArchiveResult
+		err := db.QueryRow(ctx,
+			"SELECT archive_borrowing_request_result($1, $2, $3, $4, $5, $6)",
+			pr.ID, owner, string(pr.State), pr.UpdatedAt.Time, cutoff, anonymize,
+		).Scan(&result)
+		if err != nil {
+			return "", fmt.Errorf("archive borrowing request %s: %w", pr.ID, err)
+		}
+		return result, nil
+	})
 }
 
 // ArchiveLendingRequest atomically stores and removes one unchanged,
 // supplier-owned lending request and its children, preserving the transaction,
 // or reports the first blocking check.
 func (r *PgPrRepo) ArchiveLendingRequest(ctx common.ExtendedContext, pr PatronRequest, owner string, cutoff time.Time, anonymize bool) (ArchiveResult, error) {
-	var result ArchiveResult
-	err := r.GetConnOrTx().QueryRow(ctx,
-		"SELECT archive_lending_request_result($1, $2, $3, $4, $5, $6)",
-		pr.ID, owner, string(pr.State), pr.UpdatedAt.Time, cutoff, anonymize,
-	).Scan(&result)
-	if err != nil {
-		return "", fmt.Errorf("archive lending request %s: %w", pr.ID, err)
-	}
-	return result, nil
+	return repo.BatchWrite(ctx, &r.PgBaseRepo, func(db repo.ConnOrTx) (ArchiveResult, error) {
+		var result ArchiveResult
+		err := db.QueryRow(ctx,
+			"SELECT archive_lending_request_result($1, $2, $3, $4, $5, $6)",
+			pr.ID, owner, string(pr.State), pr.UpdatedAt.Time, cutoff, anonymize,
+		).Scan(&result)
+		if err != nil {
+			return "", fmt.Errorf("archive lending request %s: %w", pr.ID, err)
+		}
+		return result, nil
+	})
 }
 
 var ErrUnsupportedFacet = errors.New("unsupported facet field")
@@ -257,8 +261,10 @@ func patronRequestFromSearchView(v PatronRequestSearchView) PatronRequest {
 }
 
 func (r *PgPrRepo) UpdatePatronRequest(ctx common.ExtendedContext, params UpdatePatronRequestParams) (PatronRequest, error) {
-	row, err := r.queries.UpdatePatronRequest(ctx, r.GetConnOrTx(), params)
-	return row.PatronRequest, err
+	return repo.BatchWrite(ctx, &r.PgBaseRepo, func(db repo.ConnOrTx) (PatronRequest, error) {
+		row, err := r.queries.UpdatePatronRequest(ctx, db, params)
+		return row.PatronRequest, err
+	})
 }
 
 func (r *PgPrRepo) UpdatePatronRequestInternalNote(ctx common.ExtendedContext, id string, internalNote pgtype.Text) error {
@@ -268,11 +274,13 @@ func (r *PgPrRepo) UpdatePatronRequestInternalNote(ctx common.ExtendedContext, i
 	})
 }
 func (r *PgPrRepo) CreatePatronRequest(ctx common.ExtendedContext, params CreatePatronRequestParams) (PatronRequest, error) {
-	if !params.UpdatedAt.Valid {
-		params.UpdatedAt = params.CreatedAt
-	}
-	row, err := r.queries.CreatePatronRequest(ctx, r.GetConnOrTx(), params)
-	return row.PatronRequest, err
+	return repo.BatchWrite(ctx, &r.PgBaseRepo, func(db repo.ConnOrTx) (PatronRequest, error) {
+		if !params.UpdatedAt.Valid {
+			params.UpdatedAt = params.CreatedAt
+		}
+		row, err := r.queries.CreatePatronRequest(ctx, db, params)
+		return row.PatronRequest, err
+	})
 }
 
 func (r *PgPrRepo) DeletePatronRequest(ctx common.ExtendedContext, id string) error {
@@ -294,12 +302,16 @@ func (r *PgPrRepo) GetLendingRequestBySupplierSymbolAndRequesterReqId(ctx common
 }
 
 func (r *PgPrRepo) GetNextHrid(ctx common.ExtendedContext, prefix string) (string, error) {
-	return r.queries.GetNextHrid(ctx, r.GetConnOrTx(), strings.ToUpper(prefix))
+	return repo.BatchWrite(ctx, &r.PgBaseRepo, func(db repo.ConnOrTx) (string, error) {
+		return r.queries.GetNextHrid(ctx, db, strings.ToUpper(prefix))
+	})
 }
 
 func (r *PgPrRepo) SaveItem(ctx common.ExtendedContext, params SaveItemParams) (Item, error) {
-	row, err := r.queries.SaveItem(ctx, r.GetConnOrTx(), params)
-	return row.Item, err
+	return repo.BatchWrite(ctx, &r.PgBaseRepo, func(db repo.ConnOrTx) (Item, error) {
+		row, err := r.queries.SaveItem(ctx, db, params)
+		return row.Item, err
+	})
 }
 
 func (r *PgPrRepo) GetItemById(ctx common.ExtendedContext, id string) (Item, error) {
@@ -317,29 +329,35 @@ func (r *PgPrRepo) GetItemsByPrId(ctx common.ExtendedContext, prId string) ([]It
 }
 
 func (r *PgPrRepo) SetItemLmsRequestID(ctx common.ExtendedContext, params SetItemLmsRequestIDParams) error {
-	rows, err := r.queries.SetItemLmsRequestID(ctx, r.GetConnOrTx(), params)
-	if err != nil {
-		return err
-	}
-	if rows != 1 {
-		return fmt.Errorf("expected to update one item, updated %d", rows)
-	}
-	return nil
+	return repo.BatchExec(ctx, &r.PgBaseRepo, func(db repo.ConnOrTx) error {
+		rows, err := r.queries.SetItemLmsRequestID(ctx, db, params)
+		if err != nil {
+			return err
+		}
+		if rows != 1 {
+			return fmt.Errorf("expected to update one item, updated %d", rows)
+		}
+		return nil
+	})
 }
 
 // SetItemLmsStatus persists confirmed LMS progress without changing item metadata.
 // It returns pgx.ErrNoRows if the item no longer exists.
 func (r *PgPrRepo) SetItemLmsStatus(ctx common.ExtendedContext, params SetItemLmsStatusParams) error {
-	rows, err := r.queries.SetItemLmsStatus(ctx, r.GetConnOrTx(), params)
-	if err == nil && rows == 0 {
-		return pgx.ErrNoRows
-	}
-	return err
+	return repo.BatchExec(ctx, &r.PgBaseRepo, func(db repo.ConnOrTx) error {
+		rows, err := r.queries.SetItemLmsStatus(ctx, db, params)
+		if err == nil && rows == 0 {
+			return pgx.ErrNoRows
+		}
+		return err
+	})
 }
 
 func (r *PgPrRepo) SaveNotification(ctx common.ExtendedContext, params SaveNotificationParams) (Notification, error) {
-	row, err := r.queries.SaveNotification(ctx, r.GetConnOrTx(), params)
-	return row.Notification, err
+	return repo.BatchWrite(ctx, &r.PgBaseRepo, func(db repo.ConnOrTx) (Notification, error) {
+		row, err := r.queries.SaveNotification(ctx, db, params)
+		return row.Notification, err
+	})
 }
 
 func (r *PgPrRepo) GetNotificationById(ctx common.ExtendedContext, id string) (Notification, error) {
@@ -370,7 +388,9 @@ func (r *PgPrRepo) GetNotificationsByPrId(ctx common.ExtendedContext, params Get
 }
 
 func (r *PgPrRepo) MarkConditionNotificationsReceipt(ctx common.ExtendedContext, params MarkConditionNotificationsReceiptParams) error {
-	return r.queries.MarkConditionNotificationsReceipt(ctx, r.GetConnOrTx(), params)
+	return repo.BatchExec(ctx, &r.PgBaseRepo, func(db repo.ConnOrTx) error {
+		return r.queries.MarkConditionNotificationsReceipt(ctx, db, params)
+	})
 }
 
 func (r *PgPrRepo) DeleteNotificationById(ctx common.ExtendedContext, id string) error {
