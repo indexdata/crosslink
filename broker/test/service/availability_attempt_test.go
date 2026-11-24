@@ -80,7 +80,7 @@ func TestAvailabilityAttemptOverlap(t *testing.T) {
 					} else if value != "" {
 						lookup.Holdings = []catalog.Holding{{ItemId: value}}
 					}
-					factory := service.NewLookupAdapterFactory(illRepo, nil, "", nil, availabilityCreator{lookup: lookup})
+					factory := service.NewLookupAdapterFactory(illRepo, nil, "", directorySources(), availabilityCreator{lookup: lookup})
 					locator := service.CreateSupplierLocator(buses[i], illRepo, nil, factory)
 					go func() { defer close(done[i]); locator.CheckAvailability(ctx, event) }()
 					waitAvailabilityAttempt(t, base, barriers[i].reached)
@@ -152,7 +152,7 @@ func TestAvailabilityAttemptGuardsDelayedWork(t *testing.T) {
 	supplier := availabilityAttemptSelection(t, ctx)
 	bus := new(availabilityCaptureBus)
 	lookup := &catalog.MockLookupAdapter{Holdings: []catalog.Holding{{ItemId: "first"}}}
-	factory := service.NewLookupAdapterFactory(illRepo, nil, "", nil, availabilityCreator{lookup: lookup})
+	factory := service.NewLookupAdapterFactory(illRepo, nil, "", directorySources(), availabilityCreator{lookup: lookup})
 	locator := service.CreateSupplierLocator(bus, illRepo, nil, factory)
 	event := events.Event{ID: uuid.NewString(), IllTransactionID: supplier.IllTransactionID}
 	locator.CheckAvailability(ctx, event)
@@ -203,13 +203,13 @@ func TestAvailabilityAttemptCannotClearNewerSelection(t *testing.T) {
 	oldRepo := &pausedAvailabilityRepo{IllRepo: illRepo, barrier: barrier}
 	oldBus, newBus := new(availabilityCaptureBus), new(availabilityCaptureBus)
 	lookup := &catalog.MockLookupAdapter{Holdings: []catalog.Holding{{ItemId: "new-item"}}}
-	oldFactory := service.NewLookupAdapterFactory(oldRepo, nil, "", nil, availabilityCreator{lookup: lookup})
+	oldFactory := service.NewLookupAdapterFactory(oldRepo, nil, "", directorySources(), availabilityCreator{lookup: lookup})
 	oldLocator := service.CreateSupplierLocator(oldBus, oldRepo, nil, oldFactory)
 	event := events.Event{ID: uuid.NewString(), IllTransactionID: supplier.IllTransactionID}
 	done := make(chan struct{})
 	go func() { defer close(done); oldLocator.CheckAvailability(ctx, event) }()
 	waitAvailabilityAttempt(t, base, barrier.reached)
-	factory := service.NewLookupAdapterFactory(illRepo, nil, "", nil, availabilityCreator{lookup: lookup})
+	factory := service.NewLookupAdapterFactory(illRepo, nil, "", directorySources(), availabilityCreator{lookup: lookup})
 	locator := service.CreateSupplierLocator(newBus, illRepo, nil, factory)
 	locator.CheckAvailability(ctx, event)
 	require.Equal(t, events.EventStatusSuccess, newBus.completed.EventStatus)
@@ -228,7 +228,7 @@ func TestAvailabilityReselectionInvalidatesAttempt(t *testing.T) {
 			ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 			supplier := availabilityAttemptSelection(t, ctx)
 			bus := new(availabilityCaptureBus)
-			factory := service.NewLookupAdapterFactory(illRepo, nil, "", nil, availabilityCreator{lookup: &catalog.MockLookupAdapter{}})
+			factory := service.NewLookupAdapterFactory(illRepo, nil, "", directorySources(), availabilityCreator{lookup: &catalog.MockLookupAdapter{}})
 			locator := service.CreateSupplierLocator(bus, illRepo, nil, factory)
 			event := events.Event{ID: uuid.NewString(), IllTransactionID: supplier.IllTransactionID}
 			locator.CheckAvailability(ctx, event)
@@ -263,7 +263,7 @@ func TestAvailabilityExhaustionCanNotifyRequester(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	supplier := availabilityAttemptSelection(t, ctx)
 	bus := new(availabilityCaptureBus)
-	factory := service.NewLookupAdapterFactory(illRepo, nil, "", nil, availabilityCreator{lookup: &catalog.MockLookupAdapter{}})
+	factory := service.NewLookupAdapterFactory(illRepo, nil, "", directorySources(), availabilityCreator{lookup: &catalog.MockLookupAdapter{}})
 	locator := service.CreateSupplierLocator(bus, illRepo, nil, factory)
 	event := events.Event{ID: uuid.NewString(), IllTransactionID: supplier.IllTransactionID}
 	locator.CheckAvailability(ctx, event)
@@ -303,7 +303,7 @@ func TestCentralPolicyAvailabilityAttemptPreservesDiscovery(t *testing.T) {
 				defer barrier.resume()
 				oldRepo := &pausedAvailabilityRepo{IllRepo: illRepo, barrier: barrier}
 				oldBus := new(availabilityCaptureBus)
-				oldFactory := service.NewLookupAdapterFactory(oldRepo, nil, "", nil, availabilityCreator{})
+				oldFactory := service.NewLookupAdapterFactory(oldRepo, nil, "", directorySources(), availabilityCreator{})
 				oldLocator := service.CreateSupplierLocator(oldBus, oldRepo, nil, oldFactory)
 				event := events.Event{ID: uuid.NewString(), IllTransactionID: supplier.IllTransactionID}
 				oldBase, stopOld := context.WithCancel(base)
@@ -328,7 +328,7 @@ func TestCentralPolicyAvailabilityAttemptPreservesDiscovery(t *testing.T) {
 				}
 
 				bus := new(availabilityCaptureBus)
-				factory := service.NewLookupAdapterFactory(illRepo, nil, "", nil, availabilityCreator{})
+				factory := service.NewLookupAdapterFactory(illRepo, nil, "", directorySources(), availabilityCreator{})
 				locator := service.CreateSupplierLocator(bus, illRepo, nil, factory)
 				locator.CheckAvailability(ctx, event)
 				latest, err := illRepo.GetAvailabilityAttempt(ctx, supplier.IllTransactionID)
@@ -356,4 +356,9 @@ func TestCentralPolicyAvailabilityAttemptPreservesDiscovery(t *testing.T) {
 			})
 		}
 	}
+}
+
+// directorySources configures Directory catalog configuration as the only holdings source.
+func directorySources() []catalog.HoldingsSource {
+	return []catalog.HoldingsSource{{Name: catalog.HoldingsAdapterConsortium}}
 }

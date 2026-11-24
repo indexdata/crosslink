@@ -10,6 +10,10 @@ var ErrMissingLookupParameters = errors.New("missing lookup parameters")
 // Connection, search and retrieval errors do not use it.
 var ErrHoldingsParse = errors.New("holdings parsing failed")
 
+// ErrLookupAdapterConfig identifies a lookup adapter that could not be created
+// from its configuration. A chained fallback reports it only when reached.
+var ErrLookupAdapterConfig = errors.New("lookup adapter configuration failed")
+
 type missingLookupParametersError struct {
 	message string
 }

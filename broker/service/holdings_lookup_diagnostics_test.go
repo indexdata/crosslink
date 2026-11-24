@@ -42,7 +42,7 @@ func TestCentralHoldingsLookupDiagnostics(t *testing.T) {
 			}}
 			tc.configure(lookup)
 			directory := new(adapter.MockDirectoryLookupAdapter)
-			factory := NewLookupAdapterFactory(repo, directory, "", lookup, nil)
+			factory := NewLookupAdapterFactory(repo, directory, "", globalSources(lookup), nil)
 			locator := CreateSupplierLocator(new(events.PostgresEventBus), repo, directory, factory)
 			status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill"})
 			require.Equal(t, tc.status, status)
@@ -74,9 +74,9 @@ func TestCentralLookupUsesConfiguredTargetOnlyWithoutGlobalOverride(t *testing.T
 			}}})
 		lookup := &diagnosticLookup{MockLookupAdapter: catalog.MockLookupAdapter{Holdings: []catalog.Holding{{Symbol: "ISIL:SUP1"}}}}
 		directory := new(adapter.MockDirectoryLookupAdapter)
-		factory := NewLookupAdapterFactory(repo, directory, "", nil, policyLookupCreator{lookup: lookup})
+		factory := NewLookupAdapterFactory(repo, directory, "", directorySources(), policyLookupCreator{lookup: lookup})
 		if global {
-			factory.globalLookupAdapter = lookup
+			factory.sources = globalSources(lookup)
 		}
 		locator := CreateSupplierLocator(new(events.PostgresEventBus), repo, directory, factory)
 		status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill"})
@@ -91,6 +91,67 @@ func TestCentralLookupUsesConfiguredTargetOnlyWithoutGlobalOverride(t *testing.T
 			require.Equal(t, "sru", details.Protocol)
 			require.Equal(t, "https://catalog.example/sru", details.Target)
 		}
+	}
+}
+
+func TestCentralLookupChainReportsSupplyingSource(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		directoryResults []catalog.Holding
+		source           string
+		target           string
+	}{
+		{"directory has holdings", []catalog.Holding{{Symbol: "ISIL:SUP1"}}, "directory", "https://catalog.example/sru"},
+		{"directory empty falls through to global", nil, "global", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := metadataTestRepo(ill_db.IllTransaction{ID: "ill", RequesterID: pgtype.Text{String: "requester", Valid: true}},
+				ill_db.Peer{ID: "requester", CustomData: dirapi.Entry{CatalogConfig: &dirapi.CatalogConfig{
+					Sru: &dirapi.SruConfig{Address: "https://catalog.example/sru"},
+				}}})
+			directoryLookup := &diagnosticLookup{MockLookupAdapter: catalog.MockLookupAdapter{Holdings: tc.directoryResults}}
+			globalLookup := &diagnosticLookup{MockLookupAdapter: catalog.MockLookupAdapter{Holdings: []catalog.Holding{{Symbol: "ISIL:SUP1"}}}}
+			directory := new(adapter.MockDirectoryLookupAdapter)
+			sources := []catalog.HoldingsSource{{Name: catalog.HoldingsAdapterConsortium}, {Name: catalog.HoldingsAdapterMock, Adapter: globalLookup}}
+			factory := NewLookupAdapterFactory(repo, directory, "", sources, policyLookupCreator{lookup: directoryLookup})
+			locator := CreateSupplierLocator(new(events.PostgresEventBus), repo, directory, factory)
+			status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill"})
+			require.Equal(t, events.EventStatusSuccess, status)
+			details := result.CustomData["holdingsLookup"].(*availabilityLookupDetails)
+			require.Equal(t, tc.source, details.ConfigurationSource)
+			require.Equal(t, tc.target, details.Target)
+			require.Equal(t, "available-holdings", details.Outcome)
+		})
+	}
+}
+
+func TestCentralLookupChainDefersFallbackConfigError(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		globalHoldings []catalog.Holding
+		status         events.EventStatus
+		source         string
+		outcome        string
+	}{
+		{"global holdings ignore broken fallback", []catalog.Holding{{Symbol: "ISIL:SUP1"}}, events.EventStatusSuccess, "global", "available-holdings"},
+		{"empty global reaches broken fallback", nil, events.EventStatusError, "directory", "adapter-failed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := metadataTestRepo(ill_db.IllTransaction{ID: "ill", RequesterID: pgtype.Text{String: "requester", Valid: true}},
+				ill_db.Peer{ID: "requester", CustomData: dirapi.Entry{CatalogConfig: &dirapi.CatalogConfig{
+					Sru: &dirapi.SruConfig{Address: "https://catalog.example/sru"},
+				}}})
+			globalLookup := &diagnosticLookup{MockLookupAdapter: catalog.MockLookupAdapter{Holdings: tc.globalHoldings}}
+			directory := new(adapter.MockDirectoryLookupAdapter)
+			sources := []catalog.HoldingsSource{{Name: catalog.HoldingsAdapterSru, Adapter: globalLookup}, {Name: catalog.HoldingsAdapterConsortium}}
+			factory := NewLookupAdapterFactory(repo, directory, "", sources, policyLookupCreator{err: errors.New("adapter config failed")})
+			locator := CreateSupplierLocator(new(events.PostgresEventBus), repo, directory, factory)
+			status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill"})
+			require.Equal(t, tc.status, status)
+			details := result.CustomData["holdingsLookup"].(*availabilityLookupDetails)
+			require.Equal(t, tc.source, details.ConfigurationSource)
+			require.Equal(t, tc.outcome, details.Outcome)
+		})
 	}
 }
 
@@ -111,7 +172,7 @@ func TestCentralHoldingsPolicyDiagnosticsSurviveSaveFailure(t *testing.T) {
 	repo.peers[0].CustomData.HoldingsPolicy = &dirapi.HoldingsPolicy{}
 	lookup := &catalog.MockLookupAdapter{Holdings: []catalog.Holding{{Symbol: "ISIL:SUP1", ItemId: "copy"}}}
 	directory := new(adapter.MockDirectoryLookupAdapter)
-	factory := NewLookupAdapterFactory(repo, directory, "", lookup, nil)
+	factory := NewLookupAdapterFactory(repo, directory, "", globalSources(lookup), nil)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), repo, directory, factory)
 	status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill"})
 	require.Equal(t, events.EventStatusError, status)

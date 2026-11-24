@@ -130,7 +130,7 @@ func testAvailabilityConcurrentUpdate(t *testing.T, phase, change string, lookup
 		lookup.barrier = barrier
 	}
 	bus := new(availabilityCaptureBus)
-	factory := service.NewLookupAdapterFactory(repo, nil, "", nil, availabilityCreator{lookup: lookup})
+	factory := service.NewLookupAdapterFactory(repo, nil, "", directorySources(), availabilityCreator{lookup: lookup})
 	locator := service.CreateSupplierLocator(bus, repo, nil, factory)
 	done := make(chan struct{})
 	go func() {
@@ -232,7 +232,7 @@ func TestLocalPolicyReadinessRetry(t *testing.T) {
 	require.NoError(t, err)
 	lookup := &catalog.MockLookupAdapter{Holdings: []catalog.Holding{{}}}
 	bus := new(availabilityCaptureBus)
-	factory := service.NewLookupAdapterFactory(illRepo, nil, "", nil, availabilityCreator{lookup: lookup})
+	factory := service.NewLookupAdapterFactory(illRepo, nil, "", directorySources(), availabilityCreator{lookup: lookup})
 	locator := service.CreateSupplierLocator(bus, illRepo, nil, factory)
 	workflow := service.CreateWorkflowManager(bus, illRepo, service.WorkflowConfig{})
 	for _, fails := range []bool{true, false, true} {

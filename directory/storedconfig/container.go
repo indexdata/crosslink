@@ -9,10 +9,11 @@ import (
 
 // Entry API property names used as keys in Configs.
 const (
-	IllConfig      = "illConfig"
-	LmsConfig      = "lmsConfig"
-	CatalogConfig  = "catalogConfig"
-	HoldingsPolicy = "holdingsPolicy"
+	CatalogConfig   = "catalogConfig"
+	DiscoveryConfig = "discoveryConfig"
+	HoldingsPolicy  = "holdingsPolicy"
+	IllConfig       = "illConfig"
+	LmsConfig       = "lmsConfig"
 )
 
 // Normalize prepares a container for storage. It preserves a null container,

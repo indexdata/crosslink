@@ -12,7 +12,8 @@ import (
 // containerNames lists the configuration containers the entry API writes,
 // in the order it processes them.
 var containerNames = []string{
-	storedconfig.IllConfig, storedconfig.LmsConfig, storedconfig.CatalogConfig, storedconfig.HoldingsPolicy,
+	storedconfig.CatalogConfig, storedconfig.DiscoveryConfig, storedconfig.HoldingsPolicy,
+	storedconfig.IllConfig, storedconfig.LmsConfig,
 }
 
 // bodyProperties maps each top-level request property to its raw JSON value.

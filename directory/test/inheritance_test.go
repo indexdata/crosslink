@@ -256,6 +256,56 @@ func TestInheritanceEditability(t *testing.T) {
 	require.Equal(t, "https://ncip.example", getEntryJSON(t, branchPath, systemHeaders)["lmsConfig"].(map[string]any)["address"])
 }
 
+func TestInheritanceConsortiumOnlyDiscoveryConfig(t *testing.T) {
+	tree := setupInheritanceTree(t)
+	consortiumPath := "/entries/by-id/" + fixtureConsortium
+	patch := func(path, body string) (int, string) {
+		t.Helper()
+		response, data := jsonReq(t, http.MethodPatch, path, body, consortialHeaders)
+		return response.StatusCode, data
+	}
+	inherited := func() []any {
+		t.Helper()
+		return []any{
+			getEntryJSON(t, entryPath(tree.institution), systemHeaders)["discoveryConfig"],
+			getEntryJSON(t, entryPath(tree.branch), systemHeaders)["discoveryConfig"],
+		}
+	}
+
+	status, body := patch(consortiumPath, `{"discoveryConfig":{"queryUrl":"https://discovery.example/search","itemLinkTemplate":"https://discovery.example/item/{itemid}"}}`)
+	require.Equal(t, http.StatusNoContent, status, body)
+	want := map[string]any{"queryUrl": "https://discovery.example/search", "itemLinkTemplate": "https://discovery.example/item/{itemid}"}
+	require.Equal(t, []any{want, want}, inherited(), "the institution and the branch inherit the consortium's settings")
+	require.NotContains(t, getEntryJSON(t, entryPath(tree.institution)+"?resolve-inherit=false", systemHeaders), "discoveryConfig")
+
+	status, body = patch(consortiumPath, `{"discoveryConfig":{"itemLinkTemplte":"https://other.example"}}`)
+	require.Equal(t, http.StatusBadRequest, status, "a misspelled field is rejected, not dropped: %s", body)
+	require.Equal(t, want, inherited()[0])
+
+	status, body = patch(entryPath(tree.institution), `{"discoveryConfig":{"queryUrl":"https://other.example"}}`)
+	require.Equal(t, http.StatusBadRequest, status)
+	require.Equal(t, "discoveryConfig.queryUrl is not editable on Institution", body)
+	status, body = patch(entryPath(tree.branch), `{"discoveryConfig":{"itemLinkTemplate":"https://other.example"}}`)
+	require.Equal(t, http.StatusBadRequest, status)
+	require.Equal(t, "discoveryConfig.itemLinkTemplate is not editable on Branch", body)
+
+	record := entryImportRecord(symbolObject("ISIL", "INHERIT-INST"), "Inherit institution", nil, "Institution")
+	data := record["data"].(map[string]any)
+	data["parent"], data["tenant"] = fixtureConsortium, "INHERIT"
+	data["discoveryConfig"] = map[string]any{"queryUrl": "https://other.example", "itemLinkTemplate": nil}
+	_, result := importRequest(t, []any{record}, "update", standardHeaders)
+	require.Len(t, result.Errors, 1)
+	require.Equal(t, "discoveryConfig.queryUrl is not editable on Institution", result.Errors[0].Error)
+
+	status, body = patch(consortiumPath, `{"discoveryConfig":{"itemLinkTemplate":null}}`)
+	require.Equal(t, http.StatusNoContent, status, body)
+	require.Equal(t, map[string]any{"queryUrl": "https://discovery.example/search"}, inherited()[0], "PATCH keeps omitted fields")
+
+	status, body = patch(consortiumPath, `{"discoveryConfig":null}`)
+	require.Equal(t, http.StatusNoContent, status, body)
+	require.Equal(t, []any{nil, nil}, inherited())
+}
+
 func TestInheritanceProtectedValuesAndReparenting(t *testing.T) {
 	tree := setupInheritanceTree(t)
 	branchPath := entryPath(tree.branch)

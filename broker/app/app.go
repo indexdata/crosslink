@@ -146,7 +146,7 @@ func configLog() slog.Handler {
 
 func Init(ctx context.Context) (Context, error) {
 	appCtx.Logger().Info("starting " + vcs.GetSignature())
-	lookupAdapterEnv, err := catalog.CreateLookupAdapterFromEnv(map[string]any{
+	holdingsSources, err := catalog.CreateLookupAdapterFromEnv(map[string]any{
 		catalog.HoldingsAdapter:    HOLDINGS_ADAPTER,
 		catalog.HoldingsSruURL:     HOLDINGS_SRU_URL,
 		catalog.HoldingsIsxnLookup: HOLDINGS_ISXN_LOOKUP,
@@ -194,7 +194,7 @@ func Init(ctx context.Context) (Context, error) {
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo, illRepo, dirAdapter)
 	lmsCreator := lms.NewLmsCreator(illRepo, dirAdapter)
 	lookupAdapterCreator := catalog.NewLookupAdapterCreator(AVAILABILITY_ADAPTER, METAPROXY_URL)
-	lookupAdapterFactory := service.NewLookupAdapterFactory(illRepo, dirAdapter, CONSORTIUM_SYMBOL, lookupAdapterEnv, lookupAdapterCreator)
+	lookupAdapterFactory := service.NewLookupAdapterFactory(illRepo, dirAdapter, CONSORTIUM_SYMBOL, holdingsSources, lookupAdapterCreator)
 	prActionService := prservice.CreatePatronRequestActionService(prRepo, illRepo, eventBus, &iso18626Handler, lmsCreator, email.NewEmailService(), lookupAdapterFactory, dirAdapter)
 	prMessageHandler.SetAutoActionRunner(prActionService)
 	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, prMessageHandler, MAX_MESSAGE_SIZE, delay)

@@ -29,7 +29,7 @@ func TestPrefillCatalogResults(t *testing.T) {
 			repo := new(IllRepoMock)
 			// No request repository or event bus is supplied: only peer configuration may be cached.
 			repo.On("GetCachedPeersBySymbols", []string{"ISIL:REQ"}, mock.Anything).Return([]ill_db.Peer{{CustomData: dirapi.Entry{}}}, "", nil).Once()
-			factory := lookupservice.NewLookupAdapterFactory(repo, nil, "", tc.adapter, nil)
+			factory := lookupservice.NewLookupAdapterFactory(repo, nil, "", globalSources(tc.adapter), nil)
 			service := NewPrefillService(repo, nil, factory)
 			result, err := service.Prefill(appCtx, "ISIL:REQ", catalog.LookupParams{Identifier: "record"})
 			require.ErrorIs(t, err, tc.wantErr)
@@ -70,10 +70,28 @@ func TestPrefillLookupFailures(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := new(IllRepoMock)
 			repo.On("GetCachedPeersBySymbols", []string{"ISIL:REQ"}, mock.Anything).Return(tc.peers, "", tc.repoErr).Once()
-			factory := lookupservice.NewLookupAdapterFactory(repo, nil, "", tc.lookup, catalog.NewLookupAdapterCreator(catalog.LookupAdapterMock, ""))
+			factory := lookupservice.NewLookupAdapterFactory(repo, nil, "", testHoldingsSources(tc.lookup), catalog.NewLookupAdapterCreator(catalog.LookupAdapterMock, ""))
 			_, err := NewPrefillService(repo, nil, factory).Prefill(appCtx, "ISIL:REQ", catalog.LookupParams{Identifier: "record"})
 			require.ErrorIs(t, err, tc.want)
 			repo.AssertExpectations(t)
 		})
 	}
+}
+
+// globalSources configures adapter as the only, shared holdings source.
+func globalSources(adapter catalog.LookupAdapter) []catalog.HoldingsSource {
+	return []catalog.HoldingsSource{{Name: catalog.HoldingsAdapterMock, Adapter: adapter}}
+}
+
+// directorySources configures Directory catalog configuration as the only holdings source.
+func directorySources() []catalog.HoldingsSource {
+	return []catalog.HoldingsSource{{Name: catalog.HoldingsAdapterConsortium}}
+}
+
+// testHoldingsSources uses adapter as a shared source, or Directory configuration when nil.
+func testHoldingsSources(adapter catalog.LookupAdapter) []catalog.HoldingsSource {
+	if adapter == nil {
+		return directorySources()
+	}
+	return globalSources(adapter)
 }
