@@ -43,7 +43,7 @@ func TestLoadBalancingPolicyPersistenceAndValidation(t *testing.T) {
 	institution := "/entries/by-id/00000000-0000-0000-0000-000000000002"
 	response, body := jsonReq(t, http.MethodPatch, institution, `{"illConfig":{"loadBalancingPolicy":"deficit"}}`, headers)
 	require.Equal(t, http.StatusBadRequest, response.StatusCode, body)
-	require.Equal(t, "illConfig.loadBalancingPolicy is not editable on Institution", body)
+	require.JSONEq(t, errorJSON("illConfig.loadBalancingPolicy is not editable on Institution"), body)
 	response, body = jsonReq(t, http.MethodPatch, path, `{"illConfig":{"loadBalancingPolicy":"deficit"}}`, headers)
 	require.Equal(t, http.StatusNoContent, response.StatusCode, body)
 	response, body = jsonReq(t, http.MethodGet, institution, "", headers)

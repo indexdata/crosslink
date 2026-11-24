@@ -88,7 +88,7 @@ func TestEntryNetworksCases(t *testing.T) {
 			name:        "PATCH entry network without permission",
 			method:      http.MethodPatch,
 			endpoint:    "/entry-networks/40000000-0000-0000-0000-000000000001",
-			status:      http.StatusUnauthorized,
+			status:      http.StatusForbidden,
 			body:        `{"priority":0}`,
 			addlHeaders: institutionPermissionHeaders,
 		},

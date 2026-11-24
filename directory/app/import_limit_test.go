@@ -90,7 +90,8 @@ func TestOpenAPIRequestValidationReportsExpectedImportContentType(t *testing.T) 
 	handler.ServeHTTP(response, request)
 
 	require.Equal(t, http.StatusBadRequest, response.Code)
-	require.Equal(t, "invalid Content-Type: expected application/x-ndjson\n", response.Body.String())
+	require.Equal(t, "application/json", response.Header().Get("Content-Type"))
+	require.JSONEq(t, `{"error":"invalid Content-Type: expected application/x-ndjson"}`, response.Body.String())
 }
 
 func TestOpenAPIRequestValidationStillValidatesOtherRequestBodies(t *testing.T) {
@@ -107,6 +108,8 @@ func TestOpenAPIRequestValidationStillValidatesOtherRequestBodies(t *testing.T) 
 	handler.ServeHTTP(response, request)
 
 	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.Equal(t, "application/json", response.Header().Get("Content-Type"))
+	require.Contains(t, response.Body.String(), `"error":`)
 	require.False(t, called)
 }
 
@@ -149,7 +152,7 @@ func TestImportBodyLimitDoesNotReadUnauthorizedOrAffectOtherRoutes(t *testing.T)
 		t.Run(name, func(t *testing.T) {
 			permissions, path := values[0], values[1]
 			body := &trackingReadCloser{Reader: strings.NewReader(strings.Repeat("x", 129))}
-			next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusUnauthorized) })
+			next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusForbidden) })
 			handler := auth.FolioTokenAwareMiddleware(ImportBodyLimitMiddleware(128, next))
 			request := httptest.NewRequest(http.MethodPost, path, body)
 			request.ContentLength = 129
@@ -158,7 +161,7 @@ func TestImportBodyLimitDoesNotReadUnauthorizedOrAffectOtherRoutes(t *testing.T)
 
 			handler.ServeHTTP(response, request)
 
-			require.Equal(t, http.StatusUnauthorized, response.Code)
+			require.Equal(t, http.StatusForbidden, response.Code)
 			require.False(t, body.read)
 		})
 	}
@@ -173,7 +176,7 @@ func TestImportHandlerRejectsUnauthorizedBeforeValidationReadsBody(t *testing.T)
 
 	InitHandler(context.Background(), nil).ServeHTTP(response, request)
 
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusForbidden, response.Code)
 	require.False(t, body.read)
 }
 

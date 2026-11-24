@@ -42,7 +42,7 @@ func TestImportOpenAPIContract(t *testing.T) {
 	require.NotNil(t, media)
 	require.NotNil(t, media.Schema)
 	require.Contains(t, media.Extensions, "x-ndjson-item-schema")
-	for _, status := range []string{"200", "400", "401", "413", "500"} {
+	for _, status := range []string{"200", "400", "403", "413", "500"} {
 		require.NotNil(t, post.Responses.Value(status), status)
 	}
 

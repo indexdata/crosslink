@@ -169,10 +169,7 @@ paths:
                 type: object
                 additionalProperties: true
         '500':
-          description: Failed to prepare the specification
-          content:
-            text/plain:
-              schema: { type: string }
+          $ref: '#/components/responses/InternalServerError'
   /openapi.json:
     get:
       summary: Retrieve the Directory OpenAPI specification as JSON
@@ -187,10 +184,7 @@ paths:
                 type: object
                 additionalProperties: true
         '500':
-          description: Failed to prepare the specification
-          content:
-            text/plain:
-              schema: { type: string }
+          $ref: '#/components/responses/InternalServerError'
   /import:
     post:
       summary: Import complete directory aggregates
@@ -219,25 +213,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/ImportResult'
         '400':
-          description: Invalid import request
-          content:
-            text/plain:
-              schema: { type: string }
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema: { type: string }
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '413':
           description: Import request or record is too large
           content:
-            text/plain:
-              schema: { type: string }
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
-          description: Failed to read the import stream
-          content:
-            text/plain:
-              schema: { type: string }
+          $ref: '#/components/responses/InternalServerError'
   /entries:
     get:
       summary: Returns all entries
@@ -267,23 +253,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/EntriesResponse'
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
     post:
       summary: Creates a new entry
       description: Creates a new entry
@@ -314,23 +288,17 @@ paths:
                 key: 'id'
                 value: '$response.body#/id'
         '400':
-          description: Bad request
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: An entry with the same hrid already exists
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+                $ref: '#/components/schemas/Error'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
   /entries/owned:
     get:
       summary: Returns entries owned by the current tenant
@@ -361,23 +329,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/EntriesResponse'
         '400':
-          description: Missing tenant or invalid request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
   /entries/{key}/{value}:
     get:
       summary: Returns a directory entry by ID or symbol
@@ -394,29 +350,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Entry'
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Not found
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/NotFound'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
     patch:
       summary: Update an entry
       description: Update an entry
@@ -435,29 +375,19 @@ paths:
         '204':
           description: entry updated
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Not found
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: An entry with the same hrid already exists
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
+                $ref: '#/components/schemas/Error'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
     delete:
       summary: Delete directory entry by ID
       operationId: deleteEntry
@@ -468,23 +398,11 @@ paths:
         '204':
           description: entry deleted
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
   /entries/{key}/{value}/tiers:
     get:
       summary: Get all Tiers for a given Entry
@@ -500,29 +418,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/TiersResponse'
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Not found
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/NotFound'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
     post:
       summary: Add an Entry Tier to a given Entry
       operationId: addTierForEntry
@@ -544,29 +446,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Id'
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Not found
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/NotFound'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
   /entries/{key}/{value}/tiers/{id}:
     delete:
       summary: Delete an Entry Tier from a given Entry
@@ -585,29 +471,13 @@ paths:
         '204':
           description: Tier deleted from Entry
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Not found
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/NotFound'
         '500':
-          description: Internal sever error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
   /entries/{key}/{value}/networks:
     get:
       summary: Get all Networks for a given Entry
@@ -623,29 +493,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/NetworksForEntryResponse'
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Not found
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/NotFound'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
     post:
       summary: Add an Entry Network to a given Entry
       operationId: addNetworkForEntry
@@ -667,29 +521,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Id'
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Not found
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/NotFound'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
   /entries/{key}/{value}/networks/{id}:
     delete:
       summary: Delete an Entry Network from a given Entry
@@ -708,29 +546,13 @@ paths:
         '204':
           description: Network deleted from Entry
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Not found
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/NotFound'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
   /tiers:
     get:
       summary: Get all tiers
@@ -754,23 +576,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/TiersResponse'
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
     post:
       summary: Create a new Tier
       description: Create a new Tier
@@ -799,29 +609,17 @@ paths:
               parameters:
                 id: '$response.body#/id'
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '409':
           description: A tier with the same name already exists in the consortium
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
+                $ref: '#/components/schemas/Error'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
   /tiers/{id}:
     get:
       summary: Returns a Tier by ID
@@ -842,29 +640,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Tier'
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Forbidden
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Not found
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/NotFound'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
     patch:
       summary: Update a Tier
       operationId: updateTier
@@ -887,29 +669,13 @@ paths:
         '204':
           description: Tier updated
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Not found
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/NotFound'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
     delete:
       summary: Delete Tier by ID
       operationId: deleteTier
@@ -925,23 +691,17 @@ paths:
         '204':
           description: Tier deleted
         '400':
-          description: Bad request
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: The tier is still assigned to an entry
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+                $ref: '#/components/schemas/Error'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
   /networks:
     get:
       summary: Get all networks
@@ -965,23 +725,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/NetworksResponse'
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
     post:
       summary: Create a new network
       description: Create a new network
@@ -1010,29 +758,17 @@ paths:
               parameters:
                 id: '$response.body#/id'
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '409':
           description: A network with the same name already exists in the consortium
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
+                $ref: '#/components/schemas/Error'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
   /networks/{id}:
     get:
       summary: Returns a Network by ID
@@ -1053,29 +789,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Network'
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Forbidden
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Not found
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/NotFound'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
     patch:
       summary: Update a Network
       operationId: updateNetwork
@@ -1098,29 +818,13 @@ paths:
         '204':
           description: Network updated
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Not found
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/NotFound'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
     delete:
       summary: Delete Network by ID
       operationId: deleteNetwork
@@ -1136,23 +840,17 @@ paths:
         '204':
           description: Network deleted
         '400':
-          description: Bad request
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: The network is still assigned to an entry
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+                $ref: '#/components/schemas/Error'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
   /entry-tiers:
     get:
       summary: Returns all Entry Tier Mappings
@@ -1176,23 +874,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/EntryTiersResponse'
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
     post:
       summary: Creates a new Entry Tier
       description: Creates a new Entry Tier Relationship
@@ -1217,23 +903,11 @@ paths:
               parameters:
                 id: '$response.body#/id'
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
   /entry-tiers/{id}:
     get:
       summary: Returns an Entry Tier by ID
@@ -1254,29 +928,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/EntryTier'
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Not found
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/NotFound'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
     delete:
       summary: Delete Entry Tier by ID
       operationId: deleteEntryTier
@@ -1292,23 +950,11 @@ paths:
         '204':
           description: Entry Tier deleted
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
   /entry-networks:
     get:
       summary: Returns all Entry Network Mappings
@@ -1332,23 +978,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/EntryNetworksResponse'
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
     post:
       summary: Creates a new Entry Network
       description: Creates a new Entry Network Relationship
@@ -1373,23 +1007,11 @@ paths:
               parameters:
                 id: '$response.body#/id'
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
   /entry-networks/{id}:
     get:
       summary: Returns an Entry Network by ID
@@ -1410,29 +1032,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/EntryNetwork'
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Not found
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/NotFound'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
     patch:
       summary: Update an Entry Network
       operationId: updateEntryNetwork
@@ -1455,29 +1061,13 @@ paths:
         '204':
           description: Entry Network updated
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Not found
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/NotFound'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
 
     delete:
       summary: Delete Entry Network by ID
@@ -1494,23 +1084,11 @@ paths:
         '204':
           description: Entry Network deleted
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
   /closures:
     get:
       summary: Get all Closures
@@ -1534,23 +1112,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ClosuresResponse'
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
     post:
       summary: Create a new Closure
       description: Create a new Closure
@@ -1579,23 +1145,11 @@ paths:
               parameters:
                 id: '$response.body#/id'
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
   /closures/{id}:
     get:
       summary: Returns a Closure by ID
@@ -1616,29 +1170,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Closure'
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Forbidden
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Not found
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/NotFound'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
     patch:
       summary: Update a Closure
       description: Update a Closure
@@ -1662,29 +1200,13 @@ paths:
         '204':
           description: Closure updated
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Not found
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/NotFound'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
     delete:
       summary: Delete Closure by ID
       operationId: deleteClosure
@@ -1700,23 +1222,11 @@ paths:
         '204':
           description: Closure deleted
         '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: '#/components/responses/InternalServerError'
 components:
   parameters:
     Offset:
@@ -1764,7 +1274,41 @@ components:
       schema:
         type: string
 
+  responses:
+    BadRequest:
+      description: The request is invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: The caller lacks the permission the operation requires
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: The resource was not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
   schemas:
+    Error:
+      type: object
+      description: Error response body
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
     ConflictPolicy:
       type: string
       enum: [fail, skip, update]

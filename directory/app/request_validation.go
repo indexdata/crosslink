@@ -9,6 +9,8 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	apiValidator "github.com/oapi-codegen/nethttp-middleware"
+
+	"github.com/indexdata/crosslink/directory/api"
 )
 
 const importContentType = "application/x-ndjson"
@@ -16,6 +18,9 @@ const importContentType = "application/x-ndjson"
 func openAPIRequestValidationMiddleware(spec *openapi3.T) func(http.Handler) http.Handler {
 	genericValidator := apiValidator.OapiRequestValidatorWithOptions(spec, &apiValidator.Options{
 		Skipper: isImportRequest,
+		ErrorHandler: func(writer http.ResponseWriter, message string, statusCode int) {
+			api.WriteError(writer, statusCode, message)
+		},
 	})
 	return func(next http.Handler) http.Handler {
 		return validateImportRequest(genericValidator(next))
@@ -31,20 +36,20 @@ func validateImportRequest(next http.Handler) http.Handler {
 
 		contentType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
 		if err != nil || contentType != importContentType {
-			http.Error(writer, "invalid Content-Type: expected "+importContentType, http.StatusBadRequest)
+			api.WriteError(writer, http.StatusBadRequest, "invalid Content-Type: expected "+importContentType)
 			return
 		}
 		if request.Body == nil || request.Body == http.NoBody {
-			http.Error(writer, "body is required", http.StatusBadRequest)
+			api.WriteError(writer, http.StatusBadRequest, "body is required")
 			return
 		}
 
 		var firstByte [1]byte
 		if _, err := io.ReadFull(request.Body, firstByte[:]); err != nil {
 			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-				http.Error(writer, "body is required", http.StatusBadRequest)
+				api.WriteError(writer, http.StatusBadRequest, "body is required")
 			} else {
-				http.Error(writer, "failed to read request body", http.StatusBadRequest)
+				api.WriteError(writer, http.StatusBadRequest, "failed to read request body")
 			}
 			return
 		}
