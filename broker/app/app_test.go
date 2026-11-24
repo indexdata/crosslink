@@ -141,10 +141,12 @@ func TestBadHoldingsAdapter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	HOLDINGS_ADAPTER = "bad"
-	_, err := Init(ctx)
-	assert.ErrorContains(t, err, "bad value for HOLDINGS_ADAPTER")
-	HOLDINGS_ADAPTER = "mock"
+	defer func() { HOLDINGS_ADAPTER = "mock" }()
+	for _, value := range []string{"bad", "consortium,bad", "mock,mock", "consortium,,mock"} {
+		HOLDINGS_ADAPTER = value
+		_, err := Init(ctx)
+		assert.ErrorContains(t, err, "bad value for HOLDINGS_ADAPTER", value)
+	}
 }
 
 func TestBadDirectoryAdapter(t *testing.T) {

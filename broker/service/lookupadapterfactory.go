@@ -14,16 +14,18 @@ type LookupAdapterFactory struct {
 	illRepo              ill_db.IllRepo
 	dirAdapter           adapter.DirectoryLookupAdapter
 	consortiumSymbol     string
-	globalLookupAdapter  catalog.LookupAdapter
+	sources              []catalog.HoldingsSource
 	lookupAdapterCreator catalog.LookupAdapterCreator
 }
 
-func NewLookupAdapterFactory(illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, consortiumSymbol string, globalLookupAdapter catalog.LookupAdapter, lookupAdapterCreator catalog.LookupAdapterCreator) *LookupAdapterFactory {
+// NewLookupAdapterFactory creates a factory whose requester lookups try sources in order.
+// A source without an adapter is resolved per peer through lookupAdapterCreator.
+func NewLookupAdapterFactory(illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, consortiumSymbol string, sources []catalog.HoldingsSource, lookupAdapterCreator catalog.LookupAdapterCreator) *LookupAdapterFactory {
 	return &LookupAdapterFactory{
 		illRepo:              illRepo,
 		dirAdapter:           dirAdapter,
 		consortiumSymbol:     consortiumSymbol,
-		globalLookupAdapter:  globalLookupAdapter,
+		sources:              sources,
 		lookupAdapterCreator: lookupAdapterCreator,
 	}
 }
@@ -50,22 +52,68 @@ func (s *LookupAdapterFactory) resolveConfigPeer(ctx common.ExtendedContext, req
 	return consortiumPeers[0], nil
 }
 
+// GetAdapterRequester returns the lookup adapter for requester-side lookups and the
+// configuration peer's Directory entry. With several resolved sources, the adapter
+// tries them in order (see catalog.ChainLookupAdapter). Results report their
+// configuration source (catalog.SourcedLookupResult). A nil adapter means no
+// source is available for the requester.
 func (s *LookupAdapterFactory) GetAdapterRequester(ctx common.ExtendedContext, requester ill_db.Peer) (catalog.LookupAdapter, dirapi.Entry, error) {
+	lookupAdapter, source, entry, err := s.getAdapterRequester(ctx, requester)
+	if lookupAdapter != nil && source != "" {
+		// a single adapter: chain it so its results also report their source
+		lookupAdapter = catalog.NewChainLookupAdapter([]catalog.ChainEntry{{Source: source, Adapter: lookupAdapter}})
+	}
+	return lookupAdapter, entry, err
+}
+
+// getAdapterRequester also returns the configuration source of a single resolved
+// adapter; it is empty for a chain, whose results report their own source.
+func (s *LookupAdapterFactory) getAdapterRequester(ctx common.ExtendedContext, requester ill_db.Peer) (catalog.LookupAdapter, string, dirapi.Entry, error) {
 	peer, err := s.resolveConfigPeer(ctx, requester)
 	if err != nil {
-		return nil, dirapi.Entry{}, err
+		return nil, "", dirapi.Entry{}, err
 	}
-	if s.globalLookupAdapter != nil {
-		return s.globalLookupAdapter, peer.CustomData, nil
+	var entries []catalog.ChainEntry
+	for _, source := range s.sources {
+		if source.Adapter != nil {
+			entries = append(entries, catalog.ChainEntry{Source: catalog.ConfigurationSourceGlobal, Adapter: source.Adapter})
+			continue
+		}
+		if s.lookupAdapterCreator == nil {
+			return nil, "", dirapi.Entry{}, fmt.Errorf("lookup adapter factory misconfigured: lookupAdapterCreator is nil")
+		}
+		lookupAdapter, err := s.lookupAdapterCreator.GetAdapter(ctx, peer)
+		if err != nil {
+			err = fmt.Errorf("failed to get adapter for peer: %w: %w", catalog.ErrLookupAdapterConfig, err)
+			if len(entries) == 0 {
+				return nil, "", dirapi.Entry{}, err
+			}
+			// An earlier source may still return holdings, so report this
+			// configuration error only if the chain reaches it.
+			lookupAdapter = failedLookupAdapter{err: err}
+		}
+		if lookupAdapter != nil {
+			entries = append(entries, catalog.ChainEntry{Source: catalog.ConfigurationSourceDirectory, Adapter: lookupAdapter})
+		}
 	}
-	if s.lookupAdapterCreator == nil {
-		return nil, dirapi.Entry{}, fmt.Errorf("lookup adapter factory misconfigured: lookupAdapterCreator is nil")
+	switch len(entries) {
+	case 0:
+		return nil, "", peer.CustomData, nil
+	case 1:
+		return entries[0].Adapter, entries[0].Source, peer.CustomData, nil
+	default:
+		return catalog.NewChainLookupAdapter(entries), "", peer.CustomData, nil
 	}
-	lookupAdapter, err := s.lookupAdapterCreator.GetAdapter(ctx, peer)
-	if err != nil {
-		return nil, dirapi.Entry{}, fmt.Errorf("failed to get adapter for peer: %w", err)
+}
+
+// hasDirectorySource reports whether any source is resolved from Directory configuration.
+func (s *LookupAdapterFactory) hasDirectorySource() bool {
+	for _, source := range s.sources {
+		if source.Adapter == nil {
+			return true
+		}
 	}
-	return lookupAdapter, peer.CustomData, nil
+	return false
 }
 
 func (s *LookupAdapterFactory) GetAdapterSupplier(ctx common.ExtendedContext, supplier ill_db.Peer) (catalog.LookupAdapter, error) {
@@ -88,4 +136,13 @@ func (f *LookupAdapterFactory) loadBalancingPolicy(configPeer dirapi.Entry) (dir
 		return "", fmt.Errorf("consortium %s has invalid loadBalancingPolicy %q", f.consortiumSymbol, policy)
 	}
 	return policy, nil
+}
+
+// failedLookupAdapter defers an adapter construction error until a lookup reaches it.
+type failedLookupAdapter struct {
+	err error
+}
+
+func (a failedLookupAdapter) Lookup(catalog.LookupParams) (catalog.LookupResult, error) {
+	return nil, a.err
 }

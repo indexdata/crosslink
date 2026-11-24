@@ -96,6 +96,17 @@ func newAvailabilityLookupDetails(supplier ill_db.LocatedSupplier) *availability
 	}
 }
 
+// setConfigurationSource records which configuration supplied the lookup. Only
+// Directory configuration reports its protocol and target; a global adapter does
+// not use the Directory endpoint, so it must not be reported as the target.
+func (d *availabilityLookupDetails) setConfigurationSource(source string, entry dirapi.Entry) {
+	d.ConfigurationSource = source
+	d.Protocol, d.Target = "", ""
+	if source == catalog.ConfigurationSourceDirectory {
+		d.configure(entry)
+	}
+}
+
 func (d *availabilityLookupDetails) configure(entry dirapi.Entry) {
 	effective, err := profiles.Resolve(entry)
 	if err != nil || effective.Catalog == nil {

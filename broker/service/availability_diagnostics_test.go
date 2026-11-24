@@ -63,7 +63,7 @@ func diagnosticRepo() *availabilityPolicyRepo {
 }
 
 func runDiagnosticAvailability(repo *availabilityPolicyRepo, lookup catalog.LookupAdapter) (events.EventStatus, *events.EventResult) {
-	factory := NewLookupAdapterFactory(repo, nil, "", nil, policyLookupCreator{lookup: lookup})
+	factory := NewLookupAdapterFactory(repo, nil, "", directorySources(), policyLookupCreator{lookup: lookup})
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), repo, nil, factory)
 	return locator.checkAvailability(appCtx, events.Event{IllTransactionID: "ill"})
 }

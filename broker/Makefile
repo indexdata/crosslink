@@ -1,5 +1,4 @@
 GO ?= go
-DEPS_UPDATE_CONSTRAINTS := github.com/dprotaso/go-yit@v0.0.0-20250513224043-18a80f8f6df4
 GIT ?= git
 GOFMT ?= gofmt "-s"
 OS ?= $(shell uname)
@@ -91,19 +90,19 @@ $(STATE_MODELS_JSON): $(STATE_MODELS_YAML) go.mod go.sum
 	$(GO) tool yq eval -o=json $< > $@.tmp
 	mv -f $@.tmp $@
 
-$(OAPI_GEN): $(OAPI_CFG) $(OAPI_SPEC) $(OAPI_OVERLAY)
+$(OAPI_GEN): $(OAPI_CFG) $(OAPI_SPEC) $(OAPI_OVERLAY) go.mod go.sum
 	$(OAPI_CODEGEN) -config ./$(OAPI_CFG) ./$(OAPI_SPEC)
 
-$(PR_OAPI_GEN): $(PR_OAPI_CFG) $(PR_OAPI_SPEC) $(PR_OAPI_OVERLAY)
+$(PR_OAPI_GEN): $(PR_OAPI_CFG) $(PR_OAPI_SPEC) $(PR_OAPI_OVERLAY) go.mod go.sum
 	$(OAPI_CODEGEN) -config ./$(PR_OAPI_CFG) ./$(PR_OAPI_SPEC)
 
-$(PS_OAPI_GEN): $(PS_OAPI_CFG) $(PS_OAPI_SPEC)
+$(PS_OAPI_GEN): $(PS_OAPI_CFG) $(PS_OAPI_SPEC) go.mod go.sum
 	$(OAPI_CODEGEN) -config ./$(PS_OAPI_CFG) ./$(PS_OAPI_SPEC)
 
-$(SCHED_OAPI_GEN): $(SCHED_OAPI_CFG) $(SCHED_OAPI_SPEC)
+$(SCHED_OAPI_GEN): $(SCHED_OAPI_CFG) $(SCHED_OAPI_SPEC) go.mod go.sum
 	$(OAPI_CODEGEN) -config ./$(SCHED_OAPI_CFG) ./$(SCHED_OAPI_SPEC)
 
-$(IMPORT_OAPI_GEN): $(IMPORT_OAPI_CFG) $(IMPORT_OAPI_SPEC) $(OAPI_OVERLAY)
+$(IMPORT_OAPI_GEN): $(IMPORT_OAPI_CFG) $(IMPORT_OAPI_SPEC) $(OAPI_OVERLAY) go.mod go.sum
 	$(OAPI_CODEGEN) -config ./$(IMPORT_OAPI_CFG) ./$(IMPORT_OAPI_SPEC)
 
 $(SQL_GEN_OUT): $(SQL_GEN_IN) $(SQLC_CONFIG)

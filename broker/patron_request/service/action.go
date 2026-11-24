@@ -116,6 +116,8 @@ type actionDecisionDetailMetadataUpdate struct {
 type actionDecisionDetailMetadataSource struct {
 	AdapterType         string `json:"adapterType"`
 	ConfigurationPeerID string `json:"configurationPeerId"`
+	// ConfigurationSource is the holdings source ("global" or "directory") whose record was used.
+	ConfigurationSource string `json:"configurationSource,omitempty"`
 }
 
 type actionDecisionDetailMetadataChange struct {
@@ -1065,7 +1067,10 @@ func (a *PatronRequestActionService) metadataUpdateWithDetails(ctx common.Extend
 		Source:        metadataUpdateSource(configPeer),
 	}
 
-	lookupResult, err := lookupAdapter.Lookup(lookupParams)
+	lookupResult, err := catalog.LookupContext(ctx, lookupAdapter, lookupParams)
+	if sourced, ok := lookupResult.(catalog.SourcedLookupResult); ok {
+		detail.Source.ConfigurationSource = sourced.ConfigurationSource()
+	}
 	if err != nil {
 		if errors.Is(err, catalog.ErrMissingLookupParameters) {
 			detail.Outcome = "skipped"

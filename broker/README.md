@@ -354,10 +354,17 @@ Configuration is provided via environment variables:
 | `SHUTDOWN_DELAY`                 | Delay duration for graceful shutdown (in-flight    | `15s`                                     |
 |                                  | connections)                                       |                                           |
 | `MAX_MESSAGE_SIZE`               | Max accepted ISO18626 message size                 | `100KB`                                   |
-| `HOLDINGS_ADAPTER`               | Holdings lookup method: `mock` , `sru` or          | `mock`                                    |
-|                                  | `consortium`                                       |                                           |
+| `HOLDINGS_ADAPTER`               | Comma-separated, ordered list of holdings lookup   | `mock`                                    |
+|                                  | methods: `mock` , `sru` and/or `consortium` (e.g.  |                                           |
+|                                  | `consortium,sru` ). Each is tried in order; the    |                                           |
+|                                  | next is used when one has no adapter for the       |                                           |
+|                                  | requester, cannot search with the request's        |                                           |
+|                                  | parameters, or returns no holdings. Other lookup   |                                           |
+|                                  | and adapter configuration errors stop the chain    |                                           |
+|                                  | once reached, unless an earlier source found a     |                                           |
+|                                  | record. Entries must be unique                     |                                           |
 | `HOLDINGS_SRU_URL`               | Comma separated list of URLs when                  | `http://localhost:8081/sru`               |
-|                                  | `HOLDINGS_ADAPTER` is `sru`                        |                                           |
+|                                  | `HOLDINGS_ADAPTER` includes `sru`                  |                                           |
 | `HOLDINGS_ISXN_LOOKUP`           | Whether to use ISBN/ISSN lookup for `sru` method   | `false`                                   |
 | `HOLDINGS_FORMAT`                | Parser for SRU holdings: `reservoir` , `marc` ,    | `reservoir`                               |
 |                                  | `opac` or `MARC-21plus-1`                          |                                           |
@@ -797,8 +804,9 @@ counts and failures, including on unsuccessful discovery. The discovery note say
 identifying individual items or confirming current circulation availability.
 The existing `availableHoldings` field counts those parsed holdings.
 `configurationSource`
-distinguishes global adapters from Directory configuration. A global override does
-not report the overridden Directory endpoint as its target.
+distinguishes global adapters from Directory configuration. With several
+`HOLDINGS_ADAPTER` entries it reports the source whose result was used. A global
+adapter does not report the Directory endpoint as its target.
 Each `rotaInfo.suppliers` candidate includes its raw catalog `itemId`,
 `holdingsPolicyStatus` (`not-configured`, `deferred`, `evaluated`, or `applied`),
 and, for evaluated policies, `holdingsPolicyEligible` and any
