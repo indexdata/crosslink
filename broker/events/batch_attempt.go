@@ -3,6 +3,7 @@ package events
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/common"
@@ -115,4 +116,68 @@ func (r *PgEventRepo) requireBatchActionAttempt(ctx common.ExtendedContext, even
 		return repo.ErrBatchAttemptLost
 	}
 	return repo.LockBatchAttempt(ctx, r.Tx)
+}
+
+// CreateInlineActionTask creates an inline child or returns its stored event on a retry.
+func CreateInlineActionTask(ctx common.ExtendedContext, bus EventBus, requestID string, data EventData, parentID *string, position int) (Event, error) {
+	workerBus := WithWorkerContext(bus, ctx)
+	if postgres, ok := workerBus.(*PostgresEventBus); ok {
+		if id, stable := batchChildID(ctx, requestID, EventNameInvokeAction, data, EventDomainPatronRequest, parentID, position); stable {
+			return postgres.persistTask(id, requestID, EventNameInvokeAction, data, EventDomainPatronRequest, parentID, SignalConsumers, true, nil)
+		}
+	}
+	id, err := workerBus.CreateTask(requestID, EventNameInvokeAction, data, EventDomainPatronRequest, parentID, SignalConsumers)
+	return Event{ID: id, PatronRequestID: requestID, EventData: data}, err
+}
+
+// CreateBackgroundActionTaskIfEligible reuses any coordinated child before
+// consulting the caller's eligibility check for a new action. The check must
+// only inspect in-memory data, since coordinated creation holds the parent lock.
+func CreateBackgroundActionTaskIfEligible(bus EventBus, requestID string, data EventData, parentID *string, eligible func() (bool, error)) error {
+	if postgres, ok := bus.(*PostgresEventBus); ok {
+		if id, stable := batchChildID(postgres.ctx, requestID, EventNameInvokeBackgroundAction, data, EventDomainPatronRequest, parentID, 0); stable {
+			_, err := postgres.persistTask(id, requestID, EventNameInvokeBackgroundAction, data, EventDomainPatronRequest, parentID, SignalConsumers, true, eligible)
+			return err
+		}
+	}
+	allowed, err := eligible()
+	if err != nil || !allowed {
+		return err
+	}
+	_, err = bus.CreateTask(requestID, EventNameInvokeBackgroundAction, data, EventDomainPatronRequest, parentID, SignalConsumers)
+	return err
+}
+
+func batchChildID(ctx common.ExtendedContext, classID string, name EventName, data EventData, domain EventDomain, parentID *string, position int) (string, bool) {
+	if ctx == nil || parentID == nil || data.Action == nil {
+		return "", false
+	}
+	attempt := repo.BatchAttemptFrom(ctx)
+	if attempt.ID == "" || attempt.EventID != *parentID {
+		return "", false
+	}
+	// Quote each identity component so delimiters inside an ID cannot alias another child.
+	key := fmt.Sprintf("crosslink:batch-child:%q:%q:%q:%q:%q:%d", *parentID, domain, classID, name, *data.Action, position)
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(key)).String(), true
+}
+
+// Once started, a child can have external effects or persist a state change
+// before its event completes. Archive runs can likewise commit per-resource work.
+func batchWorkMayHaveEffects(event Event) bool {
+	if event.EventName != EventNameInvokeBatchAction {
+		return true
+	}
+	data := event.EventData.BatchActionData
+	return data != nil && strings.HasPrefix(data.ActionName, "archive-")
+}
+
+func (r *PgEventRepo) markBatchWorkStarted(ctx common.ExtendedContext, eventID string) error {
+	count, err := r.queries.MarkBatchActionWorkStarted(ctx, r.Tx, eventID)
+	if err != nil {
+		return fmt.Errorf("mark batch work started: %w", err)
+	}
+	if count != 1 {
+		return fmt.Errorf("batch work for event %s may already have started", eventID)
+	}
+	return nil
 }

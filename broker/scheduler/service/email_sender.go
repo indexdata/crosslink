@@ -12,8 +12,10 @@ import (
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	psservice "github.com/indexdata/crosslink/broker/pullslip/service"
+	"github.com/indexdata/crosslink/broker/repo"
 	sched_db "github.com/indexdata/crosslink/broker/scheduler/db"
 	"github.com/indexdata/go-utils/utils"
+	"github.com/jackc/pgx/v5"
 )
 
 const COMP = "email_sender"
@@ -62,10 +64,53 @@ func EmailSenderServiceWithClient(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, e
 
 func (s *EmailSenderService) EmailPullslip(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(COMP))
+	if repo.BatchAttemptFrom(ctx).ID != "" {
+		delivery, err := s.deliveryRepo.GetBatchEmailDelivery(ctx, event.ID)
+		if err == nil {
+			return s.resumeEmailPullslip(ctx, event, delivery)
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return events.NewErrorResult("failed to read email delivery progress", err.Error())
+		}
+	}
 	if s.emailService.IsReadyToSend() {
 		return s.generateAndEmailPullslip(ctx, event)
 	}
 	return s.emailPullslipMarkFailed(ctx, event)
+}
+
+func (s *EmailSenderService) resumeEmailPullslip(ctx common.ExtendedContext, event events.Event, delivery events.BatchActionEmailDelivery) (events.EventStatus, *events.EventResult) {
+	if !delivery.AcceptedAt.Valid {
+		return events.NewErrorResult("email delivery needs investigation", "SMTP acceptance is unconfirmed")
+	}
+	if !delivery.QueuePrintedActions {
+		return events.EventStatusSuccess, nil
+	}
+	batch := event.EventData.BatchActionData
+	if batch == nil || batch.Owner == "" {
+		return events.NewErrorResult("cannot resume printed actions", "batch owner is required")
+	}
+	requests := make([]pr_db.PatronRequest, 0, len(delivery.SelectedRequestIds))
+	for _, id := range delivery.SelectedRequestIds {
+		request, err := s.prRepo.GetPatronRequestById(ctx, id)
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return events.NewErrorResult("failed to read selected patron request", err.Error())
+		}
+		if request.SupplierSymbol.Valid && request.SupplierSymbol.String == batch.Owner {
+			requests = append(requests, request)
+		}
+	}
+	return s.queuePrintedActions(ctx, event, requests)
+}
+
+func (s *EmailSenderService) queuePrintedActions(ctx common.ExtendedContext, event events.Event, requests []pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+	if err := psservice.QueuePullslipPrinted(events.WithWorkerContext(s.eventBus, ctx), requests, &event.ID, event.EventData.BatchActionData); err != nil {
+		return events.NewErrorResult("email sent but failed to queue pullslip-printed actions", err.Error())
+	}
+	return events.EventStatusSuccess, nil
 }
 
 func (s *EmailSenderService) emailPullslipMarkFailed(_ common.ExtendedContext, _ events.Event) (events.EventStatus, *events.EventResult) {
@@ -196,9 +241,7 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 		return events.NewErrorResult("SMTP accepted email but failed to record acceptance", err.Error())
 	}
 	if includePdf {
-		if err := psservice.QueuePullslipPrinted(events.WithWorkerContext(s.eventBus, ctx), prs, &event.ID, event.EventData.BatchActionData); err != nil {
-			return events.NewErrorResult("email sent but failed to queue pullslip-printed actions", err.Error())
-		}
+		return s.queuePrintedActions(ctx, event, prs)
 	}
 	return events.EventStatusSuccess, nil
 }

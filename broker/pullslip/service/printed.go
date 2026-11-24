@@ -10,30 +10,28 @@ import (
 )
 
 // QueuePullslipPrinted records successful output through normal exclusive request
-// actions. Only the supplied PDF's requests are considered; unsupported states
-// are skipped and eligibility is checked again when the action runs.
+// actions. Existing batch children are reused, and new tasks are only queued
+// for eligible requests from the supplied PDF. The action rechecks eligibility.
 func QueuePullslipPrinted(bus events.EventBus, requests []pr_db.PatronRequest, parentID *string, batch *events.BatchActionData) error {
 	mappingService := &prservice.ActionMappingService{}
 	action := prservice.LenderActionPullslipPrinted
 	var failures []error
 	for _, request := range requests {
-		if request.Side != prservice.SideLending {
-			continue
-		}
-		mapping, err := mappingService.GetActionMapping(request.IllRequest)
-		if err != nil {
-			failures = append(failures, fmt.Errorf("request %s: %w", request.ID, err))
-			continue
-		}
-		if !mapping.IsActionSupported(request, action) {
-			continue
-		}
 		data := events.EventData{CommonEventData: events.CommonEventData{Action: &action}}
 		if batch != nil {
 			child := *batch
 			data.BatchActionData = &child
 		}
-		if _, err := bus.CreateTask(request.ID, events.EventNameInvokeBackgroundAction, data, events.EventDomainPatronRequest, parentID, events.SignalConsumers); err != nil {
+		if err := events.CreateBackgroundActionTaskIfEligible(bus, request.ID, data, parentID, func() (bool, error) {
+			if request.Side != prservice.SideLending {
+				return false, nil
+			}
+			mapping, err := mappingService.GetActionMapping(request.IllRequest)
+			if err != nil {
+				return false, fmt.Errorf("request %s: %w", request.ID, err)
+			}
+			return mapping.IsActionSupported(request, action), nil
+		}); err != nil {
 			failures = append(failures, fmt.Errorf("queue pullslip-printed for %s: %w", request.ID, err))
 		}
 	}

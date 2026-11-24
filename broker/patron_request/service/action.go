@@ -682,26 +682,24 @@ func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.Exten
 	}
 
 	currentState := pr.State
-	for _, action := range autoActions {
+	for position, action := range autoActions {
 		actionName := pr_db.PatronRequestAction(action.Name)
 		data := events.EventData{
 			CommonEventData: events.CommonEventData{Action: &actionName, User: user},
 			CustomData:      withStaticActionParams(nil, action.Params),
 		}
-		eventID, err := events.WithWorkerContext(a.eventBus, ctx).CreateTask(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, parentEventID, events.SignalConsumers)
+		autoEvent, err := events.CreateInlineActionTask(ctx, a.eventBus, pr.ID, data, parentEventID, position)
 		if err != nil {
 			return &autoActionFailure{action: actionName, msg: err.Error()}
 		}
 
-		autoEvent := events.Event{
-			ID:              eventID,
-			PatronRequestID: pr.ID,
-			EventData:       data,
-		}
 		// Auto actions execute inline here to preserve synchronous state-transition semantics.
-		completedEvent, err := a.processInvokeActionTask(ctx, autoEvent)
-		if err != nil {
-			return &autoActionFailure{action: actionName, msg: err.Error()}
+		completedEvent := autoEvent
+		if autoEvent.EventStatus == "" || autoEvent.EventStatus == events.EventStatusNew {
+			completedEvent, err = a.processInvokeActionTask(ctx, autoEvent)
+			if err != nil {
+				return &autoActionFailure{action: actionName, msg: err.Error()}
+			}
 		}
 		actionResult := completedEvent.ResultData.ActionResult
 		if actionResult != nil && actionResult.ChildActionError != nil {

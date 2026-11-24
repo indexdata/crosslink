@@ -21,6 +21,11 @@ var ErrBatchActionRunActive = errors.New("an overlapping run of this batch actio
 
 type SchedRepo interface {
 	BatchEmailDeliveryRepo
+	IsBatchActionPlanSaved(ctx common.ExtendedContext, runID string) (bool, error)
+	SaveBatchActionPlan(ctx common.ExtendedContext, runID string, entries []BatchActionPlanEntry) error
+	GetBatchActionPlanEntries(ctx common.ExtendedContext, runID string, after int64) ([]BatchActionPlanEntry, error)
+	StartOverdueBatchPlan(ctx common.ExtendedContext, runID string) (OverduePlanProgress, error)
+	SaveOverdueBatchPlanPage(ctx common.ExtendedContext, runID, previous, next string, entries []BatchActionPlanEntry, complete bool) error
 	QueueBatchActionRun(common.ExtendedContext, ScheduledTask) error
 	repo.Transactional[SchedRepo]
 	SaveScheduledTask(ctx common.ExtendedContext, params SaveScheduledTaskParams) (ScheduledTask, error)

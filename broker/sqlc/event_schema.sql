@@ -142,3 +142,19 @@ CREATE TABLE batch_action_email_delivery (
     started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     accepted_at TIMESTAMPTZ
 );
+
+ALTER TABLE batch_action_run
+    ADD COLUMN plan_saved BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN overdue_cutoff TIMESTAMPTZ,
+    ADD COLUMN overdue_cursor VARCHAR NOT NULL DEFAULT '',
+    ADD COLUMN overdue_plan_size BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE batch_action_run_event ADD COLUMN work_started_at TIMESTAMPTZ;
+
+CREATE TABLE batch_action_plan (
+    run_id VARCHAR NOT NULL REFERENCES batch_action_run (id) ON DELETE CASCADE,
+    position BIGINT NOT NULL,
+    request_id VARCHAR NOT NULL,
+    action_name VARCHAR,
+    selection_error VARCHAR,
+    PRIMARY KEY (run_id, position)
+);

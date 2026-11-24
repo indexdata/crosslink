@@ -284,6 +284,23 @@ acknowledges DATA, the broker records acceptance before queuing any pull-slip
 printed actions. A failed QUIT does not change acceptance. The broker retries
 transient acceptance-write failures without resubmitting the email.
 
+Coordinated request-aging and overdue runs save their selected actions before
+queueing any children. Overdue selection saves a fixed due-date cutoff and
+pages by request ID. The CQL predicate controls eligibility and request ID order
+controls dispatch, including when the selector supplies `sortBy`. Each page
+commits with its cursor, and dispatch waits for the complete plan. Retrying
+dispatch uses the saved selection and reuses existing
+child events, including their results. It re-notifies background children with
+a pending creation signal. A pull-slip email with recorded acceptance can
+resume queuing printed actions for its saved requests without sending again.
+An email with unconfirmed acceptance requires investigation.
+
+Coordinated child handlers and archive runs checkpoint work that may have side
+effects in the same transaction that moves the event to processing. An
+unfinished event with that checkpoint requires review
+before replay. Applying this migration marks existing processing events as
+potentially started. Automatic recovery is a separate step.
+
 The legacy `archive` binary, `POST /archive_ill_transactions`, `call_archive.sh`,
 and their database function have been removed. Replace old jobs with scheduled
 batch actions. Historical rows in `archived_ill_transactions` are preserved;

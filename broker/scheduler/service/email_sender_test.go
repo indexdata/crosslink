@@ -52,6 +52,11 @@ func (m *mockEmailPrRepo) ListPatronRequests(_ common.ExtendedContext, params pr
 	return m.listResult, int64(len(m.listResult)), m.listErr
 }
 
+func (m *mockEmailPrRepo) ListOverdueBatchCandidates(ctx common.ExtendedContext, limit int32, _ string, query pgcql.Query) ([]pr_db.PatronRequest, error) {
+	rows, _, err := m.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: limit}, query)
+	return rows, err
+}
+
 func (m *mockEmailPrRepo) GetTemplateByPurposeAudienceLabelAndOwner(_ common.ExtendedContext, params pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams) (pr_db.Template, error) {
 	m.templateCalled = true
 	m.gotTemplate = params
@@ -109,6 +114,10 @@ func (m *mockEmailService) SendEmail(from string, to []string, raw []byte) error
 type mockBatchEmailDelivery struct {
 	recordIntent     func(string, []string, bool) error
 	recordAcceptance func(string) error
+}
+
+func (*mockBatchEmailDelivery) GetBatchEmailDelivery(common.ExtendedContext, string) (events.BatchActionEmailDelivery, error) {
+	return events.BatchActionEmailDelivery{}, pgx.ErrNoRows
 }
 
 func (m *mockBatchEmailDelivery) RecordBatchEmailIntent(_ common.ExtendedContext, runID string, requestIDs []string, queuePrintedActions bool) error {

@@ -211,37 +211,40 @@ func (s *BatchActionService) RequestAging(ctx common.ExtendedContext, event even
 		return events.NewErrorResult("invalid cql selector", err.Error())
 	}
 
-	prs, _, err := s.prRepo.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: MAX_RECORDS_PER_EMAIL, Offset: 0}, pgcql)
+	result := &events.EventResult{CustomData: map[string]any{}}
+	processedCount := 0
+	params := backgroundActionParams(event.EventData.CustomData)
+	err = s.visitBatchPlan(ctx, event.ID, func() ([]sched_db.BatchActionPlanEntry, error) {
+		prs, _, err := s.prRepo.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: MAX_RECORDS_PER_EMAIL}, pgcql)
+		if err != nil {
+			return nil, err
+		}
+		entries := make([]sched_db.BatchActionPlanEntry, 0, len(prs))
+		for _, pr := range prs {
+			entry := sched_db.BatchActionPlanEntry{RequestID: pr.ID}
+			mapping, err := s.actionMappingService.GetActionMapping(pr.IllRequest)
+			if err != nil {
+				entry.Error = "could not find action mapping for patron request: " + pr.ID + ", error: " + err.Error()
+			} else if action := mapping.GetClosingAction(pr); action != nil {
+				entry.Action = string(*action)
+			} else {
+				entry.Error = "could not find closing action for patron request state: " + string(pr.State) + " within state model: " + mapping.StateModelName
+			}
+			entries = append(entries, entry)
+		}
+		return entries, nil
+	}, func(entry sched_db.BatchActionPlanEntry) {
+		processedCount++
+		if entry.Error != "" {
+			result.CustomData[entry.RequestID] = entry.Error
+			return
+		}
+		if err := s.queuePlannedAction(ctx, event, entry, params); err != nil {
+			result.CustomData[entry.RequestID] = "error creating close action: " + err.Error()
+		}
+	})
 	if err != nil {
 		return events.NewErrorResult("did not select data for processing", err.Error())
-	}
-
-	var result = &events.EventResult{CustomData: map[string]any{}}
-	var processedCount = 0
-	if len(prs) > 0 {
-		for _, pr := range prs {
-			processedCount++
-			var action *pr_db.PatronRequestAction
-			actionMapping, mappingErr := s.actionMappingService.GetActionMapping(pr.IllRequest)
-			if mappingErr != nil {
-				result.CustomData[pr.ID] = "could not find action mapping for patron request: " + pr.ID + ", error: " + mappingErr.Error()
-				continue
-			}
-			action = actionMapping.GetClosingAction(pr)
-			if action == nil {
-				result.CustomData[pr.ID] = "could not find closing action for patron request state: " + string(pr.State) + " within state model: " + actionMapping.StateModelName
-				continue
-			}
-			childBatchActionData := *batchActionData
-			data := events.EventData{CommonEventData: events.CommonEventData{
-				Action:          action,
-				BatchActionData: &childBatchActionData,
-			}, CustomData: backgroundActionParams(event.EventData.CustomData)}
-			_, eventErr := events.WithWorkerContext(s.eventBus, ctx).CreateTask(pr.ID, events.EventNameInvokeBackgroundAction, data, events.EventDomainPatronRequest, &event.ID, events.SignalConsumers)
-			if eventErr != nil {
-				result.CustomData[pr.ID] = "error creating close action: " + eventErr.Error()
-			}
-		}
 	}
 	result.Note = "processed patron request count: " + strconv.Itoa(processedCount)
 	status := events.EventStatusSuccess

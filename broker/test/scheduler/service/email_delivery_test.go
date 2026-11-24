@@ -2,6 +2,7 @@ package sched_service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -55,11 +56,15 @@ func TestBatchEmailPersistsDeliveryProgress(t *testing.T) {
 		name                   string
 		smtpError              error
 		loseCommitConfirmation bool
+		replayDelivery         bool
+		changeState            bool
 		wantStatus             events.EventStatus
 	}{
 		{name: "accepted", wantStatus: events.EventStatusSuccess},
+		{name: "resume accepted delivery", replayDelivery: true, wantStatus: events.EventStatusSuccess},
+		{name: "resume after request state changes", replayDelivery: true, changeState: true, wantStatus: events.EventStatusSuccess},
 		{name: "acceptance commit confirmation lost", loseCommitConfirmation: true, wantStatus: events.EventStatusSuccess},
-		{name: "unconfirmed", smtpError: errors.New("SMTP connection lost"), wantStatus: events.EventStatusError},
+		{name: "unconfirmed", replayDelivery: true, smtpError: errors.New("SMTP connection lost"), wantStatus: events.EventStatusError},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pool := schedRepo.(*sched_db.PgSchedRepo).Pool
@@ -153,7 +158,47 @@ func TestBatchEmailPersistsDeliveryProgress(t *testing.T) {
 			}
 			emailSender := schedservice.EmailSenderServiceWithClient(prRepo, illRepo, mailer, batchDeliveryPDF{}, bus, deliveryRepo)
 			batch := schedservice.NewBatchActionService(bus, prRepo, schedRepo, emailSender)
-			batch.BatchAction(workCtx, event)
+			if tc.replayDelivery {
+				_, err := bus.ProcessTask(workCtx, event, events.SignalObservers,
+					func(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+						event.EventData.BatchActionData.Selector = "id==" + pr.ID
+						status, result := emailSender.EmailPullslip(ctx, event)
+						require.Equal(t, tc.wantStatus, status, "%+v", result)
+						if tc.changeState {
+							children, err := eventRepo.GetPatronRequestEvents(appCtx, pr.ID)
+							require.NoError(t, err)
+							require.Len(t, children, 1)
+							child := children[0]
+							require.Equal(t, events.EventStatusNew, child.EventStatus)
+							require.Equal(t, string(events.SignalTaskCreated), child.LastSignal)
+							updated := pr_db.UpdatePatronRequestParams(pr)
+							updated.State = prservice.LenderStateShipped
+							_, err = prRepo.UpdatePatronRequest(appCtx, updated)
+							require.NoError(t, err)
+
+							// This listener missed the first creation signal.
+							listener, err := pgx.Connect(appCtx, connString)
+							require.NoError(t, err)
+							defer listener.Close(appCtx)
+							_, err = listener.Exec(appCtx, "LISTEN "+events.EVENT_BUS_CHANNEL)
+							require.NoError(t, err)
+							status, result = emailSender.EmailPullslip(ctx, event)
+							require.Equal(t, events.EventStatusSuccess, status, "%+v", result)
+							waitCtx, cancel := context.WithTimeout(appCtx, 3*time.Second)
+							defer cancel()
+							notification, err := listener.WaitForNotification(waitCtx)
+							require.NoError(t, err)
+							var signal events.NotifyData
+							require.NoError(t, json.Unmarshal([]byte(notification.Payload), &signal))
+							require.Equal(t, events.NotifyData{Event: child.ID, Signal: events.SignalTaskCreated, Target: events.SignalConsumers}, signal)
+							return status, result
+						}
+						return emailSender.EmailPullslip(ctx, event)
+					})
+				require.NoError(t, err)
+			} else {
+				batch.BatchAction(workCtx, event)
+			}
 			require.Equal(t, 1, sendCount)
 			if tc.loseCommitConfirmation {
 				require.Equal(t, 2, acceptanceWrites)

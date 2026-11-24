@@ -214,10 +214,49 @@ func triggerHandlers(eventCtx common.ExtendedContext, event Event, handlers []fu
 }
 
 func (p *PostgresEventBus) CreateTask(classId string, eventName EventName, data EventData, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error) {
-	id := uuid.New().String()
+	id, deterministic := "", false
+	if eventName == EventNameInvokeBackgroundAction {
+		id, deterministic = batchChildID(p.ctx, classId, eventName, data, eventDomain, parentId, 0)
+	}
+	if !deterministic {
+		id = uuid.NewString()
+	}
+	_, err := p.persistTask(id, classId, eventName, data, eventDomain, parentId, target, deterministic, nil)
+	return id, err
+}
+
+func (p *PostgresEventBus) persistTask(id, classId string, eventName EventName, data EventData, eventDomain EventDomain, parentId *string, target SignalTarget, deterministic bool, eligible func() (bool, error)) (Event, error) {
 	illTransactionID, patronRequestID := getIllTransactionAndPatronRequestId(classId, eventDomain)
-	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
-		event, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
+	var event Event
+	err := p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
+		if deterministic {
+			// The parent attempt lock serializes creation of its deterministic children.
+			existing, err := eventRepo.GetEvent(p.ctx, id)
+			if err == nil {
+				if existing.EventType != EventTypeTask || existing.EventName != eventName ||
+					existing.ParentID != getPgText(parentId) || existing.PatronRequestID != patronRequestID ||
+					existing.IllTransactionID != illTransactionID || existing.EventData.Action == nil || *existing.EventData.Action != *data.Action {
+					return fmt.Errorf("batch child ID %s already belongs to another event", id)
+				}
+				event = existing
+				if eventName == EventNameInvokeBackgroundAction && existing.EventStatus == EventStatusNew &&
+					existing.LastSignal == string(SignalTaskCreated) {
+					return eventRepo.Notify(p.ctx, id, SignalTaskCreated, target)
+				}
+				return nil
+			}
+			if !errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("read batch child %s: %w", id, err)
+			}
+		}
+		if eligible != nil {
+			allowed, err := eligible()
+			if err != nil || !allowed {
+				return err
+			}
+		}
+		var err error
+		event, err = eventRepo.SaveEvent(p.ctx, SaveEventParams{
 			ID:               id,
 			IllTransactionID: illTransactionID,
 			Timestamp:        getPgNow(),
@@ -241,6 +280,7 @@ func (p *PostgresEventBus) CreateTask(classId string, eventName EventName, data 
 		p.ctx.Logger().Debug("created TASK event", "eventName", eventName, "eventId", event.ID, "status", event.EventStatus)
 		return err
 	})
+	return event, err
 }
 
 func (p *PostgresEventBus) CreateNotice(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, target SignalTarget) (string, error) {
@@ -325,6 +365,11 @@ func (p *PostgresEventBus) beginTask(ctx common.ExtendedContext, eventId string,
 		})
 		if err != nil {
 			return err
+		}
+		if isPostgres && repo.BatchAttemptFrom(ctx).ID != "" && batchWorkMayHaveEffects(event) {
+			if err = pgRepo.markBatchWorkStarted(ctx, eventId); err != nil {
+				return err
+			}
 		}
 		err = eventRepo.Notify(ctx, eventId, SignalTaskBegin, target)
 		return err

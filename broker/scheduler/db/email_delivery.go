@@ -10,10 +10,17 @@ import (
 
 // BatchEmailDeliveryRepo records delivery progress for a coordinated pull-slip email.
 type BatchEmailDeliveryRepo interface {
+	GetBatchEmailDelivery(ctx common.ExtendedContext, runID string) (events.BatchActionEmailDelivery, error)
 	// RecordBatchEmailIntent starts the delivery once for the current root attempt.
 	RecordBatchEmailIntent(ctx common.ExtendedContext, runID string, requestIDs []string, queuePrintedActions bool) error
 	// RecordBatchEmailAcceptance marks delivery as accepted or confirms a previous write.
 	RecordBatchEmailAcceptance(ctx common.ExtendedContext, runID string) error
+}
+
+// GetBatchEmailDelivery returns the committed delivery progress for a run.
+func (r *PgSchedRepo) GetBatchEmailDelivery(ctx common.ExtendedContext, runID string) (events.BatchActionEmailDelivery, error) {
+	row, err := r.eventQueries.GetBatchEmailDelivery(ctx, r.GetConnOrTx(), runID)
+	return row.BatchActionEmailDelivery, err
 }
 
 // RecordBatchEmailIntent persists the selected requests before SMTP submission.

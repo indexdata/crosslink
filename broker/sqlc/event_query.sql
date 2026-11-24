@@ -205,3 +205,44 @@ SELECT sqlc.embed(event) FROM event
 WHERE ill_transaction_id = sqlc.arg(IllTransactionID) AND event_name = 'requester-msg-received' AND
     (event_data -> 'incomingMessage' -> 'requestingAgencyMessage' ->> 'action')::text = sqlc.arg(Action)::text
 ORDER BY timestamp DESC LIMIT 1;
+
+-- name: IsBatchActionPlanSaved :one
+SELECT plan_saved FROM batch_action_run WHERE id = $1;
+
+-- name: MarkBatchActionPlanSaved :execrows
+UPDATE batch_action_run SET plan_saved = true WHERE id = $1 AND NOT plan_saved;
+
+-- name: StartOverdueBatchPlan :one
+UPDATE batch_action_run
+SET overdue_cutoff = COALESCE(overdue_cutoff, date_trunc('second', now()))
+WHERE id = $1 AND action_name = 'overdue'
+RETURNING overdue_cutoff, overdue_cursor, plan_saved;
+
+-- name: AdvanceOverdueBatchPlan :one
+UPDATE batch_action_run
+SET overdue_cursor = sqlc.arg(next_cursor),
+    overdue_plan_size = overdue_plan_size + sqlc.arg(entry_count)::bigint,
+    plan_saved = sqlc.arg(complete)::boolean
+WHERE id = sqlc.arg(run_id) AND overdue_cursor = sqlc.arg(previous_cursor)
+    AND overdue_cutoff IS NOT NULL AND NOT plan_saved
+RETURNING overdue_plan_size;
+
+-- name: InsertBatchActionPlanEntries :exec
+INSERT INTO batch_action_plan (run_id, position, request_id, action_name, selection_error)
+SELECT sqlc.arg(run_id), sqlc.arg(page_start)::bigint + ordinality, entry ->> 'requestId', entry ->> 'action', entry ->> 'error'
+FROM jsonb_array_elements(sqlc.arg(entries)::jsonb) WITH ORDINALITY AS page(entry, ordinality);
+
+-- name: GetBatchActionPlanEntries :many
+SELECT position, request_id, action_name, selection_error
+FROM batch_action_plan
+WHERE run_id = sqlc.arg(run_id) AND position > sqlc.arg(after_position)
+ORDER BY position
+LIMIT sqlc.arg(page_size);
+
+-- name: MarkBatchActionWorkStarted :execrows
+UPDATE batch_action_run_event
+SET work_started_at = now()
+WHERE event_id = $1 AND work_started_at IS NULL;
+
+-- name: GetBatchEmailDelivery :one
+SELECT sqlc.embed(batch_action_email_delivery) FROM batch_action_email_delivery WHERE run_id = $1;

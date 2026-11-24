@@ -30,7 +30,7 @@ func TestOverdueDefaultFiltersStatesInDatabase(t *testing.T) {
 	t.Fatal("overdue batch default not found")
 }
 
-func TestOverdueBatchPreservesSelectorSortingAndGrouping(t *testing.T) {
+func TestOverdueBatchAcceptsSortedSelectorAndPreservesGrouping(t *testing.T) {
 	repo := new(mockEmailPrRepo)
 	svc := NewBatchActionService(new(mockBatchActionEventBus), repo, new(mockBatchActionCleanupRepo), nil)
 	event := batchActionEvent("overdue")
