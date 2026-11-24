@@ -1,5 +1,4 @@
 GO ?= go
-DEPS_UPDATE_CONSTRAINTS := github.com/dprotaso/go-yit@v0.0.0-20250513224043-18a80f8f6df4
 GIT ?= git
 GOFMT ?= gofmt "-s"
 OS ?= $(shell uname)
@@ -23,7 +22,7 @@ docker: generate
 
 generate: $(OAPI_GEN)
 
-$(OAPI_GEN): $(OAPI_CFG) $(OAPI_SPEC)
+$(OAPI_GEN): $(OAPI_CFG) $(OAPI_SPEC) go.mod go.sum
 	$(OAPI_CODEGEN) --config=$(OAPI_CFG) $(OAPI_SPEC)
 
 $(PROGRAMS): $(GOFILES) $(COMMIT_ID) $(OAPI_GEN)
