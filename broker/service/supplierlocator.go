@@ -132,13 +132,15 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		return events.LogErrorAndReturnResult(ctx, "lookup adapter factory not configured", fmt.Errorf("lookup adapter factory is nil"))
 	}
 
-	lookupAdapter, configPeer, err := s.lookupAdapterFactory.GetAdapterRequester(ctx, requester)
-	if s.lookupAdapterFactory.globalLookupAdapter != nil {
-		lookupDetails.ConfigurationSource = "global"
-	} else {
-		lookupDetails.ConfigurationSource = "directory"
-		lookupDetails.configure(configPeer)
+	lookupAdapter, source, configPeer, err := s.lookupAdapterFactory.getAdapterRequester(ctx, requester)
+	if lookupAdapter == nil {
+		// failed or not configured: report the configuration that was consulted
+		source = catalog.ConfigurationSourceGlobal
+		if s.lookupAdapterFactory.hasDirectorySource() {
+			source = catalog.ConfigurationSourceDirectory
+		}
 	}
+	lookupDetails.setConfigurationSource(source, configPeer)
 	if err != nil {
 		lookupDetails.Outcome = "adapter-failed"
 		return events.LogErrorAndReturnResult(ctx, "failed to get lookup adapter for locating suppliers", err)
@@ -160,8 +162,17 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 
 	var query string
 	lookupStarted := time.Now()
-	lookupResult, err := lookupAdapter.Lookup(lookupParams)
+	lookupResult, err := catalog.LookupContext(ctx, lookupAdapter, lookupParams)
+	if sourced, ok := lookupResult.(catalog.SourcedLookupResult); ok {
+		lookupDetails.setConfigurationSource(sourced.ConfigurationSource(), configPeer)
+	}
 	lookupDetails.recordLookup(lookupStarted, lookupResult, err)
+	if errors.Is(err, catalog.ErrLookupAdapterConfig) {
+		// a chained fallback whose configuration failed was reached
+		lookupDetails.setConfigurationSource(catalog.ConfigurationSourceDirectory, configPeer)
+		lookupDetails.Outcome = "adapter-failed"
+		return events.LogErrorAndReturnResult(ctx, "failed to get lookup adapter for locating suppliers", err)
+	}
 	if lookupResult != nil {
 		query = lookupResult.GetQuery() // get the query even if there was an error, for logging purposes
 	}

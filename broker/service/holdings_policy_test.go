@@ -133,7 +133,7 @@ func TestAvailabilityPolicyReevaluation(t *testing.T) {
 			if tc.saveErr {
 				repo.saveErr = errors.New("save failed")
 			}
-			factory := NewLookupAdapterFactory(repo, new(adapter.MockDirectoryLookupAdapter), "", nil, creator)
+			factory := NewLookupAdapterFactory(repo, new(adapter.MockDirectoryLookupAdapter), "", directorySources(), creator)
 			locator := CreateSupplierLocator(new(events.PostgresEventBus), repo, new(adapter.MockDirectoryLookupAdapter), factory)
 			status, result := locator.checkAvailability(appCtx, events.Event{IllTransactionID: "ill"})
 			if tc.saveErr || tc.invalidConfig || tc.lookupErr || tc.holdingsErr || tc.adapterErr || tc.missingAdapter {
@@ -173,7 +173,7 @@ func TestLocateSuppliersPolicyStage(t *testing.T) {
 				{Symbol: "ISIL:SUP1", LocalIdentifier: "second-bib", ItemId: "eligible-item", CallNumber: "eligible call"},
 			}}
 			directory := new(adapter.MockDirectoryLookupAdapter)
-			factory := NewLookupAdapterFactory(repo, directory, "", lookup, nil)
+			factory := NewLookupAdapterFactory(repo, directory, "", globalSources(lookup), nil)
 			locator := CreateSupplierLocator(new(events.PostgresEventBus), repo, directory, factory)
 			status, result := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill"})
 			require.Equal(t, events.EventStatusSuccess, status)
@@ -223,7 +223,7 @@ func (r *availabilityPolicyRepo) GetLocatedSupplierByIdForUpdate(common.Extended
 
 func TestAvailabilityCommitFailure(t *testing.T) {
 	repo := &availabilityPolicyRepo{supplier: ill_db.LocatedSupplier{ID: "sup", IllTransactionID: "ill", SupplierStatus: ill_db.SupplierStateSelectedPg}, commitErr: errors.New("commit failed")}
-	factory := NewLookupAdapterFactory(repo, nil, "", nil, policyLookupCreator{})
+	factory := NewLookupAdapterFactory(repo, nil, "", directorySources(), policyLookupCreator{})
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), repo, nil, factory)
 	status, result := locator.checkAvailability(appCtx, events.Event{IllTransactionID: "ill"})
 	require.Equal(t, events.EventStatusError, status)
@@ -272,7 +272,7 @@ func TestDeferredPolicySeesAllOpacCirculations(t *testing.T) {
 				}
 				repo := &availabilityPolicyRepo{peer: ill_db.Peer{CustomData: entry}, supplier: ill_db.LocatedSupplier{ID: "sup", SupplierID: "peer", IllTransactionID: "ill", SupplierStatus: ill_db.SupplierStateSelectedPg, LocalID: pgtype.Text{String: "bib", Valid: true}}}
 				creator := catalog.NewLookupAdapterCreator(catalog.LookupAdapterZoom, "")
-				factory := NewLookupAdapterFactory(repo, nil, "", nil, creator)
+				factory := NewLookupAdapterFactory(repo, nil, "", directorySources(), creator)
 				locator := CreateSupplierLocator(new(events.PostgresEventBus), repo, nil, factory)
 				status, result := locator.checkAvailability(appCtx, events.Event{IllTransactionID: "ill"})
 				require.Equal(t, events.EventStatusSuccess, status, "%+v", result)

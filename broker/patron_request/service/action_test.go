@@ -1167,7 +1167,7 @@ func TestMetadataUpdateNoFactory(t *testing.T) {
 
 func TestMetadataUpdateAdapterInitError(t *testing.T) {
 	creator := &mockLookupCreator{err: errors.New("adapter init failed")}
-	factory := service.NewLookupAdapterFactory(nil, nil, "", nil, creator)
+	factory := service.NewLookupAdapterFactory(nil, nil, "", directorySources(), creator)
 	s := PatronRequestActionService{
 		lookupAdapterFactory: factory,
 	}
@@ -1178,7 +1178,7 @@ func TestMetadataUpdateAdapterInitError(t *testing.T) {
 
 func TestMetadataUpdateNilLookupAdapter(t *testing.T) {
 	creator := &mockLookupCreator{} // returns nil adapter, nil error
-	factory := service.NewLookupAdapterFactory(nil, nil, "", nil, creator)
+	factory := service.NewLookupAdapterFactory(nil, nil, "", directorySources(), creator)
 	s := PatronRequestActionService{
 		lookupAdapterFactory: factory,
 	}
@@ -1233,6 +1233,19 @@ func TestMetadataUpdateMergePopulatesEmptyFields(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "Catalog Title", req.BibliographicInfo.Title)
 	assert.Equal(t, "Jane Doe", req.BibliographicInfo.Author)
+}
+
+func TestMetadataUpdateReportsFallbackSource(t *testing.T) {
+	mode := dirapi.Replace
+	sources := []catalog.HoldingsSource{{Name: catalog.HoldingsAdapterMock, Adapter: &catalog.MockLookupAdapter{}}, {Name: catalog.HoldingsAdapterConsortium}}
+	creator := &mockLookupCreator{adapter: &catalog.MockLookupAdapter{Metadata: catalog.Metadata{Title: "Directory Title"}}}
+	s := PatronRequestActionService{lookupAdapterFactory: service.NewLookupAdapterFactory(nil, nil, "", sources, creator)}
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	req := &iso18626.Request{BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "record"}}
+	detail, err := s.metadataUpdateWithDetails(ctx, req, peerWithMetadataMode(&mode))
+	require.NoError(t, err)
+	assert.Equal(t, "Directory Title", req.BibliographicInfo.Title)
+	assert.Equal(t, catalog.ConfigurationSourceDirectory, detail.Source.ConfigurationSource)
 }
 
 func TestMetadataUpdateMergePreservesExistingFields(t *testing.T) {
@@ -5548,6 +5561,7 @@ func TestUpdateMetadataBorrowingRequestAddsDecisionDetails(t *testing.T) {
 				Source: actionDecisionDetailMetadataSource{
 					AdapterType:         "sru",
 					ConfigurationPeerID: "00000000-0000-0000-0000-000000000456",
+					ConfigurationSource: "global",
 				},
 				Changes: []actionDecisionDetailMetadataChange{
 					{Field: "title", PreviousValue: "Original title", NewValue: "Canonical title"},
@@ -6355,7 +6369,7 @@ func (m *mockLookupCreator) GetAdapter(ctx common.ExtendedContext, peer ill_db.P
 
 // lookupFactoryWithAdapter creates a LookupAdapterFactory that returns the given adapter directly.
 func lookupFactoryWithAdapter(adapter catalog.LookupAdapter) *service.LookupAdapterFactory {
-	return service.NewLookupAdapterFactory(nil, nil, "", adapter, nil)
+	return service.NewLookupAdapterFactory(nil, nil, "", globalSources(adapter), nil)
 }
 
 // peerWithMetadataMode builds a Peer whose CustomData carries the given MetadataUpdateMode.
