@@ -20,6 +20,7 @@ const SchedulerChannel = "crosslink_sched_channel"
 var ErrBatchActionRunActive = errors.New("an overlapping run of this batch action is already active")
 
 type SchedRepo interface {
+	BatchEmailDeliveryRepo
 	QueueBatchActionRun(common.ExtendedContext, ScheduledTask) error
 	repo.Transactional[SchedRepo]
 	SaveScheduledTask(ctx common.ExtendedContext, params SaveScheduledTaskParams) (ScheduledTask, error)

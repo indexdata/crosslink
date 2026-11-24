@@ -1,0 +1,1 @@
+DROP TABLE batch_action_email_delivery;

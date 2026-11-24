@@ -161,6 +161,18 @@ RETURNING id;
 -- name: AddBatchActionRunEvent :exec
 INSERT INTO batch_action_run_event (event_id, run_id) VALUES ($1, $2);
 
+-- name: RecordBatchEmailIntent :execrows
+INSERT INTO batch_action_email_delivery (run_id, selected_request_ids, queue_printed_actions)
+SELECT id, sqlc.arg(selected_request_ids)::varchar[], sqlc.arg(queue_printed_actions)::boolean
+FROM batch_action_run
+WHERE id = sqlc.arg(run_id) AND action_name = 'email-pullslips' AND completed_at IS NULL
+ON CONFLICT (run_id) DO NOTHING;
+
+-- name: RecordBatchEmailAcceptance :execrows
+UPDATE batch_action_email_delivery
+SET accepted_at = COALESCE(accepted_at, now())
+WHERE run_id = $1;
+
 -- name: GetBatchActionAttempt :one
 SELECT attempt_id FROM batch_action_run_event WHERE event_id = $1;
 

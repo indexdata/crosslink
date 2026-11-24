@@ -2,6 +2,8 @@ package sched_service
 
 import (
 	"errors"
+	"fmt"
+	"io"
 	"strings"
 	"testing"
 
@@ -13,6 +15,7 @@ import (
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	psservice "github.com/indexdata/crosslink/broker/pullslip/service"
+	brokerrepo "github.com/indexdata/crosslink/broker/repo"
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -87,6 +90,7 @@ type mockEmailService struct {
 	called bool
 	data   []byte
 	ready  bool
+	onSend func()
 }
 
 func (m *mockEmailService) IsReadyToSend() bool {
@@ -96,7 +100,29 @@ func (m *mockEmailService) IsReadyToSend() bool {
 func (m *mockEmailService) SendEmail(from string, to []string, raw []byte) error {
 	m.called = true
 	m.data = append([]byte(nil), raw...)
+	if m.onSend != nil {
+		m.onSend()
+	}
 	return m.err
+}
+
+type mockBatchEmailDelivery struct {
+	recordIntent     func(string, []string, bool) error
+	recordAcceptance func(string) error
+}
+
+func (m *mockBatchEmailDelivery) RecordBatchEmailIntent(_ common.ExtendedContext, runID string, requestIDs []string, queuePrintedActions bool) error {
+	if m.recordIntent != nil {
+		return m.recordIntent(runID, requestIDs, queuePrintedActions)
+	}
+	return nil
+}
+
+func (m *mockBatchEmailDelivery) RecordBatchEmailAcceptance(_ common.ExtendedContext, runID string) error {
+	if m.recordAcceptance != nil {
+		return m.recordAcceptance(runID)
+	}
+	return nil
 }
 
 // mockPdfGen implements PdfGenerator.
@@ -147,7 +173,7 @@ func validEmailEvent() events.Event {
 
 // newEmailSvc creates an EmailSenderService wired to the supplied mocks.
 func newEmailSvc(prRepo pr_db.PrRepo, emailService email.EmailService, pdf psservice.PdfService) *EmailSenderService {
-	return EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, emailService, pdf, nil)
+	return EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, emailService, pdf, nil, &mockBatchEmailDelivery{})
 }
 
 // ---------------------------------------------------------------------------
@@ -423,6 +449,10 @@ func TestGenerateAndEmailPullslip_SuccessNoEmail(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
 	mailer := &mockEmailService{}
 	svc := newEmailSvc(prRepo, mailer, nil)
+	svc.deliveryRepo = &mockBatchEmailDelivery{recordIntent: func(string, []string, bool) error {
+		t.Error("a skipped email must not have a delivery intent")
+		return nil
+	}}
 	status, result := svc.generateAndEmailPullslip(testCtx, validEmailEvent())
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, "no patron requests matched the selector", result.Note)
@@ -433,6 +463,11 @@ func TestGenerateAndEmailPullslip_SuccessEmailWithZero(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
 	mailer := &mockEmailService{}
 	svc := newEmailSvc(prRepo, mailer, nil)
+	svc.deliveryRepo = &mockBatchEmailDelivery{recordIntent: func(_ string, ids []string, queuePrintedActions bool) error {
+		assert.Equal(t, []string{}, ids)
+		assert.False(t, queuePrintedActions)
+		return nil
+	}}
 	event := validEmailEvent()
 	event.EventData.CustomData["sendEmpty"] = true
 	status, result := svc.generateAndEmailPullslip(testCtx, event)
@@ -585,7 +620,7 @@ func TestGenerateAndEmailPullslip_WithPDF_GenerateError(t *testing.T) {
 func TestEmailPullslip_WhenReadyToSend_SendsEmail(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{{ID: "pr-1"}}}
 	mailer := &mockEmailService{ready: true}
-	svc := EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, nil, nil)
+	svc := newEmailSvc(prRepo, mailer, nil)
 
 	status, _ := svc.EmailPullslip(testCtx, validEmailEvent())
 
@@ -596,14 +631,14 @@ func TestEmailPullslip_WhenReadyToSend_SendsEmail(t *testing.T) {
 func TestEmailPullslip_DoesNotPanic(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
 	mailer := &mockEmailService{ready: false}
-	svc := EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, nil, nil)
+	svc := newEmailSvc(prRepo, mailer, nil)
 
 	// EmailPullslip ignores the ProcessTask error (_, _ = ...); verify no panic.
 	svc.EmailPullslip(testCtx, validEmailEvent())
 }
 
 func TestEmailPullslip_InvalidEvent_ErrorStatus(t *testing.T) {
-	svc := EmailSenderServiceWithClient(nil, &mockEmailIllRepo{fromEmail: "from@example.com"}, &mockEmailService{}, nil, nil)
+	svc := newEmailSvc(nil, &mockEmailService{}, nil)
 
 	// Event with no BatchActionData → handler returns error status.
 	status, _ := svc.EmailPullslip(testCtx, events.Event{})
@@ -614,7 +649,7 @@ func TestEmailPullslip_InvalidEvent_ErrorStatus(t *testing.T) {
 func TestEmailPullslip_SetEventToFailed(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
 	mailer := &mockEmailService{}
-	svc := EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, nil, nil)
+	svc := newEmailSvc(prRepo, mailer, nil)
 
 	status, _ := svc.EmailPullslip(testCtx, validEmailEvent())
 
@@ -622,34 +657,77 @@ func TestEmailPullslip_SetEventToFailed(t *testing.T) {
 	assert.False(t, mailer.called)
 }
 
-func TestEmailPullslipQueuesPrintedOnlyAfterPDFEmail(t *testing.T) {
+func TestEmailPullslipRecordsDeliveryBeforeQueuingPrintedActions(t *testing.T) {
 	for _, tc := range []struct {
-		name                      string
-		pdf                       bool
-		sendErr, pdfErr, queueErr error
-		wantQueued                int
-		wantStatus                events.EventStatus
+		name             string
+		pdf              bool
+		failsAt          string
+		acceptanceErrors []error
+		wantSteps        []string
+		wantQueued       int
 	}{
-		{name: "PDF sent", pdf: true, wantQueued: 1, wantStatus: events.EventStatusSuccess},
-		{name: "no PDF", wantStatus: events.EventStatusSuccess},
-		{name: "SMTP failed", pdf: true, sendErr: errors.New("SMTP failed"), wantStatus: events.EventStatusError},
-		{name: "PDF failed", pdf: true, pdfErr: errors.New("PDF failed"), wantStatus: events.EventStatusError},
-		{name: "queue failed", pdf: true, queueErr: errors.New("queue failed"), wantQueued: 1, wantStatus: events.EventStatusError},
+		{name: "PDF sent", pdf: true, wantSteps: []string{"intent", "smtp", "acceptance"}, wantQueued: 1},
+		{name: "no PDF", wantSteps: []string{"intent", "smtp", "acceptance"}},
+		{name: "PDF failed", pdf: true, failsAt: "pdf"},
+		{name: "intent write failed", pdf: true, failsAt: "intent", wantSteps: []string{"intent"}},
+		{name: "SMTP failed", pdf: true, failsAt: "smtp", wantSteps: []string{"intent", "smtp"}},
+		{name: "acceptance write failed", pdf: true, failsAt: "acceptance", wantSteps: []string{"intent", "smtp", "acceptance"}},
+		{name: "transient acceptance write recovers", pdf: true, acceptanceErrors: []error{fmt.Errorf("commit: %w", io.ErrUnexpectedEOF)}, wantSteps: []string{"intent", "smtp", "acceptance", "acceptance"}, wantQueued: 1},
+		{name: "transient acceptance retries exhausted", pdf: true, failsAt: "acceptance", acceptanceErrors: []error{io.EOF, io.EOF, io.EOF}, wantSteps: []string{"intent", "smtp", "acceptance", "acceptance", "acceptance"}},
+		{name: "attempt lost while retrying acceptance", pdf: true, failsAt: "acceptance", acceptanceErrors: []error{io.EOF, brokerrepo.ErrBatchAttemptLost}, wantSteps: []string{"intent", "smtp", "acceptance", "acceptance"}},
+		{name: "queue failed", pdf: true, failsAt: "queue", wantSteps: []string{"intent", "smtp", "acceptance"}, wantQueued: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			failAt := func(step string) error {
+				if tc.failsAt == step {
+					return errors.New(step + " failed")
+				}
+				return nil
+			}
 			prs := []pr_db.PatronRequest{
 				{ID: "included", Side: prservice.SideLending, State: prservice.LenderStateWillSupply},
 				{ID: "shipped", Side: prservice.SideLending, State: prservice.LenderStateShipped},
 				{ID: "borrower", Side: prservice.SideBorrowing, State: prservice.BorrowerStateWillSupply},
 			}
 			repo := &mockEmailPrRepo{listResult: prs, fullCount: 200}
-			bus := &mockBatchActionEventBus{createTaskErr: tc.queueErr}
-			svc := EmailSenderServiceWithClient(repo, &mockEmailIllRepo{fromEmail: "from@example.com"}, &mockEmailService{ready: true, err: tc.sendErr}, &mockPdfGen{data: []byte("pdf"), err: tc.pdfErr}, bus)
+			bus := &mockBatchActionEventBus{createTaskErr: failAt("queue")}
 			event := validEmailEvent()
 			event.ID = "batch-parent"
 			event.EventData.CustomData["includePdf"] = tc.pdf
+
+			var steps []string
+			mailer := &mockEmailService{ready: true, err: failAt("smtp"), onSend: func() {
+				steps = append(steps, "smtp")
+				assert.Empty(t, bus.createTaskCalls)
+			}}
+			acceptanceWrites := 0
+			delivery := &mockBatchEmailDelivery{
+				recordIntent: func(runID string, requestIDs []string, queuePrintedActions bool) error {
+					steps = append(steps, "intent")
+					assert.Equal(t, event.ID, runID)
+					assert.Equal(t, []string{"included", "shipped", "borrower"}, requestIDs)
+					assert.Equal(t, tc.pdf, queuePrintedActions)
+					return failAt("intent")
+				},
+				recordAcceptance: func(runID string) error {
+					steps = append(steps, "acceptance")
+					assert.Equal(t, event.ID, runID)
+					assert.Empty(t, bus.createTaskCalls)
+					acceptanceWrites++
+					if acceptanceWrites <= len(tc.acceptanceErrors) {
+						return tc.acceptanceErrors[acceptanceWrites-1]
+					}
+					return failAt("acceptance")
+				},
+			}
+			svc := EmailSenderServiceWithClient(repo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, &mockPdfGen{data: []byte("pdf"), err: failAt("pdf")}, bus, delivery)
 			status, _ := svc.EmailPullslip(testCtx, event)
-			assert.Equal(t, tc.wantStatus, status)
+			wantStatus := events.EventStatusSuccess
+			if tc.failsAt != "" {
+				wantStatus = events.EventStatusError
+			}
+			assert.Equal(t, wantStatus, status)
+			assert.Equal(t, tc.wantSteps, steps)
 			if assert.Len(t, bus.createTaskCalls, tc.wantQueued) && tc.wantQueued > 0 {
 				call := bus.createTaskCalls[0]
 				assert.Equal(t, "included", call.id)

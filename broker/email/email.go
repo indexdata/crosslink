@@ -37,17 +37,6 @@ var (
 	SMTP_PASSWORD = utils.GetEnv("SMTP_PASSWORD", "")
 )
 
-// Mailer is an interface over smtp.SendMail, allowing mocking in tests.
-type Mailer interface {
-	SendMail(addr string, a smtp.Auth, from string, to []string, msg []byte) error
-}
-
-type DefaultMailer struct{}
-
-func (m *DefaultMailer) SendMail(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
-	return smtp.SendMail(addr, a, from, to, msg)
-}
-
 // EmailData carries the email payload inside an EventData.CustomData map.
 type EmailData struct {
 	To         []string `json:"to"`

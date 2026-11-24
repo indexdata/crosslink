@@ -188,7 +188,7 @@ func Init(ctx context.Context) (Context, error) {
 	schedRepo := sched_db.CreateSchedRepo(pool)
 
 	var emailSenderService *sched_service.EmailSenderService
-	emailSenderService, err = sched_service.NewEmailSenderService(prRepo, illRepo, eventBus)
+	emailSenderService, err = sched_service.NewEmailSenderService(prRepo, illRepo, eventBus, schedRepo)
 
 	prMessageHandler := prservice.CreatePatronRequestMessageHandler(prRepo, eventRepo, illRepo, eventBus)
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo, illRepo, dirAdapter)

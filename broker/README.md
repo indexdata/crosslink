@@ -277,6 +277,13 @@ state, queue children, or finish the task. A worker's cancellation or elapsed
 claim time never clears ownership. Drain in-flight coordinated tasks and
 upgrade all replicas together when deploying worker-attempt fencing.
 
+Before submitting a pull-slip email to SMTP, the broker stores the selected
+request IDs and whether printed actions are needed. A delivery record without
+an acceptance timestamp means the SMTP outcome is unconfirmed. After SMTP
+acknowledges DATA, the broker records acceptance before queuing any pull-slip
+printed actions. A failed QUIT does not change acceptance. The broker retries
+transient acceptance-write failures without resubmitting the email.
+
 The legacy `archive` binary, `POST /archive_ill_transactions`, `call_archive.sh`,
 and their database function have been removed. Replace old jobs with scheduled
 batch actions. Historical rows in `archived_ill_transactions` are preserved;

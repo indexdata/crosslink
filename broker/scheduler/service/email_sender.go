@@ -12,6 +12,7 @@ import (
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	psservice "github.com/indexdata/crosslink/broker/pullslip/service"
+	sched_db "github.com/indexdata/crosslink/broker/scheduler/db"
 	"github.com/indexdata/go-utils/utils"
 )
 
@@ -34,9 +35,10 @@ type EmailSenderService struct {
 	illRepo      ill_db.IllRepo
 	pdf          psservice.PdfService
 	emailService email.EmailService
+	deliveryRepo sched_db.BatchEmailDeliveryRepo
 }
 
-func NewEmailSenderService(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, eventBus events.EventBus) (*EmailSenderService, error) {
+func NewEmailSenderService(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, eventBus events.EventBus, deliveryRepo sched_db.BatchEmailDeliveryRepo) (*EmailSenderService, error) {
 	emailService := email.NewEmailService()
 	var err error
 	if !emailService.IsReadyToSend() {
@@ -48,13 +50,14 @@ func NewEmailSenderService(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, eventBus
 		illRepo:      illRepo,
 		pdf:          psservice.NewPdfService(prRepo),
 		emailService: emailService,
+		deliveryRepo: deliveryRepo,
 	}, err
 }
 
 // EmailSenderServiceWithClient constructs an EmailSenderService with injected
 // dependencies, intended for use in tests.
-func EmailSenderServiceWithClient(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, emailService email.EmailService, pdf psservice.PdfService, eventBus events.EventBus) *EmailSenderService {
-	return &EmailSenderService{eventBus: eventBus, prRepo: prRepo, illRepo: illRepo, pdf: pdf, emailService: emailService}
+func EmailSenderServiceWithClient(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, emailService email.EmailService, pdf psservice.PdfService, eventBus events.EventBus, deliveryRepo sched_db.BatchEmailDeliveryRepo) *EmailSenderService {
+	return &EmailSenderService{eventBus: eventBus, prRepo: prRepo, illRepo: illRepo, pdf: pdf, emailService: emailService, deliveryRepo: deliveryRepo}
 }
 
 func (s *EmailSenderService) EmailPullslip(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
@@ -178,9 +181,19 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 		return events.NewErrorResult("failed to build email message", err.Error())
 	}
 
+	requestIDs := make([]string, 0, len(prs))
+	for _, pr := range prs {
+		requestIDs = append(requestIDs, pr.ID)
+	}
+	if err := s.deliveryRepo.RecordBatchEmailIntent(ctx, event.ID, requestIDs, includePdf); err != nil {
+		return events.NewErrorResult("failed to record email delivery intent", err.Error())
+	}
 	err = s.emailService.SendEmail(*owner.CustomData.FromEmail, messageData.To, raw)
 	if err != nil {
 		return events.NewErrorResult("failed to send email via SMTP", err.Error())
+	}
+	if err := s.recordEmailAcceptance(ctx, event.ID); err != nil {
+		return events.NewErrorResult("SMTP accepted email but failed to record acceptance", err.Error())
 	}
 	if includePdf {
 		if err := psservice.QueuePullslipPrinted(events.WithWorkerContext(s.eventBus, ctx), prs, &event.ID, event.EventData.BatchActionData); err != nil {
