@@ -3,6 +3,7 @@ package apputils
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -25,17 +26,17 @@ import (
 
 const EventRecordFormat = "%v, %v = %v"
 
-func StartApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.EventRepo, pr_db.PrRepo) {
-	appContext := StartAppReturnContext(ctx)
+func StartApp(ctx context.Context, listener net.Listener) (events.EventBus, ill_db.IllRepo, events.EventRepo, pr_db.PrRepo) {
+	appContext := StartAppReturnContext(ctx, listener)
 	return appContext.EventBus, appContext.IllRepo, appContext.EventRepo, appContext.PrRepo
 }
 
-func StartAppReturnContext(ctx context.Context) app.Context {
+func StartAppReturnContext(ctx context.Context, listener net.Listener) app.Context {
 	app.DB_PROVISION = true
 	appContext, err := app.Init(ctx)
 	utils.Expect(err, "failed to init app")
 	go func() {
-		err := app.StartServer(appContext)
+		err := app.StartServerWithListener(appContext, listener)
 		utils.Expect(err, "failed to start server")
 	}()
 	return appContext
@@ -201,12 +202,13 @@ func EventsToCompareStringFunc(appCtx common.ExtendedContext, eventRepo events.E
 	return value
 }
 
-func StartMockApp(mockPort int) {
+func StartMockApp(listener net.Listener) {
+	mockPort := utils.ListenerPort(listener)
 	utils.Expect(os.Setenv("HTTP_PORT", strconv.Itoa(mockPort)), "failed to set mock server port")
 
 	go func() {
 		var mockApp mockapp.MockApp
-		utils.Expect(mockApp.Run(), "failed to start illmock server")
+		utils.Expect(mockApp.RunWithListener(listener), "failed to start illmock server")
 	}()
 	utils.WaitForServiceUp(mockPort)
 }

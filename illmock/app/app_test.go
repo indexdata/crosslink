@@ -22,6 +22,7 @@ import (
 	"github.com/indexdata/crosslink/testutil"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func createPatronRequest() *iso18626.ISO18626Message {
@@ -1714,4 +1715,31 @@ func TestHandleSupplyingAgencyNotificationNoAction(t *testing.T) {
 	assert.NotNil(t, app.requester.load(header))
 	// Loaned branch must not have been entered
 	assert.False(t, info.received)
+}
+
+func TestRunWithListener(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
+
+	// Configure the occupied address: RunWithListener must use the existing
+	// listener rather than trying to bind another socket to the same port.
+	t.Setenv("HTTP_PORT", listener.Addr().String())
+	var app MockApp
+	done := make(chan error, 1)
+	go func() { done <- app.RunWithListener(listener) }()
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get("http://" + listener.Addr().String() + "/healthz")
+	require.NoError(t, err)
+	defer func() { assert.NoError(t, resp.Body.Close()) }()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	t.Cleanup(func() { assert.NoError(t, app.Shutdown()) })
+
+	require.NoError(t, listener.Close())
+	select {
+	case err := <-done:
+		assert.ErrorIs(t, err, net.ErrClosed)
+	case <-time.After(2 * time.Second):
+		t.Fatal("server did not stop after listener was closed")
+	}
 }

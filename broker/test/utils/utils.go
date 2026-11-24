@@ -46,7 +46,19 @@ func Expect(err error, message string) {
 	}
 }
 
-// GetFreePort asks the kernel for a free open port that is ready to use.
+// ListenLocal reserves a loopback TCP port until the listener is closed.
+// Pass the listener directly to the server rather than closing and rebinding it.
+func ListenLocal() (net.Listener, error) {
+	return net.Listen("tcp", "127.0.0.1:0")
+}
+
+// ListenerPort returns the port of a TCP listener created by ListenLocal.
+func ListenerPort(listener net.Listener) int {
+	return listener.Addr().(*net.TCPAddr).Port
+}
+
+// GetFreePort returns an unused port without reserving it.
+// Do not use it to allocate server ports; use ListenLocal instead.
 func GetFreePort() (int, error) {
 	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
 	if err != nil {
@@ -57,8 +69,6 @@ func GetFreePort() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	// release for now so it can be bound by the actual server
-	// a more robust solution would be to bind the server to the port and close it here
 	defer l.Close()
 
 	if addr, ok := l.Addr().(*net.TCPAddr); !ok {
@@ -69,11 +79,19 @@ func GetFreePort() (int, error) {
 }
 
 func WaitForServiceUp(port int) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
 	if !WaitForPredicateToBeTrue(func() bool {
-		resp, err := http.Get("http://localhost:" + strconv.Itoa(port) + "/healthz")
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:"+strconv.Itoa(port)+"/healthz", nil)
 		if err != nil {
 			return false
 		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
 		return resp.StatusCode == http.StatusOK
 	}) {
 		panic("failed to start broker")

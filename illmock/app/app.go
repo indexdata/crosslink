@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"slices"
@@ -314,6 +315,17 @@ func (app *MockApp) Shutdown() error {
 }
 
 func (app *MockApp) Run() error {
+	return app.run(nil)
+}
+
+// RunWithListener serves HTTP on an already bound listener and closes it when
+// the server stops or initialization fails. It takes ownership of listener.
+func (app *MockApp) RunWithListener(listener net.Listener) error {
+	defer func() { _ = listener.Close() }()
+	return app.run(listener)
+}
+
+func (app *MockApp) run(listener net.Listener) error {
 	err := app.parseEnv()
 	if err != nil {
 		return err
@@ -344,7 +356,6 @@ func (app *MockApp) Run() error {
 		}
 	}
 	app.sruApi = sruapi.CreateSruApi()
-	log.Info("Start HTTP serve on " + addr)
 	mux := http.NewServeMux()
 	iso18626Handler := iso18626Handler(app)
 	mux.HandleFunc("/iso18626", iso18626Handler)
@@ -372,6 +383,14 @@ func (app *MockApp) Run() error {
 	}
 
 	app.server = &http.Server{Addr: addr, Handler: mux}
+	if listener == nil {
+		listener, err = net.Listen("tcp", addr)
+		if err != nil {
+			return fmt.Errorf("HTTP server listen: %w", err)
+		}
+	}
+	defer func() { _ = listener.Close() }()
+	log.Info("Start HTTP serve", "address", listener.Addr().String())
 	app.flowsApi.Run()
-	return app.server.ListenAndServe()
+	return app.server.Serve(listener)
 }

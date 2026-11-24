@@ -56,10 +56,11 @@ func TestMain(m *testing.M) {
 
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
-	app.HTTP_PORT = utils.Must(test.GetFreePort())
+	brokerListener := utils.Must(test.ListenLocal())
+	app.HTTP_PORT = test.ListenerPort(brokerListener)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	appContext := apptest.StartAppReturnContext(ctx)
+	appContext := apptest.StartAppReturnContext(ctx, brokerListener)
 	illRepo = appContext.IllRepo
 	eventRepo = appContext.EventRepo
 	sseBroker = appContext.SseBroker
