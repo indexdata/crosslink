@@ -114,10 +114,11 @@ type EntryData struct {
 	Closures          []Closure         `json:"closures"`
 	// These fields hold the raw JSON containers from the import record.
 	// The import schema has already validated them.
-	LMSConfig      json.RawMessage `json:"lmsConfig"`
-	CatalogConfig  json.RawMessage `json:"catalogConfig"`
-	ILLConfig      json.RawMessage `json:"illConfig"`
-	HoldingsPolicy json.RawMessage `json:"holdingsPolicy"`
+	CatalogConfig   json.RawMessage `json:"catalogConfig"`
+	DiscoveryConfig json.RawMessage `json:"discoveryConfig"`
+	HoldingsPolicy  json.RawMessage `json:"holdingsPolicy"`
+	ILLConfig       json.RawMessage `json:"illConfig"`
+	LMSConfig       json.RawMessage `json:"lmsConfig"`
 }
 
 // LendersOfLastResort returns the lender entry IDs from illConfig. A missing
@@ -139,10 +140,11 @@ func (d EntryData) LendersOfLastResort() ([]uuid.UUID, error) {
 // Containers returns the record's configuration containers by their API names.
 func (d EntryData) Containers() map[string]json.RawMessage {
 	return map[string]json.RawMessage{
-		storedconfig.IllConfig:      d.ILLConfig,
-		storedconfig.LmsConfig:      d.LMSConfig,
-		storedconfig.CatalogConfig:  d.CatalogConfig,
-		storedconfig.HoldingsPolicy: d.HoldingsPolicy,
+		storedconfig.CatalogConfig:   d.CatalogConfig,
+		storedconfig.DiscoveryConfig: d.DiscoveryConfig,
+		storedconfig.HoldingsPolicy:  d.HoldingsPolicy,
+		storedconfig.IllConfig:       d.ILLConfig,
+		storedconfig.LmsConfig:       d.LMSConfig,
 	}
 }
 
