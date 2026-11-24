@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/indexdata/crosslink/directory/auth"
 	"github.com/indexdata/crosslink/directory/db"
 	"log/slog"
@@ -15,21 +16,20 @@ func (a ApiImpl) AddEntryNetwork(ctx context.Context, request AddEntryNetworkReq
 	authData := auth.GetAuthData(ctx)
 
 	if !authData.HasRole(auth.ConsortialAdminRole) {
-		slog.ErrorContext(ctx, "permission denied")
-		return AddEntryNetwork401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return AddEntryNetwork403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	tx, err := a.pool.Begin(ctx)
 
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to begin transaction", "error", err, "operation", "AddEntryNetwork")
-		return AddEntryNetwork500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	if request.Body == nil || request.Body.Entry == uuid.Nil || request.Body.Network == uuid.Nil {
-		return AddEntryNetwork400TextResponse("You most provide a valid entry and network"), nil
+		return AddEntryNetwork400JSONResponse{badRequest("You must provide a valid entry and network")}, nil
 	}
 
 	qtx := a.queries.WithTx(tx)
@@ -41,8 +41,7 @@ func (a ApiImpl) AddEntryNetwork(ctx context.Context, request AddEntryNetworkReq
 	})
 
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to create entry network", "error", err, "entry", request.Body.Entry, "network", request.Body.Network)
-		return AddEntryNetwork500TextResponse("Error creating entry network"), nil
+		return nil, fmt.Errorf("failed to create entry network entry=%v network=%v: %w", request.Body.Entry, request.Body.Network, err)
 	}
 
 	var resp Id
@@ -51,8 +50,7 @@ func (a ApiImpl) AddEntryNetwork(ctx context.Context, request AddEntryNetworkReq
 	err = tx.Commit(ctx)
 
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to commit transaction", "error", err, "operation", "AddEntryNetwork")
-		return AddEntryNetwork500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return AddEntryNetwork201JSONResponse(resp), nil
@@ -63,19 +61,18 @@ func (a ApiImpl) AddNetworkForEntry(ctx context.Context, request AddNetworkForEn
 	authData := auth.GetAuthData(ctx)
 
 	if !authData.HasRole(auth.ConsortialAdminRole) {
-		slog.ErrorContext(ctx, "permission denied")
-		return AddNetworkForEntry401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return AddNetworkForEntry403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	if request.Body == nil || request.Body.Id == uuid.Nil {
-		return AddNetworkForEntry400TextResponse("You must provide a valid network to add"), nil
+		return AddNetworkForEntry400JSONResponse{badRequest("You must provide a valid network to add")}, nil
 	}
 
 	tx, err := a.pool.Begin(ctx)
 
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to begin transaction", "error", err, "operation", "AddNetworkForEntry")
-		return AddNetworkForEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
 	defer func() { _ = tx.Rollback(ctx) }()
@@ -88,21 +85,20 @@ func (a ApiImpl) AddNetworkForEntry(ctx context.Context, request AddNetworkForEn
 	case AddNetworkForEntryParamsKeyById:
 		parsedId, perr := uuid.Parse(request.Value)
 		if perr != nil {
-			return AddNetworkForEntry400TextResponse("Error parsing id"), nil
+			return AddNetworkForEntry400JSONResponse{badRequest(invalidIDMessage)}, nil
 		}
 		orig, err = qtx.EntryByIdForUpdate(ctx, parsedId)
 	case AddNetworkForEntryParamsKeyBySymbol:
 		authority, symbol, perr := resolveCombinedSymbol(request.Value)
 		if perr != nil {
-			return AddNetworkForEntry400TextResponse("Unable to parse symbol"), nil
+			return AddNetworkForEntry400JSONResponse{badRequest(invalidSymbolMessage)}, nil
 		}
 		orig, err = qtx.EntryBySymbolForUpdate(ctx, db.EntryBySymbolForUpdateParams{Authority: authority, Symbol: symbol})
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
-		return AddNetworkForEntry404TextResponse("Entry not found"), nil
+		return AddNetworkForEntry404JSONResponse{notFound("Entry not found")}, nil
 	} else if err != nil {
-		slog.ErrorContext(ctx, "Failed to fetch entry", "error", err)
-		return AddNetworkForEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to fetch entry: %w", err)
 	}
 
 	insertedNetworkForEntry, err := qtx.CreateEntryNetwork(ctx, db.CreateEntryNetworkParams{
@@ -112,8 +108,7 @@ func (a ApiImpl) AddNetworkForEntry(ctx context.Context, request AddNetworkForEn
 	})
 
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to add network to entry", "error", err, "entry", orig.ID, "network", request.Body.Id)
-		return AddNetworkForEntry500TextResponse("Error creating entry network"), nil
+		return nil, fmt.Errorf("failed to add network to entry entry=%v network=%v: %w", orig.ID, request.Body.Id, err)
 	}
 
 	var resp Id
@@ -122,8 +117,7 @@ func (a ApiImpl) AddNetworkForEntry(ctx context.Context, request AddNetworkForEn
 	err = tx.Commit(ctx)
 
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to commit transaction", "error", err, "operation", "AddNetworkForEntry")
-		return AddNetworkForEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return AddNetworkForEntry201JSONResponse(resp), nil
@@ -136,17 +130,16 @@ func (a ApiImpl) GetEntryNetworkByID(ctx context.Context, request GetEntryNetwor
 	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole}
 
 	if !authData.HasRoleFromList(validRoles) {
-		slog.ErrorContext(ctx, "permission denied")
-		return GetEntryNetworkByID401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return GetEntryNetworkByID403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	entryNetwork, err := a.queries.GetEntryNetworkById(ctx, request.Id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return GetEntryNetworkByID404TextResponse("Entry Network not found"), nil
+			return GetEntryNetworkByID404JSONResponse{notFound("Entry network not found")}, nil
 		} else {
-			slog.ErrorContext(ctx, "failed to get entry network", "error", err, "id", request.Id)
-			return GetEntryNetworkByID500TextResponse("Internal server error"), nil
+			return nil, fmt.Errorf("failed to get entry network id=%v: %w", request.Id, err)
 		}
 	}
 
@@ -165,8 +158,8 @@ func (a ApiImpl) GetNetworksForEntry(ctx context.Context, request GetNetworksFor
 	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole}
 
 	if !authData.HasRoleFromList(validRoles) {
-		slog.ErrorContext(ctx, "permission denied")
-		return GetNetworksForEntry401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return GetNetworksForEntry403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	var entry db.Entry
@@ -175,22 +168,21 @@ func (a ApiImpl) GetNetworksForEntry(ctx context.Context, request GetNetworksFor
 	if request.Key == GetNetworksForEntryParamsKeyById {
 		parsedId, perr := uuid.Parse(request.Value)
 		if perr != nil {
-			return GetNetworksForEntry400TextResponse("Error parsing id"), nil
+			return GetNetworksForEntry400JSONResponse{badRequest(invalidIDMessage)}, nil
 		}
 		entry, err = a.queries.EntryById(ctx, parsedId)
 	} else {
 		authority, symbol, perr := resolveCombinedSymbol(request.Value)
 		if perr != nil {
-			return GetNetworksForEntry400TextResponse("Unable to parse symbol"), nil
+			return GetNetworksForEntry400JSONResponse{badRequest(invalidSymbolMessage)}, nil
 		}
 		entry, err = a.queries.EntryBySymbol(ctx, db.EntryBySymbolParams{Authority: authority, Symbol: symbol})
 	}
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return GetNetworksForEntry404TextResponse("Entry not found"), nil
+			return GetNetworksForEntry404JSONResponse{notFound("Entry not found")}, nil
 		} else {
-			slog.ErrorContext(ctx, "Failed to fetch entry", "error", err, "key", request.Key, "value", request.Value)
-			return GetNetworksForEntry500TextResponse("Internal server error"), nil
+			return nil, fmt.Errorf("failed to fetch entry key=%v value=%v: %w", request.Key, request.Value, err)
 		}
 	}
 
@@ -199,8 +191,7 @@ func (a ApiImpl) GetNetworksForEntry(ctx context.Context, request GetNetworksFor
 	if entry.Type == string(EntryTypeConsortium) {
 		rows, err := a.queries.ListNetworksForConsortium(ctx, entry.ID)
 		if err != nil {
-			slog.ErrorContext(ctx, "failed to list networks for consortium", "error", err, "entry", entry.ID)
-			return GetNetworksForEntry500TextResponse("Internal Server Error"), nil
+			return nil, fmt.Errorf("failed to list networks for consortium entry=%v: %w", entry.ID, err)
 		}
 
 		for _, row := range rows {
@@ -215,8 +206,7 @@ func (a ApiImpl) GetNetworksForEntry(ctx context.Context, request GetNetworksFor
 	} else {
 		rows, err := a.queries.ListNetworksForEntry(ctx, entry.ID)
 		if err != nil {
-			slog.ErrorContext(ctx, "failed to list networks for entry", "error", err, "entry", entry.ID)
-			return GetNetworksForEntry500TextResponse("Internal Server Error"), nil
+			return nil, fmt.Errorf("failed to list networks for entry entry=%v: %w", entry.ID, err)
 		}
 
 		for _, row := range rows {
@@ -244,14 +234,14 @@ func (a ApiImpl) GetEntryNetworks(ctx context.Context, request GetEntryNetworksR
 	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole}
 
 	if !authData.HasRoleFromList(validRoles) {
-		slog.ErrorContext(ctx, "permission denied")
-		return GetEntryNetworks401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return GetEntryNetworks403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	queryField, queryValue, err := SplitQuery(request.Params.Q)
 
 	if err != nil {
-		return GetEntryNetworks400TextResponse("Malformed query string"), nil
+		return GetEntryNetworks400JSONResponse{badRequest("Malformed query string")}, nil
 	}
 
 	params := db.ListEntryNetworksParams{
@@ -263,8 +253,7 @@ func (a ApiImpl) GetEntryNetworks(ctx context.Context, request GetEntryNetworksR
 
 	rows, err := a.queries.ListEntryNetworks(ctx, params)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to list entry networks", "error", err)
-		return GetEntryNetworks500TextResponse("Internal Server Error"), nil
+		return nil, fmt.Errorf("failed to list entry networks: %w", err)
 	}
 
 	entryNetworkList := make([]EntryNetwork, 0, len(rows))
@@ -293,11 +282,11 @@ func (a ApiImpl) GetEntryNetworks(ctx context.Context, request GetEntryNetworksR
 func (a ApiImpl) UpdateEntryNetwork(ctx context.Context, request UpdateEntryNetworkRequestObject) (UpdateEntryNetworkResponseObject, error) {
 	authData := auth.GetAuthData(ctx)
 	if !authData.HasRole(auth.ConsortialAdminRole) {
-		slog.ErrorContext(ctx, "permission denied")
-		return UpdateEntryNetwork401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return UpdateEntryNetwork403JSONResponse{forbidden("Access denied")}, nil
 	}
 	if request.Body == nil {
-		return UpdateEntryNetwork400TextResponse("You must provide a priority to update"), nil
+		return UpdateEntryNetwork400JSONResponse{badRequest("You must provide a priority to update")}, nil
 	}
 
 	rows, err := a.queries.UpdateEntryNetwork(ctx, db.UpdateEntryNetworkParams{
@@ -305,11 +294,10 @@ func (a ApiImpl) UpdateEntryNetwork(ctx context.Context, request UpdateEntryNetw
 		Priority: request.Body.Priority,
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to update entry network", "error", err, "id", request.Id)
-		return UpdateEntryNetwork500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to update entry network id=%v: %w", request.Id, err)
 	}
 	if rows == 0 {
-		return UpdateEntryNetwork404TextResponse("Entry Network not found"), nil
+		return UpdateEntryNetwork404JSONResponse{notFound("Entry network not found")}, nil
 	}
 	return UpdateEntryNetwork204Response{}, nil
 }
@@ -318,8 +306,8 @@ func (a ApiImpl) DeleteNetworkForEntry(ctx context.Context, request DeleteNetwor
 	authData := auth.GetAuthData(ctx)
 
 	if !authData.HasRole(auth.ConsortialAdminRole) {
-		slog.ErrorContext(ctx, "permission denied")
-		return DeleteNetworkForEntry401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return DeleteNetworkForEntry403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	var entry db.Entry
@@ -327,46 +315,42 @@ func (a ApiImpl) DeleteNetworkForEntry(ctx context.Context, request DeleteNetwor
 	if request.Key == DeleteNetworkForEntryParamsKeyById {
 		parsedId, perr := uuid.Parse(request.Value)
 		if perr != nil {
-			return DeleteNetworkForEntry400TextResponse("Error parsing id"), nil
+			return DeleteNetworkForEntry400JSONResponse{badRequest(invalidIDMessage)}, nil
 		}
 		entry, err = a.queries.EntryByIdForUpdate(ctx, parsedId)
 	} else {
 		authority, symbol, perr := resolveCombinedSymbol(request.Value)
 		if perr != nil {
-			return DeleteNetworkForEntry400TextResponse("Unable to parse symbol"), nil
+			return DeleteNetworkForEntry400JSONResponse{badRequest(invalidSymbolMessage)}, nil
 		}
 		entry, err = a.queries.EntryBySymbolForUpdate(ctx, db.EntryBySymbolForUpdateParams{Authority: authority, Symbol: symbol})
 	}
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return DeleteNetworkForEntry404TextResponse("Entry not found"), nil
+			return DeleteNetworkForEntry404JSONResponse{notFound("Entry not found")}, nil
 		}
-		slog.ErrorContext(ctx, "Failed to retrieve Entry", "error", err, "key", request.Key, "value", request.Value)
-		return DeleteNetworkForEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to retrieve Entry key=%v value=%v: %w", request.Key, request.Value, err)
 	}
 
 	network, err := a.queries.GetNetworkById(ctx, request.Id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return DeleteNetworkForEntry404TextResponse("Network not found"), nil
+			return DeleteNetworkForEntry404JSONResponse{notFound("Network not found")}, nil
 		}
-		slog.ErrorContext(ctx, "Failed to retrieve Network by Id", "error", err, "network", request.Id)
-		return DeleteNetworkForEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to retrieve Network by Id network=%v: %w", request.Id, err)
 	}
 
 	entryNetwork, err := a.queries.GetEntryNetworkByNetworkAndEntry(ctx, db.GetEntryNetworkByNetworkAndEntryParams{Network: network.ID, Entry: entry.ID})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return DeleteNetworkForEntry404TextResponse("Network not found for entry"), nil
+			return DeleteNetworkForEntry404JSONResponse{notFound("Network not found for entry")}, nil
 		}
-		slog.ErrorContext(ctx, "Failed to retrieve Entry Network by Network and Entry", "error", err, "network", network.ID, "entry", entry.ID)
-		return DeleteNetworkForEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to retrieve Entry Network by Network and Entry network=%v entry=%v: %w", network.ID, entry.ID, err)
 	}
 
 	err = a.queries.DeleteEntryNetworkById(ctx, entryNetwork.ID)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to delete entry network", "error", err, "id", entryNetwork.ID)
-		return DeleteNetworkForEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to delete entry network id=%v: %w", entryNetwork.ID, err)
 	}
 	return DeleteNetworkForEntry204Response{}, nil
 
@@ -376,14 +360,13 @@ func (a ApiImpl) DeleteEntryNetwork(ctx context.Context, request DeleteEntryNetw
 	authData := auth.GetAuthData(ctx)
 
 	if !authData.HasRole(auth.ConsortialAdminRole) {
-		slog.ErrorContext(ctx, "permission denied")
-		return DeleteEntryNetwork401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return DeleteEntryNetwork403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	err := a.queries.DeleteEntryNetworkById(ctx, request.Id)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to delete entry network", "error", err, "id", request.Id)
-		return DeleteEntryNetwork500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to delete entry network id=%v: %w", request.Id, err)
 	}
 	return DeleteEntryNetwork204Response{}, nil
 

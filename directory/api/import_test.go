@@ -56,7 +56,7 @@ func TestPostImportRejectsUnauthorizedCallerBeforeReadingBody(t *testing.T) {
 	response, err := impl.PostImport(context.Background(), PostImportRequestObject{Body: strings.NewReader("record")})
 
 	require.NoError(t, err)
-	require.IsType(t, PostImport401TextResponse(""), response)
+	require.IsType(t, PostImport403JSONResponse{}, response)
 	require.Zero(t, importer.calls)
 }
 
@@ -67,12 +67,12 @@ func TestPostImportValidatesPolicyAndBody(t *testing.T) {
 
 	response, err := impl.PostImport(consortialAdminContext(t), PostImportRequestObject{Params: PostImportParams{ConflictPolicy: &unknown}, Body: strings.NewReader("record")})
 	require.NoError(t, err)
-	require.IsType(t, PostImport400TextResponse(""), response)
+	require.IsType(t, PostImport400JSONResponse{}, response)
 	require.Zero(t, importer.calls)
 
 	response, err = impl.PostImport(consortialAdminContext(t), PostImportRequestObject{Body: nil})
 	require.NoError(t, err)
-	require.IsType(t, PostImport400TextResponse(""), response)
+	require.IsType(t, PostImport400JSONResponse{}, response)
 	require.Zero(t, importer.calls)
 }
 
@@ -86,17 +86,17 @@ func TestPostImportMapsRecordAndBodyLimitsTo413(t *testing.T) {
 			impl := NewApiImpl(nil, nil, importer, nil)
 			response, err := impl.PostImport(consortialAdminContext(t), PostImportRequestObject{Body: strings.NewReader("record")})
 			require.NoError(t, err)
-			require.IsType(t, PostImport413TextResponse(""), response)
+			require.IsType(t, PostImport413JSONResponse{}, response)
 		})
 	}
 }
 
-func TestPostImportMapsFatalReaderErrorTo500(t *testing.T) {
+func TestPostImportReturnsFatalReaderError(t *testing.T) {
 	importer := &recordingAggregateImporter{err: errors.New("read failed")}
 	impl := NewApiImpl(nil, nil, importer, nil)
 	response, err := impl.PostImport(consortialAdminContext(t), PostImportRequestObject{Body: strings.NewReader("record")})
-	require.NoError(t, err)
-	require.IsType(t, PostImport500TextResponse(""), response)
+	require.ErrorContains(t, err, "read failed")
+	require.Nil(t, response)
 }
 
 func TestPostImportHTTPValidatesBodyAndContentType(t *testing.T) {

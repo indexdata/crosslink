@@ -318,7 +318,7 @@ func fullSymbol(symbol directory.Symbol) string {
 func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEntriesRequestObject) (directory.GetEntriesResponseObject, error) {
 	response, err := d.listEntries(ctx, request.Params, "")
 	if err != nil {
-		return directory.GetEntries400TextResponse(err.Error()), nil
+		return directory.GetEntries400JSONResponse{BadRequestJSONResponse: badRequest(err.Error())}, nil
 	}
 	return directory.GetEntries200JSONResponse(response), nil
 }
@@ -327,13 +327,17 @@ func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEnt
 func (d *DirectoryMock) GetOwnedEntries(ctx context.Context, request directory.GetOwnedEntriesRequestObject) (directory.GetOwnedEntriesResponseObject, error) {
 	tenant, _ := ctx.Value(tenantContextKey{}).(string)
 	if strings.TrimSpace(tenant) == "" {
-		return directory.GetOwnedEntries400TextResponse("Tenant is required"), nil
+		return directory.GetOwnedEntries400JSONResponse{BadRequestJSONResponse: badRequest("Tenant is required")}, nil
 	}
 	response, err := d.listEntries(ctx, directory.GetEntriesParams(request.Params), tenant)
 	if err != nil {
-		return directory.GetOwnedEntries400TextResponse(err.Error()), nil
+		return directory.GetOwnedEntries400JSONResponse{BadRequestJSONResponse: badRequest(err.Error())}, nil
 	}
 	return directory.GetOwnedEntries200JSONResponse(response), nil
+}
+
+func badRequest(message string) directory.BadRequestJSONResponse {
+	return directory.BadRequestJSONResponse{Error: message}
 }
 
 func (d *DirectoryMock) listEntries(ctx context.Context, params directory.GetEntriesParams, tenant string) (directory.EntriesResponse, error) {
@@ -431,12 +435,33 @@ func (d *DirectoryMock) HandlerFromMux(mux *http.ServeMux) error {
 	if err != nil {
 		return err
 	}
-	sint := directory.NewStrictHandler(d, nil)
+	sint := directory.NewStrictHandlerWithOptions(d, nil, directory.StrictHTTPServerOptions{
+		RequestErrorHandlerFunc: func(w http.ResponseWriter, _ *http.Request, err error) {
+			writeError(w, http.StatusBadRequest, err.Error())
+		},
+		ResponseErrorHandlerFunc: func(w http.ResponseWriter, _ *http.Request, err error) {
+			writeError(w, http.StatusInternalServerError, "Internal server error")
+		},
+	})
 	directoryMux := http.NewServeMux()
 	handler := directory.HandlerWithOptions(sint, directory.StdHTTPServerOptions{
 		BaseURL:    directoryBasePath,
 		BaseRouter: directoryMux,
+		ErrorHandlerFunc: func(w http.ResponseWriter, _ *http.Request, err error) {
+			writeError(w, http.StatusBadRequest, err.Error())
+		},
 	})
-	mux.Handle(directoryBasePath+"/", directoryContextMiddleware(apiValidator.OapiRequestValidator(swagger)(handler)))
+	validator := apiValidator.OapiRequestValidatorWithOptions(swagger, &apiValidator.Options{
+		ErrorHandler: func(w http.ResponseWriter, message string, statusCode int) {
+			writeError(w, statusCode, message)
+		},
+	})
+	mux.Handle(directoryBasePath+"/", directoryContextMiddleware(validator(handler)))
 	return nil
+}
+
+func writeError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(directory.Error{Error: message})
 }

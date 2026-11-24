@@ -227,17 +227,17 @@ func TestInheritanceEditability(t *testing.T) {
 
 	status, body = patch(branchPath, `{"illConfig":{"isPickupLocation":false,"maxRequestsPerPatron":5}}`)
 	require.Equal(t, http.StatusBadRequest, status)
-	require.Equal(t, "illConfig.maxRequestsPerPatron is not editable on Branch", body)
+	require.JSONEq(t, errorJSON("illConfig.maxRequestsPerPatron is not editable on Branch"), body)
 	local := getEntryJSON(t, branchPath+"?resolve-inherit=false", systemHeaders)
 	require.Equal(t, map[string]any{"isPickupLocation": true}, local["illConfig"], "a rejected request changes nothing")
 
 	status, body = patch("/entries/by-id/"+fixtureConsortium, `{"lmsConfig":{"vendor":"Koha"}}`)
 	require.Equal(t, http.StatusBadRequest, status)
-	require.Equal(t, "lmsConfig.vendor is not editable on Consortium", body)
+	require.JSONEq(t, errorJSON("lmsConfig.vendor is not editable on Consortium"), body)
 
 	response, body := jsonReq(t, http.MethodPost, "/entries", fmt.Sprintf(`{"name":"New branch","type":"Branch","parent":"%s","lmsConfig":{"address":"https://other.example"}}`, tree.institution), consortialHeaders)
 	require.Equal(t, http.StatusBadRequest, response.StatusCode)
-	require.Equal(t, "lmsConfig.address is not editable on Branch", body)
+	require.JSONEq(t, errorJSON("lmsConfig.address is not editable on Branch"), body)
 
 	// A legacy branch value supplies its whole merge unit and never mixes with
 	// the institution's credentials.
@@ -249,7 +249,7 @@ func TestInheritanceEditability(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, status, "resubmitting a stored value is a no-op: %s", body)
 	status, body = patch(branchPath, `{"lmsConfig":{"address":"https://new.example"}}`)
 	require.Equal(t, http.StatusBadRequest, status)
-	require.Equal(t, "lmsConfig.address is not editable on Branch", body)
+	require.JSONEq(t, errorJSON("lmsConfig.address is not editable on Branch"), body)
 
 	status, body = patch(branchPath, `{"lmsConfig":{"address":null,"fromAgency":null}}`)
 	require.Equal(t, http.StatusNoContent, status, "null clears a value the entry type may not set: %s", body)
@@ -284,10 +284,10 @@ func TestInheritanceConsortiumOnlyDiscoveryConfig(t *testing.T) {
 
 	status, body = patch(entryPath(tree.institution), `{"discoveryConfig":{"queryUrl":"https://other.example"}}`)
 	require.Equal(t, http.StatusBadRequest, status)
-	require.Equal(t, "discoveryConfig.queryUrl is not editable on Institution", body)
+	require.JSONEq(t, errorJSON("discoveryConfig.queryUrl is not editable on Institution"), body)
 	status, body = patch(entryPath(tree.branch), `{"discoveryConfig":{"itemLinkTemplate":"https://other.example"}}`)
 	require.Equal(t, http.StatusBadRequest, status)
-	require.Equal(t, "discoveryConfig.itemLinkTemplate is not editable on Branch", body)
+	require.JSONEq(t, errorJSON("discoveryConfig.itemLinkTemplate is not editable on Branch"), body)
 
 	record := entryImportRecord(symbolObject("ISIL", "INHERIT-INST"), "Inherit institution", nil, "Institution")
 	data := record["data"].(map[string]any)
@@ -324,8 +324,8 @@ func TestInheritanceProtectedValuesAndReparenting(t *testing.T) {
 
 	reparent := fmt.Sprintf(`{"parent":"%s"}`, other)
 	response, body := jsonReq(t, http.MethodPatch, branchPath, reparent, ownerHeaders)
-	require.Equal(t, http.StatusUnauthorized, response.StatusCode)
-	require.Equal(t, hierarchyDenied, body)
+	require.Equal(t, http.StatusForbidden, response.StatusCode)
+	require.JSONEq(t, errorJSON(hierarchyDenied), body)
 	require.Equal(t, tree.institution.String(), getEntryJSON(t, branchPath, systemHeaders)["parent"])
 
 	response, body = jsonReq(t, http.MethodPatch, branchPath, reparent, consortialHeaders)
@@ -362,8 +362,8 @@ func TestOnlyConsortialAdminsChangeHierarchy(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			response, body := jsonReq(t, http.MethodPatch, tc.path, tc.body, ownerHeaders)
-			require.Equal(t, http.StatusUnauthorized, response.StatusCode, body)
-			require.Equal(t, hierarchyDenied, body)
+			require.Equal(t, http.StatusForbidden, response.StatusCode, body)
+			require.JSONEq(t, errorJSON(hierarchyDenied), body)
 			requireHierarchy(tree.institution.String(), "Branch", "a rejected request changes nothing")
 		})
 	}

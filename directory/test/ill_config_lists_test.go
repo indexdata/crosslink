@@ -126,7 +126,7 @@ func TestImportIllConfigLists(t *testing.T) {
 	// Existing authorization applies to records carrying reason lists and loan conditions.
 	restricted := map[string]string{auth.FolioPermissionsHeader: `["directory.institution.all"]`}
 	response, _ := importRequest(t, []any{record}, "update", restricted)
-	require.Equal(t, http.StatusUnauthorized, response.StatusCode)
+	require.Equal(t, http.StatusForbidden, response.StatusCode)
 	require.Equal(t, config["loanConditions"], read()["loanConditions"])
 	require.Equal(t, config["unfilledReasons"], read()["unfilledReasons"])
 	response, body := jsonReq(t, http.MethodPatch, path, `{"illConfig":{"availableCopyrightTypes":[{"code":"CustomCopyright","defaultDesc":"Configured through API"}]}}`, standardHeaders)

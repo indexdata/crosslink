@@ -1473,7 +1473,7 @@ func TestService(t *testing.T) {
 		resp, err := http.Get(directoryUrl + "?cql=sym1%20sym2")
 		assert.NoError(t, err)
 		assert.Equal(t, 400, resp.StatusCode)
-		assert.Equal(t, "text/plain", resp.Header.Get("Content-Type"))
+		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 		buf, err := io.ReadAll(resp.Body)
 		assert.NoError(t, err)
 		defer func() {
@@ -1487,7 +1487,7 @@ func TestService(t *testing.T) {
 		resp, err := http.Get(directoryUrl + "?cql=")
 		assert.NoError(t, err)
 		assert.Equal(t, 400, resp.StatusCode)
-		assert.Equal(t, "text/plain", resp.Header.Get("Content-Type"))
+		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 		buf, err := io.ReadAll(resp.Body)
 		assert.NoError(t, err)
 		defer func() {

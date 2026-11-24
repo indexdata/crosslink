@@ -997,68 +997,11 @@ func TestHandleSupplyingAgencyMessageCancelled(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestHandleSupplyingAgencyMessageCancelledStatusChangeAcceptedWithoutTransition(t *testing.T) {
-	mockPrRepo := new(MockPrRepo)
-	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
-
-	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
-		Header: iso18626.Header{
-			SupplyingAgencyId: iso18626.TypeAgencyId{
-				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
-				AgencyIdValue: "REQ",
-			},
-			RequestingAgencyRequestId: patronRequestId,
-		},
-		MessageInfo: iso18626.MessageInfo{
-			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
-		},
-		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled},
-	}, pr_db.PatronRequest{
-		ID:              patronRequestId,
-		RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REQ"},
-		State:           BorrowerStateLocalSupply,
-		Side:            SideBorrowing,
-	})
-	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
-	assert.NoError(t, err)
-	assert.Equal(t, patronRequestId, mockPrRepo.savedPr.ID)
-	assert.Equal(t, BorrowerStateLocalSupply, mockPrRepo.savedPr.State)
-}
-
-func TestHandleSupplyingAgencyMessageCancelledStatusChangeRejectedWhenNotLocalSupply(t *testing.T) {
-	handler := CreatePatronRequestMessageHandler(new(MockPrRepo), *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
-
-	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
-		Header: iso18626.Header{
-			SupplyingAgencyId: iso18626.TypeAgencyId{
-				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
-				AgencyIdValue: "REQ",
-			},
-			RequestingAgencyRequestId: patronRequestId,
-		},
-		MessageInfo: iso18626.MessageInfo{
-			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
-		},
-		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled},
-	}, pr_db.PatronRequest{
-		RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REQ"},
-		State:           BorrowerStateSent,
-		Side:            SideBorrowing,
-	})
-	assert.Equal(t, events.EventStatusProblem, status)
-	assert.Equal(t, iso18626.TypeMessageStatusERROR, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
-	if assert.Error(t, err) {
-		assert.Contains(t, err.Error(), "status change not allowed:")
-	}
-}
-
-func TestHandleSupplyingAgencyMessageLocalSupplyCompletedAcceptedWithoutTransition(t *testing.T) {
-	for _, completedStatus := range []iso18626.TypeStatus{
-		iso18626.TypeStatusLoanCompleted,
-		iso18626.TypeStatusCopyCompleted,
-	} {
-		t.Run(string(completedStatus), func(t *testing.T) {
+// Unsolicited supplier Cancelled status changes are rejected in every state,
+// including LOCAL_SUPPLY, whose cancellation is recorded by cancel-local-supply.
+func TestHandleSupplyingAgencyMessageCancelledStatusChangeRejected(t *testing.T) {
+	for _, state := range []pr_db.PatronRequestState{BorrowerStateSent, BorrowerStateLocalSupply} {
+		t.Run(string(state), func(t *testing.T) {
 			mockPrRepo := new(MockPrRepo)
 			handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
 
@@ -1072,52 +1015,24 @@ func TestHandleSupplyingAgencyMessageLocalSupplyCompletedAcceptedWithoutTransiti
 				},
 				MessageInfo: iso18626.MessageInfo{
 					ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+					Note:             "#CancellationReason: InvalidUser#",
 				},
-				StatusInfo: iso18626.StatusInfo{Status: completedStatus},
+				StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled},
 			}, pr_db.PatronRequest{
 				ID:              patronRequestId,
 				RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REQ"},
-				State:           BorrowerStateLocalSupply,
+				State:           state,
 				Side:            SideBorrowing,
 			})
-			assert.Equal(t, events.EventStatusSuccess, status)
-			assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
-			assert.NoError(t, err)
-			assert.Equal(t, patronRequestId, mockPrRepo.savedPr.ID)
-			assert.Equal(t, BorrowerStateLocalSupply, mockPrRepo.savedPr.State)
+			assert.Equal(t, events.EventStatusProblem, status)
+			assert.Equal(t, iso18626.TypeMessageStatusERROR, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+			if assert.Error(t, err) {
+				assert.Contains(t, err.Error(), "status change not allowed:")
+			}
+			assert.Empty(t, mockPrRepo.savedPr.ID)
 		})
 	}
 }
-
-func TestHandleSupplyingAgencyMessageLocalSupplyUnfilledAcceptedWithoutTransition(t *testing.T) {
-	mockPrRepo := new(MockPrRepo)
-	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
-
-	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
-		Header: iso18626.Header{
-			SupplyingAgencyId: iso18626.TypeAgencyId{
-				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
-				AgencyIdValue: "REQ",
-			},
-			RequestingAgencyRequestId: patronRequestId,
-		},
-		MessageInfo: iso18626.MessageInfo{
-			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
-		},
-		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusUnfilled},
-	}, pr_db.PatronRequest{
-		ID:              patronRequestId,
-		RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REQ"},
-		State:           BorrowerStateLocalSupply,
-		Side:            SideBorrowing,
-	})
-	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
-	assert.NoError(t, err)
-	assert.Equal(t, patronRequestId, mockPrRepo.savedPr.ID)
-	assert.Equal(t, BorrowerStateLocalSupply, mockPrRepo.savedPr.State)
-}
-
 func TestHandleSupplyingAgencyMessageCancelResponseCancelled(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
@@ -2333,7 +2248,7 @@ func assertCancellationReasonNotification(t *testing.T, saved []pr_db.Notificati
 func TestCancellationReasonSupplier(t *testing.T) {
 	for _, tt := range []struct {
 		name, note, reason, remainder, code string
-		rejected, local, invalid            bool
+		rejected, invalid                   bool
 	}{
 		{name: "accepted", note: "before #CancellationReason: InvalidUser# after", reason: "InvalidUser", remainder: "before  after", code: "InvalidUser"},
 		{name: "reason only", note: "#CancellationReason: Duplicate Request#", reason: "Duplicate Request", code: "Duplicate Request"},
@@ -2341,7 +2256,6 @@ func TestCancellationReasonSupplier(t *testing.T) {
 		{name: "plain note preserves reason", note: "ordinary note", reason: "existing", remainder: "ordinary note"},
 		{name: "absent preserves reason", reason: "existing"},
 		{name: "rejected", note: "#CancellationReason: Still needed#explanation", reason: "Still needed", remainder: "explanation", code: "Still needed", rejected: true},
-		{name: "local", note: "#CancellationReason: InvalidUser#local note", reason: "InvalidUser", remainder: "local note", code: "InvalidUser", local: true},
 		{name: "contradictory", note: "#CancellationReason: InvalidUser#", invalid: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2360,13 +2274,6 @@ func TestCancellationReasonSupplier(t *testing.T) {
 			}
 			if tt.invalid {
 				sam.MessageInfo.AnswerYesNo = &no
-			}
-			if tt.local {
-				pr.State = BorrowerStateLocalSupply
-				pr.RequesterSymbol = getDbText("ISIL:REQ")
-				sam.Header.SupplyingAgencyId = iso18626.TypeAgencyId{AgencyIdType: iso18626.TypeSchemeValuePair{Text: "ISIL"}, AgencyIdValue: "REQ"}
-				sam.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
-				expectedState = BorrowerStateLocalSupply
 			}
 			status, _, err := handler.handleSupplyingAgencyMessage(appCtx, sam, pr)
 			if tt.invalid {

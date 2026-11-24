@@ -994,6 +994,78 @@ func TestCopySupplyDocumentCompletesRequesterAndSupplier(t *testing.T) {
 	assert.Equal(t, iso18626.TypeMessageStatusOK, completionEvent.ResultData.OutgoingMessage.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 }
 
+// The broker does not relay local-supply messages back to the requester, so
+// the local action's invoke-action event carries the audit label.
+func TestLocalSupplyDocumentRecordsAuditLabelOnAction(t *testing.T) {
+	requesterSymbol := "ISIL:REQ" + uuid.NewString()
+	// Opaque requesters skip themselves as suppliers; local supply needs transparent mode.
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, string(common.BrokerModeTransparent), dirapi.CrossLink, dirapi.Entry{}, requesterSymbol)
+	require.NotNil(t, reqPeer)
+
+	request := iso18626.Request{
+		BibliographicInfo: iso18626.BibliographicInfo{
+			SupplierUniqueRecordId: "return-" + requesterSymbol + "::LOCAL-COPY",
+			Title:                  "Local copy integration test",
+		},
+		ServiceInfo: &iso18626.ServiceInfo{ServiceType: iso18626.TypeServiceTypeCopy},
+	}
+	patron := "p1"
+	requestBytes, err := json.Marshal(proapi.CreatePatronRequest{
+		RequesterSymbol: &requesterSymbol,
+		Patron:          &patron,
+		IllRequest:      request,
+	})
+	require.NoError(t, err)
+
+	responseBytes := httpRequest(t, "POST", basePath, requestBytes, http.StatusCreated)
+	var requesterPr proapi.PatronRequest
+	require.NoError(t, json.Unmarshal(responseBytes, &requesterPr))
+	requesterPath := basePath + "/" + requesterPr.Id
+	requesterParams := "?side=borrowing&symbol=" + requesterSymbol
+
+	require.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		responseBytes = httpRequest(t, "GET", requesterPath+"/actions"+requesterParams, nil, http.StatusOK)
+		return strings.Contains(string(responseBytes), `"name":"`+string(prservice.BorrowerActionSupplyDocument)+`"`)
+	}), "timed out waiting for local supply-document action")
+
+	actionParams := map[string]any{"deliveryUrl": "https://documents.example.org/local/" + requesterPr.Id}
+	actionBytes, err := json.Marshal(proapi.ExecuteAction{
+		Action:       string(prservice.BorrowerActionSupplyDocument),
+		ActionParams: &actionParams,
+	})
+	require.NoError(t, err)
+	var actionResult proapi.ActionResult
+	require.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		responseBytes = httpRequest(t, "POST", requesterPath+"/action"+requesterParams, actionBytes, http.StatusOK)
+		actionResult = proapi.ActionResult{}
+		require.NoError(t, json.Unmarshal(responseBytes, &actionResult))
+		return actionResult.Result != string(events.EventStatusError) ||
+			actionResult.Message == nil || *actionResult.Message != "another invoke-action task in progress"
+	}), "timed out waiting for supply-document to run without task conflict")
+	require.Equal(t, string(events.EventStatusSuccess), actionResult.Result)
+
+	responseBytes = httpRequest(t, "GET", requesterPath+requesterParams, nil, http.StatusOK)
+	require.NoError(t, json.Unmarshal(responseBytes, &requesterPr))
+	assert.Equal(t, string(prservice.BorrowerStateCompleted), requesterPr.State)
+
+	var actionEvent *oapi.Event
+	require.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		responseBytes = httpRequest(t, "GET", requesterPath+"/events"+requesterParams, nil, http.StatusOK)
+		var eventLog oapi.Events
+		require.NoError(t, json.Unmarshal(responseBytes, &eventLog))
+		for i := range eventLog.Items {
+			event := &eventLog.Items[i]
+			if event.EventName == string(events.EventNameInvokeAction) &&
+				event.ResultData != nil && event.ResultData.StateModelEvent == prservice.LocalSupplyCompleted {
+				actionEvent = event
+				return true
+			}
+		}
+		return false
+	}), "local supply-document should be logged with the completed-local audit label")
+	assert.Equal(t, string(events.EventStatusSuccess), actionEvent.EventStatus)
+}
+
 func TestRejectRetry(t *testing.T) {
 	requesterSymbol := "localISIL:REQ" + uuid.NewString()
 	supplierSymbol := "ISIL:SUP" + uuid.NewString()

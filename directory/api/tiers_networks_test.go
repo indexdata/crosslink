@@ -14,7 +14,7 @@ func TestAddTierRejectsWhitespaceOnlyName(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	require.IsType(t, AddTier400TextResponse(""), response)
+	require.IsType(t, AddTier400JSONResponse{}, response)
 }
 
 func TestAddNetworkRejectsWhitespaceOnlyName(t *testing.T) {
@@ -24,5 +24,5 @@ func TestAddNetworkRejectsWhitespaceOnlyName(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	require.IsType(t, AddNetwork400TextResponse(""), response)
+	require.IsType(t, AddNetwork400JSONResponse{}, response)
 }

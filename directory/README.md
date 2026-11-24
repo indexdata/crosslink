@@ -235,7 +235,7 @@ error or skip details are retained; `errorsOmitted` counts additional details.
 | Status | Meaning |
 | --- | --- |
 | `400` | Missing body, unsupported conflict policy, or incorrect content type |
-| `401` | Missing consortial-admin permission |
+| `403` | Missing consortial-admin permission |
 | `413` | Request exceeds 1 GiB or a record exceeds 1 MiB |
 | `500` | Import stream could not be read |
 
