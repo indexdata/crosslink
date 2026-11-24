@@ -1,0 +1,42 @@
+name: migration-order
+
+# Fails when a new database migration is numbered at or below one already on
+# main, or when two migrations share a version: golang-migrate silently skips
+# such a migration on databases past that version. See
+# .github/scripts/check-migration-order.sh.
+#
+# There is deliberately no paths filter: the job must report on every pull
+# request so branch protection can require it.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  migration-order:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check migration order
+        env:
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          # A pull request checks out its merge commit, whose first parent is the
+          # main commit it was merged with. A push compares with the previous tip
+          # of main so every pushed commit is covered; that commit is missing
+          # after a force push, so fall back to the first parent.
+          base=HEAD^1
+          if [ "$GITHUB_EVENT_NAME" = push ] && git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then
+            base=$PUSH_BEFORE
+          fi
+          .github/scripts/check-migration-order.sh "$base"
