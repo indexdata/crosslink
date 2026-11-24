@@ -9,7 +9,7 @@ import (
 
 	dirapi "github.com/indexdata/crosslink/directory/api"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 func TestBuiltinDefinitions(t *testing.T) {
