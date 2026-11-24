@@ -284,10 +284,10 @@ func TestInheritanceConsortiumOnlyDiscoveryConfig(t *testing.T) {
 
 	status, body = patch(entryPath(tree.institution), `{"discoveryConfig":{"queryUrl":"https://other.example"}}`)
 	require.Equal(t, http.StatusBadRequest, status)
-	require.Equal(t, "discoveryConfig.queryUrl is not editable on Institution", body)
+	require.JSONEq(t, errorJSON("discoveryConfig.queryUrl is not editable on Institution"), body)
 	status, body = patch(entryPath(tree.branch), `{"discoveryConfig":{"itemLinkTemplate":"https://other.example"}}`)
 	require.Equal(t, http.StatusBadRequest, status)
-	require.Equal(t, "discoveryConfig.itemLinkTemplate is not editable on Branch", body)
+	require.JSONEq(t, errorJSON("discoveryConfig.itemLinkTemplate is not editable on Branch"), body)
 
 	record := entryImportRecord(symbolObject("ISIL", "INHERIT-INST"), "Inherit institution", nil, "Institution")
 	data := record["data"].(map[string]any)
