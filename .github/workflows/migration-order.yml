@@ -32,11 +32,14 @@ jobs:
           PUSH_BEFORE: ${{ github.event.before }}
         run: |
           # A pull request checks out its merge commit, whose first parent is the
-          # main commit it was merged with. A push compares with the previous tip
-          # of main so every pushed commit is covered; that commit is missing
-          # after a force push, so fall back to the first parent.
+          # main commit it was merged with. A push must compare with the previous
+          # tip of main; refuse to use rewritten history if that tip is missing.
           base=HEAD^1
-          if [ "$GITHUB_EVENT_NAME" = push ] && git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            if ! git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then
+              echo "::error::Cannot resolve pre-push commit $PUSH_BEFORE; refusing to substitute another migration baseline."
+              exit 1
+            fi
             base=$PUSH_BEFORE
           fi
           .github/scripts/check-migration-order.sh "$base"
