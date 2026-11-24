@@ -3,11 +3,15 @@ package app
 import (
 	"bytes"
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/indexdata/crosslink/broker/tenant"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHandleHealthz(t *testing.T) {
@@ -182,5 +186,36 @@ func TestOpenAPIPrefillValidation(t *testing.T) {
 			handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, prefix+"/patron_requests/prefill"+tc.query, nil))
 			assert.Equal(t, tc.status, response.Code, response.Body.String())
 		}
+	}
+}
+
+func TestStartServerWithListener(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
+
+	// The port stays reserved, so a server that tries to rebind it would fail.
+	other, err := net.Listen("tcp", listener.Addr().String())
+	if other != nil {
+		require.NoError(t, other.Close())
+	}
+	require.Error(t, err)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- StartServerWithListener(Context{TenantResolver: tenant.NewResolver()}, listener)
+	}()
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get("http://" + listener.Addr().String() + "/healthz")
+	require.NoError(t, err)
+	defer func() { assert.NoError(t, resp.Body.Close()) }()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	require.NoError(t, listener.Close())
+	select {
+	case err := <-done:
+		assert.ErrorIs(t, err, net.ErrClosed)
+	case <-time.After(2 * time.Second):
+		t.Fatal("server did not stop after listener was closed")
 	}
 }
