@@ -4081,6 +4081,7 @@ func TestHandleInvokeLenderActionSupplyDocument(t *testing.T) {
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.NotNil(t, resultData)
 	assert.Equal(t, LenderStateCompleted, mockPrRepo.savedPr.State)
+	assert.Empty(t, resultData.StateModelEvent)
 	if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage) {
 		message := mockIso18626Handler.lastSupplyingAgencyMessage
 		assert.Equal(t, iso18626.TypeStatusCopyCompleted, message.StatusInfo.Status)
@@ -5229,6 +5230,7 @@ func TestHandleInvokeBorrowerActionCancelLocalSupply(t *testing.T) {
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.NotNil(t, resultData)
 	assert.Equal(t, BorrowerStateCancelled, mockPrRepo.savedPr.State)
+	assert.Equal(t, LocalSupplyCancelled, resultData.StateModelEvent)
 	assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.ReasonForMessage)
 	assert.Equal(t, iso18626.TypeStatusCancelled, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.Status)
@@ -5262,6 +5264,7 @@ func TestHandleInvokeBorrowerActionCannotSupplyLocally(t *testing.T) {
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.NotNil(t, resultData)
 	assert.Equal(t, BorrowerStateSent, mockPrRepo.savedPr.State)
+	assert.Equal(t, LocalSupplyUnfilled, resultData.StateModelEvent)
 	assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.ReasonForMessage)
 	assert.Equal(t, iso18626.TypeStatusUnfilled, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.Status)
@@ -5362,6 +5365,7 @@ func TestHandleInvokeBorrowerActionFillLocally(t *testing.T) {
 				assert.Equal(t, string(BorrowerStateCompleted), *resultData.ActionResult.ToState)
 			}
 			assert.Equal(t, BorrowerStateCompleted, mockPrRepo.savedPr.State)
+			assert.Equal(t, LocalSupplyCompleted, resultData.StateModelEvent)
 			assert.True(t, mockPrRepo.savedPr.TerminalState)
 			assert.False(t, mockPrRepo.savedPr.NeedsAttention)
 			assert.Equal(t, "local-record-1", mockPrRepo.savedPr.IllRequest.BibliographicInfo.SupplierUniqueRecordId)
@@ -5419,6 +5423,7 @@ func TestHandleInvokeBorrowerActionFillLocallyCancelsRequestItemWithoutBarcode(t
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "LMS RequestItem returned an empty barcode", resultData.EventError.Message)
 	assert.Equal(t, BorrowerStateLocalSupply, mockPrRepo.savedPr.State)
+	assert.Empty(t, resultData.StateModelEvent)
 	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
 	assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
 	lmsAdapter.AssertExpectations(t)
@@ -5459,6 +5464,7 @@ func TestHandleInvokeBorrowerActionSupplyDocument(t *testing.T) {
 		assert.Equal(t, string(BorrowerStateCompleted), *resultData.ActionResult.ToState)
 	}
 	assert.Equal(t, BorrowerStateCompleted, mockPrRepo.savedPr.State)
+	assert.Equal(t, LocalSupplyCompleted, resultData.StateModelEvent)
 	assert.True(t, mockPrRepo.savedPr.TerminalState)
 	assert.False(t, mockPrRepo.savedPr.NeedsAttention)
 	assert.Equal(t, iso18626.TypeStatusCopyCompleted, mockPrRepo.savedPr.IllResponse.StatusInfo.Status)

@@ -247,15 +247,6 @@ stateModels:
         side: REQUESTER
         needsAttention: true
         editable: true
-        # Audit-only events emitted by local-supply actions. Do not configure
-        # transitions as they are ignored, use action transitions instead.
-        events:
-          - name: completed-local
-            desc: Local-supply completion recorded for audit
-          - name: cancelled-local
-            desc: Local-supply cancellation recorded for audit
-          - name: unfilled-local
-            desc: Local-supply failure recorded for audit
         actions:
           - name: fill-locally
             desc: Fill the request locally

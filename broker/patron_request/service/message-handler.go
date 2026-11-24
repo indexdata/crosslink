@@ -231,7 +231,7 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	}
 
 	var cancellationReason string
-	if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse || sam.StatusInfo.Status == iso18626.TypeStatusCancelled {
+	if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse {
 		cancellationReason, sam.MessageInfo.Note = common.ExtractCancellationReason(sam.MessageInfo.Note)
 		if cancellationReason != "" {
 			pr.CancellationReason = getDbText(cancellationReason)
@@ -317,23 +317,14 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 				setSupplierMessage(sam, &pr)
 			}
 			eventName = SupplierCompleted
-			if isLocalSupply(pr, supSymbol) {
-				eventName = SupplierCompletedLocal
-			}
 		case iso18626.TypeStatusUnfilled:
 			eventName = SupplierUnfilled
-			if isLocalSupply(pr, supSymbol) {
-				eventName = SupplierUnfilledLocal
-			}
 		case iso18626.TypeStatusCancelled:
 			if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse {
 				if sam.MessageInfo.AnswerYesNo != nil && *sam.MessageInfo.AnswerYesNo == iso18626.TypeYesNoN {
 					return contradictoryCancelResponse()
 				}
 				eventName = SupplierCancelAccepted
-			} else if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageStatusChange &&
-				isLocalSupply(pr, supSymbol) {
-				eventName = SupplierCancelledLocal
 			}
 		case iso18626.TypeStatusRetryPossible:
 			eventName = SupplierRetryConditional
@@ -377,15 +368,6 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 				ErrorValue: err.Error(),
 			}, err)
 		}
-	}
-	if stateChanged &&
-		(eventName == SupplierCompletedLocal ||
-			eventName == SupplierCancelledLocal ||
-			eventName == SupplierUnfilledLocal) {
-		ctx.Logger().Warn("ignoring transition configured for local audit event",
-			"event", eventName, "state", pr.State)
-		updatedPr = pr
-		stateChanged = false
 	}
 	if retryBibInfo != nil {
 		updatedPr.RetryBibInfo = retryBibInfo

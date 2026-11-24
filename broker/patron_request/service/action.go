@@ -186,6 +186,27 @@ func logActionErrorAndReturnResult(ctx common.ExtendedContext, message string, e
 	return status, result
 }
 
+// Audit labels recorded as resultData.stateModelEvent on successful
+// local-supply invoke-action events. The broker does not echo local-supply
+// messages back to the requester, so the action itself records the outcome;
+// the labels are not state-model events and never drive transitions.
+const (
+	LocalSupplyCompleted = "completed-local"
+	LocalSupplyUnfilled  = "unfilled-local"
+	LocalSupplyCancelled = "cancelled-local"
+)
+
+func withLocalSupplyAuditEvent(execResult actionExecutionResult, label string) actionExecutionResult {
+	if execResult.status != events.EventStatusSuccess {
+		return execResult
+	}
+	if execResult.result == nil {
+		execResult.result = &events.EventResult{}
+	}
+	execResult.result.StateModelEvent = label
+	return execResult
+}
+
 func actionResultFromIllSend(ctx common.ExtendedContext, status events.EventStatus, sendResult *events.EventResult, sendErr error, pr pr_db.PatronRequest) actionExecutionResult {
 	if sendErr != nil {
 		status, result := logActionErrorAndReturnResult(ctx, sendErr.Error(), sendErr)
@@ -798,13 +819,13 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 	case BorrowerActionSendNotification:
 		return a.sendNotificationBorrowingRequest(ctx, pr, params)
 	case BorrowerActionCancelLocalSupply:
-		return a.cancelLocalBorrowingRequest(ctx, eventID, pr)
+		return withLocalSupplyAuditEvent(a.cancelLocalBorrowingRequest(ctx, eventID, pr), LocalSupplyCancelled)
 	case BorrowerActionCannotSupplyLocally:
-		return a.cannotSupplyLocallyBorrowingRequest(ctx, eventID, pr, params)
+		return withLocalSupplyAuditEvent(a.cannotSupplyLocallyBorrowingRequest(ctx, eventID, pr, params), LocalSupplyUnfilled)
 	case BorrowerActionFillLocally:
-		return a.fillLocallyBorrowingRequest(ctx, eventID, pr, lmsAdapter, params)
+		return withLocalSupplyAuditEvent(a.fillLocallyBorrowingRequest(ctx, eventID, pr, lmsAdapter, params), LocalSupplyCompleted)
 	case BorrowerActionSupplyDocument:
-		return a.supplyDocumentRequest(ctx, eventID, pr, params)
+		return withLocalSupplyAuditEvent(a.supplyDocumentRequest(ctx, eventID, pr, params), LocalSupplyCompleted)
 	default:
 		status, result := logActionErrorAndReturnResult(ctx, "borrower action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 		return actionExecutionResult{status: status, result: result, pr: pr}
