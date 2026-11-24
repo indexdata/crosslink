@@ -219,6 +219,11 @@ func (p *PostgresEventBus) CreateTask(classId string, eventName EventName, data 
 		if err != nil {
 			return err
 		}
+		if parentId != nil {
+			if err = eventRepo.LinkBatchActionChild(p.ctx, *parentId, id); err != nil {
+				return err
+			}
+		}
 		err = eventRepo.Notify(p.ctx, id, SignalTaskCreated, target)
 		p.ctx.Logger().Debug("created TASK event", "eventName", eventName, "eventId", event.ID, "status", event.EventStatus)
 		return err
@@ -311,6 +316,9 @@ func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, sta
 		event.LastSignal = string(SignalTaskComplete)
 		event, err = eventRepo.SaveEvent(p.ctx, SaveEventParams(event))
 		if err != nil {
+			return err
+		}
+		if err = eventRepo.FinishBatchActionRunIfIdle(p.ctx, eventId); err != nil {
 			return err
 		}
 		err = eventRepo.Notify(p.ctx, eventId, SignalTaskComplete, target)

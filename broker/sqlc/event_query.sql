@@ -103,6 +103,10 @@ WHERE id = $1;
 -- name: HasActiveBatchActionEvents :one
 SELECT EXISTS (
     SELECT 1
+    FROM batch_action_run
+    WHERE scheduled_task_id = sqlc.arg(task_id)::text AND completed_at IS NULL
+    UNION ALL
+    SELECT 1
     FROM event
     WHERE event_name IN ('invoke-batch-action', 'invoke-background-action')
       AND event_data -> 'batchActionData' ->> 'taskId' = sqlc.arg(task_id)::text
@@ -133,6 +137,7 @@ WHERE event_name IN ('invoke-batch-action', 'invoke-background-action')
           AND id <> sqlc.arg(current_event_id)::text
           AND event_data -> 'batchActionData' ->> 'taskId' = sqlc.arg(task_id)::text
           AND id NOT IN (SELECT id FROM retained_runs)
+          AND id NOT IN (SELECT id FROM batch_action_run WHERE completed_at IS NULL)
     ),
     cleared_parent_refs AS (
         UPDATE event
@@ -146,6 +151,30 @@ WHERE event_name IN ('invoke-batch-action', 'invoke-background-action')
     WHERE patron_request_id = sqlc.arg(patron_request_id)::text AND
         (id IN (SELECT id FROM old_runs) OR
           parent_id IN (SELECT id FROM old_runs));
+
+-- name: ReserveBatchActionRun :one
+INSERT INTO batch_action_run (id, scheduled_task_id, owner, action_name)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (owner, action_name) WHERE completed_at IS NULL DO NOTHING
+RETURNING id;
+
+-- name: AddBatchActionRunEvent :exec
+INSERT INTO batch_action_run_event (event_id, run_id) VALUES ($1, $2);
+
+-- name: LockBatchActionRunForEvent :one
+SELECT batch_action_run.id, batch_action_run.completed_at
+FROM batch_action_run_event
+JOIN batch_action_run ON batch_action_run.id = batch_action_run_event.run_id
+WHERE batch_action_run_event.event_id = $1
+FOR UPDATE OF batch_action_run;
+
+-- name: BatchActionParentIsProcessing :one
+SELECT event_status = 'PROCESSING' FROM event WHERE id = $1;
+
+-- name: FinishBatchActionRunIfIdle :exec
+SELECT finish_batch_action_run_if_idle(run_id)
+FROM batch_action_run_event
+WHERE event_id = $1;
 
 -- name: UpdateEventLifecycle :one
 UPDATE event SET last_signal = $3, event_status = $2

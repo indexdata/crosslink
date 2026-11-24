@@ -258,9 +258,17 @@ accepts this action with the same configuration validation.
 `POST /batch_actions/{id}/run` (or `/broker/batch_actions/{id}/run`) queues one
 manual run and returns `202`. It preserves the saved schedule and enabled state,
 so a disabled action can be run once without enabling it. Okapi callers need
-`broker.batch_actions.item.run.post`. Scheduled and manual batch runs can overlap,
-including while earlier batch events or background actions remain unfinished.
-Archive operations use database locking and atomic checks for each resource.
+`broker.batch_actions.item.run.post`. One run per owner and action can be active
+across all saved schedules. The reservation lasts until the run and its child
+tasks finish. A conflicting manual request returns `409`. A conflicting scheduled
+occurrence is skipped and its schedule advances. Archive operations also use
+database locking and atomic checks for each resource.
+The scheduler stops a due batch action if its saved batch metadata is missing
+and continues dispatching other due tasks.
+
+Before upgrading to batch run coordination, drain in-flight batch actions and
+their child tasks, then upgrade all broker replicas before resuming batch runs.
+Runs queued by earlier versions have no reservation.
 
 The legacy `archive` binary, `POST /archive_ill_transactions`, `call_archive.sh`,
 and their database function have been removed. Replace old jobs with scheduled

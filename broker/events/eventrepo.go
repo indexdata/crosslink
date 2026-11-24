@@ -2,15 +2,19 @@ package events
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/repo"
+	"github.com/jackc/pgx/v5"
 )
 
 type EventRepo interface {
 	repo.Transactional[EventRepo]
 	SaveEvent(ctx common.ExtendedContext, params SaveEventParams) (Event, error)
+	LinkBatchActionChild(ctx common.ExtendedContext, parentID, eventID string) error
+	FinishBatchActionRunIfIdle(ctx common.ExtendedContext, eventID string) error
 	UpdateEventLifecycle(ctx common.ExtendedContext, params UpdateEventLifecycleParams) (Event, error)
 	GetEvent(ctx common.ExtendedContext, id string) (Event, error)
 	GetEventForUpdate(ctx common.ExtendedContext, id string) (Event, error)
@@ -44,6 +48,43 @@ func (r *PgEventRepo) CreateWithPgBaseRepo(base *repo.PgBaseRepo[EventRepo]) Eve
 func (r *PgEventRepo) SaveEvent(ctx common.ExtendedContext, params SaveEventParams) (Event, error) {
 	row, err := r.queries.SaveEvent(ctx, r.GetConnOrTx(), params)
 	return row.Event, err
+}
+
+// LinkBatchActionChild inherits the parent's run in the child creation transaction.
+func (r *PgEventRepo) LinkBatchActionChild(ctx common.ExtendedContext, parentID, eventID string) error {
+	if r.Tx == nil {
+		return errors.New("link batch action child requires a transaction")
+	}
+	run, err := r.queries.LockBatchActionRunForEvent(ctx, r.Tx, parentID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("lock batch action run for parent: %w", err)
+	}
+	// Check the parent after acquiring the run lock, in a fresh statement.
+	processing, err := r.queries.BatchActionParentIsProcessing(ctx, r.Tx, parentID)
+	if err != nil {
+		return fmt.Errorf("check batch action parent status: %w", err)
+	}
+	if run.CompletedAt.Valid || !processing {
+		return fmt.Errorf("batch action parent %s is no longer processing", parentID)
+	}
+	if err = r.queries.AddBatchActionRunEvent(ctx, r.Tx, AddBatchActionRunEventParams{EventID: eventID, RunID: run.ID}); err != nil {
+		return fmt.Errorf("link batch action child: %w", err)
+	}
+	return nil
+}
+
+// FinishBatchActionRunIfIdle releases the reservation in the event completion transaction.
+func (r *PgEventRepo) FinishBatchActionRunIfIdle(ctx common.ExtendedContext, eventID string) error {
+	if r.Tx == nil {
+		return errors.New("finish batch action run requires a transaction")
+	}
+	if err := r.queries.FinishBatchActionRunIfIdle(ctx, r.Tx, eventID); err != nil {
+		return fmt.Errorf("finish batch action run: %w", err)
+	}
+	return nil
 }
 
 func (r *PgEventRepo) GetEvent(ctx common.ExtendedContext, id string) (Event, error) {

@@ -56,6 +56,14 @@ func (r *exclusiveCheckErrorRepo) SaveEvent(ctx common.ExtendedContext, params S
 	return r.event, nil
 }
 
+func (r *exclusiveCheckErrorRepo) LinkBatchActionChild(common.ExtendedContext, string, string) error {
+	return nil
+}
+
+func (r *exclusiveCheckErrorRepo) FinishBatchActionRunIfIdle(common.ExtendedContext, string) error {
+	return nil
+}
+
 func (r *exclusiveCheckErrorRepo) UpdateEventLifecycle(ctx common.ExtendedContext, params UpdateEventLifecycleParams) (Event, error) {
 	r.event.EventStatus = params.EventStatus
 	r.event.LastSignal = params.LastSignal

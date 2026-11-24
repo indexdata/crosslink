@@ -19,6 +19,14 @@ func (r *MockEventRepositorySuccess) WithTxFunc(ctx common.ExtendedContext, fn f
 	return nil
 }
 
+func (r *MockEventRepositorySuccess) LinkBatchActionChild(common.ExtendedContext, string, string) error {
+	return nil
+}
+
+func (r *MockEventRepositorySuccess) FinishBatchActionRunIfIdle(common.ExtendedContext, string) error {
+	return nil
+}
+
 func (r *MockEventRepositorySuccess) SaveEvent(ctx common.ExtendedContext, params events.SaveEventParams) (events.Event, error) {
 	var event = (events.Event)(params)
 	return event, nil
@@ -102,6 +110,14 @@ func (r *MockEventRepositorySuccess) GetPatronRequestEvents(ctx common.ExtendedC
 
 type MockEventRepositoryError struct {
 	mock.Mock
+}
+
+func (r *MockEventRepositoryError) LinkBatchActionChild(common.ExtendedContext, string, string) error {
+	return errors.New("error")
+}
+
+func (r *MockEventRepositoryError) FinishBatchActionRunIfIdle(common.ExtendedContext, string) error {
+	return errors.New("error")
 }
 
 func (r *MockEventRepositoryError) WithTxFunc(ctx common.ExtendedContext, fn func(events.EventRepo) error) error {
