@@ -460,7 +460,6 @@ func (d *DirectoryMock) HandlerFromMux(mux *http.ServeMux) error {
 	return nil
 }
 
-// writeError answers with the Directory's JSON error body, as the real service does.
 func writeError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

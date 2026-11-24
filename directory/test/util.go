@@ -48,7 +48,6 @@ func filterAnyMapSlice(arr *[]any, key string, value string) []any {
 	return res
 }
 
-// errorJSON returns the error body the Directory sends for message.
 func errorJSON(message string) string {
 	data, _ := json.Marshal(map[string]string{"error": message})
 	return string(data)
