@@ -49,7 +49,7 @@ func TestEntryOwnershipUsesTenantRatherThanSymbol(t *testing.T) {
 	}
 
 	patchRes, patchData = jsonReq(t, http.MethodPatch, endpoint, `{"name":"Non-owner Updated"}`, testInstitutionHeaders)
-	if patchRes.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("non-owner PATCH expected 401: %d %s", patchRes.StatusCode, patchData)
+	if patchRes.StatusCode != http.StatusForbidden {
+		t.Fatalf("non-owner PATCH expected 403: %d %s", patchRes.StatusCode, patchData)
 	}
 }

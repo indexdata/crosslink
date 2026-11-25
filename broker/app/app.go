@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -255,6 +256,17 @@ func Run(ctx context.Context) error {
 }
 
 func StartServer(ctx Context) error {
+	listener, err := net.Listen("tcp", ":"+strconv.Itoa(HTTP_PORT))
+	if err != nil {
+		return fmt.Errorf("HTTP server listen: %w", err)
+	}
+	return StartServerWithListener(ctx, listener)
+}
+
+// StartServerWithListener serves HTTP on an already bound listener and closes it
+// when the server stops or initialization fails. It takes ownership of listener.
+func StartServerWithListener(ctx Context, listener net.Listener) error {
+	defer func() { _ = listener.Close() }()
 	ServeMux = http.NewServeMux()
 	oapiValidator, err := newOpenAPIRequestValidator()
 	if err != nil {
@@ -306,12 +318,13 @@ func StartServer(ctx Context) error {
 	// channel to listen for server errors
 	serverErrors := make(chan error, 1)
 	go func() {
-		appCtx.Logger().Info("HTTP server started on port " + strconv.Itoa(HTTP_PORT))
-		serverErrors <- server.ListenAndServe()
+		appCtx.Logger().Info("HTTP server started", "address", listener.Addr().String())
+		serverErrors <- server.Serve(listener)
 	}()
 	// channel to listen for OS signals
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(shutdown)
 	// block until we receive a signal or server error
 	select {
 	case err := <-serverErrors:

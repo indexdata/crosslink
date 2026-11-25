@@ -447,19 +447,18 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 	authData := auth.GetAuthData(ctx)
 	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole, auth.PublicUserRole}
 	if !authData.HasRoleFromList(validRoles) {
-		slog.ErrorContext(ctx, "permission denied")
-		return GetEntries401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return GetEntries403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	query, args, err := buildEntryListQuery(request.Params.Cql, request.Params.Limit, request.Params.Offset, "", nil)
 	if err != nil {
-		return GetEntries400TextResponse(fmt.Sprintf("CQL parse error: %v", err)), nil
+		return GetEntries400JSONResponse{badRequest(fmt.Sprintf("CQL parse error: %v", err))}, nil
 	}
 
 	response, err := a.queryEntryList(ctx, query, args, authData, resolveInheritParam(request.Params.ResolveInherit))
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to read entries", "error", err)
-		return GetEntries500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to read entries: %w", err)
 	}
 
 	return GetEntries200JSONResponse(response), nil
@@ -469,13 +468,13 @@ func (a ApiImpl) GetOwnedEntries(ctx context.Context, request GetOwnedEntriesReq
 	authData := auth.GetAuthData(ctx)
 	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole, auth.PublicUserRole}
 	if !authData.HasRoleFromList(validRoles) {
-		slog.ErrorContext(ctx, "permission denied")
-		return GetOwnedEntries401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return GetOwnedEntries403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	tenant := authData.GetInstitution()
 	if tenant == "" {
-		return GetOwnedEntries400TextResponse("Tenant is required"), nil
+		return GetOwnedEntries400JSONResponse{badRequest("Tenant is required")}, nil
 	}
 
 	query, args, err := buildEntryListQuery(
@@ -486,13 +485,12 @@ func (a ApiImpl) GetOwnedEntries(ctx context.Context, request GetOwnedEntriesReq
 		[]any{tenant},
 	)
 	if err != nil {
-		return GetOwnedEntries400TextResponse(fmt.Sprintf("CQL parse error: %v", err)), nil
+		return GetOwnedEntries400JSONResponse{badRequest(fmt.Sprintf("CQL parse error: %v", err))}, nil
 	}
 
 	response, err := a.queryEntryList(ctx, query, args, authData, resolveInheritParam(request.Params.ResolveInherit))
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to read owned entries", "error", err)
-		return GetOwnedEntries500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to read owned entries: %w", err)
 	}
 
 	return GetOwnedEntries200JSONResponse(response), nil
@@ -506,22 +504,22 @@ func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (G
 
 	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole, auth.PublicUserRole}
 	if !authData.HasRoleFromList(validRoles) {
-		slog.ErrorContext(ctx, "permission denied")
-		return GetEntry401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return GetEntry403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	switch request.Key {
 	case GetEntryParamsKeyById:
 		parsedId, perr := uuid.Parse(request.Value)
 		if perr != nil {
-			return GetEntry400TextResponse("Error parsing id"), nil
+			return GetEntry400JSONResponse{badRequest(invalidIDMessage)}, nil
 		}
 		query = buildEntrySQL("WHERE e.id = $1")
 		args = []interface{}{parsedId}
 	case GetEntryParamsKeyBySymbol:
 		authority, symbol, perr := resolveCombinedSymbol(request.Value)
 		if perr != nil {
-			return GetEntry400TextResponse("No delimiter found or other issue parsing symbol"), nil
+			return GetEntry400JSONResponse{badRequest(invalidSymbolMessage)}, nil
 		}
 		query = buildEntrySQL(`
 			WHERE e.id = (
@@ -533,11 +531,10 @@ func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (G
 
 	entries, _, err := a.readEntries(ctx, query, args, authData, resolveInheritParam(request.Params.ResolveInherit))
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to read entry", "error", err)
-		return GetEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to read entry: %w", err)
 	}
 	if len(entries) == 0 {
-		return GetEntry404TextResponse("Entry not found"), nil
+		return GetEntry404JSONResponse{notFound("Entry not found")}, nil
 	}
 
 	return GetEntry200JSONResponse(entries[0]), nil
@@ -593,14 +590,13 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 	authData := auth.GetAuthData(ctx)
 	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole}
 	if !authData.HasRoleFromList(validRoles) {
-		slog.ErrorContext(ctx, "permission denied")
-		return AddEntry401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return AddEntry403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to begin transaction", "error", err)
-		return AddEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := a.queries.WithTx(tx)
@@ -608,44 +604,39 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 
 	if entryType == "Consortium" {
 		if err := qtx.LockConsortiumEntryChanges(ctx); err != nil {
-			slog.ErrorContext(ctx, "failed to lock consortium entry changes", "error", err)
-			return AddEntry500TextResponse("Internal server error"), nil
+			return nil, fmt.Errorf("failed to lock consortium entry changes: %w", err)
 		}
 		_, err := qtx.GetConsortialEntry(ctx)
 		if err == nil {
-			return AddEntry400TextResponse("An entry of type Consortium already exists"), nil
+			return AddEntry400JSONResponse{badRequest("An entry of type Consortium already exists")}, nil
 		} else if !errors.Is(err, pgx.ErrNoRows) {
-			slog.ErrorContext(ctx, "failed to check for consortium entry", "error", err)
-			return AddEntry500TextResponse("Internal server error"), nil
+			return nil, fmt.Errorf("failed to check for consortium entry: %w", err)
 		}
 	}
 
 	if request.Body.Parent != nil {
 		parentEntry, err := qtx.EntryByIdForUpdate(ctx, *request.Body.Parent)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return AddEntry400TextResponse("Value for Parent is not a valid Entry"), nil
+			return AddEntry400JSONResponse{badRequest("Value for Parent is not a valid Entry")}, nil
 		} else if err != nil {
-			slog.ErrorContext(ctx, "failed to fetch parent entry", "error", err)
-			return AddEntry500TextResponse("Internal server error"), nil
+			return nil, fmt.Errorf("failed to fetch parent entry: %w", err)
 		}
 		validParent, reason := domain.ValidParentForType(string(entryType), parentEntry.Type)
 		if !validParent {
-			return AddEntry400TextResponse("Invalid entry for parent: " + reason), nil
+			return AddEntry400JSONResponse{badRequest("Invalid entry for parent: " + reason)}, nil
 		}
 	}
 
 	supplied, err := bodyProperties(request.Body)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to read request body properties", "error", err)
-		return AddEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to read request body properties: %w", err)
 	}
 	violation, err := a.checkConfigWrite(string(entryType), supplied, nil)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to check configuration editability", "error", err)
-		return AddEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to check configuration editability: %w", err)
 	}
 	if violation != "" {
-		return AddEntry400TextResponse(violation), nil
+		return AddEntry400JSONResponse{badRequest(violation)}, nil
 	}
 
 	toInsert := db.CreateEntryParams{
@@ -669,9 +660,11 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		toInsert.Vendor = &vendor
 	}
 	insertedEntry, err := qtx.CreateEntry(ctx, toInsert)
+	if isUniqueConstraintViolation(err, "entries_hrid_key") {
+		return AddEntry409JSONResponse{Error: "An entry with this hrid already exists"}, nil
+	}
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to create entry", "error", err, "name", request.Body.Name)
-		return AddEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to create entry name=%v: %w", request.Body.Name, err)
 	}
 
 	if request.Body.Symbols != nil {
@@ -686,11 +679,10 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 				if errors.As(err, &pge) {
 					if pge.SQLState() == "23505" { //unique_violation
 						slog.InfoContext(ctx, "duplicate symbol rejected", "symbol", symbol.Symbol, "authority", symbol.Authority)
-						return AddEntry400TextResponse("Duplicate symbol"), nil
+						return AddEntry400JSONResponse{badRequest("Duplicate symbol")}, nil
 					}
 				}
-				slog.ErrorContext(ctx, "failed to create symbol", "error", err, "symbol", symbol.Symbol, "authority", symbol.Authority)
-				return AddEntry500TextResponse("Internal server error"), nil
+				return nil, fmt.Errorf("failed to create symbol symbol=%v authority=%v: %w", symbol.Symbol, symbol.Authority, err)
 			}
 		}
 	}
@@ -704,8 +696,7 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 				Address: endpoint.Address,
 			})
 			if err != nil {
-				slog.ErrorContext(ctx, "failed to create service endpoint", "error", err, "name", endpoint.Name, "type", endpoint.Type)
-				return AddEntry500TextResponse("Internal server error"), nil
+				return nil, fmt.Errorf("failed to create service endpoint name=%v type=%v: %w", endpoint.Name, endpoint.Type, err)
 			}
 		}
 	}
@@ -717,8 +708,7 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 				Type:  string(address.Type),
 			})
 			if err != nil {
-				slog.ErrorContext(ctx, "failed to upsert address", "error", err, "type", address.Type)
-				return AddEntry500TextResponse("Internal server error"), nil
+				return nil, fmt.Errorf("failed to upsert address type=%v: %w", address.Type, err)
 			}
 
 			if address.AddressComponents != nil {
@@ -730,8 +720,7 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 						Value:   component.Value,
 					})
 					if err != nil {
-						slog.ErrorContext(ctx, "failed to create address component", "error", err, "type", component.Type, "seq", component.Seq)
-						return AddEntry500TextResponse("Internal server error"), nil
+						return nil, fmt.Errorf("failed to create address component type=%v seq=%v: %w", component.Type, component.Seq, err)
 					}
 				}
 			}
@@ -741,26 +730,23 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 	if request.Body.IllConfig != nil {
 		validationMessage, validationErr := validateLendersOfLastResort(ctx, qtx, request.Body.IllConfig.LendersOfLastResort)
 		if validationErr != nil {
-			slog.ErrorContext(ctx, "failed to validate lenders of last resort", "error", validationErr)
-			return AddEntry500TextResponse("Internal server error"), nil
+			return nil, fmt.Errorf("failed to validate lenders of last resort: %w", validationErr)
 		}
 		if validationMessage != "" {
-			return AddEntry400TextResponse(validationMessage), nil
+			return AddEntry400JSONResponse{badRequest(validationMessage)}, nil
 		}
 	}
 	configs := storedconfig.Configs{}
 	_, message, err := writeContainers(configs, supplied, true)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to encode configuration", "error", err)
-		return AddEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to encode configuration: %w", err)
 	}
 	if message != "" {
-		return AddEntry400TextResponse(message), nil
+		return AddEntry400JSONResponse{badRequest(message)}, nil
 	}
 	if len(configs) > 0 {
 		if err := qtx.UpdateEntryConfigs(ctx, db.UpdateEntryConfigsParams{ID: insertedEntry.ID, Configs: configs}); err != nil {
-			slog.ErrorContext(ctx, "failed to store configuration", "error", err)
-			return AddEntry500TextResponse("Internal server error"), nil
+			return nil, fmt.Errorf("failed to store configuration: %w", err)
 		}
 	}
 
@@ -769,8 +755,7 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 
 	err = tx.Commit(ctx)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to commit transaction", "error", err)
-		return AddEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return AddEntry201JSONResponse(resp), nil
@@ -783,14 +768,13 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 	writeRoles := []auth.DirectoryRole{auth.ConsortialAdminRole}
 
 	if !authData.HasRoleFromList(validRoles) {
-		slog.ErrorContext(ctx, "permission denied")
-		return UpdateEntry401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return UpdateEntry403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to begin transaction", "error", err)
-		return UpdateEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := a.queries.WithTx(tx)
@@ -800,31 +784,30 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 	case UpdateEntryParamsKeyById:
 		parsedId, perr := uuid.Parse(request.Value)
 		if perr != nil {
-			return UpdateEntry400TextResponse("Error parsing id"), nil
+			return UpdateEntry400JSONResponse{badRequest(invalidIDMessage)}, nil
 		}
 		orig, err = qtx.EntryByIdForUpdate(ctx, parsedId)
 	case UpdateEntryParamsKeyBySymbol:
 		authority, symbol, perr := resolveCombinedSymbol(request.Value)
 		if perr != nil {
-			return UpdateEntry400TextResponse("No delimiter found or other issue parsing symbol"), nil
+			return UpdateEntry400JSONResponse{badRequest(invalidSymbolMessage)}, nil
 		}
 		orig, err = qtx.EntryBySymbolForUpdate(ctx, db.EntryBySymbolForUpdateParams{Authority: authority, Symbol: symbol})
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
-		return UpdateEntry404TextResponse("Entry not found"), nil
+		return UpdateEntry404JSONResponse{notFound("Entry not found")}, nil
 	} else if err != nil {
-		slog.ErrorContext(ctx, "failed to fetch entry for update", "error", err)
-		return UpdateEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to fetch entry for update: %w", err)
 	}
 
 	if !authData.HasRoleFromList(writeRoles) && (!isOwnedEntry(authData, orig.Tenant) || request.Body.Tenant.IsSpecified()) {
-		slog.ErrorContext(ctx, "permission denied")
-		return UpdateEntry401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return UpdateEntry403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	if request.Body.Type.IsSpecified() && request.Body.Type.IsNull() {
 		slog.ErrorContext(ctx, "type cannot be null")
-		return UpdateEntry400TextResponse("'type' cannot be set to null"), nil
+		return UpdateEntry400JSONResponse{badRequest("'type' cannot be set to null")}, nil
 	}
 	origTypeEntryPatch := EntryType(orig.Type)
 	resultingType := string(*maybeUpdateCol(&origTypeEntryPatch, request.Body.Type))
@@ -834,71 +817,65 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 	// administrators may change them. Resending the stored values is allowed.
 	parentChanged := (parent == nil) != (orig.Parent == nil) || parent != nil && *parent != *orig.Parent
 	if (parentChanged || resultingType != orig.Type) && !authData.HasRoleFromList(writeRoles) {
-		return UpdateEntry401TextResponse("Only consortial administrators may change an entry's parent or type"), nil
+		return UpdateEntry403JSONResponse{forbidden("Only consortial administrators may change an entry's parent or type")}, nil
 	}
 	if parent != nil {
 		if *parent == orig.ID {
-			return UpdateEntry400TextResponse("An entry cannot be its own parent"), nil
+			return UpdateEntry400JSONResponse{badRequest("An entry cannot be its own parent")}, nil
 		}
 		parentEntry, err = qtx.EntryByIdForUpdate(ctx, *parent)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return UpdateEntry400TextResponse("Value for Parent is not a valid Entry"), nil
+			return UpdateEntry400JSONResponse{badRequest("Value for Parent is not a valid Entry")}, nil
 		} else if err != nil {
-			slog.ErrorContext(ctx, "failed to fetch parent entry", "error", err)
-			return UpdateEntry500TextResponse("Internal server error"), nil
+			return nil, fmt.Errorf("failed to fetch parent entry: %w", err)
 		}
 	}
 
 	if parent != nil {
 		validParent, reason := domain.ValidParentForType(resultingType, parentEntry.Type)
 		if !validParent {
-			return UpdateEntry400TextResponse("Invalid entry for parent: " + reason), nil
+			return UpdateEntry400JSONResponse{badRequest("Invalid entry for parent: " + reason)}, nil
 		}
 	}
 
 	if resultingType != orig.Type {
 		children, err := qtx.EntriesByParent(ctx, &orig.ID)
 		if err != nil {
-			slog.ErrorContext(ctx, "failed to fetch child entries", "error", err)
-			return UpdateEntry500TextResponse("Internal server error"), nil
+			return nil, fmt.Errorf("failed to fetch child entries: %w", err)
 		}
 		resultingParent := orig
 		resultingParent.Type = resultingType
 		for _, child := range children {
 			valid, reason := domain.ValidParentForType(child.Type, resultingParent.Type)
 			if !valid {
-				return UpdateEntry400TextResponse("Entry type is invalid for existing child: " + reason), nil
+				return UpdateEntry400JSONResponse{badRequest("Entry type is invalid for existing child: " + reason)}, nil
 			}
 		}
 	}
 
 	supplied, err := bodyProperties(request.Body)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to read request body properties", "error", err)
-		return UpdateEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to read request body properties: %w", err)
 	}
 	violation, err := a.checkConfigWrite(resultingType, supplied, orig.Configs)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to check configuration editability", "error", err)
-		return UpdateEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to check configuration editability: %w", err)
 	}
 	if violation != "" {
-		return UpdateEntry400TextResponse(violation), nil
+		return UpdateEntry400JSONResponse{badRequest(violation)}, nil
 	}
 
 	if resultingType == "Consortium" || orig.Type == "Consortium" {
 		if err := qtx.LockConsortiumEntryChanges(ctx); err != nil {
-			slog.ErrorContext(ctx, "failed to lock consortium entry changes", "error", err)
-			return UpdateEntry500TextResponse("Internal server error"), nil
+			return nil, fmt.Errorf("failed to lock consortium entry changes: %w", err)
 		}
 	}
 	if resultingType == "Consortium" && resultingType != orig.Type {
 		consortialEntry, err := qtx.GetConsortialEntry(ctx)
 		if err == nil && consortialEntry.ID != orig.ID {
-			return UpdateEntry400TextResponse("An entry of type Consortium already exists"), nil
+			return UpdateEntry400JSONResponse{badRequest("An entry of type Consortium already exists")}, nil
 		} else if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			slog.ErrorContext(ctx, "failed to check for consortium entry", "error", err)
-			return UpdateEntry500TextResponse("Internal server error"), nil
+			return nil, fmt.Errorf("failed to check for consortium entry: %w", err)
 		}
 	}
 
@@ -920,9 +897,11 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		OrganizationID:    maybeUpdateCol(orig.OrganizationID, request.Body.OrganizationId),
 		ID:                orig.ID,
 	})
+	if isUniqueConstraintViolation(err, "entries_hrid_key") {
+		return UpdateEntry409JSONResponse{Error: "An entry with this hrid already exists"}, nil
+	}
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to update entry", "error", err, "id", orig.ID)
-		return UpdateEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to update entry id=%v: %w", orig.ID, err)
 	}
 
 	if request.Body.Symbols.IsSpecified() && !request.Body.Symbols.IsNull() {
@@ -937,14 +916,12 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		if len(patchedSymbols) > 0 {
 			err = qtx.DeleteOtherOwnedSymbols(ctx, db.DeleteOtherOwnedSymbolsParams{Owner: orig.ID, Ids: patchedSymbols})
 			if err != nil {
-				slog.ErrorContext(ctx, "failed to delete other owned symbols", "error", err, "entry_id", orig.ID)
-				return UpdateEntry500TextResponse("Internal server error"), nil
+				return nil, fmt.Errorf("failed to delete other owned symbols entry_id=%v: %w", orig.ID, err)
 			}
 		} else {
 			err = qtx.DeleteAllOwnedSymbols(ctx, orig.ID)
 			if err != nil {
-				slog.ErrorContext(ctx, "failed to delete all owned symbols", "error", err, "entry_id", orig.ID)
-				return UpdateEntry500TextResponse("Internal server error"), nil
+				return nil, fmt.Errorf("failed to delete all owned symbols entry_id=%v: %w", orig.ID, err)
 			}
 		}
 
@@ -960,7 +937,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 					ID: *symbol.Id, Owner: orig.ID, Symbol: strings.ToUpper(symbol.Symbol), Authority: strings.ToUpper(symbol.Authority),
 				})
 				if errors.Is(err, pgx.ErrNoRows) {
-					return UpdateEntry400TextResponse("Symbol ID does not belong to this entry"), nil
+					return UpdateEntry400JSONResponse{badRequest("Symbol ID does not belong to this entry")}, nil
 				}
 			}
 			if err != nil {
@@ -968,18 +945,16 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 				if errors.As(err, &pge) {
 					if pge.SQLState() == "23505" { //unique_violation
 						slog.InfoContext(ctx, "duplicate symbol rejected", "symbol", symbol.Symbol, "authority", symbol.Authority)
-						return UpdateEntry400TextResponse("Duplicate symbol"), nil
+						return UpdateEntry400JSONResponse{badRequest("Duplicate symbol")}, nil
 					}
 				}
-				slog.ErrorContext(ctx, "unexpected database error during symbol upsert", "error", err, "symbol", symbol.Symbol, "authority", symbol.Authority)
-				return UpdateEntry500TextResponse("Internal server error"), nil
+				return nil, fmt.Errorf("unexpected database error during symbol upsert symbol=%v authority=%v: %w", symbol.Symbol, symbol.Authority, err)
 			}
 		}
 	} else if request.Body.Symbols.IsNull() {
 		err = qtx.DeleteAllOwnedSymbols(ctx, orig.ID)
 		if err != nil {
-			slog.ErrorContext(ctx, "failed to delete all owned symbols", "error", err, "entry_id", orig.ID)
-			return UpdateEntry500TextResponse("Internal server error"), nil
+			return nil, fmt.Errorf("failed to delete all owned symbols entry_id=%v: %w", orig.ID, err)
 		}
 	}
 
@@ -995,14 +970,12 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		if len(patchedEndpoints) > 0 {
 			err = qtx.DeleteOtherOwnedServiceEndpoints(ctx, db.DeleteOtherOwnedServiceEndpointsParams{Entry: orig.ID, Ids: patchedEndpoints})
 			if err != nil {
-				slog.ErrorContext(ctx, "failed to delete other owned service endpoints", "error", err, "entry_id", orig.ID)
-				return UpdateEntry500TextResponse("Internal server error"), nil
+				return nil, fmt.Errorf("failed to delete other owned service endpoints entry_id=%v: %w", orig.ID, err)
 			}
 		} else {
 			err = qtx.DeleteAllOwnedServiceEndpoints(ctx, orig.ID)
 			if err != nil {
-				slog.ErrorContext(ctx, "failed to delete all owned service endpoints", "error", err, "entry_id", orig.ID)
-				return UpdateEntry500TextResponse("Internal server error"), nil
+				return nil, fmt.Errorf("failed to delete all owned service endpoints entry_id=%v: %w", orig.ID, err)
 			}
 		}
 
@@ -1016,15 +989,13 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 				Address: endpoint.Address,
 			})
 			if err != nil {
-				slog.ErrorContext(ctx, "failed to upsert service endpoint", "error", err, "name", endpoint.Name, "type", endpoint.Type)
-				return UpdateEntry500TextResponse("Internal server error"), nil
+				return nil, fmt.Errorf("failed to upsert service endpoint name=%v type=%v: %w", endpoint.Name, endpoint.Type, err)
 			}
 		}
 	} else if request.Body.Endpoints.IsNull() {
 		err = qtx.DeleteAllOwnedServiceEndpoints(ctx, orig.ID)
 		if err != nil {
-			slog.ErrorContext(ctx, "failed to delete all owned service endpoints", "error", err, "entry_id", orig.ID)
-			return UpdateEntry500TextResponse("Internal server error"), nil
+			return nil, fmt.Errorf("failed to delete all owned service endpoints entry_id=%v: %w", orig.ID, err)
 		}
 	}
 
@@ -1040,14 +1011,12 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		if len(patchedAddresses) > 0 {
 			err = qtx.DeleteOtherOwnedAddresses(ctx, db.DeleteOtherOwnedAddressesParams{Entry: orig.ID, Ids: patchedAddresses})
 			if err != nil {
-				slog.ErrorContext(ctx, "failed to delete other owned addresses", "error", err, "entry_id", orig.ID)
-				return UpdateEntry500TextResponse("Internal server error"), nil
+				return nil, fmt.Errorf("failed to delete other owned addresses entry_id=%v: %w", orig.ID, err)
 			}
 		} else {
 			err = qtx.DeleteAllOwnedAddresses(ctx, orig.ID)
 			if err != nil {
-				slog.ErrorContext(ctx, "failed to delete all owned addresses", "error", err, "entry_id", orig.ID)
-				return UpdateEntry500TextResponse("Internal server error"), nil
+				return nil, fmt.Errorf("failed to delete all owned addresses entry_id=%v: %w", orig.ID, err)
 			}
 		}
 
@@ -1059,8 +1028,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 				Type:  string(address.Type),
 			})
 			if err != nil {
-				slog.ErrorContext(ctx, "failed to upsert address", "error", err, "type", address.Type)
-				return UpdateEntry500TextResponse("Internal server error"), nil
+				return nil, fmt.Errorf("failed to upsert address type=%v: %w", address.Type, err)
 			}
 
 			// Handle address components
@@ -1068,8 +1036,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 				// Delete all existing components and insert new ones
 				err = qtx.DeleteAllOwnedAddressComponents(ctx, insertedAddress.ID)
 				if err != nil {
-					slog.ErrorContext(ctx, "failed to delete all owned address components", "error", err, "address_id", insertedAddress.ID)
-					return UpdateEntry500TextResponse("Internal server error"), nil
+					return nil, fmt.Errorf("failed to delete all owned address components address_id=%v: %w", insertedAddress.ID, err)
 				}
 
 				// Insert new components
@@ -1081,8 +1048,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 						Value:   component.Value,
 					})
 					if err != nil {
-						slog.ErrorContext(ctx, "failed to create address component", "error", err, "type", component.Type, "seq", component.Seq)
-						return UpdateEntry500TextResponse("Internal server error"), nil
+						return nil, fmt.Errorf("failed to create address component type=%v seq=%v: %w", component.Type, component.Seq, err)
 					}
 				}
 			}
@@ -1090,8 +1056,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 	} else if request.Body.Addresses.IsNull() {
 		err = qtx.DeleteAllOwnedAddresses(ctx, orig.ID)
 		if err != nil {
-			slog.ErrorContext(ctx, "failed to delete all owned addresses", "error", err, "entry_id", orig.ID)
-			return UpdateEntry500TextResponse("Internal server error"), nil
+			return nil, fmt.Errorf("failed to delete all owned addresses entry_id=%v: %w", orig.ID, err)
 		}
 	}
 
@@ -1099,33 +1064,29 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		lenders, _ := patchValue(illConfig.LendersOfLastResort)
 		validationMessage, validationErr := validateLendersOfLastResort(ctx, qtx, lenders)
 		if validationErr != nil {
-			slog.ErrorContext(ctx, "failed to validate lenders of last resort", "error", validationErr)
-			return UpdateEntry500TextResponse("Internal server error"), nil
+			return nil, fmt.Errorf("failed to validate lenders of last resort: %w", validationErr)
 		}
 		if validationMessage != "" {
-			return UpdateEntry400TextResponse(validationMessage), nil
+			return UpdateEntry400JSONResponse{badRequest(validationMessage)}, nil
 		}
 	}
 	configs := maps.Clone(orig.Configs)
 	changed, message, err := writeContainers(configs, supplied, false)
 	if err != nil {
-		slog.ErrorContext(ctx, "unable to merge configuration", "error", err)
-		return UpdateEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("unable to merge configuration: %w", err)
 	}
 	if message != "" {
-		return UpdateEntry400TextResponse(message), nil
+		return UpdateEntry400JSONResponse{badRequest(message)}, nil
 	}
 	if changed {
 		if err := qtx.UpdateEntryConfigs(ctx, db.UpdateEntryConfigsParams{ID: orig.ID, Configs: configs}); err != nil {
-			slog.ErrorContext(ctx, "unexpected database error during configuration update", "error", err)
-			return UpdateEntry500TextResponse("Internal server error"), nil
+			return nil, fmt.Errorf("unexpected database error during configuration update: %w", err)
 		}
 	}
 
 	err = tx.Commit(ctx)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to commit transaction", "error", err)
-		return UpdateEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return UpdateEntry204Response{}, nil
@@ -1135,8 +1096,8 @@ func (a ApiImpl) DeleteEntry(ctx context.Context, request DeleteEntryRequestObje
 	authData := auth.GetAuthData(ctx)
 	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole}
 	if !authData.HasRoleFromList(validRoles) {
-		slog.ErrorContext(ctx, "permission denied")
-		return DeleteEntry401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return DeleteEntry403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	var err error
@@ -1144,19 +1105,18 @@ func (a ApiImpl) DeleteEntry(ctx context.Context, request DeleteEntryRequestObje
 	case DeleteEntryParamsKeyById:
 		parsedId, perr := uuid.Parse(request.Value)
 		if perr != nil {
-			return DeleteEntry400TextResponse("Error parsing id"), nil
+			return DeleteEntry400JSONResponse{badRequest(invalidIDMessage)}, nil
 		}
 		err = a.queries.DeleteEntryById(ctx, parsedId)
 	case DeleteEntryParamsKeyBySymbol:
 		authority, symbol, perr := resolveCombinedSymbol(request.Value)
 		if perr != nil {
-			return DeleteEntry400TextResponse("No delimiter found or other issue parsing symbol"), nil
+			return DeleteEntry400JSONResponse{badRequest(invalidSymbolMessage)}, nil
 		}
 		err = a.queries.DeleteEntryBySymbol(ctx, db.DeleteEntryBySymbolParams{Authority: authority, Symbol: symbol})
 	}
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to delete entry", "error", err)
-		return DeleteEntry500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to delete entry: %w", err)
 	}
 	return DeleteEntry204Response{}, nil
 }

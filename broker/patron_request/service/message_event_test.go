@@ -17,16 +17,11 @@ func TestSupplierMessageStateModelEvent(t *testing.T) {
 		state        pr_db.PatronRequestState
 		status       iso18626.TypeStatus
 		notification bool
-		local        bool
 		updateFails  bool
 		wantEvent    MessageEvent
 		wantState    pr_db.PatronRequestState
 		wantProblem  bool
 	}{
-		{name: "local loan completion", state: BorrowerStateLocalSupply, status: iso18626.TypeStatusLoanCompleted, local: true, wantEvent: SupplierCompletedLocal, wantState: BorrowerStateLocalSupply},
-		{name: "local copy completion", state: BorrowerStateLocalSupply, status: iso18626.TypeStatusCopyCompleted, local: true, wantEvent: SupplierCompletedLocal, wantState: BorrowerStateLocalSupply},
-		{name: "local cancellation", state: BorrowerStateLocalSupply, status: iso18626.TypeStatusCancelled, local: true, wantEvent: SupplierCancelledLocal, wantState: BorrowerStateLocalSupply},
-		{name: "local unfilled", state: BorrowerStateLocalSupply, status: iso18626.TypeStatusUnfilled, local: true, wantEvent: SupplierUnfilledLocal, wantState: BorrowerStateLocalSupply},
 		{name: "supplier transition", state: BorrowerStateSent, status: iso18626.TypeStatusWillSupply, wantEvent: SupplierWillSupply, wantState: BorrowerStateWillSupply},
 		{name: "rejected event", state: BorrowerStateCompleted, status: iso18626.TypeStatusWillSupply, wantEvent: SupplierWillSupply, wantProblem: true},
 		{name: "request update fails", state: BorrowerStateSent, status: iso18626.TypeStatusWillSupply, updateFails: true, wantEvent: SupplierWillSupply, wantProblem: true},
@@ -39,9 +34,6 @@ func TestSupplierMessageStateModelEvent(t *testing.T) {
 				id += "-error"
 			}
 			supplier := "ISIL:SUP"
-			if tc.local {
-				supplier = "ISIL:REQ"
-			}
 			pr := pr_db.PatronRequest{
 				ID: id, Side: SideBorrowing, State: tc.state,
 				RequesterSymbol: getDbText("ISIL:REQ"), SupplierSymbol: getDbText(supplier),

@@ -47,19 +47,21 @@ func TestMain(m *testing.M) {
 
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
-	app.HTTP_PORT = utils.Must(test.GetFreePort())
+	brokerListener := utils.Must(test.ListenLocal())
+	app.HTTP_PORT = test.ListenerPort(brokerListener)
 	app.BROKER_MODE = string(common.BrokerModeTransparent)
-	mockPort := utils.Must(test.GetFreePort())
+	mockListener := utils.Must(test.ListenLocal())
+	mockPort := test.ListenerPort(mockListener)
 	LocalAddress = "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
 	test.Expect(os.Setenv("PEER_URL", LocalAddress), "failed to set peer URL")
 
 	adapter.MOCK_PEER_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
 
-	apptest.StartMockApp(mockPort)
+	apptest.StartMockApp(mockListener)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	eventBus, illRepo, eventRepo, _ = apptest.StartApp(ctx)
+	eventBus, illRepo, eventRepo, _ = apptest.StartApp(ctx, brokerListener)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	code := m.Run()

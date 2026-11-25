@@ -57,7 +57,7 @@ func TestEntryCases(t *testing.T) {
 			name:     "GET no permissions",
 			method:   http.MethodGet,
 			endpoint: "/entries/by-id/00000000-0000-0000-0000-000000000002",
-			status:   http.StatusUnauthorized,
+			status:   http.StatusForbidden,
 		},
 		{
 			name:        "GET by symbol",
@@ -79,7 +79,7 @@ func TestEntryCases(t *testing.T) {
 			name:     "GET by symbol no permissions",
 			method:   http.MethodGet,
 			endpoint: "/entries/by-symbol/TEST:ANINST",
-			status:   http.StatusUnauthorized,
+			status:   http.StatusForbidden,
 		},
 		{
 			name:        "GET by invalid symbol",
@@ -121,7 +121,7 @@ func TestEntryCases(t *testing.T) {
 			name:     "GET entries no perms",
 			method:   http.MethodGet,
 			endpoint: "/entries",
-			status:   http.StatusUnauthorized,
+			status:   http.StatusForbidden,
 		},
 		{
 			name:        "GET entries with CQL query by name",
@@ -176,7 +176,7 @@ func TestEntryCases(t *testing.T) {
 			name:        "POST entry, insufficient perms",
 			method:      http.MethodPost,
 			endpoint:    "/entries",
-			status:      http.StatusUnauthorized,
+			status:      http.StatusForbidden,
 			bodyFile:    "entry.post.req.json",
 			addlHeaders: institutionPermissionHeaders,
 		},
@@ -227,7 +227,7 @@ func TestEntryCases(t *testing.T) {
 			name:        "DELETE entry by symbol insuffient permissions",
 			method:      http.MethodDelete,
 			endpoint:    "/entries/by-symbol/TEST:ANINST",
-			status:      http.StatusUnauthorized,
+			status:      http.StatusForbidden,
 			addlHeaders: institutionPermissionHeaders,
 		},
 		{
@@ -1507,8 +1507,8 @@ func TestGetOwnedEntries(t *testing.T) {
 
 	t.Run("authorizes before validating tenant", func(t *testing.T) {
 		res, data := jsonReq(t, http.MethodGet, "/entries/owned", "", nil)
-		if res.StatusCode != http.StatusUnauthorized {
-			t.Fatalf("expected unauthorized status %d, got %d and body %s", http.StatusUnauthorized, res.StatusCode, data)
+		if res.StatusCode != http.StatusForbidden {
+			t.Fatalf("expected forbidden status %d, got %d and body %s", http.StatusForbidden, res.StatusCode, data)
 		}
 	})
 
@@ -1719,8 +1719,8 @@ func TestInstitutionalAdminCannotPatchTenant(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			resetDb()
 			res, data := jsonReq(t, http.MethodPatch, "/entries/by-id/"+entryID, tt.body, headers)
-			if res.StatusCode != http.StatusUnauthorized {
-				t.Fatalf("expected tenant PATCH status %d, got %d and body %s", http.StatusUnauthorized, res.StatusCode, data)
+			if res.StatusCode != http.StatusForbidden {
+				t.Fatalf("expected tenant PATCH status %d, got %d and body %s", http.StatusForbidden, res.StatusCode, data)
 			}
 
 			var tenant *string
@@ -1755,8 +1755,8 @@ func TestConsortialAdminCanTransferAndClearTenantOwnership(t *testing.T) {
 		t.Fatalf("consortial tenant transfer failed: %d %s", res.StatusCode, data)
 	}
 	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+entryID, `{"name":"Old Owner"}`, oldOwnerHeaders)
-	if res.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("old owner PATCH expected 401: %d %s", res.StatusCode, data)
+	if res.StatusCode != http.StatusForbidden {
+		t.Fatalf("old owner PATCH expected 403: %d %s", res.StatusCode, data)
 	}
 	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+entryID, `{"name":"New Owner"}`, newOwnerHeaders)
 	if res.StatusCode != http.StatusNoContent {
@@ -1768,7 +1768,7 @@ func TestConsortialAdminCanTransferAndClearTenantOwnership(t *testing.T) {
 		t.Fatalf("consortial tenant clear failed: %d %s", res.StatusCode, data)
 	}
 	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+entryID, `{"name":"Former Owner"}`, newOwnerHeaders)
-	if res.StatusCode != http.StatusUnauthorized {
+	if res.StatusCode != http.StatusForbidden {
 		t.Fatalf("cleared tenant still granted ownership: %d %s", res.StatusCode, data)
 	}
 }
@@ -1787,8 +1787,8 @@ func TestTenantOwnershipMatchingRules(t *testing.T) {
 			t.Fatalf("case-mismatched tenant received protected data: %d %s", res.StatusCode, data)
 		}
 		res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+entryID, `{"name":"Wrong Case"}`, headers)
-		if res.StatusCode != http.StatusUnauthorized {
-			t.Fatalf("case-mismatched tenant PATCH expected 401: %d %s", res.StatusCode, data)
+		if res.StatusCode != http.StatusForbidden {
+			t.Fatalf("case-mismatched tenant PATCH expected 403: %d %s", res.StatusCode, data)
 		}
 	})
 
@@ -1803,8 +1803,8 @@ func TestTenantOwnershipMatchingRules(t *testing.T) {
 			t.Fatalf("empty tenant received protected data: %d %s", res.StatusCode, data)
 		}
 		res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/"+entryID, `{"name":"Empty Tenant"}`, headers)
-		if res.StatusCode != http.StatusUnauthorized {
-			t.Fatalf("empty tenant PATCH expected 401: %d %s", res.StatusCode, data)
+		if res.StatusCode != http.StatusForbidden {
+			t.Fatalf("empty tenant PATCH expected 403: %d %s", res.StatusCode, data)
 		}
 	})
 
@@ -1823,4 +1823,22 @@ func TestTenantOwnershipMatchingRules(t *testing.T) {
 			t.Fatalf("duplicate tenant did not own matching entry: %d %s", res.StatusCode, data)
 		}
 	})
+}
+
+func TestEntryDuplicateHridConflicts(t *testing.T) {
+	resetDb()
+	headers := map[string]string{
+		"X-Okapi-Tenant":      "ANINST",
+		"X-Okapi-Permissions": `["directory.consortium.all"]`,
+	}
+	res, data := jsonReq(t, http.MethodPost, "/entries", `{"name":"First","type":"Institution","hrid":"DUP"}`, headers)
+	require.Equal(t, http.StatusCreated, res.StatusCode, data)
+
+	res, data = jsonReq(t, http.MethodPost, "/entries", `{"name":"Second","type":"Institution","hrid":"DUP"}`, headers)
+	require.Equal(t, http.StatusConflict, res.StatusCode, data)
+	require.JSONEq(t, errorJSON("An entry with this hrid already exists"), data)
+
+	res, data = jsonReq(t, http.MethodPatch, "/entries/by-id/00000000-0000-0000-0000-000000000002", `{"hrid":"DUP"}`, headers)
+	require.Equal(t, http.StatusConflict, res.StatusCode, data)
+	require.JSONEq(t, errorJSON("An entry with this hrid already exists"), data)
 }

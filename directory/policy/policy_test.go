@@ -21,7 +21,7 @@ func loadPolicy(t *testing.T) *policy.Policy {
 
 func TestCompilePolicyTable(t *testing.T) {
 	p := loadPolicy(t)
-	require.Equal(t, []string{"catalogConfig", "holdingsPolicy", "illConfig", "lmsConfig"}, p.Containers())
+	require.Equal(t, []string{"catalogConfig", "discoveryConfig", "holdingsPolicy", "illConfig", "lmsConfig"}, p.Containers())
 	all := []string{policy.TypeConsortium, policy.TypeInstitution, policy.TypeBranch}
 	for _, tc := range []struct {
 		container, child string

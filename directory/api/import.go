@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/indexdata/crosslink/directory/auth"
@@ -13,7 +14,7 @@ import (
 func (a ApiImpl) PostImport(ctx context.Context, request PostImportRequestObject) (PostImportResponseObject, error) {
 	authData := auth.GetAuthData(ctx)
 	if authData == nil || !authData.HasRole(auth.ConsortialAdminRole) {
-		return PostImport401TextResponse("Access denied"), nil
+		return PostImport403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	policyValue := ""
@@ -22,22 +23,22 @@ func (a ApiImpl) PostImport(ctx context.Context, request PostImportRequestObject
 	}
 	policy, err := model.ParseConflictPolicy(policyValue)
 	if err != nil {
-		return PostImport400TextResponse(err.Error()), nil
+		return PostImport400JSONResponse{badRequest(err.Error())}, nil
 	}
 	if request.Body == nil || request.Body == http.NoBody {
-		return PostImport400TextResponse("body is required"), nil
+		return PostImport400JSONResponse{badRequest("body is required")}, nil
 	}
 	if a.importer == nil {
-		return PostImport500TextResponse("import service is unavailable"), nil
+		return nil, errors.New("import service is unavailable")
 	}
 
 	result, err := a.importer.Import(ctx, policy, request.Body)
 	if err != nil {
 		var maxBytesError *http.MaxBytesError
 		if errors.Is(err, importservice.ErrRecordTooLarge) || errors.As(err, &maxBytesError) {
-			return PostImport413TextResponse("import request too large"), nil
+			return PostImport413JSONResponse{Error: "import request too large"}, nil
 		}
-		return PostImport500TextResponse("failed to read import request"), nil
+		return nil, fmt.Errorf("read import request: %w", err)
 	}
 	return PostImport200JSONResponse(mapImportResult(result)), nil
 }

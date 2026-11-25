@@ -121,9 +121,16 @@ func TestNetworkCases(t *testing.T) {
 			name:        "PATCH network without permission",
 			method:      http.MethodPatch,
 			endpoint:    "/networks/20000000-0000-0000-0000-000000000001",
-			status:      http.StatusUnauthorized,
+			status:      http.StatusForbidden,
 			body:        `{"reciprocal":true}`,
 			addlHeaders: institutionPermissionHeaders,
+		},
+		{
+			name:        "DELETE network assigned to an entry",
+			method:      http.MethodDelete,
+			endpoint:    "/networks/20000000-0000-0000-0000-000000000001",
+			status:      http.StatusConflict,
+			addlHeaders: consortiumPermissionHeaders,
 		},
 		{
 			name:          "DELETE network",

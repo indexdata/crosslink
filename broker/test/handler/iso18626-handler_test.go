@@ -54,18 +54,20 @@ func TestMain(m *testing.M) {
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
 	test.Expect(err, "failed to get conn string")
 
-	mockPort := utils.Must(test.GetFreePort())
-	app.HTTP_PORT = utils.Must(test.GetFreePort())
+	mockListener := utils.Must(test.ListenLocal())
+	mockPort := test.ListenerPort(mockListener)
+	brokerListener := utils.Must(test.ListenLocal())
+	app.HTTP_PORT = test.ListenerPort(brokerListener)
 	test.Expect(os.Setenv("PEER_URL", "http://localhost:"+strconv.Itoa(app.HTTP_PORT)), "failed to set peer URL")
 
-	apptest.StartMockApp(mockPort)
+	apptest.StartMockApp(mockListener)
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
 	adapter.MOCK_PEER_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	_, illRepo, eventRepo, _ = apptest.StartApp(ctx)
+	_, illRepo, eventRepo, _ = apptest.StartApp(ctx, brokerListener)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	code := m.Run()

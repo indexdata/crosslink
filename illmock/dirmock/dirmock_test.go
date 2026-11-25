@@ -79,6 +79,23 @@ func TestGetEntriesPeerURLCompatibility(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
 }
 
+func TestValidationErrorsUseDirectoryErrorBody(t *testing.T) {
+	mock, err := NewJson(`[]`)
+	assert.NoError(t, err)
+	mux := http.NewServeMux()
+	assert.NoError(t, mock.HandlerFromMux(mux))
+
+	request := httptest.NewRequest(http.MethodGet, "/directory/entries?limit=invalid", nil)
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, request)
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Equal(t, "application/json", recorder.Header().Get("Content-Type"))
+	var body directory.Error
+	assert.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+	assert.NotEmpty(t, body.Error)
+}
+
 func TestGetEntriesParentSymbol(t *testing.T) {
 	mock, err := NewJson(`[
 		{"id":"00000000-0000-0000-0000-000000000001","name":"Parent","type":"Institution","symbols":[{"authority":"ISIL","symbol":"PARENT"}]},

@@ -75,8 +75,10 @@ func TestMain(m *testing.M) {
 	directoryBytes, err := os.ReadFile("gvi_directory.json")
 	test.Expect(err, "failed to read directory file")
 
-	mockPort := utils.Must(test.GetFreePort())
-	app.HTTP_PORT = utils.Must(test.GetFreePort())
+	mockListener := utils.Must(test.ListenLocal())
+	mockPort := test.ListenerPort(mockListener)
+	brokerListener := utils.Must(test.ListenLocal())
+	app.HTTP_PORT = test.ListenerPort(brokerListener)
 
 	mockPeerUrl = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
 	brokerUrl := "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
@@ -106,14 +108,14 @@ func TestMain(m *testing.M) {
 	app.HOLDINGS_ADAPTER = "consortium"
 	app.CONSORTIUM_SYMBOL = "ISIL:GVIC"
 
-	apptest.StartMockApp(mockPort)
+	apptest.StartMockApp(mockListener)
 	app.ConnectionString = connStr
 
 	app.MigrationsFolder = "file://../../migrations"
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	eventBus, illRepo, eventRepo, _ = apptest.StartApp(ctx)
+	eventBus, illRepo, eventRepo, _ = apptest.StartApp(ctx, brokerListener)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	code := m.Run()

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/indexdata/crosslink/directory/auth"
 	"github.com/indexdata/crosslink/directory/db"
 	"log/slog"
@@ -27,15 +28,14 @@ func (a ApiImpl) AddClosure(ctx context.Context, request AddClosureRequestObject
 	authData := auth.GetAuthData(ctx)
 
 	if !authData.HasRole(auth.ConsortialAdminRole) {
-		slog.ErrorContext(ctx, "permission denied")
-		return AddClosure401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return AddClosure403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	tx, err := a.pool.Begin(ctx)
 
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to begin transaction", "error", err, "operation", "AddClosure")
-		return AddClosure500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
 	defer func() { _ = tx.Rollback(ctx) }()
@@ -52,8 +52,7 @@ func (a ApiImpl) AddClosure(ctx context.Context, request AddClosureRequestObject
 	insertedClosure, err := qtx.CreateClosure(ctx, closureParams)
 
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to create closure", "error", err)
-		return AddClosure500TextResponse("Error creating closure"), nil
+		return nil, fmt.Errorf("failed to create closure: %w", err)
 	}
 
 	var resp Id
@@ -62,8 +61,7 @@ func (a ApiImpl) AddClosure(ctx context.Context, request AddClosureRequestObject
 	err = tx.Commit(ctx)
 
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to commit transaction", "error", err, "operation", "AddClosure")
-		return AddClosure500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return AddClosure201JSONResponse(resp), nil
@@ -76,17 +74,16 @@ func (a ApiImpl) GetClosure(ctx context.Context, request GetClosureRequestObject
 	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole}
 
 	if !authData.HasRoleFromList(validRoles) {
-		slog.ErrorContext(ctx, "permission denied")
-		return GetClosure401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return GetClosure403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	closure, err := a.queries.GetClosureById(ctx, request.Id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return GetClosure404TextResponse("Closure not found"), nil
+			return GetClosure404JSONResponse{notFound("Closure not found")}, nil
 		} else {
-			slog.ErrorContext(ctx, "failed to get closure", "error", err, "id", request.Id)
-			return GetClosure500TextResponse("Internal server error"), nil
+			return nil, fmt.Errorf("failed to get closure id=%v: %w", request.Id, err)
 		}
 	}
 
@@ -98,8 +95,8 @@ func (a ApiImpl) GetClosures(ctx context.Context, request GetClosuresRequestObje
 	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole}
 
 	if !authData.HasRoleFromList(validRoles) {
-		slog.ErrorContext(ctx, "permission denied")
-		return GetClosures401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return GetClosures403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	params := db.ListClosuresParams{
@@ -109,8 +106,7 @@ func (a ApiImpl) GetClosures(ctx context.Context, request GetClosuresRequestObje
 
 	rows, err := a.queries.ListClosures(ctx, params)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to list closures", "error", err)
-		return GetClosures500TextResponse("Internal Server Error"), nil
+		return nil, fmt.Errorf("failed to list closures: %w", err)
 	}
 
 	closures := make([]Closure, 0, len(rows))
@@ -134,14 +130,13 @@ func (a ApiImpl) DeleteClosure(ctx context.Context, request DeleteClosureRequest
 	authData := auth.GetAuthData(ctx)
 
 	if !authData.HasRole(auth.ConsortialAdminRole) {
-		slog.ErrorContext(ctx, "permission denied")
-		return DeleteClosure401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return DeleteClosure403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	err := a.queries.DeleteClosureById(ctx, request.Id)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to delete Closure", "error", err, "id", request.Id)
-		return DeleteClosure500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to delete Closure id=%v: %w", request.Id, err)
 	}
 	return DeleteClosure204Response{}, nil
 
@@ -151,15 +146,14 @@ func (a ApiImpl) UpdateClosure(ctx context.Context, request UpdateClosureRequest
 	authData := auth.GetAuthData(ctx)
 
 	if !authData.HasRole(auth.ConsortialAdminRole) {
-		slog.ErrorContext(ctx, "permission denied")
-		return UpdateClosure401TextResponse("Access denied"), nil
+		slog.DebugContext(ctx, "permission denied")
+		return UpdateClosure403JSONResponse{forbidden("Access denied")}, nil
 	}
 
 	tx, err := a.pool.Begin(ctx)
 
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to begin transaction", "error", err, "operation", "UpdateClosure")
-		return UpdateClosure500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
 	defer func() { _ = tx.Rollback(ctx) }()
@@ -167,10 +161,9 @@ func (a ApiImpl) UpdateClosure(ctx context.Context, request UpdateClosureRequest
 
 	orig, err := qtx.GetClosureByIdForUpdate(ctx, request.Id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return UpdateClosure404TextResponse("Closure not found"), nil
+		return UpdateClosure404JSONResponse{notFound("Closure not found")}, nil
 	} else if err != nil {
-		slog.ErrorContext(ctx, "failed to get closure for update", "error", err, "id", request.Id)
-		return UpdateClosure500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to get closure for update id=%v: %w", request.Id, err)
 	}
 
 	err = qtx.UpdateClosure(ctx, db.UpdateClosureParams{
@@ -181,14 +174,12 @@ func (a ApiImpl) UpdateClosure(ctx context.Context, request UpdateClosureRequest
 	})
 
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to update closure", "error", err, "id", request.Id)
-		return UpdateClosure500TextResponse("internal server error"), nil
+		return nil, fmt.Errorf("failed to update closure id=%v: %w", request.Id, err)
 	}
 
 	err = tx.Commit(ctx)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to commit transaction", "error", err, "operation", "UpdateClosure")
-		return UpdateClosure500TextResponse("Internal server error"), nil
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return UpdateClosure204Response{}, nil

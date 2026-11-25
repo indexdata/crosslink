@@ -120,7 +120,7 @@ func TestImportRequiresConsortialAdmin(t *testing.T) {
 			resetImportState(t)
 			headers := map[string]string{auth.FolioPermissionsHeader: `[` + mustJSON(t, permission) + `]`}
 			response, _ := importRequest(t, []any{entryImportRecord(symbolObject("ISIL", "CON"), "Consortium", nil, "Consortium")}, "", headers)
-			require.Equal(t, http.StatusUnauthorized, response.StatusCode)
+			require.Equal(t, http.StatusForbidden, response.StatusCode)
 			require.Zero(t, importedEntryCount(t))
 		})
 	}

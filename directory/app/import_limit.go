@@ -3,6 +3,7 @@ package app
 import (
 	"net/http"
 
+	"github.com/indexdata/crosslink/directory/api"
 	"github.com/indexdata/crosslink/directory/auth"
 )
 
@@ -16,11 +17,11 @@ func ImportBodyLimitMiddleware(maxBytes int64, next http.Handler) http.Handler {
 		}
 		authData := auth.GetAuthData(request.Context())
 		if authData == nil || !authData.HasRole(auth.ConsortialAdminRole) {
-			http.Error(writer, "Access denied", http.StatusUnauthorized)
+			api.WriteError(writer, http.StatusForbidden, "Access denied")
 			return
 		}
 		if request.ContentLength > maxBytes {
-			http.Error(writer, "import request too large", http.StatusRequestEntityTooLarge)
+			api.WriteError(writer, http.StatusRequestEntityTooLarge, "import request too large")
 			return
 		}
 		request.Body = http.MaxBytesReader(writer, request.Body, maxBytes)

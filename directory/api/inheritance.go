@@ -180,6 +180,9 @@ func applyConfigs(entry *Entry, configs map[string]json.RawMessage) error {
 	if entry.HoldingsPolicy, err = unmarshalJSONObject[HoldingsPolicy](configs["holdingsPolicy"]); err != nil {
 		return fmt.Errorf("decode holdingsPolicy: %w", err)
 	}
+	if entry.DiscoveryConfig, err = unmarshalJSONObject[DiscoveryConfig](configs["discoveryConfig"]); err != nil {
+		return fmt.Errorf("decode discoveryConfig: %w", err)
+	}
 	return nil
 }
 

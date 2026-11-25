@@ -235,7 +235,7 @@ error or skip details are retained; `errorsOmitted` counts additional details.
 | Status | Meaning |
 | --- | --- |
 | `400` | Missing body, unsupported conflict policy, or incorrect content type |
-| `401` | Missing consortial-admin permission |
+| `403` | Missing consortial-admin permission |
 | `413` | Request exceeds 1 GiB or a record exceeds 1 MiB |
 | `500` | Import stream could not be read |
 
@@ -365,12 +365,12 @@ The permissions and roles are as follows:
 ### Configuration inheritance
 
 Entries form a fixed hierarchy: one Consortium, Institutions under it, and
-Branches under institutions. An entry's `illConfig`, `lmsConfig`, `catalogConfig`
-and `holdingsPolicy` fields that it does not store itself are filled in on read
-from the nearest ancestor that stores them. Nothing is copied into child records,
-so a parent change applies to its descendants on their next read. The policy is
-declared in [api.yaml](api.yaml) with these extensions on `EntryProperties` and
-the configuration schemas:
+Branches under institutions. An entry's `illConfig`, `lmsConfig`, `catalogConfig`,
+`holdingsPolicy` and `discoveryConfig` fields that it does not store itself are
+filled in on read from the nearest ancestor that stores them. Nothing is copied
+into child records, so a parent change applies to its descendants on their next
+read. The policy is declared in [api.yaml](api.yaml) with these extensions on
+`EntryProperties` and the configuration schemas:
 
 - `x-inheritance-root`: the highest ancestor type consulted (`Consortium`,
   `Institution`, or `none` for a field that never inherits).
@@ -393,11 +393,14 @@ annotations at startup and stops if they are invalid.
 | `illConfig.isPickupLocation` | never | Institution, Branch |
 | `illConfig.loadBalancingPolicy` | never | Consortium |
 | `holdingsPolicy` | Institution | Institution |
+| `discoveryConfig` | Consortium | Consortium |
 
 So institutions inherit the consortium's ILL policy (except its ISO18626 peer,
 pickup flag and load-balancing policy), and branches inherit their institution's
-ILL, LMS, catalog and holdings settings. Consortium catalog settings are not
-inherited; the broker uses them only through `CONSORTIUM_SYMBOL`.
+ILL, LMS, catalog and holdings settings. Every institution and branch takes
+`discoveryConfig` from the consortium, the only entry that may store it.
+Consortium catalog settings are not inherited; the broker uses them only
+through `CONSORTIUM_SYMBOL`.
 
 Reads: every entry GET (by ID, by symbol, `/entries`, `/entries/owned`) returns
 merged values by default. Pass `resolve-inherit=false` for the entry's stored
