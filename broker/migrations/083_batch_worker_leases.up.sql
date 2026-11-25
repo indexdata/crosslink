@@ -45,6 +45,37 @@ BEGIN
 END;
 $$;
 
+CREATE TABLE message_confirmation_expiry (
+    event_id VARCHAR PRIMARY KEY REFERENCES event (id) ON DELETE CASCADE,
+    -- A confirmation task is created after its request starts waiting.
+    -- Leave more than the handler's 30-second maximum wait for any replica.
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT (clock_timestamp() + INTERVAL '1 minute')
+);
+
+CREATE INDEX message_confirmation_expiry_due_idx
+    ON message_confirmation_expiry (expires_at, event_id);
+
+CREATE FUNCTION track_message_confirmation_expiry() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.event_status IN ('NEW', 'PROCESSING') THEN
+        INSERT INTO message_confirmation_expiry (event_id)
+        VALUES (NEW.id) ON CONFLICT DO NOTHING;
+    ELSE
+        DELETE FROM message_confirmation_expiry WHERE event_id = NEW.id;
+    END IF;
+    RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER track_message_confirmation_expiry
+AFTER INSERT OR UPDATE OF event_status ON event
+FOR EACH ROW WHEN (
+    NEW.event_type = 'TASK'
+    AND NEW.event_name IN ('confirm-requester-msg', 'confirm-supplier-msg')
+)
+EXECUTE FUNCTION track_message_confirmation_expiry();
+
 -- Older binaries do not record ownership. Apply this migration after draining
 -- and stopping all old broker replicas.
 WITH RECURSIVE inline_ancestors AS (
@@ -69,3 +100,11 @@ WHERE event_type = 'TASK' AND event_status IN ('NEW', 'PROCESSING')
                 AND ancestor.event_data -> 'batchActionData' IS NOT NULL
         )
     );
+
+-- Give unfinished legacy tasks the same grace period on upgrade.
+INSERT INTO message_confirmation_expiry (event_id)
+SELECT id FROM event
+WHERE event_type = 'TASK'
+    AND event_name IN ('confirm-requester-msg', 'confirm-supplier-msg')
+    AND event_status IN ('NEW', 'PROCESSING')
+ON CONFLICT DO NOTHING;

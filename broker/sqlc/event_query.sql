@@ -267,6 +267,23 @@ SELECT NOT EXISTS (SELECT 1 FROM batch_action_run_event WHERE run_id = $1 AND NO
 -- name: FinishBatchRun :exec
 UPDATE batch_action_run SET completed_at = clock_timestamp() WHERE id = $1;
 
+-- name: ExpireMessageConfirmationTasks :exec
+WITH expired AS (
+    SELECT event.id
+    FROM message_confirmation_expiry AS expiry
+    JOIN event ON event.id = expiry.event_id
+    WHERE expiry.expires_at <= statement_timestamp()
+        AND event.event_status IN ('NEW', 'PROCESSING')
+    ORDER BY expiry.expires_at, expiry.event_id
+    LIMIT sqlc.arg(batch_limit)::int
+    FOR UPDATE OF event SKIP LOCKED
+)
+UPDATE event
+SET event_status = 'ERROR', last_signal = '',
+    result_data = '{"eventError":{"Message":"ISO 18626 confirmation expired","Cause":"The request waiter could no longer receive this confirmation."}}'
+FROM expired
+WHERE event.id = expired.id;
+
 -- name: UpdateEventLifecycle :one
 UPDATE event SET last_signal = $3, event_status = $2
 WHERE id = $1

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/broker/app"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
@@ -166,6 +168,70 @@ func TestArchiveIllTransactionSkipsPendingSignals(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestExpiredConfirmationTasksUnblockIllTransactionArchiving(t *testing.T) {
+	f, repo, candidate := transactionArchiveFixture(t)
+	saveConfirmation := func(name events.EventName, status events.EventStatus, signal events.Signal) string {
+		t.Helper()
+		id := uuid.NewString()
+		_, err := eventRepo.SaveEvent(appCtx, events.SaveEventParams{
+			ID: id, IllTransactionID: f.transaction, PatronRequestID: events.DEFAULT_PATRON_REQUEST_ID,
+			EventType: events.EventTypeTask, EventName: name, EventStatus: status, LastSignal: string(signal),
+			// Expiry must use the database's creation time rather than this audit timestamp.
+			Timestamp: pgtype.Timestamp{Time: time.Now().Add(-time.Hour), Valid: true},
+		})
+		require.NoError(t, err)
+		return id
+	}
+
+	expiredIDs := []string{
+		saveConfirmation(events.EventNameConfirmRequesterMsg, events.EventStatusNew, events.SignalTaskCreated),
+		saveConfirmation(events.EventNameConfirmSupplierMsg, events.EventStatusProcessing, events.SignalTaskBegin),
+	}
+	liveID := saveConfirmation(events.EventNameConfirmSupplierMsg, events.EventStatusNew, events.SignalTaskCreated)
+
+	stored, err := repo.ArchiveIllTransaction(appCtx, candidate, f.owner, time.Now(), false)
+	require.NoError(t, err)
+	require.False(t, stored)
+	tag, err := repo.Pool.Exec(appCtx, "UPDATE message_confirmation_expiry SET expires_at = clock_timestamp() - interval '1 second' WHERE event_id = ANY($1)", expiredIDs)
+	require.NoError(t, err)
+	require.EqualValues(t, len(expiredIDs), tag.RowsAffected())
+
+	// Startup recovers durable rows on any replica, even if it never hosted
+	// the waiter and never received the task creation notification.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	bus := events.NewPostgresEventBus(eventRepo, app.ConnectionString)
+	require.NoError(t, app.StartEventBus(ctx, bus))
+	for _, id := range expiredIDs {
+		require.Eventually(t, func() bool {
+			event, err := eventRepo.GetEvent(appCtx, id)
+			return err == nil && event.EventStatus == events.EventStatusError
+		}, 5*time.Second, 10*time.Millisecond)
+		event, err := eventRepo.GetEvent(appCtx, id)
+		require.NoError(t, err)
+		require.Empty(t, event.LastSignal)
+		require.NotNil(t, event.ResultData.EventError)
+		require.Equal(t, "ISO 18626 confirmation expired", event.ResultData.EventError.Message)
+	}
+
+	live, err := eventRepo.GetEvent(appCtx, liveID)
+	require.NoError(t, err)
+	require.Equal(t, events.EventStatusNew, live.EventStatus)
+	require.Equal(t, string(events.SignalTaskCreated), live.LastSignal)
+	stored, err = repo.ArchiveIllTransaction(appCtx, candidate, f.owner, time.Now(), false)
+	require.NoError(t, err)
+	require.False(t, stored, "the fresh confirmation still blocks archiving")
+
+	_, err = eventRepo.UpdateEventLifecycle(appCtx, events.UpdateEventLifecycleParams{ID: liveID, EventStatus: events.EventStatusSuccess})
+	require.NoError(t, err)
+	var tracked int
+	require.NoError(t, repo.Pool.QueryRow(appCtx, "SELECT count(*) FROM message_confirmation_expiry WHERE event_id = ANY($1)", append(expiredIDs, liveID)).Scan(&tracked))
+	require.Zero(t, tracked)
+	stored, err = repo.ArchiveIllTransaction(appCtx, candidate, f.owner, time.Now(), false)
+	require.NoError(t, err)
+	require.True(t, stored, "expired confirmations are terminal and have no pending signals")
 }
 
 func TestArchiveIllTransactionIgnoresRotaAuditSignals(t *testing.T) {

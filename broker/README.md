@@ -521,12 +521,15 @@ The `email-pullslips` batch queues the same action after SMTP successfully accep
 
 `email-pullslips`, `request-aging`, and `overdue` reserve an action for its owner
 across all saved schedules and broker replicas. An unrestricted run reserves the
-action for all owners. The reservation includes background and inline tasks
-created by the run. Scheduled occurrences that conflict are skipped and logged.
+action for all owners. The reservation includes background tasks, local
+CrossLink message tasks, and their inline actions. Scheduled occurrences that
+conflict are skipped and logged.
 Archive actions use their existing per-resource checks.
 
 After a worker stops renewing its lease, a broker marks its unfinished tasks
-`ERROR` in batch-action history. Live sibling tasks keep running. Startup and a
+`ERROR`. Batch-action history shows the batch and background tasks. Local message
+tasks and their inline actions appear in the affected request’s event history.
+Live sibling tasks keep running. Startup and a
 15-second poll recover expired workers and pick up queued work even if a
 notification was missed. The initial worker lease is five minutes by default,
 renewed every third of the configured interval, with a 30-minute cap. Each
@@ -542,6 +545,10 @@ Okapi callers can use the `/broker` prefix and need
 `broker.batch_actions.item.run.post` plus the action's usual authorization.
 Scheduled actions also continue at their next occurrence.
 
+ISO 18626 confirmation tasks have one minute to finish. Recovery marks expired
+tasks `ERROR` and clears their pending signals so a timed-out confirmation
+does not block transaction archiving.
+
 SMTP delivery stops after 30 seconds or at the worker's lease deadline,
 whichever comes first. A successful final DATA response counts as delivery.
 A dropped connection during the DATA response, or an interruption after SMTP
@@ -550,7 +557,8 @@ duplicate slips on a later run. Review the run history and check whether staff
 received the email before rerunning. Pull-slip actions recheck request state.
 
 Before applying migration 083, drain and stop all older broker replicas.
-The migration marks leftover batch tasks from those replicas as interrupted.
+The migration marks leftover batch tasks from those replicas as interrupted
+and gives unfinished ISO 18626 confirmations their cleanup grace period.
 Start the upgraded replicas before using the run endpoint.
 
 

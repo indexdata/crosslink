@@ -109,7 +109,7 @@ func (m *PatronRequestMessageHandler) processPatronRequestMessageTask(
 	handler func(execCtx common.ExtendedContext, parentEventID *string, result *events.EventResult) (events.EventStatus, *iso18626.ISO18626Message, error),
 ) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	data := events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: incoming}}
-	eventID, err := m.eventBus.CreateTask(prID, events.EventNamePatronRequestMessage, data, events.EventDomainPatronRequest, nil, events.SignalConsumers)
+	eventID, err := events.WithWorkerContext(m.eventBus, ctx).CreateTask(prID, events.EventNamePatronRequestMessage, data, events.EventDomainPatronRequest, nil, events.SignalConsumers)
 	if err != nil {
 		return events.EventStatusError, nil, err
 	}

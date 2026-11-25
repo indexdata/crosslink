@@ -1219,6 +1219,7 @@ func (r *requestWaitRegistry) take(id string) (RequestWait, bool) {
 	return wait, ok
 }
 
+// Keep the waiter timeout below the database grace period for confirmation tasks.
 const messageConfirmationTimeout = 30 * time.Second
 
 func waitForMessageConfirmation(ctx common.ExtendedContext, eventBus events.EventBus, illTransID string, eventName events.EventName, data events.EventData, w http.ResponseWriter) error {

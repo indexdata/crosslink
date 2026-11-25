@@ -77,6 +77,7 @@ func (p *PostgresEventBus) Start(ctx common.ExtendedContext) error {
 	}
 	if db, ok := p.repo.(*PgEventRepo); ok {
 		p.startBatchWorkers(db)
+		go db.recoverMessageConfirmations(p.ctx)
 	}
 	go p.listen(conn)
 	return nil
@@ -245,10 +246,10 @@ func (p *PostgresEventBus) CreateTask(classId string, eventName EventName, data 
 				}
 			}
 		}
-		delegated := false
+		delegated := eventName == EventNameMessageRequester || eventName == EventNameMessageSupplier
 		if tx, ok := eventRepo.(*PgEventRepo); ok && run.ID == "" {
 			owner := repo.BatchWorker(p.ctx)
-			if owner != "" && (eventName == EventNameMessageRequester || eventName == EventNameMessageSupplier) {
+			if owner != "" && (delegated || eventName == EventNamePatronRequestMessage) {
 				var err error
 				run, err = tx.lockBatchRunForEvent(p.ctx, owner)
 				if err != nil {
@@ -258,8 +259,9 @@ func (p *PostgresEventBus) CreateTask(classId string, eventName EventName, data 
 					return repo.ErrBatchLeaseLost
 				}
 				workerID = owner
-				data.BatchWorkerID = owner
-				delegated = true
+				if delegated {
+					data.BatchWorkerID = owner
+				}
 			}
 			if err := repo.LockBatchWorker(p.ctx, tx.Tx); err != nil {
 				return err

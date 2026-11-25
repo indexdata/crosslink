@@ -350,7 +350,7 @@ func (r *PgEventRepo) finishBatchRunIfIdle(ctx common.ExtendedContext, run Batch
 // belong to a run. A caller that supplies only an ID requires a DB check.
 func batchOwnershipRequired(ctx common.ExtendedContext, event Event) bool {
 	switch event.EventName {
-	case "", EventNameInvokeBatchAction, EventNameInvokeBackgroundAction, EventNameInvokeAction:
+	case "", EventNameInvokeBatchAction, EventNameInvokeBackgroundAction, EventNameInvokeAction, EventNamePatronRequestMessage:
 		return true
 	default:
 		return repo.BatchWorker(ctx) != "" || event.EventData.BatchWorkerID != ""

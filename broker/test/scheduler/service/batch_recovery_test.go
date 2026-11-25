@@ -8,14 +8,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/app"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	"github.com/indexdata/crosslink/broker/repo"
 	schedapi "github.com/indexdata/crosslink/broker/scheduler/api"
 	sched_db "github.com/indexdata/crosslink/broker/scheduler/db"
 	schedoapi "github.com/indexdata/crosslink/broker/scheduler/oapi"
 	"github.com/indexdata/crosslink/broker/tenant"
+	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
@@ -229,6 +233,109 @@ func TestExpiredChildIsFencedWhileSiblingFinishes(t *testing.T) {
 	history, err := eventRepo.GetBatchActionEvents(appCtx, task.ID)
 	require.NoError(t, err)
 	require.Len(t, history, 3, "no automatic replay of the parent or children")
+}
+
+type batchAutoActionRunner func(common.ExtendedContext, pr_db.PatronRequest, *string) error
+
+func (run batchAutoActionRunner) RunAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest, parentID *string, _ string) error {
+	return run(ctx, pr, parentID)
+}
+
+func TestInterruptedLocalMessageAndAutoActionReleaseBatchForManualRerun(t *testing.T) {
+	task := saveEmailBatchRunTask(t)
+	pool := schedRepo.(*sched_db.PgSchedRepo).Pool
+	requestRepo := pr_db.CreatePrRepo(pool, false)
+	eventRepo := app.CreateEventRepo(pool)
+	request, err := requestRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID: uuid.NewString(), Side: prservice.SideBorrowing, State: prservice.BorrowerStateSent,
+		StateModel: "default", Language: "english", Items: []pr_db.PrItem{},
+		CreatedAt: pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, requestRepo.DeletePatronRequest(appCtx, request.ID)) })
+
+	workerStarted := make(chan events.Event, 1)
+	autoActionStarted := make(chan events.Event, 1)
+	resume := make(chan struct{})
+	first := startBatchTestBus(t, func(bus *events.PostgresEventBus) {
+		handler := prservice.CreatePatronRequestMessageHandler(requestRepo, eventRepo, nil, bus)
+		handler.SetAutoActionRunner(batchAutoActionRunner(func(ctx common.ExtendedContext, pr pr_db.PatronRequest, parentID *string) error {
+			id, err := events.WithWorkerContext(bus, ctx).CreateTask(pr.ID, events.EventNameInvokeAction, events.EventData{}, events.EventDomainPatronRequest, parentID, events.SignalConsumers)
+			if err != nil {
+				return err
+			}
+			_, err = bus.ProcessExclusiveTask(ctx, events.Event{ID: id}, events.SignalConsumers, func(ctx common.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
+				autoActionStarted <- e
+				select {
+				case <-resume:
+				case <-ctx.Done():
+				}
+				return succeedBatchEvent(ctx, e)
+			})
+			return err
+		}))
+		bus.HandleEventCreated(events.EventNameInvokeBatchAction, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, e events.Event) {
+			workerStarted <- e
+			_, _ = bus.ProcessTask(ctx, e, events.SignalConsumers, func(ctx common.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
+				msg := iso18626.NewISO18626Message()
+				msg.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
+					Header:      iso18626.Header{RequestingAgencyRequestId: request.ID},
+					MessageInfo: iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange},
+					StatusInfo:  iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
+				}
+				if _, err := handler.HandleMessage(ctx, msg, nil); err != nil {
+					return events.NewErrorResult("local message failed", err.Error())
+				}
+				return succeedBatchEvent(ctx, e)
+			})
+		})
+	})
+	t.Cleanup(func() {
+		select {
+		case <-resume:
+		default:
+			close(resume)
+		}
+	})
+
+	runSavedBatch(t, task.ID, http.StatusAccepted)
+	worker := receiveBatchEvent(t, workerStarted)
+	autoAction := receiveBatchEvent(t, autoActionStarted)
+	require.True(t, autoAction.ParentID.Valid)
+	message, err := eventRepo.GetEvent(appCtx, autoAction.ParentID.String)
+	require.NoError(t, err)
+	require.Equal(t, events.EventNamePatronRequestMessage, message.EventName)
+	require.Equal(t, events.EventStatusProcessing, message.EventStatus)
+	_, err = first.CompleteTask(message.ID, nil, events.EventStatusSuccess, events.SignalConsumers)
+	require.ErrorIs(t, err, repo.ErrBatchLeaseLost)
+	expireBatchLease(t, worker.ID)
+	close(resume)
+	drainCtx, stop := context.WithTimeout(context.Background(), 3*time.Second)
+	defer stop()
+	require.NoError(t, first.DrainBatchWorkers(drainCtx))
+
+	rerun := make(chan events.Event, 1)
+	startBatchTestBus(t, func(bus *events.PostgresEventBus) {
+		bus.HandleEventCreated(events.EventNameInvokeBatchAction, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, e events.Event) {
+			rerun <- e
+			_, _ = bus.ProcessTask(ctx, e, events.SignalConsumers, func(ctx common.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
+				id, err := events.WithWorkerContext(bus, ctx).CreateTask(request.ID, events.EventNameInvokeAction, events.EventData{}, events.EventDomainPatronRequest, &e.ID, events.SignalConsumers)
+				if err != nil {
+					return events.NewErrorResult("create replacement action", err.Error())
+				}
+				next, err := bus.ProcessExclusiveTask(ctx, events.Event{ID: id}, events.SignalConsumers, succeedBatchEvent)
+				if err != nil {
+					return events.NewErrorResult("process replacement action", err.Error())
+				}
+				return next.EventStatus, &next.ResultData
+			})
+		})
+	})
+	for _, id := range []string{worker.ID, message.ID, autoAction.ID} {
+		requireBatchEventStatus(t, id, events.EventStatusError)
+	}
+	runSavedBatch(t, task.ID, http.StatusAccepted)
+	requireBatchEventStatus(t, receiveBatchEvent(t, rerun).ID, events.EventStatusSuccess)
 }
 
 func TestBatchWorkersLeaveQueuedWorkForTheNextReplicaWhenDraining(t *testing.T) {
