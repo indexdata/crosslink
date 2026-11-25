@@ -426,6 +426,79 @@ func TestCreateNotice(t *testing.T) {
 	assert.Equal(t, events.EventStatusSuccess, event.EventStatus)
 }
 
+func TestBatchNoticeWithMissingOrExpiredLeaseDoesNotBlockArchiving(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	pool := illRepo.(*ill_db.PgIllRepo).Pool
+	for _, expired := range []bool{false, true} {
+		name := "missing"
+		if expired {
+			name = "expired"
+		}
+		t.Run(name, func(t *testing.T) {
+			workerID := uuid.NewString()
+			now := time.Now().UTC()
+			if expired {
+				_, err := eventRepo.SaveEvent(ctx, events.SaveEventParams{
+					ID: workerID, IllTransactionID: events.DEFAULT_ILL_TRANSACTION_ID, PatronRequestID: events.DEFAULT_PATRON_REQUEST_ID,
+					EventType: events.EventTypeTask, EventName: events.EventNameInvokeBatchAction, EventStatus: events.EventStatusProcessing,
+					Timestamp: pgtype.Timestamp{Time: now, Valid: true},
+				})
+				require.NoError(t, err)
+				t.Cleanup(func() {
+					_, err := pool.Exec(ctx, "DELETE FROM event WHERE id = $1", workerID)
+					require.NoError(t, err)
+				})
+				_, err = pool.Exec(ctx, `WITH run AS (
+					INSERT INTO batch_action_run (id, scheduled_task_id, owner, action_name)
+					VALUES ($1, $1, '', 'overdue') RETURNING id
+				)
+				INSERT INTO batch_action_run_event (event_id, run_id, worker_event_id, lease_expires_at)
+				SELECT id, id, id, clock_timestamp() - interval '1 second' FROM run`, workerID)
+				require.NoError(t, err)
+			}
+
+			illID, owner := uuid.NewString(), "ISIL:ARCHIVE-"+uuid.NewString()
+			_, err := illRepo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams{
+				ID: illID, RequesterSymbol: pgtype.Text{String: owner, Valid: true},
+				Timestamp: pgtype.Timestamp{Time: now.Add(-time.Hour), Valid: true},
+			})
+			require.NoError(t, err)
+			candidate := ill_db.IllTransactionArchiveCandidate{ID: illID}
+			require.NoError(t, pool.QueryRow(ctx, "SELECT xmin::text FROM ill_transaction WHERE id = $1", illID).Scan(&candidate.Version))
+
+			noticeID := uuid.NewString()
+			_, err = eventRepo.SaveEvent(ctx, events.SaveEventParams{
+				ID: noticeID, IllTransactionID: illID, PatronRequestID: events.DEFAULT_PATRON_REQUEST_ID,
+				EventType: events.EventTypeNotice, EventName: events.EventNameRequesterMsgReceived, EventStatus: events.EventStatusSuccess,
+				Timestamp: pgtype.Timestamp{Time: now, Valid: true}, LastSignal: string(events.SignalNoticeCreated),
+				EventData: events.EventData{BatchWorkerID: workerID},
+			})
+			require.NoError(t, err)
+			var handled atomic.Bool
+			eventBus.HandleEventCreated(events.EventNameRequesterMsgReceived, events.HandlerRoleConsumer, func(_ common.ExtendedContext, event events.Event) {
+				if event.ID == noticeID {
+					handled.Store(true)
+				}
+			})
+
+			archived, err := illRepo.(*ill_db.PgIllRepo).ArchiveIllTransaction(ctx, candidate, owner, now, false)
+			require.NoError(t, err)
+			require.False(t, archived, "an unclaimed consumer notice blocks archiving")
+
+			require.NoError(t, eventRepo.Notify(ctx, noticeID, events.SignalNoticeCreated, events.SignalConsumers))
+			require.Eventually(t, func() bool {
+				notice, err := eventRepo.GetEvent(ctx, noticeID)
+				return err == nil && notice.LastSignal == "" && notice.EventStatus == events.EventStatusSuccess
+			}, 5*time.Second, 10*time.Millisecond)
+			require.Never(t, handled.Load, 100*time.Millisecond, 10*time.Millisecond, "the obsolete notice must not run its consumer")
+
+			archived, err = illRepo.(*ill_db.PgIllRepo).ArchiveIllTransaction(ctx, candidate, owner, now, false)
+			require.NoError(t, err)
+			require.True(t, archived)
+		})
+	}
+}
+
 func TestBeginAndCompleteTask(t *testing.T) {
 	illID := apptest.GetIllTransId(t, illRepo)
 	received := make(chan events.Event, 1)

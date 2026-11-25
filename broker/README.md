@@ -557,8 +557,9 @@ duplicate slips on a later run. Review the run history and check whether staff
 received the email before rerunning. Pull-slip actions recheck request state.
 
 Before applying migration 083, drain and stop all older broker replicas.
-The migration marks leftover batch tasks from those replicas as interrupted
-and gives unfinished ISO 18626 confirmations their cleanup grace period.
+The migration marks unfinished batch and local message tasks, including
+their inline actions, as interrupted. It gives unfinished ISO 18626
+confirmations their cleanup grace period.
 Start the upgraded replicas before using the run endpoint.
 
 

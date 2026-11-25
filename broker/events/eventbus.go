@@ -172,13 +172,20 @@ func (p *PostgresEventBus) handleNotify(data NotifyData) {
 		if event.EventData.BatchWorkerID != "" && (data.Signal == SignalTaskCreated || data.Signal == SignalNoticeCreated) {
 			var cancel context.CancelFunc
 			eventCtx, cancel, err = p.delegatedBatchContext(eventCtx, event.EventData.BatchWorkerID)
-			if err != nil {
-				if !errors.Is(err, pgx.ErrNoRows) {
-					eventCtx.Logger().Warn("load delegated batch lease", "error", err)
+			switch {
+			case err == nil:
+				defer cancel()
+			case errors.Is(err, pgx.ErrNoRows):
+				if event.EventType == EventTypeNotice && data.Signal == SignalNoticeCreated {
+					if _, claimErr := p.repo.ClaimEventForSignal(eventCtx, event.ID, data.Signal); claimErr != nil && !errors.Is(claimErr, pgx.ErrNoRows) {
+						eventCtx.Logger().Warn("clear obsolete batch notice signal", "error", claimErr)
+					}
 				}
 				return
+			default:
+				eventCtx.Logger().Warn("load delegated batch lease", "error", err)
+				return
 			}
-			defer cancel()
 		}
 		claimedEvent, claimErr := p.repo.ClaimEventForSignal(eventCtx, data.Event, data.Signal)
 		if claimErr != nil {

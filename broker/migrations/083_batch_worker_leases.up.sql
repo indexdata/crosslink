@@ -77,7 +77,8 @@ FOR EACH ROW WHEN (
 EXECUTE FUNCTION track_message_confirmation_expiry();
 
 -- Older binaries do not record ownership. Apply this migration after draining
--- and stopping all old broker replicas.
+-- and stopping all old broker replicas. Legacy local-message tasks were not
+-- linked to the batch or protocol task that invoked them.
 WITH RECURSIVE inline_ancestors AS (
     SELECT id AS child_id, parent_id AS ancestor_id FROM event
     WHERE event_type = 'TASK' AND event_status IN ('NEW', 'PROCESSING')
@@ -89,15 +90,18 @@ WITH RECURSIVE inline_ancestors AS (
 )
 UPDATE event
 SET event_status = 'ERROR', last_signal = '',
-    result_data = '{"eventError":{"Message":"batch task interrupted during upgrade","Cause":"Run the saved action again to process any remaining requests."}}'
+    result_data = '{"eventError":{"Message":"task interrupted during broker upgrade","Cause":"The previous broker stopped before this task completed."}}'
 WHERE event_type = 'TASK' AND event_status IN ('NEW', 'PROCESSING')
     AND (
-        (event_name IN ('invoke-batch-action', 'invoke-background-action') AND event_data -> 'batchActionData' IS NOT NULL)
+        event_name = 'patron-request-message'
+        OR (event_name IN ('invoke-batch-action', 'invoke-background-action') AND event_data -> 'batchActionData' IS NOT NULL)
         OR id IN (
             SELECT a.child_id FROM inline_ancestors a
             JOIN event ancestor ON ancestor.id = a.ancestor_id
-            WHERE ancestor.event_name = 'invoke-background-action'
-                AND ancestor.event_data -> 'batchActionData' IS NOT NULL
+            WHERE ancestor.event_type = 'TASK'
+                AND (ancestor.event_name = 'patron-request-message'
+                     OR (ancestor.event_name = 'invoke-background-action'
+                         AND ancestor.event_data -> 'batchActionData' IS NOT NULL))
         )
     );
 
