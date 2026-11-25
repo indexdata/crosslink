@@ -1,18 +1,23 @@
 package sched_db
 
 import (
+	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/repo"
+	"github.com/indexdata/crosslink/broker/scheduler/oapi"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const SchedulerChannel = "crosslink_sched_channel"
+
+// ErrBatchActionRunActive means the owner already has an unfinished run of this action.
+var ErrBatchActionRunActive = errors.New("a run for this owner and action is already active")
 
 type SchedRepo interface {
 	QueueBatchActionRun(common.ExtendedContext, ScheduledTask) error
@@ -162,15 +167,33 @@ func (r *PgSchedRepo) GetScheduledTasks(ctx common.ExtendedContext, params GetSc
 	return tasks, fullCount, err
 }
 
-// QueueBatchActionRun persists the run and consumer notification in the caller's
-// transaction. The caller holds the scheduled-task lock and, for pull-slip email
-// runs, checks for active batch events before queuing.
+// QueueBatchActionRun reserves the owner and action and queues the run in the
+// caller's transaction. The caller holds the scheduled-task lock.
 func (r *PgSchedRepo) QueueBatchActionRun(ctx common.ExtendedContext, task ScheduledTask) error {
 	if r.Tx == nil {
 		return fmt.Errorf("queue batch action run requires a transaction")
 	}
-	eventRepo := &events.PgEventRepo{PgBaseRepo: repo.PgBaseRepo[events.EventRepo]{Pool: r.Pool, Tx: r.Tx}}
+	data := task.ActionData.BatchActionData
+	if data == nil {
+		return fmt.Errorf("queue batch action run: missing batch action data")
+	}
+	switch schedoapi.BatchActionName(data.ActionName) {
+	case schedoapi.EmailPullslips, schedoapi.RequestAging, schedoapi.Overdue:
+		if err := r.eventQueries.LockBatchActionDispatch(ctx, r.Tx, data.ActionName); err != nil {
+			return fmt.Errorf("lock batch action dispatch: %w", err)
+		}
+		conflict, err := r.eventQueries.HasConflictingBatchActionRun(ctx, r.Tx, events.HasConflictingBatchActionRunParams{
+			ActionName: data.ActionName, Owner: task.Owner,
+		})
+		if err != nil {
+			return fmt.Errorf("check batch action reservations: %w", err)
+		}
+		if conflict {
+			return ErrBatchActionRunActive
+		}
+	}
 	id := uuid.NewString()
+	eventRepo := &events.PgEventRepo{PgBaseRepo: repo.PgBaseRepo[events.EventRepo]{Pool: r.Pool, Tx: r.Tx}}
 	_, err := eventRepo.SaveEvent(ctx, events.SaveEventParams{
 		ID: id, IllTransactionID: events.DEFAULT_ILL_TRANSACTION_ID, PatronRequestID: events.DEFAULT_PATRON_REQUEST_ID,
 		Timestamp: pgtype.Timestamp{Time: time.Now().UTC(), Valid: true}, EventType: events.EventTypeTask,
@@ -180,7 +203,17 @@ func (r *PgSchedRepo) QueueBatchActionRun(ctx common.ExtendedContext, task Sched
 	if err != nil {
 		return fmt.Errorf("queue batch action run: %w", err)
 	}
-	if err = eventRepo.Notify(ctx, id, events.SignalTaskCreated, events.SignalConsumers); err != nil {
+	if err = r.eventQueries.AddBatchActionRun(ctx, r.Tx, events.AddBatchActionRunParams{
+		ID: id, ScheduledTaskID: task.ID, Owner: task.Owner, ActionName: data.ActionName,
+	}); err != nil {
+		return fmt.Errorf("record batch action run: %w", err)
+	}
+	if err = r.eventQueries.AddBatchActionRunEvent(ctx, r.Tx, events.AddBatchActionRunEventParams{
+		EventID: id, RunID: id, WorkerEventID: id,
+	}); err != nil {
+		return fmt.Errorf("link batch action run event: %w", err)
+	}
+	if err = eventRepo.Notify(ctx, id, events.SignalTaskCreated, events.SignalBatchWorkers); err != nil {
 		return fmt.Errorf("notify batch action run: %w", err)
 	}
 	return nil

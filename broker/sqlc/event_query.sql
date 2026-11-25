@@ -103,6 +103,10 @@ WHERE id = $1;
 -- name: HasActiveBatchActionEvents :one
 SELECT EXISTS (
     SELECT 1
+    FROM batch_action_run
+    WHERE scheduled_task_id = sqlc.arg(task_id)::text AND completed_at IS NULL
+    UNION ALL
+    SELECT 1
     FROM event
     WHERE event_name IN ('invoke-batch-action', 'invoke-background-action')
       AND event_data -> 'batchActionData' ->> 'taskId' = sqlc.arg(task_id)::text
@@ -133,6 +137,7 @@ WHERE event_name IN ('invoke-batch-action', 'invoke-background-action')
           AND id <> sqlc.arg(current_event_id)::text
           AND event_data -> 'batchActionData' ->> 'taskId' = sqlc.arg(task_id)::text
           AND id NOT IN (SELECT id FROM retained_runs)
+          AND id NOT IN (SELECT id FROM batch_action_run WHERE completed_at IS NULL)
     ),
     cleared_parent_refs AS (
         UPDATE event
@@ -146,6 +151,121 @@ WHERE event_name IN ('invoke-batch-action', 'invoke-background-action')
     WHERE patron_request_id = sqlc.arg(patron_request_id)::text AND
         (id IN (SELECT id FROM old_runs) OR
           parent_id IN (SELECT id FROM old_runs));
+
+-- name: LockBatchActionDispatch :exec
+SELECT pg_advisory_xact_lock(hashtextextended('crosslink.batch:' || sqlc.arg(action_name)::text, 0));
+
+-- name: HasConflictingBatchActionRun :one
+SELECT EXISTS (
+    SELECT 1 FROM batch_action_run
+    WHERE action_name = sqlc.arg(action_name)::text AND completed_at IS NULL
+      AND (owner = sqlc.arg(owner)::text OR owner = '' OR sqlc.arg(owner)::text = '')
+);
+
+-- name: AddBatchActionRun :exec
+INSERT INTO batch_action_run (id, scheduled_task_id, owner, action_name)
+VALUES ($1, $2, $3, $4);
+
+-- name: AddBatchActionRunEvent :exec
+INSERT INTO batch_action_run_event (event_id, run_id, worker_event_id, ready_at)
+VALUES ($1, $2, $3, CASE WHEN $1::varchar = $3::varchar THEN clock_timestamp() ELSE NULL END);
+
+-- name: GetBatchEventWorker :one
+SELECT worker_event_id FROM batch_action_run_event WHERE event_id = $1;
+
+-- name: LockBatchRunForEvent :one
+SELECT sqlc.embed(batch_action_run)
+FROM batch_action_run_event
+JOIN batch_action_run ON batch_action_run.id = batch_action_run_event.run_id
+WHERE batch_action_run_event.event_id = $1
+FOR UPDATE OF batch_action_run;
+
+-- name: NextBatchWorkerEvent :one
+SELECT event_id FROM batch_action_run_event
+JOIN event ON event.id = event_id
+WHERE ready_at IS NOT NULL AND event_name = ANY(sqlc.arg(event_names)::varchar[])
+ORDER BY ready_at, event_id
+FOR UPDATE OF batch_action_run_event SKIP LOCKED
+LIMIT 1;
+
+-- name: StartBatchWorkerLease :one
+UPDATE batch_action_run_event
+SET ready_at = NULL,
+    lease_expires_at = clock_timestamp() + LEAST(sqlc.arg(lease_duration)::interval, sqlc.arg(lease_cap)::interval),
+    lease_cap_at = clock_timestamp() + sqlc.arg(lease_cap)::interval
+WHERE event_id = sqlc.arg(event_id)::text AND ready_at IS NOT NULL
+RETURNING lease_expires_at, clock_timestamp()::timestamptz AS database_now;
+
+-- name: RenewBatchWorkerLease :one
+UPDATE batch_action_run_event
+SET lease_expires_at = LEAST(clock_timestamp() + sqlc.arg(lease_duration)::interval, lease_cap_at)
+WHERE event_id = sqlc.arg(event_id)::text AND NOT finished AND lease_expires_at > clock_timestamp()
+RETURNING lease_expires_at, clock_timestamp()::timestamptz AS database_now;
+
+-- name: GetActiveBatchWorkerLease :one
+SELECT lease_expires_at, clock_timestamp()::timestamptz AS database_now
+FROM batch_action_run_event
+WHERE event_id = $1 AND lease_expires_at > clock_timestamp();
+
+-- name: GetInterruptedBatchWorkers :many
+(
+    SELECT event_id AS worker_id, run_id FROM batch_action_run_event
+    WHERE lease_expires_at <= clock_timestamp()
+    ORDER BY lease_expires_at, event_id
+    LIMIT sqlc.arg(batch_limit)::int
+)
+UNION ALL
+(
+    -- A patron request deletion can cascade to a worker event before its
+    -- delegated protocol tasks (which live in the ILL transaction domain).
+    SELECT DISTINCT child.worker_event_id AS worker_id, child.run_id
+    FROM batch_action_run_event child
+    WHERE NOT child.finished AND child.worker_event_id <> child.event_id
+      AND NOT EXISTS (
+        SELECT 1 FROM batch_action_run_event worker WHERE worker.event_id = child.worker_event_id
+      )
+    LIMIT sqlc.arg(batch_limit)::int
+);
+
+-- name: LockExpiredBatchWorker :one
+SELECT event_id FROM batch_action_run_event
+WHERE event_id = $1 AND lease_expires_at <= clock_timestamp()
+FOR UPDATE SKIP LOCKED;
+
+-- name: ListUnfinishedBatchWorkerEvents :many
+SELECT event_id FROM batch_action_run_event
+WHERE worker_event_id = $1 AND NOT finished ORDER BY event_id;
+
+-- name: FinishBatchRunEvent :exec
+UPDATE batch_action_run_event
+SET finished = TRUE, ready_at = NULL
+WHERE event_id = $1;
+
+-- name: ClearIdleBatchWorkerLease :exec
+UPDATE batch_action_run_event AS worker
+SET lease_expires_at = NULL
+WHERE worker.event_id = $1 AND worker.lease_expires_at IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM batch_action_run_event
+    WHERE worker_event_id = worker.event_id AND NOT finished
+  );
+
+-- name: ListIdleBatchRuns :many
+SELECT id FROM batch_action_run
+WHERE completed_at IS NULL AND NOT EXISTS (
+    SELECT 1 FROM batch_action_run_event WHERE run_id = batch_action_run.id AND NOT finished
+)
+ORDER BY id LIMIT $1;
+
+-- name: LockBatchRun :one
+SELECT sqlc.embed(batch_action_run) FROM batch_action_run
+WHERE id = $1 AND completed_at IS NULL FOR UPDATE SKIP LOCKED;
+
+-- name: IsBatchRunIdle :one
+SELECT NOT EXISTS (SELECT 1 FROM batch_action_run_event WHERE run_id = $1 AND NOT finished);
+
+-- name: FinishBatchRun :exec
+UPDATE batch_action_run SET completed_at = clock_timestamp() WHERE id = $1;
 
 -- name: UpdateEventLifecycle :one
 UPDATE event SET last_signal = $3, event_status = $2

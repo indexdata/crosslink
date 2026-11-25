@@ -36,6 +36,13 @@ WHERE ill_request IS NOT NULL
 ORDER BY created_at, id
 LIMIT $1;
 
+-- name: ListOverdueBatchCandidates :many
+SELECT id, side, state, ill_request
+FROM patron_request_search_view
+WHERE ill_request IS NOT NULL AND id > sqlc.arg(after_id)
+ORDER BY id
+LIMIT $1;
+
 -- name: GetPatronRequestsFacets :many
 -- TEMPLATE: 'requester_symbol' (value) and 'requester_name' (label) are placeholder
 -- column names. This query is not meant to be called directly; use

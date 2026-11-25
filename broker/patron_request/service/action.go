@@ -26,6 +26,7 @@ import (
 	"github.com/indexdata/crosslink/broker/ncipclientv1"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
+	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/shim"
 	dirapi "github.com/indexdata/crosslink/directory/api"
@@ -276,6 +277,8 @@ func (a *PatronRequestActionService) executeAction(ctx common.ExtendedContext, e
 	if a.lmsCreator == nil {
 		return logActionErrorAndReturnResult(ctx, "LMS creator not configured", nil)
 	}
+	ctx, cancel := repo.BatchIOContext(ctx)
+	defer cancel()
 	illRequest := pr.IllRequest
 	switch pr.Side {
 	case SideBorrowing:
@@ -711,7 +714,7 @@ func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.Exten
 			CommonEventData: events.CommonEventData{Action: &actionName, User: user},
 			CustomData:      withStaticActionParams(nil, action.Params),
 		}
-		eventID, err := a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, parentEventID, events.SignalConsumers)
+		eventID, err := events.WithWorkerContext(a.eventBus, ctx).CreateTask(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, parentEventID, events.SignalConsumers)
 		if err != nil {
 			return &autoActionFailure{action: actionName, msg: err.Error()}
 		}
@@ -845,7 +848,7 @@ func (a *PatronRequestActionService) createRequesterLmsAdapter(ctx common.Extend
 		customData["lmsOutgoingMessage"] = outgoing
 		customData["lmsIncomingMessage"] = incoming
 		eventData := events.EventData{CustomData: customData}
-		_, createErr := a.eventBus.CreateNoticeWithParent(pr.ID, events.EventNameLmsRequesterMessage, eventData, status, events.EventDomainPatronRequest, &eventID, events.SignalConsumers)
+		_, createErr := events.WithWorkerContext(a.eventBus, ctx).CreateNoticeWithParent(pr.ID, events.EventNameLmsRequesterMessage, eventData, status, events.EventDomainPatronRequest, &eventID, events.SignalConsumers)
 		if createErr != nil {
 			ctx.Logger().Error("failed to create LMS log event", "error", createErr)
 		}
@@ -870,7 +873,7 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 			"lmsIncomingMessage": incoming,
 		}
 		eventData := events.EventData{CustomData: customData}
-		_, createErr := a.eventBus.CreateNoticeWithParent(pr.ID, events.EventNameLmsSupplierMessage, eventData, status, events.EventDomainPatronRequest, &eventID, events.SignalConsumers)
+		_, createErr := events.WithWorkerContext(a.eventBus, ctx).CreateNoticeWithParent(pr.ID, events.EventNameLmsSupplierMessage, eventData, status, events.EventDomainPatronRequest, &eventID, events.SignalConsumers)
 		if createErr != nil {
 			ctx.Logger().Error("failed to create LMS log event", "error", createErr)
 		}
@@ -2468,7 +2471,9 @@ func (a *PatronRequestActionService) createAndSendEmail(ctx common.ExtendedConte
 	if messageErr != nil {
 		return fmt.Errorf("build email message: %w", messageErr)
 	}
-	sendErr := a.emailService.SendEmail(from, recipients, raw)
+	sendCtx, cancel := repo.BatchIOContext(ctx)
+	defer cancel()
+	sendErr := email.SendWithContext(sendCtx, a.emailService, from, recipients, raw)
 	if sendErr != nil {
 		return fmt.Errorf("send email: %w", sendErr)
 	}

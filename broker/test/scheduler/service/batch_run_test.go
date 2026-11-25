@@ -18,15 +18,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBatchRunsProceedWithUnfinishedEvents(t *testing.T) {
+func TestBatchRunsIgnoreUntrackedLegacyEvents(t *testing.T) {
 	for _, action := range []string{string(schedoapi.RequestAging), string(schedoapi.EmailPullslips)} {
 		t.Run(action, func(t *testing.T) {
-			testBatchRunsProceedWithUnfinishedEvents(t, action)
+			testBatchRunsIgnoreUntrackedLegacyEvents(t, action)
 		})
 	}
 }
 
-func testBatchRunsProceedWithUnfinishedEvents(t *testing.T, action string) {
+func testBatchRunsIgnoreUntrackedLegacyEvents(t *testing.T, action string) {
 	t.Helper()
 	for _, name := range []events.EventName{events.EventNameInvokeBatchAction, events.EventNameInvokeBackgroundAction} {
 		for _, status := range []events.EventStatus{events.EventStatusNew, events.EventStatusProcessing} {
@@ -93,8 +93,8 @@ func testBatchRunsProceedWithUnfinishedEvents(t *testing.T, action string) {
 				require.NoError(t, err)
 				require.Len(t, list, existingCount+1)
 
-				// Two scheduler replicas must queue one due occurrence despite the
-				// unfinished events, and continue dispatching other due work.
+				// Two scheduler replicas must skip the reserved action once and
+				// continue dispatching other due work.
 				task.Status = sched_db.ScheduledTaskStatusPending
 				task.RunAt = pgtype.Timestamptz{Time: time.Now().Add(-time.Minute), Valid: true}
 				_, err = schedRepo.SaveScheduledTask(appCtx, sched_db.SaveScheduledTaskParams(task))
@@ -115,7 +115,7 @@ func testBatchRunsProceedWithUnfinishedEvents(t *testing.T, action string) {
 				require.Equal(t, []string{other.ID}, bus.getClaims())
 				list, err = eventRepo.GetBatchActionEvents(appCtx, task.ID)
 				require.NoError(t, err)
-				require.Len(t, list, existingCount+2, "the due occurrence must be queued once across replicas")
+				require.Len(t, list, existingCount+1, "the due occurrence must skip the active manual run")
 				saved, err = schedRepo.GetScheduledTaskById(appCtx, task.ID, nil)
 				require.NoError(t, err)
 				require.Equal(t, task.Schedule, saved.Schedule)
@@ -126,16 +126,21 @@ func testBatchRunsProceedWithUnfinishedEvents(t *testing.T, action string) {
 
 func saveEmailBatchRunTask(t *testing.T) sched_db.ScheduledTask {
 	t.Helper()
+	return saveBatchRunTask(t, "ISIL:EMAIL", schedoapi.EmailPullslips)
+}
+
+func saveBatchRunTask(t *testing.T, owner string, action schedoapi.BatchActionName) sched_db.ScheduledTask {
+	t.Helper()
 	params := overdueTask()
 	params.EventName = events.EventNameInvokeBatchAction
 	params.Schedule = "FREQ=DAILY"
-	params.Owner = "ISIL:EMAIL"
+	params.Owner = owner
 	params.Title = pgtype.Text{String: params.ID, Valid: true}
 	params.Status = sched_db.ScheduledTaskStatusStopped
 	params.RunAt = pgtype.Timestamptz{}
 	params.ActionData = events.EventData{
 		CommonEventData: events.CommonEventData{BatchActionData: &events.BatchActionData{
-			TaskId: params.ID, Owner: params.Owner, ActionName: string(schedoapi.EmailPullslips), Selector: "side==lending and state==WILL_SUPPLY",
+			TaskId: params.ID, Owner: params.Owner, ActionName: string(action), Selector: "side==lending and state==WILL_SUPPLY",
 		}},
 		CustomData: map[string]any{"to": []string{"staff@example.com"}, "templateLabel": "pullslip-email", "includePdf": true},
 	}
@@ -148,13 +153,23 @@ func saveEmailBatchRunTask(t *testing.T) sched_db.ScheduledTask {
 	return task
 }
 
-func TestConcurrentManualEmailRunsEachQueue(t *testing.T) {
-	task := saveEmailBatchRunTask(t)
+func TestConcurrentManualEmailRunsReserveOwnerAcrossSchedules(t *testing.T) {
+	requireConcurrentBatchReservation(t, saveEmailBatchRunTask(t), saveEmailBatchRunTask(t))
+}
+
+func TestConcurrentUnrestrictedAndOwnerBatchRunsConflict(t *testing.T) {
+	unrestricted := saveBatchRunTask(t, "", schedoapi.Overdue)
+	scoped := saveBatchRunTask(t, "ISIL:EMAIL", schedoapi.Overdue)
+	requireConcurrentBatchReservation(t, unrestricted, scoped)
+}
+
+func requireConcurrentBatchReservation(t *testing.T, tasks ...sched_db.ScheduledTask) {
+	t.Helper()
 	eventRepo := app.CreateEventRepo(schedRepo.(*sched_db.PgSchedRepo).Pool)
 	handler := schedapi.NewSchedulerApiHandler(10, schedRepo, eventRepo, tenant.NewResolver(), nil)
 	start := make(chan struct{})
 	responses := make(chan *httptest.ResponseRecorder, 2)
-	for range 2 {
+	for _, task := range tasks {
 		go func() {
 			<-start
 			rr := httptest.NewRecorder()
@@ -169,14 +184,18 @@ func TestConcurrentManualEmailRunsEachQueue(t *testing.T) {
 		case rr := <-responses:
 			statuses = append(statuses, rr.Code)
 		case <-time.After(5 * time.Second):
-			t.Fatal("concurrent manual email run did not return")
+			t.Fatal("concurrent manual batch run did not return")
 		}
 	}
-	require.ElementsMatch(t, []int{http.StatusAccepted, http.StatusAccepted}, statuses)
-	list, err := eventRepo.GetBatchActionEvents(appCtx, task.ID)
-	require.NoError(t, err)
-	require.Len(t, list, 2)
-	saved, err := schedRepo.GetScheduledTaskById(appCtx, task.ID, nil)
-	require.NoError(t, err)
-	require.Equal(t, task, saved, "manual runs must preserve the disabled schedule")
+	require.ElementsMatch(t, []int{http.StatusAccepted, http.StatusConflict}, statuses)
+	count := 0
+	for _, task := range tasks {
+		list, err := eventRepo.GetBatchActionEvents(appCtx, task.ID)
+		require.NoError(t, err)
+		count += len(list)
+		saved, err := schedRepo.GetScheduledTaskById(appCtx, task.ID, nil)
+		require.NoError(t, err)
+		require.Equal(t, task, saved, "manual runs must preserve the disabled schedule")
+	}
+	require.Equal(t, 1, count)
 }

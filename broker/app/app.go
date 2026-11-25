@@ -115,6 +115,7 @@ type Context struct {
 	PsApiHandler     psapi.PullSlipApiHandler
 	SchedApiHandler  schedapi.SchedulerApiHandler
 	ImportApiHandler importapi.ApiHandler
+	stopScheduler    context.CancelFunc
 }
 
 func configLog() slog.Handler {
@@ -225,7 +226,9 @@ func Init(ctx context.Context) (Context, error) {
 	}
 
 	schedApiHandler := schedapi.NewSchedulerApiHandler(API_PAGE_SIZE, schedRepo, eventRepo, tenantResolver, prRepo)
-	if err = StartScheduler(ctx, schedRepo, eventBus); err != nil {
+	schedulerCtx, stopScheduler := context.WithCancel(ctx)
+	if err = StartScheduler(schedulerCtx, schedRepo, eventBus); err != nil {
+		stopScheduler()
 		return Context{}, err
 	}
 
@@ -244,6 +247,7 @@ func Init(ctx context.Context) (Context, error) {
 		PsApiHandler:     psApiHandler,
 		SchedApiHandler:  schedApiHandler,
 		ImportApiHandler: importApiHandler,
+		stopScheduler:    stopScheduler,
 	}, nil
 }
 
@@ -266,6 +270,9 @@ func StartServer(ctx Context) error {
 // StartServerWithListener serves HTTP on an already bound listener and closes it
 // when the server stops or initialization fails. It takes ownership of listener.
 func StartServerWithListener(ctx Context, listener net.Listener) error {
+	if ctx.stopScheduler != nil {
+		defer ctx.stopScheduler()
+	}
 	defer func() { _ = listener.Close() }()
 	ServeMux = http.NewServeMux()
 	oapiValidator, err := newOpenAPIRequestValidator()
@@ -332,11 +339,25 @@ func StartServerWithListener(ctx Context, listener net.Listener) error {
 	case sig := <-shutdown:
 		appCtx.Logger().Info("HTTP server shutdown initiated", "signal", sig)
 		// give outstanding requests a timeout to complete
-		ctx, cancel := context.WithTimeout(appCtx, SHUTDOWN_DELAY)
+		if ctx.stopScheduler != nil {
+			ctx.stopScheduler()
+		}
+		shutdownCtx, cancel := context.WithTimeout(appCtx, SHUTDOWN_DELAY)
 		defer cancel()
-		if err := server.Shutdown(ctx); err != nil {
+		drained := make(chan error, 1)
+		go func() {
+			if bus, ok := ctx.EventBus.(*events.PostgresEventBus); ok {
+				drained <- bus.DrainBatchWorkers(shutdownCtx)
+				return
+			}
+			drained <- nil
+		}()
+		if err := server.Shutdown(shutdownCtx); err != nil {
 			server.Close()
 			return fmt.Errorf("HTTP server could not shutdown gracefully: %w", err)
+		}
+		if err := <-drained; err != nil {
+			appCtx.Logger().Warn("batch worker drain ended before all workers finished", "error", err)
 		}
 		appCtx.Logger().Info("HTTP server shutdown complete")
 		return nil

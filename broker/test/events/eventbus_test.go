@@ -300,28 +300,31 @@ func TestBroadcastTaskLifecycleHandlersDoNotDuplicateCoreHandlers(t *testing.T) 
 	assert.NoError(t, err, "event should exist")
 }
 
-func TestCreateTask(t *testing.T) {
-	var requestReceived []events.Event
-	eventBus.HandleEventCreated(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
-		requestReceived = append(requestReceived, event)
-	})
-	illId := apptest.GetIllTransId(t, illRepo)
-
-	_, err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, events.EventDomainIllTransaction, nil, events.SignalConsumers)
-	if err != nil {
-		t.Errorf("Task should be created without errors: %s", err)
-	}
-
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(requestReceived) == 1
-	}) {
-		t.Error("Expected to have request event received")
-	}
-
-	if requestReceived[0].IllTransactionID != illId {
-		t.Errorf("Ill transaction id does not match, expected %s, got %s", illId, requestReceived[0].IllTransactionID)
+func requireReceivedEvent(t *testing.T, eventsReceived <-chan events.Event) events.Event {
+	t.Helper()
+	select {
+	case event := <-eventsReceived:
+		return event
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected to receive an event")
+		return events.Event{}
 	}
 }
+
+func TestCreateTask(t *testing.T) {
+	illID := apptest.GetIllTransId(t, illRepo)
+	received := make(chan events.Event, 1)
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(_ common.ExtendedContext, event events.Event) {
+		if event.IllTransactionID == illID {
+			received <- event
+		}
+	})
+
+	_, err := eventBus.CreateTask(illID, events.EventNameRequestReceived, events.EventData{}, events.EventDomainIllTransaction, nil, events.SignalConsumers)
+	require.NoError(t, err)
+	assert.Equal(t, illID, requireReceivedEvent(t, received).IllTransactionID)
+}
+
 func TestTransactionRollback(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	eventId := uuid.New().String()
@@ -408,103 +411,59 @@ func TestGetBatchActionEvents(t *testing.T) {
 }
 
 func TestCreateNotice(t *testing.T) {
-	var eventReceived []events.Event
-	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
-		eventReceived = append(eventReceived, event)
+	illID := apptest.GetIllTransId(t, illRepo)
+	received := make(chan events.Event, 1)
+	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, events.HandlerRoleConsumer, func(_ common.ExtendedContext, event events.Event) {
+		if event.IllTransactionID == illID {
+			received <- event
+		}
 	})
 
-	illId := apptest.GetIllTransId(t, illRepo)
-
-	_, err := eventBus.CreateNotice(illId, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventDomainIllTransaction, events.SignalConsumers)
-	if err != nil {
-		t.Errorf("Task should be created without errors: %s", err)
-	}
-
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(eventReceived) == 1
-	}) {
-		t.Error("Expected to have request event received")
-	}
-
-	if eventReceived[0].IllTransactionID != illId {
-		t.Errorf("Ill transaction id does not match, expected %s, got %s", illId, eventReceived[0].IllTransactionID)
-	}
-
-	if eventReceived[0].EventStatus != events.EventStatusSuccess {
-		t.Errorf("Event status does not match, expected %s, got %s", events.EventStatusSuccess, eventReceived[0].EventStatus)
-	}
+	_, err := eventBus.CreateNotice(illID, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventDomainIllTransaction, events.SignalConsumers)
+	require.NoError(t, err)
+	event := requireReceivedEvent(t, received)
+	assert.Equal(t, illID, event.IllTransactionID)
+	assert.Equal(t, events.EventStatusSuccess, event.EventStatus)
 }
 
 func TestBeginAndCompleteTask(t *testing.T) {
-	var eventsReceived []events.Event
-	var eventsStarted []events.Event
-	var eventsCompleted []events.Event
-	eventBus.HandleEventCreated(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
-		eventsReceived = append(eventsReceived, event)
-	})
-	eventBus.HandleTaskStarted(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
-		eventsStarted = append(eventsStarted, event)
-	})
-	eventBus.HandleTaskCompleted(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
-		eventsCompleted = append(eventsCompleted, event)
-	})
+	illID := apptest.GetIllTransId(t, illRepo)
+	received := make(chan events.Event, 1)
+	started := make(chan events.Event, 1)
+	completed := make(chan events.Event, 1)
+	capture := func(sink chan<- events.Event) func(common.ExtendedContext, events.Event) {
+		return func(_ common.ExtendedContext, event events.Event) {
+			if event.IllTransactionID == illID {
+				sink <- event
+			}
+		}
+	}
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, events.HandlerRoleConsumer, capture(received))
+	eventBus.HandleTaskStarted(events.EventNameRequestReceived, events.HandlerRoleConsumer, capture(started))
+	eventBus.HandleTaskCompleted(events.EventNameRequestReceived, events.HandlerRoleConsumer, capture(completed))
 
-	illId := apptest.GetIllTransId(t, illRepo)
+	eventID, err := eventBus.CreateTask(illID, events.EventNameRequestReceived, events.EventData{}, events.EventDomainIllTransaction, nil, events.SignalConsumers)
+	require.NoError(t, err)
+	event := requireReceivedEvent(t, received)
+	assert.Equal(t, illID, event.IllTransactionID)
+	assert.Equal(t, eventID, event.ID)
 
-	_, err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, events.EventDomainIllTransaction, nil, events.SignalConsumers)
-	if err != nil {
-		t.Errorf("Task should be created without errors: %s", err)
-	}
+	event, err = eventRepo.GetEvent(common.CreateExtCtxWithArgs(context.Background(), nil), eventID)
+	require.NoError(t, err)
+	assert.Equal(t, events.EventTypeTask, event.EventType)
+	assert.Equal(t, events.EventStatusNew, event.EventStatus)
 
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(eventsReceived) == 1
-	}) {
-		t.Error("Expected to have request event received")
-	}
+	_, err = eventBus.BeginTask(eventID, events.SignalConsumers)
+	require.NoError(t, err)
+	event = requireReceivedEvent(t, started)
+	assert.Equal(t, eventID, event.ID)
+	assert.Equal(t, events.EventStatusProcessing, event.EventStatus)
 
-	if eventsReceived[0].IllTransactionID != illId {
-		t.Errorf("Ill transaction id does not match, expected %s, got %s", illId, eventsReceived[0].IllTransactionID)
-	}
-
-	eventId := eventsReceived[0].ID
-
-	event, err := eventRepo.GetEvent(common.CreateExtCtxWithArgs(context.Background(), nil), eventId)
-	assert.NoError(t, err, "Should not be error getting event")
-	assert.Equal(t, events.EventTypeTask, event.EventType, "Event type should be TASK")
-	assert.Equal(t, events.EventStatusNew, event.EventStatus, "Event status should be NEW")
-
-	_, err = eventBus.BeginTask(eventId, events.SignalConsumers)
-	if err != nil {
-		t.Errorf("Task should be started: %s", err)
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(eventsStarted) == 1
-	}) {
-		t.Error("Expected to have request event received")
-	}
-	if eventsStarted[0].ID != eventId {
-		t.Errorf("Event id does not match, expected %s, got %s", eventId, eventsStarted[0].ID)
-	}
-	if eventsStarted[0].EventStatus != events.EventStatusProcessing {
-		t.Errorf("Event status does not match, expected %s, got %s", eventId, eventsStarted[0].EventStatus)
-	}
-
-	result := events.EventResult{}
-	_, err = eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess, events.SignalConsumers)
-	if err != nil {
-		t.Errorf("Task should be started: %s", err)
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(eventsCompleted) == 1
-	}) {
-		t.Error("Expected to have request event received")
-	}
-	if eventsCompleted[0].ID != eventId {
-		t.Errorf("Event id does not match, expected %s, got %s", eventId, eventsCompleted[0].ID)
-	}
-	if eventsCompleted[0].EventStatus != events.EventStatusSuccess {
-		t.Errorf("Event status does not match, expected %s, got %s", events.EventStatusSuccess, eventsCompleted[0].EventStatus)
-	}
+	_, err = eventBus.CompleteTask(eventID, &events.EventResult{}, events.EventStatusSuccess, events.SignalConsumers)
+	require.NoError(t, err)
+	event = requireReceivedEvent(t, completed)
+	assert.Equal(t, eventID, event.ID)
+	assert.Equal(t, events.EventStatusSuccess, event.EventStatus)
 }
 
 func TestProcessExclusiveTaskFailsWhenOlderIncompleteTaskExists(t *testing.T) {
@@ -623,42 +582,31 @@ func TestFailedToConnect(t *testing.T) {
 }
 
 func TestReconnectListener(t *testing.T) {
-	// Force App to reconnect to postgres LISTENER
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		conn, err := pgx.Connect(context.Background(), app.ConnectionString)
-		if err != nil {
-			t.Errorf("reconnect test unable to connect to database: %s", err)
-		}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := pgx.Connect(ctx, app.ConnectionString)
+	require.NoError(t, err)
+	defer conn.Close(context.Background())
 
-		_, err = conn.Exec(context.Background(), "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state = 'idle' AND query LIKE 'LISTEN%'")
-		if err != nil {
-			t.Errorf("reconnect test unable to kill listen command: %s", err)
-		}
-	}()
-	wg.Wait()
-	// Wait for reconnect
-	time.Sleep(2000 * time.Millisecond)
+	const listener = "FROM pg_stat_activity WHERE state = 'idle' AND query = 'LISTEN crosslink_channel'"
+	_, err = conn.Exec(ctx, "SELECT pg_terminate_backend(pid) "+listener)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		var active bool
+		err := conn.QueryRow(ctx, "SELECT EXISTS (SELECT 1 "+listener+")").Scan(&active)
+		return err == nil && active
+	}, 4*time.Second, 20*time.Millisecond)
 
-	var eventReceived []events.Event
-	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
-		eventReceived = append(eventReceived, event)
+	illID := apptest.GetIllTransId(t, illRepo)
+	received := make(chan events.Event, 1)
+	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, events.HandlerRoleConsumer, func(_ common.ExtendedContext, event events.Event) {
+		if event.IllTransactionID == illID {
+			received <- event
+		}
 	})
-
-	illId := apptest.GetIllTransId(t, illRepo)
-
-	_, err := eventBus.CreateNotice(illId, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventDomainIllTransaction, events.SignalConsumers)
-	if err != nil {
-		t.Errorf("Task should be created without errors: %s", err)
-	}
-
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(eventReceived) == 1
-	}) {
-		t.Error("Expected to have request event received")
-	}
+	_, err = eventBus.CreateNotice(illID, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventDomainIllTransaction, events.SignalConsumers)
+	require.NoError(t, err)
+	assert.Equal(t, illID, requireReceivedEvent(t, received).IllTransactionID)
 }
 
 func TestCreateTaskPreservesPostgresInsertErrorAndRollsBack(t *testing.T) {

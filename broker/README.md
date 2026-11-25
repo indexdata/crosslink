@@ -262,11 +262,6 @@ Owner scoping still applies. Reading actions and their history uses existing
 read permissions. Import is available only through trusted master access and
 accepts this action with the same configuration validation.
 
-`POST /batch_actions/{id}/run` (or `/broker/batch_actions/{id}/run`) queues one
-manual run and returns `202`. It preserves the saved schedule and enabled state,
-so a disabled action can be run once without enabling it. Okapi callers need
-`broker.batch_actions.item.run.post`. Scheduled and manual batch runs can overlap,
-including while earlier batch events or background actions remain unfinished.
 Archive operations use database locking and atomic checks for each resource.
 
 The legacy `archive` binary, `POST /archive_ill_transactions`, `call_archive.sh`,
@@ -359,7 +354,7 @@ Configuration is provided via environment variables:
 |                                  | `illConfig.noteFieldSeparator` .                   |                                           |
 | `CLIENT_DELAY`                   | Delay duration for outgoing ISO18626 messages      | `0ms`                                     |
 | `SHUTDOWN_DELAY`                 | Delay duration for graceful shutdown (in-flight    | `15s`                                     |
-|                                  | connections)                                       |                                           |
+|                                  | HTTP connections and batch workers)                |                                           |
 | `MAX_MESSAGE_SIZE`               | Max accepted ISO18626 message size                 | `100KB`                                   |
 | `HOLDINGS_ADAPTER`               | Comma-separated, ordered list of holdings lookup   | `mock`                                    |
 |                                  | methods: `mock` , `sru` and/or `consortium` (e.g.  |                                           |
@@ -403,8 +398,8 @@ Configuration is provided via environment variables:
 |                                  | Request on supplier side Deprecated: use supplier  |                                           |
 |                                  | `illConfig.supplierPatronPattern` .                |                                           |
 | `LANGUAGE`                       | Language parameter used for ts_vector search in DB | `english`                                 |
-| `SCHEDULER_RETRY_DELAY`          | Delay for failed tasks, pull-slip email runs       | `5m`                                      |
-|                                  | waiting for prior work, and fallback polling       |                                           |
+| `SCHEDULER_RETRY_DELAY`          | Scheduler polling and one-off task recovery delay  | `5m`                                      |
+| `BATCH_WORKER_LEASE`             | Worker ownership duration, from 1s to 30m           | `5m`                                      |
 | `SMTP_HOST`                      | SMTP server host for sending emails, if not        | (empty value)                             |
 |                                  | configured all email tasks will fail               |                                           |
 | `SMTP_PORT`                      | SMTP server port                                   | `2525`                                    |
@@ -521,6 +516,43 @@ While requester conditions are pending, `accept-condition` agrees to the supplie
 For Loan and CopyOrLoan requests, generating a pull-slip PDF queues the `pullslip-printed` action for the included eligible supplier requests. Accepted conditions return the supplier to `WILL_SUPPLY`. Printing moves `WILL_SUPPLY` to `SEARCHING` (picking and awaiting shipment). Reprinting in `SEARCHING` leaves the state unchanged. The `ship` action is available only in `SEARCHING`. Copy delivery remains available without this loan workflow.
 
 The `email-pullslips` batch queues the same action after SMTP successfully accepts an email containing a PDF. Emails without PDFs and failed generation or sending do not advance requests. Actions run asynchronously and recheck the current state. If queuing fails after output, the operation reports an error; retrying may reproduce the PDF or email, while repeated `pullslip-printed` actions in `SEARCHING` are harmless. Existing saved batch queries are not rewritten; use `WILL_SUPPLY` for pull-slip queries and include `SEARCHING` in aging queries as needed.
+
+### Batch runs and recovery
+
+`email-pullslips`, `request-aging`, and `overdue` reserve an action for its owner
+across all saved schedules and broker replicas. An unrestricted run reserves the
+action for all owners. The reservation includes background and inline tasks
+created by the run. Scheduled occurrences that conflict are skipped and logged.
+Archive actions use their existing per-resource checks.
+
+After a worker stops renewing its lease, a broker marks its unfinished tasks
+`ERROR` in batch-action history. Live sibling tasks keep running. Startup and a
+15-second poll recover expired workers and pick up queued work even if a
+notification was missed. The initial worker lease is five minutes by default,
+renewed every third of the configured interval, with a 30-minute cap. Each
+broker runs up to eight batch workers. Shutdown gives active workers up to
+`SHUTDOWN_DELAY` to complete.
+
+To rerun a saved action, find its ID in `GET /batch_actions` and inspect its
+history at `GET /batch_actions/{id}/events`. When unfinished tasks have completed or expired, send a POST to the action's
+`runLink` (`/batch_actions/{id}/run`).
+A `202` queues a fresh run with the saved configuration and preserves the
+schedule and enabled state. A `409` means a conflicting run is still active.
+Okapi callers can use the `/broker` prefix and need
+`broker.batch_actions.item.run.post` plus the action's usual authorization.
+Scheduled actions also continue at their next occurrence.
+
+SMTP delivery stops after 30 seconds or at the worker's lease deadline,
+whichever comes first. A successful final DATA response counts as delivery.
+A dropped connection during the DATA response, or an interruption after SMTP
+accepted the email and before the request actions completed, can produce
+duplicate slips on a later run. Review the run history and check whether staff
+received the email before rerunning. Pull-slip actions recheck request state.
+
+Before applying migration 083, drain and stop all older broker replicas.
+The migration marks leftover batch tasks from those replicas as interrupted.
+Start the upgraded replicas before using the run endpoint.
+
 
 ## Action results and automatic execution
 

@@ -1,6 +1,7 @@
 package lms
 
 import (
+	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -51,7 +52,7 @@ func (l *LmsAdapterNcip) requestItemRequestScopeType() string {
 	return autoRequestScope
 }
 
-func createResolvedLmsAdapterNcip2(lmsConfig dirapi.LmsConfig) (LmsAdapter, error) {
+func createResolvedLmsAdapterNcip2(ctx context.Context, lmsConfig dirapi.LmsConfig) (LmsAdapter, error) {
 	l := &LmsAdapterNcip{config: lmsConfig}
 	toAgency := "default-to-agency"
 	if l.config.ToAgency != nil {
@@ -68,7 +69,7 @@ func createResolvedLmsAdapterNcip2(lmsConfig dirapi.LmsConfig) (LmsAdapter, erro
 		return nil, fmt.Errorf("missing From Agency in LMS configuration")
 	}
 	disableNamespace := l.config.NcipNamespaceEnabled != nil && !*l.config.NcipNamespaceEnabled
-	l.ncipClient = ncipclient.NewNcipClient(http.DefaultClient, l.config.Address, l.config.FromAgency, toAgency, FromAgencyAuthentication, disableNamespace)
+	l.ncipClient = ncipclient.NewNcipClientWithContext(ctx, http.DefaultClient, l.config.Address, l.config.FromAgency, toAgency, FromAgencyAuthentication, disableNamespace)
 	return l, nil
 }
 

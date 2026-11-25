@@ -36,35 +36,49 @@ func (s *BatchActionService) Overdue(ctx common.ExtendedContext, event events.Ev
 	if err != nil {
 		return events.NewErrorResult("invalid overdue selector", err.Error())
 	}
-	// Do not filter needs_attention: failed sends must be retried on later runs.
-	requests, _, err := s.prRepo.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: 2147483647}, query)
-	if err != nil {
-		return events.NewErrorResult("cannot select overdue loans", err.Error())
-	}
+	// Do not filter needs_attention: failed sends remain eligible next time.
+	const pageSize = 250
 	result := &events.EventResult{CustomData: map[string]any{}}
 	action := prservice.LenderActionOverdue
-	queued := 0
-	for _, request := range requests {
-		mapping, err := s.actionMappingService.GetActionMapping(request.IllRequest)
+	workerBus := events.WithWorkerContext(s.eventBus, ctx)
+	queued, failed := 0, 0
+	afterID := ""
+	for {
+		requests, err := s.prRepo.ListOverdueBatchCandidates(ctx, pageSize, afterID, query)
 		if err != nil {
-			result.CustomData[request.ID] = err.Error()
-			continue
+			return events.NewErrorResult("cannot select overdue loans", err.Error())
 		}
-		if !mapping.IsActionSupported(request, action) {
-			continue
+		for _, request := range requests {
+			if err := ctx.Err(); err != nil {
+				return events.NewErrorResult("overdue batch interrupted", err.Error())
+			}
+			mapping, err := s.actionMappingService.GetActionMapping(request.IllRequest)
+			if err == nil {
+				if !mapping.IsActionSupported(request, action) {
+					continue
+				}
+				child := *data
+				_, err = workerBus.CreateTask(request.ID, events.EventNameInvokeBackgroundAction,
+					events.EventData{CommonEventData: events.CommonEventData{Action: &action, BatchActionData: &child}},
+					events.EventDomainPatronRequest, &event.ID, events.SignalConsumers)
+			}
+			if err != nil {
+				failed++
+				if len(result.CustomData) < pageSize {
+					result.CustomData[request.ID] = err.Error()
+				}
+				continue
+			}
+			queued++
 		}
-		child := *data
-		_, err = s.eventBus.CreateTask(request.ID, events.EventNameInvokeBackgroundAction,
-			events.EventData{CommonEventData: events.CommonEventData{Action: &action, BatchActionData: &child}},
-			events.EventDomainPatronRequest, &event.ID, events.SignalConsumers)
-		if err != nil {
-			result.CustomData[request.ID] = err.Error()
-			continue
+		if len(requests) < pageSize {
+			break
 		}
-		queued++
+		afterID = requests[len(requests)-1].ID
 	}
 	result.Note = fmt.Sprintf("queued overdue actions for %d loans", queued)
-	if len(result.CustomData) > 0 {
+	if failed > 0 {
+		result.Note += fmt.Sprintf(", failed to queue %d loans", failed)
 		return events.EventStatusError, result
 	}
 	return events.EventStatusSuccess, result

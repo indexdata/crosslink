@@ -54,8 +54,6 @@ type mockSchedRepo struct {
 	lockErrors            map[string]error
 	queuedBatchActions    []sched_db.ScheduledTask
 	queueBatchActionError error
-	activeBatchActions    map[string]bool
-	activeCheckTaskIDs    []string
 }
 
 func (m *mockSchedRepo) WithTxFunc(ctx common.ExtendedContext, fn func(sched_db.SchedRepo) error) error {
@@ -83,11 +81,6 @@ func (m *mockSchedRepo) SaveScheduledTask(_ common.ExtendedContext, p sched_db.S
 func (m *mockSchedRepo) QueueBatchActionRun(_ common.ExtendedContext, task sched_db.ScheduledTask) error {
 	m.queuedBatchActions = append(m.queuedBatchActions, task)
 	return m.queueBatchActionError
-}
-
-func (m *mockSchedRepo) HasActiveBatchActionEvents(_ common.ExtendedContext, taskID string) (bool, error) {
-	m.activeCheckTaskIDs = append(m.activeCheckTaskIDs, taskID)
-	return m.activeBatchActions[taskID], nil
 }
 
 func (m *mockSchedRepo) GetNextRunAt(_ common.ExtendedContext) (pgtype.Timestamptz, error) {
@@ -410,15 +403,14 @@ func TestRunDueTasks_BatchActionQueuesInTransaction(t *testing.T) {
 	require.Len(t, repo.savedTasks, 1)
 	require.Equal(t, sched_db.ScheduledTaskStatusPending, repo.savedTasks[0].Status)
 	require.True(t, repo.savedTasks[0].RunAt.Time.After(time.Now()))
-	require.Empty(t, repo.activeCheckTaskIDs, "batch runs may overlap")
 }
 
-func TestRunDueTasks_ActiveEmailBatchQueuesWithoutBlockingOtherTasks(t *testing.T) {
+func TestRunDueTasks_SkipsOverlappingBatchAndContinuesDispatch(t *testing.T) {
 	batch := sched_db.ScheduledTask{ID: "email", EventName: events.EventNameInvokeBatchAction, Schedule: "FREQ=DAILY",
 		ActionData: events.EventData{CommonEventData: events.CommonEventData{BatchActionData: &events.BatchActionData{ActionName: string(schedoapi.EmailPullslips)}}}}
 	repo := &mockSchedRepo{
-		claimResults:       []sched_db.ScheduledTask{batch, {ID: "other", EventName: events.EventNameSendNotification}},
-		activeBatchActions: map[string]bool{batch.ID: true},
+		claimResults:          []sched_db.ScheduledTask{batch, {ID: "other", EventName: events.EventNameSendNotification}},
+		queueBatchActionError: sched_db.ErrBatchActionRunActive,
 	}
 	bus := &mockEventBus{}
 	svc := &SchedulerService{schedRepo: repo, eventBus: bus}
@@ -427,7 +419,6 @@ func TestRunDueTasks_ActiveEmailBatchQueuesWithoutBlockingOtherTasks(t *testing.
 
 	require.Equal(t, []sched_db.ScheduledTask{batch}, repo.queuedBatchActions)
 	require.Equal(t, []events.EventName{events.EventNameSendNotification}, bus.createdTaskNames)
-	require.Empty(t, repo.activeCheckTaskIDs)
 	require.Len(t, repo.savedTasks, 2)
 	rescheduled := repo.savedTasks[0]
 	require.Equal(t, batch.ID, rescheduled.ID)

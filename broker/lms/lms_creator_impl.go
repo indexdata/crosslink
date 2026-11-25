@@ -1,6 +1,7 @@
 package lms
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/indexdata/crosslink/broker/adapter"
@@ -36,7 +37,7 @@ func (l *lmsCreatorImpl) GetAdapter(ctx common.ExtendedContext, symbol string) (
 		// Diagnostics excludes endpoints, credentials, and other sensitive settings.
 		ctx.Logger().Debug("resolved host profiles", "configuration", effective.Diagnostics())
 		if effective.LMS != nil && effective.LMS.Address != "" {
-			return createResolvedLmsAdapterNcip(*effective.LMS)
+			return createResolvedLmsAdapterNcip(ctx, *effective.LMS)
 		}
 	}
 	return CreateLmsAdapterMockOK(), nil
@@ -48,19 +49,19 @@ func CreateLmsAdapterNcip(lmsConfig dirapi.LmsConfig) (LmsAdapter, error) {
 	if err != nil {
 		return nil, err
 	}
-	return createResolvedLmsAdapterNcip(*effective.LMS)
+	return createResolvedLmsAdapterNcip(context.Background(), *effective.LMS)
 }
 
 // createResolvedLmsAdapterNcip selects the wire version after resolving profiles.
-func createResolvedLmsAdapterNcip(lmsConfig dirapi.LmsConfig) (LmsAdapter, error) {
+func createResolvedLmsAdapterNcip(ctx context.Context, lmsConfig dirapi.LmsConfig) (LmsAdapter, error) {
 	if lmsConfig.NcipVersion != nil {
 		switch *lmsConfig.NcipVersion {
 		case "1.0":
-			return createResolvedLmsAdapterNcip1(lmsConfig)
+			return createResolvedLmsAdapterNcip1(ctx, lmsConfig)
 		case "2.02":
 		default:
 			return nil, fmt.Errorf("unsupported ncipVersion %q", *lmsConfig.NcipVersion)
 		}
 	}
-	return createResolvedLmsAdapterNcip2(lmsConfig)
+	return createResolvedLmsAdapterNcip2(ctx, lmsConfig)
 }

@@ -1,15 +1,16 @@
 package events
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math/rand"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/repo"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -51,7 +52,9 @@ type PostgresEventBus struct {
 	repo             EventRepo
 	ctx              common.ExtendedContext
 	ConnectionString string
+	handlersMu       *sync.RWMutex
 	handlers         map[Signal]map[HandlerRole]map[EventName][]func(ctx common.ExtendedContext, event Event)
+	batch            *batchWorkers
 	randGen          *rand.Rand // local random generator to avoid same seed for all instance, only needed in Go < 1.20
 }
 
@@ -59,6 +62,8 @@ func NewPostgresEventBus(repo EventRepo, connString string) *PostgresEventBus {
 	return &PostgresEventBus{
 		repo:             repo,
 		ConnectionString: connString,
+		handlersMu:       &sync.RWMutex{},
+		handlers:         make(map[Signal]map[HandlerRole]map[EventName][]func(common.ExtendedContext, Event)),
 		// #nosec G404 - math/rand is sufficient for connection jitter
 		randGen: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
@@ -66,84 +71,82 @@ func NewPostgresEventBus(repo EventRepo, connString string) *PostgresEventBus {
 
 func (p *PostgresEventBus) Start(ctx common.ExtendedContext) error {
 	p.ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(EB_COMP))
-	var conn *pgx.Conn
-	var err error
-
-	connectAndListen := func() error {
-		conn, err = pgx.Connect(ctx, p.ConnectionString)
-		if err != nil {
-			ctx.Logger().Error("unable to connect to database", "error", err)
-			return err
-		}
-
-		_, err = conn.Exec(ctx, "LISTEN "+EVENT_BUS_CHANNEL)
-		if err != nil {
-			ctx.Logger().Error("unable to listen to channel", "channel", EVENT_BUS_CHANNEL, "error", err)
-			return err
-		}
-
-		ctx.Logger().Info("successfully connected and listening to channel", "channel", EVENT_BUS_CHANNEL)
-		return nil
-	}
-
-	if err = connectAndListen(); err != nil {
+	conn, err := p.connectListener()
+	if err != nil {
 		return err
 	}
-
-	go func() {
-		for {
-			notification, er := conn.WaitForNotification(ctx)
-			if er != nil {
-				ctx.Logger().Error("unable to receive notification", "error", err, "channel", EVENT_BUS_CHANNEL)
-
-				if er.Error() == "conn closed" {
-					ctx.Logger().Warn("connection closed, attempting to reconnect")
-
-					baseDelay := 1 * time.Second
-					maxDelay := 30 * time.Second
-					delay := baseDelay
-
-					for {
-						// add random duration for jitter between instances
-						jitter := time.Duration(p.randGen.Intn(500)) * time.Millisecond
-
-						select {
-						case <-time.After(delay + jitter):
-							// Wait for the delay and continue to retry
-						case <-ctx.Done():
-							ctx.Logger().Info("context cancelled during reconnect, stopping retries")
-							return // Exit goroutine if parent context is cancelled
-						}
-
-						if err = connectAndListen(); err == nil {
-							ctx.Logger().Info("successfully reconnected")
-							break // Exit the retry loop on success
-						}
-						ctx.Logger().Error("reconnection attempt failed", "error", err, "next_try_in", delay)
-
-						// Gradually increase the delay for the next attempt
-						delay = time.Duration(float64(delay) * 1.5)
-						if delay > maxDelay {
-							delay = maxDelay
-						}
-					}
-				}
-				if strings.Contains(er.Error(), "context canceled") {
-					ctx.Logger().Error("context cancelled, terminating")
-					break
-				}
-				continue
-			}
-
-			var notifyData NotifyData
-			var err = json.Unmarshal([]byte(notification.Payload), &notifyData)
-			if err != nil {
-				ctx.Logger().Error("failed to unmarshal notification", "error", err, "payload", notification.Payload)
-			}
-			go p.handleNotify(notifyData)
-		}
-	}()
+	if db, ok := p.repo.(*PgEventRepo); ok {
+		p.startBatchWorkers(db)
+	}
+	go p.listen(conn)
 	return nil
+}
+
+func (p *PostgresEventBus) connectListener() (*pgx.Conn, error) {
+	ctx, cancel := context.WithTimeout(p.ctx, batchPollInterval)
+	defer cancel()
+	conn, err := pgx.Connect(ctx, p.ConnectionString)
+	if err != nil {
+		return nil, fmt.Errorf("connect event listener: %w", err)
+	}
+	if _, err = conn.Exec(ctx, "LISTEN "+EVENT_BUS_CHANNEL); err != nil {
+		closeEventListener(conn)
+		return nil, fmt.Errorf("listen on event channel: %w", err)
+	}
+	return conn, nil
+}
+
+func closeEventListener(conn *pgx.Conn) {
+	ctx, cancel := context.WithTimeout(context.Background(), batchPollInterval)
+	defer cancel()
+	_ = conn.Close(ctx)
+}
+
+func (p *PostgresEventBus) listen(conn *pgx.Conn) {
+	for {
+		notification, err := conn.WaitForNotification(p.ctx)
+		if err != nil {
+			closeEventListener(conn)
+			if p.ctx.Err() != nil {
+				return
+			}
+			p.ctx.Logger().Warn("event listener disconnected", "error", err)
+			conn = p.reconnectListener()
+			if conn == nil {
+				return
+			}
+			p.wakeBatchWorkers()
+			continue
+		}
+		var data NotifyData
+		if err := json.Unmarshal([]byte(notification.Payload), &data); err != nil {
+			p.ctx.Logger().Error("decode event notification", "error", err)
+			continue
+		}
+		if data.Target == SignalBatchWorkers {
+			p.wakeBatchWorkers()
+			continue
+		}
+		go p.handleNotify(data)
+	}
+}
+
+func (p *PostgresEventBus) reconnectListener() *pgx.Conn {
+	delay := time.Second
+	for {
+		jitter := time.Duration(p.randGen.Intn(500)) * time.Millisecond
+		select {
+		case <-time.After(delay + jitter):
+		case <-p.ctx.Done():
+			return nil
+		}
+		conn, err := p.connectListener()
+		if err == nil {
+			return conn
+		}
+		p.ctx.Logger().Warn("reconnect event listener", "error", err)
+		delay = min(delay+delay/2, 30*time.Second)
+	}
 }
 
 func (p *PostgresEventBus) handleNotify(data NotifyData) {
@@ -164,7 +167,19 @@ func (p *PostgresEventBus) handleNotify(data NotifyData) {
 	}
 
 	if data.Target == SignalConsumers || data.Target == SignalAll {
-		claimedEvent, claimErr := p.repo.ClaimEventForSignal(p.ctx, data.Event, data.Signal)
+		eventCtx := p.getEventContext(&event)
+		if event.EventData.BatchWorkerID != "" && (data.Signal == SignalTaskCreated || data.Signal == SignalNoticeCreated) {
+			var cancel context.CancelFunc
+			eventCtx, cancel, err = p.delegatedBatchContext(eventCtx, event.EventData.BatchWorkerID)
+			if err != nil {
+				if !errors.Is(err, pgx.ErrNoRows) {
+					eventCtx.Logger().Warn("load delegated batch lease", "error", err)
+				}
+				return
+			}
+			defer cancel()
+		}
+		claimedEvent, claimErr := p.repo.ClaimEventForSignal(eventCtx, data.Event, data.Signal)
 		if claimErr != nil {
 			if !errors.Is(claimErr, pgx.ErrNoRows) {
 				p.ctx.Logger().Error("failure claiming event", "error", claimErr, "eventId", data.Event, "signal", data.Signal, "target", data.Target)
@@ -173,7 +188,7 @@ func (p *PostgresEventBus) handleNotify(data NotifyData) {
 			}
 			return
 		}
-		triggerHandlers(p.getEventContext(&claimedEvent), claimedEvent, p.getHandlers(data.Signal, HandlerRoleConsumer, claimedEvent.EventName), data.Signal)
+		triggerHandlers(eventCtx, claimedEvent, p.getHandlers(data.Signal, HandlerRoleConsumer, claimedEvent.EventName), data.Signal)
 	}
 }
 
@@ -204,6 +219,53 @@ func (p *PostgresEventBus) CreateTask(classId string, eventName EventName, data 
 	id := uuid.New().String()
 	illTransactionID, patronRequestID := getIllTransactionAndPatronRequestId(classId, eventDomain)
 	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
+		var run BatchActionRun
+		var workerID string
+		if tx, ok := eventRepo.(*PgEventRepo); ok && parentId != nil &&
+			(eventName == EventNameInvokeAction || eventName == EventNameInvokeBackgroundAction) {
+			var err error
+			run, err = tx.lockBatchRunForEvent(p.ctx, *parentId)
+			if err != nil {
+				return err
+			}
+			if run.ID != "" {
+				if err := tx.checkBatchEventOwnership(p.ctx, *parentId); err != nil {
+					return err
+				}
+				parent, err := tx.GetEvent(p.ctx, *parentId)
+				if err != nil {
+					return err
+				}
+				if run.CompletedAt.Valid || parent.EventStatus != EventStatusProcessing {
+					return repo.ErrBatchLeaseLost
+				}
+				workerID = id
+				if eventName == EventNameInvokeAction {
+					workerID = repo.BatchWorker(p.ctx)
+				}
+			}
+		}
+		delegated := false
+		if tx, ok := eventRepo.(*PgEventRepo); ok && run.ID == "" {
+			owner := repo.BatchWorker(p.ctx)
+			if owner != "" && (eventName == EventNameMessageRequester || eventName == EventNameMessageSupplier) {
+				var err error
+				run, err = tx.lockBatchRunForEvent(p.ctx, owner)
+				if err != nil {
+					return err
+				}
+				if run.ID == "" || run.CompletedAt.Valid {
+					return repo.ErrBatchLeaseLost
+				}
+				workerID = owner
+				data.BatchWorkerID = owner
+				delegated = true
+			}
+			if err := repo.LockBatchWorker(p.ctx, tx.Tx); err != nil {
+				return err
+			}
+		}
+
 		event, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
 			ID:               id,
 			IllTransactionID: illTransactionID,
@@ -218,6 +280,21 @@ func (p *PostgresEventBus) CreateTask(classId string, eventName EventName, data 
 		})
 		if err != nil {
 			return err
+		}
+		if run.ID != "" {
+			tx := eventRepo.(*PgEventRepo)
+			if err := tx.queries.AddBatchActionRunEvent(p.ctx, tx.Tx, AddBatchActionRunEventParams{
+				EventID: id, RunID: run.ID, WorkerEventID: workerID,
+			}); err != nil {
+				return fmt.Errorf("link batch child task: %w", err)
+			}
+			if workerID == id {
+				return eventRepo.Notify(p.ctx, id, SignalTaskCreated, SignalBatchWorkers)
+			}
+			if !delegated {
+				// The current handler starts inline children synchronously.
+				return nil
+			}
 		}
 		err = eventRepo.Notify(p.ctx, id, SignalTaskCreated, target)
 		p.ctx.Logger().Debug("created TASK event", "eventName", eventName, "eventId", event.ID, "status", event.EventStatus)
@@ -241,6 +318,15 @@ func (p *PostgresEventBus) CreateNoticeWithID(eventID string, classId string, ev
 func (p *PostgresEventBus) createNotice(id string, classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error) {
 	illTransactionID, patronRequestID := getIllTransactionAndPatronRequestId(classId, eventDomain)
 	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
+		if tx, ok := eventRepo.(*PgEventRepo); ok {
+			if err := repo.LockBatchWorker(p.ctx, tx.Tx); err != nil {
+				return err
+			}
+		}
+
+		if status == EventStatusSuccess && (eventName == EventNameSupplierMsgReceived || eventName == EventNameRequesterMsgReceived) {
+			data.BatchWorkerID = repo.BatchWorker(p.ctx)
+		}
 		event, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
 			ID:               id,
 			IllTransactionID: illTransactionID,
@@ -263,12 +349,26 @@ func (p *PostgresEventBus) createNotice(id string, classId string, eventName Eve
 }
 
 func (p *PostgresEventBus) BeginTask(eventId string, target SignalTarget) (Event, error) {
+	return p.beginTask(p.ctx, Event{ID: eventId}, target)
+}
+
+func (p *PostgresEventBus) beginTask(ctx common.ExtendedContext, hint Event, target SignalTarget) (Event, error) {
+	eventId := hint.ID
 	var event Event
-	err := p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
+	err := p.repo.WithTxFunc(ctx, func(eventRepo EventRepo) error {
+		checkOwnership := batchOwnershipRequired(ctx, hint)
+		if tx, ok := eventRepo.(*PgEventRepo); ok && checkOwnership {
+			if err := tx.checkBatchEventOwnership(ctx, eventId); err != nil {
+				return err
+			}
+		}
 		var err error
-		event, err = eventRepo.GetEventForUpdate(p.ctx, eventId)
+		event, err = eventRepo.GetEventForUpdate(ctx, eventId)
 		if err != nil {
 			return err
+		}
+		if !checkOwnership && batchOwnershipRequired(ctx, event) {
+			return repo.ErrBatchLeaseLost
 		}
 		if event.EventType != EventTypeTask {
 			return fmt.Errorf("cannot begin task processing, event is not a TASK but %s", event.EventType)
@@ -276,27 +376,44 @@ func (p *PostgresEventBus) BeginTask(eventId string, target SignalTarget) (Event
 		if event.EventStatus != EventStatusNew {
 			return fmt.Errorf("cannot begin task processing, event is not in state NEW but %s", event.EventStatus)
 		}
-		event, err = eventRepo.UpdateEventLifecycle(p.ctx, UpdateEventLifecycleParams{
-			ID:          eventId,
-			EventStatus: EventStatusProcessing,
-			LastSignal:  string(SignalTaskBegin),
+		event, err = eventRepo.UpdateEventLifecycle(ctx, UpdateEventLifecycleParams{
+			ID: eventId, EventStatus: EventStatusProcessing, LastSignal: string(SignalTaskBegin),
 		})
 		if err != nil {
 			return err
 		}
-		err = eventRepo.Notify(p.ctx, eventId, SignalTaskBegin, target)
-		return err
+		return eventRepo.Notify(ctx, eventId, SignalTaskBegin, target)
 	})
 	return event, err
 }
 
 func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, status EventStatus, target SignalTarget) (Event, error) {
+	return p.completeTask(p.ctx, Event{ID: eventId}, result, status, target)
+}
+
+func (p *PostgresEventBus) completeTask(ctx common.ExtendedContext, hint Event, result *EventResult, status EventStatus, target SignalTarget) (Event, error) {
+	eventId := hint.ID
 	var event Event
-	err := p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
+	err := p.repo.WithTxFunc(ctx, func(eventRepo EventRepo) error {
+		tx, postgres := eventRepo.(*PgEventRepo)
+		var run BatchActionRun
 		var err error
-		event, err = eventRepo.GetEventForUpdate(p.ctx, eventId)
+		checkOwnership := batchOwnershipRequired(ctx, hint)
+		if postgres && checkOwnership {
+			run, err = tx.lockBatchRunForEvent(ctx, eventId)
+			if err != nil {
+				return err
+			}
+			if err = tx.checkBatchEventOwnership(ctx, eventId); err != nil {
+				return err
+			}
+		}
+		event, err = eventRepo.GetEventForUpdate(ctx, eventId)
 		if err != nil {
 			return err
+		}
+		if !checkOwnership && batchOwnershipRequired(ctx, event) {
+			return repo.ErrBatchLeaseLost
 		}
 		if event.EventType != EventTypeTask {
 			return fmt.Errorf("cannot complete task processing, event is not a TASK but %s", event.EventType)
@@ -304,19 +421,32 @@ func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, sta
 		if event.EventStatus != EventStatusProcessing {
 			return fmt.Errorf("cannot complete task processing, event is not in state PROCESSING but %s", event.EventStatus)
 		}
-		event.EventStatus = status
-		if result != nil {
-			event.ResultData = *result
-		}
-		event.LastSignal = string(SignalTaskComplete)
-		event, err = eventRepo.SaveEvent(p.ctx, SaveEventParams(event))
-		if err != nil {
+		event, err = completeEvent(ctx, eventRepo, event, result, status, target)
+		if err != nil || run.ID == "" {
 			return err
 		}
-		err = eventRepo.Notify(p.ctx, eventId, SignalTaskComplete, target)
-		return err
+		if err = tx.queries.FinishBatchRunEvent(ctx, tx.Tx, eventId); err != nil {
+			return err
+		}
+		if err := tx.queries.ClearIdleBatchWorkerLease(ctx, tx.Tx, repo.BatchWorker(ctx)); err != nil {
+			return err
+		}
+		return tx.finishBatchRunIfIdle(ctx, run)
 	})
 	return event, err
+}
+
+func completeEvent(ctx common.ExtendedContext, eventRepo EventRepo, event Event, result *EventResult, status EventStatus, target SignalTarget) (Event, error) {
+	event.EventStatus = status
+	if result != nil {
+		event.ResultData = *result
+	}
+	event.LastSignal = string(SignalTaskComplete)
+	event, err := eventRepo.SaveEvent(ctx, SaveEventParams(event))
+	if err != nil {
+		return event, err
+	}
+	return event, eventRepo.Notify(ctx, event.ID, SignalTaskComplete, target)
 }
 
 func (p *PostgresEventBus) HandleEventCreated(eventName EventName, role HandlerRole, f func(ctx common.ExtendedContext, event Event)) {
@@ -334,7 +464,14 @@ func (p *PostgresEventBus) HandleTaskCompleted(eventName EventName, role Handler
 
 func (p *PostgresEventBus) ProcessTask(ctx common.ExtendedContext, event Event, target SignalTarget, h func(common.ExtendedContext, Event) (EventStatus, *EventResult)) (Event, error) {
 	inEvent := &event
-	event, err := p.BeginTask(event.ID, target)
+	var err error
+	if event.ID == repo.BatchWorker(ctx) && event.EventStatus == EventStatusProcessing {
+		if !consumeBatchClaim(ctx) {
+			return event, repo.ErrBatchLeaseLost
+		}
+	} else {
+		event, err = p.beginTask(ctx, event, target)
+	}
 	if err != nil {
 		p.getEventContext(inEvent).Logger().Warn("failed to start processing TASK event", "error", err, "eventName", inEvent.EventName)
 		return event, err
@@ -342,7 +479,7 @@ func (p *PostgresEventBus) ProcessTask(ctx common.ExtendedContext, event Event, 
 
 	status, result := h(ctx, event)
 
-	event, err = p.CompleteTask(event.ID, result, status, target)
+	event, err = p.completeTask(ctx, event, result, status, target)
 	if err != nil {
 		p.getEventContext(inEvent).Logger().Warn("failed to complete processing TASK event", "error", err, "eventName", inEvent.EventName)
 		return event, err
@@ -376,9 +513,8 @@ func (p *PostgresEventBus) ProcessExclusiveTask(ctx common.ExtendedContext, even
 }
 
 func (p *PostgresEventBus) registerHandler(signal Signal, role HandlerRole, eventName EventName, f func(ctx common.ExtendedContext, event Event)) {
-	if p.handlers == nil {
-		p.handlers = make(map[Signal]map[HandlerRole]map[EventName][]func(ctx common.ExtendedContext, event Event))
-	}
+	p.handlersMu.Lock()
+	defer p.handlersMu.Unlock()
 	if p.handlers[signal] == nil {
 		p.handlers[signal] = make(map[HandlerRole]map[EventName][]func(ctx common.ExtendedContext, event Event))
 	}
@@ -389,9 +525,8 @@ func (p *PostgresEventBus) registerHandler(signal Signal, role HandlerRole, even
 }
 
 func (p *PostgresEventBus) getHandlers(signal Signal, role HandlerRole, eventName EventName) []func(ctx common.ExtendedContext, event Event) {
-	if p.handlers == nil {
-		return nil
-	}
+	p.handlersMu.RLock()
+	defer p.handlersMu.RUnlock()
 	signalHandlers, ok := p.handlers[signal]
 	if !ok {
 		return nil

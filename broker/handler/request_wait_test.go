@@ -25,8 +25,8 @@ func TestRequestWaitRegistryConcurrentAccess(t *testing.T) {
 			defer workers.Done()
 			<-start
 			id := fmt.Sprint(i)
-			var pending sync.WaitGroup
-			registry.register(id, RequestWait{wg: &pending})
+			pending := make(chan messageConfirmation, 1)
+			registry.register(id, RequestWait{response: pending})
 			assert.True(t, registry.contains(id))
 			var takers sync.WaitGroup
 			results := make(chan bool, 2)
@@ -36,7 +36,7 @@ func TestRequestWaitRegistryConcurrentAccess(t *testing.T) {
 					defer takers.Done()
 					wait, ok := registry.take(id)
 					if ok {
-						assert.Same(t, &pending, wait.wg)
+						assert.Equal(t, pending, wait.response)
 					}
 					results <- ok
 				}()
@@ -130,4 +130,19 @@ func TestWaitForMessageConfirmationPublishFailure(t *testing.T) {
 	err := waitForMessageConfirmation(ctx, bus, "transaction", events.EventNameRequesterMsgReceived, events.EventData{}, httptest.NewRecorder())
 	require.ErrorIs(t, err, publishErr)
 	assert.False(t, waitingReqs.contains(eventID), "failed publication must not leave a waiter")
+}
+
+func TestWaitForMessageConfirmationCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var eventID string
+	bus := immediateNoticeBus{publish: func(id string) error {
+		eventID = id
+		cancel()
+		return nil
+	}}
+	recorder := httptest.NewRecorder()
+	err := waitForMessageConfirmation(common.CreateExtCtxWithArgs(ctx, nil), bus, "transaction", events.EventNameRequesterMsgReceived, events.EventData{}, recorder)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.False(t, waitingReqs.contains(eventID))
+	assert.Empty(t, recorder.Body.String())
 }

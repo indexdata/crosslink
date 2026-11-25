@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
@@ -463,20 +465,34 @@ func (c *Iso18626Client) HandleIllMessage(ctx common.ExtendedContext, peer *ill_
 	if strings.EqualFold(peer.Vendor, string(dirapi.CrossLink)) {
 		return c.prMessageHandler.HandleMessage(ctx, msg, peer)
 	}
-	return c.SendHttpPost(peer, msg)
+	sendCtx, cancel := repo.BatchIOContext(ctx)
+	defer cancel()
+	return c.sendHttpPost(sendCtx, peer, msg)
 }
 
 func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
+	return c.sendHttpPost(context.Background(), peer, msg)
+}
+
+func (c *Iso18626Client) sendHttpPost(ctx context.Context, peer *ill_db.Peer, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
 	httpClient := httpclient.NewClient().
 		WithMaxSize(int64(c.maxMsgSize)).
 		WithHeaders("User-Agent", vcs.GetSignature())
 	for k, v := range peer.HttpHeaders {
 		httpClient.WithHeaders(k, v)
 	}
-	time.Sleep(c.sendDelay)
+	if c.sendDelay > 0 {
+		timer := time.NewTimer(c.sendDelay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
 	iso18626Shim := getPeerShim(peer)
 	var resmsg iso18626.ISO18626Message
-	err := httpClient.RequestResponse(c.client, http.MethodPost,
+	err := httpClient.RequestResponseContext(ctx, c.client, http.MethodPost,
 		[]string{httpclient.ContentTypeApplicationXml, httpclient.ContentTypeTextXml},
 		peer.Url, msg, &resmsg, func(v any) ([]byte, error) {
 			if isoM, ok := v.(*iso18626.ISO18626Message); ok {

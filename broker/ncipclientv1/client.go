@@ -3,6 +3,7 @@ package ncipclientv1
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -21,6 +22,7 @@ type LogFunc func(map[string]any, map[string]any, error)
 
 // Client exchanges v1 types without translating to another protocol version.
 type Client struct {
+	ctx     context.Context
 	client  *http.Client
 	address string
 	logFunc LogFunc
@@ -29,10 +31,15 @@ type Client struct {
 // New creates an HTTP client. A nil transport uses a 30 second timeout.
 // Requests must include their initiation header and identifier agencies.
 func New(client *http.Client, address string) *Client {
+	return NewWithContext(context.Background(), client, address)
+}
+
+// NewWithContext binds exchanges to the caller's cancellation and deadline.
+func NewWithContext(ctx context.Context, client *http.Client, address string) *Client {
 	if client == nil {
 		client = &http.Client{Timeout: 30 * time.Second}
 	}
-	return &Client{client: client, address: address}
+	return &Client{ctx: ctx, client: client, address: address}
 }
 
 // SetLogFunc installs the operation logger before concurrent use.
@@ -57,7 +64,7 @@ func (e *Error) Error() string {
 
 // exchange sanitizes response failures before errors reach callers or log callbacks.
 func (c *Client) exchange(outgoing, incoming *ncip.NCIPMessage) error {
-	err := httpclient.NewClient().RequestResponse(c.client, http.MethodPost, []string{"application/xml", "text/xml"}, c.address, outgoing, incoming, xml.Marshal, decodeResponse)
+	err := httpclient.NewClient().RequestResponseContext(c.ctx, c.client, http.MethodPost, []string{"application/xml", "text/xml"}, c.address, outgoing, incoming, xml.Marshal, decodeResponse)
 	var httpErr *httpclient.HttpError
 	if errors.As(err, &httpErr) {
 		return &httpclient.HttpError{StatusCode: httpErr.StatusCode}

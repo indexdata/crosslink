@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -23,6 +24,7 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgerrcode"
@@ -674,7 +676,7 @@ func handleRequestingAgencyErrorWithNotice(ctx common.ExtendedContext, w http.Re
 			},
 		},
 	}
-	_, err := eventBus.CreateNotice(illTransId, events.EventNameRequesterMsgReceived, eventData, events.EventStatusProblem, events.EventDomainIllTransaction, events.SignalConsumers)
+	_, err := events.WithWorkerContext(eventBus, ctx).CreateNotice(illTransId, events.EventNameRequesterMsgReceived, eventData, events.EventStatusProblem, events.EventDomainIllTransaction, events.SignalConsumers)
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransId)
 	}
@@ -931,14 +933,14 @@ func handleSupplyingAgencyErrorWithNotice(ctx common.ExtendedContext, w http.Res
 			},
 		},
 	}
-	_, err := eventBus.CreateNotice(illTransId, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem, events.EventDomainIllTransaction, events.SignalConsumers)
+	_, err := events.WithWorkerContext(eventBus, ctx).CreateNotice(illTransId, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem, events.EventDomainIllTransaction, events.SignalConsumers)
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransId)
 	}
 }
 
 func createNotice(ctx common.ExtendedContext, eventBus events.EventBus, illTransId string, eventName events.EventName, eventData events.EventData, eventStatus events.EventStatus) (string, error) {
-	id, err := eventBus.CreateNotice(illTransId, eventName, eventData, eventStatus, events.EventDomainIllTransaction, events.SignalConsumers)
+	id, err := events.WithWorkerContext(eventBus, ctx).CreateNotice(illTransId, eventName, eventData, eventStatus, events.EventDomainIllTransaction, events.SignalConsumers)
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransId)
 		return "", err
@@ -1109,11 +1111,7 @@ func (c *Iso18626Handler) confirmSupplierResponse(ctx common.ExtendedContext, il
 	} else {
 		// We don't have response, so it was http error or connection error
 		if supplierResult.HttpFailure != nil {
-			(*wait.w).WriteHeader(supplierResult.HttpFailure.StatusCode)
-			if len(supplierResult.HttpFailure.Body) > 0 {
-				(*wait.w).Write(supplierResult.HttpFailure.Body)
-			}
-			wait.wg.Done()
+			wait.response <- messageConfirmation{failure: supplierResult.HttpFailure}
 			ctx.Logger().Warn("forwarding HTTP error response from supplier to requester", "transactionId", illTransId, "error", supplierResult.HttpFailure)
 			return nil, supplierResult.HttpFailure
 		}
@@ -1125,8 +1123,7 @@ func (c *Iso18626Handler) confirmSupplierResponse(ctx common.ExtendedContext, il
 			"errorType", eType, "errorValue", errorMessage)
 	}
 	var resmsg = createRequestingAgencyResponse(requesterIllMsg, messageStatus, errorType, ErrorValue(errorMessage))
-	writeResponse(ctx, resmsg, *wait.w)
-	wait.wg.Done()
+	wait.response <- messageConfirmation{message: resmsg}
 	return resmsg, nil
 }
 
@@ -1166,11 +1163,7 @@ func (c *Iso18626Handler) confirmRequesterResponse(ctx common.ExtendedContext, i
 		}
 	} else if requesterResult.HttpFailure != nil {
 		// We don't have response, so it was http error or connection error
-		(*wait.w).WriteHeader(requesterResult.HttpFailure.StatusCode)
-		if len(requesterResult.HttpFailure.Body) > 0 {
-			(*wait.w).Write(requesterResult.HttpFailure.Body)
-		}
-		wait.wg.Done()
+		wait.response <- messageConfirmation{failure: requesterResult.HttpFailure}
 		ctx.Logger().Warn("forwarding HTTP error response from requester to supplier", "transactionId", illTransId, "error", requesterResult.HttpFailure)
 		return nil, requesterResult.HttpFailure
 	} else if doNotSend, foundOk := requesterResult.CustomData[common.DO_NOT_SEND].(bool); foundOk && doNotSend {
@@ -1185,14 +1178,17 @@ func (c *Iso18626Handler) confirmRequesterResponse(ctx common.ExtendedContext, i
 			"errorType", eType, "errorValue", errorMessage)
 	}
 	var resmsg = createSupplyingAgencyResponse(supplierIllMsg, messageStatus, errorType, ErrorValue(errorMessage))
-	writeResponse(ctx, resmsg, *wait.w)
-	wait.wg.Done()
+	wait.response <- messageConfirmation{message: resmsg}
 	return resmsg, nil
 }
 
+type messageConfirmation struct {
+	message *iso18626.ISO18626Message
+	failure *httpclient.HttpError
+}
+
 type RequestWait struct {
-	w  *http.ResponseWriter
-	wg *sync.WaitGroup
+	response chan messageConfirmation
 }
 
 // requestWaitRegistry coordinates HTTP handlers and asynchronous confirmations.
@@ -1223,17 +1219,33 @@ func (r *requestWaitRegistry) take(id string) (RequestWait, bool) {
 	return wait, ok
 }
 
+const messageConfirmationTimeout = 30 * time.Second
+
 func waitForMessageConfirmation(ctx common.ExtendedContext, eventBus events.EventBus, illTransID string, eventName events.EventName, data events.EventData, w http.ResponseWriter) error {
+	waitCtx, cancel := context.WithTimeout(ctx, messageConfirmationTimeout)
+	defer cancel()
 	id := uuid.NewString()
-	var wg sync.WaitGroup
-	wg.Add(1)
+	response := make(chan messageConfirmation, 1)
 	// Register before publishing: a consumer may confirm before creation returns.
-	waitingReqs.register(id, RequestWait{w: &w, wg: &wg})
+	waitingReqs.register(id, RequestWait{response: response})
 	defer waitingReqs.take(id)
-	if _, err := eventBus.CreateNoticeWithID(id, illTransID, eventName, data, events.EventStatusSuccess, events.EventDomainIllTransaction, events.SignalConsumers); err != nil {
+
+	if _, err := events.WithWorkerContext(eventBus, ctx).CreateNoticeWithID(id, illTransID, eventName, data, events.EventStatusSuccess, events.EventDomainIllTransaction, events.SignalConsumers); err != nil {
 		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransID)
 		return err
 	}
-	wg.Wait()
-	return nil
+	select {
+	case confirmation := <-response:
+		if confirmation.failure != nil {
+			w.WriteHeader(confirmation.failure.StatusCode)
+			if len(confirmation.failure.Body) > 0 {
+				_, _ = w.Write(confirmation.failure.Body)
+			}
+		} else {
+			writeResponse(ctx, confirmation.message, w)
+		}
+		return nil
+	case <-waitCtx.Done():
+		return fmt.Errorf("waiting for ISO 18626 confirmation: %w", waitCtx.Err())
+	}
 }

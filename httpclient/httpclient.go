@@ -2,6 +2,7 @@ package httpclient
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -54,8 +55,8 @@ func (c *HttpClient) WithHeaders(headers ...string) *HttpClient {
 	return c
 }
 
-func (c *HttpClient) httpInvoke(client *http.Client, method string, contentTypes []string, url string, reader io.Reader) ([]byte, error) {
-	req, err := http.NewRequest(method, url, reader)
+func (c *HttpClient) httpInvoke(ctx context.Context, client *http.Client, method string, contentTypes []string, url string, reader io.Reader) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, reader)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +137,7 @@ func (c *HttpClient) requestResponseXml(client *http.Client, method string, url 
 }
 
 func (c *HttpClient) request(client *http.Client, method string, contentTypes []string, url string, res any, unmarshal func([]byte, any) error) error {
-	resbuf, err := c.httpInvoke(client, method, contentTypes, url, nil)
+	resbuf, err := c.httpInvoke(context.Background(), client, method, contentTypes, url, nil)
 	if err != nil {
 		return err
 	}
@@ -144,6 +145,11 @@ func (c *HttpClient) request(client *http.Client, method string, contentTypes []
 }
 
 func (c *HttpClient) RequestResponse(client *http.Client, method string, contentTypes []string, url string, req any, res any, marshal func(any) ([]byte, error), unmarshal func([]byte, any) error) error {
+	return c.RequestResponseContext(context.Background(), client, method, contentTypes, url, req, res, marshal, unmarshal)
+}
+
+// RequestResponseContext performs the request with a caller-supplied deadline and cancellation.
+func (c *HttpClient) RequestResponseContext(ctx context.Context, client *http.Client, method string, contentTypes []string, url string, req any, res any, marshal func(any) ([]byte, error), unmarshal func([]byte, any) error) error {
 	buf, err := marshal(req)
 	if err != nil {
 		return fmt.Errorf("marshal failed: %v", err)
@@ -151,7 +157,7 @@ func (c *HttpClient) RequestResponse(client *http.Client, method string, content
 	if buf == nil {
 		return fmt.Errorf("marshal returned nil")
 	}
-	resbuf, err := c.httpInvoke(client, method, contentTypes, url, bytes.NewReader(buf))
+	resbuf, err := c.httpInvoke(ctx, client, method, contentTypes, url, bytes.NewReader(buf))
 	if err != nil {
 		return err
 	}

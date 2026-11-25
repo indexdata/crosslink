@@ -39,6 +39,11 @@ type mockEmailPrRepo struct {
 	gotTemplate    pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams
 }
 
+func (m *mockEmailPrRepo) ListOverdueBatchCandidates(ctx common.ExtendedContext, limit int32, afterID string, query pgcql.Query) ([]pr_db.PatronRequest, error) {
+	requests, _, err := m.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: limit}, query)
+	return requests, err
+}
+
 func (m *mockEmailPrRepo) ListPatronRequests(_ common.ExtendedContext, params pr_db.ListPatronRequestsParams, query pgcql.Query) ([]pr_db.PatronRequest, int64, error) {
 	m.listCalled = true
 	m.gotParams = params

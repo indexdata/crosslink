@@ -2,6 +2,7 @@ package email
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -36,17 +37,6 @@ var (
 	SMTP_USERNAME = utils.GetEnv("SMTP_USERNAME", "")
 	SMTP_PASSWORD = utils.GetEnv("SMTP_PASSWORD", "")
 )
-
-// Mailer is an interface over smtp.SendMail, allowing mocking in tests.
-type Mailer interface {
-	SendMail(addr string, a smtp.Auth, from string, to []string, msg []byte) error
-}
-
-type DefaultMailer struct{}
-
-func (m *DefaultMailer) SendMail(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
-	return smtp.SendMail(addr, a, from, to, msg)
-}
 
 // EmailData carries the email payload inside an EventData.CustomData map.
 type EmailData struct {
@@ -98,6 +88,32 @@ func (s *EmailServiceImpl) SendEmail(from string, to []string, raw []byte) error
 		return errors.New("email sender not configured")
 	}
 	return s.mailer.SendMail(s.smtpAddr, s.smtpAuth, from, to, raw)
+}
+
+// SendEmailContext uses the connection deadline when supported by the mailer.
+func (s *EmailServiceImpl) SendEmailContext(ctx context.Context, from string, to []string, raw []byte) error {
+	if !s.readyToSend {
+		return errors.New("email sender not configured")
+	}
+	if mailer, ok := s.mailer.(interface {
+		SendMailContext(context.Context, string, smtp.Auth, string, []string, []byte) error
+	}); ok {
+		return mailer.SendMailContext(ctx, s.smtpAddr, s.smtpAuth, from, to, raw)
+	}
+	return s.SendEmail(from, to, raw)
+}
+
+// SendWithContext submits email with the caller's deadline when the sender supports it.
+func SendWithContext(ctx context.Context, sender EmailService, from string, to []string, raw []byte) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if contextual, ok := sender.(interface {
+		SendEmailContext(context.Context, string, []string, []byte) error
+	}); ok {
+		return contextual.SendEmailContext(ctx, from, to, raw)
+	}
+	return sender.SendEmail(from, to, raw)
 }
 
 func (s *EmailServiceImpl) IsReadyToSend() bool {

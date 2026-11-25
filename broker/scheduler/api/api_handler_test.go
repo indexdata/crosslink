@@ -181,6 +181,7 @@ func TestGetBatchActions_OK(t *testing.T) {
 	assert.Equal(t, "task-1", resp.Items[0].Id)
 	assert.Equal(t, testSymbol, resp.Items[0].Owner)
 	assert.Equal(t, "/batch_actions/task-1/events", resp.Items[0].EventsLink)
+	assert.Equal(t, "/batch_actions/task-1/run", resp.Items[0].RunLink)
 	assert.Equal(t, schedoapi.EmailPullslips, resp.Items[0].ActionName)
 	assert.Equal(t, "title=test", resp.Items[0].BatchQuery)
 	assert.True(t, resp.Items[0].Active)

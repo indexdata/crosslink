@@ -328,7 +328,7 @@ func (ms *PatronRequestMessageSender) createIllMessageNotice(ctx common.Extended
 	if parentEventID == "" {
 		_, err = ms.eventBus.CreateNotice(prID, eventName, eventData, status, events.EventDomainPatronRequest, events.SignalConsumers)
 	} else {
-		_, err = ms.eventBus.CreateNoticeWithParent(prID, eventName, eventData, status, events.EventDomainPatronRequest, &parentEventID, events.SignalConsumers)
+		_, err = events.WithWorkerContext(ms.eventBus, ctx).CreateNoticeWithParent(prID, eventName, eventData, status, events.EventDomainPatronRequest, &parentEventID, events.SignalConsumers)
 	}
 	if err != nil {
 		ctx.Logger().Error("failed to create ILL message log event", "error", err)
