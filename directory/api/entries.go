@@ -322,7 +322,7 @@ func buildEntrySQL(whereClause string) string {
 		)
 		FROM closures c
 		WHERE c.entry = e.id
-		ORDER BY c.id
+		ORDER BY c.start_date, c.id
 		) as closures,
 		COUNT(*) OVER() as total_count
 		FROM entries e
@@ -375,8 +375,9 @@ func buildEntryListQuery(cqlString *string, limit *Limit, offset *Offset, baseWh
 	return query, args, nil
 }
 
-// readEntries runs an entry query, merges inherited configuration when
-// resolve is true, and sanitizes protected fields for the caller.
+// readEntries runs an entry query, merges inherited configuration and
+// closures when resolve is true, and sanitizes protected fields for the
+// caller.
 //
 // When resolving, the entries and their ancestors are read in one read-only
 // REPEATABLE READ transaction so that both come from the same snapshot.

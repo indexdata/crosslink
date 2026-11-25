@@ -554,7 +554,7 @@ func TestInheritedClosures(t *testing.T) {
 		t.Helper()
 		var id uuid.UUID
 		require.NoError(t, dbpool.QueryRow(context.Background(),
-			`INSERT INTO closures (entry, start_date, end_date, reason) VALUES ($1, current_date + $2::int, current_date + $3::int, $4) RETURNING id`,
+			`INSERT INTO closures (entry, start_date, end_date, reason) VALUES ($1, (now() AT TIME ZONE 'UTC')::date + $2::int, (now() AT TIME ZONE 'UTC')::date + $3::int, $4) RETURNING id`,
 			entry, startOffset, endOffset, reason).Scan(&id))
 		return id
 	}
@@ -582,7 +582,7 @@ func TestInheritedClosures(t *testing.T) {
 		"a sibling branch does not see the other branch's closures")
 
 	// The unresolved view lists only the entry's own closures, expired ones included.
-	require.ElementsMatch(t, []string{"BExpired", "B1"}, closureReasons(t, getEntryJSON(t, entryPath(tree.branch)+"?resolve-inherit=false", systemHeaders)))
+	require.Equal(t, []string{"BExpired", "B1"}, closureReasons(t, getEntryJSON(t, entryPath(tree.branch)+"?resolve-inherit=false", systemHeaders)))
 	require.Equal(t, []string{}, closureReasons(t, getEntryJSON(t, entryPath(sibling)+"?resolve-inherit=false", systemHeaders)))
 
 	// Every read path returns the same merged closures.

@@ -2179,10 +2179,12 @@ components:
               description: >-
                 With resolve-inherit (the default), all of the entry's own
                 closures together with the unexpired closures of its parent
-                institution and consortium (endDate no earlier than yesterday),
-                ordered by start date. Each closure's entry names the entry that
+                institution and consortium (endDate no earlier than yesterday,
+                by the UTC date), ordered by start date. Each closure's entry names the entry that
                 stores it, so a closure is local when entry equals this entry's
-                id. With resolve-inherit=false, only the entry's own closures.
+                id. With resolve-inherit=false, only the entry's own closures,
+                also ordered by start date. Closures are added and removed
+                through /closures.
               items:
                 $ref: '#/components/schemas/Closure'
             endpoints:
