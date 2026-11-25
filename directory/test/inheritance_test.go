@@ -475,3 +475,83 @@ func TestInheritanceOffValueMigration(t *testing.T) {
 	require.Error(t, exec(`UPDATE ill_configs SET default_loan_period = 0 WHERE entry = $1`, id), "the earlier constraint is restored")
 	require.NoError(t, exec("ROLLBACK TO SAVEPOINT restored"))
 }
+
+// closureReasons returns the reason of each closure listed on entry, in order.
+// Each test closure's reason names its owner.
+func closureReasons(t *testing.T, entry map[string]any) []string {
+	t.Helper()
+	reasons := []string{}
+	closures, _ := entry["closures"].([]any)
+	for _, closure := range closures {
+		reasons = append(reasons, closure.(map[string]any)["reason"].(string))
+	}
+	return reasons
+}
+
+func TestInheritedClosures(t *testing.T) {
+	tree := setupInheritanceTree(t)
+	consortium := uuid.MustParse(fixtureConsortium)
+	sibling := importEntryUUID(symbolObject("ISIL", "INHERIT-SIBLING"))
+	sqlExec(t, `DELETE FROM symbols WHERE owner = $1`, sibling)
+	sqlExec(t, `INSERT INTO entries (id, name, type, parent, tenant) VALUES ($1, 'Inherit sibling', 'Branch', $2, 'INHERIT')`, sibling, tree.institution)
+	sqlExec(t, `INSERT INTO symbols (owner, authority, symbol) VALUES ($1, 'ISIL', 'INHERIT-SIBLING')`, sibling)
+	// The fixture consortium outlives this test.
+	t.Cleanup(func() { sqlExec(t, `DELETE FROM closures WHERE entry = $1`, consortium) })
+	// Dates are relative to the database's current date. The *Expired closures
+	// ended two or more days ago; CYesterday ended yesterday and is still
+	// inherited because closure dates carry no time zone.
+	closure := func(entry uuid.UUID, startOffset, endOffset int, reason string) uuid.UUID {
+		t.Helper()
+		var id uuid.UUID
+		require.NoError(t, dbpool.QueryRow(context.Background(),
+			`INSERT INTO closures (entry, start_date, end_date, reason) VALUES ($1, current_date + $2::int, current_date + $3::int, $4) RETURNING id`,
+			entry, startOffset, endOffset, reason).Scan(&id))
+		return id
+	}
+	closure(consortium, -10, -3, "CExpired")
+	closure(tree.institution, -9, -2, "IExpired")
+	closure(consortium, -8, -1, "CYesterday")
+	closure(tree.branch, -7, -6, "BExpired")
+	consortiumClosure := closure(consortium, 10, 11, "C1")
+	closure(tree.institution, 20, 21, "I1")
+	closure(tree.branch, 30, 31, "B1")
+
+	branch := getEntryJSON(t, entryPath(tree.branch), systemHeaders)
+	require.Equal(t, []string{"CYesterday", "BExpired", "C1", "I1", "B1"}, closureReasons(t, branch),
+		"a branch lists all its own closures and the unexpired closures of its institution and consortium")
+	owners := []string{}
+	for _, closure := range branch["closures"].([]any) {
+		owners = append(owners, closure.(map[string]any)["entry"].(string))
+	}
+	require.Equal(t, []string{fixtureConsortium, tree.branch.String(), fixtureConsortium, tree.institution.String(), tree.branch.String()},
+		owners, "each closure names its owning entry")
+
+	require.Equal(t, []string{"IExpired", "CYesterday", "C1", "I1"}, closureReasons(t, getEntryJSON(t, entryPath(tree.institution), systemHeaders)))
+	require.Equal(t, []string{"CExpired", "CYesterday", "C1"}, closureReasons(t, getEntryJSON(t, entryPath(consortium), systemHeaders)))
+	require.Equal(t, []string{"CYesterday", "C1", "I1"}, closureReasons(t, getEntryJSON(t, entryPath(sibling), systemHeaders)),
+		"a sibling branch does not see the other branch's closures")
+
+	// The unresolved view lists only the entry's own closures, expired ones included.
+	require.ElementsMatch(t, []string{"BExpired", "B1"}, closureReasons(t, getEntryJSON(t, entryPath(tree.branch)+"?resolve-inherit=false", systemHeaders)))
+	require.Equal(t, []string{}, closureReasons(t, getEntryJSON(t, entryPath(sibling)+"?resolve-inherit=false", systemHeaders)))
+
+	// Every read path returns the same merged closures.
+	require.Equal(t, branch, getEntryJSON(t, "/entries/by-symbol/ISIL:INHERIT-BRANCH", systemHeaders))
+	cql := url.QueryEscape(fmt.Sprintf(`parent=%s`, tree.institution))
+	list := getEntryJSON(t, "/entries?cql="+cql, systemHeaders)
+	found := false
+	for _, item := range list["items"].([]any) {
+		entry := item.(map[string]any)
+		if entry["id"] == tree.branch.String() {
+			require.Equal(t, branch, entry)
+			found = true
+		}
+	}
+	require.True(t, found, "the branch is listed under its institution")
+
+	// Removing an ancestor's closure removes it from every descendant.
+	response, body := jsonReq(t, http.MethodDelete, "/closures/"+consortiumClosure.String(), "", consortialHeaders)
+	require.Equal(t, http.StatusNoContent, response.StatusCode, body)
+	require.Equal(t, []string{"CYesterday", "BExpired", "I1", "B1"}, closureReasons(t, getEntryJSON(t, entryPath(tree.branch), systemHeaders)))
+	require.Equal(t, []string{"IExpired", "CYesterday", "I1"}, closureReasons(t, getEntryJSON(t, entryPath(tree.institution), systemHeaders)))
+}

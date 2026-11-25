@@ -1,5 +1,15 @@
 # Unreleased
 
+- Entry closures are inherited. Merged entry reads list all of an entry's own
+  closures together with the unexpired closures (ending yesterday or later) of
+  its parent institution and consortium; each closure's `entry` names the entry
+  that stores it. Behavior change: existing institution
+  and consortium closures now also apply to their branches and institutions,
+  including in the broker's supplier selection. `resolve-inherit=false` and the
+  `/closures` endpoints return stored closures only. Migration
+  `029_closures_entry_index` indexes closures by entry. See
+  [configuration inheritance](README.md#configuration-inheritance).
+
 - Directory entries now inherit configuration through the consortium →
   institution → branch hierarchy. Entry GETs return merged values by default;
   pass `resolve-inherit=false` for stored values only. Inheritance boundaries,

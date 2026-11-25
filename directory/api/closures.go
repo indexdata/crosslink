@@ -10,6 +10,19 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// closureFromRow converts a stored closure to its API representation. The
+// closures table declares both dates NOT NULL.
+func closureFromRow(row db.Closure) Closure {
+	id := row.ID
+	return Closure{
+		Id:        &id,
+		StartDate: *PgTimestampToDatePtr(row.StartDate),
+		EndDate:   *PgTimestampToDatePtr(row.EndDate),
+		Reason:    row.Reason,
+		Entry:     row.Entry,
+	}
+}
+
 func (a ApiImpl) AddClosure(ctx context.Context, request AddClosureRequestObject) (AddClosureResponseObject, error) {
 	authData := auth.GetAuthData(ctx)
 
@@ -77,15 +90,7 @@ func (a ApiImpl) GetClosure(ctx context.Context, request GetClosureRequestObject
 		}
 	}
 
-	closureResponse := Closure{
-		Id:        &closure.ID,
-		StartDate: *PgTimestampToDatePtr(closure.StartDate),
-		EndDate:   *PgTimestampToDatePtr(closure.EndDate),
-		Reason:    closure.Reason,
-		Entry:     closure.Entry,
-	}
-
-	return GetClosure200JSONResponse(closureResponse), nil
+	return GetClosure200JSONResponse(closureFromRow(closure)), nil
 }
 
 func (a ApiImpl) GetClosures(ctx context.Context, request GetClosuresRequestObject) (GetClosuresResponseObject, error) {
@@ -111,14 +116,7 @@ func (a ApiImpl) GetClosures(ctx context.Context, request GetClosuresRequestObje
 	closures := make([]Closure, 0, len(rows))
 
 	for _, row := range rows {
-		closure := Closure{
-			Id:        &row.ID,
-			StartDate: *PgTimestampToDatePtr(row.StartDate),
-			EndDate:   *PgTimestampToDatePtr(row.EndDate),
-			Reason:    row.Reason,
-			Entry:     row.Entry,
-		}
-		closures = append(closures, closure)
+		closures = append(closures, closureFromRow(row))
 	}
 
 	resp := ClosuresResponse{
