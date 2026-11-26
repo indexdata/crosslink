@@ -32,7 +32,7 @@ CREATE INDEX batch_action_run_event_ready_idx
 CREATE INDEX batch_action_run_event_leases_idx
     ON batch_action_run_event (lease_expires_at, event_id) WHERE lease_expires_at IS NOT NULL;
 
--- A short write transaction holds this row lock through commit. Recovery uses
+-- An event bus transaction holds this row lock through commit. Recovery uses
 -- the same lock and rechecks expiry once it acquires it.
 CREATE FUNCTION lock_batch_worker(p_event_id VARCHAR) RETURNS BOOLEAN
 LANGUAGE plpgsql AS $$
@@ -48,8 +48,8 @@ $$;
 CREATE TABLE message_confirmation_expiry (
     event_id VARCHAR PRIMARY KEY REFERENCES event (id) ON DELETE CASCADE,
     -- A confirmation task is created after its request starts waiting.
-    -- Leave more than the handler's 30-second maximum wait for any replica.
-    expires_at TIMESTAMPTZ NOT NULL DEFAULT (clock_timestamp() + INTERVAL '1 minute')
+    -- Leave more than the handler's 55-second maximum wait for any replica.
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT (clock_timestamp() + INTERVAL '2 minutes')
 );
 
 CREATE INDEX message_confirmation_expiry_due_idx

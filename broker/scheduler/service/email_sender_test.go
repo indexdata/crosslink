@@ -33,6 +33,7 @@ type mockEmailPrRepo struct {
 	listCalled     bool
 	gotParams      pr_db.ListPatronRequestsParams
 	gotQuery       pgcql.Query
+	overdueCursors []string
 	template       pr_db.Template
 	templateErr    error
 	templateCalled bool
@@ -40,7 +41,14 @@ type mockEmailPrRepo struct {
 }
 
 func (m *mockEmailPrRepo) ListOverdueBatchCandidates(ctx common.ExtendedContext, limit int32, afterID string, query pgcql.Query) ([]pr_db.PatronRequest, error) {
+	m.overdueCursors = append(m.overdueCursors, afterID)
 	requests, _, err := m.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: limit}, query)
+	for len(requests) > 0 && requests[0].ID <= afterID {
+		requests = requests[1:]
+	}
+	if len(requests) > int(limit) {
+		requests = requests[:limit]
+	}
 	return requests, err
 }
 

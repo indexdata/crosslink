@@ -277,8 +277,6 @@ func (a *PatronRequestActionService) executeAction(ctx common.ExtendedContext, e
 	if a.lmsCreator == nil {
 		return logActionErrorAndReturnResult(ctx, "LMS creator not configured", nil)
 	}
-	ctx, cancel := repo.BatchIOContext(ctx)
-	defer cancel()
 	illRequest := pr.IllRequest
 	switch pr.Side {
 	case SideBorrowing:

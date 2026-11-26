@@ -15,14 +15,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-var batchLeaseDuration, _ = utils.GetEnvAny("BATCH_WORKER_LEASE", 5*time.Minute, func(value string) (time.Duration, error) {
-	duration, err := time.ParseDuration(value)
-	if err != nil || duration < time.Second || duration > batchWorkerCap {
-		return 0, fmt.Errorf("BATCH_WORKER_LEASE must be between 1s and %s", batchWorkerCap)
-	}
-	return duration, nil
-})
-
 const (
 	batchWorkerCap     = 30 * time.Minute
 	batchWorkerCount   = 8
@@ -46,10 +38,8 @@ type batchWorkers struct {
 
 // WithWorkerContext propagates the lease to worker-originated event writes.
 func WithWorkerContext(bus EventBus, ctx common.ExtendedContext) EventBus {
-	if postgres, ok := bus.(*PostgresEventBus); ok && repo.BatchWorker(ctx) != "" {
-		scoped := *postgres
-		scoped.ctx = ctx
-		return &scoped
+	if repo.BatchWorker(ctx) != "" {
+		return WithContext(bus, ctx)
 	}
 	return bus
 }
@@ -64,6 +54,16 @@ func (p *PostgresEventBus) startBatchWorkers(db *PgEventRepo) {
 	if len(names) == 0 {
 		return
 	}
+	leaseDuration, err := utils.GetEnvAny("BATCH_WORKER_LEASE", 5*time.Minute, func(value string) (time.Duration, error) {
+		duration, err := time.ParseDuration(value)
+		if err != nil || duration < time.Second || duration > batchWorkerCap {
+			return 0, fmt.Errorf("BATCH_WORKER_LEASE must be between 1s and %s", batchWorkerCap)
+		}
+		return duration, nil
+	})
+	if err != nil {
+		p.ctx.Logger().Warn("using default batch worker lease", "error", err, "lease", leaseDuration)
+	}
 	claims, stop := context.WithCancel(p.ctx)
 	work, cancel := context.WithCancel(p.ctx)
 	workers := &batchWorkers{wake: make(chan struct{}, 1), stop: stop, cancel: cancel, done: make(chan struct{})}
@@ -73,10 +73,12 @@ func (p *PostgresEventBus) startBatchWorkers(db *PgEventRepo) {
 	for range batchWorkerCount {
 		wait.Go(func() {
 			for claims.Err() == nil {
-				event, deadline, err := db.claimBatchWork(p.batchContext(claims, ""), batchLeaseDuration, batchWorkerCap, names)
+				event, deadline, err := db.claimBatchWork(p.batchContext(claims, ""), leaseDuration, batchWorkerCap, names)
 				if err == nil {
 					p.wakeBatchWorkers()
-					p.runBatchWorker(work, db, event, deadline)
+					p.runBatchWorker(work, event, deadline, leaseDuration, func(ctx context.Context) (time.Time, error) {
+						return db.renewBatchWorkerLease(ctx, event.ID, leaseDuration)
+					})
 					continue
 				}
 				if !errors.Is(err, pgx.ErrNoRows) && claims.Err() == nil {
@@ -144,7 +146,10 @@ func (p *PostgresEventBus) batchContext(ctx context.Context, eventID string) com
 	return common.CreateExtCtxWithArgs(ctx, &args)
 }
 
-func (p *PostgresEventBus) runBatchWorker(work context.Context, db *PgEventRepo, event Event, initial time.Time) {
+func (p *PostgresEventBus) runBatchWorker(work context.Context, event Event, initial time.Time, leaseDuration time.Duration, renew func(context.Context) (time.Time, error)) {
+	if work.Err() != nil || time.Until(initial) <= 0 {
+		return
+	}
 	ctx, cancel := context.WithCancel(work)
 	defer cancel()
 	var deadline atomic.Value
@@ -156,34 +161,35 @@ func (p *PostgresEventBus) runBatchWorker(work context.Context, db *PgEventRepo,
 	go func() {
 		defer close(renewDone)
 		defer cancel()
-		ticker := time.NewTicker(batchLeaseDuration / 3)
-		defer ticker.Stop()
+		renewInterval := leaseDuration / 3
+		retryInterval := min(time.Second, leaseDuration/10)
+		delay := renewInterval
 		for {
-			remaining := time.Until(leaseDeadline())
-			timer := time.NewTimer(remaining)
+			expires := leaseDeadline()
+			timer := time.NewTimer(min(delay, time.Until(expires)))
 			select {
 			case <-ctx.Done():
 				timer.Stop()
 				return
 			case <-timer.C:
-				return
-			case <-ticker.C:
-				timer.Stop()
 			}
 
-			start := time.Now()
-			renewCtx, stop := context.WithDeadline(ctx, leaseDeadline())
-			renewed, err := db.queries.RenewBatchWorkerLease(renewCtx, db.Pool, RenewBatchWorkerLeaseParams{
-				EventID: event.ID, LeaseDuration: batchInterval(batchLeaseDuration),
-			})
-			stop()
-			if err != nil {
-				if ctx.Err() == nil && !errors.Is(err, pgx.ErrNoRows) {
-					workerCtx.Logger().Warn("renew batch worker lease", "error", err)
-				}
+			if ctx.Err() != nil || time.Until(expires) <= 0 {
 				return
 			}
-			deadline.Store(start.Add(renewed.LeaseExpiresAt.Time.Sub(renewed.DatabaseNow.Time)))
+			renewCtx, stop := context.WithDeadline(ctx, expires)
+			renewed, err := renew(renewCtx)
+			stop()
+			if ctx.Err() != nil || time.Until(expires) <= 0 || errors.Is(err, pgx.ErrNoRows) {
+				return
+			}
+			if err != nil {
+				workerCtx.Logger().Warn("retrying batch worker lease renewal", "error", err)
+				delay = retryInterval
+				continue
+			}
+			deadline.Store(renewed)
+			delay = renewInterval
 		}
 	}()
 
@@ -191,6 +197,17 @@ func (p *PostgresEventBus) runBatchWorker(work context.Context, db *PgEventRepo,
 	triggerHandlers(workerCtx, event, handlers, SignalTaskCreated)
 	cancel()
 	<-renewDone
+}
+
+func (r *PgEventRepo) renewBatchWorkerLease(ctx context.Context, eventID string, lease time.Duration) (time.Time, error) {
+	start := time.Now()
+	renewed, err := r.queries.RenewBatchWorkerLease(ctx, r.Pool, RenewBatchWorkerLeaseParams{
+		EventID: eventID, LeaseDuration: batchInterval(lease),
+	})
+	if err != nil {
+		return time.Time{}, err
+	}
+	return start.Add(renewed.LeaseExpiresAt.Time.Sub(renewed.DatabaseNow.Time)), nil
 }
 
 func (p *PostgresEventBus) delegatedBatchContext(ctx common.ExtendedContext, eventID string) (common.ExtendedContext, context.CancelFunc, error) {
@@ -203,9 +220,57 @@ func (p *PostgresEventBus) delegatedBatchContext(ctx common.ExtendedContext, eve
 	if err != nil {
 		return ctx, nil, err
 	}
-	deadline := start.Add(lease.LeaseExpiresAt.Time.Sub(lease.DatabaseNow.Time))
-	bounded, cancel := context.WithDeadline(ctx, deadline)
-	return repo.WithBatchWorker(p.batchContext(bounded, ctx.LoggerArgs().EventId), eventID, func() time.Time { return deadline }), cancel, nil
+	initial := start.Add(lease.LeaseExpiresAt.Time.Sub(lease.DatabaseNow.Time))
+	if time.Until(initial) <= 0 {
+		return ctx, nil, pgx.ErrNoRows
+	}
+	watchCtx, cancel := context.WithCancel(ctx)
+	var deadline atomic.Value
+	deadline.Store(initial)
+	lastConfirmedDeadline := func() time.Time { return deadline.Load().(time.Time) }
+	delegated := repo.WithBatchWorker(p.batchContext(watchCtx, ctx.LoggerArgs().EventId), eventID, lastConfirmedDeadline)
+	go func() {
+		defer cancel()
+		// A delegate may be on another replica. Only its owner renews the lease.
+		confirmedExpiry := lease.LeaseExpiresAt.Time
+		refreshDelay := func(remaining time.Duration) time.Duration {
+			return max(10*time.Millisecond, min(time.Second, remaining/3))
+		}
+		delay := refreshDelay(time.Until(initial))
+		for {
+			expires := lastConfirmedDeadline()
+			timer := time.NewTimer(min(delay, time.Until(expires)))
+			select {
+			case <-watchCtx.Done():
+				timer.Stop()
+				return
+			case <-timer.C:
+			}
+			if watchCtx.Err() != nil || time.Until(expires) <= 0 {
+				return
+			}
+			start := time.Now()
+			refreshCtx, stop := context.WithDeadline(watchCtx, expires)
+			current, err := db.queries.GetActiveBatchWorkerLease(refreshCtx, db.Pool, eventID)
+			stop()
+			if watchCtx.Err() != nil || time.Until(expires) <= 0 || errors.Is(err, pgx.ErrNoRows) {
+				return
+			}
+			if err != nil {
+				delegated.Logger().Debug("refresh delegated batch lease", "error", err)
+				continue
+			}
+			if !current.LeaseExpiresAt.Time.Equal(confirmedExpiry) {
+				confirmedExpiry = current.LeaseExpiresAt.Time
+				updated := start.Add(confirmedExpiry.Sub(current.DatabaseNow.Time))
+				// An unchanged database expiry would only move the local
+				// estimate as connection latency changes.
+				deadline.Store(updated)
+				delay = refreshDelay(time.Until(updated))
+			}
+		}
+	}()
+	return delegated, cancel, nil
 }
 
 func batchInterval(duration time.Duration) pgtype.Interval {
@@ -230,12 +295,11 @@ func (r *PgEventRepo) claimBatchWork(ctx common.ExtendedContext, lease, cap time
 			return err
 		}
 		deadline = start.Add(window.LeaseExpiresAt.Time.Sub(window.DatabaseNow.Time))
-		event, err = tx.UpdateEventLifecycle(ctx, UpdateEventLifecycleParams{
-			ID: id, EventStatus: EventStatusProcessing, LastSignal: string(SignalTaskBegin),
-		})
+		row, err := tx.queries.BeginBatchWorkerEvent(ctx, tx.Tx, id)
 		if err != nil {
 			return err
 		}
+		event = row.Event
 		return tx.Notify(ctx, id, SignalTaskBegin, SignalConsumers)
 	})
 	return event, deadline, err
@@ -287,15 +351,15 @@ func (r *PgEventRepo) expireBatchWorker(ctx common.ExtendedContext, workerID, ru
 			return err
 		}
 		if _, err = tx.queries.LockExpiredBatchWorker(ctx, tx.Tx, workerID); errors.Is(err, pgx.ErrNoRows) {
-			// A present worker renewed, finished, or is still committing a
-			// fenced write. A deleted worker can never reclaim its event ID.
+			// A present worker renewed, finished, or still holds the lease lock.
+			// A deleted worker can never reclaim its event ID.
 			if _, err = tx.queries.GetBatchEventWorker(ctx, tx.Tx, workerID); !errors.Is(err, pgx.ErrNoRows) {
 				return err
 			}
 		} else if err != nil {
 			return err
 		}
-		if err := tx.finishAbandonedWorkerEvents(ctx, workerID); err != nil {
+		if err := tx.queries.FinishAbandonedWorkerEvents(ctx, tx.Tx, workerID); err != nil {
 			return err
 		}
 		if err := tx.queries.ClearIdleBatchWorkerLease(ctx, tx.Tx, workerID); err != nil {
@@ -303,30 +367,6 @@ func (r *PgEventRepo) expireBatchWorker(ctx common.ExtendedContext, workerID, ru
 		}
 		return tx.finishBatchRunIfIdle(ctx, row.BatchActionRun)
 	})
-}
-
-func (r *PgEventRepo) finishAbandonedWorkerEvents(ctx common.ExtendedContext, id string) error {
-	ids, err := r.queries.ListUnfinishedBatchWorkerEvents(ctx, r.Tx, id)
-	if err != nil {
-		return err
-	}
-	for _, eventID := range ids {
-		event, err := r.GetEventForUpdate(ctx, eventID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			continue // The request and its event were deleted.
-		}
-		if err != nil {
-			return err
-		}
-		status, result := NewErrorResult("batch worker interrupted", "The worker did not complete this task.")
-		if _, err := completeEvent(ctx, r, event, result, status, SignalConsumers); err != nil {
-			return err
-		}
-		if err := r.queries.FinishBatchRunEvent(ctx, r.Tx, eventID); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (r *PgEventRepo) lockBatchRunForEvent(ctx common.ExtendedContext, id string) (BatchActionRun, error) {
@@ -360,7 +400,7 @@ func batchOwnershipRequired(ctx common.ExtendedContext, event Event) bool {
 func (r *PgEventRepo) checkBatchEventOwnership(ctx common.ExtendedContext, eventID string) error {
 	owner, err := r.queries.GetBatchEventWorker(ctx, r.Tx, eventID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return repo.LockBatchWorker(ctx, r.Tx)
+		return r.lockBatchWorker(ctx)
 	}
 	if err != nil {
 		return err
@@ -368,5 +408,21 @@ func (r *PgEventRepo) checkBatchEventOwnership(ctx common.ExtendedContext, event
 	if owner != repo.BatchWorker(ctx) {
 		return repo.ErrBatchLeaseLost
 	}
-	return repo.LockBatchWorker(ctx, r.Tx)
+	return r.lockBatchWorker(ctx)
+}
+
+// lockBatchWorker holds the lease through the event bus transaction's commit.
+func (r *PgEventRepo) lockBatchWorker(ctx context.Context) error {
+	id := repo.BatchWorker(ctx)
+	if id == "" {
+		return nil
+	}
+	var current bool
+	if err := r.Tx.QueryRow(ctx, "SELECT lock_batch_worker($1)", id).Scan(&current); err != nil {
+		return fmt.Errorf("check batch worker lease: %w", err)
+	}
+	if !current {
+		return repo.ErrBatchLeaseLost
+	}
+	return nil
 }

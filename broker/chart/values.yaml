@@ -21,6 +21,7 @@ okapi-hooks:
 
 containerPort: 8080
 # envvars passed to the container
+# Set env.SMTP_TIMEOUT to override the broker's 30s SMTP delivery timeout.
 env: {}
 
 # envvars passed to the container as secretKeyRef, format

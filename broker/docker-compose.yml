@@ -57,5 +57,6 @@ services:
       DB_PORT: 5432
       DB_PROVISION: "true"
       DB_MIGRATE: "true"
+      SMTP_TIMEOUT: ${SMTP_TIMEOUT:-30s}
     ports:
       - "8081:8081"

@@ -58,6 +58,17 @@ type PostgresEventBus struct {
 	randGen          *rand.Rand // local random generator to avoid same seed for all instance, only needed in Go < 1.20
 }
 
+// WithContext binds calls on the returned bus to ctx. Its listener and consumer
+// handlers continue using the context supplied to Start.
+func WithContext(bus EventBus, ctx common.ExtendedContext) EventBus {
+	if postgres, ok := bus.(*PostgresEventBus); ok {
+		scoped := *postgres
+		scoped.ctx = ctx
+		return &scoped
+	}
+	return bus
+}
+
 func NewPostgresEventBus(repo EventRepo, connString string) *PostgresEventBus {
 	return &PostgresEventBus{
 		repo:             repo,
@@ -270,7 +281,7 @@ func (p *PostgresEventBus) CreateTask(classId string, eventName EventName, data 
 					data.BatchWorkerID = owner
 				}
 			}
-			if err := repo.LockBatchWorker(p.ctx, tx.Tx); err != nil {
+			if err := tx.lockBatchWorker(p.ctx); err != nil {
 				return err
 			}
 		}
@@ -328,7 +339,7 @@ func (p *PostgresEventBus) createNotice(id string, classId string, eventName Eve
 	illTransactionID, patronRequestID := getIllTransactionAndPatronRequestId(classId, eventDomain)
 	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
 		if tx, ok := eventRepo.(*PgEventRepo); ok {
-			if err := repo.LockBatchWorker(p.ctx, tx.Tx); err != nil {
+			if err := tx.lockBatchWorker(p.ctx); err != nil {
 				return err
 			}
 		}

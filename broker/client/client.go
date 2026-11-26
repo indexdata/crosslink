@@ -17,7 +17,6 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
@@ -465,9 +464,7 @@ func (c *Iso18626Client) HandleIllMessage(ctx common.ExtendedContext, peer *ill_
 	if strings.EqualFold(peer.Vendor, string(dirapi.CrossLink)) {
 		return c.prMessageHandler.HandleMessage(ctx, msg, peer)
 	}
-	sendCtx, cancel := repo.BatchIOContext(ctx)
-	defer cancel()
-	return c.sendHttpPost(sendCtx, peer, msg)
+	return c.sendHttpPost(ctx, peer, msg)
 }
 
 func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {

@@ -155,12 +155,14 @@ WHERE event_name IN ('invoke-batch-action', 'invoke-background-action')
 -- name: LockBatchActionDispatch :exec
 SELECT pg_advisory_xact_lock(hashtextextended('crosslink.batch:' || sqlc.arg(action_name)::text, 0));
 
--- name: HasConflictingBatchActionRun :one
-SELECT EXISTS (
-    SELECT 1 FROM batch_action_run
-    WHERE action_name = sqlc.arg(action_name)::text AND completed_at IS NULL
-      AND (owner = sqlc.arg(owner)::text OR owner = '' OR sqlc.arg(owner)::text = '')
-);
+-- name: GetConflictingBatchActionRun :one
+SELECT batch_action_run.id, event.timestamp AS started_at
+FROM batch_action_run
+JOIN event ON event.id = batch_action_run.id
+WHERE action_name = sqlc.arg(action_name)::text AND completed_at IS NULL
+  AND (owner = sqlc.arg(owner)::text OR owner = '' OR sqlc.arg(owner)::text = '')
+ORDER BY event.timestamp, batch_action_run.id
+LIMIT 1;
 
 -- name: AddBatchActionRun :exec
 INSERT INTO batch_action_run (id, scheduled_task_id, owner, action_name)
@@ -183,7 +185,8 @@ FOR UPDATE OF batch_action_run;
 -- name: NextBatchWorkerEvent :one
 SELECT event_id FROM batch_action_run_event
 JOIN event ON event.id = event_id
-WHERE ready_at IS NOT NULL AND event_name = ANY(sqlc.arg(event_names)::varchar[])
+WHERE ready_at IS NOT NULL AND event_status = 'NEW'
+  AND event_name = ANY(sqlc.arg(event_names)::varchar[])
 ORDER BY ready_at, event_id
 FOR UPDATE OF batch_action_run_event SKIP LOCKED
 LIMIT 1;
@@ -195,6 +198,12 @@ SET ready_at = NULL,
     lease_cap_at = clock_timestamp() + sqlc.arg(lease_cap)::interval
 WHERE event_id = sqlc.arg(event_id)::text AND ready_at IS NOT NULL
 RETURNING lease_expires_at, clock_timestamp()::timestamptz AS database_now;
+
+-- name: BeginBatchWorkerEvent :one
+UPDATE event
+SET event_status = 'PROCESSING', last_signal = 'task_begin'
+WHERE id = $1 AND event_status = 'NEW'
+RETURNING sqlc.embed(event);
 
 -- name: RenewBatchWorkerLease :one
 UPDATE batch_action_run_event
@@ -232,9 +241,19 @@ SELECT event_id FROM batch_action_run_event
 WHERE event_id = $1 AND lease_expires_at <= clock_timestamp()
 FOR UPDATE SKIP LOCKED;
 
--- name: ListUnfinishedBatchWorkerEvents :many
-SELECT event_id FROM batch_action_run_event
-WHERE worker_event_id = $1 AND NOT finished ORDER BY event_id;
+-- name: FinishAbandonedWorkerEvents :exec
+-- Recovery clears pending signals without invoking protocol completion handlers.
+WITH abandoned AS (
+    UPDATE batch_action_run_event
+    SET finished = TRUE, ready_at = NULL
+    WHERE worker_event_id = $1 AND NOT finished
+    RETURNING event_id
+)
+UPDATE event
+SET event_status = 'ERROR', last_signal = '',
+    result_data = '{"eventError":{"Message":"batch worker interrupted","Cause":"The worker did not complete this task."}}'
+FROM abandoned
+WHERE event.id = abandoned.event_id AND event.event_status IN ('NEW', 'PROCESSING');
 
 -- name: FinishBatchRunEvent :exec
 UPDATE batch_action_run_event

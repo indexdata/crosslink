@@ -10,6 +10,7 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/indexdata/crosslink/broker/scheduler/oapi"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -18,6 +19,20 @@ const SchedulerChannel = "crosslink_sched_channel"
 
 // ErrBatchActionRunActive means the owner already has an unfinished run of this action.
 var ErrBatchActionRunActive = errors.New("a run for this owner and action is already active")
+
+// BatchActionRunActiveError identifies the run that prevents another dispatch.
+type BatchActionRunActiveError struct {
+	ID        string
+	StartedAt time.Time
+}
+
+func (e *BatchActionRunActiveError) Error() string {
+	return fmt.Sprintf("%s (run %s, started %s)", ErrBatchActionRunActive, e.ID, e.StartedAt.Format(time.RFC3339Nano))
+}
+
+func (e *BatchActionRunActiveError) Unwrap() error {
+	return ErrBatchActionRunActive
+}
 
 type SchedRepo interface {
 	QueueBatchActionRun(common.ExtendedContext, ScheduledTask) error
@@ -182,14 +197,14 @@ func (r *PgSchedRepo) QueueBatchActionRun(ctx common.ExtendedContext, task Sched
 		if err := r.eventQueries.LockBatchActionDispatch(ctx, r.Tx, data.ActionName); err != nil {
 			return fmt.Errorf("lock batch action dispatch: %w", err)
 		}
-		conflict, err := r.eventQueries.HasConflictingBatchActionRun(ctx, r.Tx, events.HasConflictingBatchActionRunParams{
+		conflict, err := r.eventQueries.GetConflictingBatchActionRun(ctx, r.Tx, events.GetConflictingBatchActionRunParams{
 			ActionName: data.ActionName, Owner: task.Owner,
 		})
-		if err != nil {
-			return fmt.Errorf("check batch action reservations: %w", err)
+		if err == nil {
+			return &BatchActionRunActiveError{ID: conflict.ID, StartedAt: conflict.StartedAt.Time.UTC()}
 		}
-		if conflict {
-			return ErrBatchActionRunActive
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("check batch action reservations: %w", err)
 		}
 	}
 	id := uuid.NewString()

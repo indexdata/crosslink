@@ -405,6 +405,7 @@ Configuration is provided via environment variables:
 | `SMTP_PORT`                      | SMTP server port                                   | `2525`                                    |
 | `SMTP_USERNAME`                  | Username for SMTP authentication                   | (empty value)                             |
 | `SMTP_PASSWORD`                  | Password for SMTP authentication                   | (empty value)                             |
+| `SMTP_TIMEOUT`                   | SMTP delivery timeout as a Go duration              | `30s`                                     |
 | `BATCH_PULLSLIP_MAX_COUNT`       | Max count of Patron request to include in pullslip | `100`                                     |
 |                                  | batch                                              |                                           |
 | `BATCH_ACTION_RUN_RETENTION`     | Number of batch action events to retain. Set to 0  | `5`                                       |
@@ -523,34 +524,37 @@ The `email-pullslips` batch queues the same action after SMTP successfully accep
 across all saved schedules and broker replicas. An unrestricted run reserves the
 action for all owners. The reservation includes background tasks, local
 CrossLink message tasks, and their inline actions. Scheduled occurrences that
-conflict are skipped and logged.
+conflict are skipped and logged with the blocking run ID and start time.
 Archive actions use their existing per-resource checks.
 
-After a worker stops renewing its lease, a broker marks its unfinished tasks
-`ERROR`. Batch-action history shows the batch and background tasks. Local message
-tasks and their inline actions appear in the affected request’s event history.
-Live sibling tasks keep running. Startup and a
+After a worker stops renewing its lease, a broker records unfinished tasks as
+`ERROR` without publishing completion signals. Batch-action history shows the
+batch and background tasks. Local message tasks and their inline actions appear
+in the affected request’s event history. Live sibling tasks keep running. Startup and a
 15-second poll recover expired workers and pick up queued work even if a
 notification was missed. The initial worker lease is five minutes by default,
-renewed every third of the configured interval, with a 30-minute cap. Each
-broker runs up to eight batch workers. Shutdown gives active workers up to
-`SHUTDOWN_DELAY` to complete.
+renewed every third of the configured interval, with retries until the current
+deadline and a 30-minute cap. Delegated ISO tasks follow the owner's renewed
+lease through PostgreSQL. Each broker runs up to eight batch workers.
+Shutdown gives active workers up to `SHUTDOWN_DELAY` to complete.
 
 To rerun a saved action, find its ID in `GET /batch_actions` and inspect its
 history at `GET /batch_actions/{id}/events`. When unfinished tasks have completed or expired, send a POST to the action's
 `runLink` (`/batch_actions/{id}/run`).
 A `202` queues a fresh run with the saved configuration and preserves the
-schedule and enabled state. A `409` means a conflicting run is still active.
+schedule and enabled state. A `409` identifies the active run and when it was queued.
 Okapi callers can use the `/broker` prefix and need
 `broker.batch_actions.item.run.post` plus the action's usual authorization.
 Scheduled actions also continue at their next occurrence.
 
-ISO 18626 confirmation tasks have one minute to finish. Recovery marks expired
-tasks `ERROR` and clears their pending signals so a timed-out confirmation
-does not block transaction archiving.
+ISO 18626 HTTP requests have 55 seconds from handler entry to produce a
+confirmation. Confirmation tasks have a two-minute expiry. Recovery and
+rollback clear pending signals on interrupted tasks and record them as `ERROR`
+so they do not block transaction archiving.
 
-SMTP delivery stops after 30 seconds or at the worker's lease deadline,
-whichever comes first. A successful final DATA response counts as delivery.
+SMTP delivery stops after `SMTP_TIMEOUT` (30 seconds by default) or at the
+worker's lease deadline, whichever comes first. A successful final DATA
+response counts as delivery.
 A dropped connection during the DATA response, or an interruption after SMTP
 accepted the email and before the request actions completed, can produce
 duplicate slips on a later run. Review the run history and check whether staff

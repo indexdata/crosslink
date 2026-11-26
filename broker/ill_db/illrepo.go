@@ -86,10 +86,8 @@ func (r *PgIllRepo) CreateWithPgBaseRepo(base *repo.PgBaseRepo[IllRepo]) IllRepo
 }
 
 func (r *PgIllRepo) SaveIllTransaction(ctx common.ExtendedContext, params SaveIllTransactionParams) (IllTransaction, error) {
-	return repo.BatchWrite(ctx, &r.PgBaseRepo, func(db repo.ConnOrTx) (IllTransaction, error) {
-		row, err := r.queries.SaveIllTransaction(ctx, db, params)
-		return row.IllTransaction, err
-	})
+	row, err := r.queries.SaveIllTransaction(ctx, r.GetConnOrTx(), params)
+	return row.IllTransaction, err
 }
 
 func (r *PgIllRepo) GetIllTransactionByRequesterRequestId(ctx common.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error) {
@@ -179,10 +177,8 @@ func (r *PgIllRepo) GetLocatedSuppliersByIllTransactionAndStatus(ctx common.Exte
 }
 
 func (r *PgIllRepo) SavePeer(ctx common.ExtendedContext, params SavePeerParams) (Peer, error) {
-	return repo.BatchWrite(ctx, &r.PgBaseRepo, func(db repo.ConnOrTx) (Peer, error) {
-		row, err := r.queries.SavePeer(ctx, db, params)
-		return row.Peer, err
-	})
+	row, err := r.queries.SavePeer(ctx, r.GetConnOrTx(), params)
+	return row.Peer, err
 }
 
 func (r *PgIllRepo) DeletePeer(ctx common.ExtendedContext, id string) error {
@@ -190,10 +186,8 @@ func (r *PgIllRepo) DeletePeer(ctx common.ExtendedContext, id string) error {
 }
 
 func (r *PgIllRepo) SaveLocatedSupplier(ctx common.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error) {
-	return repo.BatchWrite(ctx, &r.PgBaseRepo, func(db repo.ConnOrTx) (LocatedSupplier, error) {
-		row, err := r.queries.SaveLocatedSupplier(ctx, db, params)
-		return row.LocatedSupplier, err
-	})
+	row, err := r.queries.SaveLocatedSupplier(ctx, r.GetConnOrTx(), params)
+	return row.LocatedSupplier, err
 }
 
 func (r *PgIllRepo) SkipLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) error {

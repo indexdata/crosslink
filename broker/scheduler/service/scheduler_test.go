@@ -410,7 +410,7 @@ func TestRunDueTasks_SkipsOverlappingBatchAndContinuesDispatch(t *testing.T) {
 		ActionData: events.EventData{CommonEventData: events.CommonEventData{BatchActionData: &events.BatchActionData{ActionName: string(schedoapi.EmailPullslips)}}}}
 	repo := &mockSchedRepo{
 		claimResults:          []sched_db.ScheduledTask{batch, {ID: "other", EventName: events.EventNameSendNotification}},
-		queueBatchActionError: sched_db.ErrBatchActionRunActive,
+		queueBatchActionError: &sched_db.BatchActionRunActiveError{ID: "existing-run", StartedAt: time.Now()},
 	}
 	bus := &mockEventBus{}
 	svc := &SchedulerService{schedRepo: repo, eventBus: bus}

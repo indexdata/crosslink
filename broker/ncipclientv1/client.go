@@ -64,7 +64,11 @@ func (e *Error) Error() string {
 
 // exchange sanitizes response failures before errors reach callers or log callbacks.
 func (c *Client) exchange(outgoing, incoming *ncip.NCIPMessage) error {
-	err := httpclient.NewClient().RequestResponseContext(c.ctx, c.client, http.MethodPost, []string{"application/xml", "text/xml"}, c.address, outgoing, incoming, xml.Marshal, decodeResponse)
+	ctx := c.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	err := httpclient.NewClient().RequestResponseContext(ctx, c.client, http.MethodPost, []string{"application/xml", "text/xml"}, c.address, outgoing, incoming, xml.Marshal, decodeResponse)
 	var httpErr *httpclient.HttpError
 	if errors.As(err, &httpErr) {
 		return &httpclient.HttpError{StatusCode: httpErr.StatusCode}

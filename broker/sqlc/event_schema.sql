@@ -73,8 +73,8 @@ $$;
 CREATE TABLE message_confirmation_expiry (
     event_id VARCHAR PRIMARY KEY REFERENCES event (id) ON DELETE CASCADE,
     -- A confirmation task is created after its request starts waiting.
-    -- Leave more than the handler's 30-second maximum wait for any replica.
-    expires_at TIMESTAMPTZ NOT NULL DEFAULT (clock_timestamp() + INTERVAL '1 minute')
+    -- Leave more than the handler's 55-second maximum wait for any replica.
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT (clock_timestamp() + INTERVAL '2 minutes')
 );
 
 CREATE INDEX message_confirmation_expiry_due_idx

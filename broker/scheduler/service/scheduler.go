@@ -178,8 +178,10 @@ func (s *SchedulerService) runDueTasks(ctx common.ExtendedContext) bool {
 				}
 				// Commit the run and next schedule atomically under the task lock.
 				txErr = txRepo.QueueBatchActionRun(ctx, task)
-				if errors.Is(txErr, sched_db.ErrBatchActionRunActive) {
-					ctx.Logger().Info("skipped overlapping batch action occurrence", "taskId", task.ID)
+				var conflict *sched_db.BatchActionRunActiveError
+				if errors.As(txErr, &conflict) {
+					ctx.Logger().Info("skipped overlapping batch action occurrence", "taskId", task.ID,
+						"blockingRunId", conflict.ID, "blockingRunStartedAt", conflict.StartedAt)
 					txErr = nil
 				}
 			} else {

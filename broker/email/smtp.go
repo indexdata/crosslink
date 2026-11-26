@@ -9,7 +9,17 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/indexdata/go-utils/utils"
 )
+
+var smtpTimeout, _ = utils.GetEnvAny("SMTP_TIMEOUT", 30*time.Second, func(value string) (time.Duration, error) {
+	timeout, err := time.ParseDuration(value)
+	if err != nil || timeout <= 0 {
+		return 0, errors.New("SMTP_TIMEOUT must be a positive duration")
+	}
+	return timeout, nil
+})
 
 // Mailer submits a message and returns nil once SMTP accepts it.
 type Mailer interface {
@@ -26,7 +36,7 @@ func (m *DefaultMailer) SendMail(addr string, auth smtp.Auth, from string, to []
 
 // SendMailContext bounds all SMTP exchanges, including the greeting and DATA reply.
 func (m *DefaultMailer) SendMailContext(ctx context.Context, addr string, auth smtp.Auth, from string, to []string, msg []byte) error {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, smtpTimeout)
 	defer cancel()
 	hasLineBreak := func(address string) bool { return strings.ContainsAny(address, "\r\n") }
 	if hasLineBreak(from) || slices.ContainsFunc(to, hasLineBreak) {

@@ -1,6 +1,7 @@
 package sched_service
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/events"
@@ -10,6 +11,26 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestOverdueBatchQueuesLoansAcrossPages(t *testing.T) {
+	const count = 251
+	requests := make([]pr_db.PatronRequest, count)
+	for i := range requests {
+		requests[i] = pr_db.PatronRequest{
+			ID: fmt.Sprintf("loan-%03d", i), Side: prservice.SideLending, State: prservice.LenderStateReceived,
+		}
+	}
+	repo := &mockEmailPrRepo{listResult: requests}
+	bus := new(mockBatchActionEventBus)
+	svc := NewBatchActionService(bus, repo, new(mockBatchActionCleanupRepo), nil)
+	status, result := svc.batchAction(testCtx, batchActionEvent("overdue"))
+	require.Equal(t, events.EventStatusSuccess, status, "%+v", result)
+	require.Equal(t, []string{"", requests[249].ID}, repo.overdueCursors)
+	require.Len(t, bus.createTaskCalls, count)
+	for i, call := range bus.createTaskCalls {
+		require.Equal(t, requests[i].ID, call.id)
+	}
+}
 
 func TestOverdueDefaultFiltersStatesInDatabase(t *testing.T) {
 	for _, defaults := range prservice.GetStateModelBatchActionDefaults() {

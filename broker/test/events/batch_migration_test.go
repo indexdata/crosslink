@@ -94,3 +94,71 @@ func TestBatchMigrationClearsDetachedLegacyLocalMessageTasks(t *testing.T) {
 	})
 	require.ErrorIs(t, err, rollback)
 }
+
+func TestBatchRollbackClearsBatchAndConfirmationTasks(t *testing.T) {
+	down, err := os.ReadFile("../../migrations/083_batch_worker_leases.down.sql")
+	require.NoError(t, err)
+	ctx := common.CreateExtCtxWithArgs(t.Context(), nil)
+	runID := uuid.NewString()
+	fixtures := []struct {
+		id         string
+		name       events.EventName
+		status     events.EventStatus
+		signal     events.Signal
+		batchOwned bool
+	}{
+		{runID, events.EventNameInvokeBatchAction, events.EventStatusNew, events.SignalTaskCreated, true},
+		{uuid.NewString(), events.EventNameInvokeBackgroundAction, events.EventStatusProcessing, events.SignalTaskBegin, true},
+		{uuid.NewString(), events.EventNameMessageSupplier, events.EventStatusNew, events.SignalTaskCreated, true},
+		{uuid.NewString(), events.EventNameInvokeAction, events.EventStatusSuccess, "", true},
+		{uuid.NewString(), events.EventNameConfirmRequesterMsg, events.EventStatusNew, events.SignalTaskCreated, false},
+		{uuid.NewString(), events.EventNameConfirmSupplierMsg, events.EventStatusProcessing, events.SignalTaskBegin, false},
+		{uuid.NewString(), events.EventNameConfirmSupplierMsg, events.EventStatusSuccess, "", false},
+	}
+	rollback := errors.New("roll back migration fixture")
+	err = eventRepo.WithTxFunc(ctx, func(bound events.EventRepo) error {
+		db := bound.(*events.PgEventRepo).GetConnOrTx()
+		queries := events.Queries{}
+		for _, fixture := range fixtures {
+			_, err := bound.SaveEvent(ctx, events.SaveEventParams{
+				ID: fixture.id, IllTransactionID: events.DEFAULT_ILL_TRANSACTION_ID, PatronRequestID: events.DEFAULT_PATRON_REQUEST_ID,
+				EventName: fixture.name, EventType: events.EventTypeTask, EventStatus: fixture.status, LastSignal: string(fixture.signal),
+				Timestamp: pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
+			})
+			if err != nil {
+				return fmt.Errorf("save fixture %s: %w", fixture.id, err)
+			}
+		}
+		if err := queries.AddBatchActionRun(ctx, db, events.AddBatchActionRunParams{ID: runID, ScheduledTaskID: "task", ActionName: "overdue"}); err != nil {
+			return fmt.Errorf("save batch run: %w", err)
+		}
+		for _, fixture := range fixtures {
+			if !fixture.batchOwned {
+				continue
+			}
+			err := queries.AddBatchActionRunEvent(ctx, db, events.AddBatchActionRunEventParams{EventID: fixture.id, RunID: runID, WorkerEventID: runID})
+			if err != nil {
+				return fmt.Errorf("link fixture %s: %w", fixture.id, err)
+			}
+		}
+		if _, err := db.Exec(ctx, string(down)); err != nil {
+			return fmt.Errorf("roll back migration 083: %w", err)
+		}
+		for _, fixture := range fixtures {
+			event, err := bound.GetEvent(ctx, fixture.id)
+			if err != nil {
+				return fmt.Errorf("read fixture %s: %w", fixture.id, err)
+			}
+			if fixture.status == events.EventStatusSuccess {
+				assert.Equal(t, events.EventStatusSuccess, event.EventStatus)
+				assert.Nil(t, event.ResultData.EventError)
+			} else {
+				assert.Equal(t, events.EventStatusError, event.EventStatus, fixture.name)
+				assert.Empty(t, event.LastSignal, fixture.name)
+				assert.NotNil(t, event.ResultData.EventError, fixture.name)
+			}
+		}
+		return rollback
+	})
+	require.ErrorIs(t, err, rollback)
+}

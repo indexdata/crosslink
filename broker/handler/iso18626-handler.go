@@ -118,7 +118,9 @@ func CreateIso18626Handler(eventBus events.EventBus, eventRepo events.EventRepo,
 
 func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter, maxMsgSize int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{RequestId: uuid.NewString(), Component: HANDLER_COMP})
+		requestCtx, cancel := context.WithTimeout(r.Context(), messageConfirmationTimeout)
+		defer cancel()
+		ctx := common.CreateExtCtxWithArgs(requestCtx, &common.LoggerArgs{RequestId: uuid.NewString(), Component: HANDLER_COMP})
 		if r.Method != http.MethodPost {
 			ctx.Logger().Error("method not allowed", "method", r.Method, "url", r.URL)
 			http.Error(w, "only POST allowed", http.StatusMethodNotAllowed)
@@ -1219,20 +1221,35 @@ func (r *requestWaitRegistry) take(id string) (RequestWait, bool) {
 	return wait, ok
 }
 
-// Keep the waiter timeout below the database grace period for confirmation tasks.
-const messageConfirmationTimeout = 30 * time.Second
+// Budget HTTP processing from handler entry, leaving time for the response
+// before the server's 60-second write timeout.
+const messageConfirmationTimeout = 55 * time.Second
 
-func waitForMessageConfirmation(ctx common.ExtendedContext, eventBus events.EventBus, illTransID string, eventName events.EventName, data events.EventData, w http.ResponseWriter) error {
+func waitForMessageConfirmation(ctx common.ExtendedContext, eventBus events.EventBus, illTransID string, eventName events.EventName, data events.EventData, w http.ResponseWriter) (err error) {
+	// In-process callers also use this waiter. For HTTP, the earlier deadline
+	// from the start of the request wins.
 	waitCtx, cancel := context.WithTimeout(ctx, messageConfirmationTimeout)
 	defer cancel()
 	id := uuid.NewString()
+	defer func() {
+		if err != nil && errors.Is(waitCtx.Err(), context.DeadlineExceeded) {
+			ctx.Logger().Warn("timed out waiting for ISO 18626 confirmation", "transactionId", illTransID, "eventId", id, "eventName", eventName)
+		}
+	}()
+	if err := waitCtx.Err(); err != nil {
+		return fmt.Errorf("waiting for ISO 18626 confirmation: %w", err)
+	}
 	response := make(chan messageConfirmation, 1)
 	// Register before publishing: a consumer may confirm before creation returns.
 	waitingReqs.register(id, RequestWait{response: response})
 	defer waitingReqs.take(id)
 
-	if _, err := events.WithWorkerContext(eventBus, ctx).CreateNoticeWithID(id, illTransID, eventName, data, events.EventStatusSuccess, events.EventDomainIllTransaction, events.SignalConsumers); err != nil {
-		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransID)
+	args := ctx.LoggerArgs()
+	publishCtx := common.CreateExtCtxWithArgs(waitCtx, &args)
+	if _, err := events.WithContext(eventBus, publishCtx).CreateNoticeWithID(id, illTransID, eventName, data, events.EventStatusSuccess, events.EventDomainIllTransaction, events.SignalConsumers); err != nil {
+		if waitCtx.Err() == nil {
+			ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransID)
+		}
 		return err
 	}
 	select {

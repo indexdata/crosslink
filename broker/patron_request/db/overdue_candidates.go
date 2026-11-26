@@ -15,8 +15,12 @@ func (r *PgPrRepo) ListOverdueBatchCandidates(ctx common.ExtendedContext, limit 
 		return nil, fmt.Errorf("overdue batch selection requires CQL and a positive limit")
 	}
 	sql := listOverdueBatchCandidates
+	pos := strings.Index(sql, "ORDER BY id")
+	if pos == -1 {
+		return nil, fmt.Errorf("overdue batch query missing ORDER BY id")
+	}
 	if where := query.GetWhereClause(); where != "" {
-		sql = strings.Replace(sql, "ORDER BY id", "AND ("+where+")\nORDER BY id", 1)
+		sql = sql[:pos] + "AND (" + where + ")\n" + sql[pos:]
 	}
 	args := []any{limit, afterID}
 	args = append(args, query.GetQueryArguments()...)
