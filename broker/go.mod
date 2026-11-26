@@ -16,7 +16,7 @@ replace (
 )
 
 require (
-	github.com/boombuler/barcode v1.1.0
+	github.com/boombuler/barcode v1.1.1
 	github.com/carlos7ags/folio v0.11.0
 	github.com/containerd/errdefs v1.0.0
 	github.com/dustin/go-humanize v1.1.0
