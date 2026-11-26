@@ -186,7 +186,7 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 		return events.NewErrorResult("failed to send email via SMTP", err.Error())
 	}
 	if includePdf {
-		if err := psservice.QueuePullslipPrinted(events.WithWorkerContext(s.eventBus, ctx), prs, &event.ID, event.EventData.BatchActionData); err != nil {
+		if err := psservice.QueuePullslipPrinted(s.eventBus, prs, &event.ID, event.EventData.BatchActionData); err != nil {
 			return events.NewErrorResult("email sent but failed to queue pullslip-printed actions", err.Error())
 		}
 	}

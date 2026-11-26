@@ -84,13 +84,13 @@ func (m *PatronRequestMessageHandler) applyEventTransition(pr pr_db.PatronReques
 	return pr, false, true, nil
 }
 
-func (m *PatronRequestMessageHandler) HandleMessage(ctx common.ExtendedContext, msg *iso18626.ISO18626Message, recipientPeer *ill_db.Peer) (*iso18626.ISO18626Message, error) {
+func (m *PatronRequestMessageHandler) HandleMessage(ctx common.ExtendedContext, msg *iso18626.ISO18626Message, recipientPeer *ill_db.Peer, parentID *string) (*iso18626.ISO18626Message, error) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(COMP_MESSAGE))
 	if msg == nil {
 		return nil, errors.New("cannot process nil message")
 	}
 
-	_, response, _, handleErr := m.handlePatronRequestMessageWithPeer(ctx, msg, recipientPeer)
+	_, response, _, handleErr := m.handlePatronRequestMessageWithPeer(ctx, msg, recipientPeer, parentID)
 	return response, handleErr
 }
 
@@ -106,10 +106,11 @@ func (m *PatronRequestMessageHandler) processPatronRequestMessageTask(
 	ctx common.ExtendedContext,
 	prID string,
 	incoming *iso18626.ISO18626Message,
+	parentID *string,
 	handler func(execCtx common.ExtendedContext, parentEventID *string, result *events.EventResult) (events.EventStatus, *iso18626.ISO18626Message, error),
 ) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	data := events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: incoming}}
-	eventID, err := events.WithWorkerContext(m.eventBus, ctx).CreateTask(prID, events.EventNamePatronRequestMessage, data, events.EventDomainPatronRequest, nil, events.SignalConsumers)
+	eventID, err := m.eventBus.CreateTask(prID, events.EventNamePatronRequestMessage, data, events.EventDomainPatronRequest, parentID, events.SignalInline)
 	if err != nil {
 		return events.EventStatusError, nil, err
 	}
@@ -152,16 +153,16 @@ func taskParentID(task *events.Event) *string {
 }
 
 func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.ExtendedContext, msg *iso18626.ISO18626Message) (events.EventStatus, *iso18626.ISO18626Message, pr_db.PatronRequest, error) {
-	return m.handlePatronRequestMessageWithPeer(ctx, msg, nil)
+	return m.handlePatronRequestMessageWithPeer(ctx, msg, nil, nil)
 }
 
-func (m *PatronRequestMessageHandler) handlePatronRequestMessageWithPeer(ctx common.ExtendedContext, msg *iso18626.ISO18626Message, recipientPeer *ill_db.Peer) (events.EventStatus, *iso18626.ISO18626Message, pr_db.PatronRequest, error) {
+func (m *PatronRequestMessageHandler) handlePatronRequestMessageWithPeer(ctx common.ExtendedContext, msg *iso18626.ISO18626Message, recipientPeer *ill_db.Peer, parentID *string) (events.EventStatus, *iso18626.ISO18626Message, pr_db.PatronRequest, error) {
 	if msg.SupplyingAgencyMessage != nil {
 		pr, err := m.prRepo.GetPatronRequestByIdAndSide(ctx, msg.SupplyingAgencyMessage.Header.RequestingAgencyRequestId, SideBorrowing)
 		if err != nil {
 			return events.EventStatusError, nil, pr_db.PatronRequest{}, err
 		}
-		status, response, err := m.processPatronRequestMessageTask(ctx, pr.ID, msg, func(execCtx common.ExtendedContext, parentEventID *string, result *events.EventResult) (events.EventStatus, *iso18626.ISO18626Message, error) {
+		status, response, err := m.processPatronRequestMessageTask(ctx, pr.ID, msg, parentID, func(execCtx common.ExtendedContext, parentEventID *string, result *events.EventResult) (events.EventStatus, *iso18626.ISO18626Message, error) {
 			return m.handleSupplyingAgencyMessageWithParent(execCtx, *msg.SupplyingAgencyMessage, pr, parentEventID, result)
 		})
 		return status, response, pr, err
@@ -170,12 +171,12 @@ func (m *PatronRequestMessageHandler) handlePatronRequestMessageWithPeer(ctx com
 		if err != nil {
 			return events.EventStatusError, nil, pr_db.PatronRequest{}, err
 		}
-		status, response, err := m.processPatronRequestMessageTask(ctx, pr.ID, msg, func(execCtx common.ExtendedContext, parentEventID *string, result *events.EventResult) (events.EventStatus, *iso18626.ISO18626Message, error) {
+		status, response, err := m.processPatronRequestMessageTask(ctx, pr.ID, msg, parentID, func(execCtx common.ExtendedContext, parentEventID *string, result *events.EventResult) (events.EventStatus, *iso18626.ISO18626Message, error) {
 			return m.handleRequestingAgencyMessageWithParent(execCtx, *msg.RequestingAgencyMessage, pr, parentEventID, result)
 		})
 		return status, response, pr, err
 	} else if msg.Request != nil {
-		status, response, pr, err := m.handleRequestMessageWithPeer(ctx, *msg.Request, recipientPeer)
+		status, response, pr, err := m.handleRequestMessageWithPeer(ctx, *msg.Request, recipientPeer, parentID)
 		return status, response, pr, err
 	} else {
 		return events.EventStatusError, nil, pr_db.PatronRequest{}, errors.New("cannot process message without content")
@@ -441,10 +442,10 @@ func createRequestResponse(request iso18626.Request, messageStatus iso18626.Type
 }
 
 func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedContext, request iso18626.Request) (events.EventStatus, *iso18626.ISO18626Message, pr_db.PatronRequest, error) {
-	return m.handleRequestMessageWithPeer(ctx, request, nil)
+	return m.handleRequestMessageWithPeer(ctx, request, nil, nil)
 }
 
-func (m *PatronRequestMessageHandler) handleRequestMessageWithPeer(ctx common.ExtendedContext, request iso18626.Request, recipientPeer *ill_db.Peer) (events.EventStatus, *iso18626.ISO18626Message, pr_db.PatronRequest, error) {
+func (m *PatronRequestMessageHandler) handleRequestMessageWithPeer(ctx common.ExtendedContext, request iso18626.Request, recipientPeer *ill_db.Peer, parentID *string) (events.EventStatus, *iso18626.ISO18626Message, pr_db.PatronRequest, error) {
 	raRequestId := request.Header.RequestingAgencyRequestId
 	if raRequestId == "" {
 		status, response, err := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
@@ -467,7 +468,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessageWithPeer(ctx common.Ex
 	} else {
 		var message = iso18626.NewISO18626Message()
 		message.Request = &request
-		status, response, handleErr := m.processPatronRequestMessageTask(ctx, existingPr.ID, message,
+		status, response, handleErr := m.processPatronRequestMessageTask(ctx, existingPr.ID, message, parentID,
 			func(_ common.ExtendedContext, _ *string, _ *events.EventResult) (events.EventStatus, *iso18626.ISO18626Message, error) {
 				return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 					ErrorType:  iso18626.TypeErrorTypeBadlyFormedMessage,
@@ -526,7 +527,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessageWithPeer(ctx common.Ex
 	}
 	var message = iso18626.NewISO18626Message()
 	message.Request = &request
-	status, response, handleErr := m.processPatronRequestMessageTask(ctx, pr.ID, message,
+	status, response, handleErr := m.processPatronRequestMessageTask(ctx, pr.ID, message, parentID,
 		func(execCtx common.ExtendedContext, parentEventID *string, _ *events.EventResult) (events.EventStatus, *iso18626.ISO18626Message, error) {
 			err = m.runAutoActionsOnStateEntry(execCtx, pr, parentEventID, userFromRequest(request))
 			if err != nil {

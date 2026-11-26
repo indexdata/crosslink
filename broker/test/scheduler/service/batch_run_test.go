@@ -163,6 +163,29 @@ func TestConcurrentUnrestrictedAndOwnerBatchRunsConflict(t *testing.T) {
 	requireConcurrentBatchReservation(t, unrestricted, scoped)
 }
 
+func TestConcurrentRunsOfANewBatchActionConflictByDefault(t *testing.T) {
+	const action = schedoapi.BatchActionName("new-batch-action")
+	first := saveBatchRunTask(t, "ISIL:EMAIL", action)
+	second := saveBatchRunTask(t, first.Owner, action)
+	requireConcurrentBatchReservation(t, first, second)
+}
+
+func TestBatchArchiveActionsAllowOverlappingRuns(t *testing.T) {
+	for _, action := range []schedoapi.BatchActionName{
+		schedoapi.ArchiveBorrowingRequests, schedoapi.ArchiveLendingRequests, schedoapi.ArchiveIllTransactions,
+	} {
+		t.Run(string(action), func(t *testing.T) {
+			task := saveBatchRunTask(t, "ISIL:ARCHIVE", action)
+			for range 2 {
+				err := schedRepo.WithTxFunc(appCtx, func(tx sched_db.SchedRepo) error {
+					return tx.QueueBatchActionRun(appCtx, task)
+				})
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func requireConcurrentBatchReservation(t *testing.T, tasks ...sched_db.ScheduledTask) {
 	t.Helper()
 	eventRepo := app.CreateEventRepo(schedRepo.(*sched_db.PgSchedRepo).Pool)

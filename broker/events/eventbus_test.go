@@ -102,7 +102,7 @@ func TestCreateNoticeWithID(t *testing.T) {
 	repo := &noticeIDRepo{}
 	bus := NewPostgresEventBus(repo, "")
 	bus.ctx = common.CreateExtCtxWithArgs(context.Background(), nil)
-	id, err := bus.CreateNoticeWithID("allocated-event", "transaction", EventNameRequesterMsgReceived, EventData{}, EventStatusSuccess, EventDomainIllTransaction, SignalConsumers)
+	id, err := bus.CreateNoticeWithID("allocated-event", "transaction", EventNameRequesterMsgReceived, EventData{}, EventStatusSuccess, EventDomainIllTransaction, nil, SignalConsumers)
 	assert.NoError(t, err)
 	assert.Equal(t, "allocated-event", id)
 	assert.Equal(t, id, repo.saved.ID)

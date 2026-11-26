@@ -36,21 +36,14 @@ type batchWorkers struct {
 	done   chan struct{}
 }
 
-// WithWorkerContext propagates the lease to worker-originated event writes.
-func WithWorkerContext(bus EventBus, ctx common.ExtendedContext) EventBus {
-	if repo.BatchWorker(ctx) != "" {
-		return WithContext(bus, ctx)
-	}
-	return bus
-}
-
 func (p *PostgresEventBus) startBatchWorkers(db *PgEventRepo) {
-	var names []string
-	for _, name := range []EventName{EventNameInvokeBatchAction, EventNameInvokeBackgroundAction} {
-		if len(p.getHandlers(SignalTaskCreated, HandlerRoleConsumer, name)) > 0 {
-			names = append(names, string(name))
-		}
+	p.handlersMu.RLock()
+	consumers := p.handlers[SignalTaskCreated][HandlerRoleConsumer]
+	names := make([]string, 0, len(consumers))
+	for name := range consumers {
+		names = append(names, string(name))
 	}
+	p.handlersMu.RUnlock()
 	if len(names) == 0 {
 		return
 	}
@@ -195,8 +188,29 @@ func (p *PostgresEventBus) runBatchWorker(work context.Context, event Event, ini
 
 	handlers := p.getHandlers(SignalTaskCreated, HandlerRoleConsumer, event.EventName)
 	triggerHandlers(workerCtx, event, handlers, SignalTaskCreated)
+	if db, ok := p.repo.(*PgEventRepo); ok {
+		db.waitForBatchDependents(workerCtx, event.ID, min(time.Second, leaseDuration/3))
+	}
 	cancel()
 	<-renewDone
+}
+
+// A completed worker can still own notified descendants. An interrupted
+// worker leaves its lease to expire even if descendants remain.
+func (r *PgEventRepo) waitForBatchDependents(ctx common.ExtendedContext, id string, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for ctx.Err() == nil {
+		pending, err := r.queries.HasFinishedBatchWorkerDependents(ctx, r.Pool, id)
+		if err == nil && !pending {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 func (r *PgEventRepo) renewBatchWorkerLease(ctx context.Context, eventID string, lease time.Duration) (time.Time, error) {
@@ -353,7 +367,7 @@ func (r *PgEventRepo) expireBatchWorker(ctx common.ExtendedContext, workerID, ru
 		if _, err = tx.queries.LockExpiredBatchWorker(ctx, tx.Tx, workerID); errors.Is(err, pgx.ErrNoRows) {
 			// A present worker renewed, finished, or still holds the lease lock.
 			// A deleted worker can never reclaim its event ID.
-			if _, err = tx.queries.GetBatchEventWorker(ctx, tx.Tx, workerID); !errors.Is(err, pgx.ErrNoRows) {
+			if _, err = tx.queries.GetBatchRunEvent(ctx, tx.Tx, workerID); !errors.Is(err, pgx.ErrNoRows) {
 				return err
 			}
 		} else if err != nil {
@@ -369,12 +383,87 @@ func (r *PgEventRepo) expireBatchWorker(ctx common.ExtendedContext, workerID, ru
 	})
 }
 
-func (r *PgEventRepo) lockBatchRunForEvent(ctx common.ExtendedContext, id string) (BatchActionRun, error) {
+type lockedBatchEvent struct {
+	BatchActionRun
+	BatchActionRunEvent
+}
+
+func (r *PgEventRepo) lockBatchRunForEvent(ctx common.ExtendedContext, id string) (lockedBatchEvent, error) {
 	row, err := r.queries.LockBatchRunForEvent(ctx, r.Tx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return BatchActionRun{}, nil
+		return lockedBatchEvent{}, nil
 	}
-	return row.BatchActionRun, err
+	if err != nil {
+		return lockedBatchEvent{}, err
+	}
+	// Read membership after taking the run lock. A finishing transaction
+	// may have changed it while this transaction waited for that lock.
+	member, err := r.queries.GetBatchRunEvent(ctx, r.Tx, id)
+	return lockedBatchEvent{row.BatchActionRun, member.BatchActionRunEvent}, err
+}
+
+func batchParent(ctx common.ExtendedContext, eventRepo EventRepo, parentID *string) (lockedBatchEvent, error) {
+	tx, ok := eventRepo.(*PgEventRepo)
+	if !ok || parentID == nil {
+		return lockedBatchEvent{}, nil
+	}
+	parent, err := tx.lockBatchRunForEvent(ctx, *parentID)
+	if err != nil || parent.ID == "" {
+		return parent, err
+	}
+	if parent.CompletedAt.Valid || parent.Finished {
+		return parent, repo.ErrBatchLeaseLost
+	}
+	return parent, tx.lockBatchWorker(ctx, parent.WorkerEventID)
+}
+
+func (r *PgEventRepo) addBatchEvent(ctx common.ExtendedContext, id, runID, workerID string) error {
+	if err := r.queries.AddBatchActionRunEvent(ctx, r.Tx, AddBatchActionRunEventParams{
+		EventID: id, RunID: runID, WorkerEventID: workerID,
+	}); err != nil {
+		return fmt.Errorf("link batch child event: %w", err)
+	}
+	return nil
+}
+
+func lockOwnedBatchEvent(ctx common.ExtendedContext, eventRepo EventRepo, id string) (lockedBatchEvent, error) {
+	tx, ok := eventRepo.(*PgEventRepo)
+	if !ok {
+		return lockedBatchEvent{}, nil
+	}
+	member, err := tx.lockBatchRunForEvent(ctx, id)
+	if err != nil || member.ID == "" {
+		return member, err
+	}
+	if member.Finished || member.WorkerEventID != repo.BatchWorker(ctx) {
+		return member, repo.ErrBatchLeaseLost
+	}
+	return member, tx.lockBatchWorker(ctx, member.WorkerEventID)
+}
+
+func (p *PostgresEventBus) finishBatchEvent(ctx common.ExtendedContext, id string) error {
+	return p.repo.WithTxFunc(ctx, func(eventRepo EventRepo) error {
+		member, err := lockOwnedBatchEvent(ctx, eventRepo, id)
+		if err != nil || member.ID == "" {
+			return err
+		}
+		// Completion callbacks are invoked directly for batch tasks, so
+		// clear their pending signal before releasing the reservation.
+		if _, err := eventRepo.ClaimEventForSignal(ctx, id, SignalTaskComplete); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		return eventRepo.(*PgEventRepo).finishBatchEvent(ctx, id, member)
+	})
+}
+
+func (r *PgEventRepo) finishBatchEvent(ctx common.ExtendedContext, id string, member lockedBatchEvent) error {
+	if err := r.queries.FinishBatchRunEvent(ctx, r.Tx, id); err != nil {
+		return err
+	}
+	if err := r.queries.ClearIdleBatchWorkerLease(ctx, r.Tx, member.WorkerEventID); err != nil {
+		return err
+	}
+	return r.finishBatchRunIfIdle(ctx, member.BatchActionRun)
 }
 
 // finishBatchRunIfIdle requires the run lock, which also serializes child creation.
@@ -386,37 +475,8 @@ func (r *PgEventRepo) finishBatchRunIfIdle(ctx common.ExtendedContext, run Batch
 	return r.queries.FinishBatchRun(ctx, r.Tx, run.ID)
 }
 
-// Only batch actions, their inline children, and delegated deliveries can
-// belong to a run. A caller that supplies only an ID requires a DB check.
-func batchOwnershipRequired(ctx common.ExtendedContext, event Event) bool {
-	switch event.EventName {
-	case "", EventNameInvokeBatchAction, EventNameInvokeBackgroundAction, EventNameInvokeAction, EventNamePatronRequestMessage:
-		return true
-	default:
-		return repo.BatchWorker(ctx) != "" || event.EventData.BatchWorkerID != ""
-	}
-}
-
-func (r *PgEventRepo) checkBatchEventOwnership(ctx common.ExtendedContext, eventID string) error {
-	owner, err := r.queries.GetBatchEventWorker(ctx, r.Tx, eventID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return r.lockBatchWorker(ctx)
-	}
-	if err != nil {
-		return err
-	}
-	if owner != repo.BatchWorker(ctx) {
-		return repo.ErrBatchLeaseLost
-	}
-	return r.lockBatchWorker(ctx)
-}
-
 // lockBatchWorker holds the lease through the event bus transaction's commit.
-func (r *PgEventRepo) lockBatchWorker(ctx context.Context) error {
-	id := repo.BatchWorker(ctx)
-	if id == "" {
-		return nil
-	}
+func (r *PgEventRepo) lockBatchWorker(ctx context.Context, id string) error {
 	var current bool
 	if err := r.Tx.QueryRow(ctx, "SELECT lock_batch_worker($1)", id).Scan(&current); err != nil {
 		return fmt.Errorf("check batch worker lease: %w", err)

@@ -103,17 +103,19 @@ func TestBatchRollbackClearsBatchAndConfirmationTasks(t *testing.T) {
 	fixtures := []struct {
 		id         string
 		name       events.EventName
+		kind       events.EventType
 		status     events.EventStatus
 		signal     events.Signal
 		batchOwned bool
 	}{
-		{runID, events.EventNameInvokeBatchAction, events.EventStatusNew, events.SignalTaskCreated, true},
-		{uuid.NewString(), events.EventNameInvokeBackgroundAction, events.EventStatusProcessing, events.SignalTaskBegin, true},
-		{uuid.NewString(), events.EventNameMessageSupplier, events.EventStatusNew, events.SignalTaskCreated, true},
-		{uuid.NewString(), events.EventNameInvokeAction, events.EventStatusSuccess, "", true},
-		{uuid.NewString(), events.EventNameConfirmRequesterMsg, events.EventStatusNew, events.SignalTaskCreated, false},
-		{uuid.NewString(), events.EventNameConfirmSupplierMsg, events.EventStatusProcessing, events.SignalTaskBegin, false},
-		{uuid.NewString(), events.EventNameConfirmSupplierMsg, events.EventStatusSuccess, "", false},
+		{runID, events.EventNameInvokeBatchAction, events.EventTypeTask, events.EventStatusNew, events.SignalTaskCreated, true},
+		{uuid.NewString(), events.EventNameInvokeBackgroundAction, events.EventTypeTask, events.EventStatusProcessing, events.SignalTaskBegin, true},
+		{uuid.NewString(), events.EventNameMessageSupplier, events.EventTypeTask, events.EventStatusNew, events.SignalTaskCreated, true},
+		{uuid.NewString(), events.EventNameInvokeAction, events.EventTypeTask, events.EventStatusSuccess, events.SignalTaskComplete, true},
+		{uuid.NewString(), events.EventNameRequestReceived, events.EventTypeNotice, events.EventStatusSuccess, events.SignalNoticeCreated, true},
+		{uuid.NewString(), events.EventNameConfirmRequesterMsg, events.EventTypeTask, events.EventStatusNew, events.SignalTaskCreated, false},
+		{uuid.NewString(), events.EventNameConfirmSupplierMsg, events.EventTypeTask, events.EventStatusProcessing, events.SignalTaskBegin, false},
+		{uuid.NewString(), events.EventNameConfirmSupplierMsg, events.EventTypeTask, events.EventStatusSuccess, "", false},
 	}
 	rollback := errors.New("roll back migration fixture")
 	err = eventRepo.WithTxFunc(ctx, func(bound events.EventRepo) error {
@@ -122,7 +124,7 @@ func TestBatchRollbackClearsBatchAndConfirmationTasks(t *testing.T) {
 		for _, fixture := range fixtures {
 			_, err := bound.SaveEvent(ctx, events.SaveEventParams{
 				ID: fixture.id, IllTransactionID: events.DEFAULT_ILL_TRANSACTION_ID, PatronRequestID: events.DEFAULT_PATRON_REQUEST_ID,
-				EventName: fixture.name, EventType: events.EventTypeTask, EventStatus: fixture.status, LastSignal: string(fixture.signal),
+				EventName: fixture.name, EventType: fixture.kind, EventStatus: fixture.status, LastSignal: string(fixture.signal),
 				Timestamp: pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
 			})
 			if err != nil {
@@ -151,6 +153,7 @@ func TestBatchRollbackClearsBatchAndConfirmationTasks(t *testing.T) {
 			}
 			if fixture.status == events.EventStatusSuccess {
 				assert.Equal(t, events.EventStatusSuccess, event.EventStatus)
+				assert.Empty(t, event.LastSignal, fixture.name)
 				assert.Nil(t, event.ResultData.EventError)
 			} else {
 				assert.Equal(t, events.EventStatusError, event.EventStatus, fixture.name)

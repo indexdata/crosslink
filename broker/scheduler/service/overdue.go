@@ -40,7 +40,6 @@ func (s *BatchActionService) Overdue(ctx common.ExtendedContext, event events.Ev
 	const pageSize = 250
 	result := &events.EventResult{CustomData: map[string]any{}}
 	action := prservice.LenderActionOverdue
-	workerBus := events.WithWorkerContext(s.eventBus, ctx)
 	queued, failed := 0, 0
 	afterID := ""
 	for {
@@ -58,7 +57,7 @@ func (s *BatchActionService) Overdue(ctx common.ExtendedContext, event events.Ev
 					continue
 				}
 				child := *data
-				_, err = workerBus.CreateTask(request.ID, events.EventNameInvokeBackgroundAction,
+				_, err = s.eventBus.CreateTask(request.ID, events.EventNameInvokeBackgroundAction,
 					events.EventData{CommonEventData: events.CommonEventData{Action: &action, BatchActionData: &child}},
 					events.EventDomainPatronRequest, &event.ID, events.SignalConsumers)
 			}

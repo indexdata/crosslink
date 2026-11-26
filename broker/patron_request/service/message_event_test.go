@@ -58,7 +58,7 @@ func TestSupplierMessageStateModelEvent(t *testing.T) {
 				message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageNotification
 			}
 
-			response, err := handler.HandleMessage(appCtx, message, nil)
+			response, err := handler.HandleMessage(appCtx, message, nil, nil)
 			if tc.wantProblem {
 				require.Error(t, err)
 			} else {
@@ -98,7 +98,7 @@ func TestRequesterMessageStateModelEvent(t *testing.T) {
 				Action: tc.action,
 			}
 
-			response, err := handler.HandleMessage(appCtx, message, nil)
+			response, err := handler.HandleMessage(appCtx, message, nil, nil)
 			if tc.wantProblem {
 				require.Error(t, err)
 			} else {

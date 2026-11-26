@@ -1077,18 +1077,18 @@ func TestHandleIllMessage(t *testing.T) {
 		},
 	}
 
-	_, err := client.HandleIllMessage(appCtx, nil, sam)
+	_, err := client.HandleIllMessage(appCtx, nil, sam, nil)
 	assert.EqualError(t, err, "peer is nil")
 
 	// To internal peer
-	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{Vendor: string(dirapi.CrossLink)}, sam)
+	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{Vendor: string(dirapi.CrossLink)}, sam, nil)
 	assert.EqualError(t, err, "searching pr with id=req-1")
 
 	// Internal, case insensitive
-	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{Vendor: "crosslinK"}, sam)
+	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{Vendor: "crosslinK"}, sam, nil)
 	assert.EqualError(t, err, "searching pr with id=req-1")
 
-	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{}, sam)
+	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{}, sam, nil)
 	assert.EqualError(t, err, "Post \"\": unsupported protocol scheme \"\"")
 }
 
@@ -1134,7 +1134,7 @@ func TestCancellationReasonDelivery(t *testing.T) {
 		client := CreateIso18626Client(nil, nil, prservice.PatronRequestMessageHandler{}, 1024*1024, 0)
 		msg := iso18626.NewISO18626Message()
 		msg.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{MessageInfo: iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse, Note: note}, StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled}}
-		_, err := client.HandleIllMessage(ctx, &ill_db.Peer{Url: server.URL, Vendor: string(dirapi.Alma)}, msg)
+		_, err := client.HandleIllMessage(ctx, &ill_db.Peer{Url: server.URL, Vendor: string(dirapi.Alma)}, msg, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, note, msg.SupplyingAgencyMessage.MessageInfo.Note)
 	})
@@ -1145,7 +1145,7 @@ func TestCancellationReasonDelivery(t *testing.T) {
 		client := CreateIso18626Client(nil, nil, handler, 1024*1024, 0)
 		msg := iso18626.NewISO18626Message()
 		msg.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{Header: iso18626.Header{RequestingAgencyRequestId: "pr"}, MessageInfo: iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse, Note: note}, StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled}}
-		response, err := client.HandleIllMessage(ctx, &ill_db.Peer{Vendor: string(dirapi.CrossLink)}, msg)
+		response, err := client.HandleIllMessage(ctx, &ill_db.Peer{Vendor: string(dirapi.CrossLink)}, msg, nil)
 		assert.NoError(t, err)
 		if assert.NotNil(t, response) {
 			assert.Equal(t, iso18626.TypeMessageStatusOK, response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)

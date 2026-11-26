@@ -193,7 +193,9 @@ func (r *PgSchedRepo) QueueBatchActionRun(ctx common.ExtendedContext, task Sched
 		return fmt.Errorf("queue batch action run: missing batch action data")
 	}
 	switch schedoapi.BatchActionName(data.ActionName) {
-	case schedoapi.EmailPullslips, schedoapi.RequestAging, schedoapi.Overdue:
+	case schedoapi.ArchiveBorrowingRequests, schedoapi.ArchiveLendingRequests, schedoapi.ArchiveIllTransactions:
+		// Archive actions use atomic per-resource SQL and have no external side effects.
+	default:
 		if err := r.eventQueries.LockBatchActionDispatch(ctx, r.Tx, data.ActionName); err != nil {
 			return fmt.Errorf("lock batch action dispatch: %w", err)
 		}

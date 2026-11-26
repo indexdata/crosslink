@@ -712,7 +712,7 @@ func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.Exten
 			CommonEventData: events.CommonEventData{Action: &actionName, User: user},
 			CustomData:      withStaticActionParams(nil, action.Params),
 		}
-		eventID, err := events.WithWorkerContext(a.eventBus, ctx).CreateTask(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, parentEventID, events.SignalConsumers)
+		eventID, err := a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, parentEventID, events.SignalInline)
 		if err != nil {
 			return &autoActionFailure{action: actionName, msg: err.Error()}
 		}
@@ -846,7 +846,7 @@ func (a *PatronRequestActionService) createRequesterLmsAdapter(ctx common.Extend
 		customData["lmsOutgoingMessage"] = outgoing
 		customData["lmsIncomingMessage"] = incoming
 		eventData := events.EventData{CustomData: customData}
-		_, createErr := events.WithWorkerContext(a.eventBus, ctx).CreateNoticeWithParent(pr.ID, events.EventNameLmsRequesterMessage, eventData, status, events.EventDomainPatronRequest, &eventID, events.SignalConsumers)
+		_, createErr := a.eventBus.CreateNoticeWithParent(pr.ID, events.EventNameLmsRequesterMessage, eventData, status, events.EventDomainPatronRequest, &eventID, events.SignalConsumers)
 		if createErr != nil {
 			ctx.Logger().Error("failed to create LMS log event", "error", createErr)
 		}
@@ -871,7 +871,7 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 			"lmsIncomingMessage": incoming,
 		}
 		eventData := events.EventData{CustomData: customData}
-		_, createErr := events.WithWorkerContext(a.eventBus, ctx).CreateNoticeWithParent(pr.ID, events.EventNameLmsSupplierMessage, eventData, status, events.EventDomainPatronRequest, &eventID, events.SignalConsumers)
+		_, createErr := a.eventBus.CreateNoticeWithParent(pr.ID, events.EventNameLmsSupplierMessage, eventData, status, events.EventDomainPatronRequest, &eventID, events.SignalConsumers)
 		if createErr != nil {
 			ctx.Logger().Error("failed to create LMS log event", "error", createErr)
 		}

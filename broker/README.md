@@ -520,12 +520,17 @@ The `email-pullslips` batch queues the same action after SMTP successfully accep
 
 ### Batch runs and recovery
 
-`email-pullslips`, `request-aging`, and `overdue` reserve an action for its owner
-across all saved schedules and broker replicas. An unrestricted run reserves the
-action for all owners. The reservation includes background tasks, local
-CrossLink message tasks, and their inline actions. Scheduled occurrences that
-conflict are skipped and logged with the blocking run ID and start time.
-Archive actions use their existing per-resource checks.
+Batch actions reserve the action for their owner across all saved schedules
+and broker replicas. An unrestricted run reserves the action for all owners.
+Archive actions are exempt because each resource is archived atomically in
+PostgreSQL and the operation has no external side effects. Scheduled
+occurrences that conflict are skipped and logged with the blocking run ID
+and start time.
+
+Child tasks and notices inherit the run from their parent event. Queued tasks
+can take their own leases. Inline tasks and workflows that resume a waiter on
+another replica share the originating worker's lease. The run stays active
+through completion callbacks and until all linked work is finished.
 
 After a worker stops renewing its lease, a broker records unfinished tasks as
 `ERROR` without publishing completion signals. Batch-action history shows the
@@ -547,10 +552,12 @@ Okapi callers can use the `/broker` prefix and need
 `broker.batch_actions.item.run.post` plus the action's usual authorization.
 Scheduled actions also continue at their next occurrence.
 
-ISO 18626 HTTP requests have 55 seconds from handler entry to produce a
-confirmation. Confirmation tasks have a two-minute expiry. Recovery and
-rollback clear pending signals on interrupted tasks and record them as `ERROR`
-so they do not block transaction archiving.
+ISO 18626 requesting and supplying agency messages have 55 seconds from HTTP
+handler entry to produce a confirmation. Once a new or retried ILL request has
+been saved, the broker gives its workflow notice up to five seconds to publish
+even if the requester disconnects. Confirmation tasks have a two-minute expiry.
+Recovery and rollback clear pending signals on interrupted tasks and record
+them as `ERROR` so they do not block transaction archiving.
 
 SMTP delivery stops after `SMTP_TIMEOUT` (30 seconds by default) or at the
 worker's lease deadline, whichever comes first. A successful final DATA

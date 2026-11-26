@@ -101,15 +101,14 @@ func TestInterruptedBatchRequiresManualRerunAfterRestart(t *testing.T) {
 	first := startBatchTestBus(t, func(bus *events.PostgresEventBus) {
 		bus.HandleEventCreated(events.EventNameInvokeBatchAction, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 			started <- event
-			scoped := events.WithWorkerContext(bus, ctx)
-			requester, err := scoped.CreateTask(events.DEFAULT_ILL_TRANSACTION_ID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, nil, events.SignalObservers)
+			requester, err := bus.CreateTask(events.DEFAULT_ILL_TRANSACTION_ID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalObservers)
 			if err != nil {
 				delegated <- protocolTasks{err: err}
 				return
 			}
-			supplier, err := scoped.CreateTask(events.DEFAULT_ILL_TRANSACTION_ID, events.EventNameMessageSupplier, events.EventData{}, events.EventDomainIllTransaction, nil, events.SignalObservers)
+			supplier, err := bus.CreateTask(events.DEFAULT_ILL_TRANSACTION_ID, events.EventNameMessageSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalObservers)
 			if err == nil {
-				_, err = scoped.BeginTask(supplier, events.SignalObservers)
+				_, err = events.WithContext(bus, ctx).BeginTask(supplier, events.SignalObservers)
 			}
 			delegated <- protocolTasks{requester: requester, supplier: supplier, err: err}
 			// Simulate interruption between claim and completion.
@@ -170,6 +169,120 @@ func succeedBatchEvent(common.ExtendedContext, events.Event) (events.EventStatus
 	return events.EventStatusSuccess, nil
 }
 
+func TestBatchRunTracksGenericChildrenAndCompletionSuccessors(t *testing.T) {
+	t.Setenv("BATCH_WORKER_LEASE", "1s")
+	task := saveBatchRunTask(t, "ISIL:GENERIC", schedoapi.BatchActionName("new-batch-action"))
+	taskCompleted := make(chan events.Event, 1)
+	noticeReceived := make(chan events.Event, 1)
+	successorStarted := make(chan events.Event, 1)
+	handoffErrors := make(chan error, 2)
+	finish := make(chan struct{})
+	release := sync.OnceFunc(func() { close(finish) })
+
+	bus := startBatchTestBus(t, func(bus *events.PostgresEventBus) {
+		bus.HandleEventCreated(events.EventNameInvokeBatchAction, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
+			_, _ = bus.ProcessTask(ctx, event, events.SignalConsumers, func(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+				_, err := bus.CreateTask(event.IllTransactionID, events.EventNameSendNotification, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+				if err != nil {
+					return events.NewErrorResult("create test child", err.Error())
+				}
+				return succeedBatchEvent(ctx, event)
+			})
+		})
+		bus.HandleEventCreated(events.EventNameSendNotification, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
+			_, _ = bus.ProcessTask(ctx, event, events.SignalConsumers, succeedBatchEvent)
+		})
+		bus.HandleTaskCompleted(events.EventNameSendNotification, events.HandlerRoleConsumer, func(_ common.ExtendedContext, event events.Event) {
+			taskCompleted <- event
+			_, err := bus.CreateNoticeWithParent(event.IllTransactionID, events.EventNameRequestReceived, events.EventData{}, events.EventStatusSuccess, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+			handoffErrors <- err
+		})
+		bus.HandleEventCreated(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(_ common.ExtendedContext, event events.Event) {
+			noticeReceived <- event
+			_, err := bus.CreateTask(event.IllTransactionID, events.EventNameLocateSuppliers, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+			handoffErrors <- err
+		})
+		bus.HandleEventCreated(events.EventNameLocateSuppliers, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
+			_, _ = bus.ProcessTask(ctx, event, events.SignalConsumers, func(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+				successorStarted <- event
+				select {
+				case <-finish:
+				case <-ctx.Done():
+				}
+				return succeedBatchEvent(ctx, event)
+			})
+		})
+	})
+	t.Cleanup(release)
+
+	runSavedBatch(t, task.ID, http.StatusAccepted)
+	child := receiveBatchEvent(t, taskCompleted)
+	notice := receiveBatchEvent(t, noticeReceived)
+	successor := receiveBatchEvent(t, successorStarted)
+	pool := schedRepo.(*sched_db.PgSchedRepo).Pool
+	queries := events.Queries{}
+	for _, id := range []string{child.ID, notice.ID, successor.ID} {
+		t.Cleanup(func() { require.NoError(t, queries.DeleteEvent(appCtx, pool, id)) })
+	}
+	require.NoError(t, <-handoffErrors)
+	require.NoError(t, <-handoffErrors)
+	require.Equal(t, events.EventStatusSuccess, child.EventStatus)
+	require.Equal(t, child.ID, notice.ParentID.String)
+	require.Equal(t, notice.ID, successor.ParentID.String)
+	for _, id := range []string{child.ID, notice.ID, successor.ID} {
+		row, err := queries.GetBatchRunEvent(appCtx, pool, id)
+		require.NoError(t, err)
+		require.Equal(t, child.ParentID.String, row.BatchActionRunEvent.RunID)
+		require.Equal(t, child.ID, row.BatchActionRunEvent.WorkerEventID)
+	}
+	runSavedBatch(t, task.ID, http.StatusConflict)
+	owner, err := queries.GetActiveBatchWorkerLease(appCtx, pool, child.ID)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		row, err := queries.GetBatchRunEvent(appCtx, pool, child.ID)
+		return err == nil && row.BatchActionRunEvent.Finished && row.BatchActionRunEvent.LeaseExpiresAt.Time.After(owner.LeaseExpiresAt.Time)
+	}, 3*time.Second, 10*time.Millisecond, "the completed child keeps renewing until its successor finishes")
+
+	confirmation, err := bus.CreateTask(successor.IllTransactionID, events.EventNameConfirmRequesterMsg,
+		events.EventData{}, events.EventDomainIllTransaction, &successor.ID, events.SignalObservers)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, queries.DeleteEvent(appCtx, pool, confirmation)) })
+
+	release()
+	requireBatchEventStatus(t, successor.ID, events.EventStatusSuccess)
+	runSavedBatch(t, task.ID, http.StatusConflict)
+
+	// Retire the final dependent without going through normal task completion.
+	_, err = pool.Exec(appCtx, "UPDATE message_confirmation_expiry SET expires_at = clock_timestamp() WHERE event_id = $1", confirmation)
+	require.NoError(t, err)
+	require.NoError(t, queries.ExpireMessageConfirmationTasks(appCtx, pool, 10))
+	retired, err := queries.GetBatchRunEvent(appCtx, pool, confirmation)
+	require.NoError(t, err)
+	require.True(t, retired.BatchActionRunEvent.Finished)
+	requireBatchEventStatus(t, confirmation, events.EventStatusError)
+
+	// Startup runs idle-batch recovery immediately.
+	startBatchTestBus(t, func(bus *events.PostgresEventBus) {
+		bus.HandleEventCreated(events.EventNameInvokeBatchAction, events.HandlerRoleConsumer, func(common.ExtendedContext, events.Event) {})
+	})
+	require.Eventually(t, func() bool {
+		active, err := schedRepo.HasActiveBatchActionEvents(appCtx, task.ID)
+		return err == nil && !active
+	}, 3*time.Second, 10*time.Millisecond)
+	worker, err := queries.GetBatchRunEvent(appCtx, pool, child.ID)
+	require.NoError(t, err)
+	require.False(t, worker.BatchActionRunEvent.LeaseExpiresAt.Valid)
+
+	// Older brokers could leave an expired lease on a completed run.
+	_, err = pool.Exec(appCtx, "UPDATE batch_action_run_event SET lease_expires_at = clock_timestamp() WHERE event_id = $1", child.ID)
+	require.NoError(t, err)
+	interrupted, err := queries.GetInterruptedBatchWorkers(appCtx, pool, 100)
+	require.NoError(t, err)
+	for _, entry := range interrupted {
+		require.NotEqual(t, child.ID, entry.WorkerID)
+	}
+}
+
 func TestExpiredChildIsFencedWhileSiblingFinishes(t *testing.T) {
 	t.Setenv("BATCH_WORKER_LEASE", "1s")
 	task := saveEmailBatchRunTask(t)
@@ -191,7 +304,7 @@ func TestExpiredChildIsFencedWhileSiblingFinishes(t *testing.T) {
 				for _, note := range []string{"expired", "slow"} {
 					data := e.EventData
 					data.Note = note
-					_, err := events.WithWorkerContext(bus, ctx).CreateTask(events.DEFAULT_PATRON_REQUEST_ID, events.EventNameInvokeBackgroundAction, data, events.EventDomainPatronRequest, &e.ID, events.SignalConsumers)
+					_, err := bus.CreateTask(events.DEFAULT_PATRON_REQUEST_ID, events.EventNameInvokeBackgroundAction, data, events.EventDomainPatronRequest, &e.ID, events.SignalConsumers)
 					if err != nil {
 						return events.NewErrorResult("create test child", err.Error())
 					}
@@ -202,8 +315,7 @@ func TestExpiredChildIsFencedWhileSiblingFinishes(t *testing.T) {
 		bus.HandleEventCreated(events.EventNameInvokeBackgroundAction, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 			if event.EventData.Note == "expired" {
 				deadStarted <- event
-				scoped := events.WithWorkerContext(bus, ctx)
-				inline, err := scoped.CreateTask(event.PatronRequestID, events.EventNameInvokeAction, event.EventData, events.EventDomainPatronRequest, &event.ID, events.SignalConsumers)
+				inline, err := bus.CreateTask(event.PatronRequestID, events.EventNameInvokeAction, event.EventData, events.EventDomainPatronRequest, &event.ID, events.SignalInline)
 				args := ctx.LoggerArgs()
 				staleCtx := common.CreateExtCtxWithArgs(context.WithoutCancel(ctx), &args)
 				inlineCreated <- interruptedChild{inline: inline, ctx: staleCtx, err: err}
@@ -253,10 +365,9 @@ func TestExpiredChildIsFencedWhileSiblingFinishes(t *testing.T) {
 	runSavedBatch(t, task.ID, http.StatusConflict)
 	requireBatchEventStatus(t, live.ID, events.EventStatusProcessing)
 
-	scoped := events.WithWorkerContext(first, child.ctx)
-	_, err := scoped.CreateTask(dead.PatronRequestID, events.EventNameInvokeAction, dead.EventData, events.EventDomainPatronRequest, &dead.ID, events.SignalConsumers)
+	_, err := first.CreateTask(dead.PatronRequestID, events.EventNameInvokeAction, dead.EventData, events.EventDomainPatronRequest, &dead.ID, events.SignalInline)
 	require.ErrorIs(t, err, repo.ErrBatchLeaseLost)
-	_, err = scoped.CompleteTask(dead.ID, nil, events.EventStatusSuccess, events.SignalConsumers)
+	_, err = events.WithContext(first, child.ctx).CompleteTask(dead.ID, nil, events.EventStatusSuccess, events.SignalConsumers)
 	require.ErrorIs(t, err, repo.ErrBatchLeaseLost)
 	requireBatchEventStatus(t, dead.ID, events.EventStatusError)
 	close(finishSibling)
@@ -293,7 +404,7 @@ func TestInterruptedLocalMessageAndAutoActionReleaseBatchForManualRerun(t *testi
 	first := startBatchTestBus(t, func(bus *events.PostgresEventBus) {
 		handler := prservice.CreatePatronRequestMessageHandler(requestRepo, eventRepo, nil, bus)
 		handler.SetAutoActionRunner(batchAutoActionRunner(func(ctx common.ExtendedContext, pr pr_db.PatronRequest, parentID *string) error {
-			id, err := events.WithWorkerContext(bus, ctx).CreateTask(pr.ID, events.EventNameInvokeAction, events.EventData{}, events.EventDomainPatronRequest, parentID, events.SignalConsumers)
+			id, err := bus.CreateTask(pr.ID, events.EventNameInvokeAction, events.EventData{}, events.EventDomainPatronRequest, parentID, events.SignalInline)
 			if err != nil {
 				return err
 			}
@@ -313,7 +424,7 @@ func TestInterruptedLocalMessageAndAutoActionReleaseBatchForManualRerun(t *testi
 					MessageInfo: iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange},
 					StatusInfo:  iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
 				}
-				if _, err := handler.HandleMessage(ctx, msg, nil); err != nil {
+				if _, err := handler.HandleMessage(ctx, msg, nil, &e.ID); err != nil {
 					return events.NewErrorResult("local message failed", err.Error())
 				}
 				return succeedBatchEvent(ctx, e)
@@ -340,7 +451,7 @@ func TestInterruptedLocalMessageAndAutoActionReleaseBatchForManualRerun(t *testi
 		bus.HandleEventCreated(events.EventNameInvokeBatchAction, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, e events.Event) {
 			rerun <- e
 			_, _ = bus.ProcessTask(ctx, e, events.SignalConsumers, func(ctx common.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
-				id, err := events.WithWorkerContext(bus, ctx).CreateTask(request.ID, events.EventNameInvokeAction, events.EventData{}, events.EventDomainPatronRequest, &e.ID, events.SignalConsumers)
+				id, err := bus.CreateTask(request.ID, events.EventNameInvokeAction, events.EventData{}, events.EventDomainPatronRequest, &e.ID, events.SignalInline)
 				if err != nil {
 					return events.NewErrorResult("create replacement action", err.Error())
 				}
@@ -474,7 +585,7 @@ func TestDelegatedBatchWorkFollowsRenewalAcrossReplicas(t *testing.T) {
 	replica := startBatchTestBus(t, func(bus *events.PostgresEventBus) {
 		bus.HandleEventCreated(events.EventNameMessageRequester, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 			completed, err := bus.ProcessTask(ctx, event, events.SignalObservers, func(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
-				if _, err := isoClient.HandleIllMessage(ctx, &ill_db.Peer{Url: peer.URL}, iso18626.NewISO18626Message()); err != nil {
+				if _, err := isoClient.HandleIllMessage(ctx, &ill_db.Peer{Url: peer.URL}, iso18626.NewISO18626Message(), &event.ID); err != nil {
 					return events.NewErrorResult("send test ISO message", err.Error())
 				}
 				return succeedBatchEvent(ctx, event)
@@ -502,9 +613,14 @@ func TestDelegatedBatchWorkFollowsRenewalAcrossReplicas(t *testing.T) {
 	_, err = queries.BeginBatchWorkerEvent(appCtx, ownerPool, root.ID)
 	require.NoError(t, err)
 	owner := repo.WithBatchWorker(appCtx, root.ID, func() time.Time { return initial.LeaseExpiresAt.Time })
-	bus := events.WithWorkerContext(replica, owner)
+	inline, err := replica.CreateTask(events.DEFAULT_PATRON_REQUEST_ID, events.EventNameInvokeAction,
+		events.EventData{}, events.EventDomainPatronRequest, &root.ID, events.SignalInline)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, queries.DeleteEvent(appCtx, ownerPool, inline)) })
+	_, err = events.WithContext(replica, owner).BeginTask(inline, events.SignalObservers)
+	require.NoError(t, err)
 	for _, name := range []events.EventName{events.EventNameMessageSupplier, events.EventNameMessageRequester} {
-		id, err := bus.CreateTask(events.DEFAULT_ILL_TRANSACTION_ID, name, events.EventData{}, events.EventDomainIllTransaction, nil, events.SignalConsumers)
+		id, err := replica.CreateTask(events.DEFAULT_ILL_TRANSACTION_ID, name, events.EventData{}, events.EventDomainIllTransaction, &inline, events.SignalConsumers)
 		require.NoError(t, err)
 		t.Cleanup(func() { require.NoError(t, queries.DeleteEvent(appCtx, ownerPool, id)) })
 	}

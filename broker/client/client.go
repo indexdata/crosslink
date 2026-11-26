@@ -457,12 +457,12 @@ func (c *Iso18626Client) checkConfirmationError(ctx common.ExtendedContext, resp
 	return status
 }
 
-func (c *Iso18626Client) HandleIllMessage(ctx common.ExtendedContext, peer *ill_db.Peer, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
+func (c *Iso18626Client) HandleIllMessage(ctx common.ExtendedContext, peer *ill_db.Peer, msg *iso18626.ISO18626Message, parentID *string) (*iso18626.ISO18626Message, error) {
 	if peer == nil {
 		return nil, fmt.Errorf("peer is nil")
 	}
 	if strings.EqualFold(peer.Vendor, string(dirapi.CrossLink)) {
-		return c.prMessageHandler.HandleMessage(ctx, msg, peer)
+		return c.prMessageHandler.HandleMessage(ctx, msg, peer, parentID)
 	}
 	return c.sendHttpPost(ctx, peer, msg)
 }
@@ -725,7 +725,7 @@ func (c *Iso18626Client) sendAndUpdateStatus(ctx common.ExtendedContext, trCtx t
 		resData.CustomData = map[string]any{common.DO_NOT_SEND: true}
 		resData.OutgoingMessage = nil
 	} else {
-		response, err := c.HandleIllMessage(ctx, trCtx.requester, message)
+		response, err := c.HandleIllMessage(ctx, trCtx.requester, message, &trCtx.event.ID)
 		if response != nil {
 			resData.IncomingMessage = response
 		}
@@ -848,7 +848,7 @@ func (c *Iso18626Client) sendAndUpdateSupplier(ctx common.ExtendedContext, trCtx
 	resData := events.EventResult{}
 	resData.OutgoingMessage = message
 	if !isDoNotSend(trCtx.event) {
-		response, err := c.HandleIllMessage(ctx, trCtx.selectedSupplierPeer, message)
+		response, err := c.HandleIllMessage(ctx, trCtx.selectedSupplierPeer, message, &trCtx.event.ID)
 		if response != nil {
 			resData.IncomingMessage = response
 		}

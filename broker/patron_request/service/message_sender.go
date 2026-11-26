@@ -69,7 +69,7 @@ func (ms *PatronRequestMessageSender) sendSupplyingAgencyMessage(ctx common.Exte
 		illMessage.SupplyingAgencyMessage.DeliveryInfo.DateSent = utils.XSDDateTime{Time: time.Now()}
 	}
 	w := NewResponseCaptureWriter()
-	ms.iso18626Handler.HandleSupplyingAgencyMessage(ctx, illMessage, w)
+	ms.iso18626Handler.HandleSupplyingAgencyMessage(ctx, illMessage, w, messageParentID(parentEventID))
 	result := &events.EventResult{CommonEventData: events.CommonEventData{
 		OutgoingMessage: illMessage,
 		IncomingMessage: w.IllMessage,
@@ -121,7 +121,7 @@ func (ms *PatronRequestMessageSender) sendRequestingAgencyMessageTo(ctx common.E
 		Note:   note,
 	}
 	w := NewResponseCaptureWriter()
-	ms.iso18626Handler.HandleRequestingAgencyMessage(ctx, illMessage, w)
+	ms.iso18626Handler.HandleRequestingAgencyMessage(ctx, illMessage, w, messageParentID(parentEventID))
 	result := &events.EventResult{CommonEventData: events.CommonEventData{
 		OutgoingMessage: illMessage,
 		IncomingMessage: w.IllMessage,
@@ -173,6 +173,7 @@ func (ms *PatronRequestMessageSender) sendBorrowingRequest(ctx common.ExtendedCo
 	w := NewResponseCaptureWriter()
 	resultMap := ms.iso18626Handler.HandleRequest(ctx, illMessage, w, handler.RequestOptions{
 		SkipDuplicateCheck: pr.PrevReqID.Valid && requestType == iso18626.TypeRequestTypeNew,
+		ParentEventID:      messageParentID(parentEventID),
 	})
 	var customData map[string]any
 	if len(resultMap) > 0 {
@@ -316,6 +317,13 @@ func illMessageType(message *iso18626.ISO18626Message) string {
 	}
 }
 
+func messageParentID(id string) *string {
+	if id == "" {
+		return nil
+	}
+	return &id
+}
+
 func (ms *PatronRequestMessageSender) createIllMessageNotice(ctx common.ExtendedContext, prID, parentEventID string, eventName events.EventName, result *events.EventResult, status events.EventStatus) {
 	if ms.eventBus == nil {
 		return
@@ -328,7 +336,7 @@ func (ms *PatronRequestMessageSender) createIllMessageNotice(ctx common.Extended
 	if parentEventID == "" {
 		_, err = ms.eventBus.CreateNotice(prID, eventName, eventData, status, events.EventDomainPatronRequest, events.SignalConsumers)
 	} else {
-		_, err = events.WithWorkerContext(ms.eventBus, ctx).CreateNoticeWithParent(prID, eventName, eventData, status, events.EventDomainPatronRequest, &parentEventID, events.SignalConsumers)
+		_, err = ms.eventBus.CreateNoticeWithParent(prID, eventName, eventData, status, events.EventDomainPatronRequest, &parentEventID, events.SignalConsumers)
 	}
 	if err != nil {
 		ctx.Logger().Error("failed to create ILL message log event", "error", err)

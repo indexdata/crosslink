@@ -133,15 +133,15 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx common.ExtendedContext, ev
 	}
 	if w.shouldForwardSAM(ctx, *event.EventData.IncomingMessage.SupplyingAgencyMessage, event.IllTransactionID) {
 		common.Must(ctx, func() (string, error) {
-			return events.WithWorkerContext(w.eventBus, ctx).CreateTask(event.IllTransactionID, events.EventNameMessageRequester,
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester,
 				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}, CustomData: map[string]any{common.DO_NOT_SEND: !w.shouldForwardMessage(ctx, event)}}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 		}, "")
 	} else {
 		common.Must(ctx, func() (string, error) {
-			return events.WithWorkerContext(w.eventBus, ctx).CreateTask(event.IllTransactionID, events.EventNameConfirmSupplierMsg, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalObservers)
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameConfirmSupplierMsg, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalObservers)
 		}, "")
 		common.Must(ctx, func() (string, error) { // This will also send unfilled message if no more suppliers
-			return events.WithWorkerContext(w.eventBus, ctx).CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 		}, "")
 	}
 }
@@ -155,7 +155,7 @@ func (w *WorkflowManager) RequesterMessageReceived(ctx common.ExtendedContext, e
 			w.skipAllSuppliersByStatus(ctx, event.IllTransactionID, ill_db.SupplierStateNewPg)
 		}
 		common.Must(ctx, func() (string, error) {
-			return events.WithWorkerContext(w.eventBus, ctx).CreateTask(event.IllTransactionID, events.EventNameMessageSupplier,
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier,
 				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}, CustomData: map[string]any{common.DO_NOT_SEND: !w.shouldForwardMessage(ctx, event)}}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 		}, "")
 	}

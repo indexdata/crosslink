@@ -78,9 +78,11 @@ type SignalTarget string
 const (
 	// SignalBatchWorkers wakes the durable batch queue on every replica.
 	SignalBatchWorkers SignalTarget = "batch_workers"
-	SignalConsumers    SignalTarget = "consumers"
-	SignalObservers    SignalTarget = "observers"
-	SignalAll          SignalTarget = "all"
+	// SignalInline creates a task for the caller to process without a creation notification.
+	SignalInline    SignalTarget = "inline"
+	SignalConsumers SignalTarget = "consumers"
+	SignalObservers SignalTarget = "observers"
+	SignalAll       SignalTarget = "all"
 )
 
 // HandlerRole controls which signal target this handler supports.
@@ -93,7 +95,7 @@ const (
 
 type EventData struct {
 	CommonEventData
-	// BatchWorkerID carries a lease across replicas for delegated ISO 18626 delivery.
+	// BatchWorkerID identifies the owner of a notice written by an older broker.
 	BatchWorkerID string         `json:"batchWorkerId,omitempty"`
 	CustomData    map[string]any `json:"customData,omitempty"`
 }

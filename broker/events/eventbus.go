@@ -27,7 +27,7 @@ type EventBus interface {
 	CreateTask(id string, eventName EventName, data EventData, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error)
 	CreateNotice(id string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, target SignalTarget) (string, error)
 	// CreateNoticeWithID publishes a notice using a caller-allocated event ID.
-	CreateNoticeWithID(eventID string, id string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, target SignalTarget) (string, error)
+	CreateNoticeWithID(eventID string, id string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error)
 	// CreateNoticeWithParent creates a notice linked to a parent event.
 	CreateNoticeWithParent(id string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error)
 	// BeginTask marks a task as processing and emits SignalTaskBegin to the selected target.
@@ -162,52 +162,69 @@ func (p *PostgresEventBus) reconnectListener() *pgx.Conn {
 }
 
 func (p *PostgresEventBus) handleNotify(data NotifyData) {
-	event, err := p.repo.GetEvent(p.ctx, data.Event)
+	var event Event
+	var err error
+	var workerID string
+	var memberFinished bool
+	creation := data.Signal == SignalTaskCreated || data.Signal == SignalNoticeCreated
+	if db, ok := p.repo.(*PgEventRepo); ok && creation {
+		var row GetEventForCreationSignalRow
+		row, err = db.queries.GetEventForCreationSignal(p.ctx, db.Pool, data.Event)
+		event, workerID, memberFinished = row.Event, row.WorkerEventID, row.BatchMemberFinished
+	} else {
+		event, err = p.repo.GetEvent(p.ctx, data.Event)
+	}
 	if err != nil {
 		p.ctx.Logger().Error("failure loading event", "error", err, "eventId", data.Event, "signal", data.Signal, "target", data.Target)
 		return
 	}
 	p.ctx.Logger().Debug("received event", "channel", EVENT_BUS_CHANNEL,
-		"signal", data.Signal,
-		"target", data.Target,
-		"eventName", event.EventName,
-		"eventType", event.EventType,
-		"eventStatus", event.EventStatus)
+		"signal", data.Signal, "target", data.Target, "eventName", event.EventName, "eventType", event.EventType, "eventStatus", event.EventStatus)
+
+	eventCtx := p.getEventContext(&event)
+	// Durable tasks are dispatched by the batch queue. Their creation
+	// notification, if any, is only for observers.
+	finishNotice := workerID != "" && !memberFinished && data.Signal == SignalNoticeCreated
+	if workerID == "" && creation {
+		workerID = event.EventData.BatchWorkerID // Legacy notices carried ownership in their payload.
+	}
+	if workerID != "" && workerID != event.ID && !memberFinished {
+		leased, cancel, err := p.delegatedBatchContext(eventCtx, workerID)
+		switch {
+		case err == nil:
+			defer cancel()
+			eventCtx = leased
+		case errors.Is(err, pgx.ErrNoRows):
+			if data.Signal == SignalNoticeCreated {
+				if _, err := p.repo.ClaimEventForSignal(eventCtx, event.ID, data.Signal); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+					eventCtx.Logger().Warn("clear obsolete batch notice signal", "error", err)
+				}
+			}
+			return
+		default:
+			eventCtx.Logger().Warn("load delegated batch lease", "error", err)
+			return
+		}
+	}
 
 	if data.Target == SignalObservers || data.Target == SignalAll {
-		triggerHandlers(p.getEventContext(&event), event, p.getHandlers(data.Signal, HandlerRoleObserver, event.EventName), data.Signal)
+		triggerHandlers(eventCtx, event, p.getHandlers(data.Signal, HandlerRoleObserver, event.EventName), data.Signal)
 	}
 
 	if data.Target == SignalConsumers || data.Target == SignalAll {
-		eventCtx := p.getEventContext(&event)
-		if event.EventData.BatchWorkerID != "" && (data.Signal == SignalTaskCreated || data.Signal == SignalNoticeCreated) {
-			var cancel context.CancelFunc
-			eventCtx, cancel, err = p.delegatedBatchContext(eventCtx, event.EventData.BatchWorkerID)
-			switch {
-			case err == nil:
-				defer cancel()
-			case errors.Is(err, pgx.ErrNoRows):
-				if event.EventType == EventTypeNotice && data.Signal == SignalNoticeCreated {
-					if _, claimErr := p.repo.ClaimEventForSignal(eventCtx, event.ID, data.Signal); claimErr != nil && !errors.Is(claimErr, pgx.ErrNoRows) {
-						eventCtx.Logger().Warn("clear obsolete batch notice signal", "error", claimErr)
-					}
-				}
-				return
-			default:
-				eventCtx.Logger().Warn("load delegated batch lease", "error", err)
-				return
-			}
-		}
-		claimedEvent, claimErr := p.repo.ClaimEventForSignal(eventCtx, data.Event, data.Signal)
-		if claimErr != nil {
-			if !errors.Is(claimErr, pgx.ErrNoRows) {
-				p.ctx.Logger().Error("failure claiming event", "error", claimErr, "eventId", data.Event, "signal", data.Signal, "target", data.Target)
-			} else {
-				p.ctx.Logger().Debug("no event claimed for signal", "eventId", data.Event, "signal", data.Signal, "target", data.Target)
+		claimedEvent, err := p.repo.ClaimEventForSignal(eventCtx, data.Event, data.Signal)
+		if err != nil {
+			if !errors.Is(err, pgx.ErrNoRows) {
+				eventCtx.Logger().Error("failure claiming event", "error", err, "signal", data.Signal, "target", data.Target)
 			}
 			return
 		}
 		triggerHandlers(eventCtx, claimedEvent, p.getHandlers(data.Signal, HandlerRoleConsumer, claimedEvent.EventName), data.Signal)
+		if finishNotice {
+			if err := p.finishBatchEvent(eventCtx, event.ID); err != nil && eventCtx.Err() == nil {
+				eventCtx.Logger().Warn("finish batch notice", "error", err)
+			}
+		}
 	}
 }
 
@@ -238,55 +255,15 @@ func (p *PostgresEventBus) CreateTask(classId string, eventName EventName, data 
 	id := uuid.New().String()
 	illTransactionID, patronRequestID := getIllTransactionAndPatronRequestId(classId, eventDomain)
 	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
-		var run BatchActionRun
-		var workerID string
-		if tx, ok := eventRepo.(*PgEventRepo); ok && parentId != nil &&
-			(eventName == EventNameInvokeAction || eventName == EventNameInvokeBackgroundAction) {
-			var err error
-			run, err = tx.lockBatchRunForEvent(p.ctx, *parentId)
-			if err != nil {
-				return err
-			}
-			if run.ID != "" {
-				if err := tx.checkBatchEventOwnership(p.ctx, *parentId); err != nil {
-					return err
-				}
-				parent, err := tx.GetEvent(p.ctx, *parentId)
-				if err != nil {
-					return err
-				}
-				if run.CompletedAt.Valid || parent.EventStatus != EventStatusProcessing {
-					return repo.ErrBatchLeaseLost
-				}
-				workerID = id
-				if eventName == EventNameInvokeAction {
-					workerID = repo.BatchWorker(p.ctx)
-				}
-			}
+		parent, err := batchParent(p.ctx, eventRepo, parentId)
+		if err != nil {
+			return err
 		}
-		delegated := eventName == EventNameMessageRequester || eventName == EventNameMessageSupplier
-		if tx, ok := eventRepo.(*PgEventRepo); ok && run.ID == "" {
-			owner := repo.BatchWorker(p.ctx)
-			if owner != "" && (delegated || eventName == EventNamePatronRequestMessage) {
-				var err error
-				run, err = tx.lockBatchRunForEvent(p.ctx, owner)
-				if err != nil {
-					return err
-				}
-				if run.ID == "" || run.CompletedAt.Valid {
-					return repo.ErrBatchLeaseLost
-				}
-				workerID = owner
-				if delegated {
-					data.BatchWorkerID = owner
-				}
-			}
-			if err := tx.lockBatchWorker(p.ctx); err != nil {
-				return err
-			}
+		lastSignal := string(SignalTaskCreated)
+		if target == SignalInline {
+			lastSignal = ""
 		}
-
-		event, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
+		_, err = eventRepo.SaveEvent(p.ctx, SaveEventParams{
 			ID:               id,
 			IllTransactionID: illTransactionID,
 			Timestamp:        getPgNow(),
@@ -295,59 +272,56 @@ func (p *PostgresEventBus) CreateTask(classId string, eventName EventName, data 
 			EventStatus:      EventStatusNew,
 			EventData:        data,
 			ParentID:         getPgText(parentId),
-			LastSignal:       string(SignalTaskCreated),
+			LastSignal:       lastSignal,
 			PatronRequestID:  patronRequestID,
 		})
 		if err != nil {
 			return err
 		}
-		if run.ID != "" {
-			tx := eventRepo.(*PgEventRepo)
-			if err := tx.queries.AddBatchActionRunEvent(p.ctx, tx.Tx, AddBatchActionRunEventParams{
-				EventID: id, RunID: run.ID, WorkerEventID: workerID,
-			}); err != nil {
-				return fmt.Errorf("link batch child task: %w", err)
+		if parent.ID != "" {
+			workerID := parent.WorkerEventID
+			// Directly queued children get independent leases. Inline work,
+			// observer-affine tasks, and their continuations stay with the
+			// owner, which may be waiting for them in a batch worker slot.
+			if workerID == *parentId && (target == SignalConsumers || target == SignalAll) {
+				workerID = id
+			}
+			if err := eventRepo.(*PgEventRepo).addBatchEvent(p.ctx, id, parent.ID, workerID); err != nil {
+				return err
 			}
 			if workerID == id {
+				if target == SignalAll {
+					if err := eventRepo.Notify(p.ctx, id, SignalTaskCreated, SignalObservers); err != nil {
+						return err
+					}
+				}
 				return eventRepo.Notify(p.ctx, id, SignalTaskCreated, SignalBatchWorkers)
 			}
-			if !delegated {
-				// The current handler starts inline children synchronously.
-				return nil
-			}
 		}
-		err = eventRepo.Notify(p.ctx, id, SignalTaskCreated, target)
-		p.ctx.Logger().Debug("created TASK event", "eventName", eventName, "eventId", event.ID, "status", event.EventStatus)
-		return err
+		if target == SignalInline {
+			return nil
+		}
+		return eventRepo.Notify(p.ctx, id, SignalTaskCreated, target)
 	})
 }
 
 func (p *PostgresEventBus) CreateNotice(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, target SignalTarget) (string, error) {
-	return p.CreateNoticeWithID(uuid.NewString(), classId, eventName, data, status, eventDomain, target)
+	return p.CreateNoticeWithID(uuid.NewString(), classId, eventName, data, status, eventDomain, nil, target)
 }
 
 func (p *PostgresEventBus) CreateNoticeWithParent(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error) {
-	return p.createNotice(uuid.NewString(), classId, eventName, data, status, eventDomain, parentId, target)
+	return p.CreateNoticeWithID(uuid.NewString(), classId, eventName, data, status, eventDomain, parentId, target)
 }
 
 // CreateNoticeWithID publishes a notice using a caller-allocated event ID.
-func (p *PostgresEventBus) CreateNoticeWithID(eventID string, classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, target SignalTarget) (string, error) {
-	return p.createNotice(eventID, classId, eventName, data, status, eventDomain, nil, target)
-}
-
-func (p *PostgresEventBus) createNotice(id string, classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error) {
+func (p *PostgresEventBus) CreateNoticeWithID(id string, classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error) {
 	illTransactionID, patronRequestID := getIllTransactionAndPatronRequestId(classId, eventDomain)
 	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
-		if tx, ok := eventRepo.(*PgEventRepo); ok {
-			if err := tx.lockBatchWorker(p.ctx); err != nil {
-				return err
-			}
+		parent, err := batchParent(p.ctx, eventRepo, parentId)
+		if err != nil {
+			return err
 		}
-
-		if status == EventStatusSuccess && (eventName == EventNameSupplierMsgReceived || eventName == EventNameRequesterMsgReceived) {
-			data.BatchWorkerID = repo.BatchWorker(p.ctx)
-		}
-		event, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
+		_, err = eventRepo.SaveEvent(p.ctx, SaveEventParams{
 			ID:               id,
 			IllTransactionID: illTransactionID,
 			Timestamp:        getPgNow(),
@@ -362,33 +336,36 @@ func (p *PostgresEventBus) createNotice(id string, classId string, eventName Eve
 		if err != nil {
 			return err
 		}
-		err = eventRepo.Notify(p.ctx, id, SignalNoticeCreated, target)
-		p.ctx.Logger().Debug("created NOTICE event", "eventName", eventName, "eventId", event.ID, "status", status)
-		return err
+		if parent.ID != "" {
+			tx := eventRepo.(*PgEventRepo)
+			if err := tx.addBatchEvent(p.ctx, id, parent.ID, parent.WorkerEventID); err != nil {
+				return err
+			}
+			if target == SignalObservers {
+				// Observer-only notices do not reserve work for consumers.
+				if err := tx.queries.FinishBatchRunEvent(p.ctx, tx.Tx, id); err != nil {
+					return err
+				}
+			}
+		}
+		return eventRepo.Notify(p.ctx, id, SignalNoticeCreated, target)
 	})
 }
 
 func (p *PostgresEventBus) BeginTask(eventId string, target SignalTarget) (Event, error) {
-	return p.beginTask(p.ctx, Event{ID: eventId}, target)
+	return p.beginTask(p.ctx, eventId, target)
 }
 
-func (p *PostgresEventBus) beginTask(ctx common.ExtendedContext, hint Event, target SignalTarget) (Event, error) {
-	eventId := hint.ID
+func (p *PostgresEventBus) beginTask(ctx common.ExtendedContext, eventId string, target SignalTarget) (Event, error) {
 	var event Event
 	err := p.repo.WithTxFunc(ctx, func(eventRepo EventRepo) error {
-		checkOwnership := batchOwnershipRequired(ctx, hint)
-		if tx, ok := eventRepo.(*PgEventRepo); ok && checkOwnership {
-			if err := tx.checkBatchEventOwnership(ctx, eventId); err != nil {
-				return err
-			}
+		if _, err := lockOwnedBatchEvent(ctx, eventRepo, eventId); err != nil {
+			return err
 		}
 		var err error
 		event, err = eventRepo.GetEventForUpdate(ctx, eventId)
 		if err != nil {
 			return err
-		}
-		if !checkOwnership && batchOwnershipRequired(ctx, event) {
-			return repo.ErrBatchLeaseLost
 		}
 		if event.EventType != EventTypeTask {
 			return fmt.Errorf("cannot begin task processing, event is not a TASK but %s", event.EventType)
@@ -408,32 +385,20 @@ func (p *PostgresEventBus) beginTask(ctx common.ExtendedContext, hint Event, tar
 }
 
 func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, status EventStatus, target SignalTarget) (Event, error) {
-	return p.completeTask(p.ctx, Event{ID: eventId}, result, status, target)
+	return p.completeTask(p.ctx, eventId, result, status, target)
 }
 
-func (p *PostgresEventBus) completeTask(ctx common.ExtendedContext, hint Event, result *EventResult, status EventStatus, target SignalTarget) (Event, error) {
-	eventId := hint.ID
+func (p *PostgresEventBus) completeTask(ctx common.ExtendedContext, eventId string, result *EventResult, status EventStatus, target SignalTarget) (Event, error) {
 	var event Event
+	var callbacks []func(common.ExtendedContext, Event)
 	err := p.repo.WithTxFunc(ctx, func(eventRepo EventRepo) error {
-		tx, postgres := eventRepo.(*PgEventRepo)
-		var run BatchActionRun
-		var err error
-		checkOwnership := batchOwnershipRequired(ctx, hint)
-		if postgres && checkOwnership {
-			run, err = tx.lockBatchRunForEvent(ctx, eventId)
-			if err != nil {
-				return err
-			}
-			if err = tx.checkBatchEventOwnership(ctx, eventId); err != nil {
-				return err
-			}
+		member, err := lockOwnedBatchEvent(ctx, eventRepo, eventId)
+		if err != nil {
+			return err
 		}
 		event, err = eventRepo.GetEventForUpdate(ctx, eventId)
 		if err != nil {
 			return err
-		}
-		if !checkOwnership && batchOwnershipRequired(ctx, event) {
-			return repo.ErrBatchLeaseLost
 		}
 		if event.EventType != EventTypeTask {
 			return fmt.Errorf("cannot complete task processing, event is not a TASK but %s", event.EventType)
@@ -441,32 +406,47 @@ func (p *PostgresEventBus) completeTask(ctx common.ExtendedContext, hint Event, 
 		if event.EventStatus != EventStatusProcessing {
 			return fmt.Errorf("cannot complete task processing, event is not in state PROCESSING but %s", event.EventStatus)
 		}
-		event, err = completeEvent(ctx, eventRepo, event, result, status, target)
-		if err != nil || run.ID == "" {
+		event.EventStatus = status
+		if result != nil {
+			event.ResultData = *result
+		}
+		event.LastSignal = string(SignalTaskComplete)
+		if member.ID != "" {
+			if target == SignalConsumers || target == SignalAll {
+				callbacks = p.getHandlers(SignalTaskComplete, HandlerRoleConsumer, event.EventName)
+			}
+			if len(callbacks) == 0 {
+				event.LastSignal = ""
+			}
+		}
+		event, err = eventRepo.SaveEvent(ctx, SaveEventParams(event))
+		if err != nil {
 			return err
 		}
-		if err = tx.queries.FinishBatchRunEvent(ctx, tx.Tx, eventId); err != nil {
-			return err
+		if member.ID == "" {
+			return eventRepo.Notify(ctx, eventId, SignalTaskComplete, target)
 		}
-		if err := tx.queries.ClearIdleBatchWorkerLease(ctx, tx.Tx, repo.BatchWorker(ctx)); err != nil {
-			return err
+		if target == SignalObservers || target == SignalAll {
+			if err := eventRepo.Notify(ctx, eventId, SignalTaskComplete, SignalObservers); err != nil {
+				return err
+			}
 		}
-		return tx.finishBatchRunIfIdle(ctx, run)
+		if len(callbacks) == 0 {
+			return eventRepo.(*PgEventRepo).finishBatchEvent(ctx, eventId, member)
+		}
+		return nil
 	})
-	return event, err
-}
-
-func completeEvent(ctx common.ExtendedContext, eventRepo EventRepo, event Event, result *EventResult, status EventStatus, target SignalTarget) (Event, error) {
-	event.EventStatus = status
-	if result != nil {
-		event.ResultData = *result
-	}
-	event.LastSignal = string(SignalTaskComplete)
-	event, err := eventRepo.SaveEvent(ctx, SaveEventParams(event))
-	if err != nil {
+	if err != nil || len(callbacks) == 0 {
 		return event, err
 	}
-	return event, eventRepo.Notify(ctx, event.ID, SignalTaskComplete, target)
+	// The terminal result is visible to completion handlers. Keep membership
+	// open until they have attached any successor work.
+	triggerHandlers(ctx, event, callbacks, SignalTaskComplete)
+	if err := p.finishBatchEvent(ctx, eventId); err != nil {
+		return event, err
+	}
+	event.LastSignal = ""
+	return event, nil
 }
 
 func (p *PostgresEventBus) HandleEventCreated(eventName EventName, role HandlerRole, f func(ctx common.ExtendedContext, event Event)) {
@@ -490,7 +470,7 @@ func (p *PostgresEventBus) ProcessTask(ctx common.ExtendedContext, event Event, 
 			return event, repo.ErrBatchLeaseLost
 		}
 	} else {
-		event, err = p.beginTask(ctx, event, target)
+		event, err = p.beginTask(ctx, event.ID, target)
 	}
 	if err != nil {
 		p.getEventContext(inEvent).Logger().Warn("failed to start processing TASK event", "error", err, "eventName", inEvent.EventName)
@@ -499,7 +479,7 @@ func (p *PostgresEventBus) ProcessTask(ctx common.ExtendedContext, event Event, 
 
 	status, result := h(ctx, event)
 
-	event, err = p.completeTask(ctx, event, result, status, target)
+	event, err = p.completeTask(ctx, event.ID, result, status, target)
 	if err != nil {
 		p.getEventContext(inEvent).Logger().Warn("failed to complete processing TASK event", "error", err, "eventName", inEvent.EventName)
 		return event, err

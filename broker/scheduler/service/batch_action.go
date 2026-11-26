@@ -237,7 +237,7 @@ func (s *BatchActionService) RequestAging(ctx common.ExtendedContext, event even
 				Action:          action,
 				BatchActionData: &childBatchActionData,
 			}, CustomData: backgroundActionParams(event.EventData.CustomData)}
-			_, eventErr := events.WithWorkerContext(s.eventBus, ctx).CreateTask(pr.ID, events.EventNameInvokeBackgroundAction, data, events.EventDomainPatronRequest, &event.ID, events.SignalConsumers)
+			_, eventErr := s.eventBus.CreateTask(pr.ID, events.EventNameInvokeBackgroundAction, data, events.EventDomainPatronRequest, &event.ID, events.SignalConsumers)
 			if eventErr != nil {
 				result.CustomData[pr.ID] = "error creating close action: " + eventErr.Error()
 			}
