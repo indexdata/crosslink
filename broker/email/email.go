@@ -23,10 +23,8 @@ import (
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const DEFAULT_FOR_NO_VALUE = "n/a"
 const DATE_LAYOUT = "2006-01-02"
 
 // Environment variables for SMTP configuration.
@@ -282,39 +280,31 @@ func getTemplatePlaceholders(dataType reflect.Type) []TemplatePlaceholder {
 	return placeholders
 }
 
+// GetPullSlipData collects the template fields for a request. A value the
+// request does not have is left empty, so a template can test it with if or
+// give its own fallback with or.
 func GetPullSlipData(pr pr_db.PatronRequest, notes []pr_db.Notification, conditions []pr_db.Notification, barcodeData string) PullSlipData {
+	bib := pr.IllRequest.BibliographicInfo
 	data := PullSlipData{
 		ReqId:              pr.RequesterReqID.String,
-		CancellationReason: textValue(pr.CancellationReason, DEFAULT_FOR_NO_VALUE),
+		CancellationReason: pr.CancellationReason.String,
 		PickupLocation:     getPickupLocation(pr),
 		PickupURL:          getPickupURL(pr),
-		NeededBy:           DEFAULT_FOR_NO_VALUE,
-		Title:              DEFAULT_FOR_NO_VALUE,
-		TitleOfComponent:   DEFAULT_FOR_NO_VALUE,
-		Author:             DEFAULT_FOR_NO_VALUE,
-		AuthorOfComponent:  DEFAULT_FOR_NO_VALUE,
-		DueDate:            DEFAULT_FOR_NO_VALUE,
-		ReturnAddress:      DEFAULT_FOR_NO_VALUE,
+		Title:              bib.Title,
+		TitleOfComponent:   bib.TitleOfComponent,
+		Author:             bib.Author,
+		AuthorOfComponent:  bib.AuthorOfComponent,
 		BarcodeBase64:      barcodeData,
-		ServiceType:        DEFAULT_FOR_NO_VALUE,
-		ServiceLevel:       DEFAULT_FOR_NO_VALUE,
-		SystemIdentifier:   DEFAULT_FOR_NO_VALUE,
-		Publisher:          DEFAULT_FOR_NO_VALUE,
-		MaterialType:       DEFAULT_FOR_NO_VALUE,
-		Volume:             DEFAULT_FOR_NO_VALUE,
-		Issue:              DEFAULT_FOR_NO_VALUE,
-		Pages:              DEFAULT_FOR_NO_VALUE,
-		PagesRequested:     DEFAULT_FOR_NO_VALUE,
+		SystemIdentifier:   bib.SupplierUniqueRecordId,
+		Volume:             bib.Volume,
+		Issue:              bib.Issue,
+		Pages:              bib.EstimatedNoPages,
+		PagesRequested:     bib.PagesRequested,
 		StaffNotes:         getStaffNotes(notes),
 		CallNumber:         getCallNumber(pr),
 		Location:           getItemLocation(pr, func(item pr_db.PrItem) *string { return item.Location }),
 		ShelvingLocation:   getItemLocation(pr, func(item pr_db.PrItem) *string { return item.ShelvingLocation }),
 		LoanConditions:     getLoanConditions(conditions),
-		PatronGivenName:    DEFAULT_FOR_NO_VALUE,
-		PatronName:         DEFAULT_FOR_NO_VALUE,
-		PatronSurname:      DEFAULT_FOR_NO_VALUE,
-		PatronId:           DEFAULT_FOR_NO_VALUE,
-		PatronProfile:      DEFAULT_FOR_NO_VALUE,
 	}
 	for _, item := range pr.Items {
 		data.Items = append(data.Items, PullSlipItem{
@@ -325,38 +315,11 @@ func GetPullSlipData(pr pr_db.PatronRequest, notes []pr_db.Notification, conditi
 			ShelvingLocation: optionalItemValue(item.ShelvingLocation),
 		})
 	}
-	if pr.IllRequest.BibliographicInfo.Author != "" {
-		data.Author = pr.IllRequest.BibliographicInfo.Author
-	}
-	if pr.IllRequest.BibliographicInfo.Title != "" {
-		data.Title = pr.IllRequest.BibliographicInfo.Title
-	}
-	if pr.IllRequest.BibliographicInfo.TitleOfComponent != "" {
-		data.TitleOfComponent = pr.IllRequest.BibliographicInfo.TitleOfComponent
-	}
-	if pr.IllRequest.BibliographicInfo.AuthorOfComponent != "" {
-		data.AuthorOfComponent = pr.IllRequest.BibliographicInfo.AuthorOfComponent
-	}
-	if pr.IllRequest.BibliographicInfo.Volume != "" {
-		data.Volume = pr.IllRequest.BibliographicInfo.Volume
-	}
-	if pr.IllRequest.BibliographicInfo.Issue != "" {
-		data.Issue = pr.IllRequest.BibliographicInfo.Issue
-	}
-	if pr.IllRequest.BibliographicInfo.EstimatedNoPages != "" {
-		data.Pages = pr.IllRequest.BibliographicInfo.EstimatedNoPages
-	}
-	if pr.IllRequest.BibliographicInfo.PagesRequested != "" {
-		data.PagesRequested = pr.IllRequest.BibliographicInfo.PagesRequested
-	}
-	if pr.IllRequest.BibliographicInfo.SupplierUniqueRecordId != "" {
-		data.SystemIdentifier = pr.IllRequest.BibliographicInfo.SupplierUniqueRecordId
-	}
-	if pr.IllRequest.PublicationInfo != nil && pr.IllRequest.PublicationInfo.Publisher != "" {
-		data.Publisher = pr.IllRequest.PublicationInfo.Publisher
-	}
-	if pr.IllRequest.PublicationInfo != nil && pr.IllRequest.PublicationInfo.PublicationType != nil && pr.IllRequest.PublicationInfo.PublicationType.Text != "" {
-		data.MaterialType = pr.IllRequest.PublicationInfo.PublicationType.Text
+	if publication := pr.IllRequest.PublicationInfo; publication != nil {
+		data.Publisher = publication.Publisher
+		if publication.PublicationType != nil {
+			data.MaterialType = publication.PublicationType.Text
+		}
 	}
 	if pr.DueAt.Valid {
 		data.DueDate = pr.DueAt.Time.Format(DATE_LAYOUT)
@@ -364,38 +327,30 @@ func GetPullSlipData(pr pr_db.PatronRequest, notes []pr_db.Notification, conditi
 	if pr.IllResponse.ReturnInfo != nil && pr.IllResponse.ReturnInfo.PhysicalAddress != nil {
 		data.ReturnAddress = formatPhysicalAddress(pr.IllResponse.ReturnInfo.PhysicalAddress)
 	}
-	if pr.IllRequest.ServiceInfo != nil {
-		if pr.IllRequest.ServiceInfo.NeedBeforeDate != nil && !pr.IllRequest.ServiceInfo.NeedBeforeDate.IsZero() {
-			data.NeededBy = pr.IllRequest.ServiceInfo.NeedBeforeDate.Format(DATE_LAYOUT)
+	if service := pr.IllRequest.ServiceInfo; service != nil {
+		if service.NeedBeforeDate != nil && !service.NeedBeforeDate.IsZero() {
+			data.NeededBy = service.NeedBeforeDate.Format(DATE_LAYOUT)
 		}
-		if pr.IllRequest.ServiceInfo.ServiceLevel != nil && pr.IllRequest.ServiceInfo.ServiceLevel.Text != "" {
-			data.ServiceLevel = pr.IllRequest.ServiceInfo.ServiceLevel.Text
+		if service.ServiceLevel != nil {
+			data.ServiceLevel = service.ServiceLevel.Text
 		}
-		if pr.IllRequest.ServiceInfo.ServiceType != "" {
-			data.ServiceType = string(pr.IllRequest.ServiceInfo.ServiceType)
-		}
+		data.ServiceType = string(service.ServiceType)
 	}
-	if pr.IllRequest.PatronInfo != nil {
-		if pr.IllRequest.PatronInfo.PatronId != "" {
-			data.PatronId = pr.IllRequest.PatronInfo.PatronId
-		}
-		if pr.IllRequest.PatronInfo.GivenName != "" {
-			data.PatronGivenName = pr.IllRequest.PatronInfo.GivenName
-			data.PatronName = pr.IllRequest.PatronInfo.GivenName
-		}
-		if pr.IllRequest.PatronInfo.Surname != "" {
-			data.PatronSurname = pr.IllRequest.PatronInfo.Surname
-		}
-		if pr.IllRequest.PatronInfo.PatronType != nil && pr.IllRequest.PatronInfo.PatronType.Text != "" {
-			data.PatronProfile = pr.IllRequest.PatronInfo.PatronType.Text
+	if patron := pr.IllRequest.PatronInfo; patron != nil {
+		data.PatronId = patron.PatronId
+		data.PatronGivenName = patron.GivenName
+		data.PatronName = patron.GivenName
+		data.PatronSurname = patron.Surname
+		if patron.PatronType != nil {
+			data.PatronProfile = patron.PatronType.Text
 		}
 	}
 	return data
 }
 
 func optionalItemValue(value *string) string {
-	if value == nil || *value == "" {
-		return DEFAULT_FOR_NO_VALUE
+	if value == nil {
+		return ""
 	}
 	return *value
 }
@@ -1067,11 +1022,7 @@ func getStaffNotes(noteList []pr_db.Notification) string {
 			noteStrings = append(noteStrings, note.Note.String)
 		}
 	}
-	notes := strings.Join(noteStrings, "\n")
-	if notes == "" {
-		return DEFAULT_FOR_NO_VALUE
-	}
-	return notes
+	return strings.Join(noteStrings, "\n")
 }
 
 func getLoanConditions(conditionList []pr_db.Notification) string {
@@ -1081,11 +1032,7 @@ func getLoanConditions(conditionList []pr_db.Notification) string {
 			conditionStrings = append(conditionStrings, note.Code.String)
 		}
 	}
-	conditions := strings.Join(conditionStrings, "\n")
-	if conditions == "" {
-		return DEFAULT_FOR_NO_VALUE
-	}
-	return conditions
+	return strings.Join(conditionStrings, "\n")
 }
 
 func getCallNumber(request pr_db.PatronRequest) string {
@@ -1095,11 +1042,7 @@ func getCallNumber(request pr_db.PatronRequest) string {
 			callNumberStrings = append(callNumberStrings, *item.CallNumber)
 		}
 	}
-	callNumber := strings.Join(callNumberStrings, ", ")
-	if callNumber == "" {
-		return DEFAULT_FOR_NO_VALUE
-	}
-	return callNumber
+	return strings.Join(callNumberStrings, ", ")
 }
 
 func getItemLocation(request pr_db.PatronRequest, value func(pr_db.PrItem) *string) string {
@@ -1108,14 +1051,7 @@ func getItemLocation(request pr_db.PatronRequest, value func(pr_db.PrItem) *stri
 			return *location
 		}
 	}
-	return DEFAULT_FOR_NO_VALUE
-}
-
-func textValue(value pgtype.Text, fallback string) string {
-	if value.Valid && value.String != "" {
-		return value.String
-	}
-	return fallback
+	return ""
 }
 
 func getPickupLocation(request pr_db.PatronRequest) string {
@@ -1127,7 +1063,7 @@ func getPickupLocation(request pr_db.PatronRequest) string {
 			return address.ElectronicAddress.ElectronicAddressData
 		}
 	}
-	return DEFAULT_FOR_NO_VALUE
+	return ""
 }
 
 func getPickupURL(request pr_db.PatronRequest) string {
@@ -1148,7 +1084,7 @@ func getPickupURL(request pr_db.PatronRequest) string {
 			return value
 		}
 	}
-	return DEFAULT_FOR_NO_VALUE
+	return ""
 }
 
 func formatPhysicalAddress(a *iso18626.PhysicalAddress) string {

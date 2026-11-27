@@ -2443,7 +2443,7 @@ func (a *PatronRequestActionService) createAndSendEmail(ctx common.ExtendedConte
 		}
 		return fmt.Errorf("validate email template %q (label %q, audience %s): %w", template.ID, label, audience, err)
 	}
-	data := email.GetPullSlipData(pr, notes, conditions, email.DEFAULT_FOR_NO_VALUE)
+	data := email.GetPullSlipData(pr, notes, conditions, "")
 	var body string
 	if template.ContentType == string(proapi.Html) {
 		body, err = email.RenderHtmlTemplate(data, template.Labels, template.Body)

@@ -18,8 +18,8 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestJoinAddresses_Empty(t *testing.T) {
-	assert.Equal(t, "", joinAddresses(nil))
-	assert.Equal(t, "", joinAddresses([]string{}))
+	assert.Empty(t, joinAddresses(nil))
+	assert.Empty(t, joinAddresses([]string{}))
 }
 
 func TestJoinAddresses_Single(t *testing.T) {
@@ -146,7 +146,7 @@ func TestGetPullSlipDataUsesCanonicalDueDate(t *testing.T) {
 		want string
 	}{
 		{name: "canonical overrides snapshot", due: pgtype.Timestamptz{Time: legacy.AddDate(0, 0, 7), Valid: true}, want: "2026-08-22"},
-		{name: "open ended ignores snapshot", want: DEFAULT_FOR_NO_VALUE},
+		{name: "open ended ignores snapshot", want: ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pr := pr_db.PatronRequest{DueAt: tc.due, IllResponse: iso18626.SupplyingAgencyMessage{
@@ -569,68 +569,28 @@ func TestGetPullSlipData_PopulatesAllAvailableFields(t *testing.T) {
 	}, data)
 }
 
-func TestGetPullSlipData_ItemsUseDefaultsForMissingOptionalFields(t *testing.T) {
+func TestGetPullSlipData_ItemsLeaveMissingOptionalFieldsEmpty(t *testing.T) {
 	data := GetPullSlipData(pr_db.PatronRequest{
 		Items: []pr_db.PrItem{{Barcode: "item-barcode"}},
 	}, nil, nil, "")
 
-	assert.Equal(t, []PullSlipItem{{
-		Title:            DEFAULT_FOR_NO_VALUE,
-		Barcode:          "item-barcode",
-		CallNumber:       DEFAULT_FOR_NO_VALUE,
-		Location:         DEFAULT_FOR_NO_VALUE,
-		ShelvingLocation: DEFAULT_FOR_NO_VALUE,
-	}}, data.Items)
+	assert.Equal(t, []PullSlipItem{{Barcode: "item-barcode"}}, data.Items)
 }
 
-func TestGetPullSlipData_UsesDefaultsWhenOptionalFieldsAreMissing(t *testing.T) {
-	data := GetPullSlipData(pr_db.PatronRequest{}, nil, nil, DEFAULT_FOR_NO_VALUE)
-
-	assert.Equal(t, PullSlipData{
-		ReqId:              "",
-		CancellationReason: DEFAULT_FOR_NO_VALUE,
-		PickupLocation:     DEFAULT_FOR_NO_VALUE,
-		PickupURL:          DEFAULT_FOR_NO_VALUE,
-		NeededBy:           DEFAULT_FOR_NO_VALUE,
-		Title:              DEFAULT_FOR_NO_VALUE,
-		TitleOfComponent:   DEFAULT_FOR_NO_VALUE,
-		Author:             DEFAULT_FOR_NO_VALUE,
-		AuthorOfComponent:  DEFAULT_FOR_NO_VALUE,
-		DueDate:            DEFAULT_FOR_NO_VALUE,
-		ReturnAddress:      DEFAULT_FOR_NO_VALUE,
-		BarcodeBase64:      DEFAULT_FOR_NO_VALUE,
-		ServiceType:        DEFAULT_FOR_NO_VALUE,
-		ServiceLevel:       DEFAULT_FOR_NO_VALUE,
-		SystemIdentifier:   DEFAULT_FOR_NO_VALUE,
-		Publisher:          DEFAULT_FOR_NO_VALUE,
-		MaterialType:       DEFAULT_FOR_NO_VALUE,
-		Volume:             DEFAULT_FOR_NO_VALUE,
-		Issue:              DEFAULT_FOR_NO_VALUE,
-		Pages:              DEFAULT_FOR_NO_VALUE,
-		PagesRequested:     DEFAULT_FOR_NO_VALUE,
-		StaffNotes:         DEFAULT_FOR_NO_VALUE,
-		CallNumber:         DEFAULT_FOR_NO_VALUE,
-		Location:           DEFAULT_FOR_NO_VALUE,
-		ShelvingLocation:   DEFAULT_FOR_NO_VALUE,
-		LoanConditions:     DEFAULT_FOR_NO_VALUE,
-		PatronGivenName:    DEFAULT_FOR_NO_VALUE,
-		PatronName:         DEFAULT_FOR_NO_VALUE,
-		PatronSurname:      DEFAULT_FOR_NO_VALUE,
-		PatronId:           DEFAULT_FOR_NO_VALUE,
-		PatronProfile:      DEFAULT_FOR_NO_VALUE,
-	}, data)
+func TestGetPullSlipData_LeavesMissingFieldsEmpty(t *testing.T) {
+	assert.Equal(t, PullSlipData{}, GetPullSlipData(pr_db.PatronRequest{}, nil, nil, ""))
 }
 
-func TestGetPullSlipData_UsesDefaultNeededByForZeroDate(t *testing.T) {
+func TestGetPullSlipData_LeavesNeededByEmptyForZeroDate(t *testing.T) {
 	data := GetPullSlipData(pr_db.PatronRequest{
 		IllRequest: iso18626.Request{
 			ServiceInfo: &iso18626.ServiceInfo{
 				NeedBeforeDate: &utils.XSDDateTime{},
 			},
 		},
-	}, nil, nil, DEFAULT_FOR_NO_VALUE)
+	}, nil, nil, "")
 
-	assert.Equal(t, DEFAULT_FOR_NO_VALUE, data.NeededBy)
+	assert.Empty(t, data.NeededBy)
 }
 
 // ── formatPhysicalAddress ─────────────────────────────────────────────────────
@@ -667,13 +627,13 @@ func TestFormatPhysicalAddress_EmptyRegionText(t *testing.T) {
 }
 
 func TestFormatPhysicalAddress_Empty(t *testing.T) {
-	assert.Equal(t, "", formatPhysicalAddress(&iso18626.PhysicalAddress{}))
+	assert.Empty(t, formatPhysicalAddress(&iso18626.PhysicalAddress{}))
 }
 
 // ── getStaffNotes ─────────────────────────────────────────────────────────────
 
 func TestGetStaffNotes_Empty(t *testing.T) {
-	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getStaffNotes([]pr_db.Notification{}))
+	assert.Empty(t, getStaffNotes([]pr_db.Notification{}))
 }
 
 func TestGetStaffNotes_InvalidNotesSkipped(t *testing.T) {
@@ -695,7 +655,7 @@ func TestGetStaffNotes_Multiple(t *testing.T) {
 // ── getLoanConditions ─────────────────────────────────────────────────────────
 
 func TestGetLoanConditions_Empty(t *testing.T) {
-	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getLoanConditions([]pr_db.Notification{}))
+	assert.Empty(t, getLoanConditions([]pr_db.Notification{}))
 }
 
 func TestGetLoanConditions_InvalidSkipped(t *testing.T) {
@@ -717,18 +677,18 @@ func TestGetLoanConditions_Multiple(t *testing.T) {
 // ── getCallNumber ─────────────────────────────────────────────────────────────
 
 func TestGetCallNumber_Empty(t *testing.T) {
-	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getCallNumber(pr_db.PatronRequest{}))
+	assert.Empty(t, getCallNumber(pr_db.PatronRequest{}))
 }
 
 func TestGetCallNumber_NilCallNumber(t *testing.T) {
 	pr := pr_db.PatronRequest{Items: []pr_db.PrItem{{ID: "i1", CallNumber: nil}}}
-	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getCallNumber(pr))
+	assert.Empty(t, getCallNumber(pr))
 }
 
 func TestGetCallNumber_EmptyCallNumber(t *testing.T) {
 	empty := ""
 	pr := pr_db.PatronRequest{Items: []pr_db.PrItem{{ID: "i1", CallNumber: &empty}}}
-	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getCallNumber(pr))
+	assert.Empty(t, getCallNumber(pr))
 }
 
 func TestGetCallNumber_Multiple(t *testing.T) {
@@ -743,7 +703,7 @@ func TestGetCallNumber_Multiple(t *testing.T) {
 // ── getPickupLocation ─────────────────────────────────────────────────────────
 
 func TestGetPickupLocation_NoDeliveryInfo(t *testing.T) {
-	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getPickupLocation(pr_db.PatronRequest{}))
+	assert.Empty(t, getPickupLocation(pr_db.PatronRequest{}))
 }
 
 func TestGetPickupLocation_NilAddress(t *testing.T) {
@@ -752,7 +712,7 @@ func TestGetPickupLocation_NilAddress(t *testing.T) {
 			RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{{Address: nil}},
 		},
 	}
-	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getPickupLocation(pr))
+	assert.Empty(t, getPickupLocation(pr))
 }
 
 func TestGetPickupLocation_PhysicalAddress(t *testing.T) {
@@ -792,7 +752,7 @@ func TestGetPickupLocation_AddressWithNoUsableFields(t *testing.T) {
 			},
 		},
 	}
-	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getPickupLocation(pr))
+	assert.Empty(t, getPickupLocation(pr))
 }
 
 // ── getPickupURL ───────────────────────────────────────────────────────────────────
@@ -807,7 +767,7 @@ func TestGetPickupURL_IgnoresEmailAddress(t *testing.T) {
 		}},
 	}}
 
-	assert.Equal(t, DEFAULT_FOR_NO_VALUE, getPickupURL(pr))
+	assert.Empty(t, getPickupURL(pr))
 }
 
 func TestGetPickupURL_RejectsUnsafeRequestSchemes(t *testing.T) {
@@ -824,7 +784,7 @@ func TestGetPickupURL_RejectsUnsafeRequestSchemes(t *testing.T) {
 				}},
 			}}
 
-			assert.Equal(t, DEFAULT_FOR_NO_VALUE, getPickupURL(pr))
+			assert.Empty(t, getPickupURL(pr))
 		})
 	}
 }
@@ -886,7 +846,7 @@ func TestRenderTextTemplateSupportsPatronGivenNameAndLegacyPatronName(t *testing
 		IllRequest: iso18626.Request{
 			PatronInfo: &iso18626.PatronInfo{GivenName: "Ann"},
 		},
-	}, nil, nil, DEFAULT_FOR_NO_VALUE)
+	}, nil, nil, "")
 
 	result, err := RenderTextTemplate(data, []string{"pullslip-pdf"}, "{{.PatronGivenName}}/{{.PatronName}}")
 

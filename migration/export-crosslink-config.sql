@@ -98,7 +98,7 @@ DECLARE
         'all locations'
     );
     if_replacement TEXT := coalesce(
-        '{{if ne ' || crosslink_path || ' "n/a"}}',
+        '{{if ' || crosslink_path || '}}',
         '{{if true}}'
     );
 BEGIN
@@ -364,12 +364,7 @@ template_action_patterns AS (
                 replace(placeholder_mappings.crosslink_path, '.', '[.]'),
                 '|' ORDER BY placeholder_mappings.step
             )
-            || ')|if[[:space:]]+ne[[:space:]]+('
-            || string_agg(
-                replace(placeholder_mappings.crosslink_path, '.', '[.]'),
-                '|' ORDER BY placeholder_mappings.step
-            )
-            || ')[[:space:]]+"n/a"|if[[:space:]]+true|else|end)'
+            || ')|if[[:space:]]+true|else|end)'
             || '[[:space:]]*[}][}]'
             AS supported_action_pattern
     FROM placeholder_mappings

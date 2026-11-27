@@ -33,27 +33,44 @@ func TestGetStateModelTemplateDefaultMatchesPurposeAudienceAndLabel(t *testing.T
 	assert.ErrorContains(t, err, "no state-model default template")
 }
 
-func TestValidateTemplateRenderingUsesRuntimeFallbackValues(t *testing.T) {
+func TestValidateTemplateRenderingUsesRuntimeValues(t *testing.T) {
 	tests := []struct {
 		name        string
 		purpose     proapi.TemplatePurpose
 		contentType proapi.TemplateContentType
 		body        string
 		labels      []string
+		wantErr     string
 	}{
 		{
-			name:        "patron request html",
+			name:        "patron request html with request ID",
+			purpose:     proapi.Pullslip,
+			contentType: proapi.Html,
+			body:        `{{index .ReqId 0}}`,
+			labels:      []string{"pullslip-pdf"},
+		},
+		{
+			name:        "patron request text with request ID",
+			purpose:     proapi.Email,
+			contentType: proapi.Text,
+			body:        `{{index .ReqId 0}}`,
+			labels:      []string{"received-notification"},
+		},
+		{
+			name:        "patron request html with missing title",
 			purpose:     proapi.Pullslip,
 			contentType: proapi.Html,
 			body:        `{{index .Title 0}}`,
 			labels:      []string{"pullslip-pdf"},
+			wantErr:     "index out of range",
 		},
 		{
-			name:        "patron request text",
+			name:        "patron request text with missing title",
 			purpose:     proapi.Email,
 			contentType: proapi.Text,
 			body:        `{{index .Title 0}}`,
 			labels:      []string{"received-notification"},
+			wantErr:     "index out of range",
 		},
 		{
 			name:        "batch email html",
@@ -74,7 +91,11 @@ func TestValidateTemplateRenderingUsesRuntimeFallbackValues(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			err := ValidateTemplateRendering(test.purpose, test.contentType, test.body, nil, test.labels)
-			assert.NoError(t, err)
+			if test.wantErr == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.ErrorContains(t, err, test.wantErr)
+			}
 		})
 	}
 }

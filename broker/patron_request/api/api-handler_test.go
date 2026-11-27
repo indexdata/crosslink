@@ -1566,8 +1566,8 @@ func TestPostTemplatesPreviewRejectsBadRequests(t *testing.T) {
 			&templateErrorDetails{part: "body", line: 3, column: 3, message: "unknown field Nope"}},
 		{"batch placeholder", `{"body":"{{.FullCount}}"}`, "FullCount",
 			&templateErrorDetails{part: "body", line: 1, column: 3, message: "unknown field FullCount"}},
-		{"fails on one sample", `{"body":"<p>{{if ne .Title \"n/a\"}}{{index .Title 40}}{{end}}</p>"}`, "sample typical: template body:",
-			&templateErrorDetails{part: "body", sample: "typical", line: 1, column: 28, message: `executing "template" at <index .Title 40>: error calling index: index out of range: 40`}},
+		{"fails on one sample", `{"body":"<p>{{if .Title}}{{index .Title 40}}{{end}}</p>"}`, "sample typical: template body:",
+			&templateErrorDetails{part: "body", sample: "typical", line: 1, column: 19, message: `executing "template" at <index .Title 40>: error calling index: index out of range: 40`}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rr := postTemplatesPreview(t, tc.body)
