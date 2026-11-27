@@ -191,8 +191,7 @@ func TestExportConfigNoticeTemplates(t *testing.T) {
 		require.Equal(t, "template", record.Type)
 		templates++
 		if label, ok := labels[record.Data.Title]; ok && !seen[label] {
-			require.Len(t, record.Data.Labels, 2)
-			require.Equal(t, label, record.Data.Labels[1])
+			require.Equal(t, []string{label}, record.Data.Labels)
 			audience := "patron"
 			if label == "new-supply-request-notification" {
 				audience = "staff"
@@ -201,6 +200,7 @@ func TestExportConfigNoticeTemplates(t *testing.T) {
 			seen[label] = true
 		} else {
 			require.Len(t, record.Data.Labels, 1, record.Data.Title)
+			require.True(t, strings.HasPrefix(record.Data.Labels[0], "mod-rs-template-"), record.Data.Title)
 		}
 		_, err = ndjson.Write(append(record.raw, '\n'))
 		require.NoError(t, err)
@@ -229,7 +229,7 @@ func TestExportConfigNoticeTriggerAliases(t *testing.T) {
 			insertConfigTemplate(t, tx, 1, "Custom notice", "Request {{request.id}}", tc.trigger)
 			records := exportConfigRecords(t, tx, "ISIL:CONFIG-TEST")
 			require.Len(t, records, 1)
-			require.Equal(t, []string{"mod-rs-template-" + configTemplateID(1), tc.label}, records[0].Data.Labels)
+			require.Equal(t, []string{tc.label}, records[0].Data.Labels)
 		})
 	}
 }
@@ -243,7 +243,7 @@ func TestExportConfigSharedNoticeAudience(t *testing.T) {
 	require.NoError(t, err)
 	records := exportConfigRecords(t, tx, "ISIL:CONFIG-TEST")
 	require.Len(t, records, 1)
-	require.Equal(t, []string{"mod-rs-template-" + configTemplateID(1), "new-request-notification", "new-supply-request-notification"}, records[0].Data.Labels)
+	require.Equal(t, []string{"new-request-notification", "new-supply-request-notification"}, records[0].Data.Labels)
 	require.Empty(t, records[0].Data.Audience)
 }
 

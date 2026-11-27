@@ -132,9 +132,9 @@ with their source, converted content, and review reason.
 
 The unsupported **New host LMS location**, **New host LMS shelving location**,
 and **New patron profile** templates are omitted from both export files.
-Other templates retain their stable `mod-rs-template-<localized-template UUID>`
-label. Configured notice triggers add the following notification labels,
-independently of the template title:
+Templates selected for configured notice triggers use the corresponding
+CrossLink notification labels. The exporter selects them by trigger,
+independently of the template title.
 
 | Legacy notice trigger | CrossLink label | Audience |
 | --- | --- | --- |
@@ -146,12 +146,19 @@ independently of the template title:
 | New request (supply); New expedited request (supply) | `new-supply-request-notification` | Staff |
 
 When several compatible English templates match a notification label, the one
-with the lowest container UUID, then localized-template UUID, receives it. Other
-templates keep their migration labels for review. Unsupported templates,
-batch-only templates, and the configured pull-slip template do not receive
-patron-request notification labels. A template used for both patron and staff
-notices has no audience restriction. Legacy notice-policy activation is not
-migrated; these labels select templates when CrossLink sends a notification.
+with the lowest container UUID, then localized-template UUID, receives it. A
+template selected for several labels receives each of them. Other importable
+templates, including batch-only templates and the configured pull-slip template,
+use their stable `mod-rs-template-<localized-template UUID>` label. A template
+used for both patron and staff notices has no audience restriction. CrossLink
+uses these labels to select templates when sending notifications. Legacy
+notice-policy activation is not migrated.
+
+When re-importing a notice exported with both kinds of label, use
+`CONFLICT_POLICY=update` to replace its labels if exactly one existing template
+shares a notification label and has the same owner, purpose, and audience. If
+the existing template has only its `mod-rs-template-<localized-template UUID>`
+label, the importer can create a second template because there is no label overlap.
 
 A `PrintPullSlips` schedule selects a migrated template only when its converted
 subject and body are importable and compatible with batch-email data. Otherwise,

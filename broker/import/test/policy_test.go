@@ -17,7 +17,7 @@ import (
 
 func TestImportTemplatePolicies(t *testing.T) {
 	owner := uuid.NewString()
-	original := pr_db.SaveTemplateParams{ID: uuid.NewString(), Owner: owner, Title: "Original", Purpose: "email", Body: "body", ContentType: "text/plain", Labels: []string{"notice"}, Audience: pgtype.Text{String: "patron", Valid: true}, CreatedAt: testTimestamp(0), UpdatedAt: testTimestamp(1)}
+	original := pr_db.SaveTemplateParams{ID: uuid.NewString(), Owner: owner, Title: "Original", Purpose: "email", Body: "body", ContentType: "text/plain", Labels: []string{"mod-rs-template-" + uuid.NewString(), "new-request-notification"}, Audience: pgtype.Text{String: "patron", Valid: true}, CreatedAt: testTimestamp(0), UpdatedAt: testTimestamp(1)}
 	result, err := importTestRepo.ImportTemplate(importTestCtx, original, importdb.ConflictPolicyFail)
 	require.NoError(t, err)
 	assert.Equal(t, importdb.OutcomeImported, result.Outcome)
@@ -25,6 +25,7 @@ func TestImportTemplatePolicies(t *testing.T) {
 	incoming := original
 	incoming.ID = uuid.NewString()
 	incoming.Title = "Updated"
+	incoming.Labels = []string{"new-request-notification"}
 	_, err = importTestRepo.ImportTemplate(importTestCtx, incoming, importdb.ConflictPolicyFail)
 	var conflict *importdb.ConflictError
 	assert.ErrorAs(t, err, &conflict)
@@ -36,9 +37,11 @@ func TestImportTemplatePolicies(t *testing.T) {
 	assert.Equal(t, importdb.OutcomeImported, updated.Outcome)
 
 	var id, title string
-	require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT id,title FROM template WHERE owner=$1", owner).Scan(&id, &title))
+	var labels []string
+	require.NoError(t, importTestPool.QueryRow(context.Background(), "SELECT id,title,labels FROM template WHERE owner=$1", owner).Scan(&id, &title, &labels))
 	assert.Equal(t, original.ID, id)
 	assert.Equal(t, "Updated", title)
+	assert.Equal(t, incoming.Labels, labels)
 }
 
 func TestImportTemplateIdentityIncludesPurposeAndAudience(t *testing.T) {

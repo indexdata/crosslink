@@ -40,13 +40,12 @@
 --     Templates with residual Handlebars actions or a mixture of patron-request
 --     and batch-only placeholders are written to unsupported_template_output
 --     for review instead of being included in the import stream.
---   * Template labels are stable and take the form "mod-rs-template-<UUID>",
---     using the localized-template UUID so multiple English templates in one
---     legacy container remain distinct.
---     Supported notice triggers also map to CrossLink notification labels, with
---     the lowest eligible container/localized-template UUID receiving each label
---     when multiple templates match. The three unsupported new LMS location,
---     shelving location, and patron profile notices are excluded.
+--   * Templates selected for supported notice triggers use the corresponding
+--     CrossLink notification labels. When multiple templates match, the lowest
+--     eligible container/localized-template UUID receives each label. Other
+--     migrated templates use "mod-rs-template-<localized-template UUID>".
+--     The three unsupported new LMS location, shelving location, and patron
+--     profile notices are excluded.
 --     A pull-slip timer uses the template selected by pull_slip_template_id when
 --     an eligible, batch-compatible English template is exported, choosing the
 --     lowest localized-template UUID if legacy data contains multiple English
@@ -700,10 +699,10 @@ export_records AS (
                 'subject', english_templates.subject,
                 'body', english_templates.body,
                 'contentType', 'html',
-                'labels', jsonb_build_array(
-                    'mod-rs-template-'
-                        || english_templates.localized_template_id
-                ) || coalesce(template_notice_labels.labels, '[]'::JSONB),
+                'labels', coalesce(
+                    template_notice_labels.labels,
+                    jsonb_build_array('mod-rs-template-' || english_templates.localized_template_id)
+                ),
                 'audience', CASE
                     WHEN english_templates.container_id::TEXT =
                         export_settings.pull_slip_template_id THEN 'staff'
