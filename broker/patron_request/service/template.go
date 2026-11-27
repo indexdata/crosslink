@@ -65,9 +65,13 @@ func ValidateTemplateRenderingForContext(purpose proapi.TemplatePurpose, content
 	switch context {
 	case PatronRequestTemplateContext:
 		// Optional fields stay empty, as they are for a sparse request, but
-		// runtime rendering always has a request ID.
+		// runtime rendering always has a request ID, and a PDF pull slip
+		// always has its barcode image. Emails render without one.
 		patronData := email.GetPullSlipData(pr_db.PatronRequest{}, nil, nil, "")
 		patronData.ReqId = "REQ-1"
+		if purpose == proapi.Pullslip {
+			patronData.BarcodeBase64 = "iVBORw0KGgo="
+		}
 		data = patronData
 	case BatchEmailTemplateContext:
 		data = email.GetBatchEmailData(1, 1, "query")
