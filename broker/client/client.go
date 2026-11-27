@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -456,27 +457,39 @@ func (c *Iso18626Client) checkConfirmationError(ctx common.ExtendedContext, resp
 	return status
 }
 
-func (c *Iso18626Client) HandleIllMessage(ctx common.ExtendedContext, peer *ill_db.Peer, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
+func (c *Iso18626Client) HandleIllMessage(ctx common.ExtendedContext, peer *ill_db.Peer, msg *iso18626.ISO18626Message, parentID *string) (*iso18626.ISO18626Message, error) {
 	if peer == nil {
 		return nil, fmt.Errorf("peer is nil")
 	}
 	if strings.EqualFold(peer.Vendor, string(dirapi.CrossLink)) {
-		return c.prMessageHandler.HandleMessage(ctx, msg, peer)
+		return c.prMessageHandler.HandleMessage(ctx, msg, peer, parentID)
 	}
-	return c.SendHttpPost(peer, msg)
+	return c.sendHttpPost(ctx, peer, msg)
 }
 
 func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
+	return c.sendHttpPost(context.Background(), peer, msg)
+}
+
+func (c *Iso18626Client) sendHttpPost(ctx context.Context, peer *ill_db.Peer, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
 	httpClient := httpclient.NewClient().
 		WithMaxSize(int64(c.maxMsgSize)).
 		WithHeaders("User-Agent", vcs.GetSignature())
 	for k, v := range peer.HttpHeaders {
 		httpClient.WithHeaders(k, v)
 	}
-	time.Sleep(c.sendDelay)
+	if c.sendDelay > 0 {
+		timer := time.NewTimer(c.sendDelay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
 	iso18626Shim := getPeerShim(peer)
 	var resmsg iso18626.ISO18626Message
-	err := httpClient.RequestResponse(c.client, http.MethodPost,
+	err := httpClient.RequestResponseContext(ctx, c.client, http.MethodPost,
 		[]string{httpclient.ContentTypeApplicationXml, httpclient.ContentTypeTextXml},
 		peer.Url, msg, &resmsg, func(v any) ([]byte, error) {
 			if isoM, ok := v.(*iso18626.ISO18626Message); ok {
@@ -712,7 +725,7 @@ func (c *Iso18626Client) sendAndUpdateStatus(ctx common.ExtendedContext, trCtx t
 		resData.CustomData = map[string]any{common.DO_NOT_SEND: true}
 		resData.OutgoingMessage = nil
 	} else {
-		response, err := c.HandleIllMessage(ctx, trCtx.requester, message)
+		response, err := c.HandleIllMessage(ctx, trCtx.requester, message, &trCtx.event.ID)
 		if response != nil {
 			resData.IncomingMessage = response
 		}
@@ -835,7 +848,7 @@ func (c *Iso18626Client) sendAndUpdateSupplier(ctx common.ExtendedContext, trCtx
 	resData := events.EventResult{}
 	resData.OutgoingMessage = message
 	if !isDoNotSend(trCtx.event) {
-		response, err := c.HandleIllMessage(ctx, trCtx.selectedSupplierPeer, message)
+		response, err := c.HandleIllMessage(ctx, trCtx.selectedSupplierPeer, message, &trCtx.event.ID)
 		if response != nil {
 			resData.IncomingMessage = response
 		}

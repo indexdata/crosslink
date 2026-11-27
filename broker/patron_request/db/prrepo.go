@@ -22,6 +22,7 @@ type PrRepo interface {
 	GetPatronRequestByIdForUpdate(ctx common.ExtendedContext, id string) (PatronRequest, error)
 	GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id string, side PatronRequestSide) (PatronRequest, error)
 	ListPatronRequests(ctx common.ExtendedContext, args ListPatronRequestsParams, pgcql pgcql.Query) ([]PatronRequest, int64, error)
+	ListOverdueBatchCandidates(ctx common.ExtendedContext, limit int32, afterID string, query pgcql.Query) ([]PatronRequest, error)
 	ListPatronRequestsSearchView(ctx common.ExtendedContext, args ListPatronRequestsParams, pgcql pgcql.Query) ([]PatronRequestSearchView, int64, error)
 	GetPatronRequestsFacets(ctx common.ExtendedContext, facetFields []string, pgcql pgcql.Query) ([]Facet, error)
 	UpdatePatronRequest(ctx common.ExtendedContext, params UpdatePatronRequestParams) (PatronRequest, error)

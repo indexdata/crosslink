@@ -24,7 +24,7 @@ import (
 func TestHandleMessageNoMessage(t *testing.T) {
 	handler := CreatePatronRequestMessageHandler(*new(pr_db.PrRepo), *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
 
-	mes, err := handler.HandleMessage(appCtx, nil, nil)
+	mes, err := handler.HandleMessage(appCtx, nil, nil, nil)
 
 	assert.Nil(t, mes)
 	assert.Equal(t, "cannot process nil message", err.Error())
@@ -42,7 +42,7 @@ func TestHandleMessageFetchPRError(t *testing.T) {
 			RequestingAgencyRequestId: patronRequestId,
 		},
 	}
-	mes, err := handler.HandleMessage(appCtx, message, nil)
+	mes, err := handler.HandleMessage(appCtx, message, nil, nil)
 
 	assert.Nil(t, mes)
 	assert.Equal(t, "db error", err.Error())
@@ -61,7 +61,7 @@ func TestHandleMessageFetchEventError(t *testing.T) {
 			RequestingAgencyRequestId: patronRequestId,
 		},
 	}
-	mes, err := handler.HandleMessage(appCtx, message, nil)
+	mes, err := handler.HandleMessage(appCtx, message, nil, nil)
 
 	assert.Nil(t, mes)
 	assert.Equal(t, "event bus error", err.Error())
@@ -92,7 +92,7 @@ func TestHandleMessageRequestCreatesTaskForCreatedPatronRequest(t *testing.T) {
 	}
 	patronPattern := "local-%v"
 	recipientPeer := &ill_db.Peer{CustomData: dirapi.Entry{IllConfig: &dirapi.IllConfig{SupplierPatronPattern: &patronPattern}}}
-	resp, err := handler.HandleMessage(appCtx, message, recipientPeer)
+	resp, err := handler.HandleMessage(appCtx, message, recipientPeer, nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.RequestConfirmation.ConfirmationHeader.MessageStatus)
@@ -130,7 +130,7 @@ func TestHandleMessageRequestCreatesTaskBeforeAutoActions(t *testing.T) {
 			RequestingAgencyRequestId: "req-id-1",
 		},
 	}
-	_, err := handler.HandleMessage(appCtx, message, nil)
+	_, err := handler.HandleMessage(appCtx, message, nil, nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, 1, mockAutoActionRunner.callCount)
@@ -173,7 +173,7 @@ func TestHandleMessageSupplyingAgencyCreatesTaskBeforeAutoActions(t *testing.T) 
 		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
 	}
-	resp, err := handler.HandleMessage(appCtx, message, nil)
+	resp, err := handler.HandleMessage(appCtx, message, nil, nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
@@ -216,7 +216,7 @@ func TestHandleMessageRequestingAgencyCreatesTaskBeforeAutoActions(t *testing.T)
 		},
 		Action: iso18626.TypeActionReceived,
 	}
-	resp, err := handler.HandleMessage(appCtx, message, nil)
+	resp, err := handler.HandleMessage(appCtx, message, nil, nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
@@ -250,7 +250,7 @@ func TestHandleMessageSupplyingAgencyTaskResultIncludesOutgoingAndNoErrorOnSucce
 		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
 	}
-	resp, err := handler.HandleMessage(appCtx, message, nil)
+	resp, err := handler.HandleMessage(appCtx, message, nil, nil)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -278,7 +278,7 @@ func TestHandleMessageRequestingAgencyTaskResultIncludesOutgoingAndErrorOnFailur
 			SupplyingAgencyRequestId: "lender-pr-id-2",
 		},
 	}
-	resp, err := handler.HandleMessage(appCtx, message, nil)
+	resp, err := handler.HandleMessage(appCtx, message, nil, nil)
 
 	assert.Error(t, err)
 	assert.NotNil(t, resp)
@@ -318,7 +318,7 @@ func TestHandleMessageDuplicateRequestCreatesTaskOnExistingPatronRequest(t *test
 			RequestingAgencyRequestId: "req-id-1",
 		},
 	}
-	resp, err := handler.HandleMessage(appCtx, message, nil)
+	resp, err := handler.HandleMessage(appCtx, message, nil, nil)
 
 	if assert.Error(t, err) {
 		assert.Equal(t, "duplicate request: there is already a request with this id req-id-1", err.Error())
@@ -357,7 +357,7 @@ func TestHandleMessageRequestTaskStatusUsesHandlerStatusWhenAutoActionFails(t *t
 			RequestingAgencyRequestId: "req-id-1",
 		},
 	}
-	_, err := handler.HandleMessage(appCtx, message, nil)
+	_, err := handler.HandleMessage(appCtx, message, nil, nil)
 
 	assert.Error(t, err)
 	if assert.NotEmpty(t, mockEventBus.processedTaskEvents) {
@@ -2138,7 +2138,7 @@ func TestHandleSuccessorRequestLinksSupplyRequests(t *testing.T) {
 						// Exercise the valid default-New representation without requestType.
 						message.Request.ServiceInfo.RequestType = nil
 					}
-					response, err := handler.HandleMessage(appCtx, message, nil)
+					response, err := handler.HandleMessage(appCtx, message, nil, nil)
 					if tc.wantErr {
 						require.Error(t, err)
 					} else {

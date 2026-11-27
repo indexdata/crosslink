@@ -508,6 +508,10 @@ func validateBatchActionTask(task sched_db.ScheduledTask) error {
 }
 
 func (h SchedulerApiHandler) writeScheduledTaskMutationError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
+	if errors.Is(err, sched_db.ErrBatchActionRunActive) {
+		brokerapi.WriteJsonErrorResponse(w, err, http.StatusConflict)
+		return
+	}
 	if errors.Is(err, errConsortiumRequired) {
 		brokerapi.WriteJsonErrorResponse(w, err, http.StatusForbidden)
 		return
@@ -579,6 +583,7 @@ func toBatchAction(r *http.Request, task sched_db.ScheduledTask) schedoapi.Batch
 		BatchQuery: actionData.Selector,
 		Active:     active,
 		EventsLink: brokerapi.Link(r, brokerapi.Path("batch_actions", task.ID, "events"), nil),
+		RunLink:    brokerapi.Link(r, brokerapi.Path("batch_actions", task.ID, "run"), nil),
 	}
 	if len(task.ActionData.CustomData) > 0 {
 		resp.ActionParams = &task.ActionData.CustomData
@@ -634,7 +639,7 @@ func (h SchedulerApiHandler) resolveMutationScope(ctx common.ExtendedContext, w 
 }
 
 // PostBatchActionsIdRun queues one durable run without changing the saved schedule
-// or enabled status. The task lock serializes queuing and task mutations.
+// or enabled status. The run reservation coordinates all schedules for the action.
 func (h SchedulerApiHandler) PostBatchActionsIdRun(w http.ResponseWriter, r *http.Request, id string, params schedoapi.PostBatchActionsIdRunParams) {
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: map[string]string{"method": "PostBatchActionsIdRun", "id": id}})
 	owners, canManage, ok := h.resolveMutationScope(ctx, w, r, params.Symbol)

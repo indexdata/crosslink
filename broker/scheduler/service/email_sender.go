@@ -12,6 +12,7 @@ import (
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	psservice "github.com/indexdata/crosslink/broker/pullslip/service"
+	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/indexdata/go-utils/utils"
 )
 
@@ -178,7 +179,9 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 		return events.NewErrorResult("failed to build email message", err.Error())
 	}
 
-	err = s.emailService.SendEmail(*owner.CustomData.FromEmail, messageData.To, raw)
+	sendCtx, cancel := repo.BatchIOContext(ctx)
+	defer cancel()
+	err = email.SendWithContext(sendCtx, s.emailService, *owner.CustomData.FromEmail, messageData.To, raw)
 	if err != nil {
 		return events.NewErrorResult("failed to send email via SMTP", err.Error())
 	}

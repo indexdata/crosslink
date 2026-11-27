@@ -26,6 +26,7 @@ import (
 	"github.com/indexdata/crosslink/broker/ncipclientv1"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
+	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/shim"
 	dirapi "github.com/indexdata/crosslink/directory/api"
@@ -711,7 +712,7 @@ func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.Exten
 			CommonEventData: events.CommonEventData{Action: &actionName, User: user},
 			CustomData:      withStaticActionParams(nil, action.Params),
 		}
-		eventID, err := a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, parentEventID, events.SignalConsumers)
+		eventID, err := a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, parentEventID, events.SignalInline)
 		if err != nil {
 			return &autoActionFailure{action: actionName, msg: err.Error()}
 		}
@@ -2468,7 +2469,9 @@ func (a *PatronRequestActionService) createAndSendEmail(ctx common.ExtendedConte
 	if messageErr != nil {
 		return fmt.Errorf("build email message: %w", messageErr)
 	}
-	sendErr := a.emailService.SendEmail(from, recipients, raw)
+	sendCtx, cancel := repo.BatchIOContext(ctx)
+	defer cancel()
+	sendErr := email.SendWithContext(sendCtx, a.emailService, from, recipients, raw)
 	if sendErr != nil {
 		return fmt.Errorf("send email: %w", sendErr)
 	}

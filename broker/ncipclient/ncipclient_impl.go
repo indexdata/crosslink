@@ -2,6 +2,7 @@ package ncipclient
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 )
 
 type NcipClientImpl struct {
+	ctx                      context.Context
 	disableNamespace         bool
 	client                   *http.Client
 	address                  string
@@ -24,7 +26,13 @@ type NcipClientImpl struct {
 }
 
 func NewNcipClient(client *http.Client, address string, fromAgency string, toAgency string, fromAgencyAuthentication string, disableNamespace bool) NcipClient {
+	return NewNcipClientWithContext(context.Background(), client, address, fromAgency, toAgency, fromAgencyAuthentication, disableNamespace)
+}
+
+// NewNcipClientWithContext binds exchanges to the caller's cancellation and deadline.
+func NewNcipClientWithContext(ctx context.Context, client *http.Client, address string, fromAgency string, toAgency string, fromAgencyAuthentication string, disableNamespace bool) NcipClient {
 	return &NcipClientImpl{
+		ctx:                      ctx,
 		disableNamespace:         disableNamespace,
 		client:                   client,
 		address:                  address,
@@ -228,7 +236,11 @@ func (n *NcipClientImpl) sendReceiveMessage(message *ncip.NCIPMessage) (*ncip.NC
 
 	var respMessage ncip.NCIPMessage
 
-	err := httpclient.NewClient().RequestResponse(n.client, http.MethodPost, []string{httpclient.ContentTypeApplicationXml},
+	ctx := n.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	err := httpclient.NewClient().RequestResponseContext(ctx, n.client, http.MethodPost, []string{httpclient.ContentTypeApplicationXml},
 		n.address, message, &respMessage, n.marshal, n.decodeResponse)
 	if err != nil {
 		var httpErr *httpclient.HttpError

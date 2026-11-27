@@ -76,6 +76,10 @@ const (
 type SignalTarget string
 
 const (
+	// SignalBatchWorkers wakes the durable batch queue on every replica.
+	SignalBatchWorkers SignalTarget = "batch_workers"
+	// SignalInline creates a task for the caller to process without a creation notification.
+	SignalInline    SignalTarget = "inline"
 	SignalConsumers SignalTarget = "consumers"
 	SignalObservers SignalTarget = "observers"
 	SignalAll       SignalTarget = "all"
@@ -91,7 +95,9 @@ const (
 
 type EventData struct {
 	CommonEventData
-	CustomData map[string]any `json:"customData,omitempty"`
+	// BatchWorkerID identifies the owner of a notice written by an older broker.
+	BatchWorkerID string         `json:"batchWorkerId,omitempty"`
+	CustomData    map[string]any `json:"customData,omitempty"`
 }
 
 type CommonEventData struct {

@@ -825,7 +825,7 @@ func (a *PatronRequestApiHandler) invokeActionAndWriteResponse(w http.ResponseWr
 		api.AddInternalError(ctx, w, errors.New("action task processor not configured"))
 		return
 	}
-	eventId, err := a.eventBus.CreateTask(prID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, nil, events.SignalConsumers)
+	eventId, err := a.eventBus.CreateTask(prID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, nil, events.SignalInline)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return

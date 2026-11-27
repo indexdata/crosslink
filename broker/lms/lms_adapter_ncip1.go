@@ -1,6 +1,7 @@
 package lms
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -29,14 +30,14 @@ func CreateLmsAdapterNcip1(config dirapi.LmsConfig) (LmsAdapter, error) {
 	if err != nil {
 		return nil, err
 	}
-	return createResolvedLmsAdapterNcip1(*effective.LMS)
+	return createResolvedLmsAdapterNcip1(context.Background(), *effective.LMS)
 }
 
-func createResolvedLmsAdapterNcip1(config dirapi.LmsConfig) (LmsAdapter, error) {
+func createResolvedLmsAdapterNcip1(ctx context.Context, config dirapi.LmsConfig) (LmsAdapter, error) {
 	if config.Address == "" || config.FromAgency == "" {
 		return nil, fmt.Errorf("NCIP v1 requires address and From Agency")
 	}
-	return &LmsAdapterNcip1{config: config, client: ncipclientv1.New(nil, config.Address)}, nil
+	return &LmsAdapterNcip1{config: config, client: ncipclientv1.NewWithContext(ctx, nil, config.Address)}, nil
 }
 
 func (l *LmsAdapterNcip1) SetLogFunc(f ncipclient.NcipLogFunc) {

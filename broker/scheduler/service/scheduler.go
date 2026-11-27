@@ -158,7 +158,7 @@ func (s *SchedulerService) schedulerLoop(ctx common.ExtendedContext) {
 }
 
 // runDueTasks processes all currently claimable tasks.
-// Returns true if at least one task was dispatched.
+// Returns true if at least one due task was handled.
 func (s *SchedulerService) runDueTasks(ctx common.ExtendedContext) bool {
 	madeProgress := false
 	for {
@@ -169,8 +169,21 @@ func (s *SchedulerService) runDueTasks(ctx common.ExtendedContext) bool {
 			}
 
 			if task.EventName == events.EventNameInvokeBatchAction {
+				if task.ActionData.BatchActionData == nil {
+					ctx.Logger().Error("batch action data is missing, disabling task", "taskId", task.ID)
+					task.Status = sched_db.ScheduledTaskStatusStopped
+					task.RunAt = pgtype.Timestamptz{}
+					_, txErr = txRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
+					return txErr
+				}
 				// Commit the run and next schedule atomically under the task lock.
 				txErr = txRepo.QueueBatchActionRun(ctx, task)
+				var conflict *sched_db.BatchActionRunActiveError
+				if errors.As(txErr, &conflict) {
+					ctx.Logger().Info("skipped overlapping batch action occurrence", "taskId", task.ID,
+						"blockingRunId", conflict.ID, "blockingRunStartedAt", conflict.StartedAt)
+					txErr = nil
+				}
 			} else {
 				_, txErr = s.eventBus.CreateTask(events.DEFAULT_ILL_TRANSACTION_ID, task.EventName, task.ActionData, events.EventDomainScheduler, nil, events.SignalConsumers)
 			}

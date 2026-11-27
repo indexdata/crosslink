@@ -6029,7 +6029,7 @@ func (h *MockIso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessa
 	return nil
 }
 
-func (h *MockIso18626Handler) HandleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
+func (h *MockIso18626Handler) HandleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, _ *string) {
 	h.lastRequestingAgencyMessage = illMessage.RequestingAgencyMessage
 	status := iso18626.TypeMessageStatusOK
 	if h.failRequestingAgencyMessage || illMessage.RequestingAgencyMessage.Header.RequestingAgencyRequestId == "error" {
@@ -6050,7 +6050,7 @@ func (h *MockIso18626Handler) HandleRequestingAgencyMessage(ctx common.ExtendedC
 	w.WriteHeader(http.StatusOK)
 	w.Write(output)
 }
-func (h *MockIso18626Handler) HandleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
+func (h *MockIso18626Handler) HandleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, _ *string) {
 	h.lastSupplyingAgencyMessage = illMessage.SupplyingAgencyMessage
 	status := iso18626.TypeMessageStatusOK
 	if h.failSupplyingAgencyMessage || illMessage.SupplyingAgencyMessage.Header.RequestingAgencyRequestId == "error" {
@@ -6469,7 +6469,7 @@ func (r *MockPrRepo) GetLendingPredecessorForUpdate(ctx common.ExtendedContext, 
 	return args.Get(0).(pr_db.PatronRequest), args.Error(1)
 }
 
-func (m *MockEventBus) CreateNoticeWithID(eventID string, id string, eventName events.EventName, data events.EventData, status events.EventStatus, eventDomain events.EventDomain, target events.SignalTarget) (string, error) {
+func (m *MockEventBus) CreateNoticeWithID(eventID string, id string, eventName events.EventName, data events.EventData, status events.EventStatus, eventDomain events.EventDomain, _ *string, target events.SignalTarget) (string, error) {
 	_, err := m.CreateNotice(id, eventName, data, status, eventDomain, target)
 	return eventID, err
 }
