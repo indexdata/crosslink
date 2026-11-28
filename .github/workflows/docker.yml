@@ -19,9 +19,36 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # Don't publish an image whose migrations some databases would skip. The
+  # migration-order workflow compares a push with the tip of main before it,
+  # covering every pushed commit, which this workflow_run payload can't do: it
+  # has no pre-push SHA. So wait for that workflow's run on the same commit.
+  migration-order:
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    name: Require migration-order to pass
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+    steps:
+      - name: Wait for migration-order on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow migration-order.yml \
+            --commit "$SHA" --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -z "$id" ]; then
+            echo "::error::No migration-order run found for $SHA"
+            exit 1
+          fi
+          gh run watch "$id" --repo "$GITHUB_REPOSITORY" --exit-status
+
   build-image:
     if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     name: Build ${{ matrix.module }} (${{ matrix.os }}/${{ matrix.arch }})
+    needs:
+      - migration-order
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false

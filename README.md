@@ -33,6 +33,15 @@ The following make targets are available: `clean`, `all`, `check`, `generate`.
 
 In order to be able to execute tests (the `check` target), Docker is also required.
 
+### Database migrations
+
+Number each new migration in `broker/migrations` or `directory/migrations` above every migration on `main`, and give it a version no other migration uses. golang-migrate only applies versions above a database's current version, so a lower-numbered migration merged later is silently skipped by databases that already passed it. If `main` gains a higher number before your pull request merges, renumber yours.
+
+The `migration-order` workflow enforces this on pull requests and pushes to `main`, and image publishing waits for the same check. To run it locally against `main`:
+
+    git fetch origin main
+    .github/scripts/check-migration-order.sh origin/main
+
 ## Hosted development environment
 
 The `broker` is available at: https://broker.crosslink-dev.indexdata.com.
