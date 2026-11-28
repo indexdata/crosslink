@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"slices"
 	"testing"
@@ -289,6 +290,49 @@ func TestLookupSendsSystemAndTenantHeaders(t *testing.T) {
 	assert.Equal(t, "tenant1", tenantHeader)
 	assert.Equal(t, "limit=1000&cql=%28symbol+any+%22ISIL%3APEER%22+or+parentSymbol+any+%22ISIL%3APEER%22%29+and+tenant%3D%22tenant1%22", rawQuery)
 	assert.Equal(t, "?"+rawQuery, cql)
+}
+
+// Directory merges ancestors' closures into an entry's closures only on
+// resolved reads, and supplier selection checks the closures the lookup
+// returns. Lookups must therefore request the resolved view and keep closures
+// owned by other entries.
+func TestLookupRequestsResolvedEntriesWithInheritedClosures(t *testing.T) {
+	const entryID = "d4cd7068-a9f4-5f3b-8eea-1a169eb71eb2"
+	const parentID = "6f0d1c5e-7a51-4c55-9d43-2a6a3f6c1e01"
+	entry := `{"id":"` + entryID + `","name":"Branch","parent":"` + parentID + `",` +
+		`"symbols":[{"authority":"ISIL","symbol":"BRANCH"}],` +
+		`"closures":[{"id":"00251ffa-d517-5e1a-9a9a-a98033dda361","entry":"` + parentID + `",` +
+		`"startDate":"2026-12-24","endDate":"2026-12-26","reason":"Institution closed"}]}`
+
+	for _, tc := range []struct {
+		name   string
+		params adapter.DirectoryLookupParams
+		body   string
+	}{
+		{name: "by symbol", params: adapter.DirectoryLookupParams{Symbols: []string{"ISIL:BRANCH"}}, body: `{"about":{"count":1},"items":[` + entry + `]}`},
+		{name: "by entry id", params: adapter.DirectoryLookupParams{EntryID: entryID}, body: entry},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var query url.Values
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				query = r.URL.Query()
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(tc.body))
+			}))
+			defer server.Close()
+
+			entries, _, err := createDirectoryAdapter(server.URL).Lookup(createLookupCtx(), tc.params)
+
+			assert.NoError(t, err)
+			resolve := query.Get("resolve-inherit")
+			assert.True(t, resolve == "" || resolve == "true", "lookup must request merged entries, got resolve-inherit=%q", resolve)
+			assert.Len(t, entries, 1)
+			closures := entries[0].CustomData.Closures
+			if assert.NotNil(t, closures) && assert.Len(t, *closures, 1) {
+				assert.Equal(t, parentID, (*closures)[0].Entry.String(), "an inherited closure is kept")
+			}
+		})
+	}
 }
 
 func TestLookupDeserializesDirectoryConfigurationFields(t *testing.T) {

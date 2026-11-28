@@ -20,7 +20,8 @@ type ApiImpl struct {
 	queries  *db.Queries
 	importer AggregateImporter
 	// inheritance enforces editability on writes and merges inherited
-	// configuration on reads. Nil disables both.
+	// configuration and closures on reads. Nil disables all of these, so
+	// reads return only each entry's own configuration and closures.
 	inheritance *policy.Policy
 }
 

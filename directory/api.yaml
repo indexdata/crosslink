@@ -1253,8 +1253,10 @@ components:
       description: >-
         When true (the default), configuration fields an entry does not store
         are filled in from its parent institution and consortium, following each
-        field's x-inheritance-root. When false, only the entry's own stored
-        values are returned; use this to edit an entry or to write values back.
+        field's x-inheritance-root, and closures include the unexpired closures
+        of the parent institution and consortium. When false, only the entry's own stored
+        values and closures are returned; use this to edit an entry or to write
+        values back.
       schema:
         type: boolean
         default: true
@@ -2174,6 +2176,15 @@ components:
                 $ref: '#/components/schemas/Address'
             closures:
               type: array
+              description: >-
+                With resolve-inherit (the default), all of the entry's own
+                closures together with the unexpired closures of its parent
+                institution and consortium (endDate no earlier than yesterday,
+                by the UTC date), ordered by start date. Each closure's entry names the entry that
+                stores it, so a closure is local when entry equals this entry's
+                id. With resolve-inherit=false, only the entry's own closures,
+                also ordered by start date. Closures are added and removed
+                through /closures.
               items:
                 $ref: '#/components/schemas/Closure'
             endpoints:

@@ -380,6 +380,14 @@ WHERE id = @id;
 -- name: DeleteEntryNetworksByNetwork :exec
 DELETE FROM entry_networks WHERE network = @network;
 
+-- name: UnexpiredClosuresByEntries :many
+-- Closure dates have no time zone. Keep those that ended yesterday by the UTC
+-- date, since they can still be in effect in zones behind UTC. The cutoff uses
+-- UTC so that it does not depend on the session's TimeZone setting.
+SELECT * FROM closures
+WHERE entry = ANY(@ids::uuid[]) AND end_date >= (now() AT TIME ZONE 'UTC')::date - 1
+ORDER BY entry, id;
+
 -- name: DeleteClosuresByEntry :exec
 DELETE FROM closures WHERE entry = @entry;
 

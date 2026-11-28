@@ -445,8 +445,33 @@ sensitive fields on both the entry that stores it and the entry being read;
 others see `""`, as before. Only consortial administrators may change an entry's
 parent or type.
 
+Closures: every stored closure belongs to its own entry; `/closures` reads and
+writes stored rows only. Merged entry reads list all of the entry's own closures
+together with the unexpired closures of its parent institution and consortium,
+ordered by start date and never de-duplicated, so a consortium closure applies
+to every institution and branch below it. Each closure's `entry` names the entry
+that stores it: a closure is local when `entry` equals the entry's `id` and
+inherited otherwise. With `resolve-inherit=false`, `closures` lists only the
+entry's own closures, also ordered by start date; use that view to see which
+closures to edit. Add and remove closures through `/closures`: PATCH on an
+entry ignores `closures`. Closures are merged by the
+same step that merges inherited configuration, so they inherit whenever
+configuration does: the service compiles the inheritance policy from `api.yaml`
+at startup and refuses to start without it.
+
+An inherited closure is unexpired while its `endDate` is no earlier than
+yesterday by the UTC date, regardless of the database session's time zone.
+Closure dates carry no time zone, and the extra day keeps a closure that is
+still in effect in zones behind UTC. Expired ancestor closures are left out so that merged reads grow with
+upcoming closures rather than with each ancestor's closure history; to see an
+ancestor's past closures, read that ancestor or use `/closures`. The broker
+evaluates each closure's dates as whole days in the supplier entry's
+`timeZone`, falling back to the broker host's time zone.
+
 The broker serves Directory entries from its peer cache, so a parent change
-reaches ILL processing after the cache refreshes. Host-profile defaults still
+reaches ILL processing after the cache refreshes. The same applies to closures
+added to or removed from an ancestor: each descendant's supplier selection sees
+the change only when that descendant's cached peer is next refreshed. Host-profile defaults still
 apply beneath the merged values and are never stored in Directory.
 
 ### Pickup locations

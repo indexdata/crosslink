@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -46,8 +49,72 @@ func loadAncestors(ctx context.Context, queries *db.Queries, entries []Entry) (m
 	return ancestors, nil
 }
 
+// loadInheritedClosures loads the unexpired closures stored on ancestors in
+// one query, grouped by owning entry. Expired ancestor closures are left out
+// so that merged reads grow with upcoming closures rather than with each
+// ancestor's closure history; an entry's own closures are never filtered.
+func loadInheritedClosures(ctx context.Context, queries *db.Queries, ancestors map[uuid.UUID]db.Entry) (map[uuid.UUID][]Closure, error) {
+	grouped := map[uuid.UUID][]Closure{}
+	if len(ancestors) == 0 {
+		return grouped, nil
+	}
+	ids := slices.Collect(maps.Keys(ancestors))
+	rows, err := queries.UnexpiredClosuresByEntries(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("load ancestor closures: %w", err)
+	}
+	for _, row := range rows {
+		grouped[row.Entry] = append(grouped[row.Entry], closureFromRow(row))
+	}
+	return grouped, nil
+}
+
+// mergeClosures returns the union of the given closure lists, ordered by start
+// date and then id. Closures are never de-duplicated; each keeps its owning
+// entry so that callers can tell local closures from inherited ones.
+func mergeClosures(lists ...[]Closure) []Closure {
+	var merged []Closure
+	for _, list := range lists {
+		merged = append(merged, list...)
+	}
+	slices.SortStableFunc(merged, func(a, b Closure) int {
+		if c := a.StartDate.Compare(b.StartDate.Time); c != 0 {
+			return c
+		}
+		return strings.Compare(uuidString(a.Id), uuidString(b.Id))
+	})
+	return merged
+}
+
+func uuidString(id *uuid.UUID) string {
+	if id == nil {
+		return ""
+	}
+	return id.String()
+}
+
+func derefSlice[T any](s *[]T) []T {
+	if s == nil {
+		return nil
+	}
+	return *s
+}
+
+// nilIfEmpty returns nil for an empty slice so the field is omitted from JSON.
+func nilIfEmpty[T any](s []T) *[]T {
+	if len(s) == 0 {
+		return nil
+	}
+	return &s
+}
+
 // resolveInheritance replaces each entry's configuration containers with
-// their merged view. configs holds each entry's stored containers.
+// their merged view and its closures with the union of its own closures and
+// the unexpired closures of its parent institution and consortium. configs
+// holds each entry's stored containers.
+//
+// Closure inheritance follows the configuration switch: without an
+// inheritance policy, entries keep only their own closures.
 //
 // A protected value stored on an ancestor is resolved as "" unless the caller
 // may see sensitive data on that ancestor. The caller must still sanitize each
@@ -60,12 +127,17 @@ func (a ApiImpl) resolveInheritance(ctx context.Context, queries *db.Queries, au
 	if err != nil {
 		return err
 	}
+	ancestorClosures, err := loadInheritedClosures(ctx, queries, ancestors)
+	if err != nil {
+		return err
+	}
 	for i := range entries {
 		entry := &entries[i]
 		chain := []policy.Level{{Tenant: entry.Tenant, Configs: configs[i]}}
 		if entry.Type != nil {
 			chain[0].Type = string(*entry.Type)
 		}
+		closureLists := [][]Closure{derefSlice(entry.Closures)}
 		for parent := entry.Parent; parent != nil && len(chain) <= maxAncestorDepth; {
 			ancestor, ok := ancestors[*parent]
 			if !ok {
@@ -77,8 +149,10 @@ func (a ApiImpl) resolveInheritance(ctx context.Context, queries *db.Queries, au
 				Configs: ancestor.Configs,
 				Redact:  !canSeeSensitiveEntry(authData, ancestor.Tenant),
 			})
+			closureLists = append(closureLists, ancestorClosures[ancestor.ID])
 			parent = ancestor.Parent
 		}
+		entry.Closures = nilIfEmpty(mergeClosures(closureLists...))
 		resolved, err := a.inheritance.Resolve(chain)
 		if err != nil {
 			return fmt.Errorf("resolve entry %s: %w", entry.Id, err)
